@@ -68,7 +68,7 @@ export async function processEvent(
     console.log("[Debug] Calling LLM for response...");
   }
 
-  const response = await callLLM(responseSystemPrompt, responseUserPrompt, signal);
+  const response = await callLLM(responseSystemPrompt, responseUserPrompt, { signal, temperature: 0.7 });
 
   if (signal?.aborted) return abortedResult;
 
@@ -101,7 +101,7 @@ export async function processEvent(
   const newSystemConcepts = await callLLMForJSON<Concept[]>(
     systemUpdatePrompt,
     conceptUpdateUserPrompt,
-    signal
+    { signal, temperature: 0.3 }
   );
 
   if (signal?.aborted) return abortedResult;
@@ -143,7 +143,7 @@ export async function processEvent(
   const newHumanConcepts = await callLLMForJSON<Concept[]>(
     humanUpdatePrompt,
     conceptUpdateUserPrompt,
-    signal
+    { signal, temperature: 0.3 }
   );
 
   if (signal?.aborted) return abortedResult;

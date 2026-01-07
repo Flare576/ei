@@ -6,7 +6,13 @@ function formatConceptsByType(concepts: Concept[], type: ConceptType): string {
   const filtered = concepts.filter(c => c.type === type);
   if (filtered.length === 0) return "(none)";
   
-  return filtered.map(c => {
+  // Sort by delta (highest need first) for attention primacy
+  const sorted = filtered
+    .map(c => ({ concept: c, delta: c.level_ideal - c.level_current }))
+    .sort((a, b) => b.delta - a.delta)
+    .map(x => x.concept);
+  
+  return sorted.map(c => {
     const delta = c.level_ideal - c.level_current;
     const deltaStr = delta > 0 ? `(want +${delta.toFixed(2)})` : delta < 0 ? `(want ${delta.toFixed(2)})` : "(satisfied)";
     return `- ${c.name}: current=${c.level_current}, ideal=${c.level_ideal} ${deltaStr}`;
@@ -131,14 +137,6 @@ If you should respond, write your response. If silence is appropriate, say exact
 
     let context = `${conversationState}\n\nIt has been ${delayMinutes} minutes since the last message.`;
 
-    if (lastSpeaker === "system") {
-      context += `\n\nIMPORTANT: Your last message was the most recent in the conversation. The human has not responded yet.`;
-
-      if (consecutiveSystemMessages >= 2) {
-        context += ` You have already sent ${consecutiveSystemMessages} messages in a row without a response. Be very hesitant to send another - the human may be busy, away, or simply done chatting.`;
-      }
-    }
-
     prompt = `${context}
 
 Should you reach out? If yes, write your message. If not, say exactly: No Message`;
@@ -154,6 +152,38 @@ Should you reach out? If yes, write your message. If not, say exactly: No Messag
 ### RECENT CONVERSATION ###
 ${historyText}
 ### END CONVERSATION ###`;
+  }
+
+  // Repetition warning at the very end for recency attention
+  if (!humanMessage && recentHistory?.length) {
+    const lastSpeaker = recentHistory[recentHistory.length - 1].role;
+    const consecutiveSystemMessages = countTrailingSystemMessages(recentHistory);
+    
+    if (lastSpeaker === "system") {
+      const lastSystemMsg = recentHistory.filter(m => m.role === "system").slice(-1)[0];
+      
+      if (lastSystemMsg) {
+        const preview = lastSystemMsg.content.length > 100 
+          ? lastSystemMsg.content.substring(0, 100) + "..." 
+          : lastSystemMsg.content;
+        
+        prompt += `
+
+### CRITICAL INSTRUCTION ###
+Your last message was: "${preview}"
+
+The human has NOT responded. DO NOT repeat or rephrase this. If you reach out, say something COMPLETELY DIFFERENT - a new topic, a genuine question, or say "No Message".`;
+
+        if (consecutiveSystemMessages >= 2) {
+          prompt += `
+
+WARNING: You've sent ${consecutiveSystemMessages} messages without a response. The human is likely busy. Strongly prefer "No Message".`;
+        }
+        
+        prompt += `
+### END INSTRUCTION ###`;
+      }
+    }
   }
 
   return prompt;

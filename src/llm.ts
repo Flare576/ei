@@ -28,11 +28,17 @@ function repairJSON(jsonStr: string): string {
   );
 }
 
+export interface LLMOptions {
+  signal?: AbortSignal;
+  temperature?: number;
+}
+
 export async function callLLM(
   systemPrompt: string,
   userPrompt: string,
-  signal?: AbortSignal
+  options: LLMOptions = {}
 ): Promise<string | null> {
+  const { signal, temperature = 0.7 } = options;
   if (signal?.aborted) {
     throw new LLMAbortedError();
   }
@@ -45,7 +51,7 @@ export async function callLLM(
         { role: "user", content: userPrompt },
       ],
       max_tokens: MAX_TOKENS,
-      temperature: 0.7,
+      temperature,
     },
     { signal }
   );
@@ -75,9 +81,9 @@ export async function callLLM(
 export async function callLLMForJSON<T>(
   systemPrompt: string,
   userPrompt: string,
-  signal?: AbortSignal
+  options: LLMOptions = {}
 ): Promise<T | null> {
-  const response = await callLLM(systemPrompt, userPrompt, signal);
+  const response = await callLLM(systemPrompt, userPrompt, options);
   if (!response) return null;
 
   const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/);
