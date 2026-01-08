@@ -25,6 +25,7 @@ export interface ProcessResult {
 
 export async function processEvent(
   humanMessage: string | null,
+  persona: string = "ei",
   debug: boolean = false,
   signal?: AbortSignal
 ): Promise<ProcessResult> {
@@ -38,8 +39,8 @@ export async function processEvent(
   if (signal?.aborted) return abortedResult;
 
   const humanConcepts = await loadConceptMap("human");
-  const systemConcepts = await loadConceptMap("system");
-  const history = await loadHistory();
+  const systemConcepts = await loadConceptMap("system", persona);
+  const history = await loadHistory(persona);
   const recentHistory = getRecentMessages(history);
   const lastMessageTime = getLastMessageTime(history);
   const delayMs = lastMessageTime > 0 ? Date.now() - lastMessageTime : 0;
@@ -49,7 +50,7 @@ export async function processEvent(
       role: "human",
       content: humanMessage,
       timestamp: new Date().toISOString(),
-    });
+    }, persona);
   }
 
   if (signal?.aborted) return abortedResult;
@@ -65,6 +66,7 @@ export async function processEvent(
   );
 
   if (debug) {
+    console.log(`[Debug] Persona: ${persona}`);
     console.log("[Debug] Calling LLM for response...");
   }
 
@@ -77,7 +79,7 @@ export async function processEvent(
       role: "system",
       content: response,
       timestamp: new Date().toISOString(),
-    });
+    }, persona);
   }
 
   let systemConceptsUpdated = false;
@@ -85,7 +87,8 @@ export async function processEvent(
 
   const conceptUpdateUserPrompt = buildConceptUpdateUserPrompt(
     humanMessage,
-    response
+    response,
+    persona
   );
 
   if (debug) {
@@ -96,7 +99,8 @@ export async function processEvent(
 
   const systemUpdatePrompt = buildConceptUpdateSystemPrompt(
     "system",
-    systemConcepts
+    systemConcepts,
+    persona
   );
   const newSystemConcepts = await callLLMForJSON<Concept[]>(
     systemUpdatePrompt,
@@ -109,6 +113,7 @@ export async function processEvent(
   if (newSystemConcepts) {
     const proposedMap: ConceptMap = {
       entity: "system",
+      aliases: systemConcepts.aliases,
       last_updated: new Date().toISOString(),
       concepts: newSystemConcepts,
     };
@@ -116,7 +121,7 @@ export async function processEvent(
     const validation = validateSystemConcepts(proposedMap, systemConcepts);
 
     if (validation.valid) {
-      await saveConceptMap(proposedMap);
+      await saveConceptMap(proposedMap, persona);
       systemConceptsUpdated = true;
     } else {
       if (debug) {
@@ -125,7 +130,7 @@ export async function processEvent(
         );
       }
       const merged = mergeWithOriginalStatics(proposedMap, systemConcepts);
-      await saveConceptMap(merged);
+      await saveConceptMap(merged, persona);
       systemConceptsUpdated = true;
     }
   }
@@ -138,7 +143,8 @@ export async function processEvent(
 
   const humanUpdatePrompt = buildConceptUpdateSystemPrompt(
     "human",
-    humanConcepts
+    humanConcepts,
+    persona
   );
   const newHumanConcepts = await callLLMForJSON<Concept[]>(
     humanUpdatePrompt,

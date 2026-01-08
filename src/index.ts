@@ -1,7 +1,13 @@
 import * as readline from "readline";
 import { processEvent } from "./processor.js";
 import { LLMAbortedError } from "./llm.js";
-import { loadHistory } from "./storage.js";
+import { 
+  loadHistory, 
+  listPersonas, 
+  findPersonaByNameOrAlias,
+  personaExists,
+} from "./storage.js";
+import { createPersonaWithLLM, saveNewPersona } from "./persona-creator.js";
 
 const DEBUG = process.argv.includes("--debug") || process.argv.includes("-d");
 const THIRTY_MINUTES_MS = 30 * 60 * 1000;
@@ -15,7 +21,9 @@ let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let currentAbortController: AbortController | null = null;
 let messageQueue: string[] = [];
 let isProcessing = false;
+let isAwaitingInput = false;
 let rl: readline.Interface;
+let activePersona = "ei";
 
 function log(message: string): void {
   const timestamp = new Date().toLocaleTimeString();
@@ -29,7 +37,7 @@ function debugLog(message: string): void {
 }
 
 function printMessage(role: "human" | "system", content: string): void {
-  const prefix = role === "human" ? "You" : "EI";
+  const prefix = role === "human" ? "You" : activePersona === "ei" ? "EI" : activePersona;
   console.log(`${prefix}: ${content}`);
 }
 
@@ -50,8 +58,8 @@ function resetHeartbeat(): void {
 }
 
 async function handleHeartbeat(): Promise<void> {
-  if (messageQueue.length > 0) {
-    debugLog("Heartbeat skipped - messages queued");
+  if (messageQueue.length > 0 || isAwaitingInput) {
+    debugLog("Heartbeat skipped - awaiting input");
     resetHeartbeat();
     return;
   }
@@ -61,7 +69,7 @@ async function handleHeartbeat(): Promise<void> {
   isProcessing = true;
 
   try {
-    const result = await processEvent(null, DEBUG, currentAbortController.signal);
+    const result = await processEvent(null, activePersona, DEBUG, currentAbortController.signal);
 
     if (result.aborted) {
       debugLog("Heartbeat was aborted");
@@ -133,7 +141,7 @@ async function processQueue(): Promise<void> {
   isProcessing = true;
 
   try {
-    const result = await processEvent(combinedMessage, DEBUG, currentAbortController.signal);
+    const result = await processEvent(combinedMessage, activePersona, DEBUG, currentAbortController.signal);
 
     if (result.aborted) {
       debugLog("Processing was aborted - will retry with new queue");
@@ -156,7 +164,7 @@ async function processQueue(): Promise<void> {
 }
 
 async function displayRecentHistory(): Promise<void> {
-  const history = await loadHistory();
+  const history = await loadHistory(activePersona);
   const recent = history.messages.slice(-STARTUP_HISTORY_COUNT);
 
   if (recent.length === 0) return;
@@ -167,6 +175,94 @@ async function displayRecentHistory(): Promise<void> {
   }
   console.log("---------------------------");
   console.log("");
+}
+
+async function handlePersonaCommand(args: string): Promise<boolean> {
+  const trimmed = args.trim();
+  const lowerTrimmed = trimmed.toLowerCase();
+  
+  if (!trimmed) {
+    const personas = await listPersonas();
+    console.log("\nAvailable personas:");
+    for (const p of personas) {
+      const aliasStr = p.aliases.length > 0 ? ` (aliases: ${p.aliases.join(", ")})` : "";
+      const marker = p.name === activePersona ? " [active]" : "";
+      console.log(`  - ${p.name}${aliasStr}${marker}`);
+    }
+    console.log("\nUsage: /persona <name> to switch (creates new if not found)");
+    console.log("");
+    return true;
+  }
+  
+  const foundPersona = await findPersonaByNameOrAlias(lowerTrimmed);
+  
+  if (foundPersona) {
+    activePersona = foundPersona;
+    console.log(`\nSwitched to persona: ${activePersona}`);
+    await displayRecentHistory();
+    return true;
+  }
+  
+  if (!personaExists(lowerTrimmed)) {
+    console.log(`\nPersona "${trimmed}" not found. Let's create it!`);
+    console.log("Describe this persona (personality, expertise, style) or press Enter for defaults:");
+    
+    isAwaitingInput = true;
+    return new Promise((resolve) => {
+      rl.question("", async (description) => {
+        isAwaitingInput = false;
+        try {
+          console.log("\nGenerating persona...");
+          const conceptMap = await createPersonaWithLLM(lowerTrimmed, description);
+          await saveNewPersona(lowerTrimmed, conceptMap);
+          activePersona = lowerTrimmed;
+          console.log(`\nCreated and switched to persona: ${activePersona}`);
+          if (conceptMap.aliases && conceptMap.aliases.length > 0) {
+            console.log(`Aliases: ${conceptMap.aliases.join(", ")}`);
+          }
+          console.log("");
+        } catch (err) {
+          console.log(`\nError creating persona: ${err instanceof Error ? err.message : String(err)}`);
+          console.log("");
+        }
+        rl.prompt();
+        resolve(true);
+      });
+    });
+  }
+  
+  return true;
+}
+
+async function handleCommand(input: string): Promise<boolean> {
+  if (!input.startsWith("/")) return false;
+  
+  resetHeartbeat();
+  
+  const spaceIdx = input.indexOf(" ");
+  const command = spaceIdx === -1 ? input.slice(1) : input.slice(1, spaceIdx);
+  const args = spaceIdx === -1 ? "" : input.slice(spaceIdx + 1);
+  
+  switch (command.toLowerCase()) {
+    case "persona":
+    case "p":
+      await handlePersonaCommand(args);
+      rl.prompt();
+      return true;
+    case "help":
+    case "h":
+      console.log("\nCommands:");
+      console.log("  /persona, /p         - List available personas");
+      console.log("  /persona <name>      - Switch to persona");
+      console.log("  /help, /h            - Show this help");
+      console.log("");
+      rl.prompt();
+      return true;
+    default:
+      console.log(`Unknown command: /${command}. Type /help for available commands.`);
+      rl.prompt();
+      return true;
+  }
 }
 
 async function main(): Promise<void> {
@@ -189,7 +285,8 @@ async function main(): Promise<void> {
   resetHeartbeat();
   rl.prompt();
 
-  rl.on("line", (input) => {
+  rl.on("line", async (input) => {
+    if (await handleCommand(input)) return;
     queueMessage(input);
     rl.prompt();
   });

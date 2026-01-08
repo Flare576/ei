@@ -7,11 +7,13 @@ export interface Concept {
   level_ideal: number;
   level_elasticity: number;
   type: ConceptType;
+  learned_by?: string;
 }
 
 export interface ConceptMap {
   entity: "human" | "system";
-  last_updated: string;
+  aliases?: string[];
+  last_updated: string | null;
   concepts: Concept[];
 }
 

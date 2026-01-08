@@ -205,7 +205,8 @@ function countTrailingSystemMessages(history: Message[] | null): number {
 
 export function buildConceptUpdateSystemPrompt(
   entity: "human" | "system",
-  concepts: ConceptMap
+  concepts: ConceptMap,
+  persona: string = "ei"
 ): string {
   const entityLabel = entity === "human" ? "Human" : "System (yourself)";
 
@@ -248,19 +249,23 @@ ${JSON.stringify(concepts.concepts, null, 2)}
 - ADD a new concept only when discovering something genuinely distinct
 - MERGE smaller concepts into a broader one when they share similar levels and elasticity
 - Keep concepts SEPARATE when they have meaningfully different dynamics
+- If you ADD a new concept, include \`"learned_by": "${persona}"\` to track its origin
 
 Return ONLY a JSON array of concepts (the updated concept list).`;
 }
 
 export function buildConceptUpdateUserPrompt(
   humanMessage: string | null,
-  systemResponse: string | null
+  systemResponse: string | null,
+  persona: string = "ei"
 ): string {
   return `### Human Message ###
 ${humanMessage || "No Message"}
 
 ### System Response ###
 ${systemResponse || "No Message"}
+
+Active Persona: ${persona}
 
 Based on this exchange (or lack thereof), return the updated concept array as JSON.`;
 }
