@@ -45,14 +45,6 @@ export async function processEvent(
   const lastMessageTime = getLastMessageTime(history);
   const delayMs = lastMessageTime > 0 ? Date.now() - lastMessageTime : 0;
 
-  if (humanMessage) {
-    await appendMessage({
-      role: "human",
-      content: humanMessage,
-      timestamp: new Date().toISOString(),
-    }, persona);
-  }
-
   if (signal?.aborted) return abortedResult;
 
   const responseSystemPrompt = buildResponseSystemPrompt(
@@ -73,17 +65,6 @@ export async function processEvent(
   const response = await callLLM(responseSystemPrompt, responseUserPrompt, { signal, temperature: 0.7 });
 
   if (signal?.aborted) return abortedResult;
-
-  if (response) {
-    await appendMessage({
-      role: "system",
-      content: response,
-      timestamp: new Date().toISOString(),
-    }, persona);
-  }
-
-  let systemConceptsUpdated = false;
-  let humanConceptsUpdated = false;
 
   const conceptUpdateUserPrompt = buildConceptUpdateUserPrompt(
     humanMessage,
@@ -110,6 +91,46 @@ export async function processEvent(
 
   if (signal?.aborted) return abortedResult;
 
+  if (debug) {
+    console.log("[Debug] Updating human concepts...");
+  }
+
+  if (signal?.aborted) return abortedResult;
+
+  const humanUpdatePrompt = buildConceptUpdateSystemPrompt(
+    "human",
+    humanConcepts,
+    persona
+  );
+  const newHumanConcepts = await callLLMForJSON<Concept[]>(
+    humanUpdatePrompt,
+    conceptUpdateUserPrompt,
+    { signal, temperature: 0.3 }
+  );
+
+  if (signal?.aborted) return abortedResult;
+
+  // === COMMIT POINT: All LLM calls succeeded, now persist everything ===
+
+  let systemConceptsUpdated = false;
+  let humanConceptsUpdated = false;
+
+  if (humanMessage) {
+    await appendMessage({
+      role: "human",
+      content: humanMessage,
+      timestamp: new Date().toISOString(),
+    }, persona);
+  }
+
+  if (response) {
+    await appendMessage({
+      role: "system",
+      content: response,
+      timestamp: new Date().toISOString(),
+    }, persona);
+  }
+
   if (newSystemConcepts) {
     const proposedMap: ConceptMap = {
       entity: "system",
@@ -134,25 +155,6 @@ export async function processEvent(
       systemConceptsUpdated = true;
     }
   }
-
-  if (debug) {
-    console.log("[Debug] Updating human concepts...");
-  }
-
-  if (signal?.aborted) return abortedResult;
-
-  const humanUpdatePrompt = buildConceptUpdateSystemPrompt(
-    "human",
-    humanConcepts,
-    persona
-  );
-  const newHumanConcepts = await callLLMForJSON<Concept[]>(
-    humanUpdatePrompt,
-    conceptUpdateUserPrompt,
-    { signal, temperature: 0.3 }
-  );
-
-  if (signal?.aborted) return abortedResult;
 
   if (newHumanConcepts) {
     const proposedMap: ConceptMap = {

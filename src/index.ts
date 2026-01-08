@@ -25,6 +25,48 @@ let isAwaitingInput = false;
 let rl: readline.Interface;
 let activePersona = "ei";
 
+/*
+ * =============================================================================
+ * MESSAGE QUEUE CONCURRENCY MODEL
+ * =============================================================================
+ * 
+ * This app uses a single-threaded async model with one key invariant:
+ * 
+ *   >>> Only ONE processQueue() execution runs at a time <<<
+ * 
+ * The flow works like this:
+ * 
+ * 1. User input arrives → queueMessage() adds to messageQueue
+ * 
+ * 2. If NOT currently processing:
+ *    - Start processQueue() immediately (if message is "complete")
+ *    - Or schedule via debounce timer (if message is short)
+ * 
+ * 3. If currently processing (isProcessing=true):
+ *    - Signal abort to current operation
+ *    - Add message to queue
+ *    - Do NOT call processQueue() - let the running one finish
+ * 
+ * 4. When processQueue() finishes (success, abort, or error):
+ *    - The finally block checks if queue has messages
+ *    - If yes, immediately calls processQueue() again
+ *    - This ensures queued messages are processed after abort
+ * 
+ * Why this matters:
+ * - Calling processQueue() while one is running creates TWO concurrent executions
+ * - Each creates its own AbortController, causing race conditions
+ * - Messages can be processed twice or lost entirely
+ * 
+ * The abort flow:
+ * - abortCurrentOperation() signals the AbortController
+ * - The running LLM call throws LLMAbortedError
+ * - processQueue() catches it, preserves the queue, exits via finally
+ * - finally block sees queue has messages, calls processQueue() again
+ * - New execution combines original + new messages
+ * 
+ * =============================================================================
+ */
+
 function log(message: string): void {
   const timestamp = new Date().toLocaleTimeString();
   console.log(`[${timestamp}] ${message}`);
@@ -92,16 +134,30 @@ async function handleHeartbeat(): Promise<void> {
   }
 }
 
+/**
+ * Adds a message to the queue and triggers processing.
+ * 
+ * CONCURRENCY: If already processing, signals abort but does NOT call
+ * processQueue() directly. The running processQueue()'s finally block
+ * will check the queue and re-trigger if needed.
+ */
 function queueMessage(input: string): void {
   const trimmed = input.trim();
   if (!trimmed) return;
 
-  if (isProcessing) {
-    abortCurrentOperation();
-  }
-
   messageQueue.push(trimmed);
   resetHeartbeat();
+
+  if (isProcessing) {
+    debugLog(`Message queued during processing (${messageQueue.length} total) - aborting current`);
+    abortCurrentOperation();
+    return;
+  }
+
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
+    debounceTimer = null;
+  }
 
   const totalLength = messageQueue.join(" ").length;
 
@@ -124,6 +180,15 @@ function scheduleDebounce(): void {
   }, DEBOUNCE_MS);
 }
 
+/**
+ * Processes all queued messages as a single combined message.
+ * 
+ * CONCURRENCY: Only one instance runs at a time. The finally block
+ * re-triggers if messages accumulated during processing.
+ * 
+ * ATOMICITY: Messages are only removed from queue on SUCCESS.
+ * On abort or error, they're preserved for the next attempt.
+ */
 async function processQueue(): Promise<void> {
   if (debounceTimer) {
     clearTimeout(debounceTimer);
@@ -133,9 +198,9 @@ async function processQueue(): Promise<void> {
   if (messageQueue.length === 0) return;
 
   const combinedMessage = messageQueue.join("\n");
-  messageQueue = [];
+  const messageCount = messageQueue.length;
 
-  debugLog(`Processing combined message: "${combinedMessage.substring(0, 50)}${combinedMessage.length > 50 ? "..." : ""}"`);
+  debugLog(`Processing ${messageCount} message(s): "${combinedMessage.substring(0, 50)}${combinedMessage.length > 50 ? "..." : ""}"`);
 
   currentAbortController = new AbortController();
   isProcessing = true;
@@ -144,22 +209,32 @@ async function processQueue(): Promise<void> {
     const result = await processEvent(combinedMessage, activePersona, DEBUG, currentAbortController.signal);
 
     if (result.aborted) {
-      debugLog("Processing was aborted - will retry with new queue");
-    } else if (result.response) {
-      printMessage("system", result.response);
+      debugLog(`Processing aborted - ${messageCount} message(s) preserved for retry`);
     } else {
-      debugLog("No response");
+      messageQueue = [];
+      if (result.response) {
+        printMessage("system", result.response);
+      } else {
+        debugLog("No response");
+      }
     }
   } catch (err) {
     if (err instanceof LLMAbortedError) {
-      debugLog("LLM call aborted - will retry with new queue");
+      debugLog(`LLM call aborted - ${messageCount} message(s) preserved for retry`);
     } else {
+      messageQueue = [];
       log(`Error: ${err instanceof Error ? err.message : String(err)}`);
     }
   } finally {
     isProcessing = false;
     currentAbortController = null;
-    rl.prompt();
+
+    if (messageQueue.length > 0) {
+      debugLog(`Queue has ${messageQueue.length} message(s) after processing - retriggering`);
+      processQueue();
+    } else {
+      rl.prompt();
+    }
   }
 }
 
@@ -197,6 +272,14 @@ async function handlePersonaCommand(args: string): Promise<boolean> {
   const foundPersona = await findPersonaByNameOrAlias(lowerTrimmed);
   
   if (foundPersona) {
+    if (foundPersona !== activePersona) {
+      if (isProcessing || messageQueue.length > 0) {
+        abortCurrentOperation();
+        const discarded = messageQueue.length;
+        messageQueue = [];
+        debugLog(`Persona switch: aborted processing, discarded ${discarded} queued message(s)`);
+      }
+    }
     activePersona = foundPersona;
     console.log(`\nSwitched to persona: ${activePersona}`);
     await displayRecentHistory();
@@ -204,6 +287,13 @@ async function handlePersonaCommand(args: string): Promise<boolean> {
   }
   
   if (!personaExists(lowerTrimmed)) {
+    if (isProcessing || messageQueue.length > 0) {
+      abortCurrentOperation();
+      const discarded = messageQueue.length;
+      messageQueue = [];
+      debugLog(`Persona creation: aborted processing, discarded ${discarded} queued message(s)`);
+    }
+    
     console.log(`\nPersona "${trimmed}" not found. Let's create it!`);
     console.log("Describe this persona (personality, expertise, style) or press Enter for defaults:");
     

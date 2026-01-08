@@ -16,9 +16,10 @@ export class LLMAbortedError extends Error {
 }
 
 const JSON_REPAIR_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
-  { pattern: /:\s*0([1-9])([,\s\n\r\]}])/g, replacement: ": 0.$1$2" },
+  // Fix leading zeros: 03 → 0.3, 015 → 0.15
+  { pattern: /:\s*0([1-9][0-9]*)([,\s\n\r\]}])/g, replacement: ": 0.$1$2" },
+  // Remove trailing commas before ] or }
   { pattern: /,(\s*[\]}])/g, replacement: "$1" },
-  { pattern: /'/g, replacement: '"' },
 ];
 
 function repairJSON(jsonStr: string): string {
@@ -33,6 +34,13 @@ export interface LLMOptions {
   temperature?: number;
 }
 
+function isAbortError(err: unknown): boolean {
+  if (err instanceof Error) {
+    return err.name === "AbortError" || err.message.includes("aborted");
+  }
+  return false;
+}
+
 export async function callLLM(
   systemPrompt: string,
   userPrompt: string,
@@ -43,18 +51,26 @@ export async function callLLM(
     throw new LLMAbortedError();
   }
 
-  const response = await client.chat.completions.create(
-    {
-      model: MODEL,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      max_tokens: MAX_TOKENS,
-      temperature,
-    },
-    { signal }
-  );
+  let response;
+  try {
+    response = await client.chat.completions.create(
+      {
+        model: MODEL,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        max_tokens: MAX_TOKENS,
+        temperature,
+      },
+      { signal }
+    );
+  } catch (err) {
+    if (signal?.aborted || isAbortError(err)) {
+      throw new LLMAbortedError();
+    }
+    throw err;
+  }
 
   if (signal?.aborted) {
     throw new LLMAbortedError();
