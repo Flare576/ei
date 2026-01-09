@@ -5,8 +5,8 @@ const client = new OpenAI({
   apiKey: process.env.EI_LLM_API_KEY || "not-needed-for-local",
 });
 
-const MODEL = process.env.EI_LLM_MODEL || "openai/gpt-oss-20b";
-const MAX_TOKENS = 2000;
+// const MODEL = process.env.EI_LLM_MODEL || "openai/gpt-oss-20b";
+const MODEL = process.env.EI_LLM_MODEL || "google/gemma-3-12b";
 
 export class LLMAbortedError extends Error {
   constructor() {
@@ -60,7 +60,6 @@ export async function callLLM(
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
-        max_tokens: MAX_TOKENS,
         temperature,
       },
       { signal }

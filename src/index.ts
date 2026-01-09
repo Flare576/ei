@@ -1,4 +1,6 @@
 import * as readline from "readline";
+import * as fs from "fs";
+import { spawnSync } from "child_process";
 import { processEvent } from "./processor.js";
 import { LLMAbortedError } from "./llm.js";
 import { 
@@ -6,6 +8,8 @@ import {
   listPersonas, 
   findPersonaByNameOrAlias,
   personaExists,
+  getDataPath,
+  initializeDataDirectory,
 } from "./storage.js";
 import { createPersonaWithLLM, saveNewPersona } from "./persona-creator.js";
 
@@ -344,10 +348,38 @@ async function handleCommand(input: string): Promise<boolean> {
       console.log("\nCommands:");
       console.log("  /persona, /p         - List available personas");
       console.log("  /persona <name>      - Switch to persona");
+      console.log("  /editor, /e          - Open $EDITOR for multi-line input");
       console.log("  /help, /h            - Show this help");
       console.log("");
       rl.prompt();
       return true;
+    case "editor":
+    case "e": {
+      const editor = process.env.EDITOR || "vim";
+      const tmpFile = `/tmp/ei-edit-${Date.now()}.md`;
+      
+      fs.writeFileSync(tmpFile, "");
+      
+      isAwaitingInput = true;
+      const result = spawnSync(editor, [tmpFile], { stdio: "inherit" });
+      isAwaitingInput = false;
+      
+      if (result.status === 0) {
+        const content = fs.readFileSync(tmpFile, "utf-8").trim();
+        if (content) {
+          queueMessage(content);
+        } else {
+          console.log("(empty message, not sent)");
+        }
+      } else {
+        console.log(`(editor exited with status ${result.status})`);
+      }
+      
+      try { fs.unlinkSync(tmpFile); } catch {}
+      
+      rl.prompt();
+      return true;
+    }
     default:
       console.log(`Unknown command: /${command}. Type /help for available commands.`);
       rl.prompt();
@@ -356,7 +388,13 @@ async function handleCommand(input: string): Promise<boolean> {
 }
 
 async function main(): Promise<void> {
+  const initialized = await initializeDataDirectory();
+  
   console.log("EI is listening. Type a message, or Ctrl+C to exit.");
+  console.log(`[Data: ${getDataPath()}]`);
+  if (initialized) {
+    console.log("[New data directory initialized]");
+  }
   if (DEBUG) {
     console.log("[Debug mode enabled]");
     console.log(`[Complete thought threshold: ${COMPLETE_THOUGHT_LENGTH} chars]`);
