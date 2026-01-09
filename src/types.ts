@@ -13,14 +13,19 @@ export interface Concept {
 export interface ConceptMap {
   entity: "human" | "system";
   aliases?: string[];
+  short_description?: string;  // 10-15 word summary of personality
+  long_description?: string;   // 2-3 sentence description
   last_updated: string | null;
   concepts: Concept[];
 }
+
+export type MessageState = "sent" | "processing" | "queued" | "failed";
 
 export interface Message {
   role: "human" | "system";
   content: string;
   timestamp: string;
+  state?: MessageState;
 }
 
 export interface ConversationHistory {

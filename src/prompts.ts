@@ -2,6 +2,11 @@ import { Concept, ConceptMap, Message, ConceptType } from "./types.js";
 
 const MUTABLE_TYPES: ConceptType[] = ["topic", "person", "persona"];
 
+export interface PersonaDescriptions {
+  short_description: string;
+  long_description: string;
+}
+
 function formatConceptsByType(concepts: Concept[], type: ConceptType): string {
   const filtered = concepts.filter(c => c.type === type);
   if (filtered.length === 0) return "(none)";
@@ -104,6 +109,7 @@ ${humanNeeds.map(c => `- "${c.name}"`).join("\n")}`;
 - It's okay to say nothing if silence is appropriate
 - You're a friend with your own interests, not just a helper
 - When reaching out proactively, consider YOUR curiosities too, not just theirs
+- NEVER repeat or echo the user's message in your response. Start directly with your own words.
 - If you decide not to respond, say exactly: No Message`;
 
   return prompt;
@@ -268,4 +274,43 @@ ${systemResponse || "No Message"}
 Active Persona: ${persona}
 
 Based on this exchange (or lack thereof), return the updated concept array as JSON.`;
+}
+
+export function buildDescriptionPrompt(
+  personaName: string,
+  concepts: ConceptMap
+): { system: string; user: string } {
+  const personaConcepts = concepts.concepts.filter(c => c.type === "persona");
+  const topicConcepts = concepts.concepts.filter(c => c.type === "topic");
+  const staticConcepts = concepts.concepts.filter(c => c.type === "static");
+  
+  const system = `You are generating brief descriptions for an AI persona named "${personaName}".
+
+Based on the persona's concepts, generate two descriptions:
+1. short_description: A 10-15 word summary capturing the persona's core personality
+2. long_description: 2-3 sentences describing the persona's personality, interests, and approach
+
+Return JSON in this exact format:
+{
+  "short_description": "...",
+  "long_description": "..."
+}
+
+Keep descriptions natural and characterful - they should help a user quickly understand who this persona is.`;
+
+  const conceptList = [
+    ...personaConcepts.map(c => `[persona] ${c.name}: ${c.description}`),
+    ...topicConcepts.map(c => `[topic] ${c.name}: ${c.description}`),
+    ...staticConcepts.slice(0, 3).map(c => `[behavioral] ${c.name}`),
+  ].join("\n");
+
+  const user = `Persona: ${personaName}
+${concepts.aliases?.length ? `Aliases: ${concepts.aliases.join(", ")}` : ""}
+
+Concepts:
+${conceptList || "(No concepts yet - generate a generic starter description)"}
+
+Generate the descriptions now.`;
+
+  return { system, user };
 }

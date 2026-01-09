@@ -198,6 +198,8 @@ export function getLastMessageTime(history: ConversationHistory): number {
 export interface PersonaInfo {
   name: string;
   aliases: string[];
+  short_description?: string;
+  long_description?: string;
 }
 
 export async function listPersonas(): Promise<PersonaInfo[]> {
@@ -214,6 +216,8 @@ export async function listPersonas(): Promise<PersonaInfo[]> {
         personas.push({
           name: entry.name,
           aliases: map.aliases || [],
+          short_description: map.short_description,
+          long_description: map.long_description,
         });
       } catch {
         personas.push({ name: entry.name, aliases: [] });

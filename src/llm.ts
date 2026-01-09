@@ -5,13 +5,20 @@ const client = new OpenAI({
   apiKey: process.env.EI_LLM_API_KEY || "not-needed-for-local",
 });
 
-// const MODEL = process.env.EI_LLM_MODEL || "openai/gpt-oss-20b";
-const MODEL = process.env.EI_LLM_MODEL || "google/gemma-3-12b";
+const MODEL = process.env.EI_LLM_MODEL || "openai/gpt-oss-20b";
+//const MODEL = process.env.EI_LLM_MODEL || "google/gemma-3-12b";
 
 export class LLMAbortedError extends Error {
   constructor() {
     super("LLM call aborted");
     this.name = "LLMAbortedError";
+  }
+}
+
+export class LLMTruncatedError extends Error {
+  constructor(message?: string) {
+    super(message || "LLM response was truncated due to token limit. Consider simplifying the request or increasing MAX_TOKENS.");
+    this.name = "LLMTruncatedError";
   }
 }
 
@@ -34,6 +41,11 @@ export interface LLMOptions {
   temperature?: number;
 }
 
+interface LLMRawResponse {
+  content: string | null;
+  finishReason: string | null;
+}
+
 function isAbortError(err: unknown): boolean {
   if (err instanceof Error) {
     return err.name === "AbortError" || err.message.includes("aborted");
@@ -41,11 +53,11 @@ function isAbortError(err: unknown): boolean {
   return false;
 }
 
-export async function callLLM(
+async function callLLMRaw(
   systemPrompt: string,
   userPrompt: string,
   options: LLMOptions = {}
-): Promise<string | null> {
+): Promise<LLMRawResponse> {
   const { signal, temperature = 0.7 } = options;
   if (signal?.aborted) {
     throw new LLMAbortedError();
@@ -75,7 +87,18 @@ export async function callLLM(
     throw new LLMAbortedError();
   }
 
-  const content = response.choices[0]?.message?.content?.trim() ?? null;
+  return {
+    content: response.choices[0]?.message?.content?.trim() ?? null,
+    finishReason: response.choices[0]?.finish_reason ?? null,
+  };
+}
+
+export async function callLLM(
+  systemPrompt: string,
+  userPrompt: string,
+  options: LLMOptions = {}
+): Promise<string | null> {
+  const { content } = await callLLMRaw(systemPrompt, userPrompt, options);
 
   if (!content) return null;
 
@@ -98,11 +121,18 @@ export async function callLLMForJSON<T>(
   userPrompt: string,
   options: LLMOptions = {}
 ): Promise<T | null> {
-  const response = await callLLM(systemPrompt, userPrompt, options);
-  if (!response) return null;
+  const { content, finishReason } = await callLLMRaw(systemPrompt, userPrompt, options);
+  
+  if (finishReason === "length") {
+    throw new LLMTruncatedError(
+      "LLM response was truncated due to token limit. The concept map may be too large. Consider simplifying the request."
+    );
+  }
+  
+  if (!content) return null;
 
-  const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/);
-  let jsonStr = jsonMatch ? jsonMatch[1].trim() : response.trim();
+  const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+  let jsonStr = jsonMatch ? jsonMatch[1].trim() : content.trim();
 
   try {
     return JSON.parse(jsonStr) as T;

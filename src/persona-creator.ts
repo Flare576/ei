@@ -2,6 +2,7 @@ import { writeFile } from "fs/promises";
 import { callLLMForJSON } from "./llm.js";
 import { createPersonaDirectory } from "./storage.js";
 import { Concept, ConceptMap } from "./types.js";
+import { buildDescriptionPrompt, type PersonaDescriptions } from "./prompts.js";
 
 const EI_STATIC_CONCEPTS: Concept[] = [
   {
@@ -138,6 +139,12 @@ Return JSON in this exact format:
     concepts,
   };
 
+  const descriptions = await generatePersonaDescriptions(personaName, conceptMap);
+  if (descriptions) {
+    conceptMap.short_description = descriptions.short_description;
+    conceptMap.long_description = descriptions.long_description;
+  }
+
   return conceptMap;
 }
 
@@ -153,4 +160,22 @@ export async function saveNewPersona(
   
   await writeFile(systemPath, JSON.stringify(conceptMap, null, 2), "utf-8");
   await writeFile(historyPath, JSON.stringify({ messages: [] }, null, 2), "utf-8");
+}
+
+export async function generatePersonaDescriptions(
+  personaName: string,
+  concepts: ConceptMap,
+  signal?: AbortSignal
+): Promise<PersonaDescriptions | null> {
+  const { system, user } = buildDescriptionPrompt(personaName, concepts);
+  
+  try {
+    const result = await callLLMForJSON<PersonaDescriptions>(system, user, {
+      signal,
+      temperature: 0.5
+    });
+    return result;
+  } catch {
+    return null;
+  }
 }

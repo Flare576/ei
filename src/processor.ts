@@ -15,6 +15,54 @@ import {
   buildConceptUpdateUserPrompt,
 } from "./prompts.js";
 import { validateSystemConcepts, mergeWithOriginalStatics } from "./validate.js";
+import { generatePersonaDescriptions } from "./persona-creator.js";
+
+function conceptsChanged(oldConcepts: Concept[], newConcepts: Concept[]): boolean {
+  if (oldConcepts.length !== newConcepts.length) return true;
+  
+  const oldNames = new Set(oldConcepts.map(c => c.name));
+  const newNames = new Set(newConcepts.map(c => c.name));
+  
+  for (const name of oldNames) {
+    if (!newNames.has(name)) return true;
+  }
+  for (const name of newNames) {
+    if (!oldNames.has(name)) return true;
+  }
+  
+  for (const newConcept of newConcepts) {
+    const oldConcept = oldConcepts.find(c => c.name === newConcept.name);
+    if (oldConcept && oldConcept.description !== newConcept.description) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+function stripEcho(userMessage: string | null, response: string): string {
+  if (!userMessage || !response) return response;
+  
+  const trimmedUser = userMessage.trim();
+  const trimmedResponse = response.trim();
+  
+  if (trimmedResponse.startsWith(trimmedUser)) {
+    const remainder = trimmedResponse.slice(trimmedUser.length).trimStart();
+    if (remainder.length > 0) {
+      return remainder;
+    }
+  }
+  
+  const firstNewline = trimmedResponse.indexOf("\n");
+  if (firstNewline > 0) {
+    const firstLine = trimmedResponse.slice(0, firstNewline).trim();
+    if (firstLine === trimmedUser) {
+      return trimmedResponse.slice(firstNewline + 1).trimStart();
+    }
+  }
+  
+  return response;
+}
 
 export interface ProcessResult {
   response: string | null;
@@ -62,7 +110,8 @@ export async function processEvent(
     console.log("[Debug] Calling LLM for response...");
   }
 
-  const response = await callLLM(responseSystemPrompt, responseUserPrompt, { signal, temperature: 0.7 });
+  const rawResponse = await callLLM(responseSystemPrompt, responseUserPrompt, { signal, temperature: 0.7 });
+  const response = rawResponse ? stripEcho(humanMessage, rawResponse) : null;
 
   if (signal?.aborted) return abortedResult;
 
@@ -135,25 +184,44 @@ export async function processEvent(
     const proposedMap: ConceptMap = {
       entity: "system",
       aliases: systemConcepts.aliases,
+      short_description: systemConcepts.short_description,
+      long_description: systemConcepts.long_description,
       last_updated: new Date().toISOString(),
       concepts: newSystemConcepts,
     };
 
     const validation = validateSystemConcepts(proposedMap, systemConcepts);
+    let mapToSave: ConceptMap;
 
     if (validation.valid) {
-      await saveConceptMap(proposedMap, persona);
-      systemConceptsUpdated = true;
+      mapToSave = proposedMap;
     } else {
       if (debug) {
         console.log(
           `[Debug] System concept validation failed: ${validation.issues.join(", ")}`
         );
       }
-      const merged = mergeWithOriginalStatics(proposedMap, systemConcepts);
-      await saveConceptMap(merged, persona);
-      systemConceptsUpdated = true;
+      mapToSave = mergeWithOriginalStatics(proposedMap, systemConcepts);
     }
+
+    const shouldUpdateDescriptions = conceptsChanged(
+      systemConcepts.concepts,
+      mapToSave.concepts
+    );
+
+    if (shouldUpdateDescriptions && !signal?.aborted) {
+      if (debug) {
+        console.log("[Debug] Concepts changed, regenerating descriptions...");
+      }
+      const descriptions = await generatePersonaDescriptions(persona, mapToSave, signal);
+      if (descriptions) {
+        mapToSave.short_description = descriptions.short_description;
+        mapToSave.long_description = descriptions.long_description;
+      }
+    }
+
+    await saveConceptMap(mapToSave, persona);
+    systemConceptsUpdated = true;
   }
 
   if (newHumanConcepts) {
