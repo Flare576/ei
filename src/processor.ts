@@ -121,11 +121,11 @@ export async function processEvent(
     persona
   );
 
+  if (signal?.aborted) return abortedResult;
+
   if (debug) {
     console.log("[Debug] Updating system concepts...");
   }
-
-  if (signal?.aborted) return abortedResult;
 
   const systemUpdatePrompt = buildConceptUpdateSystemPrompt(
     "system",

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Box, Text, useApp, useInput, useStdout } from "ink";
+import fs from "fs";
 import { PersonaList, type PersonaInfo, type PersonaStatusInfo } from "./PersonaList.js";
 import { ChatHistory } from "./ChatHistory.js";
 import { InputArea } from "./InputArea.js";
@@ -25,6 +26,14 @@ const HEARTBEAT_INTERVAL_MS = DEBUG ? 600 * 1000 : THIRTY_MINUTES_MS;
 const COMPLETE_THOUGHT_LENGTH = 30;
 const DEBOUNCE_MS = 2000;
 const STARTUP_HISTORY_COUNT = 20;
+
+// File logging for debugging Ctrl+C behavior
+const logToFile = (message: string) => {
+  if (DEBUG) {
+    const timestamp = new Date().toISOString();
+    fs.appendFileSync('/tmp/ei-debug.log', `${timestamp}: ${message}\n`);
+  }
+};
 
 type FocusedPane = "input" | "personas";
 
@@ -195,19 +204,23 @@ export function App(): React.ReactElement {
     const messageCount = ps.messageQueue.length;
 
     debugLog(`[${personaName}] Processing ${messageCount} message(s)`);
+    logToFile(`[${personaName}] Starting processing, setting isProcessing=true`);
 
     ps.abortController = new AbortController();
     ps.isProcessing = true;
     
     if (personaName === activePersonaRef.current) {
       setState(s => ({ ...s, isProcessing: true }));
+      logToFile(`[${personaName}] Updated UI isProcessing=true`);
     }
 
     try {
       const result = await processEvent(combinedMessage, personaName, DEBUG, ps.abortController.signal);
+      logToFile(`[${personaName}] processEvent completed, aborted: ${result.aborted}`);
 
       if (result.aborted) {
         debugLog(`[${personaName}] Processing aborted - ${messageCount} message(s) preserved`);
+        logToFile(`[${personaName}] Processing was aborted, messages preserved`);
       } else {
         ps.messageQueue = [];
         if (personaName === activePersonaRef.current) {
@@ -224,8 +237,10 @@ export function App(): React.ReactElement {
         }
       }
     } catch (err) {
+      logToFile(`[${personaName}] processEvent threw error: ${err instanceof Error ? err.message : String(err)}`);
       if (err instanceof LLMAbortedError) {
         debugLog(`[${personaName}] LLM call aborted - messages preserved`);
+        logToFile(`[${personaName}] LLMAbortedError caught`);
       } else {
         ps.messageQueue = [];
         if (personaName === activePersonaRef.current) {
@@ -234,15 +249,18 @@ export function App(): React.ReactElement {
         }
       }
     } finally {
+      logToFile(`[${personaName}] Processing finished, setting isProcessing=false`);
       ps.isProcessing = false;
       ps.abortController = null;
       
       if (personaName === activePersonaRef.current) {
         setState(s => ({ ...s, isProcessing: false }));
+        logToFile(`[${personaName}] Updated UI isProcessing=false`);
       }
 
       if (ps.messageQueue.length > 0) {
         debugLog(`[${personaName}] Queue has messages after processing - retriggering`);
+        logToFile(`[${personaName}] Queue still has ${ps.messageQueue.length} messages, retriggering`);
         processPersonaQueue(personaName);
       }
     }
@@ -310,12 +328,34 @@ export function App(): React.ReactElement {
 
   const abortPersonaOperation = useCallback((personaName: string) => {
     const ps = personaStatesRef.current.get(personaName);
+    logToFile(`abortPersonaOperation called for ${personaName}, has abortController: ${!!ps?.abortController}`);
     if (ps?.abortController) {
       debugLog(`[${personaName}] Aborting current operation`);
+      logToFile(`Calling abort() on ${personaName}`);
       ps.abortController.abort();
       ps.abortController = null;
+      
+      // Mark the last human message as failed (for EDIT/RETRY functionality)
+      if (personaName === activePersonaRef.current) {
+        updateLastHumanMessageState("failed");
+        logToFile(`Set last human message state to 'failed' for ${personaName}`);
+      }
+      
+      // Clear the message queue to prevent re-processing
+      logToFile(`Clearing message queue for ${personaName} (had ${ps.messageQueue.length} messages)`);
+      ps.messageQueue = [];
+      
+      // Immediately update processing state to prevent race conditions
+      ps.isProcessing = false;
+      logToFile(`Set ${personaName} isProcessing to false`);
+      
+      // Update UI state if this is the active persona
+      if (personaName === activePersonaRef.current) {
+        setState(s => ({ ...s, isProcessing: false }));
+        logToFile(`Updated UI isProcessing to false for active persona ${personaName}`);
+      }
     }
-  }, [debugLog]);
+  }, [debugLog, updateLastHumanMessageState]);
 
   const schedulePersonaDebounce = useCallback((personaName: string) => {
     const ps = getOrCreatePersonaState(personaName);
@@ -473,11 +513,30 @@ export function App(): React.ReactElement {
   }, [handleCommand, addMessageToActive, queueMessage, setStatus]);
 
   const cleanupAllPersonaStates = useCallback(() => {
-    for (const [, ps] of personaStatesRef.current) {
-      if (ps.heartbeatTimer) clearTimeout(ps.heartbeatTimer);
-      if (ps.debounceTimer) clearTimeout(ps.debounceTimer);
-      if (ps.abortController) ps.abortController.abort();
+    logToFile("cleanupAllPersonaStates called - aborting all operations");
+    for (const [name, ps] of personaStatesRef.current) {
+      logToFile(`Cleaning up persona ${name}: heartbeat=${!!ps.heartbeatTimer}, debounce=${!!ps.debounceTimer}, abort=${!!ps.abortController}, queue=${ps.messageQueue.length}`);
+      
+      if (ps.heartbeatTimer) {
+        clearTimeout(ps.heartbeatTimer);
+        ps.heartbeatTimer = null;
+      }
+      if (ps.debounceTimer) {
+        clearTimeout(ps.debounceTimer);
+        ps.debounceTimer = null;
+      }
+      if (ps.abortController) {
+        ps.abortController.abort();
+        ps.abortController = null;
+      }
+      
+      // Clear message queues to prevent restart
+      ps.messageQueue = [];
+      ps.isProcessing = false;
+      
+      logToFile(`Cleaned up persona ${name}`);
     }
+    logToFile("All persona states cleaned up");
   }, []);
 
   const getBackgroundProcessingPersonas = useCallback((): string[] => {
@@ -496,15 +555,40 @@ export function App(): React.ReactElement {
 
   useInput((input, key) => {
     if (key.ctrl && input === "c") {
+      logToFile("Ctrl+C pressed");
+      
       const activePs = personaStatesRef.current.get(activePersonaRef.current);
       
-      if (activePs?.isProcessing) {
-        abortPersonaOperation(activePersonaRef.current);
-        setStatus("Aborted current operation");
-        return;
+      // Check if ANY persona is processing (active or background)
+      const anyProcessing = Array.from(personaStatesRef.current.values()).some(ps => ps.isProcessing);
+      
+      logToFile(`Active persona processing: ${activePs?.isProcessing}, Any processing: ${anyProcessing}`);
+      
+      if (anyProcessing) {
+        // Abort the active persona if it's processing
+        if (activePs?.isProcessing) {
+          logToFile("Aborting active persona operation");
+          abortPersonaOperation(activePersonaRef.current);
+          setStatus("Aborted current operation");
+          return;
+        }
+        
+        // If active persona isn't processing but others are, show warning
+        const backgroundProcessing = getBackgroundProcessingPersonas();
+        if (backgroundProcessing.length > 0 && !state.ctrlCWarningShown) {
+          const names = backgroundProcessing.join(", ");
+          logToFile(`Showing background processing warning for: ${names}`);
+          setState(s => ({ 
+            ...s, 
+            ctrlCWarningShown: true,
+            statusMessage: `Processing in progress for: ${names}. Press Ctrl+C again to exit.`
+          }));
+          return;
+        }
       }
 
       if (state.inputHasText) {
+        logToFile("Clearing input text");
         setState(s => ({ 
           ...s, 
           inputClearTrigger: s.inputClearTrigger + 1,
@@ -513,17 +597,8 @@ export function App(): React.ReactElement {
         return;
       }
 
-      const backgroundProcessing = getBackgroundProcessingPersonas();
-      if (backgroundProcessing.length > 0 && !state.ctrlCWarningShown) {
-        const names = backgroundProcessing.join(", ");
-        setState(s => ({ 
-          ...s, 
-          ctrlCWarningShown: true,
-          statusMessage: `Processing in progress for: ${names}. Press Ctrl+C again to exit.`
-        }));
-        return;
-      }
-
+      // Only exit if no processing is happening and no input text
+      logToFile("Exiting application");
       cleanupAllPersonaStates();
       exit();
       return;

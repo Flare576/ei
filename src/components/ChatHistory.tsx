@@ -115,6 +115,7 @@ function messageToDisplayLines(
   const name = getRoleName(msg.role, persona);
   const nameColor = getMessageColor(msg.role, msg.state);
   const isGrayed = msg.state === "processing" || msg.state === "queued";
+  const isFailed = msg.state === "failed";
   
   const prefixText = `[${time}] ${name}: `;
   const prefixWidth = prefixText.length;
@@ -133,7 +134,7 @@ function messageToDisplayLines(
       <Text>{' '.repeat(prefixWidth)}</Text>
     ),
     content: lineContent,
-    contentColor: nameColor,
+    contentColor: isFailed ? "red" : nameColor,
     isGrayed
   }));
 }
@@ -197,18 +198,23 @@ export function ChatHistory({ messages, persona, scrollOffset = 0, onScrollInfo 
         {visibleLines.length === 0 ? (
           <Text dimColor>(no messages yet)</Text>
         ) : (
-          visibleLines.map((line) => (
-            <Text key={line.key} wrap="truncate-end">
-              {line.prefix}
-              {line.isGrayed ? (
-                <Text dimColor>{line.content}</Text>
-              ) : (
-                parseMarkdownInline(line.content).map((node, i) =>
-                  typeof node === "string" ? <Text key={i}>{node}</Text> : React.cloneElement(node, { key: i })
-                )
-              )}
-            </Text>
-          ))
+          visibleLines.map((line) => {
+            const isFailed = line.contentColor === "red";
+            return (
+              <Text key={line.key} wrap="truncate-end">
+                {line.prefix}
+                {line.isGrayed ? (
+                  <Text dimColor>{line.content}</Text>
+                ) : isFailed ? (
+                  <Text color="red">{line.content}</Text>
+                ) : (
+                  parseMarkdownInline(line.content).map((node, i) =>
+                    typeof node === "string" ? <Text key={i}>{node}</Text> : React.cloneElement(node, { key: i })
+                  )
+                )}
+              </Text>
+            );
+          })
         )}
       </Box>
     </Box>
