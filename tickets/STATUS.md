@@ -1,7 +1,7 @@
 # Ticket Status Summary
 
 ## HIGHEST PRIORITY 🚨 (Critical Infrastructure)
-- 0056: End-to-End Testing POC with Controlled Environment (enables comprehensive testing)
+- (none currently - 0056 moved to IN_PROGRESS)
 
 ## HIGH PRIORITY 🔥 (Critical User Experience)
 - 0033: Blessed Resize Input Corruption Validation (basic functionality)
@@ -40,7 +40,7 @@
 - 0052: Window Size CLI Parameter (configuration)
 
 ## IN_PROGRESS 🚧
-- (none currently)
+- 0056: End-to-End Testing POC with Controlled Environment
 
 ## DONE 🔄
 - (none currently)
