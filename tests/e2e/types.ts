@@ -20,13 +20,39 @@ export interface E2ETestHarness {
   
   // State observation
   waitForUIChange(timeout?: number): Promise<string>;
+  waitForUIText(expectedText: string, timeout?: number): Promise<string>;
+  waitForUIPattern(pattern: RegExp, timeout?: number): Promise<string>;
   waitForFileChange(filePath: string, timeout?: number): Promise<void>;
+  waitForFileCreation(filePath: string, timeout?: number): Promise<void>;
+  waitForFileContent(filePath: string, expectedContent: string | RegExp, timeout?: number): Promise<string>;
   waitForProcessingComplete(timeout?: number): Promise<void>;
+  waitForLLMRequest(timeout?: number): Promise<void>;
+  waitForIdleState(timeout?: number): Promise<void>;
+  waitForCondition(checker: () => Promise<boolean> | boolean, description: string, timeout?: number, checkInterval?: number): Promise<void>;
   
   // Assertions
-  assertUIContains(text: string): void;
+  assertUIContains(text: string): Promise<void>;
+  assertUIDoesNotContain(text: string): Promise<void>;
+  assertUIMatches(pattern: RegExp): Promise<void>;
   assertFileExists(filePath: string): void;
-  assertPersonaState(persona: string, expectedState: PersonaState): void;
+  assertFileDoesNotExist(filePath: string): void;
+  assertFileContent(filePath: string, expectedContent: string | RegExp): Promise<void>;
+  assertPersonaState(persona: string, expectedState: PersonaState): Promise<void>;
+  assertProcessState(expectedRunning: boolean): void;
+  assertExitCode(expectedExitCode: number, timeout?: number): Promise<void>;
+  assertMockRequestCount(expectedCount: number): void;
+  assertMockRequestReceived(endpoint: string, method?: string): void;
+  assertDirectoryExists(dirPath: string, expectedFiles?: string[]): void;
+  assertCleanEnvironment(allowedFiles?: string[]): void;
+  
+  // Utility methods
+  getCurrentOutput(lines?: number): Promise<string>;
+  getTempDataPath(): string | null;
+  getMockRequestHistory(): any[];
+  setMockResponse(endpoint: string, content: string, delayMs?: number): void;
+  enableMockStreaming(endpoint: string, chunks: string[]): void;
+  isAppRunning(): boolean;
+  getAppFinalState(): any;
 }
 
 export interface TestConfig {

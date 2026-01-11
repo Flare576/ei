@@ -1,0 +1,71 @@
+{
+  "name": "Basic Application Flow Test",
+  "description": "Tests the basic flow of starting the application, sending a message, and receiving a response",
+  "setup": {
+    "mockResponses": [
+      {
+        "endpoint": "/v1/chat/completions",
+        "response": {
+          "type": "fixed",
+          "content": "Hello! I'm a test response from the mock LLM server.",
+          "delayMs": 100
+        }
+      }
+    ],
+    "initialData": {
+      "personas": [
+        {
+          "name": "test-assistant",
+          "systemPrompt": "You are a helpful test assistant.",
+          "initialMessages": []
+        }
+      ]
+    }
+  },
+  "steps": [
+    {
+      "type": "input",
+      "action": "Hello, test assistant!",
+      "timeout": 5000
+    },
+    {
+      "type": "wait",
+      "action": "llm_request",
+      "timeout": 3000
+    },
+    {
+      "type": "wait",
+      "action": "ui:Hello! I'm a test response",
+      "timeout": 5000
+    },
+    {
+      "type": "command",
+      "action": "/quit",
+      "timeout": 2000
+    }
+  ],
+  "assertions": [
+    {
+      "type": "ui",
+      "target": "output",
+      "condition": "contains",
+      "expected": "Hello! I'm a test response"
+    },
+    {
+      "type": "file",
+      "target": "personas/test-assistant/system.jsonc",
+      "condition": "exists",
+      "expected": true
+    },
+    {
+      "type": "process",
+      "target": "mock_server",
+      "condition": "mock_requests",
+      "expected": 1
+    }
+  ],
+  "cleanup": {
+    "killProcesses": true,
+    "restoreEnvironment": true
+  }
+}
