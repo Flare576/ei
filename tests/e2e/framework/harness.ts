@@ -1029,18 +1029,28 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
       'Thinking...',
       'Loading...',
       'Generating...',
-      // Blessed UI might show processing indicators
+      // EI-specific processing indicators
       'Working',
-      // Look for cursor or spinner characters that might indicate processing
-      '|', '/', '-', '\\',
-      // Look for streaming indicators
       'streaming',
-      'chunk'
+      'chunk',
+      // Look for actual processing messages, not UI box-drawing characters
+      'processing in progress',
+      'background processing'
     ];
 
     const recentOutput = output.slice(-1000); // Check last 1KB of output
-    return processingIndicators.some(indicator => 
-      recentOutput.toLowerCase().includes(indicator.toLowerCase())
-    );
+    
+    // Don't treat box-drawing characters as processing indicators
+    // These are common in blessed UI: │ ┌ ┐ └ ┘ ├ ┤ ┬ ┴ ┼ ─ ═ ║ ╔ ╗ ╚ ╝ ╠ ╣ ╦ ╩ ╬
+    // Also ignore single character indicators that are likely UI elements
+    return processingIndicators.some(indicator => {
+      if (indicator.length === 1) {
+        // For single character indicators, require them to be surrounded by spaces or at word boundaries
+        const regex = new RegExp(`\\s${indicator}\\s|^${indicator}\\s|\\s${indicator}$`, 'i');
+        return regex.test(recentOutput);
+      } else {
+        return recentOutput.toLowerCase().includes(indicator.toLowerCase());
+      }
+    });
   }
 }

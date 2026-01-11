@@ -220,6 +220,10 @@ export class TestScenarioRunner {
         result.details.personasSetup = setup.personas.length;
       }
 
+      // Start the application after all setup is complete
+      await this.harness.startApp({ debugMode: false });
+      result.details.applicationStarted = true;
+
       result.success = true;
     } catch (error) {
       result.error = error instanceof Error ? error.message : String(error);
@@ -349,15 +353,21 @@ export class TestScenarioRunner {
     };
 
     try {
+      // Always stop the application if it's running
+      if (this.harness.isAppRunning()) {
+        await this.harness.stopApp();
+        result.details.applicationStopped = true;
+      }
+
       // Remove specified files
       if (cleanup.removeFiles && cleanup.removeFiles.length > 0) {
         await this.cleanupFiles(cleanup.removeFiles);
         result.details.filesRemoved = cleanup.removeFiles.length;
       }
 
-      // Kill processes if specified
+      // Kill processes if specified (legacy support)
       if (cleanup.killProcesses) {
-        await this.harness.stopApp();
+        // Already handled above, but keep for compatibility
         result.details.processesKilled = true;
       }
 

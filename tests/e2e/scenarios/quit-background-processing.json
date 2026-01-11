@@ -1,0 +1,92 @@
+{
+  "name": "Quit Command - Background Processing",
+  "description": "Tests quit command behavior when background processing is active (should show warnings)",
+  "setup": {
+    "mockResponses": [
+      {
+        "endpoint": "/v1/chat/completions",
+        "response": {
+          "type": "streaming",
+          "content": [
+            "This is chunk 1 of background processing",
+            "This is chunk 2 of background processing", 
+            "This is chunk 3 of background processing",
+            "Final chunk of background processing"
+          ],
+          "delayMs": 500
+        }
+      }
+    ],
+    "initialData": {
+      "personas": [
+        {
+          "name": "test-assistant",
+          "systemPrompt": "You are a helpful test assistant.",
+          "initialMessages": []
+        }
+      ]
+    }
+  },
+  "steps": [
+    {
+      "type": "wait",
+      "action": "idle",
+      "timeout": 3000
+    },
+    {
+      "type": "input",
+      "action": "Generate a long response with streaming",
+      "timeout": 1000
+    },
+    {
+      "type": "wait",
+      "action": "llm_request",
+      "timeout": 2000
+    },
+    {
+      "type": "command",
+      "action": "quit",
+      "timeout": 1000
+    },
+    {
+      "type": "wait",
+      "action": "ui:background processing",
+      "timeout": 3000
+    },
+    {
+      "type": "input",
+      "action": "y",
+      "timeout": 1000
+    }
+  ],
+  "assertions": [
+    {
+      "type": "process",
+      "target": "application",
+      "condition": "exit_code",
+      "expected": 0
+    },
+    {
+      "type": "process",
+      "target": "application",
+      "condition": "running",
+      "expected": false
+    },
+    {
+      "type": "process",
+      "target": "mock_server",
+      "condition": "mock_requests",
+      "expected": 1
+    },
+    {
+      "type": "file",
+      "target": "personas/test-assistant/system.jsonc",
+      "condition": "exists",
+      "expected": true
+    }
+  ],
+  "cleanup": {
+    "restoreEnvironment": true,
+    "killProcesses": true
+  }
+}
