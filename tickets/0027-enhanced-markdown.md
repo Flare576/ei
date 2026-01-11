@@ -23,7 +23,7 @@ Not implemented:
 - Block quotes (`> text`)
 - Links (`[text](url)`)
 - Lists (`- item`)
-- Code blocks (triple backticks)
+- Code blocks (triple backticks) - **CRITICAL**: Current blessed implementation has parsing order bug where inline code (single backticks) processes before code blocks, breaking triple backtick parsing
 
 ## Acceptance Criteria
 

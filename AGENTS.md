@@ -51,12 +51,13 @@ Maintain `tickets/STATUS.md` as the single source of truth for ticket overview:
 
 ```
 src/
-  index.tsx          # Entry point (Ink render)
-  components/        # React/Ink UI components
-    App.tsx          # Main application component
-    PersonaList.tsx  # Left pane - persona list
-    ChatHistory.tsx  # Center pane - messages
-    InputArea.tsx    # Bottom pane - text input
+  index.tsx          # Entry point (Blessed render)
+  blessed/           # Blessed-based UI components
+    app.ts           # Main application class
+    layout-manager.ts # Responsive layout handling
+    focus-manager.ts # Input focus management
+    persona-renderer.ts # Persona list rendering
+    chat-renderer.ts # Chat history rendering
   processor.ts       # Message processing + LLM orchestration
   storage.ts         # File I/O for personas, history, concepts
   llm.ts             # OpenAI-compatible LLM client
@@ -69,7 +70,7 @@ data/                # Runtime data (personas, history) - gitignored
 
 ### Key Conventions
 
-- **Ink/React for UI**: All terminal rendering via Ink components
+- **Blessed for UI**: All terminal rendering via blessed widgets
 - **JSONC files**: Data files use `.jsonc` extension (JSON with comments support, though we don't use comments currently)
 - **Persona-centric**: Most operations take a `persona` parameter
 - **AbortController**: Long operations support cancellation via AbortSignal

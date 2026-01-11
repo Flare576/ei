@@ -71,7 +71,6 @@ inclusion: always
 - `tickets/STATUS.md`: Single source of truth for project status
 
 ### Environment Setup
-- `EI_DATA_PATH`: Points to `/Users/flare576/personaldot/ei/` (outside workspace)
 - Use bash commands to access data files (not file tools)
 - Test with `npm test`, run with `npm start -- -d` for debug mode
 

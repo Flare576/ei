@@ -251,3 +251,28 @@ export async function createPersonaDirectory(persona: string): Promise<void> {
   const dir = path.join(DATA_PATH, "personas", persona);
   await mkdir(dir, { recursive: true });
 }
+
+// Debug logging utilities to isolate file system access
+const DEBUG_LOG = 'logs/output.log';
+
+export function initializeDebugLog(): void {
+  try {
+    // Create logs directory if it doesn't exist
+    const logsDir = path.dirname(DEBUG_LOG);
+    if (!existsSync(logsDir)) {
+      mkdir(logsDir, { recursive: true });
+    }
+    writeFile(DEBUG_LOG, `=== Blessed App Debug Log - ${new Date().toISOString()} ===\n`, { flag: 'w' });
+  } catch (err) {
+    // Silently fail if debug log can't be created
+  }
+}
+
+export function appendDebugLog(message: string): void {
+  try {
+    const timestamp = new Date().toISOString();
+    writeFile(DEBUG_LOG, `[${timestamp}] ${message}\n`, { flag: 'a' });
+  } catch (err) {
+    // Silently fail if debug log can't be written
+  }
+}

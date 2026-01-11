@@ -7,6 +7,7 @@ import {
   appendMessage,
   getRecentMessages,
   getLastMessageTime,
+  appendDebugLog,
 } from "./storage.js";
 import {
   buildResponseSystemPrompt,
@@ -106,8 +107,8 @@ export async function processEvent(
   );
 
   if (debug) {
-    console.log(`[Debug] Persona: ${persona}`);
-    console.log("[Debug] Calling LLM for response...");
+    appendDebugLog(`[Debug] Persona: ${persona}`);
+    appendDebugLog("[Debug] Calling LLM for response...");
   }
 
   const rawResponse = await callLLM(responseSystemPrompt, responseUserPrompt, { signal, temperature: 0.7 });
@@ -124,7 +125,7 @@ export async function processEvent(
   if (signal?.aborted) return abortedResult;
 
   if (debug) {
-    console.log("[Debug] Updating system concepts...");
+    appendDebugLog("[Debug] Updating system concepts...");
   }
 
   const systemUpdatePrompt = buildConceptUpdateSystemPrompt(
@@ -141,7 +142,7 @@ export async function processEvent(
   if (signal?.aborted) return abortedResult;
 
   if (debug) {
-    console.log("[Debug] Updating human concepts...");
+    appendDebugLog("[Debug] Updating human concepts...");
   }
 
   if (signal?.aborted) return abortedResult;
@@ -197,7 +198,7 @@ export async function processEvent(
       mapToSave = proposedMap;
     } else {
       if (debug) {
-        console.log(
+        appendDebugLog(
           `[Debug] System concept validation failed: ${validation.issues.join(", ")}`
         );
       }
@@ -211,7 +212,7 @@ export async function processEvent(
 
     if (shouldUpdateDescriptions && !signal?.aborted) {
       if (debug) {
-        console.log("[Debug] Concepts changed, regenerating descriptions...");
+        appendDebugLog("[Debug] Concepts changed, regenerating descriptions...");
       }
       const descriptions = await generatePersonaDescriptions(persona, mapToSave, signal);
       if (descriptions) {

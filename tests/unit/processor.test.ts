@@ -29,6 +29,7 @@ vi.mock('../../src/storage.js', () => ({
   appendMessage: vi.fn(),
   getRecentMessages: vi.fn(),
   getLastMessageTime: vi.fn(),
+  appendDebugLog: vi.fn(),
 }));
 
 vi.mock('../../src/prompts.js', () => ({

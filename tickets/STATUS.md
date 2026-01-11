@@ -5,20 +5,25 @@
 - 0015: Persona Switching (Commands + Navigation)
 - 0018: Public Repository Storage Warning
 - 0022: Per-Persona Model Configuration
-- 0023: Ink Resize Delay
-- 0024: Ink Medium Layout Rendering Issues
 - 0026: Heartbeat Interrupt Protection
 - 0027: Enhanced Markdown Rendering
 - 0028: Slow LLM Investigation
 - 0029: Quit Command with Force Option
-- 0030: Ink Editor Command
 - 0032: Failed Message Edit and Retry Interface
+- 0033: Blessed Resize Input Corruption Validation
+- 0034: Blessed Status Line Corruption
+- 0036: Blessed Text Rendering Corruption
+- 0038: Blessed Multi-Line Modal Interface
+- 0039: Blessed Proper Emoji Support
+- 0041: Blessed Editor Command
 
 ## IN_PROGRESS 🚧
 - (none currently)
 
 ## DONE 🔄
-- (none currently)
+- 0035: Blessed Duplicate Message Processing
+- 0037: Blessed Debug Output Log-Only Mode
+- 0040: Blessed Resize Detection Broken
 
 ## BLOCKED 🚫
 - (none currently)
@@ -43,12 +48,15 @@
 - 0031: Processor Unit Tests
 
 ## CANCELLED ❌
-- 0003: /editor Command for Multi-line Input (replaced by 0030)
+- 0003: /editor Command for Multi-line Input (replaced by 0030, then 0041)
 - 0004: Inline Carriage Return Support (replaced by 0013)
 - 0012: OpenCode-Compatible Keybindings (partially implemented, issues noted)
+- 0023: Ink Resize Delay (resolved by Blessed migration)
+- 0024: Ink Medium Layout Rendering Issues (resolved by Blessed migration)
+- 0030: Ink Editor Command (replaced by 0041 for Blessed)
 
 ---
 
-**Last Updated**: 2026-01-09  
-**Total Tickets**: 32 created  
-**Completion Rate**: 17/31 validated (55%)
+**Last Updated**: 2026-01-11  
+**Total Tickets**: 41 created  
+**Completion Rate**: 17/38 validated (45%) + 3 done awaiting validation

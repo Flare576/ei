@@ -48,3 +48,14 @@ export interface ConceptMapUpdate {
   concepts: Concept[];
   reasoning?: string;
 }
+
+export interface PersonaState {
+  name: string;
+  heartbeatTimer: ReturnType<typeof setTimeout> | null;
+  debounceTimer: ReturnType<typeof setTimeout> | null;
+  lastActivity: number;
+  isProcessing: boolean;
+  messageQueue: string[];
+  unreadCount: number;
+  abortController: AbortController | null;
+}

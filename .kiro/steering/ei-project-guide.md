@@ -68,6 +68,15 @@ Tickets in `/tickets/` track all features, bugs, and improvements with numbered 
 - Create tickets for bugs if none exist
 - Minimal fixes - avoid refactoring during bug fixes
 
+## Agent Testing Capabilities
+
+### TUI Testing via controlBashProcess
+- **Agents CAN see Ink TUI output** using `controlBashProcess` + `getProcessOutput`
+- **Responsive layout works**: Terminal width affects layout (3-pane → 1-pane)
+- **Visual verification possible**: Can verify UI rendering, layout, content display
+- **Use for**: UI regression testing, layout validation, visual confirmation of changes
+- **Limitations**: No interactive input testing (can't simulate keystrokes)
+
 ## Validation Patterns
 
 ### Two-Tier Completion Verification

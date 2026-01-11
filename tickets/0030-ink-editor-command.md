@@ -1,10 +1,18 @@
 # 0030: /editor Command for Ink-based Multi-line Input
 
-**Status**: PENDING
+**Status**: CANCELLED
+
+> Cancelled: This ticket was specific to the Ink-based TUI implementation. The system has migrated to Blessed, making the Ink-specific implementation details obsolete. See ticket 0041 for the Blessed-compatible version.
 
 ## Summary
 
 Re-implement `/editor` slash command for the Ink-based TUI that opens the user's configured `$EDITOR` for composing multi-line messages.
+
+## Resolution
+
+**OBSOLETE**: The Blessed migration has replaced the Ink-based TUI. The `/editor` command functionality is still valuable but needs to be implemented using Blessed's event system and status handling rather than Ink's React-based approach.
+
+**Replacement**: See ticket 0041 for Blessed-specific implementation.
 
 ## Problem
 

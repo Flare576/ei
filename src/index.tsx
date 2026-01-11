@@ -1,21 +1,10 @@
-import React from "react";
-import { render } from "ink";
-import { App } from "./components/App.js";
+#!/usr/bin/env node
 
-// Configure Ink to not exit on Ctrl+C - we'll handle it ourselves
-const { unmount } = render(React.createElement(App), {
-  exitOnCtrlC: false
-});
+import { EIApp } from "./blessed/app.js";
 
-// Handle process termination signals
-process.on('SIGINT', () => {
-  // Let the App component handle Ctrl+C through useInput
-  // If we get here, it means the App didn't handle it, so exit
-  unmount();
-  process.exit(0);
-});
-
-process.on('SIGTERM', () => {
-  unmount();
-  process.exit(0);
+// Start the Blessed-based application
+const app = new EIApp();
+app.init().catch((error) => {
+  console.error('Failed to initialize EI application:', error);
+  process.exit(1);
 });
