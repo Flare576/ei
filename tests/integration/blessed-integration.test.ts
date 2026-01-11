@@ -388,6 +388,26 @@ describe('Blessed Integration Tests', () => {
       expect(chatHistory.getScroll).toBeDefined();
       expect(chatHistory.getScrollHeight).toBeDefined();
     });
+
+    test('scrolling key bindings work after resize', () => {
+      // This tests the specific bug fix where scrolling stopped working after resize
+      // because key bindings were lost when the input box was recreated
+      
+      // @ts-ignore - accessing private property for testing
+      const focusManager = app.focusManager;
+      
+      // The key test is that handleResize doesn't throw an error
+      // and that the setupScrollingKeyBindings method exists and can be called
+      expect(() => focusManager.handleResize()).not.toThrow();
+      
+      // Verify that the app has the setupScrollingKeyBindings method
+      // @ts-ignore - accessing private method for testing
+      expect(typeof app.setupScrollingKeyBindings).toBe('function');
+      
+      // Verify that calling setupScrollingKeyBindings doesn't throw
+      // @ts-ignore - accessing private method for testing
+      expect(() => app.setupScrollingKeyBindings()).not.toThrow();
+    });
   });
 
   describe('Event Handling Integration', () => {

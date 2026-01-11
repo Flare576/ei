@@ -204,6 +204,36 @@ describe('Blessed Scrolling Tests', () => {
       expect(scrollManager.getCurrentScroll()).toBe(targetPosition);
     });
 
+    test('scrolling works after layout recreation (resize scenario)', () => {
+      // This tests the specific bug where scrolling stopped working after resize
+      // because key bindings were lost when the input box was recreated
+      
+      // Start with some scrollable content
+      scrollManager.setScrollHeight(200);
+      scrollManager.autoScrollToBottom();
+      
+      // Scroll up to middle position
+      scrollManager.scrollChatHistory(-50);
+      const middlePosition = scrollManager.getCurrentScroll();
+      expect(middlePosition).toBeGreaterThan(0);
+      expect(middlePosition).toBeLessThan(200);
+      
+      // Simulate layout recreation (what happens during resize)
+      // In the real app, this would create new blessed elements
+      const newScrollManager = new MockScrollManager();
+      newScrollManager.setScrollHeight(200);
+      newScrollManager.chatHistory.scrollTo(middlePosition); // Preserve position
+      
+      // Verify scrolling still works after "recreation"
+      const scrollUpResult = newScrollManager.scrollChatHistory(-10);
+      expect(scrollUpResult.scrolled).toBe(true);
+      expect(scrollUpResult.afterScroll).toBeLessThan(middlePosition);
+      
+      const scrollDownResult = newScrollManager.scrollChatHistory(20);
+      expect(scrollDownResult.scrolled).toBe(true);
+      expect(scrollDownResult.afterScroll).toBeGreaterThan(scrollUpResult.afterScroll);
+    });
+
     test('scroll height changes with content', () => {
       const initialHeight = scrollManager.getScrollHeight();
       

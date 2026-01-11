@@ -7,6 +7,9 @@ dist/
 # Data (personal/test content)
 data/
 
+# Test coverage reports
+coverage/
+
 # Editor/IDE
 .vscode/
 .idea/
@@ -17,6 +20,7 @@ data/
 
 # Logs
 *.log
+logs/
 npm-debug.log*
 
 # Environment

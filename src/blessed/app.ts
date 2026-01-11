@@ -133,23 +133,8 @@ export class EIApp {
       this.handleRefreshCommand();
     });
 
-    // Scrolling key bindings
-    this.screen.key(['pageup'], () => {
-      this.scrollChatHistory(-5);
-    });
-
-    this.screen.key(['pagedown'], () => {
-      this.scrollChatHistory(5);
-    });
-
-    // Also add scrolling to input box for when it has focus
-    this.layoutManager.getInputBox().key(['pageup'], () => {
-      this.scrollChatHistory(-5);
-    });
-
-    this.layoutManager.getInputBox().key(['pagedown'], () => {
-      this.scrollChatHistory(5);
-    });
+    // Set up scrolling key bindings
+    this.setupScrollingKeyBindings();
 
     // Track input text changes for Ctrl+C logic
     this.layoutManager.getInputBox().on('keypress', (ch, key) => {
@@ -181,6 +166,26 @@ export class EIApp {
     // Don't add polling - blessed's resize event should be sufficient
   }
 
+  private setupScrollingKeyBindings() {
+    // Scrolling key bindings on screen level (for when no element has focus)
+    this.screen.key(['pageup'], () => {
+      this.scrollChatHistory(-5);
+    });
+
+    this.screen.key(['pagedown'], () => {
+      this.scrollChatHistory(5);
+    });
+
+    // Also add scrolling to input box for when it has focus
+    this.layoutManager.getInputBox().key(['pageup'], () => {
+      this.scrollChatHistory(-5);
+    });
+
+    this.layoutManager.getInputBox().key(['pagedown'], () => {
+      this.scrollChatHistory(5);
+    });
+  }
+
   private setupSignalHandlers() {
     // Handle termination signals gracefully, but let blessed handle Ctrl+C
     const gracefulExit = () => {
@@ -201,6 +206,10 @@ export class EIApp {
   private handleResize() {
     debugLog(`handleResize called - screen size: ${this.screen.width}x${this.screen.height}`);
     this.focusManager.handleResize();
+    
+    // Re-establish scrolling key bindings on the new input box after resize
+    this.setupScrollingKeyBindings();
+    
     this.render();
   }
 

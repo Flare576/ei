@@ -21,9 +21,7 @@
 - (none currently)
 
 ## DONE 🔄
-- 0035: Blessed Duplicate Message Processing
-- 0037: Blessed Debug Output Log-Only Mode
-- 0040: Blessed Resize Detection Broken
+- (none currently)
 
 ## BLOCKED 🚫
 - (none currently)
@@ -46,6 +44,9 @@
 - 0021: Fix Gemma Message Echo Bug
 - 0025: Ctrl+C Handling - Incomplete Abort
 - 0031: Processor Unit Tests
+- 0035: Blessed Duplicate Message Processing
+- 0037: Blessed Debug Output Log-Only Mode
+- 0040: Blessed Resize Detection Broken
 
 ## CANCELLED ❌
 - 0003: /editor Command for Multi-line Input (replaced by 0030, then 0041)
@@ -59,4 +60,4 @@
 
 **Last Updated**: 2026-01-11  
 **Total Tickets**: 41 created  
-**Completion Rate**: 17/38 validated (45%) + 3 done awaiting validation
+**Completion Rate**: 20/38 validated (53%) + 0 done awaiting validation
