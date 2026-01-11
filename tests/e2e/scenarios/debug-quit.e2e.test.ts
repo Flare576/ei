@@ -21,8 +21,8 @@ describe('Debug Quit Command', () => {
   });
 
   test('debug quit command step by step', async () => {
-    console.log('=== Starting application ===');
-    await harness.startApp({ debugMode: true });
+    console.log('=== Starting application with PTY ===');
+    await harness.startApp({ debugMode: true, usePty: true });
     
     console.log('=== Waiting for idle state ===');
     await harness.waitForIdleState(8000);
