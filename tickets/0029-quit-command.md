@@ -1,6 +1,6 @@
 # 0029: /quit Command with Force Option
 
-**Status**: PENDING
+**Status**: VALIDATED
 
 ## Summary
 
@@ -75,12 +75,12 @@ case "q": {
 
 ## Acceptance Criteria
 
-- [ ] `/quit` follows exact same priority logic as Ctrl+C
-- [ ] `/quit --force` bypasses all checks and exits immediately
-- [ ] `/q` works as shorthand alias
-- [ ] Warning message mentions `/quit --force` option
-- [ ] `/help` updated to show quit commands
-- [ ] Command works from any input state (focused/unfocused)
+- [x] `/quit` follows exact same priority logic as Ctrl+C
+- [x] `/quit --force` bypasses all checks and exits immediately
+- [x] `/q` works as shorthand alias
+- [x] Warning message mentions `/quit --force` option
+- [x] `/help` updated to show quit commands
+- [x] Command works from any input state (focused/unfocused)
 
 ## Value Statement
 

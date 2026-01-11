@@ -339,7 +339,7 @@ describe('Blessed Core Functionality Tests', () => {
   });
 
   describe('Business Logic Preservation Tests', () => {
-    test('Property 18: Business logic preservation', () => {
+    test('Property 6: Business logic preservation', () => {
       fc.assert(fc.property(
         fc.constantFrom('ei', 'claude', 'gpt'),
         fc.string().filter(s => s.trim().length > 0),
@@ -354,7 +354,7 @@ describe('Blessed Core Functionality Tests', () => {
       ), { numRuns: 30 });
     });
 
-    test('Property 19: UI file handling isolation', () => {
+    test('Property 7: UI file handling isolation', () => {
       // This property tests that UI code doesn't directly access files
       // In our mock, all file operations go through storage functions
       

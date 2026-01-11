@@ -4,6 +4,52 @@ inclusion: always
 
 # Ticket Creation Guide
 
+# Ticket and Spec Management Guide
+
+## Workflow Overview
+
+### For Simple Work (Tickets Only)
+- Bug fixes, small features, investigations
+- Use traditional ticket workflow
+- Execute directly in "Vibe" mode
+
+### For Complex Work (Ticket → Spec Workflow)
+- Major features, architectural changes, multi-file implementations
+- Start with ticket, convert to spec for detailed planning
+- Use "Spec" mode for structured development
+
+## Ticket → Spec Conversion Process
+
+### When to Convert a Ticket to Spec
+- Feature requires >3 files or >2 hours of work
+- Architectural decisions needed
+- Complex business logic or integration
+- Multiple acceptance criteria or edge cases
+- Cross-team coordination required
+
+### Conversion Workflow
+1. **Mark ticket IN_PROGRESS** when starting spec creation
+2. Create spec in `.kiro/specs/feature-name/` directory
+3. Reference original ticket in spec documentation
+4. Work through requirements → design → tasks workflow
+5. **Mark ticket DONE** when spec execution is complete
+6. **Mark ticket VALIDATED** after human verification
+
+## Enterprise Integration (Jira + Kiro)
+
+### Recommended Flow
+1. **Team Planning**: Create epics/stories/tasks in Jira
+2. **Developer Assignment**: Developer gets assigned Jira task
+3. **Spec Creation**: Developer tells Kiro "Pull Jira ticket XYZ and create spec"
+4. **Collaborative Planning**: Developer + Kiro work through spec phases
+5. **Implementation**: Kiro executes approved tasks
+6. **Sync Back**: Kiro updates Jira via MCP with progress/completion
+
+### MCP Integration Points
+- **Inbound**: Fetch ticket details, acceptance criteria, context
+- **Outbound**: Update status, link artifacts, track time
+- **Bidirectional**: Comments, progress updates, blockers
+
 ## When to Create New Tickets
 
 - New feature requests from user
@@ -71,7 +117,7 @@ Small (~1-2 hours) | Medium (~3-4 hours) | Large (~6+ hours)
 ### 4. Integration with Existing System
 
 **Check for conflicts:**
-- Review similar existing tickets
+- Review similar existing tickets or specs
 - Ensure consistency with architecture patterns
 - Verify it follows EI conventions (persona-centric, AbortController, etc.)
 
@@ -79,6 +125,12 @@ Small (~1-2 hours) | Medium (~3-4 hours) | Large (~6+ hours)
 - Add to `/help` command if user-facing
 - Update steering files if it changes workflows
 - Consider impact on AGENTS.md guidance
+- Link to related Jira tickets if using enterprise workflow
+
+**Spec Conversion Consideration:**
+- If ticket grows complex during analysis, consider converting to spec
+- Mark ticket IN_PROGRESS when starting spec creation
+- Reference original ticket in spec documentation
 
 ## Testing-Focused Tickets
 
@@ -91,7 +143,9 @@ When creating tickets that enable testing (like 0029), include:
 ## Ticket Lifecycle Reminders
 
 - Start status is always `PENDING`
-- Only humans can set `VALIDATED` status
+- Mark `IN_PROGRESS` when starting work (including spec creation)
 - Agents can set `DONE` when implementation complete
+- Only humans can set `VALIDATED` status
 - Never delete tickets - they're project history
 - Update acceptance criteria checkboxes during development
+- For complex work: ticket IN_PROGRESS → create spec → work through spec → ticket DONE → human validation → ticket VALIDATED

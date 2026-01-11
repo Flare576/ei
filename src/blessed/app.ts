@@ -111,7 +111,14 @@ export class EIApp {
     // Key bindings on screen level (only for non-input keys)
     this.screen.key(['escape', 'q'], () => {
       debugLog('Screen key handler: cleaning up and exiting...');
-      this.cleanup();
+      try {
+        const cleanupResult = this.cleanup();
+        if (!cleanupResult.success) {
+          debugLog(`Emergency exit cleanup had errors: ${cleanupResult.errors.join('; ')}`);
+        }
+      } catch (error) {
+        debugLog(`Emergency exit cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
       setTimeout(() => process.exit(1), 100);
     });
 
@@ -190,9 +197,22 @@ export class EIApp {
     // Handle termination signals gracefully, but let blessed handle Ctrl+C
     const gracefulExit = () => {
       debugLog('Graceful exit called');
-      this.cleanup();
-      this.screen.destroy();
-      process.exit(0);
+      try {
+        const cleanupResult = this.cleanup();
+        if (!cleanupResult.success) {
+          debugLog(`Graceful exit cleanup had errors: ${cleanupResult.errors.join('; ')}`);
+        }
+        this.screen.destroy();
+        process.exit(0);
+      } catch (error) {
+        debugLog(`Graceful exit failed: ${error instanceof Error ? error.message : String(error)}`);
+        try {
+          this.screen.destroy();
+        } catch (screenError) {
+          debugLog(`Screen destroy failed during graceful exit: ${screenError instanceof Error ? screenError.message : String(screenError)}`);
+        }
+        process.exit(1);
+      }
     };
     
     // Only handle non-interactive signals
@@ -268,9 +288,13 @@ export class EIApp {
       case 'r':
         this.handleRefreshCommand();
         break;
+      case 'quit':
+      case 'q':
+        await this.handleQuitCommand(args);
+        break;
       case 'help':
       case 'h':
-        this.setStatus('Commands: /persona <name>, /refresh, /help | Keys: Ctrl+H (personas), Ctrl+L (input), Ctrl+R (refresh), Ctrl+C (exit)');
+        this.setStatus('Commands: /persona <name>, /quit|/q [--force] (exit app, --force bypasses safety checks), /refresh, /help | Keys: Ctrl+H (personas), Ctrl+L (input), Ctrl+R (refresh), Ctrl+C (exit)');
         break;
       default:
         this.setStatus(`Unknown command: /${command}`);
@@ -299,6 +323,76 @@ export class EIApp {
       await this.switchPersona(foundPersona);
     } else {
       this.setStatus(`Persona "${trimmed}" not found.`);
+    }
+  }
+
+  private async handleQuitCommand(args: string) {
+    const trimmedArgs = args.trim();
+    
+    // Enhanced argument validation
+    if (trimmedArgs) {
+      // Split arguments and filter out empty strings
+      const argList = trimmedArgs.split(/\s+/).filter(arg => arg.length > 0);
+      
+      // Check for multiple arguments
+      if (argList.length > 1) {
+        debugLog(`Quit command validation failed: multiple arguments provided: [${argList.join(', ')}]`);
+        this.setStatus(`Too many arguments. Usage: /quit [--force]`);
+        return;
+      }
+      
+      // Check for single valid argument
+      const singleArg = argList[0];
+      if (singleArg !== "--force") {
+        debugLog(`Quit command validation failed: invalid argument: "${singleArg}"`);
+        
+        // Provide helpful suggestions for common mistakes
+        if (singleArg === "-f" || singleArg === "force") {
+          this.setStatus(`Invalid argument: ${singleArg}. Did you mean --force? Usage: /quit [--force]`);
+        } else if (singleArg.startsWith("-")) {
+          this.setStatus(`Unknown flag: ${singleArg}. Only --force is supported. Usage: /quit [--force]`);
+        } else {
+          this.setStatus(`Invalid argument: ${singleArg}. Usage: /quit [--force]`);
+        }
+        return;
+      }
+    }
+    
+    const isForce = trimmedArgs === "--force";
+    
+    try {
+      if (isForce) {
+        // Force exit: bypass all safety checks
+        debugLog('Force quit command executed - bypassing all safety checks');
+        try {
+          const cleanupResult = this.cleanup();
+          
+          if (!cleanupResult.success) {
+            debugLog(`Force quit cleanup had errors: ${cleanupResult.errors.join('; ')}`);
+            // Continue with force exit regardless of cleanup errors
+          }
+          
+          this.screen.destroy();
+          process.exit(0);
+        } catch (error) {
+          debugLog(`Critical error during force quit: ${error instanceof Error ? error.message : String(error)}`);
+          // Force exit even if everything fails
+          try {
+            this.screen.destroy();
+          } catch (screenError) {
+            debugLog(`Screen destroy failed during force quit: ${screenError instanceof Error ? screenError.message : String(screenError)}`);
+          }
+          process.exit(1);
+        }
+        return;
+      }
+      
+      // Regular quit: use shared exit logic (identical to Ctrl+C)
+      debugLog('Regular quit command executed - using shared exit logic');
+      this.executeExitLogic();
+    } catch (error) {
+      debugLog(`Quit command execution error: ${error instanceof Error ? error.message : String(error)}`);
+      this.setStatus(`Error executing quit command: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -636,13 +730,82 @@ export class EIApp {
     debugLog(`DEBUG autoScroll: ended at position ${actualScroll}`);
   }
 
-  private handleCtrlC() {
-    debugLog('=== CTRL+C HANDLER START ===');
-    debugLog('Ctrl+C pressed - starting proper handling chain');
+  private executeExitLogic() {
+    debugLog('=== EXIT LOGIC START ===');
+    debugLog('Exit logic called - starting proper handling chain');
     
     const activePs = this.getOrCreatePersonaState(this.activePersona);
     debugLog(`Active persona: ${this.activePersona}`);
     debugLog(`Active persona state: isProcessing=${activePs.isProcessing}, messageQueue=${activePs.messageQueue.length}`);
+    
+    // Priority 1: Abort active persona processing
+    if (activePs.isProcessing) {
+      debugLog('BRANCH: Aborting active persona operation');
+      this.abortPersonaOperation(this.activePersona);
+      this.setStatus('Aborted current operation');
+      debugLog('=== EXIT LOGIC END (aborted active) ===');
+      return;
+    }
+
+    // Priority 2: Clear input text
+    debugLog(`Input has text: ${this.inputHasText}`);
+    debugLog(`Input box value: "${this.layoutManager.getInputBox().getValue()}"`);
+    
+    if (this.inputHasText) {
+      debugLog('BRANCH: Clearing input text');
+      this.layoutManager.getInputBox().clearValue();
+      this.inputHasText = false;
+      this.setStatus('Input cleared');
+      debugLog('=== EXIT LOGIC END (input cleared) ===');
+      return;
+    }
+
+    // Priority 3: Warn about background processing
+    const backgroundProcessing = this.getBackgroundProcessingPersonas();
+    const now = Date.now();
+    const timeSinceWarning = this.ctrlCWarningTimestamp ? now - this.ctrlCWarningTimestamp : Infinity;
+    
+    debugLog(`Background processing personas: [${backgroundProcessing.join(', ')}]`);
+    debugLog(`Ctrl+C warning timestamp: ${this.ctrlCWarningTimestamp}, time since: ${timeSinceWarning}ms`);
+    
+    if (backgroundProcessing.length > 0 && 
+        (!this.ctrlCWarningTimestamp || timeSinceWarning > CTRL_C_CONFIRMATION_WINDOW_MS)) {
+      const names = backgroundProcessing.join(', ');
+      debugLog(`BRANCH: Showing background processing warning for: ${names}`);
+      this.ctrlCWarningTimestamp = now;
+      this.setStatus(`Processing in progress for: ${names}. Press Ctrl+C again or use /quit --force to exit immediately.`);
+      debugLog('=== EXIT LOGIC END (warning shown) ===');
+      return;
+    }
+
+    // Priority 4: Exit application with graceful degradation
+    debugLog('BRANCH: Exiting application - no blocking conditions');
+    try {
+      const cleanupResult = this.cleanup();
+      
+      if (!cleanupResult.success) {
+        debugLog(`Cleanup had errors but continuing with exit: ${cleanupResult.errors.join('; ')}`);
+        // Continue with exit even if cleanup had issues
+      }
+      
+      this.screen.destroy();
+      debugLog('=== EXIT LOGIC END (exiting) ===');
+      process.exit(0);
+    } catch (error) {
+      debugLog(`Critical error during exit: ${error instanceof Error ? error.message : String(error)}`);
+      // Force exit even if cleanup completely fails
+      try {
+        this.screen.destroy();
+      } catch (screenError) {
+        debugLog(`Screen destroy failed: ${screenError instanceof Error ? screenError.message : String(screenError)}`);
+      }
+      process.exit(1); // Exit with error code to indicate issues
+    }
+  }
+
+  private handleCtrlC() {
+    debugLog('=== CTRL+C HANDLER START ===');
+    debugLog('Ctrl+C pressed - delegating to shared exit logic');
     
     // Check if ANY persona is processing (active or background)
     const anyProcessing = Array.from(this.personaStates.values()).some(ps => ps.isProcessing);
@@ -659,64 +822,49 @@ export class EIApp {
     
     debugLog(`Any processing: ${anyProcessing}`);
     debugLog(`Processing personas: [${processingPersonas.join(', ')}]`);
-    debugLog(`Active persona processing: ${activePs.isProcessing}, Any processing: ${anyProcessing}`);
     
+    // Special handling for Ctrl+C confirmation window
     if (anyProcessing) {
-      // Abort the active persona if it's processing
-      if (activePs.isProcessing) {
-        debugLog('BRANCH: Aborting active persona operation');
-        this.abortPersonaOperation(this.activePersona);
-        this.setStatus('Aborted current operation');
-        debugLog('=== CTRL+C HANDLER END (aborted active) ===');
-        return;
-      }
+      const activePs = this.getOrCreatePersonaState(this.activePersona);
       
-      // If active persona isn't processing but others are, show warning
-      const backgroundProcessing = this.getBackgroundProcessingPersonas();
-      debugLog(`Background processing personas: [${backgroundProcessing.join(', ')}]`);
-      
-      const now = Date.now();
-      const timeSinceWarning = this.ctrlCWarningTimestamp ? now - this.ctrlCWarningTimestamp : Infinity;
-      debugLog(`Ctrl+C warning timestamp: ${this.ctrlCWarningTimestamp}, time since: ${timeSinceWarning}ms`);
-      
-      if (backgroundProcessing.length > 0) {
-        // Check if user pressed Ctrl+C again within the confirmation window
-        if (this.ctrlCWarningTimestamp && timeSinceWarning <= CTRL_C_CONFIRMATION_WINDOW_MS) {
+      // If active persona isn't processing but others are, check confirmation window
+      if (!activePs.isProcessing) {
+        const backgroundProcessing = this.getBackgroundProcessingPersonas();
+        const now = Date.now();
+        const timeSinceWarning = this.ctrlCWarningTimestamp ? now - this.ctrlCWarningTimestamp : Infinity;
+        
+        if (backgroundProcessing.length > 0 && 
+            this.ctrlCWarningTimestamp && 
+            timeSinceWarning <= CTRL_C_CONFIRMATION_WINDOW_MS) {
           debugLog('BRANCH: User confirmed exit within confirmation window - forcing exit');
-          this.cleanup();
-          this.screen.destroy();
-          debugLog('=== CTRL+C HANDLER END (confirmed exit) ===');
-          process.exit(0);
-        } else {
-          // First Ctrl+C or outside confirmation window - show warning and set timestamp
-          const names = backgroundProcessing.join(', ');
-          debugLog(`BRANCH: Showing background processing warning for: ${names}`);
-          this.ctrlCWarningTimestamp = now;
-          this.setStatus(`Processing in progress for: ${names}. Press Ctrl+C again within ${CTRL_C_CONFIRMATION_WINDOW_MS/1000}s to exit.`);
-          debugLog('=== CTRL+C HANDLER END (warning shown) ===');
+          try {
+            const cleanupResult = this.cleanup();
+            
+            if (!cleanupResult.success) {
+              debugLog(`Cleanup had errors but continuing with confirmed exit: ${cleanupResult.errors.join('; ')}`);
+            }
+            
+            this.screen.destroy();
+            debugLog('=== CTRL+C HANDLER END (confirmed exit) ===');
+            process.exit(0);
+          } catch (error) {
+            debugLog(`Critical error during confirmed exit: ${error instanceof Error ? error.message : String(error)}`);
+            // Force exit even if cleanup fails
+            try {
+              this.screen.destroy();
+            } catch (screenError) {
+              debugLog(`Screen destroy failed during confirmed exit: ${screenError instanceof Error ? screenError.message : String(screenError)}`);
+            }
+            process.exit(1);
+          }
           return;
         }
       }
     }
-
-    debugLog(`Input has text: ${this.inputHasText}`);
-    debugLog(`Input box value: "${this.layoutManager.getInputBox().getValue()}"`);
     
-    if (this.inputHasText) {
-      debugLog('BRANCH: Clearing input text');
-      this.layoutManager.getInputBox().clearValue();
-      this.inputHasText = false;
-      this.setStatus('Input cleared');
-      debugLog('=== CTRL+C HANDLER END (input cleared) ===');
-      return;
-    }
-
-    // Only exit if no processing is happening and no input text
-    debugLog('BRANCH: Exiting application - no processing, no input text');
-    this.cleanup();
-    this.screen.destroy();
-    debugLog('=== CTRL+C HANDLER END (exiting) ===');
-    process.exit(0);
+    // Delegate to shared exit logic
+    this.executeExitLogic();
+    debugLog('=== CTRL+C HANDLER END ===');
   }
 
   private getBackgroundProcessingPersonas(): string[] {
@@ -726,12 +874,60 @@ export class EIApp {
   }
 
   private cleanup() {
-    for (const [name, ps] of this.personaStates) {
-      if (ps.heartbeatTimer) clearTimeout(ps.heartbeatTimer);
-      if (ps.debounceTimer) clearTimeout(ps.debounceTimer);
-      if (ps.abortController) ps.abortController.abort();
+    debugLog('Starting cleanup process...');
+    let cleanupErrors: string[] = [];
+    
+    try {
+      // Clean up persona states with individual error handling
+      for (const [name, ps] of this.personaStates) {
+        try {
+          if (ps.heartbeatTimer) {
+            clearTimeout(ps.heartbeatTimer);
+            debugLog(`Cleared heartbeat timer for persona: ${name}`);
+          }
+          if (ps.debounceTimer) {
+            clearTimeout(ps.debounceTimer);
+            debugLog(`Cleared debounce timer for persona: ${name}`);
+          }
+          if (ps.abortController) {
+            ps.abortController.abort();
+            debugLog(`Aborted controller for persona: ${name}`);
+          }
+        } catch (error) {
+          const errorMsg = `Failed to cleanup persona ${name}: ${error instanceof Error ? error.message : String(error)}`;
+          debugLog(errorMsg);
+          cleanupErrors.push(errorMsg);
+          // Continue with other personas even if one fails
+        }
+      }
+      
+      // Clean up persona renderer with error handling
+      try {
+        this.personaRenderer.cleanup();
+        debugLog('PersonaRenderer cleanup completed');
+      } catch (error) {
+        const errorMsg = `Failed to cleanup PersonaRenderer: ${error instanceof Error ? error.message : String(error)}`;
+        debugLog(errorMsg);
+        cleanupErrors.push(errorMsg);
+      }
+      
+      if (cleanupErrors.length > 0) {
+        debugLog(`Cleanup completed with ${cleanupErrors.length} errors: ${cleanupErrors.join('; ')}`);
+      } else {
+        debugLog('Cleanup completed successfully');
+      }
+      
+    } catch (error) {
+      const errorMsg = `Critical cleanup error: ${error instanceof Error ? error.message : String(error)}`;
+      debugLog(errorMsg);
+      cleanupErrors.push(errorMsg);
     }
-    this.personaRenderer.cleanup();
+    
+    // Return cleanup status for caller to handle if needed
+    return {
+      success: cleanupErrors.length === 0,
+      errors: cleanupErrors
+    };
   }
 
   async init() {
