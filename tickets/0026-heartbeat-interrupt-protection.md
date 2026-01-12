@@ -1,6 +1,6 @@
 # 0026: Heartbeats Should Not Interrupt Active Processing
 
-**Status**: PENDING
+**Status**: CANCELLED
 
 ## Problem
 

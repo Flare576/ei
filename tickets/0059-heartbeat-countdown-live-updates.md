@@ -1,6 +1,6 @@
 # 0059: Heartbeat Countdown Live Updates
 
-**Status**: PENDING
+**Status**: CANCELLED
 
 ## Summary
 Fix heartbeat countdown display to automatically re-render when any persona's countdown crosses a minute threshold, eliminating the misleading static display that makes heartbeats appear broken.

@@ -1,6 +1,7 @@
 import blessed from 'blessed';
 import type { PersonaState } from '../types.js';
 import { appendDebugLog } from '../storage.js';
+import { HEARTBEAT_INTERVAL_MS } from './app.js';
 
 // Layout breakpoints
 const LAYOUT_FULL_MIN_COLS = 100;
@@ -51,8 +52,6 @@ export class PersonaRenderer {
     unreadCounts: Map<string, number>,
     personaStates: Map<string, PersonaState>
   ) {
-    const HEARTBEAT_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
-
     const personaText = personas.map(p => {
       const marker = p.name === activePersona ? '{green-fg}>{/green-fg} ' : '  ';
       const unread = unreadCounts.get(p.name) || 0;
