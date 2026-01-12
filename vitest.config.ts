@@ -27,11 +27,7 @@ export default defineConfig({
     },
     // E2E tests run sequentially to avoid resource conflicts
     pool: "forks",
-    poolOptions: {
-      forks: {
-        singleFork: true
-      }
-    }
+    maxConcurrency: 1
   },
   resolve: {
     alias: {
