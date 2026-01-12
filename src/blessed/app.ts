@@ -26,11 +26,11 @@ function debugLog(message: string) {
 const STARTUP_HISTORY_COUNT = 20;
 
 export class EIApp implements IEIApp {
-  private screen: blessed.Widgets.Screen;
-  private layoutManager: LayoutManager;
-  private focusManager: FocusManager;
-  private personaRenderer: PersonaRenderer;
-  private chatRenderer: ChatRenderer;
+  public screen: blessed.Widgets.Screen;
+  public layoutManager: LayoutManager;
+  public focusManager: FocusManager;
+  public personaRenderer: PersonaRenderer;
+  public chatRenderer: ChatRenderer;
   private commandHandler: ICommandHandler;
   private personaManager: IPersonaManager;
   private messageProcessor: IMessageProcessor;
@@ -259,14 +259,75 @@ export class EIApp implements IEIApp {
 
   // Legacy methods for CommandHandler delegation (temporary - will be removed)
   public executeExitLogic?(): void {
-    // This method is now handled by EventOrchestrator
-    // Kept for backward compatibility with CommandHandler
-    debugLog('executeExitLogic called on app - this should be handled by EventOrchestrator');
+    // Delegate to EventOrchestrator's exit logic
+    this.eventOrchestrator.triggerExitLogic();
   }
 
   public handleRefreshCommand?(): void {
-    // This method is now handled by EventOrchestrator
-    // Kept for backward compatibility with CommandHandler
-    debugLog('handleRefreshCommand called on app - this should be handled by EventOrchestrator');
+    // Delegate to EventOrchestrator's refresh logic
+    this.eventOrchestrator.triggerRefreshCommand();
+  }
+
+  // ============================================================================
+  // BACKWARD COMPATIBILITY METHODS FOR INTEGRATION TESTS
+  // ============================================================================
+  // These methods provide access to internal state for integration tests
+  // They should be removed once tests are updated to use the new architecture
+  
+  // Note: These getters expose private properties for testing
+  // The properties are already public via the private field declarations above
+
+  public getOrCreatePersonaState(name: string) {
+    return this.personaManager.getPersonaState(name);
+  }
+
+  public async handleCommand(input: string): Promise<void> {
+    const command = this.commandHandler.parseCommand(input);
+    if (command) {
+      await this.commandHandler.executeCommand(command);
+    }
+  }
+
+  public get statusMessage(): string | null {
+    // Access status through UI orchestrator
+    return (this.uiOrchestrator as any).statusMessage || null;
+  }
+
+  public set statusMessage(message: string | null) {
+    this.uiOrchestrator.setStatus(message);
+  }
+
+  public get isProcessing(): boolean {
+    return this.messageProcessor.isProcessing(this.personaManager.getCurrentPersona());
+  }
+
+  public set isProcessing(value: boolean) {
+    // This is a read-only computed property in the new architecture
+    debugLog(`Attempted to set isProcessing to ${value} - this is now computed from persona states`);
+  }
+
+  public get inputHasText(): boolean {
+    const inputBox = this.layoutManager.getInputBox();
+    return inputBox.getValue().trim().length > 0;
+  }
+
+  public set inputHasText(value: boolean) {
+    // This is a computed property based on input box content
+    debugLog(`Attempted to set inputHasText to ${value} - this is now computed from input box`);
+  }
+
+  public get ctrlCWarningTimestamp(): number | null {
+    // Access through event orchestrator if needed
+    return (this.eventOrchestrator as any).ctrlCWarningTimestamp || null;
+  }
+
+  public setupScrollingKeyBindings(): void {
+    // This is now handled by EventOrchestrator during initialization
+    debugLog('setupScrollingKeyBindings called - this is now handled by EventOrchestrator');
+  }
+
+  public renderStatus(): void {
+    // Delegate to UI orchestrator
+    (this.uiOrchestrator as any).renderStatus();
   }
 }

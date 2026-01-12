@@ -354,4 +354,22 @@ export class EventOrchestrator implements IEventOrchestrator {
     
     this.uiOrchestrator.setStatus(`UI refreshed - Terminal size: ${screenWidth}x${screenHeight}`);
   }
+
+  // ============================================================================
+  // PUBLIC METHODS FOR BACKWARD COMPATIBILITY
+  // ============================================================================
+  
+  /**
+   * Public wrapper for executeExitLogic (for backward compatibility)
+   */
+  public triggerExitLogic(): void {
+    this.executeExitLogic();
+  }
+
+  /**
+   * Public wrapper for handleRefreshCommand (for backward compatibility)
+   */
+  public triggerRefreshCommand(): void {
+    this.handleRefreshCommand();
+  }
 }

@@ -300,6 +300,16 @@ export interface IEventOrchestrator {
    * Set up signal handlers for graceful shutdown
    */
   setupSignalHandlers(): void;
+
+  /**
+   * Public wrapper for executeExitLogic (for backward compatibility)
+   */
+  triggerExitLogic(): void;
+
+  /**
+   * Public wrapper for handleRefreshCommand (for backward compatibility)
+   */
+  triggerRefreshCommand(): void;
 }
 
 // ============================================================================
