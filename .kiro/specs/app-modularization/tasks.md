@@ -47,14 +47,14 @@ This implementation plan converts the monolithic `src/blessed/app.ts` file into 
     - Maintain existing debounce and abort controller patterns
     - _Requirements: 2.1, 2.5_
 
-- [ ] 5. Extract Test Support module
-  - [ ] 5.1 Create test-support.ts with ITestSupport interface
+- [x] 5. Extract Test Support module
+  - [x] 5.1 Create test-support.ts with ITestSupport interface
     - Extract E2E test input injection system from app.ts
     - Maintain stdin-based input handling for E2E tests
     - Preserve test mode detection and debug logging
     - _Requirements: 9.1, 9.2, 9.3, 9.4_
 
-  - [ ] 5.3 Update app.ts to use TestSupport
+  - [x] 5.3 Update app.ts to use TestSupport
     - Replace inline test support with TestSupport calls
     - Maintain public injectTestInput() method for E2E tests
     - _Requirements: 2.1, 3.6_

@@ -315,6 +315,12 @@ export interface IEIApp {
    */
   autoScrollToBottom(): void;
 
+  /**
+   * Get current persona name
+   * @returns Current persona name
+   */
+  getCurrentPersona?(): string;
+
   // Temporary methods for CommandHandler delegation - will be removed in final refactoring
   executeExitLogic?(): void;
   handleRefreshCommand?(): void;

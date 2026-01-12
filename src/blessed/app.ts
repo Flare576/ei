@@ -11,7 +11,8 @@ import { ChatRenderer } from './chat-renderer.js';
 import { CommandHandler } from './command-handler.js';
 import { PersonaManager } from './persona-manager.js';
 import { MessageProcessor } from './message-processor.js';
-import type { ICommandHandler, IPersonaManager, IMessageProcessor } from './interfaces.js';
+import { TestSupport } from './test-support.js';
+import type { ICommandHandler, IPersonaManager, IMessageProcessor, ITestSupport } from './interfaces.js';
 
 // Initialize debug log file
 initializeDebugLog();
@@ -35,6 +36,7 @@ export class EIApp {
   private commandHandler: ICommandHandler;
   private personaManager: IPersonaManager;
   private messageProcessor: IMessageProcessor;
+  private testSupport: ITestSupport;
   
   private personas: any[] = [];
   private activePersona = 'ei';
@@ -53,18 +55,10 @@ export class EIApp {
   private static instanceCount = 0;
   private instanceId: number;
 
-  // Test input injection system
-  private testInputEnabled = false;
-  private testInputBuffer: string[] = [];
-
   constructor() {
     EIApp.instanceCount++;
     this.instanceId = EIApp.instanceCount;
     debugLog(`EIApp constructor starting - Instance #${this.instanceId}`);
-    
-    // Check if we're in test mode
-    this.testInputEnabled = process.env.NODE_ENV === 'test' || process.env.EI_TEST_INPUT === 'true';
-    debugLog(`Test input enabled: ${this.testInputEnabled} - Instance #${this.instanceId}`);
     
     this.screen = blessed.screen({
       smartCSR: true,
@@ -116,6 +110,14 @@ export class EIApp {
     });
     debugLog(`CommandHandler created - Instance #${this.instanceId}`);
 
+    // Initialize TestSupport
+    this.testSupport = new TestSupport({
+      commandHandler: this.commandHandler,
+      messageProcessor: this.messageProcessor,
+      app: this as any
+    }, this.instanceId);
+    debugLog(`TestSupport created - Instance #${this.instanceId}`);
+
     // Pass screen reference to persona renderer for spinner animation
     this.personaRenderer.setScreen(this.screen);
     this.personaRenderer.setRenderCallback(() => this.render());
@@ -127,9 +129,7 @@ export class EIApp {
     debugLog(`Submit and Ctrl+C handlers set - Instance #${this.instanceId}`);
 
     // Set up test input injection if enabled
-    if (this.testInputEnabled) {
-      this.setupTestInputInjection();
-    }
+    this.testSupport.setupTestInputInjection();
 
     this.setupLayout();
     this.setupEventHandlers();
@@ -527,6 +527,10 @@ export class EIApp {
     };
   }
 
+  public getCurrentPersona(): string {
+    return this.activePersona;
+  }
+
   private render() {
     this.personaRenderer.render(
       this.layoutManager.getPersonaList(),
@@ -670,87 +674,13 @@ export class EIApp {
     }
   }
 
-  // ============================================================================
-  // Test Input Injection System
-  // ============================================================================
 
-  /**
-   * Sets up test input injection system for E2E testing
-   * This allows tests to inject input directly into the application
-   */
-  private setupTestInputInjection(): void {
-    debugLog(`Setting up test input injection - Instance #${this.instanceId}`);
-    
-    // Listen for test input on stdin in addition to blessed input
-    if (process.stdin && process.stdin.readable) {
-      process.stdin.on('data', (data: Buffer) => {
-        const input = data.toString().trim();
-        debugLog(`Test input received: "${input}" - Instance #${this.instanceId}`);
-        
-        // Process the input as if it came from the UI
-        this.processTestInput(input);
-      });
-      
-      // Make sure stdin is in the right mode
-      if (process.stdin.setRawMode) {
-        process.stdin.setRawMode(false); // We want line-buffered input for testing
-      }
-      process.stdin.resume();
-    }
-    
-    debugLog(`Test input injection setup complete - Instance #${this.instanceId}`);
-  }
-
-  /**
-   * Processes input received through the test injection system
-   */
-  private processTestInput(input: string): void {
-    debugLog(`Processing test input: "${input}" - Instance #${this.instanceId}`);
-    
-    // Handle commands (starting with /)
-    if (input.startsWith('/')) {
-      debugLog(`Test command detected: "${input}" - Instance #${this.instanceId}`);
-      
-      if (input === '/quit') {
-        debugLog(`Test quit command - Instance #${this.instanceId}`);
-        this.handleQuit();
-        return;
-      }
-      
-      // Handle other commands here as they're implemented
-      debugLog(`Unknown test command: "${input}" - Instance #${this.instanceId}`);
-      return;
-    }
-    
-    // Handle regular messages
-    if (input.length > 0) {
-      debugLog(`Test message submission: "${input}" - Instance #${this.instanceId}`);
-      this.handleSubmit(input);
-    }
-  }
-
-  /**
-   * Handles quit command for testing
-   */
-  private handleQuit(): void {
-    debugLog(`Handling quit command - Instance #${this.instanceId}`);
-    
-    // Clean exit for testing
-    this.screen.destroy();
-    process.exit(0);
-  }
 
   /**
    * Public method for tests to inject input directly
    * This can be called by test frameworks that have access to the app instance
    */
   public injectTestInput(input: string): void {
-    if (!this.testInputEnabled) {
-      debugLog(`Test input injection attempted but not enabled - Instance #${this.instanceId}`);
-      return;
-    }
-    
-    debugLog(`Direct test input injection: "${input}" - Instance #${this.instanceId}`);
-    this.processTestInput(input);
+    this.testSupport.injectTestInput(input);
   }
 }
