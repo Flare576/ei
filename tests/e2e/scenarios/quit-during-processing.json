@@ -1,0 +1,62 @@
+{
+  "name": "Quit Command - During LLM Processing",
+  "description": "Tests quit command behavior when LLM processing is active (should interrupt and exit)",
+  "setup": {
+    "mockResponses": [
+      {
+        "endpoint": "/v1/chat/completions",
+        "response": {
+          "type": "fixed",
+          "content": "This is a delayed response to simulate processing time.",
+          "delayMs": 3000
+        }
+      }
+    ]
+  },
+  "steps": [
+    {
+      "type": "wait",
+      "action": "idle",
+      "timeout": 8000
+    },
+    {
+      "type": "input",
+      "action": "Tell me a story\n",
+      "timeout": 1000
+    },
+    {
+      "type": "wait",
+      "action": "llm_request",
+      "timeout": 3000
+    },
+    {
+      "type": "command",
+      "action": "quit",
+      "timeout": 2000
+    }
+  ],
+  "assertions": [
+    {
+      "type": "process",
+      "target": "application",
+      "condition": "exit_code",
+      "expected": 0
+    },
+    {
+      "type": "process",
+      "target": "application",
+      "condition": "running",
+      "expected": false
+    },
+    {
+      "type": "process",
+      "target": "mock_server",
+      "condition": "mock_requests",
+      "expected": 1
+    }
+  ],
+  "cleanup": {
+    "restoreEnvironment": true,
+    "killProcesses": true
+  }
+}

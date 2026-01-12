@@ -1,0 +1,84 @@
+{
+  "name": "Basic Test Template",
+  "description": "Template for creating new basic E2E tests",
+  "setup": {
+    "mockResponses": [
+      {
+        "endpoint": "/v1/chat/completions",
+        "response": {
+          "type": "fixed",
+          "content": "REPLACE_WITH_YOUR_EXPECTED_RESPONSE",
+          "delayMs": 200
+        }
+      }
+    ],
+    "initialData": {
+      "personas": [
+        {
+          "name": "ei",
+          "systemPrompt": "REPLACE_WITH_YOUR_SYSTEM_PROMPT",
+          "initialMessages": []
+        }
+      ]
+    }
+  },
+  "steps": [
+    {
+      "type": "wait",
+      "action": "idle",
+      "timeout": 3000,
+      "description": "Wait for application initialization"
+    },
+    {
+      "type": "input",
+      "action": "REPLACE_WITH_YOUR_TEST_MESSAGE",
+      "timeout": 2000,
+      "description": "REPLACE_WITH_STEP_DESCRIPTION"
+    },
+    {
+      "type": "wait",
+      "action": "llm_request",
+      "timeout": 5000,
+      "description": "Wait for LLM request"
+    },
+    {
+      "type": "wait",
+      "action": "ui:REPLACE_WITH_EXPECTED_UI_TEXT",
+      "timeout": 8000,
+      "description": "Wait for response in UI"
+    },
+    {
+      "type": "command",
+      "action": "/quit",
+      "timeout": 3000,
+      "description": "Exit application"
+    }
+  ],
+  "assertions": [
+    {
+      "type": "ui",
+      "target": "output",
+      "condition": "contains",
+      "expected": "REPLACE_WITH_EXPECTED_TEXT",
+      "description": "REPLACE_WITH_ASSERTION_DESCRIPTION"
+    },
+    {
+      "type": "process",
+      "target": "exit_code",
+      "condition": "equals",
+      "expected": 0,
+      "description": "Verify clean exit"
+    },
+    {
+      "type": "process",
+      "target": "mock_server",
+      "condition": "mock_requests",
+      "expected": 1,
+      "description": "Verify expected number of requests"
+    }
+  ],
+  "cleanup": {
+    "killProcesses": true,
+    "restoreEnvironment": true
+  }
+}

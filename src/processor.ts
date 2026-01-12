@@ -85,6 +85,10 @@ export async function processEvent(
     aborted: true,
   };
 
+  if (debug) {
+    appendDebugLog(`[Debug] processEvent called with message: ${humanMessage ? humanMessage.substring(0, 50) + '...' : 'null'}`);
+  }
+
   if (signal?.aborted) return abortedResult;
 
   const humanConcepts = await loadConceptMap("human");

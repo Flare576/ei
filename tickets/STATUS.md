@@ -1,7 +1,7 @@
 # Ticket Status Summary
 
 ## HIGHEST PRIORITY 🚨 (Critical Infrastructure)
-- 0056: End-to-End Testing POC with Controlled Environment (enables comprehensive testing)
+- (none currently - 0056 moved to IN_PROGRESS)
 
 ## HIGH PRIORITY 🔥 (Critical User Experience)
 - 0033: Blessed Resize Input Corruption Validation (basic functionality)
@@ -24,6 +24,7 @@
 - 0039: Blessed Proper Emoji Support (modern UX)
 - 0050: Global -p Parameter for Command Targeting (power user efficiency)
 - 0055: Logging System Improvements (developer experience, system reliability)
+- 0057: Persona Creation via /persona Command (workflow streamlining)
 
 ## LOWER PRIORITY 📋 (Advanced Features)
 - 0022: Per-Persona Model Configuration (advanced customization)
@@ -70,6 +71,7 @@
 - 0035: Blessed Duplicate Message Processing
 - 0037: Blessed Debug Output Log-Only Mode
 - 0040: Blessed Resize Detection Broken
+- 0056: End-to-End Testing POC with Controlled Environment
 
 ## CANCELLED ❌
 - 0003: /editor Command for Multi-line Input (replaced by 0030, then 0041)
@@ -82,8 +84,8 @@
 ---
 
 **Last Updated**: 2026-01-11  
-**Total Tickets**: 56 created  
-**Completion Rate**: 21/53 validated (40%) + 0 done awaiting validation
+**Total Tickets**: 57 created  
+**Completion Rate**: 22/54 validated (41%) + 0 done awaiting validation
 
 ## Priority Analysis
 
