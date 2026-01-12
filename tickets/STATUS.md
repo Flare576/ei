@@ -2,6 +2,7 @@
 
 ## HIGHEST PRIORITY 🚨 (Critical Infrastructure)
 - 0058: Blessed App.ts Refactoring (enables clean feature development)
+- 0060: Fix Same-Persona Switch Behavior (integration test failures)
 
 ## HIGH PRIORITY 🔥 (Critical User Experience)
 - 0033: Blessed Resize Input Corruption Validation (basic functionality)
@@ -25,6 +26,7 @@
 - 0050: Global -p Parameter for Command Targeting (power user efficiency)
 - 0055: Logging System Improvements (developer experience, system reliability)
 - 0057: Persona Creation via /persona Command (workflow streamlining)
+- 0059: Heartbeat Countdown Live Updates (UI accuracy)
 
 ## LOWER PRIORITY 📋 (Advanced Features)
 - 0022: Per-Persona Model Configuration (advanced customization)
@@ -84,8 +86,8 @@
 ---
 
 **Last Updated**: 2026-01-11  
-**Total Tickets**: 58 created  
-**Completion Rate**: 22/55 validated (40%) + 0 done awaiting validation
+**Total Tickets**: 60 created  
+**Completion Rate**: 22/57 validated (39%) + 0 done awaiting validation
 
 ## Priority Analysis
 

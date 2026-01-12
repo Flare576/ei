@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 
 import blessed from 'blessed';
+// Import test output capture early to intercept blessed methods before they're used
+import { testOutputCapture } from './test-output-capture.js';
+
 import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog } from '../storage.js';
 import { processEvent } from '../processor.js';
 import { LLMAbortedError } from '../llm.js';
@@ -894,6 +897,18 @@ export class EIApp {
     let cleanupErrors: string[] = [];
     
     try {
+      // Clean up test output capture if enabled
+      if (testOutputCapture.isEnabled()) {
+        try {
+          testOutputCapture.restore();
+          debugLog('Test output capture cleanup completed');
+        } catch (error) {
+          const errorMsg = `Failed to cleanup test output capture: ${error instanceof Error ? error.message : String(error)}`;
+          debugLog(errorMsg);
+          cleanupErrors.push(errorMsg);
+        }
+      }
+      
       // Clean up persona states with individual error handling
       for (const [name, ps] of this.personaStates) {
         try {
@@ -1015,7 +1030,10 @@ export class EIApp {
     if (input.startsWith('/')) {
       debugLog(`Test command detected: "${input}" - Instance #${this.instanceId}`);
       
-      if (input === '/quit') {
+      // Normalize command by trimming and converting to lowercase
+      const normalizedCommand = input.trim().toLowerCase();
+      
+      if (normalizedCommand === '/quit' || normalizedCommand === '/q') {
         debugLog(`Test quit command - Instance #${this.instanceId}`);
         this.handleQuit();
         return;

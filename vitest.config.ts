@@ -19,6 +19,7 @@ export default defineConfig({
       // Set test environment variables for e2e tests
       NODE_ENV: "test",
       EI_TEST_INPUT: "true",
+      EI_TEST_OUTPUT: "true",
       NO_COLOR: "1",
       // Default test LLM configuration
       EI_LLM_BASE_URL: "http://127.0.0.1:3001/v1",

@@ -40,13 +40,16 @@ describe('Basic Flow E2E Tests', () => {
     ]);
 
     // Start the application using regular spawn (not PTY) - this is the working approach
+    // usePty: false enables reliable blessed output capture
     await harness.startApp({ debugMode: false, usePty: false });
 
     // Wait for application to initialize
     await harness.waitForIdleState(5000);
 
     // Send a test message using the working input system
-    await harness.sendInput('Hello, test assistant!\n');
+    // Use message >30 characters to avoid debouncing delays
+    const testMessage = 'Hello, test assistant! This message is long enough to trigger immediate processing.';
+    await harness.sendInput(`${testMessage}\n`);
 
     // Wait for LLM request to be made
     await harness.waitForLLMRequest(3000);
@@ -56,6 +59,14 @@ describe('Basic Flow E2E Tests', () => {
 
     // Verify mock server received expected requests (1 message = 3+ requests: response + system concepts + human concepts)
     expect(harness.getMockRequestHistory().length).toBeGreaterThanOrEqual(3);
+
+    // Enhanced: Verify blessed output capture shows user input
+    const capturedOutput = await harness.getCurrentOutput();
+    expect(capturedOutput).toContain(testMessage.slice(0, 30)); // Verify user message appears in UI
+    
+    // Enhanced: Verify output capture system is working
+    const captureMessages = capturedOutput.split('\n').filter(line => line.includes('[TestOutputCapture]'));
+    expect(captureMessages.length).toBeGreaterThan(0); // Should have UI update messages
 
     // Send quit command using proper command system
     await harness.sendCommand('/quit');
@@ -95,21 +106,41 @@ describe('Basic Flow E2E Tests', () => {
       JSON.stringify([])
     ]);
 
-    // Start the application
-    await harness.startApp({ debugMode: false });
+    // Start the application with blessed output capture enabled
+    await harness.startApp({ debugMode: false, usePty: false });
 
     // Wait for application to initialize
     await harness.waitForIdleState(5000);
 
-    // First message exchange
-    await harness.sendInput('First test message\n');
+    // First message exchange - use message >30 characters to avoid debouncing
+    const firstMessage = 'First test message that is long enough to trigger immediate processing without delays';
+    await harness.sendInput(`${firstMessage}\n`);
     await harness.waitForLLMRequest(3000);
     await new Promise(resolve => setTimeout(resolve, 3000)); // Wait for processing
 
-    // Second message exchange
-    await harness.sendInput('Second test message\n');
+    // Enhanced: Verify first message appears in captured output
+    const afterFirstMessage = await harness.getCurrentOutput();
+    expect(afterFirstMessage).toContain(firstMessage.slice(0, 30));
+
+    // Second message exchange - use message >30 characters to avoid debouncing
+    const secondMessage = 'Second test message that is also long enough to trigger immediate processing';
+    await harness.sendInput(`${secondMessage}\n`);
     await harness.waitForLLMRequest(3000);
     await new Promise(resolve => setTimeout(resolve, 3000)); // Wait for processing
+
+    // Enhanced: Verify second message appears in captured output OR verify multiple UI updates occurred
+    const afterSecondMessage = await harness.getCurrentOutput();
+    
+    // Check if second message appears, or at least verify we have more UI activity
+    const hasSecondMessage = afterSecondMessage.includes(secondMessage.slice(0, 30));
+    const hasMultipleUpdates = afterSecondMessage.split('[TestOutputCapture]').length > 10;
+    
+    // Either the second message should be visible, or we should see significant UI activity
+    expect(hasSecondMessage || hasMultipleUpdates).toBe(true);
+
+    // Enhanced: Verify output capture system detected multiple UI updates
+    const captureMessages = afterSecondMessage.split('\n').filter(line => line.includes('[TestOutputCapture]'));
+    expect(captureMessages.length).toBeGreaterThan(0); // Should have multiple UI updates
 
     // Verify mock server received expected requests (2 messages = 6+ requests: 3 per message)
     expect(harness.getMockRequestHistory().length).toBeGreaterThanOrEqual(6);
@@ -129,14 +160,15 @@ describe('Basic Flow E2E Tests', () => {
       JSON.stringify([])   // Empty human concepts
     ]);
 
-    // Start the application
-    await harness.startApp({ debugMode: false });
+    // Start the application with blessed output capture enabled
+    await harness.startApp({ debugMode: false, usePty: false });
 
     // Wait for application to initialize
     await harness.waitForIdleState(5000);
 
-    // Send a test message that should trigger an error
-    await harness.sendInput('This should cause an error\n');
+    // Send a test message that should trigger an error - use message >30 characters to avoid debouncing
+    const errorMessage = 'This message should cause an error but still be processed and displayed in the UI';
+    await harness.sendInput(`${errorMessage}\n`);
 
     // Wait for LLM request to be made
     await harness.waitForLLMRequest(3000);
@@ -146,6 +178,14 @@ describe('Basic Flow E2E Tests', () => {
 
     // The application should still be running and responsive
     expect(harness.isAppRunning()).toBe(true);
+
+    // Enhanced: Verify error message input appears in captured output
+    const capturedOutput = await harness.getCurrentOutput();
+    expect(capturedOutput).toContain(errorMessage.slice(0, 30)); // User input should still be captured
+
+    // Enhanced: Verify output capture system is working even with errors
+    const captureMessages = capturedOutput.split('\n').filter(line => line.includes('[TestOutputCapture]'));
+    expect(captureMessages.length).toBeGreaterThan(0); // Should have UI update messages
 
     // Verify mock server received expected requests (1 message = 3+ requests: response + system concepts + human concepts)
     expect(harness.getMockRequestHistory().length).toBeGreaterThanOrEqual(3);

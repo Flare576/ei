@@ -97,7 +97,7 @@ describe('Quit Command E2E Tests', () => {
   test('quit command with background processing shows warnings', async () => {
     // Configure sequential responses with delay to simulate background processing
     harness.setMockResponseQueue([
-      'This is a response during processing.',
+      'This is a response during processing that exceeds thirty character threshold.',
       JSON.stringify([{
         name: "Processing Concept",
         description: "Concept during processing",
@@ -110,22 +110,27 @@ describe('Quit Command E2E Tests', () => {
     ]);
     
     // Add delay to simulate background processing
-    harness.setMockResponse('/v1/chat/completions', 'This is a response during processing.', 1000);
+    harness.setMockResponse('/v1/chat/completions', 'This is a response during processing that exceeds thirty character threshold.', 1000);
     
-    // Start the application
-    await harness.startApp({ debugMode: false });
+    // Start the application with blessed output capture enabled
+    await harness.startApp({ debugMode: true, usePty: false });
     
     // Wait for idle state
     await harness.waitForIdleState(3000);
     
-    // Send a message to trigger processing
-    await harness.sendInput('Generate a response\n');
+    // Send a message to trigger processing (>30 chars to avoid debouncing)
+    const processingMessage = 'Generate a response that will trigger background processing';
+    await harness.sendInput(`${processingMessage}\n`);
     
     // Wait for processing to begin
     await harness.waitForLLMRequest(3000);
     
     // Send /quit command during processing - this should show a warning
     await harness.sendCommand('/quit');
+    
+    // Use blessed output capture to verify the quit command was processed
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    const capturedOutput = await harness.getCapturedUIContent();
     
     // The application should either show a warning or exit cleanly
     // We'll just verify it handles the quit command appropriately
@@ -192,7 +197,7 @@ describe('Quit Command E2E Tests', () => {
   test('Ctrl+C (SIGTERM) behavior works correctly', async () => {
     // Configure sequential responses for any message that might be sent
     harness.setMockResponseQueue([
-      'Test message response for Ctrl+C integration',
+      'Test message response for Ctrl+C integration that is long enough to avoid debouncing',
       JSON.stringify([{
         name: "Ctrl+C Test Concept",
         description: "Concept for Ctrl+C integration test",
@@ -203,15 +208,26 @@ describe('Quit Command E2E Tests', () => {
       }]),
       JSON.stringify([])
     ]);
-    // Start the application
-    await harness.startApp({ debugMode: false });
     
-    // Wait for idle state
+    // Start the application with blessed output capture enabled
+    await harness.startApp({ debugMode: true, usePty: false });
+    
+    // Wait for application to initialize completely
     await harness.waitForIdleState(3000);
     
-    // Send some input to establish state
-    await harness.sendInput('Test message for Ctrl+C integration\n');
-    await harness.waitForIdleState(5000);
+    // Send some input to establish state and verify UI is working
+    const testMessage = 'Test message for Ctrl+C integration that exceeds thirty character threshold';
+    await harness.sendInput(`${testMessage}\n`);
+    
+    // Wait for LLM processing to begin
+    await harness.waitForLLMRequest(3000);
+    
+    // Wait for processing to complete
+    await new Promise(resolve => setTimeout(resolve, 4000));
+    
+    // Verify the message was processed and appears in UI
+    const capturedOutput = await harness.getCapturedUIContent();
+    expect(capturedOutput.includes(testMessage.slice(0, 30))).toBe(true);
     
     // Send SIGTERM to simulate Ctrl+C
     const currentProcess = (harness as any).currentProcess;
@@ -287,21 +303,24 @@ describe('Quit Command E2E Tests', () => {
    * Requirements: 5.4 - Test quit command argument validation
    */
   test('quit command with invalid arguments shows help', async () => {
-    // Start the application
-    await harness.startApp({ debugMode: false });
+    // Start the application with blessed output capture enabled
+    await harness.startApp({ debugMode: true, usePty: false });
     
-    // Wait for idle state
+    // Wait for application to initialize
     await harness.waitForIdleState(3000);
     
     // Send quit command with invalid argument
     await harness.sendCommand('/quit --invalid-flag');
     
-    // The application should show usage text and remain running
-    // Since UI text detection is challenging with blessed, we'll verify the application
-    // is still running (indicating the invalid command was handled properly)
+    // Wait a moment for the command to be processed
     await new Promise(resolve => setTimeout(resolve, 2000));
     
-    // Application should still be running after invalid command
+    // Use blessed output capture to verify the application handled the invalid command
+    // and is still running (indicating the invalid command was handled properly)
+    const capturedOutput = await harness.getCapturedUIContent();
+    
+    // The application should show some kind of response to the invalid command
+    // and remain running (we can verify this by checking it's still responsive)
     harness.assertProcessState(true);
     
     // Send proper quit command

@@ -74,7 +74,10 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
         EI_DATA_PATH: this.tempDataPath,
         EI_LLM_BASE_URL: `http://localhost:${mockServerPort}/v1`,
         EI_LLM_API_KEY: 'test-api-key',
-        EI_LLM_MODEL: 'test-model'
+        EI_LLM_MODEL: 'test-model',
+        NODE_ENV: 'test',
+        EI_TEST_INPUT: 'true',
+        EI_TEST_OUTPUT: 'true'
       };
 
       this.environmentManager.setTestEnvironment(envConfig);
@@ -314,17 +317,30 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
     return new Promise((resolve, reject) => {
       const checkForText = async () => {
         try {
-          const currentOutput = await this.processManager.getOutput(this.currentProcess!);
+          const rawOutput = await this.processManager.getOutput(this.currentProcess!);
           
-          // Check if expected text appears in output
-          if (currentOutput.includes(expectedText)) {
-            resolve(currentOutput);
+          // Extract readable text from blessed terminal output
+          const cleanText = this.extractReadableText(rawOutput);
+          
+          // TEMPORARY DEBUG: Also check raw output
+          const rawContainsText = rawOutput.includes(expectedText);
+          const cleanContainsText = cleanText.includes(expectedText);
+          
+          // Check if expected text appears in cleaned output OR raw output (for debugging)
+          if (cleanContainsText || rawContainsText) {
+            resolve(rawOutput);
             return;
           }
 
           // Check timeout
           if (Date.now() - startTime >= timeout) {
-            reject(new Error(`UI text timeout after ${timeout}ms. Expected: "${expectedText}"`));
+            // Include both raw and cleaned text in error for debugging
+            const recentRawText = rawOutput.slice(-1000); // Show more raw text
+            const recentCleanText = cleanText.slice(-500);
+            console.log('DEBUG - Full raw output length:', rawOutput.length);
+            console.log('DEBUG - Raw output (last 1000 chars):', JSON.stringify(recentRawText));
+            console.log('DEBUG - Clean text:', JSON.stringify(recentCleanText));
+            reject(new Error(`UI text timeout after ${timeout}ms. Expected: "${expectedText}". Recent raw text: "${recentRawText}". Recent clean text: "${recentCleanText}"`));
             return;
           }
 
@@ -360,17 +376,21 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
     return new Promise((resolve, reject) => {
       const checkForPattern = async () => {
         try {
-          const currentOutput = await this.processManager.getOutput(this.currentProcess!);
+          const rawOutput = await this.processManager.getOutput(this.currentProcess!);
           
-          // Check if pattern matches output
-          if (pattern.test(currentOutput)) {
-            resolve(currentOutput);
+          // Extract readable text from blessed terminal output
+          const cleanText = this.extractReadableText(rawOutput);
+          
+          // Check if pattern matches cleaned output
+          if (pattern.test(cleanText)) {
+            resolve(rawOutput);
             return;
           }
 
           // Check timeout
           if (Date.now() - startTime >= timeout) {
-            reject(new Error(`UI pattern timeout after ${timeout}ms. Pattern: ${pattern}`));
+            const recentCleanText = cleanText.slice(-500);
+            reject(new Error(`UI pattern timeout after ${timeout}ms. Pattern: ${pattern}. Recent clean text: "${recentCleanText}"`));
             return;
           }
 
@@ -686,9 +706,11 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
       throw new Error('Application is not running. Call startApp() first.');
     }
 
-    const output = await this.processManager.getOutput(this.currentProcess);
-    if (!output.includes(text)) {
-      throw new Error(`UI assertion failed: Expected output to contain "${text}". Actual output: ${output.slice(-500)}`);
+    const rawOutput = await this.processManager.getOutput(this.currentProcess);
+    const cleanText = this.extractReadableText(rawOutput);
+    
+    if (!cleanText.includes(text)) {
+      throw new Error(`UI assertion failed: Expected output to contain "${text}". Actual clean text: ${cleanText.slice(-500)}`);
     }
   }
 
@@ -701,9 +723,11 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
       throw new Error('Application is not running. Call startApp() first.');
     }
 
-    const output = await this.processManager.getOutput(this.currentProcess);
-    if (output.includes(text)) {
-      throw new Error(`UI assertion failed: Expected output to NOT contain "${text}". Actual output: ${output.slice(-500)}`);
+    const rawOutput = await this.processManager.getOutput(this.currentProcess);
+    const cleanText = this.extractReadableText(rawOutput);
+    
+    if (cleanText.includes(text)) {
+      throw new Error(`UI assertion failed: Expected output to NOT contain "${text}". Actual clean text: ${cleanText.slice(-500)}`);
     }
   }
 
@@ -716,9 +740,11 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
       throw new Error('Application is not running. Call startApp() first.');
     }
 
-    const output = await this.processManager.getOutput(this.currentProcess);
-    if (!pattern.test(output)) {
-      throw new Error(`UI assertion failed: Expected output to match pattern ${pattern}. Actual output: ${output.slice(-500)}`);
+    const rawOutput = await this.processManager.getOutput(this.currentProcess);
+    const cleanText = this.extractReadableText(rawOutput);
+    
+    if (!pattern.test(cleanText)) {
+      throw new Error(`UI assertion failed: Expected output to match pattern ${pattern}. Actual clean text: ${cleanText.slice(-500)}`);
     }
   }
 
@@ -857,6 +883,9 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
         throw new Error(`Exit code assertion failed: Process did not exit within ${timeout}ms`);
       }
       throw error;
+    } finally {
+      // Clean up process reference after exit verification
+      this.currentProcess = null;
     }
   }
 
@@ -951,6 +980,19 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
     }
 
     return await this.processManager.getOutput(this.currentProcess, lines);
+  }
+
+  /**
+   * Gets the current application output with escape sequences removed
+   * Utility method for debugging cleaned text extraction
+   */
+  async getCurrentCleanOutput(lines?: number): Promise<string> {
+    if (!this.currentProcess) {
+      throw new Error('Application is not running. Call startApp() first.');
+    }
+
+    const rawOutput = await this.processManager.getOutput(this.currentProcess, lines);
+    return this.extractReadableText(rawOutput);
   }
 
   /**
@@ -1236,6 +1278,165 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
   }
 
   // Private helper methods
+
+  /**
+   * Gets captured UI content using the test output capture system
+   * Requirements: 3.1 - UI output monitoring with readable content extraction
+   */
+  async getCapturedUIContent(): Promise<string> {
+    if (!this.currentProcess) {
+      throw new Error('Application is not running. Call startApp() first.');
+    }
+
+    // Use the new test output capture system to get readable content
+    // This requires the application to have EI_TEST_OUTPUT=true enabled
+    const rawOutput = await this.processManager.getOutput(this.currentProcess, 50);
+    
+    // Check if the output contains test capture markers
+    if (rawOutput.includes('[TestOutputCapture]') || rawOutput.includes('TestOutputCapture: Captured')) {
+      // Extract captured content from the debug output
+      return this.extractCapturedContent(rawOutput);
+    }
+    
+    // Fallback to existing text extraction method
+    return this.extractReadableText(rawOutput);
+  }
+
+  /**
+   * Waits for specific text to appear in captured UI content
+   * Requirements: 3.1 - UI output monitoring with improved text detection
+   */
+  async waitForCapturedUIText(expectedText: string, timeout: number = 5000): Promise<string> {
+    if (!this.currentProcess) {
+      throw new Error('Application is not running. Call startApp() first.');
+    }
+
+    const startTime = Date.now();
+    
+    return new Promise((resolve, reject) => {
+      const checkForText = async () => {
+        try {
+          const capturedContent = await this.getCapturedUIContent();
+          
+          if (capturedContent.includes(expectedText)) {
+            resolve(capturedContent);
+            return;
+          }
+
+          // Check timeout
+          if (Date.now() - startTime >= timeout) {
+            const recentContent = capturedContent.slice(-500);
+            reject(new Error(`Captured UI text timeout after ${timeout}ms. Expected: "${expectedText}". Recent captured content: "${recentContent}"`));
+            return;
+          }
+
+          // Check if process is still running
+          if (!this.processManager.isRunning(this.currentProcess!)) {
+            reject(new Error('Application process stopped while waiting for captured UI text'));
+            return;
+          }
+
+          // Continue checking
+          setTimeout(checkForText, 100);
+        } catch (error) {
+          reject(new Error(`Error while waiting for captured UI text: ${error}`));
+        }
+      };
+
+      // Start checking immediately
+      checkForText();
+    });
+  }
+
+  /**
+   * Extracts captured content from debug output
+   */
+  private extractCapturedContent(rawOutput: string): string {
+    // Look for TestOutputCapture console messages in the output
+    const captureLines = rawOutput
+      .split('\n')
+      .filter(line => line.includes('[TestOutputCapture] Captured'))
+      .map(line => {
+        // Extract the captured content from console messages
+        // Format: "[TestOutputCapture] Captured {component} content: "{content}" (total captured: {count})"
+        const match = line.match(/\[TestOutputCapture\] Captured .+ content: "(.+?)" \(total captured: \d+\)/);
+        return match ? match[1] : '';
+      })
+      .filter(content => content.length > 0);
+
+    return captureLines.join('\n');
+  }
+
+  /**
+   * Extracts readable text from blessed terminal output by removing ANSI escape sequences
+   * and blessed box-drawing characters
+   */
+  private extractReadableText(rawOutput: string): string {
+    if (!rawOutput || rawOutput.trim() === '') {
+      return '';
+    }
+
+    let cleanText = rawOutput;
+
+    // Remove ANSI escape sequences - comprehensive patterns
+    // CSI sequences: ESC[ followed by parameters and final byte
+    cleanText = cleanText.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '');
+    
+    // OSC sequences: ESC] followed by data and terminated by BEL or ESC\
+    cleanText = cleanText.replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, '');
+    
+    // Simple escape sequences: ESC followed by single character
+    cleanText = cleanText.replace(/\x1b[a-zA-Z0-9]/g, '');
+    
+    // DCS sequences: ESC P ... ESC \
+    cleanText = cleanText.replace(/\x1bP[^\x1b]*\x1b\\/g, '');
+    
+    // APC sequences: ESC _ ... ESC \
+    cleanText = cleanText.replace(/\x1b_[^\x1b]*\x1b\\/g, '');
+    
+    // PM sequences: ESC ^ ... ESC \
+    cleanText = cleanText.replace(/\x1b\^[^\x1b]*\x1b\\/g, '');
+
+    // Remove remaining escape sequences that might not match above patterns
+    cleanText = cleanText.replace(/\x1b./g, '');
+
+    // Remove cursor positioning sequences that might appear as text
+    // These often appear as patterns like "-1;2H", "?25h", etc.
+    cleanText = cleanText.replace(/-?\d+;\d+H/g, '');
+    cleanText = cleanText.replace(/\?\d+[lh]/g, '');
+    cleanText = cleanText.replace(/\?\d+/g, '');
+
+    // Remove blessed box-drawing characters more precisely
+    // Look for long sequences of box-drawing characters (5+ in a row)
+    // This preserves legitimate text while removing UI elements
+    cleanText = cleanText.replace(/[qkxjlmtuvwn]{5,}/g, ' ');
+    
+    // Remove short sequences of box-drawing chars that are clearly UI (2-4 chars surrounded by spaces or line boundaries)
+    cleanText = cleanText.replace(/(\s|^)[qkxjlmtuvwn]{2,4}(\s|$)/g, ' ');
+    
+    // Remove isolated single box-drawing characters surrounded by spaces
+    cleanText = cleanText.replace(/(\s)[qkxjlmtuvwn](\s)/g, '$1$2');
+
+    // Remove control characters (except newlines and tabs)
+    cleanText = cleanText.replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/g, '');
+
+    // Clean up excessive whitespace but preserve line structure
+    cleanText = cleanText.replace(/[ \t]+/g, ' '); // Multiple spaces/tabs to single space
+    cleanText = cleanText.replace(/\n\s*\n\s*\n/g, '\n\n'); // Multiple newlines to double newline
+    
+    // Remove leading/trailing whitespace from each line while preserving line breaks
+    cleanText = cleanText.split('\n').map(line => line.trim()).join('\n');
+    
+    // Remove empty lines at start and end
+    cleanText = cleanText.replace(/^\n+/, '').replace(/\n+$/, '');
+
+    // Final check - if we ended up with just whitespace or single characters, return empty
+    if (cleanText.trim().length <= 1) {
+      return '';
+    }
+
+    return cleanText;
+  }
 
   private getDefaultConfig(): TestConfig {
     return {
