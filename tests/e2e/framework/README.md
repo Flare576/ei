@@ -2,6 +2,11 @@
 
 This document describes the configuration management and extensibility features of the E2E testing framework.
 
+> **📖 Related Documentation**: 
+> - For main framework overview and usage guide, see [`../README.md`](../README.md)
+> - For test scenario framework details, see [`test-scenario-README.md`](test-scenario-README.md)
+> - This document focuses on configuration management and extensibility features
+
 ## Configuration Management
 
 The configuration system provides file-based configuration loading, programmatic API, environment overrides, and validation.

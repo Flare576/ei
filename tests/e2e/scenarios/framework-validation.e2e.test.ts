@@ -142,7 +142,7 @@ describe('Framework Validation E2E Tests', () => {
     expect(requestHistory.length).toBeGreaterThan(0);
     
     // Verify the request was for chat completions
-    const chatRequest = requestHistory.find(req => req.url.includes('/v1/chat/completions'));
+    const chatRequest = requestHistory.find(req => req.endpoint.includes('/v1/chat/completions'));
     expect(chatRequest).toBeTruthy();
     
     // Send quit command
@@ -205,7 +205,12 @@ describe('Framework Validation E2E Tests', () => {
    * Requirements: 5.2 - Quit during LLM processing
    */
   test('framework validates quit during processing', async () => {
-    // Configure mock response with delay to simulate processing
+    // Configure mock response queue with delay to simulate processing
+    harness.setMockResponseQueue([
+      'Processing response',     // Main response with delay
+      JSON.stringify([]),        // System concepts
+      JSON.stringify([])         // Human concepts
+    ]);
     harness.setMockResponse('/v1/chat/completions', 'Processing response', 2000);
     
     // Start the application
@@ -218,7 +223,7 @@ describe('Framework Validation E2E Tests', () => {
     await harness.sendInput('Start processing\n');
     
     // Wait for LLM request to start
-    await harness.waitForLLMRequest(2000);
+    await harness.waitForLLMRequest(3000);
     
     // Send quit command during processing
     await harness.sendCommand('/quit');

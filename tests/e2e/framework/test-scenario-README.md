@@ -2,6 +2,11 @@
 
 The Test Scenario Framework provides a comprehensive system for creating, loading, and executing end-to-end test scenarios with built-in error handling and recovery mechanisms.
 
+> **📖 Related Documentation**: 
+> - For main framework overview and usage guide, see [`../README.md`](../README.md)
+> - For configuration management and extensibility features, see [`README.md`](README.md)
+> - This document focuses on the test scenario execution system
+
 ## Overview
 
 The framework consists of two main components:

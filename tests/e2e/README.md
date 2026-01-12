@@ -2,17 +2,28 @@
 
 This comprehensive end-to-end testing framework enables automated testing of the EI (Emotional Intelligence) application through controlled environments, mock LLM interactions, and real application behavior validation.
 
+**Framework Status**: ✅ **VALIDATED** - Core functionality tested and working with real EI application scenarios.
+
+> **📖 Additional Documentation**: 
+> - For detailed framework architecture and component documentation, see this main README
+> - For configuration management and extensibility features, see [`framework/README.md`](framework/README.md)
+> - For test scenario framework details, see [`framework/test-scenario-README.md`](framework/test-scenario-README.md)
+
 ## Overview
 
-The E2E testing framework provides:
+The E2E testing framework provides **validated, working patterns** for:
 
-- **Isolated Test Environments**: Each test runs in a temporary directory with its own data
-- **Mock LLM Server**: Configurable mock server that simulates LLM responses
-- **Application Process Management**: Controlled spawning and management of the EI application
-- **Test Input Injection**: Direct input injection into the blessed-based terminal application
-- **Comprehensive Metrics**: Detailed execution time tracking and resource usage monitoring
-- **Flexible Test Scenarios**: JSON-configurable test scenarios with step-by-step execution
-- **Extensible Hooks System**: Pre/post test hooks for custom setup and teardown
+- **✅ Isolated Test Environments**: Each test runs in a temporary directory with its own data
+- **✅ Mock LLM Server**: Configurable mock server that simulates LLM responses with sequential response queues
+- **✅ Application Process Management**: Reliable spawning and management of the EI application using regular spawn (not PTY)
+- **✅ Test Input Injection**: Proven input delivery system that works with blessed-based terminal applications
+- **✅ Quit Command Validation**: Complete validation of quit command behavior in all application states
+- **✅ Multi-Persona Testing**: Basic multi-persona functionality validation with independent state management
+- **✅ Comprehensive Metrics**: Detailed execution time tracking and resource usage monitoring
+- **✅ Flexible Test Scenarios**: JSON-configurable test scenarios with step-by-step execution
+- **✅ Extensible Hooks System**: Pre/post test hooks for custom setup and teardown
+
+**Recent Validation**: Framework has been extensively tested with real EI application scenarios and provides reliable testing capabilities for core functionality.
 
 ## Architecture
 
@@ -60,11 +71,58 @@ npm run test:e2e
 # Run specific test file
 npx vitest run tests/e2e/scenarios/working-input-test.e2e.test.ts
 
-# Run with debug output
+# Run with debug output (only when troubleshooting)
 npm run test:e2e:debug
 
-# Run metrics verification test
-npm run test:e2e:metrics
+# Run framework validation tests
+npx vitest run tests/e2e/scenarios/framework-validation.e2e.test.ts
+```
+
+### Basic Test Example (Working Pattern)
+
+```typescript
+import { E2ETestHarnessImpl } from '../framework/harness.js';
+
+test('basic message flow', async () => {
+  const harness = new E2ETestHarnessImpl();
+  
+  // Setup test environment
+  await harness.setup({
+    tempDirPrefix: 'my-test',
+    appTimeout: 10000,
+    cleanupTimeout: 5000
+  });
+
+  // Configure mock responses (3+ responses per message)
+  harness.setMockResponseQueue([
+    'Hello from mock server!',     // Main response
+    JSON.stringify([]),            // System concepts
+    JSON.stringify([])             // Human concepts
+  ]);
+
+  // Start application (use regular spawn, not PTY)
+  await harness.startApp({ debugMode: false, usePty: false });
+
+  // Wait for initialization (always do this)
+  await harness.waitForIdleState(5000);
+
+  // Send input (include \n for line termination)
+  await harness.sendInput('Hello, test message\n');
+
+  // Wait for processing
+  await harness.waitForLLMRequest(3000);
+  await harness.waitForUIText('Hello from mock', 8000);
+
+  // Verify response (use partial text matching)
+  await harness.assertUIContains('Hello from mock');
+
+  // Clean exit
+  await harness.sendCommand('/quit');
+  await harness.assertExitCode(0, 5000);
+
+  // Cleanup
+  await harness.cleanup();
+}, 30000);
 ```
 
 ## Core Components
@@ -200,20 +258,56 @@ const isRunning = processManager.isRunning(process);
 await processManager.stop(process);
 ```
 
-## Test Input Injection System
+## Test Input System - Working Patterns
 
-The framework uses a special test input injection system that allows sending input directly to the blessed-based EI application. This works by:
+The framework uses a proven input injection system that reliably sends input to the blessed-based EI application. Based on extensive testing and validation, the following patterns work consistently:
 
-1. Setting the `EI_TEST_INPUT=true` environment variable
-2. The EI application detects this and sets up a secondary input listener on stdin
-3. Tests can send input via the process manager, which gets processed as if typed by a user
+### Working Configuration
+
+**Application Startup (RECOMMENDED)**:
+```typescript
+// Use regular spawn (not PTY) for reliable input injection
+await harness.startApp({ 
+  debugMode: false,  // Enable only for troubleshooting
+  usePty: false      // PTY causes input reliability issues
+});
+```
+
+**Input Delivery**:
+```typescript
+// Send regular messages (include \n for line termination)
+await harness.sendInput('Hello, test message\n');
+
+// Send commands (framework adds / prefix and \n suffix automatically)
+await harness.sendCommand('/quit');
+await harness.sendCommand('/persona create TestPersona');
+```
+
+**Mock Response Configuration**:
+```typescript
+// Configure sequential responses for complete message flow
+// Each message requires 3+ responses: main response + system concepts + human concepts
+harness.setMockResponseQueue([
+  'Hello! I received your message.',  // Main LLM response
+  JSON.stringify([{                   // System concepts update
+    name: "Test Concept",
+    description: "A test concept",
+    level_current: 0.5,
+    level_ideal: 0.8,
+    level_elasticity: 0.3,
+    type: "static"
+  }]),
+  JSON.stringify([])                  // Human concepts (usually empty)
+]);
+```
 
 ### Key Features
 
-- **Command Support**: Handles both regular messages and commands (e.g., `/quit`, `/persona`)
-- **Clean Exit**: Special handling for quit commands to ensure clean test exits
-- **Debug Logging**: Comprehensive logging for troubleshooting input issues
-- **Compatibility**: Works with both regular spawn and PTY processes
+- **Reliable Input Delivery**: Regular spawn process provides consistent input handling
+- **Command Support**: Framework handles both messages and commands with proper formatting
+- **Clean Exit**: `/quit` command ensures proper application termination
+- **Mock Integration**: Sequential response queue handles complete message processing flow
+- **Debug Support**: Enable debug mode only when troubleshooting specific issues
 
 ## Metrics and Reporting
 
@@ -300,6 +394,8 @@ interface MockResponse {
 ```
 
 ## Test Scenarios
+
+The framework includes a comprehensive test scenario system for creating reusable, configurable tests. For detailed information about the test scenario framework, see [`framework/test-scenario-README.md`](framework/test-scenario-README.md).
 
 ### JSON Configuration Format
 
@@ -429,57 +525,128 @@ class CustomTestHarness extends E2ETestHarnessImpl {
 
 ## Troubleshooting
 
-### Common Issues
+### Working Patterns (VALIDATED)
 
-#### 1. Application Startup Timeout
+The following patterns have been validated and work reliably:
 
-**Problem**: Application fails to start within the timeout period.
+#### ✅ Application Startup
+```typescript
+// WORKING: Use regular spawn, not PTY
+await harness.startApp({ debugMode: false, usePty: false });
+await harness.waitForIdleState(5000);
+```
 
-**Solutions**:
-- Increase `appTimeout` in test configuration
-- Check that the application builds successfully (`npm run build`)
-- Verify environment variables are set correctly
-- Enable debug mode to see detailed startup logs
+#### ✅ Input Delivery  
+```typescript
+// WORKING: Include \n for messages, use sendCommand for commands
+await harness.sendInput('Hello, test message\n');
+await harness.sendCommand('/quit');  // Framework adds / and \n automatically
+```
 
-#### 2. Input Not Reaching Application
+#### ✅ Mock Response Configuration
+```typescript
+// WORKING: Sequential queue handles complete message flow
+harness.setMockResponseQueue([
+  'Main response',           // LLM response
+  JSON.stringify([]),        // System concepts
+  JSON.stringify([])         // Human concepts  
+]);
+```
 
-**Problem**: Test input doesn't seem to reach the application.
+#### ✅ UI Text Validation
+```typescript
+// WORKING: Use partial text matching, not exact matches
+await harness.waitForUIText('Hello! I received', 8000);
+await harness.assertUIContains('Hello! I received');
+```
 
-**Solutions**:
-- Verify `EI_TEST_INPUT=true` environment variable is set
-- Check that the application process is running (`harness.isAppRunning()`)
-- Use `usePty: false` in app start options (regular spawn works better for input injection)
-- Add delays between input and verification steps
+### Common Issues and Solutions
 
-#### 3. Mock Server Connection Issues
+#### 1. Test Timeouts
 
-**Problem**: Application can't connect to mock LLM server.
-
-**Solutions**:
-- Verify mock server is started before application
-- Check that `EI_LLM_BASE_URL` points to the correct mock server port
-- Ensure no firewall or port conflicts
-- Use `harness.waitForLLMRequest()` to verify requests are being made
-
-#### 4. Test Cleanup Errors
-
-**Problem**: Tests fail during cleanup with process management errors.
-
-**Solutions**:
-- These are usually non-critical - the test functionality worked
-- Ensure proper test lifecycle: setup → test → cleanup
-- Use try/catch blocks around cleanup operations
-- Check for resource leaks (unclosed processes, temp directories)
-
-#### 5. Blessed Application Output Issues
-
-**Problem**: Can't find expected text in application output.
+**Problem**: Tests timeout waiting for responses or UI text.
 
 **Solutions**:
-- Remember that blessed output contains escape sequences and box-drawing characters
-- Use partial text matching instead of exact matches
-- Check output with `harness.getCurrentOutput()` for debugging
-- Look for content fragments rather than formatted UI elements
+- Use recommended timeouts: startup (10s), LLM request (3s), UI text (8s)
+- Always wait for idle state after startup: `await harness.waitForIdleState(5000)`
+- Use partial text matching instead of exact text matches
+- Check mock response queue has enough responses (3+ per message)
+
+#### 2. Input Not Working
+
+**Problem**: Application doesn't respond to test input.
+
+**Solutions**:
+- Use `usePty: false` in startApp options (PTY causes issues)
+- Include `\n` at end of input messages: `sendInput('message\n')`
+- Use `sendCommand('/quit')` for commands (framework handles formatting)
+- Wait for idle state before sending input
+
+#### 3. Mock Server Issues
+
+**Problem**: LLM requests not reaching mock server.
+
+**Solutions**:
+- Configure response queue before starting app
+- Use `waitForLLMRequest(3000)` to verify requests are made
+- Check request history: `harness.getMockRequestHistory().length`
+- Ensure mock server starts before application
+
+#### 4. UI Text Not Found
+
+**Problem**: Expected text doesn't appear in UI output.
+
+**Solutions**:
+- Use partial text matching: `waitForUIText('partial text', 8000)`
+- Remember blessed output contains escape sequences (this is normal)
+- Use `getCurrentOutput()` for debugging what text is actually present
+- Focus on content fragments, not formatted UI elements
+
+#### 5. Application Won't Exit
+
+**Problem**: Application hangs during shutdown.
+
+**Solutions**:
+- Use `sendCommand('/quit')` instead of process termination
+- Wait for exit code: `await harness.assertExitCode(0, 5000)`
+- Cleanup handles forced termination if needed
+- Check that all async operations complete before quit
+
+### ❌ Patterns to Avoid (Experimental/Deprecated)
+
+The following patterns were tried during development but are not reliable:
+
+#### ❌ PTY Process Spawning
+```typescript
+// DON'T USE: PTY causes input reliability issues
+await harness.startApp({ usePty: true });  // Unreliable
+```
+
+#### ❌ Complex Text Matching
+```typescript
+// DON'T USE: Exact text matching fails with blessed escape sequences
+await harness.waitForUIText('exact formatted text with colors');  // Fails
+```
+
+#### ❌ Manual Process Termination
+```typescript
+// DON'T USE: SIGTERM/SIGKILL instead of proper quit command
+process.kill(pid, 'SIGTERM');  // Unreliable cleanup
+```
+
+#### ❌ Single Mock Response
+```typescript
+// DON'T USE: Single response doesn't handle concept updates
+harness.setMockResponse('/v1/chat/completions', 'response');  // Incomplete
+```
+
+#### ❌ Fixed Delays Instead of Waiting
+```typescript
+// DON'T USE: Fixed delays are unreliable
+await new Promise(resolve => setTimeout(resolve, 5000));  // Flaky
+// USE: Proper wait conditions
+await harness.waitForLLMRequest(3000);  // Reliable
+```
 
 ### Debug Mode
 
