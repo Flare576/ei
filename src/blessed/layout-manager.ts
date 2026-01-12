@@ -104,7 +104,8 @@ export class LayoutManager {
       inputOnFocus: true,
       keys: true,
       secret: false,
-      censor: false
+      censor: false,
+      submit: true
     });
 
     this.statusBar = blessed.box({
@@ -150,7 +151,8 @@ export class LayoutManager {
       inputOnFocus: true,
       keys: true,
       secret: false,
-      censor: false
+      censor: false,
+      submit: true
     });
 
     this.statusBar = blessed.box({
@@ -195,7 +197,8 @@ export class LayoutManager {
       inputOnFocus: true,
       keys: true,
       secret: false,
-      censor: false
+      censor: false,
+      submit: true
     });
 
     this.statusBar = blessed.box({
