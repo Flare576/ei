@@ -2,7 +2,6 @@
 
 import blessed from 'blessed';
 import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog } from '../storage.js';
-import { processEvent } from '../processor.js';
 import { LLMAbortedError } from '../llm.js';
 import type { Message, MessageState, PersonaState } from '../types.js';
 import { LayoutManager } from './layout-manager.js';
@@ -11,7 +10,8 @@ import { PersonaRenderer } from './persona-renderer.js';
 import { ChatRenderer } from './chat-renderer.js';
 import { CommandHandler } from './command-handler.js';
 import { PersonaManager } from './persona-manager.js';
-import type { ICommandHandler, IPersonaManager } from './interfaces.js';
+import { MessageProcessor } from './message-processor.js';
+import type { ICommandHandler, IPersonaManager, IMessageProcessor } from './interfaces.js';
 
 // Initialize debug log file
 initializeDebugLog();
@@ -21,10 +21,6 @@ function debugLog(message: string) {
 }
 
 const DEBUG = process.argv.includes("--debug") || process.argv.includes("-d");
-const THIRTY_MINUTES_MS = 30 * 60 * 1000;
-const HEARTBEAT_INTERVAL_MS = DEBUG ? 600 * 1000 : THIRTY_MINUTES_MS;
-const COMPLETE_THOUGHT_LENGTH = 30;
-const DEBOUNCE_MS = 2000;
 const STARTUP_HISTORY_COUNT = 20;
 
 // Ctrl+C confirmation window - user has this long to press Ctrl+C again to exit
@@ -38,11 +34,11 @@ export class EIApp {
   private chatRenderer: ChatRenderer;
   private commandHandler: ICommandHandler;
   private personaManager: IPersonaManager;
+  private messageProcessor: IMessageProcessor;
   
   private personas: any[] = [];
   private activePersona = 'ei';
   private messages: Message[] = [];
-  private isProcessing = false;
   private statusMessage: string | null = null;
   
   // Ctrl+C state tracking
@@ -104,14 +100,18 @@ export class EIApp {
     });
     debugLog(`PersonaManager created - Instance #${this.instanceId}`);
 
-    // Initialize CommandHandler with proper PersonaManager
-    const tempMessageProcessor = {
-      // Minimal implementation for now
-    };
+    // Initialize MessageProcessor
+    this.messageProcessor = new MessageProcessor({
+      chatRenderer: this.chatRenderer,
+      personaManager: this.personaManager,
+      app: this as any
+    });
+    debugLog(`MessageProcessor created - Instance #${this.instanceId}`);
 
+    // Initialize CommandHandler with proper dependencies
     this.commandHandler = new CommandHandler({
       personaManager: this.personaManager,
-      messageProcessor: tempMessageProcessor as any,
+      messageProcessor: this.messageProcessor,
       app: this as any
     });
     debugLog(`CommandHandler created - Instance #${this.instanceId}`);
@@ -310,9 +310,8 @@ export class EIApp {
       return;
     }
 
-    // Add user message
-    this.addMessage('human', text, 'processing');
-    this.queueMessage(text);
+    // Add user message and queue for processing
+    await this.messageProcessor.processMessage(this.activePersona, text);
     this.layoutManager.getInputBox().clearValue();
     
     this.focusManager.maintainFocus();
@@ -339,93 +338,6 @@ export class EIApp {
     }
   }
 
-  private queueMessage(input: string) {
-    const ps = this.personaManager.getPersonaState(this.activePersona);
-    ps.messageQueue.push(input.trim());
-    this.resetPersonaHeartbeat(this.activePersona);
-
-    if (ps.isProcessing) {
-      this.abortPersonaOperation(this.activePersona);
-      return;
-    }
-
-    const totalLength = ps.messageQueue.join(' ').length;
-    if (totalLength >= COMPLETE_THOUGHT_LENGTH) {
-      // Clear any pending debounce timer since we're processing immediately
-      if (ps.debounceTimer) {
-        clearTimeout(ps.debounceTimer);
-        ps.debounceTimer = null;
-      }
-      debugLog(`queueMessage: immediate processing for ${this.activePersona} (length: ${totalLength})`);
-      this.processPersonaQueue(this.activePersona);
-    } else {
-      debugLog(`queueMessage: scheduling debounce for ${this.activePersona} (length: ${totalLength})`);
-      this.schedulePersonaDebounce(this.activePersona);
-    }
-  }
-
-  private async processPersonaQueue(personaName: string) {
-    const ps = this.personaManager.getPersonaState(personaName);
-    
-    if (ps.messageQueue.length === 0 || ps.isProcessing) {
-      debugLog(`processPersonaQueue: skipping ${personaName} - queue:${ps.messageQueue.length}, processing:${ps.isProcessing}`);
-      return;
-    }
-
-    debugLog(`processPersonaQueue: starting ${personaName} with ${ps.messageQueue.length} messages`);
-    
-    const combinedMessage = ps.messageQueue.join('\n');
-    ps.abortController = new AbortController();
-    ps.isProcessing = true;
-    this.personaManager.updateSpinnerAnimation();
-    
-    if (personaName === this.activePersona) {
-      this.isProcessing = true;
-      this.render();
-    }
-
-    try {
-      const result = await processEvent(combinedMessage, personaName, DEBUG, ps.abortController.signal);
-      
-      if (!result.aborted) {
-        ps.messageQueue = [];
-        if (personaName === this.activePersona) {
-          this.updateLastHumanMessageState('sent');
-        }
-        if (result.response) {
-          if (personaName === this.activePersona) {
-            this.addMessage('system', result.response);
-          } else {
-            this.personaManager.updateUnreadCount(personaName, 1);
-          }
-        }
-      }
-    } catch (err) {
-      if (!(err instanceof LLMAbortedError)) {
-        ps.messageQueue = [];
-        if (personaName === this.activePersona) {
-          this.updateLastHumanMessageState('failed');
-          this.setStatus(`Error: ${err instanceof Error ? err.message : String(err)}`);
-        }
-      }
-    } finally {
-      debugLog(`processPersonaQueue: finished ${personaName}`);
-      ps.isProcessing = false;
-      ps.abortController = null;
-      this.personaManager.updateSpinnerAnimation();
-      
-      if (personaName === this.activePersona) {
-        this.isProcessing = false;
-      }
-
-      this.render();
-
-      if (ps.messageQueue.length > 0) {
-        debugLog(`processPersonaQueue: retriggering ${personaName} - queue has ${ps.messageQueue.length} messages`);
-        this.processPersonaQueue(personaName);
-      }
-    }
-  }
 
   private updateLastHumanMessageState(newState: MessageState | undefined) {
     for (let i = this.messages.length - 1; i >= 0; i--) {
@@ -436,90 +348,11 @@ export class EIApp {
     }
   }
 
-  private resetPersonaHeartbeat(personaName: string) {
-    const ps = this.personaManager.getPersonaState(personaName);
-    
-    if (ps.heartbeatTimer) {
-      clearTimeout(ps.heartbeatTimer);
-    }
-    
-    ps.lastActivity = Date.now();
-    
-    ps.heartbeatTimer = setTimeout(async () => {
-      if (ps.messageQueue.length > 0 || ps.isProcessing) {
-        this.resetPersonaHeartbeat(personaName);
-        return;
-      }
 
-      ps.abortController = new AbortController();
-      ps.isProcessing = true;
-      this.personaManager.updateSpinnerAnimation();
-      
-      if (personaName === this.activePersona) {
-        this.isProcessing = true;
-        this.render();
-      }
 
-      try {
-        const result = await processEvent(null, personaName, DEBUG, ps.abortController.signal);
-        if (!result.aborted && result.response) {
-          if (personaName === this.activePersona) {
-            this.addMessage('system', result.response);
-          } else {
-            this.personaManager.updateUnreadCount(personaName, 1);
-          }
-        }
-      } catch (err) {
-        if (!(err instanceof LLMAbortedError)) {
-          if (personaName === this.activePersona) {
-            this.setStatus(`Heartbeat error: ${err instanceof Error ? err.message : String(err)}`);
-          }
-        }
-      } finally {
-        ps.isProcessing = false;
-        ps.abortController = null;
-        this.personaManager.updateSpinnerAnimation();
-        if (personaName === this.activePersona) {
-          this.isProcessing = false;
-        }
-        this.render();
-        this.resetPersonaHeartbeat(personaName);
-      }
-    }, HEARTBEAT_INTERVAL_MS);
-  }
 
-  private schedulePersonaDebounce(personaName: string) {
-    const ps = this.personaManager.getPersonaState(personaName);
-    
-    if (ps.debounceTimer) {
-      clearTimeout(ps.debounceTimer);
-    }
-    debugLog(`schedulePersonaDebounce: scheduling ${personaName} in ${DEBOUNCE_MS}ms`);
-    ps.debounceTimer = setTimeout(() => {
-      debugLog(`schedulePersonaDebounce: timer fired for ${personaName}`);
-      this.processPersonaQueue(personaName);
-    }, DEBOUNCE_MS);
-  }
 
-  private abortPersonaOperation(personaName: string) {
-    const ps = this.personaManager.getPersonaState(personaName);
-    if (ps?.abortController) {
-      ps.abortController.abort();
-      ps.abortController = null;
-      
-      if (personaName === this.activePersona) {
-        this.updateLastHumanMessageState('failed');
-      }
-      
-      ps.messageQueue = [];
-      ps.isProcessing = false;
-      this.personaManager.updateSpinnerAnimation();
-      
-      if (personaName === this.activePersona) {
-        this.isProcessing = false;
-      }
-    }
-  }
+
 
   private async switchPersona(personaName: string) {
     if (personaName === this.activePersona) return;
@@ -529,12 +362,10 @@ export class EIApp {
       
       this.activePersona = personaName;
       this.messages = recent;
-      const ps = this.personaManager.getPersonaState(personaName);
-      this.isProcessing = ps.isProcessing;
       
       this.setStatus(`Switched to persona: ${personaName}`);
       
-      this.resetPersonaHeartbeat(personaName);
+      this.messageProcessor.resetHeartbeat(personaName);
       
       // Reset scroll position and render
       this.render();
@@ -570,7 +401,7 @@ export class EIApp {
     // Priority 1: Abort active persona processing
     if (activePs.isProcessing) {
       debugLog('BRANCH: Aborting active persona operation');
-      this.abortPersonaOperation(this.activePersona);
+      this.messageProcessor.abortProcessing(this.activePersona);
       this.setStatus('Aborted current operation');
       debugLog('=== EXIT LOGIC END (aborted active) ===');
       return;
@@ -720,7 +551,7 @@ export class EIApp {
 
   private renderStatus() {
     let status = '';
-    if (this.isProcessing) {
+    if (this.messageProcessor.isProcessing(this.activePersona)) {
       status += '{cyan-fg}thinking...{/cyan-fg} ';
     }
     if (this.statusMessage) {
@@ -822,9 +653,7 @@ export class EIApp {
       this.messages = history.messages.slice(-STARTUP_HISTORY_COUNT);
       
       // Initialize heartbeats for all personas
-      for (const persona of this.personas) {
-        this.resetPersonaHeartbeat(persona.name);
-      }
+      this.messageProcessor.initializeHeartbeats(this.personas);
       
       this.focusManager.focusInput();
       this.render();

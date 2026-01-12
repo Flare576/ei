@@ -35,14 +35,14 @@ This implementation plan converts the monolithic `src/blessed/app.ts` file into 
     - Update command handler to use persona manager for /persona commands
     - _Requirements: 2.1, 2.4_
 
-- [ ] 4. Extract Message Processor module
-  - [ ] 4.1 Create message-processor.ts with IMessageProcessor interface
+- [x] 4. Extract Message Processor module
+  - [x] 4.1 Create message-processor.ts with IMessageProcessor interface
     - Extract message queuing and processing logic from app.ts
     - Move heartbeat system management to message processor
     - Integrate with existing chat-renderer.ts
     - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 10.1_
 
-  - [ ] 4.3 Update app.ts to use MessageProcessor
+  - [x] 4.3 Update app.ts to use MessageProcessor
     - Replace inline message processing with MessageProcessor calls
     - Maintain existing debounce and abort controller patterns
     - _Requirements: 2.1, 2.5_
