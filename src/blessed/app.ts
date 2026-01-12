@@ -256,12 +256,12 @@ export class EIApp implements IEIApp {
   }
 
   // Legacy methods for CommandHandler delegation (temporary - will be removed)
-  public executeExitLogic?(): void {
+  public executeExitLogic(): void {
     // Delegate to EventOrchestrator's exit logic
     this.eventOrchestrator.triggerExitLogic();
   }
 
-  public handleRefreshCommand?(): void {
+  public handleRefreshCommand(): void {
     // Delegate to EventOrchestrator's refresh logic
     this.eventOrchestrator.triggerRefreshCommand();
   }

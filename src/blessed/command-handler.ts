@@ -251,7 +251,13 @@ export class CommandHandler implements ICommandHandler {
    */
   private executeRegularQuit(): void {
     // Regular quit: use shared exit logic (identical to Ctrl+C)
-    (this.app as any).executeExitLogic();
+    if (this.app.executeExitLogic) {
+      this.app.executeExitLogic();
+    } else {
+      debugLog('executeExitLogic method not found on app - this should not happen');
+      // Fallback to force quit if the method is missing
+      this.executeForceQuit();
+    }
   }
 
   /**
@@ -260,6 +266,10 @@ export class CommandHandler implements ICommandHandler {
    */
   private executeRefresh(): void {
     // Delegate to the app's handleRefreshCommand method
-    (this.app as any).handleRefreshCommand();
+    if (this.app.handleRefreshCommand) {
+      this.app.handleRefreshCommand();
+    } else {
+      debugLog('handleRefreshCommand method not found on app - this should not happen');
+    }
   }
 }
