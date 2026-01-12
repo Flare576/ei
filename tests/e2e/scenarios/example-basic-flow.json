@@ -1,22 +1,22 @@
 {
-  "name": "Basic Application Flow Test",
-  "description": "Tests the basic flow of starting the application, sending a message, and receiving a response",
+  "name": "Basic Application Flow Example",
+  "description": "Demonstrates basic application flow: start → send message → receive response → quit",
   "setup": {
     "mockResponses": [
       {
         "endpoint": "/v1/chat/completions",
         "response": {
           "type": "fixed",
-          "content": "Hello! I'm a test response from the mock LLM server.",
-          "delayMs": 100
+          "content": "Hello! This is an example response from the E2E testing framework. The application is working correctly.",
+          "delayMs": 300
         }
       }
     ],
     "initialData": {
       "personas": [
         {
-          "name": "test-assistant",
-          "systemPrompt": "You are a helpful test assistant.",
+          "name": "ei",
+          "systemPrompt": "You are EI, a helpful AI assistant.",
           "initialMessages": []
         }
       ]
@@ -24,24 +24,34 @@
   },
   "steps": [
     {
+      "type": "wait",
+      "action": "idle",
+      "timeout": 3000,
+      "description": "Wait for application to initialize"
+    },
+    {
       "type": "input",
-      "action": "Hello, test assistant!",
-      "timeout": 5000
+      "action": "Hello, this is a test message from the E2E framework!",
+      "timeout": 2000,
+      "description": "Send a test message to the application"
     },
     {
       "type": "wait",
       "action": "llm_request",
-      "timeout": 3000
+      "timeout": 5000,
+      "description": "Wait for LLM request to be made"
     },
     {
       "type": "wait",
-      "action": "ui:Hello! I'm a test response",
-      "timeout": 5000
+      "action": "ui:example response from the E2E testing framework",
+      "timeout": 8000,
+      "description": "Wait for response to appear in UI"
     },
     {
       "type": "command",
       "action": "/quit",
-      "timeout": 2000
+      "timeout": 3000,
+      "description": "Send quit command to exit application"
     }
   ],
   "assertions": [
@@ -49,19 +59,29 @@
       "type": "ui",
       "target": "output",
       "condition": "contains",
-      "expected": "Hello! I'm a test response"
+      "expected": "example response from the E2E testing framework",
+      "description": "Verify the response appears in the UI"
     },
     {
-      "type": "file",
-      "target": "personas/test-assistant/system.jsonc",
-      "condition": "exists",
-      "expected": true
+      "type": "process",
+      "target": "exit_code",
+      "condition": "equals",
+      "expected": 0,
+      "description": "Verify application exits cleanly"
     },
     {
       "type": "process",
       "target": "mock_server",
       "condition": "mock_requests",
-      "expected": 1
+      "expected": 1,
+      "description": "Verify exactly one LLM request was made"
+    },
+    {
+      "type": "file",
+      "target": "personas",
+      "condition": "exists",
+      "expected": true,
+      "description": "Verify personas directory was created"
     }
   ],
   "cleanup": {

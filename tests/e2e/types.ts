@@ -2,6 +2,7 @@
 // Based on the design document specifications
 
 import { ChildProcess } from 'child_process';
+import { HooksManager } from './framework/hooks-manager.js';
 
 // ============================================================================
 // E2E Test Harness Interfaces
@@ -50,9 +51,15 @@ export interface E2ETestHarness {
   getTempDataPath(): string | null;
   getMockRequestHistory(): any[];
   setMockResponse(endpoint: string, content: string, delayMs?: number): void;
+  setMockResponseQueue(responses: string[]): void;
+  clearMockResponseQueue(): void;
   enableMockStreaming(endpoint: string, chunks: string[]): void;
   isAppRunning(): boolean;
   getAppFinalState(): any;
+  
+  // Hooks and extensibility
+  getHooksManager(): HooksManager;
+  executeTestScenario(scenario: TestScenario): Promise<void>;
 }
 
 export interface TestConfig {
@@ -69,6 +76,7 @@ export interface AppStartOptions {
   llmApiKey?: string;
   llmModel?: string;
   debugMode?: boolean;
+  usePty?: boolean; // Use pseudoterminal for better blessed app testing
 }
 
 // ============================================================================
@@ -81,6 +89,8 @@ export interface MockLLMServer {
   
   // Response configuration
   setResponse(endpoint: string, response: MockResponse): void;
+  setResponseQueue(responses: string[]): void;
+  clearResponseQueue(): void;
   setDelay(endpoint: string, delayMs: number): void;
   enableStreaming(endpoint: string, chunks: string[]): void;
   
@@ -164,6 +174,7 @@ export interface AppConfig {
   llmApiKey: string;
   llmModel: string;
   debugMode?: boolean;
+  usePty?: boolean; // Use pseudoterminal for better blessed app testing
 }
 
 // ============================================================================

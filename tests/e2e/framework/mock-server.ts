@@ -17,9 +17,12 @@ export class MockLLMServerImpl implements MockLLMServer {
   private config: MockServerConfig;
   private requestHistory: MockRequest[] = [];
   private responseOverrides: Map<string, MockResponse> = new Map();
+  private responseTypeOverrides: Map<string, MockResponse> = new Map();
   private delayOverrides: Map<string, number> = new Map();
   private streamingConfigs: Map<string, string[]> = new Map();
   private activeStreams: Set<Response> = new Set();
+  private responseQueue: string[] = [];
+  private responseQueueIndex: number = 0;
 
   constructor() {
     this.app = express();
@@ -71,6 +74,25 @@ export class MockLLMServerImpl implements MockLLMServer {
 
   setResponse(endpoint: string, response: MockResponse): void {
     this.responseOverrides.set(endpoint, response);
+  }
+
+  setResponseForType(requestType: string, response: MockResponse): void {
+    this.responseTypeOverrides.set(requestType, response);
+  }
+
+  clearResponseOverrides(): void {
+    this.responseOverrides.clear();
+    this.responseTypeOverrides.clear();
+  }
+
+  setResponseQueue(responses: string[]): void {
+    this.responseQueue = [...responses];
+    this.responseQueueIndex = 0;
+  }
+
+  clearResponseQueue(): void {
+    this.responseQueue = [];
+    this.responseQueueIndex = 0;
   }
 
   setDelay(endpoint: string, delayMs: number): void {
@@ -151,8 +173,11 @@ export class MockLLMServerImpl implements MockLLMServer {
       });
     }
 
-    // Get response configuration
-    const response = this.getResponseForEndpoint(endpoint);
+    // Detect request type based on system message content
+    const requestType = this.detectRequestType(req.body.messages);
+    
+    // Get appropriate response based on request type
+    const response = this.getResponseForRequestType(requestType, endpoint);
     const delay = this.getDelayForEndpoint(endpoint);
     const streamingChunks = this.streamingConfigs.get(endpoint);
 
@@ -189,6 +214,135 @@ export class MockLLMServerImpl implements MockLLMServer {
 
     // Handle fixed responses
     await this.handleFixedResponse(req, res, response);
+  }
+
+  private detectRequestType(messages: any[]): 'response' | 'system-concepts' | 'human-concepts' | 'description' | 'unknown' {
+    if (!messages || messages.length === 0) {
+      return 'unknown';
+    }
+
+    // Look for system message to determine request type
+    const systemMessage = messages.find(m => m.role === 'system');
+    if (!systemMessage || !systemMessage.content) {
+      return 'unknown';
+    }
+
+    const content = systemMessage.content.toLowerCase();
+
+    // Detect system concept update requests
+    if (content.includes('you are ei, a system that tracks "concepts"') && content.includes('system (yourself)')) {
+      return 'system-concepts';
+    }
+
+    // Detect human concept update requests  
+    if (content.includes('you are ei, a system that tracks "concepts"') && content.includes('human')) {
+      return 'human-concepts';
+    }
+
+    // Detect description generation requests
+    if (content.includes('generating brief descriptions for an ai persona')) {
+      return 'description';
+    }
+
+    // Detect response generation requests
+    if (content.includes('you are ei, a conversational companion')) {
+      return 'response';
+    }
+
+    return 'unknown';
+  }
+
+  private getResponseForRequestType(requestType: string, endpoint: string): MockResponse {
+    // Check for response queue first - this takes highest priority
+    if (this.responseQueue.length > 0 && this.responseQueueIndex < this.responseQueue.length) {
+      const queuedResponse = this.responseQueue[this.responseQueueIndex];
+      this.responseQueueIndex++;
+      return {
+        type: 'fixed',
+        content: queuedResponse,
+        statusCode: 200
+      };
+    }
+
+    // Check for manual override
+    const override = this.responseOverrides.get(endpoint);
+    if (override) {
+      return override;
+    }
+
+    // Check for request-type-specific override
+    const typeOverride = this.responseTypeOverrides.get(requestType);
+    if (typeOverride) {
+      return typeOverride;
+    }
+
+    // Provide appropriate default responses based on request type
+    switch (requestType) {
+      case 'system-concepts':
+        // System concepts should maintain the static guardrails
+        return {
+          type: 'fixed',
+          content: JSON.stringify([
+            {
+              name: "Promote Human-to-Human Interaction",
+              description: "Encourage maintaining human connections over AI dependency.",
+              level_current: 0.5,
+              level_ideal: 0.8,
+              level_elasticity: 0.3,
+              type: "static"
+            },
+            {
+              name: "Respect Conversational Boundaries", 
+              description: "Know when silence is better than engagement.",
+              level_current: 0.5,
+              level_ideal: 0.7,
+              level_elasticity: 0.4,
+              type: "static"
+            }
+            // Add more static concepts as needed for testing
+          ]),
+          statusCode: 200
+        };
+      
+      case 'human-concepts':
+        // Human concepts start empty and grow over time
+        return {
+          type: 'fixed',
+          content: '[]', // Empty array - human concepts learned through interaction
+          statusCode: 200
+        };
+      
+      case 'description':
+        return {
+          type: 'fixed',
+          content: JSON.stringify({
+            short_description: "Test AI assistant for E2E testing",
+            long_description: "A helpful test assistant designed for automated testing scenarios."
+          }),
+          statusCode: 200
+        };
+      
+      case 'response':
+        return {
+          type: 'fixed',
+          content: 'Hello! This is a test response from the mock LLM server.',
+          statusCode: 200
+        };
+      
+      default:
+        // Check config for fallback
+        const configResponse = this.config.responses[endpoint];
+        if (configResponse) {
+          return configResponse;
+        }
+
+        // Default fallback
+        return {
+          type: 'fixed',
+          content: 'This is a mock response from the test LLM server.',
+          statusCode: 200
+        };
+    }
   }
 
   private async handleFixedResponse(req: Request, res: Response, response: MockResponse): Promise<void> {

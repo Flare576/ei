@@ -1,393 +1,318 @@
-# E2E Test Harness
+# E2E Testing Framework - Configuration and Extensibility
 
-The E2E Test Harness is a comprehensive testing framework for the EI application that enables true integration testing by controlling the application environment, managing LLM interactions, and validating real application behavior through automated test scenarios.
+This document describes the configuration management and extensibility features of the E2E testing framework.
 
-## Overview
+## Configuration Management
 
-The E2E Test Harness orchestrates three core components:
+The configuration system provides file-based configuration loading, programmatic API, environment overrides, and validation.
 
-1. **Environment Manager** - Creates isolated test environments with temporary directories
-2. **Mock LLM Server** - Provides OpenAI-compatible API endpoints for controlled testing
-3. **Application Process Manager** - Manages the EI application as a controlled subprocess
-
-## Quick Start
+### Basic Usage
 
 ```typescript
-import { E2ETestHarnessImpl } from './framework/harness.js';
+import { createConfigManager, createDefaultConfig } from './config-manager.js';
+
+// Create a configuration manager
+const configManager = createConfigManager();
+
+// Create default configuration
+const config = createDefaultConfig({
+  tempDirPrefix: 'my-test',
+  appTimeout: 15000
+});
+
+// Validate configuration
+const validation = configManager.validateConfig(config);
+if (!validation.isValid) {
+  console.error('Invalid configuration:', validation.errors);
+}
+```
+
+### File-based Configuration
+
+Create a configuration file (supports JSON and JSONC):
+
+```json
+{
+  // E2E Test Configuration
+  "tempDirPrefix": "my-e2e-tests",
+  "mockServerPort": 3001,
+  "appTimeout": 12000,
+  "cleanupTimeout": 6000,
+  "mockResponses": [
+    {
+      "endpoint": "/v1/chat/completions",
+      "response": {
+        "type": "fixed",
+        "content": "Test response",
+        "delayMs": 100
+      }
+    }
+  ]
+}
+```
+
+Load and save configuration:
+
+```typescript
+// Load from file
+const config = await configManager.loadFromFile('./test-config.json');
+
+// Save to file
+await configManager.saveToFile(config, './test-config.json');
+```
+
+### Environment Variable Overrides
+
+Set environment variables to override configuration:
+
+```bash
+export E2E_TEST_TEMP_DIR_PREFIX=env-test
+export E2E_TEST_MOCK_SERVER_PORT=3002
+export E2E_TEST_APP_TIMEOUT=20000
+export E2E_TEST_CLEANUP_TIMEOUT=8000
+```
+
+Apply environment overrides:
+
+```typescript
+const configWithEnv = configManager.applyEnvironmentOverrides(baseConfig);
+```
+
+### Configuration Validation
+
+The system validates configuration and provides helpful error messages:
+
+```typescript
+const validation = configManager.validateConfig(config);
+
+console.log('Valid:', validation.isValid);
+console.log('Errors:', validation.errors);
+console.log('Warnings:', validation.warnings);
+```
+
+## Extensibility System
+
+The hooks system provides extensible test execution with pre/post hooks, custom scenarios, and plugin support.
+
+### Basic Hook Usage
+
+```typescript
+import { createHooksManager } from './hooks-manager.js';
+
+const hooksManager = createHooksManager();
+
+// Register a simple hook
+hooksManager.registerHook('my-hook', async (context) => {
+  console.log('Hook executed:', context.hookName);
+});
+
+// Execute the hook
+await hooksManager.executeHook('my-hook', {
+  hookName: 'my-hook',
+  timestamp: Date.now(),
+  data: { custom: 'data' }
+});
+```
+
+### Pre/Post Test Hooks
+
+```typescript
+// Before each test
+hooksManager.registerBeforeTest(async (context) => {
+  console.log(`Starting test: ${context.testName}`);
+  // Setup test-specific resources
+});
+
+// After each test
+hooksManager.registerAfterTest(async (context) => {
+  console.log(`Completed test: ${context.testName}`);
+  // Cleanup test-specific resources
+});
+
+// Before each scenario
+hooksManager.registerBeforeScenario(async (context) => {
+  console.log(`Starting scenario: ${context.scenario.name}`);
+});
+
+// After each scenario
+hooksManager.registerAfterScenario(async (context) => {
+  console.log(`Completed scenario: ${context.scenario.name}`);
+});
+```
+
+### Scenario Extensions
+
+Create custom scenario extensions:
+
+```typescript
+import { ScenarioExtension } from './hooks-manager.js';
+
+const myExtension: ScenarioExtension = {
+  name: 'my-extension',
+  description: 'Custom scenario extension',
+  version: '1.0.0',
+  
+  beforeScenario: async (context) => {
+    // Setup before scenario
+  },
+  
+  afterScenario: async (context) => {
+    // Cleanup after scenario
+  },
+  
+  customStepTypes: {
+    'custom-action': async (action, context) => {
+      // Handle custom step type
+      console.log(`Executing custom action: ${action}`);
+      return { result: 'success' };
+    }
+  },
+  
+  customAssertionTypes: {
+    'custom-assert': async (target, condition, expected, context) => {
+      // Handle custom assertion type
+      if (target !== expected) {
+        throw new Error(`Custom assertion failed: ${target} !== ${expected}`);
+      }
+    }
+  }
+};
+
+// Register the extension
+hooksManager.registerScenarioExtension('my-extension', myExtension);
+```
+
+### Plugin System
+
+Create and register plugins:
+
+```typescript
+import { E2EPlugin } from './hooks-manager.js';
+
+const myPlugin: E2EPlugin = {
+  name: 'my-plugin',
+  version: '1.0.0',
+  description: 'Custom E2E testing plugin',
+  
+  initialize: async (hooksManager, config) => {
+    console.log('Plugin initialized');
+    // Setup plugin resources
+  },
+  
+  cleanup: async () => {
+    console.log('Plugin cleaned up');
+    // Cleanup plugin resources
+  },
+  
+  hooks: {
+    'plugin-hook': async (context) => {
+      console.log('Plugin hook executed');
+    }
+  },
+  
+  scenarioExtensions: [myExtension],
+  
+  dependencies: ['other-plugin'] // Optional dependencies
+};
+
+// Register the plugin
+await hooksManager.registerPlugin(myPlugin);
+```
+
+### Built-in Extensions
+
+The framework provides built-in extensions:
+
+```typescript
+import { LoggingExtension, TimingExtension } from './hooks-manager.js';
+
+// Register logging extension for detailed execution logs
+hooksManager.registerScenarioExtension('logging', LoggingExtension);
+
+// Register timing extension for performance monitoring
+hooksManager.registerScenarioExtension('timing', TimingExtension);
+```
+
+### Integration with Test Harness
+
+Use configuration and hooks with the test harness:
+
+```typescript
+import { E2ETestHarnessImpl } from './harness.js';
+import { createDefaultConfig } from './config-manager.js';
+import { LoggingExtension } from './hooks-manager.js';
 
 const harness = new E2ETestHarnessImpl();
 
-// Setup test environment
-await harness.setup({
-  tempDirPrefix: 'my-test',
-  mockServerPort: 3001,
-  appTimeout: 5000
+// Setup with configuration
+const config = createDefaultConfig({
+  tempDirPrefix: 'integration-test',
+  appTimeout: 15000
 });
 
-// Start the application
-await harness.startApp({ debugMode: true });
+await harness.setup(config);
 
-// Send input and wait for response
-await harness.sendInput('Hello, world!\n');
-await harness.waitForUIChange(5000);
+// Get hooks manager and register extensions
+const hooksManager = harness.getHooksManager();
+hooksManager.registerScenarioExtension('logging', LoggingExtension);
 
-// Make assertions
-await harness.assertUIContains('Hello');
-harness.assertFileExists('personas/ei/system.jsonc');
+// Execute test scenario with hooks
+const scenario = {
+  name: 'my-scenario',
+  description: 'Test scenario with hooks',
+  setup: {},
+  steps: [
+    { type: 'custom-action', action: 'my custom step' }
+  ],
+  assertions: [
+    { type: 'custom-assert', target: 'value', condition: 'equals', expected: 'value' }
+  ]
+};
+
+await harness.executeTestScenario(scenario);
 
 // Cleanup
-await harness.stopApp();
 await harness.cleanup();
-```
-
-## Core Features
-
-### Lifecycle Management
-
-- **setup(config)** - Initializes test environment with isolated directories and mock server
-- **cleanup()** - Cleans up all test resources and restores environment
-- **startApp(options)** - Launches EI application as controlled subprocess
-- **stopApp()** - Gracefully stops the application
-
-### Application Control
-
-- **sendInput(text)** - Sends text input to application stdin
-- **sendCommand(command)** - Sends formatted commands (automatically adds `/` prefix)
-- **getCurrentOutput(lines?)** - Gets current application output
-- **isAppRunning()** - Checks if application process is running
-
-### State Observation
-
-#### UI Monitoring
-- **waitForUIChange(timeout?)** - Waits for UI output to change
-- **waitForUIText(text, timeout?)** - Waits for specific text to appear
-- **waitForUIPattern(pattern, timeout?)** - Waits for regex pattern match
-
-#### File System Monitoring
-- **waitForFileChange(path, timeout?)** - Waits for file modification
-- **waitForFileCreation(path, timeout?)** - Waits for file to be created
-- **waitForFileContent(path, content, timeout?)** - Waits for specific file content
-
-#### Process State Monitoring
-- **waitForProcessingComplete(timeout?)** - Waits for application to finish processing
-- **waitForLLMRequest(timeout?)** - Waits for LLM request to mock server
-- **waitForIdleState(timeout?)** - Waits for application to reach idle state
-- **waitForCondition(checker, description, timeout?, interval?)** - Custom condition waiting
-
-### Assertions
-
-#### UI Assertions
-- **assertUIContains(text)** - Assert UI output contains text
-- **assertUIDoesNotContain(text)** - Assert UI output does not contain text
-- **assertUIMatches(pattern)** - Assert UI output matches regex pattern
-
-#### File System Assertions
-- **assertFileExists(path)** - Assert file exists
-- **assertFileDoesNotExist(path)** - Assert file does not exist
-- **assertFileContent(path, content)** - Assert file content matches
-- **assertDirectoryExists(path, files?)** - Assert directory exists with optional file list
-
-#### Application State Assertions
-- **assertProcessState(running)** - Assert application running state
-- **assertExitCode(code, timeout?)** - Assert application exit code
-- **assertPersonaState(persona, state)** - Assert persona state (basic implementation)
-
-#### Mock Server Assertions
-- **assertMockRequestCount(count)** - Assert number of requests received
-- **assertMockRequestReceived(endpoint, method?)** - Assert specific request was made
-
-#### Environment Assertions
-- **assertCleanEnvironment(allowedFiles?)** - Assert test environment is clean
-
-### Mock Server Control
-
-- **setMockResponse(endpoint, content, delay?)** - Configure mock response
-- **enableMockStreaming(endpoint, chunks)** - Enable streaming responses
-- **getMockRequestHistory()** - Get all requests made to mock server
-
-## Configuration
-
-### TestConfig Options
-
-```typescript
-interface TestConfig {
-  tempDirPrefix?: string;        // Prefix for temp directory names
-  mockServerPort?: number;       // Port for mock LLM server
-  appTimeout?: number;           // Application startup timeout
-  cleanupTimeout?: number;       // Cleanup operation timeout
-  mockResponses?: MockResponseConfig[];  // Pre-configured mock responses
-}
-```
-
-### AppStartOptions
-
-```typescript
-interface AppStartOptions {
-  dataPath?: string;      // Override data directory path
-  llmBaseUrl?: string;    // Override LLM API URL
-  llmApiKey?: string;     // Override LLM API key
-  llmModel?: string;      // Override LLM model
-  debugMode?: boolean;    // Enable debug output
-}
-```
-
-## Usage Patterns
-
-### Basic Test Structure
-
-```typescript
-describe('My E2E Test', () => {
-  let harness: E2ETestHarnessImpl;
-
-  beforeEach(async () => {
-    harness = new E2ETestHarnessImpl();
-    await harness.setup({ tempDirPrefix: 'my-test' });
-  });
-
-  afterEach(async () => {
-    await harness.cleanup();
-  });
-
-  test('should handle basic interaction', async () => {
-    await harness.startApp();
-    
-    await harness.sendInput('Hello\n');
-    await harness.waitForUIChange();
-    
-    await harness.assertUIContains('Hello');
-    
-    await harness.stopApp();
-  });
-});
-```
-
-### Testing Quit Command
-
-```typescript
-test('should quit gracefully when idle', async () => {
-  await harness.startApp();
-  
-  // Wait for application to be ready
-  await harness.waitForIdleState();
-  
-  // Send quit command
-  await harness.sendCommand('quit');
-  
-  // Assert clean exit
-  await harness.assertExitCode(0);
-});
-```
-
-### Testing LLM Interactions
-
-```typescript
-test('should handle LLM conversation', async () => {
-  // Configure mock response
-  harness.setMockResponse('/v1/chat/completions', 'Mock AI response', 100);
-  
-  await harness.startApp();
-  
-  // Send message that triggers LLM
-  await harness.sendInput('Tell me a joke\n');
-  
-  // Wait for LLM request
-  await harness.waitForLLMRequest();
-  
-  // Wait for response to appear
-  await harness.waitForUIText('Mock AI response');
-  
-  // Verify request was made
-  harness.assertMockRequestReceived('/v1/chat/completions');
-  
-  await harness.stopApp();
-});
-```
-
-### Testing File Operations
-
-```typescript
-test('should persist conversation data', async () => {
-  await harness.startApp();
-  
-  // Send a message
-  await harness.sendInput('Save this message\n');
-  
-  // Wait for data to be written
-  await harness.waitForFileChange('personas/ei/history.jsonc');
-  
-  // Verify file content
-  await harness.assertFileContent('personas/ei/history.jsonc', 'Save this message');
-  
-  await harness.stopApp();
-});
-```
-
-### Testing Error Conditions
-
-```typescript
-test('should handle invalid commands gracefully', async () => {
-  await harness.startApp();
-  
-  // Send invalid command
-  await harness.sendCommand('invalid-command');
-  
-  // Should show error message
-  await harness.waitForUIText('Unknown command');
-  
-  // Application should still be running
-  harness.assertProcessState(true);
-  
-  await harness.stopApp();
-});
-```
-
-### Testing Streaming Responses
-
-```typescript
-test('should handle streaming LLM responses', async () => {
-  // Configure streaming response
-  harness.enableMockStreaming('/v1/chat/completions', [
-    'This ', 'is ', 'a ', 'streaming ', 'response'
-  ]);
-  
-  await harness.startApp();
-  
-  await harness.sendInput('Stream me a response\n');
-  
-  // Wait for streaming to complete
-  await harness.waitForUIText('streaming response');
-  
-  await harness.stopApp();
-});
 ```
 
 ## Advanced Features
 
-### Custom Wait Conditions
+### Hook Execution Monitoring
 
 ```typescript
-// Wait for complex application state
-await harness.waitForCondition(
-  async () => {
-    const output = await harness.getCurrentOutput();
-    return output.includes('Ready') && !output.includes('Processing');
-  },
-  'application ready and not processing',
-  10000,
-  200
-);
+// Get execution statistics
+const stats = hooksManager.getStatistics();
+console.log('Total hooks:', stats.totalHooks);
+console.log('Total handlers:', stats.totalHandlers);
+console.log('Plugins:', stats.plugins);
+
+// Get execution history
+const history = hooksManager.getExecutionHistory();
+for (const result of history) {
+  console.log(`Hook ${result.hookName}: ${result.executionTime}ms, ${result.handlersExecuted} handlers`);
+  if (result.errors.length > 0) {
+    console.error('Errors:', result.errors);
+  }
+}
 ```
 
-### Environment Verification
+### Configuration Schema Validation
 
-```typescript
-// Verify clean test environment
-harness.assertCleanEnvironment(['personas/ei/system.jsonc']);
+The system validates configuration against a built-in schema:
 
-// Verify directory structure
-harness.assertDirectoryExists('personas', ['ei']);
-harness.assertDirectoryExists('history');
-harness.assertDirectoryExists('concepts');
-```
+- `tempDirPrefix`: String, alphanumeric with underscores and hyphens
+- `mockServerPort`: Number, 1024-65535
+- `appTimeout`: Number, minimum 100ms (warns if < 1000ms)
+- `cleanupTimeout`: Number, minimum 100ms (warns if < 1000ms)
+- `mockResponses`: Array of mock response configurations
 
-### Mock Server Inspection
+### Error Handling
 
-```typescript
-// Get detailed request history
-const requests = harness.getMockRequestHistory();
-expect(requests).toHaveLength(2);
-expect(requests[0].endpoint).toBe('/v1/chat/completions');
-expect(requests[0].body.messages).toBeDefined();
-```
+Both systems handle errors gracefully:
 
-## Error Handling
+- Configuration validation provides detailed error messages
+- Hook execution continues even if individual handlers fail
+- Plugin initialization failures prevent registration
+- Cleanup operations attempt to clean up all resources even if some fail
 
-The harness provides comprehensive error handling:
-
-- **Setup failures** - Automatic cleanup of partial setup
-- **Application crashes** - Graceful handling and state capture
-- **Timeout conditions** - Clear error messages with context
-- **Assertion failures** - Detailed information about expected vs actual values
-- **Cleanup errors** - Best-effort cleanup with warnings
-
-## Testing the Framework
-
-The framework itself is thoroughly tested with 62+ test cases covering:
-
-- Lifecycle management
-- Configuration handling
-- Mock server integration
-- File system operations
-- Assertion methods
-- Wait conditions
-- Error scenarios
-- State management
-
-Run framework tests with:
-```bash
-npm test -- tests/e2e/framework/ --run
-```
-
-## Integration with Existing Tests
-
-The E2E Test Harness integrates seamlessly with the existing Vitest test infrastructure:
-
-```typescript
-// vitest.config.ts
-export default defineConfig({
-  test: {
-    include: ["tests/**/*.test.ts", "tests/e2e/**/*.e2e.test.ts"],
-    testTimeout: 30000, // Longer timeout for e2e tests
-  },
-});
-```
-
-## Best Practices
-
-1. **Always use beforeEach/afterEach** for setup and cleanup
-2. **Use specific timeouts** based on expected operation duration
-3. **Test both success and failure scenarios**
-4. **Verify mock server interactions** when testing LLM features
-5. **Use descriptive test names** that explain the scenario
-6. **Group related assertions** to minimize test execution time
-7. **Clean up resources** even when tests fail
-8. **Use appropriate wait methods** for different types of state changes
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Port conflicts** - Use different ports for concurrent tests
-2. **Timeout errors** - Increase timeouts for slow operations
-3. **File permission errors** - Ensure temp directories are writable
-4. **Process hanging** - Check for proper cleanup in afterEach
-5. **Mock server not responding** - Verify port configuration
-
-### Debug Mode
-
-Enable debug mode for detailed logging:
-
-```typescript
-await harness.startApp({ debugMode: true });
-```
-
-### Output Inspection
-
-Get current application output for debugging:
-
-```typescript
-const output = await harness.getCurrentOutput(50); // Last 50 lines
-console.log('Current output:', output);
-```
-
-## Future Enhancements
-
-Potential improvements for the framework:
-
-1. **TUI Test Integration** - Enhanced terminal interaction testing
-2. **Performance Monitoring** - Resource usage tracking
-3. **Parallel Test Execution** - Better isolation for concurrent tests
-4. **Visual Regression Testing** - Terminal screenshot comparison
-5. **Test Recording/Playback** - Capture and replay test scenarios
-6. **Advanced Mocking** - More sophisticated LLM response patterns
-7. **Real-time Monitoring** - Live test execution dashboards
+This extensible architecture allows for comprehensive testing scenarios while maintaining clean separation of concerns and easy customization for specific testing needs.

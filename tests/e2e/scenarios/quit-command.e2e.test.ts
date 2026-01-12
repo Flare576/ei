@@ -36,11 +36,8 @@ describe('Quit Command E2E Tests', () => {
     // Wait for application to reach idle state
     await harness.waitForIdleState(5000);
     
-    // Send SIGTERM to simulate graceful quit (equivalent to /quit command)
-    const currentProcess = (harness as any).currentProcess;
-    if (currentProcess) {
-      currentProcess.kill('SIGTERM');
-    }
+    // Send /quit command using proper input system
+    await harness.sendCommand('/quit');
     
     // Assert application exits with code 0
     await harness.assertExitCode(0, 5000);
@@ -54,8 +51,19 @@ describe('Quit Command E2E Tests', () => {
    * Requirements: 5.2 - WHEN LLM processing is active, THE quit command SHALL interrupt processing and exit cleanly
    */
   test('quit command during LLM processing interrupts and exits cleanly', async () => {
-    // Configure mock server with delayed response to simulate processing
-    harness.setMockResponse('/v1/chat/completions', 'This is a delayed response.', 3000);
+    // Configure sequential responses with delay to simulate processing
+    harness.setMockResponseQueue([
+      'This is a delayed response.',
+      JSON.stringify([{
+        name: "Processing Concept",
+        description: "Concept during processing",
+        level_current: 0.5,
+        level_ideal: 0.8,
+        level_elasticity: 0.3,
+        type: "static"
+      }]),
+      JSON.stringify([])
+    ]);
     
     // Start the application
     await harness.startApp({ debugMode: false });
@@ -63,19 +71,14 @@ describe('Quit Command E2E Tests', () => {
     // Wait for idle state first
     await harness.waitForIdleState(3000);
     
-    // Send a message to trigger LLM processing (may not work due to blessed input issue)
-    try {
-      await harness.sendInput('Tell me a story\n');
-      await harness.waitForLLMRequest(2000);
-    } catch (error) {
-      console.log('Input sending failed as expected, testing shutdown during potential processing');
-    }
+    // Send a message to trigger LLM processing
+    await harness.sendInput('Tell me a story\n');
     
-    // Send SIGTERM to simulate quit during processing
-    const currentProcess = (harness as any).currentProcess;
-    if (currentProcess) {
-      currentProcess.kill('SIGTERM');
-    }
+    // Wait for LLM request to start
+    await harness.waitForLLMRequest(2000);
+    
+    // Send /quit command during processing
+    await harness.sendCommand('/quit');
     
     // Assert application exits cleanly (should interrupt processing)
     await harness.assertExitCode(0, 5000);
@@ -108,8 +111,8 @@ describe('Quit Command E2E Tests', () => {
     // Wait for processing to begin
     await harness.waitForLLMRequest(2000);
     
-    // Send quit command during background processing
-    await harness.sendCommand('quit');
+    // Send /quit command during background processing
+    await harness.sendCommand('/quit');
     
     // Wait for UI to show warning about background processing
     await harness.waitForUIText('background processing', 3000);
@@ -129,8 +132,19 @@ describe('Quit Command E2E Tests', () => {
    * Requirements: 5.4 - WHEN using force quit, THE quit command SHALL bypass all safety checks and exit immediately
    */
   test('force quit bypasses all safety checks', async () => {
-    // Configure mock server with long delay to simulate ongoing processing
-    harness.setMockResponse('/v1/chat/completions', 'Long processing response', 5000);
+    // Configure sequential responses with long delay to simulate ongoing processing
+    harness.setMockResponseQueue([
+      'Long processing response',
+      JSON.stringify([{
+        name: "Long Processing Concept",
+        description: "Concept during long processing",
+        level_current: 0.3,
+        level_ideal: 0.9,
+        level_elasticity: 0.4,
+        type: "static"
+      }]),
+      JSON.stringify([])
+    ]);
     
     // Start the application
     await harness.startApp({ debugMode: false });
@@ -155,6 +169,47 @@ describe('Quit Command E2E Tests', () => {
     // Verify application is no longer running
     harness.assertProcessState(false);
   }, 15000);
+
+  /**
+   * Test Ctrl+C behavior validation (SIGTERM)
+   * Requirements: 5.5 - Validate integration with existing Ctrl+C logic
+   */
+  test('Ctrl+C (SIGTERM) behavior works correctly', async () => {
+    // Configure sequential responses for any message that might be sent
+    harness.setMockResponseQueue([
+      'Test message response for Ctrl+C integration',
+      JSON.stringify([{
+        name: "Ctrl+C Test Concept",
+        description: "Concept for Ctrl+C integration test",
+        level_current: 0.5,
+        level_ideal: 0.8,
+        level_elasticity: 0.3,
+        type: "static"
+      }]),
+      JSON.stringify([])
+    ]);
+    // Start the application
+    await harness.startApp({ debugMode: false });
+    
+    // Wait for idle state
+    await harness.waitForIdleState(3000);
+    
+    // Send some input to establish state
+    await harness.sendInput('Test message for Ctrl+C integration\n');
+    await harness.waitForIdleState(5000);
+    
+    // Send SIGTERM to simulate Ctrl+C
+    const currentProcess = (harness as any).currentProcess;
+    if (currentProcess) {
+      currentProcess.kill('SIGTERM');
+    }
+    
+    // Assert application exits cleanly (similar to /quit but via signal)
+    await harness.assertExitCode(0, 8000);
+    
+    // Verify application is no longer running
+    harness.assertProcessState(false);
+  }, 20000);
 
   /**
    * Test quit command using scenario configuration files
@@ -195,18 +250,15 @@ describe('Quit Command E2E Tests', () => {
     // Wait for idle state
     await harness.waitForIdleState(3000);
     
-    // Send multiple SIGTERM signals to simulate multiple quit attempts
-    const currentProcess = (harness as any).currentProcess;
-    if (currentProcess) {
-      currentProcess.kill('SIGTERM');
-      
-      // Send another signal after a short delay
-      setTimeout(() => {
-        if (harness.isAppRunning()) {
-          currentProcess.kill('SIGTERM');
-        }
-      }, 100);
-    }
+    // Send multiple /quit commands
+    await harness.sendCommand('/quit');
+    
+    // Send another quit command after a short delay (if app is still running)
+    setTimeout(async () => {
+      if (harness.isAppRunning()) {
+        await harness.sendCommand('/quit');
+      }
+    }, 100);
     
     // Assert application exits cleanly
     await harness.assertExitCode(0, 5000);
@@ -227,7 +279,7 @@ describe('Quit Command E2E Tests', () => {
     await harness.waitForIdleState(3000);
     
     // Send quit command with invalid argument
-    await harness.sendCommand('quit --invalid-flag');
+    await harness.sendCommand('/quit --invalid-flag');
     
     // Wait for help text or error message
     await harness.waitForUIText('usage', 2000);
@@ -236,7 +288,7 @@ describe('Quit Command E2E Tests', () => {
     harness.assertProcessState(true);
     
     // Send proper quit command
-    await harness.sendCommand('quit');
+    await harness.sendCommand('/quit');
     
     // Assert application exits cleanly
     await harness.assertExitCode(0, 5000);

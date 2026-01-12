@@ -14,25 +14,33 @@ import {
   AppProcessManager,
   AppConfig,
   MockServerConfig,
-  EnvironmentConfig
+  EnvironmentConfig,
+  TestScenario
 } from '../types.js';
 import { EnvironmentManagerImpl } from './environment.js';
 import { MockLLMServerImpl } from './mock-server.js';
 import { AppProcessManagerImpl } from './app-process-manager.js';
+import { HooksManager, createHooksManager, TestHookContext, ScenarioHookContext } from './hooks-manager.js';
+import { TestMetricsCollector, globalMetricsCollector } from './test-metrics.js';
 
 export class E2ETestHarnessImpl implements E2ETestHarness {
   private environmentManager: EnvironmentManager;
   private mockServer: MockLLMServer;
   private processManager: AppProcessManager;
+  private hooksManager: HooksManager;
+  private metricsCollector: TestMetricsCollector;
   private currentProcess: ChildProcess | null = null;
   private tempDataPath: string | null = null;
   private config: TestConfig = {};
   private isSetup: boolean = false;
+  private appStartTime: number = 0;
 
   constructor() {
     this.environmentManager = new EnvironmentManagerImpl();
     this.mockServer = new MockLLMServerImpl();
     this.processManager = new AppProcessManagerImpl();
+    this.hooksManager = createHooksManager();
+    this.metricsCollector = globalMetricsCollector;
   }
 
   /**
@@ -111,6 +119,13 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
       errors.push(new Error(`Failed to cleanup environment: ${error}`));
     }
 
+    // Clean up hooks manager
+    try {
+      await this.hooksManager.cleanup();
+    } catch (error) {
+      errors.push(new Error(`Failed to cleanup hooks manager: ${error}`));
+    }
+
     // Reset state
     this.currentProcess = null;
     this.tempDataPath = null;
@@ -141,6 +156,9 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
       throw new Error('Temp data path not available. Setup may have failed.');
     }
 
+    // Record app startup time for metrics
+    this.appStartTime = Date.now();
+
     // Build app configuration
     const appConfig: AppConfig = {
       dataPath: this.tempDataPath,
@@ -153,6 +171,13 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
 
     try {
       this.currentProcess = await this.processManager.start(appConfig);
+      
+      // Record startup time in metrics
+      const startupTime = Date.now() - this.appStartTime;
+      this.metricsCollector.updateApplicationMetrics({
+        startupTime,
+        processId: this.currentProcess.pid || 0
+      });
       
       // Configure timeouts if specified in test config
       if (this.config.appTimeout) {
@@ -177,8 +202,28 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
       return; // Already stopped or never started
     }
 
+    const shutdownStartTime = Date.now();
+
     try {
       await this.processManager.stop(this.currentProcess);
+      
+      // Record shutdown time and exit code in metrics
+      const shutdownTime = Date.now() - shutdownStartTime;
+      const finalState = this.processManager.getFinalState(this.currentProcess);
+      
+      this.metricsCollector.updateApplicationMetrics({
+        shutdownTime,
+        exitCode: finalState.exitCode,
+        outputSize: finalState.finalOutput.length
+      });
+    } catch (error) {
+      // If the process is not managed anymore, it likely already exited
+      if (error instanceof Error && error.message.includes('Process not managed by this AppProcessManager')) {
+        console.log('Process already exited and was cleaned up');
+      } else {
+        // Re-throw other errors
+        throw error;
+      }
     } finally {
       this.currentProcess = null;
     }
@@ -936,6 +981,84 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
   }
 
   /**
+   * Sets a queue of responses that will be returned in sequence
+   * Each subsequent LLM request gets the next response in the queue
+   */
+  setMockResponseQueue(responses: string[]) {
+    this.mockServer.setResponseQueue(responses);
+  }
+
+  /**
+   * Clears the response queue
+   */
+  clearMockResponseQueue() {
+    this.mockServer.clearResponseQueue();
+  }
+
+  /**
+   * Configures comprehensive LLM responses for all request types
+   * This handles the complexity of different LLM call types automatically
+   */
+  setLLMResponses(options: {
+    responseText?: string;
+    systemConcepts?: any[];
+    humanConcepts?: any[];
+    personaDescription?: { short_description: string; long_description: string };
+    delayMs?: number;
+  }) {
+    const {
+      responseText = 'Test response from mock LLM',
+      systemConcepts, // Will use server defaults if not provided
+      humanConcepts,  // Will use server defaults if not provided  
+      personaDescription, // Will use server defaults if not provided
+      delayMs = 100
+    } = options;
+
+    // Clear any existing overrides to let the mock server use intelligent request type detection
+    this.mockServer.clearResponseOverrides();
+    
+    // Set delay if specified
+    if (delayMs > 0) {
+      this.mockServer.setDelay('/v1/chat/completions', delayMs);
+    }
+    
+    // The mock server will automatically detect request types and provide appropriate responses
+    // We only override specific response types if custom values are provided
+    if (systemConcepts) {
+      this.mockServer.setResponseForType('system-concepts', {
+        type: 'fixed',
+        content: JSON.stringify(systemConcepts),
+        statusCode: 200
+      });
+    }
+    
+    if (humanConcepts) {
+      this.mockServer.setResponseForType('human-concepts', {
+        type: 'fixed', 
+        content: JSON.stringify(humanConcepts),
+        statusCode: 200
+      });
+    }
+    
+    if (personaDescription) {
+      this.mockServer.setResponseForType('description', {
+        type: 'fixed',
+        content: JSON.stringify(personaDescription),
+        statusCode: 200
+      });
+    }
+    
+    // Set custom response text if provided, otherwise use server default
+    if (responseText !== 'Test response from mock LLM') {
+      this.mockServer.setResponseForType('response', {
+        type: 'fixed',
+        content: responseText,
+        statusCode: 200
+      });
+    }
+  }
+
+  /**
    * Enables streaming responses for testing streaming scenarios
    */
   enableMockStreaming(endpoint: string, chunks: string[]) {
@@ -958,6 +1081,158 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
     }
 
     return this.processManager.getFinalState(this.currentProcess);
+  }
+
+  /**
+   * Gets the hooks manager for extensibility
+   * Requirements: 8.4 - Plugin-style extensibility for advanced use cases
+   */
+  getHooksManager(): HooksManager {
+    return this.hooksManager;
+  }
+
+  /**
+   * Executes a complete test scenario with hooks
+   * Requirements: 8.4 - Custom scenario extension points
+   */
+  async executeTestScenario(scenario: TestScenario): Promise<void> {
+    const scenarioContext: ScenarioHookContext = {
+      hookName: 'scenario-execution',
+      timestamp: Date.now(),
+      scenario,
+      harness: this
+    };
+
+    try {
+      // Execute before-scenario hooks
+      await this.hooksManager.executeBeforeScenario(scenarioContext);
+
+      // Execute scenario setup
+      if (scenario.setup.personas) {
+        // Setup personas if specified
+        for (const persona of scenario.setup.personas) {
+          // This would integrate with the EI application's persona system
+          // For now, we just log the setup
+          console.log(`Setting up persona: ${persona.name}`);
+        }
+      }
+
+      if (scenario.setup.mockResponses) {
+        // Configure mock responses
+        for (const mockResponse of scenario.setup.mockResponses) {
+          this.mockServer.setResponse(mockResponse.endpoint, mockResponse.response);
+        }
+      }
+
+      // Execute scenario steps
+      for (let i = 0; i < scenario.steps.length; i++) {
+        const step = scenario.steps[i];
+        const stepContext: ScenarioHookContext = {
+          ...scenarioContext,
+          stepIndex: i
+        };
+
+        // Execute before-step hooks
+        await this.hooksManager.executeBeforeStep(stepContext);
+
+        try {
+          // Execute the step
+          let stepResult: any;
+          
+          switch (step.type) {
+            case 'input':
+              await this.sendInput(step.action);
+              break;
+            case 'command':
+              await this.sendCommand(step.action);
+              break;
+            case 'wait':
+              if (step.action.startsWith('ui-text:')) {
+                const expectedText = step.action.substring(8);
+                stepResult = await this.waitForUIText(expectedText, step.timeout);
+              } else if (step.action.startsWith('file:')) {
+                const filePath = step.action.substring(5);
+                await this.waitForFileChange(filePath, step.timeout);
+              } else if (step.action === 'processing-complete') {
+                await this.waitForProcessingComplete(step.timeout);
+              } else if (step.action === 'idle-state') {
+                await this.waitForIdleState(step.timeout);
+              }
+              break;
+            case 'assert':
+              // This would be handled by the assertion execution below
+              break;
+            default:
+              // Try to execute as custom step
+              stepResult = await this.hooksManager.executeCustomStep(step.type, step.action, stepContext);
+              break;
+          }
+
+          stepContext.stepResult = stepResult;
+        } catch (error) {
+          console.error(`Step ${i + 1} failed: ${error}`);
+          throw error;
+        }
+
+        // Execute after-step hooks
+        await this.hooksManager.executeAfterStep(stepContext);
+      }
+
+      // Execute scenario assertions
+      for (const assertion of scenario.assertions) {
+        try {
+          switch (assertion.type) {
+            case 'ui':
+              if (assertion.condition === 'contains') {
+                await this.assertUIContains(assertion.expected);
+              } else if (assertion.condition === 'matches') {
+                await this.assertUIMatches(new RegExp(assertion.expected));
+              }
+              break;
+            case 'file':
+              if (assertion.condition === 'exists') {
+                this.assertFileExists(assertion.target);
+              } else if (assertion.condition === 'content') {
+                await this.assertFileContent(assertion.target, assertion.expected);
+              }
+              break;
+            case 'state':
+              if (assertion.condition === 'persona') {
+                await this.assertPersonaState(assertion.target, assertion.expected);
+              } else if (assertion.condition === 'process') {
+                this.assertProcessState(assertion.expected);
+              }
+              break;
+            case 'process':
+              if (assertion.condition === 'exit-code') {
+                await this.assertExitCode(assertion.expected);
+              } else if (assertion.condition === 'running') {
+                this.assertProcessState(assertion.expected);
+              }
+              break;
+            default:
+              // Try to execute as custom assertion
+              await this.hooksManager.executeCustomAssertion(assertion.type, assertion.target, assertion.condition, assertion.expected, scenarioContext);
+              break;
+          }
+        } catch (error) {
+          console.error(`Assertion failed: ${assertion.type} ${assertion.condition} ${assertion.expected}`);
+          throw error;
+        }
+      }
+
+      // Execute after-scenario hooks
+      await this.hooksManager.executeAfterScenario(scenarioContext);
+
+    } catch (error) {
+      // Execute after-scenario hooks even on failure
+      try {
+        await this.hooksManager.executeAfterScenario(scenarioContext);
+      } catch (hookError) {
+        console.warn(`After-scenario hook failed: ${hookError}`);
+      }
+      throw error;
+    }
   }
 
   // Private helper methods
@@ -1052,5 +1327,109 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
         return recentOutput.toLowerCase().includes(indicator.toLowerCase());
       }
     });
+  }
+
+  // ============================================================================
+  // Metrics and Reporting Methods
+  // ============================================================================
+
+  /**
+   * Starts metrics collection for a test
+   * Requirements: 7.3 - Implement execution time tracking
+   */
+  startTestMetrics(testName: string): void {
+    this.metricsCollector.startTest(testName);
+  }
+
+  /**
+   * Records a test step execution
+   */
+  recordTestStep(stepName: string, stepType: string, duration: number, success: boolean, error?: string, retryCount: number = 0): void {
+    this.metricsCollector.recordStep(stepName, stepType, duration, success, error, retryCount);
+  }
+
+  /**
+   * Finishes metrics collection for the current test
+   */
+  finishTestMetrics(success: boolean, error?: string): void {
+    // Update mock server metrics before finishing
+    const mockHistory = this.mockServer.getRequestHistory();
+    const responseTimes = mockHistory.map(req => req.responseTime || 0);
+    const errorCount = mockHistory.filter(req => req.error).length;
+    const streamingCount = mockHistory.filter(req => req.streaming).length;
+
+    this.metricsCollector.updateMockServerMetrics(
+      mockHistory.length,
+      responseTimes,
+      errorCount,
+      streamingCount
+    );
+
+    // Update application metrics with LLM request count
+    this.metricsCollector.updateApplicationMetrics({
+      llmRequestCount: mockHistory.length,
+      inputCount: this.getInputCount()
+    });
+
+    this.metricsCollector.finishTest(success, error);
+  }
+
+  /**
+   * Adds diagnostic information to metrics
+   */
+  addDiagnostic(level: 'info' | 'warning' | 'error', message: string, testName?: string, stepName?: string): void {
+    this.metricsCollector.addDiagnostic(level, message, testName, stepName);
+  }
+
+  /**
+   * Generates a comprehensive test report
+   * Requirements: 7.5 - Create detailed test reports with diagnostics
+   */
+  generateTestReport(): any {
+    return this.metricsCollector.generateReport();
+  }
+
+  /**
+   * Exports test metrics to JSON file
+   */
+  async exportMetricsToJson(filePath: string): Promise<void> {
+    await this.metricsCollector.exportToFile(filePath);
+  }
+
+  /**
+   * Exports test metrics to HTML report
+   */
+  async exportMetricsToHtml(filePath: string): Promise<void> {
+    await this.metricsCollector.exportToHtml(filePath);
+  }
+
+  /**
+   * Gets current test metrics without generating full report
+   */
+  getCurrentMetrics(): any[] {
+    return this.metricsCollector.getCurrentMetrics();
+  }
+
+  /**
+   * Gets current diagnostics
+   */
+  getCurrentDiagnostics(): any[] {
+    return this.metricsCollector.getCurrentDiagnostics();
+  }
+
+  /**
+   * Resets all collected metrics
+   */
+  resetMetrics(): void {
+    this.metricsCollector.reset();
+  }
+
+  /**
+   * Gets the count of inputs sent to the application
+   */
+  private getInputCount(): number {
+    // This would need to be tracked as inputs are sent
+    // For now, return a placeholder
+    return 0;
   }
 }

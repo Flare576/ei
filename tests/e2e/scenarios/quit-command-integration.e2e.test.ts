@@ -44,8 +44,8 @@ describe('Quit Command Integration Tests', () => {
     // Wait for any processing to complete
     await harness.waitForIdleState(3000);
     
-    // Send quit command
-    await harness.sendCommand('quit');
+    // Send /quit command using proper input system
+    await harness.sendCommand('/quit');
     
     // Wait for application to exit
     await harness.assertExitCode(0, 8000);
@@ -61,6 +61,32 @@ describe('Quit Command Integration Tests', () => {
   test('quit command persists state before termination', async () => {
     const tempDataPath = harness.getTempDataPath();
     expect(tempDataPath).toBeTruthy();
+    
+    // Configure sequential responses for the messages we'll send
+    harness.setMockResponseQueue([
+      // First message responses
+      'Create some conversation history',
+      JSON.stringify([{
+        name: "Conversation History Concept",
+        description: "Concept from conversation history",
+        level_current: 0.6,
+        level_ideal: 0.9,
+        level_elasticity: 0.2,
+        type: "static"
+      }]),
+      JSON.stringify([]),
+      // Second message responses
+      'Add more to the conversation',
+      JSON.stringify([{
+        name: "Additional Conversation Concept",
+        description: "Additional concept from conversation",
+        level_current: 0.7,
+        level_ideal: 0.8,
+        level_elasticity: 0.3,
+        type: "static"
+      }]),
+      JSON.stringify([])
+    ]);
     
     // Start the application
     await harness.startApp({ debugMode: false });
@@ -80,8 +106,8 @@ describe('Quit Command Integration Tests', () => {
     await harness.waitForLLMRequest(3000);
     await harness.waitForIdleState(5000);
     
-    // Send quit command
-    await harness.sendCommand('quit');
+    // Send /quit command
+    await harness.sendCommand('/quit');
     
     // Wait for application to exit
     await harness.assertExitCode(0, 10000);
@@ -122,21 +148,21 @@ describe('Quit Command Integration Tests', () => {
     await harness.startApp({ debugMode: false });
     await harness.waitForIdleState(3000);
     
-    await harness.sendCommand('quit');
+    await harness.sendCommand('/quit');
     await harness.assertExitCode(0, 5000);
     
     // Test quit with uppercase
     await harness.startApp({ debugMode: false });
     await harness.waitForIdleState(3000);
     
-    await harness.sendCommand('QUIT');
+    await harness.sendCommand('/QUIT');
     await harness.assertExitCode(0, 5000);
     
     // Test quit with extra whitespace
     await harness.startApp({ debugMode: false });
     await harness.waitForIdleState(3000);
     
-    await harness.sendCommand('  quit  ');
+    await harness.sendCommand('/quit  ');
     await harness.assertExitCode(0, 5000);
   }, 25000);
 
@@ -145,8 +171,31 @@ describe('Quit Command Integration Tests', () => {
    * Requirements: 5.2, 5.3 - Test quit behavior with concurrent operations
    */
   test('quit command handles concurrent operations correctly', async () => {
-    // Configure mock server with delayed responses
-    harness.setMockResponse('/v1/chat/completions', 'Response to concurrent operation', 2000);
+    // Configure sequential responses for concurrent operations
+    harness.setMockResponseQueue([
+      // First concurrent message
+      'Response to concurrent operation',
+      JSON.stringify([{
+        name: "Concurrent Operation Concept 1",
+        description: "First concurrent operation concept",
+        level_current: 0.4,
+        level_ideal: 0.7,
+        level_elasticity: 0.3,
+        type: "static"
+      }]),
+      JSON.stringify([]),
+      // Second concurrent message
+      'Response to second concurrent operation',
+      JSON.stringify([{
+        name: "Concurrent Operation Concept 2",
+        description: "Second concurrent operation concept",
+        level_current: 0.5,
+        level_ideal: 0.8,
+        level_elasticity: 0.2,
+        type: "static"
+      }]),
+      JSON.stringify([])
+    ]);
     
     // Start the application
     await harness.startApp({ debugMode: false });
@@ -159,8 +208,8 @@ describe('Quit Command Integration Tests', () => {
     // Wait for at least one LLM request to start
     await harness.waitForLLMRequest(2000);
     
-    // Send quit command while operations are in progress
-    await harness.sendCommand('quit');
+    // Send /quit command while operations are in progress
+    await harness.sendCommand('/quit');
     
     // Application should handle concurrent operations and exit cleanly
     await harness.assertExitCode(0, 8000);
@@ -175,6 +224,19 @@ describe('Quit Command Integration Tests', () => {
    * Requirements: 5.5 - Validate integration with existing Ctrl+C logic
    */
   test('quit command integrates properly with Ctrl+C handling', async () => {
+    // Configure sequential responses for any messages sent
+    harness.setMockResponseQueue([
+      'Test message for Ctrl+C integration',
+      JSON.stringify([{
+        name: "Ctrl+C Integration Concept",
+        description: "Concept for Ctrl+C integration test",
+        level_current: 0.5,
+        level_ideal: 0.8,
+        level_elasticity: 0.3,
+        type: "static"
+      }]),
+      JSON.stringify([])
+    ]);
     // Start the application
     await harness.startApp({ debugMode: false });
     await harness.waitForIdleState(3000);
@@ -183,8 +245,8 @@ describe('Quit Command Integration Tests', () => {
     await harness.sendInput('Test message for Ctrl+C integration\n');
     await harness.waitForIdleState(5000);
     
-    // Send quit command (which should work similarly to Ctrl+C but more gracefully)
-    await harness.sendCommand('quit');
+    // Send /quit command (which should work similarly to Ctrl+C but more gracefully)
+    await harness.sendCommand('/quit');
     
     // Verify clean exit
     await harness.assertExitCode(0, 8000);
@@ -209,8 +271,8 @@ describe('Quit Command Integration Tests', () => {
     await harness.sendInput('Create state before error test\n');
     await harness.waitForIdleState(5000);
     
-    // Send quit command
-    await harness.sendCommand('quit');
+    // Send /quit command
+    await harness.sendCommand('/quit');
     
     // Even if there are internal errors during quit, the application should exit
     // We use a longer timeout to allow for error handling
@@ -229,7 +291,7 @@ describe('Quit Command Integration Tests', () => {
     await harness.startApp({ debugMode: false });
     await harness.waitForIdleState(2000);
     
-    await harness.sendCommand('quit');
+    await harness.sendCommand('/quit');
     await harness.assertExitCode(0, 5000);
     
     // Test 2: Quit after some interaction
@@ -239,7 +301,7 @@ describe('Quit Command Integration Tests', () => {
     await harness.sendInput('Some interaction\n');
     await harness.waitForIdleState(3000);
     
-    await harness.sendCommand('quit');
+    await harness.sendCommand('/quit');
     await harness.assertExitCode(0, 5000);
     
     // Test 3: Quit during active processing
@@ -251,7 +313,7 @@ describe('Quit Command Integration Tests', () => {
     await harness.sendInput('Trigger processing\n');
     await harness.waitForLLMRequest(1000);
     
-    await harness.sendCommand('quit');
+    await harness.sendCommand('/quit');
     await harness.assertExitCode(0, 8000);
   }, 35000);
 
@@ -264,8 +326,8 @@ describe('Quit Command Integration Tests', () => {
     await harness.startApp({ debugMode: false });
     await harness.waitForIdleState(3000);
     
-    // Send quit command
-    await harness.sendCommand('quit');
+    // Send /quit command
+    await harness.sendCommand('/quit');
     
     // Look for quit confirmation or goodbye message in output
     try {
@@ -289,9 +351,9 @@ describe('Quit Command Integration Tests', () => {
     await harness.startApp({ debugMode: false });
     await harness.waitForIdleState(3000);
     
-    // Record time when quit command is sent
+    // Record time when /quit command is sent
     const quitStartTime = Date.now();
-    await harness.sendCommand('quit');
+    await harness.sendCommand('/quit');
     
     // Wait for exit and record completion time
     await harness.assertExitCode(0, 5000);
@@ -318,8 +380,8 @@ describe('Quit Command Integration Tests', () => {
     await harness.sendInput('Create file-based state\n');
     await harness.waitForIdleState(5000);
     
-    // Send quit command
-    await harness.sendCommand('quit');
+    // Send /quit command
+    await harness.sendCommand('/quit');
     
     // Wait for exit
     await harness.assertExitCode(0, 8000);

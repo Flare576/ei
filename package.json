@@ -7,8 +7,14 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:unit": "vitest run tests/unit tests/integration",
+    "test:unit:watch": "vitest tests/unit tests/integration",
+    "test:unit:coverage": "vitest run tests/unit tests/integration --coverage",
     "test:e2e": "vitest run tests/e2e",
     "test:e2e:watch": "vitest tests/e2e",
+    "test:e2e:debug": "vitest run tests/e2e --reporter=verbose",
+    "test:e2e:metrics": "vitest run tests/e2e/scenarios/metrics-test.e2e.test.ts",
+    "test:all": "vitest run",
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx src/index.tsx",
@@ -27,12 +33,11 @@
     "typescript": "^5.9.3"
   },
   "devDependencies": {
-    "@types/chokidar": "^1.7.5",
     "@types/express": "^5.0.6",
     "@vitest/coverage-v8": "^4.0.16",
-    "chokidar": "^5.0.0",
     "express": "^5.2.1",
     "fast-check": "^4.5.3",
+    "node-pty": "^1.1.0",
     "tsx": "^4.21.0",
     "vitest": "^4.0.16"
   }
