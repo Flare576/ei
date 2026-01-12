@@ -319,6 +319,11 @@ export class EIApp implements IEIApp {
     return (this.eventOrchestrator as any).ctrlCWarningTimestamp || null;
   }
 
+  public set ctrlCWarningTimestamp(value: number | null) {
+    // Set through event orchestrator
+    (this.eventOrchestrator as any).ctrlCWarningTimestamp = value;
+  }
+
   public setupScrollingKeyBindings(): void {
     // This is now handled by EventOrchestrator during initialization
     debugLog('setupScrollingKeyBindings called - this is now handled by EventOrchestrator');
@@ -327,5 +332,17 @@ export class EIApp implements IEIApp {
   public renderStatus(): void {
     // Delegate to UI orchestrator
     (this.uiOrchestrator as any).renderStatus();
+  }
+
+  // Method for testing Ctrl+C behavior - delegates to EventOrchestrator
+  public handleCtrlC(): void {
+    // Access the private handleCtrlC method through the EventOrchestrator
+    (this.eventOrchestrator as any).handleCtrlC();
+  }
+
+  // Method for testing form submission - delegates to EventOrchestrator
+  public async handleSubmit(text: string): Promise<void> {
+    // Access the private handleSubmit method through the EventOrchestrator
+    await (this.eventOrchestrator as any).handleSubmit(text);
   }
 }
