@@ -15,37 +15,28 @@ import {
   AppConfig,
   MockServerConfig,
   EnvironmentConfig,
-  TestScenario
 } from '../types.js';
 import { EnvironmentManagerImpl } from './environment.js';
 import { MockLLMServerImpl } from './mock-server.js';
 import { AppProcessManagerImpl } from './app-process-manager.js';
-import { HooksManager, createHooksManager, TestHookContext, ScenarioHookContext } from './hooks-manager.js';
-import { TestMetricsCollector, globalMetricsCollector } from './test-metrics.js';
 
 export class E2ETestHarnessImpl implements E2ETestHarness {
   private environmentManager: EnvironmentManager;
   private mockServer: MockLLMServer;
   private processManager: AppProcessManager;
-  private hooksManager: HooksManager;
-  private metricsCollector: TestMetricsCollector;
   private currentProcess: ChildProcess | null = null;
   private tempDataPath: string | null = null;
   private config: TestConfig = {};
   private isSetup: boolean = false;
-  private appStartTime: number = 0;
 
   constructor() {
     this.environmentManager = new EnvironmentManagerImpl();
     this.mockServer = new MockLLMServerImpl();
     this.processManager = new AppProcessManagerImpl();
-    this.hooksManager = createHooksManager();
-    this.metricsCollector = globalMetricsCollector;
   }
 
   /**
    * Sets up the test environment with all necessary components
-   * Requirements: 1.1, 1.3 - Create isolated test environment and manage lifecycle
    */
   async setup(config: TestConfig): Promise<void> {
     if (this.isSetup) {
@@ -63,7 +54,7 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
       const mockServerConfig: MockServerConfig = {
         responses: this.buildMockResponses(),
         defaultDelay: 0,
-        enableLogging: false // Keep quiet during tests unless debugging
+        enableLogging: false
       };
 
       const mockServerPort = this.config.mockServerPort || await this.findAvailablePort();
@@ -74,29 +65,27 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
         EI_DATA_PATH: this.tempDataPath,
         EI_LLM_BASE_URL: `http://localhost:${mockServerPort}/v1`,
         EI_LLM_API_KEY: 'test-api-key',
-        EI_LLM_MODEL: 'test-model'
+        EI_LLM_MODEL: 'test-model',
+        NODE_ENV: 'test',
+        EI_TEST_INPUT: 'true',
+        EI_TEST_OUTPUT: 'true'
       };
 
       this.environmentManager.setTestEnvironment(envConfig);
 
       this.isSetup = true;
     } catch (error) {
-      // Clean up partial setup on error
-      await this.cleanup().catch(() => {
-        // Ignore cleanup errors during error handling
-      });
+      await this.cleanup().catch(() => {});
       throw new Error(`Failed to setup test harness: ${error}`);
     }
   }
 
   /**
    * Cleans up all test resources and restores environment
-   * Requirements: 1.3 - Clean up all temporary files and directories after test completion
    */
   async cleanup(): Promise<void> {
     const errors: Error[] = [];
 
-    // Stop application if running
     if (this.currentProcess) {
       try {
         await this.stopApp();
@@ -105,34 +94,23 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
       }
     }
 
-    // Stop mock server
     try {
       await this.mockServer.stop();
     } catch (error) {
       errors.push(new Error(`Failed to stop mock server: ${error}`));
     }
 
-    // Clean up environment and temp directories
     try {
       await this.environmentManager.cleanup();
     } catch (error) {
       errors.push(new Error(`Failed to cleanup environment: ${error}`));
     }
 
-    // Clean up hooks manager
-    try {
-      await this.hooksManager.cleanup();
-    } catch (error) {
-      errors.push(new Error(`Failed to cleanup hooks manager: ${error}`));
-    }
-
-    // Reset state
     this.currentProcess = null;
     this.tempDataPath = null;
     this.config = {};
     this.isSetup = false;
 
-    // Report any cleanup errors
     if (errors.length > 0) {
       const errorMessages = errors.map(e => e.message).join('; ');
       throw new Error(`Cleanup completed with errors: ${errorMessages}`);
@@ -141,7 +119,6 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
 
   /**
    * Starts the EI application with test configuration
-   * Requirements: 2.1 - Launch EI application as background process
    */
   async startApp(options?: AppStartOptions): Promise<void> {
     if (!this.isSetup) {
@@ -156,10 +133,6 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
       throw new Error('Temp data path not available. Setup may have failed.');
     }
 
-    // Record app startup time for metrics
-    this.appStartTime = Date.now();
-
-    // Build app configuration
     const appConfig: AppConfig = {
       dataPath: this.tempDataPath,
       llmBaseUrl: process.env.EI_LLM_BASE_URL || 'http://localhost:3000/v1',
@@ -172,14 +145,6 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
     try {
       this.currentProcess = await this.processManager.start(appConfig);
       
-      // Record startup time in metrics
-      const startupTime = Date.now() - this.appStartTime;
-      this.metricsCollector.updateApplicationMetrics({
-        startupTime,
-        processId: this.currentProcess.pid || 0
-      });
-      
-      // Configure timeouts if specified in test config
       if (this.config.appTimeout) {
         this.processManager.configureTimeouts(this.currentProcess, {
           initialization: this.config.appTimeout,
@@ -195,33 +160,18 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
 
   /**
    * Stops the EI application gracefully
-   * Requirements: 2.1 - Application control methods
    */
   async stopApp(): Promise<void> {
     if (!this.currentProcess) {
-      return; // Already stopped or never started
+      return;
     }
-
-    const shutdownStartTime = Date.now();
 
     try {
       await this.processManager.stop(this.currentProcess);
-      
-      // Record shutdown time and exit code in metrics
-      const shutdownTime = Date.now() - shutdownStartTime;
-      const finalState = this.processManager.getFinalState(this.currentProcess);
-      
-      this.metricsCollector.updateApplicationMetrics({
-        shutdownTime,
-        exitCode: finalState.exitCode,
-        outputSize: finalState.finalOutput.length
-      });
     } catch (error) {
-      // If the process is not managed anymore, it likely already exited
       if (error instanceof Error && error.message.includes('Process not managed by this AppProcessManager')) {
         console.log('Process already exited and was cleaned up');
       } else {
-        // Re-throw other errors
         throw error;
       }
     } finally {
@@ -231,7 +181,6 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
 
   /**
    * Sends input text to the application
-   * Requirements: 2.1 - Application control methods (input)
    */
   async sendInput(text: string): Promise<void> {
     if (!this.currentProcess) {
@@ -243,10 +192,8 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
 
   /**
    * Sends a command to the application (convenience method for commands)
-   * Requirements: 2.1 - Application control methods
    */
   async sendCommand(command: string): Promise<void> {
-    // Ensure command starts with / and ends with newline
     const formattedCommand = command.startsWith('/') ? command : `/${command}`;
     const commandWithNewline = formattedCommand.endsWith('\n') ? formattedCommand : `${formattedCommand}\n`;
     
@@ -255,7 +202,6 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
 
   /**
    * Waits for UI output to change and returns the new content
-   * Requirements: 3.1 - Monitor UI output changes
    */
   async waitForUIChange(timeout: number = 5000): Promise<string> {
     if (!this.currentProcess) {
@@ -270,39 +216,33 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
         try {
           const currentOutput = await this.processManager.getOutput(this.currentProcess!);
           
-          // Check if output has changed
           if (currentOutput !== initialOutput && currentOutput.length > initialOutput.length) {
             resolve(currentOutput);
             return;
           }
 
-          // Check timeout
           if (Date.now() - startTime >= timeout) {
             reject(new Error(`UI change timeout after ${timeout}ms`));
             return;
           }
 
-          // Check if process is still running
           if (!this.processManager.isRunning(this.currentProcess!)) {
             reject(new Error('Application process stopped while waiting for UI change'));
             return;
           }
 
-          // Continue checking
           setTimeout(checkForChange, 100);
         } catch (error) {
           reject(new Error(`Error while waiting for UI change: ${error}`));
         }
       };
 
-      // Start checking after a brief delay
       setTimeout(checkForChange, 100);
     });
   }
 
   /**
    * Waits for specific text to appear in UI output
-   * Requirements: 3.1 - UI output monitoring with pattern matching
    */
   async waitForUIText(expectedText: string, timeout: number = 5000): Promise<string> {
     if (!this.currentProcess) {
@@ -314,41 +254,38 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
     return new Promise((resolve, reject) => {
       const checkForText = async () => {
         try {
-          const currentOutput = await this.processManager.getOutput(this.currentProcess!);
+          const rawOutput = await this.processManager.getOutput(this.currentProcess!);
+          const cleanText = this.extractReadableText(rawOutput);
           
-          // Check if expected text appears in output
-          if (currentOutput.includes(expectedText)) {
-            resolve(currentOutput);
+          if (cleanText.includes(expectedText) || rawOutput.includes(expectedText)) {
+            resolve(rawOutput);
             return;
           }
 
-          // Check timeout
           if (Date.now() - startTime >= timeout) {
-            reject(new Error(`UI text timeout after ${timeout}ms. Expected: "${expectedText}"`));
+            const recentRawText = rawOutput.slice(-1000);
+            const recentCleanText = cleanText.slice(-500);
+            reject(new Error(`UI text timeout after ${timeout}ms. Expected: "${expectedText}". Recent clean text: "${recentCleanText}"`));
             return;
           }
 
-          // Check if process is still running
           if (!this.processManager.isRunning(this.currentProcess!)) {
             reject(new Error('Application process stopped while waiting for UI text'));
             return;
           }
 
-          // Continue checking
           setTimeout(checkForText, 100);
         } catch (error) {
           reject(new Error(`Error while waiting for UI text: ${error}`));
         }
       };
 
-      // Start checking immediately
       checkForText();
     });
   }
 
   /**
    * Waits for UI output to match a regular expression pattern
-   * Requirements: 3.1 - UI output monitoring with pattern matching
    */
   async waitForUIPattern(pattern: RegExp, timeout: number = 5000): Promise<string> {
     if (!this.currentProcess) {
@@ -360,48 +297,43 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
     return new Promise((resolve, reject) => {
       const checkForPattern = async () => {
         try {
-          const currentOutput = await this.processManager.getOutput(this.currentProcess!);
+          const rawOutput = await this.processManager.getOutput(this.currentProcess!);
+          const cleanText = this.extractReadableText(rawOutput);
           
-          // Check if pattern matches output
-          if (pattern.test(currentOutput)) {
-            resolve(currentOutput);
+          if (pattern.test(cleanText)) {
+            resolve(rawOutput);
             return;
           }
 
-          // Check timeout
           if (Date.now() - startTime >= timeout) {
-            reject(new Error(`UI pattern timeout after ${timeout}ms. Pattern: ${pattern}`));
+            const recentCleanText = cleanText.slice(-500);
+            reject(new Error(`UI pattern timeout after ${timeout}ms. Pattern: ${pattern}. Recent clean text: "${recentCleanText}"`));
             return;
           }
 
-          // Check if process is still running
           if (!this.processManager.isRunning(this.currentProcess!)) {
             reject(new Error('Application process stopped while waiting for UI pattern'));
             return;
           }
 
-          // Continue checking
           setTimeout(checkForPattern, 100);
         } catch (error) {
           reject(new Error(`Error while waiting for UI pattern: ${error}`));
         }
       };
 
-      // Start checking immediately
       checkForPattern();
     });
   }
 
   /**
    * Waits for a specific file to change
-   * Requirements: 3.2 - Add file change detection and waiting methods
    */
   async waitForFileChange(filePath: string, timeout: number = 5000): Promise<void> {
     if (!this.tempDataPath) {
       throw new Error('Test harness not set up properly. Temp data path not available.');
     }
 
-    // Resolve relative paths against temp data directory
     const absolutePath = path.isAbsolute(filePath) ? filePath : path.join(this.tempDataPath, filePath);
 
     return new Promise((resolve, reject) => {
@@ -420,7 +352,6 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
 
   /**
    * Waits for a file to be created
-   * Requirements: 3.2 - File change detection and waiting methods
    */
   async waitForFileCreation(filePath: string, timeout: number = 5000): Promise<void> {
     if (!this.tempDataPath) {
@@ -451,7 +382,6 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
 
   /**
    * Waits for file content to match a specific pattern
-   * Requirements: 3.2 - File change detection and content monitoring
    */
   async waitForFileContent(filePath: string, expectedContent: string | RegExp, timeout: number = 5000): Promise<string> {
     if (!this.tempDataPath) {
@@ -501,7 +431,6 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
 
   /**
    * Waits for application processing to complete
-   * Requirements: 3.3, 3.4, 3.5 - Process state monitoring and wait methods
    */
   async waitForProcessingComplete(timeout: number = 10000): Promise<void> {
     if (!this.currentProcess) {
@@ -514,9 +443,6 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
       const checkProcessingState = async () => {
         try {
           const output = await this.processManager.getOutput(this.currentProcess!, 50);
-          
-          // Look for indicators that processing is complete
-          // This is heuristic-based since we can't directly query application state
           const isProcessing = this.detectProcessingInOutput(output);
           
           if (!isProcessing) {
@@ -524,33 +450,28 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
             return;
           }
 
-          // Check timeout
           if (Date.now() - startTime >= timeout) {
             reject(new Error(`Processing completion timeout after ${timeout}ms`));
             return;
           }
 
-          // Check if process is still running
           if (!this.processManager.isRunning(this.currentProcess!)) {
             reject(new Error('Application process stopped while waiting for processing completion'));
             return;
           }
 
-          // Continue checking
           setTimeout(checkProcessingState, 200);
         } catch (error) {
           reject(new Error(`Error while waiting for processing completion: ${error}`));
         }
       };
 
-      // Start checking after a brief delay
       setTimeout(checkProcessingState, 200);
     });
   }
 
   /**
    * Waits for LLM request to be made to mock server
-   * Requirements: 3.3 - Process state monitoring capabilities
    */
   async waitForLLMRequest(timeout: number = 5000): Promise<void> {
     const startTime = Date.now();
@@ -579,7 +500,6 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
 
   /**
    * Waits for application to reach idle state (no processing, no pending operations)
-   * Requirements: 3.4, 3.5 - Process state monitoring with configurable timeouts
    */
   async waitForIdleState(timeout: number = 10000): Promise<void> {
     if (!this.currentProcess) {
@@ -589,7 +509,7 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
     const startTime = Date.now();
     let lastOutputLength = 0;
     let stableCount = 0;
-    const requiredStableChecks = 5; // Output must be stable for 5 consecutive checks
+    const requiredStableChecks = 5;
 
     return new Promise((resolve, reject) => {
       const checkIdleState = async () => {
@@ -597,7 +517,6 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
           const output = await this.processManager.getOutput(this.currentProcess!);
           const currentOutputLength = output.length;
 
-          // Check if output length has stabilized
           if (currentOutputLength === lastOutputLength) {
             stableCount++;
           } else {
@@ -605,7 +524,6 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
             lastOutputLength = currentOutputLength;
           }
 
-          // Also check for processing indicators
           const isProcessing = this.detectProcessingInOutput(output);
           
           if (stableCount >= requiredStableChecks && !isProcessing) {
@@ -613,33 +531,28 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
             return;
           }
 
-          // Check timeout
           if (Date.now() - startTime >= timeout) {
             reject(new Error(`Idle state timeout after ${timeout}ms`));
             return;
           }
 
-          // Check if process is still running
           if (!this.processManager.isRunning(this.currentProcess!)) {
             reject(new Error('Application process stopped while waiting for idle state'));
             return;
           }
 
-          // Continue checking
           setTimeout(checkIdleState, 200);
         } catch (error) {
           reject(new Error(`Error while waiting for idle state: ${error}`));
         }
       };
 
-      // Start checking after a brief delay
       setTimeout(checkIdleState, 200);
     });
   }
 
   /**
    * Waits for a specific condition to be met with custom checker function
-   * Requirements: 3.5 - Configurable wait methods with timeouts
    */
   async waitForCondition(
     checker: () => Promise<boolean> | boolean,
@@ -659,79 +572,77 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
             return;
           }
 
-          // Check timeout
           if (Date.now() - startTime >= timeout) {
             reject(new Error(`Condition timeout after ${timeout}ms: ${description}`));
             return;
           }
 
-          // Continue checking
           setTimeout(checkCondition, checkInterval);
         } catch (error) {
           reject(new Error(`Error while checking condition "${description}": ${error}`));
         }
       };
 
-      // Start checking immediately
       checkCondition();
     });
   }
 
   /**
    * Asserts that UI output contains specific text
-   * Requirements: 3.4 - UI content assertions
    */
   async assertUIContains(text: string): Promise<void> {
     if (!this.currentProcess) {
       throw new Error('Application is not running. Call startApp() first.');
     }
 
-    const output = await this.processManager.getOutput(this.currentProcess);
-    if (!output.includes(text)) {
-      throw new Error(`UI assertion failed: Expected output to contain "${text}". Actual output: ${output.slice(-500)}`);
+    const rawOutput = await this.processManager.getOutput(this.currentProcess);
+    const cleanText = this.extractReadableText(rawOutput);
+    
+    if (!cleanText.includes(text)) {
+      throw new Error(`UI assertion failed: Expected output to contain "${text}". Actual clean text: ${cleanText.slice(-500)}`);
     }
   }
 
   /**
    * Asserts that UI output does not contain specific text
-   * Requirements: 3.4 - UI content assertions
    */
   async assertUIDoesNotContain(text: string): Promise<void> {
     if (!this.currentProcess) {
       throw new Error('Application is not running. Call startApp() first.');
     }
 
-    const output = await this.processManager.getOutput(this.currentProcess);
-    if (output.includes(text)) {
-      throw new Error(`UI assertion failed: Expected output to NOT contain "${text}". Actual output: ${output.slice(-500)}`);
+    const rawOutput = await this.processManager.getOutput(this.currentProcess);
+    const cleanText = this.extractReadableText(rawOutput);
+    
+    if (cleanText.includes(text)) {
+      throw new Error(`UI assertion failed: Expected output to NOT contain "${text}". Actual clean text: ${cleanText.slice(-500)}`);
     }
   }
 
   /**
    * Asserts that UI output matches a regular expression pattern
-   * Requirements: 3.4 - UI content assertions with pattern matching
    */
   async assertUIMatches(pattern: RegExp): Promise<void> {
     if (!this.currentProcess) {
       throw new Error('Application is not running. Call startApp() first.');
     }
 
-    const output = await this.processManager.getOutput(this.currentProcess);
-    if (!pattern.test(output)) {
-      throw new Error(`UI assertion failed: Expected output to match pattern ${pattern}. Actual output: ${output.slice(-500)}`);
+    const rawOutput = await this.processManager.getOutput(this.currentProcess);
+    const cleanText = this.extractReadableText(rawOutput);
+    
+    if (!pattern.test(cleanText)) {
+      throw new Error(`UI assertion failed: Expected output to match pattern ${pattern}. Actual clean text: ${cleanText.slice(-500)}`);
     }
   }
 
   /**
    * Asserts that a file exists in the test environment
-   * Requirements: 3.4 - File existence and content verification
    */
   assertFileExists(filePath: string): void {
     if (!this.tempDataPath) {
       throw new Error('Test harness not set up properly. Temp data path not available.');
     }
 
-    // Resolve relative paths against temp data directory
     const absolutePath = path.isAbsolute(filePath) ? filePath : path.join(this.tempDataPath, filePath);
 
     if (!fs.existsSync(absolutePath)) {
@@ -741,14 +652,12 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
 
   /**
    * Asserts that a file does not exist in the test environment
-   * Requirements: 3.4 - File existence verification
    */
   assertFileDoesNotExist(filePath: string): void {
     if (!this.tempDataPath) {
       throw new Error('Test harness not set up properly. Temp data path not available.');
     }
 
-    // Resolve relative paths against temp data directory
     const absolutePath = path.isAbsolute(filePath) ? filePath : path.join(this.tempDataPath, filePath);
 
     if (fs.existsSync(absolutePath)) {
@@ -758,7 +667,6 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
 
   /**
    * Asserts that file content matches expected value
-   * Requirements: 3.4 - File content verification
    */
   async assertFileContent(filePath: string, expectedContent: string | RegExp): Promise<void> {
     if (!this.tempDataPath) {
@@ -788,26 +696,22 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
 
   /**
    * Asserts persona state matches expected values
-   * Requirements: 6.3 - Create persona state assertion methods
    */
   async assertPersonaState(persona: string, expectedState: PersonaState): Promise<void> {
     if (!this.tempDataPath) {
       throw new Error('Test harness not set up properly. Temp data path not available.');
     }
 
-    // Check if persona directory exists
     const personaDataPath = path.join(this.tempDataPath, 'personas', persona);
     
     if (!fs.existsSync(personaDataPath)) {
       throw new Error(`Persona assertion failed: Persona "${persona}" does not exist`);
     }
 
-    // Try to read persona system file to get basic info
     const systemFilePath = path.join(personaDataPath, 'system.jsonc');
     if (fs.existsSync(systemFilePath)) {
       try {
         const systemContent = await fs.promises.readFile(systemFilePath, 'utf-8');
-        // Basic validation that the persona file is readable
         if (systemContent.trim().length === 0) {
           throw new Error(`Persona assertion failed: Persona "${persona}" system file is empty`);
         }
@@ -815,15 +719,10 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
         throw new Error(`Persona assertion failed: Cannot read persona "${persona}" system file: ${error}`);
       }
     }
-
-    // For now, we just verify the persona exists and has readable data
-    // A full implementation would parse persona data and compare detailed states
-    // This would require understanding the EI application's data format
   }
 
   /**
    * Asserts that the application process is in expected state
-   * Requirements: 3.4 - Application state verification utilities
    */
   assertProcessState(expectedRunning: boolean): void {
     const isRunning = this.isAppRunning();
@@ -839,7 +738,6 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
 
   /**
    * Asserts that the application exited with expected exit code
-   * Requirements: 3.4 - Application state verification utilities
    */
   async assertExitCode(expectedExitCode: number, timeout: number = 5000): Promise<void> {
     if (!this.currentProcess) {
@@ -857,12 +755,13 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
         throw new Error(`Exit code assertion failed: Process did not exit within ${timeout}ms`);
       }
       throw error;
+    } finally {
+      this.currentProcess = null;
     }
   }
 
   /**
    * Asserts that mock server received expected number of requests
-   * Requirements: 3.4 - Application state verification utilities
    */
   assertMockRequestCount(expectedCount: number): void {
     const actualCount = this.mockServer.getRequestHistory().length;
@@ -874,7 +773,6 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
 
   /**
    * Asserts that mock server received a request with specific properties
-   * Requirements: 3.4 - Application state verification utilities
    */
   assertMockRequestReceived(endpoint: string, method: string = 'POST'): void {
     const requests = this.mockServer.getRequestHistory();
@@ -889,7 +787,6 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
 
   /**
    * Asserts that a directory exists and optionally contains expected files
-   * Requirements: 3.4 - File existence and content verification
    */
   assertDirectoryExists(dirPath: string, expectedFiles?: string[]): void {
     if (!this.tempDataPath) {
@@ -918,32 +815,7 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
   }
 
   /**
-   * Asserts that the test environment is clean (no unexpected files)
-   * Requirements: 3.4 - Application state verification utilities
-   */
-  assertCleanEnvironment(allowedFiles?: string[]): void {
-    if (!this.tempDataPath) {
-      throw new Error('Test harness not set up properly. Temp data path not available.');
-    }
-
-    if (!fs.existsSync(this.tempDataPath)) {
-      // Directory doesn't exist, so it's clean
-      return;
-    }
-
-    const files = fs.readdirSync(this.tempDataPath, { recursive: true });
-    const allowedSet = new Set(allowedFiles || []);
-    
-    const unexpectedFiles = files.filter(file => !allowedSet.has(file.toString()));
-    
-    if (unexpectedFiles.length > 0) {
-      throw new Error(`Clean environment assertion failed: Unexpected files found: ${unexpectedFiles.join(', ')}`);
-    }
-  }
-
-  /**
    * Gets the current application output for inspection
-   * Utility method for debugging and advanced assertions
    */
   async getCurrentOutput(lines?: number): Promise<string> {
     if (!this.currentProcess) {
@@ -954,8 +826,36 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
   }
 
   /**
+   * Gets the current application output with escape sequences removed
+   */
+  async getCurrentCleanOutput(lines?: number): Promise<string> {
+    if (!this.currentProcess) {
+      throw new Error('Application is not running. Call startApp() first.');
+    }
+
+    const rawOutput = await this.processManager.getOutput(this.currentProcess, lines);
+    return this.extractReadableText(rawOutput);
+  }
+
+  /**
+   * Gets captured UI content using the test output capture system
+   */
+  async getCapturedUIContent(): Promise<string> {
+    if (!this.currentProcess) {
+      throw new Error('Application is not running. Call startApp() first.');
+    }
+
+    const rawOutput = await this.processManager.getOutput(this.currentProcess, 50);
+    
+    if (rawOutput.includes('[TestOutputCapture]') || rawOutput.includes('TestOutputCapture: Captured')) {
+      return this.extractCapturedContent(rawOutput);
+    }
+    
+    return this.extractReadableText(rawOutput);
+  }
+
+  /**
    * Gets the current temp data path
-   * Useful for advanced file operations in tests
    */
   getTempDataPath(): string | null {
     return this.tempDataPath;
@@ -963,7 +863,6 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
 
   /**
    * Gets mock server request history for verification
-   * Useful for testing LLM interactions
    */
   getMockRequestHistory() {
     return this.mockServer.getRequestHistory();
@@ -982,7 +881,6 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
 
   /**
    * Sets a queue of responses that will be returned in sequence
-   * Each subsequent LLM request gets the next response in the queue
    */
   setMockResponseQueue(responses: string[]) {
     this.mockServer.setResponseQueue(responses);
@@ -997,7 +895,6 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
 
   /**
    * Configures comprehensive LLM responses for all request types
-   * This handles the complexity of different LLM call types automatically
    */
   setLLMResponses(options: {
     responseText?: string;
@@ -1008,22 +905,18 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
   }) {
     const {
       responseText = 'Test response from mock LLM',
-      systemConcepts, // Will use server defaults if not provided
-      humanConcepts,  // Will use server defaults if not provided  
-      personaDescription, // Will use server defaults if not provided
+      systemConcepts,
+      humanConcepts,
+      personaDescription,
       delayMs = 100
     } = options;
 
-    // Clear any existing overrides to let the mock server use intelligent request type detection
     this.mockServer.clearResponseOverrides();
     
-    // Set delay if specified
     if (delayMs > 0) {
       this.mockServer.setDelay('/v1/chat/completions', delayMs);
     }
     
-    // The mock server will automatically detect request types and provide appropriate responses
-    // We only override specific response types if custom values are provided
     if (systemConcepts) {
       this.mockServer.setResponseForType('system-concepts', {
         type: 'fixed',
@@ -1048,7 +941,6 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
       });
     }
     
-    // Set custom response text if provided, otherwise use server default
     if (responseText !== 'Test response from mock LLM') {
       this.mockServer.setResponseForType('response', {
         type: 'fixed',
@@ -1083,164 +975,73 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
     return this.processManager.getFinalState(this.currentProcess);
   }
 
-  /**
-   * Gets the hooks manager for extensibility
-   * Requirements: 8.4 - Plugin-style extensibility for advanced use cases
-   */
-  getHooksManager(): HooksManager {
-    return this.hooksManager;
-  }
-
-  /**
-   * Executes a complete test scenario with hooks
-   * Requirements: 8.4 - Custom scenario extension points
-   */
-  async executeTestScenario(scenario: TestScenario): Promise<void> {
-    const scenarioContext: ScenarioHookContext = {
-      hookName: 'scenario-execution',
-      timestamp: Date.now(),
-      scenario,
-      harness: this
-    };
-
-    try {
-      // Execute before-scenario hooks
-      await this.hooksManager.executeBeforeScenario(scenarioContext);
-
-      // Execute scenario setup
-      if (scenario.setup.personas) {
-        // Setup personas if specified
-        for (const persona of scenario.setup.personas) {
-          // This would integrate with the EI application's persona system
-          // For now, we just log the setup
-          console.log(`Setting up persona: ${persona.name}`);
-        }
-      }
-
-      if (scenario.setup.mockResponses) {
-        // Configure mock responses
-        for (const mockResponse of scenario.setup.mockResponses) {
-          this.mockServer.setResponse(mockResponse.endpoint, mockResponse.response);
-        }
-      }
-
-      // Execute scenario steps
-      for (let i = 0; i < scenario.steps.length; i++) {
-        const step = scenario.steps[i];
-        const stepContext: ScenarioHookContext = {
-          ...scenarioContext,
-          stepIndex: i
-        };
-
-        // Execute before-step hooks
-        await this.hooksManager.executeBeforeStep(stepContext);
-
-        try {
-          // Execute the step
-          let stepResult: any;
-          
-          switch (step.type) {
-            case 'input':
-              await this.sendInput(step.action);
-              break;
-            case 'command':
-              await this.sendCommand(step.action);
-              break;
-            case 'wait':
-              if (step.action.startsWith('ui-text:')) {
-                const expectedText = step.action.substring(8);
-                stepResult = await this.waitForUIText(expectedText, step.timeout);
-              } else if (step.action.startsWith('file:')) {
-                const filePath = step.action.substring(5);
-                await this.waitForFileChange(filePath, step.timeout);
-              } else if (step.action === 'processing-complete') {
-                await this.waitForProcessingComplete(step.timeout);
-              } else if (step.action === 'idle-state') {
-                await this.waitForIdleState(step.timeout);
-              }
-              break;
-            case 'assert':
-              // This would be handled by the assertion execution below
-              break;
-            default:
-              // Try to execute as custom step
-              stepResult = await this.hooksManager.executeCustomStep(step.type, step.action, stepContext);
-              break;
-          }
-
-          stepContext.stepResult = stepResult;
-        } catch (error) {
-          console.error(`Step ${i + 1} failed: ${error}`);
-          throw error;
-        }
-
-        // Execute after-step hooks
-        await this.hooksManager.executeAfterStep(stepContext);
-      }
-
-      // Execute scenario assertions
-      for (const assertion of scenario.assertions) {
-        try {
-          switch (assertion.type) {
-            case 'ui':
-              if (assertion.condition === 'contains') {
-                await this.assertUIContains(assertion.expected);
-              } else if (assertion.condition === 'matches') {
-                await this.assertUIMatches(new RegExp(assertion.expected));
-              }
-              break;
-            case 'file':
-              if (assertion.condition === 'exists') {
-                this.assertFileExists(assertion.target);
-              } else if (assertion.condition === 'content') {
-                await this.assertFileContent(assertion.target, assertion.expected);
-              }
-              break;
-            case 'state':
-              if (assertion.condition === 'persona') {
-                await this.assertPersonaState(assertion.target, assertion.expected);
-              } else if (assertion.condition === 'process') {
-                this.assertProcessState(assertion.expected);
-              }
-              break;
-            case 'process':
-              if (assertion.condition === 'exit-code') {
-                await this.assertExitCode(assertion.expected);
-              } else if (assertion.condition === 'running') {
-                this.assertProcessState(assertion.expected);
-              }
-              break;
-            default:
-              // Try to execute as custom assertion
-              await this.hooksManager.executeCustomAssertion(assertion.type, assertion.target, assertion.condition, assertion.expected, scenarioContext);
-              break;
-          }
-        } catch (error) {
-          console.error(`Assertion failed: ${assertion.type} ${assertion.condition} ${assertion.expected}`);
-          throw error;
-        }
-      }
-
-      // Execute after-scenario hooks
-      await this.hooksManager.executeAfterScenario(scenarioContext);
-
-    } catch (error) {
-      // Execute after-scenario hooks even on failure
-      try {
-        await this.hooksManager.executeAfterScenario(scenarioContext);
-      } catch (hookError) {
-        console.warn(`After-scenario hook failed: ${hookError}`);
-      }
-      throw error;
-    }
-  }
-
   // Private helper methods
+
+  /**
+   * Extracts captured content from debug output
+   */
+  private extractCapturedContent(rawOutput: string): string {
+    const captureLines = rawOutput
+      .split('\n')
+      .filter(line => line.includes('[TestOutputCapture] Captured'))
+      .map(line => {
+        const match = line.match(/\[TestOutputCapture\] Captured .+ content: "(.+?)" \(total captured: \d+\)/);
+        return match ? match[1] : '';
+      })
+      .filter(content => content.length > 0);
+
+    return captureLines.join('\n');
+  }
+
+  /**
+   * Extracts readable text from blessed terminal output by removing ANSI escape sequences
+   */
+  private extractReadableText(rawOutput: string): string {
+    if (!rawOutput || rawOutput.trim() === '') {
+      return '';
+    }
+
+    let cleanText = rawOutput;
+
+    // Remove ANSI escape sequences
+    cleanText = cleanText.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '');
+    cleanText = cleanText.replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, '');
+    cleanText = cleanText.replace(/\x1b[a-zA-Z0-9]/g, '');
+    cleanText = cleanText.replace(/\x1bP[^\x1b]*\x1b\\/g, '');
+    cleanText = cleanText.replace(/\x1b_[^\x1b]*\x1b\\/g, '');
+    cleanText = cleanText.replace(/\x1b\^[^\x1b]*\x1b\\/g, '');
+    cleanText = cleanText.replace(/\x1b./g, '');
+
+    // Remove cursor positioning sequences
+    cleanText = cleanText.replace(/-?\d+;\d+H/g, '');
+    cleanText = cleanText.replace(/\?\d+[lh]/g, '');
+    cleanText = cleanText.replace(/\?\d+/g, '');
+
+    // Remove blessed box-drawing characters
+    cleanText = cleanText.replace(/[qkxjlmtuvwn]{5,}/g, ' ');
+    cleanText = cleanText.replace(/(\s|^)[qkxjlmtuvwn]{2,4}(\s|$)/g, ' ');
+    cleanText = cleanText.replace(/(\s)[qkxjlmtuvwn](\s)/g, '$1$2');
+
+    // Remove control characters
+    cleanText = cleanText.replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/g, '');
+
+    // Clean up whitespace
+    cleanText = cleanText.replace(/[ \t]+/g, ' ');
+    cleanText = cleanText.replace(/\n\s*\n\s*\n/g, '\n\n');
+    cleanText = cleanText.split('\n').map(line => line.trim()).join('\n');
+    cleanText = cleanText.replace(/^\n+/, '').replace(/\n+$/, '');
+
+    if (cleanText.trim().length <= 1) {
+      return '';
+    }
+
+    return cleanText;
+  }
 
   private getDefaultConfig(): TestConfig {
     return {
       tempDirPrefix: 'e2e-test',
-      mockServerPort: undefined, // Will find available port
+      mockServerPort: undefined,
       appTimeout: 5000,
       cleanupTimeout: 3000,
       mockResponses: []
@@ -1256,7 +1057,6 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
       }
     };
 
-    // Add any custom responses from config
     if (this.config.mockResponses) {
       for (const mockResponse of this.config.mockResponses) {
         responses[mockResponse.endpoint] = mockResponse.response;
@@ -1267,7 +1067,6 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
   }
 
   private async findAvailablePort(): Promise<number> {
-    // Simple port finding - start at 3001 and increment until we find an available port
     const net = await import('net');
     
     for (let port = 3001; port < 4000; port++) {
@@ -1297,139 +1096,27 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
   }
 
   private detectProcessingInOutput(output: string): boolean {
-    // Heuristic detection of processing state based on output patterns
-    // Look for common indicators that the application is processing
     const processingIndicators = [
       'Processing...',
       'Thinking...',
       'Loading...',
       'Generating...',
-      // EI-specific processing indicators
       'Working',
       'streaming',
       'chunk',
-      // Look for actual processing messages, not UI box-drawing characters
       'processing in progress',
       'background processing'
     ];
 
-    const recentOutput = output.slice(-1000); // Check last 1KB of output
+    const recentOutput = output.slice(-1000);
     
-    // Don't treat box-drawing characters as processing indicators
-    // These are common in blessed UI: │ ┌ ┐ └ ┘ ├ ┤ ┬ ┴ ┼ ─ ═ ║ ╔ ╗ ╚ ╝ ╠ ╣ ╦ ╩ ╬
-    // Also ignore single character indicators that are likely UI elements
     return processingIndicators.some(indicator => {
       if (indicator.length === 1) {
-        // For single character indicators, require them to be surrounded by spaces or at word boundaries
         const regex = new RegExp(`\\s${indicator}\\s|^${indicator}\\s|\\s${indicator}$`, 'i');
         return regex.test(recentOutput);
       } else {
         return recentOutput.toLowerCase().includes(indicator.toLowerCase());
       }
     });
-  }
-
-  // ============================================================================
-  // Metrics and Reporting Methods
-  // ============================================================================
-
-  /**
-   * Starts metrics collection for a test
-   * Requirements: 7.3 - Implement execution time tracking
-   */
-  startTestMetrics(testName: string): void {
-    this.metricsCollector.startTest(testName);
-  }
-
-  /**
-   * Records a test step execution
-   */
-  recordTestStep(stepName: string, stepType: string, duration: number, success: boolean, error?: string, retryCount: number = 0): void {
-    this.metricsCollector.recordStep(stepName, stepType, duration, success, error, retryCount);
-  }
-
-  /**
-   * Finishes metrics collection for the current test
-   */
-  finishTestMetrics(success: boolean, error?: string): void {
-    // Update mock server metrics before finishing
-    const mockHistory = this.mockServer.getRequestHistory();
-    const responseTimes = mockHistory.map(req => req.responseTime || 0);
-    const errorCount = mockHistory.filter(req => req.error).length;
-    const streamingCount = mockHistory.filter(req => req.streaming).length;
-
-    this.metricsCollector.updateMockServerMetrics(
-      mockHistory.length,
-      responseTimes,
-      errorCount,
-      streamingCount
-    );
-
-    // Update application metrics with LLM request count
-    this.metricsCollector.updateApplicationMetrics({
-      llmRequestCount: mockHistory.length,
-      inputCount: this.getInputCount()
-    });
-
-    this.metricsCollector.finishTest(success, error);
-  }
-
-  /**
-   * Adds diagnostic information to metrics
-   */
-  addDiagnostic(level: 'info' | 'warning' | 'error', message: string, testName?: string, stepName?: string): void {
-    this.metricsCollector.addDiagnostic(level, message, testName, stepName);
-  }
-
-  /**
-   * Generates a comprehensive test report
-   * Requirements: 7.5 - Create detailed test reports with diagnostics
-   */
-  generateTestReport(): any {
-    return this.metricsCollector.generateReport();
-  }
-
-  /**
-   * Exports test metrics to JSON file
-   */
-  async exportMetricsToJson(filePath: string): Promise<void> {
-    await this.metricsCollector.exportToFile(filePath);
-  }
-
-  /**
-   * Exports test metrics to HTML report
-   */
-  async exportMetricsToHtml(filePath: string): Promise<void> {
-    await this.metricsCollector.exportToHtml(filePath);
-  }
-
-  /**
-   * Gets current test metrics without generating full report
-   */
-  getCurrentMetrics(): any[] {
-    return this.metricsCollector.getCurrentMetrics();
-  }
-
-  /**
-   * Gets current diagnostics
-   */
-  getCurrentDiagnostics(): any[] {
-    return this.metricsCollector.getCurrentDiagnostics();
-  }
-
-  /**
-   * Resets all collected metrics
-   */
-  resetMetrics(): void {
-    this.metricsCollector.reset();
-  }
-
-  /**
-   * Gets the count of inputs sent to the application
-   */
-  private getInputCount(): number {
-    // This would need to be tracked as inputs are sent
-    // For now, return a placeholder
-    return 0;
   }
 }

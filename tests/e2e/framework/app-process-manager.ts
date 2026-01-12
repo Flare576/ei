@@ -44,6 +44,8 @@ export class AppProcessManagerImpl implements AppProcessManager {
       EI_LLM_MODEL: config.llmModel,
       // Enable test input injection
       EI_TEST_INPUT: 'true',
+      // Enable test output capture
+      EI_TEST_OUTPUT: 'true',
       // Disable colors for cleaner output parsing
       NO_COLOR: '1',
       // Set NODE_ENV to test to avoid production behaviors
@@ -116,6 +118,8 @@ export class AppProcessManagerImpl implements AppProcessManager {
       EI_LLM_MODEL: config.llmModel,
       // Enable test input injection
       EI_TEST_INPUT: 'true',
+      // Enable test output capture
+      EI_TEST_OUTPUT: 'true',
       // Disable colors for cleaner output parsing
       NO_COLOR: '1',
       // Set NODE_ENV to test to avoid production behaviors
