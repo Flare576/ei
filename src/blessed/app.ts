@@ -9,6 +9,8 @@ import { LayoutManager } from './layout-manager.js';
 import { FocusManager } from './focus-manager.js';
 import { PersonaRenderer } from './persona-renderer.js';
 import { ChatRenderer } from './chat-renderer.js';
+import { CommandHandler } from './command-handler.js';
+import type { ICommandHandler } from './interfaces.js';
 
 // Initialize debug log file
 initializeDebugLog();
@@ -33,6 +35,7 @@ export class EIApp {
   private focusManager: FocusManager;
   private personaRenderer: PersonaRenderer;
   private chatRenderer: ChatRenderer;
+  private commandHandler: ICommandHandler;
   
   private personas: any[] = [];
   private activePersona = 'ei';
@@ -92,6 +95,26 @@ export class EIApp {
     
     this.chatRenderer = new ChatRenderer();
     debugLog(`ChatRenderer created - Instance #${this.instanceId}`);
+
+    // Initialize CommandHandler with temporary implementations
+    // These will be replaced with proper modules in later tasks
+    const tempPersonaManager = {
+      getPersonas: () => this.personas,
+      getCurrentPersona: () => this.activePersona,
+      getUnreadCounts: () => this.unreadCounts,
+      switchPersona: async (name: string) => this.switchPersona(name)
+    };
+
+    const tempMessageProcessor = {
+      // Minimal implementation for now
+    };
+
+    this.commandHandler = new CommandHandler({
+      personaManager: tempPersonaManager as any,
+      messageProcessor: tempMessageProcessor as any,
+      app: this as any
+    });
+    debugLog(`CommandHandler created - Instance #${this.instanceId}`);
 
     // Pass screen reference to persona renderer for spinner animation
     this.personaRenderer.setScreen(this.screen);
@@ -276,7 +299,13 @@ export class EIApp {
 
     // Handle commands
     if (text.startsWith('/')) {
-      await this.handleCommand(text);
+      const parsedCommand = this.commandHandler.parseCommand(text);
+      if (parsedCommand) {
+        await this.commandHandler.executeCommand(parsedCommand);
+      } else {
+        this.setStatus(`Unknown command: ${text}`);
+      }
+      this.layoutManager.getInputBox().clearValue();
       this.focusManager.maintainFocus();
       return;
     }
@@ -290,147 +319,7 @@ export class EIApp {
     this.render();
   }
 
-  private async handleCommand(input: string): Promise<void> {
-    const spaceIdx = input.indexOf(' ');
-    const command = spaceIdx === -1 ? input.slice(1) : input.slice(1, spaceIdx);
-    const args = spaceIdx === -1 ? '' : input.slice(spaceIdx + 1);
 
-    switch (command.toLowerCase()) {
-      case 'persona':
-      case 'p':
-        await this.handlePersonaCommand(args);
-        break;
-      case 'refresh':
-      case 'r':
-        this.handleRefreshCommand();
-        break;
-      case 'quit':
-      case 'q':
-        await this.handleQuitCommand(args);
-        break;
-      case 'help':
-      case 'h':
-        this.setStatus('Commands: /persona <name>, /quit|/q [--force] (exit app, --force bypasses safety checks), /refresh, /help | Keys: Ctrl+H (personas), Ctrl+L (input), Ctrl+R (refresh), Ctrl+C (exit)');
-        break;
-      default:
-        this.setStatus(`Unknown command: /${command}`);
-    }
-    
-    this.layoutManager.getInputBox().clearValue();
-    this.render();
-  }
-
-  private async handlePersonaCommand(args: string) {
-    const trimmed = args.trim();
-    
-    if (!trimmed) {
-      const list = this.personas.map(p => {
-        const marker = p.name === this.activePersona ? '[active]' : '';
-        const unread = this.unreadCounts.get(p.name) || 0;
-        const unreadStr = unread ? ` (${unread} unread)` : '';
-        return `${p.name}${marker}${unreadStr}`;
-      }).join(', ');
-      this.setStatus(`Available personas: ${list}`);
-      return;
-    }
-
-    const foundPersona = await findPersonaByNameOrAlias(trimmed.toLowerCase());
-    if (foundPersona) {
-      await this.switchPersona(foundPersona);
-    } else {
-      this.setStatus(`Persona "${trimmed}" not found.`);
-    }
-  }
-
-  private async handleQuitCommand(args: string) {
-    const trimmedArgs = args.trim();
-    
-    // Enhanced argument validation
-    if (trimmedArgs) {
-      // Split arguments and filter out empty strings
-      const argList = trimmedArgs.split(/\s+/).filter(arg => arg.length > 0);
-      
-      // Check for multiple arguments
-      if (argList.length > 1) {
-        debugLog(`Quit command validation failed: multiple arguments provided: [${argList.join(', ')}]`);
-        this.setStatus(`Too many arguments. Usage: /quit [--force]`);
-        return;
-      }
-      
-      // Check for single valid argument
-      const singleArg = argList[0];
-      if (singleArg !== "--force") {
-        debugLog(`Quit command validation failed: invalid argument: "${singleArg}"`);
-        
-        // Provide helpful suggestions for common mistakes
-        if (singleArg === "-f" || singleArg === "force") {
-          this.setStatus(`Invalid argument: ${singleArg}. Did you mean --force? Usage: /quit [--force]`);
-        } else if (singleArg.startsWith("-")) {
-          this.setStatus(`Unknown flag: ${singleArg}. Only --force is supported. Usage: /quit [--force]`);
-        } else {
-          this.setStatus(`Invalid argument: ${singleArg}. Usage: /quit [--force]`);
-        }
-        return;
-      }
-    }
-    
-    const isForce = trimmedArgs === "--force";
-    
-    try {
-      if (isForce) {
-        // Force exit: bypass all safety checks
-        debugLog('Force quit command executed - bypassing all safety checks');
-        try {
-          const cleanupResult = this.cleanup();
-          
-          if (!cleanupResult.success) {
-            debugLog(`Force quit cleanup had errors: ${cleanupResult.errors.join('; ')}`);
-            // Continue with force exit regardless of cleanup errors
-          }
-          
-          this.screen.destroy();
-          process.exit(0);
-        } catch (error) {
-          debugLog(`Critical error during force quit: ${error instanceof Error ? error.message : String(error)}`);
-          // Force exit even if everything fails
-          try {
-            this.screen.destroy();
-          } catch (screenError) {
-            debugLog(`Screen destroy failed during force quit: ${screenError instanceof Error ? screenError.message : String(screenError)}`);
-          }
-          process.exit(1);
-        }
-        return;
-      }
-      
-      // Regular quit: use shared exit logic (identical to Ctrl+C)
-      debugLog('Regular quit command executed - using shared exit logic');
-      this.executeExitLogic();
-    } catch (error) {
-      debugLog(`Quit command execution error: ${error instanceof Error ? error.message : String(error)}`);
-      this.setStatus(`Error executing quit command: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  private handleRefreshCommand() {
-    debugLog('Manual refresh command triggered');
-    
-    // Force blessed to check terminal size and reallocate
-    this.screen.alloc();
-    
-    // Log current dimensions for debugging
-    const screenWidth = Number(this.screen.width);
-    const screenHeight = Number(this.screen.height);
-    const processWidth = process.stdout.columns;
-    const processHeight = process.stdout.rows;
-    
-    debugLog(`Refresh - Screen: ${screenWidth}x${screenHeight}, Process: ${processWidth}x${processHeight}`);
-    
-    // Trigger resize handling
-    this.handleResize();
-    
-    this.setStatus(`UI refreshed - Terminal size: ${screenWidth}x${screenHeight}`);
-  }
 
   private addMessage(role: 'human' | 'system', content: string, state?: MessageState) {
     const message: Message = {
@@ -695,58 +584,8 @@ export class EIApp {
     this.render();
   }
 
-  private render() {
-    this.personaRenderer.render(
-      this.layoutManager.getPersonaList(),
-      this.personas,
-      this.activePersona,
-      this.unreadCounts,
-      this.personaStates,
-      this.screen.width as number
-    );
-    
-    this.chatRenderer.render(
-      this.layoutManager.getChatHistory(),
-      this.messages,
-      this.activePersona
-    );
-    
-    this.renderStatus();
-    
-    this.focusManager.maintainFocus();
-    this.screen.render();
-  }
-
-  private renderStatus() {
-    let status = '';
-    if (this.isProcessing) {
-      status += '{cyan-fg}thinking...{/cyan-fg} ';
-    }
-    if (this.statusMessage) {
-      status += this.statusMessage;
-    }
-    this.layoutManager.getStatusBar().setContent(status);
-  }
-
-  private scrollChatHistory(lines: number) {
-    debugLog(`SCROLL: attempting to scroll ${lines} lines`);
-    
-    const beforeScroll = this.layoutManager.getChatHistory().getScroll();
-    this.layoutManager.getChatHistory().scroll(lines);
-    const afterScroll = this.layoutManager.getChatHistory().getScroll();
-    
-    debugLog(`SCROLL: moved from ${beforeScroll} to ${afterScroll}`);
-    this.screen.render();
-  }
-
-  private autoScrollToBottom() {
-    debugLog(`DEBUG autoScroll: letting blessed handle scroll to bottom`);
-    this.layoutManager.getChatHistory().scrollTo(this.layoutManager.getChatHistory().getScrollHeight());
-    const actualScroll = this.layoutManager.getChatHistory().getScroll();
-    debugLog(`DEBUG autoScroll: ended at position ${actualScroll}`);
-  }
-
-  private executeExitLogic() {
+  // Public methods for CommandHandler delegation
+  public executeExitLogic() {
     debugLog('=== EXIT LOGIC START ===');
     debugLog('Exit logic called - starting proper handling chain');
     
@@ -819,6 +658,134 @@ export class EIApp {
     }
   }
 
+  public handleRefreshCommand() {
+    debugLog('Manual refresh command triggered');
+    
+    // Force blessed to check terminal size and reallocate
+    this.screen.alloc();
+    
+    // Log current dimensions for debugging
+    const screenWidth = Number(this.screen.width);
+    const screenHeight = Number(this.screen.height);
+    const processWidth = process.stdout.columns;
+    const processHeight = process.stdout.rows;
+    
+    debugLog(`Refresh - Screen: ${screenWidth}x${screenHeight}, Process: ${processWidth}x${processHeight}`);
+    
+    // Trigger resize handling
+    this.handleResize();
+    
+    this.setStatus(`UI refreshed - Terminal size: ${screenWidth}x${screenHeight}`);
+  }
+
+  public cleanup() {
+    debugLog('Starting cleanup process...');
+    let cleanupErrors: string[] = [];
+    
+    try {
+      // Clean up persona states with individual error handling
+      for (const [name, ps] of this.personaStates) {
+        try {
+          if (ps.heartbeatTimer) {
+            clearTimeout(ps.heartbeatTimer);
+            debugLog(`Cleared heartbeat timer for persona: ${name}`);
+          }
+          if (ps.debounceTimer) {
+            clearTimeout(ps.debounceTimer);
+            debugLog(`Cleared debounce timer for persona: ${name}`);
+          }
+          if (ps.abortController) {
+            ps.abortController.abort();
+            debugLog(`Aborted controller for persona: ${name}`);
+          }
+        } catch (error) {
+          const errorMsg = `Failed to cleanup persona ${name}: ${error instanceof Error ? error.message : String(error)}`;
+          debugLog(errorMsg);
+          cleanupErrors.push(errorMsg);
+          // Continue with other personas even if one fails
+        }
+      }
+      
+      // Clean up persona renderer with error handling
+      try {
+        this.personaRenderer.cleanup();
+        debugLog('PersonaRenderer cleanup completed');
+      } catch (error) {
+        const errorMsg = `Failed to cleanup PersonaRenderer: ${error instanceof Error ? error.message : String(error)}`;
+        debugLog(errorMsg);
+        cleanupErrors.push(errorMsg);
+      }
+      
+      if (cleanupErrors.length > 0) {
+        debugLog(`Cleanup completed with ${cleanupErrors.length} errors: ${cleanupErrors.join('; ')}`);
+      } else {
+        debugLog('Cleanup completed successfully');
+      }
+      
+    } catch (error) {
+      const errorMsg = `Critical cleanup error: ${error instanceof Error ? error.message : String(error)}`;
+      debugLog(errorMsg);
+      cleanupErrors.push(errorMsg);
+    }
+    
+    // Return cleanup status for caller to handle if needed
+    return {
+      success: cleanupErrors.length === 0,
+      errors: cleanupErrors
+    };
+  }
+
+  private render() {
+    this.personaRenderer.render(
+      this.layoutManager.getPersonaList(),
+      this.personas,
+      this.activePersona,
+      this.unreadCounts,
+      this.personaStates,
+      this.screen.width as number
+    );
+    
+    this.chatRenderer.render(
+      this.layoutManager.getChatHistory(),
+      this.messages,
+      this.activePersona
+    );
+    
+    this.renderStatus();
+    
+    this.focusManager.maintainFocus();
+    this.screen.render();
+  }
+
+  private renderStatus() {
+    let status = '';
+    if (this.isProcessing) {
+      status += '{cyan-fg}thinking...{/cyan-fg} ';
+    }
+    if (this.statusMessage) {
+      status += this.statusMessage;
+    }
+    this.layoutManager.getStatusBar().setContent(status);
+  }
+
+  private scrollChatHistory(lines: number) {
+    debugLog(`SCROLL: attempting to scroll ${lines} lines`);
+    
+    const beforeScroll = this.layoutManager.getChatHistory().getScroll();
+    this.layoutManager.getChatHistory().scroll(lines);
+    const afterScroll = this.layoutManager.getChatHistory().getScroll();
+    
+    debugLog(`SCROLL: moved from ${beforeScroll} to ${afterScroll}`);
+    this.screen.render();
+  }
+
+  private autoScrollToBottom() {
+    debugLog(`DEBUG autoScroll: letting blessed handle scroll to bottom`);
+    this.layoutManager.getChatHistory().scrollTo(this.layoutManager.getChatHistory().getScrollHeight());
+    const actualScroll = this.layoutManager.getChatHistory().getScroll();
+    debugLog(`DEBUG autoScroll: ended at position ${actualScroll}`);
+  }
+
   private handleCtrlC() {
     debugLog('=== CTRL+C HANDLER START ===');
     debugLog('Ctrl+C pressed - delegating to shared exit logic');
@@ -887,63 +854,6 @@ export class EIApp {
     return Array.from(this.personaStates.entries())
       .filter(([name, ps]) => name !== this.activePersona && ps.isProcessing)
       .map(([name]) => name);
-  }
-
-  private cleanup() {
-    debugLog('Starting cleanup process...');
-    let cleanupErrors: string[] = [];
-    
-    try {
-      // Clean up persona states with individual error handling
-      for (const [name, ps] of this.personaStates) {
-        try {
-          if (ps.heartbeatTimer) {
-            clearTimeout(ps.heartbeatTimer);
-            debugLog(`Cleared heartbeat timer for persona: ${name}`);
-          }
-          if (ps.debounceTimer) {
-            clearTimeout(ps.debounceTimer);
-            debugLog(`Cleared debounce timer for persona: ${name}`);
-          }
-          if (ps.abortController) {
-            ps.abortController.abort();
-            debugLog(`Aborted controller for persona: ${name}`);
-          }
-        } catch (error) {
-          const errorMsg = `Failed to cleanup persona ${name}: ${error instanceof Error ? error.message : String(error)}`;
-          debugLog(errorMsg);
-          cleanupErrors.push(errorMsg);
-          // Continue with other personas even if one fails
-        }
-      }
-      
-      // Clean up persona renderer with error handling
-      try {
-        this.personaRenderer.cleanup();
-        debugLog('PersonaRenderer cleanup completed');
-      } catch (error) {
-        const errorMsg = `Failed to cleanup PersonaRenderer: ${error instanceof Error ? error.message : String(error)}`;
-        debugLog(errorMsg);
-        cleanupErrors.push(errorMsg);
-      }
-      
-      if (cleanupErrors.length > 0) {
-        debugLog(`Cleanup completed with ${cleanupErrors.length} errors: ${cleanupErrors.join('; ')}`);
-      } else {
-        debugLog('Cleanup completed successfully');
-      }
-      
-    } catch (error) {
-      const errorMsg = `Critical cleanup error: ${error instanceof Error ? error.message : String(error)}`;
-      debugLog(errorMsg);
-      cleanupErrors.push(errorMsg);
-    }
-    
-    // Return cleanup status for caller to handle if needed
-    return {
-      success: cleanupErrors.length === 0,
-      errors: cleanupErrors
-    };
   }
 
   async init() {

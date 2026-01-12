@@ -11,14 +11,14 @@ This implementation plan converts the monolithic `src/blessed/app.ts` file into 
   - ✅ Capture baseline performance metrics for comparison
   - _Requirements: 4.1, 8.1, 8.5_
 
-- [ ] 2. Extract Command Handler module
-  - [ ] 2.1 Create command-handler.ts with ICommandHandler interface
+- [x] 2. Extract Command Handler module
+  - [x] 2.1 Create command-handler.ts with ICommandHandler interface
     - Extract command parsing logic from app.ts
     - Implement parseCommand() and executeCommand() methods
     - Move help text management to command handler
     - _Requirements: 5.1, 5.2, 5.3, 5.4_
 
-  - [ ] 2.3 Update app.ts to use CommandHandler
+  - [x] 2.3 Update app.ts to use CommandHandler
     - Replace inline command handling with CommandHandler calls
     - Maintain existing event handler patterns
     - _Requirements: 2.1, 2.3_

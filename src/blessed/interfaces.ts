@@ -280,6 +280,11 @@ export interface IEIApp {
    * Auto-scroll chat to bottom
    */
   autoScrollToBottom(): void;
+
+  // Temporary methods for CommandHandler delegation - will be removed in final refactoring
+  executeExitLogic?(): void;
+  handleRefreshCommand?(): void;
+  cleanup?(): { success: boolean; errors: string[] };
 }
 
 // ============================================================================
