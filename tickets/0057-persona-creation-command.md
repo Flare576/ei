@@ -49,28 +49,29 @@ Persona 'assistant' created and activated!
 
 ## Testing Requirements
 
-⚠️ **CRITICAL TESTING CHALLENGE**: This will be the **first ticket that requires solving the blessed application input testing problem** discovered during E2E testing POC (ticket 0056).
+✅ **E2E TESTING FRAMEWORK READY**: The E2E testing framework from ticket 0056 is complete and fully supports interactive input testing for blessed applications.
 
-**Current Issue**: Our E2E test framework cannot send input to blessed applications because blessed uses its own input event system, not standard `process.stdin`. The signal-based testing approach works for quit commands but won't work for interactive flows like persona creation.
+**Available Testing Capabilities**:
+- **Input simulation**: `sendInput()` and `sendCommand()` work reliably with blessed
+- **Interactive flows**: Can handle multi-step user interactions (y/n prompts, text input)
+- **State verification**: Can verify persona creation, file system changes, and application state
+- **Mock LLM integration**: Supports persona generation with configurable responses
 
-**Testing Approaches Needed**:
-1. **Direct method testing**: Test `handlePersonaCommand()` logic directly
-2. **File system verification**: Confirm persona files are created correctly  
-3. **State verification**: Ensure application switches to new persona
-4. **Future**: Solve blessed input simulation for full E2E testing
+**Test Coverage Strategy**:
+1. **E2E tests**: Full persona creation flow using existing framework patterns
+2. **Unit tests**: Direct testing of `handlePersonaCommand()` logic
+3. **Integration tests**: File system operations and persona switching
+4. **Error handling tests**: Invalid names, creation failures, cancellation
 
-**Test Coverage Required**:
-- Unit tests for persona creation logic
-- Integration tests for file system operations
-- State verification tests for persona switching
-- Error handling tests for invalid names and creation failures
+**Existing Test Patterns**: Multiple E2E tests already expect `/persona create <name>` syntax, indicating this feature was anticipated in the framework design.
 
 ## Value Statement
 Streamlines persona creation workflow by eliminating the need to exit the application or use external tools. Enables rapid persona experimentation and reduces friction in multi-persona conversations.
 
 ## Dependencies
+- **Hard dependency**: 0058 (Blessed App.ts Refactoring) - must be completed first for clean implementation
 - **Soft dependency**: 0038 (Multi-line Modal Interface) - would improve UX but not required
-- **Testing dependency**: Blessed input simulation solution from 0056 E2E testing POC
+- **✅ Resolved**: E2E testing framework from 0056 is complete and ready
 
 ## Effort Estimate
-Medium (~3-4 hours) - includes persona creation logic, UI integration, and comprehensive testing strategy
+Small-Medium (~2-3 hours) - leverages existing persona creation system and proven E2E testing patterns
