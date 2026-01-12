@@ -65,11 +65,17 @@ export interface ICommandHandler {
  */
 export interface IPersonaManager {
   /**
+   * Initialize the persona manager with persona list
+   * @param personas - Array of persona objects
+   */
+  initialize(personas: any[]): Promise<void>;
+
+  /**
    * Switch to a different persona
    * @param name - Name of the persona to switch to
-   * @returns Promise that resolves when switch is complete
+   * @returns Promise that resolves with recent messages when switch is complete
    */
-  switchPersona(name: string): Promise<void>;
+  switchPersona(name: string): Promise<Message[]>;
 
   /**
    * Get the currently active persona name
@@ -114,6 +120,34 @@ export interface IPersonaManager {
    * @param name - Persona name to set as active
    */
   setActivePersona(name: string): void;
+
+  /**
+   * Get personas that are currently processing in the background
+   * @returns Array of persona names that are processing
+   */
+  getBackgroundProcessingPersonas(): string[];
+
+  /**
+   * Check if any persona is currently processing
+   * @returns True if any persona is processing
+   */
+  isAnyPersonaProcessing(): boolean;
+
+  /**
+   * Get personas that are currently processing (active or background)
+   * @returns Array of persona names that are processing
+   */
+  getProcessingPersonas(): string[];
+
+  /**
+   * Update spinner animation based on persona processing states
+   */
+  updateSpinnerAnimation(): void;
+
+  /**
+   * Cleanup persona manager resources
+   */
+  cleanup(): void;
 }
 
 // ============================================================================

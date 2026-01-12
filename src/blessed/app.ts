@@ -10,7 +10,8 @@ import { FocusManager } from './focus-manager.js';
 import { PersonaRenderer } from './persona-renderer.js';
 import { ChatRenderer } from './chat-renderer.js';
 import { CommandHandler } from './command-handler.js';
-import type { ICommandHandler } from './interfaces.js';
+import { PersonaManager } from './persona-manager.js';
+import type { ICommandHandler, IPersonaManager } from './interfaces.js';
 
 // Initialize debug log file
 initializeDebugLog();
@@ -36,14 +37,13 @@ export class EIApp {
   private personaRenderer: PersonaRenderer;
   private chatRenderer: ChatRenderer;
   private commandHandler: ICommandHandler;
+  private personaManager: IPersonaManager;
   
   private personas: any[] = [];
   private activePersona = 'ei';
   private messages: Message[] = [];
-  private personaStates = new Map<string, PersonaState>();
   private isProcessing = false;
   private statusMessage: string | null = null;
-  private unreadCounts = new Map<string, number>();
   
   // Ctrl+C state tracking
   private ctrlCWarningTimestamp: number | null = null;
@@ -96,21 +96,21 @@ export class EIApp {
     this.chatRenderer = new ChatRenderer();
     debugLog(`ChatRenderer created - Instance #${this.instanceId}`);
 
-    // Initialize CommandHandler with temporary implementations
-    // These will be replaced with proper modules in later tasks
-    const tempPersonaManager = {
-      getPersonas: () => this.personas,
-      getCurrentPersona: () => this.activePersona,
-      getUnreadCounts: () => this.unreadCounts,
-      switchPersona: async (name: string) => this.switchPersona(name)
-    };
+    // Initialize PersonaManager
+    this.personaManager = new PersonaManager({
+      personaRenderer: this.personaRenderer,
+      chatRenderer: this.chatRenderer,
+      layoutManager: this.layoutManager
+    });
+    debugLog(`PersonaManager created - Instance #${this.instanceId}`);
 
+    // Initialize CommandHandler with proper PersonaManager
     const tempMessageProcessor = {
       // Minimal implementation for now
     };
 
     this.commandHandler = new CommandHandler({
-      personaManager: tempPersonaManager as any,
+      personaManager: this.personaManager,
       messageProcessor: tempMessageProcessor as any,
       app: this as any
     });
@@ -340,7 +340,7 @@ export class EIApp {
   }
 
   private queueMessage(input: string) {
-    const ps = this.getOrCreatePersonaState(this.activePersona);
+    const ps = this.personaManager.getPersonaState(this.activePersona);
     ps.messageQueue.push(input.trim());
     this.resetPersonaHeartbeat(this.activePersona);
 
@@ -365,7 +365,7 @@ export class EIApp {
   }
 
   private async processPersonaQueue(personaName: string) {
-    const ps = this.getOrCreatePersonaState(personaName);
+    const ps = this.personaManager.getPersonaState(personaName);
     
     if (ps.messageQueue.length === 0 || ps.isProcessing) {
       debugLog(`processPersonaQueue: skipping ${personaName} - queue:${ps.messageQueue.length}, processing:${ps.isProcessing}`);
@@ -377,7 +377,7 @@ export class EIApp {
     const combinedMessage = ps.messageQueue.join('\n');
     ps.abortController = new AbortController();
     ps.isProcessing = true;
-    this.personaRenderer.updateSpinnerAnimation(this.personaStates);
+    this.personaManager.updateSpinnerAnimation();
     
     if (personaName === this.activePersona) {
       this.isProcessing = true;
@@ -396,8 +396,7 @@ export class EIApp {
           if (personaName === this.activePersona) {
             this.addMessage('system', result.response);
           } else {
-            ps.unreadCount++;
-            this.unreadCounts.set(personaName, ps.unreadCount);
+            this.personaManager.updateUnreadCount(personaName, 1);
           }
         }
       }
@@ -413,7 +412,7 @@ export class EIApp {
       debugLog(`processPersonaQueue: finished ${personaName}`);
       ps.isProcessing = false;
       ps.abortController = null;
-      this.personaRenderer.updateSpinnerAnimation(this.personaStates);
+      this.personaManager.updateSpinnerAnimation();
       
       if (personaName === this.activePersona) {
         this.isProcessing = false;
@@ -437,26 +436,8 @@ export class EIApp {
     }
   }
 
-  private getOrCreatePersonaState(personaName: string): PersonaState {
-    let ps = this.personaStates.get(personaName);
-    if (!ps) {
-      ps = {
-        name: personaName,
-        heartbeatTimer: null,
-        debounceTimer: null,
-        lastActivity: Date.now(),
-        isProcessing: false,
-        messageQueue: [],
-        unreadCount: 0,
-        abortController: null
-      };
-      this.personaStates.set(personaName, ps);
-    }
-    return ps;
-  }
-
   private resetPersonaHeartbeat(personaName: string) {
-    const ps = this.getOrCreatePersonaState(personaName);
+    const ps = this.personaManager.getPersonaState(personaName);
     
     if (ps.heartbeatTimer) {
       clearTimeout(ps.heartbeatTimer);
@@ -472,7 +453,7 @@ export class EIApp {
 
       ps.abortController = new AbortController();
       ps.isProcessing = true;
-      this.personaRenderer.updateSpinnerAnimation(this.personaStates);
+      this.personaManager.updateSpinnerAnimation();
       
       if (personaName === this.activePersona) {
         this.isProcessing = true;
@@ -485,8 +466,7 @@ export class EIApp {
           if (personaName === this.activePersona) {
             this.addMessage('system', result.response);
           } else {
-            ps.unreadCount++;
-            this.unreadCounts.set(personaName, ps.unreadCount);
+            this.personaManager.updateUnreadCount(personaName, 1);
           }
         }
       } catch (err) {
@@ -498,7 +478,7 @@ export class EIApp {
       } finally {
         ps.isProcessing = false;
         ps.abortController = null;
-        this.personaRenderer.updateSpinnerAnimation(this.personaStates);
+        this.personaManager.updateSpinnerAnimation();
         if (personaName === this.activePersona) {
           this.isProcessing = false;
         }
@@ -509,7 +489,7 @@ export class EIApp {
   }
 
   private schedulePersonaDebounce(personaName: string) {
-    const ps = this.getOrCreatePersonaState(personaName);
+    const ps = this.personaManager.getPersonaState(personaName);
     
     if (ps.debounceTimer) {
       clearTimeout(ps.debounceTimer);
@@ -522,7 +502,7 @@ export class EIApp {
   }
 
   private abortPersonaOperation(personaName: string) {
-    const ps = this.personaStates.get(personaName);
+    const ps = this.personaManager.getPersonaState(personaName);
     if (ps?.abortController) {
       ps.abortController.abort();
       ps.abortController = null;
@@ -533,7 +513,7 @@ export class EIApp {
       
       ps.messageQueue = [];
       ps.isProcessing = false;
-      this.personaRenderer.updateSpinnerAnimation(this.personaStates);
+      this.personaManager.updateSpinnerAnimation();
       
       if (personaName === this.activePersona) {
         this.isProcessing = false;
@@ -545,24 +525,18 @@ export class EIApp {
     if (personaName === this.activePersona) return;
 
     try {
-      const history = await loadHistory(personaName);
-      const recent = history.messages.slice(-STARTUP_HISTORY_COUNT);
-      
-      const ps = this.getOrCreatePersonaState(personaName);
-      ps.unreadCount = 0;
-      this.unreadCounts.delete(personaName);
+      const recent = await this.personaManager.switchPersona(personaName);
       
       this.activePersona = personaName;
       this.messages = recent;
+      const ps = this.personaManager.getPersonaState(personaName);
       this.isProcessing = ps.isProcessing;
       
-      this.layoutManager.getChatHistory().setLabel(`Chat: ${personaName}`);
       this.setStatus(`Switched to persona: ${personaName}`);
       
       this.resetPersonaHeartbeat(personaName);
       
       // Reset scroll position and render
-      this.layoutManager.getChatHistory().scrollTo(0);
       this.render();
       
       setTimeout(() => {
@@ -589,7 +563,7 @@ export class EIApp {
     debugLog('=== EXIT LOGIC START ===');
     debugLog('Exit logic called - starting proper handling chain');
     
-    const activePs = this.getOrCreatePersonaState(this.activePersona);
+    const activePs = this.personaManager.getPersonaState(this.activePersona);
     debugLog(`Active persona: ${this.activePersona}`);
     debugLog(`Active persona state: isProcessing=${activePs.isProcessing}, messageQueue=${activePs.messageQueue.length}`);
     
@@ -616,7 +590,7 @@ export class EIApp {
     }
 
     // Priority 3: Warn about background processing
-    const backgroundProcessing = this.getBackgroundProcessingPersonas();
+    const backgroundProcessing = this.personaManager.getBackgroundProcessingPersonas();
     const now = Date.now();
     const timeSinceWarning = this.ctrlCWarningTimestamp ? now - this.ctrlCWarningTimestamp : Infinity;
     
@@ -683,27 +657,14 @@ export class EIApp {
     let cleanupErrors: string[] = [];
     
     try {
-      // Clean up persona states with individual error handling
-      for (const [name, ps] of this.personaStates) {
-        try {
-          if (ps.heartbeatTimer) {
-            clearTimeout(ps.heartbeatTimer);
-            debugLog(`Cleared heartbeat timer for persona: ${name}`);
-          }
-          if (ps.debounceTimer) {
-            clearTimeout(ps.debounceTimer);
-            debugLog(`Cleared debounce timer for persona: ${name}`);
-          }
-          if (ps.abortController) {
-            ps.abortController.abort();
-            debugLog(`Aborted controller for persona: ${name}`);
-          }
-        } catch (error) {
-          const errorMsg = `Failed to cleanup persona ${name}: ${error instanceof Error ? error.message : String(error)}`;
-          debugLog(errorMsg);
-          cleanupErrors.push(errorMsg);
-          // Continue with other personas even if one fails
-        }
+      // Clean up persona manager
+      try {
+        this.personaManager.cleanup();
+        debugLog('PersonaManager cleanup completed');
+      } catch (error) {
+        const errorMsg = `Failed to cleanup PersonaManager: ${error instanceof Error ? error.message : String(error)}`;
+        debugLog(errorMsg);
+        cleanupErrors.push(errorMsg);
       }
       
       // Clean up persona renderer with error handling
@@ -740,8 +701,8 @@ export class EIApp {
       this.layoutManager.getPersonaList(),
       this.personas,
       this.activePersona,
-      this.unreadCounts,
-      this.personaStates,
+      this.personaManager.getUnreadCounts(),
+      this.personaManager.getAllPersonaStates(),
       this.screen.width as number
     );
     
@@ -791,14 +752,12 @@ export class EIApp {
     debugLog('Ctrl+C pressed - delegating to shared exit logic');
     
     // Check if ANY persona is processing (active or background)
-    const anyProcessing = Array.from(this.personaStates.values()).some(ps => ps.isProcessing);
-    const processingPersonas = Array.from(this.personaStates.entries())
-      .filter(([name, ps]) => ps.isProcessing)
-      .map(([name]) => name);
+    const anyProcessing = this.personaManager.isAnyPersonaProcessing();
+    const processingPersonas = this.personaManager.getProcessingPersonas();
     
     // Detailed persona state logging
     debugLog('=== ALL PERSONA STATES ===');
-    for (const [name, ps] of this.personaStates.entries()) {
+    for (const [name, ps] of this.personaManager.getAllPersonaStates().entries()) {
       debugLog(`${name}: isProcessing=${ps.isProcessing}, messageQueue=${ps.messageQueue.length}, heartbeatTimer=${ps.heartbeatTimer ? 'active' : 'null'}, debounceTimer=${ps.debounceTimer ? 'active' : 'null'}`);
     }
     debugLog('=== END PERSONA STATES ===');
@@ -808,11 +767,11 @@ export class EIApp {
     
     // Special handling for Ctrl+C confirmation window
     if (anyProcessing) {
-      const activePs = this.getOrCreatePersonaState(this.activePersona);
+      const activePs = this.personaManager.getPersonaState(this.activePersona);
       
       // If active persona isn't processing but others are, check confirmation window
       if (!activePs.isProcessing) {
-        const backgroundProcessing = this.getBackgroundProcessingPersonas();
+        const backgroundProcessing = this.personaManager.getBackgroundProcessingPersonas();
         const now = Date.now();
         const timeSinceWarning = this.ctrlCWarningTimestamp ? now - this.ctrlCWarningTimestamp : Infinity;
         
@@ -850,17 +809,15 @@ export class EIApp {
     debugLog('=== CTRL+C HANDLER END ===');
   }
 
-  private getBackgroundProcessingPersonas(): string[] {
-    return Array.from(this.personaStates.entries())
-      .filter(([name, ps]) => name !== this.activePersona && ps.isProcessing)
-      .map(([name]) => name);
-  }
-
   async init() {
     debugLog(`init() called - Instance #${this.instanceId}`);
     try {
       await initializeDataDirectory();
       this.personas = await listPersonas();
+      
+      // Initialize PersonaManager with personas
+      await this.personaManager.initialize(this.personas);
+      
       const history = await loadHistory('ei');
       this.messages = history.messages.slice(-STARTUP_HISTORY_COUNT);
       

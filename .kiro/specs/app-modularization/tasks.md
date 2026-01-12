@@ -23,14 +23,14 @@ This implementation plan converts the monolithic `src/blessed/app.ts` file into 
     - Maintain existing event handler patterns
     - _Requirements: 2.1, 2.3_
 
-- [ ] 3. Extract Persona Manager module
-  - [ ] 3.1 Create persona-manager.ts with IPersonaManager interface
+- [x] 3. Extract Persona Manager module
+  - [x] 3.1 Create persona-manager.ts with IPersonaManager interface
     - Extract persona switching logic from app.ts
     - Move PersonaState map management to persona manager
     - Integrate with existing persona-renderer.ts
     - _Requirements: 6.1, 6.2, 6.3, 6.5, 10.4_
 
-  - [ ] 3.3 Update app.ts and CommandHandler to use PersonaManager
+  - [x] 3.3 Update app.ts and CommandHandler to use PersonaManager
     - Replace inline persona management with PersonaManager calls
     - Update command handler to use persona manager for /persona commands
     - _Requirements: 2.1, 2.4_
