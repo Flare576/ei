@@ -76,14 +76,12 @@ export class EIApp implements IEIApp {
     });
 
     this.messageProcessor = new MessageProcessor({
-      chatRenderer: this.chatRenderer,
       personaManager: this.personaManager,
       app: this
     });
 
     this.commandHandler = new CommandHandler({
       personaManager: this.personaManager,
-      messageProcessor: this.messageProcessor,
       app: this
     });
 

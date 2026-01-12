@@ -20,7 +20,6 @@ function debugLog(message: string) {
 
 export class TestSupport implements ITestSupport {
   private testInputEnabled: boolean;
-  private testInputBuffer: string[] = [];
   private instanceId: number;
   
   // Dependencies

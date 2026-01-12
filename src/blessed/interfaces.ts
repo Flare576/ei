@@ -7,7 +7,6 @@
  */
 
 import type { PersonaState, Message, MessageState } from '../types.js';
-import type blessed from 'blessed';
 
 // ============================================================================
 // Command Handler Module Interface
@@ -445,7 +444,6 @@ export interface ModuleConfig {
  */
 export interface CommandHandlerDependencies {
   personaManager: IPersonaManager;
-  messageProcessor: IMessageProcessor;
   app: IEIApp;
 }
 
@@ -462,7 +460,6 @@ export interface PersonaManagerDependencies {
  * Dependencies required by MessageProcessor
  */
 export interface MessageProcessorDependencies {
-  chatRenderer: any;    // ChatRenderer from existing module
   personaManager: IPersonaManager;
   app: IEIApp;
 }

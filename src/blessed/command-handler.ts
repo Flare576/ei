@@ -14,12 +14,10 @@ function debugLog(message: string) {
  */
 export class CommandHandler implements ICommandHandler {
   private personaManager: CommandHandlerDependencies['personaManager'];
-  private messageProcessor: CommandHandlerDependencies['messageProcessor'];
   private app: CommandHandlerDependencies['app'];
 
   constructor(dependencies: CommandHandlerDependencies) {
     this.personaManager = dependencies.personaManager;
-    this.messageProcessor = dependencies.messageProcessor;
     this.app = dependencies.app;
   }
 

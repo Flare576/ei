@@ -1,5 +1,5 @@
 import { IMessageProcessor, MessageProcessorDependencies } from './interfaces.js';
-import type { PersonaState, Message, MessageState } from '../types.js';
+import type { PersonaState } from '../types.js';
 import { processEvent } from '../processor.js';
 import { LLMAbortedError } from '../llm.js';
 import { appendDebugLog } from '../storage.js';
@@ -23,12 +23,10 @@ const DEBOUNCE_MS = 2000;
  * and AbortController management for cancellation.
  */
 export class MessageProcessor implements IMessageProcessor {
-  private chatRenderer: MessageProcessorDependencies['chatRenderer'];
   private personaManager: MessageProcessorDependencies['personaManager'];
   private app: MessageProcessorDependencies['app'];
 
   constructor(dependencies: MessageProcessorDependencies) {
-    this.chatRenderer = dependencies.chatRenderer;
     this.personaManager = dependencies.personaManager;
     this.app = dependencies.app;
     
