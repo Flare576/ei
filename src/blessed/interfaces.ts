@@ -221,6 +221,88 @@ export interface IMessageProcessor {
 }
 
 // ============================================================================
+// UI Orchestrator Module Interface
+// ============================================================================
+
+/**
+ * UI Orchestrator interface - responsible for UI rendering and coordination
+ * 
+ * Handles rendering coordination between modules, scrolling behavior,
+ * status display, message management, and UI state coordination.
+ */
+export interface IUIOrchestrator {
+  /**
+   * Add a message to the current chat
+   * @param role - Message role (human or system)
+   * @param content - Message content
+   * @param state - Optional message state
+   */
+  addMessage(role: 'human' | 'system', content: string, state?: MessageState): void;
+
+  /**
+   * Update the state of the last human message
+   * @param newState - New message state
+   */
+  updateLastHumanMessageState(newState: MessageState | undefined): void;
+
+  /**
+   * Set status message
+   * @param message - Status message or null to clear
+   */
+  setStatus(message: string | null): void;
+
+  /**
+   * Render the complete UI
+   */
+  render(): void;
+
+  /**
+   * Scroll chat history by specified number of lines
+   * @param lines - Number of lines to scroll (positive = down, negative = up)
+   */
+  scrollChatHistory(lines: number): void;
+
+  /**
+   * Auto-scroll chat to bottom
+   */
+  autoScrollToBottom(): void;
+
+  /**
+   * Get current messages for active persona
+   * @returns Array of messages
+   */
+  getMessages(): Message[];
+
+  /**
+   * Set messages for current persona (used during persona switching)
+   * @param messages - Array of messages to set
+   */
+  setMessages(messages: Message[]): void;
+}
+
+// ============================================================================
+// Event Orchestrator Module Interface
+// ============================================================================
+
+/**
+ * Event Orchestrator interface - responsible for event handling and coordination
+ * 
+ * Handles screen events, key bindings, resize handling, signal handlers,
+ * Ctrl+C confirmation logic, and form submission.
+ */
+export interface IEventOrchestrator {
+  /**
+   * Set up all event handlers
+   */
+  setupEventHandlers(): void;
+
+  /**
+   * Set up signal handlers for graceful shutdown
+   */
+  setupSignalHandlers(): void;
+}
+
+// ============================================================================
 // Test Support Module Interface
 // ============================================================================
 
@@ -373,6 +455,31 @@ export interface MessageProcessorDependencies {
   chatRenderer: any;    // ChatRenderer from existing module
   personaManager: IPersonaManager;
   app: IEIApp;
+}
+
+/**
+ * Dependencies required by UIOrchestrator
+ */
+export interface UIOrchestrationDependencies {
+  layoutManager: any;   // LayoutManager from existing module
+  personaRenderer: any; // PersonaRenderer from existing module
+  chatRenderer: any;    // ChatRenderer from existing module
+  personaManager: IPersonaManager;
+  messageProcessor: IMessageProcessor;
+  screen: any;          // blessed.Widgets.Screen
+}
+
+/**
+ * Dependencies required by EventOrchestrator
+ */
+export interface EventOrchestrationDependencies {
+  screen: any;          // blessed.Widgets.Screen
+  layoutManager: any;   // LayoutManager from existing module
+  focusManager: any;    // FocusManager from existing module
+  uiOrchestrator: IUIOrchestrator;
+  personaManager: IPersonaManager;
+  messageProcessor: IMessageProcessor;
+  commandHandler: ICommandHandler;
 }
 
 /**

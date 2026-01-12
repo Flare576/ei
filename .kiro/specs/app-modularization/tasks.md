@@ -62,14 +62,14 @@ This implementation plan converts the monolithic `src/blessed/app.ts` file into 
 - [x] 6. Checkpoint - Verify all modules extracted
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 7. Finalize app.ts orchestration
-  - [ ] 7.1 Reduce app.ts to orchestration-only (~300 lines)
+- [x] 7. Finalize app.ts orchestration
+  - [x] 7.1 Reduce app.ts to orchestration-only (~300 lines)
     - Remove all extracted functionality from app.ts
     - Keep only initialization, UI setup, and coordination logic
     - Maintain integration with existing modules (layout-manager, focus-manager)
     - _Requirements: 1.1, 10.2, 10.3_
 
-  - [ ] 7.2 Implement proper dependency injection
+  - [x] 7.2 Implement proper dependency injection
     - Pass module instances through constructors
     - Ensure clean interfaces between all modules
     - _Requirements: 4.2, 4.5_
