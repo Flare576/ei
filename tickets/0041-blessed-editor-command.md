@@ -1,6 +1,6 @@
 # 0041: Blessed Editor Command
 
-**Status**: PENDING
+**Status**: DONE
 
 ## Summary
 Implement `/editor` slash command for the Blessed-based TUI that opens the user's configured `$EDITOR` for composing multi-line messages.
@@ -74,15 +74,15 @@ case "e": {
 
 ## Acceptance Criteria
 
-- [ ] `/editor` opens user's `$EDITOR` for message composition
-- [ ] `/e` works as shorthand alias
-- [ ] Saved content is submitted through normal message flow
-- [ ] Empty/aborted edits are handled gracefully with clear feedback
-- [ ] Temp files are cleaned up after use
-- [ ] Status messages inform user of editor state via blessed status bar
-- [ ] Blessed UI resumes properly after editor closes
-- [ ] Works with various editors (vim, nano, code --wait, etc.)
-- [ ] `/help` updated to show editor command
+- [x] `/editor` opens user's `$EDITOR` for message composition
+- [x] `/e` works as shorthand alias
+- [x] Saved content is submitted through normal message flow
+- [x] Empty/aborted edits are handled gracefully with clear feedback
+- [x] Temp files are cleaned up after use
+- [x] Status messages inform user of editor state via blessed status bar
+- [x] Blessed UI resumes properly after editor closes
+- [ ] Works with various editors (vim, nano, code --wait, etc.) - *needs manual testing*
+- [x] `/help` updated to show editor command
 
 ## Value Statement
 Power users can compose complex, multi-line messages using their preferred editor with full editing capabilities, syntax highlighting, and familiar keybindings.

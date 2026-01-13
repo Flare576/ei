@@ -13,6 +13,7 @@ export class LayoutManager {
   private statusBar!: blessed.Widgets.BoxElement;
   private submitHandler: ((text: string) => void) | null = null;
   private ctrlCHandler: (() => void) | null = null;
+  private ctrlEHandler: (() => void) | null = null;
 
   constructor(screen: blessed.Widgets.Screen) {
     appendDebugLog('LayoutManager constructor called');
@@ -43,6 +44,10 @@ export class LayoutManager {
 
   setCtrlCHandler(handler: () => void) {
     this.ctrlCHandler = handler;
+  }
+
+  setCtrlEHandler(handler: () => void) {
+    this.ctrlEHandler = handler;
   }
 
   createLayout() {
@@ -102,7 +107,7 @@ export class LayoutManager {
       height: 3,
       border: { type: 'line' },
       inputOnFocus: true,
-      keys: true,
+      keys: false,
       secret: false,
       censor: false,
       submit: true
@@ -149,7 +154,7 @@ export class LayoutManager {
       height: 3,
       border: { type: 'line' },
       inputOnFocus: true,
-      keys: true,
+      keys: false,
       secret: false,
       censor: false,
       submit: true
@@ -195,7 +200,7 @@ export class LayoutManager {
       height: 3,
       border: { type: 'line' },
       inputOnFocus: true,
-      keys: true,
+      keys: false,
       secret: false,
       censor: false,
       submit: true
@@ -238,12 +243,19 @@ export class LayoutManager {
       appendDebugLog('DEBUG: Setting up submit handler on inputBox');
       this.inputBox.on('submit', this.submitHandler);
       
-      // Handle Ctrl+C at the input level (blessed way) since focused elements consume keypresses
       if (this.ctrlCHandler) {
         appendDebugLog('DEBUG: Setting up Ctrl+C handler on inputBox');
         this.inputBox.key(['C-c'], () => {
           appendDebugLog('=== INPUT BOX CTRL+C TRIGGERED ===');
           this.ctrlCHandler!();
+        });
+      }
+      
+      if (this.ctrlEHandler) {
+        appendDebugLog('DEBUG: Setting up Ctrl+E handler on inputBox');
+        this.inputBox.key(['C-e'], () => {
+          appendDebugLog('=== INPUT BOX CTRL+E TRIGGERED ===');
+          this.ctrlEHandler!();
         });
       }
     }

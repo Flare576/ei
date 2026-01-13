@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 
 import blessed from 'blessed';
+import { writeFileSync, readFileSync, unlinkSync } from 'fs';
 // Import test output capture early to intercept blessed methods before they're used
 import { testOutputCapture } from './test-output-capture.js';
 
-import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog } from '../storage.js';
+import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog, getPendingMessages, replacePendingMessages, appendHumanMessage } from '../storage.js';
 import { processEvent } from '../processor.js';
 import { LLMAbortedError } from '../llm.js';
 import type { Message, MessageState, PersonaState } from '../types.js';
@@ -61,6 +62,9 @@ export class EIApp {
   private testInputEnabled = false;
   private testInputBuffer: string[] = [];
 
+  // Multi-line editor content (when set, input box is in "preview" mode)
+  private pendingMultiLineContent: string | null = null;
+
   constructor() {
     EIApp.instanceCount++;
     this.instanceId = EIApp.instanceCount;
@@ -104,7 +108,8 @@ export class EIApp {
     // Set up event handlers
     this.layoutManager.setSubmitHandler((text: string) => this.handleSubmit(text));
     this.layoutManager.setCtrlCHandler(() => this.handleCtrlC());
-    debugLog(`Submit and Ctrl+C handlers set - Instance #${this.instanceId}`);
+    this.layoutManager.setCtrlEHandler(() => this.handleCtrlE());
+    debugLog(`Submit, Ctrl+C, and Ctrl+E handlers set - Instance #${this.instanceId}`);
 
     // Set up test input injection if enabled
     if (this.testInputEnabled) {
@@ -159,12 +164,25 @@ export class EIApp {
       this.handleRefreshCommand();
     });
 
-    // Set up scrolling key bindings
     this.setupScrollingKeyBindings();
 
-    // Track input text changes for Ctrl+C logic
     this.layoutManager.getInputBox().on('keypress', (ch, key) => {
-      // Check if input has text after keypress
+      if (this.pendingMultiLineContent) {
+        if (key && key.ctrl && (key.name === 'c' || key.name === 'e')) {
+          return;
+        }
+        if (key && key.name === 'enter') {
+          return;
+        }
+        debugLog(`Blocked keypress in multi-line mode: ${key?.name || ch}`);
+        const preview = this.layoutManager.getInputBox().getValue();
+        setTimeout(() => {
+          this.layoutManager.getInputBox().setValue(preview);
+          this.screen.render();
+        }, 0);
+        return;
+      }
+      
       setTimeout(() => {
         const currentValue = this.layoutManager.getInputBox().getValue();
         const hasText = currentValue.trim().length > 0;
@@ -174,7 +192,6 @@ export class EIApp {
           this.inputHasText = hasText;
         }
         
-        // Reset Ctrl+C warning timestamp on any keypress EXCEPT Ctrl+C itself
         if (this.ctrlCWarningTimestamp && !(key && key.ctrl && key.name === 'c')) {
           debugLog('Resetting Ctrl+C warning timestamp due to non-Ctrl+C keypress');
           this.ctrlCWarningTimestamp = null;
@@ -253,40 +270,40 @@ export class EIApp {
   }
 
   private async handleSubmit(text: string) {
-    if (!text.trim()) return;
+    const actualContent = this.pendingMultiLineContent || text;
+    
+    if (!actualContent.trim()) return;
 
-    debugLog(`handleSubmit called - Instance #${this.instanceId}: "${text}"`);
+    debugLog(`handleSubmit called - Instance #${this.instanceId}: "${actualContent.substring(0, 50)}..." (${actualContent.length} chars)`);
 
-    // Prevent duplicate submissions within 2 seconds
     const now = Date.now();
     const timeSinceLastSubmit = now - this.lastSubmissionTime;
     
-    if (timeSinceLastSubmit < 2000 && text === this.lastSubmissionText) {
+    if (timeSinceLastSubmit < 2000 && actualContent === this.lastSubmissionText) {
       debugLog(`Duplicate submission prevented - Instance #${this.instanceId}`);
       return;
     }
     
     this.lastSubmissionTime = now;
-    this.lastSubmissionText = text;
+    this.lastSubmissionText = actualContent;
 
-    debugLog(`handleSubmit: processing "${text}" - Instance #${this.instanceId}`);
+    debugLog(`handleSubmit: processing - Instance #${this.instanceId}`);
 
     this.setStatus(null);
     
-    // Reset Ctrl+C warning timestamp and input state
     this.ctrlCWarningTimestamp = null;
     this.inputHasText = false;
+    this.pendingMultiLineContent = null;
 
-    // Handle commands
-    if (text.startsWith('/')) {
-      await this.handleCommand(text);
+    if (actualContent.startsWith('/')) {
+      await this.handleCommand(actualContent);
       this.focusManager.maintainFocus();
       return;
     }
 
-    // Add user message
-    this.addMessage('human', text, 'processing');
-    this.queueMessage(text);
+    this.addMessage('human', actualContent, 'processing');
+    await appendHumanMessage(actualContent, this.activePersona);
+    this.queueMessage(actualContent);
     this.layoutManager.getInputBox().clearValue();
     
     this.focusManager.maintainFocus();
@@ -311,9 +328,14 @@ export class EIApp {
       case 'q':
         await this.handleQuitCommand(args);
         break;
+      case 'editor':
+      case 'e':
+        this.layoutManager.getInputBox().clearValue();
+        await this.handleCtrlE();
+        break;
       case 'help':
       case 'h':
-        this.setStatus('Commands: /persona <name>, /quit|/q [--force] (exit app, --force bypasses safety checks), /refresh, /help | Keys: Ctrl+H (personas), Ctrl+L (input), Ctrl+R (refresh), Ctrl+C (exit)');
+        this.setStatus('Commands: /persona, /editor|/e, /quit|/q [--force], /refresh, /help | Keys: Ctrl+E (editor), Ctrl+H (personas), Ctrl+L (input), Ctrl+R (refresh), Ctrl+C (exit)');
         break;
       default:
         this.setStatus(`Unknown command: /${command}`);
@@ -433,6 +455,98 @@ export class EIApp {
     this.handleResize();
     
     this.setStatus(`UI refreshed - Terminal size: ${screenWidth}x${screenHeight}`);
+  }
+
+  private async handleCtrlE(): Promise<void> {
+    const pendingFromStorage = await getPendingMessages(this.activePersona);
+    const pendingContent = pendingFromStorage.map((m) => m.content).join('\n\n');
+    const currentInput = this.pendingMultiLineContent || this.layoutManager.getInputBox().getValue() || '';
+    
+    const combinedContent = [pendingContent, currentInput].filter(Boolean).join('\n\n');
+    
+    const editor = process.env.EDITOR || 'vim';
+    const tmpFile = `/tmp/ei-edit-${Date.now()}.md`;
+    
+    debugLog(`Ctrl+E: opening ${editor} with content (${combinedContent.length} chars, ${pendingFromStorage.length} pending messages)`);
+    
+    try {
+      writeFileSync(tmpFile, combinedContent, 'utf-8');
+      
+      this.setStatus(`Opening ${editor}...`);
+      this.screen.render();
+      
+      await new Promise<void>((resolve) => {
+        this.screen.exec(editor, [tmpFile], {}, async (err, ok) => {
+          debugLog(`Editor exited with err: ${err}, ok: ${ok}`);
+          
+          if (!err && ok) {
+            const content = readFileSync(tmpFile, 'utf-8');
+            const trimmed = content.trim();
+            
+            if (trimmed) {
+              if (pendingFromStorage.length > 0) {
+                await replacePendingMessages(trimmed, this.activePersona);
+              }
+              this.setEditorContent(trimmed);
+            } else {
+              if (pendingFromStorage.length > 0) {
+                await replacePendingMessages('', this.activePersona);
+              }
+              this.clearEditorContent();
+              this.setStatus('(empty, cleared)');
+              setTimeout(() => {
+                if (this.statusMessage === '(empty, cleared)') {
+                  this.setStatus(null);
+                }
+              }, 3000);
+            }
+          } else {
+            this.setStatus(`Editor exited with error`);
+          }
+          
+          try {
+            unlinkSync(tmpFile);
+            debugLog(`Cleaned up temp file: ${tmpFile}`);
+          } catch {
+            debugLog(`Temp file cleanup skipped: ${tmpFile}`);
+          }
+          
+          this.focusManager.focusInput();
+          this.render();
+          resolve();
+        });
+      });
+    } catch (error) {
+      debugLog(`Ctrl+E error: ${error instanceof Error ? error.message : String(error)}`);
+      this.setStatus(`Editor error: ${error instanceof Error ? error.message : String(error)}`);
+      this.focusManager.focusInput();
+      this.render();
+    }
+  }
+
+  private setEditorContent(content: string): void {
+    const lineCount = content.split('\n').length;
+    const isMultiLine = lineCount > 1;
+    
+    if (isMultiLine) {
+      this.pendingMultiLineContent = content;
+      const preview = `[${lineCount} lines] ${content.substring(0, 40).replace(/\n/g, ' ')}...`;
+      this.layoutManager.getInputBox().setValue(preview);
+      this.inputHasText = true;
+      this.setStatus('Ctrl+E to edit, Enter to send, Ctrl+C to clear');
+    } else {
+      this.pendingMultiLineContent = null;
+      this.layoutManager.getInputBox().setValue(content);
+      this.inputHasText = content.length > 0;
+      this.setStatus(null);
+    }
+    this.screen.render();
+  }
+
+  private clearEditorContent(): void {
+    this.pendingMultiLineContent = null;
+    this.layoutManager.getInputBox().clearValue();
+    this.inputHasText = false;
   }
 
   private addMessage(role: 'human' | 'system', content: string, state?: MessageState) {
@@ -826,15 +940,23 @@ export class EIApp {
 
   private handleCtrlC() {
     debugLog('=== CTRL+C HANDLER START ===');
+    
+    if (this.pendingMultiLineContent) {
+      debugLog('BRANCH: Clearing pending multi-line content');
+      this.clearEditorContent();
+      this.setStatus('Multi-line content cleared');
+      this.render();
+      debugLog('=== CTRL+C HANDLER END (cleared multi-line) ===');
+      return;
+    }
+    
     debugLog('Ctrl+C pressed - delegating to shared exit logic');
     
-    // Check if ANY persona is processing (active or background)
     const anyProcessing = Array.from(this.personaStates.values()).some(ps => ps.isProcessing);
     const processingPersonas = Array.from(this.personaStates.entries())
       .filter(([name, ps]) => ps.isProcessing)
       .map(([name]) => name);
     
-    // Detailed persona state logging
     debugLog('=== ALL PERSONA STATES ===');
     for (const [name, ps] of this.personaStates.entries()) {
       debugLog(`${name}: isProcessing=${ps.isProcessing}, messageQueue=${ps.messageQueue.length}, heartbeatTimer=${ps.heartbeatTimer ? 'active' : 'null'}, debounceTimer=${ps.debounceTimer ? 'active' : 'null'}`);
@@ -971,7 +1093,6 @@ export class EIApp {
       const history = await loadHistory('ei');
       this.messages = history.messages.slice(-STARTUP_HISTORY_COUNT);
       
-      // Initialize heartbeats for all personas
       for (const persona of this.personas) {
         this.resetPersonaHeartbeat(persona.name);
       }
@@ -980,7 +1101,8 @@ export class EIApp {
       this.render();
       this.autoScrollToBottom();
       
-      // Debug: Check if screen is properly set up for input
+      await this.processPendingMessagesOnStartup();
+      
       debugLog(`Screen setup - smartCSR: ${this.screen.options.smartCSR}, fullUnicode: ${this.screen.options.fullUnicode}`);
       debugLog(`Screen focused element: ${this.screen.focused ? this.screen.focused.type : 'none'}`);
       debugLog(`Input box element type: ${this.layoutManager.getInputBox().type}`);
@@ -988,6 +1110,32 @@ export class EIApp {
       debugLog(`init() completed - Instance #${this.instanceId}`);
     } catch (err) {
       this.setStatus(`Initialization error: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  private async processPendingMessagesOnStartup(): Promise<void> {
+    for (const persona of this.personas) {
+      const pending = await getPendingMessages(persona.name);
+      if (pending.length > 0) {
+        debugLog(`Found ${pending.length} pending messages for ${persona.name}`);
+        const combinedMessage = pending.map((m) => m.content).join('\n');
+        const ps = this.getOrCreatePersonaState(persona.name);
+        ps.messageQueue.push(combinedMessage);
+        
+        if (persona.name === this.activePersona) {
+          for (const msg of pending) {
+            const existing = this.messages.find(
+              (m) => m.role === 'human' && m.content === msg.content && m.timestamp === msg.timestamp
+            );
+            if (existing && !existing.state) {
+              existing.state = 'processing';
+            }
+          }
+          this.render();
+        }
+        
+        this.processPersonaQueue(persona.name);
+      }
     }
   }
 

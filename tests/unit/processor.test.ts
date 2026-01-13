@@ -30,6 +30,7 @@ vi.mock('../../src/storage.js', () => ({
   getRecentMessages: vi.fn(),
   getLastMessageTime: vi.fn(),
   appendDebugLog: vi.fn(),
+  markMessagesAsRead: vi.fn(),
 }));
 
 vi.mock('../../src/prompts.js', () => ({
@@ -123,7 +124,7 @@ describe('processor.ts', () => {
       expect(result.systemConceptsUpdated).toBe(true);
       
       // Verify storage operations were called
-      expect(appendMessage).toHaveBeenCalledTimes(2); // Human message + system response
+      expect(appendMessage).toHaveBeenCalledTimes(1); // System response only (human message now written by app.ts)
       expect(saveConceptMap).toHaveBeenCalledTimes(2); // System + human concepts
     });
 
@@ -166,7 +167,7 @@ describe('processor.ts', () => {
       const result = await processEvent('Hello', 'test-persona', false);
 
       expect(result.response).toBe(null);
-      expect(appendMessage).toHaveBeenCalledTimes(1); // Only human message
+      expect(appendMessage).not.toHaveBeenCalled(); // No response = nothing to append
     });
 
     test('calls generatePersonaDescriptions when concepts change', async () => {

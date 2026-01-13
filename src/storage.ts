@@ -152,10 +152,27 @@ export async function saveConceptMap(
   await writeFile(filePath, JSON.stringify(map, null, 2), "utf-8");
 }
 
+const HISTORY_MAX_MESSAGES = 200;
+const HISTORY_MAX_DAYS = 7;
+
 export async function loadHistory(persona?: string): Promise<ConversationHistory> {
   const filePath = personaPath(persona || "ei", "history.jsonc");
   const content = await readFile(filePath, "utf-8");
-  return JSON.parse(content) as ConversationHistory;
+  const history = JSON.parse(content) as ConversationHistory;
+  
+  const cutoffTime = Date.now() - HISTORY_MAX_DAYS * 24 * 60 * 60 * 1000;
+  const originalCount = history.messages.length;
+  
+  const filtered = history.messages
+    .filter((m) => new Date(m.timestamp).getTime() > cutoffTime)
+    .slice(-HISTORY_MAX_MESSAGES);
+  
+  if (filtered.length < originalCount) {
+    history.messages = filtered;
+    await writeFile(filePath, JSON.stringify(history, null, 2), "utf-8");
+  }
+  
+  return history;
 }
 
 export async function saveHistory(
@@ -172,6 +189,65 @@ export async function appendMessage(
 ): Promise<void> {
   const history = await loadHistory(persona);
   history.messages.push(message);
+  await saveHistory(history, persona);
+}
+
+export async function appendHumanMessage(
+  content: string,
+  persona?: string
+): Promise<void> {
+  const message: Message = {
+    role: "human",
+    content,
+    timestamp: new Date().toISOString(),
+    read: false,
+  };
+  await appendMessage(message, persona);
+}
+
+export async function getPendingMessages(persona?: string): Promise<Message[]> {
+  const history = await loadHistory(persona);
+  return history.messages.filter((m) => m.role === "human" && m.read === false);
+}
+
+export async function markMessagesAsRead(persona?: string): Promise<void> {
+  const history = await loadHistory(persona);
+  let changed = false;
+  for (const msg of history.messages) {
+    if (msg.role === "human" && msg.read === false) {
+      msg.read = true;
+      changed = true;
+    }
+  }
+  if (changed) {
+    await saveHistory(history, persona);
+  }
+}
+
+export async function replacePendingMessages(
+  newContent: string,
+  persona?: string
+): Promise<void> {
+  const history = await loadHistory(persona);
+  
+  const firstPendingIndex = history.messages.findIndex(
+    (m) => m.role === "human" && m.read === false
+  );
+  
+  if (firstPendingIndex === -1) {
+    await appendHumanMessage(newContent, persona);
+    return;
+  }
+  
+  const messagesBeforePending = history.messages.slice(0, firstPendingIndex);
+  const newMessage: Message = {
+    role: "human",
+    content: newContent,
+    timestamp: new Date().toISOString(),
+    read: false,
+  };
+  
+  history.messages = [...messagesBeforePending, newMessage];
   await saveHistory(history, persona);
 }
 

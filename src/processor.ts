@@ -8,6 +8,7 @@ import {
   getRecentMessages,
   getLastMessageTime,
   appendDebugLog,
+  markMessagesAsRead,
 } from "./storage.js";
 import {
   buildResponseSystemPrompt,
@@ -169,13 +170,7 @@ export async function processEvent(
   let systemConceptsUpdated = false;
   let humanConceptsUpdated = false;
 
-  if (humanMessage) {
-    await appendMessage({
-      role: "human",
-      content: humanMessage,
-      timestamp: new Date().toISOString(),
-    }, persona);
-  }
+  await markMessagesAsRead(persona);
 
   if (response) {
     await appendMessage({

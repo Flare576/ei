@@ -26,6 +26,7 @@ export interface Message {
   content: string;
   timestamp: string;
   state?: MessageState;
+  read?: boolean;
 }
 
 export interface ConversationHistory {
