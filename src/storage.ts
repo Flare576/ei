@@ -111,7 +111,15 @@ export async function initializeDataDirectory(): Promise<boolean> {
   
   const systemPath = personaPath("ei", "system.jsonc");
   if (!existsSync(systemPath)) {
-    await writeFile(systemPath, JSON.stringify(DEFAULT_SYSTEM_CONCEPTS, null, 2), "utf-8");
+    const now = new Date().toISOString();
+    const systemConcepts: ConceptMap = {
+      ...DEFAULT_SYSTEM_CONCEPTS,
+      concepts: DEFAULT_SYSTEM_CONCEPTS.concepts.map(c => ({
+        ...c,
+        last_updated: now
+      }))
+    };
+    await writeFile(systemPath, JSON.stringify(systemConcepts, null, 2), "utf-8");
     created = true;
   }
   
@@ -188,7 +196,11 @@ export async function appendMessage(
   persona?: string
 ): Promise<void> {
   const history = await loadHistory(persona);
-  history.messages.push(message);
+  const messageWithDefaults: Message = {
+    ...message,
+    concept_processed: message.concept_processed ?? false,
+  };
+  history.messages.push(messageWithDefaults);
   await saveHistory(history, persona);
 }
 
@@ -201,6 +213,7 @@ export async function appendHumanMessage(
     content,
     timestamp: new Date().toISOString(),
     read: false,
+    concept_processed: false,
   };
   await appendMessage(message, persona);
 }
@@ -219,6 +232,50 @@ export async function markMessagesAsRead(persona?: string): Promise<void> {
       changed = true;
     }
   }
+  if (changed) {
+    await saveHistory(history, persona);
+  }
+}
+
+/**
+ * Gets messages that haven't been processed for concept updates.
+ * Messages without the concept_processed field are treated as already processed (backward compatible).
+ * Only messages explicitly marked concept_processed: false are returned.
+ * @param persona - Optional persona name (defaults to "ei")
+ * @param beforeTimestamp - Optional ISO timestamp string; only return messages before this time
+ */
+export async function getUnprocessedMessages(
+  persona?: string,
+  beforeTimestamp?: string
+): Promise<Message[]> {
+  const history = await loadHistory(persona);
+  const beforeTime = beforeTimestamp ? new Date(beforeTimestamp).getTime() : undefined;
+
+  return history.messages.filter(m =>
+    m.concept_processed === false &&
+    (!beforeTime || new Date(m.timestamp).getTime() < beforeTime)
+  );
+}
+
+/**
+ * Marks messages as processed for concept updates.
+ * @param messageTimestamps - Array of ISO timestamp strings identifying messages to mark
+ * @param persona - Optional persona name (defaults to "ei")
+ */
+export async function markMessagesConceptProcessed(
+  messageTimestamps: string[],
+  persona?: string
+): Promise<void> {
+  const history = await loadHistory(persona);
+  let changed = false;
+
+  for (const msg of history.messages) {
+    if (messageTimestamps.includes(msg.timestamp) && !msg.concept_processed) {
+      msg.concept_processed = true;
+      changed = true;
+    }
+  }
+
   if (changed) {
     await saveHistory(history, persona);
   }
@@ -245,8 +302,9 @@ export async function replacePendingMessages(
     content: newContent,
     timestamp: new Date().toISOString(),
     read: false,
+    concept_processed: false,
   };
-  
+
   history.messages = [...messagesBeforePending, newMessage];
   await saveHistory(history, persona);
 }

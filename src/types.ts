@@ -5,9 +5,29 @@ export interface Concept {
   description: string;
   level_current: number;
   level_ideal: number;
+  /**
+   * ELASTICITY: Rate of natural drift toward level_ideal, per hour.
+   * 
+   * This controls how quickly a concept "decays" back toward its ideal state
+   * when not actively reinforced by interaction. Higher values = faster drift.
+   * 
+   * Examples:
+   * - 0.05 (5%/hr): Very stable, barely changes without interaction
+   * - 0.1 (10%/hr): Stable core aspect
+   * - 0.2 (20%/hr): Moderate stability, gradually returns to baseline
+   * - 0.4 (40%/hr): Flexible, relatively quick to reset
+   * - 0.6 (60%/hr): Volatile, changes rapidly with time
+   * 
+   * Guideline by type:
+   * - static: 0.05-0.15 (core values change slowly)
+   * - persona: 0.1-0.3 (personality traits are moderately stable)
+   * - topic: 0.2-0.5 (interests naturally wax and wane)
+   * - person: 0.3-0.6 (relationship intensity fluctuates)
+   */
   level_elasticity: number;
   type: ConceptType;
   learned_by?: string;
+  last_updated?: string; // ISO timestamp - when this concept was last modified
 }
 
 export interface ConceptMap {
@@ -27,6 +47,7 @@ export interface Message {
   timestamp: string;
   state?: MessageState;
   read?: boolean;
+  concept_processed?: boolean; // undefined/false = not processed for concept updates
 }
 
 export interface ConversationHistory {

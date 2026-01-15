@@ -120,16 +120,21 @@ Return JSON in this exact format:
     { temperature: 0.3 }
   );
 
+  const now = new Date().toISOString();
   const concepts: Concept[] = EI_STATIC_CONCEPTS.map(c => {
     const adjustment = result?.static_level_adjustments?.[c.name];
     if (adjustment) {
-      return { ...c, level_ideal: adjustment.level_ideal };
+      return { ...c, level_ideal: adjustment.level_ideal, last_updated: now };
     }
-    return { ...c };
+    return { ...c, last_updated: now };
   });
 
   if (result?.additional_concepts) {
-    concepts.push(...result.additional_concepts);
+    const additionalWithTimestamp = result.additional_concepts.map(c => ({
+      ...c,
+      last_updated: now
+    }));
+    concepts.push(...additionalWithTimestamp);
   }
 
   const conceptMap: ConceptMap = {

@@ -13,16 +13,33 @@ Each ticket should have a status line at the top (after the title):
 ```markdown
 # 0001: Ticket Title
 
-**Status**: PENDING | IN_PROGRESS | DONE | BLOCKED
+**Status**: PENDING | IN_PROGRESS | QA | DONE | BLOCKED
 ```
 
 | Status | Meaning |
 |--------|---------|
 | `PENDING` | Not started |
 | `IN_PROGRESS` | Active work |
-| `DONE` | Completed and working |
+| `QA` | Dev complete, tests pass, awaiting review |
+| `DONE` | Completed and verified |
 | `BLOCKED` | Waiting on something (note blocker in ticket) |
-| `VALIDATED` | Human has verified the work. **AGENTS: You may NOT set this status.** If work is complete, set `DONE` and ask the user to validate. If they're being lazy about it, remind them to open the ticket and set `VALIDATED` themselves. They're a grown-up. They can handle it. |
+
+### QA and Completion Process
+
+1. **Coding agents** completing development work should update status to `QA` when:
+   - All code changes are complete
+   - All tests pass
+   - Acceptance criteria checkboxes are checked
+
+2. **Moving from QA to DONE**:
+   - **Tickets with UI/UX impact**: Human must test and approve before moving to `DONE`
+   - **Backend/logic-only tickets**: A reviewing agent can verify and move to `DONE`
+
+3. **What counts as UI/UX impact?**
+   - Changes to terminal rendering or layout
+   - Changes to user-facing commands or messages
+   - Changes to keyboard shortcuts or input handling
+   - Anything the user directly sees or interacts with
 
 ### Working on Tickets
 
@@ -35,7 +52,7 @@ Each ticket should have a status line at the top (after the title):
 
 Maintain `tickets/STATUS.md` as the single source of truth for ticket overview:
 - Update STATUS.md whenever ticket status changes
-- Keep sections in order: PENDING → IN_PROGRESS → DONE → BLOCKED → VALIDATED → CANCELLED
+- Keep sections in order: PENDING → IN_PROGRESS → QA → DONE → BLOCKED → CANCELLED
 - Include ticket number and title for easy reference
 - Update completion statistics at bottom
 

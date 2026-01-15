@@ -5,7 +5,9 @@ import { writeFileSync, readFileSync, unlinkSync } from 'fs';
 // Import test output capture early to intercept blessed methods before they're used
 import { testOutputCapture } from './test-output-capture.js';
 
-import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog, getPendingMessages, replacePendingMessages, appendHumanMessage } from '../storage.js';
+import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog, getPendingMessages, replacePendingMessages, appendHumanMessage, getUnprocessedMessages, loadConceptMap, saveConceptMap } from '../storage.js';
+import type { Concept } from '../types.js';
+import { ConceptQueue } from '../concept-queue.js';
 import { processEvent } from '../processor.js';
 import { LLMAbortedError } from '../llm.js';
 import type { Message, MessageState, PersonaState } from '../types.js';
@@ -30,6 +32,28 @@ const STARTUP_HISTORY_COUNT = 20;
 
 // Ctrl+C confirmation window - user has this long to press Ctrl+C again to exit
 const CTRL_C_CONFIRMATION_WINDOW_MS = 3000; // 3 seconds
+
+// Stale message concept processing constants
+const STALE_CHECK_INTERVAL_MS = 5 * 60 * 1000; // Check every 5 minutes
+const STALE_MESSAGE_THRESHOLD_MS = 20 * 60 * 1000; // 20 minutes
+
+// Concept decay constants
+const CONCEPT_DELTA_THRESHOLD = 0.3; // Trigger conversation when delta exceeds this
+const MIN_DECAY_CHANGE = 0.001; // Threshold to avoid micro-updates
+const MIN_HOURS_SINCE_UPDATE = 0.1; // Skip if updated in last 6 minutes
+
+/**
+ * Calculate decay amount for a concept based on elasticity and time since last update.
+ * Concepts decay toward their ideal level.
+ */
+function calculateDecay(concept: Concept, hoursSinceUpdate: number): number {
+  const direction = Math.sign(concept.level_ideal - concept.level_current);
+  const maxChange = Math.abs(concept.level_ideal - concept.level_current);
+  const decayAmount = concept.level_elasticity * hoursSinceUpdate;
+  
+  // Don't overshoot the ideal
+  return direction * Math.min(decayAmount, maxChange);
+}
 
 export class EIApp {
   private screen: blessed.Widgets.Screen;
@@ -64,6 +88,9 @@ export class EIApp {
 
   // Multi-line editor content (when set, input box is in "preview" mode)
   private pendingMultiLineContent: string | null = null;
+
+  // Stale message checker interval for background concept processing
+  private staleMessageCheckInterval: NodeJS.Timeout | null = null;
 
   constructor() {
     EIApp.instanceCount++;
@@ -700,16 +727,28 @@ export class EIApp {
         return;
       }
 
-      ps.abortController = new AbortController();
-      ps.isProcessing = true;
-      this.personaRenderer.updateSpinnerAnimation(this.personaStates);
-      
-      if (personaName === this.activePersona) {
-        this.isProcessing = true;
-        this.render();
-      }
-
       try {
+        await this.applyConceptDecay(personaName);
+        
+        const shouldSpeak = await this.checkConceptDeltas(personaName);
+        
+        if (!shouldSpeak) {
+          debugLog(`Heartbeat for ${personaName}: no significant deltas, skipping LLM call`);
+          this.resetPersonaHeartbeat(personaName);
+          return;
+        }
+        
+        debugLog(`Heartbeat for ${personaName}: significant delta detected, generating response`);
+        
+        ps.abortController = new AbortController();
+        ps.isProcessing = true;
+        this.personaRenderer.updateSpinnerAnimation(this.personaStates);
+        
+        if (personaName === this.activePersona) {
+          this.isProcessing = true;
+          this.render();
+        }
+
         const result = await processEvent(null, personaName, DEBUG, ps.abortController.signal);
         if (!result.aborted && result.response) {
           if (personaName === this.activePersona) {
@@ -736,6 +775,52 @@ export class EIApp {
         this.resetPersonaHeartbeat(personaName);
       }
     }, HEARTBEAT_INTERVAL_MS);
+  }
+
+  private async applyConceptDecay(personaName: string): Promise<boolean> {
+    const concepts = await loadConceptMap("system", personaName);
+    const now = Date.now();
+    let changed = false;
+    
+    for (const concept of concepts.concepts) {
+      const lastUpdated = concept.last_updated 
+        ? new Date(concept.last_updated).getTime() 
+        : now;
+      const hoursSince = (now - lastUpdated) / (1000 * 60 * 60);
+      
+      if (hoursSince < MIN_HOURS_SINCE_UPDATE) continue;
+      
+      const decay = calculateDecay(concept, hoursSince);
+      if (Math.abs(decay) > MIN_DECAY_CHANGE) {
+        concept.level_current = Math.max(0, Math.min(1, 
+          concept.level_current + decay
+        ));
+        concept.last_updated = new Date().toISOString();
+        changed = true;
+        debugLog(`Decay applied to "${concept.name}": ${decay.toFixed(4)} (now ${concept.level_current.toFixed(2)})`);
+      }
+    }
+    
+    if (changed) {
+      await saveConceptMap(concepts, personaName);
+      debugLog(`Applied concept decay to ${personaName}`);
+    }
+    
+    return changed;
+  }
+
+  private async checkConceptDeltas(personaName: string): Promise<boolean> {
+    const concepts = await loadConceptMap("system", personaName);
+    
+    for (const concept of concepts.concepts) {
+      const delta = Math.abs(concept.level_ideal - concept.level_current);
+      if (delta >= CONCEPT_DELTA_THRESHOLD) {
+        debugLog(`Concept "${concept.name}" delta ${delta.toFixed(2)} triggered heartbeat for ${personaName}`);
+        return true;
+      }
+    }
+    
+    return false;
   }
 
   private schedulePersonaDebounce(personaName: string) {
@@ -771,10 +856,65 @@ export class EIApp {
     }
   }
 
+  private startStaleMessageChecker(): void {
+    debugLog('Starting stale message checker');
+    this.staleMessageCheckInterval = setInterval(
+      () => this.checkForStaleMessages(),
+      STALE_CHECK_INTERVAL_MS
+    );
+  }
+
+  private async checkForStaleMessages(): Promise<void> {
+    const cutoffTime = new Date(Date.now() - STALE_MESSAGE_THRESHOLD_MS).toISOString();
+    debugLog(`Checking for stale messages (before ${cutoffTime})`);
+
+    for (const persona of this.personas) {
+      const staleMessages = await getUnprocessedMessages(persona.name, cutoffTime);
+
+      if (staleMessages.length > 0) {
+        debugLog(`Found ${staleMessages.length} stale messages for ${persona.name}`);
+        const queue = ConceptQueue.getInstance();
+
+        queue.enqueue({
+          persona: persona.name,
+          target: "system",
+          messages: staleMessages,
+          priority: "normal"
+        });
+
+        queue.enqueue({
+          persona: persona.name,
+          target: "human",
+          messages: staleMessages,
+          priority: "normal"
+        });
+      }
+    }
+  }
+
   private async switchPersona(personaName: string) {
     if (personaName === this.activePersona) return;
 
     try {
+      // Queue concept updates for the persona being backgrounded (high priority)
+      const unprocessedMessages = await getUnprocessedMessages(this.activePersona);
+      if (unprocessedMessages.length > 0) {
+        debugLog(`Queueing concept updates for backgrounded persona ${this.activePersona} (${unprocessedMessages.length} messages)`);
+        const queue = ConceptQueue.getInstance();
+        queue.enqueue({
+          persona: this.activePersona,
+          target: "system",
+          messages: unprocessedMessages,
+          priority: "high"
+        });
+        queue.enqueue({
+          persona: this.activePersona,
+          target: "human",
+          messages: unprocessedMessages,
+          priority: "high"
+        });
+      }
+
       const history = await loadHistory(personaName);
       const recent = history.messages.slice(-STARTUP_HISTORY_COUNT);
       
@@ -1056,6 +1196,13 @@ export class EIApp {
         }
       }
       
+      // Clean up stale message checker interval
+      if (this.staleMessageCheckInterval) {
+        clearInterval(this.staleMessageCheckInterval);
+        this.staleMessageCheckInterval = null;
+        debugLog('Cleared stale message checker interval');
+      }
+      
       // Clean up persona renderer with error handling
       try {
         this.personaRenderer.cleanup();
@@ -1096,6 +1243,8 @@ export class EIApp {
       for (const persona of this.personas) {
         this.resetPersonaHeartbeat(persona.name);
       }
+      
+      this.startStaleMessageChecker();
       
       this.focusManager.focusInput();
       this.render();

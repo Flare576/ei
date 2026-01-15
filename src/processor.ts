@@ -68,7 +68,9 @@ function stripEcho(userMessage: string | null, response: string): string {
 
 export interface ProcessResult {
   response: string | null;
+  /** @deprecated Concept updates now handled by ConceptQueue */
   humanConceptsUpdated: boolean;
+  /** @deprecated Concept updates now handled by ConceptQueue */
   systemConceptsUpdated: boolean;
   aborted: boolean;
 }
@@ -121,55 +123,6 @@ export async function processEvent(
 
   if (signal?.aborted) return abortedResult;
 
-  const conceptUpdateUserPrompt = buildConceptUpdateUserPrompt(
-    humanMessage,
-    response,
-    persona
-  );
-
-  if (signal?.aborted) return abortedResult;
-
-  if (debug) {
-    appendDebugLog("[Debug] Updating system concepts...");
-  }
-
-  const systemUpdatePrompt = buildConceptUpdateSystemPrompt(
-    "system",
-    systemConcepts,
-    persona
-  );
-  const newSystemConcepts = await callLLMForJSON<Concept[]>(
-    systemUpdatePrompt,
-    conceptUpdateUserPrompt,
-    { signal, temperature: 0.3 }
-  );
-
-  if (signal?.aborted) return abortedResult;
-
-  if (debug) {
-    appendDebugLog("[Debug] Updating human concepts...");
-  }
-
-  if (signal?.aborted) return abortedResult;
-
-  const humanUpdatePrompt = buildConceptUpdateSystemPrompt(
-    "human",
-    humanConcepts,
-    persona
-  );
-  const newHumanConcepts = await callLLMForJSON<Concept[]>(
-    humanUpdatePrompt,
-    conceptUpdateUserPrompt,
-    { signal, temperature: 0.3 }
-  );
-
-  if (signal?.aborted) return abortedResult;
-
-  // === COMMIT POINT: All LLM calls succeeded, now persist everything ===
-
-  let systemConceptsUpdated = false;
-  let humanConceptsUpdated = false;
-
   await markMessagesAsRead(persona);
 
   if (response) {
@@ -180,17 +133,86 @@ export async function processEvent(
     }, persona);
   }
 
-  if (newSystemConcepts) {
+  if (debug) {
+    appendDebugLog("[Debug] Response generated. Concept updates deferred to ConceptQueue.");
+  }
+
+  return {
+    response,
+    humanConceptsUpdated: false,
+    systemConceptsUpdated: false,
+    aborted: false,
+  };
+}
+
+export async function updateConceptsForMessages(
+  messages: Message[],
+  target: "system" | "human",
+  persona: string,
+  debug: boolean = false,
+  signal?: AbortSignal
+): Promise<boolean> {
+  if (messages.length === 0) {
+    if (debug) {
+      appendDebugLog(`[Debug] updateConceptsForMessages: No messages to process for ${target}`);
+    }
+    return false;
+  }
+
+  if (signal?.aborted) return false;
+
+  const concepts = target === "system"
+    ? await loadConceptMap("system", persona)
+    : await loadConceptMap("human");
+
+  if (signal?.aborted) return false;
+
+  const combinedContent = messages.map(m => 
+    `[${m.role}]: ${m.content}`
+  ).join("\n\n");
+
+  const conceptUpdateUserPrompt = buildConceptUpdateUserPrompt(
+    combinedContent,
+    null,
+    persona
+  );
+
+  const conceptUpdateSystemPrompt = buildConceptUpdateSystemPrompt(
+    target,
+    concepts,
+    persona
+  );
+
+  if (debug) {
+    appendDebugLog(`[Debug] Updating ${target} concepts from ${messages.length} messages...`);
+  }
+
+  const newConcepts = await callLLMForJSON<Concept[]>(
+    conceptUpdateSystemPrompt,
+    conceptUpdateUserPrompt,
+    { signal, temperature: 0.3 }
+  );
+
+  if (signal?.aborted) return false;
+
+  if (!newConcepts) {
+    if (debug) {
+      appendDebugLog(`[Debug] No concept updates returned for ${target}`);
+    }
+    return false;
+  }
+
+  if (target === "system") {
     const proposedMap: ConceptMap = {
       entity: "system",
-      aliases: systemConcepts.aliases,
-      short_description: systemConcepts.short_description,
-      long_description: systemConcepts.long_description,
+      aliases: concepts.aliases,
+      short_description: concepts.short_description,
+      long_description: concepts.long_description,
       last_updated: new Date().toISOString(),
-      concepts: newSystemConcepts,
+      concepts: newConcepts,
     };
 
-    const validation = validateSystemConcepts(proposedMap, systemConcepts);
+    const validation = validateSystemConcepts(proposedMap, concepts);
     let mapToSave: ConceptMap;
 
     if (validation.valid) {
@@ -201,11 +223,11 @@ export async function processEvent(
           `[Debug] System concept validation failed: ${validation.issues.join(", ")}`
         );
       }
-      mapToSave = mergeWithOriginalStatics(proposedMap, systemConcepts);
+      mapToSave = mergeWithOriginalStatics(proposedMap, concepts);
     }
 
     const shouldUpdateDescriptions = conceptsChanged(
-      systemConcepts.concepts,
+      concepts.concepts,
       mapToSave.concepts
     );
 
@@ -221,23 +243,25 @@ export async function processEvent(
     }
 
     await saveConceptMap(mapToSave, persona);
-    systemConceptsUpdated = true;
+    
+    if (debug) {
+      appendDebugLog(`[Debug] System concepts saved for ${persona}`);
+    }
+    
+    return true;
   }
 
-  if (newHumanConcepts) {
-    const proposedMap: ConceptMap = {
-      entity: "human",
-      last_updated: new Date().toISOString(),
-      concepts: newHumanConcepts,
-    };
-    await saveConceptMap(proposedMap);
-    humanConceptsUpdated = true;
-  }
-
-  return {
-    response,
-    humanConceptsUpdated,
-    systemConceptsUpdated,
-    aborted: false,
+  const proposedMap: ConceptMap = {
+    entity: "human",
+    last_updated: new Date().toISOString(),
+    concepts: newConcepts,
   };
+  
+  await saveConceptMap(proposedMap);
+  
+  if (debug) {
+    appendDebugLog("[Debug] Human concepts saved");
+  }
+  
+  return true;
 }

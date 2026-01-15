@@ -62,6 +62,10 @@ vi.mock('../../src/storage.js', () => ({
   initializeDataDirectory: vi.fn(() => Promise.resolve()),
   initializeDebugLog: vi.fn(),
   appendDebugLog: vi.fn(),
+  getPendingMessages: vi.fn(() => Promise.resolve([])),
+  replacePendingMessages: vi.fn(() => Promise.resolve()),
+  appendHumanMessage: vi.fn(() => Promise.resolve()),
+  getUnprocessedMessages: vi.fn(() => Promise.resolve([])),
 }));
 
 vi.mock('../../src/processor.js', () => ({
@@ -78,6 +82,16 @@ vi.mock('../../src/llm.js', () => ({
       super(message);
       this.name = 'LLMAbortedError';
     }
+  },
+}));
+
+vi.mock('../../src/concept-queue.js', () => ({
+  ConceptQueue: {
+    getInstance: vi.fn(() => ({
+      enqueue: vi.fn(() => 'mock-task-id'),
+      getQueueLength: vi.fn(() => 0),
+      isProcessing: vi.fn(() => false),
+    })),
   },
 }));
 

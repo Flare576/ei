@@ -1,8 +1,7 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
-import { processEvent } from '../../src/processor.js';
-import type { Concept, ConceptMap } from '../../src/types.js';
+import { processEvent, updateConceptsForMessages } from '../../src/processor.js';
+import type { Concept, ConceptMap, Message } from '../../src/types.js';
 
-// Mock all external dependencies
 vi.mock('../../src/llm.js', () => ({
   callLLM: vi.fn(),
   callLLMForJSON: vi.fn(),
@@ -49,7 +48,6 @@ vi.mock('../../src/persona-creator.js', () => ({
   generatePersonaDescriptions: vi.fn(),
 }));
 
-// Import mocked modules for type safety
 import { callLLM, callLLMForJSON, LLMAbortedError } from '../../src/llm.js';
 import { 
   loadConceptMap, 
@@ -68,15 +66,10 @@ import {
 import { validateSystemConcepts, mergeWithOriginalStatics } from '../../src/validate.js';
 import { generatePersonaDescriptions } from '../../src/persona-creator.js';
 
-// Import the functions we want to test directly
-// Note: These are internal functions, so we'll need to access them differently
-// For now, let's focus on testing the exported processEvent function and create separate tests for the internal functions
-
 describe('processor.ts', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     
-    // Setup default mock returns
     vi.mocked(loadConceptMap).mockResolvedValue({
       entity: 'system',
       aliases: [],
@@ -102,30 +95,27 @@ describe('processor.ts', () => {
 
   describe('processEvent', () => {
     test('handles successful message processing', async () => {
-      const mockConcepts: Concept[] = [
-        {
-          name: 'test concept',
-          description: 'test description',
-          level_current: 0.5,
-          level_ideal: 0.7,
-          level_elasticity: 0.3,
-          type: 'persona'
-        }
-      ];
-
       vi.mocked(callLLM).mockResolvedValue('Test response');
-      vi.mocked(callLLMForJSON).mockResolvedValue(mockConcepts);
 
       const result = await processEvent('Hello world', 'test-persona', false);
 
       expect(result.response).toBe('Test response');
       expect(result.aborted).toBe(false);
-      expect(result.humanConceptsUpdated).toBe(true);
-      expect(result.systemConceptsUpdated).toBe(true);
+      expect(result.humanConceptsUpdated).toBe(false);
+      expect(result.systemConceptsUpdated).toBe(false);
       
-      // Verify storage operations were called
-      expect(appendMessage).toHaveBeenCalledTimes(1); // System response only (human message now written by app.ts)
-      expect(saveConceptMap).toHaveBeenCalledTimes(2); // System + human concepts
+      expect(appendMessage).toHaveBeenCalledTimes(1);
+      expect(saveConceptMap).not.toHaveBeenCalled();
+      expect(callLLMForJSON).not.toHaveBeenCalled();
+    });
+
+    test('only calls callLLM once for response generation', async () => {
+      vi.mocked(callLLM).mockResolvedValue('Test response');
+
+      await processEvent('Hello world', 'test-persona', false);
+
+      expect(callLLM).toHaveBeenCalledTimes(1);
+      expect(callLLMForJSON).not.toHaveBeenCalled();
     });
 
     test('handles abort signal correctly', async () => {
@@ -139,26 +129,23 @@ describe('processor.ts', () => {
       expect(result.humanConceptsUpdated).toBe(false);
       expect(result.systemConceptsUpdated).toBe(false);
       
-      // Should not call any storage operations
       expect(appendMessage).not.toHaveBeenCalled();
       expect(saveConceptMap).not.toHaveBeenCalled();
     });
 
     test('handles LLM abort error gracefully', async () => {
-      vi.mocked(callLLM).mockRejectedValue(new LLMAbortedError('Aborted'));
+      vi.mocked(callLLM).mockRejectedValue(new LLMAbortedError());
 
-      // LLMAbortedError should propagate up, not be caught by processEvent
-      await expect(processEvent('Hello', 'test-persona', false)).rejects.toThrow('Aborted');
+      await expect(processEvent('Hello', 'test-persona', false)).rejects.toThrow(LLMAbortedError);
     });
 
     test('handles null human message (heartbeat)', async () => {
       vi.mocked(callLLM).mockResolvedValue('Heartbeat response');
-      vi.mocked(callLLMForJSON).mockResolvedValue([]);
 
       const result = await processEvent(null, 'test-persona', false);
 
       expect(result.response).toBe('Heartbeat response');
-      expect(appendMessage).toHaveBeenCalledTimes(1); // Only system response, no human message
+      expect(appendMessage).toHaveBeenCalledTimes(1);
     });
 
     test('handles empty LLM response', async () => {
@@ -167,16 +154,155 @@ describe('processor.ts', () => {
       const result = await processEvent('Hello', 'test-persona', false);
 
       expect(result.response).toBe(null);
-      expect(appendMessage).not.toHaveBeenCalled(); // No response = nothing to append
+      expect(appendMessage).not.toHaveBeenCalled();
     });
 
-    test('calls generatePersonaDescriptions when concepts change', async () => {
-      const mockDescriptions = {
-        short_description: 'Test short description',
-        long_description: 'Test long description'
+    test('does not call concept update functions', async () => {
+      vi.mocked(callLLM).mockResolvedValue('Test response');
+
+      await processEvent('Hello', 'test-persona', false);
+
+      expect(callLLMForJSON).not.toHaveBeenCalled();
+      expect(generatePersonaDescriptions).not.toHaveBeenCalled();
+      expect(saveConceptMap).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('updateConceptsForMessages', () => {
+    const mockMessages: Message[] = [
+      {
+        role: 'human',
+        content: 'Hello',
+        timestamp: '2024-01-01T00:00:00Z',
+        read: true,
+        concept_processed: false
+      },
+      {
+        role: 'system',
+        content: 'Hi there!',
+        timestamp: '2024-01-01T00:00:01Z',
+        read: true,
+        concept_processed: false
+      }
+    ];
+
+    test('returns false for empty messages array', async () => {
+      const result = await updateConceptsForMessages([], 'system', 'test-persona');
+      
+      expect(result).toBe(false);
+      expect(callLLMForJSON).not.toHaveBeenCalled();
+    });
+
+    test('updates system concepts successfully', async () => {
+      const newConcepts: Concept[] = [
+        {
+          name: 'test concept',
+          description: 'test description',
+          level_current: 0.5,
+          level_ideal: 0.7,
+          level_elasticity: 0.3,
+          type: 'persona'
+        }
+      ];
+
+      vi.mocked(callLLMForJSON).mockResolvedValue(newConcepts);
+      vi.mocked(validateSystemConcepts).mockReturnValue({ valid: true, issues: [] });
+
+      const result = await updateConceptsForMessages(mockMessages, 'system', 'test-persona');
+
+      expect(result).toBe(true);
+      expect(callLLMForJSON).toHaveBeenCalledTimes(1);
+      expect(saveConceptMap).toHaveBeenCalledTimes(1);
+      expect(saveConceptMap).toHaveBeenCalledWith(
+        expect.objectContaining({ entity: 'system' }),
+        'test-persona'
+      );
+    });
+
+    test('updates human concepts successfully', async () => {
+      const newConcepts: Concept[] = [
+        {
+          name: 'human trait',
+          description: 'a human trait',
+          level_current: 0.5,
+          level_ideal: 0.5,
+          level_elasticity: 0.3,
+          type: 'topic'
+        }
+      ];
+
+      vi.mocked(callLLMForJSON).mockResolvedValue(newConcepts);
+
+      const result = await updateConceptsForMessages(mockMessages, 'human', 'test-persona');
+
+      expect(result).toBe(true);
+      expect(callLLMForJSON).toHaveBeenCalledTimes(1);
+      expect(saveConceptMap).toHaveBeenCalledTimes(1);
+      expect(saveConceptMap).toHaveBeenCalledWith(
+        expect.objectContaining({ entity: 'human' })
+      );
+    });
+
+    test('returns false when LLM returns null', async () => {
+      vi.mocked(callLLMForJSON).mockResolvedValue(null);
+
+      const result = await updateConceptsForMessages(mockMessages, 'system', 'test-persona');
+
+      expect(result).toBe(false);
+      expect(saveConceptMap).not.toHaveBeenCalled();
+    });
+
+    test('handles abort signal', async () => {
+      const abortController = new AbortController();
+      abortController.abort();
+
+      const result = await updateConceptsForMessages(
+        mockMessages,
+        'system',
+        'test-persona',
+        false,
+        abortController.signal
+      );
+
+      expect(result).toBe(false);
+      expect(callLLMForJSON).not.toHaveBeenCalled();
+    });
+
+    test('handles concept validation failure for system concepts', async () => {
+      const invalidConcepts: Concept[] = [
+        {
+          name: 'invalid concept',
+          description: 'invalid description',
+          level_current: 0.5,
+          level_ideal: 0.7,
+          level_elasticity: 0.3,
+          type: 'persona'
+        }
+      ];
+
+      const mergedMap: ConceptMap = {
+        entity: 'system',
+        aliases: [],
+        last_updated: new Date().toISOString(),
+        concepts: []
       };
 
-      // Mock conceptsChanged to return true by providing different concepts
+      vi.mocked(callLLMForJSON).mockResolvedValue(invalidConcepts);
+      vi.mocked(validateSystemConcepts).mockReturnValue({
+        valid: false,
+        issues: ['Invalid concept structure']
+      });
+      vi.mocked(mergeWithOriginalStatics).mockReturnValue(mergedMap);
+
+      const result = await updateConceptsForMessages(mockMessages, 'system', 'test-persona', true);
+
+      expect(result).toBe(true);
+      expect(validateSystemConcepts).toHaveBeenCalled();
+      expect(mergeWithOriginalStatics).toHaveBeenCalled();
+      expect(saveConceptMap).toHaveBeenCalledWith(mergedMap, 'test-persona');
+    });
+
+    test('regenerates descriptions when concepts change', async () => {
       const oldConcepts: Concept[] = [];
       const newConcepts: Concept[] = [
         {
@@ -189,34 +315,38 @@ describe('processor.ts', () => {
         }
       ];
 
-      vi.mocked(loadConceptMap).mockResolvedValueOnce({
+      vi.mocked(loadConceptMap).mockResolvedValue({
         entity: 'system',
         aliases: [],
         last_updated: null,
         concepts: oldConcepts
       } as ConceptMap);
 
-      vi.mocked(callLLMForJSON).mockResolvedValueOnce(newConcepts);
-      vi.mocked(generatePersonaDescriptions).mockResolvedValue(mockDescriptions);
+      vi.mocked(callLLMForJSON).mockResolvedValue(newConcepts);
+      vi.mocked(validateSystemConcepts).mockReturnValue({ valid: true, issues: [] });
+      vi.mocked(generatePersonaDescriptions).mockResolvedValue({
+        short_description: 'Updated short',
+        long_description: 'Updated long'
+      });
 
-      const result = await processEvent('Hello', 'test-persona', false);
+      const result = await updateConceptsForMessages(mockMessages, 'system', 'test-persona');
 
-      expect(generatePersonaDescriptions).toHaveBeenCalledWith(
-        'test-persona',
+      expect(result).toBe(true);
+      expect(generatePersonaDescriptions).toHaveBeenCalled();
+      expect(saveConceptMap).toHaveBeenCalledWith(
         expect.objectContaining({
-          concepts: newConcepts,
-          short_description: mockDescriptions.short_description,
-          long_description: mockDescriptions.long_description
+          short_description: 'Updated short',
+          long_description: 'Updated long'
         }),
-        undefined
+        'test-persona'
       );
     });
 
-    test('handles concept validation failure', async () => {
-      const invalidConcepts: Concept[] = [
+    test('does not regenerate descriptions when concepts unchanged', async () => {
+      const concepts: Concept[] = [
         {
-          name: 'invalid concept',
-          description: 'invalid description',
+          name: 'test concept',
+          description: 'same description',
           level_current: 0.5,
           level_ideal: 0.7,
           level_elasticity: 0.3,
@@ -224,37 +354,39 @@ describe('processor.ts', () => {
         }
       ];
 
-      const mergedConcepts: ConceptMap = {
+      vi.mocked(loadConceptMap).mockResolvedValue({
         entity: 'system',
         aliases: [],
-        last_updated: new Date().toISOString(),
-        concepts: []
-      };
+        last_updated: null,
+        concepts: concepts
+      } as ConceptMap);
 
-      vi.mocked(callLLMForJSON).mockResolvedValueOnce(invalidConcepts);
-      vi.mocked(validateSystemConcepts).mockReturnValue({
-        valid: false,
-        issues: ['Invalid concept structure']
-      });
-      vi.mocked(mergeWithOriginalStatics).mockReturnValue(mergedConcepts);
+      vi.mocked(callLLMForJSON).mockResolvedValue(concepts);
+      vi.mocked(validateSystemConcepts).mockReturnValue({ valid: true, issues: [] });
 
-      const result = await processEvent('Hello', 'test-persona', true); // Enable debug
+      await updateConceptsForMessages(mockMessages, 'system', 'test-persona');
 
-      expect(validateSystemConcepts).toHaveBeenCalled();
-      expect(mergeWithOriginalStatics).toHaveBeenCalled();
-      expect(saveConceptMap).toHaveBeenCalledWith(mergedConcepts, 'test-persona');
+      expect(generatePersonaDescriptions).not.toHaveBeenCalled();
+    });
+
+    test('builds combined content from messages', async () => {
+      vi.mocked(callLLMForJSON).mockResolvedValue([]);
+
+      await updateConceptsForMessages(mockMessages, 'system', 'test-persona');
+
+      expect(buildConceptUpdateUserPrompt).toHaveBeenCalledWith(
+        '[human]: Hello\n\n[system]: Hi there!',
+        null,
+        'test-persona'
+      );
     });
   });
 });
-
-// Test the internal functions by creating a separate test file or by exposing them
-// For now, let's create tests for the logic we can verify through processEvent
 
 describe('stripEcho function (via processEvent)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     
-    // Setup minimal mocks
     vi.mocked(loadConceptMap).mockResolvedValue({
       entity: 'system',
       aliases: [],
@@ -267,10 +399,6 @@ describe('stripEcho function (via processEvent)', () => {
     vi.mocked(getLastMessageTime).mockReturnValue(0);
     vi.mocked(buildResponseSystemPrompt).mockReturnValue('system prompt');
     vi.mocked(buildResponseUserPrompt).mockReturnValue('user prompt');
-    vi.mocked(buildConceptUpdateSystemPrompt).mockReturnValue('concept system prompt');
-    vi.mocked(buildConceptUpdateUserPrompt).mockReturnValue('concept user prompt');
-    vi.mocked(validateSystemConcepts).mockReturnValue({ valid: true, issues: [] });
-    vi.mocked(callLLMForJSON).mockResolvedValue([]);
   });
 
   test('strips exact prefix echo', async () => {
@@ -321,174 +449,6 @@ describe('stripEcho function (via processEvent)', () => {
 
     const result = await processEvent('Hello', 'test-persona', false);
 
-    expect(result.response).toBe(null); // Empty string gets converted to null by stripEcho
-  });
-});
-
-describe('conceptsChanged function (via processEvent behavior)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    
-    // Setup minimal mocks
-    vi.mocked(loadHistory).mockResolvedValue({ messages: [] });
-    vi.mocked(getRecentMessages).mockReturnValue([]);
-    vi.mocked(getLastMessageTime).mockReturnValue(0);
-    vi.mocked(buildResponseSystemPrompt).mockReturnValue('system prompt');
-    vi.mocked(buildResponseUserPrompt).mockReturnValue('user prompt');
-    vi.mocked(buildConceptUpdateSystemPrompt).mockReturnValue('concept system prompt');
-    vi.mocked(buildConceptUpdateUserPrompt).mockReturnValue('concept user prompt');
-    vi.mocked(validateSystemConcepts).mockReturnValue({ valid: true, issues: [] });
-    vi.mocked(callLLM).mockResolvedValue('Test response');
-  });
-
-  test('detects new concepts', async () => {
-    const oldConcepts: Concept[] = [
-      {
-        name: 'existing concept',
-        description: 'existing description',
-        level_current: 0.5,
-        level_ideal: 0.7,
-        level_elasticity: 0.3,
-        type: 'persona'
-      }
-    ];
-
-    const newConcepts: Concept[] = [
-      ...oldConcepts,
-      {
-        name: 'new concept',
-        description: 'new description',
-        level_current: 0.5,
-        level_ideal: 0.7,
-        level_elasticity: 0.3,
-        type: 'persona'
-      }
-    ];
-
-    vi.mocked(loadConceptMap).mockResolvedValue({
-      entity: 'system',
-      aliases: [],
-      last_updated: null,
-      concepts: oldConcepts
-    } as ConceptMap);
-
-    vi.mocked(callLLMForJSON).mockResolvedValue(newConcepts);
-    vi.mocked(generatePersonaDescriptions).mockResolvedValue({
-      short_description: 'Updated description',
-      long_description: 'Updated long description'
-    });
-
-    await processEvent('Hello', 'test-persona', false);
-
-    // Should call generatePersonaDescriptions because concepts changed
-    expect(generatePersonaDescriptions).toHaveBeenCalled();
-  });
-
-  test('detects removed concepts', async () => {
-    const oldConcepts: Concept[] = [
-      {
-        name: 'concept 1',
-        description: 'description 1',
-        level_current: 0.5,
-        level_ideal: 0.7,
-        level_elasticity: 0.3,
-        type: 'persona'
-      },
-      {
-        name: 'concept 2',
-        description: 'description 2',
-        level_current: 0.5,
-        level_ideal: 0.7,
-        level_elasticity: 0.3,
-        type: 'persona'
-      }
-    ];
-
-    const newConcepts: Concept[] = [oldConcepts[0]]; // Removed concept 2
-
-    vi.mocked(loadConceptMap).mockResolvedValue({
-      entity: 'system',
-      aliases: [],
-      last_updated: null,
-      concepts: oldConcepts
-    } as ConceptMap);
-
-    vi.mocked(callLLMForJSON).mockResolvedValue(newConcepts);
-    vi.mocked(generatePersonaDescriptions).mockResolvedValue({
-      short_description: 'Updated description',
-      long_description: 'Updated long description'
-    });
-
-    await processEvent('Hello', 'test-persona', false);
-
-    expect(generatePersonaDescriptions).toHaveBeenCalled();
-  });
-
-  test('detects description changes', async () => {
-    const oldConcepts: Concept[] = [
-      {
-        name: 'test concept',
-        description: 'old description',
-        level_current: 0.5,
-        level_ideal: 0.7,
-        level_elasticity: 0.3,
-        type: 'persona'
-      }
-    ];
-
-    const newConcepts: Concept[] = [
-      {
-        name: 'test concept',
-        description: 'new description', // Changed description
-        level_current: 0.5,
-        level_ideal: 0.7,
-        level_elasticity: 0.3,
-        type: 'persona'
-      }
-    ];
-
-    vi.mocked(loadConceptMap).mockResolvedValue({
-      entity: 'system',
-      aliases: [],
-      last_updated: null,
-      concepts: oldConcepts
-    } as ConceptMap);
-
-    vi.mocked(callLLMForJSON).mockResolvedValue(newConcepts);
-    vi.mocked(generatePersonaDescriptions).mockResolvedValue({
-      short_description: 'Updated description',
-      long_description: 'Updated long description'
-    });
-
-    await processEvent('Hello', 'test-persona', false);
-
-    expect(generatePersonaDescriptions).toHaveBeenCalled();
-  });
-
-  test('does not trigger description update when concepts unchanged', async () => {
-    const concepts: Concept[] = [
-      {
-        name: 'test concept',
-        description: 'same description',
-        level_current: 0.5,
-        level_ideal: 0.7,
-        level_elasticity: 0.3,
-        type: 'persona'
-      }
-    ];
-
-    vi.mocked(loadConceptMap).mockResolvedValue({
-      entity: 'system',
-      aliases: [],
-      last_updated: null,
-      concepts: concepts
-    } as ConceptMap);
-
-    vi.mocked(callLLMForJSON).mockResolvedValue(concepts); // Same concepts
-
-    await processEvent('Hello', 'test-persona', false);
-
-    // Should not call generatePersonaDescriptions because concepts didn't change
-    expect(generatePersonaDescriptions).not.toHaveBeenCalled();
+    expect(result.response).toBe(null);
   });
 });
