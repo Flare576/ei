@@ -3,28 +3,27 @@ export type ConceptType = "static" | "topic" | "person" | "persona";
 export interface Concept {
   name: string;
   description: string;
+  /**
+   * EXPOSURE: How recently/frequently has this concept come up?
+   * Range: 0.0 to 1.0
+   * Decays toward 0.0 over time (logarithmic)
+   * Increases when the concept is discussed
+   */
   level_current: number;
+  /**
+   * DISCUSSION DESIRE: How much does the entity WANT TO TALK about this?
+   * Range: 0.0 to 1.0
+   * NOT the same as how much they like/care about it (see sentiment)
+   * Changes rarely - only on explicit preference signals
+   */
   level_ideal: number;
   /**
-   * ELASTICITY: Rate of natural drift toward level_ideal, per hour.
-   * 
-   * This controls how quickly a concept "decays" back toward its ideal state
-   * when not actively reinforced by interaction. Higher values = faster drift.
-   * 
-   * Examples:
-   * - 0.05 (5%/hr): Very stable, barely changes without interaction
-   * - 0.1 (10%/hr): Stable core aspect
-   * - 0.2 (20%/hr): Moderate stability, gradually returns to baseline
-   * - 0.4 (40%/hr): Flexible, relatively quick to reset
-   * - 0.6 (60%/hr): Volatile, changes rapidly with time
-   * 
-   * Guideline by type:
-   * - static: 0.05-0.15 (core values change slowly)
-   * - persona: 0.1-0.3 (personality traits are moderately stable)
-   * - topic: 0.2-0.5 (interests naturally wax and wane)
-   * - person: 0.3-0.6 (relationship intensity fluctuates)
+   * SENTIMENT: How does the entity feel about this concept?
+   * Range: -1.0 (strongly negative) to 1.0 (strongly positive)
+   * 0.0 = neutral
+   * Updated based on expressed emotions about the concept
    */
-  level_elasticity: number;
+  sentiment: number;
   type: ConceptType;
   learned_by?: string;
   last_updated?: string; // ISO timestamp - when this concept was last modified

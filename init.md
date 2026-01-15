@@ -40,18 +40,19 @@ It's composed of:
     * "User said their heart was racing when they saw XYZ enter the room"
     * "Every time the user eats XYZ, they get sick"
     * "We researched XYZ and found that..."
-- Level_Current: Value from 0 to 1 representing how "full" the entity (Human or System) is of that Concept
-    * 0.0 - The entity hasn't experienced, talked about, or engaged with this Concept in a very long time, or for any period of time recently.
-    * 0.5 - The entity has some recent experience, or their last experience was impactful and still likely effecting them
-    * 1.0 - The entity is actively engaged in the experience or activity, and likely could not tolerate additional exposure
-- Level_Ideal: Value from 0 to 1 representing the System's estimation of the entity's desired level for a Concept
-    * 0.0 - The entity wants to avoid any exposure to this Concept
-    * 0.5 - The entity wants to engage with the Concept at a moderate level
-    * 1.0 - The entity wants nothing else in the world except this Concept
-- Level_Elasticity: Value from 0 to 1 representing the System's estimation of the entities historical exposure coefficient
-    * 0.0 - No amount of exposure will shift this value - it is perpetually stuck at Level_Current
-    * 0.5 - Exposure to this Concept results in a equally proportional change in its Level_Current
-    * 1.0 - Exposure to this Concept wildly changes its Level_Current
+- Level_Current (Exposure): Value from 0 to 1 representing how "fresh" the concept is in the entity's mind.
+    * 0.0 - The entity hasn't experienced or talked about this recently.
+    * 1.0 - The entity is actively engaged in the experience or activity right now.
+    * Behavior: Decays naturally toward 0.0 over time using a logarithmic model.
+- Level_Ideal (Discussion Desire): Value from 0 to 1 representing how much the entity WANTS TO TALK about this concept.
+    * 0.0 - The entity wants to avoid any discussion of this Concept.
+    * 1.0 - The entity wants to bring this up constantly.
+    * Note: This is NOT the same as how much they like the concept (see Sentiment).
+- Sentiment (Emotional Valence): Value from -1.0 to 1.0 representing how the entity FEELS about the concept.
+    * -1.0 - Strongly negative/hate.
+    * 0.0 - Neutral/Indifferent.
+    * 1.0 - Strongly positive/love.
+    * Behavior: Updated via sentiment analysis of the entity's statements.
 
 ### Static Vs. Dynamic Concpets
 

@@ -1,6 +1,6 @@
 # 0075: Update Documentation for New Concept Schema
 
-**Status**: PENDING
+**Status**: DONE
 
 ## Summary
 Update AGENTS.md and any other documentation to reflect the new concept schema with sentiment field, removed elasticity, and clarified field definitions.
@@ -48,10 +48,10 @@ These three dimensions are independent:
 Ensure types.ts has clear JSDoc comments on each field.
 
 ## Acceptance Criteria
-- [ ] AGENTS.md updated with concept schema explanation
-- [ ] Clear examples showing field independence
-- [ ] types.ts has JSDoc comments on all Concept fields
-- [ ] Any other relevant documentation updated
+- [x] AGENTS.md updated with concept schema explanation
+- [x] Clear examples showing field independence
+- [x] types.ts has JSDoc comments on all Concept fields
+- [x] Any other relevant documentation updated
 
 ## Value Statement
 **Developer Understanding**: Clear documentation helps future agents (and humans) understand the psychological model behind the system.

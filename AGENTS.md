@@ -145,6 +145,41 @@ npm start -- -d  # Run with debug output
 - **Be methodical over fast** - "Slow is smooth, smooth is fast"
 - **Verify implementation matches ticket acceptance criteria** exactly
 
+### Concept Schema
+
+Each concept tracked by the system (for both humans and personas) consists of three independent dimensions. This separation ensures psychological realism by distinguishing between exposure, desire, and emotional state.
+
+#### level_current (Exposure)
+- **Range**: 0.0 to 1.0
+- **Purpose**: Represents how recently or frequently this concept has been discussed or experienced.
+- **Behavior**: 
+  - Increases when the concept is discussed in the conversation.
+  - Decays naturally toward 0.0 over time using a logarithmic model (fast decay at high/low extremes, moderate in the middle).
+- **Mental Model**: "How fresh is this in my mind?"
+
+#### level_ideal (Discussion Desire)
+- **Range**: 0.0 to 1.0
+- **Purpose**: Represents how much the entity *wants to talk* about this concept.
+- **Behavior**: 
+  - Changes rarely - only on explicit preference signals or sustained engagement patterns.
+  - **NOT** the same as how much the entity likes the concept (see Sentiment).
+- **Example**: Someone might love birthday cake (high sentiment) but only want to discuss it once a year (low level_ideal).
+- **Mental Model**: "How much do I want to bring this up right now?"
+
+#### sentiment (Emotional Valence)
+- **Range**: -1.0 (strongly negative) to 1.0 (strongly positive)
+- **Purpose**: Represents how the entity *feels* about the concept.
+- **Behavior**: 
+  - Updated via sentiment analysis of the entity's statements.
+  - Can be volatile - reflects the current emotional state regarding the concept.
+- **Example**: "I hate my job" (negative sentiment) vs "I need to vent about my job" (moderate level_ideal).
+- **Mental Model**: "Do I like or hate this thing?"
+
+#### Field Independence Examples
+- **High Exposure + Low Desire + Positive Sentiment**: "I love my hobby, but we've talked about it so much lately that I'm satisfied for now."
+- **Low Exposure + High Desire + Negative Sentiment**: "I'm really upset about something that happened yesterday and I need to vent because we haven't talked about it yet."
+- **High Exposure + High Desire + Neutral Sentiment**: "We are currently in the middle of a deep, objective technical discussion about a project."
+
 ### Communication Patterns
 
 - **Brief but accurate explanations** - no need for basic concepts

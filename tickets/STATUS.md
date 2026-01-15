@@ -12,9 +12,8 @@
 - 0036: Blessed Text Rendering Corruption (core readability)
 - 0054: Human Concept Map Race Condition Protection (data integrity)
 - 0070: Update Concept interface - add sentiment, remove elasticity (part of 0069)
-- 0071: Update decay function for logarithmic model (part of 0069)
-- 0072: Update level_ideal adjustment logic in prompts (part of 0069)
-- 0073: Add sentiment field handling in prompts (part of 0069)
+- 0072: Update level_ideal adjustment logic in prompts (part of 0069) - QA
+- 0074: Update heartbeat trigger logic for new schema (part of 0069)
 
 ## MEDIUM-HIGH PRIORITY ⚡ (Major Features)
 - 0015: Persona Switching (Commands + Navigation) (workflow efficiency)
@@ -49,16 +48,10 @@
 - 0052: Window Size CLI Parameter (configuration)
 - 0075: Update documentation for new schema (part of 0069)
 
-## IN_PROGRESS 🚧
-- (none currently)
-
-## QA 🔄
-- (none currently)
-
-## BLOCKED 🚫
-- (none currently)
-
 ## DONE ✅
+- 0075: Update documentation for new schema (part of 0069)
+- 0073: Add sentiment field handling in prompts (part of 0069)
+
 - 0062: Add concept_processed flag to messages (part of 0061)
 - 0063: Add last_updated timestamp to concepts (part of 0061)
 - 0064: Implement ConceptQueue background processor (part of 0061)
@@ -100,9 +93,9 @@
 
 ---
 
-**Last Updated**: 2026-01-14  
+**Last Updated**: 2026-01-15  
 **Total Tickets**: 75 created  
-**Completion Rate**: 28 done - 0061 epic complete!
+**Completion Rate**: 29 done - 0061 epic complete!
 
 ## Epic Status
 
@@ -116,9 +109,9 @@
 
 ### 0069: Concept Schema Overhaul (NEW)
 - 0070: PENDING - Update interface (add sentiment, remove elasticity)
-- 0071: PENDING - Logarithmic decay model
-- 0072: PENDING - level_ideal prompt guidance
-- 0073: PENDING - sentiment prompt guidance
+- 0071: QA - Logarithmic decay model
+- 0072: QA - level_ideal prompt guidance
+- 0073: DONE - sentiment prompt guidance
 - 0074: PENDING - Heartbeat trigger logic
 - 0075: PENDING - Documentation updates
 
