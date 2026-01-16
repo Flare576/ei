@@ -7,9 +7,9 @@
 - **0069: Concept Schema Overhaul (Epic)** - DONE - Separates exposure/desire/sentiment
 
 ## QA 🧪 (Awaiting Human Verification)
-- **0057: Persona Creation via /persona Command** - Create personas inline when not found
 
 ## DONE ✅ (Recently Completed)
+- **0057: Persona Creation via /persona Command** - Create personas inline when not found
 - **0076: Persist Unread Message Counts Across Sessions** - Unread counts survive app restart
 - **0042: Pause/Resume Active Persona** - Pause heartbeats and queue messages for Mike the Mechanic
 

@@ -1,6 +1,6 @@
 # 0057: Persona Creation via /persona Command
 
-**Status**: QA
+**Status**: DONE
 
 ## Summary
 Re-implement `/persona <name>` command to create new personas when the specified persona doesn't exist, with interactive persona generation flow.
