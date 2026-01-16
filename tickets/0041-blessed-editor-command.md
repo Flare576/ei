@@ -1,6 +1,6 @@
 # 0041: Blessed Editor Command
 
-**Status**: DONE
+**Status**: VALIDATED
 
 ## Summary
 Implement `/editor` slash command for the Blessed-based TUI that opens the user's configured `$EDITOR` for composing multi-line messages.
