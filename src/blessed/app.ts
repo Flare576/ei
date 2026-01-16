@@ -5,7 +5,7 @@ import { writeFileSync, readFileSync, unlinkSync } from 'fs';
 // Import test output capture early to intercept blessed methods before they're used
 import { testOutputCapture } from './test-output-capture.js';
 
-import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog, getPendingMessages, replacePendingMessages, appendHumanMessage, getUnprocessedMessages, loadConceptMap, saveConceptMap, loadPauseState, savePauseState, markSystemMessagesAsRead } from '../storage.js';
+import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog, getPendingMessages, replacePendingMessages, appendHumanMessage, getUnprocessedMessages, loadConceptMap, saveConceptMap, loadPauseState, savePauseState, markSystemMessagesAsRead, getUnreadSystemMessageCount } from '../storage.js';
 import { createPersonaWithLLM, saveNewPersona } from '../persona-creator.js';
 import type { Concept } from '../types.js';
 import { ConceptQueue } from '../concept-queue.js';
@@ -1509,15 +1509,25 @@ export class EIApp {
     try {
       await initializeDataDirectory();
       this.personas = await listPersonas();
-      const history = await loadHistory('ei');
-      this.messages = history.messages.slice(-STARTUP_HISTORY_COUNT);
-      
-      await markSystemMessagesAsRead('ei');
       
       for (const persona of this.personas) {
+        const unreadCount = await getUnreadSystemMessageCount(persona.name);
+        if (unreadCount > 0) {
+          const ps = this.getOrCreatePersonaState(persona.name);
+          ps.unreadCount = unreadCount;
+          this.unreadCounts.set(persona.name, unreadCount);
+        }
         await this.loadPersistedPauseState(persona.name);
         this.resetPersonaHeartbeat(persona.name);
       }
+      
+      const history = await loadHistory('ei');
+      this.messages = history.messages.slice(-STARTUP_HISTORY_COUNT);
+      
+      const ps = this.getOrCreatePersonaState('ei');
+      ps.unreadCount = 0;
+      this.unreadCounts.delete('ei');
+      await markSystemMessagesAsRead('ei');
       
       this.startStaleMessageChecker();
       

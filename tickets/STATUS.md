@@ -10,6 +10,7 @@
 - **0057: Persona Creation via /persona Command** - Create personas inline when not found
 
 ## DONE ✅ (Recently Completed)
+- **0076: Persist Unread Message Counts Across Sessions** - Unread counts survive app restart
 - **0042: Pause/Resume Active Persona** - Pause heartbeats and queue messages for Mike the Mechanic
 
 ## HIGH PRIORITY 🔥 (Critical User Experience)
@@ -19,7 +20,6 @@
 - 0054: Human Concept Map Race Condition Protection (data integrity)
 
 ## PENDING (New)
-- 0076: Persist Unread Message Counts Across Sessions
 
 
 - 0062: Add concept_processed flag to messages (part of 0061)

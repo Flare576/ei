@@ -252,6 +252,13 @@ export async function markSystemMessagesAsRead(persona?: string): Promise<void> 
   }
 }
 
+export async function getUnreadSystemMessageCount(persona?: string): Promise<number> {
+  const history = await loadHistory(persona);
+  return history.messages.filter(
+    (m) => m.role === "system" && m.read === false
+  ).length;
+}
+
 /**
  * Gets messages that haven't been processed for concept updates.
  * Messages without the concept_processed field are treated as already processed (backward compatible).

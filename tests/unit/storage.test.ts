@@ -329,3 +329,66 @@ describe("markMessagesConceptProcessed mutation logic", () => {
     expect(result.messages[2].concept_processed).toBe(true);
   });
 });
+
+describe("getUnreadSystemMessageCount filtering logic", () => {
+  const createMessageWithRead = (
+    role: "human" | "system",
+    content: string,
+    read: boolean | undefined
+  ): Message => ({
+    role,
+    content,
+    timestamp: new Date().toISOString(),
+    read,
+  });
+
+  const countUnreadSystem = (messages: Message[]): number => {
+    return messages.filter(
+      (m) => m.role === "system" && m.read === false
+    ).length;
+  };
+
+  it("should return 0 for empty messages", () => {
+    expect(countUnreadSystem([])).toBe(0);
+  });
+
+  it("should count only system messages with read: false", () => {
+    const messages = [
+      createMessageWithRead("system", "Unread system", false),
+      createMessageWithRead("system", "Read system", true),
+      createMessageWithRead("human", "Unread human", false),
+      createMessageWithRead("system", "Another unread system", false),
+    ];
+
+    expect(countUnreadSystem(messages)).toBe(2);
+  });
+
+  it("should treat undefined read field as read (backward compat)", () => {
+    const messages = [
+      createMessageWithRead("system", "Old message no read field", undefined),
+      createMessageWithRead("system", "New unread message", false),
+    ];
+
+    expect(countUnreadSystem(messages)).toBe(1);
+  });
+
+  it("should ignore human messages regardless of read status", () => {
+    const messages = [
+      createMessageWithRead("human", "Unread human 1", false),
+      createMessageWithRead("human", "Unread human 2", false),
+      createMessageWithRead("human", "Read human", true),
+    ];
+
+    expect(countUnreadSystem(messages)).toBe(0);
+  });
+
+  it("should return 0 when all system messages are read", () => {
+    const messages = [
+      createMessageWithRead("system", "Read 1", true),
+      createMessageWithRead("system", "Read 2", true),
+      createMessageWithRead("human", "Unread human", false),
+    ];
+
+    expect(countUnreadSystem(messages)).toBe(0);
+  });
+});

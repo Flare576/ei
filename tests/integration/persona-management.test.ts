@@ -18,6 +18,10 @@ vi.mock('../../src/storage.js', () => ({
   replacePendingMessages: vi.fn(() => Promise.resolve()),
   appendHumanMessage: vi.fn(() => Promise.resolve()),
   getUnprocessedMessages: vi.fn(() => Promise.resolve([])),
+  markSystemMessagesAsRead: vi.fn(() => Promise.resolve()),
+  getUnreadSystemMessageCount: vi.fn(() => Promise.resolve(0)),
+  loadPauseState: vi.fn(() => Promise.resolve({ isPaused: false })),
+  savePauseState: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock('../../src/processor.js', () => ({
@@ -87,6 +91,7 @@ vi.mock('blessed', () => ({
       setValue: vi.fn(),
       on: vi.fn(),
       key: vi.fn(),
+      unkey: vi.fn(),
       removeAllListeners: vi.fn(),
       type: 'textbox',
     })),

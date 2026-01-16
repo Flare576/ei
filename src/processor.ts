@@ -130,6 +130,7 @@ export async function processEvent(
       role: "system",
       content: response,
       timestamp: new Date().toISOString(),
+      read: false,  // Human hasn't seen this yet
     }, persona);
   }
 
