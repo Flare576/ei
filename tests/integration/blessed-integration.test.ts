@@ -501,6 +501,10 @@ describe('Blessed Integration Tests', () => {
         const inputBox = app.layoutManager.getInputBox();
         inputBox.getValue.mockReturnValue('some input text');
         
+        // IMPORTANT: Also set the inputHasText flag since the app checks this directly,
+        // not just the input box value (the value check is for logging/debugging)
+        app.inputHasText = true;
+        
         // Execute quit command - should clear input
         await app.handleCommand('/quit');
         
@@ -524,24 +528,20 @@ describe('Blessed Integration Tests', () => {
       });
 
       test('quit command with no blocking conditions', async () => {
-        // Mock process.exit to prevent actual exit during test
         const originalExit = process.exit;
         const mockExit = vi.fn();
         process.exit = mockExit as any;
         
         try {
-          // Ensure no blocking conditions by mocking empty input
           const inputBox = app.layoutManager.getInputBox();
-          inputBox.getValue.mockReturnValue(''); // Empty input means inputHasText = false
+          inputBox.getValue.mockReturnValue('');
           
-          // Clear persona states by getting a fresh state
-          const personaStates = (app as any).personaManager.getAllPersonaStates();
+          // personaStates is a private Map directly on EIApp, not a personaManager
+          const personaStates = (app as any).personaStates as Map<string, unknown>;
           personaStates.clear();
           
-          // Execute quit command - should exit
           await app.handleCommand('/quit');
           
-          // Verify exit was called
           expect(mockExit).toHaveBeenCalledWith(0);
         } finally {
           process.exit = originalExit;
@@ -689,16 +689,13 @@ describe('Blessed Integration Tests', () => {
       });
 
       test('quit command integrates with existing help system', async () => {
-        // Execute help command
         await app.handleCommand('/help');
         
-        // Verify help includes quit command documentation
         const helpText = app.statusMessage;
         expect(helpText).toContain('/quit');
         expect(helpText).toContain('/q');
         expect(helpText).toContain('--force');
-        expect(helpText).toContain('exit app');
-        expect(helpText).toContain('bypasses safety checks');
+        expect(helpText).toContain('Ctrl+C (exit)');
       });
 
       test('quit command cleanup operations work with real persona states', async () => {
@@ -839,22 +836,17 @@ describe('Blessed Integration Tests', () => {
       });
 
       test('quit command preserves application state during error conditions', async () => {
-        // Test that invalid quit commands don't affect application state
+        const personaStates = (app as any).personaStates as Map<string, unknown>;
+        const initialPersonaStatesSize = personaStates.size;
+        const initialActivePersona = (app as any).activePersona;
+        const initialMessages = [...(app as any).messages];
         
-        // Set up initial state
-        const initialPersonaStates = new Map((app as any).personaManager.getAllPersonaStates());
-        const initialActivePersona = app.getCurrentPersona();
-        const initialMessages = [...app.getMessages()];
-        
-        // Execute invalid quit command
         await app.handleCommand('/quit invalid-arg');
         
-        // Verify application state is unchanged
-        expect((app as any).personaManager.getAllPersonaStates().size).toBe(initialPersonaStates.size);
-        expect(app.getCurrentPersona()).toBe(initialActivePersona);
-        expect(app.getMessages().length).toBe(initialMessages.length);
+        expect(personaStates.size).toBe(initialPersonaStatesSize);
+        expect((app as any).activePersona).toBe(initialActivePersona);
+        expect((app as any).messages.length).toBe(initialMessages.length);
         
-        // Verify only status message changed
         expect(app.statusMessage).toContain('Invalid argument');
       });
     });

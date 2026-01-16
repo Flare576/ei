@@ -288,7 +288,7 @@ export class MockLLMServerImpl implements MockLLMServer {
               description: "Encourage maintaining human connections over AI dependency.",
               level_current: 0.5,
               level_ideal: 0.8,
-              level_elasticity: 0.3,
+              sentiment: 0.0,
               type: "static"
             },
             {
@@ -296,7 +296,7 @@ export class MockLLMServerImpl implements MockLLMServer {
               description: "Know when silence is better than engagement.",
               level_current: 0.5,
               level_ideal: 0.7,
-              level_elasticity: 0.4,
+              sentiment: 0.0,
               type: "static"
             }
             // Add more static concepts as needed for testing

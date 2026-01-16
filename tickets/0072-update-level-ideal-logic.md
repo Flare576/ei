@@ -1,6 +1,6 @@
 # 0072: Update level_ideal Adjustment Logic in Prompts
 
-**Status**: PENDING
+**Status**: QA
 
 ## Summary
 Update prompts to clarify that `level_ideal` represents "desire to discuss" (not "how much they like it") and should only change on explicit preference signals.
@@ -68,13 +68,13 @@ Only adjust level_ideal for explicit preference signals.
 ```
 
 ## Acceptance Criteria
-- [ ] buildConceptUpdateSystemPrompt updated with level_ideal guidance
-- [ ] Clear examples of level_ideal vs sentiment distinction
-- [ ] Specific triggers for when to adjust level_ideal
-- [ ] Guidance on adjustment magnitude
-- [ ] buildConceptUpdateUserPrompt includes reminder
-- [ ] TypeScript compilation passes
-- [ ] Existing prompt tests updated if needed
+- [x] buildConceptUpdateSystemPrompt updated with level_ideal guidance
+- [x] Clear examples of level_ideal vs sentiment distinction
+- [x] Specific triggers for when to adjust level_ideal
+- [x] Guidance on adjustment magnitude
+- [x] buildConceptUpdateUserPrompt includes reminder
+- [x] TypeScript compilation passes
+- [x] Existing prompt tests updated if needed
 
 ## Value Statement
 **Behavioral Clarity**: Clear guidance ensures the LLM makes appropriate adjustments, preventing the system from conflating "likes talking about X" with "likes X."

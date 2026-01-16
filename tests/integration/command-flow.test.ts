@@ -159,15 +159,12 @@ describe('Command Flow Integration Tests', () => {
       expect(app.getTestStatusMessage()).toContain('Switched to persona: claude');
     });
 
-    test('persona command with invalid name shows error', async () => {
-      // Mock persona not found
+    test('persona command with unknown name prompts for creation', async () => {
       vi.mocked(findPersonaByNameOrAlias).mockResolvedValue(null);
 
-      // Execute persona command with invalid name
       await app.testHandleCommand('/persona nonexistent');
 
-      // Verify error message is shown
-      expect(app.getTestStatusMessage()).toContain('Persona "nonexistent" not found');
+      expect(app.getTestStatusMessage()).toContain("Persona 'nonexistent' not found. Create it? (y/n)");
     });
 
     test('persona command without arguments lists available personas', async () => {

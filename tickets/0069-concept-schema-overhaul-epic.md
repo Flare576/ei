@@ -1,6 +1,6 @@
 # 0069: Concept Schema Overhaul (Epic)
 
-**Status**: PENDING
+**Status**: DONE
 
 ## Summary
 Restructure the Concept schema to properly separate three distinct psychological dimensions that were previously conflated:
@@ -97,15 +97,15 @@ With new schema, trigger when:
 | 0075 | Update documentation and AGENTS.md | Low | 1 hour |
 
 ## Acceptance Criteria
-- [ ] Concept interface updated with new schema
-- [ ] level_elasticity removed from all code
-- [ ] level_current decays toward 0.0 with logarithmic rate
-- [ ] level_ideal only changes on explicit preference signals
-- [ ] sentiment field added and updated via sentiment analysis
-- [ ] Heartbeat triggers use new schema logic
-- [ ] Existing data migrates cleanly
-- [ ] All prompts updated with clear guidance
-- [ ] Documentation reflects new mental model
+- [x] Concept interface updated with new schema
+- [x] level_elasticity removed from all code
+- [x] level_current decays toward 0.0 with logarithmic rate
+- [x] level_ideal only changes on explicit preference signals
+- [x] sentiment field added and updated via sentiment analysis
+- [x] Heartbeat triggers use new schema logic
+- [x] Existing data migrates cleanly
+- [x] All prompts updated with clear guidance
+- [x] Documentation reflects new mental model
 
 ## Value Statement
 **Psychological Realism**: Separating exposure, desire, and sentiment creates a much more accurate model of how entities actually relate to concepts. This enables nuanced behaviors like "I know a lot about X but don't want to discuss it" or "I rarely think about Y but love it when it comes up."

@@ -297,7 +297,7 @@ describe('ConceptQueue', () => {
           description: 'test concept',
           level_current: 0.5,
           level_ideal: 0.5,
-          level_elasticity: 0.3,
+          sentiment: 0.0,
           type: 'topic',
         },
       ]);
@@ -373,7 +373,7 @@ describe('ConceptQueue', () => {
           description: 'test',
           level_current: 0.5,
           level_ideal: 0.5,
-          level_elasticity: 0.3,
+          sentiment: 0.0,
           type: 'topic',
         },
       ]);
@@ -399,7 +399,7 @@ describe('ConceptQueue', () => {
           description: 'test',
           level_current: 0.5,
           level_ideal: 0.5,
-          level_elasticity: 0.3,
+          sentiment: 0.0,
           type: 'topic',
         },
       ]);
@@ -432,7 +432,7 @@ describe('ConceptQueue', () => {
           description: 'test',
           level_current: 0.5,
           level_ideal: 0.5,
-          level_elasticity: 0.3,
+          sentiment: 0.0,
           type: 'topic',
         },
       ]);

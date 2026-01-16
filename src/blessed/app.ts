@@ -6,6 +6,7 @@ import { writeFileSync, readFileSync, unlinkSync } from 'fs';
 import { testOutputCapture } from './test-output-capture.js';
 
 import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog, getPendingMessages, replacePendingMessages, appendHumanMessage, getUnprocessedMessages, loadConceptMap, saveConceptMap } from '../storage.js';
+import { createPersonaWithLLM, saveNewPersona } from '../persona-creator.js';
 import type { Concept } from '../types.js';
 import { ConceptQueue } from '../concept-queue.js';
 import { processEvent } from '../processor.js';
@@ -37,22 +38,28 @@ const CTRL_C_CONFIRMATION_WINDOW_MS = 3000; // 3 seconds
 const STALE_CHECK_INTERVAL_MS = 5 * 60 * 1000; // Check every 5 minutes
 const STALE_MESSAGE_THRESHOLD_MS = 20 * 60 * 1000; // 20 minutes
 
-// Concept decay constants
-const CONCEPT_DELTA_THRESHOLD = 0.3; // Trigger conversation when delta exceeds this
+// Heartbeat trigger constants
+const DESIRE_GAP_THRESHOLD = 0.3;   // Trigger when level_ideal - level_current exceeds this
+const SENTIMENT_FLOOR = -0.5;        // Don't bring up topics with sentiment below this
 const MIN_DECAY_CHANGE = 0.001; // Threshold to avoid micro-updates
 const MIN_HOURS_SINCE_UPDATE = 0.1; // Skip if updated in last 6 minutes
 
 /**
- * Calculate decay amount for a concept based on elasticity and time since last update.
- * Concepts decay toward their ideal level.
+ * Logarithmic decay formula for level_current.
+ * 
+ * Rate is fastest at middle values (0.5), slowest at extremes (0.0, 1.0).
+ * This models natural "forgetting" - recent memories fade quickly,
+ * but deeply ingrained or completely forgotten things change slowly.
+ * 
+ * Formula: decay = k * value * (1 - value) * hours
+ * Where k is a tuning constant (default 0.1)
  */
-function calculateDecay(concept: Concept, hoursSinceUpdate: number): number {
-  const direction = Math.sign(concept.level_ideal - concept.level_current);
-  const maxChange = Math.abs(concept.level_ideal - concept.level_current);
-  const decayAmount = concept.level_elasticity * hoursSinceUpdate;
+function calculateLogarithmicDecay(currentValue: number, hoursSinceUpdate: number): number {
+  const K = 0.1; // Tuning constant - adjust based on feel
+  const decay = K * currentValue * (1 - currentValue) * hoursSinceUpdate;
   
-  // Don't overshoot the ideal
-  return direction * Math.min(decayAmount, maxChange);
+  // Always decay toward 0.0
+  return Math.max(0, currentValue - decay);
 }
 
 export class EIApp {
@@ -91,6 +98,12 @@ export class EIApp {
 
   // Stale message checker interval for background concept processing
   private staleMessageCheckInterval: NodeJS.Timeout | null = null;
+
+  // Persona creation state tracking
+  private pendingPersonaCreation: {
+    name: string;
+    stage: 'confirm' | 'describe';
+  } | null = null;
 
   constructor() {
     EIApp.instanceCount++;
@@ -322,6 +335,14 @@ export class EIApp {
     this.inputHasText = false;
     this.pendingMultiLineContent = null;
 
+    if (this.pendingPersonaCreation) {
+      await this.handlePersonaCreationInput(actualContent);
+      this.layoutManager.getInputBox().clearValue();
+      this.focusManager.maintainFocus();
+      this.render();
+      return;
+    }
+
     if (actualContent.startsWith('/')) {
       await this.handleCommand(actualContent);
       this.focusManager.maintainFocus();
@@ -390,7 +411,67 @@ export class EIApp {
     if (foundPersona) {
       await this.switchPersona(foundPersona);
     } else {
-      this.setStatus(`Persona "${trimmed}" not found.`);
+      const validationError = this.validatePersonaName(trimmed);
+      if (validationError) {
+        this.setStatus(validationError);
+        return;
+      }
+      this.pendingPersonaCreation = { name: trimmed, stage: 'confirm' };
+      this.setStatus(`Persona '${trimmed}' not found. Create it? (y/n)`);
+    }
+  }
+
+  private validatePersonaName(name: string): string | null {
+    if (name.length < 2) {
+      return 'Persona name must be at least 2 characters';
+    }
+    if (name.length > 32) {
+      return 'Persona name must be 32 characters or less';
+    }
+    if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(name)) {
+      return 'Persona name must start with a letter and contain only letters, numbers, underscores, and hyphens';
+    }
+    return null;
+  }
+
+  private async handlePersonaCreationInput(input: string): Promise<void> {
+    if (!this.pendingPersonaCreation) return;
+
+    const { name, stage } = this.pendingPersonaCreation;
+    const trimmed = input.trim().toLowerCase();
+
+    if (stage === 'confirm') {
+      if (trimmed === 'y' || trimmed === 'yes') {
+        this.pendingPersonaCreation = { name, stage: 'describe' };
+        this.setStatus(`Creating '${name}'. What should this persona be like?`);
+      } else if (trimmed === 'n' || trimmed === 'no') {
+        this.pendingPersonaCreation = null;
+        this.setStatus('Persona creation cancelled');
+      } else {
+        this.setStatus(`Persona '${name}' not found. Create it? (y/n)`);
+      }
+      return;
+    }
+
+    if (stage === 'describe') {
+      this.setStatus(`Generating persona '${name}'...`);
+      this.render();
+
+      try {
+        const conceptMap = await createPersonaWithLLM(name, input.trim());
+        await saveNewPersona(name, conceptMap);
+        
+        this.personas = await listPersonas();
+        this.pendingPersonaCreation = null;
+        
+        this.setStatus(`Persona '${name}' created!`);
+        this.render();
+        
+        await this.switchPersona(name);
+      } catch (err) {
+        this.pendingPersonaCreation = null;
+        this.setStatus(`Failed to create persona: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
   }
 
@@ -485,16 +566,21 @@ export class EIApp {
   }
 
   private async handleCtrlE(): Promise<void> {
-    const pendingFromStorage = await getPendingMessages(this.activePersona);
+    const isPersonaCreation = !!this.pendingPersonaCreation;
+    const previousStatus = this.statusMessage;
+    
+    const pendingFromStorage = isPersonaCreation ? [] : await getPendingMessages(this.activePersona);
     const pendingContent = pendingFromStorage.map((m) => m.content).join('\n\n');
     const currentInput = this.pendingMultiLineContent || this.layoutManager.getInputBox().getValue() || '';
     
-    const combinedContent = [pendingContent, currentInput].filter(Boolean).join('\n\n');
+    const combinedContent = isPersonaCreation 
+      ? currentInput 
+      : [pendingContent, currentInput].filter(Boolean).join('\n\n');
     
     const editor = process.env.EDITOR || 'vim';
     const tmpFile = `/tmp/ei-edit-${Date.now()}.md`;
     
-    debugLog(`Ctrl+E: opening ${editor} with content (${combinedContent.length} chars, ${pendingFromStorage.length} pending messages)`);
+    debugLog(`Ctrl+E: opening ${editor} with content (${combinedContent.length} chars, ${pendingFromStorage.length} pending messages, personaCreation: ${isPersonaCreation})`);
     
     try {
       writeFileSync(tmpFile, combinedContent, 'utf-8');
@@ -510,7 +596,11 @@ export class EIApp {
             const content = readFileSync(tmpFile, 'utf-8');
             const trimmed = content.trim();
             
-            if (trimmed) {
+            if (isPersonaCreation) {
+              this.layoutManager.getInputBox().setValue(trimmed);
+              this.inputHasText = trimmed.length > 0;
+              this.setStatus(previousStatus);
+            } else if (trimmed) {
               if (pendingFromStorage.length > 0) {
                 await replacePendingMessages(trimmed, this.activePersona);
               }
@@ -790,11 +880,10 @@ export class EIApp {
       
       if (hoursSince < MIN_HOURS_SINCE_UPDATE) continue;
       
-      const decay = calculateDecay(concept, hoursSince);
+      const newValue = calculateLogarithmicDecay(concept.level_current, hoursSince);
+      const decay = concept.level_current - newValue;
       if (Math.abs(decay) > MIN_DECAY_CHANGE) {
-        concept.level_current = Math.max(0, Math.min(1, 
-          concept.level_current + decay
-        ));
+        concept.level_current = newValue;
         concept.last_updated = new Date().toISOString();
         changed = true;
         debugLog(`Decay applied to "${concept.name}": ${decay.toFixed(4)} (now ${concept.level_current.toFixed(2)})`);
@@ -813,9 +902,11 @@ export class EIApp {
     const concepts = await loadConceptMap("system", personaName);
     
     for (const concept of concepts.concepts) {
-      const delta = Math.abs(concept.level_ideal - concept.level_current);
-      if (delta >= CONCEPT_DELTA_THRESHOLD) {
-        debugLog(`Concept "${concept.name}" delta ${delta.toFixed(2)} triggered heartbeat for ${personaName}`);
+      // Only trigger if they WANT to discuss MORE than they have been
+      const desireGap = concept.level_ideal - concept.level_current;
+      
+      if (desireGap >= DESIRE_GAP_THRESHOLD && concept.sentiment > SENTIMENT_FLOOR) {
+        debugLog(`Heartbeat trigger: "${concept.name}" - desire gap ${desireGap.toFixed(2)}, sentiment ${concept.sentiment.toFixed(2)}`);
         return true;
       }
     }
@@ -1087,6 +1178,16 @@ export class EIApp {
       this.setStatus('Multi-line content cleared');
       this.render();
       debugLog('=== CTRL+C HANDLER END (cleared multi-line) ===');
+      return;
+    }
+
+    if (this.pendingPersonaCreation) {
+      debugLog('BRANCH: Cancelling pending persona creation');
+      this.pendingPersonaCreation = null;
+      this.layoutManager.getInputBox().clearValue();
+      this.setStatus('Persona creation cancelled');
+      this.render();
+      debugLog('=== CTRL+C HANDLER END (cancelled persona creation) ===');
       return;
     }
     

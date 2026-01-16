@@ -18,7 +18,7 @@ const createConcept = (
   description: `Description for ${name}`,
   level_current,
   level_ideal,
-  level_elasticity: 0.3,
+  sentiment: 0.0,
   type,
 });
 

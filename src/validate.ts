@@ -62,7 +62,7 @@ export function mergeWithOriginalStatics(
         ...origStatic,
         level_current: proposedVersion.level_current,
         level_ideal: proposedVersion.level_ideal,
-        level_elasticity: proposedVersion.level_elasticity,
+        sentiment: proposedVersion.sentiment,
       };
     }
     return origStatic;

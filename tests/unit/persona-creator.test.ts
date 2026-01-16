@@ -32,7 +32,7 @@ const createTestConceptMap = (personaName: string = 'test'): ConceptMap => ({
       description: 'A test concept',
       level_current: 0.5,
       level_ideal: 0.7,
-      level_elasticity: 0.3,
+      sentiment: 0.0,
       type: 'persona'
     }
   ]
@@ -149,7 +149,7 @@ describe('Persona Creator', () => {
           description: 'Desire to be helpful',
           level_current: 0.5,
           level_ideal: 0.8,
-          level_elasticity: 0.3,
+          sentiment: 0.0,
           type: 'persona' as const
         }]
       };

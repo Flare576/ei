@@ -200,7 +200,7 @@ describe('processor.ts', () => {
           description: 'test description',
           level_current: 0.5,
           level_ideal: 0.7,
-          level_elasticity: 0.3,
+          sentiment: 0.0,
           type: 'persona'
         }
       ];
@@ -226,7 +226,7 @@ describe('processor.ts', () => {
           description: 'a human trait',
           level_current: 0.5,
           level_ideal: 0.5,
-          level_elasticity: 0.3,
+          sentiment: 0.0,
           type: 'topic'
         }
       ];
@@ -275,7 +275,7 @@ describe('processor.ts', () => {
           description: 'invalid description',
           level_current: 0.5,
           level_ideal: 0.7,
-          level_elasticity: 0.3,
+          sentiment: 0.0,
           type: 'persona'
         }
       ];
@@ -310,7 +310,7 @@ describe('processor.ts', () => {
           description: 'new description',
           level_current: 0.5,
           level_ideal: 0.7,
-          level_elasticity: 0.3,
+          sentiment: 0.0,
           type: 'persona'
         }
       ];
@@ -349,7 +349,7 @@ describe('processor.ts', () => {
           description: 'same description',
           level_current: 0.5,
           level_ideal: 0.7,
-          level_elasticity: 0.3,
+          sentiment: 0.0,
           type: 'persona'
         }
       ];

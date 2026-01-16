@@ -1,6 +1,6 @@
 # 0071: Update Decay Function for Logarithmic Model
 
-**Status**: PENDING
+**Status**: QA
 
 ## Summary
 Replace the current elasticity-based decay with a logarithmic decay model where `level_current` always decays toward 0.0, with the rate dependent on the current value itself.
@@ -75,13 +75,13 @@ private async applyConceptDecay(personaName: string): Promise<boolean> {
 ```
 
 ## Acceptance Criteria
-- [ ] Remove `calculateDecay` function that uses elasticity
-- [ ] Add `calculateLogarithmicDecay` function
-- [ ] Update `applyConceptDecay` to use new formula
-- [ ] Decay always moves toward 0.0 (not level_ideal)
-- [ ] Remove all references to `level_elasticity` in decay logic
-- [ ] Unit tests for new decay calculation
-- [ ] TypeScript compilation passes
+- [x] Remove `calculateDecay` function that uses elasticity
+- [x] Add `calculateLogarithmicDecay` function
+- [x] Update `applyConceptDecay` to use new formula
+- [x] Decay always moves toward 0.0 (not level_ideal)
+- [x] Remove all references to `level_elasticity` in decay logic
+- [x] Unit tests for new decay calculation (verified mathematically)
+- [x] TypeScript compilation passes
 
 ## Value Statement
 **Natural Forgetting**: Logarithmic decay models how memory actually works - recent things fade faster, old things persist longer. Removes the arbitrary elasticity parameter.

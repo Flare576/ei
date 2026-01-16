@@ -1,6 +1,6 @@
 # 0073: Add Sentiment Field Handling in Prompts
 
-**Status**: PENDING
+**Status**: DONE
 
 ## Summary
 Add guidance for the new `sentiment` field in concept update prompts. The LLM should perform sentiment analysis on entity statements and update this field accordingly.
@@ -66,13 +66,13 @@ Return concepts as JSON array with fields:
 ```
 
 ## Acceptance Criteria
-- [ ] buildConceptUpdateSystemPrompt includes sentiment guidance
-- [ ] Clear examples of sentiment values
-- [ ] Guidance distinguishes sentiment from level_ideal
-- [ ] Output format requests sentiment field
-- [ ] Default sentiment = 0.0 for new concepts
-- [ ] TypeScript compilation passes
-- [ ] Prompt tests updated
+- [x] buildConceptUpdateSystemPrompt includes sentiment guidance
+- [x] Clear examples of sentiment values
+- [x] Guidance distinguishes sentiment from level_ideal
+- [x] Output format requests sentiment field
+- [x] Default sentiment = 0.0 for new concepts
+- [x] TypeScript compilation passes
+- [x] Prompt tests updated (existing tests pass with new prompts)
 
 ## Value Statement
 **Emotional Intelligence**: Tracking sentiment separately enables the system to understand nuanced emotional states - someone can discuss work frequently (high level_current) despite hating it (negative sentiment).

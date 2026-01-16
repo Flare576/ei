@@ -1,6 +1,6 @@
 # 0057: Persona Creation via /persona Command
 
-**Status**: PENDING
+**Status**: QA
 
 ## Summary
 Re-implement `/persona <name>` command to create new personas when the specified persona doesn't exist, with interactive persona generation flow.
@@ -37,15 +37,15 @@ Persona 'assistant' created and activated!
 - Support cancellation at any step
 
 ## Acceptance Criteria
-- [ ] `/persona <existing_name>` continues to work (switch behavior)
-- [ ] `/persona <new_name>` prompts for creation when persona not found
-- [ ] Creation prompt accepts y/n input with clear messaging
-- [ ] Interactive persona generation flow launches on confirmation
-- [ ] New persona files are created in correct directory structure
-- [ ] Application automatically switches to newly created persona
-- [ ] Creation process can be cancelled without side effects
-- [ ] Invalid persona names are rejected with helpful error messages
-- [ ] Creation failures show clear error messages and don't leave partial files
+- [x] `/persona <existing_name>` continues to work (switch behavior)
+- [x] `/persona <new_name>` prompts for creation when persona not found
+- [x] Creation prompt accepts y/n input with clear messaging
+- [x] Interactive persona generation flow launches on confirmation
+- [x] New persona files are created in correct directory structure
+- [x] Application automatically switches to newly created persona
+- [x] Creation process can be cancelled without side effects (Ctrl+C or 'n')
+- [x] Invalid persona names are rejected with helpful error messages
+- [x] Creation failures show clear error messages and don't leave partial files
 
 ## Testing Requirements
 

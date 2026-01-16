@@ -231,8 +231,88 @@ export function buildConceptUpdateSystemPrompt(
 - description: Context and nuance (should evolve as you learn more)
 - level_current (0-1): Current state
 - level_ideal (0-1): Desired state
-- level_elasticity (0-1): How much interactions shift level_current
+- sentiment (-1 to 1): Emotional valence toward concept (-1=negative, 0=neutral, 1=positive)
 - type: One of: static, persona, person, topic
+
+## Understanding level_ideal (Discussion Desire)
+
+level_ideal represents HOW MUCH THE ENTITY WANTS TO DISCUSS this concept.
+This is NOT the same as how much they like or care about it!
+
+Examples:
+- Birthday cake: Someone might LOVE it (high sentiment) but only want to discuss 
+  it around their birthday (low level_ideal)
+- Work stress: Someone might HATE it (negative sentiment) but need to discuss it 
+  frequently for support (moderate level_ideal)
+- A deceased loved one: Deep positive sentiment, but low discussion desire due to grief
+
+### When to Adjust level_ideal
+
+Adjustments should be RARE. Only change level_ideal when:
+
+1. **Explicit Request**: Entity directly asks to discuss more/less
+   - "I don't want to talk about work anymore" → decrease
+   - "Tell me more about X" (repeatedly) → slight increase
+
+2. **Sustained Engagement Pattern**: Over multiple messages
+   - Entity consistently brings up topic → slight increase
+   - Entity consistently changes subject away → slight decrease
+
+3. **Clear Avoidance Signals**: 
+   - Short responses when topic comes up → decrease
+   - Explicit subject changes → decrease
+
+### How Much to Adjust
+
+Use the intensity/length/frequency of signals:
+- Strong explicit request: ±0.2 to ±0.3
+- Moderate pattern over time: ±0.1 to ±0.15
+- Slight signal: ±0.05
+
+Also apply logarithmic scaling:
+- Values near 0.0 or 1.0 are harder to change (extremes are stable)
+- Values near 0.5 change more easily
+
+## Understanding sentiment (Emotional Valence)
+
+sentiment represents HOW THE ENTITY FEELS about this concept.
+Range: -1.0 (strongly negative) to 1.0 (strongly positive), 0.0 = neutral
+
+This is independent of level_current (exposure) and level_ideal (discussion desire)!
+
+Examples:
+- "I love my dog so much" → sentiment toward "dog" concept: ~0.8
+- "Work has been really stressful lately" → sentiment toward "work": ~-0.4
+- "The weather is nice today" → sentiment toward "weather": ~0.3
+- "I hate dealing with taxes" → sentiment toward "taxes": ~-0.8
+- "Programming is amazing" → sentiment toward "programming": ~0.9
+
+### When to Update sentiment
+
+Update sentiment whenever the entity expresses emotion about a concept:
+
+1. **Explicit emotional statements**
+   - "I hate X" → strong negative (-0.6 to -0.9)
+   - "I love X" → strong positive (0.6 to 0.9)
+   - "X is okay" → mild/neutral (-0.2 to 0.2)
+
+2. **Implicit emotional signals**
+   - Enthusiastic language, exclamation marks → positive shift
+   - Complaints, frustration → negative shift
+   - Flat/disengaged tone → toward neutral
+
+3. **Context matters**
+   - Sarcasm should be interpreted correctly
+   - Past tense emotions may differ from present
+
+### Sentiment Analysis Guidelines
+
+- Don't predict emotions - reflect what was expressed
+- Can change frequently (emotions are volatile)
+- Default to 0.0 (neutral) when uncertain
+- Extreme values (-1.0, 1.0) should be rare
+- Consider the full context, not just keywords
+- Sentiment is independent from level_ideal (can hate something but need to discuss it)
 
 You need to update the Concept Map for the ${entityLabel}.
 
@@ -256,8 +336,13 @@ ${JSON.stringify(concepts.concepts, null, 2)}
 - MERGE smaller concepts into a broader one when they share similar levels and elasticity
 - Keep concepts SEPARATE when they have meaningfully different dynamics
 - If you ADD a new concept, include \`"learned_by": "${persona}"\` to track its origin
+- For NEW concepts, set sentiment to 0.0 (neutral) unless emotion is clearly expressed
 
-Return ONLY a JSON array of concepts (the updated concept list).`;
+Return ONLY a JSON array of concepts with ALL fields:
+- name, description, type, learned_by (if new)
+- level_current: exposure level (0.0-1.0)
+- level_ideal: discussion desire (0.0-1.0) - rarely change this
+- sentiment: emotional valence (-1.0 to 1.0) - update based on expressed emotions`;
 }
 
 export function buildConceptUpdateUserPrompt(
@@ -272,6 +357,12 @@ ${humanMessage || "No Message"}
 ${systemResponse || "No Message"}
 
 Active Persona: ${persona}
+
+Remember: 
+- level_ideal = discussion desire, NOT sentiment
+- Only adjust level_ideal for explicit preference signals
+- sentiment = emotional valence - update when emotions are expressed about concepts
+- Perform sentiment analysis on statements about concepts
 
 Based on this exchange (or lack thereof), return the updated concept array as JSON.`;
 }

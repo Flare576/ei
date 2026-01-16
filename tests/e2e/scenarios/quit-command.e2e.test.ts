@@ -36,7 +36,7 @@ describe('Quit Command E2E Tests', () => {
         description: "Concept during processing",
         level_current: 0.5,
         level_ideal: 0.8,
-        level_elasticity: 0.3,
+        sentiment: 0.0,
         type: "static"
       }]),
       JSON.stringify([])
@@ -80,7 +80,7 @@ describe('Quit Command E2E Tests', () => {
         description: "Concept for Ctrl+C integration test",
         level_current: 0.5,
         level_ideal: 0.8,
-        level_elasticity: 0.3,
+        sentiment: 0.0,
         type: "static"
       }]),
       JSON.stringify([])

@@ -11,7 +11,7 @@ const createConcept = (
   description,
   level_current: 0.5,
   level_ideal: 0.5,
-  level_elasticity: 0.3,
+  sentiment: 0.0,
   type,
 });
 
@@ -138,7 +138,7 @@ describe("mergeWithOriginalStatics", () => {
       ...STATIC_CONCEPTS[0],
       level_current: 0.9,
       level_ideal: 0.95,
-      level_elasticity: 0.1,
+      sentiment: 0.1,
     };
     const proposed = createConceptMap([modifiedStatic, ...STATIC_CONCEPTS.slice(1)]);
 
@@ -147,7 +147,7 @@ describe("mergeWithOriginalStatics", () => {
     const mergedStatic = merged.concepts.find(c => c.name === STATIC_CONCEPTS[0].name);
     expect(mergedStatic?.level_current).toBe(0.9);
     expect(mergedStatic?.level_ideal).toBe(0.95);
-    expect(mergedStatic?.level_elasticity).toBe(0.1);
+    expect(mergedStatic?.sentiment).toBe(0.1);
   });
 
   it("should include non-static concepts from proposed", () => {

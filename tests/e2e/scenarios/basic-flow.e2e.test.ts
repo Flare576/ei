@@ -19,17 +19,9 @@ describe('Basic Flow E2E Tests', () => {
   });
 
   test('basic application flow: start → send message → receive response → quit', async () => {
+    // Post-0061: Only 1 LLM call per message (response only, concept updates are async/background)
     harness.setMockResponseQueue([
-      'Hello! I received your message and I\'m responding from the test environment.',
-      JSON.stringify([{
-        name: "Test System Concept",
-        description: "A test concept for system",
-        level_current: 0.5,
-        level_ideal: 0.8,
-        level_elasticity: 0.3,
-        type: "static"
-      }]),
-      JSON.stringify([])
+      'Hello! I received your message and I\'m responding from the test environment.'
     ]);
 
     await harness.startApp({ debugMode: false, usePty: false });
@@ -41,7 +33,8 @@ describe('Basic Flow E2E Tests', () => {
     await harness.waitForLLMRequest(3000);
     await new Promise(resolve => setTimeout(resolve, 5000));
 
-    expect(harness.getMockRequestHistory().length).toBeGreaterThanOrEqual(3);
+    // Post-0061: Expect 1 LLM call (response), not 3+ (response + concept updates)
+    expect(harness.getMockRequestHistory().length).toBeGreaterThanOrEqual(1);
 
     const capturedOutput = await harness.getCurrentOutput();
     expect(capturedOutput).toContain(testMessage.slice(0, 30));
@@ -54,27 +47,10 @@ describe('Basic Flow E2E Tests', () => {
   }, 30000);
 
   test('basic flow with multiple messages', async () => {
+    // Post-0061: Only 1 LLM call per message (response only, concept updates are async/background)
     harness.setMockResponseQueue([
       'I understand your first message.',
-      JSON.stringify([{
-        name: "First Message Concept",
-        description: "Concept from first message",
-        level_current: 0.5,
-        level_ideal: 0.8,
-        level_elasticity: 0.3,
-        type: "static"
-      }]),
-      JSON.stringify([]),
-      'I received your second message too.',
-      JSON.stringify([{
-        name: "Second Message Concept", 
-        description: "Concept from second message",
-        level_current: 0.6,
-        level_ideal: 0.9,
-        level_elasticity: 0.2,
-        type: "static"
-      }]),
-      JSON.stringify([])
+      'I received your second message too.'
     ]);
 
     await harness.startApp({ debugMode: false, usePty: false });
@@ -93,17 +69,17 @@ describe('Basic Flow E2E Tests', () => {
     await harness.waitForLLMRequest(3000);
     await new Promise(resolve => setTimeout(resolve, 3000));
 
-    expect(harness.getMockRequestHistory().length).toBeGreaterThanOrEqual(6);
+    // Post-0061: Expect 2 LLM calls (1 per message), not 6+ (3 per message)
+    expect(harness.getMockRequestHistory().length).toBeGreaterThanOrEqual(2);
 
     await harness.sendCommand('/quit');
     await harness.assertExitCode(0, 5000);
   }, 45000);
 
   test('basic flow with error handling', async () => {
+    // Post-0061: Only 1 LLM call per message (response only, concept updates are async/background)
     harness.setMockResponseQueue([
-      'Server Error',
-      JSON.stringify([]),
-      JSON.stringify([])
+      'Server Error'
     ]);
 
     await harness.startApp({ debugMode: false, usePty: false });
@@ -120,7 +96,8 @@ describe('Basic Flow E2E Tests', () => {
     const capturedOutput = await harness.getCurrentOutput();
     expect(capturedOutput).toContain(errorMessage.slice(0, 30));
 
-    expect(harness.getMockRequestHistory().length).toBeGreaterThanOrEqual(3);
+    // Post-0061: Expect 1 LLM call (response), not 3+ (response + concept updates)
+    expect(harness.getMockRequestHistory().length).toBeGreaterThanOrEqual(1);
 
     await harness.sendCommand('/quit');
     await harness.assertExitCode(0, 5000);
