@@ -5,11 +5,11 @@ import { writeFileSync, readFileSync, unlinkSync } from 'fs';
 // Import test output capture early to intercept blessed methods before they're used
 import { testOutputCapture } from './test-output-capture.js';
 
-import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog, getPendingMessages, replacePendingMessages, appendHumanMessage, getUnprocessedMessages, loadConceptMap, saveConceptMap, loadPauseState, savePauseState, markSystemMessagesAsRead, getUnreadSystemMessageCount } from '../storage.js';
+import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog, getPendingMessages, replacePendingMessages, appendHumanMessage, getUnprocessedMessages, loadPauseState, savePauseState, markSystemMessagesAsRead, getUnreadSystemMessageCount } from '../storage.js';
 import { createPersonaWithLLM, saveNewPersona } from '../persona-creator.js';
-import type { Concept } from '../types.js';
 import { ConceptQueue } from '../concept-queue.js';
 import { processEvent } from '../processor.js';
+import { applyConceptDecay, checkConceptDeltas } from '../concept-decay.js';
 import { LLMAbortedError } from '../llm.js';
 import type { Message, MessageState, PersonaState } from '../types.js';
 import { LayoutManager } from './layout-manager.js';
@@ -38,29 +38,7 @@ const CTRL_C_CONFIRMATION_WINDOW_MS = 3000; // 3 seconds
 const STALE_CHECK_INTERVAL_MS = 5 * 60 * 1000; // Check every 5 minutes
 const STALE_MESSAGE_THRESHOLD_MS = 20 * 60 * 1000; // 20 minutes
 
-// Heartbeat trigger constants
-const DESIRE_GAP_THRESHOLD = 0.3;   // Trigger when level_ideal - level_current exceeds this
-const SENTIMENT_FLOOR = -0.5;        // Don't bring up topics with sentiment below this
-const MIN_DECAY_CHANGE = 0.001; // Threshold to avoid micro-updates
-const MIN_HOURS_SINCE_UPDATE = 0.1; // Skip if updated in last 6 minutes
 
-/**
- * Logarithmic decay formula for level_current.
- * 
- * Rate is fastest at middle values (0.5), slowest at extremes (0.0, 1.0).
- * This models natural "forgetting" - recent memories fade quickly,
- * but deeply ingrained or completely forgotten things change slowly.
- * 
- * Formula: decay = k * value * (1 - value) * hours
- * Where k is a tuning constant (default 0.1)
- */
-function calculateLogarithmicDecay(currentValue: number, hoursSinceUpdate: number): number {
-  const K = 0.1; // Tuning constant - adjust based on feel
-  const decay = K * currentValue * (1 - currentValue) * hoursSinceUpdate;
-  
-  // Always decay toward 0.0
-  return Math.max(0, currentValue - decay);
-}
 
 export class EIApp {
   private screen: blessed.Widgets.Screen;
@@ -987,9 +965,9 @@ export class EIApp {
       }
 
       try {
-        await this.applyConceptDecay(personaName);
+        await applyConceptDecay(personaName);
         
-        const shouldSpeak = await this.checkConceptDeltas(personaName);
+        const shouldSpeak = await checkConceptDeltas(personaName);
         
         if (!shouldSpeak) {
           debugLog(`Heartbeat for ${personaName}: no significant deltas, skipping LLM call`);
@@ -1036,52 +1014,7 @@ export class EIApp {
     }, HEARTBEAT_INTERVAL_MS);
   }
 
-  private async applyConceptDecay(personaName: string): Promise<boolean> {
-    const concepts = await loadConceptMap("system", personaName);
-    const now = Date.now();
-    let changed = false;
-    
-    for (const concept of concepts.concepts) {
-      const lastUpdated = concept.last_updated 
-        ? new Date(concept.last_updated).getTime() 
-        : now;
-      const hoursSince = (now - lastUpdated) / (1000 * 60 * 60);
-      
-      if (hoursSince < MIN_HOURS_SINCE_UPDATE) continue;
-      
-      const newValue = calculateLogarithmicDecay(concept.level_current, hoursSince);
-      const decay = concept.level_current - newValue;
-      if (Math.abs(decay) > MIN_DECAY_CHANGE) {
-        concept.level_current = newValue;
-        concept.last_updated = new Date().toISOString();
-        changed = true;
-        debugLog(`Decay applied to "${concept.name}": ${decay.toFixed(4)} (now ${concept.level_current.toFixed(2)})`);
-      }
-    }
-    
-    if (changed) {
-      await saveConceptMap(concepts, personaName);
-      debugLog(`Applied concept decay to ${personaName}`);
-    }
-    
-    return changed;
-  }
 
-  private async checkConceptDeltas(personaName: string): Promise<boolean> {
-    const concepts = await loadConceptMap("system", personaName);
-    
-    for (const concept of concepts.concepts) {
-      // Only trigger if they WANT to discuss MORE than they have been
-      const desireGap = concept.level_ideal - concept.level_current;
-      
-      if (desireGap >= DESIRE_GAP_THRESHOLD && concept.sentiment > SENTIMENT_FLOOR) {
-        debugLog(`Heartbeat trigger: "${concept.name}" - desire gap ${desireGap.toFixed(2)}, sentiment ${concept.sentiment.toFixed(2)}`);
-        return true;
-      }
-    }
-    
-    return false;
-  }
 
   private schedulePersonaDebounce(personaName: string) {
     const ps = this.getOrCreatePersonaState(personaName);
@@ -1614,17 +1547,6 @@ export class EIApp {
     if (input.length > 0) {
       this.handleSubmit(input);
     }
-  }
-
-  /**
-   * Handles quit command for testing
-   */
-  private handleQuit(): void {
-    debugLog(`Handling quit command - Instance #${this.instanceId}`);
-    
-    // Clean exit for testing
-    this.screen.destroy();
-    process.exit(0);
   }
 
   /**
