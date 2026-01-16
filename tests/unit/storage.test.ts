@@ -133,10 +133,11 @@ describe("getLastMessageTime", () => {
 });
 
 describe("getUnprocessedMessages filtering logic", () => {
-  const createMessageWithProcessed = (
+  const createMessageWithFlags = (
     role: "human" | "system",
     content: string,
     concept_processed: boolean | undefined,
+    read: boolean | undefined,
     hoursAgo: number = 0
   ): Message => {
     const timestamp = new Date(Date.now() - hoursAgo * 60 * 60 * 1000);
@@ -145,6 +146,7 @@ describe("getUnprocessedMessages filtering logic", () => {
       content,
       timestamp: timestamp.toISOString(),
       concept_processed,
+      read,
     };
   };
 
@@ -155,6 +157,7 @@ describe("getUnprocessedMessages filtering logic", () => {
     const beforeTime = beforeTimestamp ? new Date(beforeTimestamp).getTime() : undefined;
     return messages.filter(m =>
       m.concept_processed === false &&
+      m.read === true &&
       (!beforeTime || new Date(m.timestamp).getTime() < beforeTime)
     );
   };
@@ -164,23 +167,35 @@ describe("getUnprocessedMessages filtering logic", () => {
     expect(result).toEqual([]);
   });
 
-  it("should return only messages with concept_processed: false", () => {
+  it("should return only messages with concept_processed: false AND read: true", () => {
     const messages = [
-      createMessageWithProcessed("human", "Processed", true, 2),
-      createMessageWithProcessed("system", "Unprocessed", false, 1),
-      createMessageWithProcessed("human", "Legacy (no field)", undefined, 0),
+      createMessageWithFlags("human", "Processed and read", true, true, 3),
+      createMessageWithFlags("human", "Unprocessed and read", false, true, 2),
+      createMessageWithFlags("human", "Unprocessed but unread", false, false, 1),
+      createMessageWithFlags("system", "System unprocessed and read", false, true, 0),
     ];
 
     const result = filterUnprocessed(messages);
 
-    expect(result).toHaveLength(1);
-    expect(result[0].content).toBe("Unprocessed");
+    expect(result).toHaveLength(2);
+    expect(result[0].content).toBe("Unprocessed and read");
+    expect(result[1].content).toBe("System unprocessed and read");
   });
 
-  it("should treat undefined concept_processed as processed (backward compatible)", () => {
+  it("should exclude unread messages even if concept_processed is false", () => {
     const messages = [
-      createMessageWithProcessed("human", "Legacy message 1", undefined, 1),
-      createMessageWithProcessed("human", "Legacy message 2", undefined, 0),
+      createMessageWithFlags("human", "Unread human message", false, false, 1),
+      createMessageWithFlags("system", "Unread system message", false, false, 0),
+    ];
+
+    const result = filterUnprocessed(messages);
+
+    expect(result).toEqual([]);
+  });
+
+  it("should treat undefined read as unread (not eligible)", () => {
+    const messages = [
+      createMessageWithFlags("human", "No read field", false, undefined, 0),
     ];
 
     const result = filterUnprocessed(messages);
@@ -193,26 +208,40 @@ describe("getUnprocessedMessages filtering logic", () => {
     const cutoffTimestamp = new Date(now - 1.5 * 60 * 60 * 1000).toISOString();
 
     const messages = [
-      createMessageWithProcessed("human", "Old unprocessed", false, 2),
-      createMessageWithProcessed("human", "Recent unprocessed", false, 1),
-      createMessageWithProcessed("human", "Very recent unprocessed", false, 0),
+      createMessageWithFlags("human", "Old unprocessed read", false, true, 2),
+      createMessageWithFlags("human", "Recent unprocessed read", false, true, 1),
+      createMessageWithFlags("human", "Very recent unprocessed read", false, true, 0),
     ];
 
     const result = filterUnprocessed(messages, cutoffTimestamp);
 
     expect(result).toHaveLength(1);
-    expect(result[0].content).toBe("Old unprocessed");
+    expect(result[0].content).toBe("Old unprocessed read");
   });
 
-  it("should return all unprocessed when beforeTimestamp not provided", () => {
+  it("should return all eligible when beforeTimestamp not provided", () => {
     const messages = [
-      createMessageWithProcessed("human", "Unprocessed 1", false, 2),
-      createMessageWithProcessed("human", "Unprocessed 2", false, 0),
+      createMessageWithFlags("human", "Eligible 1", false, true, 2),
+      createMessageWithFlags("human", "Eligible 2", false, true, 0),
     ];
 
     const result = filterUnprocessed(messages);
 
     expect(result).toHaveLength(2);
+  });
+
+  it("should handle mixed read states correctly", () => {
+    const messages = [
+      createMessageWithFlags("human", "Human read", false, true, 3),
+      createMessageWithFlags("system", "System unread", false, false, 2),
+      createMessageWithFlags("human", "Human unread", false, false, 1),
+      createMessageWithFlags("system", "System read", false, true, 0),
+    ];
+
+    const result = filterUnprocessed(messages);
+
+    expect(result).toHaveLength(2);
+    expect(result.map(m => m.content)).toEqual(["Human read", "System read"]);
   });
 });
 

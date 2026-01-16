@@ -36,6 +36,8 @@ export interface ConceptMap {
   long_description?: string;   // 2-3 sentence description
   last_updated: string | null;
   concepts: Concept[];
+  isPaused?: boolean;
+  pauseUntil?: string;  // ISO timestamp when pause expires (undefined = indefinite)
 }
 
 export type MessageState = "sent" | "processing" | "queued" | "failed";
@@ -79,4 +81,12 @@ export interface PersonaState {
   messageQueue: string[];
   unreadCount: number;
   abortController: AbortController | null;
+  /** Whether this persona is paused (no heartbeats or message processing) */
+  isPaused: boolean;
+  /** ISO timestamp when pause expires (undefined = indefinite pause) */
+  pauseUntil?: string;
+  /** Timer for auto-resume when pauseUntil is set */
+  pauseTimer: ReturnType<typeof setTimeout> | null;
 }
+
+

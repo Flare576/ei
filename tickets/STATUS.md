@@ -9,11 +9,17 @@
 ## QA 🧪 (Awaiting Human Verification)
 - **0057: Persona Creation via /persona Command** - Create personas inline when not found
 
+## DONE ✅ (Recently Completed)
+- **0042: Pause/Resume Active Persona** - Pause heartbeats and queue messages for Mike the Mechanic
+
 ## HIGH PRIORITY 🔥 (Critical User Experience)
 - 0033: Blessed Resize Input Corruption Validation (basic functionality)
 - 0034: Blessed Status Line Corruption (error visibility)
 - 0036: Blessed Text Rendering Corruption (core readability)
 - 0054: Human Concept Map Race Condition Protection (data integrity)
+
+## PENDING (New)
+- 0076: Persist Unread Message Counts Across Sessions
 
 
 - 0062: Add concept_processed flag to messages (part of 0061)
@@ -57,9 +63,9 @@
 
 ---
 
-**Last Updated**: 2026-01-15  
-**Total Tickets**: 75 created  
-**Completion Rate**: 29 done - 0061 epic complete!
+**Last Updated**: 2026-01-16  
+**Total Tickets**: 76 created  
+**Completion Rate**: 30 done - 0042 pause/resume complete!
 
 ## Epic Status
 

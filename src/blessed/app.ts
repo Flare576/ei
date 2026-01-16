@@ -5,7 +5,7 @@ import { writeFileSync, readFileSync, unlinkSync } from 'fs';
 // Import test output capture early to intercept blessed methods before they're used
 import { testOutputCapture } from './test-output-capture.js';
 
-import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog, getPendingMessages, replacePendingMessages, appendHumanMessage, getUnprocessedMessages, loadConceptMap, saveConceptMap } from '../storage.js';
+import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog, getPendingMessages, replacePendingMessages, appendHumanMessage, getUnprocessedMessages, loadConceptMap, saveConceptMap, loadPauseState, savePauseState, markSystemMessagesAsRead } from '../storage.js';
 import { createPersonaWithLLM, saveNewPersona } from '../persona-creator.js';
 import type { Concept } from '../types.js';
 import { ConceptQueue } from '../concept-queue.js';
@@ -355,6 +355,7 @@ export class EIApp {
     
     this.focusManager.maintainFocus();
     this.render();
+    this.autoScrollToBottom();
   }
 
   private async handleCommand(input: string): Promise<void> {
@@ -380,9 +381,15 @@ export class EIApp {
         this.layoutManager.getInputBox().clearValue();
         await this.handleCtrlE();
         break;
+      case 'pause':
+        await this.handlePauseCommand(args);
+        break;
+      case 'resume':
+        await this.handleResumeCommand(args);
+        break;
       case 'help':
       case 'h':
-        this.setStatus('Commands: /persona, /editor|/e, /quit|/q [--force], /refresh, /help | Keys: Ctrl+E (editor), Ctrl+H (personas), Ctrl+L (input), Ctrl+R (refresh), Ctrl+C (exit)');
+        this.setStatus('Commands: /persona, /pause [duration], /resume [persona], /editor|/e, /quit|/q [--force], /refresh, /help');
         break;
       default:
         this.setStatus(`Unknown command: /${command}`);
@@ -544,6 +551,145 @@ export class EIApp {
     }
   }
 
+  private async handlePauseCommand(args: string): Promise<void> {
+    const trimmed = args.trim().toLowerCase();
+    const ps = this.getOrCreatePersonaState(this.activePersona);
+    
+    if (ps.isPaused) {
+      this.setStatus(`${this.activePersona} is already paused`);
+      return;
+    }
+    
+    let pauseUntil: string | undefined;
+    let durationMs: number | undefined;
+    let durationDisplay: string;
+    
+    if (!trimmed || trimmed === 'indefinite') {
+      pauseUntil = undefined;
+      durationDisplay = 'indefinitely';
+    } else {
+      const match = trimmed.match(/^(\d+)(m|h)$/);
+      if (!match) {
+        this.setStatus('Usage: /pause [30m|2h|indefinite]');
+        return;
+      }
+      const value = parseInt(match[1], 10);
+      const unit = match[2];
+      durationMs = unit === 'h' ? value * 60 * 60 * 1000 : value * 60 * 1000;
+      pauseUntil = new Date(Date.now() + durationMs).toISOString();
+      durationDisplay = `for ${value}${unit}`;
+    }
+    
+    ps.isPaused = true;
+    ps.pauseUntil = pauseUntil;
+    
+    if (ps.heartbeatTimer) {
+      clearTimeout(ps.heartbeatTimer);
+      ps.heartbeatTimer = null;
+    }
+    
+    const pausedPersonaName = this.activePersona;
+    if (durationMs && pauseUntil) {
+      ps.pauseTimer = setTimeout(() => {
+        this.autoResumePersona(pausedPersonaName);
+      }, durationMs);
+    }
+    
+    await savePauseState(pausedPersonaName, { isPaused: true, pauseUntil });
+    
+    this.setStatus(`Paused ${this.activePersona} ${durationDisplay}`);
+    this.render();
+  }
+
+  private async handleResumeCommand(args: string): Promise<void> {
+    const trimmed = args.trim();
+    
+    const targetPersona = trimmed 
+      ? await findPersonaByNameOrAlias(trimmed) || trimmed
+      : this.activePersona;
+    
+    const personaExists = this.personas.some(p => p.name === targetPersona);
+    if (!personaExists) {
+      this.setStatus(`Persona '${targetPersona}' not found`);
+      return;
+    }
+    
+    const ps = this.getOrCreatePersonaState(targetPersona);
+    
+    if (!ps.isPaused) {
+      this.setStatus(`${targetPersona} is not paused`);
+      return;
+    }
+    
+    await this.resumePersona(targetPersona, true);
+    this.setStatus(`Resumed ${targetPersona}`);
+    this.render();
+  }
+
+  private async autoResumePersona(personaName: string): Promise<void> {
+    debugLog(`Auto-resuming ${personaName} after pause timer expired`);
+    await this.resumePersona(personaName, true);
+    
+    if (personaName === this.activePersona) {
+      this.setStatus(`${personaName} auto-resumed`);
+    }
+    this.render();
+  }
+
+  private async resumePersona(personaName: string, triggerHeartbeat: boolean): Promise<void> {
+    const ps = this.getOrCreatePersonaState(personaName);
+    
+    ps.isPaused = false;
+    ps.pauseUntil = undefined;
+    
+    if (ps.pauseTimer) {
+      clearTimeout(ps.pauseTimer);
+      ps.pauseTimer = null;
+    }
+    
+    await savePauseState(personaName, { isPaused: false });
+    
+    const pendingFromStorage = await getPendingMessages(personaName);
+    if (pendingFromStorage.length > 0 && ps.messageQueue.length === 0) {
+      debugLog(`Resuming ${personaName}: loading ${pendingFromStorage.length} pending messages from storage`);
+      const combinedMessage = pendingFromStorage.map(m => m.content).join('\n');
+      ps.messageQueue.push(combinedMessage);
+    }
+    
+    if (ps.messageQueue.length > 0) {
+      debugLog(`Resuming ${personaName} with ${ps.messageQueue.length} queued messages`);
+      this.processPersonaQueue(personaName);
+    } else if (triggerHeartbeat) {
+      this.resetPersonaHeartbeat(personaName);
+    }
+  }
+
+  private async loadPersistedPauseState(personaName: string): Promise<void> {
+    const pauseState = await loadPauseState(personaName);
+    
+    if (!pauseState.isPaused) return;
+    
+    const ps = this.getOrCreatePersonaState(personaName);
+    ps.isPaused = true;
+    ps.pauseUntil = pauseState.pauseUntil;
+    
+    if (pauseState.pauseUntil) {
+      const remainingMs = new Date(pauseState.pauseUntil).getTime() - Date.now();
+      
+      if (remainingMs <= 0) {
+        debugLog(`Pause expired for ${personaName} while app was closed, resuming`);
+        await this.resumePersona(personaName, false);
+      } else {
+        debugLog(`Restoring pause timer for ${personaName}: ${Math.round(remainingMs / 60000)}m remaining`);
+        ps.pauseTimer = setTimeout(() => {
+          this.autoResumePersona(personaName);
+        }, remainingMs);
+      }
+    } else {
+      debugLog(`Restored indefinite pause for ${personaName}`);
+    }
+  }
+
   private handleRefreshCommand() {
     debugLog('Manual refresh command triggered');
     
@@ -686,6 +832,13 @@ export class EIApp {
   private queueMessage(input: string) {
     const ps = this.getOrCreatePersonaState(this.activePersona);
     ps.messageQueue.push(input.trim());
+    
+    if (ps.isPaused) {
+      debugLog(`queueMessage: ${this.activePersona} is paused, message queued (${ps.messageQueue.length} total)`);
+      this.setStatus(`Message queued (${this.activePersona} is paused)`);
+      return;
+    }
+    
     this.resetPersonaHeartbeat(this.activePersona);
 
     if (ps.isProcessing) {
@@ -695,7 +848,6 @@ export class EIApp {
 
     const totalLength = ps.messageQueue.join(' ').length;
     if (totalLength >= COMPLETE_THOUGHT_LENGTH) {
-      // Clear any pending debounce timer since we're processing immediately
       if (ps.debounceTimer) {
         clearTimeout(ps.debounceTimer);
         ps.debounceTimer = null;
@@ -710,6 +862,11 @@ export class EIApp {
 
   private async processPersonaQueue(personaName: string) {
     const ps = this.getOrCreatePersonaState(personaName);
+    
+    if (ps.isPaused) {
+      debugLog(`processPersonaQueue: skipping ${personaName} - persona is paused (${ps.messageQueue.length} messages queued)`);
+      return;
+    }
     
     if (ps.messageQueue.length === 0 || ps.isProcessing) {
       debugLog(`processPersonaQueue: skipping ${personaName} - queue:${ps.messageQueue.length}, processing:${ps.isProcessing}`);
@@ -794,7 +951,10 @@ export class EIApp {
         isProcessing: false,
         messageQueue: [],
         unreadCount: 0,
-        abortController: null
+        abortController: null,
+        isPaused: false,
+        pauseUntil: undefined,
+        pauseTimer: null
       };
       this.personaStates.set(personaName, ps);
     }
@@ -808,9 +968,19 @@ export class EIApp {
       clearTimeout(ps.heartbeatTimer);
     }
     
+    if (ps.isPaused) {
+      debugLog(`Skipping heartbeat for ${personaName}: persona is paused`);
+      return;
+    }
+    
     ps.lastActivity = Date.now();
     
     ps.heartbeatTimer = setTimeout(async () => {
+      if (ps.isPaused) {
+        debugLog(`Heartbeat skipped for ${personaName}: persona is paused`);
+        return;
+      }
+      
       if (ps.messageQueue.length > 0 || ps.isProcessing) {
         this.resetPersonaHeartbeat(personaName);
         return;
@@ -1007,6 +1177,8 @@ export class EIApp {
 
       const history = await loadHistory(personaName);
       const recent = history.messages.slice(-STARTUP_HISTORY_COUNT);
+      
+      await markSystemMessagesAsRead(personaName);
       
       const ps = this.getOrCreatePersonaState(personaName);
       ps.unreadCount = 0;
@@ -1340,7 +1512,10 @@ export class EIApp {
       const history = await loadHistory('ei');
       this.messages = history.messages.slice(-STARTUP_HISTORY_COUNT);
       
+      await markSystemMessagesAsRead('ei');
+      
       for (const persona of this.personas) {
+        await this.loadPersistedPauseState(persona.name);
         this.resetPersonaHeartbeat(persona.name);
       }
       

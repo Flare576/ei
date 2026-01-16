@@ -57,10 +57,18 @@ export class PersonaRenderer {
       const unread = unreadCounts.get(p.name) || 0;
       const unreadStr = unread ? ` {red-fg}(${unread}){/red-fg}` : '';
       const ps = personaStates.get(p.name);
+      
+      if (ps?.isPaused) {
+        const pauseInfo = ps.pauseUntil 
+          ? ` ${Math.max(0, Math.ceil((new Date(ps.pauseUntil).getTime() - Date.now()) / 60000))}m`
+          : '';
+        const queuedStr = ps.messageQueue.length > 0 ? ` {yellow-fg}(${ps.messageQueue.length} queued){/yellow-fg}` : '';
+        return `${marker}{yellow-fg}⏸ ${p.name}{/yellow-fg}${pauseInfo}${queuedStr}`;
+      }
+      
       const heartbeatIn = ps ? Math.max(0, Math.floor((ps.lastActivity + HEARTBEAT_INTERVAL_MS - Date.now()) / 60000)) : 0;
       const timeStr = heartbeatIn > 0 ? ` ${heartbeatIn}m` : '';
       
-      // Add thinking indicator using spinner frames
       const thinkingStr = ps?.isProcessing ? ` {cyan-fg}${SPINNER_FRAMES[this.spinnerFrame]}{/cyan-fg}` : '';
       
       return `${marker}{cyan-fg}${p.name}{/cyan-fg}${timeStr}${unreadStr}${thinkingStr}`;
@@ -77,12 +85,18 @@ export class PersonaRenderer {
     personaStates: Map<string, PersonaState>
   ) {
     const personaText = personas.map(p => {
+      const ps = personaStates.get(p.name);
+      
+      if (ps?.isPaused) {
+        const marker = p.name === activePersona ? `{green-fg}[⏸${p.name}]{/green-fg}` : `{yellow-fg}⏸${p.name}{/yellow-fg}`;
+        const queuedStr = ps.messageQueue.length > 0 ? `{yellow-fg}(${ps.messageQueue.length}){/yellow-fg}` : '';
+        return `${marker}${queuedStr}`;
+      }
+      
       const marker = p.name === activePersona ? `{green-fg}[${p.name}]{/green-fg}` : p.name;
       const unread = unreadCounts.get(p.name) || 0;
       const unreadStr = unread ? `{red-fg}(${unread}){/red-fg}` : '';
-      const ps = personaStates.get(p.name);
       
-      // Add thinking indicator for medium layout using spinner frames
       const thinkingStr = ps?.isProcessing ? ` {cyan-fg}${SPINNER_FRAMES[this.spinnerFrame]}{/cyan-fg}` : '';
       
       return `${marker}${unreadStr}${thinkingStr}`;

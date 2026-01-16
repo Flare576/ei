@@ -198,6 +198,7 @@ export async function appendMessage(
   const history = await loadHistory(persona);
   const messageWithDefaults: Message = {
     ...message,
+    read: message.read ?? false,
     concept_processed: message.concept_processed ?? false,
   };
   history.messages.push(messageWithDefaults);
@@ -237,12 +238,25 @@ export async function markMessagesAsRead(persona?: string): Promise<void> {
   }
 }
 
+export async function markSystemMessagesAsRead(persona?: string): Promise<void> {
+  const history = await loadHistory(persona);
+  let changed = false;
+  for (const msg of history.messages) {
+    if (msg.role === "system" && msg.read === false) {
+      msg.read = true;
+      changed = true;
+    }
+  }
+  if (changed) {
+    await saveHistory(history, persona);
+  }
+}
+
 /**
  * Gets messages that haven't been processed for concept updates.
  * Messages without the concept_processed field are treated as already processed (backward compatible).
- * Only messages explicitly marked concept_processed: false are returned.
- * @param persona - Optional persona name (defaults to "ei")
- * @param beforeTimestamp - Optional ISO timestamp string; only return messages before this time
+ * Only returns messages where both concept_processed: false AND read: true.
+ * This ensures both entities have "seen" the message before it affects concept maps.
  */
 export async function getUnprocessedMessages(
   persona?: string,
@@ -253,6 +267,7 @@ export async function getUnprocessedMessages(
 
   return history.messages.filter(m =>
     m.concept_processed === false &&
+    m.read === true &&
     (!beforeTime || new Date(m.timestamp).getTime() < beforeTime)
   );
 }
@@ -397,6 +412,21 @@ export async function saveNewPersona(
   
   await writeFile(systemPath, JSON.stringify(conceptMap, null, 2), "utf-8");
   await writeFile(historyPath, JSON.stringify({ messages: [] }, null, 2), "utf-8");
+}
+
+export async function loadPauseState(persona: string): Promise<{ isPaused: boolean; pauseUntil?: string }> {
+  const conceptMap = await loadConceptMap("system", persona);
+  return {
+    isPaused: conceptMap.isPaused ?? false,
+    pauseUntil: conceptMap.pauseUntil
+  };
+}
+
+export async function savePauseState(persona: string, state: { isPaused: boolean; pauseUntil?: string }): Promise<void> {
+  const conceptMap = await loadConceptMap("system", persona);
+  conceptMap.isPaused = state.isPaused;
+  conceptMap.pauseUntil = state.pauseUntil;
+  await saveConceptMap(conceptMap, persona);
 }
 
 // Debug logging utilities to isolate file system access
