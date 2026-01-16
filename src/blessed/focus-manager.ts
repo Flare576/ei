@@ -35,14 +35,8 @@ export class FocusManager {
     const currentValue = this.layoutManager.getInputBox().getValue();
     const wasFocused = this.isInputFocused();
     
-    // Remove event handlers before recreating layout
-    this.layoutManager.removeEventHandlers();
-    
-    // Recreate layout for new terminal size
+    // recreateLayout() handles removing old handlers and setting up new ones internally
     this.layoutManager.recreateLayout();
-    
-    // Re-attach event handlers
-    this.layoutManager.setupEventHandlers();
     
     // Restore input state and focus
     this.layoutManager.getInputBox().setValue(currentValue);

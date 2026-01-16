@@ -14,6 +14,8 @@ export class LayoutManager {
   private submitHandler: ((text: string) => void) | null = null;
   private ctrlCHandler: (() => void) | null = null;
   private ctrlEHandler: (() => void) | null = null;
+  private boundCtrlCHandler: (() => void) | null = null;
+  private boundCtrlEHandler: (() => void) | null = null;
 
   constructor(screen: blessed.Widgets.Screen) {
     appendDebugLog('LayoutManager constructor called');
@@ -245,26 +247,36 @@ export class LayoutManager {
       
       if (this.ctrlCHandler) {
         appendDebugLog('DEBUG: Setting up Ctrl+C handler on inputBox');
-        this.inputBox.key(['C-c'], () => {
+        this.boundCtrlCHandler = () => {
           appendDebugLog('=== INPUT BOX CTRL+C TRIGGERED ===');
           this.ctrlCHandler!();
-        });
+        };
+        this.inputBox.key(['C-c'], this.boundCtrlCHandler);
       }
       
       if (this.ctrlEHandler) {
         appendDebugLog('DEBUG: Setting up Ctrl+E handler on inputBox');
-        this.inputBox.key(['C-e'], () => {
+        this.boundCtrlEHandler = () => {
           appendDebugLog('=== INPUT BOX CTRL+E TRIGGERED ===');
           this.ctrlEHandler!();
-        });
+        };
+        this.inputBox.key(['C-e'], this.boundCtrlEHandler);
       }
     }
   }
 
   removeEventHandlers() {
     if (this.inputBox) {
-      appendDebugLog('DEBUG: Removing submit handlers from inputBox');
+      appendDebugLog('DEBUG: Removing all event handlers from inputBox');
       this.inputBox.removeAllListeners('submit');
+      if (this.boundCtrlCHandler) {
+        this.inputBox.unkey('C-c', this.boundCtrlCHandler);
+        this.boundCtrlCHandler = null;
+      }
+      if (this.boundCtrlEHandler) {
+        this.inputBox.unkey('C-e', this.boundCtrlEHandler);
+        this.boundCtrlEHandler = null;
+      }
     }
   }
 
