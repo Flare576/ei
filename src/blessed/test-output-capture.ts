@@ -33,13 +33,12 @@ class TestOutputCapture {
 
   private constructor() {
     this.state = {
-      enabled: process.env.NODE_ENV === 'test' || process.env.EI_TEST_OUTPUT === 'true',
+      enabled: process.env.NODE_ENV === 'test' || process.env.EI_E2E_MODE === 'true',
       capturedContent: [],
       lastUpdate: 0
     };
 
-    // Debug environment variables
-    appendDebugLog(`TestOutputCapture: NODE_ENV=${process.env.NODE_ENV}, EI_TEST_OUTPUT=${process.env.EI_TEST_OUTPUT}`);
+    appendDebugLog(`TestOutputCapture: NODE_ENV=${process.env.NODE_ENV}, EI_E2E_MODE=${process.env.EI_E2E_MODE}`);
     appendDebugLog(`TestOutputCapture: Enabled=${this.state.enabled}`);
 
     if (this.state.enabled) {
@@ -186,10 +185,9 @@ class TestOutputCapture {
       this.state.capturedContent = this.state.capturedContent.slice(-100);
     }
 
-    appendDebugLog(`TestOutputCapture: Captured ${component} content: "${cleanContent.slice(0, 50)}${cleanContent.length > 50 ? '...' : ''}" (total captured: ${this.state.capturedContent.length})`);
+    appendDebugLog(`TestOutputCapture: Captured ${component} content: "${cleanContent}" (total captured: ${this.state.capturedContent.length})`);
     
-    // Also output to console so it appears in E2E test raw output
-    console.log(`[TestOutputCapture] Captured ${component} content: "${cleanContent.slice(0, 50)}${cleanContent.length > 50 ? '...' : ''}" (total captured: ${this.state.capturedContent.length})`);
+    console.log(`[TestOutputCapture] Captured ${component} content: "${cleanContent}" (total captured: ${this.state.capturedContent.length})`);
   }
 
   /**

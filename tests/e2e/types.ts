@@ -178,8 +178,7 @@ export interface EnvironmentConfig {
   EI_LLM_API_KEY: string;
   EI_LLM_MODEL: string;
   NODE_ENV?: string;
-  EI_TEST_INPUT?: string;
-  EI_TEST_OUTPUT?: string;
+  EI_E2E_MODE?: string;
 }
 
 export interface FileWatcher {

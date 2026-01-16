@@ -28,33 +28,50 @@ describe('Quit Command E2E Tests', () => {
     harness.assertProcessState(false);
   }, 15000);
 
-  test('quit command during LLM processing interrupts and exits cleanly', async () => {
-    harness.setMockResponseQueue([
-      'This is a delayed response.',
-      JSON.stringify([{
-        name: "Processing Concept",
-        description: "Concept during processing",
-        level_current: 0.5,
-        level_ideal: 0.8,
-        sentiment: 0.0,
-        type: "static"
-      }]),
-      JSON.stringify([])
-    ]);
-    
-    harness.setMockResponse('/v1/chat/completions', 'This is a delayed response.', 3000);
+  test('first quit during LLM processing aborts the request (not exit)', async () => {
+    // Set up a slow response so we can interrupt it
+    harness.setMockResponse('/v1/chat/completions', 'This would be a slow response.', 5000);
     
     await harness.startApp({ debugMode: false });
     await harness.waitForIdleState(3000);
     
+    // Send a message to start LLM processing
     await harness.sendInput('Tell me a story\n');
     await harness.waitForLLMRequest(3000);
     
+    // First /quit should abort the active processing, not exit
     await harness.sendCommand('/quit');
-    await harness.assertExitCode(0, 8000);
+    
+    // Wait for the abort to be reflected in status
+    await harness.waitForUIText('Aborted', 3000);
+    
+    // App should still be running (abort happened, not exit)
+    expect(harness.isAppRunning()).toBe(true);
+    
+    // Now use --force to cleanly exit for test cleanup
+    await harness.sendCommand('/quit --force');
+    await harness.assertExitCode(0, 5000);
     
     harness.assertProcessState(false);
-  }, 25000);
+  }, 20000);
+
+  test('quit --force exits immediately even during LLM processing', async () => {
+    // Set up a slow response so we can interrupt it
+    harness.setMockResponse('/v1/chat/completions', 'This would be a slow response.', 5000);
+    
+    await harness.startApp({ debugMode: false });
+    await harness.waitForIdleState(3000);
+    
+    // Send a message to start LLM processing
+    await harness.sendInput('Tell me a story\n');
+    await harness.waitForLLMRequest(3000);
+    
+    // /quit --force should exit immediately regardless of processing state
+    await harness.sendCommand('/quit --force');
+    await harness.assertExitCode(0, 5000);
+    
+    harness.assertProcessState(false);
+  }, 20000);
 
   test('multiple quit commands are handled gracefully', async () => {
     await harness.startApp({ debugMode: false });

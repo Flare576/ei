@@ -60,15 +60,13 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
       const mockServerPort = this.config.mockServerPort || await this.findAvailablePort();
       await this.mockServer.start(mockServerPort, mockServerConfig);
 
-      // Set up test environment variables
       const envConfig: EnvironmentConfig = {
         EI_DATA_PATH: this.tempDataPath,
         EI_LLM_BASE_URL: `http://localhost:${mockServerPort}/v1`,
         EI_LLM_API_KEY: 'test-api-key',
         EI_LLM_MODEL: 'test-model',
         NODE_ENV: 'test',
-        EI_TEST_INPUT: 'true',
-        EI_TEST_OUTPUT: 'true'
+        EI_E2E_MODE: 'true'
       };
 
       this.environmentManager.setTestEnvironment(envConfig);

@@ -110,8 +110,7 @@ export class EIApp {
     this.instanceId = EIApp.instanceCount;
     debugLog(`EIApp constructor starting - Instance #${this.instanceId}`);
     
-    // Check if we're in test mode
-    this.testInputEnabled = process.env.NODE_ENV === 'test' || process.env.EI_TEST_INPUT === 'true';
+    this.testInputEnabled = process.env.NODE_ENV === 'test' || process.env.EI_E2E_MODE === 'true';
     debugLog(`Test input enabled: ${this.testInputEnabled} - Instance #${this.instanceId}`);
     
     this.screen = blessed.screen({
@@ -1422,31 +1421,12 @@ export class EIApp {
 
   /**
    * Processes input received through the test injection system
+   * Routes all input through handleSubmit() which handles both commands and messages
    */
   private processTestInput(input: string): void {
     debugLog(`Processing test input: "${input}" - Instance #${this.instanceId}`);
     
-    // Handle commands (starting with /)
-    if (input.startsWith('/')) {
-      debugLog(`Test command detected: "${input}" - Instance #${this.instanceId}`);
-      
-      // Normalize command by trimming and converting to lowercase
-      const normalizedCommand = input.trim().toLowerCase();
-      
-      if (normalizedCommand === '/quit' || normalizedCommand === '/q') {
-        debugLog(`Test quit command - Instance #${this.instanceId}`);
-        this.handleQuit();
-        return;
-      }
-      
-      // Handle other commands here as they're implemented
-      debugLog(`Unknown test command: "${input}" - Instance #${this.instanceId}`);
-      return;
-    }
-    
-    // Handle regular messages
     if (input.length > 0) {
-      debugLog(`Test message submission: "${input}" - Instance #${this.instanceId}`);
       this.handleSubmit(input);
     }
   }

@@ -42,17 +42,11 @@ export class AppProcessManagerImpl implements AppProcessManager {
       EI_LLM_BASE_URL: config.llmBaseUrl,
       EI_LLM_API_KEY: config.llmApiKey,
       EI_LLM_MODEL: config.llmModel,
-      // Enable test input injection
-      EI_TEST_INPUT: 'true',
-      // Enable test output capture
-      EI_TEST_OUTPUT: 'true',
-      // Disable colors for cleaner output parsing
+      EI_E2E_MODE: 'true',
       NO_COLOR: '1',
-      // Set NODE_ENV to test to avoid production behaviors
       NODE_ENV: 'test'
     };
 
-    // Use the same node executable that's running this process
     const nodeExecutable = process.execPath;
     
     const ptyProcess = pty.spawn(nodeExecutable, args, {
@@ -116,13 +110,8 @@ export class AppProcessManagerImpl implements AppProcessManager {
       EI_LLM_BASE_URL: config.llmBaseUrl,
       EI_LLM_API_KEY: config.llmApiKey,
       EI_LLM_MODEL: config.llmModel,
-      // Enable test input injection
-      EI_TEST_INPUT: 'true',
-      // Enable test output capture
-      EI_TEST_OUTPUT: 'true',
-      // Disable colors for cleaner output parsing
+      EI_E2E_MODE: 'true',
       NO_COLOR: '1',
-      // Set NODE_ENV to test to avoid production behaviors
       NODE_ENV: 'test'
     };
 
