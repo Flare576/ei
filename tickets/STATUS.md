@@ -10,12 +10,10 @@
 - **0057: Persona Creation via /persona Command** - Create personas inline when not found
 - **0076: Persist Unread Message Counts Across Sessions** - Unread counts survive app restart
 - **0042: Pause/Resume Active Persona** - Pause heartbeats and queue messages for Mike the Mechanic
+- 0054: Human Concept Map Race Condition Protection (resolved via ConceptQueue)
 
 ## HIGH PRIORITY 🔥 (Critical User Experience)
-- 0033: Blessed Resize Input Corruption Validation (basic functionality)
-- 0034: Blessed Status Line Corruption (error visibility)
-- 0036: Blessed Text Rendering Corruption (core readability)
-- 0054: Human Concept Map Race Condition Protection (data integrity)
+(None currently - UI bugs resolved or cancelled)
 
 ## PENDING (New)
 
@@ -51,6 +49,9 @@
 - 0056: End-to-End Testing POC with Controlled Environment
 
 ## CANCELLED ❌
+- 0033: Blessed Resize Input Corruption Validation (fixed during migration)
+- 0034: Blessed Status Line Corruption (not observed, may revisit as modal enhancement)
+- 0036: Blessed Text Rendering Corruption (fixed during migration)
 - 0003: /editor Command for Multi-line Input (replaced by 0030, then 0041)
 - 0004: Inline Carriage Return Support (replaced by 0013)
 - 0012: OpenCode-Compatible Keybindings (partially implemented, issues noted)
@@ -63,7 +64,7 @@
 
 **Last Updated**: 2026-01-16  
 **Total Tickets**: 76 created  
-**Completion Rate**: 32 done (0061 epic complete)
+**Completion Rate**: 33 done, 4 cancelled this session
 
 ## Epic Status
 
@@ -87,8 +88,8 @@
 ## Priority Analysis
 
 ### Immediate Action Items
-1. **0054** - Race condition protection (if multi-persona usage increases)
-2. High priority UI bugs (0033, 0034, 0036) - corruption issues
+1. Review PENDING tickets for next priorities
+2. Consider modal/popup for `/help` (status line too small)
 
 ### Schema Change Summary (0069) - COMPLETED
 The concept schema has been overhauled to separate three independent dimensions:

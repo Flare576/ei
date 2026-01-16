@@ -1,6 +1,8 @@
 # 0034: Blessed Status Line Corruption
 
-**Status**: PENDING
+**Status**: CANCELLED
+
+> **Note**: Status line corruption has not been observed in regular use. The single-line status bar may eventually need a modal/popup replacement for `/help` and longer messages, but that's a separate enhancement, not a bug fix.
 
 ## Summary
 Intermittent corruption of the status line (bottom of screen) in the Blessed UI, particularly when LLM connection errors occur.

@@ -1,6 +1,8 @@
 # 0033: Blessed Resize Input Corruption Validation
 
-**Status**: PENDING
+**Status**: CANCELLED
+
+> **Note**: Resize handling has been validated through regular use. The fixes implemented during the Blessed migration (element cleanup, state preservation, screen refresh) resolved the post-resize input corruption issue.
 
 ## Summary
 Validate that the blessed prototype resize handling fixes resolve the post-resize input corruption issue where text becomes invisible but cursor still moves.

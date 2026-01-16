@@ -1,6 +1,8 @@
 # 0036: Blessed Text Rendering Corruption
 
-**Status**: PENDING
+**Status**: CANCELLED
+
+> **Note**: Text rendering corruption resolved. Root cause was likely related to pre-rendering or buffer handling that was fixed during Blessed integration work.
 
 ## Summary
 Text rendering corruption in chat messages where characters appear mixed up, overlapped, or incorrectly positioned.
