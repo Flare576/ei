@@ -1,6 +1,7 @@
 # 0058: Blessed App.ts Refactoring
 
-**Status**: PENDING
+**Status**: DONE
+**NOTES**: There's too much interdependency to split this file up reasonably - when adding new functionality, keep pure/isolated pieces in separate files, but don't attempt to refactor just to make it "Smaller"
 
 ## Summary
 Refactor the monolithic `src/blessed/app.ts` file (1059 lines) into focused, maintainable modules with clear separation of concerns.

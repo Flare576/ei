@@ -1,12 +1,10 @@
 # Ticket Status Summary
 
-## HIGHEST PRIORITY 🚨 (Critical Infrastructure)
-- **0061: Concept Processing Architecture Overhaul (Epic)** - 60-70% response time improvement
-- **0069: Concept Schema Overhaul (Epic)** - DONE - Separates exposure/desire/sentiment
-
 ## QA 🧪 (Awaiting Human Verification)
 
 ## DONE ✅ (Recently Completed)
+- **0069: Concept Schema Overhaul (Epic)** - Separates exposure/desire/sentiment
+- **0061: Concept Processing Architecture Overhaul (Epic)** - 60-70% response time improvement
 - 0060: Fix Same-Persona Switch Behavior (scrolls to bottom, no reload)
 - 0058: Blessed App.ts Refactoring (enables clean feature development)
 - **0057: Persona Creation via /persona Command** - Create personas inline when not found
@@ -65,17 +63,18 @@
 
 **Last Updated**: 2026-01-16  
 **Total Tickets**: 76 created  
-**Completion Rate**: 31 done
+**Completion Rate**: 32 done (0061 epic complete)
 
 ## Epic Status
 
-### 0061: Concept Processing Architecture Overhaul
+### 0061: Concept Processing Architecture Overhaul - DONE
 - 0062: DONE - concept_processed flag
 - 0063: DONE - last_updated timestamp
 - 0064: DONE - ConceptQueue
 - 0065: DONE - Decouple processEvent
 - 0066: DONE - Queue triggers
 - 0067: DONE - Programmatic decay
+- 0068: CANCELLED - superseded by 0069
 
 ### 0069: Concept Schema Overhaul (DONE)
 - 0070: DONE - Update interface (add sentiment, remove elasticity)
@@ -88,9 +87,8 @@
 ## Priority Analysis
 
 ### Immediate Action Items
-1. **Test 0066 & 0067** - UI/UX changes need human verification
-2. **0069 epic** - Schema improvements for better concept modeling
-3. **0054** - Race condition protection (if multi-persona usage increases)
+1. **0054** - Race condition protection (if multi-persona usage increases)
+2. High priority UI bugs (0033, 0034, 0036) - corruption issues
 
 ### Schema Change Summary (0069) - COMPLETED
 The concept schema has been overhauled to separate three independent dimensions:

@@ -1,6 +1,6 @@
 # 0061: Concept Processing Architecture Overhaul (Epic)
 
-**Status**: PENDING
+**Status**: DONE
 
 ## Summary
 Decouple concept map updates from the conversational loop to dramatically improve response times. Currently, each message triggers 3-4 sequential LLM calls (response + system concepts + human concepts + optional descriptions), creating 60-120 second delays. This epic restructures the system to generate responses immediately while processing concept updates asynchronously.
@@ -29,23 +29,25 @@ The current architecture couples concept learning with conversation:
 
 ## Sub-Tickets
 
-| Ticket | Title | Priority | Effort |
-|--------|-------|----------|--------|
-| 0062 | Add concept_processed flag to messages | High | 1 hour |
-| 0063 | Add last_updated timestamp to concepts | High | 1 hour |
-| 0064 | Implement ConceptQueue background processor | High | 3-4 hours |
-| 0065 | Decouple processEvent from concept updates | High | 2 hours |
-| 0066 | Implement queue triggers (switch, stale messages) | Medium | 2-3 hours |
-| 0067 | Replace heartbeat LLM calls with programmatic decay | Medium | 2-3 hours |
-| 0068 | Refine elasticity guidance and defaults | Low | 1-2 hours |
+| Ticket | Title | Status |
+|--------|-------|--------|
+| 0062 | Add concept_processed flag to messages | DONE |
+| 0063 | Add last_updated timestamp to concepts | DONE |
+| 0064 | Implement ConceptQueue background processor | DONE |
+| 0065 | Decouple processEvent from concept updates | DONE |
+| 0066 | Implement queue triggers (switch, stale messages) | DONE |
+| 0067 | Replace heartbeat LLM calls with programmatic decay | DONE |
+| 0068 | Refine elasticity guidance and defaults | CANCELLED (superseded by 0069) |
+
+> **Note**: 0069 (Concept Schema Overhaul) replaced elasticity with logarithmic decay and added sentiment field.
 
 ## Acceptance Criteria
-- [ ] Response generation completes in single LLM call time (~20-40 seconds vs current 60-120)
-- [ ] Concept maps continue to update accurately (just asynchronously)
-- [ ] No data loss - human concepts preserve learned_by attribution
-- [ ] Heartbeats trigger conversation based on concept deltas, not LLM re-evaluation
-- [ ] Personas naturally drift toward topics based on elasticity/decay
-- [ ] All existing tests pass with new architecture
+- [x] Response generation completes in single LLM call time (~20-40 seconds vs current 60-120)
+- [x] Concept maps continue to update accurately (just asynchronously)
+- [x] No data loss - human concepts preserve learned_by attribution
+- [x] Heartbeats trigger conversation based on concept deltas, not LLM re-evaluation
+- [x] Personas naturally drift toward topics based on logarithmic decay (elasticity removed per 0069)
+- [x] All existing tests pass with new architecture
 
 ## Value Statement
 **Dramatic UX Improvement**: Reduces perceived response time by 60-70%. Users get immediate conversational flow while the system learns in the background. Enables more natural persona behavior through concept decay mechanics.
