@@ -16,14 +16,7 @@
 (None currently - UI bugs resolved or cancelled)
 
 ## PENDING (New)
-
-
-- 0062: Add concept_processed flag to messages (part of 0061)
-- 0063: Add last_updated timestamp to concepts (part of 0061)
-- 0064: Implement ConceptQueue background processor (part of 0061)
-- 0065: Decouple processEvent from concept updates (part of 0061)
-- 0066: Implement queue triggers - switch, stale messages (part of 0061)
-- 0067: Replace heartbeat LLM calls with programmatic decay (part of 0061)
+- 0077: Help Modal Popup (replace status bar with proper modal)
 - 0001: Auto-Generate Persona Descriptions
 - 0005: CLI Thinking Indicators
 - 0006: Detect and Handle LLM Response Truncation
@@ -63,8 +56,8 @@
 ---
 
 **Last Updated**: 2026-01-16  
-**Total Tickets**: 76 created  
-**Completion Rate**: 33 done, 4 cancelled this session
+**Total Tickets**: 77 created  
+**Completion Rate**: 33 done
 
 ## Epic Status
 
