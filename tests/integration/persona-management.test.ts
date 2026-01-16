@@ -209,20 +209,18 @@ describe('Persona Management Integration Tests', () => {
       expect(unreadCounts.has('claude')).toBe(false);
     });
 
-    test('switching to same persona does nothing - BUG REPRODUCTION', async () => {
+    test('switching to same persona scrolls to bottom without reload', async () => {
       const currentPersona = app.getTestActivePersona();
       const initialMessageCount = app.getTestMessages().length;
 
-      // Switch to same persona
+      vi.mocked(loadHistory).mockClear();
+
       await app.testSwitchPersona(currentPersona);
 
-      // Verify no changes occurred
       expect(app.getTestActivePersona()).toBe(currentPersona);
       expect(app.getTestMessages()).toHaveLength(initialMessageCount);
-      
-      // BUG: This should NOT call loadHistory for same persona
-      // This test documents the bug - loadHistory is called unnecessarily
-      expect(loadHistory).toHaveBeenCalledWith(currentPersona);
+      expect(loadHistory).not.toHaveBeenCalled();
+      expect(app.getTestStatusMessage()).toContain('Scrolled to latest');
     });
 
     test('persona switch error shows error status', async () => {

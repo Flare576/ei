@@ -1,14 +1,14 @@
 # Ticket Status Summary
 
 ## HIGHEST PRIORITY 🚨 (Critical Infrastructure)
-- 0058: Blessed App.ts Refactoring (enables clean feature development)
-- 0060: Fix Same-Persona Switch Behavior (integration test failures)
 - **0061: Concept Processing Architecture Overhaul (Epic)** - 60-70% response time improvement
 - **0069: Concept Schema Overhaul (Epic)** - DONE - Separates exposure/desire/sentiment
 
 ## QA 🧪 (Awaiting Human Verification)
 
 ## DONE ✅ (Recently Completed)
+- 0060: Fix Same-Persona Switch Behavior (scrolls to bottom, no reload)
+- 0058: Blessed App.ts Refactoring (enables clean feature development)
 - **0057: Persona Creation via /persona Command** - Create personas inline when not found
 - **0076: Persist Unread Message Counts Across Sessions** - Unread counts survive app restart
 - **0042: Pause/Resume Active Persona** - Pause heartbeats and queue messages for Mike the Mechanic
@@ -65,7 +65,7 @@
 
 **Last Updated**: 2026-01-16  
 **Total Tickets**: 76 created  
-**Completion Rate**: 30 done - 0042 pause/resume complete!
+**Completion Rate**: 31 done
 
 ## Epic Status
 

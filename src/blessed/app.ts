@@ -1086,7 +1086,11 @@ export class EIApp {
   }
 
   private async switchPersona(personaName: string) {
-    if (personaName === this.activePersona) return;
+    if (personaName === this.activePersona) {
+      this.autoScrollToBottom();
+      this.setStatus(`Scrolled to latest in: ${personaName}`);
+      return;
+    }
 
     try {
       // Queue concept updates for the persona being backgrounded (high priority)

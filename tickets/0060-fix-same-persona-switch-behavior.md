@@ -1,6 +1,6 @@
 # 0060: Fix Same-Persona Switch Behavior
 
-**Status**: PENDING
+**Status**: DONE
 
 ## Summary
 Fix same-persona switching to only scroll to bottom instead of performing full reload operations, eliminating unnecessary file I/O and matching product owner specifications.
@@ -41,12 +41,12 @@ private async switchPersona(personaName: string) {
 ```
 
 ## Acceptance Criteria
-- [ ] Same-persona switches do not call `loadHistory`
-- [ ] Same-persona switches scroll to bottom of chat
-- [ ] User gets visual feedback that command was processed
-- [ ] Integration test `switching to same persona does nothing` passes
-- [ ] No performance regression for different-persona switches
-- [ ] Early return condition works reliably
+- [x] Same-persona switches do not call `loadHistory`
+- [x] Same-persona switches scroll to bottom of chat
+- [x] User gets visual feedback that command was processed
+- [x] Integration test `switching to same persona scrolls to bottom without reload` passes
+- [x] No performance regression for different-persona switches
+- [x] Early return condition works reliably
 
 ## Value Statement
 Eliminates unnecessary file I/O operations and fixes integration test failures, proving the test infrastructure is catching real performance issues.
