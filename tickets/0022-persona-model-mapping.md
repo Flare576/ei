@@ -1,6 +1,6 @@
 # 0022: Multi-Model LLM Architecture (Epic)
 
-**Status**: PENDING
+**Status**: DONE
 
 ## Summary
 
@@ -118,13 +118,13 @@ EI_MODEL_GENERATION=openai:gpt-4o-mini    # For persona creation
 
 ## Acceptance Criteria
 
-- [ ] Sub-ticket 0080 complete: Multi-provider infrastructure
-- [ ] Sub-ticket 0081 complete: Schema updated
-- [ ] Sub-ticket 0082 complete: LLM calls refactored
-- [ ] Sub-ticket 0083 complete: Operation-specific models
-- [ ] Sub-ticket 0084 complete: /model command
-- [ ] Sub-ticket 0085 complete: Provider optimizations (optional)
-- [ ] Sub-ticket 0086 complete: Documentation
+- [x] Sub-ticket 0080 complete: Multi-provider infrastructure
+- [x] Sub-ticket 0081 complete: Schema updated
+- [x] Sub-ticket 0082 complete: LLM calls refactored
+- [x] Sub-ticket 0083 complete: Operation-specific models
+- [x] Sub-ticket 0084 complete: /model command
+- [x] Sub-ticket 0085 complete: Provider optimizations (partial - rate limits + headers)
+- [x] Sub-ticket 0086 complete: Documentation
 
 ## Value Statement
 

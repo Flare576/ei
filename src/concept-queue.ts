@@ -334,10 +334,11 @@ export class ConceptQueue {
       task.persona
     );
 
+    // Concept updates use operation/global defaults (persona models may not handle JSON well)
     const newConcepts = await callLLMForJSON<Concept[]>(
       systemPrompt,
       userPrompt,
-      { signal, temperature: 0.3 }
+      { signal, temperature: 0.3, operation: "concept" }
     );
 
     if (signal.aborted) {

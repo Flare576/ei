@@ -64,7 +64,7 @@ describe('Persona Creator', () => {
       expect(callLLMForJSON).toHaveBeenCalledWith(
         'system prompt',
         'user prompt',
-        { signal: undefined, temperature: 0.5 }
+        { signal: undefined, temperature: 0.5, model: undefined, operation: 'generation' }
       );
     });
 
@@ -85,7 +85,7 @@ describe('Persona Creator', () => {
       expect(callLLMForJSON).toHaveBeenCalledWith(
         'system',
         'user',
-        { signal: controller.signal, temperature: 0.5 }
+        { signal: controller.signal, temperature: 0.5, model: undefined, operation: 'generation' }
       );
     });
 
@@ -252,7 +252,7 @@ describe('Persona Creator', () => {
       expect(callLLMForJSON).toHaveBeenCalledWith(
         expect.any(String),
         expect.stringContaining('Create a persona based on this description'),
-        { temperature: 0.3 }
+        { temperature: 0.3, operation: 'generation' }
       );
     });
 

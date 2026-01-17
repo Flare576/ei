@@ -1,6 +1,6 @@
 # 0084: /model Command - View and Set Persona Models
 
-**Status**: PENDING
+**Status**: DONE
 
 **Parent Epic**: 0022 - Multi-Model LLM Architecture
 
@@ -178,15 +178,15 @@ Examples:
 
 ## Acceptance Criteria
 
-- [ ] `/model` shows current persona's model with fallback explanation
-- [ ] `/model <provider:model>` validates and sets persona model
-- [ ] `/model <spec>` shows helpful error for unknown provider
-- [ ] `/model <spec>` shows helpful error for missing API key
-- [ ] `/model --clear` removes persona model override
-- [ ] `/model --list` shows all providers with status
-- [ ] Model changes persist to persona's `system.jsonc` file
-- [ ] `/help` updated with model commands
-- [ ] Integration tests verify command behavior
+- [x] `/model` shows current persona's model with fallback explanation
+- [x] `/model <provider:model>` validates and sets persona model
+- [x] `/model <spec>` shows helpful error for unknown provider
+- [x] `/model <spec>` shows helpful error for missing API key
+- [x] `/model --clear` removes persona model override
+- [x] `/model --list` shows all providers with status
+- [x] Model changes persist to persona's `system.jsonc` file
+- [x] `/help` updated with model commands
+- [x] Integration tests verify command behavior
 
 ## Testing Strategy
 

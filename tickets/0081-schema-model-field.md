@@ -1,6 +1,6 @@
 # 0081: Schema - Add Model Field to ConceptMap
 
-**Status**: PENDING
+**Status**: DONE
 
 **Parent Epic**: 0022 - Multi-Model LLM Architecture
 
@@ -59,11 +59,11 @@ Add to AGENTS.md Concept Schema section:
 
 ## Acceptance Criteria
 
-- [ ] `ConceptMap` interface has `model?: string` field
-- [ ] TypeScript compilation passes
-- [ ] Existing persona files load without error (backward compatible)
-- [ ] AGENTS.md documents the `model` field
-- [ ] AGENTS.md includes valid provider:model examples
+- [x] `ConceptMap` interface has `model?: string` field
+- [x] TypeScript compilation passes
+- [x] Existing persona files load without error (backward compatible)
+- [x] AGENTS.md documents the `model` field
+- [x] AGENTS.md includes valid provider:model examples
 
 ## Dependencies
 

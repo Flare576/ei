@@ -5,12 +5,12 @@ import { writeFileSync, readFileSync, unlinkSync } from 'fs';
 // Import test output capture early to intercept blessed methods before they're used
 import { testOutputCapture } from './test-output-capture.js';
 
-import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog, getPendingMessages, replacePendingMessages, appendHumanMessage, getUnprocessedMessages, loadPauseState, savePauseState, markSystemMessagesAsRead, getUnreadSystemMessageCount, loadArchiveState, saveArchiveState, getArchivedPersonas, findArchivedPersonaByNameOrAlias, addPersonaAlias, removePersonaAlias, loadConceptMap } from '../storage.js';
+import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog, getPendingMessages, replacePendingMessages, appendHumanMessage, getUnprocessedMessages, loadPauseState, savePauseState, markSystemMessagesAsRead, getUnreadSystemMessageCount, loadArchiveState, saveArchiveState, getArchivedPersonas, findArchivedPersonaByNameOrAlias, addPersonaAlias, removePersonaAlias, loadConceptMap, saveConceptMap } from '../storage.js';
 import { createPersonaWithLLM, saveNewPersona } from '../persona-creator.js';
 import { ConceptQueue } from '../concept-queue.js';
 import { processEvent } from '../processor.js';
 import { applyConceptDecay, checkConceptDeltas } from '../concept-decay.js';
-import { LLMAbortedError } from '../llm.js';
+import { LLMAbortedError, resolveModel, getProviderStatuses } from '../llm.js';
 import type { Message, MessageState, PersonaState } from '../types.js';
 import { LayoutManager } from './layout-manager.js';
 import { FocusManager } from './focus-manager.js';
@@ -375,6 +375,10 @@ export class EIApp {
       case 'nick':
       case 'n':
         await this.handleNickCommand(args);
+        break;
+      case 'model':
+      case 'm':
+        await this.handleModelCommand(args);
         break;
       case 'help':
       case 'h':
@@ -809,6 +813,118 @@ export class EIApp {
     this.setStatus(`Unknown subcommand: /nick ${subcommand}. Use add, remove, or list.`);
   }
 
+  private async handleModelCommand(args: string): Promise<void> {
+    const { parseCommandArgs } = await import('../parse-utils.js');
+    const parts = parseCommandArgs(args);
+    const arg = parts[0]?.toLowerCase() || '';
+
+    if (!arg) {
+      await this.showModelConfig();
+      return;
+    }
+
+    if (arg === '--clear') {
+      await this.clearPersonaModel();
+      return;
+    }
+
+    if (arg === '--list') {
+      await this.listProviders();
+      return;
+    }
+
+    await this.setPersonaModel(parts[0]);
+  }
+
+  private async showModelConfig(): Promise<void> {
+    const conceptMap = await loadConceptMap('system', this.activePersona);
+    const personaModel = conceptMap.model || null;
+
+    const envResponse = process.env.EI_MODEL_RESPONSE || null;
+    const envConcept = process.env.EI_MODEL_CONCEPT || null;
+    const envGeneration = process.env.EI_MODEL_GENERATION || null;
+    const globalDefault = process.env.EI_LLM_MODEL || 'local:google/gemma-3-12b';
+
+    const currentlyUsing = personaModel || envResponse || globalDefault;
+
+    let lines: string[] = [];
+    lines.push(`Model configuration for '${this.activePersona}':`);
+    lines.push('');
+    lines.push(`  Persona model:     ${personaModel || '(not set)'}`);
+    
+    if (!personaModel) {
+      if (envResponse) {
+        lines.push(`  EI_MODEL_RESPONSE: ${envResponse}`);
+      }
+      if (envConcept) {
+        lines.push(`  EI_MODEL_CONCEPT:  ${envConcept}`);
+      }
+      if (envGeneration) {
+        lines.push(`  EI_MODEL_GENERATION: ${envGeneration}`);
+      }
+    }
+    
+    lines.push(`  Global default:    ${globalDefault}`);
+    lines.push('');
+    lines.push(`Currently using: ${currentlyUsing}`);
+
+    this.setStatus(lines.join(' | '));
+  }
+
+  private async setPersonaModel(modelSpec: string): Promise<void> {
+    try {
+      resolveModel(modelSpec);
+    } catch (err) {
+      this.setStatus(`Error: ${err instanceof Error ? err.message : String(err)}`);
+      return;
+    }
+
+    const conceptMap = await loadConceptMap('system', this.activePersona);
+    conceptMap.model = modelSpec;
+    await saveConceptMap(conceptMap, this.activePersona);
+
+    this.setStatus(`Model for '${this.activePersona}' set to: ${modelSpec}`);
+  }
+
+  private async clearPersonaModel(): Promise<void> {
+    const conceptMap = await loadConceptMap('system', this.activePersona);
+    
+    if (!conceptMap.model) {
+      this.setStatus(`No model override set for '${this.activePersona}'`);
+      return;
+    }
+
+    delete conceptMap.model;
+    await saveConceptMap(conceptMap, this.activePersona);
+
+    const globalDefault = process.env.EI_LLM_MODEL || 'local:google/gemma-3-12b';
+    this.setStatus(`Model override cleared for '${this.activePersona}'. Now using default: ${globalDefault}`);
+  }
+
+  private async listProviders(): Promise<void> {
+    const statuses = getProviderStatuses();
+    
+    let lines: string[] = [];
+    lines.push('Available Providers:');
+    
+    for (const status of statuses) {
+      const check = status.configured ? '\u2713' : '\u2717';
+      const configStatus = status.configured 
+        ? (status.provider === 'local' ? `(${status.baseURL})` : '(API key set)')
+        : `(set EI_${status.provider === 'x' ? 'XAI' : status.provider.toUpperCase()}_API_KEY)`;
+      lines.push(`  ${status.provider.padEnd(10)} ${check} ${status.name} ${configStatus}`);
+    }
+
+    lines.push('');
+    lines.push('Current defaults:');
+    lines.push(`  EI_LLM_MODEL        = ${process.env.EI_LLM_MODEL || '(not set)'}`);
+    lines.push(`  EI_MODEL_RESPONSE   = ${process.env.EI_MODEL_RESPONSE || '(not set)'}`);
+    lines.push(`  EI_MODEL_CONCEPT    = ${process.env.EI_MODEL_CONCEPT || '(not set)'}`);
+    lines.push(`  EI_MODEL_GENERATION = ${process.env.EI_MODEL_GENERATION || '(not set)'}`);
+
+    this.setStatus(lines.join(' | '));
+  }
+
   private showHelpModal(): void {
     const helpText = `EI - Emotional Intelligence Chat
 
@@ -822,6 +938,11 @@ COMMANDS
     /nick              List aliases for active persona
     /nick add <alias>  Add alias (supports "multi word" quotes)
     /nick remove <pat> Remove alias by partial match
+  /model [subcommand] View/set persona model configuration
+    /model             Show current model configuration
+    /model <spec>      Set model (e.g., openai:gpt-4o)
+    /model --clear     Remove persona model (use default)
+    /model --list      List available providers
   /editor, /e         Open external editor for multi-line input
   /refresh, /r        Refresh UI layout
   /quit [--force]     Exit application

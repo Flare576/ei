@@ -1,6 +1,6 @@
 # 0085: Provider-Specific Optimizations
 
-**Status**: PENDING
+**Status**: DONE (partial - rate limits + provider headers only)
 
 **Parent Epic**: 0022 - Multi-Model LLM Architecture
 

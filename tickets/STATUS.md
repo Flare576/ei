@@ -1,6 +1,6 @@
 # Ticket Status Summary
 
-## DONE ✅ (44 tickets)
+## DONE ✅ (51 tickets)
 - 0001: Auto-Generate Persona Descriptions
 - 0002: Nickname Management Commands
 - 0005: CLI Thinking Indicators
@@ -25,6 +25,7 @@
 - 0040: Blessed Resize Detection Broken
 - 0041: Blessed Editor Command
 - 0042: Pause/Resume Active Persona with Message Queuing
+- 0043: Archive/Unarchive Personas
 - 0054: Human Concept Map Race Condition Protection
 - 0056: End-to-End Testing POC with Controlled Environment
 - 0057: Persona Creation via /persona Command
@@ -44,12 +45,20 @@
 - 0075: Update Documentation for New Concept Schema
 - 0076: Persist Unread Message Counts Across Sessions
 - 0077: Help Command with External Pager
-- 0043: Archive/Unarchive Personas
+- 0080: Core Multi-Provider Infrastructure
+- 0081: Schema - Add Model Field to ConceptMap
+- 0082: Refactor LLM Calls - Accept Model Parameter
+- 0083: Operation-Specific Model Configuration
+- 0084: /model Command - View and Set Persona Models
+- 0085: Provider-Specific Optimizations (partial - rate limits + headers)
+- 0022: Multi-Model LLM Architecture (Epic)
 
-## PENDING (27 tickets)
+## QA (1 ticket)
+- 0091: Dynamic Persona System Prompt
+
+## PENDING (23 tickets)
 - 0015: Persona Switching (Commands + Navigation)
 - 0018: Warn on Public Repository Storage
-- 0022: Multi-Model LLM Architecture (Epic)
 - 0027: Enhanced Markdown Rendering
 - 0028: Investigate Slow LLM Response Times
 - 0032: Failed Message Edit and Retry Interface
@@ -68,13 +77,13 @@
 - 0055: Logging System Improvements
 - 0078: Persona Delete Command
 - 0079: Validate Command Argument Counts
-- 0080: Core Multi-Provider Infrastructure
-- 0081: Schema - Add Model Field to ConceptMap
-- 0082: Refactor LLM Calls - Accept Model Parameter
-- 0083: Operation-Specific Model Configuration
-- 0084: /model Command - View and Set Persona Models
-- 0085: Provider-Specific Optimizations
-- 0086: Documentation - Multi-Model Setup Guide
+- 0086: DONE - Documentation - Multi-Model Setup Guide
+- 0087: JSON Parse Retry with Enhanced Prompt
+- 0088: Token Usage Logging
+- 0089: Proactive API Key Validation
+- 0090: Parse Qwen-style Response Markup
+- 0092: LLM Validation and Error Handling
+- 0093: Persona Generation - Seed Initial Topics
 
 ## CANCELLED ❌ (11 tickets)
 - 0003: /editor Command for Multi-line Input
@@ -92,8 +101,8 @@
 ---
 
 **Last Updated**: 2026-01-17
-**Total Tickets**: 86 created (0012 and 0071/0072 not in filesystem - may have been consolidated)
-**Stats**: 44 done, 0 in QA, 27 pending, 11 cancelled
+**Total Tickets**: 93 created
+**Stats**: 51 done, 1 QA, 23 pending, 11 cancelled
 
 ## Epic Status
 
@@ -112,11 +121,16 @@
 - 0074: DONE - Heartbeat trigger logic
 - 0075: DONE - Documentation updates
 
-### 0022: Multi-Model LLM Architecture - PENDING
-- 0080: PENDING - Core multi-provider infrastructure
-- 0081: PENDING - Schema model field
-- 0082: PENDING - Refactor LLM calls
-- 0083: PENDING - Operation-specific models
-- 0084: PENDING - /model command
-- 0085: PENDING - Provider optimizations (optional)
+### 0022: Multi-Model LLM Architecture - DONE
+- 0080: DONE - Core multi-provider infrastructure
+- 0081: DONE - Schema model field
+- 0082: DONE - Refactor LLM calls
+- 0083: DONE - Operation-specific models
+- 0084: DONE - /model command
+- 0085: DONE (partial) - Rate limit handling + provider headers
 - 0086: PENDING - Documentation
+
+## Deferred from 0085 (standalone tickets)
+- 0087: PENDING - JSON parse retry with enhanced prompt
+- 0088: PENDING - Token usage logging
+- 0089: PENDING - Proactive API key validation

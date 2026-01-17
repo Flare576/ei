@@ -116,7 +116,7 @@ Return JSON in this exact format:
   const result = await callLLMForJSON<PersonaGenerationResult>(
     systemPrompt,
     userPrompt,
-    { temperature: 0.3 }
+    { temperature: 0.3, operation: "generation" }
   );
 
   const now = new Date().toISOString();
@@ -164,7 +164,9 @@ export async function generatePersonaDescriptions(
   try {
     const result = await callLLMForJSON<PersonaDescriptions>(system, user, {
       signal,
-      temperature: 0.5
+      temperature: 0.5,
+      model: concepts.model,
+      operation: "generation"
     });
     return result;
   } catch {

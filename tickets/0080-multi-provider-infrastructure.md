@@ -1,6 +1,6 @@
 # 0080: Core Multi-Provider Infrastructure
 
-**Status**: PENDING
+**Status**: DONE
 
 **Parent Epic**: 0022 - Multi-Model LLM Architecture
 
@@ -142,17 +142,17 @@ export function getProviderStatuses(): ProviderStatus[] {
 
 ## Acceptance Criteria
 
-- [ ] `ProviderConfig` interface defined
-- [ ] Provider registry with 5 providers (local, openai, google, anthropic, x)
-- [ ] `resolveModel()` parses `provider:model` format correctly
-- [ ] `resolveModel()` handles bare model names (assumes local)
-- [ ] Client caching prevents redundant OpenAI instances
-- [ ] Graceful error for unknown provider
-- [ ] Graceful error for missing API key (non-local providers)
-- [ ] `getProviderStatuses()` returns status of all providers
-- [ ] Backward compatible: existing `EI_LLM_*` vars still work
-- [ ] Unit tests for `resolveModel()` with various inputs
-- [ ] Unit tests for provider status utility
+- [x] `ProviderConfig` interface defined
+- [x] Provider registry with 5 providers (local, openai, google, anthropic, x)
+- [x] `resolveModel()` parses `provider:model` format correctly
+- [x] `resolveModel()` handles bare model names (assumes local)
+- [x] Client caching prevents redundant OpenAI instances
+- [x] Graceful error for unknown provider
+- [x] Graceful error for missing API key (non-local providers)
+- [x] `getProviderStatuses()` returns status of all providers
+- [x] Backward compatible: existing `EI_LLM_*` vars still work
+- [x] Unit tests for `resolveModel()` with various inputs
+- [x] Unit tests for provider status utility
 
 ## Testing Strategy
 

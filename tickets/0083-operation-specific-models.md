@@ -1,6 +1,6 @@
 # 0083: Operation-Specific Model Configuration
 
-**Status**: PENDING
+**Status**: QA
 
 **Parent Epic**: 0022 - Multi-Model LLM Architecture
 
@@ -125,15 +125,15 @@ const newConcepts = await callLLMForJSON<Concept[]>(
 
 ## Acceptance Criteria
 
-- [ ] `LLMOperation` type defined with three values
-- [ ] `EI_MODEL_RESPONSE` env var recognized and used for response generation
-- [ ] `EI_MODEL_CONCEPT` env var recognized and used for concept updates
-- [ ] `EI_MODEL_GENERATION` env var recognized and used for persona/description generation
-- [ ] Fallback chain works correctly (model → operation env → global env → default)
-- [ ] All callsites updated with appropriate operation type
-- [ ] AGENTS.md documents operation-specific env vars with examples
-- [ ] Unit tests verify fallback chain behavior
-- [ ] Backward compatible: existing setups (only `EI_LLM_MODEL`) still work
+- [x] `LLMOperation` type defined with three values
+- [x] `EI_MODEL_RESPONSE` env var recognized and used for response generation
+- [x] `EI_MODEL_CONCEPT` env var recognized and used for concept updates
+- [x] `EI_MODEL_GENERATION` env var recognized and used for persona/description generation
+- [x] Fallback chain works correctly (model → operation env → global env → default)
+- [x] All callsites updated with appropriate operation type
+- [x] AGENTS.md documents operation-specific env vars with examples
+- [x] Unit tests verify fallback chain behavior
+- [x] Backward compatible: existing setups (only `EI_LLM_MODEL`) still work
 
 ## Testing Strategy
 

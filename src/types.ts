@@ -34,6 +34,13 @@ export interface ConceptMap {
   aliases?: string[];
   short_description?: string;  // 10-15 word summary of personality
   long_description?: string;   // 2-3 sentence description
+  /**
+   * MODEL: Which LLM model should this persona use?
+   * Format: "provider:model" (e.g., "openai:gpt-4o", "local:google/gemma-3-12b")
+   * Optional - absence means use global default (EI_LLM_MODEL env var)
+   * Only meaningful for entity: "system" (personas), ignored for humans
+   */
+  model?: string;
   last_updated: string | null;
   concepts: Concept[];
   isPaused?: boolean;

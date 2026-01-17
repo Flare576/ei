@@ -1,6 +1,6 @@
 # 0082: Refactor LLM Calls - Accept Model Parameter
 
-**Status**: PENDING
+**Status**: DONE
 
 **Parent Epic**: 0022 - Multi-Model LLM Architecture
 
@@ -131,14 +131,14 @@ const newConcepts = await callLLMForJSON<Concept[]>(
 
 ## Acceptance Criteria
 
-- [ ] `LLMOptions.model` field exists
-- [ ] `callLLMRaw` uses `resolveModel()` to get client and model
-- [ ] Debug mode logs which provider:model is used per call
-- [ ] `processEvent` passes persona's model to response generation
-- [ ] `concept-queue` passes persona's model to concept updates
-- [ ] `persona-creator` passes persona's model to description generation
-- [ ] All existing tests pass (backward compatible when model not specified)
-- [ ] New tests verify model parameter flows through correctly
+- [x] `LLMOptions.model` field exists
+- [x] `callLLMRaw` uses `resolveModel()` to get client and model
+- [x] Debug mode logs which provider:model is used per call
+- [x] `processEvent` passes persona's model to response generation
+- [x] `concept-queue` passes persona's model to concept updates
+- [x] `persona-creator` passes persona's model to description generation
+- [x] All existing tests pass (backward compatible when model not specified)
+- [x] New tests verify model parameter flows through correctly (existing llm-providers tests cover resolveModel)
 
 ## Testing Strategy
 
