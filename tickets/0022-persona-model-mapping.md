@@ -1,10 +1,10 @@
-# 0022: Per-Persona Model Configuration
+# 0022: Multi-Model LLM Architecture (Epic)
 
 **Status**: PENDING
 
 ## Summary
 
-Allow each persona to use a different LLM model/provider, enabling mixed-model conversations where each persona has distinct "brains."
+Allow each persona to use a different LLM model/provider, enable operation-specific model configuration, and support multiple LLM providers (OpenAI, Anthropic, Google, X.AI, local).
 
 ## Problem
 
@@ -14,7 +14,12 @@ Currently all personas share a single global model (`EI_LLM_MODEL`). Different p
 - **lena**: Could leverage a creative-focused model
 - **beta**: Testing ground for experimental models
 
-No way to configure this per-persona today.
+Additionally, different *operations* might benefit from different models:
+- **Responses**: Needs creativity and personality - flagship model
+- **Concept updates**: Needs reliable JSON output - structured model
+- **Persona generation**: Needs creativity but also structure - mid-tier model
+
+No way to configure any of this today.
 
 ## Proposed Solution
 
@@ -59,49 +64,19 @@ EI_OPENAI_API_KEY=sk-...
 EI_GOOGLE_API_KEY=...
 EI_ANTHROPIC_API_KEY=...
 EI_XAI_API_KEY=...
-```
 
-### Implementation
-
-```typescript
-// llm.ts additions
-interface ProviderConfig {
-  baseURL: string;
-  apiKey: string;
-}
-
-const PROVIDERS: Record<string, ProviderConfig> = {
-  local: {
-    baseURL: process.env.EI_LLM_BASE_URL || "http://127.0.0.1:1234/v1",
-    apiKey: process.env.EI_LLM_API_KEY || "not-needed",
-  },
-  openai: {
-    baseURL: "https://api.openai.com/v1",
-    apiKey: process.env.EI_OPENAI_API_KEY || "",
-  },
-  // ... etc
-};
-
-function getClientForModel(modelSpec: string): { client: OpenAI; model: string } {
-  const [provider, model] = modelSpec.includes(":") 
-    ? modelSpec.split(":", 2) 
-    : ["local", modelSpec];
-  
-  const config = PROVIDERS[provider];
-  if (!config) throw new Error(`Unknown provider: ${provider}`);
-  
-  return {
-    client: new OpenAI({ baseURL: config.baseURL, apiKey: config.apiKey }),
-    model,
-  };
-}
+# Operation-specific defaults (optional)
+EI_MODEL_RESPONSE=openai:gpt-4o          # For conversational responses
+EI_MODEL_CONCEPT=local:google/gemma-3-12b # For concept map updates
+EI_MODEL_GENERATION=openai:gpt-4o-mini    # For persona creation
 ```
 
 ### Fallback Chain
 
 1. Persona's `model` field (if set)
-2. Global `EI_LLM_MODEL` env var
-3. Default: `local:google/gemma-3-12b`
+2. Operation-specific env var (e.g., `EI_MODEL_RESPONSE`)
+3. Global `EI_LLM_MODEL` env var
+4. Default: `local:google/gemma-3-12b`
 
 ### Commands
 
@@ -112,49 +87,48 @@ function getClientForModel(modelSpec: string): { client: OpenAI; model: string }
 /model --list             # List available/configured providers
 ```
 
-Example output:
+## Sub-Tickets
 
-```
-> /model
-Current model for ei: google:gemini-1.5-pro
+| Ticket | Title | Priority | Dependencies |
+|--------|-------|----------|--------------|
+| 0080 | Core Multi-Provider Infrastructure | High | None |
+| 0081 | Schema - Add Model Field to ConceptMap | High | None |
+| 0082 | Refactor LLM Calls - Accept Model Parameter | High | 0080 |
+| 0083 | Operation-Specific Model Configuration | Medium | 0082 |
+| 0084 | /model Command - View and Set Persona Models | Medium | 0081, 0082 |
+| 0085 | Provider-Specific Optimizations | Low | 0082 |
+| 0086 | Documentation - Multi-Model Setup Guide | Low | All |
 
-> /model local:google/gemma-3-12b
-Model for ei set to: local:google/gemma-3-12b
+### Implementation Phases
 
-> /model --clear
-Model for ei cleared. Using global default: local:google/gemma-3-12b
+**Phase 1 - Foundation (Parallel)**
+- 0080: Multi-provider infrastructure (llm.ts refactor)
+- 0081: Add `model` field to schema
 
-> /model --list
-Configured providers:
-  local     ✓ http://127.0.0.1:1234/v1
-  openai    ✓ (API key set)
-  google    ✗ (no API key)
-  anthropic ✗ (no API key)
-```
+**Phase 2 - Integration (Sequential)**
+- 0082: Refactor all LLM calls to use model parameter
+- 0083: Operation-specific model config
 
-### Open Questions
+**Phase 3 - User-Facing**
+- 0084: `/model` command
 
-- **Cost tracking**: Should we log which provider/model was used per message for cost awareness?
-- **Rate limiting**: Different providers have different limits - handle gracefully?
-- **Capability mismatch**: Some models may not handle JSON output well - per-model tweaks?
+**Phase 4 - Polish (Optional)**
+- 0085: Provider-specific optimizations
+- 0086: Complete documentation
 
 ## Acceptance Criteria
 
-- [ ] Persona `system.jsonc` supports optional `model` field
-- [ ] `provider:model` format parsed correctly
-- [ ] Multiple provider configs via env vars
-- [ ] Fallback to global model when persona model not set
-- [ ] Different personas can use different models in same session
-- [ ] Error handling for misconfigured/unavailable providers
-- [ ] `/model` shows current persona's model config
-- [ ] `/model <provider:model>` sets model for current persona
-- [ ] `/model --clear` removes persona-specific override
-- [ ] `/model --list` shows configured providers
-- [ ] `/help` updated with model commands
+- [ ] Sub-ticket 0080 complete: Multi-provider infrastructure
+- [ ] Sub-ticket 0081 complete: Schema updated
+- [ ] Sub-ticket 0082 complete: LLM calls refactored
+- [ ] Sub-ticket 0083 complete: Operation-specific models
+- [ ] Sub-ticket 0084 complete: /model command
+- [ ] Sub-ticket 0085 complete: Provider optimizations (optional)
+- [ ] Sub-ticket 0086 complete: Documentation
 
 ## Value Statement
 
-Mix and match models based on persona personality and use case. Run cheap local models for casual chat, bring in the big guns for complex discussions. Experiment with new models without affecting all personas.
+Mix and match models based on persona personality and use case. Run cheap local models for background tasks, bring in the big guns for complex conversations. Experiment with new models without affecting all personas.
 
 ## Dependencies
 
@@ -162,4 +136,4 @@ Mix and match models based on persona personality and use case. Run cheap local 
 
 ## Effort Estimate
 
-Medium: ~3-4 hours
+Large: ~12-16 hours total across all sub-tickets

@@ -46,10 +46,10 @@
 - 0077: Help Command with External Pager
 - 0043: Archive/Unarchive Personas
 
-## PENDING (21 tickets)
+## PENDING (27 tickets)
 - 0015: Persona Switching (Commands + Navigation)
 - 0018: Warn on Public Repository Storage
-- 0022: Per-Persona Model Configuration
+- 0022: Multi-Model LLM Architecture (Epic)
 - 0027: Enhanced Markdown Rendering
 - 0028: Investigate Slow LLM Response Times
 - 0032: Failed Message Edit and Retry Interface
@@ -68,6 +68,13 @@
 - 0055: Logging System Improvements
 - 0078: Persona Delete Command
 - 0079: Validate Command Argument Counts
+- 0080: Core Multi-Provider Infrastructure
+- 0081: Schema - Add Model Field to ConceptMap
+- 0082: Refactor LLM Calls - Accept Model Parameter
+- 0083: Operation-Specific Model Configuration
+- 0084: /model Command - View and Set Persona Models
+- 0085: Provider-Specific Optimizations
+- 0086: Documentation - Multi-Model Setup Guide
 
 ## CANCELLED ❌ (11 tickets)
 - 0003: /editor Command for Multi-line Input
@@ -85,8 +92,8 @@
 ---
 
 **Last Updated**: 2026-01-17
-**Total Tickets**: 79 created (0012 and 0071/0072 not in filesystem - may have been consolidated)
-**Stats**: 44 done, 0 in QA, 21 pending, 11 cancelled
+**Total Tickets**: 86 created (0012 and 0071/0072 not in filesystem - may have been consolidated)
+**Stats**: 44 done, 0 in QA, 27 pending, 11 cancelled
 
 ## Epic Status
 
@@ -104,3 +111,12 @@
 - 0073: DONE - Sentiment field handling
 - 0074: DONE - Heartbeat trigger logic
 - 0075: DONE - Documentation updates
+
+### 0022: Multi-Model LLM Architecture - PENDING
+- 0080: PENDING - Core multi-provider infrastructure
+- 0081: PENDING - Schema model field
+- 0082: PENDING - Refactor LLM calls
+- 0083: PENDING - Operation-specific models
+- 0084: PENDING - /model command
+- 0085: PENDING - Provider optimizations (optional)
+- 0086: PENDING - Documentation
