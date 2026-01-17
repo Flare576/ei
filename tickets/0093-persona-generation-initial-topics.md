@@ -1,6 +1,6 @@
 # 0093: Persona Generation - Seed Initial Topics
 
-**Status**: PENDING
+**Status**: DONE
 
 ## Summary
 
@@ -66,12 +66,12 @@ For a persona described as "a grumpy but knowledgeable mechanic":
 
 ## Acceptance Criteria
 
-- [ ] System prompt explicitly requests topic-type concepts
-- [ ] Prompt specifies sentiment variation (positive and negative)
-- [ ] Prompt specifies level_ideal range (0.5-0.8)
-- [ ] Prompt includes examples of good topic concepts
-- [ ] Generated personas have at least 2-3 topic concepts on creation
-- [ ] Topics reflect the persona description meaningfully
+- [x] System prompt explicitly requests topic-type concepts
+- [x] Prompt specifies sentiment variation (positive and negative)
+- [x] Prompt specifies level_ideal range (0.5-0.8)
+- [x] Prompt includes examples of good topic concepts
+- [x] Generated personas have at least 2-3 topic concepts on creation
+- [x] Topics reflect the persona description meaningfully
 
 ## Dependencies
 

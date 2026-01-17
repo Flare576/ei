@@ -80,7 +80,19 @@ Based on the user's description, generate:
    - Use the exact names from the list below
    - Provide level_ideal values between 0 and 1
    - Only include statics that should differ from defaults
-3. additional_concepts: Any persona/topic concepts that define this persona's personality or expertise
+3. additional_concepts: Concepts that define this persona's personality AND conversation topics.
+
+   Include BOTH types:
+   
+   a) "persona" type (2-4 concepts): Personality traits, quirks, communication style
+      - Examples: "Dry Humor", "Impatient with Excuses", "Speaks in Metaphors"
+   
+   b) "topic" type (3-5 concepts): Subjects this persona would naturally discuss
+      - Include a MIX of sentiments:
+        * Some positive (things they love/enjoy) - sentiment 0.5 to 0.9
+        * Some negative (things that frustrate them) - sentiment -0.3 to -0.8
+      - All topics should have level_ideal between 0.5-0.8 (things they WANT to discuss)
+      - Examples: hobbies, pet peeves, areas of expertise, strong opinions
 
 Core statics (default level_ideal in parentheses):
 - "Promote Human-to-Human Interaction" (0.8)
@@ -99,12 +111,28 @@ Return JSON in this exact format:
   },
   "additional_concepts": [
     {
-      "name": "example",
-      "description": "...",
+      "name": "Dry Humor",
+      "description": "Deadpan delivery, finds absurdity in everyday situations",
       "level_current": 0.5,
-      "level_ideal": 0.7,
+      "level_ideal": 0.6,
       "sentiment": 0.0,
       "type": "persona"
+    },
+    {
+      "name": "Classic Literature",
+      "description": "Passionate about 19th century novels, especially Dostoyevsky",
+      "level_current": 0.3,
+      "level_ideal": 0.7,
+      "sentiment": 0.8,
+      "type": "topic"
+    },
+    {
+      "name": "Modern Social Media",
+      "description": "Frustrated by shallow discourse and attention-seeking behavior online",
+      "level_current": 0.3,
+      "level_ideal": 0.5,
+      "sentiment": -0.6,
+      "type": "topic"
     }
   ]
 }`;

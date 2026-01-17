@@ -1,6 +1,6 @@
 # Ticket Status Summary
 
-## DONE ✅ (51 tickets)
+## DONE ✅ (52 tickets)
 - 0001: Auto-Generate Persona Descriptions
 - 0002: Nickname Management Commands
 - 0005: CLI Thinking Indicators
@@ -52,11 +52,12 @@
 - 0084: /model Command - View and Set Persona Models
 - 0085: Provider-Specific Optimizations (partial - rate limits + headers)
 - 0022: Multi-Model LLM Architecture (Epic)
+- 0093: Persona Generation - Seed Initial Topics
 
 ## QA (1 ticket)
 - 0091: Dynamic Persona System Prompt
 
-## PENDING (23 tickets)
+## PENDING (22 tickets)
 - 0015: Persona Switching (Commands + Navigation)
 - 0018: Warn on Public Repository Storage
 - 0027: Enhanced Markdown Rendering
@@ -83,7 +84,6 @@
 - 0089: Proactive API Key Validation
 - 0090: Parse Qwen-style Response Markup
 - 0092: LLM Validation and Error Handling
-- 0093: Persona Generation - Seed Initial Topics
 
 ## CANCELLED ❌ (11 tickets)
 - 0003: /editor Command for Multi-line Input
@@ -102,7 +102,7 @@
 
 **Last Updated**: 2026-01-17
 **Total Tickets**: 93 created
-**Stats**: 51 done, 1 QA, 23 pending, 11 cancelled
+**Stats**: 52 done, 1 QA, 22 pending, 11 cancelled
 
 ## Epic Status
 

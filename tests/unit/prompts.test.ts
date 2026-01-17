@@ -5,6 +5,7 @@ import {
   buildConceptUpdateSystemPrompt,
   buildConceptUpdateUserPrompt,
   buildDescriptionPrompt,
+  PersonaIdentity,
 } from "../../src/prompts.js";
 import type { ConceptMap, Concept, Message } from "../../src/types.js";
 
@@ -31,14 +32,36 @@ const createConceptMap = (
   concepts,
 });
 
+const defaultPersona: PersonaIdentity = {
+  name: "EI",
+  aliases: ["default"],
+  short_description: "a conversational companion",
+  long_description: "A friendly AI companion with curiosity and warmth.",
+};
+
 describe("buildResponseSystemPrompt", () => {
-  it("should include persona name EI in output", () => {
+  it("should include persona name in output", () => {
     const humanConcepts = createConceptMap("human", []);
     const systemConcepts = createConceptMap("system", []);
 
-    const result = buildResponseSystemPrompt(humanConcepts, systemConcepts);
+    const result = buildResponseSystemPrompt(humanConcepts, systemConcepts, defaultPersona);
 
     expect(result).toContain("You are EI");
+  });
+
+  it("should include aliases when provided", () => {
+    const humanConcepts = createConceptMap("human", []);
+    const systemConcepts = createConceptMap("system", []);
+    const personaWithAliases: PersonaIdentity = {
+      name: "TestBot",
+      aliases: ["TB", "Testy"],
+    };
+
+    const result = buildResponseSystemPrompt(humanConcepts, systemConcepts, personaWithAliases);
+
+    expect(result).toContain("You are TestBot");
+    expect(result).toContain("TB");
+    expect(result).toContain("Testy");
   });
 
   it("should include behavioral guidelines section for static concepts", () => {
@@ -47,7 +70,7 @@ describe("buildResponseSystemPrompt", () => {
       createConcept("Test Static", "static"),
     ]);
 
-    const result = buildResponseSystemPrompt(humanConcepts, systemConcepts);
+    const result = buildResponseSystemPrompt(humanConcepts, systemConcepts, defaultPersona);
 
     expect(result).toContain("Behavioral Guidelines");
     expect(result).toContain("Test Static");
@@ -60,7 +83,7 @@ describe("buildResponseSystemPrompt", () => {
       createConcept("High Need Topic", "topic", 0.1, 0.8),
     ]);
 
-    const result = buildResponseSystemPrompt(humanConcepts, systemConcepts);
+    const result = buildResponseSystemPrompt(humanConcepts, systemConcepts, defaultPersona);
 
     expect(result).toContain("High Need Topic");
     expect(result).toContain("Current Priorities");
@@ -72,7 +95,7 @@ describe("buildResponseSystemPrompt", () => {
     ]);
     const systemConcepts = createConceptMap("system", []);
 
-    const result = buildResponseSystemPrompt(humanConcepts, systemConcepts);
+    const result = buildResponseSystemPrompt(humanConcepts, systemConcepts, defaultPersona);
 
     expect(result).toContain("Human Interest");
     expect(result).toContain("Potential Interests");
@@ -82,9 +105,45 @@ describe("buildResponseSystemPrompt", () => {
     const humanConcepts = createConceptMap("human", []);
     const systemConcepts = createConceptMap("system", []);
 
-    const result = buildResponseSystemPrompt(humanConcepts, systemConcepts);
+    const result = buildResponseSystemPrompt(humanConcepts, systemConcepts, defaultPersona);
 
     expect(result).toContain("Current time:");
+  });
+
+  it("should use long_description when provided", () => {
+    const humanConcepts = createConceptMap("human", []);
+    const systemConcepts = createConceptMap("system", []);
+    const personaWithDesc: PersonaIdentity = {
+      name: "Helper",
+      long_description: "A helpful assistant who loves to assist.",
+    };
+
+    const result = buildResponseSystemPrompt(humanConcepts, systemConcepts, personaWithDesc);
+
+    expect(result).toContain("A helpful assistant who loves to assist.");
+  });
+
+  it("should fall back to short_description when long_description missing", () => {
+    const humanConcepts = createConceptMap("human", []);
+    const systemConcepts = createConceptMap("system", []);
+    const personaWithShort: PersonaIdentity = {
+      name: "Helper",
+      short_description: "a helpful assistant",
+    };
+
+    const result = buildResponseSystemPrompt(humanConcepts, systemConcepts, personaWithShort);
+
+    expect(result).toContain("a helpful assistant");
+  });
+
+  it("should fall back to default description when no descriptions provided", () => {
+    const humanConcepts = createConceptMap("human", []);
+    const systemConcepts = createConceptMap("system", []);
+    const barePersona: PersonaIdentity = { name: "Minimal" };
+
+    const result = buildResponseSystemPrompt(humanConcepts, systemConcepts, barePersona);
+
+    expect(result).toContain("a conversational companion");
   });
 });
 
@@ -106,17 +165,29 @@ describe("buildResponseUserPrompt", () => {
     expect(result).toContain("mid-conversation");
   });
 
-  it("should include recent conversation history", () => {
+  it("should include recent conversation history with default persona name", () => {
     const history: Message[] = [
       { role: "human", content: "User said this", timestamp: new Date().toISOString() },
-      { role: "system", content: "EI replied this", timestamp: new Date().toISOString() },
+      { role: "system", content: "System replied this", timestamp: new Date().toISOString() },
     ];
 
     const result = buildResponseUserPrompt(0, history, "Hello");
 
     expect(result).toContain("User said this");
-    expect(result).toContain("EI replied this");
+    expect(result).toContain("EI: System replied this");
     expect(result).toContain("RECENT CONVERSATION");
+  });
+
+  it("should use custom persona name in history formatting", () => {
+    const history: Message[] = [
+      { role: "human", content: "User said this", timestamp: new Date().toISOString() },
+      { role: "system", content: "System replied this", timestamp: new Date().toISOString() },
+    ];
+
+    const result = buildResponseUserPrompt(0, history, "Hello", "Gandalf");
+
+    expect(result).toContain("Gandalf: System replied this");
+    expect(result).not.toContain("EI:");
   });
 
   it("should include human message in prompt", () => {
