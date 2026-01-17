@@ -5,7 +5,7 @@ import { writeFileSync, readFileSync, unlinkSync } from 'fs';
 // Import test output capture early to intercept blessed methods before they're used
 import { testOutputCapture } from './test-output-capture.js';
 
-import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog, getPendingMessages, replacePendingMessages, appendHumanMessage, getUnprocessedMessages, loadPauseState, savePauseState, markSystemMessagesAsRead, getUnreadSystemMessageCount } from '../storage.js';
+import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog, getPendingMessages, replacePendingMessages, appendHumanMessage, getUnprocessedMessages, loadPauseState, savePauseState, markSystemMessagesAsRead, getUnreadSystemMessageCount, loadArchiveState, saveArchiveState, getArchivedPersonas, findArchivedPersonaByNameOrAlias } from '../storage.js';
 import { createPersonaWithLLM, saveNewPersona } from '../persona-creator.js';
 import { ConceptQueue } from '../concept-queue.js';
 import { processEvent } from '../processor.js';
@@ -366,6 +366,12 @@ export class EIApp {
       case 'resume':
         await this.handleResumeCommand(args);
         break;
+      case 'archive':
+        await this.handleArchiveCommand(args);
+        break;
+      case 'unarchive':
+        await this.handleUnarchiveCommand(args);
+        break;
       case 'help':
       case 'h':
         this.showHelpModal();
@@ -396,6 +402,12 @@ export class EIApp {
     if (foundPersona) {
       await this.switchPersona(foundPersona);
     } else {
+      const archivedPersona = await findArchivedPersonaByNameOrAlias(trimmed.toLowerCase());
+      if (archivedPersona) {
+        this.setStatus(`Persona '${archivedPersona}' is archived. Use /unarchive ${trimmed} to restore it`);
+        return;
+      }
+      
       const validationError = this.validatePersonaName(trimmed);
       if (validationError) {
         this.setStatus(validationError);
@@ -615,6 +627,96 @@ export class EIApp {
     this.render();
   }
 
+  private async handleArchiveCommand(args: string): Promise<void> {
+    const trimmed = args.trim();
+    
+    const targetPersona = trimmed
+      ? await findPersonaByNameOrAlias(trimmed) || trimmed
+      : this.activePersona;
+    
+    const personaExists = this.personas.some(p => p.name === targetPersona);
+    if (!personaExists) {
+      this.setStatus(`Persona '${targetPersona}' not found`);
+      return;
+    }
+    
+    const archiveState = await loadArchiveState(targetPersona);
+    if (archiveState.isArchived) {
+      this.setStatus(`${targetPersona} is already archived`);
+      return;
+    }
+    
+    await saveArchiveState(targetPersona, {
+      isArchived: true,
+      archivedDate: new Date().toISOString()
+    });
+    
+    const ps = this.personaStates.get(targetPersona);
+    if (ps?.heartbeatTimer) {
+      clearTimeout(ps.heartbeatTimer);
+      ps.heartbeatTimer = null;
+    }
+    
+    this.personas = await listPersonas();
+    
+    if (targetPersona === this.activePersona) {
+      if (this.personas.length > 0) {
+        await this.switchPersona(this.personas[0].name);
+      }
+    }
+    
+    this.setStatus(`Archived ${targetPersona}`);
+    this.render();
+  }
+
+  private async handleUnarchiveCommand(args: string): Promise<void> {
+    const trimmed = args.trim();
+    
+    if (!trimmed) {
+      const archived = await getArchivedPersonas();
+      if (archived.length === 0) {
+        this.setStatus('No archived personas');
+        return;
+      }
+      const list = archived.map((p, i) => `${i + 1}. ${p.name}`).join(', ');
+      this.setStatus(`Archived personas: ${list}`);
+      return;
+    }
+    
+    const archived = await getArchivedPersonas();
+    let targetPersona: string | null = null;
+    
+    if (/^\d+$/.test(trimmed)) {
+      const index = parseInt(trimmed, 10) - 1;
+      if (index >= 0 && index < archived.length) {
+        targetPersona = archived[index].name;
+      }
+    } else {
+      targetPersona = await findArchivedPersonaByNameOrAlias(trimmed);
+    }
+    
+    if (!targetPersona) {
+      this.setStatus(`Archived persona '${trimmed}' not found`);
+      return;
+    }
+    
+    const archiveState = await loadArchiveState(targetPersona);
+    if (!archiveState.isArchived) {
+      this.setStatus(`${targetPersona} is not archived`);
+      return;
+    }
+    
+    await saveArchiveState(targetPersona, {
+      isArchived: false,
+      archivedDate: undefined
+    });
+    
+    this.personas = await listPersonas();
+    
+    this.setStatus(`Unarchived ${targetPersona}`);
+    this.render();
+  }
+
   private showHelpModal(): void {
     const helpText = `EI - Emotional Intelligence Chat
 
@@ -622,6 +724,8 @@ COMMANDS
   /persona [name]     Switch persona (or list if no name)
   /pause [duration]   Pause active persona (30m, 2h, or indefinite)
   /resume [persona]   Resume paused persona
+  /archive [persona]  Archive persona (hides from list, stops heartbeats)
+  /unarchive [name|#] Restore archived persona (no args lists archived)
   /editor, /e         Open external editor for multi-line input
   /refresh, /r        Refresh UI layout
   /quit [--force]     Exit application

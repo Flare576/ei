@@ -38,6 +38,8 @@ export interface ConceptMap {
   concepts: Concept[];
   isPaused?: boolean;
   pauseUntil?: string;  // ISO timestamp when pause expires (undefined = indefinite)
+  isArchived?: boolean;
+  archivedDate?: string;  // ISO timestamp when persona was archived
 }
 
 export type MessageState = "sent" | "processing" | "queued" | "failed";

@@ -13,6 +13,10 @@ vi.mock('../../src/storage.js', () => ({
   findPersonaByNameOrAlias: vi.fn((name) => Promise.resolve(
     ['ei', 'claude', 'assistant'].includes(name) ? name : null
   )),
+  findArchivedPersonaByNameOrAlias: vi.fn(() => Promise.resolve(null)),
+  getArchivedPersonas: vi.fn(() => Promise.resolve([])),
+  loadArchiveState: vi.fn(() => Promise.resolve({ isArchived: false })),
+  saveArchiveState: vi.fn(() => Promise.resolve()),
   initializeDataDirectory: vi.fn(() => Promise.resolve()),
   initializeDebugLog: vi.fn(),
   appendDebugLog: vi.fn(),

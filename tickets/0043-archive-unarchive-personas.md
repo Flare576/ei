@@ -1,6 +1,6 @@
 # 0043: Archive/Unarchive Personas
 
-**Status**: PENDING
+**Status**: DONE
 
 ## Summary
 Allow users to archive personas to hide them from the active list and disable heartbeats, with ability to view archived personas and restore them.
@@ -32,22 +32,27 @@ interface PersonaMetadata {
 - Unarchive with name/number restores persona to active state
 
 ## Acceptance Criteria
-- [ ] `/archive` marks active persona as archived in concept map
-- [ ] `/archive <name>` archives specified persona by name
-- [ ] Archived personas don't appear in main persona list UI
-- [ ] Archived personas don't trigger heartbeat timers
-- [ ] `/unarchive` shows numbered list of archived personas with names
-- [ ] `/unarchive <name>` restores persona by name to active state
-- [ ] `/unarchive <number>` restores persona by list position
-- [ ] Archive status persists in persona storage
-- [ ] Archived personas maintain all chat history and concept data
-- [ ] `/help` command documents archive/unarchive syntax
+- [x] `/archive` marks active persona as archived in concept map
+- [x] `/archive <name>` archives specified persona by name
+- [x] Archived personas don't appear in main persona list UI
+- [x] Archived personas don't trigger heartbeat timers
+- [x] `/unarchive` shows numbered list of archived personas with names
+- [x] `/unarchive <name>` restores persona by name to active state
+- [x] `/unarchive <number>` restores persona by list position
+- [x] Archive status persists in persona storage
+- [x] Archived personas maintain all chat history and concept data
+- [x] `/help` command documents archive/unarchive syntax
 
 ## Value Statement
 Reduces UI clutter and system overhead by allowing users to temporarily retire personas while preserving their complete state for future reactivation.
 
 ## Dependencies
 - None (uses existing persona storage and concept map system)
+
+## Implementation Notes
+- Added `findArchivedPersonaByNameOrAlias()` to enable name/alias search in archived list
+- `/unarchive <name>` now correctly searches archived personas (not active list)
+- `/persona <archived_name>` detects archived personas and instructs user to use `/unarchive`
 
 ## Effort Estimate
 Small (~1-2 hours)

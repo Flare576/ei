@@ -369,6 +369,9 @@ export async function listPersonas(): Promise<PersonaInfo[]> {
         const systemPath = personaPath(entry.name, "system.jsonc");
         const content = await readFile(systemPath, "utf-8");
         const map = JSON.parse(content) as ConceptMap;
+        if (map.isArchived) {
+          continue;
+        }
         personas.push({
           name: entry.name,
           aliases: map.aliases || [],
@@ -382,6 +385,47 @@ export async function listPersonas(): Promise<PersonaInfo[]> {
   }
   
   return personas;
+}
+
+export async function getArchivedPersonas(): Promise<PersonaInfo[]> {
+  const personasDir = path.join(DATA_PATH, "personas");
+  const entries = await readdir(personasDir, { withFileTypes: true });
+  
+  const archived: PersonaInfo[] = [];
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      try {
+        const systemPath = personaPath(entry.name, "system.jsonc");
+        const content = await readFile(systemPath, "utf-8");
+        const map = JSON.parse(content) as ConceptMap;
+        if (map.isArchived) {
+          archived.push({
+            name: entry.name,
+            aliases: map.aliases || [],
+            short_description: map.short_description,
+            long_description: map.long_description,
+          });
+        }
+      } catch {
+      }
+    }
+  }
+  
+  return archived;
+}
+
+export async function findArchivedPersonaByNameOrAlias(
+  nameOrAlias: string
+): Promise<string | null> {
+  const archived = await getArchivedPersonas();
+  const lower = nameOrAlias.toLowerCase();
+  
+  for (const p of archived) {
+    if (p.name.toLowerCase() === lower) return p.name;
+    if (p.aliases.some(a => a.toLowerCase() === lower)) return p.name;
+  }
+  
+  return null;
 }
 
 export async function findPersonaByNameOrAlias(
@@ -433,6 +477,21 @@ export async function savePauseState(persona: string, state: { isPaused: boolean
   const conceptMap = await loadConceptMap("system", persona);
   conceptMap.isPaused = state.isPaused;
   conceptMap.pauseUntil = state.pauseUntil;
+  await saveConceptMap(conceptMap, persona);
+}
+
+export async function loadArchiveState(persona: string): Promise<{ isArchived: boolean; archivedDate?: string }> {
+  const conceptMap = await loadConceptMap("system", persona);
+  return {
+    isArchived: conceptMap.isArchived ?? false,
+    archivedDate: conceptMap.archivedDate
+  };
+}
+
+export async function saveArchiveState(persona: string, state: { isArchived: boolean; archivedDate?: string }): Promise<void> {
+  const conceptMap = await loadConceptMap("system", persona);
+  conceptMap.isArchived = state.isArchived;
+  conceptMap.archivedDate = state.archivedDate;
   await saveConceptMap(conceptMap, persona);
 }
 

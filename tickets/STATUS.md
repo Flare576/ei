@@ -3,7 +3,7 @@
 ## QA 🧪 (Awaiting Human Verification)
 (None)
 
-## DONE ✅ (42 tickets)
+## DONE ✅ (43 tickets)
 - 0001: Auto-Generate Persona Descriptions
 - 0005: CLI Thinking Indicators
 - 0006: Detect and Handle LLM Response Truncation
@@ -46,8 +46,9 @@
 - 0075: Update Documentation for New Concept Schema
 - 0076: Persist Unread Message Counts Across Sessions
 - 0077: Help Command with External Pager
+- 0043: Archive/Unarchive Personas
 
-## PENDING (21 tickets)
+## PENDING (20 tickets)
 - 0002: Nickname Management Commands
 - 0015: Persona Switching (Commands + Navigation)
 - 0018: Warn on Public Repository Storage
@@ -57,7 +58,6 @@
 - 0032: Failed Message Edit and Retry Interface
 - 0038: Blessed Multi-Line Modal Interface
 - 0039: Blessed Proper Emoji Support
-- 0043: Archive/Unarchive Personas
 - 0044: Fresh Conversation Command
 - 0045: Poke Command with Physical Context Interpretation
 - 0046: Clone Persona with Concept Map
@@ -85,9 +85,9 @@
 
 ---
 
-**Last Updated**: 2026-01-16
+**Last Updated**: 2026-01-17
 **Total Tickets**: 77 created (0012 and 0071/0072 not in filesystem - may have been consolidated)
-**Stats**: 42 done, 21 pending, 11 cancelled
+**Stats**: 43 done, 20 pending, 11 cancelled
 
 ## Epic Status
 
