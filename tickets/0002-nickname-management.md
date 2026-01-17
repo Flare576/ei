@@ -1,6 +1,6 @@
 # 0002: Nickname Management Commands
 
-**Status**: QA
+**Status**: DONE
 
 ## Summary
 
