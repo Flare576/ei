@@ -1,6 +1,6 @@
 # 0001: Auto-Generate Persona Descriptions
 
-**Status**: VALIDATED
+**Status**: DONE
 
 ## Summary
 

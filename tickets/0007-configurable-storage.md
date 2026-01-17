@@ -1,6 +1,6 @@
 # 0007: Configurable Storage Location
 
-**Status**: VALIDATED
+**Status**: DONE
 
 ## Summary
 

@@ -1,6 +1,6 @@
 # 0009: Per-Persona Message Queues and Read Tracking
 
-**Status**: VALIDATED
+**Status**: DONE
 
 ## Summary
 

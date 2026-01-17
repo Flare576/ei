@@ -1,6 +1,6 @@
 # 0017: Unread Indicators and Heartbeat Countdown Display
 
-**Status**: VALIDATED
+**Status**: DONE
 
 ## Summary
 

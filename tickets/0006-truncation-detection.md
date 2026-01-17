@@ -1,6 +1,6 @@
 # 0006: Detect and Handle LLM Response Truncation
 
-**Status**: VALIDATED
+**Status**: DONE
 
 ## Summary
 

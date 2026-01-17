@@ -1,6 +1,6 @@
 # 0013: Multi-line Input with Visual Feedback
 
-**Status**: VALIDATED
+**Status**: DONE
 
 ## Summary
 

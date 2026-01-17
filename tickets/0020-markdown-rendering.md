@@ -1,6 +1,6 @@
 # 0020: Markdown Rendering in Chat Messages
 
-**Status**: VALIDATED
+**Status**: DONE
 
 ## Summary
 

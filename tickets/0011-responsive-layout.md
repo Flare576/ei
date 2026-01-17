@@ -1,6 +1,6 @@
 # 0011: Responsive Terminal Layout
 
-**Status**: VALIDATED
+**Status**: DONE
 
 ## Summary
 

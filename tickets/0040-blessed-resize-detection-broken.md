@@ -1,6 +1,6 @@
 # 0040: Blessed Resize Detection Broken
 
-**Status**: VALIDATED
+**Status**: DONE
 
 ## Summary
 Multiple system integration failures after macOS update preventing terminal resize detection and keyboard shortcuts.

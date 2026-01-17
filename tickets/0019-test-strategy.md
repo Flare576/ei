@@ -1,6 +1,6 @@
 # 0019: Test Strategy and Infrastructure
 
-**Status**: VALIDATED
+**Status**: DONE
 
 ## Summary
 

@@ -1,6 +1,6 @@
 # 0037: Blessed Debug Output Log-Only Mode
 
-**Status**: VALIDATED
+**Status**: DONE
 
 ## Summary
 Debug output in blessed UI breaks the status line layout when multi-line text wraps, causing application corruption. Move all debug output to log files only.

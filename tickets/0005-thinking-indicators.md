@@ -1,6 +1,6 @@
 # 0005: CLI Thinking Indicators
 
-**Status**: VALIDATED
+**Status**: DONE
 
 > Basic "thinking..." text hint implemented. Animated spinner TBD pending UI cleanup.
 

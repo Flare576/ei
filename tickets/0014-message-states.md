@@ -1,6 +1,6 @@
 # 0014: Message State Visualization
 
-**Status**: VALIDATED
+**Status**: DONE
 
 ## Summary
 

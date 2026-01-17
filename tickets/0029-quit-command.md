@@ -1,6 +1,6 @@
 # 0029: /quit Command with Force Option
 
-**Status**: VALIDATED
+**Status**: DONE
 
 ## Summary
 

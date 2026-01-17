@@ -1,6 +1,6 @@
 # 0010: Replace Readline with Ink + Basic 3-Pane Layout
 
-**Status**: VALIDATED
+**Status**: DONE
 
 ## Summary
 

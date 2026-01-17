@@ -1,6 +1,6 @@
 # 0025: Ctrl+C Handling - Incomplete Abort
 
-**Status**: VALIDATED
+**Status**: DONE
 
 ## Problem
 
