@@ -148,13 +148,13 @@ describe('Multi-Persona E2E Tests', () => {
     await harness.startApp({ debugMode: false, usePty: false });
     await harness.waitForIdleState(5000);
 
-    await harness.sendCommand('/persona a');
+    await harness.sendCommand('/persona z');
     await harness.waitForUIText('at least 2 characters', 5000);
 
     await harness.sendCommand('/persona 123test');
     await harness.waitForUIText('must start with a letter', 5000);
 
-    harness.assertFileDoesNotExist('personas/a');
+    harness.assertFileDoesNotExist('personas/z');
     harness.assertFileDoesNotExist('personas/123test');
 
     await harness.sendCommand('/quit');

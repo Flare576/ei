@@ -225,7 +225,7 @@ describe('Command Flow Integration Tests', () => {
     test('persona command with valid name triggers persona switch', async () => {
       await app.testHandleCommand('/persona claude');
 
-      expect(findPersonaByNameOrAlias).toHaveBeenCalledWith('claude', { allowPartialMatch: true });
+      expect(findPersonaByNameOrAlias).toHaveBeenCalledWith('claude');
       
       expect(app.getTestStatusMessage()).toContain('Switched to persona: claude');
     });
@@ -280,7 +280,7 @@ describe('Command Flow Integration Tests', () => {
     test('persona command alias /p works identically', async () => {
       await app.testHandleCommand('/p claude');
 
-      expect(findPersonaByNameOrAlias).toHaveBeenCalledWith('claude', { allowPartialMatch: true });
+      expect(findPersonaByNameOrAlias).toHaveBeenCalledWith('claude');
       expect(app.getTestStatusMessage()).toContain('Switched to persona: claude');
     });
   });

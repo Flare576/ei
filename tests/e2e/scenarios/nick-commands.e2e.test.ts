@@ -89,19 +89,13 @@ describe('Nick Commands E2E Tests', () => {
     await harness.waitForIdleState(5000);
 
     await harness.sendCommand('/nick add tempAlias');
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await harness.waitForUIText('Added alias "tempAlias"', 2000);
 
     await harness.sendCommand('/nick remove tempAlias');
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    let output = await harness.getCurrentOutput();
-    expect(output).toContain('Removed alias "tempAlias"');
+    await harness.waitForUIText('Removed alias "tempAlias"', 2000);
 
     await harness.sendCommand('/nick');
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    output = await harness.getCurrentOutput();
-    expect(output).not.toContain('tempAlias');
+    await harness.waitForUIText('Aliases for ei: default, core', 2000);
 
     await harness.sendCommand('/quit');
     await harness.assertExitCode(0, 5000);
@@ -144,19 +138,24 @@ describe('Nick Commands E2E Tests', () => {
   }, 30000);
 
   test('/nick shows no aliases message for persona without aliases', async () => {
-    harness.setMockResponseQueue([]);
+    harness.setMockResponseQueue([
+      JSON.stringify({ content: 'Hi! I am testpersona.', aliases: [] }),
+    ]);
 
     await harness.startApp({ debugMode: false, usePty: false });
     await harness.waitForIdleState(5000);
 
-    await harness.sendCommand('/persona claude');
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await harness.sendCommand('/persona testpersona');
+    await harness.waitForUIText("Persona 'testpersona' not found. Create it?", 3000);
+    
+    await harness.sendInput('y\n');
+    await harness.waitForUIText('What should this persona be', 3000);
+    
+    await harness.sendInput('A test persona with no aliases\n');
+    await harness.waitForFileCreation('personas/testpersona/system.jsonc', 10000);
 
     await harness.sendCommand('/nick');
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    const output = await harness.getCurrentOutput();
-    expect(output).toContain('has no aliases');
+    await harness.waitForUIText('has no aliases', 3000);
 
     await harness.sendCommand('/quit');
     await harness.assertExitCode(0, 5000);

@@ -412,10 +412,25 @@ export class EIApp {
       nameOrAlias = trimmed.split(/\s+/)[0];
     }
 
+    // First check for exact match (name or alias)
+    const exactPersona = await findPersonaByNameOrAlias(nameOrAlias.toLowerCase());
+    if (exactPersona) {
+      await this.switchPersona(exactPersona);
+      return;
+    }
+    
+    // Check archived personas
+    const archivedPersona = await findArchivedPersonaByNameOrAlias(nameOrAlias.toLowerCase());
+    if (archivedPersona) {
+      this.setStatus(`Persona '${archivedPersona}' is archived. Use /unarchive ${nameOrAlias} to restore it`);
+      return;
+    }
+    
+    // Try partial match only if exact match and archive check failed
     try {
-      const foundPersona = await findPersonaByNameOrAlias(nameOrAlias.toLowerCase(), { allowPartialMatch: true });
-      if (foundPersona) {
-        await this.switchPersona(foundPersona);
+      const partialPersona = await findPersonaByNameOrAlias(nameOrAlias.toLowerCase(), { allowPartialMatch: true });
+      if (partialPersona) {
+        await this.switchPersona(partialPersona);
         return;
       }
     } catch (error) {
@@ -426,12 +441,7 @@ export class EIApp {
       throw error;
     }
     
-    const archivedPersona = await findArchivedPersonaByNameOrAlias(nameOrAlias.toLowerCase());
-    if (archivedPersona) {
-      this.setStatus(`Persona '${archivedPersona}' is archived. Use /unarchive ${nameOrAlias} to restore it`);
-      return;
-    }
-    
+    // No match found - validate before creating
     const validationError = this.validatePersonaName(nameOrAlias);
     if (validationError) {
       this.setStatus(validationError);
