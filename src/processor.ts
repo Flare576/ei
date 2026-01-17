@@ -15,6 +15,7 @@ import {
   buildResponseUserPrompt,
   buildConceptUpdateSystemPrompt,
   buildConceptUpdateUserPrompt,
+  PersonaIdentity,
 } from "./prompts.js";
 import { validateSystemConcepts, mergeWithOriginalStatics } from "./validate.js";
 import { generatePersonaDescriptions } from "./persona-creator.js";
@@ -103,14 +104,23 @@ export async function processEvent(
 
   if (signal?.aborted) return abortedResult;
 
+  const personaIdentity: PersonaIdentity = {
+    name: persona,
+    aliases: systemConcepts.aliases,
+    short_description: systemConcepts.short_description,
+    long_description: systemConcepts.long_description,
+  };
+
   const responseSystemPrompt = buildResponseSystemPrompt(
     humanConcepts,
-    systemConcepts
+    systemConcepts,
+    personaIdentity
   );
   const responseUserPrompt = buildResponseUserPrompt(
     delayMs,
     recentHistory,
-    humanMessage
+    humanMessage,
+    persona
   );
 
   if (debug) {
@@ -118,7 +128,7 @@ export async function processEvent(
     appendDebugLog("[Debug] Calling LLM for response...");
   }
 
-  const rawResponse = await callLLM(responseSystemPrompt, responseUserPrompt, { signal, temperature: 0.7 });
+  const rawResponse = await callLLM(responseSystemPrompt, responseUserPrompt, { signal, temperature: 0.7, model: systemConcepts.model, operation: "response" });
   const response = rawResponse ? stripEcho(humanMessage, rawResponse) : null;
 
   if (signal?.aborted) return abortedResult;
@@ -191,7 +201,7 @@ export async function updateConceptsForMessages(
   const newConcepts = await callLLMForJSON<Concept[]>(
     conceptUpdateSystemPrompt,
     conceptUpdateUserPrompt,
-    { signal, temperature: 0.3 }
+    { signal, temperature: 0.3, model: concepts.model, operation: "concept" }
   );
 
   if (signal?.aborted) return false;

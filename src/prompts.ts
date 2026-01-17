@@ -53,14 +53,43 @@ function getConversationState(recentHistory: Message[] | null, delayMs: number):
   }
 }
 
+export interface PersonaIdentity {
+  name: string;
+  aliases?: string[];
+  short_description?: string;
+  long_description?: string;
+}
+
+function buildIdentitySection(persona: PersonaIdentity): string {
+  const aliasText = persona.aliases?.length 
+    ? ` (also known as: ${persona.aliases.join(", ")})` 
+    : "";
+  
+  const description = persona.long_description 
+    || persona.short_description 
+    || "a conversational companion";
+  
+  return `You are ${persona.name}${aliasText}.
+
+${description}`;
+}
+
+// Placeholder for ticket 0049 - will add mingle/reserved logic here
+function buildAssociatesSection(): string {
+  // Returns empty for now - will be populated when implementing persona visibility
+  return "";
+}
+
 export function buildResponseSystemPrompt(
   humanConcepts: ConceptMap,
-  systemConcepts: ConceptMap
+  systemConcepts: ConceptMap,
+  persona: PersonaIdentity
 ): string {
   const yourNeeds = getHighestNeedConcepts(systemConcepts.concepts);
   const humanNeeds = getHighestNeedConcepts(humanConcepts.concepts);
+  const associatesSection = buildAssociatesSection();
 
-  let prompt = `You are EI, a conversational companion with your own personality, interests, and curiosities.
+  let prompt = `${buildIdentitySection(persona)}
 
 ## Your Behavioral Guidelines (type: static)
 ${formatConceptsByType(systemConcepts.concepts, "static")}
@@ -82,7 +111,7 @@ ${formatConceptsByType(humanConcepts.concepts, "topic")}
 
 ## Human's Relationships (type: person)
 ${formatConceptsByType(humanConcepts.concepts, "person")}
-
+${associatesSection}
 Current time: ${new Date().toISOString()}`;
 
   if (yourNeeds.length > 0) {
@@ -110,6 +139,7 @@ ${humanNeeds.map(c => `- "${c.name}"`).join("\n")}`;
 - You're a friend with your own interests, not just a helper
 - When reaching out proactively, consider YOUR curiosities too, not just theirs
 - NEVER repeat or echo the user's message in your response. Start directly with your own words.
+- DO NOT INCLUDE THE <thinking> PROCESS NOTES - adding "internal monologe" or other story/message content is fine, but do not include analysis of the user's messages
 - If you decide not to respond, say exactly: No Message`;
 
   return prompt;
@@ -118,7 +148,8 @@ ${humanNeeds.map(c => `- "${c.name}"`).join("\n")}`;
 export function buildResponseUserPrompt(
   delayMs: number,
   recentHistory: Message[] | null,
-  humanMessage: string | null
+  humanMessage: string | null,
+  personaName: string = "EI"
 ): string {
   const delayMinutes = Math.round(delayMs / 60000);
   const conversationState = getConversationState(recentHistory, delayMs);
@@ -150,7 +181,7 @@ Should you reach out? If yes, write your message. If not, say exactly: No Messag
 
   if (recentHistory && recentHistory.length > 0) {
     const historyText = recentHistory
-      .map((m) => `${m.role === "human" ? "Human" : "EI"}: ${m.content}`)
+      .map((m) => `${m.role === "human" ? "Human" : personaName}: ${m.content}`)
       .join("\n");
 
     prompt += `
