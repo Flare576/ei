@@ -1,6 +1,6 @@
 # 0070: Update Concept Interface - Add Sentiment, Remove Elasticity
 
-**Status**: PENDING
+**Status**: DONE
 
 ## Summary
 Update the Concept interface to reflect the new schema: add `sentiment` field and remove `level_elasticity`.
@@ -57,12 +57,12 @@ export interface Concept {
 Same changes as above
 
 ## Acceptance Criteria
-- [ ] Concept interface updated with `sentiment` field
-- [ ] `level_elasticity` removed from Concept interface
-- [ ] JSDoc comments explain each field's purpose
-- [ ] DEFAULT_SYSTEM_CONCEPTS updated (remove elasticity, add sentiment)
-- [ ] TypeScript compilation passes
-- [ ] All unit tests updated and passing
+- [x] Concept interface updated with `sentiment` field
+- [x] `level_elasticity` removed from Concept interface
+- [x] JSDoc comments explain each field's purpose
+- [x] DEFAULT_SYSTEM_CONCEPTS updated (remove elasticity, add sentiment)
+- [x] TypeScript compilation passes
+- [x] All unit tests updated and passing
 
 ## Value Statement
 **Schema Foundation**: This is the foundational change that enables the rest of the schema overhaul.

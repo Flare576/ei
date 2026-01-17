@@ -1,22 +1,9 @@
 # Ticket Status Summary
 
 ## QA 🧪 (Awaiting Human Verification)
+(None)
 
-## DONE ✅ (Recently Completed)
-- **0069: Concept Schema Overhaul (Epic)** - Separates exposure/desire/sentiment
-- **0061: Concept Processing Architecture Overhaul (Epic)** - 60-70% response time improvement
-- 0060: Fix Same-Persona Switch Behavior (scrolls to bottom, no reload)
-- 0058: Blessed App.ts Refactoring (enables clean feature development)
-- **0057: Persona Creation via /persona Command** - Create personas inline when not found
-- **0076: Persist Unread Message Counts Across Sessions** - Unread counts survive app restart
-- **0042: Pause/Resume Active Persona** - Pause heartbeats and queue messages for Mike the Mechanic
-- 0054: Human Concept Map Race Condition Protection (resolved via ConceptQueue)
-
-## HIGH PRIORITY 🔥 (Critical User Experience)
-(None currently - UI bugs resolved or cancelled)
-
-## PENDING (New)
-- 0077: Help Modal Popup (replace status bar with proper modal)
+## DONE ✅ (41 tickets)
 - 0001: Auto-Generate Persona Descriptions
 - 0005: CLI Thinking Indicators
 - 0006: Detect and Handle LLM Response Truncation
@@ -33,31 +20,74 @@
 - 0020: Markdown Rendering in Chat Messages
 - 0021: Fix Gemma Message Echo Bug
 - 0025: Ctrl+C Handling - Incomplete Abort
-- 0029: Quit Command with Force Option
-- 0031: Processor Unit Tests
+- 0029: /quit Command with Force Option
+- 0031: Unit Tests for processor.ts
 - 0035: Blessed Duplicate Message Processing
 - 0037: Blessed Debug Output Log-Only Mode
 - 0040: Blessed Resize Detection Broken
-- 0041: Blessed Editor Command (power user workflow)
+- 0041: Blessed Editor Command
+- 0042: Pause/Resume Active Persona with Message Queuing
+- 0054: Human Concept Map Race Condition Protection
 - 0056: End-to-End Testing POC with Controlled Environment
+- 0057: Persona Creation via /persona Command
+- 0058: Blessed App.ts Refactoring
+- 0060: Fix Same-Persona Switch Behavior
+- 0061: Concept Processing Architecture Overhaul (Epic)
+- 0062: Add concept_processed Flag to Messages
+- 0063: Add last_updated Timestamp to Concepts
+- 0064: Implement ConceptQueue Background Processor
+- 0065: Decouple processEvent from Concept Updates
+- 0066: Implement Queue Triggers (Switch, Stale Messages)
+- 0067: Replace Heartbeat LLM Calls with Programmatic Decay
+- 0069: Concept Schema Overhaul (Epic)
+- 0070: Update Concept Interface - Add Sentiment, Remove Elasticity
+- 0073: Add Sentiment Field Handling in Prompts
+- 0074: Update Heartbeat Trigger Logic for New Schema
+- 0075: Update Documentation for New Concept Schema
+- 0076: Persist Unread Message Counts Across Sessions
 
-## CANCELLED ❌
-- 0033: Blessed Resize Input Corruption Validation (fixed during migration)
-- 0034: Blessed Status Line Corruption (not observed, may revisit as modal enhancement)
-- 0036: Blessed Text Rendering Corruption (fixed during migration)
-- 0003: /editor Command for Multi-line Input (replaced by 0030, then 0041)
-- 0004: Inline Carriage Return Support (replaced by 0013)
-- 0012: OpenCode-Compatible Keybindings (partially implemented, issues noted)
-- 0023: Ink Resize Delay (resolved by Blessed migration)
-- 0024: Ink Medium Layout Rendering Issues (resolved by Blessed migration)
-- 0030: Ink Editor Command (replaced by 0041 for Blessed)
-- 0068: Refine elasticity guidance (superseded by 0069 schema overhaul)
+## PENDING (22 tickets)
+- 0002: Nickname Management Commands
+- 0015: Persona Switching (Commands + Navigation)
+- 0018: Warn on Public Repository Storage
+- 0022: Per-Persona Model Configuration
+- 0027: Enhanced Markdown Rendering
+- 0028: Investigate Slow LLM Response Times
+- 0032: Failed Message Edit and Retry Interface
+- 0038: Blessed Multi-Line Modal Interface
+- 0039: Blessed Proper Emoji Support
+- 0043: Archive/Unarchive Personas
+- 0044: Fresh Conversation Command
+- 0045: Poke Command with Physical Context Interpretation
+- 0046: Clone Persona with Concept Map
+- 0047: Force Edit Current Persona
+- 0048: Save/Restore State System
+- 0049: Mingle Flag for Persona Cross-Awareness
+- 0050: Global -p Parameter for Command Targeting
+- 0051: Undo System (In-Memory State)
+- 0052: Window Size CLI Parameter
+- 0053: Graceful Quit/Exit Commands
+- 0055: Logging System Improvements
+- 0077: Help Modal Popup
+
+## CANCELLED ❌ (11 tickets)
+- 0003: /editor Command for Multi-line Input
+- 0004: Inline Carriage Return Support (Ctrl+J)
+- 0023: INK - Reduce Layout Resize Delay
+- 0024: INK - Medium Layout Rendering Issues
+- 0026: Heartbeats Should Not Interrupt Active Processing
+- 0030: /editor Command for Ink-based Multi-line Input
+- 0033: Blessed Resize Input Corruption Validation
+- 0034: Blessed Status Line Corruption
+- 0036: Blessed Text Rendering Corruption
+- 0059: Heartbeat Countdown Live Updates
+- 0068: Refine Elasticity Guidance and Defaults
 
 ---
 
-**Last Updated**: 2026-01-16  
-**Total Tickets**: 77 created  
-**Completion Rate**: 33 done
+**Last Updated**: 2026-01-16
+**Total Tickets**: 77 created (0012 and 0071/0072 not in filesystem - may have been consolidated)
+**Stats**: 41 done, 22 pending, 11 cancelled
 
 ## Epic Status
 
@@ -70,24 +100,8 @@
 - 0067: DONE - Programmatic decay
 - 0068: CANCELLED - superseded by 0069
 
-### 0069: Concept Schema Overhaul (DONE)
-- 0070: DONE - Update interface (add sentiment, remove elasticity)
-- 0071: DONE - Logarithmic decay model
-- 0072: DONE - level_ideal prompt guidance
-- 0073: DONE - sentiment prompt guidance
+### 0069: Concept Schema Overhaul - DONE
+- 0070: DONE - Update interface
+- 0073: DONE - Sentiment field handling
 - 0074: DONE - Heartbeat trigger logic
 - 0075: DONE - Documentation updates
-
-## Priority Analysis
-
-### Immediate Action Items
-1. Review PENDING tickets for next priorities
-2. Consider modal/popup for `/help` (status line too small)
-
-### Schema Change Summary (0069) - COMPLETED
-The concept schema has been overhauled to separate three independent dimensions:
-- **level_current** (Exposure): How recently discussed? Decays toward 0.0 with logarithmic model
-- **level_ideal** (Discussion Desire): How much do they WANT to talk about it?
-- **sentiment** (Emotional Valence): How do they FEEL about it? (-1 to +1)
-
-This fixes the conflation where "likes birthday cake" was treated same as "wants to discuss birthday cake."

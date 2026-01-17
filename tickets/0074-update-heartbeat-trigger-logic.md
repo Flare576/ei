@@ -1,6 +1,6 @@
 # 0074: Update Heartbeat Trigger Logic for New Schema
 
-**Status**: PENDING
+**Status**: DONE
 
 ## Summary
 Update the heartbeat conversation trigger logic (`checkConceptDeltas`) to use the new schema fields correctly: trigger when there's a concept the entity wants to discuss but hasn't recently, and sentiment isn't strongly negative.
@@ -62,13 +62,13 @@ const SENTIMENT_FLOOR = -0.5;       // Don't bring up if sentiment below this
 ```
 
 ## Acceptance Criteria
-- [ ] `checkConceptDeltas` updated for new schema
-- [ ] Only triggers when level_ideal > level_current (desire gap)
-- [ ] Respects sentiment floor (doesn't bring up painful topics)
-- [ ] Clear debug logging explains trigger reason
-- [ ] Constants are configurable
-- [ ] TypeScript compilation passes
-- [ ] Unit tests for trigger logic
+- [x] `checkConceptDeltas` updated for new schema
+- [x] Only triggers when level_ideal > level_current (desire gap)
+- [x] Respects sentiment floor (doesn't bring up painful topics)
+- [x] Clear debug logging explains trigger reason
+- [x] Constants are configurable
+- [x] TypeScript compilation passes
+- [x] Unit tests for trigger logic
 
 ## Value Statement
 **Emotionally Intelligent Triggers**: Personas will naturally bring up topics the entity wants to discuss, while being sensitive enough not to raise painful subjects unprompted.
