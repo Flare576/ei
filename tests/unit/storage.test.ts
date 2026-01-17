@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { getRecentMessages, getLastMessageTime } from "../../src/storage.js";
+import { getRecentMessages, getLastMessageTime, findPersonaByAlias, addPersonaAlias, removePersonaAlias, listPersonas } from "../../src/storage.js";
 import type { ConversationHistory, Message } from "../../src/types.js";
 
 const createMessage = (
@@ -390,5 +390,61 @@ describe("getUnreadSystemMessageCount filtering logic", () => {
     ];
 
     expect(countUnreadSystem(messages)).toBe(0);
+  });
+});
+
+describe("findPersonaByAlias", () => {
+  it("should return null when no personas exist", async () => {
+    vi.mock("../../src/storage.js", async () => {
+      const actual = await vi.importActual("../../src/storage.js");
+      return {
+        ...actual,
+        listPersonas: vi.fn(async () => []),
+      };
+    });
+
+    const result = await findPersonaByAlias("test");
+    expect(result).toBeNull();
+  });
+
+  it("should find persona by exact alias match", async () => {
+    vi.mocked(listPersonas).mockResolvedValue([
+      { name: "alice", aliases: ["al", "alice123"] },
+      { name: "bob", aliases: ["bobby", "robert"] },
+    ]);
+
+    const result = await findPersonaByAlias("bobby");
+    
+    expect(result).toEqual({ personaName: "bob", alias: "bobby" });
+  });
+
+  it("should perform case-insensitive matching", async () => {
+    vi.mocked(listPersonas).mockResolvedValue([
+      { name: "alice", aliases: ["Al", "ALICE"] },
+    ]);
+
+    const result = await findPersonaByAlias("al");
+    
+    expect(result).toEqual({ personaName: "alice", alias: "Al" });
+  });
+
+  it("should return null when alias not found", async () => {
+    vi.mocked(listPersonas).mockResolvedValue([
+      { name: "alice", aliases: ["al"] },
+    ]);
+
+    const result = await findPersonaByAlias("nonexistent");
+    
+    expect(result).toBeNull();
+  });
+
+  it("should return original alias spelling from persona", async () => {
+    vi.mocked(listPersonas).mockResolvedValue([
+      { name: "alice", aliases: ["Alice the Great"] },
+    ]);
+
+    const result = await findPersonaByAlias("alice the great");
+    
+    expect(result?.alias).toBe("Alice the Great");
   });
 });

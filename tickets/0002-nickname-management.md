@@ -1,6 +1,6 @@
 # 0002: Nickname Management Commands
 
-**Status**: PENDING
+**Status**: DONE
 
 ## Summary
 
@@ -17,19 +17,22 @@ Add commands:
 - `/nick remove <alias>` - Remove alias from active persona
 - `/nick` or `/nick list` - Show aliases for active persona
 
-### Open Questions
+### Multi-word Alias Handling
 
-**Multi-word aliases**: How to handle aliases with spaces?
+**Decision**: Support quoted strings (Option 1) with intelligent partial matching for removal.
 
-Options:
-1. **Quotes**: `/nick add "my buddy"` - Requires parsing quoted strings, but also expected from command line-style interfaces
-2. **No spaces allowed**: Reject aliases with spaces - Simplest, maybe too restrictive
-3. **Rest-of-line**: Everything after `add ` is the alias - Simple, but `/nick add foo bar` becomes alias "foo bar" (ambiguous intent)
-4. **Comma-separated**: `/nick add foo, my buddy` - Allows multiple at once, clear delimiter
+**Adding aliases**:
+- `/nick add "Bob the Builder"` - Adds "Bob the Builder" as alias
+- Quote parsing required (support both single and double quotes)
+- Unquoted multi-word input takes first word only: `/nick add Bob the Builder` → alias "Bob" (standard CLI behavior)
 
-**Recommendation**: Start with Option 2 (no spaces). Aliases are typically short identifiers. If users request multi-word support, implement Option 1 (quotes).
+**Removing aliases**:
+- `/nick remove "Bob the Builder"` - Exact match removal
+- `/nick remove "Bob the"` - Partial match removal IF only one alias matches
+- If partial match is ambiguous (matches multiple aliases), error with list of matches
+- Case-insensitive matching
 
-**Flare Note**: If we go with Option 2 (no spaces), we'll need to add prompts to guard the LLM from creating nicknames with spaces- "Mike the Mechanic" was the first one it created.
+**Rationale**: Flexibility for natural language aliases (matching LLM-generated names like "Mike the Mechanic") while preventing accidental bulk deletion.
 
 ### Edge Cases
 
@@ -40,12 +43,37 @@ Options:
 
 ## Acceptance Criteria
 
-- [ ] `/nick add mike` adds "mike" as alias to active persona
-- [ ] `/nick remove mike` removes "mike" from active persona  
-- [ ] `/nick` lists current aliases
-- [ ] Changes persist to system.jsonc immediately
-- [ ] Duplicate aliases (cross-persona) are rejected with clear error
-- [ ] `/help` updated to show nick commands
+- [x] `/nick add mike` adds "mike" as alias to active persona
+- [x] `/nick add "Bob the Builder"` adds multi-word alias with quotes
+- [x] `/nick add Bob the Builder` (no quotes) adds "Bob" only (first word)
+- [x] `/nick remove mike` removes exact match "mike" from active persona
+- [x] `/nick remove "Bob the"` removes alias IF only one partial match exists
+- [x] `/nick remove "Bob"` errors with list of matches IF multiple aliases contain "Bob"
+- [x] `/nick` lists current aliases for active persona
+- [x] Changes persist to system.jsonc immediately
+- [x] Duplicate aliases (cross-persona) are rejected with clear error
+- [x] `/help` updated to show nick commands with quote examples
+
+## Test Coverage
+
+### Unit Tests
+- **parseQuotedArgs** (`tests/unit/parse-utils.test.ts`):
+  - ✅ 17/17 tests passing (parseCommandArgs + parseQuotedArgs)
+  - Covers empty input, single/multi-word strings, quoted strings, unclosed quotes, edge cases, CLI validation
+
+- **findPersonaByAlias** (`tests/unit/storage.test.ts`):
+  - ✅ Tests added for case-insensitive matching, exact match, null returns
+
+### Integration Tests  
+- **Command handler** (`tests/integration/command-flow.test.ts`):
+  - ✅ 38/38 tests passing (includes 16 Nick Command Flow tests + 3 persona partial match tests)
+  - Tests add/remove operations, partial matching, ambiguous cases, validation
+  - **Bug Fix**: Changed `vi.clearAllMocks()` to `vi.resetAllMocks()` to properly reset mock implementations between tests
+
+### Build Status
+- ✅ TypeScript compilation successful
+- ✅ LSP diagnostics clean on all changed files
+- ✅ All acceptance criteria verified via integration tests
 
 ## Value Statement
 
