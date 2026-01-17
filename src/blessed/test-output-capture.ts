@@ -68,18 +68,20 @@ class TestOutputCapture {
       this.originalMethods.set('box.setContent', originalBoxSetContent);
       appendDebugLog('TestOutputCapture: Intercepting blessed.box.prototype.setContent');
       
-      blessed.box.prototype.setContent = function(content: string) {
-        appendDebugLog(`TestOutputCapture: box.setContent called with content length: ${content?.length || 0}`);
+      blessed.box.prototype.setContent = function(content: string, noClear?: boolean, noTags?: boolean) {
+        const result = originalBoxSetContent.call(this, content, noClear, noTags);
         
-        // Call original method first to maintain normal functionality
-        const result = originalBoxSetContent.call(this, content);
-        
-        // Capture content for testing
-        TestOutputCapture.getInstance().captureContent(
-          this.type || 'box',
-          content,
-          this.options?.label
-        );
+        try {
+          if (content != null && this._clines) {
+            TestOutputCapture.getInstance().captureContent(
+              this.type || 'box',
+              content,
+              this.options?.label
+            );
+          }
+        } catch (e) {
+          // Ignore capture errors - widget may be partially constructed
+        }
         
         return result;
       };
@@ -89,16 +91,20 @@ class TestOutputCapture {
       this.originalMethods.set('textbox.setContent', originalTextboxSetContent);
       appendDebugLog('TestOutputCapture: Intercepting blessed.textbox.prototype.setContent');
       
-      blessed.textbox.prototype.setContent = function(content: string) {
-        appendDebugLog(`TestOutputCapture: textbox.setContent called with content length: ${content?.length || 0}`);
+      blessed.textbox.prototype.setContent = function(content: string, noClear?: boolean, noTags?: boolean) {
+        const result = originalTextboxSetContent.call(this, content, noClear, noTags);
         
-        const result = originalTextboxSetContent.call(this, content);
-        
-        TestOutputCapture.getInstance().captureContent(
-          this.type || 'textbox',
-          content,
-          this.options?.label
-        );
+        try {
+          if (content != null && this._clines) {
+            TestOutputCapture.getInstance().captureContent(
+              this.type || 'textbox',
+              content,
+              this.options?.label
+            );
+          }
+        } catch (e) {
+          // Ignore capture errors during widget construction
+        }
         
         return result;
       };
@@ -109,18 +115,49 @@ class TestOutputCapture {
       appendDebugLog('TestOutputCapture: Intercepting blessed.textbox.prototype.setValue');
       
       blessed.textbox.prototype.setValue = function(value: string) {
-        appendDebugLog(`TestOutputCapture: textbox.setValue called with value length: ${value?.length || 0}`);
-        
         const result = originalTextboxSetValue.call(this, value);
         
-        TestOutputCapture.getInstance().captureContent(
-          `${this.type || 'textbox'}-value`,
-          value,
-          this.options?.label
-        );
+        try {
+          if (value != null && this._clines) {
+            TestOutputCapture.getInstance().captureContent(
+              `${this.type || 'textbox'}-value`,
+              value,
+              this.options?.label
+            );
+          }
+        } catch (e) {
+          // Ignore capture errors during widget construction
+        }
         
         return result;
       };
+
+      // Intercept blessed.message display method (for modal popups like help)
+      if (blessed.message && blessed.message.prototype && blessed.message.prototype.display) {
+        const originalMessageDisplay = blessed.message.prototype.display;
+        this.originalMethods.set('message.display', originalMessageDisplay);
+        appendDebugLog('TestOutputCapture: Intercepting blessed.message.prototype.display');
+        
+        blessed.message.prototype.display = function(content: string, time: number, callback?: () => void) {
+          const result = originalMessageDisplay.call(this, content, time, callback);
+          
+          try {
+            if (content != null) {
+              TestOutputCapture.getInstance().captureContent(
+                'message',
+                content,
+                this.options?.label || 'modal'
+              );
+            }
+          } catch (e) {
+            // Ignore capture errors during widget construction
+          }
+          
+          return result;
+        };
+      } else {
+        appendDebugLog('TestOutputCapture: blessed.message.prototype.display not available, skipping interception');
+      }
 
       // Intercept screen.render to capture render events
       const originalScreenRender = blessed.screen.prototype.render;
@@ -128,12 +165,8 @@ class TestOutputCapture {
       appendDebugLog('TestOutputCapture: Intercepting blessed.screen.prototype.render');
       
       blessed.screen.prototype.render = function() {
-        appendDebugLog('TestOutputCapture: screen.render called');
-        
         const result = originalScreenRender.call(this);
-        
         TestOutputCapture.getInstance().captureRenderEvent();
-        
         return result;
       };
 
@@ -346,6 +379,11 @@ class TestOutputCapture {
           break;
         case 'textbox':
           (blessed.textbox.prototype as any)[methodKey] = originalMethod;
+          break;
+        case 'message':
+          if (blessed.message && blessed.message.prototype) {
+            (blessed.message.prototype as any)[methodKey] = originalMethod;
+          }
           break;
         case 'screen':
           (blessed.screen.prototype as any)[methodKey] = originalMethod;

@@ -1,6 +1,8 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
+import { createBlessedMock } from '../helpers/blessed-mocks.js';
 
-// Mock external dependencies
+vi.mock('blessed', () => createBlessedMock());
+
 vi.mock('../../src/storage.js', () => ({
   loadHistory: vi.fn(() => Promise.resolve({ messages: [] })),
   listPersonas: vi.fn(() => Promise.resolve([
@@ -47,50 +49,6 @@ vi.mock('../../src/concept-queue.js', () => ({
       isProcessing: vi.fn(() => false),
     })),
   },
-}));
-
-// Minimal blessed stubs - just prevent initialization errors
-vi.mock('blessed', () => ({
-  default: {
-    screen: vi.fn(() => ({
-      width: 100,
-      height: 30,
-      render: vi.fn(),
-      destroy: vi.fn(),
-      key: vi.fn(),
-      on: vi.fn(),
-      append: vi.fn(),
-      remove: vi.fn(),
-      alloc: vi.fn(),
-      realloc: vi.fn(),
-      clearRegion: vi.fn(),
-      options: { smartCSR: true, fullUnicode: true },
-      focused: null,
-    })),
-    box: vi.fn(() => ({
-      setContent: vi.fn(),
-      setLabel: vi.fn(),
-      focus: vi.fn(),
-      scroll: vi.fn(),
-      scrollTo: vi.fn(),
-      getScroll: vi.fn(() => 0),
-      getScrollHeight: vi.fn(() => 100),
-      on: vi.fn(),
-      key: vi.fn(),
-      removeAllListeners: vi.fn(),
-      type: 'box',
-    })),
-    textbox: vi.fn(() => ({
-      focus: vi.fn(),
-      clearValue: vi.fn(),
-      getValue: vi.fn(() => ''),
-      setValue: vi.fn(),
-      on: vi.fn(),
-      key: vi.fn(),
-      removeAllListeners: vi.fn(),
-      type: 'textbox',
-    })),
-  }
 }));
 
 import { EIApp } from '../../src/blessed/app.js';

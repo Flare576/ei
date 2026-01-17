@@ -184,6 +184,7 @@ export class EIApp {
     this.setupScrollingKeyBindings();
 
     this.layoutManager.getInputBox().on('keypress', (ch, key) => {
+      debugLog(`inputBox keypress: ch="${ch}", key=${key?.name}, value="${this.layoutManager.getInputBox().getValue()}"`);
       if (this.pendingMultiLineContent) {
         if (key && key.ctrl && (key.name === 'c' || key.name === 'e')) {
           return;
@@ -367,7 +368,7 @@ export class EIApp {
         break;
       case 'help':
       case 'h':
-        this.setStatus('Commands: /persona, /pause [duration], /resume [persona], /editor|/e, /quit|/q [--force], /refresh, /help');
+        this.showHelpModal();
         break;
       default:
         this.setStatus(`Unknown command: /${command}`);
@@ -612,6 +613,48 @@ export class EIApp {
       this.setStatus(`${personaName} auto-resumed`);
     }
     this.render();
+  }
+
+  private showHelpModal(): void {
+    const helpText = `EI - Emotional Intelligence Chat
+
+COMMANDS
+  /persona [name]     Switch persona (or list if no name)
+  /pause [duration]   Pause active persona (30m, 2h, or indefinite)
+  /resume [persona]   Resume paused persona
+  /editor, /e         Open external editor for multi-line input
+  /refresh, /r        Refresh UI layout
+  /quit [--force]     Exit application
+  /help, /h           Show this help
+
+KEYBOARD SHORTCUTS
+  Ctrl+E              Open external editor
+  Ctrl+C              Clear input / abort operation / exit
+  Ctrl+H              Focus persona list
+  Ctrl+L              Focus input
+  Ctrl+R              Refresh UI
+  PageUp/PageDown     Scroll chat history
+  Escape, Q           Quit application
+
+TIPS
+  - Messages are processed asynchronously
+  - Use /pause to temporarily stop responses
+  - External editor supports multi-line messages
+
+Press q to close this help.`;
+
+    const tmpFile = `/tmp/ei-help-${Date.now()}.txt`;
+    writeFileSync(tmpFile, helpText, 'utf-8');
+    
+    this.screen.exec('less', [tmpFile], {}, (err) => {
+      try {
+        unlinkSync(tmpFile);
+      } catch {
+        // Ignore cleanup errors
+      }
+      this.focusManager.focusInput();
+      this.screen.render();
+    });
   }
 
   private async resumePersona(personaName: string, triggerHeartbeat: boolean): Promise<void> {
@@ -1468,8 +1511,13 @@ export class EIApp {
       
       this.startStaleMessageChecker();
       
+      const countListeners = () => this.layoutManager.getInputBox().listeners('keypress').length;
+      const listListeners = () => this.layoutManager.getInputBox().listeners('keypress').map(f => f.name || 'anonymous');
+      debugLog(`Before focusInput: listeners=${countListeners()} [${listListeners().join(', ')}], _reading=${(this.layoutManager.getInputBox() as any)._reading}`);
       this.focusManager.focusInput();
+      debugLog(`After focusInput: listeners=${countListeners()} [${listListeners().join(', ')}], _reading=${(this.layoutManager.getInputBox() as any)._reading}`);
       this.render();
+      debugLog(`After render: listeners=${countListeners()} [${listListeners().join(', ')}], _reading=${(this.layoutManager.getInputBox() as any)._reading}`);
       this.autoScrollToBottom();
       
       await this.processPendingMessagesOnStartup();

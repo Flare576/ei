@@ -13,7 +13,6 @@ export class FocusManager {
   }
 
   maintainFocus() {
-    // Only refocus if we actually lost focus
     if (!this.isInputFocused()) {
       this.layoutManager.getInputBox().focus();
     }

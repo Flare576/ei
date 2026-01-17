@@ -1,45 +1,9 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import fc from 'fast-check';
+import { createBlessedMock } from '../helpers/blessed-mocks.js';
 
-// Mock blessed for UI testing
-vi.mock('blessed', () => ({
-  default: {
-    screen: vi.fn(() => ({
-      width: 100,
-      height: 30,
-      render: vi.fn(),
-      key: vi.fn(),
-      on: vi.fn(),
-      append: vi.fn(),
-      remove: vi.fn(),
-      clearRegion: vi.fn(),
-      realloc: vi.fn(),
-      focused: null,
-    })),
-    box: vi.fn(() => ({
-      setContent: vi.fn(),
-      setLabel: vi.fn(),
-      scroll: vi.fn(),
-      scrollTo: vi.fn(),
-      getScroll: vi.fn(() => 0),
-      getScrollHeight: vi.fn(() => 100),
-      focus: vi.fn(),
-      on: vi.fn(),
-      key: vi.fn(),
-      hidden: false,
-      removeAllListeners: vi.fn(),
-    })),
-    textbox: vi.fn(() => ({
-      getValue: vi.fn(() => ''),
-      setValue: vi.fn(),
-      clearValue: vi.fn(),
-      focus: vi.fn(),
-      on: vi.fn(),
-      key: vi.fn(),
-      screen: { focused: null },
-      removeAllListeners: vi.fn(),
-    })),
-  }
+vi.mock('blessed', () => createBlessedMock({
+  textbox: { screen: { focused: null } }
 }));
 
 // Mock dependencies

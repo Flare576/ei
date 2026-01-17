@@ -3,7 +3,7 @@
 ## QA 🧪 (Awaiting Human Verification)
 (None)
 
-## DONE ✅ (41 tickets)
+## DONE ✅ (42 tickets)
 - 0001: Auto-Generate Persona Descriptions
 - 0005: CLI Thinking Indicators
 - 0006: Detect and Handle LLM Response Truncation
@@ -45,8 +45,9 @@
 - 0074: Update Heartbeat Trigger Logic for New Schema
 - 0075: Update Documentation for New Concept Schema
 - 0076: Persist Unread Message Counts Across Sessions
+- 0077: Help Command with External Pager
 
-## PENDING (22 tickets)
+## PENDING (21 tickets)
 - 0002: Nickname Management Commands
 - 0015: Persona Switching (Commands + Navigation)
 - 0018: Warn on Public Repository Storage
@@ -68,7 +69,6 @@
 - 0052: Window Size CLI Parameter
 - 0053: Graceful Quit/Exit Commands
 - 0055: Logging System Improvements
-- 0077: Help Modal Popup
 
 ## CANCELLED ❌ (11 tickets)
 - 0003: /editor Command for Multi-line Input
@@ -87,7 +87,7 @@
 
 **Last Updated**: 2026-01-16
 **Total Tickets**: 77 created (0012 and 0071/0072 not in filesystem - may have been consolidated)
-**Stats**: 41 done, 22 pending, 11 cancelled
+**Stats**: 42 done, 21 pending, 11 cancelled
 
 ## Epic Status
 
