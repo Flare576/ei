@@ -178,11 +178,15 @@ describe('Pause/Resume Persona E2E Tests', () => {
     
     await harness.waitForFileContent('personas/ei/history.jsonc', testMessage, 10000);
     await harness.waitForIdleState(2000);
+    
+    const requestCountBeforeResume = harness.getMockRequestHistory().length;
 
     await harness.sendCommand('/resume');
     await harness.waitForUIText('Resumed ei', 5000);
 
-    await harness.waitForLLMRequest(15000);
+    await harness.waitForLLMRequestCount(requestCountBeforeResume + 1, 15000);
+    
+    await harness.waitForUIText('queued message', 10000);
 
     await harness.sendCommand('/quit');
     await harness.assertExitCode(0, 8000);

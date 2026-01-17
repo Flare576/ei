@@ -17,6 +17,7 @@ export interface E2ETestHarness {
   waitForFileContent(filePath: string, expectedContent: string | RegExp, timeout?: number): Promise<string>;
   waitForProcessingComplete(timeout?: number): Promise<void>;
   waitForLLMRequest(timeout?: number): Promise<void>;
+  waitForLLMRequestCount(expectedCount: number, timeout?: number): Promise<void>;
   waitForIdleState(timeout?: number): Promise<void>;
   waitForCondition(checker: () => Promise<boolean> | boolean, description: string, timeout?: number, checkInterval?: number): Promise<void>;
   

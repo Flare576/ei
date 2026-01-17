@@ -496,6 +496,30 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
     });
   }
 
+  async waitForLLMRequestCount(expectedCount: number, timeout: number = 5000): Promise<void> {
+    const startTime = Date.now();
+
+    return new Promise((resolve, reject) => {
+      const checkForRequest = () => {
+        const currentRequestCount = this.mockServer.getRequestHistory().length;
+        
+        if (currentRequestCount >= expectedCount) {
+          resolve();
+          return;
+        }
+
+        if (Date.now() - startTime >= timeout) {
+          reject(new Error(`LLM request count timeout after ${timeout}ms. Expected: ${expectedCount}, Got: ${currentRequestCount}`));
+          return;
+        }
+
+        setTimeout(checkForRequest, 100);
+      };
+
+      checkForRequest();
+    });
+  }
+
   /**
    * Waits for application to reach idle state (no processing, no pending operations)
    */
