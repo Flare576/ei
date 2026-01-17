@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { getRecentMessages, getLastMessageTime } from "../../src/storage.js";
+import { getRecentMessages, getLastMessageTime, findPersonaByAlias, addPersonaAlias, removePersonaAlias, listPersonas } from "../../src/storage.js";
 import type { ConversationHistory, Message } from "../../src/types.js";
 
 const createMessage = (
@@ -390,5 +390,100 @@ describe("getUnreadSystemMessageCount filtering logic", () => {
     ];
 
     expect(countUnreadSystem(messages)).toBe(0);
+  });
+});
+
+describe("findPersonaByAlias logic", () => {
+  it("should return null when alias not found in empty list", () => {
+    const personas: Array<{ name: string; aliases: string[] }> = [];
+    const lower = "test".toLowerCase();
+    
+    let result: { personaName: string; alias: string } | null = null;
+    for (const p of personas) {
+      const matchedAlias = p.aliases.find(a => a.toLowerCase() === lower);
+      if (matchedAlias) {
+        result = { personaName: p.name, alias: matchedAlias };
+        break;
+      }
+    }
+    
+    expect(result).toBeNull();
+  });
+
+  it("should find persona by exact alias match", () => {
+    const personas = [
+      { name: "alice", aliases: ["al", "alice123"] },
+      { name: "bob", aliases: ["bobby", "robert"] },
+    ];
+    const searchAlias = "bobby";
+    const lower = searchAlias.toLowerCase();
+    
+    let result: { personaName: string; alias: string } | null = null;
+    for (const p of personas) {
+      const matchedAlias = p.aliases.find(a => a.toLowerCase() === lower);
+      if (matchedAlias) {
+        result = { personaName: p.name, alias: matchedAlias };
+        break;
+      }
+    }
+    
+    expect(result).toEqual({ personaName: "bob", alias: "bobby" });
+  });
+
+  it("should perform case-insensitive matching", () => {
+    const personas = [
+      { name: "alice", aliases: ["Al", "ALICE"] },
+    ];
+    const searchAlias = "al";
+    const lower = searchAlias.toLowerCase();
+    
+    let result: { personaName: string; alias: string } | null = null;
+    for (const p of personas) {
+      const matchedAlias = p.aliases.find(a => a.toLowerCase() === lower);
+      if (matchedAlias) {
+        result = { personaName: p.name, alias: matchedAlias };
+        break;
+      }
+    }
+    
+    expect(result).toEqual({ personaName: "alice", alias: "Al" });
+  });
+
+  it("should return null when alias not found", () => {
+    const personas = [
+      { name: "alice", aliases: ["al"] },
+    ];
+    const searchAlias = "nonexistent";
+    const lower = searchAlias.toLowerCase();
+    
+    let result: { personaName: string; alias: string } | null = null;
+    for (const p of personas) {
+      const matchedAlias = p.aliases.find(a => a.toLowerCase() === lower);
+      if (matchedAlias) {
+        result = { personaName: p.name, alias: matchedAlias };
+        break;
+      }
+    }
+    
+    expect(result).toBeNull();
+  });
+
+  it("should return original alias spelling from persona", () => {
+    const personas = [
+      { name: "alice", aliases: ["Alice the Great"] },
+    ];
+    const searchAlias = "alice the great";
+    const lower = searchAlias.toLowerCase();
+    
+    let result: { personaName: string; alias: string } | null = null;
+    for (const p of personas) {
+      const matchedAlias = p.aliases.find(a => a.toLowerCase() === lower);
+      if (matchedAlias) {
+        result = { personaName: p.name, alias: matchedAlias };
+        break;
+      }
+    }
+    
+    expect(result?.alias).toBe("Alice the Great");
   });
 });

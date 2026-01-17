@@ -5,7 +5,7 @@ import { writeFileSync, readFileSync, unlinkSync } from 'fs';
 // Import test output capture early to intercept blessed methods before they're used
 import { testOutputCapture } from './test-output-capture.js';
 
-import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog, getPendingMessages, replacePendingMessages, appendHumanMessage, getUnprocessedMessages, loadPauseState, savePauseState, markSystemMessagesAsRead, getUnreadSystemMessageCount, loadArchiveState, saveArchiveState, getArchivedPersonas, findArchivedPersonaByNameOrAlias } from '../storage.js';
+import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog, getPendingMessages, replacePendingMessages, appendHumanMessage, getUnprocessedMessages, loadPauseState, savePauseState, markSystemMessagesAsRead, getUnreadSystemMessageCount, loadArchiveState, saveArchiveState, getArchivedPersonas, findArchivedPersonaByNameOrAlias, addPersonaAlias, removePersonaAlias, loadConceptMap } from '../storage.js';
 import { createPersonaWithLLM, saveNewPersona } from '../persona-creator.js';
 import { ConceptQueue } from '../concept-queue.js';
 import { processEvent } from '../processor.js';
@@ -372,6 +372,10 @@ export class EIApp {
       case 'unarchive':
         await this.handleUnarchiveCommand(args);
         break;
+      case 'nick':
+      case 'n':
+        await this.handleNickCommand(args);
+        break;
       case 'help':
       case 'h':
         this.showHelpModal();
@@ -398,24 +402,53 @@ export class EIApp {
       return;
     }
 
-    const foundPersona = await findPersonaByNameOrAlias(trimmed.toLowerCase());
-    if (foundPersona) {
-      await this.switchPersona(foundPersona);
+    const { parseQuotedArgs } = await import('../parse-utils.js');
+    const firstChar = trimmed[0];
+    let nameOrAlias: string;
+    
+    if (firstChar === '"' || firstChar === "'") {
+      nameOrAlias = parseQuotedArgs(trimmed);
     } else {
-      const archivedPersona = await findArchivedPersonaByNameOrAlias(trimmed.toLowerCase());
-      if (archivedPersona) {
-        this.setStatus(`Persona '${archivedPersona}' is archived. Use /unarchive ${trimmed} to restore it`);
-        return;
-      }
-      
-      const validationError = this.validatePersonaName(trimmed);
-      if (validationError) {
-        this.setStatus(validationError);
-        return;
-      }
-      this.pendingPersonaCreation = { name: trimmed, stage: 'confirm' };
-      this.setStatus(`Persona '${trimmed}' not found. Create it? (y/n)`);
+      nameOrAlias = trimmed.split(/\s+/)[0];
     }
+
+    // First check for exact match (name or alias)
+    const exactPersona = await findPersonaByNameOrAlias(nameOrAlias.toLowerCase());
+    if (exactPersona) {
+      await this.switchPersona(exactPersona);
+      return;
+    }
+    
+    // Check archived personas
+    const archivedPersona = await findArchivedPersonaByNameOrAlias(nameOrAlias.toLowerCase());
+    if (archivedPersona) {
+      this.setStatus(`Persona '${archivedPersona}' is archived. Use /unarchive ${nameOrAlias} to restore it`);
+      return;
+    }
+    
+    // Try partial match only if exact match and archive check failed
+    try {
+      const partialPersona = await findPersonaByNameOrAlias(nameOrAlias.toLowerCase(), { allowPartialMatch: true });
+      if (partialPersona) {
+        await this.switchPersona(partialPersona);
+        return;
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('Ambiguous')) {
+        this.setStatus(error.message);
+        return;
+      }
+      throw error;
+    }
+    
+    // No match found - validate before creating
+    const validationError = this.validatePersonaName(nameOrAlias);
+    if (validationError) {
+      this.setStatus(validationError);
+      return;
+    }
+    this.pendingPersonaCreation = { name: nameOrAlias, stage: 'confirm' };
+    this.setStatus(`Persona '${nameOrAlias}' not found. Create it? (y/n)`);
   }
 
   private validatePersonaName(name: string): string | null {
@@ -717,6 +750,65 @@ export class EIApp {
     this.render();
   }
 
+  private async handleNickCommand(args: string): Promise<void> {
+    const { parseCommandArgs } = await import('../parse-utils.js');
+    const parts = parseCommandArgs(args);
+    const subcommand = parts[0]?.toLowerCase() || '';
+    
+    if (!subcommand || subcommand === 'list') {
+      const conceptMap = await loadConceptMap('system', this.activePersona);
+      const aliases = conceptMap.aliases || [];
+      
+      if (aliases.length === 0) {
+        this.setStatus(`${this.activePersona} has no aliases`);
+        return;
+      }
+      
+      this.setStatus(`Aliases for ${this.activePersona}: ${aliases.join(', ')}`);
+      return;
+    }
+    
+    if (subcommand === 'add') {
+      if (parts.length !== 2) {
+        this.setStatus('Usage: /nick add <alias> or /nick add "multi word alias"');
+        return;
+      }
+      
+      const alias = parts[1];
+      
+      try {
+        await addPersonaAlias(this.activePersona, alias);
+        this.setStatus(`Added alias "${alias}" to ${this.activePersona}`);
+        this.personas = await listPersonas();
+        this.render();
+      } catch (error) {
+        this.setStatus(`Error: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      return;
+    }
+    
+    if (subcommand === 'remove') {
+      if (parts.length !== 2) {
+        this.setStatus('Usage: /nick remove <alias> or /nick remove "partial match"');
+        return;
+      }
+      
+      const pattern = parts[1];
+      
+      try {
+        const removed = await removePersonaAlias(this.activePersona, pattern);
+        this.setStatus(`Removed alias "${removed[0]}" from ${this.activePersona}`);
+        this.personas = await listPersonas();
+        this.render();
+      } catch (error) {
+        this.setStatus(`Error: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      return;
+    }
+    
+    this.setStatus(`Unknown subcommand: /nick ${subcommand}. Use add, remove, or list.`);
+  }
+
   private showHelpModal(): void {
     const helpText = `EI - Emotional Intelligence Chat
 
@@ -726,6 +818,10 @@ COMMANDS
   /resume [persona]   Resume paused persona
   /archive [persona]  Archive persona (hides from list, stops heartbeats)
   /unarchive [name|#] Restore archived persona (no args lists archived)
+  /nick [subcommand]  Manage persona aliases
+    /nick              List aliases for active persona
+    /nick add <alias>  Add alias (supports "multi word" quotes)
+    /nick remove <pat> Remove alias by partial match
   /editor, /e         Open external editor for multi-line input
   /refresh, /r        Refresh UI layout
   /quit [--force]     Exit application

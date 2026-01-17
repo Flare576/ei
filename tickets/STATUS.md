@@ -1,10 +1,8 @@
 # Ticket Status Summary
 
-## QA 🧪 (Awaiting Human Verification)
-(None)
-
-## DONE ✅ (43 tickets)
+## DONE ✅ (44 tickets)
 - 0001: Auto-Generate Persona Descriptions
+- 0002: Nickname Management Commands
 - 0005: CLI Thinking Indicators
 - 0006: Detect and Handle LLM Response Truncation
 - 0007: Configurable Storage Location
@@ -48,8 +46,7 @@
 - 0077: Help Command with External Pager
 - 0043: Archive/Unarchive Personas
 
-## PENDING (20 tickets)
-- 0002: Nickname Management Commands
+## PENDING (21 tickets)
 - 0015: Persona Switching (Commands + Navigation)
 - 0018: Warn on Public Repository Storage
 - 0022: Per-Persona Model Configuration
@@ -69,6 +66,8 @@
 - 0052: Window Size CLI Parameter
 - 0053: Graceful Quit/Exit Commands
 - 0055: Logging System Improvements
+- 0078: Persona Delete Command
+- 0079: Validate Command Argument Counts
 
 ## CANCELLED ❌ (11 tickets)
 - 0003: /editor Command for Multi-line Input
@@ -86,8 +85,8 @@
 ---
 
 **Last Updated**: 2026-01-17
-**Total Tickets**: 77 created (0012 and 0071/0072 not in filesystem - may have been consolidated)
-**Stats**: 43 done, 20 pending, 11 cancelled
+**Total Tickets**: 79 created (0012 and 0071/0072 not in filesystem - may have been consolidated)
+**Stats**: 44 done, 0 in QA, 21 pending, 11 cancelled
 
 ## Epic Status
 

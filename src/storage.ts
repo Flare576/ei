@@ -429,7 +429,8 @@ export async function findArchivedPersonaByNameOrAlias(
 }
 
 export async function findPersonaByNameOrAlias(
-  nameOrAlias: string
+  nameOrAlias: string,
+  options: { allowPartialMatch?: boolean } = {}
 ): Promise<string | null> {
   const personas = await listPersonas();
   const lower = nameOrAlias.toLowerCase();
@@ -439,7 +440,125 @@ export async function findPersonaByNameOrAlias(
     if (p.aliases.some(a => a.toLowerCase() === lower)) return p.name;
   }
   
+  if (options.allowPartialMatch) {
+    const matches = personas.filter(p =>
+      p.aliases.some(a => a.toLowerCase().includes(lower))
+    );
+    
+    if (matches.length === 1) {
+      return matches[0].name;
+    }
+    
+    if (matches.length > 1) {
+      const matchedAliases = matches.flatMap(p => 
+        p.aliases.filter(a => a.toLowerCase().includes(lower))
+      );
+      throw new Error(
+        `Ambiguous: multiple aliases match "${nameOrAlias}": ${matchedAliases.join(", ")}`
+      );
+    }
+  }
+  
   return null;
+}
+
+/**
+ * Find which persona (if any) owns a given alias
+ * @returns {personaName: string, alias: string} if found, null otherwise
+ */
+export async function findPersonaByAlias(
+  alias: string
+): Promise<{ personaName: string; alias: string } | null> {
+  const personas = await listPersonas();
+  const lower = alias.toLowerCase();
+  
+  for (const p of personas) {
+    const matchedAlias = p.aliases.find(a => a.toLowerCase() === lower);
+    if (matchedAlias) {
+      return { personaName: p.name, alias: matchedAlias };
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Add an alias to a persona's alias list
+ * @throws Error if alias already exists on another persona or validation fails
+ */
+export async function addPersonaAlias(
+  personaName: string,
+  alias: string
+): Promise<void> {
+  // Check if alias already exists on ANY persona
+  const existing = await findPersonaByAlias(alias);
+  if (existing) {
+    throw new Error(
+      `Alias "${alias}" already exists on persona "${existing.personaName}"`
+    );
+  }
+  
+  // Load current concept map
+  const conceptMap = await loadConceptMap("system", personaName);
+  
+  // Initialize aliases array if missing
+  if (!conceptMap.aliases) {
+    conceptMap.aliases = [];
+  }
+  
+  // Check for duplicate within same persona (case-insensitive)
+  const lower = alias.toLowerCase();
+  if (conceptMap.aliases.some(a => a.toLowerCase() === lower)) {
+    throw new Error(`Alias "${alias}" already exists on this persona`);
+  }
+  
+  // Add alias and save
+  conceptMap.aliases.push(alias);
+  conceptMap.last_updated = new Date().toISOString();
+  await saveConceptMap(conceptMap, personaName);
+}
+
+/**
+ * Remove alias(es) from a persona using partial matching
+ * @returns Array of removed aliases
+ * @throws Error if no matches found or multiple ambiguous matches
+ */
+export async function removePersonaAlias(
+  personaName: string,
+  aliasPattern: string
+): Promise<string[]> {
+  const conceptMap = await loadConceptMap("system", personaName);
+  
+  if (!conceptMap.aliases || conceptMap.aliases.length === 0) {
+    throw new Error(`No aliases found for persona "${personaName}"`);
+  }
+  
+  const lower = aliasPattern.toLowerCase();
+  
+  // Find matches (case-insensitive partial match)
+  const matches = conceptMap.aliases.filter(a => 
+    a.toLowerCase().includes(lower)
+  );
+  
+  if (matches.length === 0) {
+    throw new Error(
+      `No aliases matching "${aliasPattern}" found on persona "${personaName}"`
+    );
+  }
+  
+  if (matches.length > 1) {
+    throw new Error(
+      `Ambiguous: multiple aliases match "${aliasPattern}": ${matches.join(", ")}`
+    );
+  }
+  
+  // Remove the single matched alias
+  const removedAlias = matches[0];
+  conceptMap.aliases = conceptMap.aliases.filter(a => a !== removedAlias);
+  conceptMap.last_updated = new Date().toISOString();
+  await saveConceptMap(conceptMap, personaName);
+  
+  return [removedAlias];
 }
 
 export function personaExists(persona: string): boolean {

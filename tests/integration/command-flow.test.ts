@@ -3,16 +3,114 @@ import { createBlessedMock } from '../helpers/blessed-mocks.js';
 
 vi.mock('blessed', () => createBlessedMock());
 
+const mockPersonas = [
+  { name: 'ei', aliases: ['default', 'core'] },
+  { name: 'claude', aliases: ['assistant'] },
+  { name: 'assistant', aliases: [] }
+];
+
+const mockConceptMaps = new Map<string, any>();
+mockConceptMaps.set('ei:system', { entity: 'system', aliases: ['default', 'core'], last_updated: null, concepts: [] });
+mockConceptMaps.set('claude:system', { entity: 'system', aliases: ['assistant'], last_updated: null, concepts: [] });
+mockConceptMaps.set('assistant:system', { entity: 'system', aliases: [], last_updated: null, concepts: [] });
+
 vi.mock('../../src/storage.js', () => ({
   loadHistory: vi.fn(() => Promise.resolve({ messages: [] })),
-  listPersonas: vi.fn(() => Promise.resolve([
-    { name: 'ei' },
-    { name: 'claude' },
-    { name: 'assistant' }
-  ])),
-  findPersonaByNameOrAlias: vi.fn((name) => Promise.resolve(
-    ['ei', 'claude', 'assistant'].includes(name) ? name : null
-  )),
+  listPersonas: vi.fn(() => Promise.resolve(mockPersonas)),
+  findPersonaByNameOrAlias: vi.fn(async (name, options) => {
+    const lower = name.toLowerCase();
+    
+    for (const p of mockPersonas) {
+      if (p.name.toLowerCase() === lower) return p.name;
+      if (p.aliases.some(a => a.toLowerCase() === lower)) return p.name;
+    }
+    
+    if (options?.allowPartialMatch) {
+      const matches = mockPersonas.filter(p =>
+        p.aliases.some(a => a.toLowerCase().includes(lower))
+      );
+      
+      if (matches.length === 1) {
+        return matches[0].name;
+      }
+      
+      if (matches.length > 1) {
+        const matchedAliases = matches.flatMap(p => 
+          p.aliases.filter(a => a.toLowerCase().includes(lower))
+        );
+        throw new Error(
+          `Ambiguous: multiple aliases match "${name}": ${matchedAliases.join(", ")}`
+        );
+      }
+    }
+    
+    return null;
+  }),
+  loadConceptMap: vi.fn((entity, persona) => {
+    const key = `${persona}:${entity}`;
+    return Promise.resolve(mockConceptMaps.get(key) || {
+      entity,
+      aliases: [],
+      last_updated: new Date().toISOString(),
+      concepts: [],
+    });
+  }),
+  saveConceptMap: vi.fn((conceptMap, persona) => {
+    const key = `${persona}:${conceptMap.entity}`;
+    mockConceptMaps.set(key, conceptMap);
+    const p = mockPersonas.find(p => p.name === persona);
+    if (p && conceptMap.aliases) {
+      p.aliases = [...conceptMap.aliases];
+    }
+    return Promise.resolve();
+  }),
+  findPersonaByAlias: vi.fn(async (alias) => {
+    const lower = alias.toLowerCase();
+    for (const p of mockPersonas) {
+      const matchedAlias = p.aliases.find(a => a.toLowerCase() === lower);
+      if (matchedAlias) {
+        return { personaName: p.name, alias: matchedAlias };
+      }
+    }
+    return null;
+  }),
+  addPersonaAlias: vi.fn(async (personaName, alias) => {
+    const existing = await vi.mocked((await import('../../src/storage.js')).findPersonaByAlias)(alias);
+    if (existing) {
+      throw new Error(`Alias "${alias}" already exists on persona "${existing.personaName}"`);
+    }
+    const conceptMap = mockConceptMaps.get(`${personaName}:system`);
+    if (!conceptMap) throw new Error(`Persona ${personaName} not found`);
+    if (!conceptMap.aliases) conceptMap.aliases = [];
+    const lower = alias.toLowerCase();
+    if (conceptMap.aliases.some((a: string) => a.toLowerCase() === lower)) {
+      throw new Error(`Alias "${alias}" already exists on this persona`);
+    }
+    conceptMap.aliases.push(alias);
+    conceptMap.last_updated = new Date().toISOString();
+    const p = mockPersonas.find(p => p.name === personaName);
+    if (p) p.aliases = [...conceptMap.aliases];
+  }),
+  removePersonaAlias: vi.fn(async (personaName, pattern) => {
+    const conceptMap = mockConceptMaps.get(`${personaName}:system`);
+    if (!conceptMap || !conceptMap.aliases || conceptMap.aliases.length === 0) {
+      throw new Error(`No aliases found for persona "${personaName}"`);
+    }
+    const lower = pattern.toLowerCase();
+    const matches = conceptMap.aliases.filter((a: string) => a.toLowerCase().includes(lower));
+    if (matches.length === 0) {
+      throw new Error(`No aliases matching "${pattern}" found on persona "${personaName}"`);
+    }
+    if (matches.length > 1) {
+      throw new Error(`Ambiguous: multiple aliases match "${pattern}": ${matches.join(", ")}`);
+    }
+    const removedAlias = matches[0];
+    conceptMap.aliases = conceptMap.aliases.filter((a: string) => a !== removedAlias);
+    conceptMap.last_updated = new Date().toISOString();
+    const p = mockPersonas.find(p => p.name === personaName);
+    if (p) p.aliases = [...conceptMap.aliases];
+    return [removedAlias];
+  }),
   findArchivedPersonaByNameOrAlias: vi.fn(() => Promise.resolve(null)),
   getArchivedPersonas: vi.fn(() => Promise.resolve([])),
   loadArchiveState: vi.fn(() => Promise.resolve({ isArchived: false })),
@@ -99,7 +197,20 @@ describe('Command Flow Integration Tests', () => {
   let app: TestableEIApp;
 
   beforeEach(async () => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    
+    mockConceptMaps.clear();
+    mockConceptMaps.set('ei:system', { entity: 'system', aliases: ['default', 'core'], last_updated: null, concepts: [] });
+    mockConceptMaps.set('claude:system', { entity: 'system', aliases: ['assistant'], last_updated: null, concepts: [] });
+    mockConceptMaps.set('assistant:system', { entity: 'system', aliases: [], last_updated: null, concepts: [] });
+    
+    mockPersonas.length = 0;
+    mockPersonas.push(
+      { name: 'ei', aliases: ['default', 'core'] },
+      { name: 'claude', aliases: ['assistant'] },
+      { name: 'assistant', aliases: [] }
+    );
+    
     app = new TestableEIApp();
     await app.init();
   });
@@ -112,16 +223,10 @@ describe('Command Flow Integration Tests', () => {
 
   describe('Persona Command Flow', () => {
     test('persona command with valid name triggers persona switch', async () => {
-      // Mock finding a valid persona
-      vi.mocked(findPersonaByNameOrAlias).mockResolvedValue('claude');
-
-      // Execute persona command
       await app.testHandleCommand('/persona claude');
 
-      // Verify persona lookup was called
       expect(findPersonaByNameOrAlias).toHaveBeenCalledWith('claude');
       
-      // Verify status message indicates success
       expect(app.getTestStatusMessage()).toContain('Switched to persona: claude');
     });
 
@@ -142,13 +247,39 @@ describe('Command Flow Integration Tests', () => {
       expect(app.getTestStatusMessage()).toContain('ei');
     });
 
-    test('persona command alias /p works identically', async () => {
-      vi.mocked(findPersonaByNameOrAlias).mockResolvedValue('claude');
+    test('persona command with partial alias match switches persona', async () => {
+      await app.testHandleCommand('/nick add "Test Master"');
+      await app.testHandleCommand('/persona claude');
+      
+      await app.testHandleCommand('/persona Test');
+      
+      expect(app.getTestStatusMessage()).toContain('Switched to persona: ei');
+    });
 
-      // Execute using /p alias
+    test('persona command with ambiguous partial alias shows error', async () => {
+      await app.testHandleCommand('/nick add "Test Master"');
+      await app.testHandleCommand('/persona claude');
+      await app.testHandleCommand('/nick add "Test Helper"');
+      await app.testHandleCommand('/persona assistant');
+      
+      await app.testHandleCommand('/persona Test');
+      
+      const status = app.getTestStatusMessage();
+      expect(status).toContain('Ambiguous');
+      expect(status).toContain('Test Master');
+      expect(status).toContain('Test Helper');
+    });
+
+    test('persona command with unquoted multi-word input uses first word only', async () => {
+      await app.testHandleCommand('/persona Test Master');
+      
+      const status = app.getTestStatusMessage();
+      expect(status).toContain("Persona 'Test' not found");
+    });
+
+    test('persona command alias /p works identically', async () => {
       await app.testHandleCommand('/p claude');
 
-      // Verify same behavior as /persona
       expect(findPersonaByNameOrAlias).toHaveBeenCalledWith('claude');
       expect(app.getTestStatusMessage()).toContain('Switched to persona: claude');
     });
@@ -237,6 +368,134 @@ describe('Command Flow Integration Tests', () => {
       } finally {
         process.exit = originalExit;
       }
+    });
+  });
+
+  describe('Nick Command Flow', () => {
+    test('/nick lists aliases for active persona', async () => {
+      await app.testHandleCommand('/nick');
+
+      const status = app.getTestStatusMessage();
+      expect(status).toContain('ei');
+      expect(status).toContain('default');
+      expect(status).toContain('core');
+    });
+
+    test('/nick list works identically to /nick', async () => {
+      await app.testHandleCommand('/nick list');
+
+      const status = app.getTestStatusMessage();
+      expect(status).toContain('ei');
+      expect(status).toContain('default');
+    });
+
+    test('/nick shows message when no aliases exist', async () => {
+      (app as any).activePersona = 'assistant';
+      await app.testHandleCommand('/nick');
+
+      const status = app.getTestStatusMessage();
+      expect(status).toContain('assistant has no aliases');
+    });
+
+    test('/nick add adds single-word alias', async () => {
+      await app.testHandleCommand('/nick add newAlias');
+
+      const status = app.getTestStatusMessage();
+      expect(status).toContain('Added alias "newAlias"');
+      expect(status).toContain('ei');
+    });
+
+    test('/nick add adds quoted multi-word alias', async () => {
+      await app.testHandleCommand('/nick add "Alice the Great"');
+
+      const status = app.getTestStatusMessage();
+      expect(status).toContain('Added alias "Alice the Great"');
+    });
+
+    test('/nick add with unquoted multi-word shows usage error', async () => {
+      await app.testHandleCommand('/nick add Bob the Builder');
+
+      const status = app.getTestStatusMessage();
+      expect(status).toContain('Usage');
+    });
+
+    test('/nick add shows error for duplicate alias on same persona', async () => {
+      await app.testHandleCommand('/nick add default');
+
+      const status = app.getTestStatusMessage();
+      expect(status).toContain('Error');
+      expect(status).toContain('already exists');
+    });
+
+    test('/nick add shows error for duplicate alias across personas', async () => {
+      await app.testHandleCommand('/nick add assistant');
+
+      const status = app.getTestStatusMessage();
+      expect(status).toContain('Error');
+      expect(status).toContain('already exists on persona "claude"');
+    });
+
+    test('/nick add shows usage when no alias provided', async () => {
+      await app.testHandleCommand('/nick add');
+
+      const status = app.getTestStatusMessage();
+      expect(status).toContain('Usage');
+      expect(status).toContain('/nick add');
+    });
+
+    test('/nick remove removes alias by exact match', async () => {
+      await app.testHandleCommand('/nick remove default');
+
+      const status = app.getTestStatusMessage();
+      expect(status).toContain('Removed alias "default"');
+    });
+
+    test('/nick remove removes alias by partial match', async () => {
+      await app.testHandleCommand('/nick remove "def"');
+
+      const status = app.getTestStatusMessage();
+      expect(status).toContain('Removed alias "default"');
+    });
+
+    test('/nick remove shows error when no aliases exist', async () => {
+      (app as any).activePersona = 'assistant';
+      await app.testHandleCommand('/nick remove test');
+
+      const status = app.getTestStatusMessage();
+      expect(status).toContain('Error');
+      expect(status).toContain('No aliases found');
+    });
+
+    test('/nick remove shows error when pattern matches no aliases', async () => {
+      await app.testHandleCommand('/nick remove nonexistent');
+
+      const status = app.getTestStatusMessage();
+      expect(status).toContain('Error');
+      expect(status).toContain('No aliases matching');
+    });
+
+    test('/nick remove shows usage when no pattern provided', async () => {
+      await app.testHandleCommand('/nick remove');
+
+      const status = app.getTestStatusMessage();
+      expect(status).toContain('Usage');
+      expect(status).toContain('/nick remove');
+    });
+
+    test('/nick with invalid subcommand shows error', async () => {
+      await app.testHandleCommand('/nick invalid');
+
+      const status = app.getTestStatusMessage();
+      expect(status).toContain('Unknown subcommand');
+      expect(status).toContain('invalid');
+    });
+
+    test('/nick alias /n works identically', async () => {
+      await app.testHandleCommand('/n');
+
+      const status = app.getTestStatusMessage();
+      expect(status).toContain('ei');
+      expect(status).toContain('default');
     });
   });
 
