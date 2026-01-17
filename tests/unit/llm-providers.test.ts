@@ -78,7 +78,7 @@ describe("resolveModel", () => {
     const result = resolveModel();
 
     expect(result.provider).toBe("local");
-    expect(result.model).toBe("google/gemma-3-12b");
+    expect(result.model).toBe("ministral-3-3b-reasoning-2512");
   });
 
   it("throws for unknown provider", () => {
@@ -275,7 +275,7 @@ describe("resolveModel with operation", () => {
 
   it("uses hardcoded default when nothing configured", () => {
     const result = resolveModel(undefined, "response");
-    expect(result.model).toBe("google/gemma-3-12b");
+    expect(result.model).toBe("ministral-3-3b-reasoning-2512");
     expect(result.provider).toBe("local");
   });
 
@@ -288,7 +288,7 @@ describe("resolveModel with operation", () => {
 
   it("backward compatible: no operation and no global uses hardcoded default", () => {
     const result = resolveModel();
-    expect(result.model).toBe("google/gemma-3-12b");
+    expect(result.model).toBe("ministral-3-3b-reasoning-2512");
     expect(result.provider).toBe("local");
   });
 

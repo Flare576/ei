@@ -144,11 +144,11 @@ export function resolveModel(modelSpec?: string, operation?: LLMOperation): Reso
       spec = opModel;
     } else {
       // 3. Global default
-      spec = process.env.EI_LLM_MODEL || "local:openai/gpt-oss-20b";
+      spec = process.env.EI_LLM_MODEL || "local:ministral-3-3b-reasoning-2512";
     }
   } else {
     // 3. Global default (no operation specified)
-    spec = process.env.EI_LLM_MODEL || "local:openai/gpt-oss-20b";
+    spec = process.env.EI_LLM_MODEL || "local:ministral-3-3b-reasoning-2512";
   }
 
   let provider: string;
