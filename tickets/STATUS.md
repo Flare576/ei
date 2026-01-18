@@ -1,6 +1,7 @@
 # Ticket Status Summary
 
-## DONE ✅ (63 tickets)
+## DONE ✅ (64 tickets)
+- 0090: Parse Qwen-style Response Markup
 - 0087: JSON Parse Retry with Enhanced Prompt
 - 0001: Auto-Generate Persona Descriptions
 - 0002: Nickname Management Commands
@@ -65,7 +66,7 @@
 - 0100: Epic Cleanup - Finalize Schema
 - 0101: Debug Log to Data Directory
 
-## PENDING (21 tickets)
+## PENDING (20 tickets)
 - 0102: Ei Core Persona Refinement
 - 0103: Persona Prompt Architecture
 - 0015: Persona Switching (Commands + Navigation)
@@ -89,7 +90,6 @@
 - 0079: Validate Command Argument Counts
 - 0088: Token Usage Logging
 - 0089: Proactive API Key Validation
-- 0090: Parse Qwen-style Response Markup
 - 0092: LLM Validation and Error Handling
 
 ## CANCELLED ❌ (12 tickets)
@@ -110,7 +110,7 @@
 
 **Last Updated**: 2026-01-18
 **Total Tickets**: 103 created
-**Stats**: 63 done, 0 QA, 21 pending, 12 cancelled
+**Stats**: 64 done, 0 QA, 20 pending, 12 cancelled
 
 ## Epic Status
 

@@ -250,4 +250,101 @@ Let me know if you need anything else!`;
     expect(result).toEqual({ name: "complete", status: "ok" });
     expect(mockCreate).toHaveBeenCalledTimes(2);
   });
+
+  it("extracts JSON from <think> tag wrapped responses", async () => {
+    const thinkingTagResponse = `<think>
+Okay, let's analyze this. The user wants a persona with these traits...
+I should structure the response properly.
+</think>
+
+{
+  "aliases": ["test", "tester"],
+  "level": 0.8
+}`;
+
+    mockCreate.mockResolvedValueOnce({
+      choices: [{ 
+        message: { content: thinkingTagResponse }, 
+        finish_reason: "stop" 
+      }],
+    });
+
+    const { callLLMForJSON } = await import("../../src/llm.js");
+    const result = await callLLMForJSON<{ aliases: string[]; level: number }>("system", "user");
+
+    expect(result).toEqual({ aliases: ["test", "tester"], level: 0.8 });
+    expect(mockCreate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("callLLM text response cleaning", () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(async () => {
+    mockCreate.mockReset();
+    process.env.EI_LLM_MODEL = "local:test-model";
+    
+    const { clearClientCache } = await import("../../src/llm.js");
+    clearClientCache();
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  it("strips incomplete thinking tags from text responses", async () => {
+    mockCreate.mockResolvedValueOnce({
+      choices: [{ 
+        message: { content: "After carefully considering...</thinking>the actual content" }, 
+        finish_reason: "stop" 
+      }],
+    });
+
+    const { callLLM } = await import("../../src/llm.js");
+    const result = await callLLM("system", "user");
+
+    expect(result).toBe("the actual content");
+  });
+
+  it("extracts content from RESPONSE tags", async () => {
+    mockCreate.mockResolvedValueOnce({
+      choices: [{ 
+        message: { content: "some thinking</thinking><RESPONSE>the actual response</RESPONSE>" }, 
+        finish_reason: "stop" 
+      }],
+    });
+
+    const { callLLM } = await import("../../src/llm.js");
+    const result = await callLLM("system", "user");
+
+    expect(result).toBe("the actual response");
+  });
+
+  it("strips complete think tags from text responses", async () => {
+    mockCreate.mockResolvedValueOnce({
+      choices: [{ 
+        message: { content: "<think>internal reasoning</think>the actual content" }, 
+        finish_reason: "stop" 
+      }],
+    });
+
+    const { callLLM } = await import("../../src/llm.js");
+    const result = await callLLM("system", "user");
+
+    expect(result).toBe("the actual content");
+  });
+
+  it("returns clean content when no tags present", async () => {
+    mockCreate.mockResolvedValueOnce({
+      choices: [{ 
+        message: { content: "just normal content" }, 
+        finish_reason: "stop" 
+      }],
+    });
+
+    const { callLLM } = await import("../../src/llm.js");
+    const result = await callLLM("system", "user");
+
+    expect(result).toBe("just normal content");
+  });
 });

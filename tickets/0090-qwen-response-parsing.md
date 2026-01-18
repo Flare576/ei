@@ -1,6 +1,6 @@
 # 0090: Parse Qwen-style Response Markup
 
-**Status**: PENDING
+**Status**: DONE
 
 ## Summary
 
@@ -18,6 +18,7 @@ Notes:
 - No opening `<thinking>` tag (just closing)
 - Response wrapped in `<RESPONSE>` tags
 - The "thinking" content leaks into the response
+- Qwen3 does have open/close <think> tags
 
 This markup ends up in chat output instead of being stripped.
 
@@ -51,11 +52,32 @@ function cleanModelResponse(content: string): string {
 
 ## Acceptance Criteria
 
-- [ ] Research common thinking/response tag patterns
-- [ ] Implement parsing to extract actual response content
-- [ ] Handle malformed tags gracefully (missing open/close)
-- [ ] Tests for various tag formats
-- [ ] Works with local Qwen models
+- [x] Research common thinking/response tag patterns
+- [x] Implement parsing to extract actual response content
+- [x] Handle malformed tags gracefully (missing open/close)
+- [x] Tests for various tag formats
+- [x] Works with local Qwen models
+
+## Implementation Notes
+
+Fixed in two parts:
+
+1. **JSON Responses** (`attemptJSONParse` in `src/llm.ts`):
+   - Added extraction logic for `
+...
+` wrapped JSON
+   - Priority: code fences → thinking tags → raw content
+   - Fixes persona creation failures with Qwen models
+
+2. **Text Responses** (`cleanModelResponse` in `src/llm.ts`):
+   - Strips `
+...
+` and `<thinking>...</thinking>` tags
+   - Extracts content from `<RESPONSE>...</RESPONSE>` wrappers
+   - Handles incomplete tags (missing opening tag)
+   - Fixes chat responses leaking thinking content
+
+Tests added: 5 new test cases covering all tag patterns
 
 ## Dependencies
 

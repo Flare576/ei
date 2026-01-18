@@ -370,6 +370,22 @@ async function callLLMRaw(
   throw lastError;
 }
 
+function cleanModelResponse(content: string): string {
+  let cleaned = content;
+  
+  const responseTagMatch = cleaned.match(/<RESPONSE>([\s\S]*?)<\/RESPONSE>/i);
+  if (responseTagMatch) {
+    cleaned = responseTagMatch[1];
+  }
+  
+  cleaned = cleaned.replace(/^[\s\S]*?<\/thinking>/i, '');
+  cleaned = cleaned.replace(/^[\s\S]*?<\/think>/i, '');
+  cleaned = cleaned.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
+  cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, '');
+  
+  return cleaned.trim();
+}
+
 export async function callLLM(
   systemPrompt: string,
   userPrompt: string,
@@ -379,6 +395,8 @@ export async function callLLM(
 
   if (!content) return null;
 
+  const cleaned = cleanModelResponse(content);
+
   const noMessagePatterns = [
     /^no message$/i,
     /^\[no message\]$/i,
@@ -387,10 +405,10 @@ export async function callLLM(
   ];
 
   for (const pattern of noMessagePatterns) {
-    if (pattern.test(content)) return null;
+    if (pattern.test(cleaned)) return null;
   }
 
-  return content;
+  return cleaned;
 }
 
 class JSONParseFailure extends Error {
@@ -421,8 +439,17 @@ async function attemptJSONParse<T>(
   
   if (!content) return null;
 
-  const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-  let jsonStr = jsonMatch ? jsonMatch[1].trim() : content.trim();
+  const codeBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+  const thinkingTagMatch = content.match(/<think>[\s\S]*?<\/think>\s*([\s\S]*)/);
+  
+  let jsonStr: string;
+  if (codeBlockMatch) {
+    jsonStr = codeBlockMatch[1].trim();
+  } else if (thinkingTagMatch) {
+    jsonStr = thinkingTagMatch[1].trim();
+  } else {
+    jsonStr = content.trim();
+  }
 
   try {
     return JSON.parse(jsonStr) as T;
