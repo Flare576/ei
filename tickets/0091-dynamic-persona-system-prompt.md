@@ -1,6 +1,6 @@
 # 0091: Dynamic Persona System Prompt
 
-**Status**: QA
+**Status**: DONE
 
 ## Summary
 
@@ -65,7 +65,7 @@ Need to check:
 - [x] System prompt incorporates `long_description` if available
 - [x] Falls back gracefully when descriptions are missing
 - [x] Works for all persona types (conversational, roleplay, assistant)
-- [ ] Tests verify prompt generation with various persona configs
+- [x] Tests verify prompt generation with various persona configs
 
 ## Dependencies
 

@@ -1,6 +1,9 @@
 # 0049: Mingle Flag for Persona Cross-Awareness
 
-**Status**: PENDING
+**Status**: CANCELLED
+
+> **Superseded by**: 0094 (Group-Based Concept Visibility System Epic)
+> The group-based visibility system provides more flexible and nuanced control over persona cross-awareness than the binary mingle flag.
 
 ## Summary
 Implement "mingle" flag system to control which personas are aware of each other, with default mingle behavior and `/reserved` command to opt out.

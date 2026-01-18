@@ -1,6 +1,6 @@
 # Ticket Status Summary
 
-## DONE ✅ (52 tickets)
+## DONE ✅ (54 tickets)
 - 0001: Auto-Generate Persona Descriptions
 - 0002: Nickname Management Commands
 - 0005: CLI Thinking Indicators
@@ -52,10 +52,11 @@
 - 0084: /model Command - View and Set Persona Models
 - 0085: Provider-Specific Optimizations (partial - rate limits + headers)
 - 0022: Multi-Model LLM Architecture (Epic)
-- 0093: Persona Generation - Seed Initial Topics
-
-## QA (1 ticket)
 - 0091: Dynamic Persona System Prompt
+- 0093: Persona Generation - Seed Initial Topics
+- 0086: Documentation - Multi-Model Setup Guide
+
+## QA (0 tickets)
 
 ## PENDING (22 tickets)
 - 0015: Persona Switching (Commands + Navigation)
@@ -70,7 +71,13 @@
 - 0046: Clone Persona with Concept Map
 - 0047: Force Edit Current Persona
 - 0048: Save/Restore State System
-- 0049: Mingle Flag for Persona Cross-Awareness
+- 0094: Group-Based Concept Visibility (Epic)
+- 0095: Schema Changes - Group Fields
+- 0096: Concept Visibility Filtering
+- 0097: Concept Group Assignment Logic
+- 0098: Group Management Commands
+- 0099: Group-Based Persona Visibility
+- 0100: Epic Cleanup - Finalize Schema
 - 0050: Global -p Parameter for Command Targeting
 - 0051: Undo System (In-Memory State)
 - 0052: Window Size CLI Parameter
@@ -78,15 +85,16 @@
 - 0055: Logging System Improvements
 - 0078: Persona Delete Command
 - 0079: Validate Command Argument Counts
-- 0086: DONE - Documentation - Multi-Model Setup Guide
+
 - 0087: JSON Parse Retry with Enhanced Prompt
 - 0088: Token Usage Logging
 - 0089: Proactive API Key Validation
 - 0090: Parse Qwen-style Response Markup
 - 0092: LLM Validation and Error Handling
 
-## CANCELLED ❌ (11 tickets)
+## CANCELLED ❌ (12 tickets)
 - 0003: /editor Command for Multi-line Input
+- 0049: Mingle Flag for Persona Cross-Awareness (superseded by 0094)
 - 0004: Inline Carriage Return Support (Ctrl+J)
 - 0023: INK - Reduce Layout Resize Delay
 - 0024: INK - Medium Layout Rendering Issues
@@ -100,9 +108,9 @@
 
 ---
 
-**Last Updated**: 2026-01-17
-**Total Tickets**: 93 created
-**Stats**: 52 done, 1 QA, 22 pending, 11 cancelled
+**Last Updated**: 2026-01-18
+**Total Tickets**: 100 created
+**Stats**: 54 done, 0 QA, 27 pending, 12 cancelled
 
 ## Epic Status
 
@@ -134,3 +142,11 @@
 - 0087: PENDING - JSON parse retry with enhanced prompt
 - 0088: PENDING - Token usage logging
 - 0089: PENDING - Proactive API key validation
+
+### 0094: Group-Based Concept Visibility - PENDING
+- 0095: PENDING - Schema changes (group fields)
+- 0096: PENDING - Concept visibility filtering
+- 0097: PENDING - Concept group assignment logic
+- 0098: PENDING - Group management commands (/g, /gs)
+- 0099: PENDING - Group-based persona visibility
+- 0100: PENDING - Epic cleanup (finalize schema)
