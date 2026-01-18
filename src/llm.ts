@@ -393,7 +393,20 @@ export async function callLLM(
   return content;
 }
 
-export async function callLLMForJSON<T>(
+class JSONParseFailure extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "JSONParseFailure";
+  }
+}
+
+/**
+ * Attempts to parse JSON from LLM response, applying repairs if needed.
+ * Returns null if LLM returns no content.
+ * Throws JSONParseFailure if content exists but cannot be parsed.
+ * @internal
+ */
+async function attemptJSONParse<T>(
   systemPrompt: string,
   userPrompt: string,
   options: LLMOptions = {}
@@ -434,8 +447,41 @@ export async function callLLMForJSON<T>(
         appendDebugLog(`[LLM] Extracted JSON:\n${jsonStr}`);
         appendDebugLog(`[LLM] After standard repair:\n${repaired}`);
         appendDebugLog(`[LLM] After truncation repair:\n${truncationRepaired}`);
-        throw new Error(`Invalid JSON from LLM: ${thirdErr instanceof Error ? thirdErr.message : String(thirdErr)}`);
+        throw new JSONParseFailure(`Invalid JSON from LLM: ${thirdErr instanceof Error ? thirdErr.message : String(thirdErr)}`);
       }
+    }
+  }
+}
+
+export async function callLLMForJSON<T>(
+  systemPrompt: string,
+  userPrompt: string,
+  options: LLMOptions = {}
+): Promise<T | null> {
+  try {
+    return await attemptJSONParse<T>(systemPrompt, userPrompt, options);
+  } catch (err) {
+    if (err instanceof LLMTruncatedError) {
+      throw err;
+    }
+    
+    if (!(err instanceof JSONParseFailure)) {
+      throw err;
+    }
+    
+    const enhancedSystemPrompt = systemPrompt + `
+
+CRITICAL: Your response MUST be valid JSON. No markdown code fences, no explanations, just the JSON object/array.`;
+    
+    console.warn("[LLM] JSON parse failed, retrying with enhanced guidance...");
+    
+    try {
+      return await attemptJSONParse<T>(enhancedSystemPrompt, userPrompt, options);
+    } catch (retryErr) {
+      if (retryErr instanceof JSONParseFailure) {
+        throw new Error("Invalid JSON from LLM even after retry with enhanced guidance");
+      }
+      throw retryErr;
     }
   }
 }

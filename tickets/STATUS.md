@@ -1,6 +1,7 @@
 # Ticket Status Summary
 
-## DONE ✅ (62 tickets)
+## DONE ✅ (63 tickets)
+- 0087: JSON Parse Retry with Enhanced Prompt
 - 0001: Auto-Generate Persona Descriptions
 - 0002: Nickname Management Commands
 - 0005: CLI Thinking Indicators
@@ -64,7 +65,7 @@
 - 0100: Epic Cleanup - Finalize Schema
 - 0101: Debug Log to Data Directory
 
-## PENDING (23 tickets)
+## PENDING (21 tickets)
 - 0102: Ei Core Persona Refinement
 - 0103: Persona Prompt Architecture
 - 0015: Persona Switching (Commands + Navigation)
@@ -86,7 +87,6 @@
 - 0055: Logging System Improvements
 - 0078: Persona Delete Command
 - 0079: Validate Command Argument Counts
-- 0087: JSON Parse Retry with Enhanced Prompt
 - 0088: Token Usage Logging
 - 0089: Proactive API Key Validation
 - 0090: Parse Qwen-style Response Markup
@@ -110,7 +110,7 @@
 
 **Last Updated**: 2026-01-18
 **Total Tickets**: 103 created
-**Stats**: 62 done, 0 QA, 23 pending, 12 cancelled
+**Stats**: 63 done, 0 QA, 21 pending, 12 cancelled
 
 ## Epic Status
 
@@ -139,7 +139,7 @@
 - 0086: DONE - Documentation
 
 ## Deferred from 0085 (standalone tickets)
-- 0087: PENDING - JSON parse retry with enhanced prompt
+- 0087: DONE - JSON parse retry with enhanced prompt
 - 0088: PENDING - Token usage logging
 - 0089: PENDING - Proactive API key validation
 
