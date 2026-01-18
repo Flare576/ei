@@ -1,6 +1,6 @@
 # Ticket Status Summary
 
-## DONE ✅ (61 tickets)
+## DONE ✅ (62 tickets)
 - 0001: Auto-Generate Persona Descriptions
 - 0002: Nickname Management Commands
 - 0005: CLI Thinking Indicators
@@ -62,9 +62,9 @@
 - 0098: Group Management Commands
 - 0099: Group-Based Persona Visibility
 - 0100: Epic Cleanup - Finalize Schema
-
-## PENDING (24 tickets)
 - 0101: Debug Log to Data Directory
+
+## PENDING (23 tickets)
 - 0102: Ei Core Persona Refinement
 - 0103: Persona Prompt Architecture
 - 0015: Persona Switching (Commands + Navigation)
@@ -110,7 +110,7 @@
 
 **Last Updated**: 2026-01-18
 **Total Tickets**: 103 created
-**Stats**: 61 done, 0 QA, 24 pending, 12 cancelled
+**Stats**: 62 done, 0 QA, 23 pending, 12 cancelled
 
 ## Epic Status
 

@@ -1,6 +1,6 @@
 # 0101: Debug Log to Data Directory
 
-**Status**: PENDING
+**Status**: DONE
 
 ## Summary
 Move debug log file from project directory to data directory to prevent test runs from polluting development logs.
@@ -12,11 +12,11 @@ Currently `debugLog()` writes to a file in the project directory. When tests run
 Write debug logs to the data directory (`EI_DATA_DIR` or default `~/.ei/data/`) instead of the project root. This keeps test logs separate from development logs since tests use isolated temp directories.
 
 ## Acceptance Criteria
-- [ ] Debug log writes to `{dataDir}/debug.log` instead of project root
-- [ ] Debug log respects `EI_DATA_DIR` environment variable
-- [ ] Tests write to their isolated temp data directories
-- [ ] Development debug logs remain in `~/.ei/data/debug.log` (or configured location)
-- [ ] All tests pass
+- [x] Debug log writes to `{dataDir}/debug.log` instead of project root
+- [x] Debug log respects `EI_DATA_DIR` environment variable
+- [x] Tests write to their isolated temp data directories
+- [x] Development debug logs remain in `~/.ei/data/debug.log` (or configured location)
+- [x] All tests pass
 
 ## Dependencies
 None

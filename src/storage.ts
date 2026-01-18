@@ -660,7 +660,7 @@ export async function saveArchiveState(persona: string, state: { isArchived: boo
 }
 
 // Debug logging utilities to isolate file system access
-const DEBUG_LOG = 'logs/output.log';
+const DEBUG_LOG = path.join(DATA_PATH, 'debug.log');
 
 export function initializeDebugLog(): void {
   try {
