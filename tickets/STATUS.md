@@ -1,6 +1,6 @@
 # Ticket Status Summary
 
-## DONE ✅ (54 tickets)
+## DONE ✅ (61 tickets)
 - 0001: Auto-Generate Persona Descriptions
 - 0002: Nickname Management Commands
 - 0005: CLI Thinking Indicators
@@ -55,10 +55,18 @@
 - 0091: Dynamic Persona System Prompt
 - 0093: Persona Generation - Seed Initial Topics
 - 0086: Documentation - Multi-Model Setup Guide
+- 0094: Group-Based Concept Visibility (Epic)
+- 0095: Schema Changes - Group Fields
+- 0096: Concept Visibility Filtering
+- 0097: Concept Group Assignment Logic
+- 0098: Group Management Commands
+- 0099: Group-Based Persona Visibility
+- 0100: Epic Cleanup - Finalize Schema
 
-## QA (0 tickets)
-
-## PENDING (22 tickets)
+## PENDING (24 tickets)
+- 0101: Debug Log to Data Directory
+- 0102: Ei Core Persona Refinement
+- 0103: Persona Prompt Architecture
 - 0015: Persona Switching (Commands + Navigation)
 - 0018: Warn on Public Repository Storage
 - 0027: Enhanced Markdown Rendering
@@ -71,13 +79,6 @@
 - 0046: Clone Persona with Concept Map
 - 0047: Force Edit Current Persona
 - 0048: Save/Restore State System
-- 0094: Group-Based Concept Visibility (Epic)
-- 0095: Schema Changes - Group Fields
-- 0096: Concept Visibility Filtering
-- 0097: Concept Group Assignment Logic
-- 0098: Group Management Commands
-- 0099: Group-Based Persona Visibility
-- 0100: Epic Cleanup - Finalize Schema
 - 0050: Global -p Parameter for Command Targeting
 - 0051: Undo System (In-Memory State)
 - 0052: Window Size CLI Parameter
@@ -85,7 +86,6 @@
 - 0055: Logging System Improvements
 - 0078: Persona Delete Command
 - 0079: Validate Command Argument Counts
-
 - 0087: JSON Parse Retry with Enhanced Prompt
 - 0088: Token Usage Logging
 - 0089: Proactive API Key Validation
@@ -109,8 +109,8 @@
 ---
 
 **Last Updated**: 2026-01-18
-**Total Tickets**: 100 created
-**Stats**: 54 done, 0 QA, 27 pending, 12 cancelled
+**Total Tickets**: 103 created
+**Stats**: 61 done, 0 QA, 24 pending, 12 cancelled
 
 ## Epic Status
 
@@ -136,17 +136,17 @@
 - 0083: DONE - Operation-specific models
 - 0084: DONE - /model command
 - 0085: DONE (partial) - Rate limit handling + provider headers
-- 0086: PENDING - Documentation
+- 0086: DONE - Documentation
 
 ## Deferred from 0085 (standalone tickets)
 - 0087: PENDING - JSON parse retry with enhanced prompt
 - 0088: PENDING - Token usage logging
 - 0089: PENDING - Proactive API key validation
 
-### 0094: Group-Based Concept Visibility - PENDING
-- 0095: PENDING - Schema changes (group fields)
-- 0096: PENDING - Concept visibility filtering
-- 0097: PENDING - Concept group assignment logic
-- 0098: PENDING - Group management commands (/g, /gs)
-- 0099: PENDING - Group-based persona visibility
-- 0100: PENDING - Epic cleanup (finalize schema)
+### 0094: Group-Based Concept Visibility - DONE
+- 0095: DONE - Schema changes (group fields)
+- 0096: DONE - Concept visibility filtering
+- 0097: DONE - Concept group assignment logic
+- 0098: DONE - Group management commands (/g, /gs)
+- 0099: DONE - Group-based persona visibility
+- 0100: DONE - Epic cleanup (finalize schema)

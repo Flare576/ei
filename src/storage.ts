@@ -29,6 +29,8 @@ const DEFAULT_HUMAN_CONCEPTS: ConceptMap = {
 const DEFAULT_SYSTEM_CONCEPTS: ConceptMap = {
   entity: "system",
   aliases: ["default", "core"],
+  group_primary: null,
+  groups_visible: ["*"],
   last_updated: null,
   concepts: [
     {
@@ -143,7 +145,19 @@ export async function loadConceptMap(
     filePath = personaPath(persona || "ei", "system.jsonc");
   }
   const content = await readFile(filePath, "utf-8");
-  return JSON.parse(content) as ConceptMap;
+  const map = JSON.parse(content) as ConceptMap;
+  
+  // Ensure ei persona has groups_visible: ["*"] for backward compatibility
+  if (entity === "system" && (persona === "ei" || persona === undefined)) {
+    if (map.groups_visible === undefined) {
+      map.groups_visible = ["*"];
+    }
+    if (map.group_primary === undefined) {
+      map.group_primary = null;
+    }
+  }
+  
+  return map;
 }
 
 export async function saveConceptMap(
@@ -384,6 +398,37 @@ export async function listPersonas(): Promise<PersonaInfo[]> {
     }
   }
   
+  return personas;
+}
+
+export interface PersonaWithConceptMap {
+  name: string;
+  conceptMap: ConceptMap;
+}
+
+export async function loadAllPersonasWithConceptMaps(): Promise<PersonaWithConceptMap[]> {
+  const personasDir = path.join(DATA_PATH, "personas");
+  const entries = await readdir(personasDir, { withFileTypes: true });
+
+  const personas: PersonaWithConceptMap[] = [];
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      try {
+        const systemPath = personaPath(entry.name, "system.jsonc");
+        const content = await readFile(systemPath, "utf-8");
+        const map = JSON.parse(content) as ConceptMap;
+        if (map.isArchived) {
+          continue;
+        }
+        personas.push({
+          name: entry.name,
+          conceptMap: map,
+        });
+      } catch {
+      }
+    }
+  }
+
   return personas;
 }
 

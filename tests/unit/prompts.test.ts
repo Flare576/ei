@@ -7,6 +7,7 @@ import {
   buildDescriptionPrompt,
   PersonaIdentity,
 } from "../../src/prompts.js";
+import { GLOBAL_GROUP } from "../../src/concept-reconciliation.js";
 import type { ConceptMap, Concept, Message } from "../../src/types.js";
 
 const createConcept = (
@@ -21,6 +22,7 @@ const createConcept = (
   level_ideal,
   sentiment: 0.0,
   type,
+  persona_groups: [GLOBAL_GROUP],
 });
 
 const createConceptMap = (

@@ -1,6 +1,6 @@
 # 0098: Group Management Commands
 
-**Status**: PENDING
+**Status**: DONE
 
 ## Summary
 Implement `/group` (`/g`) and `/groups` (`/gs`) commands for managing persona group membership.
@@ -75,21 +75,21 @@ Error: Ei's groups are managed by the system
 ```
 
 ## Acceptance Criteria
-- [ ] `/g` displays current primary group (or "none")
-- [ ] `/g Fellowship` sets primary group to "Fellowship"
-- [ ] `/g "My Group"` handles quoted group names with spaces
-- [ ] `/g clear` sets primary group to null
-- [ ] `/group` works as full command (alias of `/g`)
-- [ ] `/gs` lists visible groups, showing "(primary)" marker for primary group
-- [ ] `/gs Personal` adds "Personal" to visible groups
-- [ ] `/gs Personal` warns if "Personal" is already primary group (but still works for non-primary)
-- [ ] `/gs remove Personal` removes "Personal" from visible groups
-- [ ] `/gs clear` empties visible groups array
-- [ ] `/groups` works as full command (alias of `/gs`)
-- [ ] Changes persist to persona metadata file immediately
-- [ ] `/help` documents `/g` and `/gs` commands with examples
-- [ ] Commands error gracefully when used on Ei persona
-- [ ] Error messages guide user when used incorrectly
+- [x] `/g` displays current primary group (or "none")
+- [x] `/g Fellowship` sets primary group to "Fellowship"
+- [x] `/g "My Group"` handles quoted group names with spaces
+- [x] `/g clear` sets primary group to null
+- [x] `/group` works as full command (alias of `/g`)
+- [x] `/gs` lists visible groups, showing "(primary)" marker for primary group
+- [x] `/gs Personal` adds "Personal" to visible groups
+- [x] `/gs Personal` warns if "Personal" is already primary group (but still works for non-primary)
+- [x] `/gs remove Personal` removes "Personal" from visible groups
+- [x] `/gs clear` empties visible groups array
+- [x] `/groups` works as full command (alias of `/gs`)
+- [x] Changes persist to persona metadata file immediately
+- [x] `/help` documents `/g` and `/gs` commands with examples
+- [x] Commands error gracefully when used on Ei persona
+- [x] Error messages guide user when used incorrectly
 
 ## Dependencies
 - 0095: Schema Changes - Group Fields

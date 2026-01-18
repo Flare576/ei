@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { appendDebugLog } from "./storage.js";
 
 // =============================================================================
 // Provider Configuration and Client Management
@@ -144,11 +145,11 @@ export function resolveModel(modelSpec?: string, operation?: LLMOperation): Reso
       spec = opModel;
     } else {
       // 3. Global default
-      spec = process.env.EI_LLM_MODEL || "local:ministral-3-3b-reasoning-2512";
+      spec = process.env.EI_LLM_MODEL || "local:qwen/qwen3-14b";
     }
   } else {
     // 3. Global default (no operation specified)
-    spec = process.env.EI_LLM_MODEL || "local:ministral-3-3b-reasoning-2512";
+    spec = process.env.EI_LLM_MODEL || "local:qwen/qwen3-14b";
   }
 
   let provider: string;
@@ -220,11 +221,44 @@ export class LLMTruncatedError extends Error {
 }
 
 const JSON_REPAIR_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
+  // Remove JavaScript-style comments (// ...) - must be first to avoid breaking other repairs
+  { pattern: /\/\/[^\n]*/g, replacement: "" },
+  // Fix missing opening quote before ISO date values: 2026-01-18T... → "2026-01-18T..."
+  { pattern: /:\s*(\d{4}-\d{2}-\d{2}T[^"}\],\n]+)/g, replacement: ': "$1"' },
   // Fix leading zeros: 03 → 0.3, 015 → 0.15
   { pattern: /:\s*0([1-9][0-9]*)([,\s\n\r\]}])/g, replacement: ": 0.$1$2" },
   // Remove trailing commas before ] or }
   { pattern: /,(\s*[\]}])/g, replacement: "$1" },
 ];
+
+// Attempt to fix truncated JSON by closing open structures
+function attemptTruncationRepair(jsonStr: string): string {
+  let repaired = jsonStr.trim();
+  
+  // If it looks like JSON got cut off mid-string, try to close it
+  // Count unbalanced quotes (simple heuristic - not perfect for escaped quotes)
+  const quoteCount = (repaired.match(/(?<!\\)"/g) || []).length;
+  if (quoteCount % 2 !== 0) {
+    // Odd number of quotes - string is unclosed
+    repaired += '"';
+  }
+  
+  // Count braces/brackets and close them
+  const openBraces = (repaired.match(/{/g) || []).length;
+  const closeBraces = (repaired.match(/}/g) || []).length;
+  const openBrackets = (repaired.match(/\[/g) || []).length;
+  const closeBrackets = (repaired.match(/\]/g) || []).length;
+  
+  // Close any unclosed structures
+  for (let i = 0; i < openBrackets - closeBrackets; i++) {
+    repaired += ']';
+  }
+  for (let i = 0; i < openBraces - closeBraces; i++) {
+    repaired += '}';
+  }
+  
+  return repaired;
+}
 
 function repairJSON(jsonStr: string): string {
   return JSON_REPAIR_PATTERNS.reduce(
@@ -286,7 +320,7 @@ async function callLLMRaw(
   const { client, model, provider } = resolveModel(modelSpec, operation);
 
   if (DEBUG) {
-    console.log(`[LLM] Using ${provider}:${model}`);
+    appendDebugLog(`[LLM] Using ${provider}:${model}`);
   }
 
   let lastError: unknown;
@@ -323,7 +357,7 @@ async function callLLMRaw(
 
       if (isRateLimitError(err) && attempt < MAX_RETRIES) {
         const backoffMs = INITIAL_BACKOFF_MS * Math.pow(2, attempt);
-        console.warn(`[LLM] Rate limited (attempt ${attempt + 1}/${MAX_RETRIES + 1}), retrying in ${backoffMs}ms...`);
+        appendDebugLog(`[LLM] Rate limited (attempt ${attempt + 1}/${MAX_RETRIES + 1}), retrying in ${backoffMs}ms...`);
         await sleep(backoffMs);
         lastError = err;
         continue;
@@ -380,15 +414,28 @@ export async function callLLMForJSON<T>(
   try {
     return JSON.parse(jsonStr) as T;
   } catch (firstErr) {
+    appendDebugLog(`[LLM] JSON parse failed (attempt 1), trying repairs. Error: ${firstErr instanceof Error ? firstErr.message : String(firstErr)}`);
+    appendDebugLog(`[LLM] Raw content length: ${content.length}, finishReason: ${finishReason}`);
+    
     const repaired = repairJSON(jsonStr);
     try {
-      console.warn("[LLM] JSON repair applied");
+      appendDebugLog("[LLM] Standard JSON repair applied successfully");
       return JSON.parse(repaired) as T;
     } catch (secondErr) {
-      console.error("[LLM] Failed to parse JSON even after repair:");
-      console.error("[LLM] Original:", jsonStr.substring(0, 300));
-      console.error("[LLM] Repaired:", repaired.substring(0, 300));
-      throw new Error(`Invalid JSON from LLM: ${secondErr instanceof Error ? secondErr.message : String(secondErr)}`);
+      appendDebugLog(`[LLM] Standard repair failed, trying truncation repair. Error: ${secondErr instanceof Error ? secondErr.message : String(secondErr)}`);
+      
+      const truncationRepaired = attemptTruncationRepair(repaired);
+      try {
+        appendDebugLog("[LLM] Truncation repair applied successfully");
+        return JSON.parse(truncationRepaired) as T;
+      } catch (thirdErr) {
+        appendDebugLog("[LLM] All JSON repairs failed. Logging full content for diagnosis:");
+        appendDebugLog(`[LLM] Original raw content:\n${content}`);
+        appendDebugLog(`[LLM] Extracted JSON:\n${jsonStr}`);
+        appendDebugLog(`[LLM] After standard repair:\n${repaired}`);
+        appendDebugLog(`[LLM] After truncation repair:\n${truncationRepaired}`);
+        throw new Error(`Invalid JSON from LLM: ${thirdErr instanceof Error ? thirdErr.message : String(thirdErr)}`);
+      }
     }
   }
 }

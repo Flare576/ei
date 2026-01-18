@@ -1,6 +1,6 @@
 # 0095: Schema Changes - Group Fields
 
-**Status**: PENDING
+**Status**: DONE
 
 ## Summary
 Add group fields to persona and human concept schemas.
@@ -37,16 +37,16 @@ interface HumanConcept {
 - Groups are free-form strings (no predefined list)
 
 ## Acceptance Criteria
-- [ ] `PersonaMetadata` interface includes `group_primary` (string | null)
-- [ ] `PersonaMetadata` interface includes `groups_visible` (string[] | undefined)
-- [ ] `HumanConcept` interface includes `persona_groups` (string[])
-- [ ] Validation ensures `group_primary` is string or null
-- [ ] Validation ensures `groups_visible` is array of strings when present
-- [ ] Validation ensures `persona_groups` is array of strings
-- [ ] Ei persona automatically gets `groups_visible: ["*"]` on load
-- [ ] New personas default to `group_primary: null`, `groups_visible: []`
-- [ ] New concepts default to `persona_groups: []`
-- [ ] Schema validation tests pass for all three fields
+- [x] `PersonaMetadata` interface includes `group_primary` (string | null)
+- [x] `PersonaMetadata` interface includes `groups_visible` (string[] | undefined)
+- [x] `HumanConcept` interface includes `persona_groups` (string[])
+- [x] Validation ensures `group_primary` is string or null
+- [x] Validation ensures `groups_visible` is array of strings when present
+- [x] Validation ensures `persona_groups` is array of strings
+- [x] Ei persona automatically gets `groups_visible: ["*"]` on load
+- [x] New personas default to `group_primary: null`, `groups_visible: []`
+- [x] New concepts default to `persona_groups: []`
+- [x] Schema validation tests pass for all three fields
 
 ## Dependencies
 None

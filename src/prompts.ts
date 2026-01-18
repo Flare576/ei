@@ -2,6 +2,90 @@ import { Concept, ConceptMap, Message, ConceptType } from "./types.js";
 
 const MUTABLE_TYPES: ConceptType[] = ["topic", "person", "persona"];
 
+/**
+ * Strips persona_groups from concepts before showing to LLM.
+ * LLM should not see or manage this field - code handles it post-processing.
+ */
+function stripConceptGroupsForLLM(concepts: Concept[]): Omit<Concept, 'persona_groups'>[] {
+  return concepts.map(({ persona_groups, ...rest }) => rest);
+}
+
+import { GLOBAL_GROUP } from "./concept-reconciliation.js";
+
+export function getVisibleConcepts(persona: ConceptMap, humanConcepts: Concept[]): Concept[] {
+  if (persona.groups_visible?.includes("*")) {
+    return humanConcepts;
+  }
+
+  const visibleGroups = new Set<string>();
+  if (persona.group_primary) {
+    visibleGroups.add(persona.group_primary);
+  }
+  (persona.groups_visible || []).forEach(g => visibleGroups.add(g));
+
+  return humanConcepts.filter(concept => {
+    const conceptGroups = concept.persona_groups || [];
+    const isGlobalConcept = conceptGroups.includes(GLOBAL_GROUP);
+    return isGlobalConcept || conceptGroups.some(g => visibleGroups.has(g));
+  });
+}
+
+export interface VisiblePersona {
+  name: string;
+  short_description?: string;
+}
+
+/**
+ * Determines which personas are visible to the current persona based on group membership.
+ * 
+ * - Ei (name === "ei") sees all other personas
+ * - Other personas see those whose group_primary matches their visible groups
+ * - Visibility is NOT automatically symmetric (A seeing B doesn't mean B sees A)
+ * - Personas never see themselves in the list
+ * 
+ * @param currentPersonaName - Name of the current persona (used for self-exclusion and ei check)
+ * @param currentPersona - The current persona's concept map
+ * @param allPersonas - Array of all personas with their names and concept maps
+ * @returns Array of visible personas with name and description
+ */
+export function getVisiblePersonas(
+  currentPersonaName: string,
+  currentPersona: ConceptMap,
+  allPersonas: Array<{ name: string; conceptMap: ConceptMap }>
+): VisiblePersona[] {
+  // Ei sees everyone (except self)
+  if (currentPersonaName === "ei") {
+    return allPersonas
+      .filter(p => p.name !== "ei")
+      .map(p => ({ name: p.name, short_description: p.conceptMap.short_description }));
+  }
+
+  // Build visible groups for current persona
+  const visibleGroups = new Set<string>();
+  if (currentPersona.group_primary) {
+    visibleGroups.add(currentPersona.group_primary);
+  }
+  (currentPersona.groups_visible || []).forEach(g => visibleGroups.add(g));
+
+  // No groups = see no other personas
+  if (visibleGroups.size === 0) {
+    return [];
+  }
+
+  // See personas whose primary group matches our visible groups
+  const visible: VisiblePersona[] = [];
+  for (const p of allPersonas) {
+    if (p.name === currentPersonaName) continue; // Don't see self
+    if (p.name === "ei") continue; // Ei handled separately in prompts
+    
+    if (p.conceptMap.group_primary && visibleGroups.has(p.conceptMap.group_primary)) {
+      visible.push({ name: p.name, short_description: p.conceptMap.short_description });
+    }
+  }
+
+  return visible;
+}
+
 export interface PersonaDescriptions {
   short_description: string;
   long_description: string;
@@ -74,20 +158,34 @@ function buildIdentitySection(persona: PersonaIdentity): string {
 ${description}`;
 }
 
-// Placeholder for ticket 0049 - will add mingle/reserved logic here
-function buildAssociatesSection(): string {
-  // Returns empty for now - will be populated when implementing persona visibility
-  return "";
+function buildAssociatesSection(visiblePersonas?: VisiblePersona[]): string {
+  if (!visiblePersonas || visiblePersonas.length === 0) {
+    return "";
+  }
+  
+  const personaLines = visiblePersonas.map(p => {
+    if (p.short_description) {
+      return `- **${p.name}**: ${p.short_description}`;
+    }
+    return `- **${p.name}**`;
+  });
+
+  return `
+
+## Other Personas You Know
+${personaLines.join("\n")}`;
 }
 
 export function buildResponseSystemPrompt(
   humanConcepts: ConceptMap,
   systemConcepts: ConceptMap,
-  persona: PersonaIdentity
+  persona: PersonaIdentity,
+  visiblePersonas?: VisiblePersona[]
 ): string {
+  const visibleHumanConcepts = getVisibleConcepts(systemConcepts, humanConcepts.concepts);
   const yourNeeds = getHighestNeedConcepts(systemConcepts.concepts);
-  const humanNeeds = getHighestNeedConcepts(humanConcepts.concepts);
-  const associatesSection = buildAssociatesSection();
+  const humanNeeds = getHighestNeedConcepts(visibleHumanConcepts);
+  const associatesSection = buildAssociatesSection(visiblePersonas);
 
   let prompt = `${buildIdentitySection(persona)}
 
@@ -104,13 +202,13 @@ ${formatConceptsByType(systemConcepts.concepts, "topic")}
 ${formatConceptsByType(systemConcepts.concepts, "person")}
 
 ## Human's Personality (type: persona)
-${formatConceptsByType(humanConcepts.concepts, "persona")}
+${formatConceptsByType(visibleHumanConcepts, "persona")}
 
 ## Human's Interests & Topics (type: topic)
-${formatConceptsByType(humanConcepts.concepts, "topic")}
+${formatConceptsByType(visibleHumanConcepts, "topic")}
 
 ## Human's Relationships (type: person)
-${formatConceptsByType(humanConcepts.concepts, "person")}
+${formatConceptsByType(visibleHumanConcepts, "person")}
 ${associatesSection}
 Current time: ${new Date().toISOString()}`;
 
@@ -349,7 +447,7 @@ You need to update the Concept Map for the ${entityLabel}.
 
 Current Concept Map:
 \`\`\`json
-${JSON.stringify(concepts.concepts, null, 2)}
+${JSON.stringify(stripConceptGroupsForLLM(concepts.concepts), null, 2)}
 \`\`\`
 
 ## Rules

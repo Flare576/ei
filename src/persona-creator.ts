@@ -167,6 +167,8 @@ Return JSON in this exact format:
   const conceptMap: ConceptMap = {
     entity: "system",
     aliases: result?.aliases || [],
+    group_primary: null,
+    groups_visible: [],
     last_updated: null,
     concepts,
   };

@@ -27,6 +27,12 @@ export interface Concept {
   type: ConceptType;
   learned_by?: string;
   last_updated?: string; // ISO timestamp - when this concept was last modified
+  /**
+   * PERSONA_GROUPS: Which persona groups can see this concept (human concepts only)
+   * Empty array = globally visible to all personas
+   * Non-empty = only visible to personas in these groups (or with groups_visible: ["*"])
+   */
+  persona_groups?: string[];
 }
 
 export interface ConceptMap {
@@ -41,6 +47,21 @@ export interface ConceptMap {
    * Only meaningful for entity: "system" (personas), ignored for humans
    */
   model?: string;
+  /**
+   * GROUP_PRIMARY: Primary group for this persona (personas only)
+   * Concepts created by this persona inherit this group
+   * null = no primary group (global persona like ei)
+   * Only meaningful for entity: "system"
+   */
+  group_primary?: string | null;
+  /**
+   * GROUPS_VISIBLE: Additional groups this persona can see (personas only)
+   * Primary group is implicitly visible (don't duplicate here)
+   * ["*"] = can see all groups (special case for ei)
+   * [] or undefined = only see own group + global
+   * Only meaningful for entity: "system"
+   */
+  groups_visible?: string[];
   last_updated: string | null;
   concepts: Concept[];
   isPaused?: boolean;

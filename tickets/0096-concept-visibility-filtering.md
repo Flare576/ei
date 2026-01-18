@@ -1,6 +1,6 @@
 # 0096: Concept Visibility Filtering
 
-**Status**: PENDING
+**Status**: DONE
 
 ## Summary
 Implement filtering logic to show personas only concepts from their visible groups.
@@ -40,16 +40,16 @@ function getVisibleConcepts(persona: Persona, allConcepts: HumanConcept[]): Huma
 - Any other function that reads human concepts for a persona
 
 ## Acceptance Criteria
-- [ ] `getVisibleConcepts()` utility function implemented in appropriate module
-- [ ] Persona with `group_primary: "Work"` sees concepts with `persona_groups: ["Work"]`
-- [ ] Persona with `group_primary: "Work"` sees concepts with `persona_groups: []` (global)
-- [ ] Persona with `group_primary: "Work"` does NOT see concepts with only `persona_groups: ["Personal"]`
-- [ ] Persona with `group_primary: "Work"` and `groups_visible: ["Personal"]` sees BOTH "Work" and "Personal" concepts
-- [ ] Ei (`groups_visible: ["*"]`) sees ALL concepts regardless of `persona_groups`
-- [ ] Persona with no groups (`group_primary: null`, `groups_visible: []`) sees only global concepts
-- [ ] Response system prompts include only visible concepts
-- [ ] Concept map prompts include only visible concepts
-- [ ] Unit tests cover all visibility scenarios
+- [x] `getVisibleConcepts()` utility function implemented in appropriate module
+- [x] Persona with `group_primary: "Work"` sees concepts with `persona_groups: ["Work"]`
+- [x] Persona with `group_primary: "Work"` sees concepts with `persona_groups: []` (global)
+- [x] Persona with `group_primary: "Work"` does NOT see concepts with only `persona_groups: ["Personal"]`
+- [x] Persona with `group_primary: "Work"` and `groups_visible: ["Personal"]` sees BOTH "Work" and "Personal" concepts
+- [x] Ei (`groups_visible: ["*"]`) sees ALL concepts regardless of `persona_groups`
+- [x] Persona with no groups (`group_primary: null`, `groups_visible: []`) sees only global concepts
+- [x] Response system prompts include only visible concepts
+- [x] Concept map prompts include only visible concepts (N/A - concept updates operate on full map)
+- [x] Unit tests cover all visibility scenarios
 
 ## Dependencies
 - 0095: Schema Changes - Group Fields

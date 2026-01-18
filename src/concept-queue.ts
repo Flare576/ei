@@ -21,6 +21,7 @@ import {
 } from "./prompts.js";
 import { validateSystemConcepts, mergeWithOriginalStatics } from "./validate.js";
 import { generatePersonaDescriptions } from "./persona-creator.js";
+import { reconcileConceptGroups } from "./concept-reconciliation.js";
 
 /**
  * Represents a task in the concept update queue.
@@ -319,6 +320,11 @@ export class ConceptQueue {
       task.target === "system" ? task.persona : undefined
     );
 
+    const personaConcepts =
+      task.target === "human"
+        ? await loadConceptMap("system", task.persona)
+        : currentConcepts;
+
     if (signal.aborted) {
       throw new LLMAbortedError();
     }
@@ -350,18 +356,17 @@ export class ConceptQueue {
       return false;
     }
 
-    const proposedMap: ConceptMap = {
-      entity: task.target,
-      ...(task.target === "system"
-        ? {
-            aliases: currentConcepts.aliases,
-            short_description: currentConcepts.short_description,
-            long_description: currentConcepts.long_description,
-          }
-        : {}),
-      last_updated: new Date().toISOString(),
-      concepts: newConcepts,
-    };
+    const proposedMap: ConceptMap = task.target === "system"
+      ? {
+          ...currentConcepts,
+          last_updated: new Date().toISOString(),
+          concepts: newConcepts,
+        }
+      : {
+          entity: "human",
+          last_updated: new Date().toISOString(),
+          concepts: newConcepts,
+        };
 
     let mapToSave: ConceptMap;
 
@@ -395,7 +400,13 @@ export class ConceptQueue {
       await saveConceptMap(mapToSave, task.persona);
       return changed;
     } else {
-      mapToSave = proposedMap;
+      const reconciledConcepts = reconcileConceptGroups(
+        currentConcepts.concepts,
+        newConcepts,
+        personaConcepts,
+        task.persona
+      );
+      mapToSave = { ...proposedMap, concepts: reconciledConcepts };
       const changed = conceptsChanged(currentConcepts.concepts, mapToSave.concepts);
       await saveConceptMap(mapToSave);
       return changed;

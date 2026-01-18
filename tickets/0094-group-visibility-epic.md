@@ -1,6 +1,6 @@
 # 0094: Group-Based Concept Visibility System (Epic)
 
-**Status**: PENDING
+**Status**: DONE
 
 ## Summary
 Replace boolean mingle flag concept with flexible group-based visibility system. Personas belong to groups, human concepts are tagged with groups, and visibility is determined by group membership. This enables nuanced privacy controls (e.g., work personas see work concepts, personal personas see personal concepts, reviewer personas see everything).

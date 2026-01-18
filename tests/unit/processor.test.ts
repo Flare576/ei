@@ -30,6 +30,7 @@ vi.mock('../../src/storage.js', () => ({
   getLastMessageTime: vi.fn(),
   appendDebugLog: vi.fn(),
   markMessagesAsRead: vi.fn(),
+  loadAllPersonasWithConceptMaps: vi.fn(),
 }));
 
 vi.mock('../../src/prompts.js', () => ({
@@ -37,6 +38,7 @@ vi.mock('../../src/prompts.js', () => ({
   buildResponseUserPrompt: vi.fn(),
   buildConceptUpdateSystemPrompt: vi.fn(),
   buildConceptUpdateUserPrompt: vi.fn(),
+  getVisiblePersonas: vi.fn(),
 }));
 
 vi.mock('../../src/validate.js', () => ({
@@ -55,13 +57,15 @@ import {
   loadHistory, 
   appendMessage,
   getRecentMessages,
-  getLastMessageTime 
+  getLastMessageTime,
+  loadAllPersonasWithConceptMaps,
 } from '../../src/storage.js';
 import {
   buildResponseSystemPrompt,
   buildResponseUserPrompt,
   buildConceptUpdateSystemPrompt,
   buildConceptUpdateUserPrompt,
+  getVisiblePersonas,
 } from '../../src/prompts.js';
 import { validateSystemConcepts, mergeWithOriginalStatics } from '../../src/validate.js';
 import { generatePersonaDescriptions } from '../../src/persona-creator.js';
@@ -80,6 +84,8 @@ describe('processor.ts', () => {
     vi.mocked(loadHistory).mockResolvedValue({ messages: [] });
     vi.mocked(getRecentMessages).mockReturnValue([]);
     vi.mocked(getLastMessageTime).mockReturnValue(0);
+    vi.mocked(loadAllPersonasWithConceptMaps).mockResolvedValue([]);
+    vi.mocked(getVisiblePersonas).mockReturnValue([]);
     vi.mocked(buildResponseSystemPrompt).mockReturnValue('system prompt');
     vi.mocked(buildResponseUserPrompt).mockReturnValue('user prompt');
     vi.mocked(buildConceptUpdateSystemPrompt).mockReturnValue('concept system prompt');

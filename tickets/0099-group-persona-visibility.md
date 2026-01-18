@@ -1,6 +1,6 @@
 # 0099: Group-Based Persona Visibility
 
-**Status**: PENDING
+**Status**: DONE
 
 ## Summary
 Replace mingle flag concept with group-based persona visibility (personas see other personas in their groups).
@@ -69,15 +69,15 @@ function getVisiblePersonas(currentPersona: Persona, allPersonas: Persona[]): Pe
 | All personas ungrouped | No cross-awareness (original isolated behavior) |
 
 ## Acceptance Criteria
-- [ ] Persona with `group_primary: "Work"` sees other personas with `group_primary: "Work"`
-- [ ] Persona with `groups_visible: ["Personal"]` sees personas in both "Work" (primary) and "Personal"
-- [ ] Persona with no groups (`group_primary: null`, `groups_visible: []`) sees no other personas
-- [ ] Ei sees all personas regardless of groups
-- [ ] Personas do NOT see themselves in their own context
-- [ ] System prompts list visible personas accurately
-- [ ] Visibility is NOT automatically symmetric (A seeing B doesn't mean B sees A)
-- [ ] `/status` command displays group membership for personas
-- [ ] Unit tests cover visibility scenarios:
+- [x] Persona with `group_primary: "Work"` sees other personas with `group_primary: "Work"`
+- [x] Persona with `groups_visible: ["Personal"]` sees personas in both "Work" (primary) and "Personal"
+- [x] Persona with no groups (`group_primary: null`, `groups_visible: []`) sees no other personas
+- [x] Ei sees all personas regardless of groups
+- [x] Personas do NOT see themselves in their own context
+- [x] System prompts list visible personas accurately
+- [x] Visibility is NOT automatically symmetric (A seeing B doesn't mean B sees A)
+- [x] `/status` command displays group membership for personas
+- [x] Unit tests cover visibility scenarios:
   - Same group
   - Different groups
   - One-way visibility via `groups_visible`

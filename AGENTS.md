@@ -348,6 +348,52 @@ Each concept tracked by the system (for both humans and personas) consists of th
   - `"local:google/gemma-3-12b"` - Use local LM Studio
   - `"google:gemini-1.5-pro"` - Use Google AI Studio
 
+### Group-Based Visibility Schema
+
+Personas can be organized into groups to control which human concepts they can see. This enables privacy controls (e.g., work personas see work concepts, personal personas see personal concepts).
+
+#### group_primary (Optional - System entities only)
+- **Type**: string | null
+- **Purpose**: The primary group this persona belongs to
+- **Behavior**:
+  - Concepts created/updated during conversations with this persona are tagged with this group
+  - The persona can see concepts tagged with this group
+  - `null` = no primary group (global persona, like `ei`)
+- **Examples**:
+  - `"Work"` - This persona's conversations create work-tagged concepts
+  - `"Personal"` - This persona's conversations create personal-tagged concepts
+  - `null` - Global persona (concepts are visible to all)
+
+#### groups_visible (Optional - System entities only)
+- **Type**: string[]
+- **Purpose**: Additional groups this persona can see beyond their primary group
+- **Behavior**:
+  - Primary group is implicitly visible (don't duplicate here)
+  - `["*"]` = can see ALL groups (special case for omniscient personas like `ei`)
+  - `[]` or `undefined` = only see own group + globally-visible concepts
+- **Examples**:
+  - `["*"]` - Omniscient persona (sees everything)
+  - `["Work", "Projects"]` - Can see these groups in addition to primary
+  - `[]` - Only sees own group and global concepts
+
+#### persona_groups (Optional - On concepts)
+- **Type**: string[]
+- **Purpose**: Which persona groups can see this concept
+- **Behavior**:
+  - Empty array `[]` = globally visible to all personas
+  - Non-empty = only visible to personas in these groups (or personas with `groups_visible: ["*"]`)
+  - Automatically set when concepts are created/updated based on the active persona's `group_primary`
+- **Examples**:
+  - `[]` - Visible to everyone
+  - `["Work"]` - Only visible to personas with Work as primary or in groups_visible
+  - `["Personal", "Family"]` - Visible to personas in either group
+
+#### Group Visibility Examples
+- **Work persona** (`group_primary: "Work"`, `groups_visible: []`): Sees work-tagged concepts + global concepts
+- **Personal persona** (`group_primary: "Personal"`, `groups_visible: ["Family"]`): Sees personal + family + global
+- **EI (system persona)** (`group_primary: null`, `groups_visible: ["*"]`): Sees all concepts from all groups
+- **Therapist persona** (`group_primary: "Personal"`, `groups_visible: ["*"]`): Creates personal concepts but can see everything
+
 ### Communication Patterns
 
 - **Brief but accurate explanations** - no need for basic concepts

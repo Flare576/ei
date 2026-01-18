@@ -5,7 +5,8 @@ import { writeFileSync, readFileSync, unlinkSync } from 'fs';
 // Import test output capture early to intercept blessed methods before they're used
 import { testOutputCapture } from './test-output-capture.js';
 
-import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog, getPendingMessages, replacePendingMessages, appendHumanMessage, getUnprocessedMessages, loadPauseState, savePauseState, markSystemMessagesAsRead, getUnreadSystemMessageCount, loadArchiveState, saveArchiveState, getArchivedPersonas, findArchivedPersonaByNameOrAlias, addPersonaAlias, removePersonaAlias, loadConceptMap, saveConceptMap } from '../storage.js';
+import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog, getPendingMessages, replacePendingMessages, appendHumanMessage, getUnprocessedMessages, loadPauseState, savePauseState, markSystemMessagesAsRead, getUnreadSystemMessageCount, loadArchiveState, saveArchiveState, getArchivedPersonas, findArchivedPersonaByNameOrAlias, addPersonaAlias, removePersonaAlias, loadConceptMap, saveConceptMap, loadAllPersonasWithConceptMaps } from '../storage.js';
+import { getVisiblePersonas } from '../prompts.js';
 import { createPersonaWithLLM, saveNewPersona } from '../persona-creator.js';
 import { ConceptQueue } from '../concept-queue.js';
 import { processEvent } from '../processor.js';
@@ -184,7 +185,6 @@ export class EIApp {
     this.setupScrollingKeyBindings();
 
     this.layoutManager.getInputBox().on('keypress', (ch, key) => {
-      debugLog(`inputBox keypress: ch="${ch}", key=${key?.name}, value="${this.layoutManager.getInputBox().getValue()}"`);
       if (this.pendingMultiLineContent) {
         if (key && key.ctrl && (key.name === 'c' || key.name === 'e')) {
           return;
@@ -380,9 +380,21 @@ export class EIApp {
       case 'm':
         await this.handleModelCommand(args);
         break;
+      case 'group':
+      case 'g':
+        await this.handleGroupCommand(args);
+        break;
+      case 'groups':
+      case 'gs':
+        await this.handleGroupsCommand(args);
+        break;
       case 'help':
       case 'h':
         this.showHelpModal();
+        break;
+      case 'status':
+      case 's':
+        await this.handleStatusCommand();
         break;
       default:
         this.setStatus(`Unknown command: /${command}`);
@@ -925,6 +937,181 @@ export class EIApp {
     this.setStatus(lines.join(' | '));
   }
 
+  private async handleGroupCommand(args: string): Promise<void> {
+    // Block on Ei persona
+    if (this.activePersona === 'ei') {
+      this.setStatus("Error: Ei's groups are managed by the system");
+      return;
+    }
+
+    const { parseQuotedArgs } = await import('../parse-utils.js');
+    const trimmed = args.trim();
+
+    // /g - show current primary group
+    if (!trimmed) {
+      const conceptMap = await loadConceptMap('system', this.activePersona);
+      const primary = conceptMap.group_primary;
+      this.setStatus(`Primary group: ${primary || '(none)'}`);
+      return;
+    }
+
+    // Check for too many arguments (error case: "/g set Foo")
+    const firstChar = trimmed[0];
+    let groupName: string;
+    let remainder: string;
+
+    if (firstChar === '"' || firstChar === "'") {
+      groupName = parseQuotedArgs(trimmed);
+      // Find where the quoted arg ends to check for extra args
+      const closeIdx = trimmed.indexOf(firstChar, 1);
+      remainder = closeIdx === -1 ? '' : trimmed.slice(closeIdx + 1).trim();
+    } else {
+      const parts = trimmed.split(/\s+/);
+      groupName = parts[0];
+      remainder = parts.slice(1).join(' ');
+    }
+
+    // If there's anything after the group name, error
+    if (remainder) {
+      this.setStatus('Error: /g takes one argument (group name) or "clear"');
+      return;
+    }
+
+    // /g clear - clear primary group
+    if (groupName.toLowerCase() === 'clear') {
+      const conceptMap = await loadConceptMap('system', this.activePersona);
+      conceptMap.group_primary = null;
+      await saveConceptMap(conceptMap, this.activePersona);
+      this.setStatus(`Primary group cleared for ${this.activePersona}`);
+      return;
+    }
+
+    // /g <name> - set primary group
+    const conceptMap = await loadConceptMap('system', this.activePersona);
+    conceptMap.group_primary = groupName;
+    await saveConceptMap(conceptMap, this.activePersona);
+    this.setStatus(`Primary group set to: ${groupName}`);
+  }
+
+  private async handleGroupsCommand(args: string): Promise<void> {
+    // Block on Ei persona
+    if (this.activePersona === 'ei') {
+      this.setStatus("Error: Ei's groups are managed by the system");
+      return;
+    }
+
+    const { parseCommandArgs } = await import('../parse-utils.js');
+    const parts = parseCommandArgs(args);
+    const subcommand = parts[0]?.toLowerCase() || '';
+
+    // /gs - list visible groups
+    if (!subcommand) {
+      const conceptMap = await loadConceptMap('system', this.activePersona);
+      const primary = conceptMap.group_primary;
+      const visible = conceptMap.groups_visible || [];
+
+      if (!primary && visible.length === 0) {
+        this.setStatus('Visible groups: (none)');
+        return;
+      }
+
+      const groupList: string[] = [];
+      if (primary) {
+        groupList.push(`${primary} (primary)`);
+      }
+      groupList.push(...visible.filter(g => g !== primary));
+
+      this.setStatus(`Visible groups: ${groupList.join(', ')}`);
+      return;
+    }
+
+    // /gs clear - clear all visible groups
+    if (subcommand === 'clear') {
+      const conceptMap = await loadConceptMap('system', this.activePersona);
+      conceptMap.groups_visible = [];
+      await saveConceptMap(conceptMap, this.activePersona);
+      this.setStatus(`Visible groups cleared for ${this.activePersona}`);
+      return;
+    }
+
+    // /gs remove <group> - remove from visible groups
+    if (subcommand === 'remove') {
+      if (parts.length !== 2) {
+        this.setStatus('Usage: /gs remove <group> or /gs remove "group name"');
+        return;
+      }
+
+      const groupName = parts[1];
+      const conceptMap = await loadConceptMap('system', this.activePersona);
+      const visible = conceptMap.groups_visible || [];
+
+      if (!visible.includes(groupName)) {
+        this.setStatus(`"${groupName}" is not in visible groups`);
+        return;
+      }
+
+      conceptMap.groups_visible = visible.filter(g => g !== groupName);
+      await saveConceptMap(conceptMap, this.activePersona);
+      this.setStatus(`Removed "${groupName}" from visible groups`);
+      return;
+    }
+
+    // /gs <group> - add to visible groups
+    const groupName = parts[0];
+    const conceptMap = await loadConceptMap('system', this.activePersona);
+
+    // Warn if adding primary group
+    if (conceptMap.group_primary === groupName) {
+      this.setStatus(`Note: "${groupName}" is already visible as your primary group`);
+      return;
+    }
+
+    const visible = conceptMap.groups_visible || [];
+
+    // Check if already in visible groups
+    if (visible.includes(groupName)) {
+      this.setStatus(`"${groupName}" is already in visible groups`);
+      return;
+    }
+
+    conceptMap.groups_visible = [...visible, groupName];
+    await saveConceptMap(conceptMap, this.activePersona);
+    this.setStatus(`Added "${groupName}" to visible groups`);
+  }
+
+  private async handleStatusCommand(): Promise<void> {
+    const conceptMap = await loadConceptMap('system', this.activePersona);
+    const allPersonas = await loadAllPersonasWithConceptMaps();
+    const visiblePersonas = getVisiblePersonas(this.activePersona, conceptMap, allPersonas);
+
+    const lines: string[] = [];
+    lines.push(`Status for '${this.activePersona}':`);
+
+    const primary = conceptMap.group_primary;
+    const visible = conceptMap.groups_visible || [];
+
+    if (this.activePersona === 'ei') {
+      lines.push('  Groups: (global - sees all)');
+    } else if (!primary && visible.length === 0) {
+      lines.push('  Groups: (none)');
+    } else {
+      const groupList: string[] = [];
+      if (primary) {
+        groupList.push(`${primary} (primary)`);
+      }
+      groupList.push(...visible.filter(g => g !== primary));
+      lines.push(`  Groups: ${groupList.join(', ')}`);
+    }
+
+    if (visiblePersonas.length === 0) {
+      lines.push('  Visible personas: (none)');
+    } else {
+      lines.push(`  Visible personas: ${visiblePersonas.map(p => p.name).join(', ')}`);
+    }
+
+    this.setStatus(lines.join(' | '));
+  }
+
   private showHelpModal(): void {
     const helpText = `EI - Emotional Intelligence Chat
 
@@ -943,6 +1130,17 @@ COMMANDS
     /model <spec>      Set model (e.g., openai:gpt-4o)
     /model --clear     Remove persona model (use default)
     /model --list      List available providers
+  /group, /g          View/set primary group for persona
+    /g                 Show current primary group
+    /g Fellowship      Set primary group to "Fellowship"
+    /g "My Group"      Groups with spaces need quotes
+    /g clear           Clear primary group
+  /groups, /gs        Manage visible groups for persona
+    /gs                List visible groups (primary marked)
+    /gs Personal       Add "Personal" to visible groups
+    /gs remove Work    Remove "Work" from visible groups
+    /gs clear          Clear all visible groups
+  /status, /s         Show persona status (groups, visible personas)
   /editor, /e         Open external editor for multi-line input
   /refresh, /r        Refresh UI layout
   /quit [--force]     Exit application

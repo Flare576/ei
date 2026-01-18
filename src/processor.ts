@@ -9,6 +9,7 @@ import {
   getLastMessageTime,
   appendDebugLog,
   markMessagesAsRead,
+  loadAllPersonasWithConceptMaps,
 } from "./storage.js";
 import {
   buildResponseSystemPrompt,
@@ -16,9 +17,11 @@ import {
   buildConceptUpdateSystemPrompt,
   buildConceptUpdateUserPrompt,
   PersonaIdentity,
+  getVisiblePersonas,
 } from "./prompts.js";
 import { validateSystemConcepts, mergeWithOriginalStatics } from "./validate.js";
 import { generatePersonaDescriptions } from "./persona-creator.js";
+import { reconcileConceptGroups } from "./concept-reconciliation.js";
 
 function conceptsChanged(oldConcepts: Concept[], newConcepts: Concept[]): boolean {
   if (oldConcepts.length !== newConcepts.length) return true;
@@ -111,10 +114,14 @@ export async function processEvent(
     long_description: systemConcepts.long_description,
   };
 
+  const allPersonas = await loadAllPersonasWithConceptMaps();
+  const visiblePersonas = getVisiblePersonas(persona, systemConcepts, allPersonas);
+
   const responseSystemPrompt = buildResponseSystemPrompt(
     humanConcepts,
     systemConcepts,
-    personaIdentity
+    personaIdentity,
+    visiblePersonas
   );
   const responseUserPrompt = buildResponseUserPrompt(
     delayMs,
@@ -125,6 +132,7 @@ export async function processEvent(
 
   if (debug) {
     appendDebugLog(`[Debug] Persona: ${persona}`);
+    appendDebugLog(`[Debug] Response system prompt:\n${responseSystemPrompt}`);
     appendDebugLog("[Debug] Calling LLM for response...");
   }
 
@@ -176,6 +184,11 @@ export async function updateConceptsForMessages(
     ? await loadConceptMap("system", persona)
     : await loadConceptMap("human");
 
+  const personaConcepts =
+    target === "human"
+      ? await loadConceptMap("system", persona)
+      : concepts;
+
   if (signal?.aborted) return false;
 
   const combinedContent = messages.map(m => 
@@ -215,10 +228,7 @@ export async function updateConceptsForMessages(
 
   if (target === "system") {
     const proposedMap: ConceptMap = {
-      entity: "system",
-      aliases: concepts.aliases,
-      short_description: concepts.short_description,
-      long_description: concepts.long_description,
+      ...concepts,
       last_updated: new Date().toISOString(),
       concepts: newConcepts,
     };
@@ -262,10 +272,17 @@ export async function updateConceptsForMessages(
     return true;
   }
 
+  const reconciledConcepts = reconcileConceptGroups(
+    concepts.concepts,
+    newConcepts,
+    personaConcepts,
+    persona
+  );
+
   const proposedMap: ConceptMap = {
     entity: "human",
     last_updated: new Date().toISOString(),
-    concepts: newConcepts,
+    concepts: reconciledConcepts,
   };
   
   await saveConceptMap(proposedMap);
