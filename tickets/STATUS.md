@@ -67,7 +67,7 @@
 - 0100: Epic Cleanup - Finalize Schema
 - 0101: Debug Log to Data Directory
 
-## PENDING (19 tickets)
+## PENDING (18 tickets)
 - 0102: Ei Core Persona Refinement
 - 0103: Persona Prompt Architecture
 - 0015: Persona Switching (Commands + Navigation)
@@ -80,9 +80,8 @@
 - 0045: Poke Command with Physical Context Interpretation
 - 0046: Clone Persona with Concept Map
 - 0047: Force Edit Current Persona
-- 0048: Save/Restore State System
+- 0048: Unified State Management System (Undo + Save/Restore)
 - 0050: Global -p Parameter for Command Targeting
-- 0051: Undo System (In-Memory State)
 - 0052: Window Size CLI Parameter
 - 0053: Graceful Quit/Exit Commands
 - 0055: Logging System Improvements
@@ -92,9 +91,10 @@
 - 0089: Proactive API Key Validation
 - 0092: LLM Validation and Error Handling
 
-## CANCELLED ❌ (12 tickets)
+## CANCELLED ❌ (13 tickets)
 - 0003: /editor Command for Multi-line Input
 - 0049: Mingle Flag for Persona Cross-Awareness (superseded by 0094)
+- 0051: Undo System (In-Memory State) (superseded by unified design in 0048)
 - 0004: Inline Carriage Return Support (Ctrl+J)
 - 0023: INK - Reduce Layout Resize Delay
 - 0024: INK - Medium Layout Rendering Issues
@@ -110,7 +110,7 @@
 
 **Last Updated**: 2026-01-18
 **Total Tickets**: 103 created
-**Stats**: 65 done, 0 QA, 19 pending, 12 cancelled
+**Stats**: 65 done, 0 QA, 18 pending, 13 cancelled
 
 ## Epic Status
 
