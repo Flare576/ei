@@ -1,6 +1,6 @@
 # 0039: Blessed Proper Emoji Support
 
-**Status**: PENDING
+**Status**: DONE
 
 ## Summary
 Implement proper emoji rendering in blessed UI instead of current `[e]` placeholder replacement.
@@ -42,12 +42,12 @@ Create comprehensive emoji → text mapping:
 - etc.
 
 ## Acceptance Criteria
-- [ ] Emoji display correctly without layout corruption
-- [ ] Text positioning remains accurate after emoji
-- [ ] Common emoji (warning, check, X, etc.) render properly
-- [ ] No performance impact on message rendering
-- [ ] Fallback handling for unsupported emoji
-- [ ] Works across different terminal types
+- [x] Emoji display correctly without layout corruption
+- [x] Text positioning remains accurate after emoji
+- [x] Common emoji (warning, check, X, etc.) render properly
+- [x] No performance impact on message rendering
+- [x] Fallback handling for unsupported emoji
+- [x] Works across different terminal types
 
 ## Current Workaround
 Temporary `[e]` replacement in `src/blessed/chat-renderer.ts` line ~15.

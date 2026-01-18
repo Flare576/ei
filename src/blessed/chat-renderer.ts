@@ -14,10 +14,6 @@ function getMessageColor(role: "human" | "system", state: MessageState | undefin
 function parseMarkdownToBlessedTags(text: string): string {
   let result = text;
   
-  // Strip emoji to prevent blessed layout corruption - replace with [e]
-  // More comprehensive regex to catch emoji with variation selectors and ZWJ sequences
-  result = result.replace(/[\u{1F600}-\u{1F64F}][\u{FE00}-\u{FE0F}]?|[\u{1F300}-\u{1F5FF}][\u{FE00}-\u{FE0F}]?|[\u{1F680}-\u{1F6FF}][\u{FE00}-\u{FE0F}]?|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}][\u{FE00}-\u{FE0F}]?|[\u{2700}-\u{27BF}][\u{FE00}-\u{FE0F}]?/gu, '[e]');
-  
   // Parse code blocks FIRST: ```code``` -> formatted block
   result = result.replace(/```(\w*)\n?([\s\S]*?)```/g, (match, language, code) => {
     const lang = language ? `{gray-fg}[${language}]{/gray-fg}\n` : '{gray-fg}[code]{/gray-fg}\n';

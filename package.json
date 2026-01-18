@@ -30,6 +30,7 @@
     "@types/node": "^25.0.3",
     "blessed": "^0.1.81",
     "openai": "^6.15.0",
+    "string-width": "^8.1.0",
     "typescript": "^5.9.3"
   },
   "devDependencies": {

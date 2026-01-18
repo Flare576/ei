@@ -17,6 +17,7 @@ coverage/
 *.swo
 *~
 .DS_Store
+.opencode
 
 # Logs
 *.log

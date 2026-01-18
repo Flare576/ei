@@ -17,6 +17,7 @@ import { LayoutManager } from './layout-manager.js';
 import { FocusManager } from './focus-manager.js';
 import { PersonaRenderer } from './persona-renderer.js';
 import { ChatRenderer } from './chat-renderer.js';
+import { getDisplayWidth } from './unicode-width.js';
 
 // Initialize debug log file
 initializeDebugLog();
@@ -27,7 +28,7 @@ function debugLog(message: string) {
 
 const DEBUG = process.argv.includes("--debug") || process.argv.includes("-d");
 const THIRTY_MINUTES_MS = 30 * 60 * 1000;
-export const HEARTBEAT_INTERVAL_MS = DEBUG ? 600 * 1000 : THIRTY_MINUTES_MS;
+export const HEARTBEAT_INTERVAL_MS = THIRTY_MINUTES_MS;
 const COMPLETE_THOUGHT_LENGTH = 30;
 const DEBOUNCE_MS = 2000;
 const STARTUP_HISTORY_COUNT = 20;
@@ -103,6 +104,8 @@ export class EIApp {
       output: process.stdout
     });
 
+    this.patchBlessedUnicodeWidth();
+
     debugLog(`Screen created - Instance #${this.instanceId}`);
 
     // Initialize managers
@@ -138,6 +141,23 @@ export class EIApp {
     this.setupEventHandlers();
     this.setupSignalHandlers();
     debugLog(`EIApp constructor completed - Instance #${this.instanceId}`);
+  }
+
+  private patchBlessedUnicodeWidth() {
+    const blessedModule = blessed as any;
+    
+    if (blessedModule.Element?.prototype?.strWidth) {
+      blessedModule.Element.prototype.strWidth = function(text: string): number {
+        if (this.parseTags && blessedModule.helpers?.stripTags) {
+          text = blessedModule.helpers.stripTags(text);
+        }
+        return getDisplayWidth(text);
+      };
+      
+      debugLog(`Blessed strWidth monkey-patched with string-width library`);
+    } else {
+      debugLog(`WARNING: Could not monkey-patch blessed.Element.prototype.strWidth - API may have changed`);
+    }
   }
 
   private setupLayout() {
