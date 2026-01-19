@@ -18,6 +18,8 @@ vi.mock('../../src/storage.js', () => ({
   saveConceptMap: vi.fn(),
   markMessagesConceptProcessed: vi.fn(),
   appendDebugLog: vi.fn(),
+  setStateManager: vi.fn(),
+  getDataPath: vi.fn(() => "/tmp/ei-test"),
 }));
 
 vi.mock('../../src/prompts.js', () => ({

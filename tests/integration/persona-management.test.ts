@@ -5,6 +5,7 @@ vi.mock('blessed', () => createBlessedMock());
 
 vi.mock('../../src/storage.js', () => ({
   loadHistory: vi.fn(() => Promise.resolve({ messages: [] })),
+  loadConceptMap: vi.fn(() => Promise.resolve({ entity: 'system', concepts: [], last_updated: null })),
   listPersonas: vi.fn(() => Promise.resolve([
     { name: 'ei' },
     { name: 'claude' },
@@ -24,6 +25,8 @@ vi.mock('../../src/storage.js', () => ({
   getUnreadSystemMessageCount: vi.fn(() => Promise.resolve(0)),
   loadPauseState: vi.fn(() => Promise.resolve({ isPaused: false })),
   savePauseState: vi.fn(() => Promise.resolve()),
+  setStateManager: vi.fn(),
+  getDataPath: vi.fn(() => "/tmp/ei-test"),
 }));
 
 vi.mock('../../src/processor.js', () => ({

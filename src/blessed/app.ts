@@ -18,6 +18,8 @@ import { FocusManager } from './focus-manager.js';
 import { PersonaRenderer } from './persona-renderer.js';
 import { ChatRenderer } from './chat-renderer.js';
 import { getDisplayWidth } from './unicode-width.js';
+import { StateManager } from '../state-manager.js';
+import { setStateManager } from '../storage.js';
 
 // Initialize debug log file
 initializeDebugLog();
@@ -48,6 +50,7 @@ export class EIApp {
   private focusManager: FocusManager;
   private personaRenderer: PersonaRenderer;
   private chatRenderer: ChatRenderer;
+  private stateManager: StateManager;
   
   private personas: any[] = [];
   private activePersona = 'ei';
@@ -120,6 +123,11 @@ export class EIApp {
     
     this.chatRenderer = new ChatRenderer();
     debugLog(`ChatRenderer created - Instance #${this.instanceId}`);
+
+    // Initialize StateManager
+    this.stateManager = new StateManager();
+    setStateManager(this.stateManager);
+    debugLog(`StateManager created - Instance #${this.instanceId}`);
 
     // Pass screen reference to persona renderer for spinner animation
     this.personaRenderer.setScreen(this.screen);
@@ -347,6 +355,9 @@ export class EIApp {
       return;
     }
 
+    // Capture snapshot before user message
+    await this.stateManager.captureSnapshot();
+    
     this.addMessage('human', actualContent, 'processing');
     await appendHumanMessage(actualContent, this.activePersona);
     this.queueMessage(actualContent);
@@ -415,6 +426,15 @@ export class EIApp {
       case 'status':
       case 's':
         await this.handleStatusCommand();
+        break;
+      case 'undo':
+        await this.handleUndoCommand(args);
+        break;
+      case 'savestate':
+        await this.handleSaveStateCommand(args);
+        break;
+      case 'restorestate':
+        await this.handleRestoreStateCommand(args);
         break;
       default:
         this.setStatus(`Unknown command: /${command}`);
@@ -524,6 +544,7 @@ export class EIApp {
       this.render();
 
       try {
+        await this.stateManager.captureSnapshot();
         const conceptMap = await createPersonaWithLLM(name, input.trim());
         await saveNewPersona(name, conceptMap);
         
@@ -655,6 +676,7 @@ export class EIApp {
       }, durationMs);
     }
     
+    await this.stateManager.captureSnapshot();
     await savePauseState(pausedPersonaName, { isPaused: true, pauseUntil });
     
     this.setStatus(`Paused ${this.activePersona} ${durationDisplay}`);
@@ -715,6 +737,7 @@ export class EIApp {
       return;
     }
     
+    await this.stateManager.captureSnapshot();
     await saveArchiveState(targetPersona, {
       isArchived: true,
       archivedDate: new Date().toISOString()
@@ -775,6 +798,7 @@ export class EIApp {
       return;
     }
     
+    await this.stateManager.captureSnapshot();
     await saveArchiveState(targetPersona, {
       isArchived: false,
       archivedDate: undefined
@@ -813,6 +837,7 @@ export class EIApp {
       const alias = parts[1];
       
       try {
+        await this.stateManager.captureSnapshot();
         await addPersonaAlias(this.activePersona, alias);
         this.setStatus(`Added alias "${alias}" to ${this.activePersona}`);
         this.personas = await listPersonas();
@@ -832,6 +857,7 @@ export class EIApp {
       const pattern = parts[1];
       
       try {
+        await this.stateManager.captureSnapshot();
         const removed = await removePersonaAlias(this.activePersona, pattern);
         this.setStatus(`Removed alias "${removed[0]}" from ${this.activePersona}`);
         this.personas = await listPersonas();
@@ -913,6 +939,7 @@ export class EIApp {
 
     const conceptMap = await loadConceptMap('system', this.activePersona);
     conceptMap.model = modelSpec;
+    await this.stateManager.captureSnapshot();
     await saveConceptMap(conceptMap, this.activePersona);
 
     this.setStatus(`Model for '${this.activePersona}' set to: ${modelSpec}`);
@@ -927,6 +954,7 @@ export class EIApp {
     }
 
     delete conceptMap.model;
+    await this.stateManager.captureSnapshot();
     await saveConceptMap(conceptMap, this.activePersona);
 
     const globalDefault = process.env.EI_LLM_MODEL || 'local:google/gemma-3-12b';
@@ -1001,6 +1029,7 @@ export class EIApp {
     if (groupName.toLowerCase() === 'clear') {
       const conceptMap = await loadConceptMap('system', this.activePersona);
       conceptMap.group_primary = null;
+      await this.stateManager.captureSnapshot();
       await saveConceptMap(conceptMap, this.activePersona);
       this.setStatus(`Primary group cleared for ${this.activePersona}`);
       return;
@@ -1009,6 +1038,7 @@ export class EIApp {
     // /g <name> - set primary group
     const conceptMap = await loadConceptMap('system', this.activePersona);
     conceptMap.group_primary = groupName;
+    await this.stateManager.captureSnapshot();
     await saveConceptMap(conceptMap, this.activePersona);
     this.setStatus(`Primary group set to: ${groupName}`);
   }
@@ -1049,6 +1079,7 @@ export class EIApp {
     if (subcommand === 'clear') {
       const conceptMap = await loadConceptMap('system', this.activePersona);
       conceptMap.groups_visible = [];
+      await this.stateManager.captureSnapshot();
       await saveConceptMap(conceptMap, this.activePersona);
       this.setStatus(`Visible groups cleared for ${this.activePersona}`);
       return;
@@ -1071,6 +1102,7 @@ export class EIApp {
       }
 
       conceptMap.groups_visible = visible.filter(g => g !== groupName);
+      await this.stateManager.captureSnapshot();
       await saveConceptMap(conceptMap, this.activePersona);
       this.setStatus(`Removed "${groupName}" from visible groups`);
       return;
@@ -1095,6 +1127,7 @@ export class EIApp {
     }
 
     conceptMap.groups_visible = [...visible, groupName];
+    await this.stateManager.captureSnapshot();
     await saveConceptMap(conceptMap, this.activePersona);
     this.setStatus(`Added "${groupName}" to visible groups`);
   }
@@ -1132,6 +1165,133 @@ export class EIApp {
     this.setStatus(lines.join(' | '));
   }
 
+  private async handleUndoCommand(args: string): Promise<void> {
+    const trimmed = args.trim();
+    
+    let n = 1;
+    if (trimmed) {
+      const parsed = parseInt(trimmed, 10);
+      if (isNaN(parsed) || parsed < 1) {
+        this.setStatus('Usage: /undo [n] where n is a positive integer');
+        return;
+      }
+      n = parsed;
+    }
+    
+    this.abortPersonaOperation(this.activePersona);
+    
+    const snapshot = this.stateManager.undo(n);
+    
+    if (!snapshot) {
+      this.setStatus('No undo history available');
+      return;
+    }
+    
+    const availableCount = this.stateManager.getSnapshotCount();
+    if (n > availableCount + 1) {
+      this.setStatus(`Only ${availableCount + 1} state(s) available, undid all`);
+    }
+    
+    try {
+      await this.stateManager.restoreSnapshot(snapshot);
+      await this.reloadFromDisk();
+      
+      const timestamp = new Date(snapshot.timestamp).toLocaleString();
+      const actionCount = n === 1 ? '1 action' : `${n} actions`;
+      this.setStatus(`Undid ${actionCount} - Restored to state from ${timestamp}`);
+    } catch (err) {
+      this.setStatus(`Undo failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  private async handleSaveStateCommand(args: string): Promise<void> {
+    const trimmed = args.trim();
+    const name = trimmed || undefined;
+
+    try {
+      await this.stateManager.saveStateToDisk(name);
+      const timestamp = new Date().toLocaleString();
+      const displayName = name || timestamp;
+      this.setStatus(`State saved: ${displayName} (${timestamp})`);
+    } catch (err) {
+      this.setStatus(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  private async handleRestoreStateCommand(args: string): Promise<void> {
+    const trimmed = args.trim();
+
+    if (!trimmed) {
+      try {
+        const states = await this.stateManager.listSavedStates();
+        
+        if (states.length === 0) {
+          this.setStatus('No saved states available');
+          return;
+        }
+
+        const lines: string[] = [];
+        lines.push('Saved States');
+        lines.push('');
+        lines.push('#   Name                           Timestamp');
+        lines.push('─────────────────────────────────────────────────────────');
+        
+        states.forEach((state, index) => {
+          const num = (index + 1).toString().padEnd(4);
+          const name = state.name.padEnd(30);
+          const timestamp = new Date(state.timestamp).toLocaleString();
+          lines.push(`${num}${name} ${timestamp}`);
+        });
+        
+        lines.push('');
+        lines.push('Use /restoreState <number> or /restoreState <name> to restore');
+        lines.push('Press q to close this list.');
+
+        const tmpFile = `/tmp/ei-restore-${Date.now()}.txt`;
+        writeFileSync(tmpFile, lines.join('\n'), 'utf-8');
+        
+        this.screen.exec('less', [tmpFile], {}, (err) => {
+          try {
+            unlinkSync(tmpFile);
+          } catch {
+          }
+          this.focusManager.focusInput();
+          this.screen.render();
+        });
+      } catch (err) {
+        this.setStatus(`Failed to list states: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      return;
+    }
+
+    try {
+      const parsedNumber = parseInt(trimmed, 10);
+      const arg = isNaN(parsedNumber) ? trimmed : parsedNumber;
+
+      await this.stateManager.captureSnapshot();
+      const snapshot = await this.stateManager.loadStateFromDisk(arg);
+      
+      this.abortPersonaOperation(this.activePersona);
+      await this.stateManager.restoreSnapshot(snapshot);
+      await this.reloadFromDisk();
+
+      const timestamp = new Date(snapshot.timestamp).toLocaleString();
+      const states = await this.stateManager.listSavedStates();
+      const state = typeof arg === 'number' 
+        ? states[arg - 1] 
+        : states.find(s => s.name === arg || s.id === arg);
+      const displayName = state?.name || arg;
+      
+      this.setStatus(`Restored state: ${displayName} (${timestamp})`);
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('State not found')) {
+        this.setStatus(`State '${trimmed}' not found`);
+      } else {
+        this.setStatus(`Restore failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  }
+
   private showHelpModal(): void {
     const helpText = `EI - Emotional Intelligence Chat
 
@@ -1161,6 +1321,9 @@ COMMANDS
     /gs remove Work    Remove "Work" from visible groups
     /gs clear          Clear all visible groups
   /status, /s         Show persona status (groups, visible personas)
+  /undo [n]           Undo last n actions (default: 1)
+  /saveState [name]   Save current state to disk (optional name)
+  /restoreState [arg] Restore saved state (no args lists states)
   /editor, /e         Open external editor for multi-line input
   /refresh, /r        Refresh UI layout
   /quit [--force]     Exit application
@@ -1179,6 +1342,10 @@ TIPS
   - Messages are processed asynchronously
   - Use /pause to temporarily stop responses
   - External editor supports multi-line messages
+  - Use /undo to roll back unwanted changes
+  - /saveState creates backup snapshots (persists across restarts)
+  - /undo history is lost when app restarts
+  - Saved states are stored in data/.ei-states/ (max 10)
 
 Press q to close this help.`;
 
@@ -1207,6 +1374,7 @@ Press q to close this help.`;
       ps.pauseTimer = null;
     }
     
+    await this.stateManager.captureSnapshot();
     await savePauseState(personaName, { isPaused: false });
     
     const pendingFromStorage = await getPendingMessages(personaName);
@@ -1268,6 +1436,34 @@ Press q to close this help.`;
     this.handleResize();
     
     this.setStatus(`UI refreshed - Terminal size: ${screenWidth}x${screenHeight}`);
+  }
+
+  private async reloadFromDisk(): Promise<void> {
+    debugLog('Reloading all state from disk');
+    
+    this.personas = await listPersonas();
+    
+    if (!this.personas.find(p => p.name === this.activePersona)) {
+      debugLog(`Active persona '${this.activePersona}' no longer exists, switching to 'ei'`);
+      this.activePersona = 'ei';
+    }
+    
+    const history = await loadHistory(this.activePersona);
+    this.messages = history.messages;
+    
+    this.personaStates.clear();
+    this.unreadCounts.clear();
+    
+    for (const persona of this.personas) {
+      await this.loadPersistedPauseState(persona.name);
+      const unreadCount = await getUnreadSystemMessageCount(persona.name);
+      this.unreadCounts.set(persona.name, unreadCount);
+    }
+    
+    this.render();
+    this.autoScrollToBottom();
+    
+    debugLog('State reload from disk complete');
   }
 
   private async handleCtrlE(): Promise<void> {

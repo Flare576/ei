@@ -1,6 +1,6 @@
 # Ticket Status Summary
 
-## DONE ✅ (65 tickets)
+## DONE ✅ (66 tickets)
 - 0039: Blessed Proper Emoji Support
 - 0090: Parse Qwen-style Response Markup
 - 0087: JSON Parse Retry with Enhanced Prompt
@@ -66,8 +66,9 @@
 - 0099: Group-Based Persona Visibility
 - 0100: Epic Cleanup - Finalize Schema
 - 0101: Debug Log to Data Directory
+- 0048: Unified State Management System (Undo + Save/Restore)
 
-## PENDING (18 tickets)
+## PENDING (17 tickets)
 - 0102: Ei Core Persona Refinement
 - 0103: Persona Prompt Architecture
 - 0015: Persona Switching (Commands + Navigation)
@@ -80,7 +81,6 @@
 - 0045: Poke Command with Physical Context Interpretation
 - 0046: Clone Persona with Concept Map
 - 0047: Force Edit Current Persona
-- 0048: Unified State Management System (Undo + Save/Restore)
 - 0050: Global -p Parameter for Command Targeting
 - 0052: Window Size CLI Parameter
 - 0053: Graceful Quit/Exit Commands
@@ -108,9 +108,9 @@
 
 ---
 
-**Last Updated**: 2026-01-18
+**Last Updated**: 2026-01-19
 **Total Tickets**: 103 created
-**Stats**: 65 done, 0 QA, 18 pending, 13 cancelled
+**Stats**: 66 done, 0 QA, 17 pending, 13 cancelled
 
 ## Epic Status
 

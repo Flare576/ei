@@ -126,6 +126,8 @@ vi.mock('../../src/storage.js', () => ({
   getUnreadSystemMessageCount: vi.fn(() => Promise.resolve(0)),
   loadPauseState: vi.fn(() => Promise.resolve({ isPaused: false })),
   savePauseState: vi.fn(() => Promise.resolve()),
+  setStateManager: vi.fn(),
+  getDataPath: vi.fn(() => "/tmp/ei-test"),
 }));
 
 vi.mock('../../src/processor.js', () => ({

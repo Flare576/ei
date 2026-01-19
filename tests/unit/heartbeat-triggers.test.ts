@@ -6,6 +6,8 @@ vi.mock('../../src/storage.js', () => ({
   loadConceptMap: vi.fn(),
   appendDebugLog: vi.fn(),
   initializeDebugLog: vi.fn(),
+  setStateManager: vi.fn(),
+  getDataPath: vi.fn(() => "/tmp/ei-test"),
 }));
 
 // Test the heartbeat trigger logic directly

@@ -13,7 +13,10 @@ vi.mock('../../src/prompts.js', () => ({
 }));
 
 vi.mock('../../src/storage.js', () => ({
-  createPersonaDirectory: vi.fn()
+  createPersonaDirectory: vi.fn(),
+  loadConceptMap: vi.fn(() => Promise.resolve({ entity: 'system', concepts: [], last_updated: null })),
+  setStateManager: vi.fn(),
+  getDataPath: vi.fn(() => "/tmp/ei-test"),
 }));
 
 vi.mock('fs/promises', () => ({

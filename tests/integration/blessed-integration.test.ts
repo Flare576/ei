@@ -28,6 +28,8 @@ vi.mock('../../src/storage.js', () => ({
   savePauseState: vi.fn(() => Promise.resolve()),
   loadConceptMap: vi.fn(() => Promise.resolve({})),
   saveConceptMap: vi.fn(() => Promise.resolve()),
+  setStateManager: vi.fn(),
+  getDataPath: vi.fn(() => "/tmp/ei-test"),
 }));
 
 vi.mock('../../src/processor.js', () => ({

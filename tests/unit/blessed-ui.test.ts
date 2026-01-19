@@ -9,9 +9,12 @@ vi.mock('blessed', () => createBlessedMock({
 // Mock dependencies
 vi.mock('../../src/storage.js', () => ({
   loadHistory: vi.fn(),
+  loadConceptMap: vi.fn(() => Promise.resolve({ entity: 'system', concepts: [], last_updated: null })),
   listPersonas: vi.fn(),
   findPersonaByNameOrAlias: vi.fn(),
   initializeDataDirectory: vi.fn(),
+  setStateManager: vi.fn(),
+  getDataPath: vi.fn(() => "/tmp/ei-test"),
 }));
 
 vi.mock('../../src/processor.js', () => ({

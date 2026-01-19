@@ -119,4 +119,14 @@ export interface PersonaState {
   pauseTimer: ReturnType<typeof setTimeout> | null;
 }
 
+export interface SystemSnapshot {
+  timestamp: string;
+  humanConcepts: ConceptMap;
+  personas: {
+    [personaName: string]: {
+      system: ConceptMap;
+      history: ConversationHistory;
+    }
+  };
+}
 

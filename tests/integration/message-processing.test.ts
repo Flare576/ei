@@ -5,6 +5,7 @@ vi.mock('blessed', () => createBlessedMock());
 
 vi.mock('../../src/storage.js', () => ({
   loadHistory: vi.fn(() => Promise.resolve({ messages: [] })),
+  loadConceptMap: vi.fn(() => Promise.resolve({ entity: 'system', concepts: [], last_updated: null })),
   listPersonas: vi.fn(() => Promise.resolve([
     { name: 'ei' },
     { name: 'claude' },
@@ -20,6 +21,8 @@ vi.mock('../../src/storage.js', () => ({
   replacePendingMessages: vi.fn(() => Promise.resolve()),
   appendHumanMessage: vi.fn(() => Promise.resolve()),
   getUnprocessedMessages: vi.fn(() => Promise.resolve([])),
+  setStateManager: vi.fn(),
+  getDataPath: vi.fn(() => "/tmp/ei-test"),
 }));
 
 vi.mock('../../src/processor.js', () => ({
@@ -240,7 +243,10 @@ describe('Message Processing Integration Tests', () => {
       // Submit message (long enough to trigger immediate processing)
       const submitPromise = app.testHandleSubmit('Test message that is long enough to trigger processing');
 
-      // Check initial state immediately
+      // Give the message addition a moment to complete (snapshot is async)
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // Check initial state
       const initialMessages = app.getTestMessages();
       const initialLastMessage = initialMessages[initialMessages.length - 1];
       expect(initialLastMessage.role).toBe('human');

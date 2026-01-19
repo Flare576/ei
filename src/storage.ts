@@ -3,10 +3,17 @@ import { existsSync } from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
 import { ConceptMap, ConversationHistory, Message } from "./types.js";
+import type { StateManager } from "./state-manager.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_DATA_PATH = path.resolve(__dirname, "../data");
 const DATA_PATH = process.env.EI_DATA_PATH || DEFAULT_DATA_PATH;
+
+let stateManager: StateManager | null = null;
+
+export function setStateManager(manager: StateManager): void {
+  stateManager = manager;
+}
 
 export function getDataPath(): string {
   return DATA_PATH;
@@ -213,7 +220,7 @@ export async function appendMessage(
   const messageWithDefaults: Message = {
     ...message,
     read: message.read ?? false,
-    concept_processed: message.concept_processed ?? false,
+    concept_processed: false,
   };
   history.messages.push(messageWithDefaults);
   await saveHistory(history, persona);
