@@ -11,29 +11,29 @@ function getMessageColor(role: "human" | "system", state: MessageState | undefin
   return role === "human" ? "yellow-fg" : "green-fg";
 }
 
+function addEmojiSpacing(text: string): string {
+  return text.replace(/([\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}])/gu, '$1 ');
+}
+
 function parseMarkdownToBlessedTags(text: string): string {
   let result = text;
   
-  // Parse code blocks FIRST: ```code``` -> formatted block
+  result = addEmojiSpacing(result);
+  
   result = result.replace(/```(\w*)\n?([\s\S]*?)```/g, (match, language, code) => {
     const lang = language ? `{gray-fg}[${language}]{/gray-fg}\n` : '{gray-fg}[code]{/gray-fg}\n';
     const formattedCode = code.trim().split('\n').map((line: string) => `  {cyan-fg}${line}{/cyan-fg}`).join('\n');
     return `\n${lang}${formattedCode}\n`;
   });
   
-  // Parse inline code AFTER code blocks: `code` -> {cyan-fg}{inverse}code{/inverse}{/cyan-fg}
   result = result.replace(/`([^`]+)`/g, '{cyan-fg}{inverse}$1{/inverse}{/cyan-fg}');
   
-  // Parse bold: **text** -> {bold}text{/bold}
   result = result.replace(/\*\*([^*]+)\*\*/g, '{bold}$1{/bold}');
   
-  // Parse italic underscore: _text_ -> {underline}text{/underline}
   result = result.replace(/(?<!\w)_([^_]+)_/g, '{underline}$1{/underline}');
   
-  // Parse italic asterisk: *text* -> {underline}text{/underline}
   result = result.replace(/\*([^*]+)\*/g, '{underline}$1{/underline}');
   
-  // Parse strikethrough: ~~text~~ -> {strikethrough}text{/strikethrough}
   result = result.replace(/~~([^~]+)~~/g, '{strikethrough}$1{/strikethrough}');
   
   return result;

@@ -154,6 +154,7 @@ export class EIApp {
   private patchBlessedUnicodeWidth() {
     const blessedModule = blessed as any;
     
+    // Patch Element.prototype.strWidth for overall string width
     if (blessedModule.Element?.prototype?.strWidth) {
       blessedModule.Element.prototype.strWidth = function(text: string): number {
         if (this.parseTags && blessedModule.helpers?.stripTags) {
@@ -165,6 +166,32 @@ export class EIApp {
       debugLog(`Blessed strWidth monkey-patched with string-width library`);
     } else {
       debugLog(`WARNING: Could not monkey-patch blessed.Element.prototype.strWidth - API may have changed`);
+    }
+
+    // Patch unicode.charWidth for per-character width (used in text wrapping)
+    // This is CRITICAL for emoji rendering - without it, emoji break line wrapping
+    const unicode = blessedModule.unicode || (blessed as any).unicode;
+    if (unicode?.charWidth) {
+      const originalCharWidth = unicode.charWidth;
+      
+      unicode.charWidth = function(str: string, i?: number): number {
+        const idx = i || 0;
+        
+        const codePoint = unicode.codePointAt ? unicode.codePointAt(str, idx) : str.codePointAt(idx);
+        const char = String.fromCodePoint(codePoint);
+        
+        const width = getDisplayWidth(char);
+        
+        if (width === 0 || width === undefined) {
+          return originalCharWidth.call(this, str, idx);
+        }
+        
+        return width;
+      };
+      
+      debugLog(`Blessed unicode.charWidth monkey-patched with string-width library`);
+    } else {
+      debugLog(`WARNING: Could not monkey-patch blessed.unicode.charWidth - API may have changed`);
     }
   }
 
