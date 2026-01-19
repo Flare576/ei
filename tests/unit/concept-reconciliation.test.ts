@@ -129,7 +129,7 @@ describe("reconcileConceptGroups", () => {
       expect(result[0].persona_groups).toEqual([GLOBAL_GROUP]);
     });
 
-    it("does not set learned_by for existing concepts", () => {
+    it("preserves learned_by from existing concepts", () => {
       const existingConcepts: Concept[] = [
         createConcept("Existing", { learned_by: "original-creator" }),
       ];
@@ -138,7 +138,21 @@ describe("reconcileConceptGroups", () => {
 
       const result = reconcileConceptGroups(existingConcepts, llmConcepts, persona, "test-persona");
 
-      expect(result[0].learned_by).toBeUndefined();
+      expect(result[0].learned_by).toBe("original-creator");
+    });
+
+    it("ignores learned_by from LLM updates to existing concepts", () => {
+      const existingConcepts: Concept[] = [
+        createConcept("Existing", { learned_by: "original-creator" }),
+      ];
+      const llmConcepts: Concept[] = [
+        createConcept("Existing", { learned_by: "malicious-override" as any }),
+      ];
+      const persona = createPersonaMap({ group_primary: "Work" });
+
+      const result = reconcileConceptGroups(existingConcepts, llmConcepts, persona, "test-persona");
+
+      expect(result[0].learned_by).toBe("original-creator");
     });
 
     it("updates last_updated for existing concepts", () => {

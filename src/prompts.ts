@@ -3,11 +3,14 @@ import { Concept, ConceptMap, Message, ConceptType } from "./types.js";
 const MUTABLE_TYPES: ConceptType[] = ["topic", "person", "persona"];
 
 /**
- * Strips persona_groups from concepts before showing to LLM.
- * LLM should not see or manage this field - code handles it post-processing.
+ * Strips metadata fields from concepts before showing to LLM.
+ * LLM should not see or manage these fields - code handles them post-processing:
+ * - persona_groups: Group visibility control
+ * - learned_by: Origin attribution (set once at creation)
+ * - last_updated: Timestamp management
  */
-function stripConceptGroupsForLLM(concepts: Concept[]): Omit<Concept, 'persona_groups'>[] {
-  return concepts.map(({ persona_groups, ...rest }) => rest);
+function stripConceptMetaFieldsForLLM(concepts: Concept[]): Omit<Concept, 'persona_groups' | 'learned_by' | 'last_updated'>[] {
+  return concepts.map(({ persona_groups, learned_by, last_updated, ...rest }) => rest);
 }
 
 import { GLOBAL_GROUP } from "./concept-reconciliation.js";
@@ -447,7 +450,7 @@ You need to update the Concept Map for the ${entityLabel}.
 
 Current Concept Map:
 \`\`\`json
-${JSON.stringify(stripConceptGroupsForLLM(concepts.concepts), null, 2)}
+${JSON.stringify(stripConceptMetaFieldsForLLM(concepts.concepts), null, 2)}
 \`\`\`
 
 ## Rules
@@ -464,11 +467,10 @@ ${JSON.stringify(stripConceptGroupsForLLM(concepts.concepts), null, 2)}
 - ADD a new concept only when discovering something genuinely distinct
 - MERGE smaller concepts into a broader one when they share similar levels and elasticity
 - Keep concepts SEPARATE when they have meaningfully different dynamics
-- If you ADD a new concept, include \`"learned_by": "${persona}"\` to track its origin
 - For NEW concepts, set sentiment to 0.0 (neutral) unless emotion is clearly expressed
 
-Return ONLY a JSON array of concepts with ALL fields:
-- name, description, type, learned_by (if new)
+Return ONLY a JSON array of concepts. For each concept include:
+- name, description, type
 - level_current: exposure level (0.0-1.0)
 - level_ideal: discussion desire (0.0-1.0) - rarely change this
 - sentiment: emotional valence (-1.0 to 1.0) - update based on expressed emotions`;

@@ -267,6 +267,36 @@ describe("buildConceptUpdateSystemPrompt", () => {
     expect(humanResult).toContain("Human");
     expect(systemResult).toContain("System (yourself)");
   });
+
+  it("should strip metadata fields from concepts shown to LLM", () => {
+    const conceptWithMetadata: Concept = {
+      name: "Test Concept",
+      description: "A test concept",
+      level_current: 0.5,
+      level_ideal: 0.5,
+      sentiment: 0.0,
+      type: "topic",
+      persona_groups: ["SecretGroup"],
+      learned_by: "original-persona",
+      last_updated: "2025-01-15T12:00:00.000Z",
+    };
+    const concepts = createConceptMap("human", [conceptWithMetadata]);
+
+    const result = buildConceptUpdateSystemPrompt("human", concepts);
+    
+    const jsonMatch = result.match(/```json\n([\s\S]*?)\n```/);
+    expect(jsonMatch).toBeTruthy();
+    const jsonContent = jsonMatch![1];
+
+    expect(jsonContent).toContain("Test Concept");
+    expect(jsonContent).toContain("A test concept");
+    expect(jsonContent).not.toContain("persona_groups");
+    expect(jsonContent).not.toContain("SecretGroup");
+    expect(jsonContent).not.toContain('"learned_by"');
+    expect(jsonContent).not.toContain("original-persona");
+    expect(jsonContent).not.toContain('"last_updated"');
+    expect(jsonContent).not.toContain("2025-01-15T12:00:00.000Z");
+  });
 });
 
 describe("buildConceptUpdateUserPrompt", () => {

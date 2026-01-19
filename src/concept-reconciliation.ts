@@ -35,6 +35,7 @@ export function reconcileConceptGroups(
       reconciled.push({
         ...updated,
         persona_groups: personaGroups,
+        learned_by: existing.learned_by,
         last_updated: now,
       });
     } else {
