@@ -357,9 +357,22 @@ export function getRecentMessages(
   maxHours: number = 8,
   maxMessages: number = 100
 ): Message[] {
+  let clearMarkerIndex = -1;
+  for (let i = history.messages.length - 1; i >= 0; i--) {
+    if (history.messages[i].content === '[CONTEXT_CLEARED]') {
+      clearMarkerIndex = i;
+      break;
+    }
+  }
+
+  let messagesToFilter = history.messages;
+  if (clearMarkerIndex >= 0) {
+    messagesToFilter = history.messages.slice(clearMarkerIndex + 1);
+  }
+
   const cutoff = Date.now() - maxHours * 60 * 60 * 1000;
 
-  const recent = history.messages
+  const recent = messagesToFilter
     .filter((m) => new Date(m.timestamp).getTime() > cutoff)
     .slice(-maxMessages);
 

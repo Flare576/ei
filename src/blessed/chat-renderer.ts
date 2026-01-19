@@ -45,8 +45,11 @@ export class ChatRenderer {
     messages: Message[],
     activePersona: string
   ) {
-    // Use blessed's native text handling with proper color formatting and markdown parsing
     const chatText = messages.map(msg => {
+      if (msg.content === '[CONTEXT_CLEARED]') {
+        return '{cyan-fg}{bold}--- New Conversation ---{/bold}{/cyan-fg}';
+      }
+      
       const time = new Date(msg.timestamp).toLocaleTimeString([], { 
         hour: 'numeric', 
         minute: '2-digit' 
@@ -54,16 +57,13 @@ export class ChatRenderer {
       const name = msg.role === 'human' ? 'You' : activePersona.charAt(0).toUpperCase() + activePersona.slice(1);
       const nameColor = getMessageColor(msg.role, msg.state);
       
-      // State indicators with colors
       let stateIndicator = '';
       if (msg.state === 'processing') stateIndicator = ' {gray-fg}[processing]{/gray-fg}';
       else if (msg.state === 'queued') stateIndicator = ' {gray-fg}[queued]{/gray-fg}';
       else if (msg.state === 'failed') stateIndicator = ' {red-fg}[failed]{/red-fg}';
       
-      // Parse markdown in message content
       const parsedContent = parseMarkdownToBlessedTags(msg.content);
       
-      // Format with blessed color tags
       return `{gray-fg}[${time}]{/gray-fg} {${nameColor}}${name}:{/${nameColor}}${stateIndicator} ${parsedContent}`;
     }).join('\n\n');
     

@@ -1,6 +1,7 @@
 # Ticket Status Summary
 
-## DONE ✅ (66 tickets)
+## DONE ✅ (67 tickets)
+- 0044: New Conversation Command
 - 0039: Blessed Proper Emoji Support
 - 0090: Parse Qwen-style Response Markup
 - 0087: JSON Parse Retry with Enhanced Prompt
@@ -68,7 +69,7 @@
 - 0101: Debug Log to Data Directory
 - 0048: Unified State Management System (Undo + Save/Restore)
 
-## PENDING (17 tickets)
+## PENDING (16 tickets)
 - 0102: Ei Core Persona Refinement
 - 0103: Persona Prompt Architecture
 - 0015: Persona Switching (Commands + Navigation)
@@ -77,7 +78,6 @@
 - 0028: Investigate Slow LLM Response Times
 - 0032: Failed Message Edit and Retry Interface
 - 0038: Blessed Multi-Line Modal Interface
-- 0044: Fresh Conversation Command
 - 0045: Poke Command with Physical Context Interpretation
 - 0046: Clone Persona with Concept Map
 - 0047: Force Edit Current Persona
@@ -110,7 +110,7 @@
 
 **Last Updated**: 2026-01-19
 **Total Tickets**: 103 created
-**Stats**: 66 done, 0 QA, 17 pending, 13 cancelled
+**Stats**: 67 done, 0 QA, 0 in_progress, 16 pending, 13 cancelled
 
 ## Epic Status
 

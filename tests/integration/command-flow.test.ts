@@ -121,6 +121,7 @@ vi.mock('../../src/storage.js', () => ({
   getPendingMessages: vi.fn(() => Promise.resolve([])),
   replacePendingMessages: vi.fn(() => Promise.resolve()),
   appendHumanMessage: vi.fn(() => Promise.resolve()),
+  appendMessage: vi.fn(() => Promise.resolve()),
   getUnprocessedMessages: vi.fn(() => Promise.resolve([])),
   markSystemMessagesAsRead: vi.fn(() => Promise.resolve()),
   getUnreadSystemMessageCount: vi.fn(() => Promise.resolve(0)),
@@ -614,6 +615,26 @@ describe('Command Flow Integration Tests', () => {
 
       // Verify it was processed as message
       expect(processEvent).toHaveBeenCalled();
+    });
+
+    test('/new command inserts context marker and reloads messages', async () => {
+      const { loadHistory } = await import('../../src/storage.js');
+      const mockHistory = {
+        messages: [
+          { role: 'human' as const, content: 'Old message 1', timestamp: new Date(Date.now() - 10000).toISOString(), read: true },
+          { role: 'system' as const, content: 'Old response 1', timestamp: new Date(Date.now() - 9000).toISOString(), read: true },
+          { role: 'system' as const, content: '[CONTEXT_CLEARED]', timestamp: new Date().toISOString(), read: true, concept_processed: true },
+        ]
+      };
+      
+      vi.mocked(loadHistory).mockResolvedValueOnce(mockHistory);
+      
+      await app.testHandleSubmit('/new');
+      
+      const statusMessage = app.getTestStatusMessage();
+      expect(statusMessage).toBe('New conversation started');
+      
+      expect(loadHistory).toHaveBeenCalledWith('ei');
     });
   });
 });

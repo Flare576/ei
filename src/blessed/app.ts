@@ -5,7 +5,7 @@ import { writeFileSync, readFileSync, unlinkSync } from 'fs';
 // Import test output capture early to intercept blessed methods before they're used
 import { testOutputCapture } from './test-output-capture.js';
 
-import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog, getPendingMessages, replacePendingMessages, appendHumanMessage, getUnprocessedMessages, loadPauseState, savePauseState, markSystemMessagesAsRead, getUnreadSystemMessageCount, loadArchiveState, saveArchiveState, getArchivedPersonas, findArchivedPersonaByNameOrAlias, addPersonaAlias, removePersonaAlias, loadConceptMap, saveConceptMap, loadAllPersonasWithConceptMaps } from '../storage.js';
+import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog, getPendingMessages, replacePendingMessages, appendHumanMessage, appendMessage, getUnprocessedMessages, loadPauseState, savePauseState, markSystemMessagesAsRead, getUnreadSystemMessageCount, loadArchiveState, saveArchiveState, getArchivedPersonas, findArchivedPersonaByNameOrAlias, addPersonaAlias, removePersonaAlias, loadConceptMap, saveConceptMap, loadAllPersonasWithConceptMaps } from '../storage.js';
 import { getVisiblePersonas } from '../prompts.js';
 import { createPersonaWithLLM, saveNewPersona } from '../persona-creator.js';
 import { ConceptQueue } from '../concept-queue.js';
@@ -435,6 +435,9 @@ export class EIApp {
         break;
       case 'restorestate':
         await this.handleRestoreStateCommand(args);
+        break;
+      case 'new':
+        await this.handleNewCommand();
         break;
       default:
         this.setStatus(`Unknown command: /${command}`);
@@ -1292,6 +1295,31 @@ export class EIApp {
     }
   }
 
+  private async handleNewCommand(): Promise<void> {
+    try {
+      await this.stateManager.captureSnapshot();
+      
+      const markerMessage: Message = {
+        role: 'system',
+        content: '[CONTEXT_CLEARED]',
+        timestamp: new Date().toISOString(),
+        read: true,
+        concept_processed: true,
+      };
+      
+      await appendMessage(markerMessage, this.activePersona);
+      
+      const history = await loadHistory(this.activePersona);
+      this.messages = history.messages.slice(-STARTUP_HISTORY_COUNT);
+      
+      this.setStatus('New conversation started');
+      this.render();
+      this.autoScrollToBottom();
+    } catch (err) {
+      this.setStatus(`Failed to start new conversation: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   private showHelpModal(): void {
     const helpText = `EI - Emotional Intelligence Chat
 
@@ -1321,6 +1349,7 @@ COMMANDS
     /gs remove Work    Remove "Work" from visible groups
     /gs clear          Clear all visible groups
   /status, /s         Show persona status (groups, visible personas)
+  /new                Start new conversation (clears LLM context)
   /undo [n]           Undo last n actions (default: 1)
   /saveState [name]   Save current state to disk (optional name)
   /restoreState [arg] Restore saved state (no args lists states)

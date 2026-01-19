@@ -95,6 +95,68 @@ describe("getRecentMessages", () => {
     expect(result[0].content).toBe("Second");
     expect(result[1].content).toBe("Third");
   });
+
+  it("should stop at context clear marker", () => {
+    const history: ConversationHistory = {
+      messages: [
+        createMessage("human", "Old message 1", 5),
+        createMessage("system", "Old message 2", 4),
+        { role: "system", content: "[CONTEXT_CLEARED]", timestamp: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(), read: true, concept_processed: true },
+        createMessage("human", "New message 1", 2),
+        createMessage("system", "New message 2", 1),
+      ],
+    };
+
+    const result = getRecentMessages(history, 8);
+
+    expect(result).toHaveLength(2);
+    expect(result[0].content).toBe("New message 1");
+    expect(result[1].content).toBe("New message 2");
+  });
+
+  it("should use most recent marker when multiple markers exist", () => {
+    const history: ConversationHistory = {
+      messages: [
+        createMessage("human", "Ancient message", 10),
+        { role: "system", content: "[CONTEXT_CLEARED]", timestamp: new Date(Date.now() - 9 * 60 * 60 * 1000).toISOString(), read: true, concept_processed: true },
+        createMessage("human", "Old message", 8),
+        { role: "system", content: "[CONTEXT_CLEARED]", timestamp: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(), read: true, concept_processed: true },
+        createMessage("human", "New message", 2),
+      ],
+    };
+
+    const result = getRecentMessages(history, 8);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].content).toBe("New message");
+  });
+
+  it("should return empty array when only marker exists", () => {
+    const history: ConversationHistory = {
+      messages: [
+        { role: "system", content: "[CONTEXT_CLEARED]", timestamp: new Date().toISOString(), read: true, concept_processed: true },
+      ],
+    };
+
+    const result = getRecentMessages(history, 8);
+
+    expect(result).toEqual([]);
+  });
+
+  it("should work normally when no marker exists", () => {
+    const history: ConversationHistory = {
+      messages: [
+        createMessage("human", "Message 1", 2),
+        createMessage("system", "Message 2", 1),
+      ],
+    };
+
+    const result = getRecentMessages(history, 8);
+
+    expect(result).toHaveLength(2);
+    expect(result[0].content).toBe("Message 1");
+    expect(result[1].content).toBe("Message 2");
+  });
 });
 
 describe("getLastMessageTime", () => {
