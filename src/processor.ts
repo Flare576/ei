@@ -113,7 +113,7 @@ export async function processEvent(
   const allPersonas = await loadAllPersonasWithEntities();
   const visiblePersonas = getVisiblePersonas(persona, personaEntity, allPersonas);
 
-  const responseSystemPrompt = buildResponseSystemPrompt(
+  const responseSystemPrompt = await buildResponseSystemPrompt(
     humanEntity,
     personaEntity,
     personaIdentity,

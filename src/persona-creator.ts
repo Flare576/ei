@@ -127,6 +127,11 @@ export async function generatePersonaDescriptions(
   entity: PersonaEntity,
   signal?: AbortSignal
 ): Promise<PersonaDescriptions | null> {
+  if (personaName === "ei") {
+    const { EI_DESCRIPTIONS } = await import("./prompts.js");
+    return EI_DESCRIPTIONS;
+  }
+  
   const systemPrompt = `You are generating brief descriptions for an AI persona named "${personaName}".
 
 Based on the persona's traits and topics, generate two descriptions:

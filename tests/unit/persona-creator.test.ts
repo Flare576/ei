@@ -266,4 +266,31 @@ describe('Persona Creator', () => {
       expect(identityTrait?.description).toContain('Maintains personality consistency');
     });
   });
+
+  describe('generatePersonaDescriptions', () => {
+    test('returns locked descriptions for ei persona', async () => {
+      const eiEntity = createTestPersonaEntity('ei');
+      
+      const result = await generatePersonaDescriptions('ei', eiEntity);
+      
+      expect(result).toBeDefined();
+      expect(result?.short_description).toBe("Your guide to the EI persona system - warm, direct, and always looking out for you");
+      expect(result?.long_description).toContain("orchestrator of your personal AI companion system");
+      expect(callLLMForJSON).not.toHaveBeenCalled();
+    });
+
+    test('generates descriptions for non-ei personas', async () => {
+      const testEntity = createTestPersonaEntity('helper');
+      vi.mocked(callLLMForJSON).mockResolvedValue({
+        short_description: 'A helpful companion',
+        long_description: 'A helpful AI companion who assists with tasks.'
+      });
+
+      const result = await generatePersonaDescriptions('helper', testEntity);
+
+      expect(result).toBeDefined();
+      expect(result?.short_description).toBe('A helpful companion');
+      expect(callLLMForJSON).toHaveBeenCalled();
+    });
+  });
 });

@@ -89,12 +89,12 @@ The following items were already completed as part of ticket 0109:
 ### src/processor.ts
 - [x] Update imports to use HumanEntity/PersonaEntity **[DONE in 0119]** - removed Concept/ConceptMap imports
 - [x] Update `processEvent` to load entities **[DONE in 0119]** - now calls loadHumanEntity/loadPersonaEntity
-- [x] Update `buildResponseSystemPrompt` call **[DONE in 0119]** - uses new signature
+- [x] Update `buildResponseSystemPrompt` call **[DONE in 0121]** - now async, uses await
 - [x] Update `getVisiblePersonas` call **[DONE in 0119]** - uses PersonaEntity
-- [ ] Remove `conceptsChanged` helper function (lines 26-47)
-- [ ] Remove `ProcessResult.humanConceptsUpdated` field (line 76 - already marked deprecated)
-- [ ] Remove `ProcessResult.systemConceptsUpdated` field (line 78 - already marked deprecated)
-- [ ] Remove all old concept update orchestration code (lines ~200-350) - replaced by new extraction system
+- [ ] Remove `conceptsChanged` helper function (line 22) - **[Required for 0121]**
+- [ ] Remove `ProcessResult.humanConceptsUpdated` field (line 72 - already marked deprecated)
+- [ ] Remove `ProcessResult.systemConceptsUpdated` field (line 74 - already marked deprecated)
+- [ ] Remove all old concept update orchestration code (lines 190-348) - replaced by new extraction system
 
 ### src/validate.ts
 - [x] Remove static concept validation **[Deleted in 0120]**

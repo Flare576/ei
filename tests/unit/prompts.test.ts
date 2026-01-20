@@ -91,16 +91,16 @@ const defaultPersona: PersonaIdentity = {
 };
 
 describe("buildResponseSystemPrompt", () => {
-  it("should include persona name in output", () => {
+  it("should include persona name in output", async () => {
     const humanEntity = createHumanEntity();
     const personaEntity = createPersonaEntity();
 
-    const result = buildResponseSystemPrompt(humanEntity, personaEntity, defaultPersona);
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, defaultPersona);
 
     expect(result).toContain("You are EI");
   });
 
-  it("should include aliases when provided", () => {
+  it("should include aliases when provided", async () => {
     const humanEntity = createHumanEntity();
     const personaEntity = createPersonaEntity();
     const personaWithAliases: PersonaIdentity = {
@@ -108,94 +108,131 @@ describe("buildResponseSystemPrompt", () => {
       aliases: ["TB", "Testy"],
     };
 
-    const result = buildResponseSystemPrompt(humanEntity, personaEntity, personaWithAliases);
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, personaWithAliases);
 
     expect(result).toContain("You are TestBot");
     expect(result).toContain("TB");
     expect(result).toContain("Testy");
   });
 
-  it("should include guidelines section", () => {
+  it("should include guidelines section", async () => {
     const humanEntity = createHumanEntity();
     const personaEntity = createPersonaEntity();
 
-    const result = buildResponseSystemPrompt(humanEntity, personaEntity, defaultPersona);
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, defaultPersona);
 
     expect(result).toContain("## Guidelines");
     expect(result).toContain("Be genuine, not sycophantic");
   });
 
-  it("should include ei-specific guidelines for ei persona", () => {
+  it("should include ei-specific guidelines for ei persona", async () => {
     const humanEntity = createHumanEntity();
     const personaEntity = createPersonaEntity();
     const eiPersona: PersonaIdentity = {
       name: "ei",
     };
 
-    const result = buildResponseSystemPrompt(humanEntity, personaEntity, eiPersona);
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, eiPersona);
 
-    expect(result).toContain("Encourage human-to-human connection");
-    expect(result).toContain("Be transparent about being an AI");
+    expect(result).toContain("Encourage real human connections");
+    expect(result).toContain("Be honest about being an AI when relevant");
+    expect(result).toContain("Gently challenge self-limiting beliefs");
   });
 
-  it("should include persona traits when present", () => {
+  it("should show Ei as system orchestrator with omniscient view", async () => {
+    const humanEntity = createHumanEntity(
+      [createFact("Birthday", 0.9)],
+      [createTrait("Analytical", 0.7)],
+      [createTopic("AI", 0.5, 0.7)],
+      [createPerson("Bob", "friend", 0.6, 0.5)]
+    );
+    const personaEntity = createPersonaEntity();
+    const eiPersona: PersonaIdentity = {
+      name: "ei",
+    };
+
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, eiPersona);
+
+    expect(result).toContain("orchestrator of this personal AI companion system");
+    expect(result).toContain("Facts About Them");
+    expect(result).toContain("Their Personality");
+    expect(result).toContain("Their Interests");
+    expect(result).toContain("People in Their Life");
+    expect(result).toContain("Bob");
+  });
+
+  it("should show onboarding guidance for new users", async () => {
+    const humanEntity = createHumanEntity();
+    const personaEntity = createPersonaEntity();
+    const eiPersona: PersonaIdentity = {
+      name: "ei",
+    };
+
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, eiPersona);
+
+    expect(result).toContain("Onboarding");
+    expect(result).toContain("new user");
+    expect(result).toContain("creating their first persona");
+  });
+
+  it("should include persona traits when present", async () => {
     const humanEntity = createHumanEntity();
     const personaEntity = createPersonaEntity([
       createTrait("Curious", 0.8),
     ]);
 
-    const result = buildResponseSystemPrompt(humanEntity, personaEntity, defaultPersona);
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, defaultPersona);
 
     expect(result).toContain("Your personality");
     expect(result).toContain("Curious");
   });
 
-  it("should include persona topics with desire indicators", () => {
+  it("should include persona topics with desire indicators", async () => {
     const humanEntity = createHumanEntity();
     const personaEntity = createPersonaEntity([], [
       createTopic("Programming", 0.2, 0.8),
     ]);
 
-    const result = buildResponseSystemPrompt(humanEntity, personaEntity, defaultPersona);
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, defaultPersona);
 
     expect(result).toContain("Your interests");
     expect(result).toContain("Programming");
     expect(result).toContain("🔺");
   });
 
-  it("should include high-confidence human facts", () => {
+  it("should include high-confidence human facts", async () => {
     const humanEntity = createHumanEntity([
       createFact("Lives in Seattle", 0.9),
       createFact("Low confidence fact", 0.5),
     ]);
     const personaEntity = createPersonaEntity([], [], ["*"]);
 
-    const result = buildResponseSystemPrompt(humanEntity, personaEntity, defaultPersona);
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, defaultPersona);
 
     expect(result).toContain("Lives in Seattle");
     expect(result).not.toContain("Low confidence fact");
   });
 
-  it("should include human traits", () => {
+  it("should include human traits", async () => {
     const humanEntity = createHumanEntity([], [
       createTrait("Introverted", 0.7),
     ]);
     const personaEntity = createPersonaEntity([], [], ["*"]);
 
-    const result = buildResponseSystemPrompt(humanEntity, personaEntity, defaultPersona);
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, defaultPersona);
 
     expect(result).toContain("Personality");
     expect(result).toContain("Introverted");
   });
 
-  it("should include active human topics", () => {
+  it("should include active human topics", async () => {
     const humanEntity = createHumanEntity([], [], [
       createTopic("Gardening", 0.8, 0.5, 0.5),
       createTopic("Inactive topic", 0.1, 0.2),
     ]);
     const personaEntity = createPersonaEntity([], [], ["*"]);
 
-    const result = buildResponseSystemPrompt(humanEntity, personaEntity, defaultPersona);
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, defaultPersona);
 
     expect(result).toContain("Current Interests");
     expect(result).toContain("Gardening");
@@ -203,20 +240,20 @@ describe("buildResponseSystemPrompt", () => {
     expect(result).not.toContain("Inactive topic");
   });
 
-  it("should include human people", () => {
+  it("should include human people", async () => {
     const humanEntity = createHumanEntity([], [], [], [
       createPerson("Alice", "daughter", 0.7, 0.5),
     ]);
     const personaEntity = createPersonaEntity([], [], ["*"]);
 
-    const result = buildResponseSystemPrompt(humanEntity, personaEntity, defaultPersona);
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, defaultPersona);
 
     expect(result).toContain("People in Their Life");
     expect(result).toContain("Alice");
     expect(result).toContain("daughter");
   });
 
-  it("should show conversation opportunities when desires exist", () => {
+  it("should show conversation opportunities when desires exist", async () => {
     const humanEntity = createHumanEntity([], [], [
       createTopic("Cooking", 0.2, 0.8),
     ]);
@@ -224,23 +261,23 @@ describe("buildResponseSystemPrompt", () => {
       createTopic("Music", 0.1, 0.7),
     ], ["*"]);
 
-    const result = buildResponseSystemPrompt(humanEntity, personaEntity, defaultPersona);
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, defaultPersona);
 
     expect(result).toContain("Conversation Opportunities");
     expect(result).toContain("Music");
     expect(result).toContain("Cooking");
   });
 
-  it("should include current timestamp", () => {
+  it("should include current timestamp", async () => {
     const humanEntity = createHumanEntity();
     const personaEntity = createPersonaEntity();
 
-    const result = buildResponseSystemPrompt(humanEntity, personaEntity, defaultPersona);
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, defaultPersona);
 
     expect(result).toContain("Current time:");
   });
 
-  it("should use long_description when provided", () => {
+  it("should use long_description when provided", async () => {
     const humanEntity = createHumanEntity();
     const personaEntity = createPersonaEntity();
     const personaWithDesc: PersonaIdentity = {
@@ -248,12 +285,12 @@ describe("buildResponseSystemPrompt", () => {
       long_description: "A helpful assistant who loves to assist.",
     };
 
-    const result = buildResponseSystemPrompt(humanEntity, personaEntity, personaWithDesc);
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, personaWithDesc);
 
     expect(result).toContain("A helpful assistant who loves to assist.");
   });
 
-  it("should fall back to short_description when long_description missing", () => {
+  it("should fall back to short_description when long_description missing", async () => {
     const humanEntity = createHumanEntity();
     const personaEntity = createPersonaEntity();
     const personaWithShort: PersonaIdentity = {
@@ -261,26 +298,26 @@ describe("buildResponseSystemPrompt", () => {
       short_description: "a helpful assistant",
     };
 
-    const result = buildResponseSystemPrompt(humanEntity, personaEntity, personaWithShort);
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, personaWithShort);
 
     expect(result).toContain("a helpful assistant");
   });
 
-  it("should fall back to default description when no descriptions provided", () => {
+  it("should fall back to default description when no descriptions provided", async () => {
     const humanEntity = createHumanEntity();
     const personaEntity = createPersonaEntity();
     const barePersona: PersonaIdentity = { name: "Minimal" };
 
-    const result = buildResponseSystemPrompt(humanEntity, personaEntity, barePersona);
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, barePersona);
 
     expect(result).toContain("a conversational companion");
   });
 
-  it("should show empty state when human data is minimal", () => {
+  it("should show empty state when human data is minimal", async () => {
     const humanEntity = createHumanEntity();
     const personaEntity = createPersonaEntity([], [], ["*"]);
 
-    const result = buildResponseSystemPrompt(humanEntity, personaEntity, defaultPersona);
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, defaultPersona);
 
     expect(result).toContain("Still getting to know them");
   });
