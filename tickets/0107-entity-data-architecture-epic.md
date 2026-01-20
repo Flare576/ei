@@ -195,7 +195,7 @@ Instead of one massive "update all concepts" call:
 
 ### Prompt Restructuring
 - [x] 0119: Response Prompt Overhaul (QA - new entity-based prompt structure, tests passing)
-- [ ] 0120: Static Concepts → Prompt Templates
+- [x] 0120: Static Concepts → Prompt Templates (QA - static concepts removed, seed traits added, tests passing)
 - [ ] 0121: Ei-Specific System Prompt
 
 ### Cleanup

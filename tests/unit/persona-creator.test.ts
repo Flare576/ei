@@ -1,20 +1,24 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { generatePersonaDescriptions, createPersonaWithLLM } from '../../src/persona-creator.js';
-import type { ConceptMap, Concept } from '../../src/types.js';
-import type { PersonaDescriptions } from '../../src/prompts.js';
+import type { PersonaEntity, Trait, Topic } from '../../src/types.js';
 
-// Mock dependencies
+interface PersonaDescriptions {
+  short_description: string;
+  long_description: string;
+}
+
 vi.mock('../../src/llm.js', () => ({
   callLLMForJSON: vi.fn()
 }));
 
-vi.mock('../../src/prompts.js', () => ({
-  buildDescriptionPrompt: vi.fn()
-}));
-
 vi.mock('../../src/storage.js', () => ({
   createPersonaDirectory: vi.fn(),
-  loadConceptMap: vi.fn(() => Promise.resolve({ entity: 'system', concepts: [], last_updated: null })),
+  loadPersonaEntity: vi.fn(() => Promise.resolve({ 
+    entity: 'system', 
+    traits: [], 
+    topics: [], 
+    last_updated: null 
+  })),
   setStateManager: vi.fn(),
   getDataPath: vi.fn(() => "/tmp/ei-test"),
 }));
@@ -24,21 +28,20 @@ vi.mock('fs/promises', () => ({
 }));
 
 import { callLLMForJSON } from '../../src/llm.js';
-import { buildDescriptionPrompt } from '../../src/prompts.js';
 
-const createTestConceptMap = (personaName: string = 'test'): ConceptMap => ({
+const createTestPersonaEntity = (personaName: string = 'test'): PersonaEntity => ({
   entity: 'system',
   last_updated: null,
-  concepts: [
+  traits: [
     {
-      name: 'Test Concept',
-      description: 'A test concept',
-      level_current: 0.5,
-      level_ideal: 0.7,
+      name: 'Test Trait',
+      description: 'A test trait',
       sentiment: 0.0,
-      type: 'persona'
+      strength: 0.7,
+      last_updated: new Date().toISOString()
     }
-  ]
+  ],
+  topics: []
 });
 
 describe('Persona Creator', () => {
@@ -53,67 +56,50 @@ describe('Persona Creator', () => {
         long_description: 'A thoughtful and engaging AI companion that helps with various tasks.'
       };
 
-      vi.mocked(buildDescriptionPrompt).mockReturnValue({
-        system: 'system prompt',
-        user: 'user prompt'
-      });
       vi.mocked(callLLMForJSON).mockResolvedValue(mockDescriptions);
 
-      const conceptMap = createTestConceptMap('TestPersona');
-      const result = await generatePersonaDescriptions('TestPersona', conceptMap);
+      const personaEntity = createTestPersonaEntity('TestPersona');
+      const result = await generatePersonaDescriptions('TestPersona', personaEntity);
 
       expect(result).toEqual(mockDescriptions);
-      expect(buildDescriptionPrompt).toHaveBeenCalledWith('TestPersona', conceptMap);
       expect(callLLMForJSON).toHaveBeenCalledWith(
-        'system prompt',
-        'user prompt',
+        expect.stringContaining('generating brief descriptions'),
+        expect.stringContaining('TestPersona'),
         { signal: undefined, temperature: 0.5, model: undefined, operation: 'generation' }
       );
     });
 
     test('passes abort signal to LLM call', async () => {
       const controller = new AbortController();
-      vi.mocked(buildDescriptionPrompt).mockReturnValue({
-        system: 'system',
-        user: 'user'
-      });
       vi.mocked(callLLMForJSON).mockResolvedValue({
         short_description: 'test',
         long_description: 'test description'
       });
 
-      const conceptMap = createTestConceptMap();
-      await generatePersonaDescriptions('test', conceptMap, controller.signal);
+      const personaEntity = createTestPersonaEntity();
+      await generatePersonaDescriptions('test', personaEntity, controller.signal);
 
       expect(callLLMForJSON).toHaveBeenCalledWith(
-        'system',
-        'user',
+        expect.any(String),
+        expect.any(String),
         { signal: controller.signal, temperature: 0.5, model: undefined, operation: 'generation' }
       );
     });
 
     test('returns null on LLM error', async () => {
-      vi.mocked(buildDescriptionPrompt).mockReturnValue({
-        system: 'system',
-        user: 'user'
-      });
       vi.mocked(callLLMForJSON).mockRejectedValue(new Error('LLM failed'));
 
-      const conceptMap = createTestConceptMap();
-      const result = await generatePersonaDescriptions('test', conceptMap);
+      const personaEntity = createTestPersonaEntity();
+      const result = await generatePersonaDescriptions('test', personaEntity);
 
       expect(result).toBeNull();
     });
 
     test('returns null when LLM returns null', async () => {
-      vi.mocked(buildDescriptionPrompt).mockReturnValue({
-        system: 'system',
-        user: 'user'
-      });
       vi.mocked(callLLMForJSON).mockResolvedValue(null);
 
-      const conceptMap = createTestConceptMap();
-      const result = await generatePersonaDescriptions('test', conceptMap);
+      const personaEntity = createTestPersonaEntity();
+      const result = await generatePersonaDescriptions('test', personaEntity);
 
       expect(result).toBeNull();
     });
@@ -124,36 +110,39 @@ describe('Persona Creator', () => {
         long_description: 'A longer description that provides more context about the persona and their characteristics.'
       };
 
-      vi.mocked(buildDescriptionPrompt).mockReturnValue({
-        system: 'system',
-        user: 'user'
-      });
       vi.mocked(callLLMForJSON).mockResolvedValue(mockDescriptions);
 
-      const conceptMap = createTestConceptMap();
-      const result = await generatePersonaDescriptions('test', conceptMap);
+      const personaEntity = createTestPersonaEntity();
+      const result = await generatePersonaDescriptions('test', personaEntity);
 
       expect(result?.short_description).toBeTruthy();
       expect(result?.long_description).toBeTruthy();
-      expect(result?.short_description.split(' ').length).toBeLessThan(20); // Reasonable short description
-      expect(result?.long_description.length).toBeGreaterThan(result?.short_description.length);
+      const wordCount = result?.short_description.split(' ').length ?? 0;
+      expect(wordCount).toBeLessThan(20);
+      if (result) {
+        expect(result.long_description.length).toBeGreaterThan(result.short_description.length);
+      }
     });
   });
 
   describe('createPersonaWithLLM', () => {
-    test('creates persona with basic description', async () => {
+    test('creates persona with traits and topics', async () => {
       const mockGenerationResult = {
         aliases: ['helper', 'assistant'],
-        static_level_adjustments: {
-          'Transparency About Nature': { level_ideal: 0.3 }
-        },
-        additional_concepts: [{
+        traits: [{
           name: 'Helpfulness',
           description: 'Desire to be helpful',
-          level_current: 0.5,
-          level_ideal: 0.8,
           sentiment: 0.0,
-          type: 'persona' as const
+          strength: 0.8,
+          last_updated: new Date().toISOString()
+        }],
+        topics: [{
+          name: 'Task Management',
+          description: 'Organizing and completing tasks',
+          level_current: 0.5,
+          level_ideal: 0.7,
+          sentiment: 0.6,
+          last_updated: new Date().toISOString()
         }]
       };
 
@@ -163,13 +152,8 @@ describe('Persona Creator', () => {
       };
 
       vi.mocked(callLLMForJSON)
-        .mockResolvedValueOnce(mockGenerationResult) // First call for persona generation
-        .mockResolvedValueOnce(mockDescriptions);    // Second call for descriptions
-
-      vi.mocked(buildDescriptionPrompt).mockReturnValue({
-        system: 'desc system',
-        user: 'desc user'
-      });
+        .mockResolvedValueOnce(mockGenerationResult)
+        .mockResolvedValueOnce(mockDescriptions);
 
       const result = await createPersonaWithLLM('Helper', 'A helpful AI assistant');
 
@@ -178,35 +162,55 @@ describe('Persona Creator', () => {
       expect(result.short_description).toBe('A helpful assistant');
       expect(result.long_description).toBe('A thoughtful AI that helps with tasks');
       
-      // Should have 7 static concepts + 1 additional
-      expect(result.concepts).toHaveLength(8);
+      expect(result.traits.length).toBeGreaterThanOrEqual(2);
+      const helpfulnessTrait = result.traits.find(t => t.name === 'Helpfulness');
+      expect(helpfulnessTrait).toBeDefined();
       
-      // Check that static level adjustment was applied
-      const transparencyConcept = result.concepts.find(c => c.name === 'Transparency About Nature');
-      expect(transparencyConcept?.level_ideal).toBe(0.3);
+      const identityTrait = result.traits.find(t => t.name === 'Consistent Character');
+      expect(identityTrait).toBeDefined();
+      expect(identityTrait?.strength).toBe(0.8);
       
-      // Check additional concept was added
-      const helpfulnessConcept = result.concepts.find(c => c.name === 'Helpfulness');
-      expect(helpfulnessConcept).toBeDefined();
-      expect(helpfulnessConcept?.type).toBe('persona');
+      expect(result.topics).toHaveLength(1);
+      expect(result.topics[0].name).toBe('Task Management');
+    });
+
+    test('adds growth trait when description mentions growth', async () => {
+      const mockGenerationResult = {
+        aliases: ['coach'],
+        traits: [],
+        topics: []
+      };
+
+      vi.mocked(callLLMForJSON)
+        .mockResolvedValueOnce(mockGenerationResult)
+        .mockResolvedValueOnce(null);
+
+      const result = await createPersonaWithLLM('Coach', 'A persona to help me grow and improve');
+
+      expect(result.traits.length).toBe(2);
+      const growthTrait = result.traits.find(t => t.name === 'Growth-Oriented');
+      expect(growthTrait).toBeDefined();
+      expect(growthTrait?.strength).toBe(0.7);
     });
 
     test('handles minimal persona creation with no description', async () => {
       const mockGenerationResult = {
         aliases: ['basic'],
-        static_level_adjustments: {},
-        additional_concepts: []
+        traits: [],
+        topics: []
       };
 
       vi.mocked(callLLMForJSON)
         .mockResolvedValueOnce(mockGenerationResult)
-        .mockResolvedValueOnce(null); // No descriptions generated
+        .mockResolvedValueOnce(null);
 
       const result = await createPersonaWithLLM('Basic', '');
 
       expect(result.entity).toBe('system');
       expect(result.aliases).toEqual(['basic']);
-      expect(result.concepts).toHaveLength(7); // Only static concepts
+      expect(result.traits).toHaveLength(1);
+      expect(result.traits[0].name).toBe('Consistent Character');
+      expect(result.topics).toHaveLength(0);
       expect(result.short_description).toBeUndefined();
       expect(result.long_description).toBeUndefined();
     });
@@ -217,41 +221,20 @@ describe('Persona Creator', () => {
       const result = await createPersonaWithLLM('Failed', 'test description');
 
       expect(result.entity).toBe('system');
-      expect(result.concepts).toHaveLength(7); // Static concepts with defaults
-      expect(result.aliases).toEqual([]); // Empty array when LLM fails
-    });
-
-    test('preserves default static concept values when no adjustments', async () => {
-      const mockGenerationResult = {
-        aliases: [],
-        static_level_adjustments: {},
-        additional_concepts: []
-      };
-
-      vi.mocked(callLLMForJSON)
-        .mockResolvedValueOnce(mockGenerationResult)
-        .mockResolvedValueOnce(null);
-
-      const result = await createPersonaWithLLM('Default', 'basic persona');
-
-      // Check that default values are preserved
-      const promoteConcept = result.concepts.find(c => c.name === 'Promote Human-to-Human Interaction');
-      expect(promoteConcept?.level_ideal).toBe(0.8); // Default value
-
-      const respectConcept = result.concepts.find(c => c.name === 'Respect Conversational Boundaries');
-      expect(respectConcept?.level_ideal).toBe(0.7); // Default value
+      expect(result.traits).toHaveLength(1);
+      expect(result.traits[0].name).toBe('Consistent Character');
+      expect(result.aliases).toEqual([]);
     });
 
     test('uses appropriate temperature for persona generation', async () => {
       vi.mocked(callLLMForJSON).mockResolvedValue({
         aliases: [],
-        static_level_adjustments: {},
-        additional_concepts: []
+        traits: [],
+        topics: []
       });
 
       await createPersonaWithLLM('Test', 'test description');
 
-      // First call should use temperature 0.3 for persona generation
       expect(callLLMForJSON).toHaveBeenCalledWith(
         expect.any(String),
         expect.stringContaining('Create a persona based on this description'),
@@ -259,11 +242,17 @@ describe('Persona Creator', () => {
       );
     });
 
-    test('includes all required static concepts', async () => {
+    test('always includes identity coherence seed trait', async () => {
       const mockGenerationResult = {
         aliases: [],
-        static_level_adjustments: {},
-        additional_concepts: []
+        traits: [{
+          name: 'Custom Trait',
+          description: 'A custom trait',
+          sentiment: 0.0,
+          strength: 0.5,
+          last_updated: new Date().toISOString()
+        }],
+        topics: []
       };
 
       vi.mocked(callLLMForJSON)
@@ -272,21 +261,9 @@ describe('Persona Creator', () => {
 
       const result = await createPersonaWithLLM('Complete', 'test');
 
-      const expectedStaticConcepts = [
-        'Promote Human-to-Human Interaction',
-        'Respect Conversational Boundaries',
-        'Maintain Identity Coherence',
-        'Emotional Authenticity Over Sycophancy',
-        'Transparency About Nature',
-        'Encourage Growth Over Comfort',
-        'Context-Aware Proactive Timing'
-      ];
-
-      for (const conceptName of expectedStaticConcepts) {
-        const concept = result.concepts.find(c => c.name === conceptName);
-        expect(concept).toBeDefined();
-        expect(concept?.type).toBe('static');
-      }
+      const identityTrait = result.traits.find(t => t.name === 'Consistent Character');
+      expect(identityTrait).toBeDefined();
+      expect(identityTrait?.description).toContain('Maintains personality consistency');
     });
   });
 });

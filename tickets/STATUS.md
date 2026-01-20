@@ -1,9 +1,10 @@
 # Ticket Status Summary
 
-## QA ⚠️ (3 tickets)
+## QA ⚠️ (4 tickets)
 - 0111: Fast-Scan Prompt Implementation
 - 0115: Data Verification Flow (Daily Ceremony)
 - 0119: Response Prompt Overhaul
+- 0120: Static Concepts → Prompt Templates
 
 ## DONE ✅ (72 tickets)
 - 0078: Persona Delete Command
@@ -122,7 +123,7 @@
 
 **Last Updated**: 2026-01-20
 **Total Tickets**: 127 created (0114 marked done, was already implemented in 0111/0112)
-**Stats**: 72 done, 2 QA, 0 in_progress, 32 pending (14 in 0107 epic), 13 cancelled
+**Stats**: 72 done, 4 QA, 0 in_progress, 31 pending (13 in 0107 epic), 13 cancelled
 
 ## Epic Status
 
@@ -188,7 +189,7 @@ Absorbs 0102 (Ei Core Persona) and 0103 (Persona Prompt Architecture).
 - 0117: PENDING - /clarify Command
 - 0118: DONE - Ei Heartbeat Simplification
 - 0119: QA - Response Prompt Overhaul
-- 0120: PENDING - Static Concepts → Prompt Templates
+- 0120: QA - Static Concepts → Prompt Templates
 - 0121: PENDING - Ei-Specific System Prompt
 
 **Cleanup:**

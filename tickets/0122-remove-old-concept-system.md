@@ -84,7 +84,7 @@ The following items were already completed as part of ticket 0109:
 - [x] Remove `stripConceptMetaFieldsForLLM` function (lines 5-14) **[Deleted in 0111]**
 - [x] Update `getVisibleConcepts` → renamed to `filterByVisibility` **[DONE in 0119]** - now returns FilteredHumanData
 - [x] Update `getVisiblePersonas` to use PersonaEntity **[DONE in 0119]**
-- [ ] Update `buildDescriptionPrompt` to use PersonaEntity (currently still uses ConceptMap)
+- [x] Update `buildDescriptionPrompt` to use PersonaEntity **[Deleted in 0120]** - moved to persona-creator.ts
 
 ### src/processor.ts
 - [x] Update imports to use HumanEntity/PersonaEntity **[DONE in 0119]** - removed Concept/ConceptMap imports
@@ -97,13 +97,13 @@ The following items were already completed as part of ticket 0109:
 - [ ] Remove all old concept update orchestration code (lines ~200-350) - replaced by new extraction system
 
 ### src/validate.ts
-- [x] Remove static concept validation (done in 0120)
-- [ ] **DELETE ENTIRE FILE** (77 lines)
+- [x] Remove static concept validation **[Deleted in 0120]**
+- [x] **DELETE ENTIRE FILE** **[Deleted in 0120]** (77 lines)
   - `STATIC_CONCEPT_NAMES` array (lines 3-11)
   - `validateSystemConcepts()` function (lines 13-47)
   - `mergeWithOriginalStatics()` function (lines 49-76)
   - All static concept validation logic
-- [ ] Remove imports from processor.ts, concept-queue.ts
+- [x] Remove imports from processor.ts, concept-queue.ts **[No imports found in 0120]**
 
 ### src/concept-reconciliation.ts
 - [x] **DELETED ENTIRELY in ticket 0116** (53 lines)
@@ -123,7 +123,7 @@ The following items were already completed as part of ticket 0109:
   - Replaced by `src/llm-queue.ts` with new queue types and persistence
 
 ### src/persona-creator.ts
-- [ ] Remove all static concept definitions (lines 7-63)
+- [x] Remove all static concept definitions **[Deleted in 0120]** (lines 7-63)
   - Hardcoded "Promote Human-to-Human Interaction"
   - Hardcoded "Respect Conversational Boundaries"
   - Hardcoded "Maintain Identity Coherence"
@@ -131,9 +131,9 @@ The following items were already completed as part of ticket 0109:
   - Hardcoded "Transparency About Nature"
   - Hardcoded "Encourage Growth Over Comfort"
   - Hardcoded "Context-Aware Proactive Timing"
-- [ ] Update `generatePersonaDescriptions` to return PersonaEntity structure **[Required for 0112 - description_regen]**
-- [ ] Add optional seed trait generation (e.g., "Warm but Direct" for Ei)
-- [ ] Simplify to identity generation only (aliases + descriptions)
+- [x] Update `generatePersonaDescriptions` to use PersonaEntity structure **[Updated in 0120]**
+- [x] Add optional seed trait generation **[Done in 0120]** - "Consistent Character" always added, "Growth-Oriented" conditionally added
+- [x] Simplified to PersonaEntity generation **[Done in 0120]** (traits + topics + identity)
 
 ### src/blessed/app.ts
 - [x] Remove `concept_processed: true` assignment **[Deleted in 0110]**
@@ -166,6 +166,8 @@ The following items were already completed as part of ticket 0109:
 
 ### tests/unit/
 - [x] concept-decay.test.ts **DELETED in 0113** → Replaced by topic-decay.test.ts
+- [x] validate.test.ts **DELETED in 0120** → No longer needed (static concept validation removed)
+- [x] persona-creator.test.ts **UPDATED in 0120** → Now uses PersonaEntity, tests seed traits
 - [ ] concept-reconciliation.test.ts → entity-reconciliation.test.ts
 - [ ] concept-visibility.test.ts → entity-visibility.test.ts
 - [ ] processor.test.ts → update for new flow

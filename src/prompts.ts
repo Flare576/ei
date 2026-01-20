@@ -105,10 +105,7 @@ export function getVisiblePersonas(
   return visible;
 }
 
-export interface PersonaDescriptions {
-  short_description: string;
-  long_description: string;
-}
+
 
 
 
@@ -430,44 +427,7 @@ function countTrailingSystemMessages(history: Message[] | null): number {
 
 
 
-export function buildDescriptionPrompt(
-  personaName: string,
-  concepts: ConceptMap
-): { system: string; user: string } {
-  const personaConcepts = concepts.concepts.filter(c => c.type === "persona");
-  const topicConcepts = concepts.concepts.filter(c => c.type === "topic");
-  const staticConcepts = concepts.concepts.filter(c => c.type === "static");
-  
-  const system = `You are generating brief descriptions for an AI persona named "${personaName}".
 
-Based on the persona's concepts, generate two descriptions:
-1. short_description: A 10-15 word summary capturing the persona's core personality
-2. long_description: 2-3 sentences describing the persona's personality, interests, and approach
-
-Return JSON in this exact format:
-{
-  "short_description": "...",
-  "long_description": "..."
-}
-
-Keep descriptions natural and characterful - they should help a user quickly understand who this persona is.`;
-
-  const conceptList = [
-    ...personaConcepts.map(c => `[persona] ${c.name}: ${c.description}`),
-    ...topicConcepts.map(c => `[topic] ${c.name}: ${c.description}`),
-    ...staticConcepts.slice(0, 3).map(c => `[behavioral] ${c.name}`),
-  ].join("\n");
-
-  const user = `Persona: ${personaName}
-${concepts.aliases?.length ? `Aliases: ${concepts.aliases.join(", ")}` : ""}
-
-Concepts:
-${conceptList || "(No concepts yet - generate a generic starter description)"}
-
-Generate the descriptions now.`;
-
-  return { system, user };
-}
 
 export function buildVerificationResponsePrompt(
   validationList: string,

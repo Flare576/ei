@@ -1,6 +1,6 @@
 # 0120: Static Concepts → Prompt Templates
 
-**Status**: PENDING
+**Status**: QA
 
 ## Summary
 
@@ -127,15 +127,47 @@ Since we're not maintaining backward compatibility:
 
 ## Acceptance Criteria
 
-- [ ] `static` type removed from codebase
-- [ ] Universal guidelines template created
-- [ ] Ei-specific guidelines template created
-- [ ] Response prompt uses templates (0119)
-- [ ] Seed traits for new personas include "Consistent Character"
-- [ ] Persona generation analyzes growth intent
-- [ ] DEFAULT_SYSTEM_CONCEPTS removed
-- [ ] Static validation removed
-- [ ] Tests updated
+- [x] `static` type removed from codebase (was already removed in prior tickets)
+- [x] Universal guidelines template created (already existed in buildGuidelinesSection)
+- [x] Ei-specific guidelines template created (already existed in buildGuidelinesSection)
+- [x] Response prompt uses templates (0119) (already done in 0119)
+- [x] Seed traits for new personas include "Consistent Character"
+- [x] Persona generation analyzes growth intent (simple keyword-based detection)
+- [x] DEFAULT_SYSTEM_CONCEPTS removed (already done in 0109)
+- [x] Static validation removed (validate.ts deleted)
+- [x] Tests updated (persona-creator.test.ts updated to PersonaEntity, validate.test.ts deleted)
+
+## Implementation Notes
+
+### Changes Made in 0120
+
+**src/persona-creator.ts:**
+- Removed `EI_STATIC_CONCEPTS` array (lines 6-63)
+- Removed `Concept` and `ConceptMap` imports
+- Added `SEED_TRAIT_IDENTITY` and `SEED_TRAIT_GROWTH` constants
+- Updated `createPersonaWithLLM()` to generate PersonaEntity with traits/topics
+- Added simple growth intent detection (checks for "growth", "improve", "challenge" in description)
+- Updated `generatePersonaDescriptions()` to work with PersonaEntity instead of ConceptMap
+- Moved `PersonaDescriptions` interface from prompts.ts to persona-creator.ts
+
+**src/prompts.ts:**
+- Removed `buildDescriptionPrompt()` function (moved to persona-creator.ts)
+- Removed `PersonaDescriptions` export (moved to persona-creator.ts)
+- Guidelines already existed in `buildGuidelinesSection()` from 0119
+
+**src/validate.ts:**
+- **DELETED ENTIRE FILE** - no longer needed without static concepts
+
+**tests/unit/validate.test.ts:**
+- **DELETED ENTIRE FILE** - no longer needed
+
+**tests/unit/persona-creator.test.ts:**
+- Updated all tests to use PersonaEntity instead of ConceptMap
+- Removed mocking of `buildDescriptionPrompt` (no longer exists)
+- Updated expectations: check for traits/topics instead of concepts
+- Test seed trait generation ("Consistent Character" always added)
+- Test growth trait detection
+- All 11 tests passing
 
 ## Dependencies
 
