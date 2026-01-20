@@ -58,15 +58,15 @@ The following items were already completed as part of ticket 0109:
 
 ### src/prompts.ts
 - [x] Rebuild `buildResponseSystemPrompt` (done in 0119)
-- [ ] Remove `MUTABLE_TYPES` constant (line 3)
-- [ ] Remove `buildConceptUpdateSystemPrompt` (replaced in 0111-0112)
-- [ ] Remove `buildConceptUpdateUserPrompt` (replaced in 0111-0112)
-- [ ] Remove `formatConceptsByType` function (lines 97-112)
-- [ ] Remove `getHighestNeedConcepts` function (lines 114-122)
-- [ ] Remove `stripConceptMetaFieldsForLLM` function (lines 12-14)
+- [x] Remove `MUTABLE_TYPES` constant (line 3) **[Deleted in 0111]**
+- [x] Remove `buildConceptUpdateSystemPrompt` (lines 306-439) **[Deleted in 0111]** - replaced by extraction.ts fast-scan and detail prompts
+- [x] Remove `buildConceptUpdateUserPrompt` (lines 441-461) **[Deleted in 0111]** - replaced by extraction.ts
+- [x] Remove `formatConceptsByType` function (lines 84-99) **[Deleted in 0111]**
+- [x] Remove `getHighestNeedConcepts` function (lines 101-109) **[Deleted in 0111]**
+- [x] Remove `stripConceptMetaFieldsForLLM` function (lines 5-14) **[Deleted in 0111]**
 - [ ] Update `getVisibleConcepts` (lines 18-34) → new visibility logic for data buckets
 - [ ] Update all `ConceptMap` parameters to `PersonaEntity`/`HumanEntity`
-- [ ] Remove type-based filtering throughout (all `c.type === "X"` checks)
+- [ ] Remove type-based filtering throughout (all `c.type === "X"` checks) - **[buildResponseSystemPrompt and buildDescriptionPrompt still use old structures]**
 
 ### src/processor.ts
 - [ ] Remove `conceptsChanged` helper function (lines 26-47)
@@ -266,17 +266,20 @@ const DEFAULT_EI_PERSONA: PersonaEntity = {
 - `ProcessResult.humanConceptsUpdated`
 - `ProcessResult.systemConceptsUpdated`
 
-### 9. Prompt Building Functions
-**Functions to Remove** (prompts.ts):
-- `buildConceptUpdateSystemPrompt()` - Replaced in ticket 0112
-- `buildConceptUpdateUserPrompt()` - Replaced in ticket 0112
-- `stripConceptMetaFieldsForLLM()` (lines 12-14)
-- `formatConceptsByType()` (lines 97-112)
-- `getHighestNeedConcepts()` (lines 114-122)
+### 9. Prompt Building Functions **[Partially Deleted in 0111]**
+**Functions Removed in 0111** (prompts.ts):
+- ✅ `buildConceptUpdateSystemPrompt()` (lines 306-439) - Replaced by src/extraction.ts **[Deleted in 0111]**
+- ✅ `buildConceptUpdateUserPrompt()` (lines 441-461) - Replaced by src/extraction.ts **[Deleted in 0111]**
+- ✅ `stripConceptMetaFieldsForLLM()` (lines 5-14) **[Deleted in 0111]**
+- ✅ `formatConceptsByType()` (lines 84-99) **[Deleted in 0111]**
+- ✅ `getHighestNeedConcepts()` (lines 101-109) **[Deleted in 0111]**
+- ✅ `MUTABLE_TYPES` constant (line 3) **[Deleted in 0111]**
 
 **Functions to Update**:
 - `getVisibleConcepts()` (lines 18-34) → Filter per data bucket, not concepts
 - All functions taking `ConceptMap` → Update to `PersonaEntity`/`HumanEntity`
+- `buildResponseSystemPrompt()` still uses old Concept structures
+- `buildDescriptionPrompt()` still uses old Concept structures
 
 ### 10. Persona Creator Updates
 **Remove** (persona-creator.ts):

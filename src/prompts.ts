@@ -1,18 +1,5 @@
 import { Concept, ConceptMap, Message, ConceptType } from "./types.js";
 
-const MUTABLE_TYPES: ConceptType[] = ["topic", "person", "persona"];
-
-/**
- * Strips metadata fields from concepts before showing to LLM.
- * LLM should not see or manage these fields - code handles them post-processing:
- * - persona_groups: Group visibility control
- * - learned_by: Origin attribution (set once at creation)
- * - last_updated: Timestamp management
- */
-function stripConceptMetaFieldsForLLM(concepts: Concept[]): Omit<Concept, 'persona_groups' | 'learned_by' | 'last_updated'>[] {
-  return concepts.map(({ persona_groups, learned_by, last_updated, ...rest }) => rest);
-}
-
 import { GLOBAL_GROUP } from "./concept-reconciliation.js";
 
 export function getVisibleConcepts(persona: ConceptMap, humanConcepts: Concept[]): Concept[] {
@@ -94,32 +81,7 @@ export interface PersonaDescriptions {
   long_description: string;
 }
 
-function formatConceptsByType(concepts: Concept[], type: ConceptType): string {
-  const filtered = concepts.filter(c => c.type === type);
-  if (filtered.length === 0) return "(none)";
-  
-  // Sort by delta (highest need first) for attention primacy
-  const sorted = filtered
-    .map(c => ({ concept: c, delta: c.level_ideal - c.level_current }))
-    .sort((a, b) => b.delta - a.delta)
-    .map(x => x.concept);
-  
-  return sorted.map(c => {
-    const delta = c.level_ideal - c.level_current;
-    const deltaStr = delta > 0 ? `(want +${delta.toFixed(2)})` : delta < 0 ? `(want ${delta.toFixed(2)})` : "(satisfied)";
-    return `- ${c.name}: current=${c.level_current}, ideal=${c.level_ideal} ${deltaStr}`;
-  }).join("\n");
-}
 
-function getHighestNeedConcepts(concepts: Concept[], count: number = 3): Concept[] {
-  return concepts
-    .filter(c => MUTABLE_TYPES.includes(c.type))
-    .map(c => ({ concept: c, delta: c.level_ideal - c.level_current }))
-    .filter(x => x.delta > 0.1)
-    .sort((a, b) => b.delta - a.delta)
-    .slice(0, count)
-    .map(x => x.concept);
-}
 
 function getConversationState(recentHistory: Message[] | null, delayMs: number): string {
   if (!recentHistory || recentHistory.length === 0) {
@@ -341,162 +303,7 @@ function countTrailingSystemMessages(history: Message[] | null): number {
   return count;
 }
 
-export function buildConceptUpdateSystemPrompt(
-  entity: "human" | "system",
-  concepts: ConceptMap,
-  persona: string = "ei"
-): string {
-  const entityLabel = entity === "human" ? "Human" : "System (yourself)";
 
-  return `You are EI, a system that tracks "Concepts" - emotional and relational gauges.
-
-## Concept Types
-
-- **static**: Behavioral rules and guardrails. System-only. CANNOT be added, removed, or renamed. Levels can be adjusted.
-- **persona**: Personality traits, quirks, communication styles. Description explains why. Elasticity is typically 0 (changes only via explicit feedback). level_current = expression strength, level_ideal = target strength.
-- **person**: People - by name or relationship. Description captures feelings, history, hopes, fears. Levels represent relationship closeness/engagement.
-- **topic**: Subjects, hobbies, interests, places, media, etc. Levels represent saturation and desire for engagement.
-
-## Concept Structure
-
-- name: Identifier
-- description: Context and nuance (should evolve as you learn more)
-- level_current (0-1): Current state
-- level_ideal (0-1): Desired state
-- sentiment (-1 to 1): Emotional valence toward concept (-1=negative, 0=neutral, 1=positive)
-- type: One of: static, persona, person, topic
-
-## Understanding level_ideal (Discussion Desire)
-
-level_ideal represents HOW MUCH THE ENTITY WANTS TO DISCUSS this concept.
-This is NOT the same as how much they like or care about it!
-
-Examples:
-- Birthday cake: Someone might LOVE it (high sentiment) but only want to discuss 
-  it around their birthday (low level_ideal)
-- Work stress: Someone might HATE it (negative sentiment) but need to discuss it 
-  frequently for support (moderate level_ideal)
-- A deceased loved one: Deep positive sentiment, but low discussion desire due to grief
-
-### When to Adjust level_ideal
-
-Adjustments should be RARE. Only change level_ideal when:
-
-1. **Explicit Request**: Entity directly asks to discuss more/less
-   - "I don't want to talk about work anymore" → decrease
-   - "Tell me more about X" (repeatedly) → slight increase
-
-2. **Sustained Engagement Pattern**: Over multiple messages
-   - Entity consistently brings up topic → slight increase
-   - Entity consistently changes subject away → slight decrease
-
-3. **Clear Avoidance Signals**: 
-   - Short responses when topic comes up → decrease
-   - Explicit subject changes → decrease
-
-### How Much to Adjust
-
-Use the intensity/length/frequency of signals:
-- Strong explicit request: ±0.2 to ±0.3
-- Moderate pattern over time: ±0.1 to ±0.15
-- Slight signal: ±0.05
-
-Also apply logarithmic scaling:
-- Values near 0.0 or 1.0 are harder to change (extremes are stable)
-- Values near 0.5 change more easily
-
-## Understanding sentiment (Emotional Valence)
-
-sentiment represents HOW THE ENTITY FEELS about this concept.
-Range: -1.0 (strongly negative) to 1.0 (strongly positive), 0.0 = neutral
-
-This is independent of level_current (exposure) and level_ideal (discussion desire)!
-
-Examples:
-- "I love my dog so much" → sentiment toward "dog" concept: ~0.8
-- "Work has been really stressful lately" → sentiment toward "work": ~-0.4
-- "The weather is nice today" → sentiment toward "weather": ~0.3
-- "I hate dealing with taxes" → sentiment toward "taxes": ~-0.8
-- "Programming is amazing" → sentiment toward "programming": ~0.9
-
-### When to Update sentiment
-
-Update sentiment whenever the entity expresses emotion about a concept:
-
-1. **Explicit emotional statements**
-   - "I hate X" → strong negative (-0.6 to -0.9)
-   - "I love X" → strong positive (0.6 to 0.9)
-   - "X is okay" → mild/neutral (-0.2 to 0.2)
-
-2. **Implicit emotional signals**
-   - Enthusiastic language, exclamation marks → positive shift
-   - Complaints, frustration → negative shift
-   - Flat/disengaged tone → toward neutral
-
-3. **Context matters**
-   - Sarcasm should be interpreted correctly
-   - Past tense emotions may differ from present
-
-### Sentiment Analysis Guidelines
-
-- Don't predict emotions - reflect what was expressed
-- Can change frequently (emotions are volatile)
-- Default to 0.0 (neutral) when uncertain
-- Extreme values (-1.0, 1.0) should be rare
-- Consider the full context, not just keywords
-- Sentiment is independent from level_ideal (can hate something but need to discuss it)
-
-You need to update the Concept Map for the ${entityLabel}.
-
-Current Concept Map:
-\`\`\`json
-${JSON.stringify(stripConceptMetaFieldsForLLM(concepts.concepts), null, 2)}
-\`\`\`
-
-## Rules
-
-- NEVER add, remove, or rename concepts with type: "static"
-- You may adjust level_current for any concept based on the interaction
-- You may add new persona/person/topic concepts if discovered
-- You may remove persona/person/topic concepts if no longer relevant
-- Small level adjustments are normal - big swings are rare
-
-## Evolving Concepts
-
-- UPDATE a description when you learn new details
-- ADD a new concept only when discovering something genuinely distinct
-- MERGE smaller concepts into a broader one when they share similar levels and elasticity
-- Keep concepts SEPARATE when they have meaningfully different dynamics
-- For NEW concepts, set sentiment to 0.0 (neutral) unless emotion is clearly expressed
-
-Return ONLY a JSON array of concepts. For each concept include:
-- name, description, type
-- level_current: exposure level (0.0-1.0)
-- level_ideal: discussion desire (0.0-1.0) - rarely change this
-- sentiment: emotional valence (-1.0 to 1.0) - update based on expressed emotions`;
-}
-
-export function buildConceptUpdateUserPrompt(
-  humanMessage: string | null,
-  systemResponse: string | null,
-  persona: string = "ei"
-): string {
-  return `### Human Message ###
-${humanMessage || "No Message"}
-
-### System Response ###
-${systemResponse || "No Message"}
-
-Active Persona: ${persona}
-
-Remember: 
-- level_ideal = discussion desire, NOT sentiment
-- Only adjust level_ideal for explicit preference signals
-- sentiment = emotional valence - update when emotions are expressed about concepts
-- Perform sentiment analysis on statements about concepts
-
-Based on this exchange (or lack thereof), return the updated concept array as JSON.`;
-}
 
 export function buildDescriptionPrompt(
   personaName: string,

@@ -1,5 +1,8 @@
 # Ticket Status Summary
 
+## QA ⚠️ (1 ticket)
+- 0111: Fast-Scan Prompt Implementation
+
 ## DONE ✅ (70 tickets)
 - 0078: Persona Delete Command
 - 0044: New Conversation Command
@@ -115,7 +118,7 @@
 
 **Last Updated**: 2026-01-20
 **Total Tickets**: 125 created
-**Stats**: 70 done, 0 QA, 0 in_progress, 35 pending (17 in 0107 epic), 13 cancelled
+**Stats**: 70 done, 1 QA, 0 in_progress, 34 pending (16 in 0107 epic), 13 cancelled
 
 ## Epic Status
 
@@ -167,7 +170,7 @@ Absorbs 0102 (Ei Core Persona) and 0103 (Persona Prompt Architecture).
 - 0124: PENDING - Scheduled Jobs Infrastructure
 
 **Extraction System:**
-- 0111: PENDING - Fast-Scan Prompt Implementation
+- 0111: QA - Fast-Scan Prompt Implementation
 - 0112: PENDING - Detail Update Prompts (per data type)
 - 0113: PENDING - Extraction Frequency Controller
 - 0114: PENDING - Known Personas in Prompts

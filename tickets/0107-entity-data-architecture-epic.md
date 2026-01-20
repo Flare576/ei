@@ -179,7 +179,7 @@ Instead of one massive "update all concepts" call:
 - [ ] 0124: Scheduled Jobs Infrastructure (NEW)
 
 ### Extraction System
-- [ ] 0111: Fast-Scan Prompt Implementation
+- [x] 0111: Fast-Scan Prompt Implementation (QA - ready for integration testing)
 - [ ] 0112: Detail Update Prompts (per data type)
 - [ ] 0113: Extraction Frequency Controller
 - [ ] 0114: Known Personas in Prompts (renamed)
