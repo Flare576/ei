@@ -6,6 +6,32 @@
 
 Clean up all remnants of the old `Concept` and `ConceptMap` system once the new entity architecture is in place.
 
+## Changes Made in 0109 (Storage Migration)
+
+The following items were already completed as part of ticket 0109:
+
+**storage.ts - Deleted/Replaced:**
+- ✅ Removed `DEFAULT_HUMAN_CONCEPTS` → replaced with `DEFAULT_HUMAN_ENTITY`
+- ✅ Removed `DEFAULT_SYSTEM_CONCEPTS` → replaced with `DEFAULT_EI_PERSONA` (with "Warm but Direct" trait)
+- ✅ Removed `loadConceptMap()` → replaced with `loadHumanEntity()` and `loadPersonaEntity()`
+- ✅ Removed `saveConceptMap()` → replaced with `saveHumanEntity()` and `savePersonaEntity()`
+- ✅ Updated `initializeDataDirectory()` to use new entity types
+- ✅ Updated `listPersonas()` to use PersonaEntity
+- ✅ Renamed `PersonaWithConceptMap` → `PersonaWithEntity`
+- ✅ Renamed `loadAllPersonasWithConceptMaps()` → `loadAllPersonasWithEntities()`
+- ✅ Updated `getArchivedPersonas()` to use PersonaEntity
+- ✅ Updated `addPersonaAlias()` to use PersonaEntity
+- ✅ Updated `removePersonaAlias()` to use PersonaEntity
+- ✅ Updated `saveNewPersona()` signature: `ConceptMap` → `PersonaEntity`
+- ✅ Updated `loadPauseState()` / `savePauseState()` to use PersonaEntity
+- ✅ Updated `loadArchiveState()` / `saveArchiveState()` to use PersonaEntity
+- ✅ Removed import of `ConceptMap` from types.ts
+- ✅ Added import of `HumanEntity` and `PersonaEntity` from types.ts
+
+**storage.ts - Still Remaining:**
+- Message-level concept processing functions (`markMessagesConceptProcessed`, `getUnprocessedMessages`)
+- `concept_processed` field handling in message operations
+
 ## Files to Update
 
 ### src/types.ts
@@ -20,9 +46,12 @@ Clean up all remnants of the old `Concept` and `ConceptMap` system once the new 
   - Replacement: Per-data-type extraction tracking with timestamps
 
 ### src/storage.ts
-- [x] Remove `DEFAULT_SYSTEM_CONCEPTS` (done in 0109)
-- [x] Remove `loadConceptMap` / `saveConceptMap` (done in 0109)
-- [ ] Remove `DEFAULT_HUMAN_CONCEPTS` (lines 30-34) - replace with proper HumanEntity init
+- [x] Remove `DEFAULT_SYSTEM_CONCEPTS` **[Deleted in 0109]**
+- [x] Remove `loadConceptMap` / `saveConceptMap` **[Deleted in 0109]**
+- [x] Remove `DEFAULT_HUMAN_CONCEPTS` **[Deleted in 0109]** - replaced with DEFAULT_HUMAN_ENTITY
+- [x] `PersonaWithConceptMap` interface renamed to `PersonaWithEntity` **[Deleted in 0109]**
+- [x] `loadAllPersonasWithConceptMaps()` renamed to `loadAllPersonasWithEntities()` **[Deleted in 0109]**
+- [x] All ConceptMap parameters updated to PersonaEntity **[Deleted in 0109]**
 - [ ] Remove `markMessagesConceptProcessed()` function
 - [ ] Remove `getUnprocessedMessages()` function (lines 285-305)
 - [ ] Remove all `concept_processed` field handling (lines 223, 238, 316-317, 348)
@@ -149,8 +178,8 @@ Clean up all remnants of the old `Concept` and `ConceptMap` system once the new 
 
 **Replacement**: Baked into prompt templates (ticket 0120)
 
-### 4. DEFAULT Entity Structures
-**Current** (storage.ts:30-100):
+### 4. DEFAULT Entity Structures **[Deleted in 0109]**
+**OLD** (storage.ts:30-100) - **REMOVED**:
 ```typescript
 const DEFAULT_HUMAN_CONCEPTS: ConceptMap = {
   entity: "human",
@@ -168,7 +197,7 @@ const DEFAULT_SYSTEM_CONCEPTS: ConceptMap = {
 };
 ```
 
-**Replacement**:
+**NEW** (implemented in 0109):
 ```typescript
 const DEFAULT_HUMAN_ENTITY: HumanEntity = {
   entity: "human",
@@ -179,21 +208,35 @@ const DEFAULT_HUMAN_ENTITY: HumanEntity = {
   last_updated: null
 };
 
-const DEFAULT_PERSONA_ENTITY: PersonaEntity = {
+const DEFAULT_EI_PERSONA: PersonaEntity = {
   entity: "system",
-  aliases: [],
+  aliases: ["default", "core"],
   group_primary: null,
   groups_visible: ["*"],
-  traits: [],
+  traits: [
+    {
+      name: "Warm but Direct",
+      description: "Friendly and approachable while being honest and straightforward. Doesn't sugarcoat but delivers truth with care.",
+      sentiment: 0.3,
+      strength: 0.7,
+      last_updated: new Date().toISOString()
+    }
+  ],
   topics: [],
   last_updated: null
 };
 ```
 
-### 5. Storage Layer Functions (storage.ts)
-**Functions to Replace**:
-- `loadConceptMap()` → `loadHumanEntity()`, `loadPersonaEntity()`
-- `saveConceptMap()` → `saveHumanEntity()`, `savePersonaEntity()`
+### 5. Storage Layer Functions (storage.ts) **[Partially Deleted in 0109]**
+**Functions Replaced in 0109**:
+- ✅ `loadConceptMap()` → `loadHumanEntity()`, `loadPersonaEntity()` **[Deleted in 0109]**
+- ✅ `saveConceptMap()` → `saveHumanEntity()`, `savePersonaEntity()` **[Deleted in 0109]**
+- ✅ `saveNewPersona(personaName, ConceptMap)` → `saveNewPersona(personaName, PersonaEntity)` **[Updated in 0109]**
+- ✅ `loadPauseState()` / `savePauseState()` → Updated to use PersonaEntity **[Updated in 0109]**
+- ✅ `loadArchiveState()` / `saveArchiveState()` → Updated to use PersonaEntity **[Updated in 0109]**
+- ✅ `addPersonaAlias()` / `removePersonaAlias()` → Updated to use PersonaEntity **[Updated in 0109]**
+
+**Functions Still To Remove**:
 - `markMessagesConceptProcessed()` → Remove (replaced by per-type tracking)
 - `getUnprocessedMessages()` → Remove (replaced by per-type tracking)
 
