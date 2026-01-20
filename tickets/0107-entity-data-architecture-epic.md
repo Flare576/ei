@@ -194,7 +194,7 @@ Instead of one massive "update all concepts" call:
 - [x] 0118: Ei Heartbeat Simplification (DONE)
 
 ### Prompt Restructuring
-- [ ] 0119: Response Prompt Overhaul (remove redundancy)
+- [x] 0119: Response Prompt Overhaul (QA - new entity-based prompt structure, tests passing)
 - [ ] 0120: Static Concepts → Prompt Templates
 - [ ] 0121: Ei-Specific System Prompt
 

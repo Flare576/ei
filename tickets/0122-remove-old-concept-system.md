@@ -75,24 +75,26 @@ The following items were already completed as part of ticket 0109:
 - [x] Update message creation to remove `concept_processed: false` initialization **[Deleted in 0110]**
 
 ### src/prompts.ts
-- [x] Rebuild `buildResponseSystemPrompt` (done in 0119)
+- [x] Rebuild `buildResponseSystemPrompt` **[DONE in 0119]** - now uses HumanEntity/PersonaEntity
 - [x] Remove `MUTABLE_TYPES` constant (line 3) **[Deleted in 0111]**
 - [x] Remove `buildConceptUpdateSystemPrompt` (lines 306-439) **[Deleted in 0111]** - replaced by extraction.ts fast-scan and detail prompts
 - [x] Remove `buildConceptUpdateUserPrompt` (lines 441-461) **[Deleted in 0111]** - replaced by extraction.ts
 - [x] Remove `formatConceptsByType` function (lines 84-99) **[Deleted in 0111]**
 - [x] Remove `getHighestNeedConcepts` function (lines 101-109) **[Deleted in 0111]**
 - [x] Remove `stripConceptMetaFieldsForLLM` function (lines 5-14) **[Deleted in 0111]**
-- [ ] Update `getVisibleConcepts` (lines 18-34) → new visibility logic for data buckets
-- [ ] Update all `ConceptMap` parameters to `PersonaEntity`/`HumanEntity`
-- [ ] Remove type-based filtering throughout (all `c.type === "X"` checks) - **[buildResponseSystemPrompt and buildDescriptionPrompt still use old structures]**
+- [x] Update `getVisibleConcepts` → renamed to `filterByVisibility` **[DONE in 0119]** - now returns FilteredHumanData
+- [x] Update `getVisiblePersonas` to use PersonaEntity **[DONE in 0119]**
+- [ ] Update `buildDescriptionPrompt` to use PersonaEntity (currently still uses ConceptMap)
 
 ### src/processor.ts
+- [x] Update imports to use HumanEntity/PersonaEntity **[DONE in 0119]** - removed Concept/ConceptMap imports
+- [x] Update `processEvent` to load entities **[DONE in 0119]** - now calls loadHumanEntity/loadPersonaEntity
+- [x] Update `buildResponseSystemPrompt` call **[DONE in 0119]** - uses new signature
+- [x] Update `getVisiblePersonas` call **[DONE in 0119]** - uses PersonaEntity
 - [ ] Remove `conceptsChanged` helper function (lines 26-47)
 - [ ] Remove `ProcessResult.humanConceptsUpdated` field (line 76 - already marked deprecated)
 - [ ] Remove `ProcessResult.systemConceptsUpdated` field (line 78 - already marked deprecated)
-- [ ] Update `processEvent` to use new entity types
-- [ ] Remove all concept update orchestration (replaced by new extraction system)
-- [ ] Update imports to remove `Concept`, `ConceptMap`
+- [ ] Remove all old concept update orchestration code (lines ~200-350) - replaced by new extraction system
 
 ### src/validate.ts
 - [x] Remove static concept validation (done in 0120)

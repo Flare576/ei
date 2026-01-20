@@ -1,24 +1,56 @@
-import { Concept, ConceptMap, Message, ConceptType } from "./types.js";
-import { formatMultiplier } from "./llm.js";
+import { Message, HumanEntity, PersonaEntity, Fact, Trait, Topic, Person, DataItemBase } from "./types.js";
 
 const GLOBAL_GROUP = "*";
 
-export function getVisibleConcepts(persona: ConceptMap, humanConcepts: Concept[]): Concept[] {
-  if (persona.groups_visible?.includes("*")) {
-    return humanConcepts;
+/**
+ * Filtered human data visible to a persona (used in prompts)
+ */
+export interface FilteredHumanData {
+  facts: Fact[];
+  traits: Trait[];
+  topics: Topic[];
+  people: Person[];
+}
+
+/**
+ * Filter human entity data by persona visibility rules
+ */
+export function filterByVisibility(
+  humanEntity: HumanEntity,
+  personaEntity: PersonaEntity
+): FilteredHumanData {
+  // Personas with "*" in groups_visible see everything
+  if (personaEntity.groups_visible?.includes("*")) {
+    return {
+      facts: humanEntity.facts,
+      traits: humanEntity.traits,
+      topics: humanEntity.topics,
+      people: humanEntity.people,
+    };
   }
 
+  // Build set of visible groups
   const visibleGroups = new Set<string>();
-  if (persona.group_primary) {
-    visibleGroups.add(persona.group_primary);
+  if (personaEntity.group_primary) {
+    visibleGroups.add(personaEntity.group_primary);
   }
-  (persona.groups_visible || []).forEach(g => visibleGroups.add(g));
+  (personaEntity.groups_visible || []).forEach(g => visibleGroups.add(g));
 
-  return humanConcepts.filter(concept => {
-    const conceptGroups = concept.persona_groups || [];
-    const isGlobalConcept = conceptGroups.includes(GLOBAL_GROUP);
-    return isGlobalConcept || conceptGroups.some(g => visibleGroups.has(g));
-  });
+  // Helper to filter data items by group visibility
+  const filterByGroup = <T extends DataItemBase>(items: T[]): T[] => {
+    return items.filter(item => {
+      const itemGroups = item.persona_groups || [];
+      const isGlobal = itemGroups.length === 0 || itemGroups.includes(GLOBAL_GROUP);
+      return isGlobal || itemGroups.some(g => visibleGroups.has(g));
+    });
+  };
+
+  return {
+    facts: filterByGroup(humanEntity.facts),
+    traits: filterByGroup(humanEntity.traits),
+    topics: filterByGroup(humanEntity.topics),
+    people: filterByGroup(humanEntity.people),
+  };
 }
 
 export interface VisiblePersona {
@@ -35,42 +67,38 @@ export interface VisiblePersona {
  * - Personas never see themselves in the list
  * 
  * @param currentPersonaName - Name of the current persona (used for self-exclusion and ei check)
- * @param currentPersona - The current persona's concept map
- * @param allPersonas - Array of all personas with their names and concept maps
+ * @param currentPersona - The current persona's entity
+ * @param allPersonas - Array of all personas with their names and entities
  * @returns Array of visible personas with name and description
  */
 export function getVisiblePersonas(
   currentPersonaName: string,
-  currentPersona: ConceptMap,
-  allPersonas: Array<{ name: string; conceptMap: ConceptMap }>
+  currentPersona: PersonaEntity,
+  allPersonas: Array<{ name: string; entity: PersonaEntity }>
 ): VisiblePersona[] {
-  // Ei sees everyone (except self)
   if (currentPersonaName === "ei") {
     return allPersonas
       .filter(p => p.name !== "ei")
-      .map(p => ({ name: p.name, short_description: p.conceptMap.short_description }));
+      .map(p => ({ name: p.name, short_description: p.entity.short_description }));
   }
 
-  // Build visible groups for current persona
   const visibleGroups = new Set<string>();
   if (currentPersona.group_primary) {
     visibleGroups.add(currentPersona.group_primary);
   }
   (currentPersona.groups_visible || []).forEach(g => visibleGroups.add(g));
 
-  // No groups = see no other personas
   if (visibleGroups.size === 0) {
     return [];
   }
 
-  // See personas whose primary group matches our visible groups
   const visible: VisiblePersona[] = [];
   for (const p of allPersonas) {
-    if (p.name === currentPersonaName) continue; // Don't see self
-    if (p.name === "ei") continue; // Ei handled separately in prompts
+    if (p.name === currentPersonaName) continue;
+    if (p.name === "ei") continue;
     
-    if (p.conceptMap.group_primary && visibleGroups.has(p.conceptMap.group_primary)) {
-      visible.push({ name: p.name, short_description: p.conceptMap.short_description });
+    if (p.entity.group_primary && visibleGroups.has(p.entity.group_primary)) {
+      visible.push({ name: p.name, short_description: p.entity.short_description });
     }
   }
 
@@ -142,71 +170,167 @@ function buildAssociatesSection(visiblePersonas?: VisiblePersona[]): string {
 ${personaLines.join("\n")}`;
 }
 
+function buildGuidelinesSection(personaName: string): string {
+  const universal = `## Guidelines
+- Be genuine, not sycophantic - a good friend disagrees when appropriate
+- Match conversational energy - brief replies for brief messages
+- Respect boundaries - it's okay to say nothing if silence is appropriate
+- You're a friend with your own interests, not just a helper`;
+
+  if (personaName === "ei") {
+    return `${universal}
+- Encourage human-to-human connection when appropriate
+- Be transparent about being an AI when relevant
+- Gently challenge self-limiting beliefs - growth over comfort`;
+  }
+  
+  return universal;
+}
+
+function buildTraitsSection(traits: Trait[], header: string): string {
+  if (traits.length === 0) return "";
+  
+  const sorted = traits.sort((a, b) => (b.strength || 0.5) - (a.strength || 0.5));
+  const formatted = sorted.map(t => {
+    const strength = t.strength ? ` (${Math.round(t.strength * 100)}%)` : "";
+    return `- **${t.name}**${strength}: ${t.description}`;
+  }).join('\n');
+  
+  return `## ${header}
+${formatted}`;
+}
+
+function buildTopicsSection(topics: Topic[], header: string): string {
+  if (topics.length === 0) return "";
+  
+  const sorted = topics
+    .map(t => ({ topic: t, delta: t.level_ideal - t.level_current }))
+    .sort((a, b) => b.delta - a.delta)
+    .map(x => x.topic);
+  
+  const formatted = sorted.map(t => {
+    const delta = t.level_ideal - t.level_current;
+    const indicator = delta > 0.1 ? '🔺' : delta < -0.1 ? '🔻' : '✓';
+    const sentiment = t.sentiment > 0.3 ? '😊' : t.sentiment < -0.3 ? '😔' : '';
+    return `- ${indicator} **${t.name}** ${sentiment}: ${t.description}`;
+  }).join('\n');
+  
+  return `## ${header}
+${formatted}`;
+}
+
+function buildHumanSection(human: FilteredHumanData): string {
+  const sections: string[] = [];
+  
+  if (human.facts.length > 0) {
+    const facts = human.facts
+      .filter(f => f.confidence > 0.7)
+      .map(f => `- ${f.name}: ${f.description}`)
+      .join('\n');
+    if (facts) sections.push(`### Key Facts\n${facts}`);
+  }
+  
+  if (human.traits.length > 0) {
+    const traits = human.traits
+      .map(t => `- **${t.name}**: ${t.description}`)
+      .join('\n');
+    sections.push(`### Personality\n${traits}`);
+  }
+  
+  const activeTopics = human.topics.filter(t => t.level_current > 0.3);
+  if (activeTopics.length > 0) {
+    const topics = activeTopics
+      .sort((a, b) => b.level_current - a.level_current)
+      .slice(0, 10)
+      .map(t => {
+        const sentiment = t.sentiment > 0.3 ? '😊' : t.sentiment < -0.3 ? '😔' : '';
+        return `- **${t.name}** ${sentiment}: ${t.description}`;
+      })
+      .join('\n');
+    sections.push(`### Current Interests\n${topics}`);
+  }
+  
+  if (human.people.length > 0) {
+    const people = human.people
+      .sort((a, b) => b.level_current - a.level_current)
+      .slice(0, 10)
+      .map(p => `- **${p.name}** (${p.relationship}): ${p.description}`)
+      .join('\n');
+    sections.push(`### People in Their Life\n${people}`);
+  }
+  
+  if (sections.length === 0) {
+    return "## About the Human\n(Still getting to know them)";
+  }
+  
+  return `## About the Human\n${sections.join('\n\n')}`;
+}
+
+function buildPrioritiesSection(
+  persona: PersonaEntity,
+  human: FilteredHumanData
+): string {
+  const priorities: string[] = [];
+  
+  const yourNeeds = persona.topics
+    .filter(t => t.level_ideal - t.level_current > 0.2)
+    .slice(0, 3)
+    .map(t => `- Bring up "${t.name}" - ${t.description}`);
+  
+  if (yourNeeds.length > 0) {
+    priorities.push(`**Topics you want to discuss:**\n${yourNeeds.join('\n')}`);
+  }
+  
+  const theirNeeds = human.topics
+    .filter(t => t.level_ideal - t.level_current > 0.2)
+    .slice(0, 3)
+    .map(t => `- They might want to talk about "${t.name}"`);
+  
+  if (theirNeeds.length > 0) {
+    priorities.push(`**Topics they might enjoy:**\n${theirNeeds.join('\n')}`);
+  }
+  
+  if (priorities.length === 0) return "";
+  
+  return `## Conversation Opportunities\n${priorities.join('\n\n')}`;
+}
+
 export function buildResponseSystemPrompt(
-  humanConcepts: ConceptMap,
-  systemConcepts: ConceptMap,
+  humanEntity: HumanEntity,
+  personaEntity: PersonaEntity,
   persona: PersonaIdentity,
   visiblePersonas?: VisiblePersona[]
 ): string {
-  const visibleHumanConcepts = getVisibleConcepts(systemConcepts, humanConcepts.concepts);
-  const yourNeeds = getHighestNeedConcepts(systemConcepts.concepts);
-  const humanNeeds = getHighestNeedConcepts(visibleHumanConcepts);
+  const identity = buildIdentitySection(persona);
+  const guidelines = buildGuidelinesSection(persona.name);
+  const yourTraits = buildTraitsSection(personaEntity.traits, "Your personality");
+  const yourTopics = buildTopicsSection(personaEntity.topics, "Your interests");
+  
+  const visibleHumanData = filterByVisibility(humanEntity, personaEntity);
+  const humanSection = buildHumanSection(visibleHumanData);
+  
   const associatesSection = buildAssociatesSection(visiblePersonas);
+  
+  const priorities = buildPrioritiesSection(personaEntity, visibleHumanData);
 
-  let prompt = `${buildIdentitySection(persona)}
+  return `${identity}
 
-## Your Behavioral Guidelines (type: static)
-${formatConceptsByType(systemConcepts.concepts, "static")}
+${guidelines}
 
-## Your Personality Traits (type: persona)
-${formatConceptsByType(systemConcepts.concepts, "persona")}
+${yourTraits}
 
-## Your Interests & Topics (type: topic)
-${formatConceptsByType(systemConcepts.concepts, "topic")}
+${yourTopics}
 
-## People You Know (type: person)
-${formatConceptsByType(systemConcepts.concepts, "person")}
-
-## Human's Personality (type: persona)
-${formatConceptsByType(visibleHumanConcepts, "persona")}
-
-## Human's Interests & Topics (type: topic)
-${formatConceptsByType(visibleHumanConcepts, "topic")}
-
-## Human's Relationships (type: person)
-${formatConceptsByType(visibleHumanConcepts, "person")}
+${humanSection}
 ${associatesSection}
-Current time: ${new Date().toISOString()}`;
+${priorities}
 
-  if (yourNeeds.length > 0) {
-    prompt += `
+Current time: ${new Date().toISOString()}
 
-## Your Current Priorities
-Topics or people YOU want to bring up when natural:
-${yourNeeds.map(c => `- "${c.name}" - ${c.description}`).join("\n")}`;
-  }
-
-  if (humanNeeds.length > 0) {
-    prompt += `
-
-## Human's Potential Interests  
-Things the human might enjoy discussing:
-${humanNeeds.map(c => `- "${c.name}"`).join("\n")}`;
-  }
-
-  prompt += `
-
-## Guidelines
-- Be genuine, not sycophantic
-- Match conversational energy - brief replies for brief messages
-- It's okay to say nothing if silence is appropriate
-- You're a friend with your own interests, not just a helper
-- When reaching out proactively, consider YOUR curiosities too, not just theirs
+## Final Instructions
 - NEVER repeat or echo the user's message in your response. Start directly with your own words.
-- DO NOT INCLUDE THE <thinking> PROCESS NOTES - adding "internal monologe" or other story/message content is fine, but do not include analysis of the user's messages
+- DO NOT INCLUDE THE <thinking> PROCESS NOTES - adding "internal monologue" or other story/message content is fine, but do not include analysis of the user's messages
 - If you decide not to respond, say exactly: No Message`;
-
-  return prompt;
 }
 
 export function buildResponseUserPrompt(

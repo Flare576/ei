@@ -1,25 +1,22 @@
-import { Concept, ConceptMap, Message } from "./types.js";
+import { Message, HumanEntity, PersonaEntity } from "./types.js";
 import { callLLM, callLLMForJSON } from "./llm.js";
 import {
-  loadConceptMap,
-  saveConceptMap,
+  loadHumanEntity,
+  loadPersonaEntity,
   loadHistory,
   appendMessage,
   getRecentMessages,
   getLastMessageTime,
   appendDebugLog,
   markMessagesAsRead,
-  loadAllPersonasWithConceptMaps,
+  loadAllPersonasWithEntities,
 } from "./storage.js";
 import {
   buildResponseSystemPrompt,
   buildResponseUserPrompt,
-  buildConceptUpdateSystemPrompt,
-  buildConceptUpdateUserPrompt,
   PersonaIdentity,
   getVisiblePersonas,
 } from "./prompts.js";
-import { validateSystemConcepts, mergeWithOriginalStatics } from "./validate.js";
 import { generatePersonaDescriptions } from "./persona-creator.js";
 
 function conceptsChanged(oldConcepts: Concept[], newConcepts: Concept[]): boolean {
@@ -97,8 +94,8 @@ export async function processEvent(
 
   if (signal?.aborted) return abortedResult;
 
-  const humanConcepts = await loadConceptMap("human");
-  const systemConcepts = await loadConceptMap("system", persona);
+  const humanEntity = await loadHumanEntity();
+  const personaEntity = await loadPersonaEntity(persona);
   const history = await loadHistory(persona);
   const recentHistory = getRecentMessages(history);
   const lastMessageTime = getLastMessageTime(history);
@@ -108,17 +105,17 @@ export async function processEvent(
 
   const personaIdentity: PersonaIdentity = {
     name: persona,
-    aliases: systemConcepts.aliases,
-    short_description: systemConcepts.short_description,
-    long_description: systemConcepts.long_description,
+    aliases: personaEntity.aliases,
+    short_description: personaEntity.short_description,
+    long_description: personaEntity.long_description,
   };
 
-  const allPersonas = await loadAllPersonasWithConceptMaps();
-  const visiblePersonas = getVisiblePersonas(persona, systemConcepts, allPersonas);
+  const allPersonas = await loadAllPersonasWithEntities();
+  const visiblePersonas = getVisiblePersonas(persona, personaEntity, allPersonas);
 
   const responseSystemPrompt = buildResponseSystemPrompt(
-    humanConcepts,
-    systemConcepts,
+    humanEntity,
+    personaEntity,
     personaIdentity,
     visiblePersonas
   );
@@ -135,7 +132,7 @@ export async function processEvent(
     appendDebugLog("[Debug] Calling LLM for response...");
   }
 
-  const rawResponse = await callLLM(responseSystemPrompt, responseUserPrompt, { signal, temperature: 0.7, model: systemConcepts.model, operation: "response" });
+  const rawResponse = await callLLM(responseSystemPrompt, responseUserPrompt, { signal, temperature: 0.7, model: personaEntity.model, operation: "response" });
   const response = rawResponse ? stripEcho(humanMessage, rawResponse) : null;
 
   if (signal?.aborted) return abortedResult;
