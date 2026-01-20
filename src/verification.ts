@@ -397,3 +397,16 @@ export async function applyVerificationResults(
   
   appendDebugLog(`[Verification] Processed ${processedIds.length} validations: ${results.confirmed.length} confirmed, ${results.corrected.length} corrected, ${results.rejected.length} rejected, ${results.roleplay.length} moved to groups`);
 }
+
+export async function wasLastEiMessageCeremony(): Promise<boolean> {
+  const { loadHistory } = await import("./storage.js");
+  const history = await loadHistory("ei");
+  
+  if (history.messages.length === 0) return false;
+  
+  const lastMessage = history.messages[history.messages.length - 1];
+  
+  if (lastMessage.role !== "system") return false;
+  
+  return lastMessage.content.trim().startsWith("## Daily Confirmations");
+}

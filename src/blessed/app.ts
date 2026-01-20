@@ -5,13 +5,15 @@ import { writeFileSync, readFileSync, unlinkSync } from 'fs';
 // Import test output capture early to intercept blessed methods before they're used
 import { testOutputCapture } from './test-output-capture.js';
 
-import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog, getPendingMessages, replacePendingMessages, appendHumanMessage, appendMessage, loadPauseState, savePauseState, markSystemMessagesAsRead, getUnreadSystemMessageCount, loadArchiveState, saveArchiveState, getArchivedPersonas, findArchivedPersonaByNameOrAlias, addPersonaAlias, removePersonaAlias, loadHumanEntity, loadPersonaEntity } from '../storage.js';
+import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog, getPendingMessages, replacePendingMessages, appendHumanMessage, appendMessage, loadPauseState, savePauseState, markSystemMessagesAsRead, getUnreadSystemMessageCount, loadArchiveState, saveArchiveState, getArchivedPersonas, findArchivedPersonaByNameOrAlias, addPersonaAlias, removePersonaAlias, loadHumanEntity, loadPersonaEntity, savePersonaEntity } from '../storage.js';
 import { getVisiblePersonas } from '../prompts.js';
 import { findDataPointByName } from '../verification.js';
 import { createPersonaWithLLM, saveNewPersona } from '../persona-creator.js';
 import { processEvent } from '../processor.js';
 import { applyTopicDecay, checkDesireGaps } from '../topic-decay.js';
-import { LLMAbortedError, resolveModel, getProviderStatuses } from '../llm.js';
+import { LLMAbortedError, resolveModel, getProviderStatuses, callLLM } from '../llm.js';
+import { wasLastEiMessageCeremony } from '../verification.js';
+import { gatherEiHeartbeatContext, buildEiHeartbeatPrompt, trackInactivityPings } from '../ei-heartbeat.js';
 import type { Message, MessageState, PersonaState } from '../types.js';
 import { LayoutManager } from './layout-manager.js';
 import { FocusManager } from './focus-manager.js';
@@ -2157,36 +2159,90 @@ Press q to close this help.`;
       }
 
       try {
-        await applyTopicDecay('system', personaName);
-        
-        const shouldSpeak = await checkDesireGaps('system', personaName);
-        
-        if (!shouldSpeak) {
-          debugLog(`Heartbeat for ${personaName}: no significant deltas, skipping LLM call`);
-          this.resetPersonaHeartbeat(personaName);
-          return;
-        }
-        
-        debugLog(`Heartbeat for ${personaName}: significant delta detected, generating response`);
-        
-        this.queueProcessor.pause();
-        
-        ps.abortController = new AbortController();
-        ps.isProcessing = true;
-        this.personaRenderer.updateSpinnerAnimation(this.personaStates);
-        
-        if (personaName === this.activePersona) {
-          this.isProcessing = true;
-          this.render();
-        }
-
-        const result = await processEvent(null, personaName, DEBUG, ps.abortController.signal);
-        if (!result.aborted && result.response) {
+        if (personaName === "ei") {
+          const isCeremonyWaiting = await wasLastEiMessageCeremony();
+          if (isCeremonyWaiting) {
+            debugLog(`Heartbeat for ei: paused (waiting for Daily Ceremony response)`);
+            this.resetPersonaHeartbeat(personaName);
+            return;
+          }
+          
+          await applyTopicDecay('system', personaName);
+          
+          const humanEntity = await loadHumanEntity();
+          const eiEntity = await loadPersonaEntity("ei");
+          
+          const ctx = await gatherEiHeartbeatContext(humanEntity, eiEntity);
+          
+          if (ctx.eiNeeds.length === 0 && ctx.humanNeeds.length === 0 && ctx.inactivePersonas.length === 0) {
+            debugLog(`Heartbeat for ei: no engagement deficits or inactive personas, skipping LLM call`);
+            this.resetPersonaHeartbeat(personaName);
+            return;
+          }
+          
+          debugLog(`Heartbeat for ei: context gathered (${ctx.eiNeeds.length} ei needs, ${ctx.humanNeeds.length} human needs, ${ctx.inactivePersonas.length} inactive personas)`);
+          
+          this.queueProcessor.pause();
+          
+          ps.abortController = new AbortController();
+          ps.isProcessing = true;
+          this.personaRenderer.updateSpinnerAnimation(this.personaStates);
+          
           if (personaName === this.activePersona) {
-            this.addMessage('system', result.response);
-          } else {
-            ps.unreadCount++;
-            this.unreadCounts.set(personaName, ps.unreadCount);
+            this.isProcessing = true;
+            this.render();
+          }
+          
+          const { system, user } = buildEiHeartbeatPrompt(ctx);
+          const response = await callLLM(system, user, { 
+            signal: ps.abortController.signal, 
+            temperature: 0.7,
+            model: eiEntity.model,
+            operation: "response"
+          });
+          
+          if (response && !ps.abortController.signal.aborted) {
+            await trackInactivityPings(response, ctx.inactivePersonas);
+            
+            if (personaName === this.activePersona) {
+              this.addMessage('system', response);
+            } else {
+              ps.unreadCount++;
+              this.unreadCounts.set(personaName, ps.unreadCount);
+            }
+          }
+        } else {
+          await applyTopicDecay('system', personaName);
+          
+          const shouldSpeak = await checkDesireGaps('system', personaName);
+          
+          if (!shouldSpeak) {
+            debugLog(`Heartbeat for ${personaName}: no significant deltas, skipping LLM call`);
+            this.resetPersonaHeartbeat(personaName);
+            return;
+          }
+          
+          debugLog(`Heartbeat for ${personaName}: significant delta detected, generating response`);
+          
+          this.queueProcessor.pause();
+          
+          ps.abortController = new AbortController();
+          ps.isProcessing = true;
+          this.personaRenderer.updateSpinnerAnimation(this.personaStates);
+          
+          if (personaName === this.activePersona) {
+            this.isProcessing = true;
+            this.render();
+          }
+
+          const result = await processEvent(null, personaName, DEBUG, ps.abortController.signal);
+          if (!result.aborted && result.response) {
+            if (personaName === this.activePersona) {
+              this.addMessage('system', result.response);
+            } else {
+              ps.unreadCount++;
+              this.unreadCounts.set(personaName, ps.unreadCount);
+            }
           }
         }
       } catch (err) {

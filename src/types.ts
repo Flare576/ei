@@ -238,6 +238,8 @@ export interface PersonaEntity {
   isArchived?: boolean;
   /** ISO timestamp when persona was archived */
   archivedDate?: string;
+  /** ISO timestamp when Ei last suggested checking in with this inactive persona */
+  lastInactivityPing?: string;
   
   /** ISO timestamp of last update to any data */
   last_updated: string | null;

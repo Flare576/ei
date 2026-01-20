@@ -155,6 +155,11 @@ The following items were already completed as part of ticket 0109:
 - Help text entry for /clarify command
 - Import of `loadHumanEntity`, `loadPersonaEntity`, `findDataPointByName`
 
+**New code added in 0118 (NOT for removal):**
+- Imports: `callLLM`, `wasLastEiMessageCeremony`, `gatherEiHeartbeatContext`, `buildEiHeartbeatPrompt`, `trackInactivityPings`, `savePersonaEntity`
+- Ei-specific heartbeat logic in `resetPersonaHeartbeat()` (lines ~2160-2195)
+- Ceremony pause detection and inactive persona tracking
+
 ## Tests to Update
 
 ### tests/unit/

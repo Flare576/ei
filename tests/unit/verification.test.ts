@@ -439,4 +439,77 @@ describe("verification", () => {
       expect(storage.saveHumanEntity).toHaveBeenCalledWith(entity);
     });
   });
+
+  describe("wasLastEiMessageCeremony", () => {
+    it("returns false when no messages exist", async () => {
+      vi.mocked(storage.loadHistory).mockResolvedValue({ messages: [] });
+
+      const result = await verification.wasLastEiMessageCeremony();
+
+      expect(result).toBe(false);
+    });
+
+    it("returns false when last message is from human", async () => {
+      vi.mocked(storage.loadHistory).mockResolvedValue({
+        messages: [
+          { role: "human", content: "test", timestamp: new Date().toISOString(), read: true }
+        ]
+      });
+
+      const result = await verification.wasLastEiMessageCeremony();
+
+      expect(result).toBe(false);
+    });
+
+    it("returns true when last message is ceremony", async () => {
+      vi.mocked(storage.loadHistory).mockResolvedValue({
+        messages: [
+          { 
+            role: "system", 
+            content: "## Daily Confirmations\n\nI've noted a few things...", 
+            timestamp: new Date().toISOString(), 
+            read: false 
+          }
+        ]
+      });
+
+      const result = await verification.wasLastEiMessageCeremony();
+
+      expect(result).toBe(true);
+    });
+
+    it("returns false when last message is system but not ceremony", async () => {
+      vi.mocked(storage.loadHistory).mockResolvedValue({
+        messages: [
+          { 
+            role: "system", 
+            content: "Just checking in!", 
+            timestamp: new Date().toISOString(), 
+            read: false 
+          }
+        ]
+      });
+
+      const result = await verification.wasLastEiMessageCeremony();
+
+      expect(result).toBe(false);
+    });
+
+    it("handles whitespace before ceremony header", async () => {
+      vi.mocked(storage.loadHistory).mockResolvedValue({
+        messages: [
+          { 
+            role: "system", 
+            content: "  \n## Daily Confirmations\n\nI've noted a few things...", 
+            timestamp: new Date().toISOString(), 
+            read: false 
+          }
+        ]
+      });
+
+      const result = await verification.wasLastEiMessageCeremony();
+
+      expect(result).toBe(true);
+    });
+  });
 });
