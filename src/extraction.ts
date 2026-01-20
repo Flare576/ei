@@ -695,9 +695,52 @@ export async function runDetailUpdate(
     await maybeRegeneratePersonaDescriptions(persona, entity as PersonaEntity);
   }
   
+  // 11. Check for cross-persona global updates (ticket 0116)
+  if (target === "human") {
+    await checkCrossPersonaUpdate(persona, data_type, validated, is_new);
+  }
+  
   appendDebugLog(
     `[DetailUpdate] ${is_new ? 'Created' : 'Updated'} ${data_type} "${item_name}" for ${target === "human" ? "human" : persona}`
   );
+}
+
+/**
+ * Check if a non-Ei persona updated a global item.
+ * If so, queue for Ei validation in Daily Ceremony.
+ * 
+ * Part of ticket 0116: Cross-Persona Validation
+ */
+async function checkCrossPersonaUpdate(
+  persona: string,
+  dataType: "fact" | "trait" | "topic" | "person",
+  item: DataItemBase,
+  isNew: boolean
+): Promise<void> {
+  if (persona === "ei") return;
+  
+  const isGlobal = !item.persona_groups || 
+                   item.persona_groups.length === 0 ||
+                   item.persona_groups.includes("*");
+  
+  if (!isGlobal) return;
+  
+  const action = isNew ? 'added a new' : 'updated';
+  const context = `${persona} ${action} ${dataType}: "${item.name}" - ${item.description}`;
+  
+  await enqueueItem({
+    type: "ei_validation",
+    priority: "normal",
+    payload: {
+      validation_type: "cross_persona",
+      item_name: item.name,
+      data_type: dataType,
+      context,
+      source_persona: persona
+    }
+  });
+  
+  appendDebugLog(`[CrossPersona] Queued validation for "${item.name}" (updated by ${persona})`);
 }
 
 /**

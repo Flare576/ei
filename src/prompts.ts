@@ -1,6 +1,7 @@
 import { Concept, ConceptMap, Message, ConceptType } from "./types.js";
+import { formatMultiplier } from "./llm.js";
 
-import { GLOBAL_GROUP } from "./concept-reconciliation.js";
+const GLOBAL_GROUP = "*";
 
 export function getVisibleConcepts(persona: ConceptMap, humanConcepts: Concept[]): Concept[] {
   if (persona.groups_visible?.includes("*")) {

@@ -104,11 +104,11 @@ The following items were already completed as part of ticket 0109:
 - [ ] Remove imports from processor.ts, concept-queue.ts
 
 ### src/concept-reconciliation.ts
-- [ ] **DELETE ENTIRE FILE OR HEAVILY REWRITE** (53 lines)
-  - `GLOBAL_GROUP` constant might stay but logic changes
-  - `reconcileConceptGroups()` function operates on wrong data structure
-  - Reconciliation happens at DataItem level, not Concept level
-  - Group assignment logic moves to entity-level operations
+- [x] **DELETED ENTIRELY in ticket 0116** (53 lines)
+  - `GLOBAL_GROUP` constant moved to prompts.ts (inlined)
+  - `reconcileConceptGroups()` logic inlined into processor.ts temporarily
+  - Group assignment for NEW system handled in extraction.ts (checkCrossPersonaUpdate)
+  - File removed, imports cleaned up from prompts.ts and processor.ts
 
 ### src/concept-decay.ts
 - [x] **DELETED in ticket 0113** - Replaced by src/topic-decay.ts

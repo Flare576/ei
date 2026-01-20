@@ -523,6 +523,115 @@ describe("extraction", () => {
       expect(queue.enqueueItem).not.toHaveBeenCalled();
     });
 
+    it("queues cross_persona validation when non-ei persona updates global item", async () => {
+      const payload: DetailUpdatePayload = {
+        target: "human",
+        persona: "frodo",
+        data_type: "fact",
+        item_name: "Birthday",
+        messages: mockMessages,
+        is_new: false
+      };
+
+      const mockResult: Fact = {
+        name: "Birthday",
+        description: "January 1st",
+        sentiment: 0,
+        confidence: 0.8,
+        persona_groups: [],
+        last_updated: new Date().toISOString()
+      };
+
+      vi.mocked(storage.loadHumanEntity).mockResolvedValue(mockHumanEntity);
+      vi.mocked(llm.callLLMForJSON).mockResolvedValue(mockResult);
+      vi.mocked(storage.saveHumanEntity).mockResolvedValue();
+      vi.mocked(queue.enqueueItem).mockResolvedValue("test-id");
+
+      await runDetailUpdate(payload);
+
+      expect(queue.enqueueItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "ei_validation",
+          priority: "normal",
+          payload: expect.objectContaining({
+            validation_type: "cross_persona",
+            item_name: "Birthday",
+            data_type: "fact",
+            source_persona: "frodo"
+          })
+        })
+      );
+    });
+
+    it("does not queue cross_persona validation for ei persona", async () => {
+      const payload: DetailUpdatePayload = {
+        target: "human",
+        persona: "ei",
+        data_type: "fact",
+        item_name: "Birthday",
+        messages: mockMessages,
+        is_new: false
+      };
+
+      const mockResult: Fact = {
+        name: "Birthday",
+        description: "January 1st",
+        sentiment: 0,
+        confidence: 0.9,
+        persona_groups: [],
+        last_updated: new Date().toISOString()
+      };
+
+      vi.mocked(storage.loadHumanEntity).mockResolvedValue(mockHumanEntity);
+      vi.mocked(llm.callLLMForJSON).mockResolvedValue(mockResult);
+      vi.mocked(storage.saveHumanEntity).mockResolvedValue();
+
+      await runDetailUpdate(payload);
+
+      const queueCalls = vi.mocked(queue.enqueueItem).mock.calls;
+      const crossPersonaCalls = queueCalls.filter(call => 
+        call[0].type === "ei_validation" &&
+        (call[0].payload as any).validation_type === "cross_persona"
+      );
+
+      expect(crossPersonaCalls).toHaveLength(0);
+    });
+
+    it("does not queue cross_persona validation for non-global items", async () => {
+      const payload: DetailUpdatePayload = {
+        target: "human",
+        persona: "frodo",
+        data_type: "topic",
+        item_name: "The Ring",
+        messages: mockMessages,
+        is_new: false
+      };
+
+      const mockResult: Topic = {
+        name: "The Ring",
+        description: "A cursed artifact",
+        sentiment: -0.5,
+        level_current: 0.9,
+        level_ideal: 0.1,
+        persona_groups: ["Fellowship"],
+        last_updated: new Date().toISOString()
+      };
+
+      vi.mocked(storage.loadHumanEntity).mockResolvedValue(mockHumanEntity);
+      vi.mocked(llm.callLLMForJSON).mockResolvedValue(mockResult);
+      vi.mocked(storage.saveHumanEntity).mockResolvedValue();
+
+      await runDetailUpdate(payload);
+
+      const queueCalls = vi.mocked(queue.enqueueItem).mock.calls;
+      const crossPersonaCalls = queueCalls.filter(call => 
+        call[0].type === "ei_validation" &&
+        (call[0].payload as any).validation_type === "cross_persona"
+      );
+
+      expect(crossPersonaCalls).toHaveLength(0);
+    });
+
     it("handles invalid LLM result gracefully", async () => {
       const payload: DetailUpdatePayload = {
         target: "human",

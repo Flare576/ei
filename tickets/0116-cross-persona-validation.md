@@ -1,6 +1,6 @@
 # 0116: Cross-Persona Validation
 
-**Status**: PENDING
+**Status**: QA
 
 ## Summary
 
@@ -165,14 +165,32 @@ This is an edge case we may need to revisit if it causes real problems.
 
 ## Acceptance Criteria
 
-- [ ] Non-Ei global updates detected
-- [ ] Validation queued with source persona context
-- [ ] Ei presents validation naturally
-- [ ] "Keep global" leaves item unchanged
-- [ ] "Move to group" updates persona_groups
-- [ ] "Remove" deletes item
-- [ ] Batch handling for multiple validations
-- [ ] Tests cover roleplay scenarios
+- [x] Non-Ei global updates detected (checkCrossPersonaUpdate in extraction.ts)
+- [x] Validation queued with source persona context (ei_validation with cross_persona type)
+- [x] Ei presents validation naturally (Daily Ceremony already handles source_persona)
+- [x] "Keep global" leaves item unchanged (existing "confirmed" handling)
+- [x] "Move to group" updates persona_groups (existing "roleplay" handling)
+- [x] "Remove" deletes item (existing "rejected" handling)
+- [x] Batch handling for multiple validations (Daily Ceremony handles batching)
+- [x] Tests cover roleplay scenarios (3 new tests in extraction.test.ts)
+
+## Implementation Notes
+
+**Files Modified:**
+- `src/extraction.ts` - Added `checkCrossPersonaUpdate()` function and integrated into `runDetailUpdate()`
+- `src/prompts.ts` - Moved `GLOBAL_GROUP` constant from concept-reconciliation.ts (inlined)
+- `src/processor.ts` - Inlined reconciliation logic (temporary until 0122 cleanup)
+- `tests/unit/extraction.test.ts` - Added 3 cross-persona validation tests
+
+**Files Deleted:**
+- `src/concept-reconciliation.ts` - Removed entirely (functionality inlined or replaced)
+
+**Design Decisions:**
+- Cross-persona validations go through Daily Ceremony (not immediate)
+- Items without `group_primary` stay global (no implicit group creation)
+- Detection works for ALL data types (fact/trait/topic/person)
+- Ei persona updates never trigger validation
+- Verification system already had all needed handlers (`confirmed`, `roleplay`, `rejected`)
 
 ## Dependencies
 

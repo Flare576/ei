@@ -21,7 +21,6 @@ import {
 } from "./prompts.js";
 import { validateSystemConcepts, mergeWithOriginalStatics } from "./validate.js";
 import { generatePersonaDescriptions } from "./persona-creator.js";
-import { reconcileConceptGroups } from "./concept-reconciliation.js";
 
 function conceptsChanged(oldConcepts: Concept[], newConcepts: Concept[]): boolean {
   if (oldConcepts.length !== newConcepts.length) return true;
@@ -299,16 +298,46 @@ export async function updateConceptsForMessages(
     return true;
   }
 
-  const reconciledConcepts = reconcileConceptGroups(
-    concepts.concepts,
-    newConcepts,
-    personaConcepts,
-    persona
-  );
+  const now = new Date().toISOString();
+  const personaGroup = personaConcepts.group_primary;
+  const reconciledConcepts: Concept[] = [];
+  
+  for (const updated of newConcepts) {
+    const existing = concepts.concepts.find((c: Concept) => c.name === updated.name);
+    
+    if (existing) {
+      const isGlobal = existing.persona_groups?.includes("*") ?? false;
+      let personaGroups: string[];
+      
+      if (isGlobal) {
+        personaGroups = ["*"];
+      } else {
+        const groups = new Set(existing.persona_groups || []);
+        if (personaGroup) {
+          groups.add(personaGroup);
+        }
+        personaGroups = Array.from(groups);
+      }
+      
+      reconciledConcepts.push({
+        ...updated,
+        persona_groups: personaGroups,
+        learned_by: existing.learned_by,
+        last_updated: now,
+      });
+    } else {
+      reconciledConcepts.push({
+        ...updated,
+        persona_groups: personaGroup ? [personaGroup] : ["*"],
+        learned_by: persona,
+        last_updated: now,
+      });
+    }
+  }
 
   const proposedMap: ConceptMap = {
     entity: "human",
-    last_updated: new Date().toISOString(),
+    last_updated: now,
     concepts: reconciledConcepts,
   };
   
