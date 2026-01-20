@@ -224,12 +224,9 @@ export class QueueProcessor {
   
   /**
    * Execute a persona description regeneration.
-   * 
-   * Currently uses legacy generatePersonaDescriptions (ConceptMap-based).
-   * TODO (0122): Update to use PersonaEntity-based description generation.
    */
   private async executeDescriptionRegen(payload: DescriptionRegenPayload): Promise<void> {
-    appendDebugLog(`[QueueProcessor] Description regen queued: ${payload.persona} - Awaiting PersonaEntity-based implementation (0122)`);
+    appendDebugLog(`[QueueProcessor] Description regen queued: ${payload.persona} - Awaiting PersonaEntity-based implementation`);
   }
   
   /**
