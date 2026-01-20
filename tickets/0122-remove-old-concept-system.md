@@ -41,9 +41,8 @@ The following items were already completed as part of ticket 0109:
 - [x] Remove `ConceptMapUpdate` interface (done in 0108)
 - [x] Update `ProcessEventInput` to use entity types (done in 0108)
 - [x] Update `SystemSnapshot` to use entity types (done in 0108)
-- [ ] Remove `Message.concept_processed` field (src/types.ts:219)
-  - Used in: storage.ts (6 places), blessed/app.ts (1 place)
-  - Replacement: Per-data-type extraction tracking with timestamps
+- [x] Remove `Message.concept_processed` field **[Deleted in 0110]**
+  - Replacement: LLM queue tracking (ticket 0110)
 
 ### src/storage.ts
 - [x] Remove `DEFAULT_SYSTEM_CONCEPTS` **[Deleted in 0109]**
@@ -52,10 +51,10 @@ The following items were already completed as part of ticket 0109:
 - [x] `PersonaWithConceptMap` interface renamed to `PersonaWithEntity` **[Deleted in 0109]**
 - [x] `loadAllPersonasWithConceptMaps()` renamed to `loadAllPersonasWithEntities()` **[Deleted in 0109]**
 - [x] All ConceptMap parameters updated to PersonaEntity **[Deleted in 0109]**
-- [ ] Remove `markMessagesConceptProcessed()` function
-- [ ] Remove `getUnprocessedMessages()` function (lines 285-305)
-- [ ] Remove all `concept_processed` field handling (lines 223, 238, 316-317, 348)
-- [ ] Update message creation to remove `concept_processed: false` initialization
+- [x] Remove `markMessagesConceptProcessed()` function **[Deleted in 0110]**
+- [x] Remove `getUnprocessedMessages()` function **[Deleted in 0110]**
+- [x] Remove all `concept_processed` field handling **[Deleted in 0110]**
+- [x] Update message creation to remove `concept_processed: false` initialization **[Deleted in 0110]**
 
 ### src/prompts.ts
 - [x] Rebuild `buildResponseSystemPrompt` (done in 0119)
@@ -100,12 +99,8 @@ The following items were already completed as part of ticket 0109:
 
 ### src/concept-queue.ts
 - [x] Replace with LLM queue (done in 0110)
-- [ ] **DELETE ENTIRE FILE** (will be replaced by new extraction system)
-  - `ConceptUpdateTask` interface (lines 29-42)
-  - `ConceptUpdateResult` interface (lines 47-56)
-  - `conceptsChanged()` function (lines 67-89)
-  - Entire `ConceptQueue` singleton class
-  - All concept-specific queue logic
+- [x] **DELETED ENTIRE FILE** **[Deleted in 0110]**
+  - Replaced by `src/llm-queue.ts` with new queue types and persistence
 
 ### src/persona-creator.ts
 - [ ] Remove all static concept definitions (lines 7-63)
@@ -121,7 +116,10 @@ The following items were already completed as part of ticket 0109:
 - [ ] Simplify to identity generation only (aliases + descriptions)
 
 ### src/blessed/app.ts
-- [ ] Remove `concept_processed: true` assignment (line 1478)
+- [x] Remove `concept_processed: true` assignment **[Deleted in 0110]**
+- [x] Remove `ConceptQueue` imports and usage **[Deleted in 0110]**
+- [x] Remove stale message checking logic **[Deleted in 0110]** (stubbed out, will be replaced by LLM queue)
+- [x] Remove `getUnprocessedMessages` import **[Deleted in 0110]**
 - [ ] Update concept display logic to show data buckets (facts/traits/topics/people)
 - [ ] Remove type-based filtering in UI rendering (lines 922, 1246, 1278, 1329)
 - [ ] [Needed throughout epic - UI changes span multiple tickets]
@@ -140,15 +138,15 @@ The following items were already completed as part of ticket 0109:
 
 ## Detailed Removal Inventory
 
-### 1. Message.concept_processed Field
-**Locations**: 10 occurrences across 3 files
-- `src/types.ts:219` - Field definition
-- `src/storage.ts:223, 238, 348` - Initialization to `false`
-- `src/storage.ts:285-297` - `getUnprocessedMessages()` function
-- `src/storage.ts:316-317` - `markMessagesConceptProcessed()` function
-- `src/blessed/app.ts:1478` - Set to `true`
+### 1. Message.concept_processed Field **[COMPLETED in 0110]**
+**All removed** - ✅ Ticket 0110 removed all occurrences:
+- ✅ `src/types.ts:219` - Field definition removed
+- ✅ `src/storage.ts` - All initialization removed (was lines 179, 194, 260)
+- ✅ `src/storage.ts:245-257` - `getUnprocessedMessages()` deleted
+- ✅ `src/storage.ts:264-281` - `markMessagesConceptProcessed()` deleted
+- ✅ `src/blessed/app.ts:1477` - Removed from marker message
 
-**Replacement**: Per-data-type extraction tracking (Facts/Traits/Topics/People track own "last processed" timestamp)
+**Replacement**: LLM queue tracking (ticket 0110)
 
 ### 2. ConceptType Enum and Type-Based Switching
 **Locations**: 37+ occurrences across 7 files
@@ -236,20 +234,20 @@ const DEFAULT_EI_PERSONA: PersonaEntity = {
 - ✅ `loadArchiveState()` / `saveArchiveState()` → Updated to use PersonaEntity **[Updated in 0109]**
 - ✅ `addPersonaAlias()` / `removePersonaAlias()` → Updated to use PersonaEntity **[Updated in 0109]**
 
-**Functions Still To Remove**:
-- `markMessagesConceptProcessed()` → Remove (replaced by per-type tracking)
-- `getUnprocessedMessages()` → Remove (replaced by per-type tracking)
+**Functions Removed in 0110**:
+- ✅ `markMessagesConceptProcessed()` **[Deleted in 0110]**
+- ✅ `getUnprocessedMessages()` **[Deleted in 0110]**
+- ✅ All `concept_processed` field initialization **[Deleted in 0110]**
 
 **Functions to Keep** (not concept-specific):
 - `loadHistory()`, `saveHistory()`, `appendMessage()`
 - `getRecentMessages()`, `getLastMessageTime()`
 - File path helpers: `dataPath()`, `personaPath()`, `getDataPath()`
 
-### 6. Concept Queue System
-**File to Delete**:
-- `src/concept-queue.ts` - **DELETE ENTIRE FILE** (replaced by new extraction system in 0111-0113)
+### 6. Concept Queue System **[COMPLETED in 0110]**
+**File Deleted**: ✅ `src/concept-queue.ts` - **DELETED ENTIRE FILE** in ticket 0110
 
-**Replacement**: Two-phase extraction with LLM queue persistence (ticket 0110)
+**Replacement**: ✅ New `src/llm-queue.ts` with persistence to `data/llm_queue.jsonc` (ticket 0110)
 
 ### 7. Concept Reconciliation
 **File to Delete/Rewrite**:

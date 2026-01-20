@@ -1,6 +1,6 @@
 # 0107: Entity Data Architecture Overhaul (Epic)
 
-**Status**: PENDING
+**Status**: IN_PROGRESS
 
 ## Summary
 
@@ -173,9 +173,9 @@ Instead of one massive "update all concepts" call:
 ## Sub-Tickets
 
 ### Schema & Storage
-- [ ] 0108: New Entity Type Definitions
-- [ ] 0109: Storage Migration (concepts → facts/traits/topics/people)
-- [ ] 0110: LLM Queue Persistence File
+- [x] 0108: New Entity Type Definitions (QA - ready for integration testing)
+- [x] 0109: Storage Migration (concepts → facts/traits/topics/people) (QA - ready for integration testing)
+- [x] 0110: LLM Queue Persistence File (DONE)
 - [ ] 0124: Scheduled Jobs Infrastructure (NEW)
 
 ### Extraction System

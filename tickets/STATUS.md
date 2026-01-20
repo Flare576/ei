@@ -1,6 +1,6 @@
 # Ticket Status Summary
 
-## DONE ✅ (69 tickets)
+## DONE ✅ (70 tickets)
 - 0078: Persona Delete Command
 - 0044: New Conversation Command
 - 0039: Blessed Proper Emoji Support
@@ -70,6 +70,7 @@
 - 0100: Epic Cleanup - Finalize Schema
 - 0101: Debug Log to Data Directory
 - 0048: Unified State Management System (Undo + Save/Restore)
+- 0110: LLM Queue Persistence File
 
 ## PENDING (18 tickets)
 - 0107: Entity Data Architecture Overhaul (Epic) - MAJOR REDESIGN
@@ -112,9 +113,9 @@
 
 ---
 
-**Last Updated**: 2026-01-19
+**Last Updated**: 2026-01-20
 **Total Tickets**: 125 created
-**Stats**: 69 done, 0 QA, 0 in_progress, 36 pending (18 in 0107 epic), 13 cancelled
+**Stats**: 70 done, 0 QA, 0 in_progress, 35 pending (17 in 0107 epic), 13 cancelled
 
 ## Epic Status
 
@@ -162,7 +163,7 @@ Absorbs 0102 (Ei Core Persona) and 0103 (Persona Prompt Architecture).
 **Schema & Storage:**
 - 0108: PENDING - New Entity Type Definitions
 - 0109: PENDING - Storage Migration
-- 0110: PENDING - LLM Queue Persistence File
+- 0110: DONE - LLM Queue Persistence File
 - 0124: PENDING - Scheduled Jobs Infrastructure
 
 **Extraction System:**

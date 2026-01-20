@@ -5,10 +5,9 @@ import { writeFileSync, readFileSync, unlinkSync } from 'fs';
 // Import test output capture early to intercept blessed methods before they're used
 import { testOutputCapture } from './test-output-capture.js';
 
-import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog, getPendingMessages, replacePendingMessages, appendHumanMessage, appendMessage, getUnprocessedMessages, loadPauseState, savePauseState, markSystemMessagesAsRead, getUnreadSystemMessageCount, loadArchiveState, saveArchiveState, getArchivedPersonas, findArchivedPersonaByNameOrAlias, addPersonaAlias, removePersonaAlias, loadConceptMap, saveConceptMap, loadAllPersonasWithConceptMaps } from '../storage.js';
+import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog, getPendingMessages, replacePendingMessages, appendHumanMessage, appendMessage, loadPauseState, savePauseState, markSystemMessagesAsRead, getUnreadSystemMessageCount, loadArchiveState, saveArchiveState, getArchivedPersonas, findArchivedPersonaByNameOrAlias, addPersonaAlias, removePersonaAlias, loadConceptMap, saveConceptMap, loadAllPersonasWithConceptMaps } from '../storage.js';
 import { getVisiblePersonas } from '../prompts.js';
 import { createPersonaWithLLM, saveNewPersona } from '../persona-creator.js';
-import { ConceptQueue } from '../concept-queue.js';
 import { processEvent } from '../processor.js';
 import { applyConceptDecay, checkConceptDeltas } from '../concept-decay.js';
 import { LLMAbortedError, resolveModel, getProviderStatuses } from '../llm.js';
@@ -1475,7 +1474,6 @@ export class EIApp {
         content: '[CONTEXT_CLEARED]',
         timestamp: new Date().toISOString(),
         read: true,
-        concept_processed: true,
       };
       
       await appendMessage(markerMessage, this.activePersona);
@@ -2037,31 +2035,7 @@ Press q to close this help.`;
   }
 
   private async checkForStaleMessages(): Promise<void> {
-    const cutoffTime = new Date(Date.now() - STALE_MESSAGE_THRESHOLD_MS).toISOString();
-    debugLog(`Checking for stale messages (before ${cutoffTime})`);
-
-    for (const persona of this.personas) {
-      const staleMessages = await getUnprocessedMessages(persona.name, cutoffTime);
-
-      if (staleMessages.length > 0) {
-        debugLog(`Found ${staleMessages.length} stale messages for ${persona.name}`);
-        const queue = ConceptQueue.getInstance();
-
-        queue.enqueue({
-          persona: persona.name,
-          target: "system",
-          messages: staleMessages,
-          priority: "normal"
-        });
-
-        queue.enqueue({
-          persona: persona.name,
-          target: "human",
-          messages: staleMessages,
-          priority: "normal"
-        });
-      }
-    }
+    debugLog('Stale message checking removed - handled by new LLM queue system');
   }
 
   private async switchPersona(personaName: string) {
@@ -2072,25 +2046,6 @@ Press q to close this help.`;
     }
 
     try {
-      // Queue concept updates for the persona being backgrounded (high priority)
-      const unprocessedMessages = await getUnprocessedMessages(this.activePersona);
-      if (unprocessedMessages.length > 0) {
-        debugLog(`Queueing concept updates for backgrounded persona ${this.activePersona} (${unprocessedMessages.length} messages)`);
-        const queue = ConceptQueue.getInstance();
-        queue.enqueue({
-          persona: this.activePersona,
-          target: "system",
-          messages: unprocessedMessages,
-          priority: "high"
-        });
-        queue.enqueue({
-          persona: this.activePersona,
-          target: "human",
-          messages: unprocessedMessages,
-          priority: "high"
-        });
-      }
-
       const history = await loadHistory(personaName);
       const recent = history.messages.slice(-STARTUP_HISTORY_COUNT);
       

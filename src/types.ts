@@ -216,7 +216,6 @@ export interface Message {
   timestamp: string;
   state?: MessageState;
   read?: boolean;
-  concept_processed?: boolean; // undefined/false = not processed for concept updates
 }
 
 export interface ConversationHistory {

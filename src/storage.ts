@@ -176,7 +176,6 @@ export async function appendMessage(
   const messageWithDefaults: Message = {
     ...message,
     read: message.read ?? false,
-    concept_processed: false,
   };
   history.messages.push(messageWithDefaults);
   await saveHistory(history, persona);
@@ -191,7 +190,6 @@ export async function appendHumanMessage(
     content,
     timestamp: new Date().toISOString(),
     read: false,
-    concept_processed: false,
   };
   await appendMessage(message, persona);
 }
@@ -236,50 +234,6 @@ export async function getUnreadSystemMessageCount(persona?: string): Promise<num
   ).length;
 }
 
-/**
- * Gets messages that haven't been processed for concept updates.
- * Messages without the concept_processed field are treated as already processed (backward compatible).
- * Only returns messages where both concept_processed: false AND read: true.
- * This ensures both entities have "seen" the message before it affects concept maps.
- */
-export async function getUnprocessedMessages(
-  persona?: string,
-  beforeTimestamp?: string
-): Promise<Message[]> {
-  const history = await loadHistory(persona);
-  const beforeTime = beforeTimestamp ? new Date(beforeTimestamp).getTime() : undefined;
-
-  return history.messages.filter(m =>
-    m.concept_processed === false &&
-    m.read === true &&
-    (!beforeTime || new Date(m.timestamp).getTime() < beforeTime)
-  );
-}
-
-/**
- * Marks messages as processed for concept updates.
- * @param messageTimestamps - Array of ISO timestamp strings identifying messages to mark
- * @param persona - Optional persona name (defaults to "ei")
- */
-export async function markMessagesConceptProcessed(
-  messageTimestamps: string[],
-  persona?: string
-): Promise<void> {
-  const history = await loadHistory(persona);
-  let changed = false;
-
-  for (const msg of history.messages) {
-    if (messageTimestamps.includes(msg.timestamp) && !msg.concept_processed) {
-      msg.concept_processed = true;
-      changed = true;
-    }
-  }
-
-  if (changed) {
-    await saveHistory(history, persona);
-  }
-}
-
 export async function replacePendingMessages(
   newContent: string,
   persona?: string
@@ -301,7 +255,6 @@ export async function replacePendingMessages(
     content: newContent,
     timestamp: new Date().toISOString(),
     read: false,
-    concept_processed: false,
   };
 
   history.messages = [...messagesBeforePending, newMessage];
