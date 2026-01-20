@@ -1,6 +1,6 @@
 # 0078: Persona Delete Command
 
-**Status**: PENDING
+**Status**: DONE
 
 ## Summary
 Implement a `/delete` command to permanently remove archived personas with safety checks and optional cleanup of human concepts learned from that persona.
@@ -26,19 +26,19 @@ Implement a safe deletion system that only operates on archived personas:
 5. Delete persona files (history, concept map, metadata)
 
 ## Acceptance Criteria
-- [ ] `/delete` without argument shows usage message, does not delete anything
-- [ ] `/delete <name>` errors if persona is not archived with helpful message
-- [ ] `/delete ei` is blocked with clear error message
-- [ ] `/delete <archived_persona>` shows confirmation prompt with "cannot be undone" warning
-- [ ] User can cancel at confirmation prompt (y/n, default to no)
-- [ ] After first confirmation, asks "Do you want to delete topics created by this persona?" (y/n)
-- [ ] If yes, removes all human concepts where `learned_by` matches persona
-- [ ] If no, preserves all human concepts
-- [ ] Successfully deletes persona history file
-- [ ] Successfully deletes persona concept map file
-- [ ] Removes persona from any in-memory state
-- [ ] Displays success message with what was deleted
-- [ ] `/help` documents `/delete` command syntax and safety features
+- [x] `/delete` without argument shows usage message, does not delete anything
+- [x] `/delete <name>` errors if persona is not archived with helpful message
+- [x] `/delete ei` is blocked with clear error message
+- [x] `/delete <archived_persona>` shows confirmation prompt with "cannot be undone" warning
+- [x] User can cancel at confirmation prompt (y/n, default to no)
+- [x] After first confirmation, asks "Do you want to delete topics created by this persona?" (y/n)
+- [x] If yes, removes all human concepts where `learned_by` matches persona
+- [x] If no, preserves all human concepts
+- [x] Successfully deletes persona history file
+- [x] Successfully deletes persona concept map file
+- [x] Removes persona from any in-memory state
+- [x] Displays success message with what was deleted
+- [x] `/help` documents `/delete` command syntax and safety features
 
 ## Value Statement
 Provides users with data hygiene control while preventing accidental deletions through multiple safety checks and archive-only restriction.

@@ -21,9 +21,6 @@ import { getDisplayWidth } from './unicode-width.js';
 import { StateManager } from '../state-manager.js';
 import { setStateManager } from '../storage.js';
 
-// Initialize debug log file
-initializeDebugLog();
-
 function debugLog(message: string) {
   appendDebugLog(message);
 }
@@ -86,6 +83,12 @@ export class EIApp {
   private pendingPersonaCreation: {
     name: string;
     stage: 'confirm' | 'describe';
+  } | null = null;
+
+  // Persona deletion state tracking
+  private pendingPersonaDeletion: {
+    name: string;
+    stage: 'confirm-delete' | 'confirm-concepts';
   } | null = null;
 
   constructor() {
@@ -376,6 +379,14 @@ export class EIApp {
       return;
     }
 
+    if (this.pendingPersonaDeletion) {
+      await this.handlePersonaDeletionInput(actualContent);
+      this.layoutManager.getInputBox().clearValue();
+      this.focusManager.maintainFocus();
+      this.render();
+      return;
+    }
+
     if (actualContent.startsWith('/')) {
       await this.handleCommand(actualContent);
       this.focusManager.maintainFocus();
@@ -429,6 +440,9 @@ export class EIApp {
         break;
       case 'unarchive':
         await this.handleUnarchiveCommand(args);
+        break;
+      case 'delete':
+        await this.handleDeleteCommand(args);
         break;
       case 'nick':
       case 'n':
@@ -838,6 +852,136 @@ export class EIApp {
     
     this.setStatus(`Unarchived ${targetPersona}`);
     this.render();
+  }
+
+  private async handleDeleteCommand(args: string): Promise<void> {
+    const trimmed = args.trim();
+    
+    if (!trimmed) {
+      this.setStatus('Usage: /delete <persona> - Deletes an archived persona (cannot be undone)');
+      return;
+    }
+    
+    const targetPersona = await findArchivedPersonaByNameOrAlias(trimmed) || trimmed;
+    
+    if (targetPersona === 'ei') {
+      this.setStatus(`Cannot delete 'ei' - this persona is system-critical`);
+      return;
+    }
+    
+    const archivedPersonas = await getArchivedPersonas();
+    const isArchived = archivedPersonas.some(p => p.name === targetPersona);
+    
+    if (!isArchived) {
+      const activePersonas = await listPersonas();
+      const isActive = activePersonas.some(p => p.name === targetPersona);
+      
+      if (isActive) {
+        this.setStatus(`Cannot delete '${targetPersona}' - only archived personas can be deleted. Use /archive first.`);
+      } else {
+        this.setStatus(`Cannot delete '${targetPersona}' - persona not found`);
+      }
+      return;
+    }
+    
+    this.pendingPersonaDeletion = { name: targetPersona, stage: 'confirm-delete' };
+    this.setStatus(`Delete '${targetPersona}'? This cannot be undone. (y/n)`);
+  }
+
+  private async handlePersonaDeletionInput(input: string): Promise<void> {
+    if (!this.pendingPersonaDeletion) return;
+
+    const { name, stage } = this.pendingPersonaDeletion;
+    const trimmed = input.trim().toLowerCase();
+
+    if (stage === 'confirm-delete') {
+      if (trimmed === 'y' || trimmed === 'yes') {
+        this.pendingPersonaDeletion = { name, stage: 'confirm-concepts' };
+        this.setStatus(`Delete topics created by '${name}'? This will remove concepts from human's map. (y/n)`);
+      } else if (trimmed === 'n' || trimmed === 'no') {
+        this.pendingPersonaDeletion = null;
+        this.setStatus('Deletion cancelled');
+      } else {
+        this.setStatus(`Delete '${name}'? This cannot be undone. (y/n)`);
+      }
+      return;
+    }
+
+    if (stage === 'confirm-concepts') {
+      if (trimmed === 'y' || trimmed === 'yes' || trimmed === 'n' || trimmed === 'no') {
+        const deleteConceptsFromHuman = trimmed === 'y' || trimmed === 'yes';
+        
+        try {
+          await this.stateManager.captureSnapshot();
+          
+          let deletedConceptCount = 0;
+          if (deleteConceptsFromHuman) {
+            const humanConcepts = await loadConceptMap('human');
+            const originalCount = humanConcepts.concepts.length;
+            humanConcepts.concepts = humanConcepts.concepts.filter(
+              concept => concept.learned_by !== name
+            );
+            deletedConceptCount = originalCount - humanConcepts.concepts.length;
+            
+            if (deletedConceptCount > 0) {
+              await saveConceptMap(humanConcepts);
+            }
+          }
+          
+          const { unlink, rmdir } = await import('fs/promises');
+          const { getDataPath } = await import('../storage.js');
+          const path = await import('path');
+          const dataPath = getDataPath();
+          
+          const personaDir = path.join(dataPath, 'personas', name);
+          const systemFile = path.join(personaDir, 'system.jsonc');
+          const historyFile = path.join(personaDir, 'history.jsonc');
+          
+          try {
+            await unlink(systemFile);
+          } catch (err) {
+          }
+          
+          try {
+            await unlink(historyFile);
+          } catch (err) {
+          }
+          
+          try {
+            await rmdir(personaDir);
+          } catch (err) {
+          }
+          
+          const ps = this.personaStates.get(name);
+          if (ps) {
+            if (ps.heartbeatTimer) {
+              clearTimeout(ps.heartbeatTimer);
+            }
+            if (ps.debounceTimer) {
+              clearTimeout(ps.debounceTimer);
+            }
+            if (ps.pauseTimer) {
+              clearTimeout(ps.pauseTimer);
+            }
+            this.personaStates.delete(name);
+          }
+          
+          this.pendingPersonaDeletion = null;
+          
+          let statusMsg = `Deleted persona '${name}'`;
+          if (deleteConceptsFromHuman && deletedConceptCount > 0) {
+            statusMsg += ` and ${deletedConceptCount} human concept${deletedConceptCount === 1 ? '' : 's'}`;
+          }
+          this.setStatus(statusMsg);
+          this.render();
+        } catch (err) {
+          this.pendingPersonaDeletion = null;
+          this.setStatus(`Failed to delete persona: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      } else {
+        this.setStatus(`Delete topics created by '${name}'? This will remove concepts from human's map. (y/n)`);
+      }
+    }
   }
 
   private async handleNickCommand(args: string): Promise<void> {
@@ -1356,6 +1500,7 @@ COMMANDS
   /resume [persona]   Resume paused persona
   /archive [persona]  Archive persona (hides from list, stops heartbeats)
   /unarchive [name|#] Restore archived persona (no args lists archived)
+  /delete <persona>   Delete archived persona permanently (cannot be undone)
   /nick [subcommand]  Manage persona aliases
     /nick              List aliases for active persona
     /nick add <alias>  Add alias (supports "multi word" quotes)
@@ -2276,6 +2421,7 @@ Press q to close this help.`;
   }
 
   async init() {
+    await initializeDebugLog();
     debugLog(`init() called - Instance #${this.instanceId}`);
     try {
       await initializeDataDirectory();

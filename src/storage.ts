@@ -679,27 +679,19 @@ export async function saveArchiveState(persona: string, state: { isArchived: boo
   await saveConceptMap(conceptMap, persona);
 }
 
-// Debug logging utilities to isolate file system access
 const DEBUG_LOG = path.join(DATA_PATH, 'debug.log');
 
-export function initializeDebugLog(): void {
+export async function initializeDebugLog(): Promise<void> {
   try {
-    // Create logs directory if it doesn't exist
     const logsDir = path.dirname(DEBUG_LOG);
     if (!existsSync(logsDir)) {
-      mkdir(logsDir, { recursive: true });
+      await mkdir(logsDir, { recursive: true });
     }
-    writeFile(DEBUG_LOG, `=== Blessed App Debug Log - ${new Date().toISOString()} ===\n`, { flag: 'w' });
+    await writeFile(DEBUG_LOG, `=== Blessed App Debug Log - ${new Date().toISOString()} ===\n`, { flag: 'w' });
   } catch (err) {
-    // Silently fail if debug log can't be created
   }
 }
 
 export function appendDebugLog(message: string): void {
-  try {
-    const timestamp = new Date().toISOString();
-    writeFile(DEBUG_LOG, `[${timestamp}] ${message}\n`, { flag: 'a' });
-  } catch (err) {
-    // Silently fail if debug log can't be written
-  }
+  writeFile(DEBUG_LOG, `[${new Date().toISOString()}] ${message}\n`, { flag: 'a' }).catch(() => {});
 }

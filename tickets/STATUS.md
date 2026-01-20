@@ -1,6 +1,7 @@
 # Ticket Status Summary
 
-## DONE ✅ (67 tickets)
+## DONE ✅ (68 tickets)
+- 0078: Persona Delete Command
 - 0044: New Conversation Command
 - 0039: Blessed Proper Emoji Support
 - 0090: Parse Qwen-style Response Markup
@@ -69,7 +70,10 @@
 - 0101: Debug Log to Data Directory
 - 0048: Unified State Management System (Undo + Save/Restore)
 
-## PENDING (16 tickets)
+## PENDING (18 tickets)
+- 0106: Special Behavior for Archiving Ei Persona
+- 0105: Context Window Command
+- 0104: OpenTUI Migration Spike
 - 0102: Ei Core Persona Refinement
 - 0103: Persona Prompt Architecture
 - 0015: Persona Switching (Commands + Navigation)
@@ -85,7 +89,6 @@
 - 0052: Window Size CLI Parameter
 - 0053: Graceful Quit/Exit Commands
 - 0055: Logging System Improvements
-- 0078: Persona Delete Command
 - 0079: Validate Command Argument Counts
 - 0088: Token Usage Logging
 - 0089: Proactive API Key Validation
@@ -109,8 +112,8 @@
 ---
 
 **Last Updated**: 2026-01-19
-**Total Tickets**: 103 created
-**Stats**: 67 done, 0 QA, 0 in_progress, 16 pending, 13 cancelled
+**Total Tickets**: 106 created
+**Stats**: 68 done, 0 QA, 0 in_progress, 16 pending, 13 cancelled
 
 ## Epic Status
 

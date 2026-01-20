@@ -8,6 +8,7 @@ import {
   saveHistory,
   listPersonas,
   getDataPath,
+  appendDebugLog,
 } from "./storage.js";
 import { SystemSnapshot, ConceptMap, ConversationHistory } from "./types.js";
 
@@ -37,7 +38,7 @@ export class StateManager {
   constructor() {
     this.statesDir = path.join(getDataPath(), ".ei-states");
     this.ensureStatesDirectory().catch(err => {
-      console.error(`Failed to initialize .ei-states directory: ${err instanceof Error ? err.message : String(err)}`);
+      appendDebugLog(`Failed to initialize .ei-states directory: ${err instanceof Error ? err.message : String(err)}`);
     });
   }
 
@@ -64,7 +65,7 @@ export class StateManager {
             history,
           };
         } catch (err) {
-          console.error(`Warning: Failed to snapshot persona "${persona.name}":`, err);
+          appendDebugLog(`Warning: Failed to snapshot persona "${persona.name}": ${err instanceof Error ? err.message : String(err)}`);
         }
       }
 
@@ -98,7 +99,7 @@ export class StateManager {
           await saveConceptMap(data.system, personaName);
           await saveHistory(data.history, personaName);
         } catch (err) {
-          console.error(`Warning: Failed to restore persona "${personaName}":`, err);
+          appendDebugLog(`Warning: Failed to restore persona "${personaName}": ${err instanceof Error ? err.message : String(err)}`);
         }
       }
     } catch (err) {
@@ -189,7 +190,7 @@ export class StateManager {
         try {
           await unlink(oldFilePath);
         } catch (err) {
-          console.error(`Failed to delete old state file: ${err instanceof Error ? err.message : String(err)}`);
+          appendDebugLog(`Failed to delete old state file: ${err instanceof Error ? err.message : String(err)}`);
         }
       }
     }
@@ -233,7 +234,7 @@ export class StateManager {
       const content = await readFile(indexPath, "utf-8");
       return JSON.parse(content) as StateIndex;
     } catch (err) {
-      console.error(`Failed to load state index, recreating: ${err instanceof Error ? err.message : String(err)}`);
+      appendDebugLog(`Failed to load state index, recreating: ${err instanceof Error ? err.message : String(err)}`);
       return { states: [] };
     }
   }

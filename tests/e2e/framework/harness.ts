@@ -717,6 +717,80 @@ export class E2ETestHarnessImpl implements E2ETestHarness {
   }
 
   /**
+   * Seeds a JSON file with test data
+   * Useful for setting up human concepts or other test state before starting the app
+   * @param filePath - Relative path from data directory (e.g., 'human.jsonc')
+   * @param data - Object to write as JSON
+   */
+  async seedJsonFile(filePath: string, data: any): Promise<void> {
+    if (!this.tempDataPath) {
+      throw new Error('Test harness not set up properly. Temp data path not available.');
+    }
+
+    const absolutePath = path.isAbsolute(filePath) ? filePath : path.join(this.tempDataPath, filePath);
+    
+    try {
+      await fs.promises.writeFile(absolutePath, JSON.stringify(data, null, 2), 'utf-8');
+    } catch (error) {
+      throw new Error(`Failed to seed JSON file at ${filePath}: ${error}`);
+    }
+  }
+
+  /**
+   * Modifies an existing JSON file using a transform function
+   * @param filePath - Relative path from data directory (e.g., 'human.jsonc')
+   * @param transform - Function that receives current JSON and returns modified JSON
+   */
+  async modifyJsonFile(filePath: string, transform: (data: any) => any): Promise<void> {
+    if (!this.tempDataPath) {
+      throw new Error('Test harness not set up properly. Temp data path not available.');
+    }
+
+    const absolutePath = path.isAbsolute(filePath) ? filePath : path.join(this.tempDataPath, filePath);
+    
+    try {
+      const content = await fs.promises.readFile(absolutePath, 'utf-8');
+      const currentData = JSON.parse(content);
+      const modifiedData = transform(currentData);
+      await fs.promises.writeFile(absolutePath, JSON.stringify(modifiedData, null, 2), 'utf-8');
+    } catch (error) {
+      throw new Error(`Failed to modify JSON file at ${filePath}: ${error}`);
+    }
+  }
+
+  /**
+   * Asserts that file content does NOT contain expected value
+   */
+  async assertFileDoesNotContain(filePath: string, unexpectedContent: string | RegExp): Promise<void> {
+    if (!this.tempDataPath) {
+      throw new Error('Test harness not set up properly. Temp data path not available.');
+    }
+
+    const absolutePath = path.isAbsolute(filePath) ? filePath : path.join(this.tempDataPath, filePath);
+
+    if (!fs.existsSync(absolutePath)) {
+      return;
+    }
+
+    try {
+      const content = await fs.promises.readFile(absolutePath, 'utf-8');
+      
+      const matches = typeof unexpectedContent === 'string' 
+        ? content.includes(unexpectedContent)
+        : unexpectedContent.test(content);
+
+      if (matches) {
+        throw new Error(`File content assertion failed for ${filePath}. File should NOT contain: ${unexpectedContent}`);
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('should NOT contain')) {
+        throw error;
+      }
+      throw new Error(`Failed to read file for negative content assertion: ${error}`);
+    }
+  }
+
+  /**
    * Asserts persona state matches expected values
    */
   async assertPersonaState(persona: string, expectedState: PersonaState): Promise<void> {
