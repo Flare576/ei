@@ -9,6 +9,9 @@ import type { DetailUpdatePayload } from "../../src/llm-queue.js";
 vi.mock("../../src/storage.js");
 vi.mock("../../src/llm.js");
 vi.mock("../../src/llm-queue.js");
+vi.mock("../../src/extraction-frequency.js", () => ({
+  recordExtraction: vi.fn().mockResolvedValue(undefined),
+}));
 
 describe("extraction", () => {
   beforeEach(() => {

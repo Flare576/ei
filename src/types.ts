@@ -133,6 +133,44 @@ export interface HumanEntity {
   last_updated: string | null;
 }
 
+// ============================================================================
+// EXTRACTION FREQUENCY TRACKING (0113)
+// ============================================================================
+
+/**
+ * Extraction history for a single data type
+ */
+export interface ExtractionHistory {
+  /** ISO timestamp of last extraction run */
+  last_extraction: string | null;
+  /** Number of message pairs since last extraction */
+  messages_since_last_extract: number;
+  /** Total number of extractions ever run (also serves as "fullness" indicator) */
+  total_extractions: number;
+}
+
+/**
+ * Extraction tracking state for a single entity
+ */
+export interface EntityExtractionState {
+  fact: ExtractionHistory;
+  trait: ExtractionHistory;
+  topic: ExtractionHistory;
+  person: ExtractionHistory;
+}
+
+/**
+ * Global extraction state file
+ * Keys: "human" or "system:{personaName}"
+ */
+export interface ExtractionState {
+  [entityKey: string]: EntityExtractionState;
+}
+
+// ============================================================================
+// ENTITY DEFINITIONS
+// ============================================================================
+
 /**
  * PERSONA ENTITY: Represents an AI conversational agent
  * Multiple per profile - each with their own personality and context

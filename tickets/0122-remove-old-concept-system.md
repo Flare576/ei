@@ -111,9 +111,9 @@ The following items were already completed as part of ticket 0109:
   - Group assignment logic moves to entity-level operations
 
 ### src/concept-decay.ts
-- [ ] Update to work with new Topic/Person types (level_current/level_ideal fields)
-- [ ] Same decay logic, different data structure
-- [ ] [Needed for 0113 - Extraction Frequency Controller]
+- [x] **DELETED in ticket 0113** - Replaced by src/topic-decay.ts
+- [x] New topic-decay.ts works with Topic/Person types directly
+- [x] Same logarithmic decay formula, cleaner implementation
 
 ### src/concept-queue.ts
 - [x] Replace with LLM queue (done in 0110)
@@ -139,6 +139,9 @@ The following items were already completed as part of ticket 0109:
 - [x] Remove stale message checking logic **[Deleted in 0110]** (stubbed out, will be replaced by LLM queue)
 - [x] Remove `getUnprocessedMessages` import **[Deleted in 0110]**
 - [x] Remove stale `loadConceptMap`, `saveConceptMap`, `loadAllPersonasWithConceptMaps` imports **[Deleted in 0126]**
+- [x] Replace concept-decay imports with topic-decay **[Updated in 0113]**
+  - Changed `applyConceptDecay` → `applyTopicDecay('system', personaName)`
+  - Changed `checkConceptDeltas` → `checkDesireGaps('system', personaName)`
 - [ ] Update concept display logic to show data buckets (facts/traits/topics/people)
 - [ ] Remove type-based filtering in UI rendering (lines 922, 1246, 1278, 1329)
 - [ ] Fix remaining `loadConceptMap`/`saveConceptMap` function calls (lines 923-1333)
@@ -147,7 +150,7 @@ The following items were already completed as part of ticket 0109:
 ## Tests to Update
 
 ### tests/unit/
-- [ ] concept-decay.test.ts → topic-decay.test.ts
+- [x] concept-decay.test.ts **DELETED in 0113** → Replaced by topic-decay.test.ts
 - [ ] concept-reconciliation.test.ts → entity-reconciliation.test.ts
 - [ ] concept-visibility.test.ts → entity-visibility.test.ts
 - [ ] processor.test.ts → update for new flow

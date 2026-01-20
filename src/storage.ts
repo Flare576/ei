@@ -2,7 +2,7 @@ import { readFile, writeFile, readdir, mkdir } from "fs/promises";
 import { existsSync } from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
-import { HumanEntity, PersonaEntity, ConversationHistory, Message } from "./types.js";
+import { HumanEntity, PersonaEntity, ConversationHistory, Message, ExtractionState } from "./types.js";
 import type { StateManager } from "./state-manager.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -584,4 +584,35 @@ export async function initializeDebugLog(): Promise<void> {
 
 export function appendDebugLog(message: string): void {
   writeFile(DEBUG_LOG, `[${new Date().toISOString()}] ${message}\n`, { flag: 'a' }).catch(() => {});
+}
+
+export function getExtractionStatePath(): string {
+  return path.join(DATA_PATH, "extraction_state.jsonc");
+}
+
+export async function loadExtractionState(): Promise<ExtractionState> {
+  const statePath = getExtractionStatePath();
+  
+  if (!existsSync(statePath)) {
+    return {};
+  }
+  
+  try {
+    const content = await readFile(statePath, "utf-8");
+    return JSON.parse(content);
+  } catch (err) {
+    appendDebugLog(`[ExtractionState] Failed to load: ${err}`);
+    return {};
+  }
+}
+
+export async function saveExtractionState(state: ExtractionState): Promise<void> {
+  const statePath = getExtractionStatePath();
+  
+  try {
+    await writeFile(statePath, JSON.stringify(state, null, 2), "utf-8");
+  } catch (err) {
+    appendDebugLog(`[ExtractionState] Failed to save: ${err}`);
+    throw err;
+  }
 }

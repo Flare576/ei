@@ -9,7 +9,7 @@ import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDire
 import { getVisiblePersonas } from '../prompts.js';
 import { createPersonaWithLLM, saveNewPersona } from '../persona-creator.js';
 import { processEvent } from '../processor.js';
-import { applyConceptDecay, checkConceptDeltas } from '../concept-decay.js';
+import { applyTopicDecay, checkDesireGaps } from '../topic-decay.js';
 import { LLMAbortedError, resolveModel, getProviderStatuses } from '../llm.js';
 import type { Message, MessageState, PersonaState } from '../types.js';
 import { LayoutManager } from './layout-manager.js';
@@ -1951,9 +1951,9 @@ Press q to close this help.`;
       }
 
       try {
-        await applyConceptDecay(personaName);
+        await applyTopicDecay('system', personaName);
         
-        const shouldSpeak = await checkConceptDeltas(personaName);
+        const shouldSpeak = await checkDesireGaps('system', personaName);
         
         if (!shouldSpeak) {
           debugLog(`Heartbeat for ${personaName}: no significant deltas, skipping LLM call`);

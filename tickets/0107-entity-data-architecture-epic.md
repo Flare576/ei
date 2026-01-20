@@ -184,7 +184,7 @@ Instead of one massive "update all concepts" call:
 ### Extraction System
 - [x] 0111: Fast-Scan Prompt Implementation (QA - ready for integration testing)
 - [x] 0112: Detail Update Prompts (QA - all prompts implemented, tests passing)
-- [ ] 0113: Extraction Frequency Controller - depends on 0126
+- [x] 0113: Extraction Frequency Controller (QA - ready for integration testing)
 - [ ] 0114: Known Personas in Prompts (renamed)
 
 ### Ei Orchestration

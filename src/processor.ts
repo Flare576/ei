@@ -156,6 +156,33 @@ export async function processEvent(
     appendDebugLog("[Debug] Response generated. Concept updates deferred to ConceptQueue.");
   }
 
+  if (!signal?.aborted && response && humanMessage) {
+    const { triggerExtraction } = await import("./extraction-frequency.js");
+    
+    const messagePair: Message[] = [
+      {
+        role: "human",
+        content: humanMessage,
+        timestamp: new Date().toISOString(),
+        read: true
+      },
+      {
+        role: "system",
+        content: response,
+        timestamp: new Date().toISOString(),
+        read: false
+      }
+    ];
+    
+    triggerExtraction("human", persona, messagePair).catch(err => {
+      appendDebugLog(`[Extraction] Failed to trigger for human: ${err}`);
+    });
+    
+    triggerExtraction("system", persona, messagePair).catch(err => {
+      appendDebugLog(`[Extraction] Failed to trigger for ${persona}: ${err}`);
+    });
+  }
+
   return {
     response,
     humanConceptsUpdated: false,

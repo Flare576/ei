@@ -685,7 +685,11 @@ export async function runDetailUpdate(
     await savePersonaEntity(entity as PersonaEntity, persona);
   }
   
-  // 9. Check if we need to regenerate persona descriptions
+  // 9. Record extraction completion (for frequency tracking)
+  const { recordExtraction } = await import("./extraction-frequency.js");
+  await recordExtraction(target, persona, data_type);
+  
+  // 10. Check if we need to regenerate persona descriptions
   if (target === "system" && data_type === "trait") {
     await maybeRegeneratePersonaDescriptions(persona, entity as PersonaEntity);
   }
