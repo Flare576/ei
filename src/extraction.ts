@@ -266,9 +266,10 @@ export async function routeFastScanResults(
       type: "ei_validation",
       priority: "low",
       payload: {
-        validation_type: "fact_confirm",
+        validation_type: "data_confirm",
         item_name: item.name,
         data_type: item.type,
+        confidence: item.confidence === "low" ? 0.3 : 0.5,  // Numeric confidence
         context: `Detected "${item.name}" (${item.type}) with low confidence. ${
           result.new_items.some(n => n.name === item.name) 
             ? `Reason: ${result.new_items.find(n => n.name === item.name)?.reason}`

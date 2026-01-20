@@ -33,7 +33,12 @@ const DEFAULT_HUMAN_ENTITY: HumanEntity = {
   traits: [],
   topics: [],
   people: [],
-  last_updated: null
+  last_updated: null,
+  ceremony_config: {
+    enabled: true,
+    time: "09:00",
+    timezone: undefined
+  }
 };
 
 const DEFAULT_EI_PERSONA: PersonaEntity = {

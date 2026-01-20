@@ -185,10 +185,10 @@ Instead of one massive "update all concepts" call:
 - [x] 0111: Fast-Scan Prompt Implementation (QA - ready for integration testing)
 - [x] 0112: Detail Update Prompts (QA - all prompts implemented, tests passing)
 - [x] 0113: Extraction Frequency Controller (QA - ready for integration testing)
-- [ ] 0114: Known Personas in Prompts (renamed)
+- [x] 0114: Known Personas in Prompts (DONE - completed during 0111/0112)
 
 ### Ei Orchestration
-- [ ] 0115: Data Verification Flow (Daily Ceremony)
+- [x] 0115: Data Verification Flow (Daily Ceremony) (QA - ready for integration testing)
 - [ ] 0116: Cross-Persona Validation
 - [ ] 0117: /clarify Command (conversational data editing)
 - [ ] 0118: Ei Heartbeat Simplification

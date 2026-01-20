@@ -206,7 +206,7 @@ describe("extraction", () => {
           type: "ei_validation",
           priority: "low",
           payload: expect.objectContaining({
-            validation_type: "fact_confirm",
+            validation_type: "data_confirm",
             item_name: "Maybe"
           })
         })

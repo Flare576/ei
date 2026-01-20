@@ -395,6 +395,7 @@ This is a cleanup ticket - do it last. The goal is a clean codebase with no vest
 
 - **[Needed for 0113]** `src/concept-decay.ts` - Decay logic still needed, just operates on Topic/Person types instead of Concept
 - **[Needed throughout epic]** `src/blessed/app.ts` UI changes - span multiple tickets, can't fully clean until end
+- **[Used by 0114]** `storage.listPersonas()` - Required for persona filtering in extraction prompts (KEEP - not concept-specific)
 
 ### Migration Strategy
 

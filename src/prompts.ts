@@ -343,3 +343,34 @@ Generate the descriptions now.`;
 
   return { system, user };
 }
+
+export function buildVerificationResponsePrompt(
+  validationList: string,
+  userMessage: string
+): { system: string; user: string } {
+  const system = `You are parsing a user's response to data verification questions.
+
+The user was asked to verify these data points:
+${validationList}
+
+Your task: categorize their response into confirmed, corrected, rejected, roleplay, or unclear items.
+
+Return JSON matching this schema:
+{
+  "confirmed": ["names they said were correct"],
+  "corrected": [{"name": "item", "correction": "what they said instead"}],
+  "rejected": ["names they said were wrong/to remove"],
+  "roleplay": [{"name": "item", "group": "group name for roleplay context"}],
+  "unclear": ["names we still need clarification on"]
+}
+
+Examples:
+- "That's right" → confirmed: [all items]
+- "Number 2 is wrong" → rejected: [item 2 name]
+- "Actually it's X not Y" → corrected: [{name: Y item, correction: "X"}]
+- "That was just for the game with Frodo" → roleplay: [{name: item, group: "Frodo"}]`;
+
+  const user = `Their response: "${userMessage}"`;
+  
+  return { system, user };
+}

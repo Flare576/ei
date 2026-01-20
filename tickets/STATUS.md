@@ -1,9 +1,10 @@
 # Ticket Status Summary
 
-## QA ⚠️ (1 ticket)
+## QA ⚠️ (2 tickets)
 - 0111: Fast-Scan Prompt Implementation
+- 0115: Data Verification Flow (Daily Ceremony)
 
-## DONE ✅ (70 tickets)
+## DONE ✅ (71 tickets)
 - 0078: Persona Delete Command
 - 0044: New Conversation Command
 - 0039: Blessed Proper Emoji Support
@@ -74,6 +75,7 @@
 - 0101: Debug Log to Data Directory
 - 0048: Unified State Management System (Undo + Save/Restore)
 - 0110: LLM Queue Persistence File
+- 0114: Known Personas in Prompts
 
 ## PENDING (19 tickets)
 - 0107: Entity Data Architecture Overhaul (Epic) - MAJOR REDESIGN
@@ -117,8 +119,8 @@
 ---
 
 **Last Updated**: 2026-01-20
-**Total Tickets**: 126 created
-**Stats**: 70 done, 1 QA, 0 in_progress, 35 pending (17 in 0107 epic), 13 cancelled
+**Total Tickets**: 127 created (0114 marked done, was already implemented in 0111/0112)
+**Stats**: 71 done, 2 QA, 0 in_progress, 33 pending (15 in 0107 epic), 13 cancelled
 
 ## Epic Status
 
@@ -176,10 +178,10 @@ Absorbs 0102 (Ei Core Persona) and 0103 (Persona Prompt Architecture).
 - 0111: QA - Fast-Scan Prompt Implementation
 - 0112: PENDING - Detail Update Prompts (per data type) - depends on 0126
 - 0113: PENDING - Extraction Frequency Controller - depends on 0126
-- 0114: PENDING - Known Personas in Prompts
+- 0114: DONE - Known Personas in Prompts (completed during 0111/0112)
 
 **Ei Orchestration:**
-- 0115: PENDING - Data Verification Flow (Daily Ceremony)
+- 0115: QA - Data Verification Flow (Daily Ceremony)
 - 0116: PENDING - Cross-Persona Validation
 - 0117: PENDING - /clarify Command
 - 0118: PENDING - Ei Heartbeat Simplification

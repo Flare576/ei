@@ -40,11 +40,12 @@ export interface DetailUpdatePayload {
 }
 
 export interface EiValidationPayload {
-  validation_type: "fact_confirm" | "cross_persona" | "conflict" | "staleness";
+  validation_type: "data_confirm" | "cross_persona" | "conflict" | "staleness";
   item_name: string;
   data_type: "fact" | "trait" | "topic" | "person";
   context: string;
-  source_persona?: string;
+  confidence?: number;       // For data_confirm type
+  source_persona?: string;   // For cross_persona type
 }
 
 export interface DescriptionRegenPayload {

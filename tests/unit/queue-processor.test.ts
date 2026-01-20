@@ -124,7 +124,7 @@ describe("QueueProcessor", () => {
         created_at: new Date().toISOString(),
         attempts: 0,
         payload: {
-          validation_type: "fact_confirm",
+          validation_type: "data_confirm",
           item_name: "Test Fact",
           data_type: "fact",
           context: "Testing"

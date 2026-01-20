@@ -116,6 +116,20 @@ export interface Person extends DataItemBase {
 }
 
 /**
+ * Configuration for Ei's Daily Ceremony (data verification)
+ */
+export interface CeremonyConfig {
+  /** Whether Daily Ceremony is enabled */
+  enabled: boolean;
+  /** Time of day to run ceremony (24-hour format: "HH:MM") */
+  time: string;
+  /** Timezone (defaults to system timezone if not set) */
+  timezone?: string;
+  /** ISO timestamp of last ceremony run */
+  last_ceremony?: string;
+}
+
+/**
  * HUMAN ENTITY: Represents the real user
  * One per profile - stores what the system knows about the human
  */
@@ -131,6 +145,8 @@ export interface HumanEntity {
   people: Person[];
   /** ISO timestamp of last update to any data bucket */
   last_updated: string | null;
+  /** Configuration for Ei's Daily Ceremony */
+  ceremony_config?: CeremonyConfig;
 }
 
 // ============================================================================
