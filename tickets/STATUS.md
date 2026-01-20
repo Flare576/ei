@@ -1,6 +1,6 @@
 # Ticket Status Summary
 
-## DONE ✅ (68 tickets)
+## DONE ✅ (69 tickets)
 - 0078: Persona Delete Command
 - 0044: New Conversation Command
 - 0039: Blessed Proper Emoji Support
@@ -31,6 +31,7 @@
 - 0041: Blessed Editor Command
 - 0042: Pause/Resume Active Persona with Message Queuing
 - 0043: Archive/Unarchive Personas
+- 0053: Graceful Quit/Exit Commands (implemented as /quit only)
 - 0054: Human Concept Map Race Condition Protection
 - 0056: End-to-End Testing POC with Controlled Environment
 - 0057: Persona Creation via /persona Command
@@ -71,11 +72,10 @@
 - 0048: Unified State Management System (Undo + Save/Restore)
 
 ## PENDING (18 tickets)
+- 0107: Entity Data Architecture Overhaul (Epic) - MAJOR REDESIGN
 - 0106: Special Behavior for Archiving Ei Persona
 - 0105: Context Window Command
 - 0104: OpenTUI Migration Spike
-- 0102: Ei Core Persona Refinement
-- 0103: Persona Prompt Architecture
 - 0015: Persona Switching (Commands + Navigation)
 - 0018: Warn on Public Repository Storage
 - 0027: Enhanced Markdown Rendering
@@ -87,7 +87,6 @@
 - 0047: Force Edit Current Persona
 - 0050: Global -p Parameter for Command Targeting
 - 0052: Window Size CLI Parameter
-- 0053: Graceful Quit/Exit Commands
 - 0055: Logging System Improvements
 - 0079: Validate Command Argument Counts
 - 0088: Token Usage Logging
@@ -108,12 +107,14 @@
 - 0036: Blessed Text Rendering Corruption
 - 0059: Heartbeat Countdown Live Updates
 - 0068: Refine Elasticity Guidance and Defaults
+- 0102: Ei Core Persona Refinement (absorbed into 0107)
+- 0103: Persona Prompt Architecture (absorbed into 0107)
 
 ---
 
 **Last Updated**: 2026-01-19
-**Total Tickets**: 106 created
-**Stats**: 68 done, 0 QA, 0 in_progress, 16 pending, 13 cancelled
+**Total Tickets**: 125 created
+**Stats**: 69 done, 0 QA, 0 in_progress, 36 pending (18 in 0107 epic), 13 cancelled
 
 ## Epic Status
 
@@ -153,3 +154,37 @@
 - 0098: DONE - Group management commands (/g, /gs)
 - 0099: DONE - Group-based persona visibility
 - 0100: DONE - Epic cleanup (finalize schema)
+
+### 0107: Entity Data Architecture Overhaul - PENDING
+Replaces monolithic "Concept" system with structured data buckets.
+Absorbs 0102 (Ei Core Persona) and 0103 (Persona Prompt Architecture).
+
+**Schema & Storage:**
+- 0108: PENDING - New Entity Type Definitions
+- 0109: PENDING - Storage Migration
+- 0110: PENDING - LLM Queue Persistence File
+- 0124: PENDING - Scheduled Jobs Infrastructure
+
+**Extraction System:**
+- 0111: PENDING - Fast-Scan Prompt Implementation
+- 0112: PENDING - Detail Update Prompts (per data type)
+- 0113: PENDING - Extraction Frequency Controller
+- 0114: PENDING - Known Personas in Prompts
+
+**Ei Orchestration:**
+- 0115: PENDING - Data Verification Flow (Daily Ceremony)
+- 0116: PENDING - Cross-Persona Validation
+- 0117: PENDING - /clarify Command
+- 0118: PENDING - Ei Heartbeat Simplification
+
+**Prompt Restructuring:**
+- 0119: PENDING - Response Prompt Overhaul
+- 0120: PENDING - Static Concepts → Prompt Templates
+- 0121: PENDING - Ei-Specific System Prompt
+
+**Cleanup:**
+- 0122: PENDING - Remove Old Concept System
+- 0123: PENDING - Update AGENTS.md Documentation
+
+**Future Exploration:**
+- 0125: PENDING - Group Chat Exploration (NOT blocking 0107)

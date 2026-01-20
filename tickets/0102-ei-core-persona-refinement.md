@@ -1,6 +1,6 @@
 # 0102: Ei Core Persona Refinement
 
-**Status**: PENDING
+**Status**: CANCELLED (absorbed into 0107)
 
 ## Summary
 Ei is the system's default "meta" persona and needs special handling distinct from user-created personas. This ticket addresses Ei's unique onboarding flow, locked descriptions, and appropriate static concepts.

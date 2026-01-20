@@ -1,6 +1,6 @@
 # 0103: Persona Prompt Architecture
 
-**Status**: PENDING
+**Status**: CANCELLED (absorbed into 0107)
 
 ## Summary
 Consolidate and clarify the system prompt structure for all personas. Address redundant sections, unclear concept categories, and missing guardrails on persona self-description.
