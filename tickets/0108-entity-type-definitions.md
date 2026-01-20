@@ -1,6 +1,6 @@
 # 0108: New Entity Type Definitions
 
-**Status**: PENDING
+**Status**: QA
 
 ## Summary
 
@@ -114,11 +114,11 @@ function isPersonaEntity(entity: Entity): entity is PersonaEntity {
 
 ## Acceptance Criteria
 
-- [ ] All new interfaces defined in src/types.ts
-- [ ] Old Concept-related types removed
-- [ ] Type guards implemented
-- [ ] JSDoc comments on all public interfaces
-- [ ] No TypeScript errors (other files will break - that's expected)
+- [x] All new interfaces defined in src/types.ts
+- [x] Old Concept-related types removed
+- [x] Type guards implemented
+- [x] JSDoc comments on all public interfaces
+- [x] No TypeScript errors in types.ts (other files broken as expected)
 
 ## Dependencies
 
