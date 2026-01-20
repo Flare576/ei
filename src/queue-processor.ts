@@ -18,7 +18,7 @@ import {
   DetailUpdatePayload,
   DescriptionRegenPayload,
 } from "./llm-queue.js";
-import { runFastScan, routeFastScanResults } from "./extraction.js";
+import { runFastScan, routeFastScanResults, runDetailUpdate } from "./extraction.js";
 import { appendDebugLog } from "./storage.js";
 import { LLMAbortedError, sleep } from "./llm.js";
 
@@ -216,21 +216,20 @@ export class QueueProcessor {
   /**
    * Execute a detail update extraction.
    * 
-   * Implementation will come in ticket 0112.
-   * For now, just log that the item was processed.
+   * Calls runDetailUpdate to perform Phase 2 extraction (focused LLM call for a single item).
    */
   private async executeDetailUpdate(payload: DetailUpdatePayload): Promise<void> {
-    appendDebugLog(`[QueueProcessor] Detail update queued: ${payload.item_name} (${payload.data_type}) - Implementation pending in 0112`);
+    await runDetailUpdate(payload, this.abortController?.signal);
   }
   
   /**
    * Execute a persona description regeneration.
    * 
-   * Implementation will come in ticket 0112.
-   * For now, just log that the item was processed.
+   * Currently uses legacy generatePersonaDescriptions (ConceptMap-based).
+   * TODO (0122): Update to use PersonaEntity-based description generation.
    */
   private async executeDescriptionRegen(payload: DescriptionRegenPayload): Promise<void> {
-    appendDebugLog(`[QueueProcessor] Description regen queued: ${payload.persona} - Implementation pending in 0112`);
+    appendDebugLog(`[QueueProcessor] Description regen queued: ${payload.persona} - Awaiting PersonaEntity-based implementation (0122)`);
   }
   
   /**

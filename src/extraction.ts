@@ -8,9 +8,9 @@
  */
 
 import { HumanEntity, PersonaEntity, Message } from "./types.js";
-import { loadHumanEntity, loadPersonaEntity, listPersonas } from "./storage.js";
+import { loadHumanEntity, loadPersonaEntity, listPersonas, appendDebugLog } from "./storage.js";
 import { callLLMForJSON } from "./llm.js";
-import { enqueueItem } from "./llm-queue.js";
+import { enqueueItem, DetailUpdatePayload } from "./llm-queue.js";
 
 // ============================================================================
 // Type Definitions
@@ -277,4 +277,465 @@ export async function routeFastScanResults(
       }
     });
   }
+}
+
+// ============================================================================
+// Phase 2: Detail Update Prompts
+// ============================================================================
+
+import type { Fact, Trait, Topic, Person, DataItemBase, ChangeEntry } from "./types.js";
+import { saveHumanEntity, savePersonaEntity } from "./storage.js";
+
+/**
+ * Build prompts for updating a specific Fact.
+ */
+function buildFactDetailPrompt(
+  fact: Fact | null,
+  messages: Message[],
+  isNew: boolean
+): { system: string; user: string } {
+  const system = `You are updating a single FACT about a person.
+
+Facts are biographical, circumstantial data that rarely changes:
+- 📅 Birthday, age, location
+- 💼 Occupation, employer
+- 👨‍👩‍👧 Family structure (married, kids)
+- 🚫 Hard constraints (allergies, disabilities)
+- ✅ Stated preferences as facts
+
+## Fields
+- name: Short identifier
+- description: Context and details
+- sentiment: How they FEEL about this fact (-1.0 to 1.0)
+- confidence: How certain we are this is accurate (0.0 to 1.0)
+
+## Guidelines
+- If this is a NEW fact, extract the core information
+- If UPDATING, refine the description with new details
+- Set confidence based on how explicitly this was stated:
+  - Explicit statement ("My birthday is May 26") → 0.9-1.0
+  - Clear implication ("I'm turning 40 next month") → 0.7-0.9
+  - Inference ("Sounds like they live in Arizona") → 0.4-0.7
+- Sentiment reflects emotional weight (neutral for most facts, but "divorced" might carry weight)
+
+Return JSON with all fields.`;
+
+  const currentData = fact 
+    ? JSON.stringify(fact, null, 2)
+    : '(New fact - create from conversation)';
+
+  const user = `## Current Data
+${currentData}
+
+## Conversation
+${messages.map(m => `[${m.role}]: ${m.content}`).join('\n\n')}
+
+## Task
+${isNew ? 'Create this new fact based on the conversation.' : 'Update this fact if the conversation provides new information.'}
+
+If no changes needed, return the original data unchanged.
+
+Return JSON:
+{
+  "name": "...",
+  "description": "...",
+  "sentiment": 0.0,
+  "confidence": 0.9
+}`;
+
+  return { system, user };
+}
+
+/**
+ * Build prompts for updating a specific Trait.
+ */
+function buildTraitDetailPrompt(
+  trait: Trait | null,
+  messages: Message[],
+  isNew: boolean
+): { system: string; user: string } {
+  const system = `You are updating a single TRAIT of a person.
+
+Traits are personality patterns and behavioral tendencies:
+- 💬 Communication style (direct, verbose, uses humor)
+- 🧠 Personality characteristics (introverted, optimistic)
+- 🔄 Behavioral patterns (night owl, procrastinator)
+- 🎭 Preferences that define how they ARE (not just what they like)
+
+## Fields
+- name: Short identifier
+- description: What this trait means, with examples
+- sentiment: How they feel about having this trait (-1.0 to 1.0)
+- strength: How strongly this trait manifests (0.0 to 1.0, optional)
+
+## Guidelines
+- Traits are about HOW someone IS, not WHAT they like (that's a topic)
+- Update description to add nuance as you learn more
+- Strength indicates consistency/intensity of the trait
+- Sentiment: Do they embrace this trait or struggle with it?
+
+Return JSON with all fields.`;
+
+  const currentData = trait
+    ? JSON.stringify(trait, null, 2)
+    : '(New trait - create from conversation)';
+
+  const user = `## Current Data
+${currentData}
+
+## Conversation
+${messages.map(m => `[${m.role}]: ${m.content}`).join('\n\n')}
+
+## Task
+${isNew ? 'Create this new trait based on the conversation.' : 'Update this trait if the conversation reveals more about it.'}
+
+If no changes needed, return the original data unchanged.
+
+Return JSON:
+{
+  "name": "...",
+  "description": "...",
+  "sentiment": 0.0,
+  "strength": 0.7
+}`;
+
+  return { system, user };
+}
+
+/**
+ * Build prompts for updating a specific Topic.
+ */
+function buildTopicDetailPrompt(
+  topic: Topic | null,
+  messages: Message[],
+  isNew: boolean
+): { system: string; user: string } {
+  const system = `You are updating a single TOPIC that a person discusses.
+
+Topics are subjects with engagement dynamics:
+- 🎮 Hobbies, interests (gaming, gardening)
+- 😰 Current concerns (work stress, health)
+- 📺 Media they consume (books, shows)
+- 🔧 Ongoing projects or situations
+
+## Fields
+- name: Short identifier
+- description: Context about their relationship to this topic
+- sentiment: How they FEEL about this topic (-1.0 to 1.0)
+- level_current: How recently/actively discussed (0.0 to 1.0)
+- level_ideal: How much they WANT to discuss it (0.0 to 1.0)
+
+## Guidelines
+- level_current: Increase if actively discussed, will decay over time
+- level_ideal: RARELY change - only on explicit preference signals
+  - "I don't want to talk about work anymore" → decrease
+  - "Tell me more about X!" (repeatedly) → slight increase
+- sentiment: Their emotional relationship to the topic
+- description: Add context as you learn more
+
+Return JSON with all fields.`;
+
+  const currentData = topic
+    ? JSON.stringify(topic, null, 2)
+    : '(New topic - create from conversation)';
+
+  const user = `## Current Data
+${currentData}
+
+## Conversation
+${messages.map(m => `[${m.role}]: ${m.content}`).join('\n\n')}
+
+## Task
+${isNew ? 'Create this new topic based on the conversation.' : 'Update this topic based on the conversation.'}
+
+If no changes needed, return the original data unchanged.
+
+Return JSON:
+{
+  "name": "...",
+  "description": "...",
+  "sentiment": 0.0,
+  "level_current": 0.5,
+  "level_ideal": 0.5
+}`;
+
+  return { system, user };
+}
+
+/**
+ * Build prompts for updating a specific Person.
+ */
+function buildPersonDetailPrompt(
+  person: Person | null,
+  messages: Message[],
+  isNew: boolean,
+  knownPersonas: string[]
+): { system: string; user: string } {
+  const system = `You are updating information about a PERSON in someone's life.
+
+People are real humans the user knows:
+- 👨‍👩‍👧‍👦 Family (daughter, spouse, parent)
+- 👥 Friends, coworkers, acquaintances
+- 🔧 Service providers they interact with regularly
+
+## NOT People (these are AI Personas - do not confuse):
+${knownPersonas.map(p => `- ${p}`).join('\n')}
+
+## Fields
+- name: Their name or identifier
+- relationship: Their role (daughter, boss, friend, etc.)
+- description: Key facts, context, dynamics
+- sentiment: How the user feels about this person (-1.0 to 1.0)
+- level_current: How recently discussed (0.0 to 1.0)
+- level_ideal: How much user wants to discuss them (0.0 to 1.0)
+
+## Guidelines
+- Capture relationship dynamics, not just facts
+- Include relevant details (age, interests, shared history)
+- sentiment: Overall feeling about the relationship
+- level_ideal: Some people are discussed frequently (kids), others rarely
+
+Return JSON with all fields.`;
+
+  const currentData = person
+    ? JSON.stringify(person, null, 2)
+    : '(New person - create from conversation)';
+
+  const user = `## Current Data
+${currentData}
+
+## Conversation
+${messages.map(m => `[${m.role}]: ${m.content}`).join('\n\n')}
+
+## Task
+${isNew ? 'Create this new person based on the conversation.' : 'Update this person based on the conversation.'}
+
+If no changes needed, return the original data unchanged.
+
+Return JSON:
+{
+  "name": "...",
+  "relationship": "...",
+  "description": "...",
+  "sentiment": 0.0,
+  "level_current": 0.5,
+  "level_ideal": 0.5
+}`;
+
+  return { system, user };
+}
+
+// ============================================================================
+// Detail Update Execution
+// ============================================================================
+
+/**
+ * Find an existing item by name within an entity's data buckets.
+ */
+function findItemByName(
+  entity: HumanEntity | PersonaEntity,
+  dataType: "fact" | "trait" | "topic" | "person",
+  name: string
+): DataItemBase | null {
+  const bucketMap = {
+    fact: entity.entity === "human" ? entity.facts : [],
+    trait: entity.traits,
+    topic: entity.topics,
+    person: entity.entity === "human" ? entity.people : [],
+  };
+  
+  const bucket = bucketMap[dataType];
+  const found = bucket.find(item => item.name.toLowerCase() === name.toLowerCase());
+  return found || null;
+}
+
+/**
+ * Upsert (insert or update) a data item into an entity.
+ */
+function upsertItem(
+  entity: HumanEntity | PersonaEntity,
+  dataType: "fact" | "trait" | "topic" | "person",
+  item: DataItemBase
+): void {
+  const bucketMap = {
+    fact: entity.entity === "human" ? entity.facts : [],
+    trait: entity.traits,
+    topic: entity.topics,
+    person: entity.entity === "human" ? entity.people : [],
+  };
+  
+  const bucket = bucketMap[dataType];
+  const existingIndex = bucket.findIndex(
+    existing => existing.name.toLowerCase() === item.name.toLowerCase()
+  );
+  
+  if (existingIndex >= 0) {
+    bucket[existingIndex] = item as any;
+  } else {
+    bucket.push(item as any);
+  }
+}
+
+/**
+ * Build a change log entry for Ei review.
+ */
+function buildChangeEntry(
+  persona: string,
+  previousItem: DataItemBase | null,
+  newItem: DataItemBase
+): ChangeEntry {
+  const deltaSize = previousItem 
+    ? Math.abs(JSON.stringify(newItem).length - JSON.stringify(previousItem).length)
+    : JSON.stringify(newItem).length;
+  
+  return {
+    date: new Date().toISOString(),
+    persona,
+    delta_size: deltaSize,
+    previous_value: previousItem ? JSON.stringify(previousItem) : undefined,
+  };
+}
+
+/**
+ * Validate detail update result based on data type.
+ * Returns validated item or null if invalid.
+ */
+function validateDetailResult(
+  result: any,
+  dataType: "fact" | "trait" | "topic" | "person"
+): DataItemBase | null {
+  if (!result || typeof result !== "object") return null;
+  if (!result.name || !result.description) return null;
+  if (typeof result.sentiment !== "number") return null;
+  
+  if (dataType === "fact") {
+    if (typeof result.confidence !== "number") return null;
+  } else if (dataType === "trait") {
+    if (result.strength !== undefined && typeof result.strength !== "number") return null;
+  } else if (dataType === "topic" || dataType === "person") {
+    if (typeof result.level_current !== "number") return null;
+    if (typeof result.level_ideal !== "number") return null;
+    if (dataType === "person" && !result.relationship) return null;
+  }
+  
+  return result as DataItemBase;
+}
+
+/**
+ * Run a detail update for a single data item.
+ * This is Phase 2 of the two-phase extraction system.
+ * 
+ * @param payload - Detail update payload from the queue
+ * @param signal - Optional abort signal
+ */
+export async function runDetailUpdate(
+  payload: DetailUpdatePayload,
+  signal?: AbortSignal
+): Promise<void> {
+  const { target, persona, data_type, item_name, messages, is_new } = payload;
+  
+  // 1. Load entity
+  const entity = target === "human"
+    ? await loadHumanEntity()
+    : await loadPersonaEntity(persona);
+  
+  // 2. Find existing item (if not new)
+  const existingItem = is_new ? null : findItemByName(entity, data_type, item_name);
+  
+  // 3. Build appropriate prompt
+  const prompts = await buildDetailPromptByType(
+    data_type,
+    existingItem,
+    messages,
+    is_new
+  );
+  
+  // 4. Call LLM
+  const result = await callLLMForJSON(
+    prompts.system,
+    prompts.user,
+    { signal, temperature: 0.3, operation: "concept" }
+  );
+  
+  if (!result) {
+    appendDebugLog(`[DetailUpdate] No result from LLM for ${item_name}`);
+    return;
+  }
+  
+  // 5. Validate and merge
+  const validated = validateDetailResult(result, data_type);
+  if (!validated) {
+    appendDebugLog(`[DetailUpdate] Invalid result for ${item_name}: ${JSON.stringify(result)}`);
+    return;
+  }
+  
+  // 6. Record change log entry (for Ei)
+  const changeEntry = buildChangeEntry(persona, existingItem, validated);
+  validated.change_log = [...(existingItem?.change_log || []), changeEntry];
+  validated.last_updated = new Date().toISOString();
+  validated.learned_by = validated.learned_by || persona;
+  
+  // 7. Upsert into entity
+  upsertItem(entity, data_type, validated);
+  
+  // 8. Save entity
+  if (target === "human") {
+    await saveHumanEntity(entity as HumanEntity);
+  } else {
+    await savePersonaEntity(entity as PersonaEntity, persona);
+  }
+  
+  // 9. Check if we need to regenerate persona descriptions
+  if (target === "system" && data_type === "trait") {
+    await maybeRegeneratePersonaDescriptions(persona, entity as PersonaEntity);
+  }
+  
+  appendDebugLog(
+    `[DetailUpdate] ${is_new ? 'Created' : 'Updated'} ${data_type} "${item_name}" for ${target === "human" ? "human" : persona}`
+  );
+}
+
+/**
+ * Build detail prompts based on data type.
+ */
+async function buildDetailPromptByType(
+  dataType: "fact" | "trait" | "topic" | "person",
+  existing: DataItemBase | null,
+  messages: Message[],
+  isNew: boolean
+): Promise<{ system: string; user: string }> {
+  switch (dataType) {
+    case "fact":
+      return buildFactDetailPrompt(existing as Fact | null, messages, isNew);
+    case "trait":
+      return buildTraitDetailPrompt(existing as Trait | null, messages, isNew);
+    case "topic":
+      return buildTopicDetailPrompt(existing as Topic | null, messages, isNew);
+    case "person": {
+      const personas = await listPersonas();
+      const personaNames = personas.flatMap(p => [p.name, ...(p.aliases || [])]);
+      return buildPersonDetailPrompt(existing as Person | null, messages, isNew, personaNames);
+    }
+  }
+}
+
+/**
+ * Regenerate persona descriptions if traits changed.
+ * Only regenerates for non-ei personas.
+ */
+async function maybeRegeneratePersonaDescriptions(
+  persona: string,
+  entity: PersonaEntity
+): Promise<void> {
+  if (persona === "ei") return;
+  
+  await enqueueItem({
+    type: "description_regen",
+    priority: "low",
+    payload: {
+      persona
+    }
+  });
+  
+  appendDebugLog(`[DetailUpdate] Queued description regeneration for ${persona}`);
 }

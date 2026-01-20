@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { runFastScan, routeFastScanResults, FastScanResult } from "../../src/extraction.js";
-import type { HumanEntity, PersonaEntity, Message } from "../../src/types.js";
+import { runFastScan, routeFastScanResults, runDetailUpdate, FastScanResult } from "../../src/extraction.js";
+import type { HumanEntity, PersonaEntity, Message, Fact, Trait, Topic, Person } from "../../src/types.js";
 import * as storage from "../../src/storage.js";
 import * as llm from "../../src/llm.js";
 import * as queue from "../../src/llm-queue.js";
+import type { DetailUpdatePayload } from "../../src/llm-queue.js";
 
 vi.mock("../../src/storage.js");
 vi.mock("../../src/llm.js");
@@ -248,6 +249,330 @@ describe("extraction", () => {
           })
         })
       );
+    });
+  });
+
+  describe("runDetailUpdate", () => {
+    const mockMessages: Message[] = [
+      { role: "human", content: "I'm 35 years old", timestamp: new Date().toISOString() },
+      { role: "system", content: "Thanks for sharing", timestamp: new Date().toISOString() }
+    ];
+
+    const mockHumanEntity: HumanEntity = {
+      entity: "human",
+      facts: [],
+      traits: [],
+      topics: [],
+      people: [],
+      last_updated: null
+    };
+
+    const mockPersonaEntity: PersonaEntity = {
+      entity: "system",
+      traits: [],
+      topics: [],
+      last_updated: null
+    };
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it("creates new fact for human entity", async () => {
+      const payload: DetailUpdatePayload = {
+        target: "human",
+        persona: "ei",
+        data_type: "fact",
+        item_name: "Age",
+        messages: mockMessages,
+        is_new: true
+      };
+
+      const mockResult: Fact = {
+        name: "Age",
+        description: "35 years old",
+        sentiment: 0.0,
+        confidence: 0.9,
+        last_updated: new Date().toISOString()
+      };
+
+      vi.mocked(storage.loadHumanEntity).mockResolvedValue(mockHumanEntity);
+      vi.mocked(storage.listPersonas).mockResolvedValue([{ name: "ei", aliases: [] }]);
+      vi.mocked(llm.callLLMForJSON).mockResolvedValue(mockResult);
+      vi.mocked(storage.saveHumanEntity).mockResolvedValue();
+
+      await runDetailUpdate(payload);
+
+      expect(storage.saveHumanEntity).toHaveBeenCalledWith(
+        expect.objectContaining({
+          facts: expect.arrayContaining([
+            expect.objectContaining({
+              name: "Age",
+              description: "35 years old",
+              confidence: 0.9
+            })
+          ])
+        })
+      );
+    });
+
+    it("updates existing trait for persona entity", async () => {
+      const existingTrait: Trait = {
+        name: "Friendly",
+        description: "Warm and welcoming",
+        sentiment: 0.5,
+        strength: 0.7,
+        last_updated: new Date().toISOString()
+      };
+
+      const entityWithTrait: PersonaEntity = {
+        ...mockPersonaEntity,
+        traits: [existingTrait]
+      };
+
+      const payload: DetailUpdatePayload = {
+        target: "system",
+        persona: "frodo",
+        data_type: "trait",
+        item_name: "Friendly",
+        messages: mockMessages,
+        is_new: false
+      };
+
+      const updatedTrait: Trait = {
+        name: "Friendly",
+        description: "Warm, welcoming, and uses humor",
+        sentiment: 0.6,
+        strength: 0.8,
+        last_updated: new Date().toISOString()
+      };
+
+      vi.mocked(storage.loadPersonaEntity).mockResolvedValue(entityWithTrait);
+      vi.mocked(llm.callLLMForJSON).mockResolvedValue(updatedTrait);
+      vi.mocked(storage.savePersonaEntity).mockResolvedValue();
+      vi.mocked(queue.enqueueItem).mockResolvedValue("test-id");
+
+      await runDetailUpdate(payload);
+
+      expect(storage.savePersonaEntity).toHaveBeenCalledWith(
+        expect.objectContaining({
+          traits: expect.arrayContaining([
+            expect.objectContaining({
+              name: "Friendly",
+              description: "Warm, welcoming, and uses humor",
+              strength: 0.8
+            })
+          ])
+        }),
+        "frodo"
+      );
+    });
+
+    it("adds change_log entry on update", async () => {
+      const existingTopic: Topic = {
+        name: "Programming",
+        description: "Software development",
+        sentiment: 0.7,
+        level_current: 0.5,
+        level_ideal: 0.8,
+        last_updated: new Date().toISOString()
+      };
+
+      const entityWithTopic: HumanEntity = {
+        ...mockHumanEntity,
+        topics: [existingTopic]
+      };
+
+      const payload: DetailUpdatePayload = {
+        target: "human",
+        persona: "ei",
+        data_type: "topic",
+        item_name: "Programming",
+        messages: mockMessages,
+        is_new: false
+      };
+
+      const updatedTopic: Topic = {
+        name: "Programming",
+        description: "Software development, especially TypeScript",
+        sentiment: 0.8,
+        level_current: 0.7,
+        level_ideal: 0.8,
+        last_updated: new Date().toISOString()
+      };
+
+      vi.mocked(storage.loadHumanEntity).mockResolvedValue(entityWithTopic);
+      vi.mocked(llm.callLLMForJSON).mockResolvedValue(updatedTopic);
+      vi.mocked(storage.saveHumanEntity).mockResolvedValue();
+
+      await runDetailUpdate(payload);
+
+      const savedEntity = vi.mocked(storage.saveHumanEntity).mock.calls[0][0];
+      const updatedTopicInEntity = savedEntity.topics.find(t => t.name === "Programming");
+      
+      expect(updatedTopicInEntity?.change_log).toBeDefined();
+      expect(updatedTopicInEntity?.change_log).toHaveLength(1);
+      expect(updatedTopicInEntity?.change_log?.[0]).toMatchObject({
+        persona: "ei",
+        delta_size: expect.any(Number)
+      });
+    });
+
+    it("sets learned_by field on new items", async () => {
+      const freshEntity: HumanEntity = {
+        entity: "human",
+        facts: [],
+        traits: [],
+        topics: [],
+        people: [],
+        last_updated: null
+      };
+
+      const payload: DetailUpdatePayload = {
+        target: "human",
+        persona: "frodo",
+        data_type: "fact",
+        item_name: "Hometown",
+        messages: mockMessages,
+        is_new: true
+      };
+
+      const mockResult: Fact = {
+        name: "Hometown",
+        description: "Portland, Oregon",
+        sentiment: 0.3,
+        confidence: 0.8,
+        last_updated: new Date().toISOString()
+      };
+
+      vi.mocked(storage.loadHumanEntity).mockResolvedValueOnce(freshEntity);
+      vi.mocked(llm.callLLMForJSON).mockResolvedValueOnce(mockResult);
+      vi.mocked(storage.saveHumanEntity).mockResolvedValueOnce();
+
+      await runDetailUpdate(payload);
+
+      const savedEntity = vi.mocked(storage.saveHumanEntity).mock.calls[0][0];
+      const newFact = savedEntity.facts[0];
+      expect(newFact.learned_by).toBe("frodo");
+    });
+
+    it("queues description regen when persona trait changes", async () => {
+      const payload: DetailUpdatePayload = {
+        target: "system",
+        persona: "frodo",
+        data_type: "trait",
+        item_name: "Curious",
+        messages: mockMessages,
+        is_new: true
+      };
+
+      const mockResult: Trait = {
+        name: "Curious",
+        description: "Always asking questions",
+        sentiment: 0.6,
+        strength: 0.7,
+        last_updated: new Date().toISOString()
+      };
+
+      vi.mocked(storage.loadPersonaEntity).mockResolvedValue(mockPersonaEntity);
+      vi.mocked(llm.callLLMForJSON).mockResolvedValue(mockResult);
+      vi.mocked(storage.savePersonaEntity).mockResolvedValue();
+      vi.mocked(queue.enqueueItem).mockResolvedValue("test-id");
+
+      await runDetailUpdate(payload);
+
+      expect(queue.enqueueItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "description_regen",
+          priority: "low",
+          payload: { persona: "frodo" }
+        })
+      );
+    });
+
+    it("does not queue description regen for ei persona", async () => {
+      const payload: DetailUpdatePayload = {
+        target: "system",
+        persona: "ei",
+        data_type: "trait",
+        item_name: "Warm but Direct",
+        messages: mockMessages,
+        is_new: false
+      };
+
+      const mockResult: Trait = {
+        name: "Warm but Direct",
+        description: "Friendly and honest",
+        sentiment: 0.5,
+        strength: 0.8,
+        last_updated: new Date().toISOString()
+      };
+
+      vi.mocked(storage.loadPersonaEntity).mockResolvedValue({
+        ...mockPersonaEntity,
+        traits: [mockResult]
+      });
+      vi.mocked(llm.callLLMForJSON).mockResolvedValue(mockResult);
+      vi.mocked(storage.savePersonaEntity).mockResolvedValue();
+
+      await runDetailUpdate(payload);
+
+      expect(queue.enqueueItem).not.toHaveBeenCalled();
+    });
+
+    it("handles invalid LLM result gracefully", async () => {
+      const payload: DetailUpdatePayload = {
+        target: "human",
+        persona: "ei",
+        data_type: "fact",
+        item_name: "Age",
+        messages: mockMessages,
+        is_new: true
+      };
+
+      vi.mocked(storage.loadHumanEntity).mockResolvedValue(mockHumanEntity);
+      vi.mocked(storage.listPersonas).mockResolvedValue([]);
+      vi.mocked(llm.callLLMForJSON).mockResolvedValue({ invalid: "data" });
+
+      await runDetailUpdate(payload);
+
+      expect(storage.saveHumanEntity).not.toHaveBeenCalled();
+    });
+
+    it("includes known personas in person detail prompt", async () => {
+      const payload: DetailUpdatePayload = {
+        target: "human",
+        persona: "ei",
+        data_type: "person",
+        item_name: "Alice",
+        messages: mockMessages,
+        is_new: true
+      };
+
+      const mockResult: Person = {
+        name: "Alice",
+        relationship: "friend",
+        description: "Close friend from college",
+        sentiment: 0.7,
+        level_current: 0.6,
+        level_ideal: 0.7,
+        last_updated: new Date().toISOString()
+      };
+
+      vi.mocked(storage.loadHumanEntity).mockResolvedValue(mockHumanEntity);
+      vi.mocked(storage.listPersonas).mockResolvedValue([
+        { name: "ei", aliases: ["assistant"] },
+        { name: "frodo", aliases: [] }
+      ]);
+      vi.mocked(llm.callLLMForJSON).mockResolvedValue(mockResult);
+      vi.mocked(storage.saveHumanEntity).mockResolvedValue();
+
+      await runDetailUpdate(payload);
+
+      const systemPrompt = vi.mocked(llm.callLLMForJSON).mock.calls[0][0];
+      expect(systemPrompt).toContain("- ei");
+      expect(systemPrompt).toContain("- assistant");
+      expect(systemPrompt).toContain("- frodo");
     });
   });
 });

@@ -6,6 +6,24 @@
 
 Clean up all remnants of the old `Concept` and `ConceptMap` system once the new entity architecture is in place.
 
+## Implementation Notes
+
+### New Code Added (NOT for removal)
+
+The following files/functions were added as part of the new entity architecture and should **NOT** be removed:
+
+**src/extraction.ts** (ticket 0112):
+- `buildFactDetailPrompt()` - NEW, part of Phase 2 extraction
+- `buildTraitDetailPrompt()` - NEW, part of Phase 2 extraction
+- `buildTopicDetailPrompt()` - NEW, part of Phase 2 extraction
+- `buildPersonDetailPrompt()` - NEW, part of Phase 2 extraction
+- `runDetailUpdate()` - NEW, Phase 2 execution logic
+- `findItemByName()`, `upsertItem()`, `validateDetailResult()` - NEW helper functions
+- `maybeRegeneratePersonaDescriptions()` - NEW, queues description regen (awaiting PersonaEntity-based implementation in 0122)
+
+**src/queue-processor.ts** (ticket 0126):
+- `executeDetailUpdate()` - Updated to call `runDetailUpdate()` from extraction.ts
+
 ## Changes Made in 0109 (Storage Migration)
 
 The following items were already completed as part of ticket 0109:
@@ -111,7 +129,7 @@ The following items were already completed as part of ticket 0109:
   - Hardcoded "Transparency About Nature"
   - Hardcoded "Encourage Growth Over Comfort"
   - Hardcoded "Context-Aware Proactive Timing"
-- [ ] Update `generatePersonaDescriptions` to return PersonaEntity structure
+- [ ] Update `generatePersonaDescriptions` to return PersonaEntity structure **[Required for 0112 - description_regen]**
 - [ ] Add optional seed trait generation (e.g., "Warm but Direct" for Ei)
 - [ ] Simplify to identity generation only (aliases + descriptions)
 
