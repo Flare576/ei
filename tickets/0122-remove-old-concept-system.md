@@ -120,8 +120,10 @@ The following items were already completed as part of ticket 0109:
 - [x] Remove `ConceptQueue` imports and usage **[Deleted in 0110]**
 - [x] Remove stale message checking logic **[Deleted in 0110]** (stubbed out, will be replaced by LLM queue)
 - [x] Remove `getUnprocessedMessages` import **[Deleted in 0110]**
+- [x] Remove stale `loadConceptMap`, `saveConceptMap`, `loadAllPersonasWithConceptMaps` imports **[Deleted in 0126]**
 - [ ] Update concept display logic to show data buckets (facts/traits/topics/people)
 - [ ] Remove type-based filtering in UI rendering (lines 922, 1246, 1278, 1329)
+- [ ] Fix remaining `loadConceptMap`/`saveConceptMap` function calls (lines 923-1333)
 - [ ] [Needed throughout epic - UI changes span multiple tickets]
 
 ## Tests to Update

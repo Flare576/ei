@@ -5,7 +5,7 @@ import { writeFileSync, readFileSync, unlinkSync } from 'fs';
 // Import test output capture early to intercept blessed methods before they're used
 import { testOutputCapture } from './test-output-capture.js';
 
-import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog, getPendingMessages, replacePendingMessages, appendHumanMessage, appendMessage, loadPauseState, savePauseState, markSystemMessagesAsRead, getUnreadSystemMessageCount, loadArchiveState, saveArchiveState, getArchivedPersonas, findArchivedPersonaByNameOrAlias, addPersonaAlias, removePersonaAlias, loadConceptMap, saveConceptMap, loadAllPersonasWithConceptMaps } from '../storage.js';
+import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog, getPendingMessages, replacePendingMessages, appendHumanMessage, appendMessage, loadPauseState, savePauseState, markSystemMessagesAsRead, getUnreadSystemMessageCount, loadArchiveState, saveArchiveState, getArchivedPersonas, findArchivedPersonaByNameOrAlias, addPersonaAlias, removePersonaAlias } from '../storage.js';
 import { getVisiblePersonas } from '../prompts.js';
 import { createPersonaWithLLM, saveNewPersona } from '../persona-creator.js';
 import { processEvent } from '../processor.js';
@@ -19,6 +19,7 @@ import { ChatRenderer } from './chat-renderer.js';
 import { getDisplayWidth } from './unicode-width.js';
 import { StateManager } from '../state-manager.js';
 import { setStateManager } from '../storage.js';
+import { QueueProcessor } from '../queue-processor.js';
 
 function debugLog(message: string) {
   appendDebugLog(message);
@@ -47,6 +48,7 @@ export class EIApp {
   private personaRenderer: PersonaRenderer;
   private chatRenderer: ChatRenderer;
   private stateManager: StateManager;
+  private queueProcessor: QueueProcessor;
   
   private personas: any[] = [];
   private activePersona = 'ei';
@@ -146,6 +148,9 @@ export class EIApp {
     if (this.testInputEnabled) {
       this.setupTestInputInjection();
     }
+
+    this.queueProcessor = new QueueProcessor();
+    debugLog(`QueueProcessor created - Instance #${this.instanceId}`);
 
     this.setupLayout();
     this.setupEventHandlers();
@@ -1830,6 +1835,8 @@ Press q to close this help.`;
 
     debugLog(`processPersonaQueue: starting ${personaName} with ${ps.messageQueue.length} messages`);
     
+    this.queueProcessor.pause();
+    
     const combinedMessage = ps.messageQueue.join('\n');
     ps.abortController = new AbortController();
     ps.isProcessing = true;
@@ -1876,6 +1883,8 @@ Press q to close this help.`;
       }
 
       this.render();
+
+      this.queueProcessor.resume();
 
       if (ps.messageQueue.length > 0) {
         debugLog(`processPersonaQueue: retriggering ${personaName} - queue has ${ps.messageQueue.length} messages`);
@@ -1954,6 +1963,8 @@ Press q to close this help.`;
         
         debugLog(`Heartbeat for ${personaName}: significant delta detected, generating response`);
         
+        this.queueProcessor.pause();
+        
         ps.abortController = new AbortController();
         ps.isProcessing = true;
         this.personaRenderer.updateSpinnerAnimation(this.personaStates);
@@ -1986,6 +1997,7 @@ Press q to close this help.`;
           this.isProcessing = false;
         }
         this.render();
+        this.queueProcessor.resume();
         this.resetPersonaHeartbeat(personaName);
       }
     }, HEARTBEAT_INTERVAL_MS);
@@ -2304,6 +2316,16 @@ Press q to close this help.`;
     let cleanupErrors: string[] = [];
     
     try {
+      // Stop queue processor first (before other cleanup)
+      try {
+        this.queueProcessor.stop();
+        debugLog('QueueProcessor stopped');
+      } catch (error) {
+        const errorMsg = `Failed to stop QueueProcessor: ${error instanceof Error ? error.message : String(error)}`;
+        debugLog(errorMsg);
+        cleanupErrors.push(errorMsg);
+      }
+      
       // Clean up test output capture if enabled
       if (testOutputCapture.isEnabled()) {
         try {
@@ -2402,6 +2424,8 @@ Press q to close this help.`;
       await markSystemMessagesAsRead('ei');
       
       this.startStaleMessageChecker();
+      await this.queueProcessor.start();
+      debugLog('QueueProcessor started');
       
       const countListeners = () => this.layoutManager.getInputBox().listeners('keypress').length;
       const listListeners = () => this.layoutManager.getInputBox().listeners('keypress').map(f => f.name || 'anonymous');

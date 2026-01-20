@@ -1,6 +1,6 @@
 # 0126: LLM Queue Processor
 
-**Status**: PENDING
+**Status**: QA
 
 ## Summary
 
@@ -285,20 +285,20 @@ class EIApp {
 
 ## Acceptance Criteria
 
-- [ ] `QueueProcessor` class implemented in `src/queue-processor.ts`
-- [ ] `start()` begins continuous processing
-- [ ] `stop()` gracefully shuts down (aborts current, waits for completion)
-- [ ] `pause()` aborts current work without stopping processor
-- [ ] `resume()` continues processing after pause
-- [ ] `executeFastScan()` calls `runFastScan()` and routes results
-- [ ] `executeDetailUpdate()` placeholder (implemented in 0112)
-- [ ] `executeDescriptionRegen()` placeholder (implemented in 0112)
-- [ ] `ei_validation` items skipped (handled by Daily Ceremony in 0115)
-- [ ] Integrated with `blessed/app.ts` lifecycle
-- [ ] User messages pause queue processing
-- [ ] Tests cover start/stop/pause/resume lifecycle
-- [ ] Tests verify abort signal propagation
-- [ ] Tests verify retry logic (successful and failed items)
+- [x] `QueueProcessor` class implemented in `src/queue-processor.ts`
+- [x] `start()` begins continuous processing
+- [x] `stop()` gracefully shuts down (aborts current, waits for completion)
+- [x] `pause()` aborts current work without stopping processor
+- [x] `resume()` continues processing after pause
+- [x] `executeFastScan()` calls `runFastScan()` and routes results
+- [x] `executeDetailUpdate()` placeholder (implemented in 0112)
+- [x] `executeDescriptionRegen()` placeholder (implemented in 0112)
+- [x] `ei_validation` items skipped (handled by Daily Ceremony in 0115)
+- [x] Integrated with `blessed/app.ts` lifecycle
+- [x] User messages pause queue processing
+- [x] Tests cover start/stop/pause/resume lifecycle
+- [x] Tests verify abort signal propagation
+- [x] Tests verify retry logic (successful and failed items)
 
 ## Dependencies
 
