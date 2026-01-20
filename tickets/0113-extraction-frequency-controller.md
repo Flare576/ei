@@ -239,6 +239,7 @@ This runs on a timer (every few minutes) to catch any messages that slipped thro
 - 0108: Entity type definitions
 - 0110: LLM queue
 - 0111: Fast-scan
+- 0126: LLM Queue Processor (executes queued fast-scans)
 
 ## Effort Estimate
 

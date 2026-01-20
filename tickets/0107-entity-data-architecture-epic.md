@@ -178,10 +178,13 @@ Instead of one massive "update all concepts" call:
 - [x] 0110: LLM Queue Persistence File (DONE)
 - [ ] 0124: Scheduled Jobs Infrastructure (NEW)
 
+### Queue Processing
+- [ ] 0126: LLM Queue Processor (NEW - infrastructure for executing queued items)
+
 ### Extraction System
 - [x] 0111: Fast-Scan Prompt Implementation (QA - ready for integration testing)
-- [ ] 0112: Detail Update Prompts (per data type)
-- [ ] 0113: Extraction Frequency Controller
+- [ ] 0112: Detail Update Prompts (per data type) - depends on 0126
+- [ ] 0113: Extraction Frequency Controller - depends on 0126
 - [ ] 0114: Known Personas in Prompts (renamed)
 
 ### Ei Orchestration

@@ -75,7 +75,7 @@
 - 0048: Unified State Management System (Undo + Save/Restore)
 - 0110: LLM Queue Persistence File
 
-## PENDING (18 tickets)
+## PENDING (19 tickets)
 - 0107: Entity Data Architecture Overhaul (Epic) - MAJOR REDESIGN
 - 0106: Special Behavior for Archiving Ei Persona
 - 0105: Context Window Command
@@ -117,8 +117,8 @@
 ---
 
 **Last Updated**: 2026-01-20
-**Total Tickets**: 125 created
-**Stats**: 70 done, 1 QA, 0 in_progress, 34 pending (16 in 0107 epic), 13 cancelled
+**Total Tickets**: 126 created
+**Stats**: 70 done, 1 QA, 0 in_progress, 35 pending (17 in 0107 epic), 13 cancelled
 
 ## Epic Status
 
@@ -169,10 +169,13 @@ Absorbs 0102 (Ei Core Persona) and 0103 (Persona Prompt Architecture).
 - 0110: DONE - LLM Queue Persistence File
 - 0124: PENDING - Scheduled Jobs Infrastructure
 
+**Queue Processing:**
+- 0126: PENDING - LLM Queue Processor (NEW - infrastructure for queue execution)
+
 **Extraction System:**
 - 0111: QA - Fast-Scan Prompt Implementation
-- 0112: PENDING - Detail Update Prompts (per data type)
-- 0113: PENDING - Extraction Frequency Controller
+- 0112: PENDING - Detail Update Prompts (per data type) - depends on 0126
+- 0113: PENDING - Extraction Frequency Controller - depends on 0126
 - 0114: PENDING - Known Personas in Prompts
 
 **Ei Orchestration:**

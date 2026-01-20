@@ -379,6 +379,7 @@ async function maybeRegeneratePersonaDescriptions(
 - 0109: Storage migration
 - 0110: LLM queue (detail_update items)
 - 0111: Fast-scan (queues detail updates)
+- 0126: LLM Queue Processor (executes queued detail updates)
 
 ## Effort Estimate
 
