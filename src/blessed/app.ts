@@ -5,8 +5,9 @@ import { writeFileSync, readFileSync, unlinkSync } from 'fs';
 // Import test output capture early to intercept blessed methods before they're used
 import { testOutputCapture } from './test-output-capture.js';
 
-import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog, getPendingMessages, replacePendingMessages, appendHumanMessage, appendMessage, loadPauseState, savePauseState, markSystemMessagesAsRead, getUnreadSystemMessageCount, loadArchiveState, saveArchiveState, getArchivedPersonas, findArchivedPersonaByNameOrAlias, addPersonaAlias, removePersonaAlias } from '../storage.js';
+import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog, getPendingMessages, replacePendingMessages, appendHumanMessage, appendMessage, loadPauseState, savePauseState, markSystemMessagesAsRead, getUnreadSystemMessageCount, loadArchiveState, saveArchiveState, getArchivedPersonas, findArchivedPersonaByNameOrAlias, addPersonaAlias, removePersonaAlias, loadHumanEntity, loadPersonaEntity } from '../storage.js';
 import { getVisiblePersonas } from '../prompts.js';
+import { findDataPointByName } from '../verification.js';
 import { createPersonaWithLLM, saveNewPersona } from '../persona-creator.js';
 import { processEvent } from '../processor.js';
 import { applyTopicDecay, checkDesireGaps } from '../topic-decay.js';
@@ -483,6 +484,10 @@ export class EIApp {
         break;
       case 'new':
         await this.handleNewCommand();
+        break;
+      case 'clarify':
+      case 'c':
+        await this.handleClarifyCommand(args);
         break;
       default:
         this.setStatus(`Unknown command: /${command}`);
@@ -1494,11 +1499,212 @@ export class EIApp {
     }
   }
 
+  private async handleClarifyCommand(args: string): Promise<void> {
+    try {
+      const trimmed = args.trim().toLowerCase();
+      const validCategories = ['facts', 'traits', 'topics', 'people'];
+      
+      // Check if argument is a category
+      if (trimmed && validCategories.includes(trimmed)) {
+        await this.showCategory(trimmed as 'facts' | 'traits' | 'topics' | 'people');
+        return;
+      }
+      
+      // Check if argument is a quoted item name
+      if (trimmed.startsWith('"') || trimmed.startsWith("'")) {
+        const { parseQuotedArgs } = await import('../parse-utils.js');
+        const itemName = parseQuotedArgs(args.trim());
+        await this.startItemEdit(itemName);
+        return;
+      }
+      
+      // No arguments - show overview
+      if (!trimmed) {
+        await this.showDataOverview();
+        return;
+      }
+      
+      // Try to interpret as item name without quotes
+      await this.startItemEdit(trimmed);
+    } catch (err) {
+      this.setStatus(`Clarify error: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  private async showDataOverview(): Promise<void> {
+    const entity = await loadHumanEntity();
+    
+    const summarizeItems = (items: any[], limit: number = 3): string => {
+      if (items.length === 0) return "(none yet)";
+      if (items.length <= limit) return items.map(i => i.name).join(', ');
+      const shown = items.slice(0, limit).map(i => i.name).join(', ');
+      return `${shown}... and ${items.length - limit} more`;
+    };
+    
+    const summary = `Here's what I know about you:
+
+**Facts** (${entity.facts.length}): ${summarizeItems(entity.facts)}
+**Traits** (${entity.traits.length}): ${summarizeItems(entity.traits)}
+**Topics** (${entity.topics.length}): ${summarizeItems(entity.topics)}
+**People** (${entity.people.length}): ${summarizeItems(entity.people)}
+
+What would you like to review or change? You can say:
+- "Show me my facts" (or /clarify facts)
+- "Edit Birthday" (or /clarify "Birthday")
+- Or just tell me what's wrong and I'll help fix it.`;
+    
+    // Switch to Ei and send the summary as a system message
+    if (this.activePersona !== 'ei') {
+      await this.switchPersona('ei');
+    }
+    
+    this.addMessage('system', summary);
+    const systemMsg: Message = {
+      role: 'system',
+      content: summary,
+      timestamp: new Date().toISOString(),
+      read: false
+    };
+    await appendMessage(systemMsg, 'ei');
+    
+    this.setStatus('Data overview displayed - respond to clarify/edit');
+    this.render();
+    this.autoScrollToBottom();
+  }
+
+  private async showCategory(category: 'facts' | 'traits' | 'topics' | 'people'): Promise<void> {
+    const entity = await loadHumanEntity();
+    const items = entity[category];
+    
+    if (items.length === 0) {
+      const response = `You don't have any ${category} recorded yet. As we chat, I'll learn more about you!`;
+      
+      if (this.activePersona !== 'ei') {
+        await this.switchPersona('ei');
+      }
+      
+      this.addMessage('system', response);
+      const systemMsg: Message = {
+        role: 'system',
+        content: response,
+        timestamp: new Date().toISOString(),
+        read: false
+      };
+      await appendMessage(systemMsg, 'ei');
+      
+      this.setStatus(`No ${category} yet`);
+      this.render();
+      this.autoScrollToBottom();
+      return;
+    }
+    
+    const formatItemDetails = (item: any): string => {
+      const parts = [];
+      
+      if ('confidence' in item) {
+        parts.push(`Confidence: ${Math.round(item.confidence * 100)}%`);
+      }
+      if ('strength' in item && item.strength !== undefined) {
+        parts.push(`Strength: ${Math.round(item.strength * 100)}%`);
+      }
+      if ('level_current' in item) {
+        parts.push(`Activity: ${Math.round(item.level_current * 100)}%`);
+      }
+      if ('sentiment' in item) {
+        const sentimentLabel = item.sentiment > 0.3 ? '😊' : item.sentiment < -0.3 ? '😔' : '😐';
+        parts.push(sentimentLabel);
+      }
+      if ('relationship' in item) {
+        parts.push(`(${item.relationship})`);
+      }
+      if ('learned_by' in item && item.learned_by) {
+        parts.push(`via ${item.learned_by}`);
+      }
+      
+      return parts.join(' | ');
+    };
+    
+    const formatted = items.map((item: any, i: number) => {
+      const details = formatItemDetails(item);
+      return `${i + 1}. **${item.name}**: ${item.description}\n   ${details}`;
+    }).join('\n\n');
+    
+    const response = `Your ${category}:\n\n${formatted}\n\nTo edit one, just tell me which (by number or name) and what to change.`;
+    
+    if (this.activePersona !== 'ei') {
+      await this.switchPersona('ei');
+    }
+    
+    this.addMessage('system', response);
+    const systemMsg: Message = {
+      role: 'system',
+      content: response,
+      timestamp: new Date().toISOString(),
+      read: false
+    };
+    await appendMessage(systemMsg, 'ei');
+    
+    this.setStatus(`Showing ${category} - respond to edit`);
+    this.render();
+    this.autoScrollToBottom();
+  }
+
+  private async startItemEdit(itemName: string): Promise<void> {
+    const entity = await loadHumanEntity();
+    const found = findDataPointByName(entity, itemName);
+    
+    if (!found) {
+      const response = `I couldn't find "${itemName}" in your data. Did you mean something else?`;
+      
+      if (this.activePersona !== 'ei') {
+        await this.switchPersona('ei');
+      }
+      
+      this.addMessage('system', response);
+      const systemMsg: Message = {
+        role: 'system',
+        content: response,
+        timestamp: new Date().toISOString(),
+        read: false
+      };
+      await appendMessage(systemMsg, 'ei');
+      
+      this.setStatus(`Item "${itemName}" not found`);
+      this.render();
+      this.autoScrollToBottom();
+      return;
+    }
+    
+    const formatted = JSON.stringify(found, null, 2);
+    const response = `Here's the current data for "${found.name}" (${found.item_type}):\n\n\`\`\`json\n${formatted}\n\`\`\`\n\nWhat would you like to change? You can:\n- Update the description\n- Change any values\n- Delete it entirely\n- Move it to a specific group`;
+    
+    if (this.activePersona !== 'ei') {
+      await this.switchPersona('ei');
+    }
+    
+    this.addMessage('system', response);
+    const systemMsg: Message = {
+      role: 'system',
+      content: response,
+      timestamp: new Date().toISOString(),
+      read: false
+    };
+    await appendMessage(systemMsg, 'ei');
+    
+    this.setStatus(`Editing "${found.name}" - respond with changes`);
+    this.render();
+    this.autoScrollToBottom();
+  }
+
   private showHelpModal(): void {
     const helpText = `EI - Emotional Intelligence Chat
 
 COMMANDS
   /persona [name]     Switch persona (or list if no name)
+  /clarify [arg]      View/edit your data (facts, traits, topics, people)
+    /clarify          Show overview of all data
+    /clarify facts    Show all facts
+    /clarify "Name"   Edit specific item by name
   /pause [duration]   Pause active persona (30m, 2h, or indefinite)
   /resume [persona]   Resume paused persona
   /archive [persona]  Archive persona (hides from list, stops heartbeats)

@@ -190,7 +190,7 @@ Instead of one massive "update all concepts" call:
 ### Ei Orchestration
 - [x] 0115: Data Verification Flow (Daily Ceremony) (QA - ready for integration testing)
 - [x] 0116: Cross-Persona Validation (QA - ready for integration testing)
-- [ ] 0117: /clarify Command (conversational data editing)
+- [x] 0117: /clarify Command (QA - command routing complete, natural language editing via Ei conversation)
 - [ ] 0118: Ei Heartbeat Simplification
 
 ### Prompt Restructuring

@@ -147,6 +147,14 @@ The following items were already completed as part of ticket 0109:
 - [ ] Fix remaining `loadConceptMap`/`saveConceptMap` function calls (lines 923-1333)
 - [ ] [Needed throughout epic - UI changes span multiple tickets]
 
+**New code added in 0117 (NOT for removal):**
+- `handleClarifyCommand()` - Command handler for /clarify
+- `showDataOverview()` - Display overview of all human entity data
+- `showCategory()` - Display specific category (facts/traits/topics/people)
+- `startItemEdit()` - Display single item details for editing
+- Help text entry for /clarify command
+- Import of `loadHumanEntity`, `loadPersonaEntity`, `findDataPointByName`
+
 ## Tests to Update
 
 ### tests/unit/
