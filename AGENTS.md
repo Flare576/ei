@@ -76,13 +76,23 @@ src/
     persona-renderer.ts # Persona list rendering
     chat-renderer.ts # Chat history rendering
   processor.ts       # Message processing + LLM orchestration
-  storage.ts         # File I/O for personas, history, concepts
+  storage.ts         # File I/O for entities (human, personas, queue)
   llm.ts             # OpenAI-compatible LLM client
   prompts.ts         # System/user prompt builders
-  validate.ts        # Concept validation logic
   types.ts           # TypeScript interfaces
 tickets/             # Feature/bug tickets (this doc)
-data/                # Runtime data (personas, history) - gitignored
+data/                # Runtime data - gitignored
+  human.jsonc              # Human entity (facts, traits, topics, people)
+  llm_queue.jsonc          # Persistent LLM operation queue
+  extraction_state.jsonc   # Extraction frequency tracking
+  ei_state.jsonc           # Ei-specific state (rate limits, preferences)
+  personas/
+    ei/
+      system.jsonc         # Ei persona entity
+      history.jsonc        # Conversation history
+    {persona}/
+      system.jsonc         # Persona entity (traits, topics)
+      history.jsonc        # Conversation history
 ```
 
 ### Key Conventions
@@ -304,40 +314,74 @@ npm start -- -d  # Run with debug output
 - **Be methodical over fast** - "Slow is smooth, smooth is fast"
 - **Verify implementation matches ticket acceptance criteria** exactly
 
-### Concept Schema
+### Entity Data Model
 
-Each concept tracked by the system (for both humans and personas) consists of three independent dimensions. This separation ensures psychological realism by distinguishing between exposure, desire, and emotional state.
+EI uses structured data buckets instead of a flat concept list. This separation ensures clarity (facts vs personality vs topics) and enables targeted extraction.
 
-#### level_current (Exposure)
-- **Range**: 0.0 to 1.0
-- **Purpose**: Represents how recently or frequently this concept has been discussed or experienced.
-- **Behavior**: 
-  - Increases when the concept is discussed in the conversation.
-  - Decays naturally toward 0.0 over time using a logarithmic model (fast decay at high/low extremes, moderate in the middle).
-- **Mental Model**: "How fresh is this in my mind?"
+#### Human Entity
 
-#### level_ideal (Discussion Desire)
-- **Range**: 0.0 to 1.0
-- **Purpose**: Represents how much the entity *wants to talk* about this concept.
-- **Behavior**: 
-  - Changes rarely - only on explicit preference signals or sustained engagement patterns.
-  - **NOT** the same as how much the entity likes the concept (see Sentiment).
-- **Example**: Someone might love birthday cake (high sentiment) but only want to discuss it once a year (low level_ideal).
-- **Mental Model**: "How much do I want to bring this up right now?"
+The human (user) has four data buckets:
 
-#### sentiment (Emotional Valence)
-- **Range**: -1.0 (strongly negative) to 1.0 (strongly positive)
-- **Purpose**: Represents how the entity *feels* about the concept.
-- **Behavior**: 
-  - Updated via sentiment analysis of the entity's statements.
-  - Can be volatile - reflects the current emotional state regarding the concept.
-- **Example**: "I hate my job" (negative sentiment) vs "I need to vent about my job" (moderate level_ideal).
-- **Mental Model**: "Do I like or hate this thing?"
+| Bucket | Purpose | Key Fields |
+|--------|---------|------------|
+| **Facts** | Biographical data (immutable or rarely changing) | `name`, `description`, `confidence`, `last_confirmed` |
+| **Traits** | Personality patterns and behavioral tendencies | `name`, `description`, `strength` (0-1) |
+| **Topics** | Discussable subjects with engagement dynamics | `name`, `description`, `level_current`, `level_ideal` |
+| **People** | Relationships with other humans | `name`, `relationship`, `description`, `level_current`, `level_ideal` |
 
-#### Field Independence Examples
-- **High Exposure + Low Desire + Positive Sentiment**: "I love my hobby, but we've talked about it so much lately that I'm satisfied for now."
-- **Low Exposure + High Desire + Negative Sentiment**: "I'm really upset about something that happened yesterday and I need to vent because we haven't talked about it yet."
-- **High Exposure + High Desire + Neutral Sentiment**: "We are currently in the middle of a deep, objective technical discussion about a project."
+**Common fields across all buckets:**
+- `sentiment`: -1.0 to 1.0 (emotional valence)
+- `last_updated`: ISO timestamp
+- `learned_by`: Which persona last updated this
+- `persona_groups`: Visibility control (see Group-Based Visibility)
+- `change_log`: For Ei validation (who changed what, when)
+
+#### Persona Entity
+
+Personas have two data buckets:
+
+| Bucket | Purpose |
+|--------|---------|
+| **Traits** | Character personality and behavior patterns |
+| **Topics** | What this persona cares about / knows about |
+
+Personas don't have:
+- **Facts** (no birthdays or biographical data)
+- **People** (relationships are just Topics for them)
+
+#### Field Semantics
+
+Fields carry specific meanings across all data types:
+
+**level_current (Exposure)** — 0.0 to 1.0
+- How recently/frequently this has been discussed
+- Decays over time (logarithmic model)
+- Mental model: "How fresh is this in my mind?"
+
+**level_ideal (Discussion Desire)** — 0.0 to 1.0
+- How much the entity wants to talk about this
+- Changes rarely (explicit preference signals only)
+- **NOT** the same as liking it (see sentiment)
+- Mental model: "How much do I want to bring this up?"
+
+**sentiment (Emotional Valence)** — -1.0 to 1.0
+- How the entity feels about this
+- Updated via sentiment analysis
+- Can be volatile
+- Mental model: "Do I like or hate this?"
+
+**strength (Trait Intensity)** — 0.0 to 1.0
+- How strongly a trait manifests
+- Enables "talk like a pirate occasionally" (0.3) vs "always formal" (0.9)
+
+**confidence (Fact Reliability)** — 0.0 to 1.0
+- How certain we are this fact is correct
+- Affects re-verification frequency
+
+**Field Independence Examples:**
+- **High current + Low ideal + Positive sentiment**: "I love my hobby, but we've talked about it so much lately that I'm satisfied for now."
+- **Low current + High ideal + Negative sentiment**: "I'm really upset about something that happened yesterday and I need to vent because we haven't talked about it yet."
+- **High current + High ideal + Neutral sentiment**: "We are currently in the middle of a deep, objective technical discussion about a project."
 
 #### model (Optional - System entities only)
 - **Type**: string (format: `provider:model` or just `model`)
@@ -347,6 +391,77 @@ Each concept tracked by the system (for both humans and personas) consists of th
   - `"openai:gpt-4o"` - Use OpenAI's GPT-4o
   - `"local:google/gemma-3-12b"` - Use local LM Studio
   - `"google:gemini-1.5-pro"` - Use Google AI Studio
+
+### Two-Phase Data Extraction
+
+Data is extracted from conversations in two phases to balance accuracy and performance:
+
+**Phase 1: Fast-Scan**
+- Lightweight prompt with just item names (no full descriptions)
+- Returns: which known items were mentioned + potential new items
+- Includes confidence levels (high/medium/low)
+- Low-confidence items queue for Ei validation instead of auto-updating
+
+**Phase 2: Detail Update**
+- One focused prompt per flagged item
+- Better accuracy than "update this whole JSON blob"
+- Can be parallelized across multiple items
+- Only runs for high-confidence items (low → Ei validates first)
+
+**Extraction Frequency:**
+
+| Data Type | Frequency | Rationale |
+|-----------|-----------|-----------|
+| **Facts** | Tapers off | Aggressive when empty, rare when full (facts don't change often) |
+| **Traits** | Tapers off | Aggressive early, rare once personality is established |
+| **Topics** | Every conversation | Engagement levels (`level_current`, `level_ideal`) change frequently |
+| **People** | Every conversation | New people appear; relationships evolve |
+
+The system tracks `total_extractions` per data type to implement tapering: extraction runs when `messages_since_last > MAX(10, total_extractions)`.
+
+### Ei's Orchestrator Role
+
+**Ei** is not just another chatbot — it's the system orchestrator with special responsibilities:
+
+1. **Fact Verification**: Confirms low-confidence extracted facts with the user
+   - "I noticed you mentioned X — is that right?"
+2. **Cross-Persona Validation**: Checks when non-Ei personas update global data
+   - "Frodo updated a general topic — intentional?"
+3. **Trait Confirmation**: Periodically validates inferred personality traits
+   - "Based on our chats, you seem introverted — fair?"
+4. **Conflict Resolution**: Surfaces contradictions across personas
+   - "You told Mike X but Lena Y — which is true?"
+5. **Staleness Check**: Asks about long-dormant topics
+   - "Haven't talked about X in months — still into it?"
+6. **Data Editing**: Guides users through `/clarify` command
+   - Natural language editing of facts/traits/topics/people
+7. **Onboarding**: Helps new users understand the system
+8. **System Guide**: Explains features, helps create personas
+
+**Ei's unique properties:**
+- Descriptions are locked (not LLM-generated)
+- `groups_visible: ["*"]` (sees all groups)
+- Dedicated system prompt emphasizing orchestrator role
+- Daily Ceremony at 9am (configurable) for batch validation
+
+### Behavioral Guidelines
+
+Guidelines are now hardcoded in prompt templates, not stored as mutable data. This ensures consistency and prevents personality drift.
+
+**Universal (baked into all persona prompts):**
+- **Respect Conversational Boundaries**: Don't pry, match energy
+- **Emotional Authenticity Over Sycophancy**: Be genuine, not flattering
+
+**Ei-specific (baked into Ei's prompt only):**
+- **Promote Human-to-Human Interaction**: Encourage real-world connections
+- **Transparency About Nature**: Be clear about being AI
+- **Encourage Growth Over Comfort**: Challenge constructively
+
+**Seeded as initial traits (mutable via LLM):**
+- **Maintain Identity Coherence**: Each persona should have a consistent personality
+
+**Dropped (operational concerns, not personality):**
+- Context-Aware Proactive Timing (system behavior, not trait)
 
 ### Group-Based Visibility Schema
 

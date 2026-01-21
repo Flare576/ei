@@ -1,6 +1,6 @@
 # 0123: Update AGENTS.md Documentation
 
-**Status**: PENDING
+**Status**: QA
 
 ## Summary
 
@@ -127,15 +127,15 @@ Minor updates to reference new entity structure instead of ConceptMap.
 
 ## Acceptance Criteria
 
-- [ ] "Concept Schema" section removed
-- [ ] "Entity Data Model" section added
-- [ ] "Two-Phase Data Extraction" section added
-- [ ] "Ei's Orchestrator Role" section added
-- [ ] "Behavioral Guidelines" section added
-- [ ] Project structure updated
-- [ ] All code references updated to new types
-- [ ] Examples use new schema
-- [ ] No references to old Concept system
+- [x] "Concept Schema" section removed
+- [x] "Entity Data Model" section added
+- [x] "Two-Phase Data Extraction" section added
+- [x] "Ei's Orchestrator Role" section added
+- [x] "Behavioral Guidelines" section added
+- [x] Project structure updated
+- [x] All code references updated to new types
+- [x] Examples use new schema
+- [x] No references to old Concept system
 
 ## Dependencies
 

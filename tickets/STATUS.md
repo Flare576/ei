@@ -1,6 +1,7 @@
 # Ticket Status Summary
 
-## QA ⚠️ (15 tickets)
+## QA ⚠️ (16 tickets)
+- 0123: Update AGENTS.md Documentation
 - 0124: Time-Based Core Logic (Simplified) - Daily Ceremony + Decay timers
 - 0122: Remove Old Concept System (core complete, UI intentionally deferred)
 - 0121: Ei-Specific System Prompt
@@ -90,11 +91,10 @@
 - 0114: Known Personas in Prompts
 - 0118: Ei Heartbeat Simplification
 
-## PENDING (22 tickets)
+## PENDING (21 tickets)
 - 0129: Extract Time-Based Core Logic from UI Layer (FUTURE - The Elephant)
 - 0128: Persona Trait Change Detection Overhaul - HIGH PRIORITY
 - 0127: Persona Facts/People as Topics (Future Enhancement)
-- 0123: Update AGENTS.md Documentation
 - 0107: Entity Data Architecture Overhaul (Epic) - MAJOR REDESIGN
 - 0106: Special Behavior for Archiving Ei Persona
 - 0105: Context Window Command
@@ -137,7 +137,7 @@
 
 **Last Updated**: 2026-01-21
 **Total Tickets**: 129 created
-**Stats**: 72 done, 15 QA, 0 in_progress, 22 pending (14 in 0107 epic), 13 cancelled
+**Stats**: 72 done, 16 QA, 0 in_progress, 21 pending (14 in 0107 epic), 13 cancelled
 
 ## Epic Status
 
@@ -208,7 +208,7 @@ Absorbs 0102 (Ei Core Persona) and 0103 (Persona Prompt Architecture).
 
 **Cleanup:**
 - 0122: QA - Remove Old Concept System
-- 0123: PENDING - Update AGENTS.md Documentation
+- 0123: QA - Update AGENTS.md Documentation
 
 **Future Exploration:**
 - 0125: PENDING - Group Chat Exploration (NOT blocking 0107)
