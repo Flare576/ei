@@ -2218,6 +2218,12 @@ Press q to close this help.`;
           }
           
           const { system, user } = buildEiHeartbeatPrompt(ctx);
+          
+          if (DEBUG) {
+            debugLog(`[Debug] Ei heartbeat system prompt:\n${system}`);
+            debugLog(`[Debug] Ei heartbeat user prompt:\n${user}`);
+          }
+          
           const response = await callLLM(system, user, { 
             signal: ps.abortController.signal, 
             temperature: 0.7,
@@ -2334,6 +2340,80 @@ Press q to close this help.`;
 
   private async checkForStaleMessages(): Promise<void> {
     debugLog('Stale message checking removed - handled by new LLM queue system');
+  }
+
+  private startDailyCeremonyChecker(): void {
+    debugLog('Starting daily ceremony checker');
+    this.dailyCeremonyInterval = setInterval(
+      () => this.checkDailyCeremony(),
+      5 * 60 * 1000
+    );
+  }
+
+  private async checkDailyCeremony(): Promise<void> {
+    const { buildDailyCeremonyMessage, recordCeremony } = await import('../verification.js');
+    
+    const entity = await loadHumanEntity();
+    const config = entity.ceremony_config || { enabled: true, time: "09:00" };
+    
+    if (!config.enabled) return;
+    
+    const now = new Date();
+    
+    const [hours, minutes] = config.time.split(':').map(Number);
+    const ceremonyMinutes = hours * 60 + minutes;
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    
+    if (nowMinutes < ceremonyMinutes) return;
+    
+    if (config.last_ceremony) {
+      const lastRun = new Date(config.last_ceremony);
+      if (lastRun.toDateString() === now.toDateString()) return;
+    }
+    
+    const message = await buildDailyCeremonyMessage();
+    if (!message) return;
+    
+    await appendMessage({
+      role: "system",
+      content: message,
+      timestamp: new Date().toISOString(),
+      read: false
+    }, "ei");
+    
+    if (this.activePersona !== "ei") {
+      const ps = this.getOrCreatePersonaState("ei");
+      ps.unreadCount++;
+      this.unreadCounts.set("ei", ps.unreadCount);
+      this.personaRenderer.updateSpinnerAnimation(this.personaStates);
+    }
+    
+    await recordCeremony();
+    
+    appendDebugLog('[DailyCeremony] Triggered at ' + now.toISOString());
+  }
+
+  private startDecayTimer(): void {
+    debugLog('Starting decay timer');
+    this.decayInterval = setInterval(
+      () => this.runDecay(),
+      60 * 60 * 1000
+    );
+  }
+
+  private async runDecay(): Promise<void> {
+    try {
+      await applyTopicDecay('human');
+      
+      const personas = await listPersonas();
+      for (const persona of personas) {
+        await applyTopicDecay('system', persona.name);
+      }
+      
+      appendDebugLog('[Decay] Applied to all entities');
+    } catch (err) {
+      appendDebugLog(`[Decay] Error: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   private async switchPersona(personaName: string) {
@@ -2649,6 +2729,19 @@ Press q to close this help.`;
         debugLog('Cleared stale message checker interval');
       }
       
+      // Clean up scheduled job intervals
+      if (this.dailyCeremonyInterval) {
+        clearInterval(this.dailyCeremonyInterval);
+        this.dailyCeremonyInterval = null;
+        debugLog('Cleared daily ceremony interval');
+      }
+      
+      if (this.decayInterval) {
+        clearInterval(this.decayInterval);
+        this.decayInterval = null;
+        debugLog('Cleared decay interval');
+      }
+      
       // Clean up persona renderer with error handling
       try {
         this.personaRenderer.cleanup();
@@ -2727,6 +2820,8 @@ Press q to close this help.`;
       await markSystemMessagesAsRead('ei');
       
       this.startStaleMessageChecker();
+      this.startDailyCeremonyChecker();
+      this.startDecayTimer();
       await this.queueProcessor.start();
       debugLog('QueueProcessor started');
       

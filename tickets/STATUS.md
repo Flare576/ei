@@ -1,10 +1,20 @@
 # Ticket Status Summary
 
-## QA ⚠️ (4 tickets)
-- 0111: Fast-Scan Prompt Implementation
-- 0115: Data Verification Flow (Daily Ceremony)
-- 0119: Response Prompt Overhaul
+## QA ⚠️ (15 tickets)
+- 0124: Time-Based Core Logic (Simplified) - Daily Ceremony + Decay timers
+- 0122: Remove Old Concept System (core complete, UI intentionally deferred)
+- 0121: Ei-Specific System Prompt
 - 0120: Static Concepts → Prompt Templates
+- 0119: Response Prompt Overhaul
+- 0117: /clarify Command
+- 0116: Cross-Persona Validation
+- 0115: Data Verification Flow (Daily Ceremony)
+- 0113: Extraction Frequency Controller
+- 0112: Detail Update Prompts
+- 0111: Fast-Scan Prompt Implementation
+- 0126: LLM Queue Processor
+- 0109: Storage Migration
+- 0108: New Entity Type Definitions
 
 ## DONE ✅ (72 tickets)
 - 0078: Persona Delete Command
@@ -80,7 +90,11 @@
 - 0114: Known Personas in Prompts
 - 0118: Ei Heartbeat Simplification
 
-## PENDING (19 tickets)
+## PENDING (22 tickets)
+- 0129: Extract Time-Based Core Logic from UI Layer (FUTURE - The Elephant)
+- 0128: Persona Trait Change Detection Overhaul - HIGH PRIORITY
+- 0127: Persona Facts/People as Topics (Future Enhancement)
+- 0123: Update AGENTS.md Documentation
 - 0107: Entity Data Architecture Overhaul (Epic) - MAJOR REDESIGN
 - 0106: Special Behavior for Archiving Ei Persona
 - 0105: Context Window Command
@@ -121,9 +135,9 @@
 
 ---
 
-**Last Updated**: 2026-01-20
-**Total Tickets**: 127 created (0114 marked done, was already implemented in 0111/0112)
-**Stats**: 72 done, 4 QA, 0 in_progress, 31 pending (13 in 0107 epic), 13 cancelled
+**Last Updated**: 2026-01-21
+**Total Tickets**: 129 created
+**Stats**: 72 done, 15 QA, 0 in_progress, 22 pending (14 in 0107 epic), 13 cancelled
 
 ## Epic Status
 
@@ -169,31 +183,31 @@ Replaces monolithic "Concept" system with structured data buckets.
 Absorbs 0102 (Ei Core Persona) and 0103 (Persona Prompt Architecture).
 
 **Schema & Storage:**
-- 0108: PENDING - New Entity Type Definitions
-- 0109: PENDING - Storage Migration
+- 0108: QA - New Entity Type Definitions
+- 0109: QA - Storage Migration
 - 0110: DONE - LLM Queue Persistence File
-- 0124: PENDING - Scheduled Jobs Infrastructure
+- 0124: QA - Time-Based Core Logic (Simplified) - Daily Ceremony + Decay timers
 
 **Queue Processing:**
-- 0126: PENDING - LLM Queue Processor (NEW - infrastructure for queue execution)
+- 0126: QA - LLM Queue Processor
 
 **Extraction System:**
 - 0111: QA - Fast-Scan Prompt Implementation
-- 0112: PENDING - Detail Update Prompts (per data type) - depends on 0126
-- 0113: PENDING - Extraction Frequency Controller - depends on 0126
+- 0112: QA - Detail Update Prompts (per data type)
+- 0113: QA - Extraction Frequency Controller
 - 0114: DONE - Known Personas in Prompts (completed during 0111/0112)
 
 **Ei Orchestration:**
 - 0115: QA - Data Verification Flow (Daily Ceremony)
-- 0116: PENDING - Cross-Persona Validation
-- 0117: PENDING - /clarify Command
+- 0116: QA - Cross-Persona Validation
+- 0117: QA - /clarify Command
 - 0118: DONE - Ei Heartbeat Simplification
 - 0119: QA - Response Prompt Overhaul
 - 0120: QA - Static Concepts → Prompt Templates
-- 0121: PENDING - Ei-Specific System Prompt
+- 0121: QA - Ei-Specific System Prompt
 
 **Cleanup:**
-- 0122: PENDING - Remove Old Concept System
+- 0122: QA - Remove Old Concept System
 - 0123: PENDING - Update AGENTS.md Documentation
 
 **Future Exploration:**
