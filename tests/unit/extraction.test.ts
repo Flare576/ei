@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { runFastScan, routeFastScanResults, runDetailUpdate, FastScanResult } from "../../src/extraction.js";
 import type { HumanEntity, PersonaEntity, Message, Fact, Trait, Topic, Person } from "../../src/types.js";
 import * as storage from "../../src/storage.js";
@@ -18,27 +18,39 @@ describe("extraction", () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   describe("runFastScan", () => {
-    const mockMessages: Message[] = [
-      { role: "human", content: "I love hiking", timestamp: new Date().toISOString() },
-      { role: "system", content: "That's great!", timestamp: new Date().toISOString() }
-    ];
+    let mockMessages: Message[];
+    let mockHumanEntity: HumanEntity;
+    let mockPersonaEntity: PersonaEntity;
 
-    const mockHumanEntity: HumanEntity = {
-      entity: "human",
-      facts: [{ name: "Birthday", description: "Jan 1", sentiment: 0, last_updated: new Date().toISOString(), confidence: 1.0 }],
-      traits: [{ name: "Introverted", description: "Prefers quiet", sentiment: 0, last_updated: new Date().toISOString() }],
-      topics: [{ name: "Programming", description: "Software dev", sentiment: 0.8, level_current: 0.5, level_ideal: 0.7, last_updated: new Date().toISOString() }],
-      people: [{ name: "Alice", description: "Friend", relationship: "friend", sentiment: 0.6, level_current: 0.4, level_ideal: 0.5, last_updated: new Date().toISOString() }],
-      last_updated: null
-    };
+    beforeEach(() => {
+      const timestamp = new Date().toISOString();
+      
+      mockMessages = [
+        { role: "human", content: "I love hiking", timestamp },
+        { role: "system", content: "That's great!", timestamp }
+      ];
 
-    const mockPersonaEntity: PersonaEntity = {
-      entity: "system",
-      traits: [{ name: "Friendly", description: "Warm", sentiment: 0.5, last_updated: new Date().toISOString() }],
-      topics: [{ name: "Music", description: "Enjoys music", sentiment: 0.7, level_current: 0.6, level_ideal: 0.8, last_updated: new Date().toISOString() }],
-      last_updated: null
-    };
+      mockHumanEntity = {
+        entity: "human",
+        facts: [{ name: "Birthday", description: "Jan 1", sentiment: 0, last_updated: timestamp, confidence: 1.0 }],
+        traits: [{ name: "Introverted", description: "Prefers quiet", sentiment: 0, last_updated: timestamp }],
+        topics: [{ name: "Programming", description: "Software dev", sentiment: 0.8, level_current: 0.5, level_ideal: 0.7, last_updated: timestamp }],
+        people: [{ name: "Alice", description: "Friend", relationship: "friend", sentiment: 0.6, level_current: 0.4, level_ideal: 0.5, last_updated: timestamp }],
+        last_updated: null
+      };
+
+      mockPersonaEntity = {
+        entity: "system",
+        traits: [{ name: "Friendly", description: "Warm", sentiment: 0.5, last_updated: timestamp }],
+        topics: [{ name: "Music", description: "Enjoys music", sentiment: 0.7, level_current: 0.6, level_ideal: 0.8, last_updated: timestamp }],
+        last_updated: null
+      };
+    });
 
     it("scans human entity and returns results", async () => {
       vi.mocked(storage.loadHumanEntity).mockResolvedValue(mockHumanEntity);
@@ -132,12 +144,17 @@ describe("extraction", () => {
   });
 
   describe("routeFastScanResults", () => {
-    const mockMessages: Message[] = [
-      { role: "human", content: "Test", timestamp: new Date().toISOString() }
-    ];
+    let mockMessages: Message[];
 
     beforeEach(() => {
+      mockMessages = [
+        { role: "human", content: "Test", timestamp: new Date().toISOString() }
+      ];
       vi.mocked(queue.enqueueItem).mockResolvedValue("test-id");
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
     });
 
     it("routes high confidence mentioned items to detail_update", async () => {
@@ -256,29 +273,39 @@ describe("extraction", () => {
   });
 
   describe("runDetailUpdate", () => {
-    const mockMessages: Message[] = [
-      { role: "human", content: "I'm 35 years old", timestamp: new Date().toISOString() },
-      { role: "system", content: "Thanks for sharing", timestamp: new Date().toISOString() }
-    ];
-
-    const mockHumanEntity: HumanEntity = {
-      entity: "human",
-      facts: [],
-      traits: [],
-      topics: [],
-      people: [],
-      last_updated: null
-    };
-
-    const mockPersonaEntity: PersonaEntity = {
-      entity: "system",
-      traits: [],
-      topics: [],
-      last_updated: null
-    };
+    let mockMessages: Message[];
+    let mockHumanEntity: HumanEntity;
+    let mockPersonaEntity: PersonaEntity;
 
     beforeEach(() => {
       vi.clearAllMocks();
+      
+      const timestamp = new Date().toISOString();
+      
+      mockMessages = [
+        { role: "human", content: "I'm 35 years old", timestamp },
+        { role: "system", content: "Thanks for sharing", timestamp }
+      ];
+
+      mockHumanEntity = {
+        entity: "human",
+        facts: [],
+        traits: [],
+        topics: [],
+        people: [],
+        last_updated: null
+      };
+
+      mockPersonaEntity = {
+        entity: "system",
+        traits: [],
+        topics: [],
+        last_updated: null
+      };
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
     });
 
     it("creates new fact for human entity", async () => {

@@ -200,19 +200,18 @@ describe('Delete Persona E2E Tests', () => {
     await harness.sendCommand('/quit');
     await harness.assertExitCode(0, 8000);
 
-    await harness.modifyJsonFile('human.jsonc', (humanMap: any) => {
-      humanMap.concepts = humanMap.concepts || [];
-      humanMap.concepts.push({
+    await harness.modifyJsonFile('human.jsonc', (humanEntity: any) => {
+      humanEntity.topics = humanEntity.topics || [];
+      humanEntity.topics.push({
         name: 'Test Topic from DeleteConcepts',
-        description: 'A concept created by the persona we will delete',
+        description: 'A topic created by the persona we will delete',
         level_current: 0.5,
         level_ideal: 0.5,
         sentiment: 0.0,
-        type: 'topic',
         learned_by: 'DeleteConcepts',
         last_updated: new Date().toISOString()
       });
-      return humanMap;
+      return humanEntity;
     });
 
     await harness.startApp({ debugMode: false, usePty: false });
@@ -232,7 +231,7 @@ describe('Delete Persona E2E Tests', () => {
     await harness.sendInput('yes\n');
     await harness.waitForUIText('Delete topics created by', 5000);
     await harness.sendInput('y\n');
-    await harness.waitForUIText('1 human concept', 15000);
+    await harness.waitForUIText('1 human data item', 15000);
 
     harness.assertFileDoesNotExist('personas/DeleteConcepts');
     harness.assertFileDoesNotExist('personas/DeleteConcepts/system.jsonc');

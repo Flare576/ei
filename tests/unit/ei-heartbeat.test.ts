@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as eiHeartbeat from "../../src/ei-heartbeat.js";
 import * as storage from "../../src/storage.js";
 import { HumanEntity, PersonaEntity, ConversationHistory } from "../../src/types.js";
@@ -8,6 +8,10 @@ vi.mock("../../src/storage.js");
 describe("ei-heartbeat", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   describe("getInactivePersonas", () => {

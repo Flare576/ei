@@ -1,4 +1,4 @@
-import { describe, test, expect, vi, beforeEach } from 'vitest';
+import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { generatePersonaDescriptions, createPersonaWithLLM } from '../../src/persona-creator.js';
 import type { PersonaEntity, Trait, Topic } from '../../src/types.js';
 
@@ -47,6 +47,10 @@ const createTestPersonaEntity = (personaName: string = 'test'): PersonaEntity =>
 describe('Persona Creator', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   describe('generatePersonaDescriptions', () => {

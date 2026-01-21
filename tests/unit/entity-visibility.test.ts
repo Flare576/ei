@@ -1,231 +1,276 @@
 import { describe, it, expect } from "vitest";
-import { getVisibleConcepts } from "../../src/prompts.js";
-import { GLOBAL_GROUP } from "../../src/concept-reconciliation.js";
-import type { ConceptMap, Concept } from "../../src/types.js";
+import { filterByVisibility, GLOBAL_GROUP } from "../../src/prompts.js";
+import type { HumanEntity, PersonaEntity, Fact, Trait, Topic, Person } from "../../src/types.js";
 
-const createConcept = (
+const createFact = (
   name: string,
   persona_groups: string[] = []
-): Concept => ({
+): Fact => ({
+  name,
+  description: `Description for ${name}`,
+  sentiment: 0.0,
+  confidence: 0.8,
+  last_updated: new Date().toISOString(),
+  persona_groups,
+});
+
+const createTrait = (
+  name: string,
+  persona_groups: string[] = []
+): Trait => ({
+  name,
+  description: `Description for ${name}`,
+  sentiment: 0.0,
+  strength: 0.5,
+  last_updated: new Date().toISOString(),
+  persona_groups,
+});
+
+const createTopic = (
+  name: string,
+  persona_groups: string[] = []
+): Topic => ({
   name,
   description: `Description for ${name}`,
   level_current: 0.5,
   level_ideal: 0.5,
   sentiment: 0.0,
-  type: "topic",
+  last_updated: new Date().toISOString(),
   persona_groups,
 });
 
-const createPersonaMap = (overrides: Partial<ConceptMap> = {}): ConceptMap => ({
+const createPerson = (
+  name: string,
+  persona_groups: string[] = []
+): Person => ({
+  name,
+  description: `Description for ${name}`,
+  relationship: "friend",
+  level_current: 0.5,
+  level_ideal: 0.5,
+  sentiment: 0.0,
+  last_updated: new Date().toISOString(),
+  persona_groups,
+});
+
+const createPersonaEntity = (overrides: Partial<PersonaEntity> = {}): PersonaEntity => ({
   entity: "system",
   last_updated: null,
-  concepts: [],
+  traits: [],
+  topics: [],
   ...overrides,
 });
 
-describe("getVisibleConcepts", () => {
+const createHumanEntity = (overrides: Partial<HumanEntity> = {}): HumanEntity => ({
+  entity: "human",
+  facts: [],
+  traits: [],
+  topics: [],
+  people: [],
+  last_updated: null,
+  ceremony_config: { enabled: true, time: "09:00", timezone: undefined },
+  ...overrides,
+});
+
+describe("filterByVisibility", () => {
   describe("wildcard visibility (groups_visible: ['*'])", () => {
-    it("sees ALL concepts regardless of persona_groups", () => {
-      const persona = createPersonaMap({ groups_visible: ["*"] });
-      const concepts = [
-        createConcept("Global", [GLOBAL_GROUP]),
-        createConcept("Work Only", ["Work"]),
-        createConcept("Personal Only", ["Personal"]),
-        createConcept("Multi-Group", ["Work", "Personal"]),
-      ];
+    it("sees ALL data regardless of persona_groups", () => {
+      const persona = createPersonaEntity({ groups_visible: ["*"] });
+      const humanEntity = createHumanEntity({
+        facts: [
+          createFact("global_fact", []),
+          createFact("work_fact", ["Work"]),
+          createFact("personal_fact", ["Personal"]),
+        ],
+        traits: [
+          createTrait("global_trait", []),
+          createTrait("work_trait", ["Work"]),
+        ],
+      });
 
-      const visible = getVisibleConcepts(persona, concepts);
+      const filtered = filterByVisibility(humanEntity, persona);
 
-      expect(visible).toHaveLength(4);
-      expect(visible.map(c => c.name)).toEqual([
-        "Global",
-        "Work Only",
-        "Personal Only",
-        "Multi-Group",
-      ]);
+      expect(filtered.facts).toHaveLength(3);
+      expect(filtered.traits).toHaveLength(2);
+    });
+
+    it("includes all data buckets", () => {
+      const persona = createPersonaEntity({ groups_visible: ["*"] });
+      const humanEntity = createHumanEntity({
+        facts: [createFact("fact1")],
+        traits: [createTrait("trait1")],
+        topics: [createTopic("topic1")],
+        people: [createPerson("person1")],
+      });
+
+      const filtered = filterByVisibility(humanEntity, persona);
+
+      expect(filtered.facts).toHaveLength(1);
+      expect(filtered.traits).toHaveLength(1);
+      expect(filtered.topics).toHaveLength(1);
+      expect(filtered.people).toHaveLength(1);
     });
   });
 
-  describe("primary group visibility", () => {
-    it("sees concepts in primary group", () => {
-      const persona = createPersonaMap({ group_primary: "Work" });
-      const concepts = [
-        createConcept("Work Project", ["Work"]),
-        createConcept("Personal Hobby", ["Personal"]),
-      ];
+  describe("group_primary visibility", () => {
+    it("sees global data (empty persona_groups)", () => {
+      const persona = createPersonaEntity({ group_primary: "Work" });
+      const humanEntity = createHumanEntity({
+        facts: [createFact("global_fact", [])],
+      });
 
-      const visible = getVisibleConcepts(persona, concepts);
+      const filtered = filterByVisibility(humanEntity, persona);
 
-      expect(visible).toHaveLength(1);
-      expect(visible[0].name).toBe("Work Project");
+      expect(filtered.facts).toHaveLength(1);
+      expect(filtered.facts[0].name).toBe("global_fact");
     });
 
-    it("sees global concepts (persona_groups: ['*'])", () => {
-      const persona = createPersonaMap({ group_primary: "Work" });
-      const concepts = [
-        createConcept("Global Interest", [GLOBAL_GROUP]),
-        createConcept("Personal Secret", ["Personal"]),
-      ];
+    it("sees global data (GLOBAL_GROUP in persona_groups)", () => {
+      const persona = createPersonaEntity({ group_primary: "Work" });
+      const humanEntity = createHumanEntity({
+        facts: [createFact("global_fact", [GLOBAL_GROUP])],
+      });
 
-      const visible = getVisibleConcepts(persona, concepts);
+      const filtered = filterByVisibility(humanEntity, persona);
 
-      expect(visible).toHaveLength(1);
-      expect(visible[0].name).toBe("Global Interest");
+      expect(filtered.facts).toHaveLength(1);
     });
 
-    it("does NOT see concepts from other groups", () => {
-      const persona = createPersonaMap({ group_primary: "Work" });
-      const concepts = [
-        createConcept("Personal Secret", ["Personal"]),
-        createConcept("Family Matter", ["Family"]),
-      ];
+    it("sees data matching its group_primary", () => {
+      const persona = createPersonaEntity({ group_primary: "Work" });
+      const humanEntity = createHumanEntity({
+        facts: [
+          createFact("work_fact", ["Work"]),
+          createFact("personal_fact", ["Personal"]),
+        ],
+      });
 
-      const visible = getVisibleConcepts(persona, concepts);
+      const filtered = filterByVisibility(humanEntity, persona);
 
-      expect(visible).toHaveLength(0);
+      expect(filtered.facts).toHaveLength(1);
+      expect(filtered.facts[0].name).toBe("work_fact");
+    });
+
+    it("does not see data from other groups", () => {
+      const persona = createPersonaEntity({ group_primary: "Work" });
+      const humanEntity = createHumanEntity({
+        facts: [createFact("personal_fact", ["Personal"])],
+      });
+
+      const filtered = filterByVisibility(humanEntity, persona);
+
+      expect(filtered.facts).toHaveLength(0);
     });
   });
 
-  describe("additional groups_visible", () => {
-    it("sees concepts from primary AND additional visible groups", () => {
-      const persona = createPersonaMap({
+  describe("groups_visible visibility", () => {
+    it("sees data from multiple groups in groups_visible", () => {
+      const persona = createPersonaEntity({ groups_visible: ["Work", "Projects"] });
+      const humanEntity = createHumanEntity({
+        facts: [
+          createFact("work_fact", ["Work"]),
+          createFact("project_fact", ["Projects"]),
+          createFact("personal_fact", ["Personal"]),
+        ],
+      });
+
+      const filtered = filterByVisibility(humanEntity, persona);
+
+      expect(filtered.facts).toHaveLength(2);
+      const names = filtered.facts.map(f => f.name);
+      expect(names).toContain("work_fact");
+      expect(names).toContain("project_fact");
+    });
+
+    it("combines group_primary and groups_visible", () => {
+      const persona = createPersonaEntity({
         group_primary: "Work",
-        groups_visible: ["Personal"],
+        groups_visible: ["Projects"],
       });
-      const concepts = [
-        createConcept("Work Project", ["Work"]),
-        createConcept("Personal Hobby", ["Personal"]),
-        createConcept("Family Matter", ["Family"]),
-      ];
-
-      const visible = getVisibleConcepts(persona, concepts);
-
-      expect(visible).toHaveLength(2);
-      expect(visible.map(c => c.name).sort()).toEqual([
-        "Personal Hobby",
-        "Work Project",
-      ]);
-    });
-
-    it("works with multiple additional groups", () => {
-      const persona = createPersonaMap({
-        group_primary: "Work",
-        groups_visible: ["Personal", "Family"],
+      const humanEntity = createHumanEntity({
+        facts: [
+          createFact("work_fact", ["Work"]),
+          createFact("project_fact", ["Projects"]),
+          createFact("personal_fact", ["Personal"]),
+        ],
       });
-      const concepts = [
-        createConcept("Work Project", ["Work"]),
-        createConcept("Personal Hobby", ["Personal"]),
-        createConcept("Family Matter", ["Family"]),
-        createConcept("Secret", ["Hidden"]),
-      ];
 
-      const visible = getVisibleConcepts(persona, concepts);
+      const filtered = filterByVisibility(humanEntity, persona);
 
-      expect(visible).toHaveLength(3);
-      expect(visible.find(c => c.name === "Secret")).toBeUndefined();
+      expect(filtered.facts).toHaveLength(2);
+      const names = filtered.facts.map(f => f.name);
+      expect(names).toContain("work_fact");
+      expect(names).toContain("project_fact");
     });
   });
 
-  describe("no groups configured", () => {
-    it("sees only global concepts when no group_primary and no groups_visible", () => {
-      const persona = createPersonaMap({
-        group_primary: null,
-        groups_visible: [],
+  describe("no group visibility", () => {
+    it("persona with no group_primary and no groups_visible sees only global data", () => {
+      const persona = createPersonaEntity({});
+      const humanEntity = createHumanEntity({
+        facts: [
+          createFact("global_fact", []),
+          createFact("work_fact", ["Work"]),
+        ],
       });
-      const concepts = [
-        createConcept("Global Topic", [GLOBAL_GROUP]),
-        createConcept("Work Concept", ["Work"]),
-        createConcept("Personal Concept", ["Personal"]),
-      ];
 
-      const visible = getVisibleConcepts(persona, concepts);
+      const filtered = filterByVisibility(humanEntity, persona);
 
-      expect(visible).toHaveLength(1);
-      expect(visible[0].name).toBe("Global Topic");
+      expect(filtered.facts).toHaveLength(1);
+      expect(filtered.facts[0].name).toBe("global_fact");
     });
 
-    it("sees only global concepts when groups fields are undefined", () => {
-      const persona = createPersonaMap({});
-      const concepts = [
-        createConcept("Global", [GLOBAL_GROUP]),
-        createConcept("Work", ["Work"]),
-      ];
-
-      const visible = getVisibleConcepts(persona, concepts);
-
-      expect(visible).toHaveLength(1);
-      expect(visible[0].name).toBe("Global");
-    });
-  });
-
-  describe("multi-group concepts", () => {
-    it("shows concept if ANY group matches", () => {
-      const persona = createPersonaMap({ group_primary: "Work" });
-      const concepts = [
-        createConcept("Work-Personal Overlap", ["Work", "Personal"]),
-      ];
-
-      const visible = getVisibleConcepts(persona, concepts);
-
-      expect(visible).toHaveLength(1);
-      expect(visible[0].name).toBe("Work-Personal Overlap");
-    });
-
-    it("shows concept if ANY visible group matches", () => {
-      const persona = createPersonaMap({
-        group_primary: "Health",
-        groups_visible: ["Personal"],
+    it("persona with undefined group fields sees only global data", () => {
+      const persona = createPersonaEntity({
+        group_primary: undefined,
+        groups_visible: undefined,
       });
-      const concepts = [
-        createConcept("Personal-Work Overlap", ["Personal", "Work"]),
-      ];
+      const humanEntity = createHumanEntity({
+        facts: [
+          createFact("global_fact", []),
+          createFact("work_fact", ["Work"]),
+        ],
+      });
 
-      const visible = getVisibleConcepts(persona, concepts);
+      const filtered = filterByVisibility(humanEntity, persona);
 
-      expect(visible).toHaveLength(1);
+      expect(filtered.facts).toHaveLength(1);
+      expect(filtered.facts[0].name).toBe("global_fact");
     });
   });
 
   describe("edge cases", () => {
-    it("handles empty concept list", () => {
-      const persona = createPersonaMap({ group_primary: "Work" });
+    it("handles empty human entity", () => {
+      const persona = createPersonaEntity({ groups_visible: ["*"] });
+      const humanEntity = createHumanEntity();
 
-      const visible = getVisibleConcepts(persona, []);
+      const filtered = filterByVisibility(humanEntity, persona);
 
-      expect(visible).toHaveLength(0);
+      expect(filtered.facts).toHaveLength(0);
+      expect(filtered.traits).toHaveLength(0);
+      expect(filtered.topics).toHaveLength(0);
+      expect(filtered.people).toHaveLength(0);
     });
 
-    it("handles concepts with undefined persona_groups as non-global (legacy)", () => {
-      const persona = createPersonaMap({ group_primary: "Work" });
-      const conceptWithUndefinedGroups: Concept = {
-        name: "Legacy Concept",
-        description: "From before persona_groups existed",
-        level_current: 0.5,
-        level_ideal: 0.5,
-        sentiment: 0.0,
-        type: "topic",
-      };
-
-      const visible = getVisibleConcepts(persona, [conceptWithUndefinedGroups]);
-
-      // undefined/empty is NOT global - global requires explicit ["*"]
-      expect(visible).toHaveLength(0);
-    });
-
-    it("groups_visible without group_primary still works", () => {
-      const persona = createPersonaMap({
-        group_primary: null,
-        groups_visible: ["Work"],
+    it("filters all data buckets independently", () => {
+      const persona = createPersonaEntity({ group_primary: "Work" });
+      const humanEntity = createHumanEntity({
+        facts: [createFact("work_fact", ["Work"]), createFact("personal_fact", ["Personal"])],
+        traits: [createTrait("work_trait", ["Work"]), createTrait("personal_trait", ["Personal"])],
+        topics: [createTopic("work_topic", ["Work"]), createTopic("personal_topic", ["Personal"])],
+        people: [createPerson("work_person", ["Work"]), createPerson("personal_person", ["Personal"])],
       });
-      const concepts = [
-        createConcept("Work Item", ["Work"]),
-        createConcept("Personal Item", ["Personal"]),
-      ];
 
-      const visible = getVisibleConcepts(persona, concepts);
+      const filtered = filterByVisibility(humanEntity, persona);
 
-      expect(visible).toHaveLength(1);
-      expect(visible[0].name).toBe("Work Item");
+      expect(filtered.facts).toHaveLength(1);
+      expect(filtered.traits).toHaveLength(1);
+      expect(filtered.topics).toHaveLength(1);
+      expect(filtered.people).toHaveLength(1);
+      expect(filtered.facts[0].name).toBe("work_fact");
+      expect(filtered.traits[0].name).toBe("work_trait");
+      expect(filtered.topics[0].name).toBe("work_topic");
+      expect(filtered.people[0].name).toBe("work_person");
     });
   });
 });

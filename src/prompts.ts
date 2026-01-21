@@ -1,7 +1,7 @@
 import { Message, HumanEntity, PersonaEntity, Fact, Trait, Topic, Person, DataItemBase } from "./types.js";
 import { getPendingValidations } from "./llm-queue.js";
 
-const GLOBAL_GROUP = "*";
+export const GLOBAL_GROUP = "*";
 
 /**
  * Filtered human data visible to a persona (used in prompts)

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { applyTopicDecay, checkDesireGaps } from '../../src/topic-decay.js';
 import type { HumanEntity, PersonaEntity } from '../../src/types.js';
 import * as storage from '../../src/storage.js';
@@ -18,6 +18,10 @@ vi.mock('../../src/storage.js', async () => {
 describe('topic-decay', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   describe('applyTopicDecay', () => {

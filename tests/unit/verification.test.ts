@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as verification from "../../src/verification.js";
 import * as storage from "../../src/storage.js";
 import * as llmQueue from "../../src/llm-queue.js";
@@ -13,6 +13,10 @@ vi.mock("../../src/llm.js");
 describe("verification", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   describe("shouldRunCeremony", () => {

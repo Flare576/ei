@@ -5,7 +5,7 @@ import { writeFileSync, readFileSync, unlinkSync } from 'fs';
 // Import test output capture early to intercept blessed methods before they're used
 import { testOutputCapture } from './test-output-capture.js';
 
-import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog, getPendingMessages, replacePendingMessages, appendHumanMessage, appendMessage, loadPauseState, savePauseState, markSystemMessagesAsRead, getUnreadSystemMessageCount, loadArchiveState, saveArchiveState, getArchivedPersonas, findArchivedPersonaByNameOrAlias, addPersonaAlias, removePersonaAlias, loadHumanEntity, loadPersonaEntity, savePersonaEntity } from '../storage.js';
+import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog, getPendingMessages, replacePendingMessages, appendHumanMessage, appendMessage, loadPauseState, savePauseState, markSystemMessagesAsRead, getUnreadSystemMessageCount, loadArchiveState, saveArchiveState, getArchivedPersonas, findArchivedPersonaByNameOrAlias, addPersonaAlias, removePersonaAlias, loadHumanEntity, loadPersonaEntity, savePersonaEntity, saveHumanEntity, loadAllPersonasWithEntities } from '../storage.js';
 import { getVisiblePersonas } from '../prompts.js';
 import { findDataPointByName } from '../verification.js';
 import { createPersonaWithLLM, saveNewPersona } from '../persona-creator.js';
@@ -94,6 +94,11 @@ export class EIApp {
     name: string;
     stage: 'confirm-delete' | 'confirm-concepts';
   } | null = null;
+
+  // Signal handlers for cleanup
+  private sigtermHandler: (() => void) | null = null;
+  private sighupHandler: (() => void) | null = null;
+  private stdinDataHandler: ((data: Buffer) => void) | null = null;
 
   constructor() {
     EIApp.instanceCount++;
@@ -218,15 +223,17 @@ export class EIApp {
     // Key bindings on screen level (only for non-input keys)
     this.screen.key(['escape', 'q'], () => {
       debugLog('Screen key handler: cleaning up and exiting...');
-      try {
-        const cleanupResult = this.cleanup();
-        if (!cleanupResult.success) {
-          debugLog(`Emergency exit cleanup had errors: ${cleanupResult.errors.join('; ')}`);
-        }
-      } catch (error) {
-        debugLog(`Emergency exit cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
-      }
-      setTimeout(() => process.exit(1), 100);
+      this.cleanup()
+        .then((cleanupResult) => {
+          if (!cleanupResult.success) {
+            debugLog(`Emergency exit cleanup had errors: ${cleanupResult.errors.join('; ')}`);
+          }
+          setTimeout(() => process.exit(1), 100);
+        })
+        .catch((error) => {
+          debugLog(`Emergency exit cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
+          setTimeout(() => process.exit(1), 100);
+        });
     });
 
     // Remove screen-level Ctrl+C binding - it won't work when input has focus
@@ -313,33 +320,32 @@ export class EIApp {
   }
 
   private setupSignalHandlers() {
-    // Handle termination signals gracefully, but let blessed handle Ctrl+C
     const gracefulExit = () => {
       debugLog('Graceful exit called');
-      try {
-        const cleanupResult = this.cleanup();
-        if (!cleanupResult.success) {
-          debugLog(`Graceful exit cleanup had errors: ${cleanupResult.errors.join('; ')}`);
-        }
-        this.screen.destroy();
-        process.exit(0);
-      } catch (error) {
-        debugLog(`Graceful exit failed: ${error instanceof Error ? error.message : String(error)}`);
-        try {
+      this.cleanup()
+        .then((cleanupResult) => {
+          if (!cleanupResult.success) {
+            debugLog(`Graceful exit cleanup had errors: ${cleanupResult.errors.join('; ')}`);
+          }
           this.screen.destroy();
-        } catch (screenError) {
-          debugLog(`Screen destroy failed during graceful exit: ${screenError instanceof Error ? screenError.message : String(screenError)}`);
-        }
-        process.exit(1);
-      }
+          process.exit(0);
+        })
+        .catch((error) => {
+          debugLog(`Graceful exit failed: ${error instanceof Error ? error.message : String(error)}`);
+          try {
+            this.screen.destroy();
+          } catch (screenError) {
+            debugLog(`Screen destroy failed during graceful exit: ${screenError instanceof Error ? screenError.message : String(screenError)}`);
+          }
+          process.exit(1);
+        });
     };
     
-    // Only handle non-interactive signals
-    process.on('SIGTERM', gracefulExit);
-    process.on('SIGHUP', gracefulExit);
+    this.sigtermHandler = gracefulExit;
+    this.sighupHandler = gracefulExit;
     
-    // Don't override SIGINT - let blessed handle Ctrl+C through key bindings
-    // Don't remove all listeners - this breaks blessed's signal handling
+    process.on('SIGTERM', this.sigtermHandler);
+    process.on('SIGHUP', this.sighupHandler);
   }
 
   private handleResize() {
@@ -656,7 +662,7 @@ export class EIApp {
         // Force exit: bypass all safety checks
         debugLog('Force quit command executed - bypassing all safety checks');
         try {
-          const cleanupResult = this.cleanup();
+          const cleanupResult = await this.cleanup();
           
           if (!cleanupResult.success) {
             debugLog(`Force quit cleanup had errors: ${cleanupResult.errors.join('; ')}`);
@@ -920,22 +926,40 @@ export class EIApp {
 
     if (stage === 'confirm-concepts') {
       if (trimmed === 'y' || trimmed === 'yes' || trimmed === 'n' || trimmed === 'no') {
-        const deleteConceptsFromHuman = trimmed === 'y' || trimmed === 'yes';
+        const deleteDataFromHuman = trimmed === 'y' || trimmed === 'yes';
         
         try {
           await this.stateManager.captureSnapshot();
           
-          let deletedConceptCount = 0;
-          if (deleteConceptsFromHuman) {
-            const humanConcepts = await loadConceptMap('human');
-            const originalCount = humanConcepts.concepts.length;
-            humanConcepts.concepts = humanConcepts.concepts.filter(
-              concept => concept.learned_by !== name
-            );
-            deletedConceptCount = originalCount - humanConcepts.concepts.length;
+          let deletedItemCount = 0;
+          if (deleteDataFromHuman) {
+            const humanEntity = await loadHumanEntity();
             
-            if (deletedConceptCount > 0) {
-              await saveConceptMap(humanConcepts);
+            // Helper to filter items by learned_by
+            const filterByLearnedBy = <T extends { learned_by?: string }>(items: T[]): T[] =>
+              items.filter(item => item.learned_by !== name);
+            
+            const originalCount = 
+              humanEntity.facts.length + 
+              humanEntity.traits.length + 
+              humanEntity.topics.length + 
+              humanEntity.people.length;
+            
+            humanEntity.facts = filterByLearnedBy(humanEntity.facts);
+            humanEntity.traits = filterByLearnedBy(humanEntity.traits);
+            humanEntity.topics = filterByLearnedBy(humanEntity.topics);
+            humanEntity.people = filterByLearnedBy(humanEntity.people);
+            
+            const newCount = 
+              humanEntity.facts.length + 
+              humanEntity.traits.length + 
+              humanEntity.topics.length + 
+              humanEntity.people.length;
+            
+            deletedItemCount = originalCount - newCount;
+            
+            if (deletedItemCount > 0) {
+              await saveHumanEntity(humanEntity);
             }
           }
           
@@ -980,8 +1004,8 @@ export class EIApp {
           this.pendingPersonaDeletion = null;
           
           let statusMsg = `Deleted persona '${name}'`;
-          if (deleteConceptsFromHuman && deletedConceptCount > 0) {
-            statusMsg += ` and ${deletedConceptCount} human concept${deletedConceptCount === 1 ? '' : 's'}`;
+          if (deleteDataFromHuman && deletedItemCount > 0) {
+            statusMsg += ` and ${deletedItemCount} human data item${deletedItemCount === 1 ? '' : 's'}`;
           }
           this.setStatus(statusMsg);
           this.render();
@@ -1001,8 +1025,8 @@ export class EIApp {
     const subcommand = parts[0]?.toLowerCase() || '';
     
     if (!subcommand || subcommand === 'list') {
-      const conceptMap = await loadConceptMap('system', this.activePersona);
-      const aliases = conceptMap.aliases || [];
+      const entity = await loadPersonaEntity(this.activePersona);
+      const aliases = entity.aliases || [];
       
       if (aliases.length === 0) {
         this.setStatus(`${this.activePersona} has no aliases`);
@@ -1080,8 +1104,8 @@ export class EIApp {
   }
 
   private async showModelConfig(): Promise<void> {
-    const conceptMap = await loadConceptMap('system', this.activePersona);
-    const personaModel = conceptMap.model || null;
+    const entity = await loadPersonaEntity(this.activePersona);
+    const personaModel = entity.model || null;
 
     const envResponse = process.env.EI_MODEL_RESPONSE || null;
     const envConcept = process.env.EI_MODEL_CONCEPT || null;
@@ -1122,25 +1146,25 @@ export class EIApp {
       return;
     }
 
-    const conceptMap = await loadConceptMap('system', this.activePersona);
-    conceptMap.model = modelSpec;
+    const entity = await loadPersonaEntity(this.activePersona);
+    entity.model = modelSpec;
     await this.stateManager.captureSnapshot();
-    await saveConceptMap(conceptMap, this.activePersona);
+    await savePersonaEntity(entity, this.activePersona);
 
     this.setStatus(`Model for '${this.activePersona}' set to: ${modelSpec}`);
   }
 
   private async clearPersonaModel(): Promise<void> {
-    const conceptMap = await loadConceptMap('system', this.activePersona);
+    const entity = await loadPersonaEntity(this.activePersona);
     
-    if (!conceptMap.model) {
+    if (!entity.model) {
       this.setStatus(`No model override set for '${this.activePersona}'`);
       return;
     }
 
-    delete conceptMap.model;
+    delete entity.model;
     await this.stateManager.captureSnapshot();
-    await saveConceptMap(conceptMap, this.activePersona);
+    await savePersonaEntity(entity, this.activePersona);
 
     const globalDefault = process.env.EI_LLM_MODEL || 'local:google/gemma-3-12b';
     this.setStatus(`Model override cleared for '${this.activePersona}'. Now using default: ${globalDefault}`);
@@ -1182,8 +1206,8 @@ export class EIApp {
 
     // /g - show current primary group
     if (!trimmed) {
-      const conceptMap = await loadConceptMap('system', this.activePersona);
-      const primary = conceptMap.group_primary;
+      const entity = await loadPersonaEntity(this.activePersona);
+      const primary = entity.group_primary;
       this.setStatus(`Primary group: ${primary || '(none)'}`);
       return;
     }
@@ -1212,19 +1236,19 @@ export class EIApp {
 
     // /g clear - clear primary group
     if (groupName.toLowerCase() === 'clear') {
-      const conceptMap = await loadConceptMap('system', this.activePersona);
-      conceptMap.group_primary = null;
+      const entity = await loadPersonaEntity(this.activePersona);
+      entity.group_primary = null;
       await this.stateManager.captureSnapshot();
-      await saveConceptMap(conceptMap, this.activePersona);
+      await savePersonaEntity(entity, this.activePersona);
       this.setStatus(`Primary group cleared for ${this.activePersona}`);
       return;
     }
 
     // /g <name> - set primary group
-    const conceptMap = await loadConceptMap('system', this.activePersona);
-    conceptMap.group_primary = groupName;
+    const entity = await loadPersonaEntity(this.activePersona);
+    entity.group_primary = groupName;
     await this.stateManager.captureSnapshot();
-    await saveConceptMap(conceptMap, this.activePersona);
+    await savePersonaEntity(entity, this.activePersona);
     this.setStatus(`Primary group set to: ${groupName}`);
   }
 
@@ -1241,9 +1265,9 @@ export class EIApp {
 
     // /gs - list visible groups
     if (!subcommand) {
-      const conceptMap = await loadConceptMap('system', this.activePersona);
-      const primary = conceptMap.group_primary;
-      const visible = conceptMap.groups_visible || [];
+      const entity = await loadPersonaEntity(this.activePersona);
+      const primary = entity.group_primary;
+      const visible = entity.groups_visible || [];
 
       if (!primary && visible.length === 0) {
         this.setStatus('Visible groups: (none)');
@@ -1254,7 +1278,7 @@ export class EIApp {
       if (primary) {
         groupList.push(`${primary} (primary)`);
       }
-      groupList.push(...visible.filter(g => g !== primary));
+      groupList.push(...visible.filter((g: string) => g !== primary));
 
       this.setStatus(`Visible groups: ${groupList.join(', ')}`);
       return;
@@ -1262,10 +1286,10 @@ export class EIApp {
 
     // /gs clear - clear all visible groups
     if (subcommand === 'clear') {
-      const conceptMap = await loadConceptMap('system', this.activePersona);
-      conceptMap.groups_visible = [];
+      const entity = await loadPersonaEntity(this.activePersona);
+      entity.groups_visible = [];
       await this.stateManager.captureSnapshot();
-      await saveConceptMap(conceptMap, this.activePersona);
+      await savePersonaEntity(entity, this.activePersona);
       this.setStatus(`Visible groups cleared for ${this.activePersona}`);
       return;
     }
@@ -1278,32 +1302,32 @@ export class EIApp {
       }
 
       const groupName = parts[1];
-      const conceptMap = await loadConceptMap('system', this.activePersona);
-      const visible = conceptMap.groups_visible || [];
+      const entity = await loadPersonaEntity(this.activePersona);
+      const visible = entity.groups_visible || [];
 
       if (!visible.includes(groupName)) {
         this.setStatus(`"${groupName}" is not in visible groups`);
         return;
       }
 
-      conceptMap.groups_visible = visible.filter(g => g !== groupName);
+      entity.groups_visible = visible.filter((g: string) => g !== groupName);
       await this.stateManager.captureSnapshot();
-      await saveConceptMap(conceptMap, this.activePersona);
+      await savePersonaEntity(entity, this.activePersona);
       this.setStatus(`Removed "${groupName}" from visible groups`);
       return;
     }
 
     // /gs <group> - add to visible groups
     const groupName = parts[0];
-    const conceptMap = await loadConceptMap('system', this.activePersona);
+    const entity = await loadPersonaEntity(this.activePersona);
 
     // Warn if adding primary group
-    if (conceptMap.group_primary === groupName) {
+    if (entity.group_primary === groupName) {
       this.setStatus(`Note: "${groupName}" is already visible as your primary group`);
       return;
     }
 
-    const visible = conceptMap.groups_visible || [];
+    const visible = entity.groups_visible || [];
 
     // Check if already in visible groups
     if (visible.includes(groupName)) {
@@ -1311,22 +1335,22 @@ export class EIApp {
       return;
     }
 
-    conceptMap.groups_visible = [...visible, groupName];
+    entity.groups_visible = [...visible, groupName];
     await this.stateManager.captureSnapshot();
-    await saveConceptMap(conceptMap, this.activePersona);
+    await savePersonaEntity(entity, this.activePersona);
     this.setStatus(`Added "${groupName}" to visible groups`);
   }
 
   private async handleStatusCommand(): Promise<void> {
-    const conceptMap = await loadConceptMap('system', this.activePersona);
-    const allPersonas = await loadAllPersonasWithConceptMaps();
-    const visiblePersonas = getVisiblePersonas(this.activePersona, conceptMap, allPersonas);
+    const entity = await loadPersonaEntity(this.activePersona);
+    const allPersonas = await loadAllPersonasWithEntities();
+    const visiblePersonas = getVisiblePersonas(this.activePersona, entity, allPersonas);
 
     const lines: string[] = [];
     lines.push(`Status for '${this.activePersona}':`);
 
-    const primary = conceptMap.group_primary;
-    const visible = conceptMap.groups_visible || [];
+    const primary = entity.group_primary;
+    const visible = entity.groups_visible || [];
 
     if (this.activePersona === 'ei') {
       lines.push('  Groups: (global - sees all)');
@@ -1337,7 +1361,7 @@ export class EIApp {
       if (primary) {
         groupList.push(`${primary} (primary)`);
       }
-      groupList.push(...visible.filter(g => g !== primary));
+      groupList.push(...visible.filter((g: string) => g !== primary));
       lines.push(`  Groups: ${groupList.join(', ')}`);
     }
 
@@ -2462,27 +2486,24 @@ Press q to close this help.`;
 
     // Priority 4: Exit application with graceful degradation
     debugLog('BRANCH: Exiting application - no blocking conditions');
-    try {
-      const cleanupResult = this.cleanup();
-      
-      if (!cleanupResult.success) {
-        debugLog(`Cleanup had errors but continuing with exit: ${cleanupResult.errors.join('; ')}`);
-        // Continue with exit even if cleanup had issues
-      }
-      
-      this.screen.destroy();
-      debugLog('=== EXIT LOGIC END (exiting) ===');
-      process.exit(0);
-    } catch (error) {
-      debugLog(`Critical error during exit: ${error instanceof Error ? error.message : String(error)}`);
-      // Force exit even if cleanup completely fails
-      try {
+    this.cleanup()
+      .then((cleanupResult) => {
+        if (!cleanupResult.success) {
+          debugLog(`Cleanup had errors but continuing with exit: ${cleanupResult.errors.join('; ')}`);
+        }
         this.screen.destroy();
-      } catch (screenError) {
-        debugLog(`Screen destroy failed: ${screenError instanceof Error ? screenError.message : String(screenError)}`);
-      }
-      process.exit(1); // Exit with error code to indicate issues
-    }
+        debugLog('=== EXIT LOGIC END (exiting) ===');
+        process.exit(0);
+      })
+      .catch((error) => {
+        debugLog(`Critical error during exit: ${error instanceof Error ? error.message : String(error)}`);
+        try {
+          this.screen.destroy();
+        } catch (screenError) {
+          debugLog(`Screen destroy failed: ${screenError instanceof Error ? screenError.message : String(screenError)}`);
+        }
+        process.exit(1);
+      });
   }
 
   private handleCtrlC() {
@@ -2537,26 +2558,24 @@ Press q to close this help.`;
             this.ctrlCWarningTimestamp && 
             timeSinceWarning <= CTRL_C_CONFIRMATION_WINDOW_MS) {
           debugLog('BRANCH: User confirmed exit within confirmation window - forcing exit');
-          try {
-            const cleanupResult = this.cleanup();
-            
-            if (!cleanupResult.success) {
-              debugLog(`Cleanup had errors but continuing with confirmed exit: ${cleanupResult.errors.join('; ')}`);
-            }
-            
-            this.screen.destroy();
-            debugLog('=== CTRL+C HANDLER END (confirmed exit) ===');
-            process.exit(0);
-          } catch (error) {
-            debugLog(`Critical error during confirmed exit: ${error instanceof Error ? error.message : String(error)}`);
-            // Force exit even if cleanup fails
-            try {
+          this.cleanup()
+            .then((cleanupResult) => {
+              if (!cleanupResult.success) {
+                debugLog(`Cleanup had errors but continuing with confirmed exit: ${cleanupResult.errors.join('; ')}`);
+              }
               this.screen.destroy();
-            } catch (screenError) {
-              debugLog(`Screen destroy failed during confirmed exit: ${screenError instanceof Error ? screenError.message : String(screenError)}`);
-            }
-            process.exit(1);
-          }
+              debugLog('=== CTRL+C HANDLER END (confirmed exit) ===');
+              process.exit(0);
+            })
+            .catch((error) => {
+              debugLog(`Critical error during confirmed exit: ${error instanceof Error ? error.message : String(error)}`);
+              try {
+                this.screen.destroy();
+              } catch (screenError) {
+                debugLog(`Screen destroy failed during confirmed exit: ${screenError instanceof Error ? screenError.message : String(screenError)}`);
+              }
+              process.exit(1);
+            });
           return;
         }
       }
@@ -2573,14 +2592,14 @@ Press q to close this help.`;
       .map(([name]) => name);
   }
 
-  private cleanup() {
+  private async cleanup() {
     debugLog('Starting cleanup process...');
     let cleanupErrors: string[] = [];
     
     try {
       // Stop queue processor first (before other cleanup)
       try {
-        this.queueProcessor.stop();
+        await this.queueProcessor.stop();
         debugLog('QueueProcessor stopped');
       } catch (error) {
         const errorMsg = `Failed to stop QueueProcessor: ${error instanceof Error ? error.message : String(error)}`;
@@ -2636,6 +2655,28 @@ Press q to close this help.`;
         debugLog('PersonaRenderer cleanup completed');
       } catch (error) {
         const errorMsg = `Failed to cleanup PersonaRenderer: ${error instanceof Error ? error.message : String(error)}`;
+        debugLog(errorMsg);
+        cleanupErrors.push(errorMsg);
+      }
+      
+      try {
+        if (this.sigtermHandler) {
+          process.removeListener('SIGTERM', this.sigtermHandler);
+          this.sigtermHandler = null;
+          debugLog('Removed SIGTERM handler');
+        }
+        if (this.sighupHandler) {
+          process.removeListener('SIGHUP', this.sighupHandler);
+          this.sighupHandler = null;
+          debugLog('Removed SIGHUP handler');
+        }
+        if (this.stdinDataHandler && process.stdin) {
+          process.stdin.removeListener('data', this.stdinDataHandler);
+          this.stdinDataHandler = null;
+          debugLog('Removed stdin data handler');
+        }
+      } catch (error) {
+        const errorMsg = `Failed to remove event listeners: ${error instanceof Error ? error.message : String(error)}`;
         debugLog(errorMsg);
         cleanupErrors.push(errorMsg);
       }
@@ -2747,19 +2788,17 @@ Press q to close this help.`;
   private setupTestInputInjection(): void {
     debugLog(`Setting up test input injection - Instance #${this.instanceId}`);
     
-    // Listen for test input on stdin in addition to blessed input
     if (process.stdin && process.stdin.readable) {
-      process.stdin.on('data', (data: Buffer) => {
+      this.stdinDataHandler = (data: Buffer) => {
         const input = data.toString().trim();
         debugLog(`Test input received: "${input}" - Instance #${this.instanceId}`);
-        
-        // Process the input as if it came from the UI
         this.processTestInput(input);
-      });
+      };
       
-      // Make sure stdin is in the right mode
+      process.stdin.on('data', this.stdinDataHandler);
+      
       if (process.stdin.setRawMode) {
-        process.stdin.setRawMode(false); // We want line-buffered input for testing
+        process.stdin.setRawMode(false);
       }
       process.stdin.resume();
     }
