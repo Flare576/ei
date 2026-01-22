@@ -832,6 +832,29 @@ export async function runDetailUpdate(
   validated.last_updated = new Date().toISOString();
   validated.learned_by = validated.learned_by || persona;
   
+  // 6.5. Set persona_groups for human data based on active persona's group_primary
+  // Only applies to human entity data (persona traits/topics are private to that persona)
+  if (target === "human") {
+    const personaEntity = await loadPersonaEntity(persona);
+    
+    if (is_new) {
+      validated.persona_groups = personaEntity.group_primary 
+        ? [personaEntity.group_primary] 
+        : ["*"];
+    } else {
+      const isGlobal = existingItem?.persona_groups?.includes("*");
+      if (isGlobal) {
+        validated.persona_groups = ["*"];
+      } else {
+        const groups = new Set(existingItem?.persona_groups || []);
+        if (personaEntity.group_primary) {
+          groups.add(personaEntity.group_primary);
+        }
+        validated.persona_groups = Array.from(groups);
+      }
+    }
+  }
+  
   // 7. Upsert into entity
   upsertItem(entity, data_type, validated);
   

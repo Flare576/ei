@@ -215,6 +215,8 @@ export async function enqueueItem(
  * Gets the next item to process, respecting priority order.
  * Priority: high → normal → low, then FIFO within priority.
  * 
+ * Skips ei_validation items - they're batched in Daily Ceremony, not processed by queue processor.
+ * 
  * @returns Next item to process, or null if queue is empty
  */
 export async function dequeueItem(): Promise<LLMQueueItem | null> {
@@ -233,7 +235,13 @@ export async function dequeueItem(): Promise<LLMQueueItem | null> {
     return a.created_at.localeCompare(b.created_at);
   });
   
-  const item = queue.items[0];
+  // Skip ei_validation items - they're batched in Daily Ceremony
+  const item = queue.items.find(i => i.type !== "ei_validation");
+  
+  if (!item) {
+    return null;
+  }
+  
   appendDebugLog(
     `[LLMQueue] Dequeued ${item.type} (priority: ${item.priority}, id: ${item.id}, attempts: ${item.attempts})`
   );

@@ -172,16 +172,16 @@ export class QueueProcessor {
       case "detail_update":
         await this.executeDetailUpdate(item.payload as DetailUpdatePayload);
         break;
-      case "ei_validation":
-        // Ei validations are batched in Daily Ceremony, not processed here
-        appendDebugLog(`[QueueProcessor] Skipping ei_validation (handled by Daily Ceremony)`);
-        break;
       case "description_regen":
         await this.executeDescriptionRegen(item.payload as DescriptionRegenPayload);
         break;
       case "response":
         // Responses should never be queued (they're synchronous)
         appendDebugLog(`[QueueProcessor] WARNING: response item in queue (should be synchronous)`);
+        break;
+      case "ei_validation":
+        // Never dequeued - handled by dequeueItem() filter
+        appendDebugLog(`[QueueProcessor] ERROR: ei_validation should never reach executeItem()`);
         break;
     }
   }

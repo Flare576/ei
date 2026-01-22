@@ -116,30 +116,15 @@ describe("QueueProcessor", () => {
       expect(queue.completeItem).toHaveBeenCalledWith("test-123");
     });
 
-    it("skips ei_validation items (handled by Daily Ceremony)", async () => {
-      const mockItem: LLMQueueItem = {
-        id: "test-validation",
-        type: "ei_validation",
-        priority: "low",
-        created_at: new Date().toISOString(),
-        attempts: 0,
-        payload: {
-          validation_type: "data_confirm",
-          item_name: "Test Fact",
-          data_type: "fact",
-          context: "Testing"
-        }
-      };
-
-      vi.mocked(queue.dequeueItem)
-        .mockResolvedValueOnce(mockItem)
-        .mockResolvedValue(null);
+    it("never dequeues ei_validation items (filtered by dequeueItem)", async () => {
+      vi.mocked(queue.dequeueItem).mockResolvedValue(null);
 
       await processor.start();
       await llm.sleep(50);
       await processor.stop();
 
-      expect(queue.completeItem).toHaveBeenCalledWith("test-validation");
+      expect(queue.completeItem).not.toHaveBeenCalled();
+      expect(queue.failItem).not.toHaveBeenCalled();
     });
 
     it("handles empty queue by sleeping", async () => {

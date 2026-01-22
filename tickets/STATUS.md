@@ -17,7 +17,8 @@
 - 0109: Storage Migration
 - 0108: New Entity Type Definitions
 
-## DONE ✅ (72 tickets)
+## DONE ✅ (73 tickets)
+- 0130: Fix ei_validation Queue Dequeue Bug
 - 0078: Persona Delete Command
 - 0044: New Conversation Command
 - 0039: Blessed Proper Emoji Support
@@ -91,9 +92,8 @@
 - 0114: Known Personas in Prompts
 - 0118: Ei Heartbeat Simplification
 
-## PENDING (23 tickets)
+## PENDING (22 tickets)
 - 0131: /clarify Command Editing Is Broken - BUG (from 0107 testing)
-- 0130: Fix ei_validation Queue Dequeue Bug - BUG (blocking 0107 completion)
 - 0129: Extract Time-Based Core Logic from UI Layer (FUTURE - The Elephant)
 - 0128: Persona Trait Change Detection Overhaul - HIGH PRIORITY
 - 0127: Persona Facts/People as Topics (Future Enhancement)
@@ -139,7 +139,7 @@
 
 **Last Updated**: 2026-01-21
 **Total Tickets**: 131 created
-**Stats**: 72 done, 16 QA, 0 in_progress, 23 pending (14 in 0107 epic + 2 bugs), 13 cancelled
+**Stats**: 73 done, 16 QA, 0 in_progress, 22 pending (14 in 0107 epic + 1 bug), 13 cancelled
 
 ## Epic Status
 

@@ -495,11 +495,12 @@ Personas can be organized into groups to control which human concepts they can s
 - **Type**: string[]
 - **Purpose**: Which persona groups can see this concept
 - **Behavior**:
-  - Empty array `[]` = globally visible to all personas
-  - Non-empty = only visible to personas in these groups (or personas with `groups_visible: ["*"]`)
+  - `["*"]` = globally visible to all personas (explicit marker for "all groups")
+  - Specific groups = only visible to personas in these groups (or personas with `groups_visible: ["*"]`)
   - Automatically set when concepts are created/updated based on the active persona's `group_primary`
+  - **Note**: Using `["*"]` instead of `[]` avoids ambiguity (bug vs deleted group vs intentional)
 - **Examples**:
-  - `[]` - Visible to everyone
+  - `["*"]` - Visible to everyone (global)
   - `["Work"]` - Only visible to personas with Work as primary or in groups_visible
   - `["Personal", "Family"]` - Visible to personas in either group
 

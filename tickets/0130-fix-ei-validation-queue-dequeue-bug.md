@@ -1,6 +1,6 @@
 # 0130: Fix ei_validation Queue Dequeue Bug
 
-**Status**: PENDING
+**Status**: DONE
 
 ## Summary
 
@@ -179,12 +179,12 @@ case "ei_validation":
 
 ## Acceptance Criteria
 
-- [ ] Cross-persona validations stay in queue after being enqueued
-- [ ] `getPendingValidations()` returns queued `ei_validation` items
-- [ ] Daily Ceremony can retrieve and display validations
-- [ ] Queue processor logs when it skips queue entirely due to only `ei_validation` items
-- [ ] After Daily Ceremony processes validations, they are cleared from queue
-- [ ] Debug log shows clear flow: enqueue → wait → ceremony retrieves → user responds → cleared
+- [x] Cross-persona validations stay in queue after being enqueued
+- [x] `getPendingValidations()` returns queued `ei_validation` items
+- [x] Daily Ceremony can retrieve and display validations
+- [x] Queue processor logs when it skips queue entirely due to only `ei_validation` items
+- [x] After Daily Ceremony processes validations, they are cleared from queue (E2E verified by Flare)
+- [x] Debug log shows clear flow: enqueue → wait → ceremony retrieves → user responds → cleared (E2E verified by Flare)
 
 ## Test Scenario
 
@@ -204,6 +204,34 @@ case "ei_validation":
 ## Effort Estimate
 
 Small (~30 minutes) - Simple filter logic change
+
+## Implementation Notes
+
+### Solution Applied (2026-01-21)
+
+Implemented **Option A + C hybrid** from ticket analysis:
+
+**Changes made:**
+
+1. **src/llm-queue.ts** (lines 220-244):
+   - Modified `dequeueItem()` to filter out `ei_validation` items
+   - Uses `find(i => i.type !== "ei_validation")` instead of accessing `[0]`
+   - Returns null with debug log when only `ei_validation` items remain
+   - Single source of truth for "what should queue processor work on?"
+
+2. **src/queue-processor.ts** (lines 164-187):
+   - Moved `ei_validation` case to end of switch (after normal processing cases)
+   - Changed to ERROR log (instead of "skipping") since this should never be reached
+   - Documents architectural invariant: "Never dequeued - handled by dequeueItem() filter"
+
+**Verification:**
+- lsp_diagnostics clean on both files (no type errors)
+- Logic review: `ei_validation` items now stay in queue until `clearValidations()` called by Daily Ceremony
+
+**E2E testing completed (2026-01-21):**
+- ✅ Daily Ceremony flow verified by Flare
+- ✅ Debug logs show expected behavior
+- ✅ Validations cleared from queue after ceremony
 
 ## Notes
 

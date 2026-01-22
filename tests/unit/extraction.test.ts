@@ -625,6 +625,26 @@ describe("extraction", () => {
     });
 
     it("does not queue cross_persona validation for non-global items", async () => {
+      const existingTopic: Topic = {
+        name: "The Ring",
+        description: "A cursed artifact",
+        sentiment: -0.5,
+        level_current: 0.9,
+        level_ideal: 0.1,
+        persona_groups: ["Fellowship"],
+        last_updated: new Date().toISOString()
+      };
+
+      const entityWithTopic: HumanEntity = {
+        ...mockHumanEntity,
+        topics: [existingTopic]
+      };
+
+      const fellowshipPersona: PersonaEntity = {
+        ...mockPersonaEntity,
+        group_primary: "Fellowship"
+      };
+
       const payload: DetailUpdatePayload = {
         target: "human",
         persona: "frodo",
@@ -636,15 +656,15 @@ describe("extraction", () => {
 
       const mockResult: Topic = {
         name: "The Ring",
-        description: "A cursed artifact",
+        description: "A cursed artifact - updated",
         sentiment: -0.5,
         level_current: 0.9,
         level_ideal: 0.1,
-        persona_groups: ["Fellowship"],
         last_updated: new Date().toISOString()
       };
 
-      vi.mocked(storage.loadHumanEntity).mockResolvedValue(mockHumanEntity);
+      vi.mocked(storage.loadHumanEntity).mockResolvedValue(entityWithTopic);
+      vi.mocked(storage.loadPersonaEntity).mockResolvedValue(fellowshipPersona);
       vi.mocked(llm.callLLMForJSON).mockResolvedValue(mockResult);
       vi.mocked(storage.saveHumanEntity).mockResolvedValue();
 
@@ -712,6 +732,217 @@ describe("extraction", () => {
       expect(systemPrompt).toContain("- ei");
       expect(systemPrompt).toContain("- assistant");
       expect(systemPrompt).toContain("- frodo");
+    });
+
+    describe("persona_groups assignment", () => {
+      it("sets persona_groups to [group_primary] for new items from grouped persona", async () => {
+        const groupedPersona: PersonaEntity = {
+          ...mockPersonaEntity,
+          group_primary: "Work"
+        };
+
+        const payload: DetailUpdatePayload = {
+          target: "human",
+          persona: "work-assistant",
+          data_type: "topic",
+          item_name: "Project X",
+          messages: mockMessages,
+          is_new: true
+        };
+
+        const mockResult: Topic = {
+          name: "Project X",
+          description: "Work project",
+          sentiment: 0.5,
+          level_current: 0.7,
+          level_ideal: 0.8,
+          last_updated: new Date().toISOString()
+        };
+
+        vi.mocked(storage.loadHumanEntity).mockResolvedValue(mockHumanEntity);
+        vi.mocked(storage.loadPersonaEntity).mockResolvedValue(groupedPersona);
+        vi.mocked(storage.listPersonas).mockResolvedValue([]);
+        vi.mocked(llm.callLLMForJSON).mockResolvedValue(mockResult);
+        vi.mocked(storage.saveHumanEntity).mockResolvedValue();
+
+        await runDetailUpdate(payload);
+
+        const savedEntity = vi.mocked(storage.saveHumanEntity).mock.calls[0][0];
+        const savedTopic = savedEntity.topics.find(t => t.name === "Project X");
+        expect(savedTopic?.persona_groups).toEqual(["Work"]);
+      });
+
+      it("sets persona_groups to ['*'] for new items from global persona (no group_primary)", async () => {
+        const globalPersona: PersonaEntity = {
+          ...mockPersonaEntity,
+          group_primary: null
+        };
+
+        const payload: DetailUpdatePayload = {
+          target: "human",
+          persona: "ei",
+          data_type: "fact",
+          item_name: "Birthday",
+          messages: mockMessages,
+          is_new: true
+        };
+
+        const mockResult: Fact = {
+          name: "Birthday",
+          description: "January 1st",
+          sentiment: 0,
+          confidence: 0.9,
+          last_updated: new Date().toISOString()
+        };
+
+        vi.mocked(storage.loadHumanEntity).mockResolvedValue(mockHumanEntity);
+        vi.mocked(storage.loadPersonaEntity).mockResolvedValue(globalPersona);
+        vi.mocked(storage.listPersonas).mockResolvedValue([]);
+        vi.mocked(llm.callLLMForJSON).mockResolvedValue(mockResult);
+        vi.mocked(storage.saveHumanEntity).mockResolvedValue();
+
+        await runDetailUpdate(payload);
+
+        const savedEntity = vi.mocked(storage.saveHumanEntity).mock.calls[0][0];
+        const savedFact = savedEntity.facts.find(f => f.name === "Birthday");
+        expect(savedFact?.persona_groups).toEqual(["*"]);
+      });
+
+      it("preserves ['*'] for updates to global items", async () => {
+        const existingGlobalTopic: Topic = {
+          name: "Hiking",
+          description: "Outdoor activity",
+          sentiment: 0.8,
+          level_current: 0.5,
+          level_ideal: 0.7,
+          last_updated: new Date().toISOString(),
+          persona_groups: ["*"]
+        };
+
+        const entityWithGlobal: HumanEntity = {
+          ...mockHumanEntity,
+          topics: [existingGlobalTopic]
+        };
+
+        const groupedPersona: PersonaEntity = {
+          ...mockPersonaEntity,
+          group_primary: "Personal"
+        };
+
+        const payload: DetailUpdatePayload = {
+          target: "human",
+          persona: "friend",
+          data_type: "topic",
+          item_name: "Hiking",
+          messages: mockMessages,
+          is_new: false
+        };
+
+        const mockResult: Topic = {
+          name: "Hiking",
+          description: "Outdoor activity - updated",
+          sentiment: 0.9,
+          level_current: 0.6,
+          level_ideal: 0.8,
+          last_updated: new Date().toISOString()
+        };
+
+        vi.mocked(storage.loadHumanEntity).mockResolvedValue(entityWithGlobal);
+        vi.mocked(storage.loadPersonaEntity).mockResolvedValue(groupedPersona);
+        vi.mocked(storage.listPersonas).mockResolvedValue([]);
+        vi.mocked(llm.callLLMForJSON).mockResolvedValue(mockResult);
+        vi.mocked(storage.saveHumanEntity).mockResolvedValue();
+
+        await runDetailUpdate(payload);
+
+        const savedEntity = vi.mocked(storage.saveHumanEntity).mock.calls[0][0];
+        const savedTopic = savedEntity.topics.find(t => t.name === "Hiking");
+        expect(savedTopic?.persona_groups).toEqual(["*"]);
+      });
+
+      it("adds persona group to existing groups on update", async () => {
+        const existingGroupedTopic: Topic = {
+          name: "Gaming",
+          description: "Video games",
+          sentiment: 0.7,
+          level_current: 0.5,
+          level_ideal: 0.6,
+          last_updated: new Date().toISOString(),
+          persona_groups: ["Personal"]
+        };
+
+        const entityWithGrouped: HumanEntity = {
+          ...mockHumanEntity,
+          topics: [existingGroupedTopic]
+        };
+
+        const workPersona: PersonaEntity = {
+          ...mockPersonaEntity,
+          group_primary: "Work"
+        };
+
+        const payload: DetailUpdatePayload = {
+          target: "human",
+          persona: "work-buddy",
+          data_type: "topic",
+          item_name: "Gaming",
+          messages: mockMessages,
+          is_new: false
+        };
+
+        const mockResult: Topic = {
+          name: "Gaming",
+          description: "Video games - also work topic",
+          sentiment: 0.7,
+          level_current: 0.6,
+          level_ideal: 0.7,
+          last_updated: new Date().toISOString()
+        };
+
+        vi.mocked(storage.loadHumanEntity).mockResolvedValue(entityWithGrouped);
+        vi.mocked(storage.loadPersonaEntity).mockResolvedValue(workPersona);
+        vi.mocked(storage.listPersonas).mockResolvedValue([]);
+        vi.mocked(llm.callLLMForJSON).mockResolvedValue(mockResult);
+        vi.mocked(storage.saveHumanEntity).mockResolvedValue();
+
+        await runDetailUpdate(payload);
+
+        const savedEntity = vi.mocked(storage.saveHumanEntity).mock.calls[0][0];
+        const savedTopic = savedEntity.topics.find(t => t.name === "Gaming");
+        expect(savedTopic?.persona_groups).toContain("Personal");
+        expect(savedTopic?.persona_groups).toContain("Work");
+        expect(savedTopic?.persona_groups).toHaveLength(2);
+      });
+
+      it("does not set persona_groups for persona entity data (only human)", async () => {
+        const payload: DetailUpdatePayload = {
+          target: "system",
+          persona: "frodo",
+          data_type: "trait",
+          item_name: "Brave",
+          messages: mockMessages,
+          is_new: true
+        };
+
+        const mockResult: Trait = {
+          name: "Brave",
+          description: "Courageous",
+          sentiment: 0.8,
+          strength: 0.9,
+          last_updated: new Date().toISOString()
+        };
+
+        vi.mocked(storage.loadPersonaEntity).mockResolvedValue(mockPersonaEntity);
+        vi.mocked(storage.listPersonas).mockResolvedValue([]);
+        vi.mocked(llm.callLLMForJSON).mockResolvedValue(mockResult);
+        vi.mocked(storage.savePersonaEntity).mockResolvedValue();
+
+        await runDetailUpdate(payload);
+
+        const savedEntity = vi.mocked(storage.savePersonaEntity).mock.calls[0][0];
+        const savedTrait = savedEntity.traits.find(t => t.name === "Brave");
+        expect(savedTrait?.persona_groups).toBeUndefined();
+      });
     });
   });
 });
