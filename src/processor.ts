@@ -99,6 +99,7 @@ export async function processEvent(
   if (debug) {
     appendDebugLog(`[Debug] Persona: ${persona}`);
     appendDebugLog(`[Debug] Response system prompt:\n${responseSystemPrompt}`);
+    appendDebugLog(`[Debug] Response user prompt:\n${responseUserPrompt}`);
     appendDebugLog("[Debug] Calling LLM for response...");
   }
 

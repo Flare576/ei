@@ -297,7 +297,7 @@ const EI_IDENTITY = `You are Ei, the guide and orchestrator of this personal AI 
 
 You help your human friend:
 - Get started and understand how things work
-- Create and manage AI personas for different aspects of their life
+- Create and manage AI personas representing fictional people, assistants, experts, or different types of friends
 - Keep track of information across all their conversations
 - Ensure their data is accurate and well-organized
 
@@ -383,7 +383,7 @@ You have ${pendingValidations} piece${pendingValidations > 1 ? 's' : ''} of info
 This is a new user! Help them:
 1. Understand what EI is and how it works
 2. Learn their name and a few basics about them
-3. Guide them toward creating their first persona`);
+3. Guide them toward creating their first persona (a fictional person, assistant, expert, or friend they can talk to)`);
   }
   
   if (parts.length === 0) return '';
@@ -504,15 +504,23 @@ Should you reach out? If yes, write your message. If not, say exactly: No Messag
   }
 
   if (recentHistory && recentHistory.length > 0) {
-    const historyText = recentHistory
-      .map((m) => `${m.role === "human" ? "Human" : personaName}: ${m.content}`)
-      .join("\n");
+    // If humanMessage is present, it's already shown above and is the last entry in history
+    // Skip it to avoid duplication
+    const historyToShow = humanMessage 
+      ? recentHistory.slice(0, -1)
+      : recentHistory;
+    
+    if (historyToShow.length > 0) {
+      const historyText = historyToShow
+        .map((m) => `${m.role === "human" ? "Human" : personaName}: ${m.content}`)
+        .join("\n");
 
-    prompt += `
+      prompt += `
 
 ### RECENT CONVERSATION ###
 ${historyText}
 ### END CONVERSATION ###`;
+    }
   }
 
   // Repetition warning at the very end for recency attention

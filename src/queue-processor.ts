@@ -151,10 +151,8 @@ export class QueueProcessor {
       return true;
     } catch (err) {
       if (err instanceof LLMAbortedError) {
-        // Aborted by pause/stop - don't count as failure
         appendDebugLog(`[QueueProcessor] Item ${item.id} aborted (paused or stopped)`);
       } else {
-        // Real failure - increment retry count
         await failItem(item.id, err instanceof Error ? err.message : String(err));
       }
       return false;

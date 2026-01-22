@@ -346,6 +346,14 @@ export async function applyVerificationResults(
     if (fact) {
       fact.confidence = 1.0;
       fact.last_confirmed = new Date().toISOString();
+      delete fact.change_log;
+    } else {
+      const item = entity.traits.find(t => t.name === name) ||
+                   entity.topics.find(t => t.name === name) ||
+                   entity.people.find(p => p.name === name);
+      if (item) {
+        delete item.change_log;
+      }
     }
   }
   
@@ -382,6 +390,7 @@ export async function applyVerificationResults(
                  entity.people.find(p => p.name === name);
     if (item) {
       item.persona_groups = [group];
+      delete item.change_log;
     }
   }
   

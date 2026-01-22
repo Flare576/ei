@@ -13,6 +13,43 @@ import * as path from "path";
 import { Message } from "./types.js";
 import { getDataPath, appendDebugLog } from "./storage.js";
 
+type QueueOperation<T> = () => Promise<T>;
+
+const queueOperations: QueueOperation<any>[] = [];
+let isProcessingQueue = false;
+
+async function withQueueLock<T>(operation: QueueOperation<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    queueOperations.push(async () => {
+      try {
+        const result = await operation();
+        resolve(result);
+      } catch (err) {
+        reject(err);
+      }
+    });
+    
+    processQueueOperations();
+  });
+}
+
+async function processQueueOperations(): Promise<void> {
+  if (isProcessingQueue || queueOperations.length === 0) {
+    return;
+  }
+  
+  isProcessingQueue = true;
+  
+  while (queueOperations.length > 0) {
+    const operation = queueOperations.shift();
+    if (operation) {
+      await operation();
+    }
+  }
+  
+  isProcessingQueue = false;
+}
+
 // ============================================================================
 // Type Definitions
 // ============================================================================
@@ -153,23 +190,25 @@ async function saveQueue(queue: LLMQueue): Promise<void> {
 export async function enqueueItem(
   item: Omit<LLMQueueItem, "id" | "created_at" | "attempts">
 ): Promise<string> {
-  const queue = await loadQueue();
-  
-  const fullItem: LLMQueueItem = {
-    ...item,
-    id: generateItemId(),
-    created_at: new Date().toISOString(),
-    attempts: 0,
-  };
-  
-  queue.items.push(fullItem);
-  await saveQueue(queue);
-  
-  appendDebugLog(
-    `[LLMQueue] Enqueued ${fullItem.type} (priority: ${fullItem.priority}, id: ${fullItem.id}, queue length: ${queue.items.length})`
-  );
-  
-  return fullItem.id;
+  return withQueueLock(async () => {
+    const queue = await loadQueue();
+    
+    const fullItem: LLMQueueItem = {
+      ...item,
+      id: generateItemId(),
+      created_at: new Date().toISOString(),
+      attempts: 0,
+    };
+    
+    queue.items.push(fullItem);
+    await saveQueue(queue);
+    
+    appendDebugLog(
+      `[LLMQueue] Enqueued ${fullItem.type} (priority: ${fullItem.priority}, id: ${fullItem.id}, queue length: ${queue.items.length})`
+    );
+    
+    return fullItem.id;
+  });
 }
 
 /**
@@ -208,18 +247,20 @@ export async function dequeueItem(): Promise<LLMQueueItem | null> {
  * @param id - Item ID to complete
  */
 export async function completeItem(id: string): Promise<void> {
-  const queue = await loadQueue();
-  const before = queue.items.length;
-  
-  queue.items = queue.items.filter((item) => item.id !== id);
-  
-  if (queue.items.length < before) {
-    queue.last_processed = new Date().toISOString();
-    await saveQueue(queue);
-    appendDebugLog(`[LLMQueue] Completed item ${id}`);
-  } else {
-    appendDebugLog(`[LLMQueue] Tried to complete non-existent item ${id}`);
-  }
+  return withQueueLock(async () => {
+    const queue = await loadQueue();
+    const before = queue.items.length;
+    
+    queue.items = queue.items.filter((item) => item.id !== id);
+    
+    if (queue.items.length < before) {
+      queue.last_processed = new Date().toISOString();
+      await saveQueue(queue);
+      appendDebugLog(`[LLMQueue] Completed item ${id}`);
+    } else {
+      appendDebugLog(`[LLMQueue] Tried to complete non-existent item ${id}`);
+    }
+  });
 }
 
 /**
@@ -230,43 +271,42 @@ export async function completeItem(id: string): Promise<void> {
  * @param error - Optional error message for logging
  */
 export async function failItem(id: string, error?: string): Promise<void> {
-  const queue = await loadQueue();
-  const item = queue.items.find((i) => i.id === id);
-  
-  if (!item) {
-    appendDebugLog(`[LLMQueue] Tried to fail non-existent item ${id}`);
-    return;
-  }
-  
-  item.attempts++;
-  item.last_attempt = new Date().toISOString();
-  
-  if (item.attempts >= 3) {
-    // Dead letter - log if debug mode, then drop
-    if (isDebugMode()) {
-      const dlqEntry = {
-        ...item,
-        final_error: error,
-        dropped_at: new Date().toISOString(),
-      };
-      appendDebugLog(`[DLQ] Dropping after 3 attempts: ${JSON.stringify(dlqEntry)}`);
+  return withQueueLock(async () => {
+    const queue = await loadQueue();
+    const item = queue.items.find((i) => i.id === id);
+    
+    if (!item) {
+      appendDebugLog(`[LLMQueue] Tried to fail non-existent item ${id}`);
+      return;
     }
     
-    queue.items = queue.items.filter((i) => i.id !== id);
-    appendDebugLog(`[LLMQueue] Item ${id} moved to dead letter queue (3 failures)`);
-  } else {
-    appendDebugLog(
-      `[LLMQueue] Item ${id} failed (attempt ${item.attempts}/3)${error ? `: ${error}` : ""}`
-    );
-  }
-  
-  await saveQueue(queue);
+    item.attempts++;
+    item.last_attempt = new Date().toISOString();
+    
+    if (item.attempts >= 3) {
+      if (isDebugMode()) {
+        const dlqEntry = {
+          ...item,
+          final_error: error,
+          dropped_at: new Date().toISOString(),
+        };
+        appendDebugLog(`[DLQ] Dropping after 3 attempts: ${JSON.stringify(dlqEntry)}`);
+      }
+      
+      queue.items = queue.items.filter((i) => i.id !== id);
+      appendDebugLog(`[LLMQueue] Item ${id} moved to dead letter queue (3 failures)`);
+    } else {
+      appendDebugLog(
+        `[LLMQueue] Item ${id} failed (attempt ${item.attempts}/3)${error ? `: ${error}` : ""}`
+      );
+    }
+    
+    await saveQueue(queue);
+  });
 }
 
 /**
- * Gets all pending Ei validation items (for batching in Daily Ceremony).
- * 
- * @returns Array of validation items
+ * Gets the current queue length.
  */
 export async function getPendingValidations(): Promise<LLMQueueItem[]> {
   const queue = await loadQueue();
@@ -279,17 +319,17 @@ export async function getPendingValidations(): Promise<LLMQueueItem[]> {
  * @param ids - Array of item IDs to clear
  */
 export async function clearValidations(ids: string[]): Promise<void> {
-  const queue = await loadQueue();
-  const before = queue.items.length;
-  
-  queue.items = queue.items.filter((item) => !ids.includes(item.id));
-  
-  const cleared = before - queue.items.length;
-  if (cleared > 0) {
-    queue.last_processed = new Date().toISOString();
-    await saveQueue(queue);
-    appendDebugLog(`[LLMQueue] Cleared ${cleared} validation(s)`);
-  }
+  return withQueueLock(async () => {
+    const queue = await loadQueue();
+    const before = queue.items.length;
+    
+    queue.items = queue.items.filter((item) => !ids.includes(item.id));
+    
+    if (queue.items.length < before) {
+      await saveQueue(queue);
+      appendDebugLog(`[LLMQueue] Cleared ${before - queue.items.length} validation(s)`);
+    }
+  });
 }
 
 /**

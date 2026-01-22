@@ -81,7 +81,21 @@ function buildFastScanSystemPrompt(
   target: "human" | "system",
   knownPersonas: string[]
 ): string {
+  const entityContext = target === "human"
+    ? "You are scanning for items relevant to the HUMAN USER."
+    : "You are scanning for items relevant to the AI PERSONA (not the human).";
+  
+  const traitGuidance = target === "human"
+    ? "- trait: Personality patterns, communication style, behavioral tendencies that the HUMAN USER demonstrates"
+    : "- trait: Personality patterns, communication style, behavioral tendencies that the AI PERSONA demonstrates in its responses (NOT traits of the human)";
+  
+  const topicGuidance = target === "human"
+    ? "- topic: Interests, hobbies, subjects the HUMAN discusses or cares about"
+    : "- topic: Subjects the AI PERSONA actively discusses, demonstrates expertise in, or is designed to care about (NOT just topics mentioned by the human)";
+
   return `You are scanning a conversation to quickly identify what was discussed.
+
+${entityContext}
 
 Your ONLY job is to spot relevant items - do NOT try to categorize or analyze them deeply. Just detect and flag.
 
@@ -107,8 +121,8 @@ ${knownPersonas.map(p => `- ${p}`).join('\n')}
 
 **Type hints:**
 - fact: Biographical data (birthday, location, job, allergies, etc.)
-- trait: Personality patterns, communication style, behavioral tendencies
-- topic: Interests, hobbies, subjects they care about discussing
+${traitGuidance}
+${topicGuidance}
 - person: Real people in their life (NOT AI personas)
 
 Return JSON only.`;
@@ -124,14 +138,15 @@ Return JSON only.`;
 function buildFastScanUserPrompt(
   target: "human" | "system",
   items: FastScanItem[],
-  messages: Message[]
+  messages: Message[],
+  persona: string | null
 ): string {
   const itemList = items.length > 0
     ? items.map(i => `- [${i.type}] ${i.name}`).join('\n')
     : '(none yet)';
   
   const messageText = messages.map(m => 
-    `[${m.role}]: ${m.content}`
+    `[${m.role === "system" ? persona : m.role}]: ${m.content}`
   ).join('\n\n');
 
   return `## Known Items
@@ -192,7 +207,7 @@ export async function runFastScan(
     // 4. Call LLM
     const result = await callLLMForJSON<FastScanResult>(
       buildFastScanSystemPrompt(target, personaNames),
-      buildFastScanUserPrompt(target, items, messages),
+      buildFastScanUserPrompt(target, items, messages, persona),
       { signal, temperature: 0.3, operation: "concept" }
     );
     
@@ -241,6 +256,13 @@ export async function routeFastScanResults(
   ];
   
   for (const item of forDetailUpdate) {
+    // Skip facts and people for personas - they only track topics/traits
+    // See ticket 0127 for future enhancement (remapping to topics)
+    if (target === "system" && (item.type === "fact" || item.type === "person")) {
+      appendDebugLog(`[FastScan] Skipping ${item.type} "${item.name}" for persona (not applicable)`);
+      continue;
+    }
+    
     await enqueueItem({
       type: "detail_update",
       priority: "normal",
@@ -262,6 +284,11 @@ export async function routeFastScanResults(
   ];
   
   for (const item of forValidation) {
+    // Skip facts and people for personas (same rationale as above)
+    if (target === "system" && (item.type === "fact" || item.type === "person")) {
+      continue;
+    }
+    
     await enqueueItem({
       type: "ei_validation",
       priority: "low",
@@ -288,10 +315,22 @@ import type { Fact, Trait, Topic, Person, DataItemBase, ChangeEntry } from "./ty
 import { saveHumanEntity, savePersonaEntity } from "./storage.js";
 
 /**
+ * Format messages for display in prompts with clear role labels.
+ */
+function formatMessagesForPrompt(messages: Message[], personaName: string): string {
+  return messages.map(m => {
+    const role = m.role === "human" ? "[human]" : `[ai_persona: ${personaName}]`;
+    return `${role}: ${m.content}`;
+  }).join('\n\n');
+}
+
+/**
  * Build prompts for updating a specific Fact.
  */
 function buildFactDetailPrompt(
   fact: Fact | null,
+  itemName: string,
+  persona: string,
   messages: Message[],
   isNew: boolean
 ): { system: string; user: string } {
@@ -317,32 +356,30 @@ Facts are biographical, circumstantial data that rarely changes:
   - Explicit statement ("My birthday is May 26") → 0.9-1.0
   - Clear implication ("I'm turning 40 next month") → 0.7-0.9
   - Inference ("Sounds like they live in Arizona") → 0.4-0.7
-- Sentiment reflects emotional weight (neutral for most facts, but "divorced" might carry weight)
-
-Return JSON with all fields.`;
+- Sentiment reflects emotional weight (neutral for most facts, but "divorced" might carry weight)`;
 
   const currentData = fact 
     ? JSON.stringify(fact, null, 2)
-    : '(New fact - create from conversation)';
+    : `(New fact: "${itemName}" - create from conversation)`;
 
   const user = `## Current Data
 ${currentData}
 
 ## Conversation
-${messages.map(m => `[${m.role}]: ${m.content}`).join('\n\n')}
+${formatMessagesForPrompt(messages, persona)}
 
 ## Task
-${isNew ? 'Create this new fact based on the conversation.' : 'Update this fact if the conversation provides new information.'}
-
-If no changes needed, return the original data unchanged.
+${isNew ? `Create a new fact called "${itemName}" based on the conversation.` : 'Update this fact if the conversation provides new information.'}
 
 Return JSON:
 {
   "name": "...",
   "description": "...",
   "sentiment": 0.0,
-  "confidence": 0.9
-}`;
+  "confidence": 0.8
+}
+
+**IMPORTANT**: If this fact is not mentioned or demonstrated in the conversation, return: {"skip": true}`;
 
   return { system, user };
 }
@@ -352,10 +389,51 @@ Return JSON:
  */
 function buildTraitDetailPrompt(
   trait: Trait | null,
+  itemName: string,
+  target: "human" | "system",
+  persona: string,
   messages: Message[],
   isNew: boolean
 ): { system: string; user: string } {
-  const system = `You are updating a single TRAIT of a person.
+  const targetDescription = target === "human"
+    ? "You are updating a single TRAIT of the HUMAN USER based on what they've said and done."
+    : `You are updating a single TRAIT of the AI PERSONA '${persona}' based on how they've behaved in this conversation, or how the HUMAN USER has asked them to behave.`;
+
+  const evidenceRequirement = target === "human"
+    ? `## CRITICAL: Evidence Check
+
+Before creating/updating this trait, identify which message(s) show the HUMAN USER demonstrating this trait through their own words or actions.
+
+**If the trait is:**
+- Only mentioned by the AI persona → SKIP (not the human's trait)
+- Only described/discussed but not demonstrated → SKIP (no evidence)
+- Shown through the human's actual behavior → PROCEED
+
+**Examples of demonstration:**
+- Human says "I'm a night owl" → proceed (self-identification)
+- Human sends messages at 3am regularly → proceed (behavioral evidence)
+- AI says "You seem introverted" but human hasn't shown it → SKIP (no evidence)
+- Human tells story about someone else's trait → SKIP (not about them)
+
+If you cannot find a message where the HUMAN demonstrates this trait, return: {"skip": true}`
+    : `## CRITICAL: Evidence Check
+
+Before creating/updating this trait, identify which message(s) show the AI PERSONA '${persona}' demonstrating this trait through its own responses.
+
+**If the trait is:**
+- Only mentioned by the human about themselves → SKIP (not the persona's trait)
+- Only described/discussed but not demonstrated → SKIP (no evidence)
+- Shown through the persona's actual response style → PROCEED
+
+**Examples of demonstration:**
+- Human describes themselves as "verbose" → SKIP (that's a human trait)
+- Persona consistently writes long, detailed responses → PROCEED (behavioral evidence)
+- Human asks persona to "be more direct" → PROCEED (requested behavior change)
+- Human tells story that mentions a trait → SKIP (not about the persona)
+
+If you cannot find a message where ${persona.toUpperCase()} demonstrates this trait, return: {"skip": true}`;
+
+  const system = `${targetDescription}
 
 Traits are personality patterns and behavioral tendencies:
 - 💬 Communication style (direct, verbose, uses humor)
@@ -375,29 +453,28 @@ Traits are personality patterns and behavioral tendencies:
 - Strength indicates consistency/intensity of the trait
 - Sentiment: Do they embrace this trait or struggle with it?
 
-Return JSON with all fields.`;
+${evidenceRequirement}`;
 
   const currentData = trait
     ? JSON.stringify(trait, null, 2)
-    : '(New trait - create from conversation)';
+    : `(New trait: "${itemName}" - create from conversation)`;
 
   const user = `## Current Data
 ${currentData}
 
 ## Conversation
-${messages.map(m => `[${m.role}]: ${m.content}`).join('\n\n')}
+${formatMessagesForPrompt(messages, persona)}
 
 ## Task
-${isNew ? 'Create this new trait based on the conversation.' : 'Update this trait if the conversation reveals more about it.'}
+${isNew ? `Create a new trait called "${itemName}" - BUT ONLY if you can identify specific messages showing this trait being demonstrated.` : 'Update this trait if the conversation reveals more about it - BUT ONLY if there is actual evidence.'}
 
-If no changes needed, return the original data unchanged.
-
-Return JSON:
+Return JSON (you MUST include the evidence field):
 {
   "name": "...",
   "description": "...",
   "sentiment": 0.0,
-  "strength": 0.7
+  "strength": 0.7,
+  "evidence": "Quote the exact message(s) that show this trait being demonstrated. If no evidence exists, return {\"skip\": true} instead."
 }`;
 
   return { system, user };
@@ -408,10 +485,51 @@ Return JSON:
  */
 function buildTopicDetailPrompt(
   topic: Topic | null,
+  itemName: string,
+  target: "human" | "system",
+  persona: string,
   messages: Message[],
   isNew: boolean
 ): { system: string; user: string } {
-  const system = `You are updating a single TOPIC that a person discusses.
+  const targetDescription = target === "human"
+    ? "You are updating a single TOPIC that the HUMAN USER discusses or cares about."
+    : `You are updating a single TOPIC that the AI PERSONA '${persona}' discusses or is designed to care about.`;
+
+  const evidenceRequirement = target === "human"
+    ? `## CRITICAL: Evidence Check
+
+Before creating/updating this topic, identify messages showing the HUMAN USER engaging with this topic.
+
+**If the topic is:**
+- Only mentioned by the AI persona → SKIP (not the human's interest)
+- Only discussed in passing without engagement → SKIP (no interest shown)
+- Human actively discusses, asks about, or shows emotion about it → PROCEED
+
+**Examples of engagement:**
+- Human says "I love gardening" → PROCEED (explicit interest)
+- Human shares detailed story about work → PROCEED (active engagement)
+- AI mentions "theater" but human doesn't respond → SKIP (no engagement)
+- Human tells story where someone else likes X → SKIP (not their topic)
+
+If you cannot find messages showing the HUMAN engaging with this topic, return: {"skip": true}`
+    : `## CRITICAL: Evidence Check
+
+Before creating/updating this topic, identify messages showing the AI PERSONA '${persona}' engaging with this topic.
+
+**If the topic is:**
+- Only mentioned by the human about themselves → SKIP (not the persona's focus)
+- Only discussed because human asked → SKIP (responsive, not interested)
+- Persona actively discusses, offers expertise, or shows designed interest → PROCEED
+
+**Examples of engagement:**
+- Human discusses their kids' education → SKIP (that's a human topic)
+- Persona offers unprompted advice about education → PROCEED (demonstrates expertise)
+- Persona asks follow-up questions about the topic → PROCEED (shows interest)
+- Human mentions "remote learning" in passing → SKIP (no persona engagement)
+
+If you cannot find messages showing ${persona.toUpperCase()} actively engaging with this topic, return: {"skip": true}`;
+
+  const system = `${targetDescription}
 
 Topics are subjects with engagement dynamics:
 - 🎮 Hobbies, interests (gaming, gardening)
@@ -434,30 +552,29 @@ Topics are subjects with engagement dynamics:
 - sentiment: Their emotional relationship to the topic
 - description: Add context as you learn more
 
-Return JSON with all fields.`;
+${evidenceRequirement}`;
 
   const currentData = topic
     ? JSON.stringify(topic, null, 2)
-    : '(New topic - create from conversation)';
+    : `(New topic: "${itemName}" - create from conversation)`;
 
   const user = `## Current Data
 ${currentData}
 
 ## Conversation
-${messages.map(m => `[${m.role}]: ${m.content}`).join('\n\n')}
+${formatMessagesForPrompt(messages, persona)}
 
 ## Task
-${isNew ? 'Create this new topic based on the conversation.' : 'Update this topic based on the conversation.'}
+${isNew ? `Create a new topic called "${itemName}" - BUT ONLY if you can identify specific messages showing engagement with this topic.` : 'Update this topic if there is new evidence of engagement.'}
 
-If no changes needed, return the original data unchanged.
-
-Return JSON:
+Return JSON (you MUST include the evidence field):
 {
   "name": "...",
   "description": "...",
   "sentiment": 0.0,
   "level_current": 0.5,
-  "level_ideal": 0.5
+  "level_ideal": 0.5,
+  "evidence": "Quote the exact message(s) that show engagement with this topic. If no evidence exists, return {\"skip\": true} instead."
 }`;
 
   return { system, user };
@@ -468,6 +585,8 @@ Return JSON:
  */
 function buildPersonDetailPrompt(
   person: Person | null,
+  itemName: string,
+  persona: string,
   messages: Message[],
   isNew: boolean,
   knownPersonas: string[]
@@ -494,24 +613,20 @@ ${knownPersonas.map(p => `- ${p}`).join('\n')}
 - Capture relationship dynamics, not just facts
 - Include relevant details (age, interests, shared history)
 - sentiment: Overall feeling about the relationship
-- level_ideal: Some people are discussed frequently (kids), others rarely
-
-Return JSON with all fields.`;
+- level_ideal: Some people are discussed frequently (kids), others rarely`;
 
   const currentData = person
     ? JSON.stringify(person, null, 2)
-    : '(New person - create from conversation)';
+    : `(New person: "${itemName}" - create from conversation)`;
 
   const user = `## Current Data
 ${currentData}
 
 ## Conversation
-${messages.map(m => `[${m.role}]: ${m.content}`).join('\n\n')}
+${formatMessagesForPrompt(messages, persona)}
 
 ## Task
-${isNew ? 'Create this new person based on the conversation.' : 'Update this person based on the conversation.'}
-
-If no changes needed, return the original data unchanged.
+${isNew ? `Create a new person called "${itemName}" based on the conversation.` : 'Update this person based on the conversation.'}
 
 Return JSON:
 {
@@ -521,7 +636,9 @@ Return JSON:
   "sentiment": 0.0,
   "level_current": 0.5,
   "level_ideal": 0.5
-}`;
+}
+
+**IMPORTANT**: If this person is not mentioned or discussed in the conversation, return: {"skip": true}`;
 
   return { system, user };
 }
@@ -646,6 +763,9 @@ export async function runDetailUpdate(
   // 3. Build appropriate prompt
   const prompts = await buildDetailPromptByType(
     data_type,
+    item_name,
+    target,
+    persona,
     existingItem,
     messages,
     is_new
@@ -663,16 +783,52 @@ export async function runDetailUpdate(
     return;
   }
   
-  // 5. Validate and merge
+  // 5. Check for skip signal
+  if (result && typeof result === 'object' && 'skip' in result && result.skip === true) {
+    appendDebugLog(`[DetailUpdate] Skipped ${data_type} "${item_name}" (entity not relevant)`);
+    return;
+  }
+  
+  // 5.5. Check evidence field for traits/topics (debugging aid)
+  if (result && typeof result === 'object' && 'evidence' in result) {
+    const evidence = result.evidence;
+    appendDebugLog(`[DetailUpdate] Evidence for ${data_type} "${item_name}": ${evidence}`);
+    
+    // Check for weak evidence patterns (LLM trying to dodge the requirement)
+    const weakEvidence = [
+      'no evidence',
+      'not demonstrated',
+      'not mentioned',
+      'unclear',
+      'uncertain',
+      'cannot find',
+      'no message',
+      'not shown'
+    ];
+    
+    const evidenceText = String(evidence).toLowerCase();
+    if (weakEvidence.some(pattern => evidenceText.includes(pattern))) {
+      appendDebugLog(`[DetailUpdate] Skipped ${data_type} "${item_name}" (weak evidence: "${evidence}")`);
+      return;
+    }
+    
+    // Strip evidence field before saving
+    delete result.evidence;
+  }
+  
+  // 6. Validate and merge
   const validated = validateDetailResult(result, data_type);
   if (!validated) {
     appendDebugLog(`[DetailUpdate] Invalid result for ${item_name}: ${JSON.stringify(result)}`);
     return;
   }
   
-  // 6. Record change log entry (for Ei)
-  const changeEntry = buildChangeEntry(persona, existingItem, validated);
-  validated.change_log = [...(existingItem?.change_log || []), changeEntry];
+  // 6. Record change log entry (for Ei to review)
+  // Skip change log for Ei's own updates - Ei is the arbiter of truth
+  if (persona !== "ei") {
+    const changeEntry = buildChangeEntry(persona, existingItem, validated);
+    validated.change_log = [...(existingItem?.change_log || []), changeEntry];
+  }
   validated.last_updated = new Date().toISOString();
   validated.learned_by = validated.learned_by || persona;
   
@@ -748,21 +904,24 @@ async function checkCrossPersonaUpdate(
  */
 async function buildDetailPromptByType(
   dataType: "fact" | "trait" | "topic" | "person",
+  itemName: string,
+  target: "human" | "system",
+  persona: string,
   existing: DataItemBase | null,
   messages: Message[],
   isNew: boolean
 ): Promise<{ system: string; user: string }> {
   switch (dataType) {
     case "fact":
-      return buildFactDetailPrompt(existing as Fact | null, messages, isNew);
+      return buildFactDetailPrompt(existing as Fact | null, itemName, persona, messages, isNew);
     case "trait":
-      return buildTraitDetailPrompt(existing as Trait | null, messages, isNew);
+      return buildTraitDetailPrompt(existing as Trait | null, itemName, target, persona, messages, isNew);
     case "topic":
-      return buildTopicDetailPrompt(existing as Topic | null, messages, isNew);
+      return buildTopicDetailPrompt(existing as Topic | null, itemName, target, persona, messages, isNew);
     case "person": {
       const personas = await listPersonas();
       const personaNames = personas.flatMap(p => [p.name, ...(p.aliases || [])]);
-      return buildPersonDetailPrompt(existing as Person | null, messages, isNew, personaNames);
+      return buildPersonDetailPrompt(existing as Person | null, itemName, persona, messages, isNew, personaNames);
     }
   }
 }

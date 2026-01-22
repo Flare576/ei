@@ -91,11 +91,13 @@
 - 0114: Known Personas in Prompts
 - 0118: Ei Heartbeat Simplification
 
-## PENDING (21 tickets)
+## PENDING (23 tickets)
+- 0131: /clarify Command Editing Is Broken - BUG (from 0107 testing)
+- 0130: Fix ei_validation Queue Dequeue Bug - BUG (blocking 0107 completion)
 - 0129: Extract Time-Based Core Logic from UI Layer (FUTURE - The Elephant)
 - 0128: Persona Trait Change Detection Overhaul - HIGH PRIORITY
 - 0127: Persona Facts/People as Topics (Future Enhancement)
-- 0107: Entity Data Architecture Overhaul (Epic) - MAJOR REDESIGN
+- 0107: Entity Data Architecture Overhaul (Epic) - MAJOR REDESIGN (blocked by 0130)
 - 0106: Special Behavior for Archiving Ei Persona
 - 0105: Context Window Command
 - 0104: OpenTUI Migration Spike
@@ -136,8 +138,8 @@
 ---
 
 **Last Updated**: 2026-01-21
-**Total Tickets**: 129 created
-**Stats**: 72 done, 16 QA, 0 in_progress, 21 pending (14 in 0107 epic), 13 cancelled
+**Total Tickets**: 131 created
+**Stats**: 72 done, 16 QA, 0 in_progress, 23 pending (14 in 0107 epic + 2 bugs), 13 cancelled
 
 ## Epic Status
 

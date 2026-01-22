@@ -59,8 +59,27 @@ const DEFAULT_EI_PERSONA: PersonaEntity = {
   last_updated: null
 };
 
+const WELCOME_MESSAGE = `Hello! I'm Ei - your guide to this personal AI companion system.
+
+I help you create and manage AI personas representing different fictional people, assistants, experts, or friends. Think of me as a thoughtful friend who happens to have perfect memory and can see the big picture across all your conversations.
+
+A few things to know:
+- I'm always here as your default companion
+- You can create specialized personas using the \`/persona\` command
+- I'll help keep track of information about you across all conversations
+- Type \`/help\` anytime to see what you can do
+
+I'd love to learn about you! What should I call you?`;
+
 const DEFAULT_HISTORY: ConversationHistory = {
-  messages: []
+  messages: [
+    {
+      role: "system",
+      content: WELCOME_MESSAGE,
+      timestamp: new Date().toISOString(),
+      read: false
+    }
+  ]
 };
 
 export async function loadHumanEntity(): Promise<HumanEntity> {

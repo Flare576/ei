@@ -83,6 +83,10 @@ export class EIApp {
   // Stale message checker interval for background concept processing
   private staleMessageCheckInterval: NodeJS.Timeout | null = null;
 
+  // Scheduled jobs for system-wide maintenance
+  private dailyCeremonyInterval: NodeJS.Timeout | null = null;
+  private decayInterval: NodeJS.Timeout | null = null;
+
   // Persona creation state tracking
   private pendingPersonaCreation: {
     name: string;
@@ -1934,8 +1938,7 @@ Press q to close this help.`;
             const trimmed = content.trim();
             
             if (isPersonaCreation) {
-              this.layoutManager.getInputBox().setValue(trimmed);
-              this.inputHasText = trimmed.length > 0;
+              this.setEditorContent(trimmed);
               this.setStatus(previousStatus);
             } else if (trimmed) {
               if (pendingFromStorage.length > 0) {

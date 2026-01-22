@@ -415,7 +415,7 @@ describe("extraction", () => {
 
       const payload: DetailUpdatePayload = {
         target: "human",
-        persona: "ei",
+        persona: "frodo",
         data_type: "topic",
         item_name: "Programming",
         messages: mockMessages,
@@ -443,7 +443,7 @@ describe("extraction", () => {
       expect(updatedTopicInEntity?.change_log).toBeDefined();
       expect(updatedTopicInEntity?.change_log).toHaveLength(1);
       expect(updatedTopicInEntity?.change_log?.[0]).toMatchObject({
-        persona: "ei",
+        persona: "frodo",
         delta_size: expect.any(Number)
       });
     });

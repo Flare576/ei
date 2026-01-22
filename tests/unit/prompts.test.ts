@@ -345,12 +345,14 @@ describe("buildResponseUserPrompt", () => {
     const history: Message[] = [
       { role: "human", content: "User said this", timestamp: new Date().toISOString() },
       { role: "system", content: "System replied this", timestamp: new Date().toISOString() },
+      { role: "human", content: "Hello", timestamp: new Date().toISOString() },
     ];
 
     const result = buildResponseUserPrompt(0, history, "Hello");
 
     expect(result).toContain("User said this");
     expect(result).toContain("EI: System replied this");
+    expect(result).not.toContain("Human: Hello");
     expect(result).toContain("RECENT CONVERSATION");
   });
 
@@ -358,12 +360,14 @@ describe("buildResponseUserPrompt", () => {
     const history: Message[] = [
       { role: "human", content: "User said this", timestamp: new Date().toISOString() },
       { role: "system", content: "System replied this", timestamp: new Date().toISOString() },
+      { role: "human", content: "Hello", timestamp: new Date().toISOString() },
     ];
 
     const result = buildResponseUserPrompt(0, history, "Hello", "Gandalf");
 
     expect(result).toContain("Gandalf: System replied this");
     expect(result).not.toContain("EI:");
+    expect(result).not.toContain("Human: Hello");
   });
 
   it("should include human message in prompt", () => {
