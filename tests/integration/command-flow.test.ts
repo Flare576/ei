@@ -1,163 +1,19 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createBlessedMock } from '../helpers/blessed-mocks.js';
+import { createStorageMocks } from '../helpers/storage-mocks.js';
+import { createLLMMocks } from '../helpers/llm-mocks.js';
+import { createQueueProcessorMock } from '../helpers/queue-processor-mock.js';
 
 vi.mock('blessed', () => createBlessedMock());
-
-const mockPersonas = [
-  { name: 'ei', aliases: ['default', 'core'] },
-  { name: 'claude', aliases: ['assistant'] },
-  { name: 'assistant', aliases: [] }
-];
-
-const mockConceptMaps = new Map<string, any>();
-mockConceptMaps.set('ei:system', { entity: 'system', aliases: ['default', 'core'], last_updated: null, concepts: [] });
-mockConceptMaps.set('claude:system', { entity: 'system', aliases: ['assistant'], last_updated: null, concepts: [] });
-mockConceptMaps.set('assistant:system', { entity: 'system', aliases: [], last_updated: null, concepts: [] });
-
-vi.mock('../../src/storage.js', () => ({
-  loadHistory: vi.fn(() => Promise.resolve({ messages: [] })),
-  listPersonas: vi.fn(() => Promise.resolve(mockPersonas)),
-  findPersonaByNameOrAlias: vi.fn(async (name, options) => {
-    const lower = name.toLowerCase();
-    
-    for (const p of mockPersonas) {
-      if (p.name.toLowerCase() === lower) return p.name;
-      if (p.aliases.some(a => a.toLowerCase() === lower)) return p.name;
-    }
-    
-    if (options?.allowPartialMatch) {
-      const matches = mockPersonas.filter(p =>
-        p.aliases.some(a => a.toLowerCase().includes(lower))
-      );
-      
-      if (matches.length === 1) {
-        return matches[0].name;
-      }
-      
-      if (matches.length > 1) {
-        const matchedAliases = matches.flatMap(p => 
-          p.aliases.filter(a => a.toLowerCase().includes(lower))
-        );
-        throw new Error(
-          `Ambiguous: multiple aliases match "${name}": ${matchedAliases.join(", ")}`
-        );
-      }
-    }
-    
-    return null;
-  }),
-  loadConceptMap: vi.fn((entity, persona) => {
-    const key = `${persona}:${entity}`;
-    return Promise.resolve(mockConceptMaps.get(key) || {
-      entity,
-      aliases: [],
-      last_updated: new Date().toISOString(),
-      concepts: [],
-    });
-  }),
-  saveConceptMap: vi.fn((conceptMap, persona) => {
-    const key = `${persona}:${conceptMap.entity}`;
-    mockConceptMaps.set(key, conceptMap);
-    const p = mockPersonas.find(p => p.name === persona);
-    if (p && conceptMap.aliases) {
-      p.aliases = [...conceptMap.aliases];
-    }
-    return Promise.resolve();
-  }),
-  findPersonaByAlias: vi.fn(async (alias) => {
-    const lower = alias.toLowerCase();
-    for (const p of mockPersonas) {
-      const matchedAlias = p.aliases.find(a => a.toLowerCase() === lower);
-      if (matchedAlias) {
-        return { personaName: p.name, alias: matchedAlias };
-      }
-    }
-    return null;
-  }),
-  addPersonaAlias: vi.fn(async (personaName, alias) => {
-    const existing = await vi.mocked((await import('../../src/storage.js')).findPersonaByAlias)(alias);
-    if (existing) {
-      throw new Error(`Alias "${alias}" already exists on persona "${existing.personaName}"`);
-    }
-    const conceptMap = mockConceptMaps.get(`${personaName}:system`);
-    if (!conceptMap) throw new Error(`Persona ${personaName} not found`);
-    if (!conceptMap.aliases) conceptMap.aliases = [];
-    const lower = alias.toLowerCase();
-    if (conceptMap.aliases.some((a: string) => a.toLowerCase() === lower)) {
-      throw new Error(`Alias "${alias}" already exists on this persona`);
-    }
-    conceptMap.aliases.push(alias);
-    conceptMap.last_updated = new Date().toISOString();
-    const p = mockPersonas.find(p => p.name === personaName);
-    if (p) p.aliases = [...conceptMap.aliases];
-  }),
-  removePersonaAlias: vi.fn(async (personaName, pattern) => {
-    const conceptMap = mockConceptMaps.get(`${personaName}:system`);
-    if (!conceptMap || !conceptMap.aliases || conceptMap.aliases.length === 0) {
-      throw new Error(`No aliases found for persona "${personaName}"`);
-    }
-    const lower = pattern.toLowerCase();
-    const matches = conceptMap.aliases.filter((a: string) => a.toLowerCase().includes(lower));
-    if (matches.length === 0) {
-      throw new Error(`No aliases matching "${pattern}" found on persona "${personaName}"`);
-    }
-    if (matches.length > 1) {
-      throw new Error(`Ambiguous: multiple aliases match "${pattern}": ${matches.join(", ")}`);
-    }
-    const removedAlias = matches[0];
-    conceptMap.aliases = conceptMap.aliases.filter((a: string) => a !== removedAlias);
-    conceptMap.last_updated = new Date().toISOString();
-    const p = mockPersonas.find(p => p.name === personaName);
-    if (p) p.aliases = [...conceptMap.aliases];
-    return [removedAlias];
-  }),
-  findArchivedPersonaByNameOrAlias: vi.fn(() => Promise.resolve(null)),
-  getArchivedPersonas: vi.fn(() => Promise.resolve([])),
-  loadArchiveState: vi.fn(() => Promise.resolve({ isArchived: false })),
-  saveArchiveState: vi.fn(() => Promise.resolve()),
-  initializeDataDirectory: vi.fn(() => Promise.resolve()),
-  initializeDebugLog: vi.fn(),
-  appendDebugLog: vi.fn(),
-  getPendingMessages: vi.fn(() => Promise.resolve([])),
-  replacePendingMessages: vi.fn(() => Promise.resolve()),
-  appendHumanMessage: vi.fn(() => Promise.resolve()),
-  appendMessage: vi.fn(() => Promise.resolve()),
-  getUnprocessedMessages: vi.fn(() => Promise.resolve([])),
-  markSystemMessagesAsRead: vi.fn(() => Promise.resolve()),
-  getUnreadSystemMessageCount: vi.fn(() => Promise.resolve(0)),
-  loadPauseState: vi.fn(() => Promise.resolve({ isPaused: false })),
-  savePauseState: vi.fn(() => Promise.resolve()),
-  setStateManager: vi.fn(),
-  getDataPath: vi.fn(() => "/tmp/ei-test"),
-}));
+vi.mock('../../src/storage.js', () => createStorageMocks());
+vi.mock('../../src/llm.js', () => createLLMMocks());
+vi.mock('../../src/queue-processor.js', () => createQueueProcessorMock());
 
 vi.mock('../../src/processor.js', () => ({
   processEvent: vi.fn(() => Promise.resolve({
     response: 'Test response from LLM',
-    aborted: false,
-    humanConceptsUpdated: false,
-    systemConceptsUpdated: false
+    aborted: false
   })),
-}));
-
-vi.mock('../../src/llm.js', () => ({
-  LLMAbortedError: class extends Error {
-    name = 'LLMAbortedError';
-    constructor(message: string) {
-      super(message);
-      this.name = 'LLMAbortedError';
-    }
-  },
-}));
-
-vi.mock('../../src/concept-queue.js', () => ({
-  ConceptQueue: {
-    getInstance: vi.fn(() => ({
-      enqueue: vi.fn(() => 'mock-task-id'),
-      getQueueLength: vi.fn(() => 0),
-      isProcessing: vi.fn(() => false),
-    })),
-  },
 }));
 
 import { EIApp } from '../../src/blessed/app.js';
@@ -187,9 +43,9 @@ class TestableEIApp extends EIApp {
     return (this as any).activePersona;
   }
   
-  public testCleanup(): void {
+  public async testCleanup(): Promise<void> {
     try {
-      (this as any).cleanup();
+      await (this as any).cleanup();
     } catch (error) {
       // Ignore cleanup errors in tests
     }
@@ -202,25 +58,13 @@ describe('Command Flow Integration Tests', () => {
   beforeEach(async () => {
     vi.resetAllMocks();
     
-    mockConceptMaps.clear();
-    mockConceptMaps.set('ei:system', { entity: 'system', aliases: ['default', 'core'], last_updated: null, concepts: [] });
-    mockConceptMaps.set('claude:system', { entity: 'system', aliases: ['assistant'], last_updated: null, concepts: [] });
-    mockConceptMaps.set('assistant:system', { entity: 'system', aliases: [], last_updated: null, concepts: [] });
-    
-    mockPersonas.length = 0;
-    mockPersonas.push(
-      { name: 'ei', aliases: ['default', 'core'] },
-      { name: 'claude', aliases: ['assistant'] },
-      { name: 'assistant', aliases: [] }
-    );
-    
     app = new TestableEIApp();
     await app.init();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     if (app) {
-      app.testCleanup();
+      await app.testCleanup();
     }
   });
 
@@ -526,8 +370,6 @@ describe('Command Flow Integration Tests', () => {
       vi.mocked(processEvent).mockResolvedValue({
         response: 'Test LLM response',
         aborted: false,
-        humanConceptsUpdated: false,
-        systemConceptsUpdated: false
       });
 
       // Submit regular message (long enough to trigger immediate processing)
@@ -585,8 +427,6 @@ describe('Command Flow Integration Tests', () => {
       vi.mocked(processEvent).mockResolvedValue({
         response: 'Response',
         aborted: false,
-        humanConceptsUpdated: false,
-        systemConceptsUpdated: false
       });
 
       // Submit regular text (long enough to trigger immediate processing)
@@ -606,8 +446,6 @@ describe('Command Flow Integration Tests', () => {
       vi.mocked(processEvent).mockResolvedValue({
         response: 'Response',
         aborted: false,
-        humanConceptsUpdated: false,
-        systemConceptsUpdated: false
       });
 
       // Submit text with / in middle (long enough to trigger immediate processing)

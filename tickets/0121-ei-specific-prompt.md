@@ -1,6 +1,6 @@
 # 0121: Ei-Specific System Prompt
 
-**Status**: PENDING
+**Status**: QA
 
 ## Summary
 
@@ -201,13 +201,13 @@ async function maybeRegenerateDescriptions(
 
 ## Acceptance Criteria
 
-- [ ] buildEiSystemPrompt implemented
-- [ ] Ei sees full human data (omniscient)
-- [ ] Ei sees system state (personas, pending validations)
-- [ ] Ei has onboarding awareness for new users
-- [ ] Ei descriptions are locked
-- [ ] Ei guidelines include orchestrator responsibilities
-- [ ] Tests verify Ei prompt differs from generic personas
+- [x] buildEiSystemPrompt implemented
+- [x] Ei sees full human data (omniscient)
+- [x] Ei sees system state (personas, pending validations)
+- [x] Ei has onboarding awareness for new users
+- [x] Ei descriptions are locked
+- [x] Ei guidelines include orchestrator responsibilities
+- [x] Tests verify Ei prompt differs from generic personas
 
 ## Dependencies
 

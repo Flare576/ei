@@ -1,6 +1,6 @@
 # 0113: Extraction Frequency Controller
 
-**Status**: PENDING
+**Status**: QA
 
 ## Summary
 
@@ -226,20 +226,64 @@ This runs on a timer (every few minutes) to catch any messages that slipped thro
 
 ## Acceptance Criteria
 
-- [ ] ExtractionFrequencyController implemented
-- [ ] Extraction state persisted to file
-- [ ] shouldExtract correctly calculates based on fullness
-- [ ] Topics/People always extract
-- [ ] Facts/Traits taper based on fullness
-- [ ] Integration with triggerExtraction flow
-- [ ] Tests cover all tier transitions
+- [x] ExtractionFrequencyController implemented
+- [x] Extraction state persisted to file
+- [x] shouldExtract correctly calculates based on fullness
+- [x] Topics/People always extract
+- [x] Facts/Traits taper based on fullness
+- [x] Integration with triggerExtraction flow
+- [x] Tests cover all tier transitions
+
+## Implementation Summary
+
+**Files Created:**
+- `src/extraction-frequency.ts` - Core controller with `triggerExtraction()` and `recordExtraction()`
+- `src/topic-decay.ts` - Decay logic for Topic and Person level_current fields
+- `tests/unit/extraction-frequency.test.ts` - 7 tests covering frequency logic
+- `tests/unit/topic-decay.test.ts` - 8 tests covering decay and desire gap detection
+
+**Files Modified:**
+- `src/types.ts` - Added ExtractionState, ExtractionHistory, EntityExtractionState interfaces
+- `src/storage.ts` - Added loadExtractionState(), saveExtractionState(), getExtractionStatePath()
+- `src/processor.ts` - Wired triggerExtraction() after conversation completes (fire-and-forget)
+- `src/extraction.ts` - Added recordExtraction() call after successful detail update
+
+**How it works:**
+1. After each conversation, processor.ts calls triggerExtraction() for both human and system entities
+2. triggerExtraction() checks extraction state to decide if fast_scan should be queued
+3. Topics/people always extract; facts/traits use adaptive threshold (MAX(10, total_extractions))
+4. Message counters increment regardless, tracking "messages since last extract"
+5. When detail_update completes, recordExtraction() resets counter and bumps total_extractions
+6. State persists to `data/extraction_state.jsonc`
+
+**Stale message detection:** Deferred to ticket 0124 (Scheduled Jobs) - the extraction state file provides all necessary data (last_extraction timestamp, messages_since_last_extract count) for a future scheduled job to detect stale messages.
+
+**Decay logic:** Implemented in topic-decay.ts using same logarithmic formula as old concept-decay.ts, but operates on Topic/Person types instead. Includes heartbeat trigger logic via checkDesireGaps().
 
 ## Dependencies
 
 - 0108: Entity type definitions
 - 0110: LLM queue
 - 0111: Fast-scan
+- 0126: LLM Queue Processor (executes queued fast-scans)
 
 ## Effort Estimate
 
 Medium (~3 hours)
+
+## Test Results
+
+**New Tests (all passing):**
+- `tests/unit/extraction-frequency.test.ts` - 7 tests
+- `tests/unit/topic-decay.test.ts` - 8 tests
+- `tests/unit/extraction.test.ts` - 18 tests (updated to mock recordExtraction)
+
+**Pre-existing test failures (unrelated to this ticket):**
+- 89 failures from old concept system code (concept-queue, loadConceptMap, prompts tests)
+- All flagged for cleanup in ticket 0122
+
+## Files Deleted
+
+- `src/concept-decay.ts` - Replaced by `src/topic-decay.ts`
+- `tests/unit/concept-decay.test.ts` - Replaced by `tests/unit/topic-decay.test.ts`
+- Updated `src/blessed/app.ts` to use new decay functions

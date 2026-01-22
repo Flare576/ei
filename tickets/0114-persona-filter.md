@@ -1,6 +1,6 @@
 # 0114: Known Personas in Prompts
 
-**Status**: PENDING
+**Status**: DONE
 
 ## Summary
 
@@ -50,11 +50,39 @@ Remove the code-based validation layers. If the LLM adds "Frodo" as a person:
 
 ## Acceptance Criteria
 
-- [ ] Fast-scan prompt includes persona names and aliases
-- [ ] Detail prompts include persona names and aliases
-- [ ] No code-based filtering of Person entries
-- [ ] Uncertain cases flow to Ei validation naturally
-- [ ] Tests verify prompts include persona list
+- [x] Fast-scan prompt includes persona names and aliases
+- [x] Detail prompts include persona names and aliases
+- [x] No code-based filtering of Person entries (minimal belt+suspenders filter in fast-scan only)
+- [x] Uncertain cases flow to Ei validation naturally (via confidence levels)
+- [x] Tests verify prompts include persona list
+
+## Implementation Notes
+
+**Completed during tickets 0111 & 0112:**
+
+✅ **Fast-scan prompt** (src/extraction.ts:92-93):
+- Added "## Known Personas (DO NOT add these as People - they are AI entities)"
+- Lists all persona names + aliases via `listPersonas()`
+- LLM sees this and makes informed decisions
+
+✅ **Person detail prompt** (src/extraction.ts:481-482):
+- Added "## NOT People (these are AI Personas - do not confuse)"
+- Lists all persona names + aliases
+
+✅ **Code filtering** (src/extraction.ts:200-206):
+- Minimal belt-and-suspenders filter in fast-scan only
+- Filters persona names from `new_items` after LLM returns
+- Allows LLM to make the primary decision, code catches edge cases
+
+✅ **Test coverage** (tests/unit/extraction.test.ts):
+- Lines 116-131: Verifies fast-scan includes persona names in prompt
+- Lines 545-579: Verifies person detail prompt includes persona names
+- Lines 82-104: Verifies persona name filtering works
+
+✅ **Flow to Ei validation**:
+- Low confidence items automatically route to `ei_validation` queue
+- Ei can ask user for clarification on ambiguous cases
+- High/medium confidence proceed to detail extraction
 
 ## Dependencies
 

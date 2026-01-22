@@ -2,36 +2,85 @@ import { describe, it, expect } from "vitest";
 import {
   buildResponseSystemPrompt,
   buildResponseUserPrompt,
-  buildConceptUpdateSystemPrompt,
-  buildConceptUpdateUserPrompt,
-  buildDescriptionPrompt,
   PersonaIdentity,
 } from "../../src/prompts.js";
-import { GLOBAL_GROUP } from "../../src/concept-reconciliation.js";
-import type { ConceptMap, Concept, Message } from "../../src/types.js";
+import type { HumanEntity, PersonaEntity, Fact, Trait, Topic, Person, Message } from "../../src/types.js";
 
-const createConcept = (
+const createFact = (
   name: string,
-  type: "static" | "topic" | "person" | "persona" = "topic",
+  confidence: number = 0.8
+): Fact => ({
+  name,
+  description: `Description for ${name}`,
+  sentiment: 0.0,
+  confidence,
+  last_updated: new Date().toISOString(),
+});
+
+const createTrait = (
+  name: string,
+  strength: number = 0.7
+): Trait => ({
+  name,
+  description: `Description for ${name}`,
+  sentiment: 0.0,
+  strength,
+  last_updated: new Date().toISOString(),
+});
+
+const createTopic = (
+  name: string,
   level_current: number = 0.5,
-  level_ideal: number = 0.5
-): Concept => ({
+  level_ideal: number = 0.5,
+  sentiment: number = 0.0
+): Topic => ({
   name,
   description: `Description for ${name}`,
   level_current,
   level_ideal,
-  sentiment: 0.0,
-  type,
-  persona_groups: [GLOBAL_GROUP],
+  sentiment,
+  last_updated: new Date().toISOString(),
 });
 
-const createConceptMap = (
-  entity: "human" | "system",
-  concepts: Concept[]
-): ConceptMap => ({
-  entity,
+const createPerson = (
+  name: string,
+  relationship: string = "friend",
+  level_current: number = 0.5,
+  level_ideal: number = 0.5
+): Person => ({
+  name,
+  description: `Description for ${name}`,
+  relationship,
+  level_current,
+  level_ideal,
+  sentiment: 0.0,
+  last_updated: new Date().toISOString(),
+});
+
+const createHumanEntity = (
+  facts: Fact[] = [],
+  traits: Trait[] = [],
+  topics: Topic[] = [],
+  people: Person[] = []
+): HumanEntity => ({
+  entity: "human",
+  facts,
+  traits,
+  topics,
+  people,
   last_updated: null,
-  concepts,
+});
+
+const createPersonaEntity = (
+  traits: Trait[] = [],
+  topics: Topic[] = [],
+  groups_visible?: string[]
+): PersonaEntity => ({
+  entity: "system",
+  traits,
+  topics,
+  groups_visible,
+  last_updated: null,
 });
 
 const defaultPersona: PersonaIdentity = {
@@ -42,110 +91,235 @@ const defaultPersona: PersonaIdentity = {
 };
 
 describe("buildResponseSystemPrompt", () => {
-  it("should include persona name in output", () => {
-    const humanConcepts = createConceptMap("human", []);
-    const systemConcepts = createConceptMap("system", []);
+  it("should include persona name in output", async () => {
+    const humanEntity = createHumanEntity();
+    const personaEntity = createPersonaEntity();
 
-    const result = buildResponseSystemPrompt(humanConcepts, systemConcepts, defaultPersona);
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, defaultPersona);
 
     expect(result).toContain("You are EI");
   });
 
-  it("should include aliases when provided", () => {
-    const humanConcepts = createConceptMap("human", []);
-    const systemConcepts = createConceptMap("system", []);
+  it("should include aliases when provided", async () => {
+    const humanEntity = createHumanEntity();
+    const personaEntity = createPersonaEntity();
     const personaWithAliases: PersonaIdentity = {
       name: "TestBot",
       aliases: ["TB", "Testy"],
     };
 
-    const result = buildResponseSystemPrompt(humanConcepts, systemConcepts, personaWithAliases);
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, personaWithAliases);
 
     expect(result).toContain("You are TestBot");
     expect(result).toContain("TB");
     expect(result).toContain("Testy");
   });
 
-  it("should include behavioral guidelines section for static concepts", () => {
-    const humanConcepts = createConceptMap("human", []);
-    const systemConcepts = createConceptMap("system", [
-      createConcept("Test Static", "static"),
-    ]);
+  it("should include guidelines section", async () => {
+    const humanEntity = createHumanEntity();
+    const personaEntity = createPersonaEntity();
 
-    const result = buildResponseSystemPrompt(humanConcepts, systemConcepts, defaultPersona);
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, defaultPersona);
 
-    expect(result).toContain("Behavioral Guidelines");
-    expect(result).toContain("Test Static");
+    expect(result).toContain("## Guidelines");
+    expect(result).toContain("Be genuine, not sycophantic");
   });
 
-  it("should include highest need concepts in priorities", () => {
-    const humanConcepts = createConceptMap("human", []);
-    const systemConcepts = createConceptMap("system", [
-      createConcept("Low Need Topic", "topic", 0.5, 0.5),
-      createConcept("High Need Topic", "topic", 0.1, 0.8),
-    ]);
+  it("should include ei-specific guidelines for ei persona", async () => {
+    const humanEntity = createHumanEntity();
+    const personaEntity = createPersonaEntity();
+    const eiPersona: PersonaIdentity = {
+      name: "ei",
+    };
 
-    const result = buildResponseSystemPrompt(humanConcepts, systemConcepts, defaultPersona);
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, eiPersona);
 
-    expect(result).toContain("High Need Topic");
-    expect(result).toContain("Current Priorities");
+    expect(result).toContain("Encourage real human connections");
+    expect(result).toContain("Be honest about being an AI when relevant");
+    expect(result).toContain("Gently challenge self-limiting beliefs");
   });
 
-  it("should include human interests when they have needs", () => {
-    const humanConcepts = createConceptMap("human", [
-      createConcept("Human Interest", "topic", 0.2, 0.7),
-    ]);
-    const systemConcepts = createConceptMap("system", []);
+  it("should show Ei as system orchestrator with omniscient view", async () => {
+    const humanEntity = createHumanEntity(
+      [createFact("Birthday", 0.9)],
+      [createTrait("Analytical", 0.7)],
+      [createTopic("AI", 0.5, 0.7)],
+      [createPerson("Bob", "friend", 0.6, 0.5)]
+    );
+    const personaEntity = createPersonaEntity();
+    const eiPersona: PersonaIdentity = {
+      name: "ei",
+    };
 
-    const result = buildResponseSystemPrompt(humanConcepts, systemConcepts, defaultPersona);
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, eiPersona);
 
-    expect(result).toContain("Human Interest");
-    expect(result).toContain("Potential Interests");
+    expect(result).toContain("orchestrator of this personal AI companion system");
+    expect(result).toContain("Facts About Them");
+    expect(result).toContain("Their Personality");
+    expect(result).toContain("Their Interests");
+    expect(result).toContain("People in Their Life");
+    expect(result).toContain("Bob");
   });
 
-  it("should include current timestamp", () => {
-    const humanConcepts = createConceptMap("human", []);
-    const systemConcepts = createConceptMap("system", []);
+  it("should show onboarding guidance for new users", async () => {
+    const humanEntity = createHumanEntity();
+    const personaEntity = createPersonaEntity();
+    const eiPersona: PersonaIdentity = {
+      name: "ei",
+    };
 
-    const result = buildResponseSystemPrompt(humanConcepts, systemConcepts, defaultPersona);
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, eiPersona);
+
+    expect(result).toContain("Onboarding");
+    expect(result).toContain("new user");
+    expect(result).toContain("creating their first persona");
+  });
+
+  it("should include persona traits when present", async () => {
+    const humanEntity = createHumanEntity();
+    const personaEntity = createPersonaEntity([
+      createTrait("Curious", 0.8),
+    ]);
+
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, defaultPersona);
+
+    expect(result).toContain("Your personality");
+    expect(result).toContain("Curious");
+  });
+
+  it("should include persona topics with desire indicators", async () => {
+    const humanEntity = createHumanEntity();
+    const personaEntity = createPersonaEntity([], [
+      createTopic("Programming", 0.2, 0.8),
+    ]);
+
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, defaultPersona);
+
+    expect(result).toContain("Your interests");
+    expect(result).toContain("Programming");
+    expect(result).toContain("🔺");
+  });
+
+  it("should include high-confidence human facts", async () => {
+    const humanEntity = createHumanEntity([
+      createFact("Lives in Seattle", 0.9),
+      createFact("Low confidence fact", 0.5),
+    ]);
+    const personaEntity = createPersonaEntity([], [], ["*"]);
+
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, defaultPersona);
+
+    expect(result).toContain("Lives in Seattle");
+    expect(result).not.toContain("Low confidence fact");
+  });
+
+  it("should include human traits", async () => {
+    const humanEntity = createHumanEntity([], [
+      createTrait("Introverted", 0.7),
+    ]);
+    const personaEntity = createPersonaEntity([], [], ["*"]);
+
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, defaultPersona);
+
+    expect(result).toContain("Personality");
+    expect(result).toContain("Introverted");
+  });
+
+  it("should include active human topics", async () => {
+    const humanEntity = createHumanEntity([], [], [
+      createTopic("Gardening", 0.8, 0.5, 0.5),
+      createTopic("Inactive topic", 0.1, 0.2),
+    ]);
+    const personaEntity = createPersonaEntity([], [], ["*"]);
+
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, defaultPersona);
+
+    expect(result).toContain("Current Interests");
+    expect(result).toContain("Gardening");
+    expect(result).toContain("😊");
+    expect(result).not.toContain("Inactive topic");
+  });
+
+  it("should include human people", async () => {
+    const humanEntity = createHumanEntity([], [], [], [
+      createPerson("Alice", "daughter", 0.7, 0.5),
+    ]);
+    const personaEntity = createPersonaEntity([], [], ["*"]);
+
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, defaultPersona);
+
+    expect(result).toContain("People in Their Life");
+    expect(result).toContain("Alice");
+    expect(result).toContain("daughter");
+  });
+
+  it("should show conversation opportunities when desires exist", async () => {
+    const humanEntity = createHumanEntity([], [], [
+      createTopic("Cooking", 0.2, 0.8),
+    ]);
+    const personaEntity = createPersonaEntity([], [
+      createTopic("Music", 0.1, 0.7),
+    ], ["*"]);
+
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, defaultPersona);
+
+    expect(result).toContain("Conversation Opportunities");
+    expect(result).toContain("Music");
+    expect(result).toContain("Cooking");
+  });
+
+  it("should include current timestamp", async () => {
+    const humanEntity = createHumanEntity();
+    const personaEntity = createPersonaEntity();
+
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, defaultPersona);
 
     expect(result).toContain("Current time:");
   });
 
-  it("should use long_description when provided", () => {
-    const humanConcepts = createConceptMap("human", []);
-    const systemConcepts = createConceptMap("system", []);
+  it("should use long_description when provided", async () => {
+    const humanEntity = createHumanEntity();
+    const personaEntity = createPersonaEntity();
     const personaWithDesc: PersonaIdentity = {
       name: "Helper",
       long_description: "A helpful assistant who loves to assist.",
     };
 
-    const result = buildResponseSystemPrompt(humanConcepts, systemConcepts, personaWithDesc);
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, personaWithDesc);
 
     expect(result).toContain("A helpful assistant who loves to assist.");
   });
 
-  it("should fall back to short_description when long_description missing", () => {
-    const humanConcepts = createConceptMap("human", []);
-    const systemConcepts = createConceptMap("system", []);
+  it("should fall back to short_description when long_description missing", async () => {
+    const humanEntity = createHumanEntity();
+    const personaEntity = createPersonaEntity();
     const personaWithShort: PersonaIdentity = {
       name: "Helper",
       short_description: "a helpful assistant",
     };
 
-    const result = buildResponseSystemPrompt(humanConcepts, systemConcepts, personaWithShort);
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, personaWithShort);
 
     expect(result).toContain("a helpful assistant");
   });
 
-  it("should fall back to default description when no descriptions provided", () => {
-    const humanConcepts = createConceptMap("human", []);
-    const systemConcepts = createConceptMap("system", []);
+  it("should fall back to default description when no descriptions provided", async () => {
+    const humanEntity = createHumanEntity();
+    const personaEntity = createPersonaEntity();
     const barePersona: PersonaIdentity = { name: "Minimal" };
 
-    const result = buildResponseSystemPrompt(humanConcepts, systemConcepts, barePersona);
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, barePersona);
 
     expect(result).toContain("a conversational companion");
+  });
+
+  it("should show empty state when human data is minimal", async () => {
+    const humanEntity = createHumanEntity();
+    const personaEntity = createPersonaEntity([], [], ["*"]);
+
+    const result = await buildResponseSystemPrompt(humanEntity, personaEntity, defaultPersona);
+
+    expect(result).toContain("Still getting to know them");
   });
 });
 
@@ -171,12 +345,14 @@ describe("buildResponseUserPrompt", () => {
     const history: Message[] = [
       { role: "human", content: "User said this", timestamp: new Date().toISOString() },
       { role: "system", content: "System replied this", timestamp: new Date().toISOString() },
+      { role: "human", content: "Hello", timestamp: new Date().toISOString() },
     ];
 
     const result = buildResponseUserPrompt(0, history, "Hello");
 
     expect(result).toContain("User said this");
     expect(result).toContain("EI: System replied this");
+    expect(result).not.toContain("Human: Hello");
     expect(result).toContain("RECENT CONVERSATION");
   });
 
@@ -184,12 +360,14 @@ describe("buildResponseUserPrompt", () => {
     const history: Message[] = [
       { role: "human", content: "User said this", timestamp: new Date().toISOString() },
       { role: "system", content: "System replied this", timestamp: new Date().toISOString() },
+      { role: "human", content: "Hello", timestamp: new Date().toISOString() },
     ];
 
     const result = buildResponseUserPrompt(0, history, "Hello", "Gandalf");
 
     expect(result).toContain("Gandalf: System replied this");
     expect(result).not.toContain("EI:");
+    expect(result).not.toContain("Human: Hello");
   });
 
   it("should include human message in prompt", () => {
@@ -225,159 +403,6 @@ describe("buildResponseUserPrompt", () => {
   });
 });
 
-describe("buildConceptUpdateSystemPrompt", () => {
-  it("should include concept types documentation", () => {
-    const concepts = createConceptMap("system", []);
-
-    const result = buildConceptUpdateSystemPrompt("system", concepts);
-
-    expect(result).toContain("static");
-    expect(result).toContain("persona");
-    expect(result).toContain("person");
-    expect(result).toContain("topic");
-  });
-
-  it("should include current concepts as JSON", () => {
-    const concepts = createConceptMap("system", [
-      createConcept("Test Concept", "topic"),
-    ]);
-
-    const result = buildConceptUpdateSystemPrompt("system", concepts);
-
-    expect(result).toContain("Test Concept");
-    expect(result).toContain("```json");
-  });
-
-  it("should include persona name for tracking learned_by", () => {
-    const concepts = createConceptMap("system", []);
-
-    const result = buildConceptUpdateSystemPrompt("system", concepts, "test-persona");
-
-    expect(result).toContain("test-persona");
-    expect(result).toContain("learned_by");
-  });
-
-  it("should specify entity being updated", () => {
-    const humanConcepts = createConceptMap("human", []);
-    const systemConcepts = createConceptMap("system", []);
-
-    const humanResult = buildConceptUpdateSystemPrompt("human", humanConcepts);
-    const systemResult = buildConceptUpdateSystemPrompt("system", systemConcepts);
-
-    expect(humanResult).toContain("Human");
-    expect(systemResult).toContain("System (yourself)");
-  });
-
-  it("should strip metadata fields from concepts shown to LLM", () => {
-    const conceptWithMetadata: Concept = {
-      name: "Test Concept",
-      description: "A test concept",
-      level_current: 0.5,
-      level_ideal: 0.5,
-      sentiment: 0.0,
-      type: "topic",
-      persona_groups: ["SecretGroup"],
-      learned_by: "original-persona",
-      last_updated: "2025-01-15T12:00:00.000Z",
-    };
-    const concepts = createConceptMap("human", [conceptWithMetadata]);
-
-    const result = buildConceptUpdateSystemPrompt("human", concepts);
-    
-    const jsonMatch = result.match(/```json\n([\s\S]*?)\n```/);
-    expect(jsonMatch).toBeTruthy();
-    const jsonContent = jsonMatch![1];
-
-    expect(jsonContent).toContain("Test Concept");
-    expect(jsonContent).toContain("A test concept");
-    expect(jsonContent).not.toContain("persona_groups");
-    expect(jsonContent).not.toContain("SecretGroup");
-    expect(jsonContent).not.toContain('"learned_by"');
-    expect(jsonContent).not.toContain("original-persona");
-    expect(jsonContent).not.toContain('"last_updated"');
-    expect(jsonContent).not.toContain("2025-01-15T12:00:00.000Z");
-  });
-});
-
-describe("buildConceptUpdateUserPrompt", () => {
-  it("should include human message", () => {
-    const result = buildConceptUpdateUserPrompt("Hello world", null);
-
-    expect(result).toContain("Hello world");
-  });
-
-  it("should include system response", () => {
-    const result = buildConceptUpdateUserPrompt(null, "This is my response");
-
-    expect(result).toContain("This is my response");
-  });
-
-  it("should include active persona", () => {
-    const result = buildConceptUpdateUserPrompt(null, null, "custom-persona");
-
-    expect(result).toContain("custom-persona");
-    expect(result).toContain("Active Persona");
-  });
-
-  it("should handle null messages gracefully", () => {
-    const result = buildConceptUpdateUserPrompt(null, null);
-
-    expect(result).toContain("No Message");
-  });
-});
-
-describe("buildDescriptionPrompt", () => {
-  it("should return system and user prompts", () => {
-    const concepts = createConceptMap("system", []);
-
-    const result = buildDescriptionPrompt("test-persona", concepts);
-
-    expect(result).toHaveProperty("system");
-    expect(result).toHaveProperty("user");
-  });
-
-  it("should include persona name in prompts", () => {
-    const concepts = createConceptMap("system", []);
-
-    const result = buildDescriptionPrompt("my-persona", concepts);
-
-    expect(result.system).toContain("my-persona");
-    expect(result.user).toContain("my-persona");
-  });
-
-  it("should include aliases if present", () => {
-    const concepts: ConceptMap = {
-      entity: "system",
-      aliases: ["alias1", "alias2"],
-      last_updated: null,
-      concepts: [],
-    };
-
-    const result = buildDescriptionPrompt("test", concepts);
-
-    expect(result.user).toContain("alias1");
-    expect(result.user).toContain("alias2");
-  });
-
-  it("should include persona concepts in user prompt", () => {
-    const concepts = createConceptMap("system", [
-      createConcept("Curious Nature", "persona"),
-      createConcept("Programming", "topic"),
-    ]);
-
-    const result = buildDescriptionPrompt("test", concepts);
-
-    expect(result.user).toContain("Curious Nature");
-    expect(result.user).toContain("Programming");
-  });
-
-  it("should request JSON format with short and long descriptions", () => {
-    const concepts = createConceptMap("system", []);
-
-    const result = buildDescriptionPrompt("test", concepts);
-
-    expect(result.system).toContain("short_description");
-    expect(result.system).toContain("long_description");
-    expect(result.system).toContain("JSON");
-  });
-});
+// Tests for buildConceptUpdateSystemPrompt removed - function deleted in ticket 0111
+// Tests for buildConceptUpdateUserPrompt removed - function deleted in ticket 0111
+// Tests for buildDescriptionPrompt will be updated in ticket 0122 when that function is migrated to PersonaEntity

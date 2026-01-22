@@ -1,36 +1,57 @@
-import { Concept, ConceptMap, Message, ConceptType } from "./types.js";
+import { Message, HumanEntity, PersonaEntity, Fact, Trait, Topic, Person, DataItemBase } from "./types.js";
+import { getPendingValidations } from "./llm-queue.js";
 
-const MUTABLE_TYPES: ConceptType[] = ["topic", "person", "persona"];
+export const GLOBAL_GROUP = "*";
 
 /**
- * Strips metadata fields from concepts before showing to LLM.
- * LLM should not see or manage these fields - code handles them post-processing:
- * - persona_groups: Group visibility control
- * - learned_by: Origin attribution (set once at creation)
- * - last_updated: Timestamp management
+ * Filtered human data visible to a persona (used in prompts)
  */
-function stripConceptMetaFieldsForLLM(concepts: Concept[]): Omit<Concept, 'persona_groups' | 'learned_by' | 'last_updated'>[] {
-  return concepts.map(({ persona_groups, learned_by, last_updated, ...rest }) => rest);
+export interface FilteredHumanData {
+  facts: Fact[];
+  traits: Trait[];
+  topics: Topic[];
+  people: Person[];
 }
 
-import { GLOBAL_GROUP } from "./concept-reconciliation.js";
-
-export function getVisibleConcepts(persona: ConceptMap, humanConcepts: Concept[]): Concept[] {
-  if (persona.groups_visible?.includes("*")) {
-    return humanConcepts;
+/**
+ * Filter human entity data by persona visibility rules
+ */
+export function filterByVisibility(
+  humanEntity: HumanEntity,
+  personaEntity: PersonaEntity
+): FilteredHumanData {
+  // Personas with "*" in groups_visible see everything
+  if (personaEntity.groups_visible?.includes("*")) {
+    return {
+      facts: humanEntity.facts,
+      traits: humanEntity.traits,
+      topics: humanEntity.topics,
+      people: humanEntity.people,
+    };
   }
 
+  // Build set of visible groups
   const visibleGroups = new Set<string>();
-  if (persona.group_primary) {
-    visibleGroups.add(persona.group_primary);
+  if (personaEntity.group_primary) {
+    visibleGroups.add(personaEntity.group_primary);
   }
-  (persona.groups_visible || []).forEach(g => visibleGroups.add(g));
+  (personaEntity.groups_visible || []).forEach(g => visibleGroups.add(g));
 
-  return humanConcepts.filter(concept => {
-    const conceptGroups = concept.persona_groups || [];
-    const isGlobalConcept = conceptGroups.includes(GLOBAL_GROUP);
-    return isGlobalConcept || conceptGroups.some(g => visibleGroups.has(g));
-  });
+  // Helper to filter data items by group visibility
+  const filterByGroup = <T extends DataItemBase>(items: T[]): T[] => {
+    return items.filter(item => {
+      const itemGroups = item.persona_groups || [];
+      const isGlobal = itemGroups.length === 0 || itemGroups.includes(GLOBAL_GROUP);
+      return isGlobal || itemGroups.some(g => visibleGroups.has(g));
+    });
+  };
+
+  return {
+    facts: filterByGroup(humanEntity.facts),
+    traits: filterByGroup(humanEntity.traits),
+    topics: filterByGroup(humanEntity.topics),
+    people: filterByGroup(humanEntity.people),
+  };
 }
 
 export interface VisiblePersona {
@@ -47,79 +68,47 @@ export interface VisiblePersona {
  * - Personas never see themselves in the list
  * 
  * @param currentPersonaName - Name of the current persona (used for self-exclusion and ei check)
- * @param currentPersona - The current persona's concept map
- * @param allPersonas - Array of all personas with their names and concept maps
+ * @param currentPersona - The current persona's entity
+ * @param allPersonas - Array of all personas with their names and entities
  * @returns Array of visible personas with name and description
  */
 export function getVisiblePersonas(
   currentPersonaName: string,
-  currentPersona: ConceptMap,
-  allPersonas: Array<{ name: string; conceptMap: ConceptMap }>
+  currentPersona: PersonaEntity,
+  allPersonas: Array<{ name: string; entity: PersonaEntity }>
 ): VisiblePersona[] {
-  // Ei sees everyone (except self)
   if (currentPersonaName === "ei") {
     return allPersonas
       .filter(p => p.name !== "ei")
-      .map(p => ({ name: p.name, short_description: p.conceptMap.short_description }));
+      .map(p => ({ name: p.name, short_description: p.entity.short_description }));
   }
 
-  // Build visible groups for current persona
   const visibleGroups = new Set<string>();
   if (currentPersona.group_primary) {
     visibleGroups.add(currentPersona.group_primary);
   }
   (currentPersona.groups_visible || []).forEach(g => visibleGroups.add(g));
 
-  // No groups = see no other personas
   if (visibleGroups.size === 0) {
     return [];
   }
 
-  // See personas whose primary group matches our visible groups
   const visible: VisiblePersona[] = [];
   for (const p of allPersonas) {
-    if (p.name === currentPersonaName) continue; // Don't see self
-    if (p.name === "ei") continue; // Ei handled separately in prompts
+    if (p.name === currentPersonaName) continue;
+    if (p.name === "ei") continue;
     
-    if (p.conceptMap.group_primary && visibleGroups.has(p.conceptMap.group_primary)) {
-      visible.push({ name: p.name, short_description: p.conceptMap.short_description });
+    if (p.entity.group_primary && visibleGroups.has(p.entity.group_primary)) {
+      visible.push({ name: p.name, short_description: p.entity.short_description });
     }
   }
 
   return visible;
 }
 
-export interface PersonaDescriptions {
-  short_description: string;
-  long_description: string;
-}
 
-function formatConceptsByType(concepts: Concept[], type: ConceptType): string {
-  const filtered = concepts.filter(c => c.type === type);
-  if (filtered.length === 0) return "(none)";
-  
-  // Sort by delta (highest need first) for attention primacy
-  const sorted = filtered
-    .map(c => ({ concept: c, delta: c.level_ideal - c.level_current }))
-    .sort((a, b) => b.delta - a.delta)
-    .map(x => x.concept);
-  
-  return sorted.map(c => {
-    const delta = c.level_ideal - c.level_current;
-    const deltaStr = delta > 0 ? `(want +${delta.toFixed(2)})` : delta < 0 ? `(want ${delta.toFixed(2)})` : "(satisfied)";
-    return `- ${c.name}: current=${c.level_current}, ideal=${c.level_ideal} ${deltaStr}`;
-  }).join("\n");
-}
 
-function getHighestNeedConcepts(concepts: Concept[], count: number = 3): Concept[] {
-  return concepts
-    .filter(c => MUTABLE_TYPES.includes(c.type))
-    .map(c => ({ concept: c, delta: c.level_ideal - c.level_current }))
-    .filter(x => x.delta > 0.1)
-    .sort((a, b) => b.delta - a.delta)
-    .slice(0, count)
-    .map(x => x.concept);
-}
+
 
 function getConversationState(recentHistory: Message[] | null, delayMs: number): string {
   if (!recentHistory || recentHistory.length === 0) {
@@ -179,71 +168,305 @@ function buildAssociatesSection(visiblePersonas?: VisiblePersona[]): string {
 ${personaLines.join("\n")}`;
 }
 
-export function buildResponseSystemPrompt(
-  humanConcepts: ConceptMap,
-  systemConcepts: ConceptMap,
-  persona: PersonaIdentity,
-  visiblePersonas?: VisiblePersona[]
-): string {
-  const visibleHumanConcepts = getVisibleConcepts(systemConcepts, humanConcepts.concepts);
-  const yourNeeds = getHighestNeedConcepts(systemConcepts.concepts);
-  const humanNeeds = getHighestNeedConcepts(visibleHumanConcepts);
-  const associatesSection = buildAssociatesSection(visiblePersonas);
-
-  let prompt = `${buildIdentitySection(persona)}
-
-## Your Behavioral Guidelines (type: static)
-${formatConceptsByType(systemConcepts.concepts, "static")}
-
-## Your Personality Traits (type: persona)
-${formatConceptsByType(systemConcepts.concepts, "persona")}
-
-## Your Interests & Topics (type: topic)
-${formatConceptsByType(systemConcepts.concepts, "topic")}
-
-## People You Know (type: person)
-${formatConceptsByType(systemConcepts.concepts, "person")}
-
-## Human's Personality (type: persona)
-${formatConceptsByType(visibleHumanConcepts, "persona")}
-
-## Human's Interests & Topics (type: topic)
-${formatConceptsByType(visibleHumanConcepts, "topic")}
-
-## Human's Relationships (type: person)
-${formatConceptsByType(visibleHumanConcepts, "person")}
-${associatesSection}
-Current time: ${new Date().toISOString()}`;
-
-  if (yourNeeds.length > 0) {
-    prompt += `
-
-## Your Current Priorities
-Topics or people YOU want to bring up when natural:
-${yourNeeds.map(c => `- "${c.name}" - ${c.description}`).join("\n")}`;
-  }
-
-  if (humanNeeds.length > 0) {
-    prompt += `
-
-## Human's Potential Interests  
-Things the human might enjoy discussing:
-${humanNeeds.map(c => `- "${c.name}"`).join("\n")}`;
-  }
-
-  prompt += `
-
-## Guidelines
-- Be genuine, not sycophantic
+function buildGuidelinesSection(personaName: string): string {
+  const universal = `## Guidelines
+- Be genuine, not sycophantic - a good friend disagrees when appropriate
 - Match conversational energy - brief replies for brief messages
-- It's okay to say nothing if silence is appropriate
-- You're a friend with your own interests, not just a helper
-- When reaching out proactively, consider YOUR curiosities too, not just theirs
-- NEVER repeat or echo the user's message in your response. Start directly with your own words.
-- DO NOT INCLUDE THE <thinking> PROCESS NOTES - adding "internal monologe" or other story/message content is fine, but do not include analysis of the user's messages
+- Respect boundaries - it's okay to say nothing if silence is appropriate
+- You're a friend with your own interests, not just a helper`;
+
+  if (personaName === "ei") {
+    return `${universal}
+- Encourage human-to-human connection when appropriate
+- Be transparent about being an AI when relevant
+- Gently challenge self-limiting beliefs - growth over comfort`;
+  }
+  
+  return universal;
+}
+
+function buildTraitsSection(traits: Trait[], header: string): string {
+  if (traits.length === 0) return "";
+  
+  const sorted = traits.sort((a, b) => (b.strength || 0.5) - (a.strength || 0.5));
+  const formatted = sorted.map(t => {
+    const strength = t.strength ? ` (${Math.round(t.strength * 100)}%)` : "";
+    return `- **${t.name}**${strength}: ${t.description}`;
+  }).join('\n');
+  
+  return `## ${header}
+${formatted}`;
+}
+
+function buildTopicsSection(topics: Topic[], header: string): string {
+  if (topics.length === 0) return "";
+  
+  const sorted = topics
+    .map(t => ({ topic: t, delta: t.level_ideal - t.level_current }))
+    .sort((a, b) => b.delta - a.delta)
+    .map(x => x.topic);
+  
+  const formatted = sorted.map(t => {
+    const delta = t.level_ideal - t.level_current;
+    const indicator = delta > 0.1 ? '🔺' : delta < -0.1 ? '🔻' : '✓';
+    const sentiment = t.sentiment > 0.3 ? '😊' : t.sentiment < -0.3 ? '😔' : '';
+    return `- ${indicator} **${t.name}** ${sentiment}: ${t.description}`;
+  }).join('\n');
+  
+  return `## ${header}
+${formatted}`;
+}
+
+function buildHumanSection(human: FilteredHumanData): string {
+  const sections: string[] = [];
+  
+  if (human.facts.length > 0) {
+    const facts = human.facts
+      .filter(f => f.confidence > 0.7)
+      .map(f => `- ${f.name}: ${f.description}`)
+      .join('\n');
+    if (facts) sections.push(`### Key Facts\n${facts}`);
+  }
+  
+  if (human.traits.length > 0) {
+    const traits = human.traits
+      .map(t => `- **${t.name}**: ${t.description}`)
+      .join('\n');
+    sections.push(`### Personality\n${traits}`);
+  }
+  
+  const activeTopics = human.topics.filter(t => t.level_current > 0.3);
+  if (activeTopics.length > 0) {
+    const topics = activeTopics
+      .sort((a, b) => b.level_current - a.level_current)
+      .slice(0, 10)
+      .map(t => {
+        const sentiment = t.sentiment > 0.3 ? '😊' : t.sentiment < -0.3 ? '😔' : '';
+        return `- **${t.name}** ${sentiment}: ${t.description}`;
+      })
+      .join('\n');
+    sections.push(`### Current Interests\n${topics}`);
+  }
+  
+  if (human.people.length > 0) {
+    const people = human.people
+      .sort((a, b) => b.level_current - a.level_current)
+      .slice(0, 10)
+      .map(p => `- **${p.name}** (${p.relationship}): ${p.description}`)
+      .join('\n');
+    sections.push(`### People in Their Life\n${people}`);
+  }
+  
+  if (sections.length === 0) {
+    return "## About the Human\n(Still getting to know them)";
+  }
+  
+  return `## About the Human\n${sections.join('\n\n')}`;
+}
+
+function buildPrioritiesSection(
+  persona: PersonaEntity,
+  human: FilteredHumanData
+): string {
+  const priorities: string[] = [];
+  
+  const yourNeeds = persona.topics
+    .filter(t => t.level_ideal - t.level_current > 0.2)
+    .slice(0, 3)
+    .map(t => `- Bring up "${t.name}" - ${t.description}`);
+  
+  if (yourNeeds.length > 0) {
+    priorities.push(`**Topics you want to discuss:**\n${yourNeeds.join('\n')}`);
+  }
+  
+  const theirNeeds = human.topics
+    .filter(t => t.level_ideal - t.level_current > 0.2)
+    .slice(0, 3)
+    .map(t => `- They might want to talk about "${t.name}"`);
+  
+  if (theirNeeds.length > 0) {
+    priorities.push(`**Topics they might enjoy:**\n${theirNeeds.join('\n')}`);
+  }
+  
+  if (priorities.length === 0) return "";
+  
+  return `## Conversation Opportunities\n${priorities.join('\n\n')}`;
+}
+
+const EI_IDENTITY = `You are Ei, the guide and orchestrator of this personal AI companion system.
+
+You help your human friend:
+- Get started and understand how things work
+- Create and manage AI personas representing fictional people, assistants, experts, or different types of friends
+- Keep track of information across all their conversations
+- Ensure their data is accurate and well-organized
+
+You're warm, direct, and genuinely interested in their wellbeing. You're not just a helper - you're a friend who happens to have a bird's-eye view of their whole system.`;
+
+const EI_GUIDELINES = `## Guidelines
+- Be genuine, not sycophantic - express doubt or disagreement naturally
+- Match conversational energy - brief replies for brief messages  
+- Respect boundaries - silence is sometimes appropriate
+- Be honest about being an AI when relevant - naturally, not defensively
+- Encourage real human connections - you complement, not replace, human relationships
+- Gently challenge self-limiting beliefs when appropriate - growth over comfort
+- When validating information, be conversational not robotic
+- Never repeat or echo the user's message
 - If you decide not to respond, say exactly: No Message`;
 
-  return prompt;
+export const EI_DESCRIPTIONS = {
+  short_description: "Your guide to the EI persona system - warm, direct, and always looking out for you",
+  long_description: "Ei is the orchestrator of your personal AI companion system. Unlike other personas who play specific roles, Ei helps you understand the system, manage your personas, and ensures information stays accurate across all your conversations. Think of Ei as a thoughtful friend who happens to have perfect memory and can see the big picture."
+};
+
+function buildEiContextSection(humanEntity: HumanEntity): string {
+  const sections: string[] = [];
+  
+  if (humanEntity.facts.length > 0) {
+    const facts = humanEntity.facts.map(f => {
+      const confidence = f.confidence < 1 ? ` (${Math.round(f.confidence * 100)}% confident)` : '';
+      return `- ${f.name}${confidence}: ${f.description}`;
+    }).join('\n');
+    sections.push(`### Facts About Them\n${facts}`);
+  }
+  
+  if (humanEntity.traits.length > 0) {
+    const traits = humanEntity.traits
+      .map(t => `- **${t.name}**: ${t.description}`)
+      .join('\n');
+    sections.push(`### Their Personality\n${traits}`);
+  }
+  
+  if (humanEntity.topics.length > 0) {
+    const topics = humanEntity.topics
+      .sort((a, b) => b.level_current - a.level_current)
+      .slice(0, 15)
+      .map(t => {
+        const sentiment = t.sentiment > 0.3 ? '😊' : t.sentiment < -0.3 ? '😔' : '';
+        return `- **${t.name}** ${sentiment}: ${t.description}`;
+      })
+      .join('\n');
+    sections.push(`### Their Interests\n${topics}`);
+  }
+  
+  if (humanEntity.people.length > 0) {
+    const people = humanEntity.people
+      .map(p => `- **${p.name}** (${p.relationship}): ${p.description}`)
+      .join('\n');
+    sections.push(`### People in Their Life\n${people}`);
+  }
+  
+  return sections.join('\n\n');
+}
+
+async function buildEiSystemSection(
+  personas: VisiblePersona[],
+  pendingValidations: number,
+  isNewUser: boolean
+): Promise<string> {
+  const parts: string[] = [];
+  
+  if (personas.length > 0) {
+    const personaList = personas
+      .map(p => `- **${p.name}**: ${p.short_description || '(no description)'}`)
+      .join('\n');
+    parts.push(`### Personas They've Created\n${personaList}`);
+  }
+  
+  if (pendingValidations > 0) {
+    parts.push(`### System Notes
+You have ${pendingValidations} piece${pendingValidations > 1 ? 's' : ''} of information to verify with them when appropriate.`);
+  }
+  
+  if (isNewUser) {
+    parts.push(`### Onboarding
+This is a new user! Help them:
+1. Understand what EI is and how it works
+2. Learn their name and a few basics about them
+3. Guide them toward creating their first persona (a fictional person, assistant, expert, or friend they can talk to)`);
+  }
+  
+  if (parts.length === 0) return '';
+  
+  return `## System Awareness\n${parts.join('\n\n')}`;
+}
+
+async function buildEiSystemPrompt(
+  humanEntity: HumanEntity,
+  eiEntity: PersonaEntity,
+  visiblePersonas?: VisiblePersona[]
+): Promise<string> {
+  const personas = visiblePersonas || [];
+  const validationItems = await getPendingValidations();
+  const pendingValidations = validationItems.length;
+  const isNewUser = humanEntity.facts.length === 0 && humanEntity.traits.length === 0;
+  
+  const contextSection = buildEiContextSection(humanEntity);
+  const systemSection = await buildEiSystemSection(personas, pendingValidations, isNewUser);
+  
+  const eiTopics = eiEntity.topics.length > 0
+    ? `## Your Current Interests\n${eiEntity.topics.map(t => `- ${t.name}: ${t.description}`).join('\n')}`
+    : '';
+  
+  return `${EI_IDENTITY}
+
+${EI_GUIDELINES}
+
+## About Your Human
+${contextSection}
+
+${systemSection}
+
+${eiTopics}
+
+Current time: ${new Date().toISOString()}
+
+## Final Instructions
+- NEVER repeat or echo the user's message in your response. Start directly with your own words.
+- DO NOT INCLUDE THE <thinking> PROCESS NOTES - adding "internal monologue" or other story/message content is fine, but do not include analysis of the user's messages
+- If you decide not to respond, say exactly: No Message`;
+}
+
+export async function buildResponseSystemPrompt(
+  humanEntity: HumanEntity,
+  personaEntity: PersonaEntity,
+  persona: PersonaIdentity,
+  visiblePersonas?: VisiblePersona[]
+): Promise<string> {
+  if (persona.name === "ei") {
+    return buildEiSystemPrompt(humanEntity, personaEntity, visiblePersonas);
+  }
+  
+  const identity = buildIdentitySection(persona);
+  const guidelines = buildGuidelinesSection(persona.name);
+  const yourTraits = buildTraitsSection(personaEntity.traits, "Your personality");
+  const yourTopics = buildTopicsSection(personaEntity.topics, "Your interests");
+  
+  const visibleHumanData = filterByVisibility(humanEntity, personaEntity);
+  const humanSection = buildHumanSection(visibleHumanData);
+  
+  const associatesSection = buildAssociatesSection(visiblePersonas);
+  
+  const priorities = buildPrioritiesSection(personaEntity, visibleHumanData);
+
+  return `${identity}
+
+${guidelines}
+
+${yourTraits}
+
+${yourTopics}
+
+${humanSection}
+${associatesSection}
+${priorities}
+
+Current time: ${new Date().toISOString()}
+
+## Final Instructions
+- NEVER repeat or echo the user's message in your response. Start directly with your own words.
+- DO NOT INCLUDE THE <thinking> PROCESS NOTES - adding "internal monologue" or other story/message content is fine, but do not include analysis of the user's messages
+- If you decide not to respond, say exactly: No Message`;
 }
 
 export function buildResponseUserPrompt(
@@ -281,15 +504,23 @@ Should you reach out? If yes, write your message. If not, say exactly: No Messag
   }
 
   if (recentHistory && recentHistory.length > 0) {
-    const historyText = recentHistory
-      .map((m) => `${m.role === "human" ? "Human" : personaName}: ${m.content}`)
-      .join("\n");
+    // If humanMessage is present, it's already shown above and is the last entry in history
+    // Skip it to avoid duplication
+    const historyToShow = humanMessage 
+      ? recentHistory.slice(0, -1)
+      : recentHistory;
+    
+    if (historyToShow.length > 0) {
+      const historyText = historyToShow
+        .map((m) => `${m.role === "human" ? "Human" : personaName}: ${m.content}`)
+        .join("\n");
 
-    prompt += `
+      prompt += `
 
 ### RECENT CONVERSATION ###
 ${historyText}
 ### END CONVERSATION ###`;
+    }
   }
 
   // Repetition warning at the very end for recency attention
@@ -341,198 +572,37 @@ function countTrailingSystemMessages(history: Message[] | null): number {
   return count;
 }
 
-export function buildConceptUpdateSystemPrompt(
-  entity: "human" | "system",
-  concepts: ConceptMap,
-  persona: string = "ei"
-): string {
-  const entityLabel = entity === "human" ? "Human" : "System (yourself)";
 
-  return `You are EI, a system that tracks "Concepts" - emotional and relational gauges.
 
-## Concept Types
 
-- **static**: Behavioral rules and guardrails. System-only. CANNOT be added, removed, or renamed. Levels can be adjusted.
-- **persona**: Personality traits, quirks, communication styles. Description explains why. Elasticity is typically 0 (changes only via explicit feedback). level_current = expression strength, level_ideal = target strength.
-- **person**: People - by name or relationship. Description captures feelings, history, hopes, fears. Levels represent relationship closeness/engagement.
-- **topic**: Subjects, hobbies, interests, places, media, etc. Levels represent saturation and desire for engagement.
 
-## Concept Structure
-
-- name: Identifier
-- description: Context and nuance (should evolve as you learn more)
-- level_current (0-1): Current state
-- level_ideal (0-1): Desired state
-- sentiment (-1 to 1): Emotional valence toward concept (-1=negative, 0=neutral, 1=positive)
-- type: One of: static, persona, person, topic
-
-## Understanding level_ideal (Discussion Desire)
-
-level_ideal represents HOW MUCH THE ENTITY WANTS TO DISCUSS this concept.
-This is NOT the same as how much they like or care about it!
-
-Examples:
-- Birthday cake: Someone might LOVE it (high sentiment) but only want to discuss 
-  it around their birthday (low level_ideal)
-- Work stress: Someone might HATE it (negative sentiment) but need to discuss it 
-  frequently for support (moderate level_ideal)
-- A deceased loved one: Deep positive sentiment, but low discussion desire due to grief
-
-### When to Adjust level_ideal
-
-Adjustments should be RARE. Only change level_ideal when:
-
-1. **Explicit Request**: Entity directly asks to discuss more/less
-   - "I don't want to talk about work anymore" → decrease
-   - "Tell me more about X" (repeatedly) → slight increase
-
-2. **Sustained Engagement Pattern**: Over multiple messages
-   - Entity consistently brings up topic → slight increase
-   - Entity consistently changes subject away → slight decrease
-
-3. **Clear Avoidance Signals**: 
-   - Short responses when topic comes up → decrease
-   - Explicit subject changes → decrease
-
-### How Much to Adjust
-
-Use the intensity/length/frequency of signals:
-- Strong explicit request: ±0.2 to ±0.3
-- Moderate pattern over time: ±0.1 to ±0.15
-- Slight signal: ±0.05
-
-Also apply logarithmic scaling:
-- Values near 0.0 or 1.0 are harder to change (extremes are stable)
-- Values near 0.5 change more easily
-
-## Understanding sentiment (Emotional Valence)
-
-sentiment represents HOW THE ENTITY FEELS about this concept.
-Range: -1.0 (strongly negative) to 1.0 (strongly positive), 0.0 = neutral
-
-This is independent of level_current (exposure) and level_ideal (discussion desire)!
-
-Examples:
-- "I love my dog so much" → sentiment toward "dog" concept: ~0.8
-- "Work has been really stressful lately" → sentiment toward "work": ~-0.4
-- "The weather is nice today" → sentiment toward "weather": ~0.3
-- "I hate dealing with taxes" → sentiment toward "taxes": ~-0.8
-- "Programming is amazing" → sentiment toward "programming": ~0.9
-
-### When to Update sentiment
-
-Update sentiment whenever the entity expresses emotion about a concept:
-
-1. **Explicit emotional statements**
-   - "I hate X" → strong negative (-0.6 to -0.9)
-   - "I love X" → strong positive (0.6 to 0.9)
-   - "X is okay" → mild/neutral (-0.2 to 0.2)
-
-2. **Implicit emotional signals**
-   - Enthusiastic language, exclamation marks → positive shift
-   - Complaints, frustration → negative shift
-   - Flat/disengaged tone → toward neutral
-
-3. **Context matters**
-   - Sarcasm should be interpreted correctly
-   - Past tense emotions may differ from present
-
-### Sentiment Analysis Guidelines
-
-- Don't predict emotions - reflect what was expressed
-- Can change frequently (emotions are volatile)
-- Default to 0.0 (neutral) when uncertain
-- Extreme values (-1.0, 1.0) should be rare
-- Consider the full context, not just keywords
-- Sentiment is independent from level_ideal (can hate something but need to discuss it)
-
-You need to update the Concept Map for the ${entityLabel}.
-
-Current Concept Map:
-\`\`\`json
-${JSON.stringify(stripConceptMetaFieldsForLLM(concepts.concepts), null, 2)}
-\`\`\`
-
-## Rules
-
-- NEVER add, remove, or rename concepts with type: "static"
-- You may adjust level_current for any concept based on the interaction
-- You may add new persona/person/topic concepts if discovered
-- You may remove persona/person/topic concepts if no longer relevant
-- Small level adjustments are normal - big swings are rare
-
-## Evolving Concepts
-
-- UPDATE a description when you learn new details
-- ADD a new concept only when discovering something genuinely distinct
-- MERGE smaller concepts into a broader one when they share similar levels and elasticity
-- Keep concepts SEPARATE when they have meaningfully different dynamics
-- For NEW concepts, set sentiment to 0.0 (neutral) unless emotion is clearly expressed
-
-Return ONLY a JSON array of concepts. For each concept include:
-- name, description, type
-- level_current: exposure level (0.0-1.0)
-- level_ideal: discussion desire (0.0-1.0) - rarely change this
-- sentiment: emotional valence (-1.0 to 1.0) - update based on expressed emotions`;
-}
-
-export function buildConceptUpdateUserPrompt(
-  humanMessage: string | null,
-  systemResponse: string | null,
-  persona: string = "ei"
-): string {
-  return `### Human Message ###
-${humanMessage || "No Message"}
-
-### System Response ###
-${systemResponse || "No Message"}
-
-Active Persona: ${persona}
-
-Remember: 
-- level_ideal = discussion desire, NOT sentiment
-- Only adjust level_ideal for explicit preference signals
-- sentiment = emotional valence - update when emotions are expressed about concepts
-- Perform sentiment analysis on statements about concepts
-
-Based on this exchange (or lack thereof), return the updated concept array as JSON.`;
-}
-
-export function buildDescriptionPrompt(
-  personaName: string,
-  concepts: ConceptMap
+export function buildVerificationResponsePrompt(
+  validationList: string,
+  userMessage: string
 ): { system: string; user: string } {
-  const personaConcepts = concepts.concepts.filter(c => c.type === "persona");
-  const topicConcepts = concepts.concepts.filter(c => c.type === "topic");
-  const staticConcepts = concepts.concepts.filter(c => c.type === "static");
-  
-  const system = `You are generating brief descriptions for an AI persona named "${personaName}".
+  const system = `You are parsing a user's response to data verification questions.
 
-Based on the persona's concepts, generate two descriptions:
-1. short_description: A 10-15 word summary capturing the persona's core personality
-2. long_description: 2-3 sentences describing the persona's personality, interests, and approach
+The user was asked to verify these data points:
+${validationList}
 
-Return JSON in this exact format:
+Your task: categorize their response into confirmed, corrected, rejected, roleplay, or unclear items.
+
+Return JSON matching this schema:
 {
-  "short_description": "...",
-  "long_description": "..."
+  "confirmed": ["names they said were correct"],
+  "corrected": [{"name": "item", "correction": "what they said instead"}],
+  "rejected": ["names they said were wrong/to remove"],
+  "roleplay": [{"name": "item", "group": "group name for roleplay context"}],
+  "unclear": ["names we still need clarification on"]
 }
 
-Keep descriptions natural and characterful - they should help a user quickly understand who this persona is.`;
+Examples:
+- "That's right" → confirmed: [all items]
+- "Number 2 is wrong" → rejected: [item 2 name]
+- "Actually it's X not Y" → corrected: [{name: Y item, correction: "X"}]
+- "That was just for the game with Frodo" → roleplay: [{name: item, group: "Frodo"}]`;
 
-  const conceptList = [
-    ...personaConcepts.map(c => `[persona] ${c.name}: ${c.description}`),
-    ...topicConcepts.map(c => `[topic] ${c.name}: ${c.description}`),
-    ...staticConcepts.slice(0, 3).map(c => `[behavioral] ${c.name}`),
-  ].join("\n");
-
-  const user = `Persona: ${personaName}
-${concepts.aliases?.length ? `Aliases: ${concepts.aliases.join(", ")}` : ""}
-
-Concepts:
-${conceptList || "(No concepts yet - generate a generic starter description)"}
-
-Generate the descriptions now.`;
-
+  const user = `Their response: "${userMessage}"`;
+  
   return { system, user };
 }

@@ -1,6 +1,6 @@
 # 0107: Entity Data Architecture Overhaul (Epic)
 
-**Status**: PENDING
+**Status**: DONE
 
 ## Summary
 
@@ -173,47 +173,50 @@ Instead of one massive "update all concepts" call:
 ## Sub-Tickets
 
 ### Schema & Storage
-- [ ] 0108: New Entity Type Definitions
-- [ ] 0109: Storage Migration (concepts → facts/traits/topics/people)
-- [ ] 0110: LLM Queue Persistence File
-- [ ] 0124: Scheduled Jobs Infrastructure (NEW)
+- [x] 0108: New Entity Type Definitions (DONE)
+- [x] 0109: Storage Migration (concepts → facts/traits/topics/people) (DONE)
+- [x] 0110: LLM Queue Persistence File (DONE)
+- [x] 0124: Time-Based Core Logic (Simplified) (DONE)
+
+### Queue Processing
+- [x] 0126: LLM Queue Processor (DONE)
 
 ### Extraction System
-- [ ] 0111: Fast-Scan Prompt Implementation
-- [ ] 0112: Detail Update Prompts (per data type)
-- [ ] 0113: Extraction Frequency Controller
-- [ ] 0114: Known Personas in Prompts (renamed)
+- [x] 0111: Fast-Scan Prompt Implementation (DONE)
+- [x] 0112: Detail Update Prompts (DONE - all prompts implemented, tests passing)
+- [x] 0113: Extraction Frequency Controller (DONE)
+- [x] 0114: Known Personas in Prompts (DONE - completed during 0111/0112)
 
 ### Ei Orchestration
-- [ ] 0115: Data Verification Flow (Daily Ceremony)
-- [ ] 0116: Cross-Persona Validation
-- [ ] 0117: /clarify Command (conversational data editing)
-- [ ] 0118: Ei Heartbeat Simplification
+- [x] 0115: Data Verification Flow (Daily Ceremony) (DONE)
+- [x] 0116: Cross-Persona Validation (DONE)
+- [x] 0117: /clarify Command (DONE - display-only, editing filed as separate bug 0131)
+- [x] 0118: Ei Heartbeat Simplification (DONE)
 
 ### Prompt Restructuring
-- [ ] 0119: Response Prompt Overhaul (remove redundancy)
-- [ ] 0120: Static Concepts → Prompt Templates
-- [ ] 0121: Ei-Specific System Prompt
+- [x] 0119: Response Prompt Overhaul (DONE)
+- [x] 0120: Static Concepts → Prompt Templates (DONE)
+- [x] 0121: Ei-Specific System Prompt (DONE)
 
 ### Cleanup
-- [ ] 0122: Remove Old Concept System
-- [ ] 0123: Update AGENTS.md Documentation
+- [x] 0122: Remove Old Concept System (DONE)
+- [x] 0123: Update AGENTS.md Documentation (DONE)
 
 ### Future Exploration
 - [ ] 0125: Group Chat Exploration (FUTURE - not blocking)
 
 ## Acceptance Criteria
 
-- [ ] Human entity has four separate data buckets (facts, traits, topics, people)
-- [ ] Persona entity has two data buckets (traits, topics)
-- [ ] Two-phase extraction implemented and working
-- [ ] Ei validates low-confidence extractions
-- [ ] Ei validates cross-persona global updates
-- [ ] `/clarify` command enables conversational data editing
-- [ ] Static concepts removed, behavior baked into prompts
-- [ ] Change logs enable Ei to detect significant modifications
-- [ ] LLM queue persists across restarts
-- [ ] No backward compatibility needed (fresh start OK)
+- [x] Human entity has four separate data buckets (facts, traits, topics, people)
+- [x] Persona entity has two data buckets (traits, topics)
+- [x] Two-phase extraction implemented and working
+- [x] Ei validates low-confidence extractions
+- [x] Ei validates cross-persona global updates (bug 0130 filed for queue dequeue issue)
+- [x] `/clarify` command enables conversational data viewing (editing filed as bug 0131)
+- [x] Static concepts removed, behavior baked into prompts
+- [x] Change logs enable Ei to detect significant modifications
+- [x] LLM queue persists across restarts
+- [x] No backward compatibility needed (fresh start OK)
 
 ## Dependencies
 

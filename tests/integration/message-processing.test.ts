@@ -1,57 +1,19 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createBlessedMock } from '../helpers/blessed-mocks.js';
+import { createStorageMocks } from '../helpers/storage-mocks.js';
+import { createLLMMocks } from '../helpers/llm-mocks.js';
+import { createQueueProcessorMock } from '../helpers/queue-processor-mock.js';
 
 vi.mock('blessed', () => createBlessedMock());
-
-vi.mock('../../src/storage.js', () => ({
-  loadHistory: vi.fn(() => Promise.resolve({ messages: [] })),
-  loadConceptMap: vi.fn(() => Promise.resolve({ entity: 'system', concepts: [], last_updated: null })),
-  listPersonas: vi.fn(() => Promise.resolve([
-    { name: 'ei' },
-    { name: 'claude' },
-    { name: 'assistant' }
-  ])),
-  findPersonaByNameOrAlias: vi.fn((name) => Promise.resolve(
-    ['ei', 'claude', 'assistant'].includes(name) ? name : null
-  )),
-  initializeDataDirectory: vi.fn(() => Promise.resolve()),
-  initializeDebugLog: vi.fn(),
-  appendDebugLog: vi.fn(),
-  getPendingMessages: vi.fn(() => Promise.resolve([])),
-  replacePendingMessages: vi.fn(() => Promise.resolve()),
-  appendHumanMessage: vi.fn(() => Promise.resolve()),
-  getUnprocessedMessages: vi.fn(() => Promise.resolve([])),
-  setStateManager: vi.fn(),
-  getDataPath: vi.fn(() => "/tmp/ei-test"),
-}));
+vi.mock('../../src/storage.js', () => createStorageMocks());
+vi.mock('../../src/llm.js', () => createLLMMocks());
+vi.mock('../../src/queue-processor.js', () => createQueueProcessorMock());
 
 vi.mock('../../src/processor.js', () => ({
   processEvent: vi.fn(() => Promise.resolve({
     response: 'Test response from LLM',
     aborted: false,
-    humanConceptsUpdated: false,
-    systemConceptsUpdated: false
   })),
-}));
-
-vi.mock('../../src/llm.js', () => ({
-  LLMAbortedError: class extends Error {
-    name = 'LLMAbortedError';
-    constructor(message: string) {
-      super(message);
-      this.name = 'LLMAbortedError';
-    }
-  },
-}));
-
-vi.mock('../../src/concept-queue.js', () => ({
-  ConceptQueue: {
-    getInstance: vi.fn(() => ({
-      enqueue: vi.fn(() => 'mock-task-id'),
-      getQueueLength: vi.fn(() => 0),
-      isProcessing: vi.fn(() => false),
-    })),
-  },
 }));
 
 import { EIApp } from '../../src/blessed/app.js';
@@ -97,9 +59,9 @@ class TestableEIApp extends EIApp {
     return (this as any).handleCommand(input);
   }
   
-  public testCleanup(): void {
+  public async testCleanup(): Promise<void> {
     try {
-      (this as any).cleanup();
+      await (this as any).cleanup();
     } catch (error) {
       // Ignore cleanup errors in tests
     }
@@ -115,9 +77,9 @@ describe('Message Processing Integration Tests', () => {
     await app.init();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     if (app) {
-      app.testCleanup();
+      await app.testCleanup();
     }
   });
 
@@ -127,8 +89,6 @@ describe('Message Processing Integration Tests', () => {
       vi.mocked(processEvent).mockResolvedValue({
         response: 'Hello! How can I help you today?',
         aborted: false,
-        humanConceptsUpdated: false,
-        systemConceptsUpdated: false
       });
 
       const initialMessageCount = app.getTestMessages().length;
@@ -195,8 +155,6 @@ describe('Message Processing Integration Tests', () => {
       vi.mocked(processEvent).mockResolvedValue({
         response: null,
         aborted: false,
-        humanConceptsUpdated: false,
-        systemConceptsUpdated: false
       });
 
       const initialMessageCount = app.getTestMessages().length;
@@ -215,8 +173,6 @@ describe('Message Processing Integration Tests', () => {
       vi.mocked(processEvent).mockResolvedValue({
         response: 'Partial response',
         aborted: true,
-        humanConceptsUpdated: false,
-        systemConceptsUpdated: false
       });
 
       // Submit message (long enough to trigger immediate processing)
@@ -256,8 +212,6 @@ describe('Message Processing Integration Tests', () => {
       resolveProcessing!({
         response: 'Response',
         aborted: false,
-        humanConceptsUpdated: false,
-        systemConceptsUpdated: false
       });
 
       // Wait for completion
@@ -291,8 +245,6 @@ describe('Message Processing Integration Tests', () => {
       resolveProcessing!({
         response: 'Response',
         aborted: false,
-        humanConceptsUpdated: false,
-        systemConceptsUpdated: false
       });
 
       // Wait for completion
@@ -308,8 +260,6 @@ describe('Message Processing Integration Tests', () => {
       vi.mocked(processEvent).mockResolvedValue({
         response: 'Response',
         aborted: false,
-        humanConceptsUpdated: false,
-        systemConceptsUpdated: false
       });
 
       // Switch to different persona
@@ -331,8 +281,6 @@ describe('Message Processing Integration Tests', () => {
       vi.mocked(processEvent).mockResolvedValue({
         response: 'Response from claude',
         aborted: false,
-        humanConceptsUpdated: false,
-        systemConceptsUpdated: false
       });
 
       // Switch to claude persona
@@ -360,8 +308,6 @@ describe('Message Processing Integration Tests', () => {
       vi.mocked(processEvent).mockResolvedValue({
         response: 'Response',
         aborted: false,
-        humanConceptsUpdated: false,
-        systemConceptsUpdated: false
       });
 
       // Submit multiple DIFFERENT messages rapidly (all long enough to trigger immediate processing)
@@ -384,8 +330,6 @@ describe('Message Processing Integration Tests', () => {
       vi.mocked(processEvent).mockResolvedValue({
         response: 'Response',
         aborted: false,
-        humanConceptsUpdated: false,
-        systemConceptsUpdated: false
       });
 
       const sameMessage = 'Duplicate message that is long enough to trigger processing';
@@ -402,8 +346,6 @@ describe('Message Processing Integration Tests', () => {
       vi.mocked(processEvent).mockResolvedValue({
         response: 'Response',
         aborted: false,
-        humanConceptsUpdated: false,
-        systemConceptsUpdated: false
       });
 
       const sameMessage = 'Repeated message that is long enough to trigger processing';
@@ -432,8 +374,6 @@ describe('Message Processing Integration Tests', () => {
       vi.mocked(processEvent).mockResolvedValue({
         response: 'Heartbeat response',
         aborted: false,
-        humanConceptsUpdated: false,
-        systemConceptsUpdated: false
       });
 
       // Get persona state and trigger heartbeat manually
@@ -462,8 +402,6 @@ describe('Message Processing Integration Tests', () => {
       vi.mocked(processEvent).mockResolvedValue({
         response: 'Background response',
         aborted: false,
-        humanConceptsUpdated: false,
-        systemConceptsUpdated: false
       });
 
       // Switch to different persona

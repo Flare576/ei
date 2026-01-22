@@ -320,7 +320,9 @@ async function callLLMRaw(
   const { client, model, provider } = resolveModel(modelSpec, operation);
 
   if (DEBUG) {
-    appendDebugLog(`[LLM] Using ${provider}:${model}`);
+    appendDebugLog(`[LLM] Using ${provider}:${model} for operation: ${operation || 'unspecified'}`);
+    appendDebugLog(`[LLM] System prompt:\n${systemPrompt}`);
+    appendDebugLog(`[LLM] User prompt:\n${userPrompt}`);
   }
 
   let lastError: unknown;

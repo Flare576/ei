@@ -58,8 +58,15 @@ export class MockLLMServerImpl implements MockLLMServer {
       return;
     }
 
-    // First interrupt all active streams
     this.interruptAllStreams();
+    
+    this.requestHistory = [];
+    this.responseQueue = [];
+    this.responseQueueIndex = 0;
+    this.responseOverrides.clear();
+    this.responseTypeOverrides.clear();
+    this.delayOverrides.clear();
+    this.streamingConfigs.clear();
 
     return new Promise((resolve) => {
       this.server!.close(() => {
@@ -164,6 +171,10 @@ export class MockLLMServerImpl implements MockLLMServer {
       timestamp: Date.now()
     };
     this.requestHistory.push(mockRequest);
+    
+    if (this.requestHistory.length > 100) {
+      this.requestHistory = this.requestHistory.slice(-50);
+    }
 
     if (this.config.enableLogging) {
       console.log(`Mock LLM Server: ${req.method} ${endpoint}`, {

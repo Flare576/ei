@@ -1,6 +1,6 @@
 # 0115: Data Verification Flow
 
-**Status**: PENDING
+**Status**: QA
 
 ## Summary
 
@@ -253,18 +253,61 @@ This runs at **lowest priority** - only when there are no other validations pend
 
 ## Acceptance Criteria
 
-- [ ] Daily Ceremony runs at configurable time
-- [ ] Up to 5 validations per ceremony
-- [ ] Priority: facts → people → traits → topics, then by confidence
-- [ ] Staleness suggestions added only when slots available
-- [ ] Protected relationships never suggested for removal
-- [ ] User responses parsed correctly
-- [ ] Confirmed data gets confidence boost
-- [ ] Corrected data gets re-extracted
-- [ ] Rejected data is removed
-- [ ] Roleplay data moved to specified group
-- [ ] Empty ceremony days are fine (no message)
-- [ ] Ceremony state persists across restarts
+- [x] Daily Ceremony runs at configurable time
+- [x] Up to 5 validations per ceremony
+- [x] Priority: facts → people → traits → topics, then by confidence
+- [x] Staleness suggestions added only when slots available
+- [x] Protected relationships never suggested for removal
+- [x] User responses parsed correctly
+- [x] Confirmed data gets confidence boost
+- [x] Corrected data gets re-extracted
+- [x] Rejected data is removed
+- [x] Roleplay data moved to specified group
+- [x] Empty ceremony days are fine (no message)
+- [x] Ceremony state persists across restarts
+
+## Implementation Notes
+
+**Files Created:**
+- `src/verification.ts` - Core Daily Ceremony logic (411 lines)
+- `tests/unit/verification.test.ts` - Comprehensive test coverage (14 tests, all passing)
+
+**Files Modified:**
+- `src/types.ts` - Added `CeremonyConfig` interface to `HumanEntity`
+- `src/storage.ts` - Updated `DEFAULT_HUMAN_ENTITY` with default ceremony config
+- `src/prompts.ts` - Added `buildVerificationResponsePrompt()` for centralized prompt management
+- `src/llm-queue.ts` - Fixed `fact_confirm` → `data_confirm` validation type, added confidence field
+- `src/extraction.ts` - Updated to use `data_confirm` validation type with numeric confidence
+- `tests/unit/extraction.test.ts` - Updated test to use `data_confirm`
+- `tests/unit/queue-processor.test.ts` - Updated test to use `data_confirm`
+
+**Protected Relationships:**
+Comprehensive list of 92 relationship terms that are never suggested for removal, including:
+- Immediate family (children, parents, siblings, spouses)
+- Step/adoptive/foster family
+- In-laws
+- Grandparents and grandchildren
+- Variations (mom/mother, dad/father, etc.)
+
+**Verification Response Parsing:**
+Uses LLM with operation type "concept" to parse natural language responses into structured actions:
+- Confirmed items → boost confidence to 1.0, record last_confirmed timestamp
+- Corrected items → queue detail_update with correction context
+- Rejected items → remove from entity
+- Roleplay items → move to specified persona group
+- Unclear items → remain in queue for re-asking
+
+**Daily Ceremony Scheduling:**
+- Configurable time (default 09:00)
+- Tracks last_ceremony timestamp in human.jsonc
+- Runs once per day after configured time
+- Returns null if no validations pending (no empty messages)
+
+**Integration Points:**
+- Reads from LLM queue via `getPendingValidations()`
+- Enqueues detail_update for corrections
+- Clears processed validations via `clearValidations()`
+- Updates human entity via `saveHumanEntity()`
 
 ## Dependencies
 

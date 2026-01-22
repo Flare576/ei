@@ -1,64 +1,19 @@
 import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createBlessedMock } from '../helpers/blessed-mocks.js';
+import { createStorageMocks } from '../helpers/storage-mocks.js';
+import { createLLMMocks } from '../helpers/llm-mocks.js';
+import { createQueueProcessorMock } from '../helpers/queue-processor-mock.js';
 
 vi.mock('blessed', () => createBlessedMock());
-
-vi.mock('../../src/storage.js', () => ({
-  loadHistory: vi.fn(() => Promise.resolve({ messages: [] })),
-  loadConceptMap: vi.fn(() => Promise.resolve({ entity: 'system', concepts: [], last_updated: null })),
-  listPersonas: vi.fn(() => Promise.resolve([
-    { name: 'ei', aliases: [] },
-    { name: 'claude', aliases: [] },
-  ])),
-  findPersonaByNameOrAlias: vi.fn((name) => Promise.resolve(
-    ['ei', 'claude'].includes(name) ? name : null
-  )),
-  findArchivedPersonaByNameOrAlias: vi.fn(),
-  getArchivedPersonas: vi.fn(() => Promise.resolve([])),
-  loadArchiveState: vi.fn(() => Promise.resolve({ isArchived: false })),
-  saveArchiveState: vi.fn(() => Promise.resolve()),
-  initializeDataDirectory: vi.fn(() => Promise.resolve()),
-  initializeDebugLog: vi.fn(),
-  appendDebugLog: vi.fn(),
-  getPendingMessages: vi.fn(() => Promise.resolve([])),
-  replacePendingMessages: vi.fn(() => Promise.resolve()),
-  appendHumanMessage: vi.fn(() => Promise.resolve()),
-  getUnprocessedMessages: vi.fn(() => Promise.resolve([])),
-  markSystemMessagesAsRead: vi.fn(() => Promise.resolve()),
-  getUnreadSystemMessageCount: vi.fn(() => Promise.resolve(0)),
-  loadPauseState: vi.fn(() => Promise.resolve({ isPaused: false })),
-  savePauseState: vi.fn(() => Promise.resolve()),
-  setStateManager: vi.fn(),
-  getDataPath: vi.fn(() => "/tmp/ei-test"),
-}));
+vi.mock('../../src/storage.js', () => createStorageMocks());
+vi.mock('../../src/llm.js', () => createLLMMocks());
+vi.mock('../../src/queue-processor.js', () => createQueueProcessorMock());
 
 vi.mock('../../src/processor.js', () => ({
   processEvent: vi.fn(() => Promise.resolve({
     response: 'Test response',
     aborted: false,
-    humanConceptsUpdated: false,
-    systemConceptsUpdated: false
   })),
-}));
-
-vi.mock('../../src/llm.js', () => ({
-  LLMAbortedError: class extends Error {
-    name = 'LLMAbortedError';
-    constructor(message: string) {
-      super(message);
-      this.name = 'LLMAbortedError';
-    }
-  },
-}));
-
-vi.mock('../../src/concept-queue.js', () => ({
-  ConceptQueue: {
-    getInstance: vi.fn(() => ({
-      enqueue: vi.fn(() => 'mock-task-id'),
-      getQueueLength: vi.fn(() => 0),
-      isProcessing: vi.fn(() => false),
-    })),
-  },
 }));
 
 import { EIApp } from '../../src/blessed/app.js';
@@ -88,9 +43,9 @@ class TestableEIApp extends EIApp {
     (this as any).personas = personas;
   }
   
-  public testCleanup(): void {
+  public async testCleanup(): Promise<void> {
     try {
-      (this as any).cleanup();
+      await (this as any).cleanup();
     } catch (error) {
     }
   }
@@ -105,9 +60,9 @@ describe('Archive/Unarchive Persona Integration Tests', () => {
     await app.init();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     if (app) {
-      app.testCleanup();
+      await app.testCleanup();
     }
   });
 

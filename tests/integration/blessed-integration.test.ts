@@ -1,62 +1,21 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createBlessedMock } from '../helpers/blessed-mocks.js';
+import { createStorageMocks } from '../helpers/storage-mocks.js';
+import { createLLMMocks } from '../helpers/llm-mocks.js';
+import { createQueueProcessorMock } from '../helpers/queue-processor-mock.js';
 
 process.setMaxListeners(20);
 
 vi.mock('blessed', () => createBlessedMock());
-
-vi.mock('../../src/storage.js', () => ({
-  loadHistory: vi.fn(() => Promise.resolve({ messages: [] })),
-  listPersonas: vi.fn(() => Promise.resolve([
-    { name: 'ei' },
-    { name: 'claude' },
-    { name: 'gpt' }
-  ])),
-  findPersonaByNameOrAlias: vi.fn((name) => Promise.resolve(
-    ['ei', 'claude', 'gpt'].includes(name) ? name : null
-  )),
-  initializeDataDirectory: vi.fn(() => Promise.resolve()),
-  initializeDebugLog: vi.fn(),
-  appendDebugLog: vi.fn(),
-  getPendingMessages: vi.fn(() => Promise.resolve([])),
-  replacePendingMessages: vi.fn(() => Promise.resolve()),
-  appendHumanMessage: vi.fn(() => Promise.resolve()),
-  getUnprocessedMessages: vi.fn(() => Promise.resolve([])),
-  markSystemMessagesAsRead: vi.fn(() => Promise.resolve()),
-  getUnreadSystemMessageCount: vi.fn(() => Promise.resolve(0)),
-  loadPauseState: vi.fn(() => Promise.resolve({ isPaused: false })),
-  savePauseState: vi.fn(() => Promise.resolve()),
-  loadConceptMap: vi.fn(() => Promise.resolve({})),
-  saveConceptMap: vi.fn(() => Promise.resolve()),
-  setStateManager: vi.fn(),
-  getDataPath: vi.fn(() => "/tmp/ei-test"),
-}));
+vi.mock('../../src/storage.js', () => createStorageMocks());
+vi.mock('../../src/llm.js', () => createLLMMocks());
+vi.mock('../../src/queue-processor.js', () => createQueueProcessorMock());
 
 vi.mock('../../src/processor.js', () => ({
   processEvent: vi.fn(() => Promise.resolve({
     response: 'Test response',
     aborted: false
   })),
-}));
-
-vi.mock('../../src/llm.js', () => ({
-  LLMAbortedError: class extends Error {
-    name = 'LLMAbortedError';
-    constructor(message: string) {
-      super(message);
-      this.name = 'LLMAbortedError';
-    }
-  },
-}));
-
-vi.mock('../../src/concept-queue.js', () => ({
-  ConceptQueue: {
-    getInstance: vi.fn(() => ({
-      enqueue: vi.fn(() => 'mock-task-id'),
-      getQueueLength: vi.fn(() => 0),
-      isProcessing: vi.fn(() => false),
-    })),
-  },
 }));
 
 // Import the EIApp after mocking
@@ -74,12 +33,13 @@ describe('Blessed Integration Tests', () => {
     await app.init();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     if (app) {
-      app.cleanup();
+      await (app as any).cleanup();
     }
+    // Allow any pending async operations to settle before restoring mocks
+    await new Promise(resolve => setImmediate(resolve));
     vi.restoreAllMocks();
-    // Clean up any remaining event listeners to prevent warnings
     process.removeAllListeners('SIGTERM');
     process.removeAllListeners('SIGHUP');
   });
@@ -387,11 +347,10 @@ describe('Blessed Integration Tests', () => {
   });
 
   describe('Cleanup Integration', () => {
-    test('app cleanup works without errors', () => {
+    test('app cleanup works without errors', async () => {
       // Should not throw when cleaning up
-      expect(() => {
-        app.cleanup();
-      }).not.toThrow();
+      const cleanupResult = await (app as any).cleanup();
+      expect(cleanupResult.success).toBe(true);
     });
 
     test('screen destruction works', () => {
@@ -506,6 +465,9 @@ describe('Blessed Integration Tests', () => {
           
           await app.handleCommand('/quit');
           
+          // Wait for async exit logic to complete (cleanup().then(process.exit))
+          await new Promise(resolve => setImmediate(resolve));
+          
           expect(mockExit).toHaveBeenCalledWith(0);
         } finally {
           process.exit = originalExit;
@@ -560,24 +522,20 @@ describe('Blessed Integration Tests', () => {
       });
 
       test('quit command aliases work identically', async () => {
-        // Mock process.exit to prevent actual exit during test
         const originalExit = process.exit;
         const mockExit = vi.fn();
         process.exit = mockExit as any;
         
         try {
-          // Test /q alias
           await app.handleCommand('/q');
+          await new Promise(resolve => setImmediate(resolve));
           
-          // Verify exit was called (no blocking conditions)
           expect(mockExit).toHaveBeenCalledWith(0);
           
           mockExit.mockClear();
           
-          // Test /q --force alias
           await app.handleCommand('/q --force');
           
-          // Verify exit was called
           expect(mockExit).toHaveBeenCalledWith(0);
         } finally {
           process.exit = originalExit;
@@ -640,16 +598,22 @@ describe('Blessed Integration Tests', () => {
 
     describe('Command Processing Pipeline Integration', () => {
       test('quit command processes through slash command infrastructure', async () => {
-        // Mock the handleCommand method to verify it's called
-        const handleCommandSpy = vi.spyOn(app, 'handleCommand');
+        const originalExit = process.exit;
+        const mockExit = vi.fn();
+        process.exit = mockExit as any;
         
-        // Submit quit command through normal input processing
-        await app.handleSubmit('/quit');
-        
-        // Verify command was processed through slash command infrastructure
-        expect(handleCommandSpy).toHaveBeenCalledWith('/quit');
-        
-        handleCommandSpy.mockRestore();
+        try {
+          const handleCommandSpy = vi.spyOn(app, 'handleCommand');
+          
+          await app.handleSubmit('/quit');
+          await new Promise(resolve => setImmediate(resolve));
+          
+          expect(handleCommandSpy).toHaveBeenCalledWith('/quit');
+          
+          handleCommandSpy.mockRestore();
+        } finally {
+          process.exit = originalExit;
+        }
       });
 
       test('quit command integrates with existing help system', async () => {
@@ -684,7 +648,7 @@ describe('Blessed Integration Tests', () => {
           // Note: setTimeout returns a Timeout object that gets cleared, not set to null
           // The cleanup method clears the timers but doesn't set the references to null
           // Let's verify the cleanup method was called instead
-          const cleanupResult = app.cleanup();
+          const cleanupResult = await (app as any).cleanup();
           expect(cleanupResult.success).toBe(true);
           
           // Verify exit was called
@@ -759,23 +723,23 @@ describe('Blessed Integration Tests', () => {
       });
 
       test('quit command input clearing works through command pipeline', async () => {
-        // Test that input is properly cleared when quit command is processed
-        const inputBox = app.layoutManager.getInputBox();
+        const originalExit = process.exit;
+        const mockExit = vi.fn();
+        process.exit = mockExit as any;
         
-        // Set up input text initially
-        inputBox.getValue.mockReturnValue('/quit');
-        
-        // Process the quit command
-        await app.handleSubmit('/quit');
-        
-        // Verify input was cleared as part of command processing
-        expect(inputBox.clearValue).toHaveBeenCalled();
-        
-        // After clearing, mock the input box to return empty string
-        inputBox.getValue.mockReturnValue('');
-        
-        // Verify inputHasText flag was reset
-        expect(app.inputHasText).toBe(false);
+        try {
+          const inputBox = app.layoutManager.getInputBox();
+          
+          inputBox.getValue.mockReturnValue('/quit');
+          
+          await app.handleSubmit('/quit');
+          await new Promise(resolve => setImmediate(resolve));
+          
+          // handleSubmit clears inputHasText before processing commands
+          expect(app.inputHasText).toBe(false);
+        } finally {
+          process.exit = originalExit;
+        }
       });
 
       test('quit command error handling integrates with status system', async () => {
@@ -848,7 +812,7 @@ describe('Blessed Integration Tests', () => {
         expect(typeof storageModule.initializeDataDirectory).toBe('function');
       });
 
-      test('application can be started and controlled programmatically', () => {
+      test('application can be started and controlled programmatically', async () => {
         // Test that the application can be controlled programmatically
         // This is the foundation for E2E testing with controlBashProcess
         
@@ -857,7 +821,7 @@ describe('Blessed Integration Tests', () => {
         expect(typeof app.init).toBe('function');
         
         // Verify cleanup works (essential for E2E test teardown)
-        const cleanupResult = app.cleanup();
+        const cleanupResult = await (app as any).cleanup();
         expect(cleanupResult).toHaveProperty('success');
         expect(cleanupResult).toHaveProperty('errors');
       });

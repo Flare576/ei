@@ -1,274 +1,202 @@
-# 0124: Scheduled Jobs Infrastructure
+# 0124: Time-Based Core Logic (Simplified)
 
-**Status**: PENDING
+**Status**: QA
 
 ## Summary
 
-Create a centralized scheduled jobs system to handle regular background operations. Separates "Heartbeat" (idle persona behavior) from system-wide maintenance tasks.
+Add two simple `setInterval` timers to `app.ts` for system-wide maintenance: Daily Ceremony and Topic/People Decay. This is a pragmatic, minimal implementation - heartbeat refactoring out of the UI layer is tracked separately in 0129.
 
-## Terminology Clarification
+## Background
 
-| Term | Definition | Old Confusion |
-|------|------------|---------------|
-| **Heartbeat** | Idle behavior of a specific persona (every 30min of inactivity) | Used to mean "anything on a timer" |
-| **Scheduled Job** | System-wide regular interval task | Didn't exist as concept |
+Currently, decay only runs when heartbeats fire (after 30min of inactivity per-persona). If the user keeps talking, topics never decay - they stay at high `level_current` forever. Daily Ceremony logic exists but is never triggered.
 
-In the old architecture, "heartbeat" was overloaded:
-- Countdown timer for persona
-- Activity when switching away from persona  
-- Human map generation trigger
-- Concept decay trigger
-- etc.
+## What We're NOT Doing
 
-In the new architecture:
-- **Heartbeat** = ONE thing: "Does this persona want to reach out after 30min of silence?"
-- **Scheduled Jobs** = Stand-alone processes on various intervals
+- **Stale message checking**: Already handled by per-message extraction triggers in `processor.ts`
+- **ScheduledJobManager abstraction**: Overkill for 2 simple timers
+- **Persistence file**: Unnecessary - ceremony tracks via `ceremony_config.last_ceremony`, decay is self-correcting
+- **Heartbeat refactoring**: Out of scope (tracked in ticket 0129)
 
-## Scheduled Jobs Needed
+## Implementation
 
-| Job | Interval | Purpose | Ticket |
-|-----|----------|---------|--------|
-| **Daily Ceremony** | Daily at 9am (configurable) | Ei presents validations | 0115 |
-| **Decay Operation** | Hourly | Reduce `level_current` on topics/people | existing |
-| **Stale Message Check** | Every 20 minutes | Find messages >10min old without extraction, queue extraction | 0113 |
-| **Description Maintenance** | (future) | Regenerate stale persona descriptions | (future) |
+### 1. Daily Ceremony Timer
 
-## Infrastructure Design
+Add to `app.ts` constructor or `startApp()`:
 
 ```typescript
-interface ScheduledJob {
-  name: string;
-  interval: number;           // milliseconds
-  enabled: boolean;
-  lastRun: string | null;     // ISO timestamp
-  nextRun: string | null;     // ISO timestamp
-  handler: () => Promise<void>;
-}
+// Check every 5 minutes if it's time for Daily Ceremony
+this.dailyCeremonyInterval = setInterval(async () => {
+  await this.checkDailyCeremony();
+}, 5 * 60 * 1000);
+```
 
-class ScheduledJobManager {
-  private jobs: Map<string, ScheduledJob> = new Map();
-  private timers: Map<string, NodeJS.Timeout> = new Map();
+Handler logic:
+
+```typescript
+private async checkDailyCeremony(): Promise<void> {
+  // Use existing verification.ts functions
+  const entity = await loadHumanEntity();
+  const config = entity.ceremony_config || { enabled: true, time: "09:00" };
   
-  register(job: ScheduledJob): void {
-    this.jobs.set(job.name, job);
+  if (!config.enabled) return;
+  
+  const now = new Date();
+  
+  // Check if it's past ceremony time
+  const [hours, minutes] = config.time.split(':').map(Number);
+  const ceremonyMinutes = hours * 60 + minutes;
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  
+  if (nowMinutes < ceremonyMinutes) return;
+  
+  // Check if already ran today
+  if (config.last_ceremony) {
+    const lastRun = new Date(config.last_ceremony);
+    if (lastRun.toDateString() === now.toDateString()) return;
   }
   
-  start(): void {
-    for (const [name, job] of this.jobs) {
-      if (!job.enabled) continue;
-      
-      const interval = setInterval(async () => {
-        await this.runJob(name);
-      }, job.interval);
-      
-      this.timers.set(name, interval);
-      
-      // Run immediately if never run or overdue
-      if (!job.lastRun || Date.now() > new Date(job.nextRun!).getTime()) {
-        await this.runJob(name);
-      }
-    }
+  // Build and send ceremony message
+  const message = await buildDailyCeremonyMessage();
+  if (!message) return;
+  
+  // Append to Ei's history with read: false
+  await appendMessage({
+    role: "system",
+    content: message,
+    timestamp: new Date().toISOString(),
+    read: false
+  }, "ei");
+  
+  // Update unread count if Ei isn't active
+  if (this.activePersona !== "ei") {
+    const ps = this.getOrCreatePersonaState("ei");
+    ps.unreadCount++;
+    this.unreadCounts.set("ei", ps.unreadCount);
+    this.personaRenderer.updateSpinnerAnimation(this.personaStates);
   }
   
-  private async runJob(name: string): Promise<void> {
-    const job = this.jobs.get(name);
-    if (!job) return;
-    
-    const now = new Date().toISOString();
-    job.lastRun = now;
-    job.nextRun = new Date(Date.now() + job.interval).toISOString();
-    
-    try {
-      await job.handler();
-      await this.persistJobState();
-    } catch (err) {
-      console.error(`[ScheduledJob] ${name} failed:`, err);
-    }
-  }
+  // Record ceremony completion
+  await recordCeremony();
   
-  stop(): void {
-    for (const timer of this.timers.values()) {
-      clearInterval(timer);
-    }
-    this.timers.clear();
-  }
-  
-  private async persistJobState(): Promise<void> {
-    const state = Array.from(this.jobs.entries()).map(([name, job]) => ({
-      name,
-      lastRun: job.lastRun,
-      nextRun: job.nextRun
-    }));
-    await writeFile(
-      path.join(getDataPath(), 'scheduled_jobs.jsonc'),
-      JSON.stringify({ jobs: state }, null, 2)
-    );
-  }
+  appendDebugLog('[DailyCeremony] Triggered at ' + now.toISOString());
 }
 ```
 
-## Job Implementations
+### 2. Decay Timer
 
-### Daily Ceremony (0115)
+Add to `app.ts` constructor or `startApp()`:
 
 ```typescript
-const dailyCeremonyJob: ScheduledJob = {
-  name: "daily_ceremony",
-  interval: 24 * 60 * 60 * 1000,  // 24 hours
-  enabled: true,
-  lastRun: null,
-  nextRun: null,
-  handler: async () => {
-    const config = await loadCeremonyConfig();
-    const now = new Date();
-    
-    // Only run if it's past ceremony time and we haven't run today
-    if (!isPastCeremonyTime(config.time, now)) return;
-    
-    const message = await buildDailyCeremonyMessage();
-    if (message) {
-      await sendEiMessage(message);
-    }
-  }
-};
+// Run decay every hour
+this.decayInterval = setInterval(async () => {
+  await this.runDecay();
+}, 60 * 60 * 1000);
 ```
 
-### Decay Operation
+Handler logic:
 
 ```typescript
-const decayJob: ScheduledJob = {
-  name: "level_decay",
-  interval: 60 * 60 * 1000,  // 1 hour
-  enabled: true,
-  lastRun: null,
-  nextRun: null,
-  handler: async () => {
-    // Decay all topics and people across all entities
-    await decayHumanTopicsAndPeople();
+private async runDecay(): Promise<void> {
+  try {
+    // Decay human entity
+    await applyTopicDecay('human');
     
+    // Decay all persona entities
     const personas = await listPersonas();
     for (const persona of personas) {
-      await decayPersonaTopics(persona.name);
+      await applyTopicDecay('system', persona.name);
     }
-  }
-};
-```
-
-### Stale Message Check (0113)
-
-```typescript
-const staleMessageJob: ScheduledJob = {
-  name: "stale_messages",
-  interval: 20 * 60 * 1000,  // 20 minutes
-  enabled: true,
-  lastRun: null,
-  nextRun: null,
-  handler: async () => {
-    const STALE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
-    const now = Date.now();
     
-    for (const persona of await listPersonas()) {
-      const unprocessed = await getUnprocessedMessages(persona.name);
-      
-      for (const msg of unprocessed) {
-        const age = now - new Date(msg.timestamp).getTime();
-        if (age > STALE_THRESHOLD_MS) {
-          await triggerExtraction("human", persona.name, [msg]);
-          await triggerExtraction("system", persona.name, [msg]);
-        }
-      }
-    }
+    appendDebugLog('[Decay] Applied to all entities');
+  } catch (err) {
+    appendDebugLog(`[Decay] Error: ${err instanceof Error ? err.message : String(err)}`);
   }
-};
+}
 ```
 
-## Integration Points
+### 3. Cleanup on Shutdown
 
-### App Startup
+Update existing cleanup logic:
 
 ```typescript
-async function startApp(): Promise<void> {
-  // ... existing startup logic
+async cleanup(): Promise<void> {
+  // Clear intervals
+  if (this.dailyCeremonyInterval) {
+    clearInterval(this.dailyCeremonyInterval);
+    this.dailyCeremonyInterval = null;
+  }
   
-  const jobManager = new ScheduledJobManager();
-  jobManager.register(dailyCeremonyJob);
-  jobManager.register(decayJob);
-  jobManager.register(staleMessageJob);
-  jobManager.start();
+  if (this.decayInterval) {
+    clearInterval(this.decayInterval);
+    this.decayInterval = null;
+  }
   
-  // ... continue app initialization
+  // ... existing cleanup
 }
 ```
 
-### Graceful Shutdown
+### 4. Add Instance Variables
 
 ```typescript
-async function shutdown(): Promise<void> {
-  jobManager.stop();
-  // ... other cleanup
+export class EIApp {
+  // ... existing fields
+  
+  private dailyCeremonyInterval: NodeJS.Timeout | null = null;
+  private decayInterval: NodeJS.Timeout | null = null;
+  
+  // ...
 }
 ```
 
-## State Persistence
+## Verification Logic Already Exists
 
-Jobs persist their state to `data/scheduled_jobs.jsonc`:
+From `verification.ts`:
+- `buildDailyCeremonyMessage()` - Builds ceremony message (line 230)
+- `recordCeremony()` - Updates `ceremony_config.last_ceremony` (line 273)
+- `wasLastEiMessageCeremony()` - Checks if ceremony is waiting for response (line 410)
 
-```json
-{
-  "jobs": [
-    {
-      "name": "daily_ceremony",
-      "lastRun": "2026-01-19T09:00:00Z",
-      "nextRun": "2026-01-20T09:00:00Z"
-    },
-    {
-      "name": "level_decay",
-      "lastRun": "2026-01-19T14:00:00Z",
-      "nextRun": "2026-01-19T15:00:00Z"
-    }
-  ]
-}
-```
-
-This ensures jobs don't re-run unnecessarily after restart.
-
-## Heartbeat vs Scheduled Job
-
-**Heartbeat** (per-persona):
-- Triggered by inactivity timer (30min of no messages)
-- Each persona has its own heartbeat logic
-- Checks: "Do I want to reach out?"
-  - Topics/people I want to discuss (my level_ideal - level_current > threshold)
-  - Topics/people human wants to discuss (their level_ideal - level_current > threshold)
-  - Haven't pinged recently outside normal conversation
-
-**Scheduled Jobs** (system-wide):
-- Run on fixed intervals regardless of conversation activity
-- Handle maintenance, validation, decay
-- Not persona-specific
+From `topic-decay.ts`:
+- `applyTopicDecay(entityType, persona?)` - Applies logarithmic decay (line 17)
+- Decay math is proportional to elapsed time, so exact interval doesn't matter
 
 ## Acceptance Criteria
 
-- [ ] ScheduledJobManager implemented
-- [ ] Job registration and execution working
-- [ ] State persists across restarts
-- [ ] Daily Ceremony integrated
-- [ ] Decay operation integrated
-- [ ] Stale message check integrated
-- [ ] Jobs can be enabled/disabled
-- [ ] Errors in one job don't crash others
-- [ ] Tests verify job scheduling and execution
+- [x] Daily Ceremony timer runs every 5 minutes and checks conditions
+- [x] Ceremony only triggers once per day at configured time
+- [x] Ceremony message appears in Ei's history with unread indicator
+- [x] Decay timer runs every hour
+- [x] Decay applies to human entity and all personas
+- [x] Both intervals are cleaned up on app shutdown
+- [x] Debug logging shows when timers fire
 
 ## Dependencies
 
-- 0110: LLM queue (stale message check queues extractions)
-- 0113: Extraction frequency (stale message integration)
-- 0115: Daily Ceremony (ceremony job)
+- 0115: Daily Ceremony logic (already implemented)
+- Existing `applyTopicDecay` function
 
 ## Effort Estimate
 
-Medium (~3-4 hours)
+Small (~1 hour) - just wiring up existing functions to timers
 
 ## Notes
 
-This infrastructure ticket should be implemented early (alongside 0108-0110) since other tickets depend on scheduled jobs existing.
+### Why No Persistence?
+
+- **Daily Ceremony**: Uses existing `ceremony_config.last_ceremony` timestamp to prevent double-runs
+- **Decay**: Self-correcting - decay amount is proportional to elapsed time since last update, so if we miss an hour, the next run compensates
+
+### Why Check Ceremony Every 5 Minutes?
+
+- Simple, predictable behavior
+- Worst case: ceremony triggers up to 5min late (acceptable for a "morning routine" feature)
+- Alternative would be calculating exact time-until-9am and using `setTimeout`, but that's more complex for minimal benefit
+
+### Future Work (Ticket 0129)
+
+Extract ALL time-based core logic from `app.ts`:
+- Heartbeat system (30min inactivity timers)
+- Pause/resume timers
+- Decay scheduling (this ticket)
+- Daily Ceremony (this ticket)
+
+Create dedicated `scheduler.ts` or similar to handle all timing concerns outside the UI layer. For now, we're pragmatically adding to `app.ts` rather than letting perfect be the enemy of done.

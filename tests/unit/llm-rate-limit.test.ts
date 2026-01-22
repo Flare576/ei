@@ -10,6 +10,10 @@ vi.mock("openai", () => ({
   default: MockOpenAI,
 }));
 
+vi.mock("../../src/storage.js", () => ({
+  appendDebugLog: vi.fn(),
+}));
+
 describe("rate limit retry behavior", () => {
   const originalEnv = { ...process.env };
 

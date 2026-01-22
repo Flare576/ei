@@ -2,15 +2,17 @@ import { readFile, writeFile, readdir, mkdir, unlink } from "fs/promises";
 import { existsSync } from "fs";
 import * as path from "path";
 import {
-  loadConceptMap,
-  saveConceptMap,
+  loadHumanEntity,
+  loadPersonaEntity,
+  saveHumanEntity,
+  savePersonaEntity,
   loadHistory,
   saveHistory,
   listPersonas,
   getDataPath,
   appendDebugLog,
 } from "./storage.js";
-import { SystemSnapshot, ConceptMap, ConversationHistory } from "./types.js";
+import { SystemSnapshot, HumanEntity, PersonaEntity, ConversationHistory } from "./types.js";
 
 interface SavedStateMetadata {
   id: string;
@@ -50,18 +52,18 @@ export class StateManager {
 
   async createSnapshot(): Promise<SystemSnapshot> {
     try {
-      const humanConcepts = await loadConceptMap("human");
+      const humanEntity = await loadHumanEntity();
       const personas = await listPersonas();
       
       const personaData: SystemSnapshot["personas"] = {};
       
       for (const persona of personas) {
         try {
-          const system = await loadConceptMap("system", persona.name);
+          const entity = await loadPersonaEntity(persona.name);
           const history = await loadHistory(persona.name);
           
           personaData[persona.name] = {
-            system,
+            entity,
             history,
           };
         } catch (err) {
@@ -71,7 +73,7 @@ export class StateManager {
 
       const snapshot: SystemSnapshot = {
         timestamp: new Date().toISOString(),
-        humanConcepts,
+        humanEntity,
         personas: personaData,
       };
 
@@ -92,11 +94,11 @@ export class StateManager {
    */
   async restoreSnapshot(snapshot: SystemSnapshot): Promise<void> {
     try {
-      await saveConceptMap(snapshot.humanConcepts);
+      await saveHumanEntity(snapshot.humanEntity);
 
       for (const [personaName, data] of Object.entries(snapshot.personas)) {
         try {
-          await saveConceptMap(data.system, personaName);
+          await savePersonaEntity(data.entity, personaName);
           await saveHistory(data.history, personaName);
         } catch (err) {
           appendDebugLog(`Warning: Failed to restore persona "${personaName}": ${err instanceof Error ? err.message : String(err)}`);

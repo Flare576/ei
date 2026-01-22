@@ -1,6 +1,6 @@
 # 0111: Fast-Scan Prompt Implementation
 
-**Status**: PENDING
+**Status**: QA
 
 ## Summary
 
@@ -198,12 +198,12 @@ async function routeFastScanResults(
 
 ## Acceptance Criteria
 
-- [ ] buildFastScanSystemPrompt implemented
-- [ ] buildFastScanUserPrompt implemented
-- [ ] runFastScan function implemented
-- [ ] Persona name filtering works (both in prompt AND post-processing)
-- [ ] Results correctly routed to detail_update or ei_validation queues
-- [ ] Tests cover: empty entity, full entity, new items, persona filtering
+- [x] buildFastScanSystemPrompt implemented (src/extraction.ts)
+- [x] buildFastScanUserPrompt implemented (src/extraction.ts)
+- [x] runFastScan function implemented (src/extraction.ts)
+- [x] Persona name filtering works (both in prompt AND post-processing)
+- [x] Results correctly routed to detail_update or ei_validation queues (routeFastScanResults)
+- [x] Tests cover: empty entity, full entity, new items, persona filtering (tests/unit/extraction.test.ts - 10 tests, all passing)
 
 ## Dependencies
 
@@ -214,3 +214,53 @@ async function routeFastScanResults(
 ## Effort Estimate
 
 Medium (~3 hours)
+
+## Implementation Notes (2026-01-20)
+
+Created `src/extraction.ts` (280 lines) with:
+- `FastScanItem` and `FastScanResult` types (exported for use in other modules)
+- `extractItemList()` - Extracts flat name+type list from HumanEntity or PersonaEntity
+- `buildFastScanSystemPrompt()` - Builds system prompt with persona filtering
+- `buildFastScanUserPrompt()` - Builds user prompt with known items and messages
+- `runFastScan()` - Main execution function, returns FastScanResult or null on failure
+- `routeFastScanResults()` - Routes results to detail_update or ei_validation queues
+
+Created `tests/unit/extraction.test.ts` (10 tests, all passing):
+- Tests for human and persona entity scanning
+- Persona name filtering (case-insensitive)
+- LLM failure handling (returns null)
+- Routing logic (high/medium → detail_update, low → ei_validation)
+- Message payload preservation
+
+### Key Design Decisions
+
+1. **Operation parameter**: Using `operation: "concept"` instead of `"fast_scan"` for LLM calls since LLMOperation type only supports "response" | "concept" | "generation". This maps to EI_MODEL_CONCEPT env var for model selection.
+
+2. **Null return on failure**: runFastScan returns null instead of throwing, making extraction failures non-critical. Caller can decide whether to retry.
+
+3. **Belt + suspenders filtering**: Persona names are filtered both in the system prompt (tells LLM not to add them) AND in post-processing (removes them if LLM ignores us). Case-insensitive matching.
+
+4. **Confidence-based routing**:
+   - High/medium confidence → detail_update queue (Phase 2 extraction)
+   - Low confidence → ei_validation queue (human verification)
+   - This prevents garbage data while still catching uncertain items for review
+
+### Old Code Removed (as part of 0111)
+
+The following old concept-system functions were removed from `src/prompts.ts` as part of this ticket:
+- ✅ `MUTABLE_TYPES` constant (line 3)
+- ✅ `stripConceptMetaFieldsForLLM()` function (lines 5-14)
+- ✅ `formatConceptsByType()` function (lines 84-99)
+- ✅ `getHighestNeedConcepts()` function (lines 101-109)
+- ✅ `buildConceptUpdateSystemPrompt()` function (lines 306-439, 133 lines)
+- ✅ `buildConceptUpdateUserPrompt()` function (lines 441-461, 20 lines)
+
+**Total removed**: ~185 lines of old concept system code
+
+These are replaced by the new extraction system in `src/extraction.ts`.
+
+### Notes for Next Tickets
+
+- **0112 (Detail Update Prompts)**: Will need to import `FastScanResult` type and use payload from queue
+- **0113 (Extraction Frequency)**: Will need to call `runFastScan()` and `routeFastScanResults()` based on frequency logic
+- **0122 (Cleanup)**: Old concept update prompts already deleted as part of this ticket
