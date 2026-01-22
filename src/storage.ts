@@ -7,7 +7,6 @@ import type { StateManager } from "./state-manager.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_DATA_PATH = path.resolve(__dirname, "../data");
-const DATA_PATH = process.env.EI_DATA_PATH || DEFAULT_DATA_PATH;
 
 let stateManager: StateManager | null = null;
 
@@ -16,15 +15,15 @@ export function setStateManager(manager: StateManager): void {
 }
 
 export function getDataPath(): string {
-  return DATA_PATH;
+  return process.env.EI_DATA_PATH || DEFAULT_DATA_PATH;
 }
 
 function dataPath(filename: string): string {
-  return path.join(DATA_PATH, filename);
+  return path.join(getDataPath(), filename);
 }
 
 function personaPath(persona: string, filename: string): string {
-  return path.join(DATA_PATH, "personas", persona, filename);
+  return path.join(getDataPath(), "personas", persona, filename);
 }
 
 const DEFAULT_HUMAN_ENTITY: HumanEntity = {
@@ -124,7 +123,7 @@ export async function savePersonaEntity(
 export async function initializeDataDirectory(): Promise<boolean> {
   let created = false;
   
-  const personasDir = path.join(DATA_PATH, "personas", "ei");
+  const personasDir = path.join(getDataPath(), "personas", "ei");
   if (!existsSync(personasDir)) {
     await mkdir(personasDir, { recursive: true });
     created = true;
@@ -326,7 +325,7 @@ export interface PersonaInfo {
 }
 
 export async function listPersonas(): Promise<PersonaInfo[]> {
-  const personasDir = path.join(DATA_PATH, "personas");
+  const personasDir = path.join(getDataPath(), "personas");
   const entries = await readdir(personasDir, { withFileTypes: true });
   
   const personas: PersonaInfo[] = [];
@@ -360,7 +359,7 @@ export interface PersonaWithEntity {
 }
 
 export async function loadAllPersonasWithEntities(): Promise<PersonaWithEntity[]> {
-  const personasDir = path.join(DATA_PATH, "personas");
+  const personasDir = path.join(getDataPath(), "personas");
   const entries = await readdir(personasDir, { withFileTypes: true });
 
   const personas: PersonaWithEntity[] = [];
@@ -386,7 +385,7 @@ export async function loadAllPersonasWithEntities(): Promise<PersonaWithEntity[]
 }
 
 export async function getArchivedPersonas(): Promise<PersonaInfo[]> {
-  const personasDir = path.join(DATA_PATH, "personas");
+  const personasDir = path.join(getDataPath(), "personas");
   const entries = await readdir(personasDir, { withFileTypes: true });
   
   const archived: PersonaInfo[] = [];
@@ -541,12 +540,12 @@ export async function removePersonaAlias(
 }
 
 export function personaExists(persona: string): boolean {
-  const dir = path.join(DATA_PATH, "personas", persona);
+  const dir = path.join(getDataPath(), "personas", persona);
   return existsSync(dir);
 }
 
 export async function createPersonaDirectory(persona: string): Promise<void> {
-  const dir = path.join(DATA_PATH, "personas", persona);
+  const dir = path.join(getDataPath(), "personas", persona);
   await mkdir(dir, { recursive: true });
 }
 
@@ -593,25 +592,29 @@ export async function saveArchiveState(persona: string, state: { isArchived: boo
   await savePersonaEntity(entity, persona);
 }
 
-const DEBUG_LOG = path.join(DATA_PATH, 'debug.log');
+function getDebugLogPath(): string {
+  return path.join(getDataPath(), 'debug.log');
+}
 
 export async function initializeDebugLog(): Promise<void> {
   try {
-    const logsDir = path.dirname(DEBUG_LOG);
+    const debugLog = getDebugLogPath();
+    const logsDir = path.dirname(debugLog);
     if (!existsSync(logsDir)) {
       await mkdir(logsDir, { recursive: true });
     }
-    await writeFile(DEBUG_LOG, `=== Blessed App Debug Log - ${new Date().toISOString()} ===\n`, { flag: 'w' });
+    await writeFile(debugLog, `=== Blessed App Debug Log - ${new Date().toISOString()} ===\n`, { flag: 'w' });
   } catch (err) {
   }
 }
 
 export function appendDebugLog(message: string): void {
-  writeFile(DEBUG_LOG, `[${new Date().toISOString()}] ${message}\n`, { flag: 'a' }).catch(() => {});
+  const debugLog = getDebugLogPath();
+  writeFile(debugLog, `[${new Date().toISOString()}] ${message}\n`, { flag: 'a' }).catch(() => {});
 }
 
 export function getExtractionStatePath(): string {
-  return path.join(DATA_PATH, "extraction_state.jsonc");
+  return path.join(getDataPath(), "extraction_state.jsonc");
 }
 
 export async function loadExtractionState(): Promise<ExtractionState> {
