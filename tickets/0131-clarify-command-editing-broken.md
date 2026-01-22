@@ -1,6 +1,6 @@
 # 0131: /clarify Command Editing Is Broken
 
-**Status**: PENDING
+**Status**: DONE
 
 ## Summary
 
@@ -180,9 +180,10 @@ Build a proper data editor (modal/form-based):
 ## Acceptance Criteria
 
 **For Option B (immediate)**:
-- [ ] Update all `/clarify` response messages to remove edit suggestions
-- [ ] Add note: "Editing feature coming soon"
-- [ ] Update help text for `/clarify` to say "View data" not "View/edit"
+- [x] Update all `/clarify` response messages to remove edit suggestions
+- [x] Add note: "Editing feature coming soon"
+- [x] Update help text for `/clarify` to say "View data" not "View/edit"
+- [x] Remove appendMessage() calls to prevent chat history pollution
 
 **For Option A (future feature)**:
 - [ ] Edit mode state tracking works
@@ -238,3 +239,29 @@ This is why most data editors use forms, not chat.
 Maybe `/clarify` should launch a blessed modal form instead of trying to do conversational editing. Users could arrow-key through fields, edit in place, delete with confirmation dialogs. Much clearer UX.
 
 But that's a bigger redesign beyond this bug ticket.
+
+## Implementation (Option B - Completed)
+
+**Files modified**: `src/blessed/app.ts`
+
+**Changes made**:
+1. **Removed chat persistence** from all `/clarify` functions:
+   - `showDataOverview()` - Removed `appendMessage()` call (line ~1598)
+   - `showCategory()` - Removed `appendMessage()` call for empty case (line ~1623) and populated case (line ~1675)
+   - `startItemEdit()` - Removed `appendMessage()` call for not-found case (line ~1700) and found case (line ~1701)
+
+2. **Updated messaging** to indicate view-only mode:
+   - Overview: Changed to show usage instructions, added "(View only - editing not yet implemented...)"
+   - Categories: Replaced "To edit one, just tell me..." with "(View only - mention changes...)"
+   - Individual items: Replaced detailed edit instructions with "(View only - mention changes...)"
+
+3. **Updated status bar messages**:
+   - "Data overview displayed (view-only)"
+   - "Viewing {category} (view-only)"
+   - "Viewing \"{name}\" (view-only)"
+
+4. **Updated help text** (line ~1713-1716):
+   - `/clarify [arg]` description changed from "View/edit" to "View"
+   - Subcommand descriptions changed from "Edit" to "View"
+
+**Result**: `/clarify` now displays data in the UI without persisting to chat history, preventing conversation pollution while maintaining clear view-only expectations.

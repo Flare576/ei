@@ -1578,26 +1578,19 @@ export class EIApp {
 **Topics** (${entity.topics.length}): ${summarizeItems(entity.topics)}
 **People** (${entity.people.length}): ${summarizeItems(entity.people)}
 
-What would you like to review or change? You can say:
-- "Show me my facts" (or /clarify facts)
-- "Edit Birthday" (or /clarify "Birthday")
-- Or just tell me what's wrong and I'll help fix it.`;
+To view details, use:
+- /clarify facts - See all facts
+- /clarify "Item Name" - View specific item
+
+(View only - editing not yet implemented.)`;
     
-    // Switch to Ei and send the summary as a system message
     if (this.activePersona !== 'ei') {
       await this.switchPersona('ei');
     }
     
     this.addMessage('system', summary);
-    const systemMsg: Message = {
-      role: 'system',
-      content: summary,
-      timestamp: new Date().toISOString(),
-      read: false
-    };
-    await appendMessage(systemMsg, 'ei');
     
-    this.setStatus('Data overview displayed - respond to clarify/edit');
+    this.setStatus('Data overview displayed (view-only)');
     this.render();
     this.autoScrollToBottom();
   }
@@ -1614,13 +1607,6 @@ What would you like to review or change? You can say:
       }
       
       this.addMessage('system', response);
-      const systemMsg: Message = {
-        role: 'system',
-        content: response,
-        timestamp: new Date().toISOString(),
-        read: false
-      };
-      await appendMessage(systemMsg, 'ei');
       
       this.setStatus(`No ${category} yet`);
       this.render();
@@ -1659,22 +1645,15 @@ What would you like to review or change? You can say:
       return `${i + 1}. **${item.name}**: ${item.description}\n   ${details}`;
     }).join('\n\n');
     
-    const response = `Your ${category}:\n\n${formatted}\n\nTo edit one, just tell me which (by number or name) and what to change.`;
+    const response = `Your ${category}:\n\n${formatted}`;
     
     if (this.activePersona !== 'ei') {
       await this.switchPersona('ei');
     }
     
     this.addMessage('system', response);
-    const systemMsg: Message = {
-      role: 'system',
-      content: response,
-      timestamp: new Date().toISOString(),
-      read: false
-    };
-    await appendMessage(systemMsg, 'ei');
     
-    this.setStatus(`Showing ${category} - respond to edit`);
+    this.setStatus(`Viewing ${category} (view-only)`);
     this.render();
     this.autoScrollToBottom();
   }
@@ -1691,13 +1670,6 @@ What would you like to review or change? You can say:
       }
       
       this.addMessage('system', response);
-      const systemMsg: Message = {
-        role: 'system',
-        content: response,
-        timestamp: new Date().toISOString(),
-        read: false
-      };
-      await appendMessage(systemMsg, 'ei');
       
       this.setStatus(`Item "${itemName}" not found`);
       this.render();
@@ -1706,22 +1678,15 @@ What would you like to review or change? You can say:
     }
     
     const formatted = JSON.stringify(found, null, 2);
-    const response = `Here's the current data for "${found.name}" (${found.item_type}):\n\n\`\`\`json\n${formatted}\n\`\`\`\n\nWhat would you like to change? You can:\n- Update the description\n- Change any values\n- Delete it entirely\n- Move it to a specific group`;
+    const response = `Here's the current data for "${found.name}" (${found.item_type}):\n\n\`\`\`json\n${formatted}\n\`\`\``;
     
     if (this.activePersona !== 'ei') {
       await this.switchPersona('ei');
     }
     
     this.addMessage('system', response);
-    const systemMsg: Message = {
-      role: 'system',
-      content: response,
-      timestamp: new Date().toISOString(),
-      read: false
-    };
-    await appendMessage(systemMsg, 'ei');
     
-    this.setStatus(`Editing "${found.name}" - respond with changes`);
+    this.setStatus(`Viewing "${found.name}" (view-only)`);
     this.render();
     this.autoScrollToBottom();
   }
@@ -1731,10 +1696,10 @@ What would you like to review or change? You can say:
 
 COMMANDS
   /persona [name]     Switch persona (or list if no name)
-  /clarify [arg]      View/edit your data (facts, traits, topics, people)
+  /clarify [arg]      View your data (facts, traits, topics, people)
     /clarify          Show overview of all data
     /clarify facts    Show all facts
-    /clarify "Name"   Edit specific item by name
+    /clarify "Name"   View specific item by name
   /pause [duration]   Pause active persona (30m, 2h, or indefinite)
   /resume [persona]   Resume paused persona
   /archive [persona]  Archive persona (hides from list, stops heartbeats)
