@@ -1,13 +1,17 @@
 # Ticket Status Summary
 
-## QA ⚠️ (16 tickets)
+## QA ⚠️ (0 tickets)
+
+## DONE ✅ (91 tickets)
+- 0131: /clarify Command Editing Is Broken - Converted to view-only (partial fix)
+- 0130: Fix ei_validation Queue Dequeue Bug (fixed in separate commit)
 - 0123: Update AGENTS.md Documentation
 - 0124: Time-Based Core Logic (Simplified) - Daily Ceremony + Decay timers
-- 0122: Remove Old Concept System (core complete, UI intentionally deferred)
+- 0122: Remove Old Concept System
 - 0121: Ei-Specific System Prompt
 - 0120: Static Concepts → Prompt Templates
 - 0119: Response Prompt Overhaul
-- 0117: /clarify Command
+- 0117: /clarify Command (display-only, editing deferred)
 - 0116: Cross-Persona Validation
 - 0115: Data Verification Flow (Daily Ceremony)
 - 0113: Extraction Frequency Controller
@@ -16,10 +20,7 @@
 - 0126: LLM Queue Processor
 - 0109: Storage Migration
 - 0108: New Entity Type Definitions
-
-## DONE ✅ (74 tickets)
-- 0131: /clarify Command Editing Is Broken - Converted to view-only
-- 0130: Fix ei_validation Queue Dequeue Bug
+- 0107: Entity Data Architecture Overhaul (Epic)
 - 0078: Persona Delete Command
 - 0044: New Conversation Command
 - 0039: Blessed Proper Emoji Support
@@ -93,11 +94,10 @@
 - 0114: Known Personas in Prompts
 - 0118: Ei Heartbeat Simplification
 
-## PENDING (21 tickets)
+## PENDING (20 tickets)
 - 0129: Extract Time-Based Core Logic from UI Layer (FUTURE - The Elephant)
 - 0128: Persona Trait Change Detection Overhaul - HIGH PRIORITY
 - 0127: Persona Facts/People as Topics (Future Enhancement)
-- 0107: Entity Data Architecture Overhaul (Epic) - MAJOR REDESIGN (blocked by 0130)
 - 0106: Special Behavior for Archiving Ei Persona
 - 0105: Context Window Command
 - 0104: OpenTUI Migration Spike
@@ -139,7 +139,7 @@
 
 **Last Updated**: 2026-01-21
 **Total Tickets**: 131 created
-**Stats**: 74 done, 16 QA, 0 in_progress, 21 pending (14 in 0107 epic), 13 cancelled
+**Stats**: 91 done, 0 QA, 0 in_progress, 20 pending, 13 cancelled, 7 archived (0107 epic sub-tickets)
 
 ## Epic Status
 
@@ -180,37 +180,26 @@
 - 0099: DONE - Group-based persona visibility
 - 0100: DONE - Epic cleanup (finalize schema)
 
-### 0107: Entity Data Architecture Overhaul - PENDING
+### 0107: Entity Data Architecture Overhaul - DONE ✅
 Replaces monolithic "Concept" system with structured data buckets.
 Absorbs 0102 (Ei Core Persona) and 0103 (Persona Prompt Architecture).
 
-**Schema & Storage:**
-- 0108: QA - New Entity Type Definitions
-- 0109: QA - Storage Migration
-- 0110: DONE - LLM Queue Persistence File
-- 0124: QA - Time-Based Core Logic (Simplified) - Daily Ceremony + Decay timers
+**Completed work:**
+- Two-phase extraction (fast-scan + detail update)
+- Entity data buckets (facts/traits/topics/people) 
+- LLM queue processor with persistence
+- Daily Ceremony + decay timer infrastructure
+- Cross-persona data validation
+- /clarify command (display-only)
+- Ei orchestrator role implementation
 
-**Queue Processing:**
-- 0126: QA - LLM Queue Processor
+**Known edge cases (filed as separate bugs):**
+- 0130: ei_validation queue dequeue (FIXED in separate commit)
+- 0131: /clarify editing (display-only workaround, full editing deferred)
 
-**Extraction System:**
-- 0111: QA - Fast-Scan Prompt Implementation
-- 0112: QA - Detail Update Prompts (per data type)
-- 0113: QA - Extraction Frequency Controller
-- 0114: DONE - Known Personas in Prompts (completed during 0111/0112)
+**Sub-tickets (all DONE):**
+- 0108, 0109, 0110, 0111, 0112, 0113, 0114, 0115, 0116, 0117, 0118, 0119, 0120, 0121, 0122, 0123, 0124, 0126
 
-**Ei Orchestration:**
-- 0115: QA - Data Verification Flow (Daily Ceremony)
-- 0116: QA - Cross-Persona Validation
-- 0117: QA - /clarify Command
-- 0118: DONE - Ei Heartbeat Simplification
-- 0119: QA - Response Prompt Overhaul
-- 0120: QA - Static Concepts → Prompt Templates
-- 0121: QA - Ei-Specific System Prompt
-
-**Cleanup:**
-- 0122: QA - Remove Old Concept System
-- 0123: QA - Update AGENTS.md Documentation
-
-**Future Exploration:**
-- 0125: PENDING - Group Chat Exploration (NOT blocking 0107)
+**Future exploration (NOT blocking):**
+- 0125: Group Chat Exploration
+- 0129: Extract time-based logic from UI layer
