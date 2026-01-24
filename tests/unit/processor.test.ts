@@ -34,11 +34,10 @@ vi.mock('../../src/storage.js', () => ({
   getDataPath: vi.fn(() => "/tmp/ei-test"),
 }));
 
-vi.mock('../../src/prompts.js', () => ({
+vi.mock('../../src/prompts/index.js', () => ({
   buildResponseSystemPrompt: vi.fn(),
   buildResponseUserPrompt: vi.fn(),
   getVisiblePersonas: vi.fn(),
-  toNativeMessages: vi.fn(),
 }));
 
 vi.mock('../../src/extraction-frequency.js', () => ({
@@ -59,8 +58,7 @@ import {
   buildResponseSystemPrompt,
   buildResponseUserPrompt,
   getVisiblePersonas,
-  toNativeMessages,
-} from '../../src/prompts.js';
+} from '../../src/prompts/index.js';
 import { triggerExtraction } from '../../src/extraction-frequency.js';
 
 describe('processor.ts', () => {
@@ -93,7 +91,6 @@ describe('processor.ts', () => {
     vi.mocked(getVisiblePersonas).mockReturnValue([]);
     vi.mocked(buildResponseSystemPrompt).mockResolvedValue('system prompt');
     vi.mocked(buildResponseUserPrompt).mockReturnValue('user prompt');
-    vi.mocked(toNativeMessages).mockReturnValue([]);
     vi.mocked(callLLMWithHistory).mockResolvedValue('LLM response');
   });
 

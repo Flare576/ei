@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getVisiblePersonas } from "../../src/prompts.js";
+import { getVisiblePersonas } from "../../src/prompts/index.js";
 import type { PersonaEntity } from "../../src/types.js";
 
 const createPersonaEntity = (overrides: Partial<PersonaEntity> = {}): PersonaEntity => ({

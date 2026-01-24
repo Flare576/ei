@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { filterByVisibility, GLOBAL_GROUP } from "../../src/prompts.js";
+import { filterByVisibility, GLOBAL_GROUP } from "../../src/prompts/index.js";
 import type { HumanEntity, PersonaEntity, Fact, Trait, Topic, Person } from "../../src/types.js";
 
 const createFact = (

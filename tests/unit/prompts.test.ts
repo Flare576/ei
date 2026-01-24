@@ -3,7 +3,7 @@ import {
   buildResponseSystemPrompt,
   buildResponseUserPrompt,
   PersonaIdentity,
-} from "../../src/prompts.js";
+} from "../../src/prompts/index.js";
 import type { HumanEntity, PersonaEntity, Fact, Trait, Topic, Person, Message } from "../../src/types.js";
 
 const createFact = (
