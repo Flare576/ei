@@ -11,11 +11,15 @@ export function buildStep1TopicsPrompt(
   messages: Message[],
   persona: string
 ): { system: string; user: string } {
-  const systemPrompt = `# Task
+  const recentCount = Math.min(10, messages.length);
+  const recentMessages = messages.slice(-recentCount);
+  const earlierMessages = messages.slice(0, -recentCount);
 
-You are scanning a conversation to quickly identify TOPICS of interest TO the HUMAN USER; your ONLY job is to spot mentions of TOPICS of interest for the HUMAN USER. Do NOT try to analyze them deeply. Just detect and flag.
+  const taskFragment = `# Task
 
-## Specific Needs
+You are scanning a conversation to quickly identify TOPICS of interest TO the HUMAN USER; your ONLY job is to spot mentions of TOPICS of interest for the HUMAN USER. Do NOT try to analyze them deeply. Just detect and flag.`;
+
+  const specificNeedsFragment = `## Specific Needs
 
 Your job is to quickly identify:
 1. Which TOPICS were mentioned or relevant
@@ -28,9 +32,9 @@ To help the system prioritize data, please include your CONFIDENCE level:
     c. "medium" confidence = clearly referenced but not the focus
     d. "low" confidence = might be relevant, uncertain
 
-The goal of the system is to remember important TOPICS to the HUMAN USER in order to ask about them in the future
+The goal of the system is to remember important TOPICS to the HUMAN USER in order to ask about them in the future`;
 
-## Guidelines
+  const guidelinesFragment = `## Guidelines
 
 ### A TOPIC Is:
 
@@ -56,9 +60,9 @@ The goal of the system is to remember important TOPICS to the HUMAN USER in orde
 10. **Location**
     a. Generally, you'll capture locations as part of a **Story** (above), but the HUMAN USER may state "My favorite vacation spot is Guam" - capture that
 11. **Preferences**
-    a. Look for both "I like {thing}" or "I hate {thing}" statements from the HUMAN USER
+    a. Look for both "I like {thing}" or "I hate {thing}" statements from the HUMAN USER`;
 
-### Do Not Capture as TOPICS
+  const doNotCaptureFragment = `### Do Not Capture as TOPICS
 
 The system is designed to track FACTS, TRAITS, and PEOPLE as separate types.
 
@@ -138,9 +142,9 @@ Do NOT capture these concepts as TOPICS:
     * core
 
 > NOTE: All PERSONA activities are tracked by the PERSONAS themselves
-> You do NOT need to record any stories or details about PERSONAS for the HUMAN USER
+> You do NOT need to record any stories or details about PERSONAS for the HUMAN USER`;
 
-# CRITICAL INSTRUCTIONS
+  const criticalFragment = `# CRITICAL INSTRUCTIONS
 
 ONLY ANALYZE the "Most Recent Messages" in the following conversation. The "Known TOPICS" and "Earlier Conversation" are provided for your context and have already been processed!
 
@@ -161,9 +165,15 @@ The JSON format is:
 
 **Return JSON only.**`;
 
-  const recentCount = Math.min(10, messages.length);
-  const recentMessages = messages.slice(-recentCount);
-  const earlierMessages = messages.slice(0, -recentCount);
+  const systemPrompt = `${taskFragment}
+
+${specificNeedsFragment}
+
+${guidelinesFragment}
+
+${doNotCaptureFragment}
+
+${criticalFragment}`;
 
   const earlierConversationSection = earlierMessages.length > 0
     ? `## Earlier Conversation
@@ -188,7 +198,7 @@ Only scan the "Most Recent Messages" - Prior messages are provided for your cont
         "type_of_topic": "Interest|Goal|Dream",
         "value_of_topic": "woodworking|Become Millionaire|Visit Spain",
         "confidence": "high|medium|low",
-        "reason": "User stated...|Assumed from...""
+        "reason": "User stated...|Assumed from..."
     }
   ]
 }

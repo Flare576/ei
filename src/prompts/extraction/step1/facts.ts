@@ -11,11 +11,15 @@ export function buildStep1FactsPrompt(
   messages: Message[],
   persona: string
 ): { system: string; user: string } {
-  const systemPrompt = `# Task
+  const recentCount = Math.min(10, messages.length);
+  const recentMessages = messages.slice(-recentCount);
+  const earlierMessages = messages.slice(0, -recentCount);
 
-You are scanning a conversation to quickly identify what FACTS were provided or discussed by the HUMAN USER; your ONLY job is to spot relevant FACTS - do NOT try to analyze them deeply. Just detect and flag.
+  const taskFragment = `# Task
 
-## Specific Needs
+You are scanning a conversation to quickly identify what FACTS were provided or discussed by the HUMAN USER; your ONLY job is to spot relevant FACTS - do NOT try to analyze them deeply. Just detect and flag.`;
+
+  const specificNeedsFragment = `## Specific Needs
 
 Your job is to quickly identify:
 1. Which FACTS were mentioned or relevant
@@ -27,9 +31,9 @@ Your job is to quickly identify:
 To help the system prioritize data, please include your CONFIDENCE level:
     a. "high" confidence = explicitly discussed
     b. "medium" confidence = clearly referenced but not the focus
-    c. "low" confidence = might be relevant, uncertain
+    c. "low" confidence = might be relevant, uncertain`;
 
-# Guidelines
+  const guidelinesFragment = `# Guidelines
 
 1.  **Explicitness:**
     *   **Focus only on what the user *explicitly states*.** Do not infer, assume, or guess based on context or general knowledge. If the user says "I have two kids," the fact is "Number of Children: 2". If they don't state genders, don't add "Gender of Children."
@@ -40,9 +44,9 @@ To help the system prioritize data, please include your CONFIDENCE level:
 3.  **Specificity over Generality:**
     *   If the user says "I live in a big city," do not extract "Location: big city." If they say "I live in New York," extract "Location: New York." If the information isn't specific enough for the categories, don't extract it.
 4.  **Avoid Inference from Interests/Hobbies:**
-    *   If a user talks extensively about cooking, it's a "General Topic" or "Interest," not a "Fact" like "Job: Chef" unless they explicitly state they *are* a chef.
+    *   If a user talks extensively about cooking, it's a "General Topic" or "Interest," not a "Fact" like "Job: Chef" unless they explicitly state they *are* a chef.`;
 
-# Specific Examples
+  const examplesFragment = `# Specific Examples
 
 **FACTS are:**
 - Biographical data (Core Identity):
@@ -76,9 +80,9 @@ To help the system prioritize data, please include your CONFIDENCE level:
 - General Topic: Interests, hobbies, General subjects
 - People: Real people in their life
 - Personas: AI personas they discuss
-- Characters: Fictitious entities from books, movies, stories, media, etc.
+- Characters: Fictitious entities from books, movies, stories, media, etc.`;
 
-# CRITICAL INSTRUCTIONS
+  const criticalFragment = `# CRITICAL INSTRUCTIONS
 
 ONLY ANALYZE the "Most Recent Messages" in the following conversation. The "Earlier Conversation" is provided for your context and have already been processed!
 
@@ -99,9 +103,15 @@ The JSON format is:
 
 **Return JSON only.**`;
 
-  const recentCount = Math.min(10, messages.length);
-  const recentMessages = messages.slice(-recentCount);
-  const earlierMessages = messages.slice(0, -recentCount);
+  const systemPrompt = `${taskFragment}
+
+${specificNeedsFragment}
+
+${guidelinesFragment}
+
+${examplesFragment}
+
+${criticalFragment}`;
 
   const earlierConversationSection = earlierMessages.length > 0
     ? `## Earlier Conversation
@@ -126,7 +136,7 @@ Only scan the "Most Recent Messages" - Prior messages are provided for your cont
         "type_of_fact": "Birthday|Name|etc.",
         "value_of_fact": "May 26th, 1984|Samwise|etc..",
         "confidence": "high|medium|low",
-        "reason": "User stated...|User implied...|User responded...|\""
+        "reason": "User stated...|User implied...|User responded...|"
     }
   ]
 }

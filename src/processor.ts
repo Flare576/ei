@@ -1,5 +1,5 @@
 import { Message, HumanEntity, PersonaEntity } from "./types.js";
-import { callLLMWithHistory } from "./llm.js";
+import { callLLMWithHistory, ChatMessage } from "./llm.js";
 import {
   loadHumanEntity,
   loadPersonaEntity,
@@ -16,8 +16,23 @@ import {
   buildResponseUserPrompt,
   PersonaIdentity,
   getVisiblePersonas,
-  toNativeMessages,
-} from "./prompts.js";
+} from "./prompts/index.js";
+
+function toNativeMessages(
+  history: Message[],
+  currentMessage?: string
+): ChatMessage[] {
+  const messages: ChatMessage[] = history.map(m => ({
+    role: m.role === "human" ? "user" : "assistant",
+    content: m.content,
+  }));
+  
+  if (currentMessage) {
+    messages.push({ role: "user", content: currentMessage });
+  }
+  
+  return messages;
+}
 
 function stripEcho(userMessage: string | null, response: string): string {
   if (!userMessage || !response) return response;

@@ -29,7 +29,7 @@ import {
   EiValidationPayload 
 } from "./llm-queue.js";
 import { callLLMForJSON } from "./llm.js";
-import { buildVerificationResponsePrompt } from "./prompts.js";
+import { buildVerificationResponsePrompt } from "./prompts/index.js";
 
 const PROTECTED_RELATIONSHIPS = [
   'daughter',

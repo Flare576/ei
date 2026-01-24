@@ -6,7 +6,7 @@ import { writeFileSync, readFileSync, unlinkSync } from 'fs';
 import { testOutputCapture } from './test-output-capture.js';
 
 import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog, getPendingMessages, replacePendingMessages, appendHumanMessage, appendMessage, loadPauseState, savePauseState, markSystemMessagesAsRead, getUnreadSystemMessageCount, loadArchiveState, saveArchiveState, getArchivedPersonas, findArchivedPersonaByNameOrAlias, addPersonaAlias, removePersonaAlias, loadHumanEntity, loadPersonaEntity, savePersonaEntity, saveHumanEntity, loadAllPersonasWithEntities } from '../storage.js';
-import { getVisiblePersonas } from '../prompts.js';
+import { getVisiblePersonas } from '../prompts/index.js';
 import { findDataPointByName } from '../verification.js';
 import { createPersonaWithLLM, saveNewPersona } from '../persona-creator.js';
 import { processEvent } from '../processor.js';

@@ -11,11 +11,15 @@ export function buildStep1PeoplePrompt(
   messages: Message[],
   persona: string
 ): { system: string; user: string } {
-  const systemPrompt = `# Task
+  const recentCount = Math.min(10, messages.length);
+  const recentMessages = messages.slice(-recentCount);
+  const earlierMessages = messages.slice(0, -recentCount);
 
-You are scanning a conversation to quickly identify PEOPLE of interest TO the HUMAN USER; your ONLY job is to spot mentions of PEOPLE of interest for the HUMAN USER. Do NOT try to analyze them deeply. Just detect and flag.
+  const taskFragment = `# Task
 
-## Specific Needs
+You are scanning a conversation to quickly identify PEOPLE of interest TO the HUMAN USER; your ONLY job is to spot mentions of PEOPLE of interest for the HUMAN USER. Do NOT try to analyze them deeply. Just detect and flag.`;
+
+  const specificNeedsFragment = `## Specific Needs
 
 Your job is to quickly identify:
 1. Which PEOPLE were mentioned or relevant
@@ -27,9 +31,9 @@ Your job is to quickly identify:
 To help the system prioritize data, please include your CONFIDENCE level:
     a. "high" confidence = explicitly discussed
     b. "medium" confidence = clearly referenced but not the focus
-    c. "low" confidence = might be relevant, uncertain
+    c. "low" confidence = might be relevant, uncertain`;
 
-## Guidelines
+  const guidelinesFragment = `## Guidelines
 
 1. **Unknown Types and Names of PEOPLE**
     a. In some conversations, it may be impossible to identify which "Brother" or which "Bob" the user is referring to.
@@ -83,9 +87,9 @@ To help the system prioritize data, please include your CONFIDENCE level:
         + Ei
         + default
         + core
-- Characters: Fictitious entities from books, movies, stories, media, etc.
+- Characters: Fictitious entities from books, movies, stories, media, etc.`;
 
-# CRITICAL INSTRUCTIONS
+  const criticalFragment = `# CRITICAL INSTRUCTIONS
 
 ONLY ANALYZE the "Most Recent Messages" in the following conversation. The "Earlier Conversation" are provided for your context and have already been processed!
 
@@ -106,9 +110,13 @@ The JSON format is
 
 **Return JSON only.**`;
 
-  const recentCount = Math.min(10, messages.length);
-  const recentMessages = messages.slice(-recentCount);
-  const earlierMessages = messages.slice(0, -recentCount);
+  const systemPrompt = `${taskFragment}
+
+${specificNeedsFragment}
+
+${guidelinesFragment}
+
+${criticalFragment}`;
 
   const earlierConversationSection = earlierMessages.length > 0
     ? `## Earlier Conversation
@@ -133,7 +141,7 @@ Only scan the "Most Recent Messages" - Prior messages are provided for your cont
         "type_of_person": "Father|Friend|Love Interest|Unknown|etc.",
         "name_of_person": "Bob|Alice|Charles|etc.",
         "confidence": "high|medium|low",
-        "reason": "User stated...|Assumed from...""
+        "reason": "User stated...|Assumed from..."
     }
   ]
 }
