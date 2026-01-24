@@ -267,6 +267,14 @@ function repairJSON(jsonStr: string): string {
   );
 }
 
+/**
+ * Message format for chat completion APIs
+ */
+export interface ChatMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
 export interface LLMOptions {
   signal?: AbortSignal;
   temperature?: number;
@@ -411,6 +419,94 @@ export async function callLLM(
   }
 
   return cleaned;
+}
+
+function estimateTokenCount(messages: ChatMessage[]): number {
+  const totalChars = messages.reduce((sum, msg) => sum + msg.content.length, 0);
+  return Math.ceil(totalChars / 4);
+}
+
+export async function callLLMWithHistory(
+  systemPrompt: string,
+  history: ChatMessage[],
+  options: LLMOptions = {}
+): Promise<string | null> {
+  const { signal, temperature = 0.7, model: modelSpec, operation } = options;
+  
+  if (signal?.aborted) {
+    throw new LLMAbortedError();
+  }
+
+  const { client, model, provider } = resolveModel(modelSpec, operation);
+
+  const messages: ChatMessage[] = [
+    { role: "system", content: systemPrompt },
+    ...history,
+  ];
+
+  if (DEBUG) {
+    const tokenEstimate = estimateTokenCount(messages);
+    appendDebugLog(`[LLM] Using ${provider}:${model} for operation: ${operation || 'unspecified'}`);
+    appendDebugLog(`[LLM] Message count: ${messages.length}, estimated tokens: ${tokenEstimate}`);
+    appendDebugLog(`[LLM] System prompt:\n${systemPrompt}`);
+    appendDebugLog(`[LLM] History: ${history.length} messages`);
+  }
+
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    if (signal?.aborted) {
+      throw new LLMAbortedError();
+    }
+
+    try {
+      const response = await client.chat.completions.create(
+        {
+          model,
+          messages,
+          temperature,
+        },
+        { signal }
+      );
+
+      if (signal?.aborted) {
+        throw new LLMAbortedError();
+      }
+
+      const content = response.choices[0]?.message?.content?.trim() ?? null;
+      if (!content) return null;
+
+      const cleaned = cleanModelResponse(content);
+
+      const noMessagePatterns = [
+        /^no message$/i,
+        /^\[no message\]$/i,
+        /^no response$/i,
+        /^\[no response\]$/i,
+      ];
+
+      for (const pattern of noMessagePatterns) {
+        if (pattern.test(cleaned)) return null;
+      }
+
+      return cleaned;
+    } catch (err) {
+      if (signal?.aborted || isAbortError(err)) {
+        throw new LLMAbortedError();
+      }
+
+      if (isRateLimitError(err) && attempt < MAX_RETRIES) {
+        const backoffMs = INITIAL_BACKOFF_MS * Math.pow(2, attempt);
+        appendDebugLog(`[LLM] Rate limited (attempt ${attempt + 1}/${MAX_RETRIES + 1}), retrying in ${backoffMs}ms...`);
+        await sleep(backoffMs);
+        lastError = err;
+        continue;
+      }
+
+      throw err;
+    }
+  }
+
+  throw lastError;
 }
 
 class JSONParseFailure extends Error {

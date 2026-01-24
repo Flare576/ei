@@ -1,5 +1,5 @@
 import { Message, HumanEntity, PersonaEntity } from "./types.js";
-import { callLLM } from "./llm.js";
+import { callLLMWithHistory } from "./llm.js";
 import {
   loadHumanEntity,
   loadPersonaEntity,
@@ -16,6 +16,7 @@ import {
   buildResponseUserPrompt,
   PersonaIdentity,
   getVisiblePersonas,
+  toNativeMessages,
 } from "./prompts.js";
 
 function stripEcho(userMessage: string | null, response: string): string {
@@ -89,21 +90,24 @@ export async function processEvent(
     personaIdentity,
     visiblePersonas
   );
-  const responseUserPrompt = buildResponseUserPrompt(
+  const contextPrompt = buildResponseUserPrompt(
     delayMs,
     recentHistory,
-    humanMessage,
-    persona
+    humanMessage
   );
+
+  const nativeHistory = toNativeMessages(recentHistory || [], humanMessage || undefined);
+  nativeHistory.push({ role: "user", content: contextPrompt });
 
   if (debug) {
     appendDebugLog(`[Debug] Persona: ${persona}`);
     appendDebugLog(`[Debug] Response system prompt:\n${responseSystemPrompt}`);
-    appendDebugLog(`[Debug] Response user prompt:\n${responseUserPrompt}`);
+    appendDebugLog(`[Debug] Context prompt:\n${contextPrompt}`);
+    appendDebugLog(`[Debug] Native history message count: ${nativeHistory.length}`);
     appendDebugLog("[Debug] Calling LLM for response...");
   }
 
-  const rawResponse = await callLLM(responseSystemPrompt, responseUserPrompt, { signal, temperature: 0.7, model: personaEntity.model, operation: "response" });
+  const rawResponse = await callLLMWithHistory(responseSystemPrompt, nativeHistory, { signal, temperature: 0.7, model: personaEntity.model, operation: "response" });
   const response = rawResponse ? stripEcho(humanMessage, rawResponse) : null;
 
   if (signal?.aborted) return abortedResult;

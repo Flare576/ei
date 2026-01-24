@@ -3,7 +3,7 @@ import { processEvent } from '../../src/processor.js';
 import type { HumanEntity, PersonaEntity } from '../../src/types.js';
 
 vi.mock('../../src/llm.js', () => ({
-  callLLM: vi.fn(),
+  callLLMWithHistory: vi.fn(),
   LLMAbortedError: class extends Error { 
     name = 'LLMAbortedError';
     constructor(message: string) {
@@ -38,13 +38,14 @@ vi.mock('../../src/prompts.js', () => ({
   buildResponseSystemPrompt: vi.fn(),
   buildResponseUserPrompt: vi.fn(),
   getVisiblePersonas: vi.fn(),
+  toNativeMessages: vi.fn(),
 }));
 
 vi.mock('../../src/extraction-frequency.js', () => ({
   triggerExtraction: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { callLLM, LLMAbortedError } from '../../src/llm.js';
+import { callLLMWithHistory, LLMAbortedError } from '../../src/llm.js';
 import { 
   loadHumanEntity,
   loadPersonaEntity,
@@ -58,6 +59,7 @@ import {
   buildResponseSystemPrompt,
   buildResponseUserPrompt,
   getVisiblePersonas,
+  toNativeMessages,
 } from '../../src/prompts.js';
 import { triggerExtraction } from '../../src/extraction-frequency.js';
 
@@ -91,7 +93,8 @@ describe('processor.ts', () => {
     vi.mocked(getVisiblePersonas).mockReturnValue([]);
     vi.mocked(buildResponseSystemPrompt).mockResolvedValue('system prompt');
     vi.mocked(buildResponseUserPrompt).mockReturnValue('user prompt');
-    vi.mocked(callLLM).mockResolvedValue('LLM response');
+    vi.mocked(toNativeMessages).mockReturnValue([]);
+    vi.mocked(callLLMWithHistory).mockResolvedValue('LLM response');
   });
 
   afterEach(() => {
@@ -100,7 +103,7 @@ describe('processor.ts', () => {
 
   describe('processEvent', () => {
     test('handles successful message processing', async () => {
-      vi.mocked(callLLM).mockResolvedValue('Test response');
+      vi.mocked(callLLMWithHistory).mockResolvedValue('Test response');
 
       const result = await processEvent('Hello world', 'test-persona', false);
 
@@ -111,12 +114,12 @@ describe('processor.ts', () => {
       expect(triggerExtraction).toHaveBeenCalledTimes(2);
     });
 
-    test('only calls callLLM once for response generation', async () => {
-      vi.mocked(callLLM).mockResolvedValue('Test response');
+    test('only calls callLLMWithHistory once for response generation', async () => {
+      vi.mocked(callLLMWithHistory).mockResolvedValue('Test response');
 
       await processEvent('Hello world', 'test-persona', false);
 
-      expect(callLLM).toHaveBeenCalledTimes(1);
+      expect(callLLMWithHistory).toHaveBeenCalledTimes(1);
     });
 
     test('handles abort signal correctly', async () => {
@@ -132,13 +135,13 @@ describe('processor.ts', () => {
     });
 
     test('handles LLM abort error gracefully', async () => {
-      vi.mocked(callLLM).mockRejectedValue(new LLMAbortedError());
+      vi.mocked(callLLMWithHistory).mockRejectedValue(new LLMAbortedError());
 
       await expect(processEvent('Hello', 'test-persona', false)).rejects.toThrow(LLMAbortedError);
     });
 
     test('handles null human message (heartbeat)', async () => {
-      vi.mocked(callLLM).mockResolvedValue('Heartbeat response');
+      vi.mocked(callLLMWithHistory).mockResolvedValue('Heartbeat response');
 
       const result = await processEvent(null, 'test-persona', false);
 
@@ -147,7 +150,7 @@ describe('processor.ts', () => {
     });
 
     test('handles empty LLM response', async () => {
-      vi.mocked(callLLM).mockResolvedValue(null);
+      vi.mocked(callLLMWithHistory).mockResolvedValue(null);
 
       const result = await processEvent('Hello', 'test-persona', false);
 
@@ -156,7 +159,7 @@ describe('processor.ts', () => {
     });
 
     test('triggers extraction for both human and persona', async () => {
-      vi.mocked(callLLM).mockResolvedValue('Test response');
+      vi.mocked(callLLMWithHistory).mockResolvedValue('Test response');
 
       await processEvent('Hello', 'test-persona', false);
 
@@ -166,7 +169,7 @@ describe('processor.ts', () => {
     });
 
     test('does not trigger extraction when no response', async () => {
-      vi.mocked(callLLM).mockResolvedValue(null);
+      vi.mocked(callLLMWithHistory).mockResolvedValue(null);
 
       await processEvent('Hello', 'test-persona', false);
 
@@ -174,7 +177,7 @@ describe('processor.ts', () => {
     });
 
     test('does not trigger extraction when no human message', async () => {
-      vi.mocked(callLLM).mockResolvedValue('Response');
+      vi.mocked(callLLMWithHistory).mockResolvedValue('Response');
 
       await processEvent(null, 'test-persona', false);
 
@@ -219,7 +222,7 @@ describe('stripEcho function (via processEvent)', () => {
     const userMessage = 'Hello world';
     const echoedResponse = 'Hello world\n\nThis is my actual response.';
     
-    vi.mocked(callLLM).mockResolvedValue(echoedResponse);
+    vi.mocked(callLLMWithHistory).mockResolvedValue(echoedResponse);
 
     const result = await processEvent(userMessage, 'test-persona', false);
 
@@ -230,7 +233,7 @@ describe('stripEcho function (via processEvent)', () => {
     const userMessage = 'Hello';
     const echoedResponse = 'Hello\nThis is my response.';
     
-    vi.mocked(callLLM).mockResolvedValue(echoedResponse);
+    vi.mocked(callLLMWithHistory).mockResolvedValue(echoedResponse);
 
     const result = await processEvent(userMessage, 'test-persona', false);
 
@@ -241,7 +244,7 @@ describe('stripEcho function (via processEvent)', () => {
     const userMessage = 'Hello';
     const responseWithQuote = 'You said "Hello" and I think that\'s nice.';
     
-    vi.mocked(callLLM).mockResolvedValue(responseWithQuote);
+    vi.mocked(callLLMWithHistory).mockResolvedValue(responseWithQuote);
 
     const result = await processEvent(userMessage, 'test-persona', false);
 
@@ -251,7 +254,7 @@ describe('stripEcho function (via processEvent)', () => {
   test('handles null user message safely', async () => {
     const response = 'This is a heartbeat response.';
     
-    vi.mocked(callLLM).mockResolvedValue(response);
+    vi.mocked(callLLMWithHistory).mockResolvedValue(response);
 
     const result = await processEvent(null, 'test-persona', false);
 
@@ -259,7 +262,7 @@ describe('stripEcho function (via processEvent)', () => {
   });
 
   test('handles empty response safely', async () => {
-    vi.mocked(callLLM).mockResolvedValue('');
+    vi.mocked(callLLMWithHistory).mockResolvedValue('');
 
     const result = await processEvent('Hello', 'test-persona', false);
 

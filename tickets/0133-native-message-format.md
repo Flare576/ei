@@ -1,6 +1,6 @@
 # 0133: Native Message Format for Responses
 
-**Status**: PENDING
+**Status**: DONE
 
 ## Problem
 
@@ -165,15 +165,15 @@ This logic moves to system prompt context, not user prompt.
 
 ## Acceptance Criteria
 
-- [ ] Create `callLLMWithHistory()` function
-- [ ] Create `toNativeMessages()` helper
-- [ ] Update response generation to use native format
-- [ ] Simplify `buildResponseUserPrompt()` (remove history blob)
-- [ ] Move conversation state context to system prompt
-- [ ] Handle no-message heartbeat case
-- [ ] Extraction prompts unchanged (still use text blobs)
-- [ ] Manual test: conversation quality should improve or stay same
-- [ ] Manual test: proactive reach-out (heartbeat) still works
+- [x] Create `callLLMWithHistory()` function
+- [x] Create `toNativeMessages()` helper
+- [x] Update response generation to use native format
+- [x] Simplify `buildResponseUserPrompt()` (remove history blob)
+- [x] Move conversation state context to system prompt
+- [x] Handle no-message heartbeat case
+- [x] Extraction prompts unchanged (still use text blobs)
+- [x] Manual test: conversation quality should improve or stay same
+- [x] Manual test: proactive reach-out (heartbeat) still works
 
 ## Testing
 

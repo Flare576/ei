@@ -341,7 +341,7 @@ describe("buildResponseUserPrompt", () => {
     expect(result).toContain("mid-conversation");
   });
 
-  it("should include recent conversation history with default persona name", () => {
+  it("should NOT include history blob (uses native message format)", () => {
     const history: Message[] = [
       { role: "human", content: "User said this", timestamp: new Date().toISOString() },
       { role: "system", content: "System replied this", timestamp: new Date().toISOString() },
@@ -350,32 +350,27 @@ describe("buildResponseUserPrompt", () => {
 
     const result = buildResponseUserPrompt(0, history, "Hello");
 
-    expect(result).toContain("User said this");
-    expect(result).toContain("EI: System replied this");
-    expect(result).not.toContain("Human: Hello");
-    expect(result).toContain("RECENT CONVERSATION");
+    expect(result).not.toContain("User said this");
+    expect(result).not.toContain("System replied this");
+    expect(result).not.toContain("RECENT CONVERSATION");
   });
 
-  it("should use custom persona name in history formatting", () => {
+  it("should NOT include persona name parameter (removed in native format)", () => {
     const history: Message[] = [
       { role: "human", content: "User said this", timestamp: new Date().toISOString() },
       { role: "system", content: "System replied this", timestamp: new Date().toISOString() },
-      { role: "human", content: "Hello", timestamp: new Date().toISOString() },
     ];
 
-    const result = buildResponseUserPrompt(0, history, "Hello", "Gandalf");
+    const result = buildResponseUserPrompt(0, history, "Hello");
 
-    expect(result).toContain("Gandalf: System replied this");
-    expect(result).not.toContain("EI:");
-    expect(result).not.toContain("Human: Hello");
+    expect(result).toBeDefined();
   });
 
-  it("should include human message in prompt", () => {
+  it("should NOT include human message markers (message passed natively)", () => {
     const result = buildResponseUserPrompt(0, null, "Hello there!");
 
-    expect(result).toContain("Hello there!");
-    expect(result).toContain("BEGIN MESSAGE");
-    expect(result).toContain("END MESSAGE");
+    expect(result).not.toContain("BEGIN MESSAGE");
+    expect(result).not.toContain("END MESSAGE");
   });
 
   it("should handle proactive (null message) case", () => {

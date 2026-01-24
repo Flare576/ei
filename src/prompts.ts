@@ -1,7 +1,24 @@
 import { Message, HumanEntity, PersonaEntity, Fact, Trait, Topic, Person, DataItemBase } from "./types.js";
 import { getPendingValidations } from "./llm-queue.js";
+import { ChatMessage } from "./llm.js";
 
 export const GLOBAL_GROUP = "*";
+
+export function toNativeMessages(
+  history: Message[],
+  currentMessage?: string
+): ChatMessage[] {
+  const messages: ChatMessage[] = history.map(m => ({
+    role: m.role === "human" ? "user" : "assistant",
+    content: m.content,
+  }));
+  
+  if (currentMessage) {
+    messages.push({ role: "user", content: currentMessage });
+  }
+  
+  return messages;
+}
 
 /**
  * Filtered human data visible to a persona (used in prompts)
@@ -472,87 +489,46 @@ Current time: ${new Date().toISOString()}
 export function buildResponseUserPrompt(
   delayMs: number,
   recentHistory: Message[] | null,
-  humanMessage: string | null,
-  personaName: string = "EI"
+  humanMessage: string | null
 ): string {
   const delayMinutes = Math.round(delayMs / 60000);
   const conversationState = getConversationState(recentHistory, delayMs);
-  let prompt: string;
 
   if (humanMessage) {
-    prompt = `${conversationState}
-
-The human sent this message:
-
-### BEGIN MESSAGE ###
-${humanMessage}
-### END MESSAGE ###
+    return `${conversationState}
 
 If you should respond, write your response. If silence is appropriate, say exactly: No Message`;
-  } else {
-    const lastSpeaker = recentHistory?.length
-      ? recentHistory[recentHistory.length - 1].role
-      : null;
+  }
 
-    const consecutiveSystemMessages = countTrailingSystemMessages(recentHistory);
+  const consecutiveSystemMessages = countTrailingSystemMessages(recentHistory);
+  const lastSystemMsg = recentHistory?.filter(m => m.role === "system").slice(-1)[0];
+  
+  let prompt = `${conversationState}
 
-    let context = `${conversationState}\n\nIt has been ${delayMinutes} minutes since the last message.`;
-
-    prompt = `${context}
+It has been ${delayMinutes} minutes since the last message.
 
 Should you reach out? If yes, write your message. If not, say exactly: No Message`;
-  }
 
-  if (recentHistory && recentHistory.length > 0) {
-    // If humanMessage is present, it's already shown above and is the last entry in history
-    // Skip it to avoid duplication
-    const historyToShow = humanMessage 
-      ? recentHistory.slice(0, -1)
-      : recentHistory;
+  if (lastSystemMsg) {
+    const preview = lastSystemMsg.content.length > 100 
+      ? lastSystemMsg.content.substring(0, 100) + "..." 
+      : lastSystemMsg.content;
     
-    if (historyToShow.length > 0) {
-      const historyText = historyToShow
-        .map((m) => `${m.role === "human" ? "Human" : personaName}: ${m.content}`)
-        .join("\n");
-
-      prompt += `
-
-### RECENT CONVERSATION ###
-${historyText}
-### END CONVERSATION ###`;
-    }
-  }
-
-  // Repetition warning at the very end for recency attention
-  if (!humanMessage && recentHistory?.length) {
-    const lastSpeaker = recentHistory[recentHistory.length - 1].role;
-    const consecutiveSystemMessages = countTrailingSystemMessages(recentHistory);
-    
-    if (lastSpeaker === "system") {
-      const lastSystemMsg = recentHistory.filter(m => m.role === "system").slice(-1)[0];
-      
-      if (lastSystemMsg) {
-        const preview = lastSystemMsg.content.length > 100 
-          ? lastSystemMsg.content.substring(0, 100) + "..." 
-          : lastSystemMsg.content;
-        
-        prompt += `
+    prompt += `
 
 ### CRITICAL INSTRUCTION ###
 Your last message was: "${preview}"
 
 The human has NOT responded. DO NOT repeat or rephrase this. If you reach out, say something COMPLETELY DIFFERENT - a new topic, a genuine question, or say "No Message".`;
 
-        if (consecutiveSystemMessages >= 2) {
-          prompt += `
+    if (consecutiveSystemMessages >= 2) {
+      prompt += `
 
 WARNING: You've sent ${consecutiveSystemMessages} messages without a response. The human is likely busy. Strongly prefer "No Message".`;
-        }
-        
-        prompt += `
-### END INSTRUCTION ###`;
-      }
     }
+    
+    prompt += `
+### END INSTRUCTION ###`;
   }
 
   return prompt;

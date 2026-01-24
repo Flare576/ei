@@ -2,7 +2,8 @@
 
 ## QA ⚠️ (0 tickets)
 
-## DONE ✅ (91 tickets)
+## DONE ✅ (92 tickets)
+- 0133: Native Message Format for Responses
 - 0131: /clarify Command Editing Is Broken - Converted to view-only (partial fix)
 - 0130: Fix ei_validation Queue Dequeue Bug (fixed in separate commit)
 - 0123: Update AGENTS.md Documentation
@@ -94,9 +95,8 @@
 - 0114: Known Personas in Prompts
 - 0118: Ei Heartbeat Simplification
 
-## PENDING (25 tickets)
+## PENDING (24 tickets)
 - 0132: Extraction System Overhaul (Epic) - HIGH PRIORITY
-- 0133: Native Message Format for Responses
 - 0134: Three-Step Human Extraction Flow
 - 0135: Prompt Centralization
 - 0136: Persona Trait Behavior Detection (supersedes 0128)
@@ -149,7 +149,7 @@
 
 **Last Updated**: 2026-01-23
 **Total Tickets**: 138 created
-**Stats**: 91 done, 0 QA, 0 in_progress, 25 pending, 1 superseded, 13 cancelled, 7 archived (0107 epic sub-tickets)
+**Stats**: 92 done, 0 QA, 0 in_progress, 24 pending, 1 superseded, 13 cancelled, 7 archived (0107 epic sub-tickets)
 
 ## Epic Status
 
@@ -218,7 +218,7 @@ Absorbs 0102 (Ei Core Persona) and 0103 (Persona Prompt Architecture).
 Complete overhaul of extraction system based on prompt engineering learnings.
 
 **Sub-tickets:**
-- 0133: PENDING - Native Message Format for Responses
+- 0133: DONE - Native Message Format for Responses
 - 0134: PENDING - Three-Step Human Extraction Flow
 - 0135: PENDING - Prompt Centralization
 - 0136: PENDING - Persona Trait Behavior Detection (supersedes 0128)
