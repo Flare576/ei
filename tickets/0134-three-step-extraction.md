@@ -1,6 +1,6 @@
 # 0134: Three-Step Human Extraction Flow
 
-**Status**: PENDING
+**Status**: DONE
 
 ## Problem
 

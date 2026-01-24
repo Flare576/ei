@@ -55,6 +55,21 @@ describe("callLLMForJSON retry behavior", () => {
     expect(mockCreate).toHaveBeenCalledTimes(1);
   });
 
+  it("handles JSON with trailing markdown fence (no-op pattern)", async () => {
+    mockCreate.mockResolvedValueOnce({
+      choices: [{ 
+        message: { content: '{}\n```' }, 
+        finish_reason: "stop" 
+      }],
+    });
+
+    const { callLLMForJSON } = await import("../../src/llm.js");
+    const result = await callLLMForJSON<Record<string, never>>("system", "user");
+
+    expect(result).toEqual({});
+    expect(mockCreate).toHaveBeenCalledTimes(1);
+  });
+
   it("retries with enhanced prompt when first parse fails", async () => {
     mockCreate
       .mockResolvedValueOnce({

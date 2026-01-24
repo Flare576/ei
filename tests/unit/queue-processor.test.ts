@@ -81,37 +81,27 @@ describe("QueueProcessor", () => {
         payload: {
           target: "human",
           persona: "ei",
-          messages: mockMessages
+          messages: mockMessages,
+          dataTypes: ["fact", "trait", "topic", "person"]
         } as FastScanPayload
-      };
-
-      const mockResult = {
-        mentioned: [{ name: "Topic1", type: "topic" as const, confidence: "high" as const }],
-        new_items: []
       };
 
       vi.mocked(queue.dequeueItem)
         .mockResolvedValueOnce(mockItem)
         .mockResolvedValue(null);
       
-      vi.mocked(extraction.runFastScan).mockResolvedValue(mockResult);
-      vi.mocked(extraction.routeFastScanResults).mockResolvedValue(undefined);
+      vi.mocked(extraction.runThreeStepExtraction).mockResolvedValue(undefined);
 
       await processor.start();
       await llm.sleep(50);
       await processor.stop();
 
-      expect(extraction.runFastScan).toHaveBeenCalledWith(
+      expect(extraction.runThreeStepExtraction).toHaveBeenCalledWith(
         "human",
         "ei",
         mockMessages,
+        ["fact", "trait", "topic", "person"],
         expect.any(Object)
-      );
-      expect(extraction.routeFastScanResults).toHaveBeenCalledWith(
-        mockResult,
-        "human",
-        "ei",
-        mockMessages
       );
       expect(queue.completeItem).toHaveBeenCalledWith("test-123");
     });
@@ -160,7 +150,8 @@ describe("QueueProcessor", () => {
         payload: {
           target: "human",
           persona: "ei",
-          messages: []
+          messages: [],
+          dataTypes: ["fact", "trait", "topic", "person"]
         } as FastScanPayload
       };
 
@@ -168,7 +159,7 @@ describe("QueueProcessor", () => {
         .mockResolvedValueOnce(mockItem)
         .mockResolvedValue(null);
       
-      vi.mocked(extraction.runFastScan).mockRejectedValue(new llm.LLMAbortedError());
+      vi.mocked(extraction.runThreeStepExtraction).mockRejectedValue(new llm.LLMAbortedError());
 
       await processor.start();
       await llm.sleep(50);
@@ -188,7 +179,8 @@ describe("QueueProcessor", () => {
         payload: {
           target: "human",
           persona: "ei",
-          messages: []
+          messages: [],
+          dataTypes: ["fact", "trait", "topic", "person"]
         } as FastScanPayload
       };
 
@@ -198,7 +190,7 @@ describe("QueueProcessor", () => {
         .mockResolvedValueOnce(mockItem)
         .mockResolvedValue(null);
       
-      vi.mocked(extraction.runFastScan).mockRejectedValue(testError);
+      vi.mocked(extraction.runThreeStepExtraction).mockRejectedValue(testError);
 
       await processor.start();
       await llm.sleep(50);
@@ -209,7 +201,7 @@ describe("QueueProcessor", () => {
   });
 
   describe("abort signal propagation", () => {
-    it("passes abort signal to runFastScan", async () => {
+    it("passes abort signal to runThreeStepExtraction", async () => {
       const mockItem: LLMQueueItem = {
         id: "test-signal",
         type: "fast_scan",
@@ -219,7 +211,8 @@ describe("QueueProcessor", () => {
         payload: {
           target: "human",
           persona: "ei",
-          messages: []
+          messages: [],
+          dataTypes: ["fact", "trait", "topic", "person"]
         } as FastScanPayload
       };
 
@@ -227,15 +220,16 @@ describe("QueueProcessor", () => {
         .mockResolvedValueOnce(mockItem)
         .mockResolvedValue(null);
       
-      vi.mocked(extraction.runFastScan).mockResolvedValue(null);
+      vi.mocked(extraction.runThreeStepExtraction).mockResolvedValue(undefined);
 
       await processor.start();
       await llm.sleep(50);
       await processor.stop();
 
-      expect(extraction.runFastScan).toHaveBeenCalledWith(
+      expect(extraction.runThreeStepExtraction).toHaveBeenCalledWith(
         expect.any(String),
         expect.any(String),
+        expect.any(Array),
         expect.any(Array),
         expect.objectContaining({
           aborted: expect.any(Boolean)
@@ -253,7 +247,8 @@ describe("QueueProcessor", () => {
         payload: {
           target: "human",
           persona: "ei",
-          messages: []
+          messages: [],
+          dataTypes: ["fact", "trait", "topic", "person"]
         } as FastScanPayload
       };
 
@@ -263,13 +258,13 @@ describe("QueueProcessor", () => {
         .mockResolvedValueOnce(mockItem)
         .mockResolvedValue(null);
       
-      vi.mocked(extraction.runFastScan).mockImplementation(async (_t, _p, _m, signal) => {
+      vi.mocked(extraction.runThreeStepExtraction).mockImplementation(async (_t, _p, _m, _d, signal) => {
         abortSignal = signal;
         await new Promise(resolve => setTimeout(resolve, 200));
         if (signal?.aborted) {
           throw new llm.LLMAbortedError();
         }
-        return null;
+        return undefined;
       });
 
       await processor.start();

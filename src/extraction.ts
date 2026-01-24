@@ -11,6 +11,13 @@ import { HumanEntity, PersonaEntity, Message } from "./types.js";
 import { loadHumanEntity, loadPersonaEntity, listPersonas, appendDebugLog } from "./storage.js";
 import { callLLMForJSON } from "./llm.js";
 import { enqueueItem, DetailUpdatePayload } from "./llm-queue.js";
+import { buildStep1FactsPrompt } from "./prompts/extraction/step1/facts.js";
+import { buildStep1TraitsPrompt } from "./prompts/extraction/step1/traits.js";
+import { buildStep1TopicsPrompt } from "./prompts/extraction/step1/topics.js";
+import { buildStep1PeoplePrompt } from "./prompts/extraction/step1/people.js";
+import { buildStep2MatchPrompt } from "./prompts/extraction/step2/match.js";
+import { buildStep3UpdatePrompt } from "./prompts/extraction/step3/update.js";
+import { mapFieldsFromPrompt } from "./prompts/extraction/field-mapping.js";
 
 // ============================================================================
 // Type Definitions
@@ -41,6 +48,67 @@ export interface FastScanResult {
     confidence: "high" | "medium" | "low";
     reason: string;
   }>;
+}
+
+export interface Step1FactItem {
+  type_of_fact: string;
+  value_of_fact: string;
+  confidence: "high" | "medium" | "low";
+  reason: string;
+}
+
+export interface Step1TraitItem {
+  type_of_trait: string;
+  value_of_trait: string;
+  confidence: "high" | "medium" | "low";
+  reason: string;
+}
+
+export interface Step1TopicItem {
+  type_of_topic: string;
+  value_of_topic: string;
+  confidence: "high" | "medium" | "low";
+  reason: string;
+}
+
+export interface Step1PersonItem {
+  type_of_person: string;
+  name_of_person: string;
+  confidence: "high" | "medium" | "low";
+  reason: string;
+}
+
+export interface Step1FactsResult {
+  facts: Step1FactItem[];
+}
+
+export interface Step1TraitsResult {
+  traits: Step1TraitItem[];
+}
+
+export interface Step1TopicsResult {
+  topics: Step1TopicItem[];
+}
+
+export interface Step1PeopleResult {
+  people: Step1PersonItem[];
+}
+
+export interface Step2MatchResult {
+  name: string;
+  description: string;
+  confidence: "high" | "medium" | "low";
+}
+
+export interface Step3UpdateResult {
+  name?: string;
+  description?: string;
+  sentiment?: number;
+  strength?: number;
+  relationship?: string;
+  exposure_current?: number;
+  exposure_desired?: number;
+  exposure_impact?: "high" | "medium" | "low" | "none";
 }
 
 // ============================================================================
@@ -968,4 +1036,301 @@ async function maybeRegeneratePersonaDescriptions(
   });
   
   appendDebugLog(`[DetailUpdate] Queued description regeneration for ${persona}`);
+}
+
+type DataType = "fact" | "trait" | "topic" | "person";
+
+function getItemsOfType(entity: HumanEntity, dataType: DataType): DataItemBase[] {
+  switch (dataType) {
+    case "fact":
+      return entity.facts;
+    case "trait":
+      return entity.traits;
+    case "topic":
+      return entity.topics;
+    case "person":
+      return entity.people;
+  }
+}
+
+function findByName(items: DataItemBase[], name: string): DataItemBase | null {
+  const normalized = name.toLowerCase().trim();
+  return items.find(item => item.name.toLowerCase().trim() === normalized) || null;
+}
+
+function mapExposureImpactToBoost(impact: string): number {
+  switch (impact) {
+    case "high": return 0.3;
+    case "medium": return 0.2;
+    case "low": return 0.1;
+    case "none": return 0;
+    default: return 0;
+  }
+}
+
+async function saveDataItem(
+  target: "human",
+  persona: string,
+  dataType: DataType,
+  data: Record<string, unknown>,
+  isNew: boolean,
+  matchedItem: DataItemBase | null = null
+): Promise<void> {
+  if (target !== "human") {
+    throw new Error("Three-step extraction only supports human target currently");
+  }
+
+  if (!data.name) {
+    appendDebugLog(`[ThreeStep] ERROR: Cannot save ${dataType} without name. Data: ${JSON.stringify(data)}`);
+    throw new Error(`Cannot save ${dataType} without name`);
+  }
+
+  const entity = await loadHumanEntity();
+  const items = getItemsOfType(entity, dataType) as any[];
+  
+  const now = new Date().toISOString();
+  
+  if ((dataType === "topic" || dataType === "person") && data.exposure_impact) {
+    const impactBoost = mapExposureImpactToBoost(data.exposure_impact as string);
+    if (impactBoost > 0) {
+      const currentLevel = isNew ? 0.5 : ((matchedItem as any)?.level_current || 0.5);
+      data.level_current = Math.min(1.0, currentLevel + impactBoost);
+      appendDebugLog(`[ThreeStep] Applied exposure_impact "${data.exposure_impact}": ${currentLevel.toFixed(2)} + ${impactBoost} = ${(data.level_current as number).toFixed(2)}`);
+    }
+    delete data.exposure_impact;
+  }
+  
+  if (isNew) {
+    const newItem: any = {
+      name: data.name,
+      description: data.description || "",
+      sentiment: data.sentiment || 0,
+      last_updated: now,
+      learned_by: persona,
+      persona_groups: ["*"]
+    };
+    
+    if (dataType === "fact") {
+      newItem.confidence = data.confidence || 0.5;
+    } else if (dataType === "trait") {
+      newItem.strength = data.strength;
+    } else if (dataType === "topic" || dataType === "person") {
+      newItem.level_current = data.level_current || 0.5;
+      newItem.level_ideal = data.level_ideal || 0.5;
+    }
+    
+    if (dataType === "person") {
+      newItem.relationship = data.relationship || "Unknown";
+    }
+    
+    items.push(newItem);
+    appendDebugLog(`[ThreeStep] Created new ${dataType}: ${newItem.name} (total ${items.length} ${dataType}s)`);
+  } else {
+    if (!matchedItem) {
+      appendDebugLog(`[ThreeStep] ERROR: Update mode but no matchedItem provided for ${dataType}`);
+      throw new Error(`Update mode requires matchedItem reference`);
+    }
+    
+    const existingItem = findByName(items, matchedItem.name);
+    if (!existingItem) {
+      appendDebugLog(`[ThreeStep] ERROR: Matched item "${matchedItem.name}" not found in ${items.length} existing ${dataType}s`);
+      throw new Error(`Matched item not found: ${matchedItem.name}`);
+    }
+    
+    Object.assign(existingItem, {
+      ...data,
+      last_updated: now,
+      learned_by: persona
+    });
+    
+    appendDebugLog(`[ThreeStep] Updated ${dataType}: ${matchedItem.name} -> ${data.name || matchedItem.name}`);
+  }
+  
+  appendDebugLog(`[ThreeStep] Saving entity with ${items.length} ${dataType}s`);
+  await saveHumanEntity(entity);
+  appendDebugLog(`[ThreeStep] Entity saved successfully`);
+}
+
+export async function runThreeStepExtraction(
+  target: "human",
+  persona: string,
+  messages: Message[],
+  dataTypes: DataType[],
+  signal?: AbortSignal
+): Promise<void> {
+  for (const dataType of dataTypes) {
+    if (signal?.aborted) return;
+    
+    appendDebugLog(`[ThreeStep] Starting ${dataType} extraction`);
+    
+    let step1Result: any = null;
+    
+    switch (dataType) {
+      case "fact": {
+        const prompts = buildStep1FactsPrompt(messages, persona);
+        step1Result = await callLLMForJSON<Step1FactsResult>(
+          prompts.system,
+          prompts.user,
+          { signal, temperature: 0.3, operation: "concept" }
+        );
+        break;
+      }
+      case "trait": {
+        const prompts = buildStep1TraitsPrompt(messages, persona);
+        step1Result = await callLLMForJSON<Step1TraitsResult>(
+          prompts.system,
+          prompts.user,
+          { signal, temperature: 0.3, operation: "concept" }
+        );
+        break;
+      }
+      case "topic": {
+        const prompts = buildStep1TopicsPrompt(messages, persona);
+        step1Result = await callLLMForJSON<Step1TopicsResult>(
+          prompts.system,
+          prompts.user,
+          { signal, temperature: 0.3, operation: "concept" }
+        );
+        break;
+      }
+      case "person": {
+        const prompts = buildStep1PeoplePrompt(messages, persona);
+        step1Result = await callLLMForJSON<Step1PeopleResult>(
+          prompts.system,
+          prompts.user,
+          { signal, temperature: 0.3, operation: "concept" }
+        );
+        break;
+      }
+    }
+    
+    if (!step1Result) {
+      appendDebugLog(`[ThreeStep] Step 1 failed for ${dataType}`);
+      continue;
+    }
+    
+    const itemsArray = dataType === "fact" ? step1Result.facts :
+                      dataType === "trait" ? step1Result.traits :
+                      dataType === "topic" ? step1Result.topics :
+                      step1Result.people;
+    
+    if (!itemsArray || itemsArray.length === 0) {
+      appendDebugLog(`[ThreeStep] No ${dataType}s found in Step 1`);
+      continue;
+    }
+    
+    appendDebugLog(`[ThreeStep] Found ${itemsArray.length} ${dataType}(s) in Step 1`);
+    
+    const entity = await loadHumanEntity();
+    const existingItems = getItemsOfType(entity, dataType);
+    const hasExistingItems = existingItems.length > 0;
+    
+    if (!hasExistingItems) {
+      appendDebugLog(`[ThreeStep] No existing ${dataType}s - skipping Step 2 (matching) for all items`);
+    }
+    
+    for (const item of itemsArray) {
+      if (signal?.aborted) return;
+      
+      if (item.confidence === "low") {
+        appendDebugLog(`[ThreeStep] Skipping low-confidence ${dataType}: ${extractItemName(item, dataType)}`);
+        continue;
+      }
+      
+      const itemName = extractItemName(item, dataType);
+      const itemValue = extractItemValue(item, dataType);
+      
+      let isNew = !hasExistingItems;
+      let matchedItem: DataItemBase | null = null;
+      
+      if (hasExistingItems) {
+        appendDebugLog(`[ThreeStep] Step 2: Matching "${itemName}" (${dataType})`);
+        
+        const matchPrompts = buildStep2MatchPrompt(
+          dataType,
+          itemName,
+          itemValue,
+          existingItems.map(e => ({ name: e.name, description: e.description }))
+        );
+        
+        const step2Result = await callLLMForJSON<Step2MatchResult>(
+          matchPrompts.system,
+          matchPrompts.user,
+          { signal, temperature: 0.3, operation: "concept" }
+        );
+        
+        if (!step2Result) {
+          appendDebugLog(`[ThreeStep] Step 2 failed for ${itemName}`);
+          continue;
+        }
+        
+        isNew = step2Result.name === "Not Found" || step2Result.description === "Not Found";
+        matchedItem = isNew ? null : findByName(existingItems, step2Result.name);
+      } else {
+        appendDebugLog(`[ThreeStep] Step 2 skipped for "${itemName}" - creating new ${dataType}`);
+      }
+      
+      appendDebugLog(`[ThreeStep] Step 3: ${isNew ? 'Creating' : 'Updating'} "${matchedItem?.name || itemName}"`);
+      
+      const updatePrompts = buildStep3UpdatePrompt(
+        dataType,
+        matchedItem,
+        messages,
+        persona,
+        isNew ? itemName : undefined,
+        isNew ? itemValue : undefined
+      );
+      
+      const step3Result = await callLLMForJSON<Step3UpdateResult>(
+        updatePrompts.system,
+        updatePrompts.user,
+        { signal, temperature: 0.3, operation: "concept" }
+      );
+      
+      if (!step3Result || Object.keys(step3Result).length === 0) {
+        appendDebugLog(`[ThreeStep] Step 3 returned empty for ${itemName} - no changes needed`);
+        continue;
+      }
+      
+      const mapped = mapFieldsFromPrompt(step3Result as Record<string, unknown>);
+      
+      if (isNew && !mapped.name) {
+        mapped.name = itemName;
+        appendDebugLog(`[ThreeStep] Using Step 1 name for new item: ${itemName}`);
+      }
+      
+      await saveDataItem(target, persona, dataType, mapped, isNew, matchedItem);
+    }
+    
+    const { recordExtraction } = await import("./extraction-frequency.js");
+    await recordExtraction(target, target === "human" ? null : persona, dataType);
+  }
+  
+  appendDebugLog(`[ThreeStep] Extraction complete for ${dataTypes.join(', ')}`);
+}
+
+function extractItemName(item: any, dataType: DataType): string {
+  switch (dataType) {
+    case "fact":
+      return item.type_of_fact;
+    case "trait":
+      return item.value_of_trait;
+    case "topic":
+      return item.value_of_topic;
+    case "person":
+      return item.name_of_person !== "Unknown" ? item.name_of_person : item.type_of_person;
+  }
+}
+
+function extractItemValue(item: any, dataType: DataType): string {
+  switch (dataType) {
+    case "fact":
+      return item.value_of_fact;
+    case "trait":
+      return item.value_of_trait;
+    case "topic":
+      return item.value_of_topic;
+    case "person":
+      return item.type_of_person;
+  }
 }

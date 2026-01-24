@@ -2,7 +2,8 @@
 
 ## QA ⚠️ (0 tickets)
 
-## DONE ✅ (92 tickets)
+## DONE ✅ (93 tickets)
+- 0134: Three-Step Human Extraction Flow
 - 0133: Native Message Format for Responses
 - 0131: /clarify Command Editing Is Broken - Converted to view-only (partial fix)
 - 0130: Fix ei_validation Queue Dequeue Bug (fixed in separate commit)
@@ -97,11 +98,11 @@
 
 ## PENDING (24 tickets)
 - 0132: Extraction System Overhaul (Epic) - HIGH PRIORITY
-- 0134: Three-Step Human Extraction Flow
 - 0135: Prompt Centralization
 - 0136: Persona Trait Behavior Detection (supersedes 0128)
 - 0137: Persona Topic Exploration
 - 0138: Persona Builder Template
+- 0139: Human Entity Data Compression
 - 0129: Extract Time-Based Core Logic from UI Layer (FUTURE - The Elephant)
 
 - 0127: Persona Facts/People as Topics (Future Enhancement)
@@ -147,9 +148,9 @@
 
 ---
 
-**Last Updated**: 2026-01-23
-**Total Tickets**: 138 created
-**Stats**: 92 done, 0 QA, 0 in_progress, 24 pending, 1 superseded, 13 cancelled, 7 archived (0107 epic sub-tickets)
+**Last Updated**: 2026-01-24
+**Total Tickets**: 139 created
+**Stats**: 93 done, 0 QA, 0 in_progress, 24 pending, 1 superseded, 13 cancelled, 7 archived (0107 epic sub-tickets)
 
 ## Epic Status
 
@@ -219,7 +220,7 @@ Complete overhaul of extraction system based on prompt engineering learnings.
 
 **Sub-tickets:**
 - 0133: DONE - Native Message Format for Responses
-- 0134: PENDING - Three-Step Human Extraction Flow
+- 0134: DONE - Three-Step Human Extraction Flow
 - 0135: PENDING - Prompt Centralization
 - 0136: PENDING - Persona Trait Behavior Detection (supersedes 0128)
 - 0137: PENDING - Persona Topic Exploration

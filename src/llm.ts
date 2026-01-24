@@ -223,6 +223,8 @@ export class LLMTruncatedError extends Error {
 const JSON_REPAIR_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
   // Remove JavaScript-style comments (// ...) - must be first to avoid breaking other repairs
   { pattern: /\/\/[^\n]*/g, replacement: "" },
+  // Fix invalid escape sequences: \' is not valid in JSON, just use '
+  { pattern: /\\'/g, replacement: "'" },
   // Fix missing opening quote before ISO date values: 2026-01-18T... → "2026-01-18T..."
   { pattern: /:\s*(\d{4}-\d{2}-\d{2}T[^"}\],\n]+)/g, replacement: ': "$1"' },
   // Fix leading zeros: 03 → 0.3, 015 → 0.15
@@ -548,6 +550,10 @@ async function attemptJSONParse<T>(
   } else {
     jsonStr = content.trim();
   }
+  
+  // Clean up trailing markdown fences that some models add after valid JSON
+  // Example: "{}\n```\n" or "{}\n```"
+  jsonStr = jsonStr.replace(/\n```[\s\S]*$/, '');
 
   try {
     return JSON.parse(jsonStr) as T;
@@ -598,7 +604,8 @@ export async function callLLMForJSON<T>(
 
 CRITICAL: Your response MUST be valid JSON. No markdown code fences, no explanations, just the JSON object/array.`;
     
-    console.warn("[LLM] JSON parse failed, retrying with enhanced guidance...");
+    const { appendDebugLog } = await import("./storage.js");
+    appendDebugLog("[LLM] JSON parse failed, retrying with enhanced guidance...");
     
     try {
       return await attemptJSONParse<T>(enhancedSystemPrompt, userPrompt, options);

@@ -65,6 +65,7 @@ export interface FastScanPayload {
   target: "human" | "system";
   persona: string;
   messages: Message[];
+  dataTypes: ("fact" | "trait" | "topic" | "person")[];
 }
 
 export interface DetailUpdatePayload {

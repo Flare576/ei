@@ -35,7 +35,7 @@ function shouldExtractByType(
     return true;
   }
   
-  const threshold = Math.max(10, history.total_extractions);
+  const threshold = Math.min(10, history.total_extractions);
   return history.messages_since_last_extract >= threshold;
 }
 
@@ -69,6 +69,7 @@ export async function triggerExtraction(
         target,
         persona,
         messages,
+        dataTypes: typesToExtract,
       }
     });
     

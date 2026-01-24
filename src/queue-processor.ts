@@ -18,7 +18,7 @@ import {
   DetailUpdatePayload,
   DescriptionRegenPayload,
 } from "./llm-queue.js";
-import { runFastScan, routeFastScanResults, runDetailUpdate } from "./extraction.js";
+import { runFastScan, routeFastScanResults, runDetailUpdate, runThreeStepExtraction } from "./extraction.js";
 import { appendDebugLog } from "./storage.js";
 import { LLMAbortedError, sleep } from "./llm.js";
 
@@ -189,40 +189,36 @@ export class QueueProcessor {
   /**
    * Execute a fast-scan extraction.
    * 
-   * Flow:
-   * 1. Run fast-scan LLM call (Phase 1)
-   * 2. Route results (queues detail_update items for Phase 2)
-   * 3. Mark this fast_scan item complete
+   * Uses three-step extraction flow: blind scan, match, update/create.
+   * Determines which data types need extraction based on extraction frequency state.
    * 
-   * Detail updates will be processed in subsequent loop iterations.
+   * Note: Currently only supports human target. System (persona) extraction 
+   * queued by extraction-frequency will be skipped until 0136/0137 implement
+   * persona-specific three-step extraction.
    */
   private async executeFastScan(payload: FastScanPayload): Promise<void> {
-    const { target, persona, messages } = payload;
+    const { target, persona, messages, dataTypes } = payload;
     
-    const result = await runFastScan(
+    if (target !== "human") {
+      appendDebugLog(`[QueueProcessor] Skipping system extraction - three-step only supports human currently (see tickets 0136/0137)`);
+      return;
+    }
+    
+    appendDebugLog(`[QueueProcessor] Running extraction for types: ${dataTypes.join(", ")}`);
+    
+    await runThreeStepExtraction(
       target,
       persona,
       messages,
+      dataTypes,
       this.abortController?.signal
     );
-    
-    if (result) {
-      await routeFastScanResults(result, target, persona, messages);
-    }
   }
   
-  /**
-   * Execute a detail update extraction.
-   * 
-   * Calls runDetailUpdate to perform Phase 2 extraction (focused LLM call for a single item).
-   */
   private async executeDetailUpdate(payload: DetailUpdatePayload): Promise<void> {
     await runDetailUpdate(payload, this.abortController?.signal);
   }
   
-  /**
-   * Execute a persona description regeneration.
-   */
   private async executeDescriptionRegen(payload: DescriptionRegenPayload): Promise<void> {
     appendDebugLog(`[QueueProcessor] Description regen queued: ${payload.persona} - Awaiting PersonaEntity-based implementation`);
   }

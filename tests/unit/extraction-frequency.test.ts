@@ -42,7 +42,14 @@ describe('extraction-frequency', () => {
 
   describe('triggerExtraction', () => {
     it('queues fast_scan for topics and people on every message', async () => {
-      const mockState: ExtractionState = {};
+      const mockState: ExtractionState = {
+        human: {
+          fact: { last_extraction: null, messages_since_last_extract: 3, total_extractions: 5 },
+          trait: { last_extraction: null, messages_since_last_extract: 2, total_extractions: 5 },
+          topic: { last_extraction: null, messages_since_last_extract: 0, total_extractions: 0 },
+          person: { last_extraction: null, messages_since_last_extract: 0, total_extractions: 0 },
+        },
+      };
       vi.mocked(storage.loadExtractionState).mockResolvedValue(mockState);
       vi.mocked(storage.saveExtractionState).mockResolvedValue();
       vi.mocked(llmQueue.enqueueItem).mockResolvedValue('test-id');
@@ -56,6 +63,7 @@ describe('extraction-frequency', () => {
           target: 'human',
           persona: 'ei',
           messages: mockMessages,
+          dataTypes: ['topic', 'person'],
         },
       });
     });
