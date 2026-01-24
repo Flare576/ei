@@ -31,3 +31,6 @@ npm-debug.log*
 
 # TypeScript cache
 *.tsbuildinfo
+
+# Don't commit these without sanitizing first
+tests/model/results

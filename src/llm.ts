@@ -307,7 +307,7 @@ export function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function callLLMRaw(
+export async function callLLMRaw(
   systemPrompt: string,
   userPrompt: string,
   options: LLMOptions = {}

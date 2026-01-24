@@ -19,7 +19,9 @@
     "start": "node dist/index.js",
     "dev": "tsx src/index.tsx",
     "chat": "tsx src/index.tsx",
-    "chat:debug": "tsx src/index.tsx --debug"
+    "chat:debug": "tsx src/index.tsx --debug",
+    "bench": "tsx tests/model/llm-bench.ts",
+    "analyze": "tsx tests/model/analyze-results.ts"
   },
   "keywords": [],
   "author": "",

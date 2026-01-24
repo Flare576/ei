@@ -1,3 +1,4 @@
 # We don't want them in Git, but we do want our agents to be able to analyze them
 !logs
 !*.log
+!tests/model/results

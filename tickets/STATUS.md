@@ -94,9 +94,16 @@
 - 0114: Known Personas in Prompts
 - 0118: Ei Heartbeat Simplification
 
-## PENDING (20 tickets)
+## PENDING (25 tickets)
+- 0132: Extraction System Overhaul (Epic) - HIGH PRIORITY
+- 0133: Native Message Format for Responses
+- 0134: Three-Step Human Extraction Flow
+- 0135: Prompt Centralization
+- 0136: Persona Trait Behavior Detection (supersedes 0128)
+- 0137: Persona Topic Exploration
+- 0138: Persona Builder Template
 - 0129: Extract Time-Based Core Logic from UI Layer (FUTURE - The Elephant)
-- 0128: Persona Trait Change Detection Overhaul - HIGH PRIORITY
+
 - 0127: Persona Facts/People as Topics (Future Enhancement)
 - 0106: Special Behavior for Archiving Ei Persona
 - 0105: Context Window Command
@@ -118,6 +125,9 @@
 - 0089: Proactive API Key Validation
 - 0092: LLM Validation and Error Handling
 
+## SUPERSEDED (1 ticket)
+- 0128: Persona Trait Change Detection Overhaul → absorbed into 0136
+
 ## CANCELLED ❌ (13 tickets)
 - 0003: /editor Command for Multi-line Input
 - 0049: Mingle Flag for Persona Cross-Awareness (superseded by 0094)
@@ -137,9 +147,9 @@
 
 ---
 
-**Last Updated**: 2026-01-21
-**Total Tickets**: 131 created
-**Stats**: 91 done, 0 QA, 0 in_progress, 20 pending, 13 cancelled, 7 archived (0107 epic sub-tickets)
+**Last Updated**: 2026-01-23
+**Total Tickets**: 138 created
+**Stats**: 91 done, 0 QA, 0 in_progress, 25 pending, 1 superseded, 13 cancelled, 7 archived (0107 epic sub-tickets)
 
 ## Epic Status
 
@@ -203,3 +213,22 @@ Absorbs 0102 (Ei Core Persona) and 0103 (Persona Prompt Architecture).
 **Future exploration (NOT blocking):**
 - 0125: Group Chat Exploration
 - 0129: Extract time-based logic from UI layer
+
+### 0132: Extraction System Overhaul - PENDING
+Complete overhaul of extraction system based on prompt engineering learnings.
+
+**Sub-tickets:**
+- 0133: PENDING - Native Message Format for Responses
+- 0134: PENDING - Three-Step Human Extraction Flow
+- 0135: PENDING - Prompt Centralization
+- 0136: PENDING - Persona Trait Behavior Detection (supersedes 0128)
+- 0137: PENDING - Persona Topic Exploration
+- 0138: PENDING - Persona Builder Template
+
+**Implementation order:**
+1. 0135 (Prompt Centralization) - enables cleaner work
+2. 0133 (Native Message Format) - foundation
+3. 0134 (Three-Step Extraction) - core overhaul
+4. 0136 (Persona Traits) - depends on 0134, 0135
+5. 0137 (Persona Topics) - depends on 0134, 0135
+6. 0138 (Persona Builder) - low priority, nice-to-have
