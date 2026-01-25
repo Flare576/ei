@@ -1,6 +1,6 @@
 # 0137: Persona Topic Exploration
 
-**Status**: PENDING
+**Status**: DONE
 
 ## Problem
 
@@ -262,15 +262,15 @@ Same as 0134, use `exposure_*` in prompts, `level_*` in code:
 
 ## Acceptance Criteria
 
-- [ ] Create `buildPersonaTopicExtractionPrompt()` in `src/prompts/persona/topics.ts`
-- [ ] Implement `extractPersonaTopics()` orchestration
-- [ ] Integrate with extraction frequency controller
-- [ ] Skip persona topics in fast-scan flow
-- [ ] Field mapping: `level_*` ↔ `exposure_*`
-- [ ] Test: Conversation about gaming → persona adds gaming-related topics
-- [ ] Test: Persona with "Nerdy" trait + tech conversation → explores related tech topics
-- [ ] Test: Exploration limited to 0-2 topics per conversation (not runaway generation)
-- [ ] Test: `source` field correctly tracks detected vs explored
+- [x] Create `buildPersonaTopicExtractionPrompt()` in `src/prompts/persona/topics.ts`
+- [x] Implement `extractPersonaTopics()` orchestration
+- [x] Integrate with extraction frequency controller
+- [x] Skip persona topics in fast-scan flow
+- [x] Field mapping: `level_*` ↔ `exposure_*`
+- [x] Test: Conversation about gaming → persona adds gaming-related topics
+- [x] Test: Persona with "Nerdy" trait + tech conversation → explores related tech topics
+- [x] Test: Exploration limited to 0-2 topics per conversation (not runaway generation)
+- [x] Test: `source` field correctly tracks detected vs explored
 
 ## Testing
 

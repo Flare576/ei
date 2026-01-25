@@ -19,6 +19,8 @@ import { buildStep2MatchPrompt } from "./prompts/extraction/step2/match.js";
 import { buildStep3UpdatePrompt } from "./prompts/extraction/step3/update.js";
 import { mapFieldsFromPrompt } from "./prompts/extraction/field-mapping.js";
 import { buildPersonaTraitExtractionPrompt } from "./prompts/persona/traits.js";
+import { buildPersonaTopicDetectionPrompt } from "./prompts/persona/topics-detection.js";
+import { buildPersonaTopicExplorationPrompt } from "./prompts/persona/topics-exploration.js";
 
 // ============================================================================
 // Type Definitions
@@ -1154,4 +1156,153 @@ export async function runPersonaTraitExtraction(
   await recordExtraction("system", persona, "trait");
   
   appendDebugLog(`[PersonaTrait] Extraction complete for ${persona}`);
+}
+
+export async function runPersonaTopicExtraction(
+  persona: string,
+  messages: Message[],
+  signal?: AbortSignal
+): Promise<void> {
+  appendDebugLog(`[PersonaTopic] Starting topic extraction for ${persona}`);
+  
+  const entity = await loadPersonaEntity(persona);
+  const existingTopics = entity.topics || [];
+  
+  const extractionState = await loadExtractionState();
+  const entityKey = `system:${persona}`;
+  const topicHistory = extractionState[entityKey]?.topic;
+  const lastExtractionTimestamp = topicHistory?.last_extraction;
+  
+  let earlierMessages: Message[] = [];
+  let newMessages: Message[] = messages;
+  
+  if (lastExtractionTimestamp) {
+    const lastExtractTime = new Date(lastExtractionTimestamp).getTime();
+    earlierMessages = messages.filter(m => new Date(m.timestamp).getTime() <= lastExtractTime);
+    newMessages = messages.filter(m => new Date(m.timestamp).getTime() > lastExtractTime);
+    appendDebugLog(`[PersonaTopic] Split: ${earlierMessages.length} earlier (context), ${newMessages.length} new (to analyze)`);
+  }
+  
+  if (newMessages.length === 0) {
+    appendDebugLog(`[PersonaTopic] No new messages to analyze`);
+    return;
+  }
+  
+  const allMessages = [...earlierMessages, ...newMessages];
+  const splitIndex = earlierMessages.length;
+  
+  const detectionPrompts = buildPersonaTopicDetectionPrompt(allMessages, persona, existingTopics, splitIndex);
+  const detectedResult = await callLLMForJSON<Array<{
+    name: string;
+    description: string;
+    sentiment: number;
+    exposure_current: number;
+    exposure_desired: number;
+  }>>(
+    detectionPrompts.system,
+    detectionPrompts.user,
+    { signal, temperature: 0.3, operation: "concept" }
+  );
+  
+  if (!detectedResult || !Array.isArray(detectedResult)) {
+    appendDebugLog(`[PersonaTopic] Detection failed or invalid format`);
+    return;
+  }
+  
+  appendDebugLog(`[PersonaTopic] Detection returned ${detectedResult.length} topics`);
+  
+  const explorationPrompts = buildPersonaTopicExplorationPrompt(
+    allMessages,
+    persona,
+    { short: entity.short_description || '', long: entity.long_description || '' },
+    entity.traits || [],
+    existingTopics,
+    splitIndex
+  );
+  
+  const exploredResult = await callLLMForJSON<Array<{
+    name: string;
+    description: string;
+    sentiment: number;
+    exposure_current: number;
+    exposure_desired: number;
+  }>>(
+    explorationPrompts.system,
+    explorationPrompts.user,
+    { signal, temperature: 0.5, operation: "concept" }
+  );
+  
+  if (!exploredResult || !Array.isArray(exploredResult)) {
+    appendDebugLog(`[PersonaTopic] Exploration failed or invalid format`);
+  } else if (exploredResult.length > 0) {
+    appendDebugLog(`[PersonaTopic] Exploration discovered ${exploredResult.length} new topics: ${exploredResult.map(t => t.name).join(', ')}`);
+  } else {
+    appendDebugLog(`[PersonaTopic] Exploration found no new topics`);
+  }
+  
+  const detectedTopics = detectedResult.map(t => ({
+    name: t.name,
+    description: t.description,
+    sentiment: t.sentiment,
+    level_current: t.exposure_current,
+    level_ideal: t.exposure_desired,
+    last_updated: new Date().toISOString(),
+  }));
+  
+  const exploredTopics = (exploredResult || []).map(t => ({
+    name: t.name,
+    description: t.description,
+    sentiment: t.sentiment,
+    level_current: t.exposure_current,
+    level_ideal: t.exposure_desired,
+    last_updated: new Date().toISOString(),
+  }));
+  
+  const mergedTopics = [...detectedTopics];
+  const detectedNames = new Set(detectedTopics.map(t => t.name.toLowerCase()));
+  
+  for (const explored of exploredTopics) {
+    if (!detectedNames.has(explored.name.toLowerCase())) {
+      mergedTopics.push(explored);
+      appendDebugLog(`[PersonaTopic] Adding explored topic: ${explored.name}`);
+    } else {
+      appendDebugLog(`[PersonaTopic] Skipping duplicate explored topic: ${explored.name}`);
+    }
+  }
+  
+  const oldTopics = new Map(existingTopics.map(t => [t.name, t]));
+  const newTopics = new Map(mergedTopics.map(t => [t.name, t]));
+  
+  const added = mergedTopics.filter(t => !oldTopics.has(t.name));
+  const removed = existingTopics.filter(t => !newTopics.has(t.name));
+  const modified = mergedTopics.filter(t => {
+    const old = oldTopics.get(t.name);
+    if (!old) return false;
+    return JSON.stringify(old) !== JSON.stringify(t);
+  });
+  
+  if (added.length > 0) {
+    appendDebugLog(`[PersonaTopic] Added: ${added.map(t => t.name).join(', ')}`);
+  }
+  if (removed.length > 0) {
+    appendDebugLog(`[PersonaTopic] Removed: ${removed.map(t => t.name).join(', ')}`);
+  }
+  if (modified.length > 0) {
+    appendDebugLog(`[PersonaTopic] Modified: ${modified.map(t => t.name).join(', ')}`);
+  }
+  
+  if (added.length === 0 && removed.length === 0 && modified.length === 0) {
+    appendDebugLog(`[PersonaTopic] No changes detected`);
+    return;
+  }
+  
+  entity.topics = mergedTopics;
+  
+  const { savePersonaEntity } = await import("./storage.js");
+  await savePersonaEntity(entity, persona);
+  
+  const { recordExtraction } = await import("./extraction-frequency.js");
+  await recordExtraction("system", persona, "topic");
+  
+  appendDebugLog(`[PersonaTopic] Extraction complete for ${persona}`);
 }

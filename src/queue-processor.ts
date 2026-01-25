@@ -18,7 +18,7 @@ import {
   DetailUpdatePayload,
   DescriptionRegenPayload,
 } from "./llm-queue.js";
-import { runDetailUpdate, runThreeStepExtraction, runPersonaTraitExtraction } from "./extraction.js";
+import { runDetailUpdate, runThreeStepExtraction, runPersonaTraitExtraction, runPersonaTopicExtraction } from "./extraction.js";
 import { appendDebugLog } from "./storage.js";
 import { LLMAbortedError, sleep } from "./llm.js";
 
@@ -218,7 +218,7 @@ export class QueueProcessor {
             await runPersonaTraitExtraction(persona, messages, this.abortController?.signal);
             break;
           case "topic":
-            appendDebugLog(`[QueueProcessor] Persona topic extraction not yet implemented (ticket 0137)`);
+            await runPersonaTopicExtraction(persona, messages, this.abortController?.signal);
             break;
           case "fact":
           case "person":
