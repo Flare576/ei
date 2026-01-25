@@ -1,8 +1,7 @@
 # Ticket Status Summary
 
-## QA ⚠️ (0 tickets)
-
-## DONE ✅ (94 tickets)
+## DONE ✅ (95 tickets)
+- 0136: Persona Trait Behavior Detection (supersedes 0128)
 - 0135: Prompt Centralization
 - 0134: Three-Step Human Extraction Flow
 - 0133: Native Message Format for Responses
@@ -99,7 +98,7 @@
 
 ## PENDING (23 tickets)
 - 0132: Extraction System Overhaul (Epic) - HIGH PRIORITY
-- 0136: Persona Trait Behavior Detection (supersedes 0128)
+- 0140: Deferred Exposure Level Updates and Logarithmic Decay
 - 0137: Persona Topic Exploration
 - 0138: Persona Builder Template
 - 0139: Human Entity Data Compression
@@ -148,9 +147,9 @@
 
 ---
 
-**Last Updated**: 2026-01-24
+**Last Updated**: 2026-01-25
 **Total Tickets**: 139 created
-**Stats**: 94 done, 0 QA, 0 in_progress, 23 pending, 1 superseded, 13 cancelled, 7 archived (0107 epic sub-tickets)
+**Stats**: 95 done, 0 QA, 0 in_progress, 23 pending, 1 superseded, 13 cancelled, 7 archived (0107 epic sub-tickets)
 
 ## Epic Status
 
@@ -222,7 +221,7 @@ Complete overhaul of extraction system based on prompt engineering learnings.
 - 0133: DONE - Native Message Format for Responses
 - 0134: DONE - Three-Step Human Extraction Flow
 - 0135: DONE - Prompt Centralization
-- 0136: PENDING - Persona Trait Behavior Detection (supersedes 0128)
+- 0136: DONE - Persona Trait Behavior Detection (supersedes 0128)
 - 0137: PENDING - Persona Topic Exploration
 - 0138: PENDING - Persona Builder Template
 
@@ -233,3 +232,19 @@ Complete overhaul of extraction system based on prompt engineering learnings.
 4. 0136 (Persona Traits) - depends on 0134, 0135
 5. 0137 (Persona Topics) - depends on 0134, 0135
 6. 0138 (Persona Builder) - low priority, nice-to-have
+
+### 0140: Deferred Exposure and Decay - PENDING
+Move `level_current` updates from real-time extraction to deferred batch analysis.
+
+**Problem:** Small conversation snapshots can't accurately determine topic exposure. Need full-session view.
+
+**Solution:** 
+- Wait until user idle (1 hour) or Daily Ceremony
+- Analyze complete conversation session
+- Update exposure levels for discussed topics
+- Decay levels for undiscussed topics
+
+**Benefits:**
+- Accurate topic engagement tracking
+- Proper decay timing (only after confirming topic wasn't discussed)
+- Clear session boundaries

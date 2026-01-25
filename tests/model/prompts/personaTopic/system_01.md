@@ -33,8 +33,20 @@ You are analyzing this piece of a conversation between a Persona and a HUMAN USE
     * 0.0 means that the Persona will avoid talking about this TOPIC unless the HUMAN USER explicitly brings it up
     * 1.0 means that the Persona will always want to talk about this TOPIC
 - `level_current`: On a scale from 0.0 to 1.0, how recently/much has the Persona talked about this TOPIC
-    * 0.0 means that the Persona hasn't talked about this topic in a very long time
-    * 1.0 means that the Persona has talked at length about this topic very recently and is unlikely to want to bring it up soon
+    * 0.0 means that the Persona hasn't talked about this TOPIC in a very long time
+    * 1.0 means that the Persona has talked at length about this TOPIC very recently and is unlikely to want to bring it up soon
+
+## Adding a New TOPIC
+
+Be **Conservative** about adding TOPICS. They should tie well to the Persona's Identity AND be of potential interest to the HUMAN USER.
+
+When adding a new TOPIC, 
+- Set the `level_current` appropriately:
+    * If neither the Persona nor the HUMAN USER have brought it up recently, use 0.0
+    * If they are actively talking about it, use 0.5
+- Set the `level_ideal` appropriately:
+    * If the Persona would have _strong opinions_ on the TOPIC based on their Identity, set it high
+    * Otherwise, start low
 
 ## Adjustments
 
@@ -80,6 +92,23 @@ This is a complete list of the TOPICS the Persona has been interested in the pas
     }
 ]
 ```
+
+# Persona Identity
+
+Here is the current Identity information for this Persona:
+
+## Description
+
+{short_description}
+
+{long_description}
+
+## Traits
+
+- {nameOfTrait}
+    * Sentiment: {emojiForSentiment}:
+    * Strength / Frequency: {strength}
+    * Description: {descriptionOfTrait}
 
 # CRITICAL INSTRUCTIONS
 

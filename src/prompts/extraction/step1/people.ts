@@ -1,4 +1,5 @@
 import type { Message } from "../../../types.js";
+import { listPersonas } from "../../../storage.js";
 
 function formatMessagesForPrompt(messages: Message[], personaName: string): string {
   return messages.map(m => {
@@ -7,13 +8,18 @@ function formatMessagesForPrompt(messages: Message[], personaName: string): stri
   }).join('\n\n');
 }
 
-export function buildStep1PeoplePrompt(
+export async function buildStep1PeoplePrompt(
   messages: Message[],
-  persona: string
-): { system: string; user: string } {
-  const recentCount = Math.min(10, messages.length);
-  const recentMessages = messages.slice(-recentCount);
-  const earlierMessages = messages.slice(0, -recentCount);
+  persona: string,
+  splitIndex?: number
+): Promise<{ system: string; user: string }> {
+  const effectiveSplitIndex = splitIndex ?? 0;
+  const earlierMessages = messages.slice(0, effectiveSplitIndex);
+  const recentMessages = messages.slice(effectiveSplitIndex);
+  
+  const personas = await listPersonas();
+  const personaNames = personas.flatMap(p => [p.name, ...(p.aliases || [])]);
+  const knownPersonasList = personaNames.map(name => `        + ${name}`).join('\n');
 
   const taskFragment = `# Task
 
@@ -84,9 +90,7 @@ To help the system prioritize data, please include your CONFIDENCE level:
 - General Topic: Interests, Hobbies, General subjects
 - Personas: AI personas they discuss
     * Known Personas:
-        + Ei
-        + default
-        + core
+${knownPersonasList}
 - Characters: Fictitious entities from books, movies, stories, media, etc.`;
 
   const criticalFragment = `# CRITICAL INSTRUCTIONS

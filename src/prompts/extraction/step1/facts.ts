@@ -9,11 +9,12 @@ function formatMessagesForPrompt(messages: Message[], personaName: string): stri
 
 export function buildStep1FactsPrompt(
   messages: Message[],
-  persona: string
+  persona: string,
+  splitIndex?: number
 ): { system: string; user: string } {
-  const recentCount = Math.min(10, messages.length);
-  const recentMessages = messages.slice(-recentCount);
-  const earlierMessages = messages.slice(0, -recentCount);
+  const effectiveSplitIndex = splitIndex ?? 0;
+  const earlierMessages = messages.slice(0, effectiveSplitIndex);
+  const recentMessages = messages.slice(effectiveSplitIndex);
 
   const taskFragment = `# Task
 

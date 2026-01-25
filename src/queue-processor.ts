@@ -18,7 +18,7 @@ import {
   DetailUpdatePayload,
   DescriptionRegenPayload,
 } from "./llm-queue.js";
-import { runFastScan, routeFastScanResults, runDetailUpdate, runThreeStepExtraction } from "./extraction.js";
+import { runDetailUpdate, runThreeStepExtraction, runPersonaTraitExtraction } from "./extraction.js";
 import { appendDebugLog } from "./storage.js";
 import { LLMAbortedError, sleep } from "./llm.js";
 
@@ -169,9 +169,6 @@ export class QueueProcessor {
       case "fast_scan":
         await this.executeFastScan(item.payload as FastScanPayload);
         break;
-      case "detail_update":
-        await this.executeDetailUpdate(item.payload as DetailUpdatePayload);
-        break;
       case "description_regen":
         await this.executeDescriptionRegen(item.payload as DescriptionRegenPayload);
         break;
@@ -189,34 +186,47 @@ export class QueueProcessor {
   /**
    * Execute a fast-scan extraction.
    * 
-   * Uses three-step extraction flow: blind scan, match, update/create.
-   * Determines which data types need extraction based on extraction frequency state.
+   * Routes extraction based on target:
+   * - Human: Uses three-step extraction flow (blind scan, match, update/create)
+   * - System (Persona): Uses specialized single-prompt extraction per data type
    * 
-   * Note: Currently only supports human target. System (persona) extraction 
-   * queued by extraction-frequency will be skipped until 0136/0137 implement
-   * persona-specific three-step extraction.
+   * For personas:
+   * - Traits: Full-array behavior change detection (0136)
+   * - Topics: To be implemented (0137)
    */
   private async executeFastScan(payload: FastScanPayload): Promise<void> {
     const { target, persona, messages, dataTypes } = payload;
     
-    if (target !== "human") {
-      appendDebugLog(`[QueueProcessor] Skipping system extraction - three-step only supports human currently (see tickets 0136/0137)`);
-      return;
+    if (target === "human") {
+      appendDebugLog(`[QueueProcessor] Running human extraction for types: ${dataTypes.join(", ")}`);
+      
+      await runThreeStepExtraction(
+        target,
+        persona,
+        messages,
+        dataTypes,
+        this.abortController?.signal
+      );
+    } else {
+      appendDebugLog(`[QueueProcessor] Running persona extraction for ${persona}, types: ${dataTypes.join(", ")}`);
+      
+      for (const dataType of dataTypes) {
+        if (this.abortController?.signal?.aborted) return;
+        
+        switch (dataType) {
+          case "trait":
+            await runPersonaTraitExtraction(persona, messages, this.abortController?.signal);
+            break;
+          case "topic":
+            appendDebugLog(`[QueueProcessor] Persona topic extraction not yet implemented (ticket 0137)`);
+            break;
+          case "fact":
+          case "person":
+            appendDebugLog(`[QueueProcessor] Skipping ${dataType} for persona - not applicable`);
+            break;
+        }
+      }
     }
-    
-    appendDebugLog(`[QueueProcessor] Running extraction for types: ${dataTypes.join(", ")}`);
-    
-    await runThreeStepExtraction(
-      target,
-      persona,
-      messages,
-      dataTypes,
-      this.abortController?.signal
-    );
-  }
-  
-  private async executeDetailUpdate(payload: DetailUpdatePayload): Promise<void> {
-    await runDetailUpdate(payload, this.abortController?.signal);
   }
   
   private async executeDescriptionRegen(payload: DescriptionRegenPayload): Promise<void> {

@@ -38,6 +38,8 @@ These requests can take a number of forms:
     * Another example is if the Persona was asked to "always be angry," it might be high (0.9)
     * A level of 0 should be used any time the HUMAN USER asks a persona to "Stop" doing something
 
+> NOTE: If a user asks a persona to "Never" do something, DO NOT remove the TRAIT - we want to be very clear to future prompts/models to NOT exhibit the behavior, use terms or words, etc.
+
 ## Adjustments
 
 ### Name & Description
@@ -55,7 +57,7 @@ If the HUMAN USER indicates that the Persona should use, embody, or demonstrate 
 
 If the HUMAN USER indicates that the Persona should STOP a TRAIT, you should set the strength to 0.0.
 
-If the HUMAN USER indicates that the Persona should START a TRAIT, you should set the strength to 0.5 unless the HUMAN USER provides their own frequency, duration, or strength. If they do, use that instead (e.g. "Always talk like a valley girl would get set to 1.0)
+If the HUMAN USER indicates that the Persona should START a TRAIT, you should set the strength to 0.5 unless the HUMAN USER provides their own frequency, duration, or strength. If they do, use that instead (e.g. "Always talk like a valley girl" would get set to 1.0)
 
 # Current TRAITS
 

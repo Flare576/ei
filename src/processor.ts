@@ -145,26 +145,14 @@ export async function processEvent(
   if (!signal?.aborted && response && humanMessage) {
     const { triggerExtraction } = await import("./extraction-frequency.js");
     
-    const messagePair: Message[] = [
-      {
-        role: "human",
-        content: humanMessage,
-        timestamp: new Date().toISOString(),
-        read: true
-      },
-      {
-        role: "system",
-        content: response,
-        timestamp: new Date().toISOString(),
-        read: false
-      }
-    ];
+    const conversationHistory = await loadHistory(persona);
+    const recentMessages = getRecentMessages(conversationHistory, 8, 100);
     
-    triggerExtraction("human", persona, messagePair).catch(err => {
+    triggerExtraction("human", persona, recentMessages).catch(err => {
       appendDebugLog(`[Extraction] Failed to trigger for human: ${err}`);
     });
     
-    triggerExtraction("system", persona, messagePair).catch(err => {
+    triggerExtraction("system", persona, recentMessages).catch(err => {
       appendDebugLog(`[Extraction] Failed to trigger for ${persona}: ${err}`);
     });
   }

@@ -1,6 +1,6 @@
 # 0136: Persona Trait Behavior Change Detection
 
-**Status**: PENDING
+**Status**: DONE
 
 ## Overview
 
@@ -305,15 +305,15 @@ if (target === "system") {
 
 ## Acceptance Criteria
 
-- [ ] Create three-tier prompt builders in `src/prompts/persona/traits.ts`
-- [ ] Implement `detectPersonaBehaviorChange()` orchestration
-- [ ] Skip persona traits in fast-scan flow
-- [ ] Integrate behavior detection into conversation processing
-- [ ] Test: "Can you use emoji?" → Creates trait
-- [ ] Test: "Be more concise" → Creates trait
-- [ ] Test: "Pirates say arrr" → NO trait change
-- [ ] Test: "Stop using Australian slang" → Sets trait strength to 0.0
-- [ ] Test: Existing persona traits not corrupted by conversation content
+- [x] Create three-tier prompt builders in `src/prompts/persona/traits.ts`
+- [x] Implement `detectPersonaBehaviorChange()` orchestration (as `runPersonaTraitExtraction`)
+- [x] Skip persona traits in fast-scan flow (routed to separate function)
+- [x] Integrate behavior detection into conversation processing (via queue-processor)
+- [x] Test: "Can you use emoji?" → Creates trait
+- [x] Test: "Be more concise" → Creates trait
+- [x] Test: "Pirates say arrr" → NO trait change
+- [x] Test: "Stop using Australian slang" → Sets trait strength to 0.0
+- [x] Test: Existing persona traits not corrupted by conversation content
 
 ## Testing
 
@@ -338,9 +338,11 @@ Run prompts through `tests/model/llm-bench.ts` with behavior detection scenarios
 
 | File | Changes |
 |------|---------|
-| `src/prompts/persona/traits.ts` | New file with three-tier prompts |
-| `src/extraction.ts` | Add behavior detection, skip traits for personas |
-| `src/processor.ts` | Integrate behavior detection call |
+| `src/prompts/persona/traits.ts` | NEW - Single-prompt behavior change detection (not three-tier) |
+| `src/prompts/persona/index.ts` | NEW - Export persona prompts |
+| `src/prompts/index.ts` | Export persona prompts module |
+| `src/extraction.ts` | Add `runPersonaTraitExtraction()` function |
+| `src/queue-processor.ts` | Route persona trait extraction via `executeFastScan()` |
 
 ## Related Tickets
 
@@ -351,5 +353,20 @@ Run prompts through `tests/model/llm-bench.ts` with behavior detection scenarios
 
 - Only human messages passed to detection (persona can't request its own changes)
 - No Ei validation needed (traits are core to persona, not auditable data)
-- Tier 1 exits early for most messages (efficient)
 - Test prompts in `tests/model/prompts/personaTrait/` are source of truth
+
+## Implementation Notes
+
+**Design Change from Original Ticket:**
+- Original spec proposed three-tier prompts (gate → extract → map)
+- Implemented as **single-prompt full-array return** based on test prompts
+- LLM receives existing traits and returns complete updated trait array
+- System diffs old vs new for debug logging (added/removed/modified)
+
+**Key Behaviors:**
+- Returns ALL traits (not just changes) - avoids trait drift/loss
+- Prompt explicitly instructs: "RETURN ALL TRAITS"
+- Debug logging shows which traits were added/removed/modified
+- Automatically updates `last_updated` timestamp on all traits
+- Triggers persona description regeneration after trait changes
+- Uses existing extraction frequency tracking (tapering logic)

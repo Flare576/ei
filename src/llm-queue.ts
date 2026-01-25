@@ -56,7 +56,6 @@ async function processQueueOperations(): Promise<void> {
 
 export type QueueItemType =
   | "fast_scan"           // Phase 1 extraction
-  | "detail_update"       // Phase 2 extraction
   | "ei_validation"       // Pending Ei verification
   | "description_regen"   // Persona description update
   | "response";           // Conversation response (safety net, shouldn't queue)

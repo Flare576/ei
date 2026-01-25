@@ -190,7 +190,14 @@ export function buildTopicsSection(topics: Topic[], header: string): string {
   }).join('\n');
   
   return `## ${header}
-${formatted}`;
+${formatted}
+
+### Legend
+😊: This topic is something you enjoy or that brings you pleasure
+😔: This topic is something that brings you negative emotions: anger, sadness, frustration, etc.
+🔺: You are eager to talk about this topic
+✓: You are satisfied with how much you've talked about this topic
+🔻: You would like to avoid talking about this topic and are likely to suggest a different topic when appropriate`;
 }
 
 export function buildHumanSection(human: FilteredHumanData): string {
@@ -221,9 +228,17 @@ export function buildHumanSection(human: FilteredHumanData): string {
         return `- **${t.name}** ${sentiment}: ${t.description}`;
       })
       .join('\n');
-    sections.push(`### Current Interests\n${topics}`);
+    sections.push(`### Current Interests
+${topics}
+
+#### Legend
+😊: This topic is something the human enjoys or that brings them pleasure
+😔: This topic is something that brings the human negative emotions: anger, sadness, frustration, etc.
+🔺: The human may be eager to talk about this topic
+✓: The human may be satisfied with how much you've talked about this topic
+🔻: The human may like to avoid talking about this topic`);
   }
-  
+
   if (human.people.length > 0) {
     const people = human.people
       .sort((a, b) => b.level_current - a.level_current)
