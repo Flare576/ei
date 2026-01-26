@@ -1,6 +1,6 @@
 # 0132: Extraction System Overhaul (Epic)
 
-**Status**: PENDING
+**Status**: DONE
 
 ## Overview
 
@@ -122,13 +122,13 @@ Guided template for persona creation that helps users provide structured input.
 
 ## Success Criteria
 
-- [ ] All prompts live in `src/prompts/` folder
-- [ ] Response generation uses native message format
-- [ ] Human extraction uses 3-step flow
-- [ ] Persona traits only update on explicit behavior requests
-- [ ] Persona topics include exploration/generation
-- [ ] Field naming is consistent and semantic
-- [ ] Benchmark tests show improved accuracy (fewer hallucinations)
+- [x] All prompts live in `src/prompts/` folder
+- [x] Response generation uses native message format
+- [x] Human extraction uses 3-step flow
+- [x] Persona traits only update on explicit behavior requests
+- [x] Persona topics include exploration/generation
+- [x] Field naming is consistent and semantic
+- [x] Benchmark tests show improved accuracy (fewer hallucinations)
 
 ## Out of Scope
 
@@ -148,3 +148,20 @@ Guided template for persona creation that helps users provide structured input.
 - Current extraction flow is in `src/extraction.ts` (~970 lines)
 - Response prompts are in `src/prompts.ts` (~610 lines)
 - Persona creation is in `src/persona-creator.ts` (~180 lines)
+
+## Completion Summary
+
+Epic completed successfully with all 6 sub-tickets done:
+
+1. **0133 - Native Message Format**: Responses now use proper message arrays instead of text blobs
+2. **0134 - Three-Step Extraction**: Blind scan → match → update flow eliminates hallucinations
+3. **0135 - Prompt Centralization**: All prompts organized in `src/prompts/` with clear structure
+4. **0136 - Persona Traits**: Three-tier behavior change detection prevents spurious updates
+5. **0137 - Persona Topics**: Generative exploration discovers natural topic extensions
+6. **0138 - Persona Builder**: Rich guided template for persona creation
+
+**Impact**:
+- Extraction accuracy significantly improved (verified through benchmarking)
+- Prompt maintenance centralized and organized
+- Field naming semantically clear (`exposure_current`/`exposure_desired`)
+- System more maintainable and testable

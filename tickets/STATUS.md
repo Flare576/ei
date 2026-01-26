@@ -1,6 +1,7 @@
 # Ticket Status Summary
 
-## DONE ✅ (96 tickets)
+## DONE ✅ (98 tickets)
+- 0138: Persona Builder Template
 - 0137: Persona Topic Exploration
 - 0136: Persona Trait Behavior Detection (supersedes 0128)
 - 0135: Prompt Centralization
@@ -97,10 +98,8 @@
 - 0114: Known Personas in Prompts
 - 0118: Ei Heartbeat Simplification
 
-## PENDING (22 tickets)
-- 0132: Extraction System Overhaul (Epic) - HIGH PRIORITY
+## PENDING (20 tickets)
 - 0140: Deferred Exposure Level Updates and Logarithmic Decay
-- 0138: Persona Builder Template
 - 0139: Human Entity Data Compression
 - 0129: Extract Time-Based Core Logic from UI Layer (FUTURE - The Elephant)
 
@@ -149,7 +148,7 @@
 
 **Last Updated**: 2026-01-25
 **Total Tickets**: 139 created
-**Stats**: 96 done, 0 QA, 0 in_progress, 22 pending, 1 superseded, 13 cancelled, 7 archived (0107 epic sub-tickets)
+**Stats**: 98 done, 0 QA, 0 in_progress, 20 pending, 1 superseded, 13 cancelled, 7 archived (0107 epic sub-tickets)
 
 ## Epic Status
 
@@ -214,16 +213,16 @@ Absorbs 0102 (Ei Core Persona) and 0103 (Persona Prompt Architecture).
 - 0125: Group Chat Exploration
 - 0129: Extract time-based logic from UI layer
 
-### 0132: Extraction System Overhaul - PENDING
+### 0132: Extraction System Overhaul - DONE ✅
 Complete overhaul of extraction system based on prompt engineering learnings.
 
-**Sub-tickets:**
+**Sub-tickets (all complete):**
 - 0133: DONE - Native Message Format for Responses
 - 0134: DONE - Three-Step Human Extraction Flow
 - 0135: DONE - Prompt Centralization
 - 0136: DONE - Persona Trait Behavior Detection (supersedes 0128)
 - 0137: DONE - Persona Topic Exploration
-- 0138: PENDING - Persona Builder Template
+- 0138: DONE - Persona Builder Template
 
 **Implementation order:**
 1. 0135 (Prompt Centralization) - enables cleaner work

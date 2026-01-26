@@ -2,7 +2,6 @@
 
 import blessed from 'blessed';
 import { writeFileSync, readFileSync, unlinkSync } from 'fs';
-// Import test output capture early to intercept blessed methods before they're used
 import { testOutputCapture } from './test-output-capture.js';
 
 import { loadHistory, listPersonas, findPersonaByNameOrAlias, initializeDataDirectory, initializeDebugLog, appendDebugLog, getPendingMessages, replacePendingMessages, appendHumanMessage, appendMessage, loadPauseState, savePauseState, markSystemMessagesAsRead, getUnreadSystemMessageCount, loadArchiveState, saveArchiveState, getArchivedPersonas, findArchivedPersonaByNameOrAlias, addPersonaAlias, removePersonaAlias, loadHumanEntity, loadPersonaEntity, savePersonaEntity, saveHumanEntity, loadAllPersonasWithEntities } from '../storage.js';
@@ -23,6 +22,7 @@ import { getDisplayWidth } from './unicode-width.js';
 import { StateManager } from '../state-manager.js';
 import { setStateManager } from '../storage.js';
 import { QueueProcessor } from '../queue-processor.js';
+import { PERSONA_BUILDER_TEMPLATE } from '../prompts/templates/persona-builder.js';
 
 function debugLog(message: string) {
   appendDebugLog(message);
@@ -42,7 +42,13 @@ const CTRL_C_CONFIRMATION_WINDOW_MS = 3000; // 3 seconds
 const STALE_CHECK_INTERVAL_MS = 5 * 60 * 1000; // Check every 5 minutes
 const STALE_MESSAGE_THRESHOLD_MS = 20 * 60 * 1000; // 20 minutes
 
-
+function stripTemplateInstructions(content: string): string {
+  return content
+    .split('\n')
+    .filter(line => !line.trimStart().startsWith('/\\'))
+    .join('\n')
+    .trim();
+}
 
 export class EIApp {
   private screen: blessed.Widgets.Screen;
@@ -593,8 +599,12 @@ export class EIApp {
 
     if (stage === 'confirm') {
       if (trimmed === 'y' || trimmed === 'yes') {
-        this.pendingPersonaCreation = { name, stage: 'describe' };
-        this.setStatus(`Creating '${name}'. What should this persona be like?`);
+        if (this.testInputEnabled) {
+          this.pendingPersonaCreation = { name, stage: 'describe' };
+          this.setStatus(`Creating '${name}'. What should this persona be like?`);
+        } else {
+          await this.openPersonaCreationEditor(name);
+        }
       } else if (trimmed === 'n' || trimmed === 'no') {
         this.pendingPersonaCreation = null;
         this.setStatus('Persona creation cancelled');
@@ -610,7 +620,8 @@ export class EIApp {
 
       try {
         await this.stateManager.captureSnapshot();
-        const conceptMap = await createPersonaWithLLM(name, input.trim());
+        const strippedInput = stripTemplateInstructions(input.trim());
+        const conceptMap = await createPersonaWithLLM(name, strippedInput);
         await saveNewPersona(name, conceptMap);
         
         this.personas = await listPersonas();
@@ -624,6 +635,60 @@ export class EIApp {
         this.pendingPersonaCreation = null;
         this.setStatus(`Failed to create persona: ${err instanceof Error ? err.message : String(err)}`);
       }
+    }
+  }
+
+  private async openPersonaCreationEditor(name: string): Promise<void> {
+    const template = PERSONA_BUILDER_TEMPLATE;
+    const editor = process.env.EDITOR || 'vim';
+    const tmpFile = `/tmp/ei-persona-create-${Date.now()}.md`;
+
+    debugLog(`Opening ${editor} with persona creation template for '${name}'`);
+
+    try {
+      writeFileSync(tmpFile, template, 'utf-8');
+      
+      this.setStatus(`Opening ${editor}...`);
+      this.screen.render();
+      
+      await new Promise<void>((resolve) => {
+        this.screen.exec(editor, [tmpFile], {}, async (err, ok) => {
+          debugLog(`Editor exited with err: ${err}, ok: ${ok}`);
+          
+          if (!err && ok) {
+            const content = readFileSync(tmpFile, 'utf-8');
+            const trimmed = content.trim();
+            
+            if (trimmed) {
+              this.pendingPersonaCreation = { name, stage: 'describe' };
+              await this.handlePersonaCreationInput(trimmed);
+            } else {
+              this.pendingPersonaCreation = null;
+              this.setStatus('Persona creation cancelled (empty description)');
+            }
+          } else {
+            this.pendingPersonaCreation = null;
+            this.setStatus('Persona creation cancelled');
+          }
+          
+          try {
+            unlinkSync(tmpFile);
+            debugLog(`Cleaned up temp file: ${tmpFile}`);
+          } catch {
+            debugLog(`Temp file cleanup skipped: ${tmpFile}`);
+          }
+          
+          this.focusManager.focusInput();
+          this.render();
+          resolve();
+        });
+      });
+    } catch (error) {
+      debugLog(`Persona creation editor error: ${error instanceof Error ? error.message : String(error)}`);
+      this.pendingPersonaCreation = null;
+      this.setStatus(`Editor error: ${error instanceof Error ? error.message : String(error)}`);
+      this.focusManager.focusInput();
+      this.render();
     }
   }
 
