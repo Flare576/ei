@@ -1,6 +1,6 @@
 # 0006: Processor Skeleton & Loop
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0004, 0005
 
 ## Summary
@@ -9,16 +9,16 @@ Implement the Processor—the orchestration layer that runs the main loop, manag
 
 ## Acceptance Criteria
 
-- [ ] Create `src/core/processor.ts` implementing the Processor interface from CONTRACTS.md
-- [ ] Implement lifecycle methods (`start()`, `stop()`)
-- [ ] Implement the main loop that:
+- [x] Create `src/core/processor.ts` implementing the Processor interface from CONTRACTS.md
+- [x] Implement lifecycle methods (`start()`, `stop()`)
+- [x] Implement the main loop that:
   - Checks auto-save interval
   - Checks scheduled tasks (heartbeat eligibility)
   - Peeks queue and starts QueueProcessor if idle
-- [ ] Implement handler dispatch based on `LLMNextStep`
-- [ ] Implement all Processor API methods (stub implementations OK for first pass)
-- [ ] Wire up StateManager and QueueProcessor
-- [ ] Create handler stubs for all `LLMNextStep` values
+- [x] Implement handler dispatch based on `LLMNextStep`
+- [x] Implement all Processor API methods (stub implementations OK for first pass)
+- [x] Wire up StateManager and QueueProcessor
+- [x] Create handler stubs for all `LLMNextStep` values
 
 ## Implementation Notes
 

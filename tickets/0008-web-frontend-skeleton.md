@@ -1,6 +1,6 @@
 # 0008: Web Frontend Skeleton
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0007
 
 ## Summary
@@ -9,14 +9,14 @@ Create a minimal React web frontend that instantiates the Processor and demonstr
 
 ## Acceptance Criteria
 
-- [ ] Create `web/` directory with React + Vite setup
-- [ ] App creates Processor with Ei_Interface handlers
-- [ ] Display list of personas (from `getPersonaList()`)
-- [ ] Display queue status (from `getQueueStatus()`)
-- [ ] Show "thinking..." when `onMessageProcessing` fires
-- [ ] Show basic chat UI (even if non-functional beyond display)
-- [ ] Console logs all events for debugging
-- [ ] Runs on `http://localhost:5173` (Vite default)
+- [x] Create `web/` directory with React + Vite setup
+- [x] App creates Processor with Ei_Interface handlers
+- [x] Display list of personas (from `getPersonaList()`)
+- [x] Display queue status (from `getQueueStatus()`)
+- [x] Show "thinking..." when `onMessageProcessing` fires
+- [x] Show basic chat UI (even if non-functional beyond display)
+- [x] Console logs all events for debugging
+- [x] Runs on `http://localhost:5173` (Vite default)
 
 ## Implementation Notes
 

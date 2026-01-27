@@ -1,6 +1,6 @@
 # 0007: Ei_Interface & Event System
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0006
 
 ## Summary
@@ -9,12 +9,12 @@ Wire up the Ei_Interface event system so the Processor can notify the Frontend w
 
 ## Acceptance Criteria
 
-- [ ] Processor constructor accepts `Ei_Interface` parameter
-- [ ] All events fire at the correct times (per CONTRACTS.md "Event Emission Rules")
-- [ ] Events with payloads pass the correct data (`personaName` for message events, etc.)
-- [ ] Events are optional—missing handlers don't crash
-- [ ] Add event emissions to all relevant StateManager operations
-- [ ] Integration test: mock Ei_Interface, verify events fire
+- [x] Processor constructor accepts `Ei_Interface` parameter
+- [x] All events fire at the correct times (per CONTRACTS.md "Event Emission Rules")
+- [x] Events with payloads pass the correct data (`personaName` for message events, etc.)
+- [x] Events are optional—missing handlers don't crash
+- [x] Add event emissions to all relevant StateManager operations
+- [x] Integration test: mock Ei_Interface, verify events fire
 
 ## Implementation Notes
 

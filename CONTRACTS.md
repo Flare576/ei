@@ -133,8 +133,16 @@ interface Ei_Interface {
   /** An error occurred that the user should know about */
   onError?: (error: { code: string; message: string }) => void;
   
-  /** A checkpoint was persisted to a named save slot */
-  onCheckpointPersisted?: (name: string) => void;
+  // === Checkpoint Events ===
+  
+  /** A checkpoint operation is starting. UI should disable checkpoint interactions until onCheckpointCreated/Deleted fires. */
+  onCheckpointStart?: () => void;
+  
+  /** A checkpoint was created. If index provided, it was manual save (10-14). No index = auto-save (0-9). */
+  onCheckpointCreated?: (index?: number) => void;
+  
+  /** A manual checkpoint was deleted (slots 10-14 only) */
+  onCheckpointDeleted?: (index: number) => void;
 }
 ```
 
@@ -151,7 +159,9 @@ interface Ei_Interface {
 | `onHumanUpdated` | After any human entity field changes |
 | `onQueueStateChanged` | When QueueProcessor transitions between idle/busy |
 | `onError` | When a recoverable error occurs (e.g., LLM failure after retries) |
-| `onCheckpointPersisted` | After a checkpoint is promoted to a named save slot |
+| `onCheckpointStart` | Before any checkpoint save/delete/restore operation begins |
+| `onCheckpointCreated` | After auto-save (no index) or manual save (with index 10-14) |
+| `onCheckpointDeleted` | After a manual checkpoint (10-14) is deleted |
 
 ---
 
@@ -229,25 +239,32 @@ interface Processor {
   /** Remove a data item by type and id */
   removeDataItem(type: "fact" | "trait" | "topic" | "person", id: string): Promise<void>;
   
-  // === State Operations ===
+  // === Checkpoint Operations ===
   
-  /** Get list of all checkpoints (ephemeral + persisted), sorted by timestamp */
+  /** Get list of all checkpoints, sorted by timestamp desc */
   getCheckpoints(): Promise<Checkpoint[]>;
   
   /** 
-   * Promote an ephemeral checkpoint to a named save slot.
-   * @param index - Index from getCheckpoints() (must be ephemeral)
-   * @param name - Name for the save slot (cannot be a number string)
-   * @throws If index is already persisted or name is invalid
+   * Create a manual checkpoint in a save slot.
+   * @param index - Slot 10-14 only
+   * @param name - Display name for the save (FE provides default if user doesn't)
+   * @throws If index is not 10-14
    */
-  persistCheckpoint(index: number, name: string): Promise<void>;
+  createCheckpoint(index: number, name: string): Promise<void>;
+  
+  /**
+   * Delete a manual checkpoint.
+   * @param index - Slot 10-14 only (cannot delete auto-saves)
+   * @throws If index is not 10-14
+   */
+  deleteCheckpoint(index: number): Promise<void>;
   
   /**
    * Restore state from a checkpoint.
-   * @param target - Index from getCheckpoints() OR name of persisted checkpoint
-   * @returns true if restored, false if target not found
+   * @param index - Slot index (0-14)
+   * @returns true if restored, false if slot is empty
    */
-  restoreCheckpoint(target: number | string): Promise<boolean>;
+  restoreCheckpoint(index: number): Promise<boolean>;
   
   /** Export full state as JSON (for download) */
   exportState(): Promise<string>;
@@ -298,10 +315,9 @@ interface MessageQueryOptions {
 }
 
 interface Checkpoint {
-  index: number;           // Position in the list
+  index: number;           // Slot number: 0-9 = auto-save, 10-14 = manual save
   timestamp: string;       // When created
-  is_persisted: boolean;   // Ephemeral (false) vs saved (true)
-  name?: string;           // Only set if persisted
+  name?: string;           // Display name (manual saves should have one)
 }
 
 interface QueueStatus {
@@ -315,23 +331,41 @@ interface QueueStatus {
 
 The checkpoint system uses a **video game save slot** model:
 
-1. **Ephemeral checkpoints**: Created automatically (e.g., before destructive operations). Roll off as new ones are created. Default limit: 10.
+| Slot Range | Type | Behavior |
+|------------|------|----------|
+| 0-9 | Auto-save | System creates every 60s. FIFO ring buffer—oldest drops when full. Cannot be deleted by user. |
+| 10-14 | Manual save | User creates on demand. Can be overwritten or deleted. |
 
-2. **Persisted checkpoints**: Named save slots that survive rolloff. Default limit: 5 slots.
+**Auto-save flow:**
+1. Every 60s, Processor calls `StateManager.checkpoint_create()` (no args)
+2. StateManager calls `Storage.saveCheckpoint(state)` (no index)
+3. Storage writes to next available slot in 0-9, dropping slot 0 if full
+4. Processor fires `onCheckpointCreated()` (no index)
 
-3. **Restore**: Can restore from any checkpoint (ephemeral or persisted). No "redo"—if you want to undo an undo, create a checkpoint first.
+**Manual save flow:**
+1. User selects slot (10-14) and provides name
+2. FE calls `Processor.createCheckpoint(index, name)`
+3. Processor calls `StateManager.checkpoint_create(index, name)`
+4. StateManager calls `Storage.saveCheckpoint(state, index)`
+5. Processor fires `onCheckpointCreated(index)`
+
+**Restore**: Load any slot (0-14) into memory. If you want to undo a restore, manually save first.
 
 ```
-Checkpoint List Example:
-─────────────────────────────────────────
-Index  Timestamp            Persisted  Name
-─────────────────────────────────────────
-0      2026-01-26T14:00:00  false      -
-1      2026-01-26T13:45:00  false      -
-2      2026-01-26T13:30:00  true       "before-refactor"
-3      2026-01-26T12:00:00  true       "morning-backup"
-4      2026-01-26T11:00:00  false      -
-─────────────────────────────────────────
+Checkpoint Slots Example:
+───────────────────────────────────────────────
+Slot   Type       Timestamp            Name
+───────────────────────────────────────────────
+0      auto       2026-01-26T13:00:00  -
+1      auto       2026-01-26T13:01:00  -
+...
+9      auto       2026-01-26T13:09:00  -
+10     manual     2026-01-26T12:00:00  "before-refactor"
+11     manual     2026-01-26T10:00:00  "morning-backup"
+12     (empty)    -                    -
+13     (empty)    -                    -
+14     (empty)    -                    -
+───────────────────────────────────────────────
 ```
 
 ---
@@ -344,11 +378,8 @@ The StateManager holds all in-memory state and provides CRUD operations. It does
 interface StateManager {
   // === Lifecycle ===
   
-  /** Load state from storage. Call once at startup. */
+  /** Load newest checkpoint from storage. Call once at startup. */
   initialize(storage: Storage): Promise<void>;
-  
-  /** Persist current state to storage (auto-save target) */
-  persist(): Promise<void>;
   
   // === Human Entity ===
   
@@ -418,17 +449,27 @@ interface StateManager {
   
   // === Checkpoints ===
   
-  /** Create an ephemeral checkpoint of current state */
-  checkpoint_create(): void;
+  /** 
+   * Create a checkpoint of current state.
+   * @param index - If omitted, auto-save to 0-9 (FIFO). If provided, must be 10-14.
+   * @param name - Display name (required for manual saves)
+   */
+  checkpoint_create(index?: number, name?: string): Promise<void>;
   
-  /** Get all checkpoints (ephemeral + persisted), sorted by timestamp desc */
+  /** Get all checkpoints (0-14), sorted by timestamp desc */
   checkpoint_list(): Checkpoint[];
   
-  /** Promote ephemeral checkpoint to persisted with name */
-  checkpoint_persist(index: number, name: string): boolean;
+  /** 
+   * Delete a manual checkpoint.
+   * @param index - Must be 10-14 (cannot delete auto-saves)
+   */
+  checkpoint_delete(index: number): Promise<boolean>;
   
-  /** Restore state from checkpoint (by index or name) */
-  checkpoint_restore(target: number | string): boolean;
+  /** 
+   * Restore state from checkpoint slot.
+   * @param index - Slot 0-14
+   */
+  checkpoint_restore(index: number): Promise<boolean>;
   
   // === Settings ===
   
@@ -464,34 +505,32 @@ interface QueueProcessor {
 
 ## Storage Interface
 
-Storage is an abstraction over persistence backends.
+Storage is an abstraction over persistence backends. Uses an **array-based** checkpoint system for simplicity.
 
 ```typescript
 interface Storage {
-  /** Load full state, returns null if not found */
-  load(): Promise<StorageState | null>;
-  
-  /** Save full state */
-  save(state: StorageState): Promise<void>;
-  
   /** Check if storage is available/configured */
   isAvailable(): Promise<boolean>;
   
-  /** List persisted checkpoints (named saves) */
-  listCheckpoints(): Promise<PersistedCheckpoint[]>;
+  /** Get all checkpoints with metadata */
+  listCheckpoints(): Promise<Checkpoint[]>;
   
-  /** Save a checkpoint to a named slot */
-  saveCheckpoint(name: string, state: StorageState): Promise<void>;
+  /** Load checkpoint by index. 0-9 = auto-save, 10-14 = manual. */
+  loadCheckpoint(index: number): Promise<StorageState | null>;
   
-  /** Load a checkpoint by name */
-  loadCheckpoint(name: string): Promise<StorageState | null>;
+  /** Save an auto-checkpoint. Appends to array, drops oldest if > 10. */
+  saveAutoCheckpoint(state: StorageState): Promise<void>;
   
-  /** Delete a checkpoint by name */
-  deleteCheckpoint(name: string): Promise<boolean>;
+  /** Save a manual checkpoint to slot 10-14. */
+  saveManualCheckpoint(index: number, name: string, state: StorageState): Promise<void>;
+  
+  /** Delete a manual checkpoint. Cannot delete auto-saves (0-9). */
+  deleteManualCheckpoint(index: number): Promise<boolean>;
 }
 
 interface StorageState {
   version: number;
+  timestamp: string;           // When this checkpoint was created
   human: HumanEntity;
   personas: Record<string, {
     entity: PersonaEntity;
@@ -499,11 +538,6 @@ interface StorageState {
   }>;
   queue: LLMRequest[];
   settings: Record<string, unknown>;
-}
-
-interface PersistedCheckpoint {
-  name: string;
-  timestamp: string;
 }
 ```
 
@@ -515,12 +549,16 @@ interface PersistedCheckpoint {
 | `FileStorage` | Node.js file system (EI_DATA_PATH) | V1.1 (TUI) |
 | `RemoteStorage` | flare576.com encrypted sync | V1.2 |
 
-### Save Slot Limits
+### Checkpoint Indices
 
-| Type | Default Limit | Notes |
-|------|---------------|-------|
-| Ephemeral checkpoints | 10 | In-memory only, roll off FIFO |
-| Persisted checkpoints | 5 | Stored via Storage interface |
+| Index Range | Type | Count | Behavior |
+|-------------|------|-------|----------|
+| 0-9 | Auto-save | 10 | Array: newest pushed to end, oldest shifted from front. Index 0 = oldest, 9 = newest. |
+| 10-14 | Manual save | 5 | Individual slots. User-managed, can overwrite or delete. |
+
+**UI Display**: Auto-saves should be shown oldest-first (index 0 at top) so users can easily select "revert to N minutes ago".
+
+**Race Condition Handling**: `onCheckpointStart` fires before any checkpoint operation. UI should disable checkpoint interactions until `onCheckpointCreated` or `onCheckpointDeleted` fires.
 
 ---
 
@@ -920,14 +958,14 @@ Standard error codes for `onError` events:
 | `LLM_TIMEOUT` | LLM call timed out |
 | `LLM_INVALID_JSON` | JSON parse failed after retries |
 | `LLM_TRUNCATED` | Response was truncated |
-| `STORAGE_LOAD_FAILED` | Could not load from storage |
-| `STORAGE_SAVE_FAILED` | Could not persist to storage |
+| `STORAGE_LOAD_FAILED` | Could not load checkpoint from storage |
+| `STORAGE_SAVE_FAILED` | Could not save checkpoint to storage |
 | `PERSONA_NOT_FOUND` | Requested persona doesn't exist |
 | `PERSONA_ARCHIVED` | Operation not allowed on archived persona |
 | `QUEUE_BUSY` | QueueProcessor already processing |
-| `CHECKPOINT_NOT_FOUND` | Requested checkpoint doesn't exist |
-| `CHECKPOINT_ALREADY_PERSISTED` | Cannot persist an already-persisted checkpoint |
-| `CHECKPOINT_INVALID_NAME` | Checkpoint name cannot be a number |
+| `CHECKPOINT_SLOT_EMPTY` | Requested checkpoint slot is empty |
+| `CHECKPOINT_INVALID_SLOT` | Slot index out of range (must be 0-14) |
+| `CHECKPOINT_SLOT_PROTECTED` | Cannot delete auto-save slots (0-9) |
 
 ---
 
@@ -945,3 +983,12 @@ Standard error codes for `onError` events:
 | 2026-01-26 | Added `queue_pause()`/`queue_resume()` to StateManager |
 | 2026-01-26 | Changed `LLMNextStep` to enum |
 | 2026-01-26 | Changed `in_context: boolean` to `context_status: ContextStatus` enum (default/always/never) |
+| 2026-01-26 | **Checkpoint system overhaul**: Slots 0-9 auto-save (FIFO), slots 10-14 manual save |
+| 2026-01-26 | Removed `persist()`, `checkpoint_persist()` from StateManager |
+| 2026-01-26 | Removed `load()`, `save()`, `loadCheckpoint()`, `listCheckpoints()` from Storage |
+| 2026-01-26 | Added `timestamp` to StorageState |
+| 2026-01-26 | Removed `PersistedCheckpoint` interface (no longer needed) |
+| 2026-01-26 | Replaced `onCheckpointPersisted` with `onCheckpointCreated` and `onCheckpointDeleted` |
+| 2026-01-27 | **Simplified checkpoint storage**: Array-based auto-saves instead of slot-based ring buffer |
+| 2026-01-27 | Added `onCheckpointStart` event for UI race condition handling |
+| 2026-01-27 | Storage interface simplified: `listCheckpoints`, `loadCheckpoint`, `saveAutoCheckpoint`, `saveManualCheckpoint`, `deleteManualCheckpoint` |

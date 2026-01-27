@@ -1,0 +1,22 @@
+{
+  "name": "ei",
+  "version": "1.0.0",
+  "description": "EI - Empathic Interface",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "dev": "tsc --watch",
+    "build": "tsc",
+    "test": "vitest",
+    "typecheck": "tsc --noEmit",
+    "web": "cd web;npm run dev"
+  },
+  "keywords": ["ai", "llm", "personas"],
+  "author": "Flare576",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "vitest": "^2.0.0"
+  }
+}

@@ -1,6 +1,6 @@
 # 0002: Core Types & Enums
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: None
 
 ## Summary
@@ -9,12 +9,12 @@ Create the core TypeScript types and enums as defined in CONTRACTS.md. This is t
 
 ## Acceptance Criteria
 
-- [ ] Create `src/core/types.ts` with all entity types from CONTRACTS.md
-- [ ] All enums defined: `ContextStatus`, `LLMRequestType`, `LLMPriority`, `LLMNextStep`
-- [ ] All interfaces defined: `HumanEntity`, `PersonaEntity`, `DataItemBase`, `Fact`, `Trait`, `Topic`, `Person`, `Message`
-- [ ] All supporting types: `HumanSettings`, `Checkpoint`, `LLMRequest`, `LLMResponse`, `ChatMessage`
-- [ ] Export everything from `src/core/index.ts`
-- [ ] Types compile without errors
+- [x] Create `src/core/types.ts` with all entity types from CONTRACTS.md
+- [x] All enums defined: `ContextStatus`, `LLMRequestType`, `LLMPriority`, `LLMNextStep`
+- [x] All interfaces defined: `HumanEntity`, `PersonaEntity`, `DataItemBase`, `Fact`, `Trait`, `Topic`, `Person`, `Message`
+- [x] All supporting types: `HumanSettings`, `Checkpoint`, `LLMRequest`, `LLMResponse`, `ChatMessage`
+- [x] Export everything from `src/core/index.ts`
+- [x] Types compile without errors
 
 ## Implementation Notes
 
