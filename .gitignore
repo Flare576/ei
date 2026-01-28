@@ -3,6 +3,7 @@ node_modules/
 
 # Build output
 dist/
+.vite/
 
 # Data (personal/test content)
 data/
@@ -32,5 +33,7 @@ npm-debug.log*
 # TypeScript cache
 *.tsbuildinfo
 
-# Don't commit these without sanitizing first
-tests/model/results
+# Don't commit these without sanitizing first (PII risk)
+**/tests/model/results/
+**/*-ideal.json
+**/*-ideal-response.json
