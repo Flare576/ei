@@ -1,0 +1,933 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import {
+  LLMNextStep,
+  LLMRequestType,
+  LLMPriority,
+  type LLMResponse,
+  type LLMRequest,
+  type Message,
+  type HumanEntity,
+  type PersonaEntity,
+  type Fact,
+  type Trait,
+  type Topic,
+  type Person,
+} from "../../../../src/core/types.js";
+
+// We need to test handlers in isolation, so we import them directly
+// and mock their dependencies
+
+// Mock the orchestrators module
+vi.mock("../../../../src/core/orchestrators/index.js", () => ({
+  orchestratePersonaGeneration: vi.fn(),
+  queueItemMatch: vi.fn(),
+  queueItemUpdate: vi.fn(),
+}));
+
+// Mock the validation prompt builder
+vi.mock("../../../../src/prompts/validation/index.js", () => ({
+  buildEiValidationPrompt: vi.fn().mockReturnValue({ system: "sys", user: "usr" }),
+}));
+
+import { handlers } from "../../../../src/core/handlers/index.js";
+import { queueItemMatch, queueItemUpdate } from "../../../../src/core/orchestrators/index.js";
+
+function createMockStateManager() {
+  const human: HumanEntity = {
+    entity: "human",
+    facts: [],
+    traits: [],
+    topics: [],
+    people: [],
+    last_updated: new Date().toISOString(),
+    last_activity: new Date().toISOString(),
+  };
+
+  const personas: Record<string, PersonaEntity> = {};
+  const messages: Record<string, Message[]> = {};
+
+  return {
+    getHuman: vi.fn(() => human),
+    setHuman: vi.fn((h: HumanEntity) => Object.assign(human, h)),
+    human_fact_upsert: vi.fn((fact: Fact) => human.facts.push(fact)),
+    human_trait_upsert: vi.fn((trait: Trait) => human.traits.push(trait)),
+    human_topic_upsert: vi.fn((topic: Topic) => human.topics.push(topic)),
+    human_person_upsert: vi.fn((person: Person) => human.people.push(person)),
+    persona_get: vi.fn((name: string) => personas[name] ?? null),
+    persona_add: vi.fn((name: string, entity: PersonaEntity) => { personas[name] = entity; }),
+    persona_update: vi.fn(),
+    messages_get: vi.fn((name: string) => messages[name] ?? []),
+    messages_append: vi.fn(),
+    messages_markPendingAsRead: vi.fn(),
+    queue_enqueue: vi.fn(),
+    queue_clearValidations: vi.fn(),
+    _human: human,
+    _personas: personas,
+    _messages: messages,
+  };
+}
+
+function createMockRequest(overrides: Partial<LLMRequest> = {}): LLMRequest {
+  return {
+    id: "test-id",
+    created_at: new Date().toISOString(),
+    attempts: 0,
+    type: LLMRequestType.JSON,
+    priority: LLMPriority.Low,
+    system: "system",
+    user: "user",
+    next_step: LLMNextStep.HandleHumanFactScan,
+    data: {
+      personaName: "ei",
+      messages_context: [],
+      messages_analyze: [],
+    },
+    ...overrides,
+  };
+}
+
+function createMockResponse(
+  request: LLMRequest,
+  parsed: unknown,
+  success = true
+): LLMResponse {
+  return {
+    request,
+    success,
+    content: success ? JSON.stringify(parsed) : null,
+    parsed: success ? parsed : undefined,
+    error: success ? undefined : "Test error",
+  };
+}
+
+describe("Extraction Handlers - Step 1 (Scan)", () => {
+  let state: ReturnType<typeof createMockStateManager>;
+
+  beforeEach(() => {
+    state = createMockStateManager();
+    vi.clearAllMocks();
+  });
+
+  describe("handleHumanFactScan", () => {
+    it("queues item match for each detected fact", () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleHumanFactScan,
+        data: {
+          personaName: "ei",
+          messages_context: [{ id: "1", role: "human", content: "context", timestamp: "", read: true, context_status: "default" }],
+          messages_analyze: [{ id: "2", role: "human", content: "analyze", timestamp: "", read: true, context_status: "default" }],
+        },
+      });
+
+      const response = createMockResponse(request, {
+        facts: [
+          { type_of_fact: "Birthday", value_of_fact: "January 15th", confidence: "high" },
+          { type_of_fact: "Location", value_of_fact: "San Francisco", confidence: "medium" },
+        ],
+      });
+
+      handlers.handleHumanFactScan(response, state as any);
+
+      expect(queueItemMatch).toHaveBeenCalledTimes(2);
+      expect(queueItemMatch).toHaveBeenCalledWith(
+        "fact",
+        expect.objectContaining({ type_of_fact: "Birthday" }),
+        expect.objectContaining({ personaName: "ei" }),
+        state
+      );
+    });
+
+    it("does nothing when no facts detected", () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleHumanFactScan,
+      });
+
+      const response = createMockResponse(request, { facts: [] });
+
+      handlers.handleHumanFactScan(response, state as any);
+
+      expect(queueItemMatch).not.toHaveBeenCalled();
+    });
+
+    it("handles missing facts array gracefully", () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleHumanFactScan,
+      });
+
+      const response = createMockResponse(request, {});
+
+      handlers.handleHumanFactScan(response, state as any);
+
+      expect(queueItemMatch).not.toHaveBeenCalled();
+    });
+
+    it("handles missing context gracefully", () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleHumanFactScan,
+        data: {}, // Missing context
+      });
+
+      const response = createMockResponse(request, {
+        facts: [{ type_of_fact: "Test", value_of_fact: "Value", confidence: "high" }],
+      });
+
+      handlers.handleHumanFactScan(response, state as any);
+
+      // Should not throw, but also not queue (missing context)
+      expect(queueItemMatch).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("handleHumanTraitScan", () => {
+    it("queues item match for each detected trait", () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleHumanTraitScan,
+        data: {
+          personaName: "ei",
+          messages_context: [],
+          messages_analyze: [{ id: "1", role: "human", content: "test", timestamp: "", read: true, context_status: "default" }],
+        },
+      });
+
+      const response = createMockResponse(request, {
+        traits: [
+          { type_of_trait: "Introversion", value_of_trait: "Prefers quiet time", confidence: "high" },
+        ],
+      });
+
+      handlers.handleHumanTraitScan(response, state as any);
+
+      expect(queueItemMatch).toHaveBeenCalledTimes(1);
+      expect(queueItemMatch).toHaveBeenCalledWith(
+        "trait",
+        expect.objectContaining({ type_of_trait: "Introversion" }),
+        expect.any(Object),
+        state
+      );
+    });
+
+    it("does nothing when no traits detected", () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleHumanTraitScan,
+        data: {
+          personaName: "ei",
+          messages_context: [],
+          messages_analyze: [],
+        },
+      });
+
+      const response = createMockResponse(request, { traits: [] });
+
+      handlers.handleHumanTraitScan(response, state as any);
+
+      expect(queueItemMatch).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("handleHumanTopicScan", () => {
+    it("queues item match for each detected topic", () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleHumanTopicScan,
+        data: {
+          personaName: "ei",
+          messages_context: [],
+          messages_analyze: [{ id: "1", role: "human", content: "test", timestamp: "", read: true, context_status: "default" }],
+        },
+      });
+
+      const response = createMockResponse(request, {
+        topics: [
+          { type_of_topic: "Technology", value_of_topic: "AI research", confidence: "high" },
+          { type_of_topic: "Hobbies", value_of_topic: "Photography", confidence: "low" },
+        ],
+      });
+
+      handlers.handleHumanTopicScan(response, state as any);
+
+      expect(queueItemMatch).toHaveBeenCalledTimes(2);
+      expect(queueItemMatch).toHaveBeenCalledWith(
+        "topic",
+        expect.objectContaining({ type_of_topic: "Technology" }),
+        expect.any(Object),
+        state
+      );
+    });
+  });
+
+  describe("handleHumanPersonScan", () => {
+    it("queues item match for each detected person", () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleHumanPersonScan,
+        data: {
+          personaName: "ei",
+          messages_context: [],
+          messages_analyze: [{ id: "1", role: "human", content: "test", timestamp: "", read: true, context_status: "default" }],
+        },
+      });
+
+      const response = createMockResponse(request, {
+        people: [
+          { name_of_person: "Alice", type_of_person: "friend", confidence: "high" },
+        ],
+      });
+
+      handlers.handleHumanPersonScan(response, state as any);
+
+      expect(queueItemMatch).toHaveBeenCalledTimes(1);
+      expect(queueItemMatch).toHaveBeenCalledWith(
+        "person",
+        expect.objectContaining({ name_of_person: "Alice" }),
+        expect.any(Object),
+        state
+      );
+    });
+  });
+});
+
+describe("Extraction Handlers - Step 2 (Match)", () => {
+  let state: ReturnType<typeof createMockStateManager>;
+
+  beforeEach(() => {
+    state = createMockStateManager();
+    vi.clearAllMocks();
+  });
+
+  describe("handleHumanItemMatch", () => {
+    it("queues item update with match result", () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleHumanItemMatch,
+        data: {
+          personaName: "ei",
+          dataType: "fact",
+          itemName: "Birthday",
+          itemValue: "January 15th",
+          scanConfidence: "high",
+          messages_context: [],
+          messages_analyze: [{ id: "1", role: "human", content: "test", timestamp: "", read: true, context_status: "default" }],
+        },
+      });
+
+      const response = createMockResponse(request, {
+        name: "Birthday",
+        confidence: "high",
+      });
+
+      handlers.handleHumanItemMatch(response, state as any);
+
+      expect(queueItemUpdate).toHaveBeenCalledTimes(1);
+      expect(queueItemUpdate).toHaveBeenCalledWith(
+        "fact",
+        expect.objectContaining({ name: "Birthday" }),
+        expect.objectContaining({
+          personaName: "ei",
+          itemName: "Birthday",
+          itemValue: "January 15th",
+        }),
+        state
+      );
+    });
+
+    it("queues item update for new item (Not Found)", () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleHumanItemMatch,
+        data: {
+          personaName: "ei",
+          dataType: "trait",
+          itemName: "Curiosity",
+          itemValue: "Loves to learn new things",
+          scanConfidence: "medium",
+          messages_context: [],
+          messages_analyze: [],
+        },
+      });
+
+      const response = createMockResponse(request, {
+        name: "Not Found",
+        confidence: "N/A",
+      });
+
+      handlers.handleHumanItemMatch(response, state as any);
+
+      expect(queueItemUpdate).toHaveBeenCalledWith(
+        "trait",
+        expect.objectContaining({ name: "Not Found" }),
+        expect.any(Object),
+        state
+      );
+    });
+
+    it("handles missing parsed result", () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleHumanItemMatch,
+        data: {
+          personaName: "ei",
+          dataType: "fact",
+          itemName: "Test",
+          itemValue: "Value",
+          scanConfidence: "high",
+          messages_context: [],
+          messages_analyze: [],
+        },
+      });
+
+      const response = createMockResponse(request, null);
+      response.parsed = undefined;
+
+      handlers.handleHumanItemMatch(response, state as any);
+
+      expect(queueItemUpdate).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe("Extraction Handlers - Step 3 (Update)", () => {
+  let state: ReturnType<typeof createMockStateManager>;
+
+  beforeEach(() => {
+    state = createMockStateManager();
+    // Add Ei persona so isEi check passes
+    state._personas["ei"] = {
+      entity: "system",
+      aliases: ["ei"],
+      traits: [],
+      topics: [],
+      is_paused: false,
+      is_archived: false,
+      last_updated: new Date().toISOString(),
+      last_activity: new Date().toISOString(),
+    };
+    vi.clearAllMocks();
+  });
+
+  describe("handleHumanItemUpdate", () => {
+    it("creates new fact when isNewItem=true", () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleHumanItemUpdate,
+        data: {
+          personaName: "ei",
+          dataType: "fact",
+          isNewItem: true,
+          existingItemId: undefined,
+        },
+      });
+
+      const response = createMockResponse(request, {
+        name: "Birthday",
+        description: "User's birthday is January 15th",
+        sentiment: 0.8,
+        confidence: 0.9,
+      });
+
+      handlers.handleHumanItemUpdate(response, state as any);
+
+      expect(state.human_fact_upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "Birthday",
+          description: "User's birthday is January 15th",
+          sentiment: 0.8,
+          confidence: 0.9,
+          learned_by: "ei",
+        })
+      );
+    });
+
+    it("updates existing fact when isNewItem=false", () => {
+      const existingId = "existing-fact-id";
+      state._human.facts.push({
+        id: existingId,
+        name: "Birthday",
+        description: "Old description",
+        sentiment: 0.5,
+        confidence: 0.5,
+        last_updated: new Date().toISOString(),
+      });
+
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleHumanItemUpdate,
+        data: {
+          personaName: "ei",
+          dataType: "fact",
+          isNewItem: false,
+          existingItemId: existingId,
+        },
+      });
+
+      const response = createMockResponse(request, {
+        name: "Birthday",
+        description: "Updated description",
+        sentiment: 0.9,
+        confidence: 0.95,
+      });
+
+      handlers.handleHumanItemUpdate(response, state as any);
+
+      expect(state.human_fact_upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: existingId,
+          name: "Birthday",
+          description: "Updated description",
+          // learned_by should NOT be set for updates
+        })
+      );
+      
+      const calledWith = state.human_fact_upsert.mock.calls[0][0];
+      expect(calledWith.learned_by).toBeUndefined();
+    });
+
+    it("creates new trait with strength", () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleHumanItemUpdate,
+        data: {
+          personaName: "ei",
+          dataType: "trait",
+          isNewItem: true,
+        },
+      });
+
+      const response = createMockResponse(request, {
+        name: "Curiosity",
+        description: "Always eager to learn",
+        sentiment: 0.7,
+        strength: 0.8,
+      });
+
+      handlers.handleHumanItemUpdate(response, state as any);
+
+      expect(state.human_trait_upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "Curiosity",
+          strength: 0.8,
+        })
+      );
+    });
+
+    it("creates new topic with exposure_impact calculation", () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleHumanItemUpdate,
+        data: {
+          personaName: "ei",
+          dataType: "topic",
+          isNewItem: true,
+        },
+      });
+
+      const response = createMockResponse(request, {
+        name: "AI Research",
+        description: "Interested in artificial intelligence",
+        sentiment: 0.9,
+        exposure_impact: "high",
+        exposure_desired: 0.8,
+      });
+
+      handlers.handleHumanItemUpdate(response, state as any);
+
+      expect(state.human_topic_upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "AI Research",
+          exposure_current: 0.9, // "high" maps to 0.9
+          exposure_desired: 0.8,
+        })
+      );
+    });
+
+    it("maps exposure_impact values correctly", () => {
+      const testCases = [
+        { impact: "high", expected: 0.9 },
+        { impact: "medium", expected: 0.6 },
+        { impact: "low", expected: 0.3 },
+        { impact: "none", expected: 0.1 },
+        { impact: undefined, expected: 0.5 }, // default
+      ];
+
+      for (const { impact, expected } of testCases) {
+        state = createMockStateManager();
+        state._personas["ei"] = {
+          entity: "system",
+          aliases: ["ei"],
+          traits: [],
+          topics: [],
+          is_paused: false,
+          is_archived: false,
+          last_updated: new Date().toISOString(),
+          last_activity: new Date().toISOString(),
+        };
+
+        const request = createMockRequest({
+          next_step: LLMNextStep.HandleHumanItemUpdate,
+          data: {
+            personaName: "ei",
+            dataType: "topic",
+            isNewItem: true,
+          },
+        });
+
+        const response = createMockResponse(request, {
+          name: "Test Topic",
+          description: "Test",
+          sentiment: 0,
+          exposure_impact: impact,
+          exposure_desired: 0.5,
+        });
+
+        handlers.handleHumanItemUpdate(response, state as any);
+
+        const calledWith = state.human_topic_upsert.mock.calls[0][0];
+        expect(calledWith.exposure_current).toBe(expected);
+      }
+    });
+
+    it("creates new person with relationship", () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleHumanItemUpdate,
+        data: {
+          personaName: "ei",
+          dataType: "person",
+          isNewItem: true,
+        },
+      });
+
+      const response = createMockResponse(request, {
+        name: "Alice",
+        description: "Close friend from college",
+        sentiment: 0.9,
+        relationship: "friend",
+        exposure_impact: "medium",
+        exposure_desired: 0.7,
+      });
+
+      handlers.handleHumanItemUpdate(response, state as any);
+
+      expect(state.human_person_upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "Alice",
+          relationship: "friend",
+          exposure_current: 0.6, // "medium" maps to 0.6
+        })
+      );
+    });
+
+    it("does nothing when result is empty", () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleHumanItemUpdate,
+        data: {
+          personaName: "ei",
+          dataType: "fact",
+          isNewItem: true,
+        },
+      });
+
+      const response = createMockResponse(request, {});
+
+      handlers.handleHumanItemUpdate(response, state as any);
+
+      expect(state.human_fact_upsert).not.toHaveBeenCalled();
+    });
+
+    it("does nothing when required fields missing", () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleHumanItemUpdate,
+        data: {
+          personaName: "ei",
+          dataType: "fact",
+          isNewItem: true,
+        },
+      });
+
+      // Missing description and sentiment
+      const response = createMockResponse(request, {
+        name: "Test",
+      });
+
+      handlers.handleHumanItemUpdate(response, state as any);
+
+      expect(state.human_fact_upsert).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe("Cross-Persona Validation", () => {
+  let state: ReturnType<typeof createMockStateManager>;
+
+  beforeEach(() => {
+    state = createMockStateManager();
+    vi.clearAllMocks();
+  });
+
+  it("queues Ei validation when non-Ei persona with General group learns item", () => {
+    // Create a non-Ei persona with no group (defaults to General)
+    state._personas["friend"] = {
+      entity: "system",
+      aliases: ["friend"],
+      group_primary: null, // General group
+      traits: [],
+      topics: [],
+      is_paused: false,
+      is_archived: false,
+      last_updated: new Date().toISOString(),
+      last_activity: new Date().toISOString(),
+    };
+
+    const request = createMockRequest({
+      next_step: LLMNextStep.HandleHumanItemUpdate,
+      data: {
+        personaName: "friend",
+        dataType: "fact",
+        isNewItem: true,
+      },
+    });
+
+    const response = createMockResponse(request, {
+      name: "TestFact",
+      description: "Test description",
+      sentiment: 0.5,
+      confidence: 0.5,
+    });
+
+    handlers.handleHumanItemUpdate(response, state as any);
+
+    // Should upsert AND queue validation
+    expect(state.human_fact_upsert).toHaveBeenCalled();
+    expect(state.queue_enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        next_step: LLMNextStep.HandleEiValidation,
+        data: expect.objectContaining({
+          dataType: "fact",
+          sourcePersona: "friend",
+        }),
+      })
+    );
+  });
+
+  it("does NOT queue validation when Ei learns item", () => {
+    state._personas["ei"] = {
+      entity: "system",
+      aliases: ["ei"],
+      traits: [],
+      topics: [],
+      is_paused: false,
+      is_archived: false,
+      last_updated: new Date().toISOString(),
+      last_activity: new Date().toISOString(),
+    };
+
+    const request = createMockRequest({
+      next_step: LLMNextStep.HandleHumanItemUpdate,
+      data: {
+        personaName: "ei",
+        dataType: "fact",
+        isNewItem: true,
+      },
+    });
+
+    const response = createMockResponse(request, {
+      name: "TestFact",
+      description: "Test description",
+      sentiment: 0.5,
+      confidence: 0.5,
+    });
+
+    handlers.handleHumanItemUpdate(response, state as any);
+
+    expect(state.human_fact_upsert).toHaveBeenCalled();
+    expect(state.queue_enqueue).not.toHaveBeenCalled();
+  });
+
+  it("does NOT queue validation when persona has non-General group", () => {
+    state._personas["work-buddy"] = {
+      entity: "system",
+      aliases: ["work-buddy"],
+      group_primary: "work", // Non-General group
+      traits: [],
+      topics: [],
+      is_paused: false,
+      is_archived: false,
+      last_updated: new Date().toISOString(),
+      last_activity: new Date().toISOString(),
+    };
+
+    const request = createMockRequest({
+      next_step: LLMNextStep.HandleHumanItemUpdate,
+      data: {
+        personaName: "work-buddy",
+        dataType: "fact",
+        isNewItem: true,
+      },
+    });
+
+    const response = createMockResponse(request, {
+      name: "TestFact",
+      description: "Test description",
+      sentiment: 0.5,
+      confidence: 0.5,
+    });
+
+    handlers.handleHumanItemUpdate(response, state as any);
+
+    expect(state.human_fact_upsert).toHaveBeenCalled();
+    expect(state.queue_enqueue).not.toHaveBeenCalled();
+  });
+
+  it("sets validation priority based on confidence (inverse)", () => {
+    state._personas["friend"] = {
+      entity: "system",
+      aliases: ["friend"],
+      group_primary: null,
+      traits: [],
+      topics: [],
+      is_paused: false,
+      is_archived: false,
+      last_updated: new Date().toISOString(),
+      last_activity: new Date().toISOString(),
+    };
+
+    // High confidence = Low priority (trusted)
+    const requestHigh = createMockRequest({
+      next_step: LLMNextStep.HandleHumanItemUpdate,
+      data: { personaName: "friend", dataType: "fact", isNewItem: true },
+    });
+    const responseHigh = createMockResponse(requestHigh, {
+      name: "HighConfidence",
+      description: "Test",
+      sentiment: 0.5,
+      confidence: 0.9,
+    });
+
+    handlers.handleHumanItemUpdate(responseHigh, state as any);
+
+    expect(state.queue_enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        priority: LLMPriority.Low,
+      })
+    );
+
+    vi.clearAllMocks();
+
+    // Low confidence = High priority (needs review)
+    const requestLow = createMockRequest({
+      next_step: LLMNextStep.HandleHumanItemUpdate,
+      data: { personaName: "friend", dataType: "fact", isNewItem: true },
+    });
+    const responseLow = createMockResponse(requestLow, {
+      name: "LowConfidence",
+      description: "Test",
+      sentiment: 0.5,
+      confidence: 0.3,
+    });
+
+    handlers.handleHumanItemUpdate(responseLow, state as any);
+
+    expect(state.queue_enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        priority: LLMPriority.High,
+      })
+    );
+  });
+});
+
+describe("handleEiValidation", () => {
+  let state: ReturnType<typeof createMockStateManager>;
+
+  beforeEach(() => {
+    state = createMockStateManager();
+    vi.clearAllMocks();
+  });
+
+  it("accepts item and applies it", () => {
+    const request = createMockRequest({
+      next_step: LLMNextStep.HandleEiValidation,
+      data: {
+        validationId: "val-123",
+        dataType: "fact",
+        itemName: "TestFact",
+        proposedItem: {
+          id: "fact-1",
+          name: "TestFact",
+          description: "Proposed description",
+          sentiment: 0.5,
+          confidence: 0.7,
+        },
+      },
+    });
+
+    const response = createMockResponse(request, {
+      decision: "accept",
+      reason: "Information seems accurate",
+    });
+
+    handlers.handleEiValidation(response, state as any);
+
+    expect(state.human_fact_upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "TestFact",
+      })
+    );
+    expect(state.queue_clearValidations).toHaveBeenCalledWith(["val-123"]);
+  });
+
+  it("rejects item and clears validation", () => {
+    const request = createMockRequest({
+      next_step: LLMNextStep.HandleEiValidation,
+      data: {
+        validationId: "val-123",
+        dataType: "fact",
+        itemName: "TestFact",
+        proposedItem: {
+          id: "fact-1",
+          name: "TestFact",
+          description: "Wrong info",
+          sentiment: 0.5,
+          confidence: 0.3,
+        },
+      },
+    });
+
+    const response = createMockResponse(request, {
+      decision: "reject",
+      reason: "Information contradicts known facts",
+    });
+
+    handlers.handleEiValidation(response, state as any);
+
+    expect(state.human_fact_upsert).not.toHaveBeenCalled();
+    expect(state.queue_clearValidations).toHaveBeenCalledWith(["val-123"]);
+  });
+
+  it("modifies item and applies modification", () => {
+    const request = createMockRequest({
+      next_step: LLMNextStep.HandleEiValidation,
+      data: {
+        validationId: "val-123",
+        dataType: "trait",
+        itemName: "Curiosity",
+        proposedItem: {
+          id: "trait-1",
+          name: "Curiosity",
+          description: "Original description",
+          sentiment: 0.5,
+          strength: 0.5,
+        },
+      },
+    });
+
+    const response = createMockResponse(request, {
+      decision: "modify",
+      reason: "Adjusted description for accuracy",
+      modified_item: {
+        id: "trait-1",
+        name: "Curiosity",
+        description: "Modified description",
+        sentiment: 0.7,
+        strength: 0.8,
+      },
+    });
+
+    handlers.handleEiValidation(response, state as any);
+
+    expect(state.human_trait_upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: "Modified description",
+        sentiment: 0.7,
+      })
+    );
+  });
+});
