@@ -36,8 +36,9 @@ vi.mock("../../../src/core/orchestrators/index.js", () => ({
   queueItemUpdate: vi.fn(),
 }));
 
-function createMockInterface(): { interface: Ei_Interface; calls: string[] } {
+function createMockInterface(): { interface: Ei_Interface; calls: string[]; recalledContent: string[] } {
   const calls: string[] = [];
+  const recalledContent: string[] = [];
   return {
     interface: {
       onPersonaAdded: () => calls.push("onPersonaAdded"),
@@ -46,16 +47,22 @@ function createMockInterface(): { interface: Ei_Interface; calls: string[] } {
       onMessageAdded: (name: string) => calls.push(`onMessageAdded:${name}`),
       onMessageProcessing: (name: string) => calls.push(`onMessageProcessing:${name}`),
       onMessageQueued: (name: string) => calls.push(`onMessageQueued:${name}`),
+      onMessageRecalled: (name: string, content: string) => {
+        calls.push(`onMessageRecalled:${name}`);
+        recalledContent.push(content);
+      },
       onHumanUpdated: () => calls.push("onHumanUpdated"),
       onQueueStateChanged: (state: "idle" | "busy") => calls.push(`onQueueStateChanged:${state}`),
       onError: (error) => calls.push(`onError:${error.code}`),
       onCheckpointStart: () => calls.push("onCheckpointStart"),
       onCheckpointCreated: (index?: number) =>
         calls.push(index !== undefined ? `onCheckpointCreated:${index}` : "onCheckpointCreated:auto"),
+      onCheckpointRestored: (index: number) => calls.push(`onCheckpointRestored:${index}`),
       onCheckpointDeleted: (index: number) => calls.push(`onCheckpointDeleted:${index}`),
       onOneShotReturned: (guid: string, content: string) => calls.push(`onOneShotReturned:${guid}:${content}`),
     },
     calls,
+    recalledContent,
   };
 }
 
@@ -1219,5 +1226,319 @@ describe("Processor Human Extraction Throttling", () => {
     expect(human.lastSeeded_trait).toBeDefined();
     expect(human.lastSeeded_topic).toBeDefined();
     expect(human.lastSeeded_person).toBeDefined();
+  });
+});
+
+describe("Processor Message Recall", () => {
+  let mock: ReturnType<typeof createMockInterface>;
+  let processor: Processor;
+  let storage: ReturnType<typeof createMockStorage>;
+
+  beforeEach(async () => {
+    mock = createMockInterface();
+    processor = new Processor(mock.interface);
+    storage = createMockStorage();
+  });
+
+  afterEach(async () => {
+    await processor.stop();
+  });
+
+  it("recallPendingMessages returns empty string when no pending messages", async () => {
+    storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
+    storage.loadCheckpoint.mockResolvedValue({
+      version: 1,
+      timestamp: new Date().toISOString(),
+      human: {
+        entity: "human",
+        facts: [],
+        traits: [],
+        topics: [],
+        people: [],
+        last_updated: new Date().toISOString(),
+        last_activity: new Date().toISOString(),
+      },
+      personas: {
+        testbot: {
+          entity: createTestPersona(),
+          messages: [
+            { id: "1", role: "human", content: "Already read", timestamp: new Date().toISOString(), read: true, context_status: "default" },
+          ],
+        },
+      },
+      queue: [],
+      settings: {},
+    });
+
+    await processor.start(storage);
+    
+    const recalled = await processor.recallPendingMessages("TestBot");
+    
+    expect(recalled).toBe("");
+  });
+
+  it("recallPendingMessages returns content of pending messages and fires onMessageRecalled", async () => {
+    storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
+    storage.loadCheckpoint.mockResolvedValue({
+      version: 1,
+      timestamp: new Date().toISOString(),
+      human: {
+        entity: "human",
+        facts: [],
+        traits: [],
+        topics: [],
+        people: [],
+        last_updated: new Date().toISOString(),
+        last_activity: new Date().toISOString(),
+      },
+      personas: {
+        testbot: {
+          entity: createTestPersona(),
+          messages: [
+            { id: "1", role: "human", content: "First pending", timestamp: new Date().toISOString(), read: false, context_status: "default" },
+            { id: "2", role: "human", content: "Second pending", timestamp: new Date().toISOString(), read: false, context_status: "default" },
+          ],
+        },
+      },
+      queue: [],
+      settings: {},
+    });
+
+    await processor.start(storage);
+    
+    const recalled = await processor.recallPendingMessages("TestBot");
+    
+    expect(recalled).toContain("First pending");
+    expect(recalled).toContain("Second pending");
+    expect(mock.calls).toContain("onMessageRecalled:TestBot");
+    expect(mock.recalledContent[0]).toContain("First pending");
+  });
+
+  it("recallPendingMessages removes messages from history", async () => {
+    storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
+    storage.loadCheckpoint.mockResolvedValue({
+      version: 1,
+      timestamp: new Date().toISOString(),
+      human: {
+        entity: "human",
+        facts: [],
+        traits: [],
+        topics: [],
+        people: [],
+        last_updated: new Date().toISOString(),
+        last_activity: new Date().toISOString(),
+      },
+      personas: {
+        testbot: {
+          entity: createTestPersona(),
+          messages: [
+            { id: "1", role: "system", content: "Hello!", timestamp: new Date().toISOString(), read: true, context_status: "default" },
+            { id: "2", role: "human", content: "Pending message", timestamp: new Date().toISOString(), read: false, context_status: "default" },
+          ],
+        },
+      },
+      queue: [],
+      settings: {},
+    });
+
+    await processor.start(storage);
+    
+    await processor.recallPendingMessages("TestBot");
+    
+    const messages = await processor.getMessages("TestBot");
+    expect(messages).toHaveLength(1);
+    expect(messages[0].role).toBe("system");
+  });
+
+  it("human messages start with read: false", async () => {
+    storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
+    storage.loadCheckpoint.mockResolvedValue({
+      version: 1,
+      timestamp: new Date().toISOString(),
+      human: {
+        entity: "human",
+        facts: [],
+        traits: [],
+        topics: [],
+        people: [],
+        last_updated: new Date().toISOString(),
+        last_activity: new Date().toISOString(),
+      },
+      personas: {
+        testbot: {
+          entity: createTestPersona(),
+          messages: [],
+        },
+      },
+      queue: [],
+      settings: {},
+    });
+
+    await processor.start(storage);
+    
+    await processor.sendMessage("TestBot", "New message");
+    
+    const messages = await processor.getMessages("TestBot");
+    const humanMessage = messages.find(m => m.role === "human");
+    expect(humanMessage?.read).toBe(false);
+  });
+});
+
+describe("Processor markMessageRead", () => {
+  let mock: ReturnType<typeof createMockInterface>;
+  let processor: Processor;
+  let storage: ReturnType<typeof createMockStorage>;
+
+  beforeEach(async () => {
+    mock = createMockInterface();
+    processor = new Processor(mock.interface);
+    storage = createMockStorage();
+  });
+
+  afterEach(async () => {
+    await processor.stop();
+  });
+
+  it("marks a message as read", async () => {
+    storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
+    storage.loadCheckpoint.mockResolvedValue({
+      version: 1,
+      timestamp: new Date().toISOString(),
+      human: {
+        entity: "human",
+        facts: [],
+        traits: [],
+        topics: [],
+        people: [],
+        last_updated: new Date().toISOString(),
+        last_activity: new Date().toISOString(),
+      },
+      personas: {
+        testbot: {
+          entity: createTestPersona(),
+          messages: [
+            { id: "msg-1", role: "system", content: "Hello!", timestamp: new Date().toISOString(), read: false, context_status: "default" },
+          ],
+        },
+      },
+      queue: [],
+      settings: {},
+    });
+
+    await processor.start(storage);
+    
+    const result = await processor.markMessageRead("TestBot", "msg-1");
+    
+    expect(result).toBe(true);
+    const messages = await processor.getMessages("TestBot");
+    expect(messages[0].read).toBe(true);
+  });
+
+  it("returns false for non-existent message", async () => {
+    storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
+    storage.loadCheckpoint.mockResolvedValue({
+      version: 1,
+      timestamp: new Date().toISOString(),
+      human: {
+        entity: "human",
+        facts: [],
+        traits: [],
+        topics: [],
+        people: [],
+        last_updated: new Date().toISOString(),
+        last_activity: new Date().toISOString(),
+      },
+      personas: {
+        testbot: {
+          entity: createTestPersona(),
+          messages: [],
+        },
+      },
+      queue: [],
+      settings: {},
+    });
+
+    await processor.start(storage);
+    
+    const result = await processor.markMessageRead("TestBot", "nonexistent");
+    
+    expect(result).toBe(false);
+  });
+});
+
+describe("Processor onCheckpointRestored", () => {
+  let mock: ReturnType<typeof createMockInterface>;
+  let processor: Processor;
+  let storage: ReturnType<typeof createMockStorage>;
+
+  beforeEach(async () => {
+    mock = createMockInterface();
+    processor = new Processor(mock.interface);
+    storage = createMockStorage();
+  });
+
+  afterEach(async () => {
+    await processor.stop();
+  });
+
+  it("fires onCheckpointRestored when restore succeeds", async () => {
+    storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
+    storage.loadCheckpoint.mockResolvedValue({
+      version: 1,
+      timestamp: new Date().toISOString(),
+      human: {
+        entity: "human",
+        facts: [],
+        traits: [],
+        topics: [],
+        people: [],
+        last_updated: new Date().toISOString(),
+        last_activity: new Date().toISOString(),
+      },
+      personas: {},
+      queue: [],
+      settings: {},
+    });
+
+    await processor.start(storage);
+    mock.calls.length = 0;
+    
+    await processor.restoreCheckpoint(5);
+    
+    expect(mock.calls).toContain("onCheckpointStart");
+    expect(mock.calls).toContain("onCheckpointRestored:5");
+  });
+
+  it("does not fire onCheckpointRestored when restore fails", async () => {
+    storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
+    storage.loadCheckpoint.mockImplementation(async (index: number) => {
+      if (index === 0) {
+        return {
+          version: 1,
+          timestamp: new Date().toISOString(),
+          human: {
+            entity: "human",
+            facts: [],
+            traits: [],
+            topics: [],
+            people: [],
+            last_updated: new Date().toISOString(),
+            last_activity: new Date().toISOString(),
+          },
+          personas: {},
+          queue: [],
+          settings: {},
+        };
+      }
+      return null;
+    });
+
+    await processor.start(storage);
+    mock.calls.length = 0;
+    
+    await processor.restoreCheckpoint(99);
+    
+    expect(mock.calls).toContain("onCheckpointStart");
+    expect(mock.calls).not.toContain("onCheckpointRestored:99");
   });
 });

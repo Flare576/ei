@@ -216,4 +216,57 @@ describe("QueueState", () => {
       expect(state.length()).toBe(1);
     });
   });
+
+  describe("clearPersonaResponses", () => {
+    const makeRequestForPersona = (
+      personaName: string,
+      nextStep: LLMNextStep = LLMNextStep.HandlePersonaResponse
+    ): Omit<LLMRequest, "id" | "created_at" | "attempts"> => ({
+      type: LLMRequestType.Response,
+      priority: LLMPriority.Normal,
+      system: "System prompt",
+      user: "User prompt",
+      next_step: nextStep,
+      data: { personaName },
+    });
+
+    it("removes requests matching personaName and nextStep", () => {
+      state.enqueue(makeRequestForPersona("Alpha", LLMNextStep.HandlePersonaResponse));
+      state.enqueue(makeRequestForPersona("Beta", LLMNextStep.HandlePersonaResponse));
+      state.enqueue(makeRequestForPersona("Alpha", LLMNextStep.HandlePersonaResponse));
+
+      const removed = state.clearPersonaResponses("Alpha", LLMNextStep.HandlePersonaResponse);
+
+      expect(removed).toHaveLength(2);
+      expect(state.length()).toBe(1);
+    });
+
+    it("returns empty array when no matches", () => {
+      state.enqueue(makeRequestForPersona("Alpha", LLMNextStep.HandlePersonaResponse));
+
+      const removed = state.clearPersonaResponses("Beta", LLMNextStep.HandlePersonaResponse);
+
+      expect(removed).toHaveLength(0);
+      expect(state.length()).toBe(1);
+    });
+
+    it("only removes requests with matching nextStep", () => {
+      state.enqueue(makeRequestForPersona("Alpha", LLMNextStep.HandlePersonaResponse));
+      state.enqueue(makeRequestForPersona("Alpha", LLMNextStep.HandlePersonaTraitExtraction));
+
+      const removed = state.clearPersonaResponses("Alpha", LLMNextStep.HandlePersonaResponse);
+
+      expect(removed).toHaveLength(1);
+      expect(state.length()).toBe(1);
+    });
+
+    it("returns the ids of removed requests", () => {
+      const id1 = state.enqueue(makeRequestForPersona("Alpha", LLMNextStep.HandlePersonaResponse));
+      state.enqueue(makeRequestForPersona("Beta", LLMNextStep.HandlePersonaResponse));
+
+      const removed = state.clearPersonaResponses("Alpha", LLMNextStep.HandlePersonaResponse);
+
+      expect(removed).toContain(id1);
+    });
+  });
 });

@@ -297,4 +297,98 @@ test.describe("Message Flow - Comprehensive", () => {
     expect(messageCounts[1]).toBeGreaterThan(messageCounts[0]);
     expect(messageCounts[2]).toBeGreaterThan(messageCounts[1]);
   });
+
+  test("pressing up-arrow recalls pending message back to input", async ({ page }) => {
+    mockServer.setResponseForType("response", {
+      type: "fixed",
+      content: "Slow response coming...",
+      statusCode: 200,
+      delayMs: 3000,
+    });
+    mockServer.setResponseForType("trait-extraction", {
+      type: "fixed",
+      content: "[]",
+      statusCode: 200,
+    });
+
+    await setupPageWithMockServer(page);
+
+    const input = page.locator("textarea");
+    const pendingMessage = "Message I want to edit";
+
+    await input.fill(pendingMessage);
+    await input.press("Enter");
+
+    await expect(page.locator(`text=${pendingMessage}`)).toBeVisible({ timeout: 2000 });
+
+    await input.press("ArrowUp");
+
+    await page.waitForTimeout(500);
+
+    const inputValue = await input.inputValue();
+    expect(inputValue).toContain(pendingMessage);
+
+    await expect(page.locator(`.ei-message:has-text("${pendingMessage}")`)).not.toBeVisible({ timeout: 2000 });
+  });
+
+  test("up-arrow does nothing when no pending messages", async ({ page }) => {
+    mockServer.setResponseForType("response", {
+      type: "fixed",
+      content: "Quick response!",
+      statusCode: 200,
+    });
+    mockServer.setResponseForType("trait-extraction", {
+      type: "fixed",
+      content: "[]",
+      statusCode: 200,
+    });
+
+    await setupPageWithMockServer(page);
+
+    const input = page.locator("textarea");
+
+    await input.fill("First message");
+    await input.press("Enter");
+
+    await waitForResponseContaining(page, "Quick response");
+    await page.waitForTimeout(1000);
+
+    await input.fill("Some new text");
+    await input.press("ArrowUp");
+
+    await page.waitForTimeout(300);
+
+    const inputValue = await input.inputValue();
+    expect(inputValue).toBe("Some new text");
+  });
+
+  test("human messages start as unread and are marked read after AI response", async ({ page }) => {
+    mockServer.setResponseForType("response", {
+      type: "fixed",
+      content: "I got your message!",
+      statusCode: 200,
+    });
+    mockServer.setResponseForType("trait-extraction", {
+      type: "fixed",
+      content: "[]",
+      statusCode: 200,
+    });
+
+    await setupPageWithMockServer(page);
+
+    const input = page.locator("textarea");
+    await input.fill("Test message for read status");
+    await input.press("Enter");
+
+    await expect(page.locator("text=Test message for read status")).toBeVisible({ timeout: 2000 });
+
+    await waitForResponseContaining(page, "I got your message");
+    await page.waitForTimeout(500);
+
+    await input.press("ArrowUp");
+    await page.waitForTimeout(300);
+
+    const inputValue = await input.inputValue();
+    expect(inputValue).toBe("");
+  });
 });

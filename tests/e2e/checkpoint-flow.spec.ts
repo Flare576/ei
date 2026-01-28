@@ -273,19 +273,170 @@ test.describe("Checkpoint Flow", () => {
     expect(hasUserMessage).toBe(true);
   });
 
-  test.skip("manual save creates checkpoint in designated slot", async () => {
-    // BLOCKED: No UI for manual save button (ticket 0049)
+  test("manual save creates checkpoint via save panel", async ({ page }) => {
+    mockServer.setResponseForType("response", {
+      type: "fixed",
+      content: "Got it!",
+      statusCode: 200,
+    });
+
+    const checkpoint = createValidCheckpoint([]);
+
+    await page.goto("/");
+
+    await page.evaluate(
+      ({ url, key, checkpoint }) => {
+        localStorage.clear();
+        localStorage.setItem("EI_LLM_BASE_URL", url);
+        localStorage.setItem(key, JSON.stringify([checkpoint]));
+      },
+      { url: MOCK_SERVER_URL, key: AUTO_SAVES_KEY, checkpoint }
+    );
+
+    await page.reload();
+
+    await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
+
+    await page.locator('button[aria-label="Save/Load"]').click();
+
+    await expect(page.locator(".ei-save-popover")).toBeVisible({ timeout: 2000 });
+
+    const slotInput = page.locator('input[placeholder*="name"]').first();
+    if (await slotInput.isVisible()) {
+      await slotInput.fill("Test Save");
+    }
+
+    await page.locator('button:has-text("Save")').first().click();
+
+    await page.waitForTimeout(1000);
+
+    const manualSavesKey = "ei_saves";
+    const manualSaves = await page.evaluate((key) => {
+      const data = localStorage.getItem(key);
+      return data ? JSON.parse(data) : [];
+    }, manualSavesKey);
+
+    expect(manualSaves.length).toBeGreaterThan(0);
   });
 
-  test.skip("restore loads previous state from selected checkpoint", async () => {
-    // BLOCKED: No UI for checkpoint list/restore (ticket 0049)
+  test("restore loads previous state and fires onCheckpointRestored", async ({ page }) => {
+    mockServer.setResponseForType("response", {
+      type: "fixed",
+      content: "New response after restore!",
+      statusCode: 200,
+    });
+
+    const checkpointWithMessage = createValidCheckpoint([
+      { role: "human", content: "Original message from saved state" },
+      { role: "assistant", content: "Original response from saved state" },
+    ]);
+
+    await page.goto("/");
+
+    await page.evaluate(
+      ({ url, key, checkpoint }) => {
+        localStorage.clear();
+        localStorage.setItem("EI_LLM_BASE_URL", url);
+        localStorage.setItem(key, JSON.stringify([checkpoint]));
+      },
+      { url: MOCK_SERVER_URL, key: AUTO_SAVES_KEY, checkpoint: checkpointWithMessage }
+    );
+
+    await page.reload();
+
+    await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
+    await page.locator(".ei-persona-pill").first().click();
+
+    await expect(page.locator("text=Original message from saved state")).toBeVisible({ timeout: 5000 });
+
+    const input = page.locator("textarea");
+    await input.fill("New message that will be lost");
+    await input.press("Enter");
+
+    await expect(page.locator("text=New message that will be lost")).toBeVisible({ timeout: 2000 });
+
+    await page.locator('button[aria-label="Save/Load"]').click();
+    await expect(page.locator(".ei-save-popover")).toBeVisible({ timeout: 2000 });
+
+    await page.locator('button:has-text("Load")').first().click();
+
+    await page.waitForTimeout(1000);
+
+    await expect(page.locator("text=Original message from saved state")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator("text=New message that will be lost")).not.toBeVisible({ timeout: 2000 });
   });
 
-  test.skip("message sent after save is lost on restore", async () => {
-    // BLOCKED: No UI for save/restore (ticket 0049)
+  test("message sent after save is lost on restore", async ({ page }) => {
+    mockServer.setResponseForType("response", {
+      type: "fixed",
+      content: "Response to new message",
+      statusCode: 200,
+    });
+
+    const checkpointBefore = createValidCheckpoint([
+      { role: "human", content: "Saved message" },
+      { role: "assistant", content: "Saved response" },
+    ]);
+
+    await page.goto("/");
+
+    await page.evaluate(
+      ({ url, key, checkpoint }) => {
+        localStorage.clear();
+        localStorage.setItem("EI_LLM_BASE_URL", url);
+        localStorage.setItem(key, JSON.stringify([checkpoint]));
+      },
+      { url: MOCK_SERVER_URL, key: AUTO_SAVES_KEY, checkpoint: checkpointBefore }
+    );
+
+    await page.reload();
+
+    await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
+    await page.locator(".ei-persona-pill").first().click();
+
+    await expect(page.locator("text=Saved message")).toBeVisible({ timeout: 5000 });
+
+    const input = page.locator("textarea");
+    await input.fill("Message that will be lost after restore");
+    await input.press("Enter");
+
+    await expect(page.locator("text=Message that will be lost after restore")).toBeVisible({ timeout: 2000 });
+
+    await page.locator('button[aria-label="Save/Load"]').click();
+    await expect(page.locator(".ei-save-popover")).toBeVisible({ timeout: 2000 });
+
+    await page.locator('button:has-text("Load")').first().click();
+    await page.waitForTimeout(1000);
+
+    await expect(page.locator("text=Saved message")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator("text=Saved response")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator("text=Message that will be lost after restore")).not.toBeVisible({ timeout: 2000 });
   });
 
-  test.skip("checkpoint list shows correct slots with timestamps", async () => {
-    // BLOCKED: No UI for checkpoint list (ticket 0049)
+  test("checkpoint list shows available saves in popover", async ({ page }) => {
+    const checkpoint = createValidCheckpoint([]);
+
+    await page.goto("/");
+
+    await page.evaluate(
+      ({ url, key, checkpoint }) => {
+        localStorage.clear();
+        localStorage.setItem("EI_LLM_BASE_URL", url);
+        localStorage.setItem(key, JSON.stringify([checkpoint]));
+      },
+      { url: MOCK_SERVER_URL, key: AUTO_SAVES_KEY, checkpoint }
+    );
+
+    await page.reload();
+
+    await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
+
+    await page.locator('button[aria-label="Save/Load"]').click();
+
+    await expect(page.locator(".ei-save-popover")).toBeVisible({ timeout: 2000 });
+
+    await expect(page.locator(".ei-save-panel")).toBeVisible();
+
+    await expect(page.locator('button:has-text("Load")').first()).toBeVisible();
   });
 });

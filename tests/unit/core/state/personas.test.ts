@@ -207,6 +207,114 @@ describe("PersonaState", () => {
     });
   });
 
+  describe("messages_markRead", () => {
+    beforeEach(() => {
+      state.add("TestBot", makePersona("TestBot"));
+    });
+
+    it("marks a message as read", () => {
+      const msg = makeMessage("Test", "system");
+      msg.read = false;
+      state.messages_append("TestBot", msg);
+
+      const result = state.messages_markRead("TestBot", msg.id);
+
+      expect(result).toBe(true);
+      expect(state.messages_get("TestBot")[0].read).toBe(true);
+    });
+
+    it("returns false for non-existent persona", () => {
+      const result = state.messages_markRead("nonexistent", "some-id");
+      expect(result).toBe(false);
+    });
+
+    it("returns false for non-existent message", () => {
+      const result = state.messages_markRead("TestBot", "nonexistent");
+      expect(result).toBe(false);
+    });
+  });
+
+  describe("messages_markPendingAsRead", () => {
+    beforeEach(() => {
+      state.add("TestBot", makePersona("TestBot"));
+    });
+
+    it("marks all unread human messages as read", () => {
+      const msg1 = makeMessage("First");
+      msg1.read = false;
+      const msg2 = makeMessage("Second");
+      msg2.read = false;
+      const msg3 = makeMessage("Response", "system");
+      msg3.read = false;
+
+      state.messages_append("TestBot", msg1);
+      state.messages_append("TestBot", msg2);
+      state.messages_append("TestBot", msg3);
+
+      const count = state.messages_markPendingAsRead("TestBot");
+
+      expect(count).toBe(2);
+      const messages = state.messages_get("TestBot");
+      expect(messages[0].read).toBe(true);
+      expect(messages[1].read).toBe(true);
+      expect(messages[2].read).toBe(false);
+    });
+
+    it("returns 0 when no pending human messages", () => {
+      const msg = makeMessage("Already read");
+      msg.read = true;
+      state.messages_append("TestBot", msg);
+
+      const count = state.messages_markPendingAsRead("TestBot");
+
+      expect(count).toBe(0);
+    });
+
+    it("returns 0 for non-existent persona", () => {
+      const count = state.messages_markPendingAsRead("nonexistent");
+      expect(count).toBe(0);
+    });
+  });
+
+  describe("messages_remove", () => {
+    beforeEach(() => {
+      state.add("TestBot", makePersona("TestBot"));
+    });
+
+    it("removes specified messages and returns them", () => {
+      const msg1 = makeMessage("First");
+      const msg2 = makeMessage("Second");
+      const msg3 = makeMessage("Third");
+
+      state.messages_append("TestBot", msg1);
+      state.messages_append("TestBot", msg2);
+      state.messages_append("TestBot", msg3);
+
+      const removed = state.messages_remove("TestBot", [msg1.id, msg3.id]);
+
+      expect(removed).toHaveLength(2);
+      expect(removed.map(m => m.content)).toContain("First");
+      expect(removed.map(m => m.content)).toContain("Third");
+      expect(state.messages_get("TestBot")).toHaveLength(1);
+      expect(state.messages_get("TestBot")[0].content).toBe("Second");
+    });
+
+    it("returns empty array for non-existent persona", () => {
+      const removed = state.messages_remove("nonexistent", ["some-id"]);
+      expect(removed).toHaveLength(0);
+    });
+
+    it("ignores non-existent message ids", () => {
+      const msg = makeMessage("Keep me");
+      state.messages_append("TestBot", msg);
+
+      const removed = state.messages_remove("TestBot", ["nonexistent"]);
+
+      expect(removed).toHaveLength(0);
+      expect(state.messages_get("TestBot")).toHaveLength(1);
+    });
+  });
+
   describe("load/export", () => {
     it("exports personas to serializable format", () => {
       state.add("Bot1", makePersona("Bot1"));
