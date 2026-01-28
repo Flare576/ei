@@ -298,25 +298,27 @@ test.describe("Checkpoint Flow", () => {
     await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
 
     await page.locator('button[aria-label="Save/Load"]').click();
-
     await expect(page.locator(".ei-save-popover")).toBeVisible({ timeout: 2000 });
 
-    const slotInput = page.locator('input[placeholder*="name"]').first();
-    if (await slotInput.isVisible()) {
-      await slotInput.fill("Test Save");
-    }
+    await page.locator(".ei-save-slot").first().locator('button:has-text("Save")').click();
 
-    await page.locator('button:has-text("Save")').first().click();
+    await expect(page.locator(".ei-save-dialog")).toBeVisible({ timeout: 2000 });
 
-    await page.waitForTimeout(1000);
+    await page.locator('input[placeholder="Enter save name..."]').fill("Test Save");
 
-    const manualSavesKey = "ei_saves";
-    const manualSaves = await page.evaluate((key) => {
-      const data = localStorage.getItem(key);
-      return data ? JSON.parse(data) : [];
-    }, manualSavesKey);
+    await page.locator(".ei-save-dialog").locator('button.ei-btn--primary:has-text("Save")').click();
 
-    expect(manualSaves.length).toBeGreaterThan(0);
+    await page.waitForTimeout(1500);
+
+    const manualSaveExists = await page.evaluate(() => {
+      for (let slot = 10; slot <= 14; slot++) {
+        const data = localStorage.getItem(`ei_manual_${slot}`);
+        if (data) return true;
+      }
+      return false;
+    });
+
+    expect(manualSaveExists).toBe(true);
   });
 
   test("restore loads previous state and fires onCheckpointRestored", async ({ page }) => {
@@ -358,7 +360,13 @@ test.describe("Checkpoint Flow", () => {
     await page.locator('button[aria-label="Save/Load"]').click();
     await expect(page.locator(".ei-save-popover")).toBeVisible({ timeout: 2000 });
 
-    await page.locator('button:has-text("Load")').first().click();
+    await page.locator(".ei-save-panel__toggle").click();
+    await page.waitForTimeout(300);
+
+    await page.locator(".ei-save-slot--auto").first().locator('button:has-text("Load")').click();
+
+    await expect(page.locator(".ei-save-dialog")).toBeVisible({ timeout: 2000 });
+    await page.locator(".ei-save-dialog").locator('button.ei-btn--primary:has-text("Load")').click();
 
     await page.waitForTimeout(1000);
 
@@ -405,7 +413,14 @@ test.describe("Checkpoint Flow", () => {
     await page.locator('button[aria-label="Save/Load"]').click();
     await expect(page.locator(".ei-save-popover")).toBeVisible({ timeout: 2000 });
 
-    await page.locator('button:has-text("Load")').first().click();
+    await page.locator(".ei-save-panel__toggle").click();
+    await page.waitForTimeout(300);
+
+    await page.locator(".ei-save-slot--auto").first().locator('button:has-text("Load")').click();
+
+    await expect(page.locator(".ei-save-dialog")).toBeVisible({ timeout: 2000 });
+    await page.locator(".ei-save-dialog").locator('button.ei-btn--primary:has-text("Load")').click();
+
     await page.waitForTimeout(1000);
 
     await expect(page.locator("text=Saved message")).toBeVisible({ timeout: 5000 });
@@ -437,6 +452,9 @@ test.describe("Checkpoint Flow", () => {
 
     await expect(page.locator(".ei-save-panel")).toBeVisible();
 
-    await expect(page.locator('button:has-text("Load")').first()).toBeVisible();
+    await page.locator(".ei-save-panel__toggle").click();
+    await page.waitForTimeout(300);
+
+    await expect(page.locator(".ei-save-slot--auto").first().locator('button:has-text("Load")')).toBeVisible();
   });
 });
