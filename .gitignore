@@ -11,6 +11,10 @@ data/
 # Test coverage reports
 coverage/
 
+# Playwright test artifacts
+playwright-report/
+test-results/
+
 # Editor/IDE
 .vscode/
 .idea/
