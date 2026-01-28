@@ -14,13 +14,21 @@ import type { HeartbeatCheckResult, EiHeartbeatResult } from "../../prompts/hear
 import type { PersonaGenerationResult, PersonaDescriptionsResult } from "../../prompts/generation/types.js";
 import type { TraitResult, TopicResult } from "../../prompts/persona/types.js";
 import type { EiValidationResult } from "../../prompts/validation/types.js";
+import type { 
+  PersonaExpireResult, 
+  PersonaExploreResult,
+  DescriptionCheckResult,
+} from "../../prompts/ceremony/types.js";
 import { 
   orchestratePersonaGeneration, 
   queueItemMatch, 
   queueItemUpdate,
+  queueExplorePhase,
+  queueDescriptionCheck,
   type PartialPersona,
   type ExtractionContext,
 } from "../orchestrators/index.js";
+import { buildPersonaDescriptionsPrompt } from "../../prompts/generation/index.js";
 import type {
   FactScanResult,
   TraitScanResult,
@@ -357,23 +365,146 @@ function handleOneShot(_response: LLMResponse, _state: StateManager): void {
 }
 
 function handleCeremonyExposure(_response: LLMResponse, _state: StateManager): void {
-  console.log("[handleCeremonyExposure] Stub - will be implemented in Wave 3");
+  console.log("[handleCeremonyExposure] No-op - exposure is handled synchronously in orchestrator");
 }
 
 function handleCeremonyDecayComplete(_response: LLMResponse, _state: StateManager): void {
-  console.log("[handleCeremonyDecayComplete] Stub - will be implemented in Wave 3");
+  console.log("[handleCeremonyDecayComplete] No-op - decay is handled synchronously in orchestrator");
 }
 
-function handlePersonaExpire(_response: LLMResponse, _state: StateManager): void {
-  console.log("[handlePersonaExpire] Stub - will be implemented in Wave 3");
+function handlePersonaExpire(response: LLMResponse, state: StateManager): void {
+  const personaName = response.request.data.personaName as string;
+  if (!personaName) {
+    console.error("[handlePersonaExpire] No personaName in request data");
+    return;
+  }
+
+  const result = response.parsed as PersonaExpireResult | undefined;
+  const persona = state.persona_get(personaName);
+  
+  if (!persona) {
+    console.error(`[handlePersonaExpire] Persona not found: ${personaName}`);
+    return;
+  }
+
+  const idsToRemove = new Set(result?.topic_ids_to_remove ?? []);
+  const remainingTopics = persona.topics.filter(t => !idsToRemove.has(t.id));
+  const removedCount = persona.topics.length - remainingTopics.length;
+
+  if (removedCount > 0) {
+    state.persona_update(personaName, { 
+      topics: remainingTopics,
+      last_updated: new Date().toISOString(),
+    });
+    console.log(`[handlePersonaExpire] Removed ${removedCount} topic(s) from ${personaName}`);
+  } else {
+    console.log(`[handlePersonaExpire] No topics removed for ${personaName}`);
+  }
+
+  const human = state.getHuman();
+  const exploreThreshold = human.ceremony_config?.explore_threshold ?? 3;
+
+  if (remainingTopics.length < exploreThreshold) {
+    console.log(`[handlePersonaExpire] ${personaName} has ${remainingTopics.length} topic(s) (< ${exploreThreshold}), triggering Explore`);
+    queueExplorePhase(personaName, state);
+  } else {
+    queueDescriptionCheck(personaName, state);
+  }
 }
 
-function handlePersonaExplore(_response: LLMResponse, _state: StateManager): void {
-  console.log("[handlePersonaExplore] Stub - will be implemented in Wave 3");
+function handlePersonaExplore(response: LLMResponse, state: StateManager): void {
+  const personaName = response.request.data.personaName as string;
+  if (!personaName) {
+    console.error("[handlePersonaExplore] No personaName in request data");
+    return;
+  }
+
+  const result = response.parsed as PersonaExploreResult | undefined;
+  const persona = state.persona_get(personaName);
+
+  if (!persona) {
+    console.error(`[handlePersonaExplore] Persona not found: ${personaName}`);
+    queueDescriptionCheck(personaName, state);
+    return;
+  }
+
+  const newTopics = result?.new_topics ?? [];
+  if (newTopics.length === 0) {
+    console.log(`[handlePersonaExplore] No new topics generated for ${personaName}`);
+    queueDescriptionCheck(personaName, state);
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const existingNames = new Set(persona.topics.map(t => t.name.toLowerCase()));
+
+  const topicsToAdd: Topic[] = newTopics
+    .filter(t => !existingNames.has(t.name.toLowerCase()))
+    .map(t => ({
+      id: crypto.randomUUID(),
+      name: t.name,
+      description: t.description,
+      sentiment: t.sentiment,
+      exposure_current: t.exposure_current ?? 0.2,
+      exposure_desired: t.exposure_desired ?? 0.6,
+      last_updated: now,
+    }));
+
+  if (topicsToAdd.length > 0) {
+    const allTopics = [...persona.topics, ...topicsToAdd];
+    state.persona_update(personaName, { 
+      topics: allTopics,
+      last_updated: now,
+    });
+    console.log(`[handlePersonaExplore] Added ${topicsToAdd.length} new topic(s) to ${personaName}: ${topicsToAdd.map(t => t.name).join(", ")}`);
+  }
+
+  queueDescriptionCheck(personaName, state);
 }
 
-function handleDescriptionCheck(_response: LLMResponse, _state: StateManager): void {
-  console.log("[handleDescriptionCheck] Stub - will be implemented in Wave 3");
+function handleDescriptionCheck(response: LLMResponse, state: StateManager): void {
+  const personaName = response.request.data.personaName as string;
+  if (!personaName) {
+    console.error("[handleDescriptionCheck] No personaName in request data");
+    return;
+  }
+
+  const result = response.parsed as DescriptionCheckResult | undefined;
+  if (!result) {
+    console.error("[handleDescriptionCheck] No parsed result");
+    return;
+  }
+
+  console.log(`[handleDescriptionCheck] ${personaName}: ${result.should_update ? "UPDATE NEEDED" : "No update needed"} - ${result.reason ?? "no reason given"}`);
+
+  if (!result.should_update) {
+    console.log(`[handleDescriptionCheck] Ceremony complete for ${personaName}`);
+    return;
+  }
+
+  const persona = state.persona_get(personaName);
+  if (!persona) {
+    console.error(`[handleDescriptionCheck] Persona not found: ${personaName}`);
+    return;
+  }
+
+  const prompt = buildPersonaDescriptionsPrompt({
+    name: personaName,
+    aliases: persona.aliases ?? [],
+    traits: persona.traits,
+    topics: persona.topics,
+  });
+
+  state.queue_enqueue({
+    type: LLMRequestType.JSON,
+    priority: LLMPriority.Low,
+    system: prompt.system,
+    user: prompt.user,
+    next_step: LLMNextStep.HandlePersonaDescriptions,
+    data: { personaName },
+  });
+
+  console.log(`[handleDescriptionCheck] Queued description regeneration for ${personaName}`);
 }
 
 function handleHumanFactScan(response: LLMResponse, state: StateManager): void {
