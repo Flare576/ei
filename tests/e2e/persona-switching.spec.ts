@@ -47,7 +47,7 @@ test.describe("Persona Switching", () => {
 
     await page.goto("/");
 
-    await expect(page.locator("li").first()).toContainText("Ei", { timeout: 10000 });
+    await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
 
     page.on("dialog", async (dialog) => {
       if (dialog.message().includes("name")) {
@@ -57,14 +57,14 @@ test.describe("Persona Switching", () => {
       }
     });
 
-    await page.click("text=+ Create Persona");
+    await page.click("text=+ New");
 
     await expect(page.locator("text=TestBot")).toBeVisible({ timeout: 15000 });
 
-    const personaList = page.locator("ul li");
+    const personaList = page.locator(".ei-persona-pill");
     await expect(personaList).toHaveCount(2, { timeout: 5000 });
-    await expect(page.locator("li").filter({ hasText: "Ei" })).toBeVisible();
-    await expect(page.locator("li").filter({ hasText: "TestBot" })).toBeVisible();
+    await expect(page.locator(".ei-persona-pill").filter({ hasText: "Ei" })).toBeVisible();
+    await expect(page.locator(".ei-persona-pill").filter({ hasText: "TestBot" })).toBeVisible();
   });
 
   test("clicking persona switches active state (visual indicator)", async ({ page }) => {
@@ -84,7 +84,7 @@ test.describe("Persona Switching", () => {
     }, MOCK_SERVER_URL);
 
     await page.goto("/");
-    await expect(page.locator("li").first()).toContainText("Ei", { timeout: 10000 });
+    await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
 
     page.on("dialog", async (dialog) => {
       if (dialog.message().includes("name")) {
@@ -93,19 +93,19 @@ test.describe("Persona Switching", () => {
         await dialog.accept("A test bot");
       }
     });
-    await page.click("text=+ Create Persona");
+    await page.click("text=+ New");
     await expect(page.locator("text=TestBot")).toBeVisible({ timeout: 15000 });
 
-    const eiPersona = page.locator("li").filter({ hasText: "Ei" });
+    const eiPersona = page.locator(".ei-persona-pill").filter({ hasText: "Ei" });
     await eiPersona.click();
 
-    await expect(eiPersona).toHaveCSS("background-color", "rgb(224, 224, 224)");
+    await expect(eiPersona).toHaveClass(/active/);
 
-    const testBotPersona = page.locator("li").filter({ hasText: "TestBot" });
+    const testBotPersona = page.locator(".ei-persona-pill").filter({ hasText: "TestBot" });
     await testBotPersona.click();
 
-    await expect(testBotPersona).toHaveCSS("background-color", "rgb(224, 224, 224)");
-    await expect(eiPersona).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(testBotPersona).toHaveClass(/active/);
+    await expect(eiPersona).not.toHaveClass(/active/);
   });
 
   test("chat history changes when switching personas", async ({ page }) => {
@@ -130,7 +130,7 @@ test.describe("Persona Switching", () => {
     }, MOCK_SERVER_URL);
 
     await page.goto("/");
-    await expect(page.locator("li").first()).toContainText("Ei", { timeout: 10000 });
+    await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
 
     page.on("dialog", async (dialog) => {
       if (dialog.message().includes("name")) {
@@ -139,18 +139,18 @@ test.describe("Persona Switching", () => {
         await dialog.accept("A test bot");
       }
     });
-    await page.click("text=+ Create Persona");
+    await page.click("text=+ New");
     await expect(page.locator("text=TestBot")).toBeVisible({ timeout: 15000 });
 
-    await page.locator("li").filter({ hasText: "Ei" }).click();
-    const input = page.locator('input[type="text"]');
+    await page.locator(".ei-persona-pill").filter({ hasText: "Ei" }).click();
+    const input = page.locator("textarea");
     await input.fill("Hello Ei, this is a test message!");
     await input.press("Enter");
 
     await expect(page.locator("text=Hello Ei, this is a test message!")).toBeVisible({ timeout: 5000 });
     await expect(page.locator("text=Hello from Ei!")).toBeVisible({ timeout: 15000 });
 
-    await page.locator("li").filter({ hasText: "TestBot" }).click();
+    await page.locator(".ei-persona-pill").filter({ hasText: "TestBot" }).click();
 
     await page.waitForTimeout(500);
 
@@ -180,7 +180,7 @@ test.describe("Persona Switching", () => {
     }, MOCK_SERVER_URL);
 
     await page.goto("/");
-    await expect(page.locator("li").first()).toContainText("Ei", { timeout: 10000 });
+    await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
 
     page.on("dialog", async (dialog) => {
       if (dialog.message().includes("name")) {
@@ -189,12 +189,12 @@ test.describe("Persona Switching", () => {
         await dialog.accept("A test bot");
       }
     });
-    await page.click("text=+ Create Persona");
+    await page.click("text=+ New");
     await expect(page.locator("text=TestBot")).toBeVisible({ timeout: 15000 });
 
-    await page.locator("li").filter({ hasText: "TestBot" }).click();
+    await page.locator(".ei-persona-pill").filter({ hasText: "TestBot" }).click();
 
-    const input = page.locator('input[type="text"]');
+    const input = page.locator("textarea");
     await input.fill("Hi TestBot!");
     await input.press("Enter");
 
@@ -222,7 +222,7 @@ test.describe("Persona Switching", () => {
     }, MOCK_SERVER_URL);
 
     await page.goto("/");
-    await expect(page.locator("li").first()).toContainText("Ei", { timeout: 10000 });
+    await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
 
     page.on("dialog", async (dialog) => {
       if (dialog.message().includes("name")) {
@@ -231,24 +231,24 @@ test.describe("Persona Switching", () => {
         await dialog.accept("A test bot");
       }
     });
-    await page.click("text=+ Create Persona");
+    await page.click("text=+ New");
     await expect(page.locator("text=TestBot")).toBeVisible({ timeout: 15000 });
 
-    await page.locator("li").filter({ hasText: "Ei" }).click();
+    await page.locator(".ei-persona-pill").filter({ hasText: "Ei" }).click();
     mockServer.setResponseForType("response", {
       type: "fixed",
       content: "Ei response to first message!",
       statusCode: 200,
     });
 
-    const input = page.locator('input[type="text"]');
+    const input = page.locator("textarea");
     await input.fill("First message to Ei");
     await input.press("Enter");
 
     await expect(page.locator("text=First message to Ei")).toBeVisible({ timeout: 5000 });
     await expect(page.locator("text=Ei response to first message!")).toBeVisible({ timeout: 15000 });
 
-    await page.locator("li").filter({ hasText: "TestBot" }).click();
+    await page.locator(".ei-persona-pill").filter({ hasText: "TestBot" }).click();
     await page.waitForTimeout(500);
 
     mockServer.setResponseForType("response", {
@@ -266,7 +266,7 @@ test.describe("Persona Switching", () => {
     await expect(page.locator("text=First message to Ei")).not.toBeVisible();
     await expect(page.locator("text=Ei response to first message!")).not.toBeVisible();
 
-    await page.locator("li").filter({ hasText: "Ei" }).click();
+    await page.locator(".ei-persona-pill").filter({ hasText: "Ei" }).click();
     await page.waitForTimeout(500);
 
     await expect(page.locator("text=First message to Ei")).toBeVisible({ timeout: 5000 });
@@ -298,7 +298,7 @@ test.describe("Persona Switching", () => {
     }, MOCK_SERVER_URL);
 
     await page.goto("/");
-    await expect(page.locator("li").first()).toContainText("Ei", { timeout: 10000 });
+    await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
 
     page.on("dialog", async (dialog) => {
       if (dialog.message().includes("name")) {
@@ -307,11 +307,11 @@ test.describe("Persona Switching", () => {
         await dialog.accept("A test bot");
       }
     });
-    await page.click("text=+ Create Persona");
+    await page.click("text=+ New");
     await expect(page.locator("text=TestBot")).toBeVisible({ timeout: 15000 });
 
-    const eiPersona = page.locator("li").filter({ hasText: "Ei" });
-    const testBotPersona = page.locator("li").filter({ hasText: "TestBot" });
+    const eiPersona = page.locator(".ei-persona-pill").filter({ hasText: "Ei" });
+    const testBotPersona = page.locator(".ei-persona-pill").filter({ hasText: "TestBot" });
 
     await eiPersona.click();
     await testBotPersona.click();
@@ -319,10 +319,10 @@ test.describe("Persona Switching", () => {
     await testBotPersona.click();
     await eiPersona.click();
 
-    await expect(eiPersona).toHaveCSS("background-color", "rgb(224, 224, 224)");
-    await expect(testBotPersona).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(eiPersona).toHaveClass(/active/);
+    await expect(testBotPersona).not.toHaveClass(/active/);
 
-    const input = page.locator('input[type="text"]');
+    const input = page.locator("textarea");
     await input.fill("After rapid switching");
     await input.press("Enter");
 

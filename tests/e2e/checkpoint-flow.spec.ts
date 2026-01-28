@@ -87,8 +87,8 @@ test.describe("Checkpoint Flow", () => {
 
     await page.reload();
 
-    await expect(page.locator("li").first()).toContainText("Ei", { timeout: 10000 });
-    await page.locator("li").first().click();
+    await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
+    await page.locator(".ei-persona-pill").first().click();
 
     await expect(page.locator(`text=${testMessage}`)).toBeVisible({ timeout: 10000 });
     await expect(page.locator("text=I remember our conversation")).toBeVisible({ timeout: 5000 });
@@ -156,8 +156,8 @@ test.describe("Checkpoint Flow", () => {
 
     await page.reload();
 
-    await expect(page.locator("li").first()).toContainText("Ei", { timeout: 10000 });
-    await page.locator("li").first().click();
+    await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
+    await page.locator(".ei-persona-pill").first().click();
 
     await expect(page.locator("text=Recent message from today")).toBeVisible({ timeout: 10000 });
     await expect(page.locator("text=This is the latest state")).toBeVisible({ timeout: 5000 });
@@ -188,10 +188,10 @@ test.describe("Checkpoint Flow", () => {
 
     await page.reload();
 
-    await expect(page.locator("li").first()).toContainText("Ei", { timeout: 10000 });
-    await page.locator("li").first().click();
+    await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
+    await page.locator(".ei-persona-pill").first().click();
 
-    const input = page.locator('input[type="text"]');
+    const input = page.locator("textarea");
     await input.fill("Message for auto-save test");
     await input.press("Enter");
 
@@ -234,11 +234,11 @@ test.describe("Checkpoint Flow", () => {
 
     await page.reload();
 
-    await expect(page.locator("li").first()).toContainText("Ei", { timeout: 10000 });
-    await page.locator("li").first().click();
+    await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
+    await page.locator(".ei-persona-pill").first().click();
 
     const uniqueMessage = `Test message ${Date.now()}`;
-    const input = page.locator('input[type="text"]');
+    const input = page.locator("textarea");
     await input.fill(uniqueMessage);
     await input.press("Enter");
 

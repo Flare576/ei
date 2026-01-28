@@ -40,10 +40,10 @@ test.describe("Basic Chat Flow", () => {
 
     await page.goto("/");
 
-    await expect(page.locator("li").first()).toContainText("Ei", { timeout: 10000 });
-    await page.locator("li").first().click();
+    await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
+    await page.locator(".ei-persona-pill").first().click();
 
-    const input = page.locator('input[type="text"]');
+    const input = page.locator("textarea");
     await input.fill("Hello Ei!");
     await input.press("Enter");
 
@@ -64,8 +64,8 @@ test.describe("Basic Chat Flow", () => {
 
     await page.goto("/");
 
-    await expect(page.locator("li").first()).toContainText("Ei", { timeout: 10000 });
-    await page.locator("li").first().click();
+    await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
+    await page.locator(".ei-persona-pill").first().click();
 
     await expect(
       page.locator("text=Hello! I'm Ei, your personal companion")
@@ -93,7 +93,7 @@ test.describe("Basic Chat Flow", () => {
     }, MOCK_SERVER_URL);
 
     await page.goto("/");
-    await expect(page.locator("li").first()).toContainText("Ei", { timeout: 10000 });
+    await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
 
     page.on("dialog", async (dialog) => {
       if (dialog.message().includes("name")) {
@@ -103,7 +103,7 @@ test.describe("Basic Chat Flow", () => {
       }
     });
 
-    await page.click("text=+ Create Persona");
+    await page.click("text=+ New");
 
     await expect(page.locator("text=Captain Test")).toBeVisible({ timeout: 15000 });
 
@@ -137,10 +137,10 @@ test.describe("Basic Chat Flow", () => {
     }, MOCK_SERVER_URL);
 
     await page.goto("/");
-    await expect(page.locator("li").first()).toContainText("Ei", { timeout: 10000 });
-    await page.locator("li").first().click();
+    await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
+    await page.locator(".ei-persona-pill").first().click();
 
-    const input = page.locator('input[type="text"]');
+    const input = page.locator("textarea");
     await input.fill("Please talk like a pirate from now on!");
     await input.press("Enter");
 

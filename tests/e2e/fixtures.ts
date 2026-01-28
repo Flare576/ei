@@ -56,15 +56,15 @@ export async function setupMockServerUrl(page: import("@playwright/test").Page) 
  * Helper to wait for Ei persona to be visible and click it.
  */
 export async function selectEiPersona(page: import("@playwright/test").Page) {
-  await expect(page.locator("li").first()).toContainText("Ei", { timeout: 10000 });
-  await page.locator("li").first().click();
+  await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
+  await page.locator(".ei-persona-pill").first().click();
 }
 
 /**
  * Helper to send a message in the chat.
  */
 export async function sendMessage(page: import("@playwright/test").Page, text: string) {
-  const input = page.locator('input[type="text"]');
+  const input = page.locator("textarea");
   await input.fill(text);
   await input.press("Enter");
 }
