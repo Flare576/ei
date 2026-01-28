@@ -24,9 +24,16 @@ vi.mock("../../../src/core/handlers/index.js", () => ({
   },
 }));
 
-// Mock the orchestrator to prevent actual persona generation
+// Mock the orchestrator to prevent actual persona generation and extraction queueing
 vi.mock("../../../src/core/orchestrators/index.js", () => ({
   orchestratePersonaGeneration: vi.fn(),
+  queueFactScan: vi.fn(),
+  queueTraitScan: vi.fn(),
+  queueTopicScan: vi.fn(),
+  queuePersonScan: vi.fn(),
+  queueAllScans: vi.fn(),
+  queueItemMatch: vi.fn(),
+  queueItemUpdate: vi.fn(),
 }));
 
 function createMockInterface(): { interface: Ei_Interface; calls: string[] } {
@@ -1033,5 +1040,184 @@ describe("Processor Checkpoint Restore", () => {
     const result = await processor.restoreCheckpoint(99);
     
     expect(result).toBe(false);
+  });
+});
+
+describe("Processor Human Extraction Throttling", () => {
+  let mock: ReturnType<typeof createMockInterface>;
+  let processor: Processor;
+  let storage: ReturnType<typeof createMockStorage>;
+
+  beforeEach(async () => {
+    mock = createMockInterface();
+    processor = new Processor(mock.interface);
+    storage = createMockStorage();
+  });
+
+  afterEach(async () => {
+    await processor.stop();
+  });
+
+  it("triggers extraction when sending message to Ei", async () => {
+    storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
+    storage.loadCheckpoint.mockResolvedValue({
+      version: 1,
+      timestamp: new Date().toISOString(),
+      human: {
+        entity: "human",
+        facts: [],
+        traits: [],
+        topics: [],
+        people: [],
+        last_updated: new Date().toISOString(),
+        last_activity: new Date().toISOString(),
+      },
+      personas: {
+        ei: {
+          entity: createTestPersona({
+            aliases: ["Ei", "ei"],
+            short_description: "Your empathic interface",
+          }),
+          messages: [
+            { id: "1", role: "system", content: "Welcome!", timestamp: new Date(Date.now() - 60000).toISOString(), read: true, context_status: "default" },
+            { id: "2", role: "human", content: "Hi there", timestamp: new Date(Date.now() - 30000).toISOString(), read: true, context_status: "default" },
+          ],
+        },
+      },
+      queue: [],
+      settings: {},
+    });
+
+    await processor.start(storage);
+    const initialStatus = await processor.getQueueStatus();
+    const initialCount = initialStatus.pending_count;
+
+    await processor.sendMessage("ei", "I live in Chicago and my birthday is January 15th");
+    
+    const status = await processor.getQueueStatus();
+    expect(status.pending_count).toBeGreaterThan(initialCount);
+  });
+
+  it("does NOT trigger extraction when sending message to non-Ei persona", async () => {
+    storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
+    storage.loadCheckpoint.mockResolvedValue({
+      version: 1,
+      timestamp: new Date().toISOString(),
+      human: {
+        entity: "human",
+        facts: [],
+        traits: [],
+        topics: [],
+        people: [],
+        last_updated: new Date().toISOString(),
+        last_activity: new Date().toISOString(),
+      },
+      personas: {
+        ei: {
+          entity: createTestPersona({ aliases: ["Ei", "ei"] }),
+          messages: [],
+        },
+        friend: {
+          entity: createTestPersona({ aliases: ["Friend", "friend"] }),
+          messages: [
+            { id: "1", role: "system", content: "Hi!", timestamp: new Date().toISOString(), read: true, context_status: "default" },
+          ],
+        },
+      },
+      queue: [],
+      settings: {},
+    });
+
+    await processor.start(storage);
+    
+    await processor.sendMessage("friend", "My birthday is January 15th");
+    
+    const status = await processor.getQueueStatus();
+    expect(status.pending_count).toBe(2);
+  });
+
+  it("throttles extraction based on items vs messages ratio", async () => {
+    const now = new Date();
+    const tenMinutesAgo = new Date(now.getTime() - 600000);
+    
+    storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: now.toISOString() }]);
+    storage.loadCheckpoint.mockResolvedValue({
+      version: 1,
+      timestamp: now.toISOString(),
+      human: {
+        entity: "human",
+        facts: [
+          { id: "f1", name: "Location", description: "Chicago", sentiment: 0.5, confidence: 0.9, last_updated: now.toISOString() },
+          { id: "f2", name: "Birthday", description: "Jan 15", sentiment: 0.8, confidence: 0.9, last_updated: now.toISOString() },
+          { id: "f3", name: "Job", description: "Engineer", sentiment: 0.7, confidence: 0.8, last_updated: now.toISOString() },
+        ],
+        traits: [
+          { id: "t1", name: "Curious", description: "Loves learning", sentiment: 0.8, last_updated: now.toISOString() },
+        ],
+        topics: [],
+        people: [],
+        last_updated: now.toISOString(),
+        last_activity: now.toISOString(),
+        lastSeeded_fact: tenMinutesAgo.toISOString(),
+        lastSeeded_trait: tenMinutesAgo.toISOString(),
+        lastSeeded_topic: tenMinutesAgo.toISOString(),
+        lastSeeded_person: tenMinutesAgo.toISOString(),
+      },
+      personas: {
+        ei: {
+          entity: createTestPersona({ aliases: ["Ei", "ei"] }),
+          messages: [
+            { id: "m1", role: "human", content: "msg1", timestamp: new Date(now.getTime() - 500000).toISOString(), read: true, context_status: "default" },
+            { id: "m2", role: "system", content: "resp1", timestamp: new Date(now.getTime() - 400000).toISOString(), read: true, context_status: "default" },
+          ],
+        },
+      },
+      queue: [],
+      settings: {},
+    });
+
+    await processor.start(storage);
+    
+    await processor.sendMessage("ei", "Just checking in");
+    
+    const status = await processor.getQueueStatus();
+    expect(status.pending_count).toBeGreaterThanOrEqual(2);
+  });
+
+  it("updates lastSeeded timestamps after queueing extraction", async () => {
+    storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
+    storage.loadCheckpoint.mockResolvedValue({
+      version: 1,
+      timestamp: new Date().toISOString(),
+      human: {
+        entity: "human",
+        facts: [],
+        traits: [],
+        topics: [],
+        people: [],
+        last_updated: new Date().toISOString(),
+        last_activity: new Date().toISOString(),
+      },
+      personas: {
+        ei: {
+          entity: createTestPersona({ aliases: ["Ei", "ei"] }),
+          messages: [
+            { id: "1", role: "system", content: "Welcome", timestamp: new Date(Date.now() - 60000).toISOString(), read: true, context_status: "default" },
+          ],
+        },
+      },
+      queue: [],
+      settings: {},
+    });
+
+    await processor.start(storage);
+    
+    await processor.sendMessage("ei", "My name is John and I live in NYC");
+    
+    const human = await processor.getHuman();
+    expect(human.lastSeeded_fact).toBeDefined();
+    expect(human.lastSeeded_trait).toBeDefined();
+    expect(human.lastSeeded_topic).toBeDefined();
+    expect(human.lastSeeded_person).toBeDefined();
   });
 });
