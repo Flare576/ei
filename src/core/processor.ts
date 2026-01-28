@@ -164,7 +164,7 @@ export class Processor {
 
   private async checkScheduledTasks(): Promise<void> {
     const now = Date.now();
-    const DEFAULT_HEARTBEAT_DELAY_MS = 5 * 60 * 1000;// 1800000;
+    const DEFAULT_HEARTBEAT_DELAY_MS = 1800000; //5 * 60 * 1000;//
 
     for (const persona of this.stateManager.persona_getAll()) {
       if (persona.is_paused || persona.is_archived) continue;
