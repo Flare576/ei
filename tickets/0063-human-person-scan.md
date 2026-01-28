@@ -1,6 +1,6 @@
 # 0063: Human Person Scan (Step 1) Prompt + Handler
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0011
 
 ## Summary
@@ -9,13 +9,13 @@ Step 1 of human data extraction: Identify people mentioned in conversation.
 
 ## Acceptance Criteria
 
-- [ ] `buildHumanPersonScanPrompt(data: PersonScanPromptData)` implemented
-- [ ] Prompt receives `messages_context` + `messages_analyze` (pre-split)
-- [ ] Prompt receives `known_persona_names` to avoid confusion
-- [ ] Prompt asks LLM to identify people the human mentioned
-- [ ] Returns JSON array of `{ name, relationship, description }` candidates
-- [ ] `handleHumanPersonScan` handler implemented
-- [ ] Handler chains each candidate to Step 2 (0064)
+- [x] `buildHumanPersonScanPrompt(data: PersonScanPromptData)` implemented
+- [x] Prompt receives `messages_context` + `messages_analyze` (pre-split)
+- [x] Prompt receives `known_persona_names` to avoid confusion
+- [x] Prompt asks LLM to identify people the human mentioned
+- [x] Returns JSON array of `{ name, relationship, description }` candidates
+- [x] `handleHumanPersonScan` handler implemented
+- [x] Handler chains each candidate to Step 2 (0064)
 
 ## Notes
 
@@ -29,4 +29,11 @@ interface PersonScanPromptData {
 }
 ```
 
-**V0 Reference**: `v0/src/prompts/human/personScan.ts`
+**V0 Reference**: `v0/src/prompts/extraction/step1/people.ts`
+
+## Implementation
+
+- `src/prompts/human/person-scan.ts` - Prompt builder
+- `src/prompts/human/types.ts` - Type definitions
+- `src/core/handlers/index.ts` - Handler implementation
+- `src/core/orchestrators/human-extraction.ts` - Gets persona names from StateManager

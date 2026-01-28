@@ -1,18 +1,18 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-01-28 (E005 complete)
+> Last updated: 2026-01-28 (E006 complete)
 
 ## Overview
 
 | Status | Count |
 |--------|-------|
-| PENDING | 33 |
+| PENDING | 26 |
 | IN_PROGRESS | 0 |
 | QA | 0 |
-| DONE | 43 |
+| DONE | 51 |
 | BLOCKED | 0 |
 
-> **All ticket files now written.** 78 total tickets (43 done + 33 pending + 2 backlog).
+> 79 total tickets (51 done + 26 pending + 2 backlog).
 
 ---
 
@@ -25,7 +25,7 @@
 | **E003** | 0020-0028 | DONE | Prompts & Handlers |
 | **E004** | 0030-0037 | DONE | Testing Infrastructure |
 | **E005** | 0040-0050 | DONE | UI: Core Components |
-| **E006** | 0060-0067 | PENDING | Extraction Pipeline |
+| **E006** | 0060-0067 | DONE | Extraction Pipeline |
 | **E007** | 0070-0076 | PENDING | Ceremony System |
 | **E008** | 0080-0089 | PENDING | UI: Entity Management |
 | **E009** | 0090-0097 | PENDING | Polish & New Features |
@@ -46,19 +46,6 @@
 ---
 
 ## PENDING
-
-### E006: Extraction Pipeline
-
-| Ticket | Title | Depends On |
-|--------|-------|------------|
-| 0060 | Human Fact Scan (Step 1) Prompt + Handler | 0011 |
-| 0061 | Human Trait Scan (Step 1) Prompt + Handler | 0011 |
-| 0062 | Human Topic Scan (Step 1) Prompt + Handler | 0011 |
-| 0063 | Human Person Scan (Step 1) Prompt + Handler | 0011 |
-| 0064 | Human Item Match (Step 2) Prompt + Handler | 0060-0063 |
-| 0065 | Human Item Update (Step 3) Prompt + Handler | 0064 |
-| 0066 | Extraction Frequency Throttling (Ei-only) | 0065 |
-| 0067 | Cross-Persona Validation Queue | 0027 |
 
 ### E007: Ceremony System
 
@@ -91,6 +78,7 @@
 
 | Ticket | Title | Depends On |
 |--------|-------|------------|
+| 0051 | Context Boundary ("New" Command) | 0043 |
 | 0090 | Onboarding Flow | 0087 |
 | 0091 | Dynamic vs Static Personas | 0086, 0070 |
 | 0092 | Persona Image Generation | 0087 |
@@ -161,6 +149,14 @@
 | 0048 | Control Area: System Pause | 2026-01-28 |
 | 0049 | Control Area: Save UI | 2026-01-28 |
 | 0050 | Help Modal | 2026-01-28 |
+| 0060 | Human Fact Scan (Step 1) | 2026-01-28 |
+| 0061 | Human Trait Scan (Step 1) | 2026-01-28 |
+| 0062 | Human Topic Scan (Step 1) | 2026-01-28 |
+| 0063 | Human Person Scan (Step 1) | 2026-01-28 |
+| 0064 | Human Item Match (Step 2) | 2026-01-28 |
+| 0065 | Human Item Update (Step 3) | 2026-01-28 |
+| 0066 | Extraction Frequency Throttling | 2026-01-28 |
+| 0067 | Cross-Persona Validation Queue | 2026-01-28 |
 
 ---
 

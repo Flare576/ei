@@ -1,6 +1,6 @@
 # 0061: Human Trait Scan (Step 1) Prompt + Handler
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0011
 
 ## Summary
@@ -9,12 +9,12 @@ Step 1 of human data extraction: Identify potential traits from conversation.
 
 ## Acceptance Criteria
 
-- [ ] `buildHumanTraitScanPrompt(data: TraitScanPromptData)` implemented
-- [ ] Prompt receives `messages_context` + `messages_analyze` (pre-split)
-- [ ] Prompt asks LLM to identify behavioral/personality traits exhibited
-- [ ] Returns JSON array of `{ name, description, strength }` candidates
-- [ ] `handleHumanTraitScan` handler implemented
-- [ ] Handler chains each candidate to Step 2 (0064)
+- [x] `buildHumanTraitScanPrompt(data: TraitScanPromptData)` implemented
+- [x] Prompt receives `messages_context` + `messages_analyze` (pre-split)
+- [x] Prompt asks LLM to identify behavioral/personality traits exhibited
+- [x] Returns JSON array of `{ name, description, strength }` candidates
+- [x] `handleHumanTraitScan` handler implemented
+- [x] Handler chains each candidate to Step 2 (0064)
 
 ## Notes
 
@@ -27,4 +27,10 @@ interface TraitScanPromptData {
 }
 ```
 
-**V0 Reference**: `v0/src/prompts/human/traitScan.ts`
+**V0 Reference**: `v0/src/prompts/extraction/step1/traits.ts`
+
+## Implementation
+
+- `src/prompts/human/trait-scan.ts` - Prompt builder
+- `src/prompts/human/types.ts` - Type definitions
+- `src/core/handlers/index.ts` - Handler implementation
