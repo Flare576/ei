@@ -41,3 +41,32 @@ export type {
   EiValidationPromptData,
   EiValidationResult,
 } from "./validation/types.js";
+
+export {
+  buildHumanFactScanPrompt,
+  buildHumanTraitScanPrompt,
+  buildHumanTopicScanPrompt,
+  buildHumanPersonScanPrompt,
+  buildHumanItemMatchPrompt,
+  buildHumanItemUpdatePrompt,
+} from "./human/index.js";
+export type {
+  FactScanPromptData,
+  TraitScanPromptData,
+  TopicScanPromptData,
+  PersonScanPromptData,
+  ScanConfidence,
+  FactScanCandidate,
+  TraitScanCandidate,
+  TopicScanCandidate,
+  PersonScanCandidate,
+  FactScanResult,
+  TraitScanResult,
+  TopicScanResult,
+  PersonScanResult,
+  ItemMatchPromptData,
+  ItemMatchResult,
+  ItemUpdatePromptData,
+  ExposureImpact,
+  ItemUpdateResult,
+} from "./human/types.js";
