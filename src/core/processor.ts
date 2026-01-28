@@ -127,10 +127,10 @@ export class Processor {
     console.log(`[Processor ${this.instanceId}] runLoop() started`);
     while (this.running) {
       if (this.shouldAutoSave()) {
+        this.lastAutoSave = Date.now();
         this.interface.onCheckpointStart?.();
         await this.stateManager.checkpoint_saveAuto();
         this.interface.onCheckpointCreated?.();
-        this.lastAutoSave = Date.now();
       }
 
       await this.checkScheduledTasks();
@@ -164,7 +164,7 @@ export class Processor {
 
   private async checkScheduledTasks(): Promise<void> {
     const now = Date.now();
-    const DEFAULT_HEARTBEAT_DELAY_MS = 1800000;
+    const DEFAULT_HEARTBEAT_DELAY_MS = 5 * 60 * 1000;// 1800000;
 
     for (const persona of this.stateManager.persona_getAll()) {
       if (persona.is_paused || persona.is_archived) continue;
@@ -189,6 +189,11 @@ export class Processor {
   private queueHeartbeatCheck(personaName: string): void {
     const persona = this.stateManager.persona_get(personaName);
     if (!persona) return;
+
+    // Update last_heartbeat NOW to prevent duplicate queueing during LLM processing
+    // (checkScheduledTasks runs every 100ms; without this, it would queue many heartbeats
+    // before the first one completes)
+    this.stateManager.persona_update(personaName, { last_heartbeat: new Date().toISOString() });
 
     const human = this.stateManager.getHuman();
     const history = this.stateManager.messages_get(personaName);

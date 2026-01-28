@@ -188,3 +188,27 @@ npm start        # Run the app
 - Never suppress type errors (`as any`, `@ts-ignore`)
 - Never commit unless explicitly requested
 - Fix minimally when debugging—don't refactor while fixing
+
+### Time-Based Triggers (IMPORTANT)
+
+When implementing features that check timestamps and queue async work:
+
+```typescript
+// ❌ WRONG: Update timestamp AFTER async work completes
+if (timeSinceLastX >= delay) {
+  await doAsyncWork();        // Takes seconds
+  lastX = Date.now();         // Other loop iterations queue duplicates!
+}
+
+// ✅ CORRECT: Update timestamp BEFORE async work
+if (timeSinceLastX >= delay) {
+  lastX = Date.now();         // Prevent duplicate queueing
+  await doAsyncWork();
+}
+```
+
+**Why this matters**: The processor loop runs every 100ms. If async work (like LLM calls) takes 5+ seconds, the condition remains true for ~50 loop iterations, queueing duplicates.
+
+**Examples in this codebase**:
+- `queueHeartbeatCheck()` updates `last_heartbeat` before queueing
+- Future: Ceremony triggers, extraction throttling
