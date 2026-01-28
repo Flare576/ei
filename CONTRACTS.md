@@ -120,6 +120,9 @@ interface Ei_Interface {
   /** A message was queued for processing */
   onMessageQueued?: (personaName: string) => void;
   
+  /** Pending human messages were recalled (for edit). Payload includes combined content for input field. */
+  onMessageRecalled?: (personaName: string, content: string) => void;
+  
   // === Human Entity Events ===
   
   /** Human entity data changed (facts, traits, topics, people) */
@@ -141,6 +144,9 @@ interface Ei_Interface {
   /** A checkpoint was created. If index provided, it was manual save (10-14). No index = auto-save (0-9). */
   onCheckpointCreated?: (index?: number) => void;
   
+  /** A checkpoint was restored. UI should refresh all state. */
+  onCheckpointRestored?: (index: number) => void;
+  
   /** A manual checkpoint was deleted (slots 10-14 only) */
   onCheckpointDeleted?: (index: number) => void;
 }
@@ -156,11 +162,13 @@ interface Ei_Interface {
 | `onMessageAdded` | After a message is appended to history |
 | `onMessageProcessing` | When QueueProcessor starts a response-type request |
 | `onMessageQueued` | When a user message is added and response is queued |
+| `onMessageRecalled` | When pending human messages are recalled via `recallPendingMessages` |
 | `onHumanUpdated` | After any human entity field changes |
 | `onQueueStateChanged` | When QueueProcessor transitions between idle/busy |
 | `onError` | When a recoverable error occurs (e.g., LLM failure after retries) |
 | `onCheckpointStart` | Before any checkpoint save/delete/restore operation begins |
 | `onCheckpointCreated` | After auto-save (no index) or manual save (with index 10-14) |
+| `onCheckpointRestored` | After state is restored from a checkpoint |
 | `onCheckpointDeleted` | After a manual checkpoint (10-14) is deleted |
 
 ---
@@ -215,6 +223,16 @@ interface Processor {
   
   /** Set a message's context status */
   setMessageContextStatus(personaName: string, messageId: string, status: ContextStatus): Promise<void>;
+  
+  /** Mark a message as read */
+  markMessageRead(personaName: string, messageId: string): Promise<boolean>;
+  
+  /** 
+   * Recall pending (unread) human messages for editing.
+   * Removes the messages from history, cancels queued responses, and returns combined content.
+   * Human messages start as read=false and become read=true when the AI responds.
+   */
+  recallPendingMessages(personaName: string): Promise<string>;
   
   // === Human Entity Operations ===
   
@@ -992,3 +1010,6 @@ Standard error codes for `onError` events:
 | 2026-01-27 | **Simplified checkpoint storage**: Array-based auto-saves instead of slot-based ring buffer |
 | 2026-01-27 | Added `onCheckpointStart` event for UI race condition handling |
 | 2026-01-27 | Storage interface simplified: `listCheckpoints`, `loadCheckpoint`, `saveAutoCheckpoint`, `saveManualCheckpoint`, `deleteManualCheckpoint` |
+| 2026-01-28 | **E005 UI Polish**: Added `onMessageRecalled`, `onCheckpointRestored` events |
+| 2026-01-28 | Added `recallPendingMessages()`, `markMessageRead()` to Processor API |
+| 2026-01-28 | Human messages now start `read: false`, marked `read: true` when AI responds |

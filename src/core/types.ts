@@ -215,6 +215,7 @@ export interface Ei_Interface {
   onPersonaRemoved?: () => void;
   onPersonaUpdated?: (personaName: string) => void;
   onMessageAdded?: (personaName: string) => void;
+  onMessageRecalled?: (personaName: string, content: string) => void;
   onMessageProcessing?: (personaName: string) => void;
   onMessageQueued?: (personaName: string) => void;
   onHumanUpdated?: () => void;
@@ -222,6 +223,7 @@ export interface Ei_Interface {
   onError?: (error: EiError) => void;
   onCheckpointStart?: () => void;
   onCheckpointCreated?: (index?: number) => void;
+  onCheckpointRestored?: (index: number) => void;
   onCheckpointDeleted?: (index: number) => void;
   onOneShotReturned?: (guid: string, content: string) => void;
 }

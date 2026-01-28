@@ -63,6 +63,18 @@ export class QueueState {
     this.queue = this.queue.filter((r) => !idSet.has(r.id));
   }
 
+  clearPersonaResponses(personaName: string, nextStep: string): string[] {
+    const removedIds: string[] = [];
+    this.queue = this.queue.filter((r) => {
+      if (r.next_step === nextStep && r.data.personaName === personaName) {
+        removedIds.push(r.id);
+        return false;
+      }
+      return true;
+    });
+    return removedIds;
+  }
+
   length(): number {
     return this.queue.length;
   }

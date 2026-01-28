@@ -30,6 +30,7 @@ function handlePersonaResponse(response: LLMResponse, state: StateManager): void
   };
 
   state.messages_append(personaName, message);
+  state.messages_markPendingAsRead(personaName);
   console.log(`[handlePersonaResponse] Appended response to ${personaName}`);
 }
 

@@ -146,6 +146,18 @@ export class StateManager {
     this.personaState.messages_setContextWindow(personaName, start, end);
   }
 
+  messages_markRead(personaName: string, messageId: string): boolean {
+    return this.personaState.messages_markRead(personaName, messageId);
+  }
+
+  messages_markPendingAsRead(personaName: string): number {
+    return this.personaState.messages_markPendingAsRead(personaName);
+  }
+
+  messages_remove(personaName: string, messageIds: string[]): Message[] {
+    return this.personaState.messages_remove(personaName, messageIds);
+  }
+
   queue_enqueue(request: Omit<LLMRequest, "id" | "created_at" | "attempts">): string {
     return this.queueState.enqueue(request);
   }
@@ -168,6 +180,10 @@ export class StateManager {
 
   queue_clearValidations(ids: string[]): void {
     this.queueState.clearValidations(ids);
+  }
+
+  queue_clearPersonaResponses(personaName: string, nextStep: string): string[] {
+    return this.queueState.clearPersonaResponses(personaName, nextStep);
   }
 
   queue_length(): number {

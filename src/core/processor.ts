@@ -2,6 +2,7 @@ import {
   LLMRequestType,
   LLMPriority,
   LLMNextStep,
+  type LLMRequest,
   type Ei_Interface,
   type PersonaSummary,
   type PersonaEntity,
@@ -48,6 +49,7 @@ export class Processor {
   private lastAutoSave = 0;
   private autoSaveInterval = DEFAULT_AUTO_SAVE_INTERVAL_MS;
   private instanceId: number;
+  private currentRequest: LLMRequest | null = null;
 
   constructor(ei: Ei_Interface) {
     this.interface = ei;
@@ -140,6 +142,7 @@ export class Processor {
         if (request) {
           console.log(`[Processor ${this.instanceId}] processing request: ${request.next_step}`);
           this.interface.onQueueStateChanged?.("busy");
+          this.currentRequest = request;
 
           const personaName = request.data.personaName as string | undefined;
           if (personaName && request.next_step === LLMNextStep.HandlePersonaResponse) {
@@ -147,6 +150,7 @@ export class Processor {
           }
 
           this.queueProcessor.start(request, (response) => {
+            this.currentRequest = null;
             this.handleResponse(response);
             this.interface.onQueueStateChanged?.("idle");
           });
@@ -379,13 +383,65 @@ export class Processor {
     return this.stateManager.messages_get(personaName);
   }
 
+  async markMessageRead(personaName: string, messageId: string): Promise<boolean> {
+    return this.stateManager.messages_markRead(personaName, messageId);
+  }
+
+  private clearPendingRequestsFor(personaName: string): boolean {
+    const responsesToClear = [
+      LLMNextStep.HandlePersonaResponse,
+      LLMNextStep.HandlePersonaTraitExtraction,
+      LLMNextStep.HandlePersonaTopicDetection,
+      LLMNextStep.HandlePersonaTopicExploration,
+    ];
+
+    let removedAny = false;
+    for (const nextStep of responsesToClear) {
+      const removedIds = this.stateManager.queue_clearPersonaResponses(personaName, nextStep);
+      if (removedIds.length > 0) removedAny = true;
+    }
+
+    const currentMatchesPersona = this.currentRequest &&
+      responsesToClear.includes(this.currentRequest.next_step as LLMNextStep) &&
+      this.currentRequest.data.personaName === personaName;
+
+    if (currentMatchesPersona) {
+      this.queueProcessor.abort();
+      return true;
+    }
+
+    return removedAny;
+  }
+
+  async recallPendingMessages(personaName: string): Promise<string> {
+    this.clearPendingRequestsFor(personaName);
+    this.stateManager.queue_pause();
+    
+    const messages = this.stateManager.messages_get(personaName);
+    const pendingIds = messages
+      .filter(m => m.role === "human" && !m.read)
+      .map(m => m.id);
+    
+    if (pendingIds.length === 0) return "";
+    
+    const removed = this.stateManager.messages_remove(personaName, pendingIds);
+    const recalledContent = removed.map(m => m.content).join("\n\n");
+    
+    this.interface.onMessageAdded?.(personaName);
+    this.interface.onMessageRecalled?.(personaName, recalledContent);
+    
+    return recalledContent;
+  }
+
   async sendMessage(personaName: string, content: string): Promise<void> {
+    this.clearPendingRequestsFor(personaName);
+
     const message: Message = {
       id: crypto.randomUUID(),
       role: "human",
       content,
       timestamp: new Date().toISOString(),
-      read: true,
+      read: false,
       context_status: "default" as ContextStatus,
     };
     this.stateManager.messages_append(personaName, message);
@@ -621,7 +677,13 @@ export class Processor {
 
   async restoreCheckpoint(index: number): Promise<boolean> {
     this.interface.onCheckpointStart?.();
-    return this.stateManager.checkpoint_restore(index);
+    this.queueProcessor.abort();
+    const result = await this.stateManager.checkpoint_restore(index);
+    if (result) {
+      this.interface.onCheckpointRestored?.(index);
+      this.interface.onQueueStateChanged?.("idle");
+    }
+    return result;
   }
 
   async exportState(): Promise<string> {

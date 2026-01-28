@@ -96,6 +96,43 @@ export class PersonaState {
     return true;
   }
 
+  messages_markRead(personaName: string, messageId: string): boolean {
+    const data = this.personas.get(this.normalizeKey(personaName));
+    if (!data) return false;
+    const msg = data.messages.find((m) => m.id === messageId);
+    if (!msg) return false;
+    msg.read = true;
+    return true;
+  }
+
+  messages_markPendingAsRead(personaName: string): number {
+    const data = this.personas.get(this.normalizeKey(personaName));
+    if (!data) return 0;
+    let count = 0;
+    for (const msg of data.messages) {
+      if (msg.role === "human" && !msg.read) {
+        msg.read = true;
+        count++;
+      }
+    }
+    return count;
+  }
+
+  messages_remove(personaName: string, messageIds: string[]): Message[] {
+    const data = this.personas.get(this.normalizeKey(personaName));
+    if (!data) return [];
+    const idsSet = new Set(messageIds);
+    const removed: Message[] = [];
+    data.messages = data.messages.filter((m) => {
+      if (idsSet.has(m.id)) {
+        removed.push(m);
+        return false;
+      }
+      return true;
+    });
+    return removed;
+  }
+
   messages_getContextWindow(
     personaName: string
   ): { start: string; end: string } | null {

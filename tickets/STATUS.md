@@ -1,18 +1,18 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-01-28 (E004 complete)
+> Last updated: 2026-01-28 (E005 complete)
 
 ## Overview
 
 | Status | Count |
 |--------|-------|
-| PENDING | 44 |
+| PENDING | 33 |
 | IN_PROGRESS | 0 |
 | QA | 0 |
-| DONE | 32 |
+| DONE | 43 |
 | BLOCKED | 0 |
 
-> **All ticket files now written.** 78 total tickets (32 done + 44 pending + 2 backlog).
+> **All ticket files now written.** 78 total tickets (43 done + 33 pending + 2 backlog).
 
 ---
 
@@ -24,7 +24,7 @@
 | **E002** | 0011-0017 | DONE | MVP: Basic Chat |
 | **E003** | 0020-0028 | DONE | Prompts & Handlers |
 | **E004** | 0030-0037 | DONE | Testing Infrastructure |
-| **E005** | 0040-0050 | PENDING | UI: Core Components |
+| **E005** | 0040-0050 | DONE | UI: Core Components |
 | **E006** | 0060-0067 | PENDING | Extraction Pipeline |
 | **E007** | 0070-0076 | PENDING | Ceremony System |
 | **E008** | 0080-0089 | PENDING | UI: Entity Management |
@@ -46,22 +46,6 @@
 ---
 
 ## PENDING
-
-### E005: UI: Core Components
-
-| Ticket | Title | Depends On |
-|--------|-------|------------|
-| 0040 | Layout Manager (3-panel, responsive) | 0013, 0014 |
-| 0041 | Persona Panel: Status Indicators | 0014 |
-| 0042 | Persona Panel: Hover Controls | 0041 |
-| 0043 | Chat Panel: Markdown Rendering | 0013 |
-| 0044 | Chat Panel: Message States (pending/read) | 0043 |
-| 0045 | Input Box: Auto-resize | 0013 |
-| 0046 | Input Box: Pending Message Recall | 0045 |
-| 0047 | Keyboard Navigation | 0040 |
-| 0048 | Control Area: System Pause | 0040 |
-| 0049 | Control Area: Save UI | 0040 |
-| 0050 | Help Modal | 0040 |
 
 ### E006: Extraction Pipeline
 
@@ -166,6 +150,17 @@
 | 0035 | E2E: Persona Switching | 2026-01-28 |
 | 0036 | E2E: Checkpoint Save/Restore | 2026-01-28 |
 | 0037 | E2E: Message Flow Complete | 2026-01-28 |
+| 0040 | Layout Manager (3-panel, responsive) | 2026-01-28 |
+| 0041 | Persona Panel: Status Indicators | 2026-01-28 |
+| 0042 | Persona Panel: Hover Controls | 2026-01-28 |
+| 0043 | Chat Panel: Markdown Rendering | 2026-01-28 |
+| 0044 | Chat Panel: Message States (pending/read) | 2026-01-28 |
+| 0045 | Input Box: Auto-resize | 2026-01-28 |
+| 0046 | Input Box: Pending Message Recall | 2026-01-28 |
+| 0047 | Keyboard Navigation | 2026-01-28 |
+| 0048 | Control Area: System Pause | 2026-01-28 |
+| 0049 | Control Area: Save UI | 2026-01-28 |
+| 0050 | Help Modal | 2026-01-28 |
 
 ---
 
