@@ -356,6 +356,26 @@ function handleOneShot(_response: LLMResponse, _state: StateManager): void {
   // This handler is a no-op placeholder
 }
 
+function handleCeremonyExposure(_response: LLMResponse, _state: StateManager): void {
+  console.log("[handleCeremonyExposure] Stub - will be implemented in Wave 3");
+}
+
+function handleCeremonyDecayComplete(_response: LLMResponse, _state: StateManager): void {
+  console.log("[handleCeremonyDecayComplete] Stub - will be implemented in Wave 3");
+}
+
+function handlePersonaExpire(_response: LLMResponse, _state: StateManager): void {
+  console.log("[handlePersonaExpire] Stub - will be implemented in Wave 3");
+}
+
+function handlePersonaExplore(_response: LLMResponse, _state: StateManager): void {
+  console.log("[handlePersonaExplore] Stub - will be implemented in Wave 3");
+}
+
+function handleDescriptionCheck(_response: LLMResponse, _state: StateManager): void {
+  console.log("[handleDescriptionCheck] Stub - will be implemented in Wave 3");
+}
+
 function handleHumanFactScan(response: LLMResponse, state: StateManager): void {
   const result = response.parsed as FactScanResult | undefined;
   if (!result?.facts || !Array.isArray(result.facts)) {
@@ -655,4 +675,9 @@ export const handlers: Record<LLMNextStep, ResponseHandler> = {
   handleEiHeartbeat,
   handleEiValidation,
   handleOneShot,
+  handleCeremonyExposure,
+  handleCeremonyDecayComplete,
+  handlePersonaExpire,
+  handlePersonaExplore,
+  handleDescriptionCheck,
 };

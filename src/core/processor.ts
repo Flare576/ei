@@ -37,6 +37,8 @@ import {
   queueTraitScan,
   queueTopicScan,
   queuePersonScan,
+  shouldRunCeremony,
+  startCeremony,
   type ExtractionContext,
 } from "./orchestrators/index.js";
 import { EI_WELCOME_MESSAGE, EI_PERSONA_DEFINITION } from "../templates/welcome.js";
@@ -176,6 +178,11 @@ export class Processor {
   private async checkScheduledTasks(): Promise<void> {
     const now = Date.now();
     const DEFAULT_HEARTBEAT_DELAY_MS = 1800000; //5 * 60 * 1000;//
+
+    const human = this.stateManager.getHuman();
+    if (human.ceremony_config && shouldRunCeremony(human.ceremony_config)) {
+      startCeremony(this.stateManager);
+    }
 
     for (const persona of this.stateManager.persona_getAll()) {
       if (persona.is_paused || persona.is_archived) continue;
@@ -354,6 +361,7 @@ export class Processor {
       topics: [],
       is_paused: false,
       is_archived: false,
+      is_static: false,
       last_updated: now,
       last_activity: now,
     };

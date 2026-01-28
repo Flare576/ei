@@ -9,3 +9,4 @@ export {
   queueItemUpdate,
   type ExtractionContext,
 } from "./human-extraction.js";
+export { shouldRunCeremony, startCeremony } from "./ceremony.js";

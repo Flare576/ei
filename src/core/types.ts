@@ -42,6 +42,12 @@ export enum LLMNextStep {
   HandleEiHeartbeat = "handleEiHeartbeat",
   HandleEiValidation = "handleEiValidation",
   HandleOneShot = "handleOneShot",
+  // Ceremony handlers
+  HandleCeremonyExposure = "handleCeremonyExposure",
+  HandleCeremonyDecayComplete = "handleCeremonyDecayComplete",
+  HandlePersonaExpire = "handlePersonaExpire",
+  HandlePersonaExplore = "handlePersonaExplore",
+  HandleDescriptionCheck = "handleDescriptionCheck",
 }
 
 // =============================================================================
@@ -88,6 +94,14 @@ export interface HumanSettings {
   queue_paused?: boolean;
 }
 
+export interface CeremonyConfig {
+  enabled: boolean;
+  time: string;  // "HH:MM" format (e.g., "03:00")
+  last_ceremony?: string;  // ISO timestamp
+  decay_rate?: number;  // Default: 0.1
+  explore_threshold?: number;  // Default: 3
+}
+
 export interface HumanEntity {
   entity: "human";
   facts: Fact[];
@@ -101,6 +115,7 @@ export interface HumanEntity {
   lastSeeded_trait?: string;
   lastSeeded_topic?: string;
   lastSeeded_person?: string;
+  ceremony_config?: CeremonyConfig;
 }
 
 export interface PersonaEntity {
@@ -117,6 +132,7 @@ export interface PersonaEntity {
   pause_until?: string;
   is_archived: boolean;
   archived_at?: string;
+  is_static: boolean;
   heartbeat_delay_ms?: number;
   context_window_hours?: number;
   last_updated: string;

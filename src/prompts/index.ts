@@ -70,3 +70,17 @@ export type {
   ExposureImpact,
   ItemUpdateResult,
 } from "./human/types.js";
+
+export {
+  buildPersonaExpirePrompt,
+  buildPersonaExplorePrompt,
+  buildDescriptionCheckPrompt,
+} from "./ceremony/index.js";
+export type {
+  PersonaExpirePromptData,
+  PersonaExpireResult,
+  PersonaExplorePromptData,
+  PersonaExploreResult,
+  DescriptionCheckPromptData,
+  DescriptionCheckResult,
+} from "./ceremony/types.js";

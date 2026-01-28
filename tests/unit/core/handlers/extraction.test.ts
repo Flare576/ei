@@ -393,6 +393,7 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
       topics: [],
       is_paused: false,
       is_archived: false,
+      is_static: false,
       last_updated: new Date().toISOString(),
       last_activity: new Date().toISOString(),
     };
@@ -548,6 +549,7 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
           topics: [],
           is_paused: false,
           is_archived: false,
+          is_static: false,
           last_updated: new Date().toISOString(),
           last_activity: new Date().toISOString(),
         };
@@ -654,15 +656,15 @@ describe("Cross-Persona Validation", () => {
   });
 
   it("queues Ei validation when non-Ei persona with General group learns item", () => {
-    // Create a non-Ei persona with no group (defaults to General)
     state._personas["friend"] = {
       entity: "system",
       aliases: ["friend"],
-      group_primary: null, // General group
+      group_primary: null,
       traits: [],
       topics: [],
       is_paused: false,
       is_archived: false,
+      is_static: false,
       last_updated: new Date().toISOString(),
       last_activity: new Date().toISOString(),
     };
@@ -706,6 +708,7 @@ describe("Cross-Persona Validation", () => {
       topics: [],
       is_paused: false,
       is_archived: false,
+      is_static: false,
       last_updated: new Date().toISOString(),
       last_activity: new Date().toISOString(),
     };
@@ -736,11 +739,12 @@ describe("Cross-Persona Validation", () => {
     state._personas["work-buddy"] = {
       entity: "system",
       aliases: ["work-buddy"],
-      group_primary: "work", // Non-General group
+      group_primary: "work",
       traits: [],
       topics: [],
       is_paused: false,
       is_archived: false,
+      is_static: false,
       last_updated: new Date().toISOString(),
       last_activity: new Date().toISOString(),
     };
@@ -776,6 +780,7 @@ describe("Cross-Persona Validation", () => {
       topics: [],
       is_paused: false,
       is_archived: false,
+      is_static: false,
       last_updated: new Date().toISOString(),
       last_activity: new Date().toISOString(),
     };
