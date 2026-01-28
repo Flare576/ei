@@ -1,6 +1,6 @@
 # 0032: Unit Tests: StateManager
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0030
 **Epic**: E004 - Testing Infrastructure
 

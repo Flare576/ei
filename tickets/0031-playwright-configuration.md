@@ -1,6 +1,6 @@
 # 0031: Playwright Configuration
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0012
 **Epic**: E004 - Testing Infrastructure
 

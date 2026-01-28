@@ -1,18 +1,18 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-01-28 (E003 complete)
+> Last updated: 2026-01-28 (E004 complete)
 
 ## Overview
 
 | Status | Count |
 |--------|-------|
-| PENDING | 52 |
+| PENDING | 44 |
 | IN_PROGRESS | 0 |
 | QA | 0 |
-| DONE | 24 |
+| DONE | 32 |
 | BLOCKED | 0 |
 
-> **All ticket files now written.** 78 total tickets (24 done + 52 pending + 2 backlog).
+> **All ticket files now written.** 78 total tickets (32 done + 44 pending + 2 backlog).
 
 ---
 
@@ -23,7 +23,7 @@
 | **E001** | 0001-0008 | DONE | Foundation |
 | **E002** | 0011-0017 | DONE | MVP: Basic Chat |
 | **E003** | 0020-0028 | DONE | Prompts & Handlers |
-| **E004** | 0030-0037 | PENDING | Testing Infrastructure |
+| **E004** | 0030-0037 | DONE | Testing Infrastructure |
 | **E005** | 0040-0050 | PENDING | UI: Core Components |
 | **E006** | 0060-0067 | PENDING | Extraction Pipeline |
 | **E007** | 0070-0076 | PENDING | Ceremony System |
@@ -46,19 +46,6 @@
 ---
 
 ## PENDING
-
-### E004: Testing Infrastructure
-
-| Ticket | Title | Depends On |
-|--------|-------|------------|
-| 0030 | Vitest Configuration | - |
-| 0031 | Playwright Configuration | 0012 |
-| 0032 | Unit Tests: StateManager | 0030 |
-| 0033 | Unit Tests: QueueProcessor | 0030 |
-| 0034 | Unit Tests: Processor | 0030 |
-| 0035 | E2E: Persona Switching | 0016 |
-| 0036 | E2E: Checkpoint Save/Restore | 0016 |
-| 0037 | E2E: Message Flow Complete | 0016 |
 
 ### E005: UI: Core Components
 
@@ -171,6 +158,14 @@
 | 0026 | Persona Topic Exploration | 2026-01-28 |
 | 0027 | Ei Validation Prompt + Handler | 2026-01-28 |
 | 0028 | One-Shot Prompt System | 2026-01-28 |
+| 0030 | Vitest Configuration | 2026-01-28 |
+| 0031 | Playwright Configuration | 2026-01-28 |
+| 0032 | Unit Tests: StateManager | 2026-01-28 |
+| 0033 | Unit Tests: QueueProcessor | 2026-01-28 |
+| 0034 | Unit Tests: Processor | 2026-01-28 |
+| 0035 | E2E: Persona Switching | 2026-01-28 |
+| 0036 | E2E: Checkpoint Save/Restore | 2026-01-28 |
+| 0037 | E2E: Message Flow Complete | 2026-01-28 |
 
 ---
 

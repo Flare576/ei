@@ -8,8 +8,12 @@
   "scripts": {
     "dev": "tsc --watch",
     "build": "tsc",
-    "test": "vitest",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:debug": "playwright test --debug",
     "typecheck": "tsc --noEmit",
     "web": "cd web;npm run dev"
   },
@@ -24,6 +28,7 @@
     "@playwright/test": "^1.58.0",
     "@types/express": "^5.0.6",
     "@types/node": "^25.0.10",
+    "@vitest/coverage-v8": "^2.1.9",
     "express": "^5.2.1",
     "typescript": "^5.3.0",
     "vitest": "^2.0.0"

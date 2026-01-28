@@ -1,6 +1,6 @@
 # 0035: E2E: Persona Switching
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0016
 **Epic**: E004 - Testing Infrastructure
 

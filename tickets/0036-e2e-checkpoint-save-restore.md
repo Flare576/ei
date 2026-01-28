@@ -1,6 +1,6 @@
 # 0036: E2E: Checkpoint Save/Restore
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0016
 **Epic**: E004 - Testing Infrastructure
 
