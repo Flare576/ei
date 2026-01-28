@@ -97,6 +97,10 @@ export interface HumanEntity {
   last_updated: string;
   last_activity: string;
   settings?: HumanSettings;
+  lastSeeded_fact?: string;
+  lastSeeded_trait?: string;
+  lastSeeded_topic?: string;
+  lastSeeded_person?: string;
 }
 
 export interface PersonaEntity {

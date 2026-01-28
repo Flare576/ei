@@ -221,6 +221,13 @@ interface Processor {
   /** Set context window bounds for a persona */
   setContextWindow(personaName: string, start: string, end: string): Promise<void>;
   
+  /** 
+   * Set context boundary for a persona ("New" command).
+   * Messages before this timestamp are excluded from LLM context (unless context_status="always").
+   * Pass null to clear the boundary.
+   */
+  setContextBoundary(personaName: string, timestamp: string | null): Promise<void>;
+  
   /** Set a message's context status */
   setMessageContextStatus(personaName: string, messageId: string, status: ContextStatus): Promise<void>;
   
@@ -632,6 +639,7 @@ interface PersonaEntity {
   // Settings (per-persona)
   heartbeat_delay_ms?: number;     // Default: 1800000 (30 min)
   context_window_hours?: number;   // Default: 8 hours
+  context_boundary?: string;       // ISO timestamp - messages before this excluded from LLM context
   
   // Timestamps
   last_updated: string;
