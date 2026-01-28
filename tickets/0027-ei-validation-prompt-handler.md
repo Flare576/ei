@@ -1,6 +1,6 @@
 # 0027: Ei Validation Prompt + Handler
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0011
 **Epic**: E003 - Prompts & Handlers
 
@@ -10,17 +10,17 @@ When non-Ei personas update global human data, those changes are queued for Ei v
 
 ## Acceptance Criteria
 
-- [ ] Create `src/prompts/validation/ei.ts` with `buildEiValidationPrompt(data): { system: string; user: string }`
-- [ ] Prompt includes the pending change (what was added/modified)
-- [ ] Prompt includes existing data for context
-- [ ] Prompt includes source persona info
-- [ ] Prompt asks Ei to validate: accept, modify, or reject
-- [ ] Implement `handleEiValidation` handler
-- [ ] Handler applies accepted changes
-- [ ] Handler applies modifications
-- [ ] Handler logs rejected changes (for debugging)
-- [ ] Handler clears processed validations from queue
-- [ ] Unit tests
+- [x] Create `src/prompts/validation/ei.ts` with `buildEiValidationPrompt(data): { system: string; user: string }`
+- [x] Prompt includes the pending change (what was added/modified)
+- [x] Prompt includes existing data for context
+- [x] Prompt includes source persona info
+- [x] Prompt asks Ei to validate: accept, modify, or reject
+- [x] Implement `handleEiValidation` handler
+- [x] Handler applies accepted changes
+- [x] Handler applies modifications
+- [x] Handler logs rejected changes (for debugging)
+- [x] Handler clears processed validations from queue
+- [ ] Unit tests (deferred to E004)
 
 ## Technical Notes
 

@@ -1,6 +1,6 @@
 # 0023: Persona Descriptions Prompt + Handler
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0011
 **Epic**: E003 - Prompts & Handlers
 
@@ -10,16 +10,16 @@ When a persona's traits change significantly, their descriptions should be regen
 
 ## Acceptance Criteria
 
-- [ ] Create `src/prompts/generation/descriptions.ts` with `buildPersonaDescriptionsPrompt(data): { system: string; user: string }`
-- [ ] Prompt includes persona name and aliases
-- [ ] Prompt includes current traits with strengths
-- [ ] Prompt includes current topics with exposure levels
-- [ ] Prompt generates new short_description (1 sentence)
-- [ ] Prompt generates new long_description (2-3 sentences)
-- [ ] Implement `handlePersonaDescriptions` handler
-- [ ] Handler updates persona entity with new descriptions
-- [ ] Handler fires onPersonaUpdated event
-- [ ] Unit tests
+- [x] Create `src/prompts/generation/descriptions.ts` with `buildPersonaDescriptionsPrompt(data): { system: string; user: string }`
+- [x] Prompt includes persona name and aliases
+- [x] Prompt includes current traits with strengths
+- [x] Prompt includes current topics with exposure levels
+- [x] Prompt generates new short_description (1 sentence)
+- [x] Prompt generates new long_description (2-3 sentences)
+- [x] Implement `handlePersonaDescriptions` handler
+- [x] Handler updates persona entity with new descriptions
+- [x] Handler fires onPersonaUpdated event
+- [ ] Unit tests (deferred to E004)
 
 ## Technical Notes
 

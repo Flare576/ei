@@ -1,6 +1,6 @@
 # 0021: Ei Heartbeat Prompt + Handler
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0020
 **Epic**: E003 - Prompts & Handlers
 
@@ -10,14 +10,14 @@ Ei's heartbeat is special — it considers not just engagement gaps but also ina
 
 ## Acceptance Criteria
 
-- [ ] Create `src/prompts/heartbeat/ei.ts` with `buildEiHeartbeatPrompt(data): { system: string; user: string }`
-- [ ] Prompt includes all human topics/people with engagement gaps
-- [ ] Prompt includes list of inactive personas (days since last activity)
-- [ ] Prompt includes pending validations count (from cross-persona updates)
-- [ ] Prompt asks Ei to prioritize what to discuss
-- [ ] Implement `handleEiHeartbeat` handler
-- [ ] Handler may trigger multiple actions (prompt about topic AND mention inactive persona)
-- [ ] Ei should gently encourage human-to-human interaction over AI dependency
+- [x] Create `src/prompts/heartbeat/ei.ts` with `buildEiHeartbeatPrompt(data): { system: string; user: string }`
+- [x] Prompt includes all human topics/people with engagement gaps
+- [x] Prompt includes list of inactive personas (days since last activity)
+- [x] Prompt includes pending validations count (from cross-persona updates)
+- [x] Prompt asks Ei to prioritize what to discuss
+- [x] Implement `handleEiHeartbeat` handler
+- [x] Handler may trigger multiple actions (prompt about topic AND mention inactive persona)
+- [x] Ei should gently encourage human-to-human interaction over AI dependency
 
 ## Technical Notes
 

@@ -1,6 +1,6 @@
 # 0020: Heartbeat Check Prompt + Handler
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0011
 **Epic**: E003 - Prompts & Handlers
 
@@ -10,17 +10,17 @@ Create the prompt and handler for heartbeat checks — when a persona decides wh
 
 ## Acceptance Criteria
 
-- [ ] Create `src/prompts/heartbeat/check.ts` with `buildHeartbeatCheckPrompt(data): { system: string; user: string }`
-- [ ] Prompt includes persona identity and topics
-- [ ] Prompt includes human topics/people with engagement gaps (exposure_current < exposure_desired)
-- [ ] Prompt includes recent message history for context
-- [ ] Prompt asks: "Should you reach out? If yes, what about?"
-- [ ] Expected response format: `{ should_respond: boolean, topic?: string, message?: string }`
-- [ ] Implement `handleHeartbeatCheck` handler in `src/core/handlers/`
-- [ ] Handler parses JSON response
-- [ ] If `should_respond: true`, enqueue response generation with suggested topic
-- [ ] If `should_respond: false`, update `last_heartbeat` timestamp and done
-- [ ] Unit tests for prompt structure and handler logic
+- [x] Create `src/prompts/heartbeat/check.ts` with `buildHeartbeatCheckPrompt(data): { system: string; user: string }`
+- [x] Prompt includes persona identity and topics
+- [x] Prompt includes human topics/people with engagement gaps (exposure_current < exposure_desired)
+- [x] Prompt includes recent message history for context
+- [x] Prompt asks: "Should you reach out? If yes, what about?"
+- [x] Expected response format: `{ should_respond: boolean, topic?: string, message?: string }`
+- [x] Implement `handleHeartbeatCheck` handler in `src/core/handlers/`
+- [x] Handler parses JSON response
+- [x] If `should_respond: true`, enqueue response generation with suggested topic
+- [x] If `should_respond: false`, update `last_heartbeat` timestamp and done
+- [ ] Unit tests for prompt structure and handler logic (deferred to E004)
 
 ## Technical Notes
 

@@ -1,6 +1,6 @@
 # 0024: Persona Trait Extraction
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0011
 **Epic**: E003 - Prompts & Handlers
 
@@ -10,16 +10,16 @@ Personas learn traits from user requests like "be more direct" or "stop using so
 
 ## Acceptance Criteria
 
-- [ ] Create `src/prompts/persona/traits.ts` with `buildPersonaTraitExtractionPrompt(data): { system: string; user: string }`
-- [ ] Prompt includes persona's current traits
-- [ ] Prompt includes recent conversation (context + new messages)
-- [ ] Prompt detects explicit user requests to change behavior
-- [ ] Prompt returns updated trait list (add/modify/remove)
-- [ ] Implement `handlePersonaTraitExtraction` handler
-- [ ] Handler diffs old vs new traits
-- [ ] Handler updates persona entity
-- [ ] Handler may trigger description regeneration (enqueue 0023)
-- [ ] Unit tests
+- [x] Create `src/prompts/persona/traits.ts` with `buildPersonaTraitExtractionPrompt(data): { system: string; user: string }`
+- [x] Prompt includes persona's current traits
+- [x] Prompt includes recent conversation (context + new messages)
+- [x] Prompt detects explicit user requests to change behavior
+- [x] Prompt returns updated trait list (add/modify/remove)
+- [x] Implement `handlePersonaTraitExtraction` handler
+- [x] Handler diffs old vs new traits
+- [x] Handler updates persona entity
+- [x] Handler may trigger description regeneration (enqueue 0023)
+- [ ] Unit tests (deferred to E004)
 
 ## Technical Notes
 

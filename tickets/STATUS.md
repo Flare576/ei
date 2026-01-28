@@ -1,18 +1,18 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-01-28
+> Last updated: 2026-01-28 (E003 complete)
 
 ## Overview
 
 | Status | Count |
 |--------|-------|
-| PENDING | 61 |
+| PENDING | 52 |
 | IN_PROGRESS | 0 |
 | QA | 0 |
-| DONE | 15 |
+| DONE | 24 |
 | BLOCKED | 0 |
 
-> **All ticket files now written.** 78 total tickets (15 done + 61 pending + 2 backlog).
+> **All ticket files now written.** 78 total tickets (24 done + 52 pending + 2 backlog).
 
 ---
 
@@ -22,7 +22,7 @@
 |------|---------|--------|-------------|
 | **E001** | 0001-0008 | DONE | Foundation |
 | **E002** | 0011-0017 | DONE | MVP: Basic Chat |
-| **E003** | 0020-0028 | PENDING | Prompts & Handlers |
+| **E003** | 0020-0028 | DONE | Prompts & Handlers |
 | **E004** | 0030-0037 | PENDING | Testing Infrastructure |
 | **E005** | 0040-0050 | PENDING | UI: Core Components |
 | **E006** | 0060-0067 | PENDING | Extraction Pipeline |
@@ -46,20 +46,6 @@
 ---
 
 ## PENDING
-
-### E003: Prompts & Handlers
-
-| Ticket | Title | Depends On |
-|--------|-------|------------|
-| 0020 | Heartbeat Check Prompt + Handler | 0011 |
-| 0021 | Ei Heartbeat Prompt + Handler | 0020 |
-| 0022 | Persona Generation Prompt + Handler | 0011 |
-| 0023 | Persona Descriptions Prompt + Handler | 0011 |
-| 0024 | Persona Trait Extraction | 0011 |
-| 0025 | Persona Topic Detection | 0011 |
-| 0026 | Persona Topic Exploration | 0025 |
-| 0027 | Ei Validation Prompt + Handler | 0011 |
-| 0028 | One-Shot Prompt System | 0011 |
 
 ### E004: Testing Infrastructure
 
@@ -176,6 +162,15 @@
 | 0015 | Wire UI to Processor | 2026-01-28 |
 | 0016 | First E2E Test (Send Message) | 2026-01-28 |
 | 0017 | Ei Welcome Message | 2026-01-28 |
+| 0020 | Heartbeat Check Prompt + Handler | 2026-01-28 |
+| 0021 | Ei Heartbeat Prompt + Handler | 2026-01-28 |
+| 0022 | Persona Generation Prompt + Handler | 2026-01-28 |
+| 0023 | Persona Descriptions Prompt + Handler | 2026-01-28 |
+| 0024 | Persona Trait Extraction | 2026-01-28 |
+| 0025 | Persona Topic Detection | 2026-01-28 |
+| 0026 | Persona Topic Exploration | 2026-01-28 |
+| 0027 | Ei Validation Prompt + Handler | 2026-01-28 |
+| 0028 | One-Shot Prompt System | 2026-01-28 |
 
 ---
 

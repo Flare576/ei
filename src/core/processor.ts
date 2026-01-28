@@ -22,7 +22,15 @@ import type { Storage } from "../storage/interface.js";
 import { StateManager } from "./state-manager.js";
 import { QueueProcessor } from "./queue-processor.js";
 import { handlers } from "./handlers/index.js";
-import { buildResponsePrompt, type ResponsePromptData } from "../prompts/index.js";
+import {
+  buildResponsePrompt,
+  buildPersonaTraitExtractionPrompt,
+  buildHeartbeatCheckPrompt,
+  type ResponsePromptData,
+  type PersonaTraitExtractionPromptData,
+  type HeartbeatCheckPromptData,
+} from "../prompts/index.js";
+import { orchestratePersonaGeneration } from "./orchestrators/index.js";
 import { EI_WELCOME_MESSAGE, EI_PERSONA_DEFINITION } from "../templates/welcome.js";
 import { ContextStatus as ContextStatusEnum } from "./types.js";
 
@@ -179,11 +187,40 @@ export class Processor {
   }
 
   private queueHeartbeatCheck(personaName: string): void {
+    const persona = this.stateManager.persona_get(personaName);
+    if (!persona) return;
+
+    const human = this.stateManager.getHuman();
+    const history = this.stateManager.messages_get(personaName);
+
+    const inactiveDays = persona.last_activity
+      ? Math.floor((Date.now() - new Date(persona.last_activity).getTime()) / (1000 * 60 * 60 * 24))
+      : 0;
+
+    const sortByEngagementGap = <T extends { exposure_desired: number; exposure_current: number }>(items: T[]): T[] =>
+      [...items].sort((a, b) => (b.exposure_desired - b.exposure_current) - (a.exposure_desired - a.exposure_current));
+
+    const promptData: HeartbeatCheckPromptData = {
+      persona: {
+        name: personaName,
+        traits: persona.traits,
+        topics: persona.topics,
+      },
+      human: {
+        topics: sortByEngagementGap(human.topics).slice(0, 5),
+        people: sortByEngagementGap(human.people).slice(0, 5),
+      },
+      recent_history: history.slice(-10),
+      inactive_days: inactiveDays,
+    };
+
+    const prompt = buildHeartbeatCheckPrompt(promptData);
+
     this.stateManager.queue_enqueue({
       type: LLMRequestType.JSON,
       priority: LLMPriority.Low,
-      system: "",
-      user: "",
+      system: prompt.system,
+      user: prompt.user,
       next_step: LLMNextStep.HandleHeartbeatCheck,
       data: { personaName },
     });
@@ -219,6 +256,46 @@ export class Processor {
           this.interface.onMessageAdded?.(personaName);
         }
       }
+
+      if (response.request.next_step === LLMNextStep.HandleOneShot) {
+        const guid = response.request.data.guid as string;
+        const content = response.content ?? "";
+        this.interface.onOneShotReturned?.(guid, content);
+      }
+
+      if (response.request.next_step === LLMNextStep.HandlePersonaGeneration) {
+        this.interface.onPersonaAdded?.();
+      }
+
+      if (response.request.next_step === LLMNextStep.HandlePersonaDescriptions) {
+        const personaName = response.request.data.personaName as string;
+        if (personaName) {
+          this.interface.onPersonaUpdated?.(personaName);
+        }
+      }
+
+      if (
+        response.request.next_step === LLMNextStep.HandlePersonaTraitExtraction ||
+        response.request.next_step === LLMNextStep.HandlePersonaTopicDetection ||
+        response.request.next_step === LLMNextStep.HandlePersonaTopicExploration
+      ) {
+        const personaName = response.request.data.personaName as string;
+        if (personaName) {
+          this.interface.onPersonaUpdated?.(personaName);
+        }
+      }
+
+      if (response.request.next_step === LLMNextStep.HandleHeartbeatCheck ||
+          response.request.next_step === LLMNextStep.HandleEiHeartbeat) {
+        const personaName = response.request.data.personaName as string ?? "ei";
+        if (response.content) {
+          this.interface.onMessageAdded?.(personaName);
+        }
+      }
+
+      if (response.request.next_step === LLMNextStep.HandleEiValidation) {
+        this.interface.onHumanUpdated?.();
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.interface.onError?.({
@@ -250,7 +327,8 @@ export class Processor {
   }
 
   async createPersona(name: string, description: string, model?: string): Promise<void> {
-    const entity: PersonaEntity = {
+    const now = new Date().toISOString();
+    const placeholder: PersonaEntity = {
       entity: "system",
       aliases: [name],
       short_description: description,
@@ -259,11 +337,17 @@ export class Processor {
       topics: [],
       is_paused: false,
       is_archived: false,
-      last_updated: new Date().toISOString(),
-      last_activity: new Date().toISOString(),
+      last_updated: now,
+      last_activity: now,
     };
-    this.stateManager.persona_add(name, entity);
+    this.stateManager.persona_add(name, placeholder);
     this.interface.onPersonaAdded?.();
+
+    orchestratePersonaGeneration(
+      { name, description, model },
+      this.stateManager,
+      () => this.interface.onPersonaUpdated?.(name)
+    );
   }
 
   async archivePersona(name: string): Promise<void> {
@@ -330,6 +414,25 @@ export class Processor {
       data: { personaName },
     });
     this.interface.onMessageQueued?.(personaName);
+
+    // Enqueue trait extraction to detect behavioral change requests (0024)
+    // "Did the human tell me to act a certain way?"
+    const traitExtractionData: PersonaTraitExtractionPromptData = {
+      persona_name: personaName,
+      current_traits: persona.traits,
+      messages_context: history.slice(0, -1), // All messages except the new one
+      messages_analyze: [message], // Just the new human message
+    };
+    const traitPrompt = buildPersonaTraitExtractionPrompt(traitExtractionData);
+
+    this.stateManager.queue_enqueue({
+      type: LLMRequestType.JSON,
+      priority: LLMPriority.Low,
+      system: traitPrompt.system,
+      user: traitPrompt.user,
+      next_step: LLMNextStep.HandlePersonaTraitExtraction,
+      data: { personaName },
+    });
   }
 
   private buildResponsePromptData(personaName: string, persona: PersonaEntity): ResponsePromptData {
@@ -542,5 +645,16 @@ export class Processor {
           : "idle",
       pending_count: this.stateManager.queue_length(),
     };
+  }
+
+  async submitOneShot(guid: string, systemPrompt: string, userPrompt: string): Promise<void> {
+    this.stateManager.queue_enqueue({
+      type: LLMRequestType.Raw,
+      priority: LLMPriority.High,
+      system: systemPrompt,
+      user: userPrompt,
+      next_step: LLMNextStep.HandleOneShot,
+      data: { guid },
+    });
   }
 }

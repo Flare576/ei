@@ -1,6 +1,6 @@
 # 0026: Persona Topic Exploration
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0025
 **Epic**: E003 - Prompts & Handlers
 
@@ -10,16 +10,16 @@ Generate new topics a persona might care about based on their identity, traits, 
 
 ## Acceptance Criteria
 
-- [ ] Create `src/prompts/persona/topics-exploration.ts` with `buildPersonaTopicExplorationPrompt(data): { system: string; user: string }`
-- [ ] Prompt includes persona identity (descriptions)
-- [ ] Prompt includes current traits
-- [ ] Prompt includes current topics
-- [ ] Prompt generates 1-3 NEW topics the persona would plausibly care about
-- [ ] Generated topics should be interesting and specific, not generic
-- [ ] Implement `handlePersonaTopicExploration` handler
-- [ ] Handler adds new topics to persona
-- [ ] Use higher temperature (0.5-0.7) for creativity
-- [ ] Unit tests
+- [x] Create `src/prompts/persona/topics-exploration.ts` with `buildPersonaTopicExplorationPrompt(data): { system: string; user: string }`
+- [x] Prompt includes persona identity (descriptions)
+- [x] Prompt includes current traits
+- [x] Prompt includes current topics
+- [x] Prompt generates 1-3 NEW topics the persona would plausibly care about
+- [x] Generated topics should be interesting and specific, not generic
+- [x] Implement `handlePersonaTopicExploration` handler
+- [x] Handler adds new topics to persona
+- [x] Use higher temperature (0.5-0.7) for creativity
+- [ ] Unit tests (deferred to E004)
 
 ## Technical Notes
 

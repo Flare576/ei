@@ -41,6 +41,7 @@ export enum LLMNextStep {
   HandleHeartbeatCheck = "handleHeartbeatCheck",
   HandleEiHeartbeat = "handleEiHeartbeat",
   HandleEiValidation = "handleEiValidation",
+  HandleOneShot = "handleOneShot",
 }
 
 // =============================================================================
@@ -222,6 +223,7 @@ export interface Ei_Interface {
   onCheckpointStart?: () => void;
   onCheckpointCreated?: (index?: number) => void;
   onCheckpointDeleted?: (index: number) => void;
+  onOneShotReturned?: (guid: string, content: string) => void;
 }
 
 // =============================================================================

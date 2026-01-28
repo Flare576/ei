@@ -1,6 +1,6 @@
 # 0028: One-Shot Prompt System
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0011
 **Epic**: E003 - Prompts & Handlers
 
@@ -10,13 +10,13 @@ Enable AI-assist buttons throughout the UI that help users write content. When c
 
 ## Acceptance Criteria
 
-- [ ] Add `onOneShotReturned?: (guid: string, content: string) => void` to Ei_Interface
-- [ ] Add `submitOneShot(guid: string, systemPrompt: string, userPrompt: string): Promise<void>` to Processor
-- [ ] Create queue item type for one-shot requests
-- [ ] Create handler that fires `onOneShotReturned` with result
-- [ ] One-shot requests are high priority (user is waiting)
-- [ ] One-shot requests don't affect conversation history
-- [ ] Unit tests for the flow
+- [x] Add `onOneShotReturned?: (guid: string, content: string) => void` to Ei_Interface
+- [x] Add `submitOneShot(guid: string, systemPrompt: string, userPrompt: string): Promise<void>` to Processor
+- [x] Create queue item type for one-shot requests (HandleOneShot in LLMNextStep)
+- [x] Create handler that fires `onOneShotReturned` with result
+- [x] One-shot requests are high priority (user is waiting)
+- [x] One-shot requests don't affect conversation history
+- [ ] Unit tests for the flow (deferred to E004)
 
 ## Technical Notes
 

@@ -1,6 +1,6 @@
 # 0025: Persona Topic Detection
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0011
 **Epic**: E003 - Prompts & Handlers
 
@@ -10,15 +10,15 @@ Detect topics that personas actively engage with during conversation. Unlike tra
 
 ## Acceptance Criteria
 
-- [ ] Create `src/prompts/persona/topics-detection.ts` with `buildPersonaTopicDetectionPrompt(data): { system: string; user: string }`
-- [ ] Prompt includes persona's current topics
-- [ ] Prompt includes recent conversation
-- [ ] Prompt detects topics persona engaged with (not just mentioned)
-- [ ] Prompt updates exposure_current for discussed topics
-- [ ] Prompt may add new topics the persona showed interest in
-- [ ] Implement `handlePersonaTopicDetection` handler
-- [ ] Handler updates persona topics
-- [ ] Unit tests
+- [x] Create `src/prompts/persona/topics-detection.ts` with `buildPersonaTopicDetectionPrompt(data): { system: string; user: string }`
+- [x] Prompt includes persona's current topics
+- [x] Prompt includes recent conversation
+- [x] Prompt detects topics persona engaged with (not just mentioned)
+- [x] Prompt updates exposure_current for discussed topics
+- [x] Prompt may add new topics the persona showed interest in
+- [x] Implement `handlePersonaTopicDetection` handler
+- [x] Handler updates persona topics
+- [ ] Unit tests (deferred to E004)
 
 ## Technical Notes
 

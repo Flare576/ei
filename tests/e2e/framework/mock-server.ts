@@ -214,7 +214,7 @@ export class MockLLMServerImpl implements MockLLMServer {
 
   private detectRequestType(
     messages: Array<{ role: string; content: string }>
-  ): "response" | "system-concepts" | "human-concepts" | "description" | "unknown" {
+  ): "response" | "system-concepts" | "human-concepts" | "description" | "persona-generation" | "trait-extraction" | "unknown" {
     if (!messages || messages.length === 0) {
       return "unknown";
     }
@@ -225,6 +225,14 @@ export class MockLLMServerImpl implements MockLLMServer {
     }
 
     const content = systemMessage.content.toLowerCase();
+
+    if (content.includes("create a new ai persona") || content.includes("generate initial personality traits")) {
+      return "persona-generation";
+    }
+
+    if (content.includes("analyzing a conversation to detect explicit requests") || content.includes("change their communication style")) {
+      return "trait-extraction";
+    }
 
     if (content.includes("you are ei") && content.includes("companion")) {
       return "response";
@@ -267,6 +275,29 @@ export class MockLLMServerImpl implements MockLLMServer {
     }
 
     switch (requestType) {
+      case "persona-generation":
+        return {
+          type: "fixed",
+          content: JSON.stringify({
+            short_description: "A test persona for automated testing",
+            long_description: "This is a test persona created during E2E testing. It has mock traits and topics.",
+            traits: [
+              { name: "Test Trait", description: "A trait for testing", sentiment: 0.5, strength: 0.7 }
+            ],
+            topics: [
+              { name: "Testing", description: "Interested in software testing", sentiment: 0.6, exposure_current: 0.5, exposure_desired: 0.7 }
+            ],
+          }),
+          statusCode: 200,
+        };
+
+      case "trait-extraction":
+        return {
+          type: "fixed",
+          content: JSON.stringify([]),
+          statusCode: 200,
+        };
+
       case "system-concepts":
         return {
           type: "fixed",

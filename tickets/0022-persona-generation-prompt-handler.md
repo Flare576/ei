@@ -1,6 +1,6 @@
 # 0022: Persona Generation Prompt + Handler
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0011
 **Epic**: E003 - Prompts & Handlers
 
@@ -10,18 +10,18 @@ When a user creates a new persona, the LLM generates initial traits and topics b
 
 ## Acceptance Criteria
 
-- [ ] Create `src/prompts/generation/persona.ts` with `buildPersonaGenerationPrompt(data): { system: string; user: string }`
-- [ ] Prompt takes name and user-provided description
-- [ ] Prompt generates 3-5 initial traits with strength values
-- [ ] Prompt generates 3-5 initial topics with exposure levels
-- [ ] Prompt generates short_description (1 sentence)
-- [ ] Prompt generates long_description (2-3 sentences)
-- [ ] Expected response is structured JSON
-- [ ] Implement `handlePersonaGeneration` handler
-- [ ] Handler creates PersonaEntity from response
-- [ ] Handler calls `stateManager.persona_add()`
-- [ ] Handler fires appropriate events via Processor callback
-- [ ] Unit tests verify prompt and handler
+- [x] Create `src/prompts/generation/persona.ts` with `buildPersonaGenerationPrompt(data): { system: string; user: string }`
+- [x] Prompt takes name and user-provided description
+- [x] Prompt generates 3-5 initial traits with strength values
+- [x] Prompt generates 3-5 initial topics with exposure levels
+- [x] Prompt generates short_description (1 sentence)
+- [x] Prompt generates long_description (2-3 sentences)
+- [x] Expected response is structured JSON
+- [x] Implement `handlePersonaGeneration` handler
+- [x] Handler creates PersonaEntity from response
+- [x] Handler calls `stateManager.persona_add()`
+- [x] Handler fires appropriate events via Processor callback
+- [ ] Unit tests verify prompt and handler (deferred to E004)
 
 ## Technical Notes
 
