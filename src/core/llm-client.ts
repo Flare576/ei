@@ -46,6 +46,15 @@ const PROVIDERS: Record<string, () => ProviderConfig> = {
 
 function getEnv(key: string, fallback: string): string {
   try {
+    if (typeof localStorage !== "undefined") {
+      const stored = localStorage.getItem(key);
+      if (stored) return stored;
+    }
+  } catch {
+    // localStorage not available
+  }
+
+  try {
     if (typeof globalThis !== "undefined" && "process" in globalThis) {
       const proc = (globalThis as unknown as { process?: { env?: Record<string, string> } }).process;
       return proc?.env?.[key] ?? fallback;

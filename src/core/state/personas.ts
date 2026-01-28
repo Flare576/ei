@@ -9,10 +9,14 @@ export interface PersonaData {
 export class PersonaState {
   private personas: Map<string, PersonaData> = new Map();
 
+  private normalizeKey(name: string): string {
+    return name.toLowerCase();
+  }
+
   load(personas: Record<string, { entity: PersonaEntity; messages: Message[] }>): void {
     this.personas = new Map(
       Object.entries(personas).map(([name, data]) => [
-        name,
+        this.normalizeKey(name),
         { entity: data.entity, messages: data.messages },
       ])
     );
@@ -31,22 +35,22 @@ export class PersonaState {
   }
 
   get(name: string): PersonaEntity | null {
-    return this.personas.get(name)?.entity ?? null;
+    return this.personas.get(this.normalizeKey(name))?.entity ?? null;
   }
 
   add(name: string, entity: PersonaEntity): void {
-    this.personas.set(name, { entity, messages: [] });
+    this.personas.set(this.normalizeKey(name), { entity, messages: [] });
   }
 
   update(name: string, updates: Partial<PersonaEntity>): boolean {
-    const data = this.personas.get(name);
+    const data = this.personas.get(this.normalizeKey(name));
     if (!data) return false;
     data.entity = { ...data.entity, ...updates, last_updated: new Date().toISOString() };
     return true;
   }
 
   archive(name: string): boolean {
-    const data = this.personas.get(name);
+    const data = this.personas.get(this.normalizeKey(name));
     if (!data) return false;
     data.entity.is_archived = true;
     data.entity.archived_at = new Date().toISOString();
@@ -55,7 +59,7 @@ export class PersonaState {
   }
 
   unarchive(name: string): boolean {
-    const data = this.personas.get(name);
+    const data = this.personas.get(this.normalizeKey(name));
     if (!data) return false;
     data.entity.is_archived = false;
     data.entity.archived_at = undefined;
@@ -64,15 +68,15 @@ export class PersonaState {
   }
 
   delete(name: string): boolean {
-    return this.personas.delete(name);
+    return this.personas.delete(this.normalizeKey(name));
   }
 
   messages_get(personaName: string): Message[] {
-    return this.personas.get(personaName)?.messages ?? [];
+    return this.personas.get(this.normalizeKey(personaName))?.messages ?? [];
   }
 
   messages_append(personaName: string, message: Message): void {
-    const data = this.personas.get(personaName);
+    const data = this.personas.get(this.normalizeKey(personaName));
     if (!data) return;
     data.messages.push(message);
     data.entity.last_activity = message.timestamp;
@@ -84,7 +88,7 @@ export class PersonaState {
     messageId: string,
     status: ContextStatus
   ): boolean {
-    const data = this.personas.get(personaName);
+    const data = this.personas.get(this.normalizeKey(personaName));
     if (!data) return false;
     const msg = data.messages.find((m) => m.id === messageId);
     if (!msg) return false;
@@ -95,11 +99,11 @@ export class PersonaState {
   messages_getContextWindow(
     personaName: string
   ): { start: string; end: string } | null {
-    return this.personas.get(personaName)?.contextWindow ?? null;
+    return this.personas.get(this.normalizeKey(personaName))?.contextWindow ?? null;
   }
 
   messages_setContextWindow(personaName: string, start: string, end: string): void {
-    const data = this.personas.get(personaName);
+    const data = this.personas.get(this.normalizeKey(personaName));
     if (data) {
       data.contextWindow = { start, end };
     }

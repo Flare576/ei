@@ -6,13 +6,13 @@
 
 | Status | Count |
 |--------|-------|
-| PENDING | 68 |
+| PENDING | 61 |
 | IN_PROGRESS | 0 |
 | QA | 0 |
-| DONE | 8 |
+| DONE | 15 |
 | BLOCKED | 0 |
 
-> **All ticket files now written.** 78 total tickets (8 done + 68 pending + 2 backlog).
+> **All ticket files now written.** 78 total tickets (15 done + 61 pending + 2 backlog).
 
 ---
 
@@ -21,7 +21,7 @@
 | Epic | Tickets | Status | Description |
 |------|---------|--------|-------------|
 | **E001** | 0001-0008 | DONE | Foundation |
-| **E002** | 0011-0017 | PENDING | MVP: Basic Chat |
+| **E002** | 0011-0017 | DONE | MVP: Basic Chat |
 | **E003** | 0020-0028 | PENDING | Prompts & Handlers |
 | **E004** | 0030-0037 | PENDING | Testing Infrastructure |
 | **E005** | 0040-0050 | PENDING | UI: Core Components |
@@ -34,11 +34,11 @@
 
 ## MVP Critical Path
 
-Complete these in order for a working demo:
+✅ **MVP Complete!** Basic chat flow works end-to-end.
 
 ```
 0011 Response Prompt    ─┐
-0012 Port Mock Server   ─┼─→ 0015 Wire UI ─→ 0016 First E2E
+0012 Port Mock Server   ─┼─→ 0015 Wire UI ─→ 0016 First E2E  ✅
 0013 Chat UI            ─┤     to Processor
 0014 Persona List UI    ─┘
 ```
@@ -46,18 +46,6 @@ Complete these in order for a working demo:
 ---
 
 ## PENDING
-
-### E002: MVP: Basic Chat
-
-| Ticket | Title | Depends On |
-|--------|-------|------------|
-| 0011 | Response Prompt Builder | - |
-| 0012 | Port Mock LLM Server | - |
-| 0013 | Chat UI Component | 0008 |
-| 0014 | Persona List UI Component | 0008 |
-| 0015 | Wire UI to Processor | 0011, 0013, 0014 |
-| 0016 | First E2E Test (Send Message) | 0012, 0015 |
-| 0017 | Ei Welcome Message | 0015 |
 
 ### E003: Prompts & Handlers
 
@@ -181,6 +169,13 @@ Complete these in order for a working demo:
 | 0006 | Processor Skeleton & Loop | 2026-01-26 |
 | 0007 | Ei_Interface & Event System | 2026-01-26 |
 | 0008 | Web Frontend Skeleton | 2026-01-26 |
+| 0011 | Response Prompt Builder | 2026-01-28 |
+| 0012 | Port Mock LLM Server | 2026-01-28 |
+| 0013 | Chat UI Component | 2026-01-28 |
+| 0014 | Persona List UI Component | 2026-01-28 |
+| 0015 | Wire UI to Processor | 2026-01-28 |
+| 0016 | First E2E Test (Send Message) | 2026-01-28 |
+| 0017 | Ei Welcome Message | 2026-01-28 |
 
 ---
 

@@ -16,11 +16,15 @@ import {
   type QueueStatus,
   type ContextStatus,
   type LLMResponse,
+  type DataItemBase,
 } from "./types.js";
 import type { Storage } from "../storage/interface.js";
 import { StateManager } from "./state-manager.js";
 import { QueueProcessor } from "./queue-processor.js";
 import { handlers } from "./handlers/index.js";
+import { buildResponsePrompt, type ResponsePromptData } from "../prompts/index.js";
+import { EI_WELCOME_MESSAGE, EI_PERSONA_DEFINITION } from "../templates/welcome.js";
+import { ContextStatus as ContextStatusEnum } from "./types.js";
 
 const DEFAULT_LOOP_INTERVAL_MS = 100;
 const DEFAULT_AUTO_SAVE_INTERVAL_MS = 60000;
@@ -52,6 +56,12 @@ export class Processor {
       return;
     }
 
+    const checkpoints = await this.stateManager.checkpoint_list();
+    const hasNoPersonas = this.stateManager.persona_getAll().length === 0;
+    if (checkpoints.length === 0 && hasNoPersonas) {
+      await this.bootstrapFirstRun();
+    }
+
     this.running = true;
     this.lastAutoSave = Date.now();
     console.log(`[Processor ${this.instanceId}] initialized, starting loop`);
@@ -62,6 +72,30 @@ export class Processor {
     }
 
     this.runLoop();
+  }
+
+  private async bootstrapFirstRun(): Promise<void> {
+    console.log(`[Processor ${this.instanceId}] First run detected, bootstrapping Ei`);
+
+    const eiEntity: PersonaEntity = {
+      ...EI_PERSONA_DEFINITION,
+      last_updated: new Date().toISOString(),
+      last_activity: new Date().toISOString(),
+    };
+    this.stateManager.persona_add("ei", eiEntity);
+
+    const welcomeMessage: Message = {
+      id: crypto.randomUUID(),
+      role: "system",
+      content: EI_WELCOME_MESSAGE,
+      timestamp: new Date().toISOString(),
+      read: false,
+      context_status: ContextStatusEnum.Always,
+    };
+    this.stateManager.messages_append("ei", welcomeMessage);
+
+    this.interface.onPersonaAdded?.();
+    this.interface.onMessageAdded?.("ei");
   }
 
   async stop(): Promise<void> {
@@ -269,27 +303,134 @@ export class Processor {
     this.interface.onMessageAdded?.(personaName);
 
     const persona = this.stateManager.persona_get(personaName);
-    const history = this.stateManager.messages_get(personaName);
+    if (!persona) {
+      this.interface.onError?.({
+        code: "PERSONA_NOT_FOUND",
+        message: `Persona "${personaName}" not found`,
+      });
+      return;
+    }
 
-    const chatMessages = history.slice(0, -1).map((m) => ({
+    const history = this.stateManager.messages_get(personaName);
+    const chatMessages = history.map((m) => ({
       role: m.role === "human" ? "user" : "assistant",
       content: m.content,
     })) as import("./types.js").ChatMessage[];
 
-    const systemPrompt = persona?.long_description
-      || persona?.short_description
-      || `You are ${personaName}, a helpful assistant.`;
+    const promptData = this.buildResponsePromptData(personaName, persona);
+    const prompt = buildResponsePrompt(promptData);
 
     this.stateManager.queue_enqueue({
       type: LLMRequestType.Response,
       priority: LLMPriority.Normal,
-      system: systemPrompt,
-      user: content,
+      system: prompt.system,
+      user: prompt.user,
       messages: chatMessages,
       next_step: LLMNextStep.HandlePersonaResponse,
       data: { personaName },
     });
     this.interface.onMessageQueued?.(personaName);
+  }
+
+  private buildResponsePromptData(personaName: string, persona: PersonaEntity): ResponsePromptData {
+    const human = this.stateManager.getHuman();
+    const filteredHuman = this.filterHumanDataByVisibility(human, persona);
+    const visiblePersonas = this.getVisiblePersonas(personaName, persona);
+    const messages = this.stateManager.messages_get(personaName);
+    const previousMessage = messages.length >= 2 ? messages[messages.length - 2] : null;
+    const delayMs = previousMessage
+      ? Date.now() - new Date(previousMessage.timestamp).getTime()
+      : 0;
+
+    return {
+      persona: {
+        name: personaName,
+        aliases: persona.aliases ?? [],
+        short_description: persona.short_description,
+        long_description: persona.long_description,
+        traits: persona.traits,
+        topics: persona.topics,
+      },
+      human: filteredHuman,
+      visible_personas: visiblePersonas,
+      delay_ms: delayMs,
+    };
+  }
+
+  private filterHumanDataByVisibility(
+    human: HumanEntity,
+    persona: PersonaEntity
+  ): ResponsePromptData["human"] {
+    const GLOBAL_GROUP = "*";
+
+    if (persona.groups_visible?.includes(GLOBAL_GROUP)) {
+      return {
+        facts: human.facts,
+        traits: human.traits,
+        topics: human.topics,
+        people: human.people,
+      };
+    }
+
+    const visibleGroups = new Set<string>();
+    if (persona.group_primary) {
+      visibleGroups.add(persona.group_primary);
+    }
+    (persona.groups_visible ?? []).forEach((g) => visibleGroups.add(g));
+
+    const filterByGroup = <T extends DataItemBase>(items: T[]): T[] => {
+      return items.filter((item) => {
+        const itemGroups = item.persona_groups ?? [];
+        const isGlobal = itemGroups.length === 0 || itemGroups.includes(GLOBAL_GROUP);
+        return isGlobal || itemGroups.some((g) => visibleGroups.has(g));
+      });
+    };
+
+    return {
+      facts: filterByGroup(human.facts),
+      traits: filterByGroup(human.traits),
+      topics: filterByGroup(human.topics),
+      people: filterByGroup(human.people),
+    };
+  }
+
+  private getVisiblePersonas(
+    currentName: string,
+    currentPersona: PersonaEntity
+  ): Array<{ name: string; short_description?: string }> {
+    const allPersonas = this.stateManager.persona_getAll();
+
+    if (currentName.toLowerCase() === "ei") {
+      return allPersonas
+        .filter((p) => (p.aliases?.[0] ?? "").toLowerCase() !== "ei" && !p.is_archived)
+        .map((p) => ({
+          name: p.aliases?.[0] ?? "Unknown",
+          short_description: p.short_description,
+        }));
+    }
+
+    const visibleGroups = new Set<string>();
+    if (currentPersona.group_primary) {
+      visibleGroups.add(currentPersona.group_primary);
+    }
+    (currentPersona.groups_visible ?? []).forEach((g) => visibleGroups.add(g));
+
+    if (visibleGroups.size === 0) {
+      return [];
+    }
+
+    return allPersonas
+      .filter((p) => {
+        const name = p.aliases?.[0] ?? "";
+        if (name === currentName || name.toLowerCase() === "ei" || p.is_archived) {
+          return false;
+        }
+        return p.group_primary && visibleGroups.has(p.group_primary);
+      })
+      .map((p) => ({
+        name: p.aliases?.[0] ?? "Unknown",
+        short_description: p.short_description,
+      }));
   }
 
   async setContextWindow(personaName: string, start: string, end: string): Promise<void> {
