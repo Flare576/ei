@@ -31,7 +31,14 @@ import {
   type PersonaTraitExtractionPromptData,
   type HeartbeatCheckPromptData,
 } from "../prompts/index.js";
-import { orchestratePersonaGeneration } from "./orchestrators/index.js";
+import { 
+  orchestratePersonaGeneration,
+  queueFactScan,
+  queueTraitScan,
+  queueTopicScan,
+  queuePersonScan,
+  type ExtractionContext,
+} from "./orchestrators/index.js";
 import { EI_WELCOME_MESSAGE, EI_PERSONA_DEFINITION } from "../templates/welcome.js";
 import { ContextStatus as ContextStatusEnum } from "./types.js";
 
@@ -259,7 +266,8 @@ export class Processor {
       handler(response, this.stateManager);
       this.stateManager.queue_complete(response.request.id);
 
-      if (response.request.next_step === LLMNextStep.HandlePersonaResponse && response.content) {
+      if (response.request.next_step === LLMNextStep.HandlePersonaResponse) {
+        // Always notify FE - even without content, user's message was "read" by the persona
         const personaName = response.request.data.personaName as string;
         if (personaName) {
           this.interface.onMessageAdded?.(personaName);
@@ -494,6 +502,55 @@ export class Processor {
       next_step: LLMNextStep.HandlePersonaTraitExtraction,
       data: { personaName },
     });
+
+    if (personaName.toLowerCase() === "ei") {
+      this.checkAndQueueHumanExtraction(message, history);
+    }
+  }
+
+  private checkAndQueueHumanExtraction(newMessage: Message, history: Message[]): void {
+    const human = this.stateManager.getHuman();
+    const now = new Date().toISOString();
+    
+    const extractionContext: ExtractionContext = {
+      personaName: "ei",
+      messages_context: history.slice(0, -1),
+      messages_analyze: [newMessage],
+    };
+
+    const countMessagesSince = (timestamp: string | undefined): number => {
+      if (!timestamp) return history.length;
+      const sinceTime = new Date(timestamp).getTime();
+      return history.filter(m => new Date(m.timestamp).getTime() > sinceTime).length;
+    };
+
+    const factMessageCount = countMessagesSince(human.lastSeeded_fact);
+    if (human.facts.length < factMessageCount) {
+      queueFactScan(extractionContext, this.stateManager);
+      this.stateManager.setHuman({ ...human, lastSeeded_fact: now });
+      console.log(`[Processor] Ei extraction: facts (${human.facts.length} < ${factMessageCount} messages)`);
+    }
+
+    const traitMessageCount = countMessagesSince(human.lastSeeded_trait);
+    if (human.traits.length < traitMessageCount) {
+      queueTraitScan(extractionContext, this.stateManager);
+      this.stateManager.setHuman({ ...this.stateManager.getHuman(), lastSeeded_trait: now });
+      console.log(`[Processor] Ei extraction: traits (${human.traits.length} < ${traitMessageCount} messages)`);
+    }
+
+    const topicMessageCount = countMessagesSince(human.lastSeeded_topic);
+    if (human.topics.length < topicMessageCount) {
+      queueTopicScan(extractionContext, this.stateManager);
+      this.stateManager.setHuman({ ...this.stateManager.getHuman(), lastSeeded_topic: now });
+      console.log(`[Processor] Ei extraction: topics (${human.topics.length} < ${topicMessageCount} messages)`);
+    }
+
+    const personMessageCount = countMessagesSince(human.lastSeeded_person);
+    if (human.people.length < personMessageCount) {
+      queuePersonScan(extractionContext, this.stateManager);
+      this.stateManager.setHuman({ ...this.stateManager.getHuman(), lastSeeded_person: now });
+      console.log(`[Processor] Ei extraction: people (${human.people.length} < ${personMessageCount} messages)`);
+    }
   }
 
   private buildResponsePromptData(personaName: string, persona: PersonaEntity): ResponsePromptData {
