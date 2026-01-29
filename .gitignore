@@ -23,6 +23,7 @@ test-results/
 *~
 .DS_Store
 .opencode
+.sisyphus/
 
 # Logs
 *.log

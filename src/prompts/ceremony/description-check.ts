@@ -1,48 +1,47 @@
 import type { DescriptionCheckPromptData } from "./types.js";
 
 export function buildDescriptionCheckPrompt(data: DescriptionCheckPromptData): { system: string; user: string } {
-  const traitList = data.traits.map(t => 
-    `- ${t.name}: ${t.description}`
-  ).join("\n");
+  const traitList = data.traits.length > 0
+    ? data.traits.map(t => `- ${t.name}: ${t.description}`).join("\n")
+    : "No traits defined";
 
-  const topicList = data.topics.map(t => 
-    `- ${t.name}: ${t.description}`
-  ).join("\n");
+  const topicList = data.topics.length > 0
+    ? data.topics.map(t => `- ${t.name}: ${t.description} (exposure: ${t.exposure_current.toFixed(2)})`).join("\n")
+    : "No topics defined";
 
   const system = `You are evaluating whether a persona's description needs updating.
 
-CRITICAL: Be VERY conservative. Only recommend updating if there's a DRASTIC mismatch.
+A description should ONLY be updated if there is a SIGNIFICANT mismatch between:
+- The current description
+- The persona's current traits and topics
 
-A description should be updated ONLY if:
-- It describes interests the persona no longer has (e.g., "loves music" but no music topics)
-- It contradicts the persona's current traits
-- It's fundamentally outdated compared to current state
+Be VERY conservative. Only recommend updating if:
+- The description mentions interests/traits that are completely absent from current data
+- The persona has developed major new interests not reflected in the description
+- The description actively contradicts the current personality
 
-DO NOT recommend updates for:
-- Minor additions or shifts in focus
-- New topics that don't contradict the description
-- Subtle personality evolution
+Do NOT recommend updating for:
+- Minor differences or evolution
+- Natural topic drift over time
+- Missing details that aren't contradictions
 
-The user invested time writing this description. Respect that.
-
-Return JSON: { "should_update": false, "reason": "No drastic changes detected" }
-or: { "should_update": true, "reason": "Description mentions X but current state shows Y" }`;
+Return JSON: { "should_update": true/false, "reason": "explanation" }`;
 
   const user = `Persona: ${data.persona_name}
 
 Current short description:
-${data.current_short_description || "(none)"}
+${data.current_short_description ?? "(none)"}
 
 Current long description:
-${data.current_long_description || "(none)"}
+${data.current_long_description ?? "(none)"}
 
-Current traits:
-${traitList || "(none)"}
+Current personality traits:
+${traitList}
 
-Current topics:
-${topicList || "(none)"}
+Current topics of interest:
+${topicList}
 
-Should the description be updated?`;
+Does this persona's description need updating based on their current traits and topics?`;
 
   return { system, user };
 }

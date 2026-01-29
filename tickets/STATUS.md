@@ -1,18 +1,18 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-01-28 (E006 complete)
+> Last updated: 2026-01-29 (E007 Wave 3 complete)
 
 ## Overview
 
 | Status | Count |
 |--------|-------|
-| PENDING | 26 |
+| PENDING | 21 |
 | IN_PROGRESS | 0 |
 | QA | 0 |
-| DONE | 51 |
+| DONE | 58 |
 | BLOCKED | 0 |
 
-> 79 total tickets (51 done + 26 pending + 2 backlog).
+> 81 total tickets (58 done + 21 pending + 2 backlog).
 
 ---
 
@@ -26,7 +26,7 @@
 | **E004** | 0030-0037 | DONE | Testing Infrastructure |
 | **E005** | 0040-0050 | DONE | UI: Core Components |
 | **E006** | 0060-0067 | DONE | Extraction Pipeline |
-| **E007** | 0070-0076 | PENDING | Ceremony System |
+| **E007** | 0070-0076 | DONE | Ceremony System |
 | **E008** | 0080-0089 | PENDING | UI: Entity Management |
 | **E009** | 0090-0097 | PENDING | Polish & New Features |
 
@@ -46,18 +46,6 @@
 ---
 
 ## PENDING
-
-### E007: Ceremony System
-
-| Ticket | Title | Depends On |
-|--------|-------|------------|
-| 0070 | Ceremony Orchestrator | 0065 |
-| 0071 | Exposure Phase | 0070 |
-| 0072 | Decay Phase | 0070 |
-| 0073 | Expire Phase | 0072 |
-| 0074 | Explore Phase | 0073 |
-| 0075 | Human Ceremony (Decay + Ei Prompt) | 0072 |
-| 0076 | Description Regeneration | 0074 |
 
 ### E008: UI: Entity Management
 
@@ -87,6 +75,8 @@
 | 0095 | Time Display Modes | 0081 |
 | 0096 | Settings Sync (flare576.com) | 0081 |
 | 0097 | LLM Streaming Support | 0011 |
+| 0098 | Pre-configured Persona Templates | 0087 |
+| 0099 | Story Co-Writer Agent (Non-Persona) | 0098 |
 
 ---
 
@@ -157,6 +147,13 @@
 | 0065 | Human Item Update (Step 3) | 2026-01-28 |
 | 0066 | Extraction Frequency Throttling | 2026-01-28 |
 | 0067 | Cross-Persona Validation Queue | 2026-01-28 |
+| 0070 | Ceremony Orchestrator | 2026-01-29 |
+| 0071 | Exposure Phase | 2026-01-29 |
+| 0072 | Decay Phase | 2026-01-29 |
+| 0073 | Expire Phase | 2026-01-29 |
+| 0074 | Explore Phase | 2026-01-29 |
+| 0075 | Human Ceremony | 2026-01-29 |
+| 0076 | Description Regeneration | 2026-01-29 |
 
 ---
 
