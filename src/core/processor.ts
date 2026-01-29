@@ -789,4 +789,50 @@ export class Processor {
       data: { guid },
     });
   }
+
+  // ============================================================================
+  // DEBUG / TESTING UTILITIES
+  // ============================================================================
+  // These methods are for development and testing. In browser devtools:
+  //   1. Set a breakpoint in App.tsx or similar
+  //   2. When it hits, access: processor.triggerCeremonyNow()
+  //   3. Watch console for ceremony phase logs
+  // ============================================================================
+
+  /**
+   * Manually trigger ceremony execution, bypassing time checks.
+   * 
+   * USE FROM BROWSER DEVTOOLS:
+   *   processor.triggerCeremonyNow()
+   * 
+   * This will:
+   *   - Run ceremony for all active personas with recent activity
+   *   - Apply decay to all persona topics
+   *   - Queue Expire → Explore → DescCheck phases (LLM calls)
+   *   - Run Human ceremony (decay human topics/people)
+   *   - Update last_ceremony timestamp
+   * 
+   * Watch console for detailed phase logging.
+   */
+  triggerCeremonyNow(): void {
+    console.log("[Processor] Manual ceremony trigger requested");
+    startCeremony(this.stateManager);
+  }
+
+  /**
+   * Get ceremony status for debugging.
+   * 
+   * USE FROM BROWSER DEVTOOLS:
+   *   processor.getCeremonyStatus()
+   */
+  getCeremonyStatus(): { enabled: boolean; lastRun: string | null; nextRunTime: string | null } {
+    const human = this.stateManager.getHuman();
+    const config = human.ceremony_config;
+    
+    return {
+      enabled: config?.enabled ?? false,
+      lastRun: config?.last_ceremony ?? null,
+      nextRunTime: config?.enabled ? `Today at ${config.time}` : null,
+    };
+  }
 }
