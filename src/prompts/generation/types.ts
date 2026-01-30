@@ -7,7 +7,10 @@ export interface PromptOutput {
 
 export interface PersonaGenerationPromptData {
   name: string;
-  description: string;
+  long_description?: string;
+  short_description?: string;
+  existing_traits?: Array<{ name?: string; description?: string; sentiment?: number; strength?: number }>;
+  existing_topics?: Array<{ name?: string; description?: string; sentiment?: number; exposure_current?: number; exposure_desired?: number }>;
 }
 
 export interface PersonaGenerationResult {

@@ -1,15 +1,31 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Processor } from "../../src/core/processor";
 import { LocalStorage } from "../../src/storage/local";
-import type { PersonaSummary, QueueStatus, Message, Ei_Interface, Checkpoint } from "../../src/core/types";
+import type { 
+  PersonaSummary, 
+  QueueStatus, 
+  Message, 
+  Ei_Interface, 
+  Checkpoint,
+  HumanEntity,
+  PersonaEntity,
+  Fact,
+  Trait,
+  Topic,
+  Person,
+  ContextStatus,
+} from "../../src/core/types";
 import { Layout, PersonaPanel, ChatPanel, ControlArea, HelpModal, type PersonaPanelHandle, type ChatPanelHandle } from "./components/Layout";
+import { HumanEditor, PersonaEditor, PersonaCreatorModal, ArchivedPersonasModal } from "./components/EntityEditor";
 import { useKeyboardNavigation } from "./hooks/useKeyboardNavigation";
 import "./styles/layout.css";
+import "./styles/entity-editor.css";
 
 function App() {
   const [processor, setProcessor] = useState<Processor | null>(null);
   const processorRef = useRef<Processor | null>(null);
   const activePersonaRef = useRef<string | null>(null);
+  const editingPersonaNameRef = useRef<string | null>(null);
   const [personas, setPersonas] = useState<PersonaSummary[]>([]);
   const [queueStatus, setQueueStatus] = useState<QueueStatus>({
     state: "idle",
@@ -22,6 +38,16 @@ function App() {
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
   const [isCheckpointOperationInProgress, setIsCheckpointOperationInProgress] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [showHumanEditor, setShowHumanEditor] = useState(false);
+  const [showPersonaEditor, setShowPersonaEditor] = useState(false);
+  const [showPersonaCreator, setShowPersonaCreator] = useState(false);
+  const [showArchivedPersonas, setShowArchivedPersonas] = useState(false);
+  const [editingPersonaName, setEditingPersonaName] = useState<string | null>(null);
+  const [human, setHuman] = useState<HumanEntity | null>(null);
+  const [editingPersona, setEditingPersona] = useState<PersonaEntity | null>(null);
+  const [editingPersonaMessages, setEditingPersonaMessages] = useState<Message[]>([]);
+  const [archivedPersonas, setArchivedPersonas] = useState<PersonaSummary[]>([]);
+  const [availableGroups, setAvailableGroups] = useState<string[]>([]);
 
   const personaPanelRef = useRef<PersonaPanelHandle | null>(null);
   const chatPanelRef = useRef<ChatPanelHandle | null>(null);
@@ -37,6 +63,10 @@ function App() {
   }, [activePersona]);
 
   useEffect(() => {
+    editingPersonaNameRef.current = editingPersonaName;
+  }, [editingPersonaName]);
+
+  useEffect(() => {
     const eiInterface: Ei_Interface = {
       onPersonaAdded: () => {
         processorRef.current?.getPersonaList().then(setPersonas);
@@ -46,6 +76,13 @@ function App() {
       },
       onPersonaUpdated: () => {
         processorRef.current?.getPersonaList().then(setPersonas);
+        processorRef.current?.getGroupList().then(setAvailableGroups);
+        if (editingPersonaNameRef.current) {
+          processorRef.current?.getPersona(editingPersonaNameRef.current).then(p => {
+            if (p) setEditingPersona(p);
+          });
+          processorRef.current?.getMessages(editingPersonaNameRef.current).then(setEditingPersonaMessages);
+        }
       },
       onMessageAdded: (name) => {
         if (name === activePersonaRef.current) {
@@ -59,7 +96,9 @@ function App() {
       onMessageQueued: () => {
         processorRef.current?.getQueueStatus().then(setQueueStatus);
       },
-      onHumanUpdated: () => {},
+      onHumanUpdated: () => {
+        processorRef.current?.getHuman().then(setHuman);
+      },
       onQueueStateChanged: (state) => {
         if (state === "idle") {
           setProcessingPersona(null);
@@ -115,6 +154,8 @@ function App() {
       });
       p.getQueueStatus().then(setQueueStatus);
       p.getCheckpoints().then(setCheckpoints);
+      p.getHuman().then(setHuman);
+      p.getGroupList().then(setAvailableGroups);
     });
 
     return () => {
@@ -135,19 +176,16 @@ function App() {
     chatPanelRef.current?.focusInput();
   }, [processor, activePersona, inputValue]);
 
-  const handleCreatePersona = useCallback(async () => {
-    if (!processor) return;
-    const name = prompt("Enter persona name:");
-    if (!name) return;
-    const description = prompt("Enter persona description:");
-    if (!description) return;
-    await processor.createPersona(name, description);
-  }, [processor]);
+  
 
-  const handleSelectPersona = useCallback((name: string) => {
+  const handleSelectPersona = useCallback(async (name: string) => {
+    if (processor && activePersona && activePersona !== name) {
+      await processor.markAllMessagesRead(activePersona);
+      processor.getPersonaList().then(setPersonas);
+    }
     setActivePersona(name);
     chatPanelRef.current?.focusInput();
-  }, []);
+  }, [processor, activePersona]);
 
   const handleMarkMessageRead = useCallback(async (messageId: string) => {
     if (!processor || !activePersona) return;
@@ -197,9 +235,7 @@ function App() {
     }
   }, [processor, activePersona]);
 
-  const handleEditPersona = useCallback((name: string) => {
-    alert(`Edit persona: ${name}\n(Persona editor modal coming in ticket 0086)`);
-  }, []);
+  
 
   const handleRecallPending = useCallback(async () => {
     if (!processor || !activePersona) return;
@@ -250,6 +286,199 @@ function App() {
     setShowHelp(true);
   }, []);
 
+  const handleSettingsClick = useCallback(() => {
+    setShowHumanEditor(true);
+  }, []);
+
+  const handleEditPersona = useCallback(async (name: string) => {
+    if (!processor) return;
+    const persona = await processor.getPersona(name);
+    if (persona) {
+      const personaMessages = await processor.getMessages(name);
+      setEditingPersonaName(name);
+      setEditingPersona(persona);
+      setEditingPersonaMessages(personaMessages);
+      setShowPersonaEditor(true);
+    }
+  }, [processor]);
+
+  const handleCreatePersona = useCallback(() => {
+    setShowPersonaCreator(true);
+  }, []);
+
+  const handleShowArchivedPersonas = useCallback(async () => {
+    if (!processor) return;
+    const allPersonas = await processor.getPersonaList();
+    setArchivedPersonas(allPersonas.filter(p => p.is_archived));
+    setShowArchivedPersonas(true);
+  }, [processor]);
+
+  const handleHumanUpdate = useCallback(async (updates: Partial<HumanEntity>) => {
+    if (!processor) return;
+    await processor.updateHuman(updates);
+    processor.getHuman().then(setHuman);
+  }, [processor]);
+
+  const handleFactSave = useCallback(async (fact: Fact) => {
+    if (!processor) return;
+    await processor.upsertFact(fact);
+    processor.getHuman().then(setHuman);
+  }, [processor]);
+
+  const handleFactDelete = useCallback(async (id: string) => {
+    if (!processor) return;
+    await processor.removeDataItem("fact", id);
+    processor.getHuman().then(setHuman);
+  }, [processor]);
+
+  const handleTraitSave = useCallback(async (trait: Trait) => {
+    if (!processor) return;
+    await processor.upsertTrait(trait);
+    processor.getHuman().then(setHuman);
+  }, [processor]);
+
+  const handleTraitDelete = useCallback(async (id: string) => {
+    if (!processor) return;
+    await processor.removeDataItem("trait", id);
+    processor.getHuman().then(setHuman);
+  }, [processor]);
+
+  const handleTopicSave = useCallback(async (topic: Topic) => {
+    if (!processor) return;
+    await processor.upsertTopic(topic);
+    processor.getHuman().then(setHuman);
+  }, [processor]);
+
+  const handleTopicDelete = useCallback(async (id: string) => {
+    if (!processor) return;
+    await processor.removeDataItem("topic", id);
+    processor.getHuman().then(setHuman);
+  }, [processor]);
+
+  const handlePersonSave = useCallback(async (person: Person) => {
+    if (!processor) return;
+    await processor.upsertPerson(person);
+    processor.getHuman().then(setHuman);
+  }, [processor]);
+
+  const handlePersonDelete = useCallback(async (id: string) => {
+    if (!processor) return;
+    await processor.removeDataItem("person", id);
+    processor.getHuman().then(setHuman);
+  }, [processor]);
+
+  const handlePersonaUpdate = useCallback(async (updates: Partial<PersonaEntity>) => {
+    if (!processor || !editingPersonaName) return;
+    await processor.updatePersona(editingPersonaName, updates);
+    const updated = await processor.getPersona(editingPersonaName);
+    if (updated) setEditingPersona(updated);
+    processor.getPersonaList().then(setPersonas);
+  }, [processor, editingPersonaName]);
+
+  const handlePersonaTraitSave = useCallback(async (trait: Trait) => {
+    if (!processor || !editingPersonaName) return;
+    const persona = await processor.getPersona(editingPersonaName);
+    if (!persona) return;
+    const existingIndex = persona.traits.findIndex(t => t.id === trait.id);
+    const newTraits = existingIndex >= 0
+      ? persona.traits.map((t, i) => i === existingIndex ? trait : t)
+      : [...persona.traits, trait];
+    await processor.updatePersona(editingPersonaName, { traits: newTraits });
+    const updated = await processor.getPersona(editingPersonaName);
+    if (updated) setEditingPersona(updated);
+  }, [processor, editingPersonaName]);
+
+  const handlePersonaTraitDelete = useCallback(async (id: string) => {
+    if (!processor || !editingPersonaName) return;
+    const persona = await processor.getPersona(editingPersonaName);
+    if (!persona) return;
+    await processor.updatePersona(editingPersonaName, {
+      traits: persona.traits.filter(t => t.id !== id)
+    });
+    const updated = await processor.getPersona(editingPersonaName);
+    if (updated) setEditingPersona(updated);
+  }, [processor, editingPersonaName]);
+
+  const handlePersonaTopicSave = useCallback(async (topic: Topic) => {
+    if (!processor || !editingPersonaName) return;
+    const persona = await processor.getPersona(editingPersonaName);
+    if (!persona) return;
+    const existingIndex = persona.topics.findIndex(t => t.id === topic.id);
+    const newTopics = existingIndex >= 0
+      ? persona.topics.map((t, i) => i === existingIndex ? topic : t)
+      : [...persona.topics, topic];
+    await processor.updatePersona(editingPersonaName, { topics: newTopics });
+    const updated = await processor.getPersona(editingPersonaName);
+    if (updated) setEditingPersona(updated);
+  }, [processor, editingPersonaName]);
+
+  const handlePersonaTopicDelete = useCallback(async (id: string) => {
+    if (!processor || !editingPersonaName) return;
+    const persona = await processor.getPersona(editingPersonaName);
+    if (!persona) return;
+    await processor.updatePersona(editingPersonaName, {
+      topics: persona.topics.filter(t => t.id !== id)
+    });
+    const updated = await processor.getPersona(editingPersonaName);
+    if (updated) setEditingPersona(updated);
+  }, [processor, editingPersonaName]);
+
+  const handleContextStatusChange = useCallback(async (messageId: string, status: ContextStatus) => {
+    if (!processor || !editingPersonaName) return;
+    await processor.setMessageContextStatus(editingPersonaName, messageId, status);
+    processor.getMessages(editingPersonaName).then(setEditingPersonaMessages);
+  }, [processor, editingPersonaName]);
+
+  const handleBulkContextStatusChange = useCallback(async (messageIds: string[], status: ContextStatus) => {
+    if (!processor || !editingPersonaName) return;
+    for (const id of messageIds) {
+      await processor.setMessageContextStatus(editingPersonaName, id, status);
+    }
+    processor.getMessages(editingPersonaName).then(setEditingPersonaMessages);
+  }, [processor, editingPersonaName]);
+
+  const handleContextBoundaryChange = useCallback(async (_timestamp: string | null) => {
+    console.log("Context boundary change not yet implemented in core");
+  }, []);
+
+  const handlePersonaCreate = useCallback(async (data: {
+    name: string;
+    aliases: string[];
+    description: string;
+    short_description?: string;
+    traits?: Array<{ name?: string; description?: string; sentiment?: number; strength?: number }>;
+    topics?: Array<{ name?: string; description?: string; exposure_current?: number; exposure_desired?: number }>;
+    model?: string;
+  }) => {
+    if (!processor) return;
+    await processor.createPersona({
+      name: data.name,
+      aliases: data.aliases,
+      long_description: data.description,
+      short_description: data.short_description,
+      traits: data.traits,
+      topics: data.topics,
+      model: data.model,
+    });
+    processor.getPersonaList().then(setPersonas);
+    setShowPersonaCreator(false);
+  }, [processor]);
+
+  const handleUnarchivePersona = useCallback(async (name: string) => {
+    if (!processor) return;
+    await processor.unarchivePersona(name);
+    processor.getPersonaList().then(setPersonas);
+    const allPersonas = await processor.getPersonaList();
+    setArchivedPersonas(allPersonas.filter(p => p.is_archived));
+  }, [processor]);
+
+  const handleDeleteArchivedPersona = useCallback(async (name: string) => {
+    if (!processor) return;
+    await processor.deletePersona(name, false);
+    const allPersonas = await processor.getPersonaList();
+    setArchivedPersonas(allPersonas.filter(p => p.is_archived));
+  }, [processor]);
+
   return (
     <>
     <Layout
@@ -265,12 +494,13 @@ function App() {
           onUndo={handleUndo}
           onRefreshCheckpoints={handleRefreshCheckpoints}
           onHelpClick={handleHelpClick}
+          onSettingsClick={handleSettingsClick}
         />
       }
       leftPanel={
         <PersonaPanel
           ref={personaPanelRef}
-          personas={personas}
+          personas={personas.filter(p => !p.is_archived)}
           activePersona={activePersona}
           processingPersona={processingPersona}
           onSelectPersona={handleSelectPersona}
@@ -279,6 +509,7 @@ function App() {
           onArchivePersona={handleArchivePersona}
           onDeletePersona={handleDeletePersona}
           onEditPersona={handleEditPersona}
+          onShowArchived={handleShowArchivedPersonas}
         />
       }
       centerPanel={
@@ -296,6 +527,74 @@ function App() {
       }
     />
     <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
+    
+    {human && (
+      <HumanEditor
+        isOpen={showHumanEditor}
+        onClose={() => setShowHumanEditor(false)}
+        human={{
+          id: "human",
+          auto_save_interval_ms: human.settings?.auto_save_interval_ms,
+          default_model: human.settings?.default_model,
+          queue_paused: human.settings?.queue_paused,
+          facts: human.facts,
+          traits: human.traits,
+          topics: human.topics,
+          people: human.people,
+        }}
+        onUpdate={handleHumanUpdate}
+        onFactSave={handleFactSave}
+        onFactDelete={handleFactDelete}
+        onTraitSave={handleTraitSave}
+        onTraitDelete={handleTraitDelete}
+        onTopicSave={handleTopicSave}
+        onTopicDelete={handleTopicDelete}
+        onPersonSave={handlePersonSave}
+        onPersonDelete={handlePersonDelete}
+      />
+    )}
+
+    {editingPersona && editingPersonaName && (
+      <PersonaEditor
+        isOpen={showPersonaEditor}
+        onClose={() => {
+          setShowPersonaEditor(false);
+          setEditingPersonaName(null);
+          setEditingPersona(null);
+        }}
+        personaName={editingPersonaName}
+        persona={editingPersona}
+        messages={editingPersonaMessages}
+        availableGroups={availableGroups}
+        onUpdate={handlePersonaUpdate}
+        onTraitSave={handlePersonaTraitSave}
+        onTraitDelete={handlePersonaTraitDelete}
+        onTopicSave={handlePersonaTopicSave}
+        onTopicDelete={handlePersonaTopicDelete}
+        onContextStatusChange={handleContextStatusChange}
+        onBulkContextStatusChange={handleBulkContextStatusChange}
+        onContextBoundaryChange={handleContextBoundaryChange}
+      />
+    )}
+
+    <PersonaCreatorModal
+      isOpen={showPersonaCreator}
+      onClose={() => setShowPersonaCreator(false)}
+      onCreate={handlePersonaCreate}
+    />
+
+    <ArchivedPersonasModal
+      isOpen={showArchivedPersonas}
+      onClose={() => setShowArchivedPersonas(false)}
+      archivedPersonas={archivedPersonas.map(p => ({
+        name: p.name,
+        aliases: p.aliases,
+        short_description: p.short_description,
+        archived_at: new Date().toISOString(),
+      }))}
+      onUnarchive={handleUnarchivePersona}
+      onDelete={handleDeleteArchivedPersona}
+    />
   </>
   );
 }

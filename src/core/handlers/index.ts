@@ -173,7 +173,7 @@ function handlePersonaGeneration(response: LLMResponse, state: StateManager): vo
   const updatedPartial: PartialPersona = {
     ...existingPartial,
     short_description: result?.short_description ?? existingPartial.short_description,
-    long_description: result?.long_description ?? existingPartial.long_description,
+    long_description: existingPartial.long_description ?? result?.long_description,
     traits: traits.length > 0 ? traits : existingPartial.traits,
     topics: topics.length > 0 ? topics : existingPartial.topics,
   };

@@ -1,18 +1,18 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-01-29 (E007 Wave 3 complete)
+> Last updated: 2026-01-29 (E010 OpenCode Integration stories added)
 
 ## Overview
 
 | Status | Count |
 |--------|-------|
-| PENDING | 21 |
+| PENDING | 31 |
 | IN_PROGRESS | 0 |
 | QA | 0 |
 | DONE | 58 |
 | BLOCKED | 0 |
 
-> 81 total tickets (58 done + 21 pending + 2 backlog).
+> 94 total tickets (58 done + 31 pending + 5 backlog).
 
 ---
 
@@ -28,7 +28,8 @@
 | **E006** | 0060-0067 | DONE | Extraction Pipeline |
 | **E007** | 0070-0076 | DONE | Ceremony System |
 | **E008** | 0080-0089 | PENDING | UI: Entity Management |
-| **E009** | 0090-0097 | PENDING | Polish & New Features |
+| **E009** | 0090-0099 | PENDING | Polish & New Features |
+| **E010** | 0100-0109 | PENDING | TUI & OpenCode Integration |
 
 ---
 
@@ -77,6 +78,21 @@
 | 0097 | LLM Streaming Support | 0011 |
 | 0098 | Pre-configured Persona Templates | 0087 |
 | 0099 | Story Co-Writer Agent (Non-Persona) | 0098 |
+
+### E010: TUI & OpenCode Integration
+
+| Ticket | Title | Depends On |
+|--------|-------|------------|
+| 0100 | TUI Frontend Skeleton | 0006, 0007 |
+| 0101 | FileStorage Implementation | 0003 |
+| 0102 | OpenCode Session Reader | 0101 |
+| 0103 | OpenCode Session Importer | 0102, 0060-0065 |
+| 0104 | Ei Context Exporter | 0101 |
+| 0105 | CLAUDE.md Context Injector | 0104 |
+| 0106 | RemoteStorage Implementation | 0003, 0096 |
+| 0107 | Sync Orchestrator | 0101, 0106 |
+| 0108 | OpenCode File Watcher | 0102, 0103 |
+| 0109 | Sisyphus Persona Bootstrap | 0103 |
 
 ---
 
@@ -169,10 +185,10 @@
 |--------|-------|-------|
 | 0009 | Ollama & Other Local LLM CORS Investigation | Document setup for other providers |
 | 0010 | WebAssembly In-Browser Model Spike | Explore zero-setup browser-native models |
+| 0110 | Group Visibility Redesign (* → General) | Replace wildcard with explicit "General" group |
+| 0111 | Persona Tool Use (Web Search) | 🌶️x5 - Enable external verification to prevent hallucinations |
+| 0112 | E2E Session Bug Coverage | Tests for bugs found during E008 session |
 | - | Batch Message Context Updates | `onMessagesChanged` event |
-| - | FileStorage Implementation | For TUI mode (V1.1) |
-| - | RemoteStorage Implementation | flare576.com encrypted sync |
-| - | TUI Frontend | OpenTUI or similar |
 
 ---
 
@@ -183,3 +199,8 @@
 3. **Human message "Read" status** - Tracks whether response was *attempted*
 4. **`pause_until` field** - Replaces boolean `is_paused` with timestamp/0/1
 5. **One-Shot prompts** - New event loop for AI-assist buttons
+6. **Bidirectional OpenCode Integration** - TUI is the integration point:
+   - OpenCode → Ei: Session imports via file watcher
+   - Ei → OpenCode: Context injection to CLAUDE.md
+   - Sync via flare576.com enables Web (mobile) ↔ TUI (desktop)
+7. **Sisyphus Persona** - Static persona representing coding agent, history = imported sessions

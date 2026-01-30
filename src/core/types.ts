@@ -142,6 +142,18 @@ export interface PersonaEntity {
   last_inactivity_ping?: string;
 }
 
+export interface PersonaCreationInput {
+  name: string;
+  aliases?: string[];
+  long_description?: string;
+  short_description?: string;
+  traits?: Partial<Trait>[];
+  topics?: Partial<Topic>[];
+  model?: string;
+  group_primary?: string;
+  groups_visible?: string[];
+}
+
 // =============================================================================
 // MESSAGES
 // =============================================================================
