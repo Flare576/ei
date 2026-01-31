@@ -47,8 +47,34 @@ import { ContextStatus as ContextStatusEnum } from "./types.js";
 
 const DEFAULT_LOOP_INTERVAL_MS = 100;
 const DEFAULT_AUTO_SAVE_INTERVAL_MS = 60000;
+const DEFAULT_CONTEXT_WINDOW_HOURS = 8;
 
 let processorInstanceCount = 0;
+
+export function filterMessagesForContext(
+  messages: Message[],
+  contextBoundary: string | undefined,
+  contextWindowHours: number
+): Message[] {
+  if (messages.length === 0) return [];
+
+  const now = Date.now();
+  const windowStartMs = now - contextWindowHours * 60 * 60 * 1000;
+  const boundaryMs = contextBoundary ? new Date(contextBoundary).getTime() : 0;
+
+  return messages.filter((msg) => {
+    if (msg.context_status === ContextStatusEnum.Always) return true;
+    if (msg.context_status === ContextStatusEnum.Never) return false;
+
+    const msgMs = new Date(msg.timestamp).getTime();
+
+    if (contextBoundary) {
+      return msgMs >= boundaryMs;
+    }
+
+    return msgMs >= windowStartMs;
+  });
+}
 
 export class Processor {
   private stateManager = new StateManager();
@@ -497,7 +523,13 @@ export class Processor {
     }
 
     const history = this.stateManager.messages_get(personaName);
-    const chatMessages = history.map((m) => ({
+    const contextWindowHours = persona.context_window_hours ?? DEFAULT_CONTEXT_WINDOW_HOURS;
+    const filteredHistory = filterMessagesForContext(
+      history,
+      persona.context_boundary,
+      contextWindowHours
+    );
+    const chatMessages = filteredHistory.map((m) => ({
       role: m.role === "human" ? "user" : "assistant",
       content: m.content,
     })) as import("./types.js").ChatMessage[];
