@@ -135,6 +135,7 @@ export interface PersonaEntity {
   is_static: boolean;
   heartbeat_delay_ms?: number;
   context_window_hours?: number;
+  context_boundary?: string;  // ISO timestamp - messages before this excluded from LLM context
   last_updated: string;
   last_activity: string;
   last_heartbeat?: string;
@@ -258,6 +259,7 @@ export interface Ei_Interface {
   onCheckpointRestored?: (index: number) => void;
   onCheckpointDeleted?: (index: number) => void;
   onOneShotReturned?: (guid: string, content: string) => void;
+  onContextBoundaryChanged?: (personaName: string) => void;
 }
 
 // =============================================================================
