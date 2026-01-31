@@ -1,55 +1,70 @@
-import { test as base, expect } from "@playwright/test";
+import { test as base, expect, type TestInfo } from "@playwright/test";
 import { MockLLMServerImpl } from "./framework/mock-server.js";
 
-const MOCK_SERVER_PORT = 3001;
-const MOCK_SERVER_URL = `http://localhost:${MOCK_SERVER_PORT}/v1`;
+/** Base port - each worker gets BASE + parallelIndex */
+const BASE_PORT = 3001;
 
 export interface TestFixtures {
   mockServer: MockLLMServerImpl;
   mockServerUrl: string;
 }
 
+/** Get the port for a given parallel worker */
+export function getPortForWorker(testInfo: TestInfo): number {
+  return BASE_PORT + testInfo.parallelIndex;
+}
+
+/** Get the mock server URL for a given parallel worker */
+export function getUrlForWorker(testInfo: TestInfo): string {
+  return `http://localhost:${getPortForWorker(testInfo)}/v1`;
+}
+
 /**
  * Extended Playwright test with mock LLM server fixture.
  * 
- * This provides a per-test mock server instance that:
+ * This provides a per-worker mock server instance that:
+ * - Starts on a unique port per parallel worker (3001, 3002, 3003...)
  * - Starts before each test
  * - Stops after each test  
  * - Has request history cleared between tests
  * 
  * Usage:
  * ```typescript
- * import { test, expect, MOCK_SERVER_URL } from './fixtures';
+ * import { test, expect } from './fixtures';
  * 
- * test('my test', async ({ page, mockServer }) => {
+ * test('my test', async ({ page, mockServer, mockServerUrl }) => {
  *   mockServer.setResponseForType('response', { type: 'fixed', content: 'Hello!' });
+ *   await page.addInitScript((url) => {
+ *     localStorage.setItem("EI_LLM_BASE_URL", url);
+ *   }, mockServerUrl);
  *   await page.goto('/');
  *   // ... test code
  * });
  * ```
  */
 export const test = base.extend<TestFixtures>({
-  mockServer: async ({}, use) => {
+  mockServer: async ({}, use, testInfo) => {
+    const port = getPortForWorker(testInfo);
     const server = new MockLLMServerImpl();
-    await server.start(MOCK_SERVER_PORT, { enableLogging: false, responses: {} });
+    await server.start(port, { enableLogging: false, responses: {} });
     await use(server);
     await server.stop();
   },
-  mockServerUrl: async ({}, use) => {
-    await use(MOCK_SERVER_URL);
+  mockServerUrl: async ({}, use, testInfo) => {
+    await use(getUrlForWorker(testInfo));
   },
 });
 
-export { expect, MOCK_SERVER_URL };
+export { expect };
 
 /**
  * Helper to set up the mock server URL in localStorage before page load.
- * Call this in test.beforeEach or at the start of each test.
+ * @deprecated Use mockServerUrl fixture instead: `await page.addInitScript(..., mockServerUrl)`
  */
-export async function setupMockServerUrl(page: import("@playwright/test").Page) {
+export async function setupMockServerUrl(page: import("@playwright/test").Page, mockServerUrl: string) {
   await page.addInitScript((url) => {
     localStorage.setItem("EI_LLM_BASE_URL", url);
-  }, MOCK_SERVER_URL);
+  }, mockServerUrl);
 }
 
 /**
