@@ -1,6 +1,6 @@
 # 0051: Context Boundary ("New" Command)
 
-**Status**: QA
+**Status**: DONE
 **Depends on**: 0043 (Chat Panel)
 
 ## Summary

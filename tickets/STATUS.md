@@ -8,8 +8,8 @@
 |--------|-------|
 | PENDING | 19 |
 | IN_PROGRESS | 0 |
-| QA | 1 |
-| DONE | 69 |
+| QA | 0 |
+| DONE | 70 |
 | BLOCKED | 0 |
 
 > 94 total tickets (69 done + 20 pending + 5 backlog).
@@ -87,9 +87,7 @@
 
 ## QA
 
-| Ticket | Title | Depends On |
-|--------|-------|------------|
-| 0051 | Context Boundary ("New" Command) | 0043 |
+(none)
 
 ---
 
@@ -165,6 +163,7 @@
 | 0087 | Persona Creator Modal | 2026-01-30 |
 | 0088 | Context Window UI | 2026-01-30 |
 | 0089 | Archived Personas UI | 2026-01-30 |
+| 0051 | Context Boundary ("New" Command) | 2026-01-31 |
 | 0091 | Dynamic vs Static Personas | 2026-01-30 |
 
 ---
