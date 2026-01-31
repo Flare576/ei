@@ -1,4 +1,5 @@
 import type { PersonaGenerationPromptData, PromptOutput } from "./types.js";
+import { DEFAULT_SEED_TRAITS } from "./seeds.js";
 
 export function buildPersonaGenerationPrompt(data: PersonaGenerationPromptData): PromptOutput {
   if (!data.name) {
@@ -7,7 +8,10 @@ export function buildPersonaGenerationPrompt(data: PersonaGenerationPromptData):
 
   const hasLongDescription = !!data.long_description?.trim();
   const hasShortDescription = !!data.short_description?.trim();
-  const existingTraitCount = data.existing_traits?.filter(t => t.name?.trim())?.length ?? 0;
+  
+  const userProvidedTraits = data.existing_traits?.filter(t => t.name?.trim()) ?? [];
+  const allTraits = [...DEFAULT_SEED_TRAITS, ...userProvidedTraits];
+  const existingTraitCount = allTraits.length;
   const existingTopicCount = data.existing_topics?.filter(t => t.name?.trim())?.length ?? 0;
 
   const needsShortDescription = !hasShortDescription;
@@ -112,10 +116,13 @@ ${schemaFragment}`;
   }
 
   if (existingTraitCount > 0) {
-    userPrompt += `## User's Traits (PRESERVE EXACTLY, add more if fewer than 3)\n`;
-    for (const trait of data.existing_traits ?? []) {
+    userPrompt += `## Traits (PRESERVE EXACTLY)\n`;
+    userPrompt += `*Seed traits are sensible defaults - user can adjust strength to 0.0 to disable*\n\n`;
+    for (const trait of allTraits) {
       if (trait.name?.trim()) {
-        userPrompt += `- ${trait.name}`;
+        const isSeed = DEFAULT_SEED_TRAITS.some(s => s.name === trait.name);
+        const prefix = isSeed ? "[seed] " : "";
+        userPrompt += `- ${prefix}${trait.name}`;
         if (trait.description) userPrompt += `: ${trait.description}`;
         if (trait.sentiment !== undefined) userPrompt += ` (sentiment: ${trait.sentiment})`;
         if (trait.strength !== undefined) userPrompt += ` (strength: ${trait.strength})`;
@@ -137,8 +144,9 @@ ${schemaFragment}`;
     userPrompt += `\n`;
   }
 
-  if (!hasLongDescription && !hasShortDescription && existingTraitCount === 0 && existingTopicCount === 0) {
-    userPrompt = `Create a basic persona named "${data.name}" with sensible defaults. Keep it minimal - the user can develop it over time.`;
+  const hasUserProvidedContent = hasLongDescription || hasShortDescription || userProvidedTraits.length > 0 || existingTopicCount > 0;
+  if (!hasUserProvidedContent) {
+    userPrompt += `The user provided only a name - generate minimal content. The seed traits above are included by default.\n`;
   }
 
   return { system, user: userPrompt };

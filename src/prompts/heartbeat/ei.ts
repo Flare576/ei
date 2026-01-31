@@ -43,6 +43,25 @@ function formatPeopleWithGaps(people: Person[]): string {
     .join('\n');
 }
 
+function countTrailingPersonaMessages(history: Message[]): number {
+  if (history.length === 0) return 0;
+
+  let count = 0;
+  for (let i = history.length - 1; i >= 0; i--) {
+    // In heartbeat context, Ei's messages are "system" role (not from human)
+    if (history[i].role === "system") {
+      count++;
+    } else {
+      break;
+    }
+  }
+  return count;
+}
+
+function getLastPersonaMessage(history: Message[]): Message | undefined {
+  return history.filter(m => m.role === "system").slice(-1)[0];
+}
+
 function formatInactivePersonas(personas: EiHeartbeatPromptData["inactive_personas"]): string {
   if (personas.length === 0) return "(All personas have been active recently)";
   
@@ -157,13 +176,36 @@ ${guidelinesFragment}
 
 ${outputFragment}`;
 
-  // Build user prompt
   const historySection = `## Recent Conversation History
 
 ${formatMessagesForPrompt(data.recent_history)}`;
 
-  const user = `${historySection}
+  const consecutiveMessages = countTrailingPersonaMessages(data.recent_history);
+  const lastEiMsg = getLastPersonaMessage(data.recent_history);
+  
+  let unansweredWarning = '';
+  if (lastEiMsg && consecutiveMessages >= 1) {
+    const preview = lastEiMsg.content.length > 100 
+      ? lastEiMsg.content.substring(0, 100) + "..." 
+      : lastEiMsg.content;
+    
+    unansweredWarning = `
+### CRITICAL: You Already Reached Out
 
+Your last message was: "${preview}"
+
+The human has NOT responded. DO NOT repeat or rephrase this message.
+If you reach out now, it MUST be about something COMPLETELY DIFFERENT - or say nothing.`;
+
+    if (consecutiveMessages >= 2) {
+      unansweredWarning += `
+
+**WARNING**: You've sent ${consecutiveMessages} messages without a response. The human is likely busy or away. Strongly prefer NOT reaching out.`;
+    }
+  }
+
+  const user = `${historySection}
+${unansweredWarning}
 ---
 
 Based on all the context above, decide: Should you reach out to your human friend right now? If so, what's most important to address?

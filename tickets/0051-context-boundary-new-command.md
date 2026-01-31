@@ -23,6 +23,8 @@ Add a "New" button to create a context boundary - a fresh conversational slate t
   - Otherwise → show "New", click sets boundary to now
 - [ ] Visual divider rendered in chat history when boundary exists and is within visible range
 - [ ] Processor method: `setContextBoundary(personaName: string, timestamp: string | null)`
+- [ ] Event: `onContextBoundaryChanged(personaName)` fires on change
+- [ ] StateManager: follows established pattern for boundary updates
 
 ## Technical Notes
 
@@ -42,6 +44,21 @@ const boundaryIsActive = context_boundary &&
 ```
 
 **Divider rendering**: When iterating messages, if a message's timestamp is the first one >= `context_boundary`, render a divider element before it.
+
+## ADR Decisions
+
+### NOT: Update `context_status` on all messages
+- Reverting would be awful
+- Unnecessarily destructive to user data
+
+### NOT: Write "barrier" record to message history (V0 approach)
+- Would break anything that processes the Message log
+- Multiple barriers create ambiguity
+- Would need Always/Never/Default handling for barriers themselves
+
+### NOT: Array of boundaries
+- User only has one "conversation" at a time
+- Just shift the single boundary to mark current cutoff
 
 ## V0 Reference
 

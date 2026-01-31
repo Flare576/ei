@@ -1,18 +1,18 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-01-30 (E008 complete)
+> Last updated: 2026-01-30 (0091 discovered complete)
 
 ## Overview
 
 | Status | Count |
 |--------|-------|
-| PENDING | 21 |
+| PENDING | 20 |
 | IN_PROGRESS | 0 |
 | QA | 0 |
-| DONE | 68 |
+| DONE | 69 |
 | BLOCKED | 0 |
 
-> 94 total tickets (68 done + 21 pending + 5 backlog).
+> 94 total tickets (69 done + 20 pending + 5 backlog).
 
 ---
 
@@ -54,7 +54,6 @@
 |--------|-------|------------|
 | 0051 | Context Boundary ("New" Command) | 0043 |
 | 0090 | Onboarding Flow | 0087 |
-| 0091 | Dynamic vs Static Personas | 0086, 0070 |
 | 0092 | Persona Image Generation | 0087 |
 | 0093 | Rich Text Editor (Markdown + WYSIWYG) | 0080 |
 | 0094 | Name Color Customization | 0081 |
@@ -165,6 +164,7 @@
 | 0087 | Persona Creator Modal | 2026-01-30 |
 | 0088 | Context Window UI | 2026-01-30 |
 | 0089 | Archived Personas UI | 2026-01-30 |
+| 0091 | Dynamic vs Static Personas | 2026-01-30 |
 
 ---
 
