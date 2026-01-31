@@ -722,6 +722,11 @@ export class Processor {
     this.stateManager.messages_setContextWindow(personaName, start, end);
   }
 
+  async setContextBoundary(personaName: string, timestamp: string | null): Promise<void> {
+    this.stateManager.persona_setContextBoundary(personaName, timestamp);
+    this.interface.onContextBoundaryChanged?.(personaName);
+  }
+
   async setMessageContextStatus(
     personaName: string,
     messageId: string,
