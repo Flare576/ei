@@ -14,6 +14,7 @@ interface ControlAreaProps {
   onUndo: () => void;
   onRefreshCheckpoints: () => void;
   onHelpClick?: () => void;
+  onSettingsClick?: () => void;
 }
 
 export function ControlArea({ 
@@ -27,6 +28,7 @@ export function ControlArea({
   onUndo,
   onRefreshCheckpoints,
   onHelpClick,
+  onSettingsClick,
 }: ControlAreaProps) {
   const [showSavePanel, setShowSavePanel] = useState(false);
   const [popoverPosition, setPopoverPosition] = useState({ top: 0, left: 0 });
@@ -132,6 +134,16 @@ export function ControlArea({
             document.body
           )}
         </div>
+        {onSettingsClick && (
+          <button
+            className="ei-btn ei-btn--icon"
+            onClick={onSettingsClick}
+            title="Settings"
+            aria-label="Settings"
+          >
+            ⚙️
+          </button>
+        )}
         {onHelpClick && (
           <button
             className="ei-btn ei-btn--icon"

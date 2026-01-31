@@ -1,7 +1,5 @@
-import { test, expect, type Page } from "@playwright/test";
-import { MockLLMServerImpl } from "./framework/mock-server.js";
-
-const MOCK_SERVER_URL = "http://localhost:3001/v1";
+import { test, expect } from "./fixtures.js";
+import type { Page } from "@playwright/test";
 
 async function sendMessage(page: Page, text: string): Promise<void> {
   const input = page.locator("textarea");
@@ -17,10 +15,10 @@ async function waitForNthResponseContaining(page: Page, text: string, n: number,
   await expect(page.locator(`text=${text}`).nth(n - 1)).toBeVisible({ timeout });
 }
 
-async function setupPageWithMockServer(page: Page): Promise<void> {
+async function setupPageWithMockServer(page: Page, mockServerUrl: string): Promise<void> {
   await page.addInitScript((url) => {
     localStorage.setItem("EI_LLM_BASE_URL", url);
-  }, MOCK_SERVER_URL);
+  }, mockServerUrl);
   await page.goto("/");
   await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
   await page.locator(".ei-persona-pill").first().click();
@@ -48,21 +46,8 @@ function isExtractionRequest(body: { messages?: Array<{ role: string; content: s
   return systemMsg?.content?.toLowerCase().includes("analyzing a conversation to detect explicit requests") ?? false;
 }
 
-test.describe.configure({ mode: "serial" });
-
 test.describe("Message Flow - Comprehensive", () => {
-  let mockServer: MockLLMServerImpl;
-
-  test.beforeAll(async () => {
-    mockServer = new MockLLMServerImpl();
-    await mockServer.start(3001, { enableLogging: false, responses: {} });
-  });
-
-  test.afterAll(async () => {
-    await mockServer.stop();
-  });
-
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page, mockServer }) => {
     mockServer.clearRequestHistory();
     mockServer.clearResponseQueue();
     await page.addInitScript(() => {
@@ -70,7 +55,7 @@ test.describe("Message Flow - Comprehensive", () => {
     });
   });
 
-  test("multiple messages in sequence arrive in correct order", async ({ page }) => {
+  test("multiple messages in sequence arrive in correct order", async ({ page, mockServer, mockServerUrl }) => {
     mockServer.setResponseForType("response", {
       type: "fixed",
       content: "I hear you!",
@@ -82,7 +67,7 @@ test.describe("Message Flow - Comprehensive", () => {
       statusCode: 200,
     });
 
-    await setupPageWithMockServer(page);
+    await setupPageWithMockServer(page, mockServerUrl);
 
     await sendMessage(page, "First message from user");
     await waitForResponseContaining(page, "I hear you");
@@ -116,7 +101,7 @@ test.describe("Message Flow - Comprehensive", () => {
     expect(getUserInput(userRequests[2])).toContain("Third message");
   });
 
-  test("conversation context is maintained across messages", async ({ page }) => {
+  test("conversation context is maintained across messages", async ({ page, mockServer, mockServerUrl }) => {
     mockServer.setResponseForType("response", {
       type: "fixed",
       content: "I remember our conversation!",
@@ -128,7 +113,7 @@ test.describe("Message Flow - Comprehensive", () => {
       statusCode: 200,
     });
 
-    await setupPageWithMockServer(page);
+    await setupPageWithMockServer(page, mockServerUrl);
 
     await sendMessage(page, "My favorite color is blue");
     await waitForResponseContaining(page, "I remember our conversation");
@@ -161,7 +146,7 @@ test.describe("Message Flow - Comprehensive", () => {
     expect(hasSecondMessage).toBe(true);
   });
 
-  test("extraction requests are triggered after user messages", async ({ page }) => {
+  test("extraction requests are triggered after user messages", async ({ page, mockServer, mockServerUrl }) => {
     mockServer.setResponseForType("response", {
       type: "fixed",
       content: "Thank you for sharing!",
@@ -175,7 +160,7 @@ test.describe("Message Flow - Comprehensive", () => {
       statusCode: 200,
     });
 
-    await setupPageWithMockServer(page);
+    await setupPageWithMockServer(page, mockServerUrl);
 
     await sendMessage(page, "I really enjoy hiking in the mountains");
     await waitForResponseContaining(page, "Thank you for sharing");
@@ -202,7 +187,7 @@ test.describe("Message Flow - Comprehensive", () => {
     expect(newExtractionCount).toBeGreaterThanOrEqual(extractionCount);
   });
 
-  test("requests are processed in chronological order", async ({ page }) => {
+  test("requests are processed in chronological order", async ({ page, mockServer, mockServerUrl }) => {
     mockServer.setResponseForType("response", {
       type: "fixed",
       content: "Processing your message!",
@@ -214,7 +199,7 @@ test.describe("Message Flow - Comprehensive", () => {
       statusCode: 200,
     });
 
-    await setupPageWithMockServer(page);
+    await setupPageWithMockServer(page, mockServerUrl);
 
     await sendMessage(page, "First request");
     await waitForNthResponseContaining(page, "Processing your message", 1);
@@ -250,7 +235,7 @@ test.describe("Message Flow - Comprehensive", () => {
     expect(getUserInput(userRequests[2])).toContain("Third request");
   });
 
-  test("conversation history grows with each exchange", async ({ page }) => {
+  test("conversation history grows with each exchange", async ({ page, mockServer, mockServerUrl }) => {
     mockServer.setResponseForType("response", {
       type: "fixed",
       content: "Understood!",
@@ -262,7 +247,7 @@ test.describe("Message Flow - Comprehensive", () => {
       statusCode: 200,
     });
 
-    await setupPageWithMockServer(page);
+    await setupPageWithMockServer(page, mockServerUrl);
 
     const messageCounts: number[] = [];
 
@@ -298,7 +283,7 @@ test.describe("Message Flow - Comprehensive", () => {
     expect(messageCounts[2]).toBeGreaterThan(messageCounts[1]);
   });
 
-  test("pressing up-arrow recalls pending message back to input", async ({ page }) => {
+  test("pressing up-arrow recalls pending message back to input", async ({ page, mockServer, mockServerUrl }) => {
     mockServer.setResponseForType("response", {
       type: "fixed",
       content: "Slow response coming...",
@@ -311,7 +296,7 @@ test.describe("Message Flow - Comprehensive", () => {
       statusCode: 200,
     });
 
-    await setupPageWithMockServer(page);
+    await setupPageWithMockServer(page, mockServerUrl);
 
     const input = page.locator("textarea");
     const pendingMessage = "Message I want to edit";
@@ -331,7 +316,7 @@ test.describe("Message Flow - Comprehensive", () => {
     await expect(page.locator(`.ei-message:has-text("${pendingMessage}")`)).not.toBeVisible({ timeout: 2000 });
   });
 
-  test("up-arrow does nothing when no pending messages", async ({ page }) => {
+  test("up-arrow does nothing when no pending messages", async ({ page, mockServer, mockServerUrl }) => {
     mockServer.setResponseForType("response", {
       type: "fixed",
       content: "Quick response!",
@@ -343,7 +328,7 @@ test.describe("Message Flow - Comprehensive", () => {
       statusCode: 200,
     });
 
-    await setupPageWithMockServer(page);
+    await setupPageWithMockServer(page, mockServerUrl);
 
     const input = page.locator("textarea");
 
@@ -362,7 +347,7 @@ test.describe("Message Flow - Comprehensive", () => {
     expect(inputValue).toBe("Some new text");
   });
 
-  test("human messages start as unread and are marked read after AI response", async ({ page }) => {
+  test("human messages start as unread and are marked read after AI response", async ({ page, mockServer, mockServerUrl }) => {
     mockServer.setResponseForType("response", {
       type: "fixed",
       content: "I got your message!",
@@ -374,7 +359,7 @@ test.describe("Message Flow - Comprehensive", () => {
       statusCode: 200,
     });
 
-    await setupPageWithMockServer(page);
+    await setupPageWithMockServer(page, mockServerUrl);
 
     const input = page.locator("textarea");
     await input.fill("Test message for read status");

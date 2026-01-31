@@ -6,12 +6,15 @@ const MAX_ORCHESTRATOR_LOOPS = 4;
 
 export interface PartialPersona {
   name: string;
+  aliases?: string[];
   description?: string;
   short_description?: string;
   long_description?: string;
-  traits?: Trait[];
-  topics?: Topic[];
+  traits?: Partial<Trait>[];
+  topics?: Partial<Topic>[];
   model?: string;
+  group_primary?: string;
+  groups_visible?: string[];
   loop_counter?: number;
   step?: "description" | "traits" | "topics";
 }
@@ -28,14 +31,19 @@ export function orchestratePersonaGeneration(
     return;
   }
 
-  const needsDescription = !partial.short_description && !partial.long_description;
-  const needsTraits = !partial.traits || partial.traits.length === 0;
-  const needsTopics = !partial.topics || partial.topics.length === 0;
+  const needsShortDescription = !partial.short_description;
+  const traitCount = partial.traits?.filter(t => t.name?.trim()).length ?? 0;
+  const topicCount = partial.topics?.filter(t => t.name?.trim()).length ?? 0;
+  const needsMoreTraits = traitCount < 3;
+  const needsMoreTopics = topicCount < 3;
 
-  if (needsDescription || needsTraits || needsTopics) {
+  if (needsShortDescription || needsMoreTraits || needsMoreTopics) {
     const prompt = buildPersonaGenerationPrompt({
       name: partial.name,
-      description: partial.description ?? partial.short_description ?? "",
+      long_description: partial.long_description,
+      short_description: partial.short_description,
+      existing_traits: partial.traits,
+      existing_topics: partial.topics,
     });
 
     stateManager.queue_enqueue({
@@ -56,8 +64,8 @@ export function orchestratePersonaGeneration(
   stateManager.persona_update(partial.name, {
     short_description: partial.short_description,
     long_description: partial.long_description,
-    traits: partial.traits,
-    topics: partial.topics,
+    traits: partial.traits as Trait[],
+    topics: partial.topics as Topic[],
     last_updated: now,
   });
 

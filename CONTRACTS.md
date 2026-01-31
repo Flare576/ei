@@ -195,8 +195,8 @@ interface Processor {
   /** Get full persona entity by name */
   getPersona(name: string): Promise<PersonaEntity | null>;
   
-  /** Create a new persona from user description */
-  createPersona(name: string, description: string, model?: string): Promise<void>;
+  /** Create a new persona from structured user input */
+  createPersona(input: PersonaCreationInput): Promise<void>;
   
   /** Archive a persona (soft delete) */
   archivePersona(name: string): Promise<void>;
@@ -209,6 +209,9 @@ interface Processor {
   
   /** Update persona fields (model, description, group, etc.) */
   updatePersona(name: string, updates: Partial<PersonaEntity>): Promise<void>;
+  
+  /** Get all known groups across all personas (derived from group_primary + groups_visible) */
+  getGroupList(): Promise<string[]>;
   
   // === Message Operations ===
   
@@ -609,6 +612,31 @@ interface HumanSettings {
   queue_paused?: boolean;          // Default: false
 }
 ```
+
+### PersonaCreationInput
+
+User-provided data for creating a new persona. All fields except `name` are optional.
+The system will preserve user-provided data verbatim and use LLM to fill gaps.
+
+```typescript
+interface PersonaCreationInput {
+  name: string;                    // Primary name (required)
+  aliases?: string[];              // Additional names
+  long_description?: string;       // User's description (preserved verbatim)
+  short_description?: string;      // User's summary (or LLM generates from long_description)
+  traits?: Partial<Trait>[];       // User-defined traits (preserved, LLM adds more if sparse)
+  topics?: Partial<Topic>[];       // User-defined topics (preserved, LLM adds more if sparse)
+  model?: string;                  // LLM model override
+  group_primary?: string;          // Group membership
+  groups_visible?: string[];       // Additional group visibility
+}
+```
+
+**Generation behavior:**
+- `long_description`: Preserved verbatim. If provided, LLM generates `short_description` as summary.
+- `short_description`: If not provided, LLM generates from `long_description`.
+- `traits`: User traits preserved. LLM adds more if count < 3.
+- `topics`: User topics preserved. LLM adds more if count < 3.
 
 ### PersonaEntity
 

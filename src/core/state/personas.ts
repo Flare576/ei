@@ -72,7 +72,8 @@ export class PersonaState {
   }
 
   messages_get(personaName: string): Message[] {
-    return this.personas.get(this.normalizeKey(personaName))?.messages ?? [];
+    const messages = this.personas.get(this.normalizeKey(personaName))?.messages ?? [];
+    return messages.map(m => ({ ...m }));
   }
 
   messages_append(personaName: string, message: Message): void {
@@ -111,6 +112,25 @@ export class PersonaState {
     let count = 0;
     for (const msg of data.messages) {
       if (msg.role === "human" && !msg.read) {
+        msg.read = true;
+        count++;
+      }
+    }
+    return count;
+  }
+
+  messages_countUnread(personaName: string): number {
+    const data = this.personas.get(this.normalizeKey(personaName));
+    if (!data) return 0;
+    return data.messages.filter(m => m.role === "system" && !m.read).length;
+  }
+
+  messages_markAllRead(personaName: string): number {
+    const data = this.personas.get(this.normalizeKey(personaName));
+    if (!data) return 0;
+    let count = 0;
+    for (const msg of data.messages) {
+      if (!msg.read) {
         msg.read = true;
         count++;
       }

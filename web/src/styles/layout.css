@@ -242,6 +242,12 @@ body {
   font-weight: 600;
 }
 
+.ei-persona-panel__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--ei-spacing-sm);
+}
+
 .ei-persona-panel__list {
   flex: 1;
   overflow-y: auto;
@@ -404,6 +410,11 @@ body {
 
 .ei-control-btn--danger:hover {
   background: var(--ei-danger);
+}
+
+.ei-control-btn--archive:hover {
+  background: linear-gradient(135deg, #fde8c8 0%, #fcd9a8 100%);
+  border: 1px solid #d4923a;
 }
 
 /* Pause Duration Options */
@@ -662,6 +673,22 @@ body {
   border-color: var(--ei-accent);
 }
 
+.ei-textarea {
+  width: 100%;
+  padding: var(--ei-spacing-sm);
+  border: 1px solid var(--ei-border);
+  border-radius: var(--ei-radius-md);
+  font-family: var(--ei-font-family);
+  font-size: var(--ei-font-size-base);
+  margin-bottom: var(--ei-spacing-md);
+  resize: vertical;
+}
+
+.ei-textarea:focus {
+  outline: none;
+  border-color: var(--ei-accent);
+}
+
 .ei-save-dialog__actions {
   display: flex;
   gap: var(--ei-spacing-sm);
@@ -889,7 +916,13 @@ body {
   width: 36px;
   height: 36px;
   padding: 0;
-  border-radius: var(--ei-radius-full);
+  border-radius: 13px;
+}
+
+.ei-btn--archive:hover {
+  background: linear-gradient(135deg, #fde8c8 0%, #fcd9a8 100%);
+  border: 1px solid #d4923a;
+  box-shadow: 0 2px 8px rgba(232, 168, 76, 0.25);
 }
 
 .ei-btn--danger {

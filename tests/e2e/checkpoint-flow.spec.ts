@@ -1,7 +1,5 @@
-import { test, expect } from "@playwright/test";
-import { MockLLMServerImpl } from "./framework/mock-server.js";
+import { test, expect } from "./fixtures.js";
 
-const MOCK_SERVER_URL = "http://localhost:3001/v1";
 const AUTO_SAVES_KEY = "ei_autosaves";
 
 function createValidCheckpoint(messages: Array<{ role: string; content: string }> = []) {
@@ -48,26 +46,13 @@ function createValidCheckpoint(messages: Array<{ role: string; content: string }
   };
 }
 
-test.describe.configure({ mode: "serial" });
-
 test.describe("Checkpoint Flow", () => {
-  let mockServer: MockLLMServerImpl;
-
-  test.beforeAll(async () => {
-    mockServer = new MockLLMServerImpl();
-    await mockServer.start(3001, { enableLogging: false, responses: {} });
-  });
-
-  test.afterAll(async () => {
-    await mockServer.stop();
-  });
-
-  test.beforeEach(async () => {
+  test.beforeEach(async ({ mockServer }) => {
     mockServer.clearRequestHistory();
     mockServer.clearResponseQueue();
   });
 
-  test("app loads state from pre-existing checkpoint in localStorage", async ({ page }) => {
+  test("app loads state from pre-existing checkpoint in localStorage", async ({ page, mockServerUrl }) => {
     const testMessage = "This message was saved in a previous session";
     const checkpoint = createValidCheckpoint([
       { role: "human", content: testMessage },
@@ -82,7 +67,7 @@ test.describe("Checkpoint Flow", () => {
         localStorage.setItem("EI_LLM_BASE_URL", url);
         localStorage.setItem(key, JSON.stringify([checkpoint]));
       },
-      { url: MOCK_SERVER_URL, key: AUTO_SAVES_KEY, checkpoint }
+      { url: mockServerUrl, key: AUTO_SAVES_KEY, checkpoint }
     );
 
     await page.reload();
@@ -94,7 +79,7 @@ test.describe("Checkpoint Flow", () => {
     await expect(page.locator("text=I remember our conversation")).toBeVisible({ timeout: 5000 });
   });
 
-  test("checkpoint structure validation - required fields present", async ({ page }) => {
+  test("checkpoint structure validation - required fields present", async ({ page, mockServerUrl }) => {
     const checkpoint = createValidCheckpoint([]);
 
     await page.goto("/");
@@ -132,7 +117,7 @@ test.describe("Checkpoint Flow", () => {
     expect(new Date(storedCheckpoint.timestamp).toString()).not.toBe("Invalid Date");
   });
 
-  test("app uses most recent checkpoint when multiple exist", async ({ page }) => {
+  test("app uses most recent checkpoint when multiple exist", async ({ page, mockServerUrl }) => {
     const oldCheckpoint = createValidCheckpoint([
       { role: "human", content: "Old message from yesterday" },
     ]);
@@ -151,7 +136,7 @@ test.describe("Checkpoint Flow", () => {
         localStorage.setItem("EI_LLM_BASE_URL", url);
         localStorage.setItem(key, JSON.stringify(checkpoints));
       },
-      { url: MOCK_SERVER_URL, key: AUTO_SAVES_KEY, checkpoints: [oldCheckpoint, newCheckpoint] }
+      { url: mockServerUrl, key: AUTO_SAVES_KEY, checkpoints: [oldCheckpoint, newCheckpoint] }
     );
 
     await page.reload();
@@ -163,7 +148,7 @@ test.describe("Checkpoint Flow", () => {
     await expect(page.locator("text=This is the latest state")).toBeVisible({ timeout: 5000 });
   });
 
-  test("auto-save triggers after configured interval", async ({ page }) => {
+  test("auto-save triggers after configured interval", async ({ page, mockServer, mockServerUrl }) => {
     test.slow();
 
     mockServer.setResponseForType("response", {
@@ -183,7 +168,7 @@ test.describe("Checkpoint Flow", () => {
         localStorage.setItem("EI_LLM_BASE_URL", url);
         localStorage.setItem(key, JSON.stringify([checkpoint]));
       },
-      { url: MOCK_SERVER_URL, key: AUTO_SAVES_KEY, checkpoint: checkpointWithShortInterval }
+      { url: mockServerUrl, key: AUTO_SAVES_KEY, checkpoint: checkpointWithShortInterval }
     );
 
     await page.reload();
@@ -209,7 +194,7 @@ test.describe("Checkpoint Flow", () => {
     expect(checkpointCount).toBeGreaterThan(1);
   });
 
-  test("auto-save preserves conversation state", async ({ page }) => {
+  test("auto-save preserves conversation state", async ({ page, mockServer, mockServerUrl }) => {
     test.slow();
 
     mockServer.setResponseForType("response", {
@@ -229,7 +214,7 @@ test.describe("Checkpoint Flow", () => {
         localStorage.setItem("EI_LLM_BASE_URL", url);
         localStorage.setItem(key, JSON.stringify([checkpoint]));
       },
-      { url: MOCK_SERVER_URL, key: AUTO_SAVES_KEY, checkpoint: checkpointWithShortInterval }
+      { url: mockServerUrl, key: AUTO_SAVES_KEY, checkpoint: checkpointWithShortInterval }
     );
 
     await page.reload();
@@ -273,7 +258,7 @@ test.describe("Checkpoint Flow", () => {
     expect(hasUserMessage).toBe(true);
   });
 
-  test("manual save creates checkpoint via save panel", async ({ page }) => {
+  test("manual save creates checkpoint via save panel", async ({ page, mockServer, mockServerUrl }) => {
     mockServer.setResponseForType("response", {
       type: "fixed",
       content: "Got it!",
@@ -290,7 +275,7 @@ test.describe("Checkpoint Flow", () => {
         localStorage.setItem("EI_LLM_BASE_URL", url);
         localStorage.setItem(key, JSON.stringify([checkpoint]));
       },
-      { url: MOCK_SERVER_URL, key: AUTO_SAVES_KEY, checkpoint }
+      { url: mockServerUrl, key: AUTO_SAVES_KEY, checkpoint }
     );
 
     await page.reload();
@@ -321,7 +306,7 @@ test.describe("Checkpoint Flow", () => {
     expect(manualSaveExists).toBe(true);
   });
 
-  test("restore loads previous state and fires onCheckpointRestored", async ({ page }) => {
+  test("restore loads previous state and fires onCheckpointRestored", async ({ page, mockServer, mockServerUrl }) => {
     mockServer.setResponseForType("response", {
       type: "fixed",
       content: "New response after restore!",
@@ -341,7 +326,7 @@ test.describe("Checkpoint Flow", () => {
         localStorage.setItem("EI_LLM_BASE_URL", url);
         localStorage.setItem(key, JSON.stringify([checkpoint]));
       },
-      { url: MOCK_SERVER_URL, key: AUTO_SAVES_KEY, checkpoint: checkpointWithMessage }
+      { url: mockServerUrl, key: AUTO_SAVES_KEY, checkpoint: checkpointWithMessage }
     );
 
     await page.reload();
@@ -374,7 +359,7 @@ test.describe("Checkpoint Flow", () => {
     await expect(page.locator("text=New message that will be lost")).not.toBeVisible({ timeout: 2000 });
   });
 
-  test("message sent after save is lost on restore", async ({ page }) => {
+  test("message sent after save is lost on restore", async ({ page, mockServer, mockServerUrl }) => {
     mockServer.setResponseForType("response", {
       type: "fixed",
       content: "Response to new message",
@@ -394,7 +379,7 @@ test.describe("Checkpoint Flow", () => {
         localStorage.setItem("EI_LLM_BASE_URL", url);
         localStorage.setItem(key, JSON.stringify([checkpoint]));
       },
-      { url: MOCK_SERVER_URL, key: AUTO_SAVES_KEY, checkpoint: checkpointBefore }
+      { url: mockServerUrl, key: AUTO_SAVES_KEY, checkpoint: checkpointBefore }
     );
 
     await page.reload();
@@ -428,7 +413,7 @@ test.describe("Checkpoint Flow", () => {
     await expect(page.locator("text=Message that will be lost after restore")).not.toBeVisible({ timeout: 2000 });
   });
 
-  test("checkpoint list shows available saves in popover", async ({ page }) => {
+  test("checkpoint list shows available saves in popover", async ({ page, mockServerUrl }) => {
     const checkpoint = createValidCheckpoint([]);
 
     await page.goto("/");
@@ -439,7 +424,7 @@ test.describe("Checkpoint Flow", () => {
         localStorage.setItem("EI_LLM_BASE_URL", url);
         localStorage.setItem(key, JSON.stringify([checkpoint]));
       },
-      { url: MOCK_SERVER_URL, key: AUTO_SAVES_KEY, checkpoint }
+      { url: mockServerUrl, key: AUTO_SAVES_KEY, checkpoint }
     );
 
     await page.reload();

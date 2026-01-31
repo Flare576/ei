@@ -6,6 +6,7 @@ import {
   type Ei_Interface,
   type PersonaSummary,
   type PersonaEntity,
+  type PersonaCreationInput,
   type Message,
   type MessageQueryOptions,
   type HumanEntity,
@@ -288,7 +289,10 @@ export class Processor {
       }
 
       if (response.request.next_step === LLMNextStep.HandlePersonaGeneration) {
-        this.interface.onPersonaAdded?.();
+        const personaName = response.request.data.personaName as string;
+        if (personaName) {
+          this.interface.onPersonaUpdated?.(personaName);
+        }
       }
 
       if (response.request.next_step === LLMNextStep.HandlePersonaDescriptions) {
@@ -335,28 +339,34 @@ export class Processor {
   }
 
   async getPersonaList(): Promise<PersonaSummary[]> {
-    return this.stateManager.persona_getAll().map((entity) => ({
-      name: entity.aliases?.[0] ?? "Unknown",
-      aliases: entity.aliases ?? [],
-      short_description: entity.short_description,
-      is_paused: entity.is_paused,
-      is_archived: entity.is_archived,
-      unread_count: 0,
-      last_activity: entity.last_activity,
-    }));
+    return this.stateManager.persona_getAll().map((entity) => {
+      const name = entity.aliases?.[0] ?? "Unknown";
+      return {
+        name,
+        aliases: entity.aliases ?? [],
+        short_description: entity.short_description,
+        is_paused: entity.is_paused,
+        is_archived: entity.is_archived,
+        unread_count: this.stateManager.messages_countUnread(name),
+        last_activity: entity.last_activity,
+      };
+    });
   }
 
   async getPersona(name: string): Promise<PersonaEntity | null> {
     return this.stateManager.persona_get(name);
   }
 
-  async createPersona(name: string, description: string, model?: string): Promise<void> {
+  async createPersona(input: PersonaCreationInput): Promise<void> {
     const now = new Date().toISOString();
     const placeholder: PersonaEntity = {
       entity: "system",
-      aliases: [name],
-      short_description: description,
-      model,
+      aliases: input.aliases ?? [input.name],
+      short_description: input.short_description,
+      long_description: input.long_description,
+      model: input.model,
+      group_primary: input.group_primary,
+      groups_visible: input.groups_visible,
       traits: [],
       topics: [],
       is_paused: false,
@@ -365,13 +375,13 @@ export class Processor {
       last_updated: now,
       last_activity: now,
     };
-    this.stateManager.persona_add(name, placeholder);
+    this.stateManager.persona_add(input.name, placeholder);
     this.interface.onPersonaAdded?.();
 
     orchestratePersonaGeneration(
-      { name, description, model },
+      input,
       this.stateManager,
-      () => this.interface.onPersonaUpdated?.(name)
+      () => this.interface.onPersonaUpdated?.(input.name)
     );
   }
 
@@ -395,12 +405,26 @@ export class Processor {
     this.interface.onPersonaUpdated?.(name);
   }
 
+  async getGroupList(): Promise<string[]> {
+    const personas = this.stateManager.persona_getAll();
+    const groups = new Set<string>();
+    for (const p of personas) {
+      if (p.group_primary) groups.add(p.group_primary);
+      for (const g of p.groups_visible || []) groups.add(g);
+    }
+    return [...groups].sort();
+  }
+
   async getMessages(personaName: string, _options?: MessageQueryOptions): Promise<Message[]> {
     return this.stateManager.messages_get(personaName);
   }
 
   async markMessageRead(personaName: string, messageId: string): Promise<boolean> {
     return this.stateManager.messages_markRead(personaName, messageId);
+  }
+
+  async markAllMessagesRead(personaName: string): Promise<number> {
+    return this.stateManager.messages_markAllRead(personaName);
   }
 
   private clearPendingRequestsFor(personaName: string): boolean {

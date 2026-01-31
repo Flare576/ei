@@ -2,10 +2,10 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  fullyParallel: false, // All test files share mock server on port 3001
+  fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: 1, // Serial execution required - mock server port collision otherwise
+  workers: undefined,
   reporter: "html",
   use: {
     baseURL: "http://localhost:5173",

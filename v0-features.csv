@@ -13,7 +13,7 @@ Feature,V1,User-Visible,Perspectives,Key Files,Description
 /undo command,Left Panel - Top,Yes,"FE, Data",app.ts; state-manager.ts,Revert last n state changes
 /savestate command,Left Panel - Top,Yes,"FE, Data",app.ts; state-manager.ts,Save named state snapshot to disk
 /restorestate command,Left Panel - Top,Yes,"FE, Data",app.ts; state-manager.ts,Restore previously saved state snapshot
-/new command,Left Panel - Bottom,Yes,"FE, Persona",app.ts,Start persona creation flow
+/new command,ChatPanel - Bottom Right (0051),Yes,"FE, Persona",app.ts,Context boundary - fresh conversational slate without losing history
 /clarify command,Human Editor,Yes,"FE, LLM",app.ts,Ask Ei to clarify a specific learned concept
 /editor command,Expanding INPUT,Yes,FE,app.ts,Open $EDITOR for multi-line message composition
 /refresh command,N/A,Yes,"FE, Data",app.ts,Reload all data from disk

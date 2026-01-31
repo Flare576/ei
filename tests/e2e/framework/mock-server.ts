@@ -226,7 +226,10 @@ export class MockLLMServerImpl implements MockLLMServer {
 
     const content = systemMessage.content.toLowerCase();
 
-    if (content.includes("create a new ai persona") || content.includes("generate initial personality traits")) {
+    if (content.includes("create") && content.includes("persona") && content.includes("traits")) {
+      return "persona-generation";
+    }
+    if (content.includes("helping create") && content.includes("persona")) {
       return "persona-generation";
     }
 

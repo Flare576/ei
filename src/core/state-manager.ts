@@ -154,6 +154,14 @@ export class StateManager {
     return this.personaState.messages_markPendingAsRead(personaName);
   }
 
+  messages_countUnread(personaName: string): number {
+    return this.personaState.messages_countUnread(personaName);
+  }
+
+  messages_markAllRead(personaName: string): number {
+    return this.personaState.messages_markAllRead(personaName);
+  }
+
   messages_remove(personaName: string, messageIds: string[]): Message[] {
     return this.personaState.messages_remove(personaName, messageIds);
   }

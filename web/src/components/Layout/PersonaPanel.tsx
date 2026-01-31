@@ -11,6 +11,7 @@ interface PersonaPanelProps {
   onArchivePersona?: (name: string) => void;
   onDeletePersona?: (name: string, deleteData: boolean) => void;
   onEditPersona?: (name: string) => void;
+  onShowArchived?: () => void;
 }
 
 export interface PersonaPanelHandle {
@@ -27,6 +28,7 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
   onArchivePersona,
   onDeletePersona,
   onEditPersona,
+  onShowArchived,
 }, ref) {
   const [expanded, setExpanded] = useState(false);
   const [hoveredPersona, setHoveredPersona] = useState<string | null>(null);
@@ -134,9 +136,16 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
     <div className={`ei-persona-panel ${expanded ? "expanded" : ""}`}>
       <div className="ei-persona-panel__header">
         <h2 className="ei-persona-panel__title">Personas</h2>
-        <button className="ei-btn ei-btn--primary" onClick={onCreatePersona}>
-          + New
-        </button>
+        <div className="ei-persona-panel__actions">
+          {onShowArchived && (
+            <button className="ei-btn ei-btn--icon ei-btn--archive" onClick={onShowArchived} title="View Archived">
+              📦
+            </button>
+          )}
+          <button className="ei-btn ei-btn--primary" onClick={onCreatePersona}>
+            + New
+          </button>
+        </div>
       </div>
 
       <div className="ei-persona-dropdown">
@@ -217,7 +226,7 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
                   </button>
                   
                   <button
-                    className="ei-control-btn"
+                    className="ei-control-btn ei-control-btn--archive"
                     onClick={() => handleArchive(persona.name)}
                     title="Archive"
                   >
