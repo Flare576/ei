@@ -1,18 +1,18 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-01-29 (E010 OpenCode Integration stories added)
+> Last updated: 2026-01-30 (E008 complete)
 
 ## Overview
 
 | Status | Count |
 |--------|-------|
-| PENDING | 31 |
+| PENDING | 21 |
 | IN_PROGRESS | 0 |
 | QA | 0 |
-| DONE | 58 |
+| DONE | 68 |
 | BLOCKED | 0 |
 
-> 94 total tickets (58 done + 31 pending + 5 backlog).
+> 94 total tickets (68 done + 21 pending + 5 backlog).
 
 ---
 
@@ -27,7 +27,7 @@
 | **E005** | 0040-0050 | DONE | UI: Core Components |
 | **E006** | 0060-0067 | DONE | Extraction Pipeline |
 | **E007** | 0070-0076 | DONE | Ceremony System |
-| **E008** | 0080-0089 | PENDING | UI: Entity Management |
+| **E008** | 0080-0089 | DONE | UI: Entity Management |
 | **E009** | 0090-0099 | PENDING | Polish & New Features |
 | **E010** | 0100-0109 | PENDING | TUI & OpenCode Integration |
 
@@ -47,21 +47,6 @@
 ---
 
 ## PENDING
-
-### E008: UI: Entity Management
-
-| Ticket | Title | Depends On |
-|--------|-------|------------|
-| 0080 | Entity Editor Modal Shell | 0040 |
-| 0081 | Human Settings Tab | 0080 |
-| 0082 | Human Facts Tab | 0080 |
-| 0083 | Human Traits Tab | 0080 |
-| 0084 | Human Topics Tab | 0080 |
-| 0085 | Human People Tab | 0080 |
-| 0086 | Persona Editor Modal | 0080 |
-| 0087 | Persona Creator Modal | 0086 |
-| 0088 | Context Window UI | 0086 |
-| 0089 | Archived Personas UI | 0042 |
 
 ### E009: Polish & New Features
 
@@ -170,6 +155,16 @@
 | 0074 | Explore Phase | 2026-01-29 |
 | 0075 | Human Ceremony | 2026-01-29 |
 | 0076 | Description Regeneration | 2026-01-29 |
+| 0080 | Entity Editor Modal Shell | 2026-01-30 |
+| 0081 | Human Settings Tab | 2026-01-30 |
+| 0082 | Human Facts Tab | 2026-01-30 |
+| 0083 | Human Traits Tab | 2026-01-30 |
+| 0084 | Human Topics Tab | 2026-01-30 |
+| 0085 | Human People Tab | 2026-01-30 |
+| 0086 | Persona Editor Modal | 2026-01-30 |
+| 0087 | Persona Creator Modal | 2026-01-30 |
+| 0088 | Context Window UI | 2026-01-30 |
+| 0089 | Archived Personas UI | 2026-01-30 |
 
 ---
 

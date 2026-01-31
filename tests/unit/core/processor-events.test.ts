@@ -106,26 +106,26 @@ describe("Processor Event System", () => {
   });
 
   it("fires onPersonaAdded when creating a persona", async () => {
-    await processor.createPersona("TestBot", "A test persona");
+    await processor.createPersona({ name: "TestBot", long_description: "A test persona" });
     expect(mock.calls).toContain("onPersonaAdded");
   });
 
   it("fires onPersonaRemoved when archiving a persona", async () => {
-    await processor.createPersona("TestBot", "A test persona");
+    await processor.createPersona({ name: "TestBot", long_description: "A test persona" });
     mock.calls.length = 0;
     await processor.archivePersona("TestBot");
     expect(mock.calls).toContain("onPersonaRemoved");
   });
 
   it("fires onPersonaUpdated when updating a persona", async () => {
-    await processor.createPersona("TestBot", "A test persona");
+    await processor.createPersona({ name: "TestBot", long_description: "A test persona" });
     mock.calls.length = 0;
     await processor.updatePersona("TestBot", { short_description: "Updated" });
     expect(mock.calls).toContain("onPersonaUpdated:TestBot");
   });
 
   it("fires onMessageAdded and onMessageQueued when sending a message", async () => {
-    await processor.createPersona("TestBot", "A test persona");
+    await processor.createPersona({ name: "TestBot", long_description: "A test persona" });
     mock.calls.length = 0;
     await processor.sendMessage("TestBot", "Hello!");
     expect(mock.calls).toContain("onMessageAdded:TestBot");
@@ -174,7 +174,7 @@ describe("Processor Event System", () => {
     const emptyStorage = createMockStorage();
     await emptyProcessor.start(emptyStorage);
     
-    await expect(emptyProcessor.createPersona("TestBot", "A test persona")).resolves.not.toThrow();
+    await expect(emptyProcessor.createPersona({ name: "TestBot", long_description: "A test persona" })).resolves.not.toThrow();
     await expect(emptyProcessor.sendMessage("TestBot", "Hello!")).resolves.not.toThrow();
     
     await emptyProcessor.stop();
@@ -543,7 +543,7 @@ describe("Processor API Methods", () => {
 
   describe("getPersonaList", () => {
     it("returns mapped summaries of all personas", async () => {
-      await processor.createPersona("TestBot", "A test persona");
+      await processor.createPersona({ name: "TestBot", short_description: "A test persona" });
       
       const list = await processor.getPersonaList();
       
@@ -564,12 +564,12 @@ describe("Processor API Methods", () => {
 
   describe("getPersona", () => {
     it("returns persona entity when found", async () => {
-      await processor.createPersona("TestBot", "A test persona");
+      await processor.createPersona({ name: "TestBot", long_description: "A test persona" });
       
       const persona = await processor.getPersona("TestBot");
       
       expect(persona).not.toBeNull();
-      expect(persona?.short_description).toBe("A test persona");
+      expect(persona?.long_description).toBe("A test persona");
     });
 
     it("returns null when persona not found", async () => {
@@ -582,7 +582,7 @@ describe("Processor API Methods", () => {
     it("adds persona and fires onPersonaAdded", async () => {
       mock.calls.length = 0;
       
-      await processor.createPersona("NewBot", "A new persona");
+      await processor.createPersona({ name: "NewBot", long_description: "A new persona" });
       
       expect(mock.calls).toContain("onPersonaAdded");
       const persona = await processor.getPersona("NewBot");
@@ -592,7 +592,7 @@ describe("Processor API Methods", () => {
 
   describe("archivePersona", () => {
     it("archives persona and fires onPersonaRemoved", async () => {
-      await processor.createPersona("ToArchive", "Will be archived");
+      await processor.createPersona({ name: "ToArchive", long_description: "Will be archived" });
       mock.calls.length = 0;
       
       await processor.archivePersona("ToArchive");
@@ -605,7 +605,7 @@ describe("Processor API Methods", () => {
 
   describe("unarchivePersona", () => {
     it("unarchives persona and fires onPersonaAdded", async () => {
-      await processor.createPersona("ToUnarchive", "Will be unarchived");
+      await processor.createPersona({ name: "ToUnarchive", long_description: "Will be unarchived" });
       await processor.archivePersona("ToUnarchive");
       mock.calls.length = 0;
       
@@ -619,7 +619,7 @@ describe("Processor API Methods", () => {
 
   describe("deletePersona", () => {
     it("deletes persona and fires onPersonaRemoved", async () => {
-      await processor.createPersona("ToDelete", "Will be deleted");
+      await processor.createPersona({ name: "ToDelete", long_description: "Will be deleted" });
       mock.calls.length = 0;
       
       await processor.deletePersona("ToDelete", false);
@@ -632,7 +632,7 @@ describe("Processor API Methods", () => {
 
   describe("updatePersona", () => {
     it("updates persona and fires onPersonaUpdated", async () => {
-      await processor.createPersona("ToUpdate", "Original description");
+      await processor.createPersona({ name: "ToUpdate", long_description: "Original description" });
       mock.calls.length = 0;
       
       await processor.updatePersona("ToUpdate", { short_description: "Updated description" });
@@ -645,7 +645,7 @@ describe("Processor API Methods", () => {
 
   describe("sendMessage", () => {
     it("appends message and fires onMessageAdded and onMessageQueued", async () => {
-      await processor.createPersona("ChatBot", "A chat persona");
+      await processor.createPersona({ name: "ChatBot", long_description: "A chat persona" });
       mock.calls.length = 0;
       
       await processor.sendMessage("ChatBot", "Hello!");
@@ -655,7 +655,7 @@ describe("Processor API Methods", () => {
     });
 
     it("queues response request for persona", async () => {
-      await processor.createPersona("ChatBot", "A chat persona");
+      await processor.createPersona({ name: "ChatBot", long_description: "A chat persona" });
       
       await processor.sendMessage("ChatBot", "Hello!");
       
@@ -666,7 +666,7 @@ describe("Processor API Methods", () => {
 
   describe("getMessages", () => {
     it("returns messages for persona", async () => {
-      await processor.createPersona("ChatBot", "A chat persona");
+      await processor.createPersona({ name: "ChatBot", long_description: "A chat persona" });
       await processor.sendMessage("ChatBot", "Hello!");
       
       const messages = await processor.getMessages("ChatBot");
@@ -731,7 +731,7 @@ describe("Processor API Methods", () => {
     });
 
     it("returns correct pending_count", async () => {
-      await processor.createPersona("QueueBot", "A bot for queue testing");
+      await processor.createPersona({ name: "QueueBot", long_description: "A bot for queue testing" });
       await processor.sendMessage("QueueBot", "Message 1");
       
       const status = await processor.getQueueStatus();
@@ -949,7 +949,7 @@ describe("Processor Context Window", () => {
   });
 
   it("setContextWindow sets the context window for a persona", async () => {
-    await processor.createPersona("ContextBot", "A bot for context testing");
+    await processor.createPersona({ name: "ContextBot", long_description: "A bot for context testing" });
     await processor.sendMessage("ContextBot", "Message 1");
     
     const messages = await processor.getMessages("ContextBot");
@@ -960,7 +960,7 @@ describe("Processor Context Window", () => {
   });
 
   it("setMessageContextStatus updates a message's context status", async () => {
-    await processor.createPersona("StatusBot", "A bot for status testing");
+    await processor.createPersona({ name: "StatusBot", long_description: "A bot for status testing" });
     await processor.sendMessage("StatusBot", "Test message");
     
     const messages = await processor.getMessages("StatusBot");
