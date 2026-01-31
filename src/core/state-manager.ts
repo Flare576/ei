@@ -122,6 +122,12 @@ export class StateManager {
     return this.personaState.delete(name);
   }
 
+  persona_setContextBoundary(name: string, timestamp: string | null): void {
+    this.personaState.update(name, {
+      context_boundary: timestamp ?? undefined,
+    });
+  }
+
   messages_get(personaName: string): Message[] {
     return this.personaState.messages_get(personaName);
   }

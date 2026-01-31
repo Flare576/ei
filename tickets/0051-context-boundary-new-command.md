@@ -1,6 +1,6 @@
 # 0051: Context Boundary ("New" Command)
 
-**Status**: PENDING
+**Status**: QA
 **Depends on**: 0043 (Chat Panel)
 
 ## Summary
@@ -9,22 +9,22 @@ Add a "New" button to create a context boundary - a fresh conversational slate t
 
 ## Acceptance Criteria
 
-- [ ] Add `context_boundary?: string` field to PersonaEntity (ISO timestamp)
-- [ ] Response prompt builder respects boundary:
+- [x] Add `context_boundary?: string` field to PersonaEntity (ISO timestamp)
+- [x] Response prompt builder respects boundary:
   - `context_status: "always"` → INCLUDE (overrides boundary)
   - `context_status: "never"` → EXCLUDE
   - `context_status: "default"` + before boundary → EXCLUDE
   - `context_status: "default"` + after boundary → apply normal window logic
-- [ ] "New" / "Resume" button in ChatPanel:
+- [x] "New" / "Resume" button in ChatPanel:
   - Position: Bottom-right corner of messages area (above input, in chat history zone)
   - Small, unobtrusive
-- [ ] Button behavior:
+- [x] Button behavior:
   - If `context_boundary > last_message.timestamp` → show "Resume", click clears boundary
   - Otherwise → show "New", click sets boundary to now
-- [ ] Visual divider rendered in chat history when boundary exists and is within visible range
-- [ ] Processor method: `setContextBoundary(personaName: string, timestamp: string | null)`
-- [ ] Event: `onContextBoundaryChanged(personaName)` fires on change
-- [ ] StateManager: follows established pattern for boundary updates
+- [x] Visual divider rendered in chat history when boundary exists and is within visible range
+- [x] Processor method: `setContextBoundary(personaName: string, timestamp: string | null)`
+- [x] Event: `onContextBoundaryChanged(personaName)` fires on change
+- [x] StateManager: follows established pattern for boundary updates
 
 ## Technical Notes
 
