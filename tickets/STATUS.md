@@ -6,9 +6,9 @@
 
 | Status | Count |
 |--------|-------|
-| PENDING | 20 |
+| PENDING | 19 |
 | IN_PROGRESS | 0 |
-| QA | 0 |
+| QA | 1 |
 | DONE | 69 |
 | BLOCKED | 0 |
 
@@ -52,7 +52,6 @@
 
 | Ticket | Title | Depends On |
 |--------|-------|------------|
-| 0051 | Context Boundary ("New" Command) | 0043 |
 | 0090 | Onboarding Flow | 0087 |
 | 0092 | Persona Image Generation | 0087 |
 | 0093 | Rich Text Editor (Markdown + WYSIWYG) | 0080 |
@@ -88,7 +87,9 @@
 
 ## QA
 
-(none)
+| Ticket | Title | Depends On |
+|--------|-------|------------|
+| 0051 | Context Boundary ("New" Command) | 0043 |
 
 ---
 
