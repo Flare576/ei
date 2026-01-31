@@ -48,6 +48,7 @@ function App() {
   const [editingPersonaMessages, setEditingPersonaMessages] = useState<Message[]>([]);
   const [archivedPersonas, setArchivedPersonas] = useState<PersonaSummary[]>([]);
   const [availableGroups, setAvailableGroups] = useState<string[]>([]);
+  const [activePersonaEntity, setActivePersonaEntity] = useState<PersonaEntity | null>(null);
 
   const personaPanelRef = useRef<PersonaPanelHandle | null>(null);
   const chatPanelRef = useRef<ChatPanelHandle | null>(null);
@@ -137,6 +138,12 @@ function App() {
         });
         processorRef.current?.getQueueStatus().then(setQueueStatus);
       },
+      onContextBoundaryChanged: (name) => {
+        if (name === activePersonaRef.current) {
+          processorRef.current?.getPersona(name).then(setActivePersonaEntity);
+          processorRef.current?.getMessages(name).then(setMessages);
+        }
+      },
     };
 
     const p = new Processor(eiInterface);
@@ -166,6 +173,9 @@ function App() {
   useEffect(() => {
     if (processor && activePersona) {
       processor.getMessages(activePersona).then(setMessages);
+      processor.getPersona(activePersona).then(setActivePersonaEntity);
+    } else {
+      setActivePersonaEntity(null);
     }
   }, [processor, activePersona]);
 
@@ -437,9 +447,10 @@ function App() {
     processor.getMessages(editingPersonaName).then(setEditingPersonaMessages);
   }, [processor, editingPersonaName]);
 
-  const handleContextBoundaryChange = useCallback(async (_timestamp: string | null) => {
-    console.log("Context boundary change not yet implemented in core");
-  }, []);
+  const handleContextBoundaryChange = useCallback(async (timestamp: string | null) => {
+    if (!processor || !activePersona) return;
+    await processor.setContextBoundary(activePersona, timestamp);
+  }, [processor, activePersona]);
 
   const handlePersonaCreate = useCallback(async (data: {
     name: string;
@@ -519,10 +530,12 @@ function App() {
           messages={messages}
           inputValue={inputValue}
           isProcessing={processingPersona !== null}
+          contextBoundary={activePersonaEntity?.context_boundary}
           onInputChange={setInputValue}
           onSendMessage={handleSendMessage}
           onMarkMessageRead={handleMarkMessageRead}
           onRecallPending={handleRecallPending}
+          onSetContextBoundary={handleContextBoundaryChange}
         />
       }
     />

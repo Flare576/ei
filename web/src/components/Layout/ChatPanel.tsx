@@ -7,10 +7,12 @@ interface ChatPanelProps {
   messages: Message[];
   inputValue: string;
   isProcessing: boolean;
+  contextBoundary?: string;
   onInputChange: (value: string) => void;
   onSendMessage: () => void;
   onMarkMessageRead?: (messageId: string) => void;
   onRecallPending?: () => void;
+  onSetContextBoundary?: (timestamp: string | null) => void;
 }
 
 export interface ChatPanelHandle {
@@ -23,10 +25,12 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
   messages,
   inputValue,
   isProcessing,
+  contextBoundary,
   onInputChange,
   onSendMessage,
   onMarkMessageRead,
   onRecallPending,
+  onSetContextBoundary,
 }, ref) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -34,6 +38,19 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
   const observerRef = useRef<IntersectionObserver | null>(null);
 
   const hasPendingMessages = messages.some(m => m.role === "human" && !m.read);
+
+  const lastMessage = messages[messages.length - 1];
+  const boundaryIsActive = contextBoundary && 
+    (!lastMessage || contextBoundary > lastMessage.timestamp);
+  
+  const handleBoundaryToggle = () => {
+    if (!onSetContextBoundary) return;
+    if (boundaryIsActive) {
+      onSetContextBoundary(null);
+    } else {
+      onSetContextBoundary(new Date().toISOString());
+    }
+  };
 
   useImperativeHandle(ref, () => ({
     focusInput: () => {
@@ -189,30 +206,57 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
               : "Select a persona to start chatting"}
           </div>
         ) : (
-          messages.map((msg) => (
-            <div 
-              key={msg.id}
-              data-message-id={msg.id}
-              className={getMessageClasses(msg)}
-              onClick={() => handleMessageClick(msg)}
-              style={{ cursor: isClickable(msg) ? "pointer" : undefined }}
-            >
-              <div className="ei-message__bubble">
-                <MarkdownContent content={msg.content} />
-              </div>
-              <div className="ei-message__time">
-                {formatTime(msg.timestamp)}
-                {msg.role === "human" && !msg.read && (
-                  <span className="ei-message__status"> (pending)</span>
+          messages.map((msg, index) => {
+            const showDivider = contextBoundary && 
+              index > 0 && 
+              messages[index - 1].timestamp < contextBoundary && 
+              msg.timestamp >= contextBoundary;
+            
+            return (
+              <div key={msg.id}>
+                {showDivider && (
+                  <div className="ei-context-divider">
+                    <span>New conversation started</span>
+                  </div>
                 )}
+                <div 
+                  data-message-id={msg.id}
+                  className={getMessageClasses(msg)}
+                  onClick={() => handleMessageClick(msg)}
+                  style={{ cursor: isClickable(msg) ? "pointer" : undefined }}
+                >
+                  <div className="ei-message__bubble">
+                    <MarkdownContent content={msg.content} />
+                  </div>
+                  <div className="ei-message__time">
+                    {formatTime(msg.timestamp)}
+                    {msg.role === "human" && !msg.read && (
+                      <span className="ei-message__status"> (pending)</span>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
+        )}
+        {contextBoundary && messages.length > 0 && messages[messages.length - 1].timestamp < contextBoundary && (
+          <div className="ei-context-divider">
+            <span>New conversation started</span>
+          </div>
         )}
         <div ref={messagesEndRef} />
       </div>
 
       <div className="ei-input-area">
+        {activePersona && onSetContextBoundary && (
+          <button 
+            className="ei-boundary-btn"
+            onClick={handleBoundaryToggle}
+            title={boundaryIsActive ? "Resume previous conversation context" : "Start new conversation context"}
+          >
+            {boundaryIsActive ? "↩" : "✦"}
+          </button>
+        )}
         <textarea
           ref={textareaRef}
           className="ei-input-area__textarea"
