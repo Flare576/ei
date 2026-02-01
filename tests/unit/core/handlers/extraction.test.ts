@@ -3,6 +3,7 @@ import {
   LLMNextStep,
   LLMRequestType,
   LLMPriority,
+  ValidationLevel,
   type LLMResponse,
   type LLMRequest,
   type Message,
@@ -121,8 +122,8 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
 
       const response = createMockResponse(request, {
         facts: [
-          { type_of_fact: "Birthday", value_of_fact: "January 15th", confidence: "high" },
-          { type_of_fact: "Location", value_of_fact: "San Francisco", confidence: "medium" },
+          { type_of_fact: "Birthday", value_of_fact: "January 15th", reason: "User stated their birthday" },
+          { type_of_fact: "Location", value_of_fact: "San Francisco", reason: "User mentioned living there" },
         ],
       });
 
@@ -168,7 +169,7 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
       });
 
       const response = createMockResponse(request, {
-        facts: [{ type_of_fact: "Test", value_of_fact: "Value", confidence: "high" }],
+        facts: [{ type_of_fact: "Test", value_of_fact: "Value", reason: "User stated it" }],
       });
 
       handlers.handleHumanFactScan(response, state as any);
@@ -191,7 +192,7 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
 
       const response = createMockResponse(request, {
         traits: [
-          { type_of_trait: "Introversion", value_of_trait: "Prefers quiet time", confidence: "high" },
+          { type_of_trait: "Introversion", value_of_trait: "Prefers quiet time", reason: "User mentioned" },
         ],
       });
 
@@ -298,7 +299,7 @@ describe("Extraction Handlers - Step 2 (Match)", () => {
         next_step: LLMNextStep.HandleHumanItemMatch,
         data: {
           personaName: "ei",
-          dataType: "fact",
+          candidateType: "fact",
           itemName: "Birthday",
           itemValue: "January 15th",
           scanConfidence: "high",
@@ -332,7 +333,7 @@ describe("Extraction Handlers - Step 2 (Match)", () => {
         next_step: LLMNextStep.HandleHumanItemMatch,
         data: {
           personaName: "ei",
-          dataType: "trait",
+          candidateType: "trait",
           itemName: "Curiosity",
           itemValue: "Loves to learn new things",
           scanConfidence: "medium",
@@ -361,7 +362,7 @@ describe("Extraction Handlers - Step 2 (Match)", () => {
         next_step: LLMNextStep.HandleHumanItemMatch,
         data: {
           personaName: "ei",
-          dataType: "fact",
+          candidateType: "fact",
           itemName: "Test",
           itemValue: "Value",
           scanConfidence: "high",
@@ -406,7 +407,7 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
         next_step: LLMNextStep.HandleHumanItemUpdate,
         data: {
           personaName: "ei",
-          dataType: "fact",
+          candidateType: "fact",
           isNewItem: true,
           existingItemId: undefined,
         },
@@ -416,7 +417,6 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
         name: "Birthday",
         description: "User's birthday is January 15th",
         sentiment: 0.8,
-        confidence: 0.9,
       });
 
       handlers.handleHumanItemUpdate(response, state as any);
@@ -426,7 +426,7 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
           name: "Birthday",
           description: "User's birthday is January 15th",
           sentiment: 0.8,
-          confidence: 0.9,
+          validated: ValidationLevel.None,
           learned_by: "ei",
         })
       );
@@ -439,7 +439,8 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
         name: "Birthday",
         description: "Old description",
         sentiment: 0.5,
-        confidence: 0.5,
+        validated: ValidationLevel.None,
+        validated_date: new Date().toISOString(),
         last_updated: new Date().toISOString(),
       });
 
@@ -447,7 +448,7 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
         next_step: LLMNextStep.HandleHumanItemUpdate,
         data: {
           personaName: "ei",
-          dataType: "fact",
+          candidateType: "fact",
           isNewItem: false,
           existingItemId: existingId,
         },
@@ -457,7 +458,6 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
         name: "Birthday",
         description: "Updated description",
         sentiment: 0.9,
-        confidence: 0.95,
       });
 
       handlers.handleHumanItemUpdate(response, state as any);
@@ -480,7 +480,7 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
         next_step: LLMNextStep.HandleHumanItemUpdate,
         data: {
           personaName: "ei",
-          dataType: "trait",
+          candidateType: "trait",
           isNewItem: true,
         },
       });
@@ -507,7 +507,7 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
         next_step: LLMNextStep.HandleHumanItemUpdate,
         data: {
           personaName: "ei",
-          dataType: "topic",
+          candidateType: "topic",
           isNewItem: true,
         },
       });
@@ -558,7 +558,7 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
           next_step: LLMNextStep.HandleHumanItemUpdate,
           data: {
             personaName: "ei",
-            dataType: "topic",
+            candidateType: "topic",
             isNewItem: true,
           },
         });
@@ -583,7 +583,7 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
         next_step: LLMNextStep.HandleHumanItemUpdate,
         data: {
           personaName: "ei",
-          dataType: "person",
+          candidateType: "person",
           isNewItem: true,
         },
       });
@@ -613,7 +613,7 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
         next_step: LLMNextStep.HandleHumanItemUpdate,
         data: {
           personaName: "ei",
-          dataType: "fact",
+          candidateType: "fact",
           isNewItem: true,
         },
       });
@@ -630,7 +630,7 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
         next_step: LLMNextStep.HandleHumanItemUpdate,
         data: {
           personaName: "ei",
-          dataType: "fact",
+          candidateType: "fact",
           isNewItem: true,
         },
       });
@@ -673,7 +673,7 @@ describe("Cross-Persona Validation", () => {
       next_step: LLMNextStep.HandleHumanItemUpdate,
       data: {
         personaName: "friend",
-        dataType: "fact",
+        candidateType: "fact",
         isNewItem: true,
       },
     });
@@ -682,7 +682,6 @@ describe("Cross-Persona Validation", () => {
       name: "TestFact",
       description: "Test description",
       sentiment: 0.5,
-      confidence: 0.5,
     });
 
     handlers.handleHumanItemUpdate(response, state as any);
@@ -717,7 +716,7 @@ describe("Cross-Persona Validation", () => {
       next_step: LLMNextStep.HandleHumanItemUpdate,
       data: {
         personaName: "ei",
-        dataType: "fact",
+        candidateType: "fact",
         isNewItem: true,
       },
     });
@@ -726,7 +725,6 @@ describe("Cross-Persona Validation", () => {
       name: "TestFact",
       description: "Test description",
       sentiment: 0.5,
-      confidence: 0.5,
     });
 
     handlers.handleHumanItemUpdate(response, state as any);
@@ -753,7 +751,7 @@ describe("Cross-Persona Validation", () => {
       next_step: LLMNextStep.HandleHumanItemUpdate,
       data: {
         personaName: "work-buddy",
-        dataType: "fact",
+        candidateType: "fact",
         isNewItem: true,
       },
     });
@@ -762,7 +760,6 @@ describe("Cross-Persona Validation", () => {
       name: "TestFact",
       description: "Test description",
       sentiment: 0.5,
-      confidence: 0.5,
     });
 
     handlers.handleHumanItemUpdate(response, state as any);
@@ -771,62 +768,6 @@ describe("Cross-Persona Validation", () => {
     expect(state.queue_enqueue).not.toHaveBeenCalled();
   });
 
-  it("sets validation priority based on confidence (inverse)", () => {
-    state._personas["friend"] = {
-      entity: "system",
-      aliases: ["friend"],
-      group_primary: null,
-      traits: [],
-      topics: [],
-      is_paused: false,
-      is_archived: false,
-      is_static: false,
-      last_updated: new Date().toISOString(),
-      last_activity: new Date().toISOString(),
-    };
-
-    // High confidence = Low priority (trusted)
-    const requestHigh = createMockRequest({
-      next_step: LLMNextStep.HandleHumanItemUpdate,
-      data: { personaName: "friend", dataType: "fact", isNewItem: true },
-    });
-    const responseHigh = createMockResponse(requestHigh, {
-      name: "HighConfidence",
-      description: "Test",
-      sentiment: 0.5,
-      confidence: 0.9,
-    });
-
-    handlers.handleHumanItemUpdate(responseHigh, state as any);
-
-    expect(state.queue_enqueue).toHaveBeenCalledWith(
-      expect.objectContaining({
-        priority: LLMPriority.Low,
-      })
-    );
-
-    vi.clearAllMocks();
-
-    // Low confidence = High priority (needs review)
-    const requestLow = createMockRequest({
-      next_step: LLMNextStep.HandleHumanItemUpdate,
-      data: { personaName: "friend", dataType: "fact", isNewItem: true },
-    });
-    const responseLow = createMockResponse(requestLow, {
-      name: "LowConfidence",
-      description: "Test",
-      sentiment: 0.5,
-      confidence: 0.3,
-    });
-
-    handlers.handleHumanItemUpdate(responseLow, state as any);
-
-    expect(state.queue_enqueue).toHaveBeenCalledWith(
-      expect.objectContaining({
-        priority: LLMPriority.High,
-      })
-    );
-  });
 });
 
 describe("handleEiValidation", () => {
@@ -849,7 +790,9 @@ describe("handleEiValidation", () => {
           name: "TestFact",
           description: "Proposed description",
           sentiment: 0.5,
-          confidence: 0.7,
+          validated: ValidationLevel.None,
+          validated_date: new Date().toISOString(),
+          last_updated: new Date().toISOString(),
         },
       },
     });
@@ -881,7 +824,9 @@ describe("handleEiValidation", () => {
           name: "TestFact",
           description: "Wrong info",
           sentiment: 0.5,
-          confidence: 0.3,
+          validated: ValidationLevel.None,
+          validated_date: new Date().toISOString(),
+          last_updated: new Date().toISOString(),
         },
       },
     });
@@ -910,6 +855,7 @@ describe("handleEiValidation", () => {
           description: "Original description",
           sentiment: 0.5,
           strength: 0.5,
+          last_updated: new Date().toISOString(),
         },
       },
     });

@@ -1,15 +1,7 @@
 import React from 'react';
 import { SliderControl } from './SliderControl';
-
-interface DataItemBase {
-  id: string;
-  name: string;
-  description: string;
-  sentiment: number;
-  last_updated: string;
-  learned_by?: string;
-  persona_groups?: string[];
-}
+import { ValidationLevel } from '../../../../src/core/types';
+import type { Fact } from '../../../../src/core/types';
 
 interface SliderConfig {
   field: string;
@@ -17,13 +9,12 @@ interface SliderConfig {
   min?: number;
   max?: number;
   formatValue?: (v: number) => string;
-  tooltip?: string;
 }
 
-interface DataItemCardProps<T extends DataItemBase> {
-  item: T;
+interface FactCardProps {
+  fact: Fact;
   sliders: SliderConfig[];
-  onChange: (field: keyof T, value: T[keyof T]) => void;
+  onChange: (field: keyof Fact, value: Fact[keyof Fact]) => void;
   onSave: () => void;
   onDelete: () => void;
   isDirty?: boolean;
@@ -32,15 +23,15 @@ interface DataItemCardProps<T extends DataItemBase> {
 
 const defaultFormat = (v: number) => v.toFixed(2);
 
-export const DataItemCard = <T extends DataItemBase>({
-  item,
+export const FactCard = ({
+  fact,
   sliders,
   onChange,
   onSave,
   onDelete,
   isDirty = false,
   showMeta = true,
-}: DataItemCardProps<T>): React.ReactElement => {
+}: FactCardProps): React.ReactElement => {
   const cardRef = React.useRef<HTMLDivElement>(null);
 
   const handleBlur = (e: React.FocusEvent) => {
@@ -50,15 +41,22 @@ export const DataItemCard = <T extends DataItemBase>({
   };
 
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    onChange('name' as keyof T, e.target.value as T[keyof T]);
+    onChange('name', e.target.value);
   };
 
   const handleDescriptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    onChange('description' as keyof T, e.target.value as T[keyof T]);
+    onChange('description', e.target.value);
   };
 
   const handleSliderChange = (field: string, value: number) => {
-    onChange(field as keyof T, value as T[keyof T]);
+    onChange(field as keyof Fact, value as Fact[keyof Fact]);
+  };
+
+  const handleValidationChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newLevel = e.target.checked ? ValidationLevel.Human : ValidationLevel.None;
+    onChange('validated', newLevel);
+    onChange('validated_date', new Date().toISOString());
+    setTimeout(() => onSave(), 0);
   };
 
   const formatTimestamp = (timestamp: string) => {
@@ -69,17 +67,21 @@ export const DataItemCard = <T extends DataItemBase>({
     }
   };
 
+  const validationClass = fact.validated 
+    ? `ei-data-card--validated-${fact.validated}` 
+    : '';
+
   return (
     <div 
       ref={cardRef}
-      className={`ei-data-card ${isDirty ? 'ei-data-card--dirty' : ''}`}
+      className={`ei-data-card ${isDirty ? 'ei-data-card--dirty' : ''} ${validationClass}`}
       onBlur={handleBlur}
     >
       <div className="ei-data-card__header">
         <input
           type="text"
           className="ei-data-card__name"
-          value={item.name}
+          value={fact.name}
           onChange={handleNameChange}
           placeholder="Name"
         />
@@ -88,7 +90,7 @@ export const DataItemCard = <T extends DataItemBase>({
       <div className="ei-data-card__body">
         <textarea
           className="ei-data-card__description"
-          value={item.description}
+          value={fact.description}
           onChange={handleDescriptionChange}
           placeholder="Description"
         />
@@ -98,12 +100,11 @@ export const DataItemCard = <T extends DataItemBase>({
             <SliderControl
               key={slider.field}
               label={slider.label}
-              value={item[slider.field as keyof T] as number}
+              value={fact[slider.field as keyof Fact] as number}
               min={slider.min}
               max={slider.max}
               onChange={(value) => handleSliderChange(slider.field, value)}
               formatValue={slider.formatValue || defaultFormat}
-              tooltip={slider.tooltip}
             />
           ))}
         </div>
@@ -112,11 +113,22 @@ export const DataItemCard = <T extends DataItemBase>({
       <div className="ei-data-card__footer">
         {showMeta && (
           <div className="ei-data-card__meta">
-            {item.learned_by && <span>Learned by: {item.learned_by} • </span>}
-            <span>Updated: {formatTimestamp(item.last_updated)}</span>
+            {fact.learned_by && <span>Learned by: {fact.learned_by} • </span>}
+            <span>Updated: {formatTimestamp(fact.last_updated)}</span>
           </div>
         )}
         <div className="ei-data-card__actions">
+          <label 
+            className="ei-validation-checkbox" 
+            title="Validated facts won't be changed automatically. Uncheck to allow updates."
+          >
+            <input
+              type="checkbox"
+              checked={fact.validated === ValidationLevel.Human}
+              onChange={handleValidationChange}
+            />
+            <span className="ei-validation-checkbox__label">Correct</span>
+          </label>
           <button 
             className="ei-control-btn ei-control-btn--danger" 
             onClick={onDelete}

@@ -47,7 +47,7 @@ interface PersonaIdentityTabProps {
 }
 
 const traitSliders = [
-  { field: 'sentiment', label: 'Sentiment', min: -1, max: 1 },
+  { field: 'sentiment', label: 'Sentiment', min: -1, max: 1, tooltip: 'How does this persona feel about this characteristic of theirs? -1: They hate it! | 0: Neutral | 1: They love it!' },
   { field: 'strength', label: 'Strength', min: 0, max: 1 },
 ];
 

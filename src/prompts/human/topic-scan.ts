@@ -29,16 +29,15 @@ Your job is to quickly identify:
     b. Be CONSERVATIVE - only suggest genuinely important, long-term relevant TOPICS
     c. Be CLEAR - state your \`reason\` for including this TOPIC with any evidence you used
 
-To help the system prioritize data, please include your CONFIDENCE level:
-    a. "high" confidence = explicitly discussed
-    b. "medium" confidence = clearly referenced but not the focus
-    c. "low" confidence = might be relevant, uncertain
-
 The goal of the system is to remember important TOPICS to the HUMAN USER in order to ask about them in the future.`;
 
   const guidelinesFragment = `## Guidelines
 
-### A TOPIC Is:
+# A TOPIC Is:
+
+A meaningful subject or concept relevant to the HUMAN USER. It is:
+
+- **Specific and Contextual:** Not a broad category or just a list of isolated facts. It must have narrative or direct relevance in the conversation.
 
 1. **Primary Focus** - Capture the main idea of the conversation, not minute details
 2. **Participation** - Things the HUMAN USER does or wants to do
@@ -52,32 +51,33 @@ The goal of the system is to remember important TOPICS to the HUMAN USER in orde
 10. **Location** - Favorite places, travel destinations
 11. **Preferences** - "I like {thing}" or "I hate {thing}" statements`;
 
-  const doNotCaptureFragment = `### Do Not Capture as TOPICS
+  const doNotCaptureFragment = `# **IMPORTANT** The Following Are NOT TOPICS
 
-The system tracks FACTS, TRAITS, and PEOPLE as separate types. Do NOT capture:
+# The system tracks FACTS, TRAITS, and PEOPLE as separate types. Do NOT capture:
 
-#### FACTS - Tracked Separately
-- Biographical data: Birthday, Location, Job, Marital Status, Gender, Eye Color, Hair Color
+## FACTS - Tracked Separately
+- **Biographical Data (Do NOT Capture):** Name, Nickname, Birthday, Location, Job, Marital Status, Gender, Eye Color, Hair Color.
+  > **CRITICAL:** The HUMAN USER's name itself, or a collection of their basic biographical facts, is NEVER a TOPIC. Even if multiple biographical facts are mentioned together (e.g., "My name is John, I live in NYC, and I'm a software engineer"), do not summarize them as a 'topic' about the user's identity.
 - Other Important Dates: Wedding Anniversary, Job Anniversary
 - Health & Well-being: Allergies, Medical Conditions, Dietary Restrictions
 
 > NOTE: Many FACTS have stories/topics around them.
 > "My birthday is May 26th" is a FACT. "A goat jumped out of my birthday cake" is a TOPIC.
 
-#### TRAITS - Tracked Separately
+## TRAITS - Tracked Separately
 * Personality Patterns, Communication style, Behavioral tendencies
 * Cognitive Style, Emotional Traits, Work Ethic, Social Orientation
 
 > NOTE: Many TRAITS have stories/topics around them.
 > "I'm a visual learner" is a TRAIT. "I saw a picture of an atom and I FINALLY GET IT" is a TOPIC.
 
-#### PEOPLE / Relationships - Tracked Separately
+## PEOPLE / Relationships - Tracked Separately
 - Immediate family, Extended family, Friends, Coworkers, etc.
 
 > NOTE: Many PEOPLE have stories/topics around them.
 > "Sarah is my dream girl" is a PERSON. "I hope Sarah and I get married on the moon" is a TOPIC.
 
-#### AI PERSONAS - Tracked Separately
+## AI PERSONAS - Tracked Separately
 - Do NOT record any stories or details about PERSONAS as TOPICS`;
 
   const criticalFragment = `# CRITICAL INSTRUCTIONS
@@ -92,7 +92,6 @@ The JSON format is:
     {
         "type_of_topic": "Interest|Goal|Dream|Conflict|Concern|etc.",
         "value_of_topic": "woodworking|Become Millionaire|Visit Spain|etc.",
-        "confidence": "high|medium|low",
         "reason": "User stated...|Assumed from..."
     }
   ]
@@ -135,7 +134,6 @@ Scan the "Most Recent Messages" for TOPICS of interest to the human user.
     {
         "type_of_topic": "Interest|Goal|Dream|etc.",
         "value_of_topic": "woodworking|Become Millionaire|etc.",
-        "confidence": "high|medium|low",
         "reason": "User stated..."
     }
   ]

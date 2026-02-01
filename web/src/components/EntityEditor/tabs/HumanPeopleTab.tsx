@@ -24,7 +24,7 @@ interface HumanPeopleTabProps {
 }
 
 const personSliders = [
-  { field: 'sentiment', label: 'Sentiment', min: -1, max: 1 },
+  { field: 'sentiment', label: 'Sentiment', min: -1, max: 1, tooltip: 'How do you feel about this person in your life? -1: Hate them! | 0: Neutral | 1: Love them!' },
   { field: 'exposure_current', label: 'Current Exposure', min: 0, max: 1 },
   { field: 'exposure_desired', label: 'Desired Exposure', min: 0, max: 1 },
 ];

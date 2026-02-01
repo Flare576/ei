@@ -46,3 +46,12 @@ interface ItemUpdatePromptData {
 - `src/prompts/human/item-update.ts` - Prompt builder
 - `src/prompts/human/types.ts` - Type definitions (ExposureImpact)
 - `src/core/handlers/index.ts` - Handler with exposure calculation and validation queueing
+
+## V0 Learnings (Applied 2026-01-31)
+
+V0 had a "poetic embroidery" problem where facts became flowery essays about emotional significance.
+
+**Fixed in V1**:
+- Added `confidenceSection` for facts with explicit anti-embroidery guidance
+- Tightened generic description guidance: "Be factual and concise"
+- Included the exact bad example ("sacred absence shaped by love...") as a DON'T

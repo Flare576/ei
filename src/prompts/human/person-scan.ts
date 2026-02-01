@@ -31,22 +31,17 @@ Your job is to quickly identify:
     a. Only flag PEOPLE that were actually discussed, not just tangentially related
     b. Be CONSERVATIVE - only suggest genuinely important, long-term relevant PEOPLE
         i. Ignore: greetings, small talk, one-off mentions, jokes
-    c. Be CLEAR - state your \`reason\` for including this PERSON with any evidence you used
-
-To help the system prioritize data, please include your CONFIDENCE level:
-    a. "high" confidence = explicitly discussed
-    b. "medium" confidence = clearly referenced but not the focus
-    c. "low" confidence = might be relevant, uncertain`;
+    c. Be CLEAR - state your \`reason\` for including this PERSON with any evidence you used`;
 
   const guidelinesFragment = `## Guidelines
 
 1. **Unknown Types and Names of PEOPLE**
     a. In some conversations, it may be impossible to identify which "Brother" or which "Bob" the user is referring to.
-        - When this occurs, MARK THE RECORD WITH \`{ "confidence": "low" }\`
+        - Use "Unknown" for the missing field and explain in the \`reason\`
         - This will trigger a later validation step to get more information!
     b. If you're adding a NEW PERSON, be as specific as you can, for example:
-        - { "type_of_person": "Unknown", "name_of_person": "Alice at Grocery Store", "confidence": "low" }
-        - { "type_of_person": "Sister that sews", "name_of_person": "Unknown", "confidence": "low" }
+        - { "type_of_person": "Unknown", "name_of_person": "Alice at Grocery Store", "reason": "Mentioned but relationship unclear" }
+        - { "type_of_person": "Sister that sews", "name_of_person": "Name Unknown", "reason": "Has a sister who sews, name not given" }
 
 **A PERSON Is**
 * Immediate Family: Father, Husband, Son, Brother, Mother, Wife, Daughter, Sister (and step/in-law variants)
@@ -78,8 +73,7 @@ The JSON format is:
   "people": [
     {
         "type_of_person": "Father|Friend|Love Interest|Unknown|etc.",
-        "name_of_person": "Bob|Alice|Charles|etc.",
-        "confidence": "high|medium|low",
+        "name_of_person": "Bob|Alice|Charles|Name Unknown|etc.",
         "reason": "User stated...|Assumed from..."
     }
   ]
@@ -119,8 +113,7 @@ Scan the "Most Recent Messages" for PEOPLE mentioned by the human user.
   "people": [
     {
         "type_of_person": "Father|Friend|Love Interest|Unknown|etc.",
-        "name_of_person": "Bob|Alice|Charles|etc.",
-        "confidence": "high|medium|low",
+        "name_of_person": "Bob|Alice|Charles|Name Unknown|etc.",
         "reason": "User stated..."
     }
   ]

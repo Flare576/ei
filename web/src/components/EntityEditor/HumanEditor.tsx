@@ -5,18 +5,8 @@ import { HumanFactsTab } from './tabs/HumanFactsTab';
 import { HumanTraitsTab } from './tabs/HumanTraitsTab';
 import { HumanTopicsTab } from './tabs/HumanTopicsTab';
 import { HumanPeopleTab } from './tabs/HumanPeopleTab';
-
-interface Fact {
-  id: string;
-  name: string;
-  description: string;
-  sentiment: number;
-  confidence: number;
-  last_updated: string;
-  learned_by?: string;
-  persona_groups?: string[];
-  last_confirmed?: string;
-}
+import { ValidationLevel } from '../../../../src/core/types';
+import type { Fact } from '../../../../src/core/types';
 
 interface Trait {
   id: string;
@@ -87,8 +77,8 @@ const tabs = [
   { id: 'settings', label: 'Settings', icon: '⚙️' },
   { id: 'facts', label: 'Facts', icon: '📋' },
   { id: 'traits', label: 'Traits', icon: '🎭' },
-  { id: 'topics', label: 'Topics', icon: '💬' },
   { id: 'people', label: 'People', icon: '👥' },
+  { id: 'topics', label: 'Topics', icon: '💬' },
 ];
 
 export const HumanEditor = ({
@@ -198,7 +188,8 @@ export const HumanEditor = ({
       name: '',
       description: '',
       sentiment: 0,
-      confidence: 0.5,
+      validated: ValidationLevel.None,
+      validated_date: new Date().toISOString(),
       last_updated: new Date().toISOString(),
     };
     setLocalFacts(prev => [...prev, newFact]);

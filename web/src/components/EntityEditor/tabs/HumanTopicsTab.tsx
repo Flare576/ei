@@ -23,7 +23,7 @@ interface HumanTopicsTabProps {
 }
 
 const topicSliders = [
-  { field: 'sentiment', label: 'Sentiment', min: -1, max: 1 },
+  { field: 'sentiment', label: 'Sentiment', min: -1, max: 1, tooltip: 'How do you feel about this topic? -1: Hate it! | 0: Neutral | 1: Love it!' },
   { field: 'exposure_current', label: 'Current Exposure', min: 0, max: 1 },
   { field: 'exposure_desired', label: 'Desired Exposure', min: 0, max: 1 },
 ];

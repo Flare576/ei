@@ -28,18 +28,13 @@ Your job is to quickly identify:
     a. Only flag FACTS that were actually discussed, not just tangentially related
     b. Be CONSERVATIVE - only suggest genuinely important, long-term relevant FACTS
         i. Ignore: greetings, small talk, one-off mentions, jokes
-    c. Be CLEAR - state your \`reason\` for including this FACT in the record with any evidence you used
-
-To help the system prioritize data, please include your CONFIDENCE level:
-    a. "high" confidence = explicitly discussed
-    b. "medium" confidence = clearly referenced but not the focus
-    c. "low" confidence = might be relevant, uncertain`;
+    c. Be CLEAR - state your \`reason\` for including this FACT in the record with any evidence you used`;
 
   const guidelinesFragment = `# Guidelines
 
 1.  **Explicitness:**
     *   **Focus only on what the user *explicitly states*.** Do not infer, assume, or guess based on context or general knowledge.
-    *   **Prioritize direct statements.** "I was born in 1985" is a fact. "I feel old now that it's 2023" isn't an explicit statement of their birth year.
+    *   **Prioritize direct statements.** "I was born in 1985" is a fact. "I feel old now that it's 3030" isn't an explicit statement of their birth year.
 2.  **Objectivity and Verifiability:**
     *   **Facts are objective and generally verifiable.** They are not subjective opinions, feelings, or temporary states.
     *   **Focus on unchangeable or enduring attributes/events.**
@@ -52,33 +47,47 @@ To help the system prioritize data, please include your CONFIDENCE level:
 
 **FACTS are:**
 - Biographical data (Core Identity):
-  - Birthday (e.g., "July 15th, 1980")
-  - Location (current city/country, hometown, place of birth)
-  - Job (current job title, industry, or company)
-  - Marital Status (married, single, divorced)
-  - Gender
-  - Eye Color, Hair Color
-  - Nationality/Citizenship
-  - Languages Spoken
-  - Educational Background
+  - type_of_fact: User's Name
+    - First Last, Nickname, etc.
+  - type_of_fact: Birthday
+    - example: "July 15th, 1980"
+  - type_of_fact: Birthplace
+  - type_of_fact: Hometown
+  - type_of_fact: Job
+    - current job title, industry, or company
+  - type_of_fact: Marital Status
+    - married, single, divorced
+  - type_of_fact: Gender
+  - type_of_fact: Eye Color
+  - type_of_fact: Hair Color
+  - type_of_fact: Nationality/Citizenship
+  - type_of_fact: Languages Spoken
+  - type_of_fact: Educational Background
 - Other Important Dates
-  - Wedding Anniversary
-  - Job Anniversary
-  - Pet Ownership
+  - type_of_fact: Wedding Anniversary
+  - type_of_fact: Job Anniversary
+  - type_of_fact: Pet Ownership
 - Health & Well-being (Objective Conditions):
-  - Allergies
-  - Medical Conditions (if explicitly stated)
-  - Dietary Restrictions
+  - type_of_fact: Allergies
+  - type_of_fact: Medical Conditions (if explicitly stated)
+  - type_of_fact: Dietary Restrictions
 
 > NOTE: Dates themselves are not facts (e.g., "August 15th" is not a fact).
 > They are details OF facts (e.g., { "type_of_fact": "Birthday", "value_of_fact": "August 15th" }).
 
 **FACTS ARE NOT**
 - Trait: Personality patterns, communication style, behavioral tendencies
+  - These are tracked separately
 - General Topic: Interests, hobbies, general subjects
-- People: Real people in their life
+  - These are tracked separately
+- Relationships: Wife, Husband, Daughter, Son, etc.
+  - These are tracked separately
+- People's Names
+  - These are tracked separately
 - Personas: AI personas they discuss
-- Characters: Fictitious entities from books, movies, stories, media, etc.`;
+  - These are tracked separately
+- Characters: Fictitious entities from books, movies, stories, media, etc.
+  - These are tracked separately`;
 
   const criticalFragment = `# CRITICAL INSTRUCTIONS
 
@@ -90,9 +99,8 @@ The JSON format is:
 {
   "facts": [
     {
-        "type_of_fact": "Birthday|Name|Location|etc.",
+        "type_of_fact": "Birthday|User's Name|Location|see above",
         "value_of_fact": "May 26th, 1984|Samwise|Seattle|etc.",
-        "confidence": "high|medium|low",
         "reason": "User stated...|User implied...|User responded..."
     }
   ]
@@ -135,7 +143,6 @@ Scan the "Most Recent Messages" for FACTS about the human user.
     {
         "type_of_fact": "Birthday|Name|etc.",
         "value_of_fact": "May 26th, 1984|Samwise|etc.",
-        "confidence": "high|medium|low",
         "reason": "User stated..."
     }
   ]

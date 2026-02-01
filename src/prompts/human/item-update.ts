@@ -15,7 +15,6 @@ function formatExistingItem(item: DataItemBase): string {
     name: item.name,
     description: item.description,
     sentiment: item.sentiment,
-    ...('confidence' in item ? { confidence: (item as any).confidence } : {}),
     ...('strength' in item ? { strength: (item as any).strength } : {}),
     ...('relationship' in item ? { relationship: (item as any).relationship } : {}),
     ...('exposure_current' in item ? { exposure_current: (item as any).exposure_current } : {}),
@@ -30,6 +29,40 @@ export function buildHumanItemUpdatePrompt(data: ItemUpdatePromptData): PromptOu
 
   const typeLabel = data.data_type.toUpperCase();
   const personaName = data.persona_name;
+
+  // This data isn't _specific_ to FACTS, but it only makes sense like this for them
+  const itemFactType = data?.existing_item?.name || data.new_item_name;
+  const descriptionSection = data.data_type === "fact" ? `
+A concise, specific piece of information about the Human's ${itemFactType}.
+
+If ${itemFactType} doesn't make sense as a type of FACT, return an empty object (\`{}\`).
+
+## CRITICAL: Facts are OBJECTIVE
+
+FACTS are biographical/circumstantial data. NOT emotional interpretations.
+
+**Good description**: "Parents divorced twice. Second divorce occurred when user was 17/18."
+**Bad description**: "A deep, quiet ache related to mother's absence... a sacred absence shaped by love, loss, and quiet strength..."
+
+The description should record WHAT HAPPENED:
+- Dates, names, places, events, circumstances
+- What the user explicitly stated or clearly implied
+
+The description should NOT include:
+- Ei's poetic interpretation of emotional significance
+- Flowery language about "sacred absences" or "quiet aches"
+- Assumptions about how the user feels (that's what \`sentiment\` is for)
+
+If the user expressed emotion, quote or paraphrase THEIR words, don't embellish.
+
+**Style**: Be factual and concise. Record what the user said or demonstrated, not your interpretation of its deeper meaning. Avoid flowery or poetic language unless the user themselves used such language.
+
+Examples: "Name Unknown" -> "Robert Jordan", "User was married in the Summer" -> "User was married in July, 2006"
+  ` : `
+This free-text field should be used to capture interesting details, quotes, or references that the Human or Persona use while discussing this data point. Personas should be able to show topical recall, make references to the topic or event, or in other ways "Remember" details about it.
+
+**ABSOLUTELY VITAL INSTRUCTION**: Do **NOT** embelish these details - each Persona will use their own voice during interactions with the User - we need to capture EXACTLY what was said and how, or referring back to it won't have meaning.
+  `;
 
   const strengthSection = data.data_type === "trait" ? `
 ## Strength (\`strength\`)
@@ -93,7 +126,6 @@ Return all relevant fields for this ${typeLabel} based on what you find in the c
     '    "name": "Example Data Point",',
     '    "description": "This is a story of a lovely lady...",',
     '    "sentiment": 0.9',
-    data.data_type === "fact" ? ',\n    "confidence": 0.8' : '',
     data.data_type === "trait" ? ',\n    "strength": 0.5' : '',
     data.data_type === "person" ? ',\n    "relationship": "Mother-In-Law|Son|Coworker|etc.",\n    "exposure_desired": 0.4,\n    "exposure_impact": "high|medium|low|none"' : '',
     data.data_type === "topic" ? ',\n    "exposure_desired": 0.4,\n    "exposure_impact": "high|medium|low|none"' : ''
@@ -122,13 +154,7 @@ Only update this field for clarification or if further specificity is warranted.
 Examples: "Unknown" -> "Brother-In-Law", "Alice's" -> "Alice's Restaurant"
 
 ## Description (\`description\`)
-
-A detailed description of the ${typeLabel}. It should be enough information that an agent or persona could bring it up later.
-
-This will be the field most likely to change over time.
-
-Examples: "Unknown" -> "Robert Jordan", "User was married in the Summer" -> "User was married in July, 2006"
-
+${descriptionSection}
 ## Sentiment (\`sentiment\`)
 
 Represents how strongly the HUMAN USER feels about this ${typeLabel}.
@@ -161,11 +187,11 @@ ${jsonTemplateFields}
 
 When you return a record, **ALWAYS** include every field (\`name\`, \`description\`, and \`sentiment\` are all REQUIRED fields).
 
-If you find no evidence of this ${typeLabel} in the "Most Recent Messages", respond with an empty object: \`{}\`.
+If you find **NO EVIDENCE** of this ${typeLabel} in the "Most Recent Messages", respond with an empty object: \`{}\`.
 
-If you determine no changes are required to the ${typeLabel}, respond with an empty object: \`{}\`.
+If you determine **NO CHANGES** are required to the ${typeLabel}, respond with an empty object: \`{}\`.
 
-An empty object, \`{}\`, is the most common expected response.`;
+An empty object, \`{}\`, is the MOST COMMON expected response.`;
 
   const earlierSection = data.messages_context.length > 0
     ? `## Earlier Conversation

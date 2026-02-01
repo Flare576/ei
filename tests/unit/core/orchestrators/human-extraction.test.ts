@@ -3,6 +3,7 @@ import {
   LLMNextStep,
   LLMRequestType,
   LLMPriority,
+  ValidationLevel,
   type Message,
   type HumanEntity,
   type PersonaEntity,
@@ -40,7 +41,7 @@ function createMockStateManager() {
   const human: HumanEntity = {
     entity: "human",
     facts: [
-      { id: "f1", name: "Birthday", description: "January 15th", sentiment: 0.5, confidence: 0.9, last_updated: "" },
+      { id: "f1", name: "Birthday", description: "January 15th", sentiment: 0.5, validated: ValidationLevel.None, validated_date: "", last_updated: "" },
     ],
     traits: [
       { id: "t1", name: "Curiosity", description: "Loves learning", sentiment: 0.7, last_updated: "" },
@@ -126,7 +127,7 @@ describe("Scan Orchestrators (Step 1)", () => {
 
       expect(state.queue_enqueue).toHaveBeenCalledWith({
         type: LLMRequestType.JSON,
-        priority: LLMPriority.Low,
+        priority: LLMPriority.Normal,
         system: "fact-sys",
         user: "fact-usr",
         next_step: LLMNextStep.HandleHumanFactScan,
@@ -224,95 +225,97 @@ describe("queueItemMatch (Step 2)", () => {
     vi.clearAllMocks();
   });
 
-  it("queues fact match with existing facts", () => {
+  it("queues fact match with all items", () => {
     const candidate = {
       type_of_fact: "Location",
       value_of_fact: "San Francisco",
-      confidence: "high" as const,
       reason: "User mentioned living there",
     };
 
     queueItemMatch("fact", candidate, context, state as any);
 
     expect(buildHumanItemMatchPrompt).toHaveBeenCalledWith({
-      data_type: "fact",
-      item_name: "Location",
-      item_value: "San Francisco",
-      existing_items: [{ name: "Birthday", description: "January 15th" }],
+      candidate_type: "fact",
+      candidate_name: "Location",
+      candidate_value: "San Francisco",
+      all_items: expect.arrayContaining([
+        expect.objectContaining({ data_type: "fact", data_id: "f1", data_name: "Birthday" }),
+        expect.objectContaining({ data_type: "trait", data_id: "t1", data_name: "Curiosity" }),
+        expect.objectContaining({ data_type: "topic", data_id: "top1", data_name: "AI" }),
+        expect.objectContaining({ data_type: "person", data_id: "p1", data_name: "Alice" }),
+      ]),
     });
 
     expect(state.queue_enqueue).toHaveBeenCalledWith(
       expect.objectContaining({
         next_step: LLMNextStep.HandleHumanItemMatch,
         data: expect.objectContaining({
-          dataType: "fact",
+          candidateType: "fact",
           itemName: "Location",
           itemValue: "San Francisco",
-          scanConfidence: "high",
         }),
       })
     );
   });
 
-  it("queues trait match with existing traits", () => {
+  it("queues trait match with all items", () => {
     const candidate = {
       type_of_trait: "Introversion",
       value_of_trait: "Prefers quiet time",
-      confidence: "medium" as const,
       reason: "Mentioned preference",
     };
 
     queueItemMatch("trait", candidate, context, state as any);
 
-    expect(buildHumanItemMatchPrompt).toHaveBeenCalledWith({
-      data_type: "trait",
-      item_name: "Introversion",
-      item_value: "Prefers quiet time",
-      existing_items: [{ name: "Curiosity", description: "Loves learning" }],
-    });
+    expect(buildHumanItemMatchPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        candidate_type: "trait",
+        candidate_name: "Introversion",
+        candidate_value: "Prefers quiet time",
+      })
+    );
   });
 
-  it("queues topic match with existing topics", () => {
+  it("queues topic match with all items", () => {
     const candidate = {
       type_of_topic: "Machine Learning",
       value_of_topic: "Neural networks",
-      confidence: "low" as const,
       reason: "User asked about ML",
     };
 
     queueItemMatch("topic", candidate, context, state as any);
 
-    expect(buildHumanItemMatchPrompt).toHaveBeenCalledWith({
-      data_type: "topic",
-      item_name: "Machine Learning",
-      item_value: "Neural networks",
-      existing_items: [{ name: "AI", description: "Artificial Intelligence" }],
-    });
+    expect(buildHumanItemMatchPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        candidate_type: "topic",
+        candidate_name: "Machine Learning",
+        candidate_value: "Neural networks",
+      })
+    );
   });
 
-  it("queues person match with existing people", () => {
+  it("queues person match with all items", () => {
     const candidate = {
       name_of_person: "Bob",
       type_of_person: "coworker",
-      confidence: "high" as const,
       reason: "Mentioned Bob from work",
     };
 
     queueItemMatch("person", candidate, context, state as any);
 
-    expect(buildHumanItemMatchPrompt).toHaveBeenCalledWith({
-      data_type: "person",
-      item_name: "Bob",
-      item_value: "coworker",
-      existing_items: [{ name: "Alice", description: "Best friend" }],
-    });
+    expect(buildHumanItemMatchPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        candidate_type: "person",
+        candidate_name: "Bob",
+        candidate_value: "coworker",
+      })
+    );
   });
 
   it("passes message context through to match request", () => {
     const candidate = {
       type_of_fact: "Test",
       value_of_fact: "Value",
-      confidence: "high" as const,
       reason: "Test reason",
     };
 
@@ -338,15 +341,14 @@ describe("queueItemUpdate (Step 3)", () => {
     vi.clearAllMocks();
   });
 
-  it("queues update for new item (Not Found match)", () => {
-    const matchResult = { name: "Not Found", description: "No match found", confidence: "low" as const };
+  it("queues update for new item (null matched_guid)", () => {
+    const matchResult = { matched_guid: null };
     const context = {
       personaName: "ei",
       messages_context: [createMessage("1", "context")],
       messages_analyze: [createMessage("2", "analyze")],
       itemName: "NewFact",
       itemValue: "New value",
-      scanConfidence: "high",
     };
 
     queueItemUpdate("fact", matchResult, context, state as any);
@@ -372,15 +374,14 @@ describe("queueItemUpdate (Step 3)", () => {
     );
   });
 
-  it("queues update for existing fact match", () => {
-    const matchResult = { name: "Birthday", description: "User's birthday", confidence: "high" as const };
+  it("queues update for existing fact match by GUID", () => {
+    const matchResult = { matched_guid: "f1" };
     const context = {
       personaName: "ei",
       messages_context: [],
       messages_analyze: [createMessage("1", "analyze")],
       itemName: "Birthday",
       itemValue: "Actually January 16th",
-      scanConfidence: "high",
     };
 
     queueItemUpdate("fact", matchResult, context, state as any);
@@ -408,15 +409,14 @@ describe("queueItemUpdate (Step 3)", () => {
     );
   });
 
-  it("queues update for existing trait match", () => {
-    const matchResult = { name: "Curiosity", description: "Personality trait", confidence: "high" as const };
+  it("queues update for existing trait match by GUID", () => {
+    const matchResult = { matched_guid: "t1" };
     const context = {
       personaName: "ei",
       messages_context: [],
       messages_analyze: [],
       itemName: "Curiosity",
       itemValue: "Updated value",
-      scanConfidence: "medium",
     };
 
     queueItemUpdate("trait", matchResult, context, state as any);
@@ -429,15 +429,14 @@ describe("queueItemUpdate (Step 3)", () => {
     );
   });
 
-  it("queues update for existing topic match", () => {
-    const matchResult = { name: "AI", description: "Artificial intelligence", confidence: "high" as const };
+  it("queues update for existing topic match by GUID", () => {
+    const matchResult = { matched_guid: "top1" };
     const context = {
       personaName: "ei",
       messages_context: [],
       messages_analyze: [],
       itemName: "AI",
       itemValue: "Updated AI interest",
-      scanConfidence: "high",
     };
 
     queueItemUpdate("topic", matchResult, context, state as any);
@@ -449,15 +448,14 @@ describe("queueItemUpdate (Step 3)", () => {
     );
   });
 
-  it("queues update for existing person match", () => {
-    const matchResult = { name: "Alice", description: "Friend", confidence: "high" as const };
+  it("queues update for existing person match by GUID", () => {
+    const matchResult = { matched_guid: "p1" };
     const context = {
       personaName: "ei",
       messages_context: [],
       messages_analyze: [],
       itemName: "Alice",
       itemValue: "Colleague",
-      scanConfidence: "medium",
     };
 
     queueItemUpdate("person", matchResult, context, state as any);
@@ -469,15 +467,14 @@ describe("queueItemUpdate (Step 3)", () => {
     );
   });
 
-  it("handles match to non-existent item gracefully (treats as new)", () => {
-    const matchResult = { name: "NonExistent", description: "No match", confidence: "medium" as const };
+  it("handles match to non-existent GUID gracefully (treats as new)", () => {
+    const matchResult = { matched_guid: "non-existent-guid" };
     const context = {
       personaName: "ei",
       messages_context: [],
       messages_analyze: [],
       itemName: "NonExistent",
       itemValue: "Value",
-      scanConfidence: "medium",
     };
 
     queueItemUpdate("fact", matchResult, context, state as any);
@@ -512,7 +509,7 @@ describe("Extraction Pipeline Integration", () => {
     expect(scanCall.data.messages_analyze).toBe(context.messages_analyze);
 
     vi.clearAllMocks();
-    const candidate = { type_of_fact: "Location", value_of_fact: "Chicago", confidence: "high" as const, reason: "User mentioned" };
+    const candidate = { type_of_fact: "Location", value_of_fact: "Chicago", reason: "User mentioned" };
     queueItemMatch("fact", candidate, context, state as any);
 
     const matchCall = state.queue_enqueue.mock.calls[0][0];
@@ -520,12 +517,11 @@ describe("Extraction Pipeline Integration", () => {
     expect(matchCall.data.messages_analyze).toBe(context.messages_analyze);
 
     vi.clearAllMocks();
-    const matchResult = { name: "Not Found", description: "No match", confidence: "low" as const };
+    const matchResult = { matched_guid: null };
     const updateContext = {
       ...context,
       itemName: "Location",
       itemValue: "Chicago",
-      scanConfidence: "high",
     };
     queueItemUpdate("fact", matchResult, updateContext, state as any);
 

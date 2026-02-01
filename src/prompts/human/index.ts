@@ -11,7 +11,6 @@ export type {
   TraitScanPromptData,
   TopicScanPromptData,
   PersonScanPromptData,
-  ScanConfidence,
   FactScanCandidate,
   TraitScanCandidate,
   TopicScanCandidate,
