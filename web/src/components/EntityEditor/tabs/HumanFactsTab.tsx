@@ -1,15 +1,15 @@
+import type { Fact } from '../../../../../src/core/types';
 import { GroupedCardList } from '../GroupedCardList';
+import { FactCard } from '../FactCard';
 
-interface Fact {
-  id: string;
-  name: string;
-  description: string;
-  sentiment: number;
-  confidence: number;
-  last_updated: string;
-  learned_by?: string;
-  persona_groups?: string[];
-  last_confirmed?: string;
+interface SliderConfig {
+  field: string;
+  label: string;
+  min?: number;
+  max?: number;
+  step?: number;
+  formatValue?: (value: number) => string;
+  tooltip?: string;
 }
 
 interface HumanFactsTabProps {
@@ -21,9 +21,8 @@ interface HumanFactsTabProps {
   dirtyIds: Set<string>;
 }
 
-const factSliders = [
-  { field: 'sentiment', label: 'Sentiment', min: -1, max: 1 },
-  { field: 'confidence', label: 'Confidence', min: 0, max: 1 },
+const factSliders: SliderConfig[] = [
+  { field: 'sentiment', label: 'Sentiment', min: -1, max: 1, tooltip: 'How do you feel about this aspect of your life? -1: Hate it! | 0: Neutral | 1: Love it!' },
 ];
 
 export const HumanFactsTab = ({
@@ -34,6 +33,25 @@ export const HumanFactsTab = ({
   onAdd,
   dirtyIds,
 }: HumanFactsTabProps) => {
+  const renderFactCard = (
+    item: Fact,
+    onItemChange: (field: keyof Fact, value: Fact[keyof Fact]) => void,
+    onItemSave: () => void,
+    onItemDelete: () => void,
+    isDirty: boolean,
+    sliders: SliderConfig[]
+  ) => (
+    <FactCard
+      key={item.id}
+      fact={item}
+      sliders={sliders}
+      onChange={onItemChange}
+      onSave={onItemSave}
+      onDelete={onItemDelete}
+      isDirty={isDirty}
+    />
+  );
+
   return (
     <GroupedCardList
       items={facts}
@@ -43,6 +61,7 @@ export const HumanFactsTab = ({
       onDelete={onDelete}
       onAdd={onAdd}
       dirtyIds={dirtyIds}
+      renderCard={renderFactCard}
     />
   );
 };
