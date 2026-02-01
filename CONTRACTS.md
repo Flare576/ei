@@ -124,12 +124,23 @@ interface Ei_Interface {
   /** Pending human messages were recalled (for edit). Payload includes combined content for input field. */
   onMessageRecalled?: (personaName: string, content: string) => void;
   
-  // === Human Entity Events ===
-  
-  /** Human entity data changed (facts, traits, topics, people) */
-  onHumanUpdated?: () => void;
-  
-  // === System Events ===
+   // === Human Entity Events ===
+   
+   /** Human entity data changed (facts, traits, topics, people) */
+   onHumanUpdated?: () => void;
+   
+   // === Quote Events ===
+   
+   /** A quote was added */
+   onQuoteAdded?: () => void;
+   
+   /** A quote was updated */
+   onQuoteUpdated?: () => void;
+   
+   /** A quote was removed */
+   onQuoteRemoved?: () => void;
+   
+   // === System Events ===
   
   /** Queue processor state changed (idle ↔ busy) */
   onQueueStateChanged?: (state: "idle" | "busy") => void;
@@ -265,10 +276,27 @@ interface Processor {
   /** Add/update a person (matched by id) */
   upsertPerson(person: Person): Promise<void>;
   
-  /** Remove a data item by type and id */
-  removeDataItem(type: "fact" | "trait" | "topic" | "person", id: string): Promise<void>;
-  
-  // === Checkpoint Operations ===
+   /** Remove a data item by type and id */
+   removeDataItem(type: "fact" | "trait" | "topic" | "person", id: string): Promise<void>;
+   
+   // === Quote Operations ===
+   
+   /** Add a new quote */
+   addQuote(quote: Quote): Promise<void>;
+   
+   /** Update an existing quote by id */
+   updateQuote(id: string, updates: Partial<Quote>): Promise<void>;
+   
+   /** Remove a quote by id */
+   removeQuote(id: string): Promise<void>;
+   
+   /** Get quotes with optional filtering */
+   getQuotes(filter?: { message_id?: string; data_item_id?: string }): Promise<Quote[]>;
+   
+   /** Get all quotes for a specific message */
+   getQuotesForMessage(messageId: string): Promise<Quote[]>;
+   
+   // === Checkpoint Operations ===
   
   /** Get list of all checkpoints, sorted by timestamp desc */
   getCheckpoints(): Promise<Checkpoint[]>;
@@ -423,10 +451,17 @@ interface StateManager {
   human_trait_remove(id: string): boolean;
   human_topic_upsert(topic: Topic): void;
   human_topic_remove(id: string): boolean;
-  human_person_upsert(person: Person): void;
-  human_person_remove(id: string): boolean;
-  
-  // === Personas ===
+   human_person_upsert(person: Person): void;
+   human_person_remove(id: string): boolean;
+   
+   // Quote operations
+   human_quote_add(quote: Quote): void;
+   human_quote_update(id: string, updates: Partial<Quote>): boolean;
+   human_quote_remove(id: string): boolean;
+   human_quote_getForMessage(messageId: string): Quote[];
+   human_quote_getForDataItem(dataItemId: string): Quote[];
+   
+   // === Personas ===
   
   persona_getAll(): PersonaEntity[];
   persona_get(name: string): PersonaEntity | null;
@@ -602,6 +637,7 @@ interface HumanEntity {
   traits: Trait[];
   topics: Topic[];
   people: Person[];
+  quotes: Quote[];
   last_updated: string;
   last_activity: string;  // When human last sent a message (any persona)
   settings?: HumanSettings;
@@ -611,6 +647,7 @@ interface HumanSettings {
   auto_save_interval_ms?: number;  // Default: 60000 (1 min)
   default_model?: string;          // Default: from EI_LLM_MODEL env
   queue_paused?: boolean;          // Default: false
+  skip_quote_delete_confirm?: boolean;  // Skip confirmation dialog when deleting quotes
 }
 ```
 
@@ -718,6 +755,20 @@ interface Person extends DataItemBase {
   relationship: string;
   exposure_current: number;    // 0.0 to 1.0
   exposure_desired: number;    // 0.0 to 1.0
+}
+
+interface Quote {
+  id: string;                    // UUID (use crypto.randomUUID())
+  message_id: string | null;     // FK to Message.id (nullable for manual quotes)
+  data_item_ids: string[];       // FK[] to DataItemBase.id
+  persona_groups: string[];      // Visibility groups
+  text: string;                  // The quote content
+  speaker: "human" | string;     // Who said it (persona name or "human")
+  timestamp: string;             // ISO timestamp (from original message)
+  start: number | null;          // Character offset in message (null = can't highlight)
+  end: number | null;            // Character offset in message (null = can't highlight)
+  created_at: string;            // ISO timestamp when captured
+  created_by: "extraction" | "human";  // How it was created
 }
 ```
 

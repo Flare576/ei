@@ -1,18 +1,18 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-02-01 (E011 Quote Preservation Epic added)
+> Last updated: 2026-02-01 (0121 HumanEditor Smart Merge added)
 
 ## Overview
 
 | Status | Count |
 |--------|-------|
-| PENDING | 25 |
+| PENDING | 26 |
 | IN_PROGRESS | 0 |
 | QA | 0 |
 | DONE | 72 |
 | BLOCKED | 0 |
 
-> 102 total tickets (72 done + 25 pending + 5 backlog).
+> 103 total tickets (72 done + 26 pending + 5 backlog).
 
 ---
 
@@ -190,6 +190,14 @@
 ## BLOCKED
 
 (none)
+
+---
+
+## Standalone / Bug Fixes
+
+| Ticket | Title | Depends On |
+|--------|-------|------------|
+| 0121 | HumanEditor Smart Merge | None |
 
 ---
 
