@@ -586,52 +586,56 @@ export class Processor {
     });
 
     if (personaName.toLowerCase() === "ei") {
-      this.checkAndQueueHumanExtraction(message, history);
+      this.checkAndQueueHumanExtraction(history);
     }
   }
 
-  private checkAndQueueHumanExtraction(newMessage: Message, history: Message[]): void {
+  private checkAndQueueHumanExtraction(history: Message[]): void {
     const human = this.stateManager.getHuman();
     const now = new Date().toISOString();
     
-    const extractionContext: ExtractionContext = {
-      personaName: "ei",
-      messages_context: history.slice(0,-1),
-      messages_analyze: [newMessage],
+    const getContextForType = (lastSeeded: string | undefined): ExtractionContext => {
+      if (!lastSeeded) {
+        return { personaName: "ei", messages_context: [], messages_analyze: history };
+      }
+      const sinceTime = new Date(lastSeeded).getTime();
+      const splitIndex = history.findIndex(m => new Date(m.timestamp).getTime() > sinceTime);
+      if (splitIndex === -1) {
+        return { personaName: "ei", messages_context: history, messages_analyze: [] };
+      }
+      return {
+        personaName: "ei",
+        messages_context: history.slice(0, splitIndex),
+        messages_analyze: history.slice(splitIndex),
+      };
     };
 
-    const countMessagesSince = (timestamp: string | undefined): number => {
-      if (!timestamp) return history.length;
-      const sinceTime = new Date(timestamp).getTime();
-      return history.filter(m => new Date(m.timestamp).getTime() > sinceTime).length;
-    };
-
-    const factMessageCount = countMessagesSince(human.lastSeeded_fact);
-    if (human.facts.length < factMessageCount) {
-      queueFactScan(extractionContext, this.stateManager);
+    const factContext = getContextForType(human.lastSeeded_fact);
+    if (human.facts.length < factContext.messages_analyze.length) {
+      queueFactScan(factContext, this.stateManager);
       this.stateManager.setHuman({ ...human, lastSeeded_fact: now });
-      console.log(`[Processor] Ei extraction: facts (${human.facts.length} < ${factMessageCount} messages)`);
+      console.log(`[Processor] Ei extraction: facts (${human.facts.length} < ${factContext.messages_analyze.length} messages)`);
     }
 
-    const traitMessageCount = countMessagesSince(human.lastSeeded_trait);
-    if (human.traits.length < traitMessageCount) {
-      queueTraitScan(extractionContext, this.stateManager);
+    const traitContext = getContextForType(human.lastSeeded_trait);
+    if (human.traits.length < traitContext.messages_analyze.length) {
+      queueTraitScan(traitContext, this.stateManager);
       this.stateManager.setHuman({ ...this.stateManager.getHuman(), lastSeeded_trait: now });
-      console.log(`[Processor] Ei extraction: traits (${human.traits.length} < ${traitMessageCount} messages)`);
+      console.log(`[Processor] Ei extraction: traits (${human.traits.length} < ${traitContext.messages_analyze.length} messages)`);
     }
 
-    const topicMessageCount = countMessagesSince(human.lastSeeded_topic);
-    if (human.topics.length < topicMessageCount) {
-      queueTopicScan(extractionContext, this.stateManager);
+    const topicContext = getContextForType(human.lastSeeded_topic);
+    if (human.topics.length < topicContext.messages_analyze.length) {
+      queueTopicScan(topicContext, this.stateManager);
       this.stateManager.setHuman({ ...this.stateManager.getHuman(), lastSeeded_topic: now });
-      console.log(`[Processor] Ei extraction: topics (${human.topics.length} < ${topicMessageCount} messages)`);
+      console.log(`[Processor] Ei extraction: topics (${human.topics.length} < ${topicContext.messages_analyze.length} messages)`);
     }
 
-    const personMessageCount = countMessagesSince(human.lastSeeded_person);
-    if (human.people.length < personMessageCount) {
-      queuePersonScan(extractionContext, this.stateManager);
+    const personContext = getContextForType(human.lastSeeded_person);
+    if (human.people.length < personContext.messages_analyze.length) {
+      queuePersonScan(personContext, this.stateManager);
       this.stateManager.setHuman({ ...this.stateManager.getHuman(), lastSeeded_person: now });
-      console.log(`[Processor] Ei extraction: people (${human.people.length} < ${personMessageCount} messages)`);
+      console.log(`[Processor] Ei extraction: people (${human.people.length} < ${personContext.messages_analyze.length} messages)`);
     }
   }
 
