@@ -1,5 +1,11 @@
 import type { LLMRequest, LLMNextStep } from "../types.js";
 
+const MAX_RETRY_ATTEMPTS = 3;
+const PERMANENT_FAILURE_PATTERNS = [
+  /\(4\d{2}\):/,
+  /bad request/i,
+];
+
 export class QueueState {
   private queue: LLMRequest[] = [];
   private paused = false;
@@ -41,15 +47,25 @@ export class QueueState {
     }
   }
 
-  fail(id: string, error?: string): void {
-    const request = this.queue.find((r) => r.id === id);
-    if (request) {
-      request.attempts++;
-      request.last_attempt = new Date().toISOString();
-      if (error) {
-        request.data._lastError = error;
-      }
+  fail(id: string, error?: string): boolean {
+    const idx = this.queue.findIndex((r) => r.id === id);
+    if (idx < 0) return false;
+    
+    const request = this.queue[idx];
+    request.attempts++;
+    request.last_attempt = new Date().toISOString();
+    if (error) {
+      request.data._lastError = error;
     }
+    
+    const isPermanentFailure = error && PERMANENT_FAILURE_PATTERNS.some(p => p.test(error));
+    const exceededRetries = request.attempts >= MAX_RETRY_ATTEMPTS;
+    
+    if (isPermanentFailure || exceededRetries) {
+      this.queue.splice(idx, 1);
+      return true;
+    }
+    return false;
   }
 
   getValidations(): LLMRequest[] {
