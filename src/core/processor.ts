@@ -14,6 +14,7 @@ import {
   type Trait,
   type Topic,
   type Person,
+  type Quote,
   type Checkpoint,
   type QueueStatus,
   type ContextStatus,
@@ -231,6 +232,15 @@ export class Processor {
     }
   }
 
+  private getModelForPersona(personaName?: string): string | undefined {
+    const human = this.stateManager.getHuman();
+    if (personaName) {
+      const persona = this.stateManager.persona_get(personaName);
+      return persona?.model || human.settings?.default_model;
+    }
+    return human.settings?.default_model;
+  }
+
   private queueHeartbeatCheck(personaName: string): void {
     const persona = this.stateManager.persona_get(personaName);
     if (!persona) return;
@@ -272,6 +282,7 @@ export class Processor {
       system: prompt.system,
       user: prompt.user,
       next_step: LLMNextStep.HandleHeartbeatCheck,
+      model: this.getModelForPersona(personaName),
       data: { personaName },
     });
   }
@@ -349,6 +360,11 @@ export class Processor {
 
       if (response.request.next_step === LLMNextStep.HandleEiValidation) {
         this.interface.onHumanUpdated?.();
+      }
+
+      if (response.request.next_step === LLMNextStep.HandleHumanItemUpdate) {
+        this.interface.onHumanUpdated?.();
+        this.interface.onQuoteAdded?.();
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -544,6 +560,7 @@ export class Processor {
       user: prompt.user,
       messages: chatMessages,
       next_step: LLMNextStep.HandlePersonaResponse,
+      model: this.getModelForPersona(personaName),
       data: { personaName },
     });
     this.interface.onMessageQueued?.(personaName);
@@ -564,6 +581,7 @@ export class Processor {
       system: traitPrompt.system,
       user: traitPrompt.user,
       next_step: LLMNextStep.HandlePersonaTraitExtraction,
+      model: this.getModelForPersona(personaName),
       data: { personaName },
     });
 
@@ -578,7 +596,7 @@ export class Processor {
     
     const extractionContext: ExtractionContext = {
       personaName: "ei",
-      messages_context: history.slice(0, -1),
+      messages_context: history.slice(0,-1),
       messages_analyze: [newMessage],
     };
 
@@ -765,23 +783,56 @@ export class Processor {
     this.interface.onHumanUpdated?.();
   }
 
-  async removeDataItem(type: "fact" | "trait" | "topic" | "person", id: string): Promise<void> {
-    switch (type) {
-      case "fact":
-        this.stateManager.human_fact_remove(id);
-        break;
-      case "trait":
-        this.stateManager.human_trait_remove(id);
-        break;
-      case "topic":
-        this.stateManager.human_topic_remove(id);
-        break;
-      case "person":
-        this.stateManager.human_person_remove(id);
-        break;
-    }
-    this.interface.onHumanUpdated?.();
-  }
+   async removeDataItem(type: "fact" | "trait" | "topic" | "person", id: string): Promise<void> {
+     switch (type) {
+       case "fact":
+         this.stateManager.human_fact_remove(id);
+         break;
+       case "trait":
+         this.stateManager.human_trait_remove(id);
+         break;
+       case "topic":
+         this.stateManager.human_topic_remove(id);
+         break;
+       case "person":
+         this.stateManager.human_person_remove(id);
+         break;
+     }
+     this.interface.onHumanUpdated?.();
+   }
+
+   async addQuote(quote: Quote): Promise<void> {
+     this.stateManager.human_quote_add(quote);
+     this.interface.onQuoteAdded?.();
+   }
+
+   async updateQuote(id: string, updates: Partial<Quote>): Promise<void> {
+     this.stateManager.human_quote_update(id, updates);
+     this.interface.onQuoteUpdated?.();
+   }
+
+   async removeQuote(id: string): Promise<void> {
+     this.stateManager.human_quote_remove(id);
+     this.interface.onQuoteRemoved?.();
+   }
+
+   async getQuotes(filter?: { message_id?: string; data_item_id?: string }): Promise<Quote[]> {
+     const human = this.stateManager.getHuman();
+     if (!filter) {
+       return human.quotes;
+     }
+     if (filter.message_id) {
+       return this.stateManager.human_quote_getForMessage(filter.message_id);
+     }
+     if (filter.data_item_id) {
+       return this.stateManager.human_quote_getForDataItem(filter.data_item_id);
+     }
+     return human.quotes;
+   }
+
+   async getQuotesForMessage(messageId: string): Promise<Quote[]> {
+     return this.stateManager.human_quote_getForMessage(messageId);
+   }
 
   async getCheckpoints(): Promise<Checkpoint[]> {
     return this.stateManager.checkpoint_list();
@@ -847,6 +898,7 @@ export class Processor {
       system: systemPrompt,
       user: userPrompt,
       next_step: LLMNextStep.HandleOneShot,
+      model: this.getModelForPersona(),
       data: { guid },
     });
   }
