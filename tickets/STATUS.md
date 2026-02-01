@@ -1,18 +1,18 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-02-01 (0113 done: Fact Validation Core)
+> Last updated: 2026-02-01 (E011 Quote Preservation Epic added)
 
 ## Overview
 
 | Status | Count |
 |--------|-------|
-| PENDING | 21 |
+| PENDING | 25 |
 | IN_PROGRESS | 0 |
 | QA | 0 |
-| DONE | 71 |
+| DONE | 72 |
 | BLOCKED | 0 |
 
-> 97 total tickets (71 done + 21 pending + 5 backlog).
+> 102 total tickets (72 done + 25 pending + 5 backlog).
 
 ---
 
@@ -30,6 +30,7 @@
 | **E008** | 0080-0089 | DONE | UI: Entity Management |
 | **E009** | 0090-0099 | PENDING | Polish & New Features |
 | **E010** | 0100-0109 | PENDING | TUI & OpenCode Integration |
+| **E011** | 0116-0120 | PENDING | Quote Preservation System |
 
 ---
 
@@ -81,8 +82,17 @@
 
 | Ticket | Title | Depends On |
 |--------|-------|------------|
-| 0114 | Fact Validation Web UI | 0113, 0082 |
 | 0115 | Fact Validation TUI | 0113, 0100 |
+
+### E011: Quote Preservation System
+
+| Ticket | Title | Depends On |
+|--------|-------|------------|
+| 0116 | Quote Data Type & Storage | None |
+| 0117 | Quote Extraction (Step 3) | 0116 |
+| 0118 | Quote Chat Rendering | 0116 |
+| 0119 | Quote Capture UI (Scissors Modal) | 0116, 0118 |
+| 0120 | Quote Management UI | 0118, 0119 |
 
 ---
 
@@ -173,6 +183,7 @@
 | 0051 | Context Boundary ("New" Command) | 2026-01-31 |
 | 0091 | Dynamic vs Static Personas | 2026-01-30 |
 | 0113 | Fact Validation System (Core) | 2026-02-01 |
+| 0114 | Fact Validation Web UI | 2026-02-01 |
 
 ---
 
@@ -207,3 +218,4 @@
    - Ei → OpenCode: Context injection to CLAUDE.md
    - Sync via flare576.com enables Web (mobile) ↔ TUI (desktop)
 7. **Sisyphus Persona** - Static persona representing coding agent, history = imported sessions
+8. **Quote Preservation** - Quotes are a separate entity (not on Topic/Fact), validated via exact string match, human-in-the-loop for capture/management
