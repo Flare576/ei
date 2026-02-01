@@ -88,7 +88,8 @@ test.describe("Basic Chat Flow", () => {
     const traitRequest = requests.find(r => {
       const body = r.body as { messages?: Array<{ role: string; content: string }> };
       const systemMsg = body?.messages?.find(m => m.role === "system");
-      return systemMsg?.content?.toLowerCase().includes("analyzing a conversation to detect explicit requests");
+      const content = systemMsg?.content?.toLowerCase() || "";
+      return content.includes("scanning a conversation to quickly identify") && content.includes("traits");
     });
     expect(traitRequest).toBeDefined();
   });

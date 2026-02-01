@@ -214,7 +214,7 @@ export class MockLLMServerImpl implements MockLLMServer {
 
   private detectRequestType(
     messages: Array<{ role: string; content: string }>
-  ): "response" | "system-concepts" | "human-concepts" | "description" | "persona-generation" | "trait-extraction" | "unknown" {
+  ): "response" | "system-concepts" | "human-concepts" | "description" | "persona-generation" | "trait-extraction" | "fact-extraction" | "topic-extraction" | "person-extraction" | "unknown" {
     if (!messages || messages.length === 0) {
       return "unknown";
     }
@@ -233,8 +233,11 @@ export class MockLLMServerImpl implements MockLLMServer {
       return "persona-generation";
     }
 
-    if (content.includes("analyzing a conversation to detect explicit requests") || content.includes("change their communication style")) {
-      return "trait-extraction";
+    if (content.includes("scanning a conversation to quickly identify")) {
+      if (content.includes("traits")) return "trait-extraction";
+      if (content.includes("facts")) return "fact-extraction";
+      if (content.includes("topics")) return "topic-extraction";
+      if (content.includes("people")) return "person-extraction";
     }
 
     if (content.includes("you are ei") && content.includes("companion")) {
@@ -295,6 +298,27 @@ export class MockLLMServerImpl implements MockLLMServer {
         };
 
       case "trait-extraction":
+        return {
+          type: "fixed",
+          content: JSON.stringify([]),
+          statusCode: 200,
+        };
+
+      case "fact-extraction":
+        return {
+          type: "fixed",
+          content: JSON.stringify([]),
+          statusCode: 200,
+        };
+
+      case "topic-extraction":
+        return {
+          type: "fixed",
+          content: JSON.stringify([]),
+          statusCode: 200,
+        };
+
+      case "person-extraction":
         return {
           type: "fixed",
           content: JSON.stringify([]),

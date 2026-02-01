@@ -549,8 +549,8 @@ test.describe("Session Bug Coverage (0112)", () => {
     await descriptionTextarea.click();
     await descriptionTextarea.fill("The user's favorite color is now green");
 
-    // Save triggers on dirty state
-    await factCard.locator("button").filter({ hasText: "Save" }).click();
+    // Blur triggers auto-save (click outside the card)
+    await page.locator('.ei-tab-container__content').click({ position: { x: 10, y: 10 } });
     await page.waitForTimeout(500);
 
     // Close editor via X button
