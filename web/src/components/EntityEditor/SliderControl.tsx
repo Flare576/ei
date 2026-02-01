@@ -9,6 +9,7 @@ interface SliderControlProps {
   onChange: (value: number) => void;
   formatValue?: (value: number) => string;
   disabled?: boolean;
+  tooltip?: string;
 }
 
 const defaultFormat = (v: number) => v.toFixed(2);
@@ -22,6 +23,7 @@ export const SliderControl: React.FC<SliderControlProps> = ({
   onChange,
   formatValue = defaultFormat,
   disabled = false,
+  tooltip,
 }) => {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     onChange(parseFloat(e.target.value));
@@ -30,7 +32,10 @@ export const SliderControl: React.FC<SliderControlProps> = ({
   return (
     <div className="ei-slider-control">
       <div className="ei-slider-control__header">
-        <span className="ei-slider-control__label">{label}</span>
+        <span className="ei-slider-control__label" title={tooltip}>
+          {label}
+          {tooltip && <span className="ei-slider-control__help">ⓘ</span>}
+        </span>
         <span className="ei-slider-control__value">{formatValue(value)}</span>
       </div>
       <input

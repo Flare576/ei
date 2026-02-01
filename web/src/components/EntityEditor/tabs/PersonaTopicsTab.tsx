@@ -23,7 +23,7 @@ interface PersonaTopicsTabProps {
 }
 
 const topicSliders = [
-  { field: 'sentiment', label: 'Sentiment', min: -1, max: 1 },
+  { field: 'sentiment', label: 'Sentiment', min: -1, max: 1, tooltip: 'How does this persona feel about this topic? -1: They hate it! | 0: Neutral | 1: They love it!' },
   { field: 'exposure_current', label: 'Current Exposure', min: 0, max: 1 },
   { field: 'exposure_desired', label: 'Desired Exposure', min: 0, max: 1 },
 ];

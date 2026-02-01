@@ -21,7 +21,7 @@ interface HumanTraitsTabProps {
 }
 
 const traitSliders = [
-  { field: 'sentiment', label: 'Sentiment', min: -1, max: 1 },
+  { field: 'sentiment', label: 'Sentiment', min: -1, max: 1, tooltip: 'How do you feel about this aspect of yourself? -1: Hate it! | 0: Neutral | 1: Love it!' },
   { field: 'strength', label: 'Strength', min: 0, max: 1 },
 ];
 
