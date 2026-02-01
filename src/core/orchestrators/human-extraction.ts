@@ -274,6 +274,7 @@ export function queueItemUpdate(
       matchedType,
       isNewItem,
       existingItemId: existingItem?.id,
+      messages_analyze: context.messages_analyze,
     },
   });
 }

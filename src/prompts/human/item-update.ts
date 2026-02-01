@@ -128,7 +128,8 @@ Return all relevant fields for this ${typeLabel} based on what you find in the c
     '    "sentiment": 0.9',
     data.data_type === "trait" ? ',\n    "strength": 0.5' : '',
     data.data_type === "person" ? ',\n    "relationship": "Mother-In-Law|Son|Coworker|etc.",\n    "exposure_desired": 0.4,\n    "exposure_impact": "high|medium|low|none"' : '',
-    data.data_type === "topic" ? ',\n    "exposure_desired": 0.4,\n    "exposure_impact": "high|medium|low|none"' : ''
+    data.data_type === "topic" ? ',\n    "exposure_desired": 0.4,\n    "exposure_impact": "high|medium|low|none"' : '',
+    ',\n    "quotes": [\n      {\n        "text": "exact phrase from message",\n        "reason": "why this matters"\n      }\n    ]'
   ].filter(Boolean).join('');
 
   const system = `# Task
@@ -168,6 +169,28 @@ Scale of -1.0 to 1.0:
 
 Do not make micro-adjustments. Close enough is OK for this field.
 ${strengthSection}${relationshipSection}${exposureSection}
+
+## Quotes
+
+In addition to updating the ${typeLabel}, identify any **memorable, funny, important, or stand-out phrases** from the Most Recent Messages that relate to this ${typeLabel}.
+
+Return them in the \`quotes\` array:
+
+\`\`\`json
+{
+  "name": "...",
+  "description": "...",
+  "sentiment": 0.5,
+  "quotes": [
+    {
+      "text": "exact phrase from the message",
+      "reason": "why this is worth preserving"
+    }
+  ]
+}
+\`\`\`
+
+**CRITICAL**: Return the EXACT text as it appears in the message. We will verify it.
 
 # Current Details of ${typeLabel}
 

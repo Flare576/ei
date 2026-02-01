@@ -89,10 +89,16 @@ export interface ItemUpdatePromptData {
 
 export type ExposureImpact = "high" | "medium" | "low" | "none";
 
+export interface QuoteCandidate {
+  text: string;
+  reason: string;
+}
+
 export interface ItemUpdateResultBase {
   name: string;
   description: string;
   sentiment: number;
+  quotes?: QuoteCandidate[];
 }
 
 export interface FactUpdateResult extends ItemUpdateResultBase {}

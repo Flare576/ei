@@ -8,6 +8,7 @@ import {
   type Topic,
   type Fact,
   type Person,
+  type Quote,
   type DataItemType,
 } from "../types.js";
 import type { StateManager } from "../state-manager.js";
@@ -522,6 +523,7 @@ function handleHumanFactScan(response: LLMResponse, state: StateManager): void {
   const context = extractContext(response);
   if (!context) return;
 
+  // TODO: we should de-dupe here - We don't need to process "Flare" 2+ times
   for (const candidate of result.facts) {
     queueItemMatch("fact", candidate, context, state);
   }
@@ -702,7 +704,71 @@ function handleHumanItemUpdate(response: LLMResponse, state: StateManager): void
     }
   }
 
+  const allMessages = state.messages_get(personaName);
+  validateAndStoreQuotes(result.quotes, allMessages, itemId, personaName, state);
+
   console.log(`[handleHumanItemUpdate] ${isNewItem ? "Created" : "Updated"} ${candidateType} "${result.name}"`);
+}
+
+function validateAndStoreQuotes(
+  candidates: Array<{ text: string; reason: string }> | undefined,
+  messages: Message[],
+  dataItemId: string,
+  personaName: string,
+  state: StateManager
+): void {
+  if (!candidates || candidates.length === 0) return;
+  
+  for (const candidate of candidates) {
+    // Search all messages for exact match
+    let found = false;
+    for (const message of messages) {
+      const start = message.content.indexOf(candidate.text);
+      if (start !== -1) {
+        const end = start + candidate.text.length;
+        
+        // Check for existing quote at same position
+        const existing = state.human_quote_getForMessage(message.id);
+        const existingQuote = existing.find(q => q.start === start && q.end === end);
+        
+        if (existingQuote) {
+          // Quote exists - append this data item if not already linked
+          if (!existingQuote.data_item_ids.includes(dataItemId)) {
+            state.human_quote_update(existingQuote.id, {
+              data_item_ids: [...existingQuote.data_item_ids, dataItemId],
+            });
+            console.log(`[extraction] Linked existing quote to "${dataItemId}": "${candidate.text.slice(0, 30)}..."`);
+          } else {
+            console.log(`[extraction] Quote already linked to "${dataItemId}": "${candidate.text.slice(0, 30)}..."`);
+          }
+          found = true;
+          break;
+        }
+        
+        const quote: Quote = {
+          id: crypto.randomUUID(),
+          message_id: message.id,
+          data_item_ids: [dataItemId],
+          persona_groups: ["General"],
+          text: candidate.text,
+          speaker: message.role === "human" ? "human" : personaName,
+          timestamp: message.timestamp,
+          start: start,
+          end: end,
+          created_at: new Date().toISOString(),
+          created_by: "extraction",
+        };
+        state.human_quote_add(quote);
+        console.log(`[extraction] Captured quote: "${candidate.text.slice(0, 50)}..."`);
+        found = true;
+        break; // Found it, move to next candidate
+      }
+    }
+    // If loop completes without finding, log it
+    if (!found) {
+      console.log(`[extraction] Quote not found in messages, skipping: "${candidate.text?.slice(0, 50)}..."`);
+    }
+  }
 }
 
 function extractContext(response: LLMResponse): ExtractionContext | null {
