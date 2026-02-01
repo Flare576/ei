@@ -1,4 +1,4 @@
-import type { HumanEntity, Fact, Trait, Topic, Person } from "../types.js";
+import type { HumanEntity, Fact, Trait, Topic, Person, Quote } from "../types.js";
 
 export function createDefaultHumanEntity(): HumanEntity {
   return {
@@ -7,6 +7,7 @@ export function createDefaultHumanEntity(): HumanEntity {
     traits: [],
     topics: [],
     people: [],
+    quotes: [],
     last_updated: new Date().toISOString(),
     last_activity: new Date().toISOString(),
   };
@@ -102,13 +103,49 @@ export class HumanState {
     this.human.last_updated = new Date().toISOString();
   }
 
-  person_remove(id: string): boolean {
-    const idx = this.human.people.findIndex((p) => p.id === id);
-    if (idx >= 0) {
-      this.human.people.splice(idx, 1);
-      this.human.last_updated = new Date().toISOString();
-      return true;
-    }
-    return false;
-  }
+   person_remove(id: string): boolean {
+     const idx = this.human.people.findIndex((p) => p.id === id);
+     if (idx >= 0) {
+       this.human.people.splice(idx, 1);
+       this.human.last_updated = new Date().toISOString();
+       return true;
+     }
+     return false;
+   }
+
+   quote_add(quote: Quote): void {
+     if (!quote.created_at) {
+       quote.created_at = new Date().toISOString();
+     }
+     this.human.quotes.push(quote);
+     this.human.last_updated = new Date().toISOString();
+   }
+
+   quote_update(id: string, updates: Partial<Quote>): boolean {
+     const idx = this.human.quotes.findIndex((q) => q.id === id);
+     if (idx >= 0) {
+       this.human.quotes[idx] = { ...this.human.quotes[idx], ...updates };
+       this.human.last_updated = new Date().toISOString();
+       return true;
+     }
+     return false;
+   }
+
+   quote_remove(id: string): boolean {
+     const idx = this.human.quotes.findIndex((q) => q.id === id);
+     if (idx >= 0) {
+       this.human.quotes.splice(idx, 1);
+       this.human.last_updated = new Date().toISOString();
+       return true;
+     }
+     return false;
+   }
+
+   quote_getForMessage(messageId: string): Quote[] {
+     return this.human.quotes.filter((q) => q.message_id === messageId);
+   }
+
+   quote_getForDataItem(dataItemId: string): Quote[] {
+     return this.human.quotes.filter((q) => q.data_item_ids.includes(dataItemId));
+   }
 }

@@ -90,6 +90,20 @@ export interface Person extends DataItemBase {
   exposure_desired: number;
 }
 
+export interface Quote {
+  id: string;                    // UUID (use crypto.randomUUID())
+  message_id: string | null;     // FK to Message.id (nullable for manual quotes)
+  data_item_ids: string[];       // FK[] to DataItemBase.id
+  persona_groups: string[];      // Visibility groups
+  text: string;                  // The quote content
+  speaker: "human" | string;     // Who said it (persona name or "human")
+  timestamp: string;             // ISO timestamp (from original message)
+  start: number | null;          // Character offset in message (null = can't highlight)
+  end: number | null;            // Character offset in message (null = can't highlight)
+  created_at: string;            // ISO timestamp when captured
+  created_by: "extraction" | "human";  // How it was created
+}
+
 // =============================================================================
 // ENTITIES
 // =============================================================================
@@ -98,6 +112,10 @@ export interface HumanSettings {
   auto_save_interval_ms?: number;
   default_model?: string;
   queue_paused?: boolean;
+  skip_quote_delete_confirm?: boolean;
+  name_display?: string;
+  name_color?: string;
+  time_mode?: "24h" | "12h" | "local" | "utc";
 }
 
 export interface CeremonyConfig {
@@ -114,6 +132,7 @@ export interface HumanEntity {
   traits: Trait[];
   topics: Topic[];
   people: Person[];
+  quotes: Quote[];
   last_updated: string;
   last_activity: string;
   settings?: HumanSettings;
@@ -258,6 +277,9 @@ export interface Ei_Interface {
   onMessageProcessing?: (personaName: string) => void;
   onMessageQueued?: (personaName: string) => void;
   onHumanUpdated?: () => void;
+  onQuoteAdded?: () => void;
+  onQuoteUpdated?: () => void;
+  onQuoteRemoved?: () => void;
   onQueueStateChanged?: (state: "idle" | "busy") => void;
   onError?: (error: EiError) => void;
   onCheckpointStart?: () => void;

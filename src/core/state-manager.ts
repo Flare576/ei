@@ -6,6 +6,7 @@ import type {
   Trait,
   Topic,
   Person,
+  Quote,
   LLMRequest,
   Checkpoint,
   StorageState,
@@ -90,11 +91,31 @@ export class StateManager {
     this.humanState.person_upsert(person);
   }
 
-  human_person_remove(id: string): boolean {
-    return this.humanState.person_remove(id);
-  }
+   human_person_remove(id: string): boolean {
+     return this.humanState.person_remove(id);
+   }
 
-  persona_getAll(): PersonaEntity[] {
+   human_quote_add(quote: Quote): void {
+     this.humanState.quote_add(quote);
+   }
+
+   human_quote_update(id: string, updates: Partial<Quote>): boolean {
+     return this.humanState.quote_update(id, updates);
+   }
+
+   human_quote_remove(id: string): boolean {
+     return this.humanState.quote_remove(id);
+   }
+
+   human_quote_getForMessage(messageId: string): Quote[] {
+     return this.humanState.quote_getForMessage(messageId);
+   }
+
+   human_quote_getForDataItem(dataItemId: string): Quote[] {
+     return this.humanState.quote_getForDataItem(dataItemId);
+   }
+
+   persona_getAll(): PersonaEntity[] {
     return this.personaState.getAll();
   }
 
@@ -173,7 +194,11 @@ export class StateManager {
   }
 
   queue_enqueue(request: Omit<LLMRequest, "id" | "created_at" | "attempts">): string {
-    return this.queueState.enqueue(request);
+    const requestWithModel = {
+      ...request,
+      model: request.model ?? this.humanState.get().settings?.default_model,
+    };
+    return this.queueState.enqueue(requestWithModel);
   }
 
   queue_peekHighest(): LLMRequest | null {
@@ -184,8 +209,8 @@ export class StateManager {
     this.queueState.complete(id);
   }
 
-  queue_fail(id: string, error?: string): void {
-    this.queueState.fail(id, error);
+  queue_fail(id: string, error?: string): boolean {
+    return this.queueState.fail(id, error);
   }
 
   queue_getValidations(): LLMRequest[] {
