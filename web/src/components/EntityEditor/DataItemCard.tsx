@@ -17,6 +17,7 @@ interface SliderConfig {
   min?: number;
   max?: number;
   formatValue?: (v: number) => string;
+  tooltip?: string;
 }
 
 interface DataItemCardProps<T extends DataItemBase> {
@@ -40,6 +41,14 @@ export const DataItemCard = <T extends DataItemBase>({
   isDirty = false,
   showMeta = true,
 }: DataItemCardProps<T>): React.ReactElement => {
+  const cardRef = React.useRef<HTMLDivElement>(null);
+
+  const handleBlur = (e: React.FocusEvent) => {
+    if (isDirty && cardRef.current && !cardRef.current.contains(e.relatedTarget as Node)) {
+      onSave();
+    }
+  };
+
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     onChange('name' as keyof T, e.target.value as T[keyof T]);
   };
@@ -61,7 +70,11 @@ export const DataItemCard = <T extends DataItemBase>({
   };
 
   return (
-    <div className={`ei-data-card ${isDirty ? 'ei-data-card--dirty' : ''}`}>
+    <div 
+      ref={cardRef}
+      className={`ei-data-card ${isDirty ? 'ei-data-card--dirty' : ''}`}
+      onBlur={handleBlur}
+    >
       <div className="ei-data-card__header">
         <input
           type="text"
@@ -90,6 +103,7 @@ export const DataItemCard = <T extends DataItemBase>({
               max={slider.max}
               onChange={(value) => handleSliderChange(slider.field, value)}
               formatValue={slider.formatValue || defaultFormat}
+              tooltip={slider.tooltip}
             />
           ))}
         </div>
@@ -103,11 +117,12 @@ export const DataItemCard = <T extends DataItemBase>({
           </div>
         )}
         <div className="ei-data-card__actions">
-          <button onClick={onSave} disabled={!isDirty}>
-            Save
-          </button>
-          <button onClick={onDelete}>
-            Delete
+          <button 
+            className="ei-control-btn ei-control-btn--danger" 
+            onClick={onDelete}
+            title="Delete"
+          >
+            🗑️
           </button>
         </div>
       </div>

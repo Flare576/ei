@@ -71,6 +71,14 @@ export const PersonCard = ({
   isDirty = false,
   showMeta = true,
 }: PersonCardProps): React.ReactElement => {
+  const cardRef = React.useRef<HTMLDivElement>(null);
+
+  const handleBlur = (e: React.FocusEvent) => {
+    if (isDirty && cardRef.current && !cardRef.current.contains(e.relatedTarget as Node)) {
+      onSave();
+    }
+  };
+
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     onChange('name', e.target.value);
   };
@@ -98,7 +106,12 @@ export const PersonCard = ({
   const gapInfo = getEngagementGapInfo(person.exposure_current, person.exposure_desired);
 
   return (
-    <div className={`ei-data-card ${isDirty ? 'ei-data-card--dirty' : ''}`} style={{ position: 'relative' }}>
+    <div 
+      ref={cardRef}
+      className={`ei-data-card ${isDirty ? 'ei-data-card--dirty' : ''}`} 
+      style={{ position: 'relative' }}
+      onBlur={handleBlur}
+    >
       <div
         className={`ei-engagement-gap ${gapInfo.className}`}
         style={{ position: 'absolute', top: '12px', right: '12px' }}
@@ -155,11 +168,12 @@ export const PersonCard = ({
           </div>
         )}
         <div className="ei-data-card__actions">
-          <button onClick={onSave} disabled={!isDirty}>
-            Save
-          </button>
-          <button onClick={onDelete}>
-            Delete
+          <button 
+            className="ei-control-btn ei-control-btn--danger" 
+            onClick={onDelete}
+            title="Delete"
+          >
+            🗑️
           </button>
         </div>
       </div>

@@ -114,6 +114,18 @@
   font-size: var(--ei-font-size-sm);
   font-weight: 500;
   color: var(--ei-text-secondary);
+  cursor: default;
+}
+
+.ei-slider-control__help {
+  margin-left: 4px;
+  font-size: 0.75em;
+  opacity: 0.6;
+  cursor: help;
+}
+
+.ei-slider-control__label:hover .ei-slider-control__help {
+  opacity: 1;
 }
 
 .ei-slider-control__value {
@@ -258,6 +270,65 @@
 .ei-data-card__actions {
   display: flex;
   gap: var(--ei-spacing-xs);
+  align-items: center;
+}
+
+/* ============================================
+   FACT VALIDATION STATES
+   ============================================ */
+
+.ei-data-card--validated-ei {
+  border-left: 3px solid #ffc107;
+}
+
+.ei-data-card--validated-human {
+  border-left: 3px solid #28a745;
+}
+
+/* ============================================
+   VALIDATION CHECKBOX
+   ============================================ */
+
+.ei-validation-checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--ei-spacing-xs);
+  padding: var(--ei-spacing-xs) var(--ei-spacing-sm);
+  background: var(--ei-bg-secondary);
+  border: 1px solid var(--ei-border);
+  border-radius: var(--ei-radius-sm);
+  cursor: pointer;
+  transition: all var(--ei-transition-fast);
+  margin-right: var(--ei-spacing-sm);
+}
+
+.ei-validation-checkbox:hover {
+  background: var(--ei-bg-tertiary);
+  border-color: var(--ei-accent);
+}
+
+.ei-validation-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: #28a745;
+}
+
+.ei-validation-checkbox__label {
+  font-size: var(--ei-font-size-sm);
+  color: var(--ei-text-secondary);
+  white-space: nowrap;
+}
+
+.ei-validation-checkbox:has(input:checked) {
+  background: rgba(212, 237, 218, 0.3);
+  border-color: #28a745;
+}
+
+.ei-validation-checkbox:has(input:checked) .ei-validation-checkbox__label {
+  color: #28a745;
+  font-weight: 500;
 }
 
 /* ============================================
