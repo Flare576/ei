@@ -5,8 +5,10 @@ import { HumanFactsTab } from './tabs/HumanFactsTab';
 import { HumanTraitsTab } from './tabs/HumanTraitsTab';
 import { HumanTopicsTab } from './tabs/HumanTopicsTab';
 import { HumanPeopleTab } from './tabs/HumanPeopleTab';
+import { HumanQuotesTab } from './tabs/HumanQuotesTab';
+import { QuoteManagementModal } from '../Quote/QuoteManagementModal';
 import { ValidationLevel } from '../../../../src/core/types';
-import type { Fact } from '../../../../src/core/types';
+import type { Fact, Quote } from '../../../../src/core/types';
 
 interface Trait {
   id: string;
@@ -56,6 +58,7 @@ interface HumanEntity {
   traits?: Trait[];
   topics?: Topic[];
   people?: Person[];
+  quotes?: Quote[];
 }
 
 interface HumanEditorProps {
@@ -71,6 +74,8 @@ interface HumanEditorProps {
   onTopicDelete: (id: string) => void;
   onPersonSave: (person: Person) => void;
   onPersonDelete: (id: string) => void;
+  onQuoteSave?: (id: string, updates: Partial<Quote>) => void;
+  onQuoteDelete?: (id: string) => void;
 }
 
 const tabs = [
@@ -79,6 +84,7 @@ const tabs = [
   { id: 'traits', label: 'Traits', icon: '🎭' },
   { id: 'people', label: 'People', icon: '👥' },
   { id: 'topics', label: 'Topics', icon: '💬' },
+  { id: 'quotes', label: 'Quotes', icon: '💬' },
 ];
 
 export const HumanEditor = ({
@@ -94,6 +100,8 @@ export const HumanEditor = ({
   onTopicDelete,
   onPersonSave,
   onPersonDelete,
+  onQuoteSave,
+  onQuoteDelete,
 }: HumanEditorProps) => {
   const [activeTab, setActiveTab] = useState('settings');
   const [localSettings, setLocalSettings] = useState({
@@ -108,6 +116,8 @@ export const HumanEditor = ({
   const [localTraits, setLocalTraits] = useState<Trait[]>(human.traits || []);
   const [localTopics, setLocalTopics] = useState<Topic[]>(human.topics || []);
   const [localPeople, setLocalPeople] = useState<Person[]>(human.people || []);
+  const [localQuotes, setLocalQuotes] = useState<Quote[]>(human.quotes || []);
+  const [editingQuote, setEditingQuote] = useState<Quote | null>(null);
   
   const [dirtyFactIds, setDirtyFactIds] = useState<Set<string>>(new Set());
   const [dirtyTraitIds, setDirtyTraitIds] = useState<Set<string>>(new Set());
@@ -129,11 +139,13 @@ export const HumanEditor = ({
       setLocalTraits(human.traits || []);
       setLocalTopics(human.topics || []);
       setLocalPeople(human.people || []);
+      setLocalQuotes(human.quotes || []);
       setDirtyFactIds(new Set());
       setDirtyTraitIds(new Set());
       setDirtyTopicIds(new Set());
       setDirtyPersonIds(new Set());
       setSettingsDirty(false);
+      setEditingQuote(null);
     }
   }, [isOpen, human]);
 
@@ -325,6 +337,22 @@ export const HumanEditor = ({
     setDirtyPersonIds(prev => new Set(prev).add(newPerson.id));
   };
 
+  const handleQuoteEdit = (quote: Quote) => {
+    setEditingQuote(quote);
+  };
+
+  const handleQuoteSaveClick = (id: string, updates: Partial<Quote>) => {
+    onQuoteSave?.(id, updates);
+    setLocalQuotes(prev => prev.map(q => q.id === id ? { ...q, ...updates } : q));
+    setEditingQuote(null);
+  };
+
+  const handleQuoteDeleteClick = (id: string) => {
+    onQuoteDelete?.(id);
+    setLocalQuotes(prev => prev.filter(q => q.id !== id));
+    setEditingQuote(null);
+  };
+
   if (!isOpen) return null;
 
   const renderTabContent = () => {
@@ -380,32 +408,70 @@ export const HumanEditor = ({
             dirtyIds={dirtyTopicIds}
           />
         );
-      case 'people':
-        return (
-          <HumanPeopleTab
-            people={localPeople}
-            onChange={handlePersonChange}
-            onSave={handlePersonSave}
-            onDelete={handlePersonDelete}
-            onAdd={handlePersonAdd}
-            dirtyIds={dirtyPersonIds}
-          />
-        );
-      default:
-        return null;
+       case 'people':
+         return (
+           <HumanPeopleTab
+             people={localPeople}
+             onChange={handlePersonChange}
+             onSave={handlePersonSave}
+             onDelete={handlePersonDelete}
+             onAdd={handlePersonAdd}
+             dirtyIds={dirtyPersonIds}
+           />
+         );
+       case 'quotes':
+         return (
+           <HumanQuotesTab
+             quotes={localQuotes}
+             dataItems={[
+               ...(human.topics || []).map(i => ({ id: i.id, name: i.name, type: 'Topic' })),
+               ...(human.people || []).map(i => ({ id: i.id, name: i.name, type: 'Person' })),
+               ...(human.traits || []).map(i => ({ id: i.id, name: i.name, type: 'Trait' })),
+               ...(human.facts || []).map(i => ({ id: i.id, name: i.name, type: 'Fact' })),
+             ]}
+             humanDisplayName={human.name_display}
+             onEdit={handleQuoteEdit}
+             onDelete={handleQuoteDeleteClick}
+             onAdd={() => {}}
+           />
+         );
+       default:
+         return null;
     }
   };
 
   return (
-    <TabContainer
-      title={`Edit Human: ${human.name_display || 'Unknown'}`}
-      tabs={tabs}
-      activeTab={activeTab}
-      onTabChange={setActiveTab}
-      onClose={onClose}
-      isDirty={isDirty}
-    >
-      {renderTabContent()}
-    </TabContainer>
+    <>
+      <TabContainer
+        title={`Edit Human: ${human.name_display || 'Unknown'}`}
+        tabs={tabs}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        onClose={onClose}
+        isDirty={isDirty}
+      >
+        {renderTabContent()}
+      </TabContainer>
+      
+      {editingQuote && (
+        <QuoteManagementModal
+          isOpen={editingQuote !== null}
+          quote={editingQuote}
+          message={null}
+          personaName=""
+          dataItems={[
+            ...(human.topics || []).map(i => ({ id: i.id, name: i.name, type: 'Topic' })),
+            ...(human.people || []).map(i => ({ id: i.id, name: i.name, type: 'Person' })),
+            ...(human.traits || []).map(i => ({ id: i.id, name: i.name, type: 'Trait' })),
+            ...(human.facts || []).map(i => ({ id: i.id, name: i.name, type: 'Fact' })),
+          ]}
+          skipDeleteConfirm={false}
+          onClose={() => setEditingQuote(null)}
+          onSave={handleQuoteSaveClick}
+          onDelete={handleQuoteDeleteClick}
+          onSkipDeleteConfirmChange={() => {}}
+        />
+      )}
+    </>
   );
 };

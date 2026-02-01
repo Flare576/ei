@@ -14,9 +14,11 @@ import type {
   Topic,
   Person,
   ContextStatus,
+  Quote,
 } from "../../src/core/types";
 import { Layout, PersonaPanel, ChatPanel, ControlArea, HelpModal, type PersonaPanelHandle, type ChatPanelHandle } from "./components/Layout";
 import { HumanEditor, PersonaEditor, PersonaCreatorModal, ArchivedPersonasModal } from "./components/EntityEditor";
+import { QuoteCaptureModal, QuoteManagementModal } from "./components/Quote";
 import { useKeyboardNavigation } from "./hooks/useKeyboardNavigation";
 import "./styles/layout.css";
 import "./styles/entity-editor.css";
@@ -48,7 +50,11 @@ function App() {
   const [editingPersonaMessages, setEditingPersonaMessages] = useState<Message[]>([]);
   const [archivedPersonas, setArchivedPersonas] = useState<PersonaSummary[]>([]);
   const [availableGroups, setAvailableGroups] = useState<string[]>([]);
-  const [activePersonaEntity, setActivePersonaEntity] = useState<PersonaEntity | null>(null);
+   const [activePersonaEntity, setActivePersonaEntity] = useState<PersonaEntity | null>(null);
+   const [quotes, setQuotes] = useState<Quote[]>([]);
+   const [captureMessage, setCaptureMessage] = useState<Message | null>(null);
+   const [editingQuote, setEditingQuote] = useState<Quote | null>(null);
+   const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false);
 
   const personaPanelRef = useRef<PersonaPanelHandle | null>(null);
   const chatPanelRef = useRef<ChatPanelHandle | null>(null);
@@ -144,6 +150,15 @@ function App() {
           processorRef.current?.getMessages(name).then(setMessages);
         }
       },
+      onQuoteAdded: () => {
+        processorRef.current?.getQuotes().then(setQuotes);
+      },
+      onQuoteUpdated: () => {
+        processorRef.current?.getQuotes().then(setQuotes);
+      },
+      onQuoteRemoved: () => {
+        processorRef.current?.getQuotes().then(setQuotes);
+      },
     };
 
     const p = new Processor(eiInterface);
@@ -163,6 +178,7 @@ function App() {
       p.getCheckpoints().then(setCheckpoints);
       p.getHuman().then(setHuman);
       p.getGroupList().then(setAvailableGroups);
+      p.getQuotes().then(setQuotes);
     });
 
     return () => {
@@ -323,11 +339,18 @@ function App() {
     setShowArchivedPersonas(true);
   }, [processor]);
 
-  const handleHumanUpdate = useCallback(async (updates: Partial<HumanEntity>) => {
+  const handleHumanUpdate = useCallback(async (updates: Record<string, unknown>) => {
     if (!processor) return;
-    await processor.updateHuman(updates);
+    const { auto_save_interval_ms, default_model, queue_paused, name_display, name_color, time_mode, ...rest } = updates;
+    const settingsFields = { auto_save_interval_ms, default_model, queue_paused, name_display, name_color, time_mode };
+    const hasSettings = Object.values(settingsFields).some(v => v !== undefined);
+    const coreUpdates: Partial<HumanEntity> = {
+      ...(rest as Partial<HumanEntity>),
+      ...(hasSettings ? { settings: { ...human?.settings, ...settingsFields } as HumanEntity['settings'] } : {}),
+    };
+    await processor.updateHuman(coreUpdates);
     processor.getHuman().then(setHuman);
-  }, [processor]);
+  }, [processor, human]);
 
   const handleFactSave = useCallback(async (fact: Fact) => {
     if (!processor) return;
@@ -490,6 +513,29 @@ function App() {
     setArchivedPersonas(allPersonas.filter(p => p.is_archived));
   }, [processor]);
 
+  const handleQuoteSave = useCallback(async (quoteData: Omit<Quote, 'id' | 'created_at'>) => {
+    if (!processor) return;
+    const quote: Quote = {
+      ...quoteData,
+      id: crypto.randomUUID(),
+      created_at: new Date().toISOString(),
+    };
+    await processor.addQuote(quote);
+    setCaptureMessage(null);
+  }, [processor]);
+
+  const handleQuoteUpdate = useCallback(async (id: string, updates: Partial<Quote>) => {
+    if (!processor) return;
+    await processor.updateQuote(id, updates);
+    setEditingQuote(null);
+  }, [processor]);
+
+  const handleQuoteDelete = useCallback(async (id: string) => {
+    if (!processor) return;
+    await processor.removeQuote(id);
+    setEditingQuote(null);
+  }, [processor]);
+
   return (
     <>
     <Layout
@@ -531,11 +577,20 @@ function App() {
           inputValue={inputValue}
           isProcessing={processingPersona !== null}
           contextBoundary={activePersonaEntity?.context_boundary}
+          quotes={quotes}
           onInputChange={setInputValue}
           onSendMessage={handleSendMessage}
           onMarkMessageRead={handleMarkMessageRead}
           onRecallPending={handleRecallPending}
           onSetContextBoundary={handleContextBoundaryChange}
+           onQuoteClick={(quote) => {
+             setShowPersonaEditor(false);
+             setEditingQuote(quote);
+           }}
+           onScissorsClick={(message) => {
+             setShowPersonaEditor(false);
+             setCaptureMessage(message);
+           }}
         />
       }
     />
@@ -550,21 +605,27 @@ function App() {
           auto_save_interval_ms: human.settings?.auto_save_interval_ms,
           default_model: human.settings?.default_model,
           queue_paused: human.settings?.queue_paused,
+          name_display: human.settings?.name_display,
+          name_color: human.settings?.name_color,
+          time_mode: human.settings?.time_mode,
           facts: human.facts,
           traits: human.traits,
           topics: human.topics,
           people: human.people,
+          quotes: quotes,
         }}
-        onUpdate={handleHumanUpdate}
-        onFactSave={handleFactSave}
-        onFactDelete={handleFactDelete}
-        onTraitSave={handleTraitSave}
-        onTraitDelete={handleTraitDelete}
-        onTopicSave={handleTopicSave}
-        onTopicDelete={handleTopicDelete}
-        onPersonSave={handlePersonSave}
-        onPersonDelete={handlePersonDelete}
-      />
+         onUpdate={handleHumanUpdate}
+         onFactSave={handleFactSave}
+         onFactDelete={handleFactDelete}
+         onTraitSave={handleTraitSave}
+         onTraitDelete={handleTraitDelete}
+         onTopicSave={handleTopicSave}
+         onTopicDelete={handleTopicDelete}
+         onPersonSave={handlePersonSave}
+         onPersonDelete={handlePersonDelete}
+         onQuoteSave={handleQuoteUpdate}
+         onQuoteDelete={handleQuoteDelete}
+       />
     )}
 
     {editingPersona && editingPersonaName && (
@@ -597,19 +658,53 @@ function App() {
     />
 
     <ArchivedPersonasModal
-      isOpen={showArchivedPersonas}
-      onClose={() => setShowArchivedPersonas(false)}
-      archivedPersonas={archivedPersonas.map(p => ({
-        name: p.name,
-        aliases: p.aliases,
-        short_description: p.short_description,
-        archived_at: new Date().toISOString(),
-      }))}
-      onUnarchive={handleUnarchivePersona}
-      onDelete={handleDeleteArchivedPersona}
-    />
-  </>
-  );
+       isOpen={showArchivedPersonas}
+       onClose={() => setShowArchivedPersonas(false)}
+       archivedPersonas={archivedPersonas.map(p => ({
+         name: p.name,
+         aliases: p.aliases,
+         short_description: p.short_description,
+         archived_at: new Date().toISOString(),
+       }))}
+       onUnarchive={handleUnarchivePersona}
+       onDelete={handleDeleteArchivedPersona}
+     />
+
+     <QuoteCaptureModal
+       isOpen={captureMessage !== null}
+       message={captureMessage}
+       personaName={activePersona || ''}
+       dataItems={[
+         ...(human?.topics || []).map(i => ({ id: i.id, name: i.name, type: 'Topic' })),
+         ...(human?.people || []).map(i => ({ id: i.id, name: i.name, type: 'Person' })),
+         ...(human?.traits || []).map(i => ({ id: i.id, name: i.name, type: 'Trait' })),
+         ...(human?.facts || []).map(i => ({ id: i.id, name: i.name, type: 'Fact' })),
+       ]}
+       onClose={() => setCaptureMessage(null)}
+       onSave={handleQuoteSave}
+     />
+
+     {editingQuote && (
+       <QuoteManagementModal
+         isOpen={editingQuote !== null}
+         quote={editingQuote}
+         message={messages.find(m => m.id === editingQuote.message_id) || null}
+         personaName={activePersona || ''}
+         dataItems={[
+           ...(human?.topics || []).map(i => ({ id: i.id, name: i.name, type: 'Topic' })),
+           ...(human?.people || []).map(i => ({ id: i.id, name: i.name, type: 'Person' })),
+           ...(human?.traits || []).map(i => ({ id: i.id, name: i.name, type: 'Trait' })),
+           ...(human?.facts || []).map(i => ({ id: i.id, name: i.name, type: 'Fact' })),
+         ]}
+         skipDeleteConfirm={skipDeleteConfirm}
+         onClose={() => setEditingQuote(null)}
+         onSave={handleQuoteUpdate}
+         onDelete={handleQuoteDelete}
+         onSkipDeleteConfirmChange={setSkipDeleteConfirm}
+       />
+     )}
+    </>
+    );
 }
 
 export default App;

@@ -1,6 +1,61 @@
 import { useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
-import type { Message } from "../../../../src/core/types";
+import type { Message, Quote } from "../../../../src/core/types";
 import { MarkdownContent } from "../Chat";
+
+// Render message content with quote highlights
+function renderMessageContent(
+  message: Message,
+  quotes: Quote[],
+  onQuoteClick?: (quote: Quote) => void
+): React.ReactNode {
+  const messageQuotes = quotes
+    .filter(q => q.message_id === message.id && q.start !== null && q.end !== null)
+    .sort((a, b) => a.start! - b.start!);
+  
+  if (messageQuotes.length === 0) {
+    return <MarkdownContent content={message.content} />;
+  }
+  
+  // Build segments: [normal, highlight, normal, highlight, ...]
+  const segments: Array<{ text: string; quote?: Quote }> = [];
+  let cursor = 0;
+  
+  for (const quote of messageQuotes) {
+    if (quote.start! > cursor) {
+      segments.push({ text: message.content.slice(cursor, quote.start!) });
+    }
+    segments.push({ 
+      text: message.content.slice(quote.start!, quote.end!),
+      quote 
+    });
+    cursor = quote.end!;
+  }
+  if (cursor < message.content.length) {
+    segments.push({ text: message.content.slice(cursor) });
+  }
+  
+  return (
+    <>
+      {segments.map((seg, i) => 
+        seg.quote ? (
+          <span 
+            key={i}
+            className="ei-quote-highlight"
+            onClick={(e) => {
+              e.stopPropagation();
+              onQuoteClick?.(seg.quote!);
+            }}
+            title="Click to edit quote"
+          >
+            {seg.text}
+          </span>
+        ) : (
+          <span key={i}>{seg.text}</span>
+        )
+      )}
+    </>
+  );
+}
 
 interface ChatPanelProps {
   activePersona: string | null;
@@ -8,11 +63,14 @@ interface ChatPanelProps {
   inputValue: string;
   isProcessing: boolean;
   contextBoundary?: string;
+  quotes?: Quote[];
   onInputChange: (value: string) => void;
   onSendMessage: () => void;
   onMarkMessageRead?: (messageId: string) => void;
   onRecallPending?: () => void;
   onSetContextBoundary?: (timestamp: string | null) => void;
+  onQuoteClick?: (quote: Quote) => void;
+  onScissorsClick?: (message: Message) => void;
 }
 
 export interface ChatPanelHandle {
@@ -26,11 +84,14 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
   inputValue,
   isProcessing,
   contextBoundary,
+  quotes = [],
   onInputChange,
   onSendMessage,
   onMarkMessageRead,
   onRecallPending,
   onSetContextBoundary,
+  onQuoteClick,
+  onScissorsClick,
 }, ref) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -212,8 +273,21 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
               messages[index - 1].timestamp < contextBoundary && 
               msg.timestamp >= contextBoundary;
             
+            const scissorsButton = (
+              <button 
+                className="ei-message__scissors"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onScissorsClick?.(msg);
+                }}
+                title="Capture a quote"
+              >
+                ✂️
+              </button>
+            );
+            
             return (
-              <div key={msg.id}>
+              <div key={msg.id} className={`ei-message-wrapper ${msg.role}`}>
                 {showDivider && (
                   <div className="ei-context-divider">
                     <span>New conversation started</span>
@@ -225,9 +299,11 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
                   onClick={() => handleMessageClick(msg)}
                   style={{ cursor: isClickable(msg) ? "pointer" : undefined }}
                 >
+                  {msg.role === "human" && scissorsButton}
                   <div className="ei-message__bubble">
-                    <MarkdownContent content={msg.content} />
+                    {renderMessageContent(msg, quotes, onQuoteClick)}
                   </div>
+                  {msg.role === "system" && scissorsButton}
                   <div className="ei-message__time">
                     {formatTime(msg.timestamp)}
                     {msg.role === "human" && !msg.read && (

@@ -746,22 +746,42 @@ body {
   background: var(--ei-bg-secondary);
 }
 
-/* Message Bubble */
-.ei-message {
+/* Message Wrapper - enables proper alignment */
+.ei-message-wrapper {
   display: flex;
   flex-direction: column;
   margin-bottom: var(--ei-spacing-md);
   max-width: 85%;
 }
 
-.ei-message.human {
+.ei-message-wrapper.human {
   align-self: flex-end;
   align-items: flex-end;
 }
 
-.ei-message.system {
+.ei-message-wrapper.system {
   align-self: flex-start;
   align-items: flex-start;
+}
+
+/* Message Bubble */
+.ei-message {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--ei-spacing-xs);
+}
+
+.ei-message.human {
+  flex-direction: row;
+}
+
+.ei-message.system {
+  flex-direction: row;
+}
+
+.ei-message.system .ei-message__time {
+  order: -1;
 }
 
 .ei-message__bubble {
@@ -797,6 +817,45 @@ body {
 .ei-recall-btn {
   font-size: var(--ei-font-size-sm);
   padding: var(--ei-spacing-xs) var(--ei-spacing-sm);
+}
+
+.ei-quote-highlight {
+  background-color: rgba(255, 200, 100, 0.3);
+  border-bottom: 2px solid var(--ei-warning);
+  cursor: pointer;
+  padding: 0 2px;
+  border-radius: 2px;
+  transition: background-color var(--ei-transition-fast);
+}
+
+.ei-quote-highlight:hover {
+  background-color: rgba(255, 200, 100, 0.5);
+}
+
+.ei-message__scissors {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 4px;
+  opacity: 0.4;
+  transition: opacity var(--ei-transition-fast);
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: var(--ei-spacing-xs);
+}
+
+.ei-message__scissors:hover {
+  opacity: 1;
+}
+
+.ei-quote-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75em;
+  color: var(--ei-text-secondary);
+  margin-left: var(--ei-spacing-sm);
 }
 
 /* Message states */
