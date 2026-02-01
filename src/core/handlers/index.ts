@@ -1,6 +1,7 @@
 import { 
   ContextStatus, 
   LLMNextStep, 
+  ValidationLevel,
   type LLMResponse, 
   type Message, 
   type Trait, 
@@ -339,16 +340,20 @@ function handleEiValidation(response: LLMResponse, state: StateManager): void {
 
     switch (dataType) {
       case "fact":
-        state.human_fact_upsert(item as any);
+        state.human_fact_upsert({
+          ...item,
+          validated: ValidationLevel.Ei,
+          validated_date: now,
+        } as Fact);
         break;
       case "trait":
-        state.human_trait_upsert(item as any);
+        state.human_trait_upsert(item as Trait);
         break;
       case "topic":
-        state.human_topic_upsert(item as any);
+        state.human_topic_upsert(item as Topic);
         break;
       case "person":
-        state.human_person_upsert(item as any);
+        state.human_person_upsert(item as Person);
         break;
     }
     console.log(`[handleEiValidation] Applied ${result.decision} for ${dataType} "${itemName}"`);
@@ -578,26 +583,33 @@ function handleHumanItemMatch(response: LLMResponse, state: StateManager): void 
     return;
   }
 
-  const dataType = response.request.data.dataType as DataItemType;
+  const candidateType = response.request.data.candidateType as DataItemType;
   const itemName = response.request.data.itemName as string;
   const itemValue = response.request.data.itemValue as string;
-  const scanConfidence = response.request.data.scanConfidence as string;
   const personaName = response.request.data.personaName as string;
   const messages_context = response.request.data.messages_context as Message[];
   const messages_analyze = response.request.data.messages_analyze as Message[];
 
-  const context: ExtractionContext & { itemName: string; itemValue: string; scanConfidence: string } = {
+  if (result.matched_guid) {
+    const human = state.getHuman();
+    const matchedFact = human.facts.find(f => f.id === result.matched_guid);
+    if (matchedFact?.validated === ValidationLevel.Human) {
+      console.log(`[handleHumanItemMatch] Skipping locked fact "${matchedFact.name}" (human-validated)`);
+      return;
+    }
+  }
+
+  const context: ExtractionContext & { itemName: string; itemValue: string } = {
     personaName,
     messages_context,
     messages_analyze,
     itemName,
     itemValue,
-    scanConfidence,
   };
 
-  queueItemUpdate(dataType, result, context, state);
-  const matched = result.name !== "Not Found" ? `matched "${result.name}"` : "no match (new item)";
-  console.log(`[handleHumanItemMatch] ${dataType} "${itemName}": ${matched}`);
+  queueItemUpdate(candidateType, result, context, state);
+  const matched = result.matched_guid ? `matched GUID "${result.matched_guid}"` : "no match (new item)";
+  console.log(`[handleHumanItemMatch] ${candidateType} "${itemName}": ${matched}`);
 }
 
 function handleHumanItemUpdate(response: LLMResponse, state: StateManager): void {
@@ -608,7 +620,7 @@ function handleHumanItemUpdate(response: LLMResponse, state: StateManager): void
     return;
   }
 
-  const dataType = response.request.data.dataType as DataItemType;
+  const candidateType = response.request.data.candidateType as DataItemType;
   const isNewItem = response.request.data.isNewItem as boolean;
   const existingItemId = response.request.data.existingItemId as string | undefined;
   const personaName = response.request.data.personaName as string;
@@ -625,14 +637,15 @@ function handleHumanItemUpdate(response: LLMResponse, state: StateManager): void
   const personaGroup = persona?.group_primary ?? null;
   const isEi = personaName.toLowerCase() === "ei";
 
-  switch (dataType) {
+  switch (candidateType) {
     case "fact": {
       const fact: Fact = {
         id: itemId,
         name: result.name,
         description: result.description,
         sentiment: result.sentiment,
-        confidence: (result as any).confidence ?? 0.5,
+        validated: ValidationLevel.None,
+        validated_date: now,
         last_updated: now,
         learned_by: isNewItem ? personaName : undefined,
         persona_groups: isNewItem && personaGroup ? [personaGroup] : undefined,
@@ -689,7 +702,7 @@ function handleHumanItemUpdate(response: LLMResponse, state: StateManager): void
     }
   }
 
-  console.log(`[handleHumanItemUpdate] ${isNewItem ? "Created" : "Updated"} ${dataType} "${result.name}"`);
+  console.log(`[handleHumanItemUpdate] ${isNewItem ? "Created" : "Updated"} ${candidateType} "${result.name}"`);
 }
 
 function extractContext(response: LLMResponse): ExtractionContext | null {
@@ -764,12 +777,8 @@ function queueEiValidation(
     proposed_item: item,
   });
 
-  const scanConfidence = (item as any).confidence ?? 0.5;
-  const priority = scanConfidence > 0.7 
-    ? LLMPriority.Low 
-    : scanConfidence > 0.4 
-      ? LLMPriority.Normal 
-      : LLMPriority.High;
+  // Cross-persona validation is always normal priority
+  const priority = LLMPriority.Normal;
 
   state.queue_enqueue({
     type: LLMRequestType.JSON,

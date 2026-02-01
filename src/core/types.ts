@@ -13,6 +13,12 @@ export enum ContextStatus {
   Never = "never",
 }
 
+export enum ValidationLevel {
+  None = "none",     // Fresh data, never acknowledged
+  Ei = "ei",         // Ei mentioned it to user (don't mention again)
+  Human = "human",   // User explicitly confirmed (locked)
+}
+
 export enum LLMRequestType {
   Response = "response",
   JSON = "json",
@@ -65,8 +71,8 @@ export interface DataItemBase {
 }
 
 export interface Fact extends DataItemBase {
-  confidence: number;
-  last_confirmed?: string;
+  validated: ValidationLevel;
+  validated_date: string;
 }
 
 export interface Trait extends DataItemBase {

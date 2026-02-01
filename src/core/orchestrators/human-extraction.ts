@@ -31,7 +31,7 @@ export function queueFactScan(context: ExtractionContext, state: StateManager): 
 
   state.queue_enqueue({
     type: LLMRequestType.JSON,
-    priority: LLMPriority.Low,
+    priority: LLMPriority.Normal,
     system: prompt.system,
     user: prompt.user,
     next_step: LLMNextStep.HandleHumanFactScan,
@@ -52,7 +52,7 @@ export function queueTraitScan(context: ExtractionContext, state: StateManager):
 
   state.queue_enqueue({
     type: LLMRequestType.JSON,
-    priority: LLMPriority.Low,
+    priority: LLMPriority.Normal,
     system: prompt.system,
     user: prompt.user,
     next_step: LLMNextStep.HandleHumanTraitScan,
@@ -98,7 +98,7 @@ export function queuePersonScan(context: ExtractionContext, state: StateManager)
 
   state.queue_enqueue({
     type: LLMRequestType.JSON,
-    priority: LLMPriority.Low,
+    priority: LLMPriority.Normal,
     system: prompt.system,
     user: prompt.user,
     next_step: LLMNextStep.HandleHumanPersonScan,
@@ -113,8 +113,13 @@ export function queuePersonScan(context: ExtractionContext, state: StateManager)
 export function queueAllScans(context: ExtractionContext, state: StateManager): void {
   queueFactScan(context, state);
   queueTraitScan(context, state);
-  queueTopicScan(context, state);
   queuePersonScan(context, state);
+  queueTopicScan(context, state);
+}
+
+function truncateDescription(description: string, maxLength: number = 255): string {
+  if (description.length <= maxLength) return description;
+  return description.slice(0, maxLength) + "...";
 }
 
 export function queueItemMatch(
@@ -125,38 +130,76 @@ export function queueItemMatch(
 ): void {
   const human = state.getHuman();
   
-  let existingItems: Array<{ name: string; description: string }>;
   let itemName: string;
   let itemValue: string;
 
   switch (dataType) {
     case "fact":
-      existingItems = human.facts.map(f => ({ name: f.name, description: f.description }));
       itemName = (candidate as FactScanCandidate).type_of_fact;
       itemValue = (candidate as FactScanCandidate).value_of_fact;
       break;
     case "trait":
-      existingItems = human.traits.map(t => ({ name: t.name, description: t.description }));
       itemName = (candidate as TraitScanCandidate).type_of_trait;
       itemValue = (candidate as TraitScanCandidate).value_of_trait;
       break;
     case "topic":
-      existingItems = human.topics.map(t => ({ name: t.name, description: t.description }));
       itemName = (candidate as TopicScanCandidate).type_of_topic;
       itemValue = (candidate as TopicScanCandidate).value_of_topic;
       break;
     case "person":
-      existingItems = human.people.map(p => ({ name: p.name, description: p.description }));
       itemName = (candidate as PersonScanCandidate).name_of_person;
       itemValue = (candidate as PersonScanCandidate).type_of_person;
       break;
   }
 
+  const allItems: Array<{
+    data_type: DataItemType;
+    data_id: string;
+    data_name: string;
+    data_description: string;
+  }> = [];
+
+  for (const fact of human.facts) {
+    allItems.push({
+      data_type: "fact",
+      data_id: fact.id,
+      data_name: fact.name,
+      data_description: dataType === "fact" ? fact.description : truncateDescription(fact.description),
+    });
+  }
+
+  for (const trait of human.traits) {
+    allItems.push({
+      data_type: "trait",
+      data_id: trait.id,
+      data_name: trait.name,
+      data_description: dataType === "trait" ? trait.description : truncateDescription(trait.description),
+    });
+  }
+
+  for (const topic of human.topics) {
+    allItems.push({
+      data_type: "topic",
+      data_id: topic.id,
+      data_name: topic.name,
+      data_description: dataType === "topic" ? topic.description : truncateDescription(topic.description),
+    });
+  }
+
+  for (const person of human.people) {
+    allItems.push({
+      data_type: "person",
+      data_id: person.id,
+      data_name: person.name,
+      data_description: dataType === "person" ? person.description : truncateDescription(person.description),
+    });
+  }
+
   const prompt = buildHumanItemMatchPrompt({
-    data_type: dataType,
-    item_name: itemName,
-    item_value: itemValue,
-    existing_items: existingItems,
+    candidate_type: dataType,
+    candidate_name: itemName,
+    candidate_value: itemValue,
+    all_items: allItems,
   });
 
   state.queue_enqueue({
@@ -167,10 +210,9 @@ export function queueItemMatch(
     next_step: LLMNextStep.HandleHumanItemMatch,
     data: {
       personaName: context.personaName,
-      dataType,
+      candidateType: dataType,
       itemName,
       itemValue,
-      scanConfidence: candidate.confidence,
       messages_context: context.messages_context,
       messages_analyze: context.messages_analyze,
     },
@@ -178,34 +220,40 @@ export function queueItemMatch(
 }
 
 export function queueItemUpdate(
-  dataType: DataItemType,
+  candidateType: DataItemType,
   matchResult: ItemMatchResult,
-  context: ExtractionContext & { itemName: string; itemValue: string; scanConfidence: string },
+  context: ExtractionContext & { itemName: string; itemValue: string },
   state: StateManager
 ): void {
   const human = state.getHuman();
-  const isNewItem = matchResult.name === "Not Found";
+  const matchedGuid = matchResult.matched_guid;
+  const isNewItem = matchedGuid === null;
 
   let existingItem = null;
+  let matchedType: DataItemType | null = null;
+
   if (!isNewItem) {
-    switch (dataType) {
-      case "fact":
-        existingItem = human.facts.find(f => f.name === matchResult.name) ?? null;
-        break;
-      case "trait":
-        existingItem = human.traits.find(t => t.name === matchResult.name) ?? null;
-        break;
-      case "topic":
-        existingItem = human.topics.find(t => t.name === matchResult.name) ?? null;
-        break;
-      case "person":
-        existingItem = human.people.find(p => p.name === matchResult.name) ?? null;
-        break;
+    existingItem = human.facts.find(f => f.id === matchedGuid) ?? null;
+    if (existingItem) matchedType = "fact";
+
+    if (!existingItem) {
+      existingItem = human.traits.find(t => t.id === matchedGuid) ?? null;
+      if (existingItem) matchedType = "trait";
+    }
+
+    if (!existingItem) {
+      existingItem = human.topics.find(t => t.id === matchedGuid) ?? null;
+      if (existingItem) matchedType = "topic";
+    }
+
+    if (!existingItem) {
+      existingItem = human.people.find(p => p.id === matchedGuid) ?? null;
+      if (existingItem) matchedType = "person";
     }
   }
 
   const prompt = buildHumanItemUpdatePrompt({
-    data_type: dataType,
+    data_type: candidateType,
     existing_item: existingItem,
     messages_context: context.messages_context,
     messages_analyze: context.messages_analyze,
@@ -222,11 +270,10 @@ export function queueItemUpdate(
     next_step: LLMNextStep.HandleHumanItemUpdate,
     data: {
       personaName: context.personaName,
-      dataType,
+      candidateType,
+      matchedType,
       isNewItem,
       existingItemId: existingItem?.id,
-      matchedName: matchResult.name,
-      scanConfidence: context.scanConfidence,
     },
   });
 }

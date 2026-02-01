@@ -21,33 +21,27 @@ export interface PersonScanPromptData extends BaseScanPromptData {
   known_persona_names: string[];
 }
 
-export type ScanConfidence = "high" | "medium" | "low";
-
 export interface FactScanCandidate {
   type_of_fact: string;
   value_of_fact: string;
-  confidence: ScanConfidence;
   reason: string;
 }
 
 export interface TraitScanCandidate {
   type_of_trait: string;
   value_of_trait: string;
-  confidence: ScanConfidence;
   reason: string;
 }
 
 export interface TopicScanCandidate {
   type_of_topic: string;
   value_of_topic: string;
-  confidence: ScanConfidence;
   reason: string;
 }
 
 export interface PersonScanCandidate {
   type_of_person: string;
   name_of_person: string;
-  confidence: ScanConfidence;
   reason: string;
 }
 
@@ -68,16 +62,19 @@ export interface PersonScanResult {
 }
 
 export interface ItemMatchPromptData {
-  data_type: DataItemType;
-  item_name: string;
-  item_value: string;
-  existing_items: Array<{ name: string; description: string }>;
+  candidate_type: DataItemType;
+  candidate_name: string;
+  candidate_value: string;
+  all_items: Array<{
+    data_type: DataItemType;
+    data_id: string;
+    data_name: string;
+    data_description: string;
+  }>;
 }
 
 export interface ItemMatchResult {
-  name: string;
-  description: string;
-  confidence: ScanConfidence;
+  matched_guid: string | null;
 }
 
 export interface ItemUpdatePromptData {
@@ -98,9 +95,7 @@ export interface ItemUpdateResultBase {
   sentiment: number;
 }
 
-export interface FactUpdateResult extends ItemUpdateResultBase {
-  confidence?: number;
-}
+export interface FactUpdateResult extends ItemUpdateResultBase {}
 
 export interface TraitUpdateResult extends ItemUpdateResultBase {
   strength?: number;

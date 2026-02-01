@@ -43,7 +43,8 @@ These field names have **specific meanings** and should be used consistently:
 | `exposure_desired` | 0.0-1.0 | How much the entity wants to discuss this |
 | `sentiment` | -1.0 to 1.0 | Emotional valence (negative to positive) |
 | `strength` | 0.0-1.0 | How strongly a trait manifests |
-| `confidence` | 0.0-1.0 | How certain we are a fact is accurate |
+| `validated` | ValidationLevel | Whether fact has been acknowledged (none/ei/human) |
+| `validated_date` | ISO string | When validation state last changed |
 | `last_updated` | ISO string | When this record was last modified |
 | `last_activity` | ISO string | When the user last interacted with this entity |
 
@@ -694,8 +695,14 @@ interface DataItemBase {
 }
 
 interface Fact extends DataItemBase {
-  confidence: number;          // 0.0 to 1.0
-  last_confirmed?: string;
+  validated: ValidationLevel;  // none | ei | human
+  validated_date: string;      // When validation state changed
+}
+
+enum ValidationLevel {
+  None = "none",     // Fresh data, never acknowledged
+  Ei = "ei",         // Ei mentioned it to user (don't mention again)
+  Human = "human",   // User explicitly confirmed (locked)
 }
 
 interface Trait extends DataItemBase {

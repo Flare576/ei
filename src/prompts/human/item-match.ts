@@ -1,69 +1,72 @@
 import type { ItemMatchPromptData, PromptOutput } from "./types.js";
 
 export function buildHumanItemMatchPrompt(data: ItemMatchPromptData): PromptOutput {
-  if (!data.data_type || !data.item_name) {
-    throw new Error("buildHumanItemMatchPrompt: data_type and item_name are required");
+  if (!data.candidate_type || !data.candidate_name) {
+    throw new Error("buildHumanItemMatchPrompt: candidate_type and candidate_name are required");
   }
 
-  const typeLabel = data.data_type.toUpperCase();
-  const pluralLabel = data.data_type === "person" ? "PEOPLE" : `${typeLabel}S`;
+  const typeLabel = data.candidate_type.toUpperCase();
 
   const system = `# Task
 
-Identify if the following ${typeLabel} is already present or represented in our list of known ${pluralLabel}.
+You are checking if a new ${typeLabel} already exists in our database.
 
-You do not need to update, alter, or otherwise adjust any existing information, just identify a single match if it exists.
+We track four types of data about the human user:
+- **FACT**: Biographical data (name, birthday, job, etc.)
+- **TRAIT**: Personality patterns (introverted, analytical, etc.)
+- **TOPIC**: Interests, goals, concerns, stories
+- **PERSON**: People in their life (family, friends, coworkers)
 
-If there isn't an **EXACT** match, but one or more is **SIMILAR**, return the **MOST SIMILAR**.
+Your job is to find if this candidate matches ANY existing entry — even if it's stored as a different type.
 
-If you are sure there is no similar entry, use "Not Found" for both the \`name\` and \`description\` in your response.
+## Why Cross-Type Matching?
 
-To help the system prioritize data and resolve mismatches, please include your CONFIDENCE level:
-    a. "high" confidence = exact or near-exact match
-    b. "medium" confidence = clearly related but not identical
-    c. "low" confidence = might be the same thing, uncertain
+Sometimes the same concept gets detected as different types:
+- "Juliet" might be detected as a TOPIC but should be a PERSON
+- "Birthday" might be detected as a TOPIC but is actually a FACT
+- "Always planning ahead" might be a TOPIC but is really a TRAIT
 
-# Existing ${pluralLabel}
+If you find a match in a DIFFERENT type, still return it! The system will handle the type mismatch.
+
+## Matching Rules
+
+1. **Exact match**: Same name/concept → return its ID
+2. **Similar match**: Clearly the same thing with different wording → return its ID
+3. **Cross-type match**: Same concept stored as different type → return its ID
+4. **No match**: Genuinely new information → return null
+
+# Existing Data
+
+The following entries are already in our database. Same-type entries have full descriptions; cross-type entries are truncated for brevity.
 
 \`\`\`json
-${JSON.stringify(data.existing_items, null, 2)}
+${JSON.stringify(data.all_items, null, 2)}
 \`\`\`
 
-# CRITICAL INSTRUCTIONS
+# Response Format
 
-If you are sure there is no similar entry, use "Not Found" for both the \`name\` and \`description\` in your response.
-
-The JSON format is:
+Return ONLY the ID of the matching entry, or null if no match exists.
 
 \`\`\`json
 {
-    "name": "Birthday|Ambitious|Mother|Goats|etc.",
-    "description": "May 26th, 1984|Everyday Hustlin'|Is A Saint|This one time...|etc.",
-    "confidence": "high|medium|low"
+    "matched_guid": "uuid-of-matching-entry" | null
 }
 \`\`\`
 
 **Return JSON only.**`;
 
-  const user = `# Try To Find
+  const user = `# Candidate to Match
 
-\`\`\`json
-{
-    "name": "${data.item_name}",
-    "description": "${data.item_value}"
-}
-\`\`\`
+Type: ${typeLabel}
+Name: ${data.candidate_name}
+Value: ${data.candidate_value}
 
-# Task
-
-Find the best match in existing ${pluralLabel}, or return "Not Found" if no match exists.
+Find the best match in existing data, or return null if this is genuinely new.
 
 **Return JSON:**
 \`\`\`json
 {
-    "name": "...",
-    "description": "...",
-    "confidence": "high|medium|low"
+    "matched_guid": "..." | null
 }
 \`\`\``;
 

@@ -1,18 +1,18 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-01-30 (0091 discovered complete)
+> Last updated: 2026-02-01 (0113 done: Fact Validation Core)
 
 ## Overview
 
 | Status | Count |
 |--------|-------|
-| PENDING | 19 |
+| PENDING | 21 |
 | IN_PROGRESS | 0 |
 | QA | 0 |
-| DONE | 70 |
+| DONE | 71 |
 | BLOCKED | 0 |
 
-> 94 total tickets (69 done + 20 pending + 5 backlog).
+> 97 total tickets (71 done + 21 pending + 5 backlog).
 
 ---
 
@@ -76,6 +76,13 @@
 | 0107 | Sync Orchestrator | 0101, 0106 |
 | 0108 | OpenCode File Watcher | 0102, 0103 |
 | 0109 | Sisyphus Persona Bootstrap | 0103 |
+
+### Fact Validation (Extraction Improvement)
+
+| Ticket | Title | Depends On |
+|--------|-------|------------|
+| 0114 | Fact Validation Web UI | 0113, 0082 |
+| 0115 | Fact Validation TUI | 0113, 0100 |
 
 ---
 
@@ -165,6 +172,7 @@
 | 0089 | Archived Personas UI | 2026-01-30 |
 | 0051 | Context Boundary ("New" Command) | 2026-01-31 |
 | 0091 | Dynamic vs Static Personas | 2026-01-30 |
+| 0113 | Fact Validation System (Core) | 2026-02-01 |
 
 ---
 

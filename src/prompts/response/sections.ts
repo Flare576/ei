@@ -98,10 +98,9 @@ ${formatted}
 export function buildHumanSection(human: ResponsePromptData["human"]): string {
   const sections: string[] = [];
   
-  // Facts (only high confidence ones)
+  // Facts
   if (human.facts.length > 0) {
     const facts = human.facts
-      .filter(f => f.confidence > 0.7)
       .map(f => `- ${f.name}: ${f.description}`)
       .join("\n");
     if (facts) sections.push(`### Key Facts\n${facts}`);
