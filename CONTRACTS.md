@@ -161,6 +161,16 @@ interface Ei_Interface {
   
   /** A manual checkpoint was deleted (slots 10-14 only) */
   onCheckpointDeleted?: (index: number) => void;
+  
+  // === One-Shot Events ===
+  
+  /** A one-shot LLM request completed (for AI-assist buttons) */
+  onOneShotReturned?: (guid: string, content: string) => void;
+  
+  // === Context Events ===
+  
+  /** A persona's context boundary changed (via "New" command) */
+  onContextBoundaryChanged?: (personaName: string) => void;
 }
 ```
 
@@ -182,6 +192,8 @@ interface Ei_Interface {
 | `onCheckpointCreated` | After auto-save (no index) or manual save (with index 10-14) |
 | `onCheckpointRestored` | After state is restored from a checkpoint |
 | `onCheckpointDeleted` | After a manual checkpoint (10-14) is deleted |
+| `onOneShotReturned` | When a one-shot LLM request completes (AI-assist buttons) |
+| `onContextBoundaryChanged` | When `setContextBoundary` updates a persona's boundary |
 
 ---
 
@@ -248,6 +260,9 @@ interface Processor {
   
   /** Mark a message as read */
   markMessageRead(personaName: string, messageId: string): Promise<boolean>;
+  
+  /** Mark all messages as read for a persona, returns count marked */
+  markAllMessagesRead(personaName: string): Promise<number>;
   
   /** 
    * Recall pending (unread) human messages for editing.
@@ -344,6 +359,12 @@ interface Processor {
   
   /** Get queue status */
   getQueueStatus(): Promise<QueueStatus>;
+  
+  /** 
+   * Submit a one-shot LLM request (for AI-assist buttons).
+   * Result returned via onOneShotReturned event with matching guid.
+   */
+  submitOneShot(guid: string, systemPrompt: string, userPrompt: string): Promise<void>;
 }
 ```
 
@@ -394,16 +415,16 @@ The checkpoint system uses a **video game save slot** model:
 | 10-14 | Manual save | User creates on demand. Can be overwritten or deleted. |
 
 **Auto-save flow:**
-1. Every 60s, Processor calls `StateManager.checkpoint_create()` (no args)
-2. StateManager calls `Storage.saveCheckpoint(state)` (no index)
+1. Every 60s, Processor calls `StateManager.checkpoint_saveAuto()`
+2. StateManager calls `Storage.saveAutoCheckpoint(state)`
 3. Storage writes to next available slot in 0-9, dropping slot 0 if full
 4. Processor fires `onCheckpointCreated()` (no index)
 
 **Manual save flow:**
 1. User selects slot (10-14) and provides name
 2. FE calls `Processor.createCheckpoint(index, name)`
-3. Processor calls `StateManager.checkpoint_create(index, name)`
-4. StateManager calls `Storage.saveCheckpoint(state, index)`
+3. Processor calls `StateManager.checkpoint_saveManual(index, name)`
+4. StateManager calls `Storage.saveManualCheckpoint(index, name, state)`
 5. Processor fires `onCheckpointCreated(index)`
 
 **Restore**: Load any slot (0-14) into memory. If you want to undo a restore, manually save first.
@@ -470,6 +491,7 @@ interface StateManager {
   persona_archive(name: string): boolean;
   persona_unarchive(name: string): boolean;
   persona_delete(name: string): boolean;
+  persona_setContextBoundary(name: string, timestamp: string | null): void;
   
   // === Messages ===
   
@@ -478,6 +500,11 @@ interface StateManager {
   messages_setContextStatus(personaName: string, messageId: string, status: ContextStatus): boolean;
   messages_getContextWindow(personaName: string): { start: string; end: string } | null;
   messages_setContextWindow(personaName: string, start: string, end: string): void;
+  messages_markRead(personaName: string, messageId: string): boolean;
+  messages_markPendingAsRead(personaName: string): number;  // Mark unread human messages as read, returns count
+  messages_countUnread(personaName: string): number;
+  messages_markAllRead(personaName: string): number;  // Returns count marked
+  messages_remove(personaName: string, messageIds: string[]): Message[];  // Returns removed messages
   
   // === LLM Queue ===
   
@@ -499,6 +526,9 @@ interface StateManager {
   /** Clear specific validation items */
   queue_clearValidations(ids: string[]): void;
   
+  /** Clear pending response requests for a persona (used when canceling/recalling) */
+  queue_clearPersonaResponses(personaName: string, nextStep: string): string[];
+  
   /** Get queue length */
   queue_length(): number;
   
@@ -513,15 +543,18 @@ interface StateManager {
   
   // === Checkpoints ===
   
+  /** Create an auto-save checkpoint (slots 0-9, FIFO) */
+  checkpoint_saveAuto(): Promise<void>;
+  
   /** 
-   * Create a checkpoint of current state.
-   * @param index - If omitted, auto-save to 0-9 (FIFO). If provided, must be 10-14.
-   * @param name - Display name (required for manual saves)
+   * Create a manual checkpoint.
+   * @param index - Slot 10-14 only
+   * @param name - Display name for the save
    */
-  checkpoint_create(index?: number, name?: string): Promise<void>;
+  checkpoint_saveManual(index: number, name: string): Promise<void>;
   
   /** Get all checkpoints (0-14), sorted by timestamp desc */
-  checkpoint_list(): Checkpoint[];
+  checkpoint_list(): Promise<Checkpoint[]>;
   
   /** 
    * Delete a manual checkpoint.
@@ -641,6 +674,15 @@ interface HumanEntity {
   last_updated: string;
   last_activity: string;  // When human last sent a message (any persona)
   settings?: HumanSettings;
+  
+  // Extraction tracking (when each data type was last seeded for extraction)
+  last_seeded_fact?: string;    // ISO timestamp
+  last_seeded_trait?: string;   // ISO timestamp
+  last_seeded_topic?: string;   // ISO timestamp
+  last_seeded_person?: string;  // ISO timestamp
+  
+  // Ceremony configuration
+  ceremony_config?: CeremonyConfig;
 }
 
 interface HumanSettings {
@@ -648,6 +690,19 @@ interface HumanSettings {
   default_model?: string;          // Default: from EI_LLM_MODEL env
   queue_paused?: boolean;          // Default: false
   skip_quote_delete_confirm?: boolean;  // Skip confirmation dialog when deleting quotes
+  
+  // Display preferences
+  name_display?: string;           // How user's name appears in chat
+  name_color?: string;             // User's name color in chat
+  time_mode?: "24h" | "12h" | "local" | "utc";  // Timestamp display format
+}
+
+interface CeremonyConfig {
+  enabled: boolean;               // Whether nightly ceremony runs
+  time: string;                   // "HH:MM" format (e.g., "03:00")
+  last_ceremony?: string;         // ISO timestamp of last run
+  decay_rate?: number;            // Exposure decay rate (default: 0.1)
+  explore_threshold?: number;     // Days before topic exploration triggers (default: 3)
 }
 ```
 
@@ -701,6 +756,7 @@ interface PersonaEntity {
   pause_until?: string;
   is_archived: boolean;
   archived_at?: string;
+  is_static: boolean;            // Static personas skip Ceremony phases
   
   // Settings (per-persona)
   heartbeat_delay_ms?: number;     // Default: 1800000 (30 min)
@@ -875,7 +931,17 @@ enum LLMNextStep {
   HandleEiHeartbeat = "handleEiHeartbeat",
   
   // Validation
-  HandleEiValidation = "handleEiValidation"
+  HandleEiValidation = "handleEiValidation",
+  
+  // One-Shot (AI-assist buttons)
+  HandleOneShot = "handleOneShot",
+  
+  // Ceremony System
+  HandleCeremonyExposure = "handleCeremonyExposure",
+  HandleCeremonyDecayComplete = "handleCeremonyDecayComplete",
+  HandlePersonaExpire = "handlePersonaExpire",
+  HandlePersonaExplore = "handlePersonaExplore",
+  HandleDescriptionCheck = "handleDescriptionCheck"
 }
 ```
 
@@ -1107,3 +1173,13 @@ Standard error codes for `onError` events:
 | 2026-01-28 | **E005 UI Polish**: Added `onMessageRecalled`, `onCheckpointRestored` events |
 | 2026-01-28 | Added `recallPendingMessages()`, `markMessageRead()` to Processor API |
 | 2026-01-28 | Human messages now start `read: false`, marked `read: true` when AI responds |
+| 2026-02-02 | **V1.Web Documentation Sync**: Added `onOneShotReturned`, `onContextBoundaryChanged` events |
+| 2026-02-02 | Added 6 LLMNextStep handlers: `HandleOneShot`, `HandleCeremonyExposure`, `HandleCeremonyDecayComplete`, `HandlePersonaExpire`, `HandlePersonaExplore`, `HandleDescriptionCheck` |
+| 2026-02-02 | Added `CeremonyConfig` interface for nightly ceremony configuration |
+| 2026-02-02 | Added `name_display`, `name_color`, `time_mode` to HumanSettings |
+| 2026-02-02 | Added `last_seeded_*` fields and `ceremony_config` to HumanEntity |
+| 2026-02-02 | Added `is_static` field to PersonaEntity |
+| 2026-02-02 | Added `markAllMessagesRead()`, `submitOneShot()` to Processor API |
+| 2026-02-02 | Fixed StateManager: `checkpoint_create()` → `checkpoint_saveAuto()` + `checkpoint_saveManual()` |
+| 2026-02-02 | Added StateManager methods: `messages_markRead`, `messages_markPendingAsRead`, `messages_countUnread`, `messages_markAllRead`, `messages_remove`, `queue_clearPersonaResponses`, `persona_setContextBoundary` |
+| 2026-02-02 | **Naming convention fix**: Renamed `lastSeeded_*` → `last_seeded_*` in HumanEntity |
