@@ -1,6 +1,6 @@
 # 0116: Quote Data Type & Storage
 
-**Status**: PENDING
+**Status**: DONE
 **Epic**: E011 (Quote Preservation System)
 **Depends on**: None
 

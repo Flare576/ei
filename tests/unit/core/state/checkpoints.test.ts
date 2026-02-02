@@ -99,7 +99,6 @@ describe("CheckpointState", () => {
         name: "Test", 
         description: "Test", 
         sentiment: 0, 
-        confidence: 1, 
         last_updated: "" 
       }];
       storage._autoSaves.push(testState);
@@ -129,7 +128,6 @@ describe("CheckpointState", () => {
         name: "Newer", 
         description: "Test", 
         sentiment: 0, 
-        confidence: 1, 
         last_updated: "" 
       }];
       
@@ -158,7 +156,6 @@ describe("CheckpointState", () => {
         name: "Manual", 
         description: "Test", 
         sentiment: 0, 
-        confidence: 1, 
         last_updated: "" 
       }];
       

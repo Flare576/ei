@@ -1,6 +1,6 @@
 # 0117: Quote Extraction (Step 3)
 
-**Status**: PENDING
+**Status**: DONE
 **Epic**: E011 (Quote Preservation System)
 **Depends on**: 0116
 

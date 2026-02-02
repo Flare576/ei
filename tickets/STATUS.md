@@ -1,18 +1,18 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-02-01 (0121 HumanEditor Smart Merge added)
+> Last updated: 2026-02-02 (E011 Quote Preservation + 0112 E2E Session Bug Coverage)
 
 ## Overview
 
 | Status | Count |
 |--------|-------|
-| PENDING | 26 |
+| PENDING | 20 |
 | IN_PROGRESS | 0 |
 | QA | 0 |
-| DONE | 72 |
+| DONE | 78 |
 | BLOCKED | 0 |
 
-> 103 total tickets (72 done + 26 pending + 5 backlog).
+> 103 total tickets (78 done + 20 pending + 5 backlog).
 
 ---
 
@@ -30,20 +30,7 @@
 | **E008** | 0080-0089 | DONE | UI: Entity Management |
 | **E009** | 0090-0099 | PENDING | Polish & New Features |
 | **E010** | 0100-0109 | PENDING | TUI & OpenCode Integration |
-| **E011** | 0116-0120 | PENDING | Quote Preservation System |
-
----
-
-## MVP Critical Path
-
-✅ **MVP Complete!** Basic chat flow works end-to-end.
-
-```
-0011 Response Prompt    ─┐
-0012 Port Mock Server   ─┼─→ 0015 Wire UI ─→ 0016 First E2E  ✅
-0013 Chat UI            ─┤     to Processor
-0014 Persona List UI    ─┘
-```
+| **E011** | 0116-0120 | DONE | Quote Preservation System |
 
 ---
 
@@ -62,6 +49,7 @@
 | 0097 | LLM Streaming Support | 0011 |
 | 0098 | Pre-configured Persona Templates | 0087 |
 | 0099 | Story Co-Writer Agent (Non-Persona) | 0098 |
+| 0121 | HumanEditor Smart Merge | None |
 
 ### E010: TUI & OpenCode Integration
 
@@ -77,22 +65,7 @@
 | 0107 | Sync Orchestrator | 0101, 0106 |
 | 0108 | OpenCode File Watcher | 0102, 0103 |
 | 0109 | Sisyphus Persona Bootstrap | 0103 |
-
-### Fact Validation (Extraction Improvement)
-
-| Ticket | Title | Depends On |
-|--------|-------|------------|
 | 0115 | Fact Validation TUI | 0113, 0100 |
-
-### E011: Quote Preservation System
-
-| Ticket | Title | Depends On |
-|--------|-------|------------|
-| 0116 | Quote Data Type & Storage | None |
-| 0117 | Quote Extraction (Step 3) | 0116 |
-| 0118 | Quote Chat Rendering | 0116 |
-| 0119 | Quote Capture UI (Scissors Modal) | 0116, 0118 |
-| 0120 | Quote Management UI | 0118, 0119 |
 
 ---
 
@@ -177,6 +150,7 @@
 | 0084 | Human Topics Tab | 2026-01-30 |
 | 0085 | Human People Tab | 2026-01-30 |
 | 0086 | Persona Editor Modal | 2026-01-30 |
+| 0086+ | Batch Message Context Updates | `onMessagesChanged` event |
 | 0087 | Persona Creator Modal | 2026-01-30 |
 | 0088 | Context Window UI | 2026-01-30 |
 | 0089 | Archived Personas UI | 2026-01-30 |
@@ -184,20 +158,18 @@
 | 0091 | Dynamic vs Static Personas | 2026-01-30 |
 | 0113 | Fact Validation System (Core) | 2026-02-01 |
 | 0114 | Fact Validation Web UI | 2026-02-01 |
+| 0112 | E2E Session Bug Coverage | 2026-02-02 |
+| 0116 | Quote Data Type & Storage | 2026-02-02 |
+| 0117 | Quote Extraction (Step 3) | 2026-02-02 |
+| 0118 | Quote Chat Rendering | 2026-02-02 |
+| 0119 | Quote Capture UI (Scissors Modal) | 2026-02-02 |
+| 0120 | Quote Management UI | 2026-02-02 |
 
 ---
 
 ## BLOCKED
 
 (none)
-
----
-
-## Standalone / Bug Fixes
-
-| Ticket | Title | Depends On |
-|--------|-------|------------|
-| 0121 | HumanEditor Smart Merge | None |
 
 ---
 
@@ -209,15 +181,17 @@
 | 0010 | WebAssembly In-Browser Model Spike | Explore zero-setup browser-native models |
 | 0110 | Group Visibility Redesign (* → General) | Replace wildcard with explicit "General" group |
 | 0111 | Persona Tool Use (Web Search) | 🌶️x5 - Enable external verification to prevent hallucinations |
-| 0112 | E2E Session Bug Coverage | Tests for bugs found during E008 session |
-| - | Batch Message Context Updates | `onMessagesChanged` event |
+
 
 ---
 
 ## Key Decisions (from backward doc)
 
 1. **Extraction only runs for Ei** - Other personas wait for nightly Ceremony
+    a. 2026-02-01: Reverted this decision. Now anytime a persona hits `messages_since_[dataType]_seed` > `human.[dataType]_count`, extraction occurs
 2. **Dynamic vs Static personas** - Static skips all Ceremony phases
+    a. 2026-02-01: Right now this also skips the Human-side of the ceremony
+    b. 2026-02-01: Re-evaluate this decision when we change Persona.Topics to clear their description when a human engages with the topic.
 3. **Human message "Read" status** - Tracks whether response was *attempted*
 4. **`pause_until` field** - Replaces boolean `is_paused` with timestamp/0/1
 5. **One-Shot prompts** - New event loop for AI-assist buttons

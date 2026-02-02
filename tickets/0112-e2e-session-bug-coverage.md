@@ -1,6 +1,6 @@
 # 0112: E2E Session Bug Coverage
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0031 (Playwright Configuration)
 
 ## Summary

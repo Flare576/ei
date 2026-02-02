@@ -492,7 +492,6 @@ test.describe("Session Bug Coverage (0112)", () => {
             name: "Favorite Color",
             description: "The user's favorite color is blue",
             sentiment: 0.5,
-            confidence: 0.8,
             last_updated: timestamp,
           },
         ],

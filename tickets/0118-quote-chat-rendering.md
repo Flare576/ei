@@ -1,6 +1,6 @@
 # 0118: Quote Chat Rendering
 
-**Status**: PENDING
+**Status**: DONE
 **Epic**: E011 (Quote Preservation System)
 **Depends on**: 0116
 

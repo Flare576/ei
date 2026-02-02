@@ -238,8 +238,8 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
 
       const response = createMockResponse(request, {
         topics: [
-          { type_of_topic: "Technology", value_of_topic: "AI research", confidence: "high" },
-          { type_of_topic: "Hobbies", value_of_topic: "Photography", confidence: "low" },
+          { type_of_topic: "Technology", value_of_topic: "AI research" },
+          { type_of_topic: "Hobbies", value_of_topic: "Photography" },
         ],
       });
 
@@ -268,7 +268,7 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
 
       const response = createMockResponse(request, {
         people: [
-          { name_of_person: "Alice", type_of_person: "friend", confidence: "high" },
+          { name_of_person: "Alice", type_of_person: "friend" },
         ],
       });
 
@@ -302,7 +302,6 @@ describe("Extraction Handlers - Step 2 (Match)", () => {
           candidateType: "fact",
           itemName: "Birthday",
           itemValue: "January 15th",
-          scanConfidence: "high",
           messages_context: [],
           messages_analyze: [{ id: "1", role: "human", content: "test", timestamp: "", read: true, context_status: "default" }],
         },
@@ -310,7 +309,6 @@ describe("Extraction Handlers - Step 2 (Match)", () => {
 
       const response = createMockResponse(request, {
         name: "Birthday",
-        confidence: "high",
       });
 
       handlers.handleHumanItemMatch(response, state as any);
@@ -336,7 +334,6 @@ describe("Extraction Handlers - Step 2 (Match)", () => {
           candidateType: "trait",
           itemName: "Curiosity",
           itemValue: "Loves to learn new things",
-          scanConfidence: "medium",
           messages_context: [],
           messages_analyze: [],
         },
@@ -344,7 +341,6 @@ describe("Extraction Handlers - Step 2 (Match)", () => {
 
       const response = createMockResponse(request, {
         name: "Not Found",
-        confidence: "N/A",
       });
 
       handlers.handleHumanItemMatch(response, state as any);
@@ -365,7 +361,6 @@ describe("Extraction Handlers - Step 2 (Match)", () => {
           candidateType: "fact",
           itemName: "Test",
           itemValue: "Value",
-          scanConfidence: "high",
           messages_context: [],
           messages_analyze: [],
         },

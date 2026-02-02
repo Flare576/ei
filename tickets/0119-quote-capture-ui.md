@@ -1,6 +1,6 @@
 # 0119: Quote Capture UI (Scissors Modal)
 
-**Status**: PENDING
+**Status**: DONE
 **Epic**: E011 (Quote Preservation System)
 **Depends on**: 0116, 0118
 

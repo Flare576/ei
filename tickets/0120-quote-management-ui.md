@@ -1,6 +1,6 @@
 # 0120: Quote Management UI
 
-**Status**: PENDING
+**Status**: DONE
 **Epic**: E011 (Quote Preservation System)
 **Depends on**: 0118, 0119
 

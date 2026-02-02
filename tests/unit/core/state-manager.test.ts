@@ -17,7 +17,7 @@ describe("StateManager", () => {
   describe("initialization", () => {
     it("loads from storage if checkpoint exists", async () => {
       const testState = createDefaultTestState();
-      testState.human.facts = [{ id: "f1", name: "Loaded", description: "", sentiment: 0, confidence: 1, last_updated: "" }];
+      testState.human.facts = [{ id: "f1", name: "Loaded", description: "", sentiment: 0, last_updated: "" }];
       storage._autoSaves.push(testState);
       
       const newSm = new StateManager();
@@ -39,7 +39,7 @@ describe("StateManager", () => {
 
   describe("human entity operations", () => {
     const makeFact = (id: string, name: string): Fact => ({
-      id, name, description: "", sentiment: 0, confidence: 1, last_updated: ""
+      id, name, description: "", sentiment: 0, last_updated: ""
     });
 
     const makeTrait = (id: string, name: string): Trait => ({
@@ -265,7 +265,7 @@ describe("StateManager", () => {
 
     it("restores checkpoint", async () => {
       const savedState = createDefaultTestState();
-      savedState.human.facts = [{ id: "f1", name: "Restored", description: "", sentiment: 0, confidence: 1, last_updated: "" }];
+      savedState.human.facts = [{ id: "f1", name: "Restored", description: "", sentiment: 0, last_updated: "" }];
       storage._autoSaves.push(savedState);
       
       const restored = await sm.checkpoint_restore(0);

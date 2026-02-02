@@ -21,7 +21,7 @@ describe("HumanState", () => {
 
     it("can load existing entity", () => {
       const custom = createDefaultHumanEntity();
-      custom.facts = [{ id: "f1", name: "Test", description: "Test fact", sentiment: 0.5, confidence: 0.9, last_updated: "" }];
+      custom.facts = [{ id: "f1", name: "Test", description: "Test fact", sentiment: 0.5, last_updated: "" }];
       
       state.load(custom);
       
@@ -36,7 +36,6 @@ describe("HumanState", () => {
       name,
       description: `${name} description`,
       sentiment: 0.5,
-      confidence: 0.9,
       last_updated: new Date().toISOString(),
     });
 
@@ -199,7 +198,7 @@ describe("HumanState", () => {
       await new Promise((r) => setTimeout(r, 2));
       
       const newEntity = createDefaultHumanEntity();
-      newEntity.facts = [{ id: "f1", name: "Custom", description: "Test", sentiment: 0, confidence: 1, last_updated: "" }];
+      newEntity.facts = [{ id: "f1", name: "Custom", description: "Test", sentiment: 0, last_updated: "" }];
       
       state.set(newEntity);
       
