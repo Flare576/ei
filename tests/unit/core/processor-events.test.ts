@@ -34,6 +34,16 @@ vi.mock("../../../src/core/orchestrators/index.js", () => ({
   queueAllScans: vi.fn(),
   queueItemMatch: vi.fn(),
   queueItemUpdate: vi.fn(),
+  isNewDay: vi.fn(),
+  isPastCeremonyTime: vi.fn(),
+  shouldRunCeremony: vi.fn(),
+  startCeremony: vi.fn(),
+  queueExposurePhase: vi.fn(),
+  queueDecayPhase: vi.fn(),
+  queueExpirePhase: vi.fn(),
+  queueExplorePhase: vi.fn(),
+  queueDescriptionCheck: vi.fn(),
+  runHumanCeremony: vi.fn(),
 }));
 
 function createMockInterface(): { interface: Ei_Interface; calls: string[]; recalledContent: string[] } {
@@ -138,7 +148,6 @@ describe("Processor Event System", () => {
       name: "Test Fact",
       description: "A test fact",
       sentiment: 0,
-      confidence: 0.9,
       last_updated: new Date().toISOString(),
     });
     expect(mock.calls).toContain("onHumanUpdated");
@@ -161,7 +170,6 @@ describe("Processor Event System", () => {
       name: "Test Fact",
       description: "A test fact",
       sentiment: 0,
-      confidence: 0.9,
       last_updated: new Date().toISOString(),
     });
     mock.calls.length = 0;
@@ -1155,9 +1163,9 @@ describe("Processor Human Extraction Throttling", () => {
       human: {
         entity: "human",
         facts: [
-          { id: "f1", name: "Location", description: "Chicago", sentiment: 0.5, confidence: 0.9, last_updated: now.toISOString() },
-          { id: "f2", name: "Birthday", description: "Jan 15", sentiment: 0.8, confidence: 0.9, last_updated: now.toISOString() },
-          { id: "f3", name: "Job", description: "Engineer", sentiment: 0.7, confidence: 0.8, last_updated: now.toISOString() },
+          { id: "f1", name: "Location", description: "Chicago", sentiment: 0.5, last_updated: now.toISOString() },
+          { id: "f2", name: "Birthday", description: "Jan 15", sentiment: 0.8, last_updated: now.toISOString() },
+          { id: "f3", name: "Job", description: "Engineer", sentiment: 0.7, last_updated: now.toISOString() },
         ],
         traits: [
           { id: "t1", name: "Curious", description: "Loves learning", sentiment: 0.8, last_updated: now.toISOString() },
@@ -1166,10 +1174,10 @@ describe("Processor Human Extraction Throttling", () => {
         people: [],
         last_updated: now.toISOString(),
         last_activity: now.toISOString(),
-        lastSeeded_fact: tenMinutesAgo.toISOString(),
-        lastSeeded_trait: tenMinutesAgo.toISOString(),
-        lastSeeded_topic: tenMinutesAgo.toISOString(),
-        lastSeeded_person: tenMinutesAgo.toISOString(),
+        last_seeded_fact: tenMinutesAgo.toISOString(),
+        last_seeded_trait: tenMinutesAgo.toISOString(),
+        last_seeded_topic: tenMinutesAgo.toISOString(),
+        last_seeded_person: tenMinutesAgo.toISOString(),
       },
       personas: {
         ei: {
@@ -1223,10 +1231,10 @@ describe("Processor Human Extraction Throttling", () => {
     await processor.sendMessage("ei", "My name is John and I live in NYC");
     
     const human = await processor.getHuman();
-    expect(human.lastSeeded_fact).toBeDefined();
-    expect(human.lastSeeded_trait).toBeDefined();
-    expect(human.lastSeeded_topic).toBeDefined();
-    expect(human.lastSeeded_person).toBeDefined();
+    expect(human.last_seeded_fact).toBeDefined();
+    expect(human.last_seeded_trait).toBeDefined();
+    expect(human.last_seeded_topic).toBeDefined();
+    expect(human.last_seeded_person).toBeDefined();
   });
 });
 

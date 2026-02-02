@@ -136,10 +136,10 @@ export interface HumanEntity {
   last_updated: string;
   last_activity: string;
   settings?: HumanSettings;
-  lastSeeded_fact?: string;
-  lastSeeded_trait?: string;
-  lastSeeded_topic?: string;
-  lastSeeded_person?: string;
+  last_seeded_fact?: string;
+  last_seeded_trait?: string;
+  last_seeded_topic?: string;
+  last_seeded_person?: string;
   ceremony_config?: CeremonyConfig;
 }
 

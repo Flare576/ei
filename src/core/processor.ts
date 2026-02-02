@@ -620,31 +620,31 @@ export class Processor {
       };
     };
 
-    const factContext = getContextForType(human.lastSeeded_fact);
+    const factContext = getContextForType(human.last_seeded_fact);
     if (human.facts.length < factContext.messages_analyze.length) {
       queueFactScan(factContext, this.stateManager);
-      this.stateManager.setHuman({ ...human, lastSeeded_fact: now });
+      this.stateManager.setHuman({ ...human, last_seeded_fact: now });
       console.log(`[Processor] Human Seed extraction: facts (${human.facts.length} < ${factContext.messages_analyze.length} messages)`);
     }
 
-    const traitContext = getContextForType(human.lastSeeded_trait);
+    const traitContext = getContextForType(human.last_seeded_trait);
     if (human.traits.length < traitContext.messages_analyze.length) {
       queueTraitScan(traitContext, this.stateManager);
-      this.stateManager.setHuman({ ...this.stateManager.getHuman(), lastSeeded_trait: now });
+      this.stateManager.setHuman({ ...this.stateManager.getHuman(), last_seeded_trait: now });
       console.log(`[Processor] Human Seed extraction: traits (${human.traits.length} < ${traitContext.messages_analyze.length} messages)`);
     }
 
-    const topicContext = getContextForType(human.lastSeeded_topic);
+    const topicContext = getContextForType(human.last_seeded_topic);
     if (human.topics.length < topicContext.messages_analyze.length) {
       queueTopicScan(topicContext, this.stateManager);
-      this.stateManager.setHuman({ ...this.stateManager.getHuman(), lastSeeded_topic: now });
+      this.stateManager.setHuman({ ...this.stateManager.getHuman(), last_seeded_topic: now });
       console.log(`[Processor] Human Seed extraction: topics (${human.topics.length} < ${topicContext.messages_analyze.length} messages)`);
     }
 
-    const personContext = getContextForType(human.lastSeeded_person);
+    const personContext = getContextForType(human.last_seeded_person);
     if (human.people.length < personContext.messages_analyze.length) {
       queuePersonScan(personContext, this.stateManager);
-      this.stateManager.setHuman({ ...this.stateManager.getHuman(), lastSeeded_person: now });
+      this.stateManager.setHuman({ ...this.stateManager.getHuman(), last_seeded_person: now });
       console.log(`[Processor] Human Seed extraction: people (${human.people.length} < ${personContext.messages_analyze.length} messages)`);
     }
   }
