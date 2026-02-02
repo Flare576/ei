@@ -16,8 +16,9 @@ This document is the **Source of Truth** for naming conventions, interface contr
 6. [QueueProcessor API](#queueprocessor-api)
 7. [Storage Interface](#storage-interface)
 8. [Entity Types](#entity-types)
-9. [LLM Types](#llm-types)
-10. [Prompt Contracts](#prompt-contracts)
+9. [Group Visibility Model](#group-visibility-model)
+10. [LLM Types](#llm-types)
+11. [Prompt Contracts](#prompt-contracts)
 
 ---
 
@@ -861,6 +862,58 @@ enum ContextStatus {
 
 ---
 
+## Group Visibility Model
+
+Groups control which data (facts, traits, topics, people, quotes) personas can see.
+
+### Persona Group Fields
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `group_primary` | `string \| null` | Where data learned by this persona gets tagged |
+| `groups_visible` | `string[]` | Additional groups this persona can read from |
+
+**Effective visibility** = `group_primary` ∪ `groups_visible`
+
+### Data Item Visibility
+
+The `persona_groups` field on data items controls which personas can see them:
+- **Empty array** (`[]`): Treated as `["General"]` (default/legacy data)
+- **Specific groups**: Only visible to personas with matching groups in their effective visibility
+
+### Ei Special Case
+
+Ei is the system persona with **global visibility**:
+- `group_primary`: Always "General" (immutable)
+- `groups_visible`: Displays "All Groups" in UI (immutable)
+- Bypasses group filtering entirely—sees all data regardless of groups
+
+### Examples
+
+```typescript
+// Default persona - sees General, writes to General
+group_primary: "General"
+groups_visible: ["General"]  // redundant but explicit
+
+// Fellowship persona (Frodo, Gandalf)
+group_primary: "Fellowship"
+groups_visible: ["General"]  // sees Fellowship + General
+
+// Isolated persona - truly walled off
+group_primary: "Hermit"
+groups_visible: []  // sees only Hermit
+```
+
+### Default Values
+
+New personas default to:
+```typescript
+group_primary: "General"
+groups_visible: ["General"]
+```
+
+---
+
 ## LLM Types
 
 ### LLMRequest
@@ -1183,3 +1236,7 @@ Standard error codes for `onError` events:
 | 2026-02-02 | Fixed StateManager: `checkpoint_create()` → `checkpoint_saveAuto()` + `checkpoint_saveManual()` |
 | 2026-02-02 | Added StateManager methods: `messages_markRead`, `messages_markPendingAsRead`, `messages_countUnread`, `messages_markAllRead`, `messages_remove`, `queue_clearPersonaResponses`, `persona_setContextBoundary` |
 | 2026-02-02 | **Naming convention fix**: Renamed `lastSeeded_*` → `last_seeded_*` in HumanEntity |
+| 2026-02-02 | **Group Visibility Redesign**: Replaced `*` wildcard with explicit "General" group |
+| 2026-02-02 | Ei now has global visibility (special-cased), `group_primary: "General"`, immutable in UI |
+| 2026-02-02 | Empty `persona_groups` on data items treated as `["General"]` for backward compatibility |
+| 2026-02-02 | Added Group Visibility Model section to documentation |

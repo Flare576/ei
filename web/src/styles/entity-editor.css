@@ -255,8 +255,10 @@
 
 .ei-data-card__footer {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
+  gap: var(--ei-spacing-xs);
   margin-top: var(--ei-spacing-md);
   padding-top: var(--ei-spacing-sm);
   border-top: 1px solid var(--ei-border-light);
@@ -265,6 +267,29 @@
 .ei-data-card__meta {
   font-size: var(--ei-font-size-sm);
   color: var(--ei-text-muted);
+}
+
+.ei-data-card__groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex: 1;
+  justify-content: flex-end;
+  margin-right: var(--ei-spacing-sm);
+}
+
+.ei-data-card__group-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 11px;
+  border-radius: 10px;
+  background: var(--ei-bg-tertiary, #e0e0e0);
+  color: var(--ei-text-muted);
+}
+
+.ei-data-card__group-badge--primary {
+  background: var(--ei-accent, #4a9eff);
+  color: white;
 }
 
 .ei-data-card__actions {

@@ -1,6 +1,6 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-02-02 (E011 Quote Preservation + 0112 E2E Session Bug Coverage)
+> Last updated: 2026-02-02 (0110 Group Visibility Redesign)
 
 ## Overview
 
@@ -9,10 +9,10 @@
 | PENDING | 20 |
 | IN_PROGRESS | 0 |
 | QA | 0 |
-| DONE | 78 |
+| DONE | 79 |
 | BLOCKED | 0 |
 
-> 103 total tickets (78 done + 20 pending + 5 backlog).
+> 104 total tickets (79 done + 20 pending + 5 backlog).
 
 ---
 
@@ -164,6 +164,7 @@
 | 0118 | Quote Chat Rendering | 2026-02-02 |
 | 0119 | Quote Capture UI (Scissors Modal) | 2026-02-02 |
 | 0120 | Quote Management UI | 2026-02-02 |
+| 0110 | Group Visibility Redesign (* → General) | 2026-02-02 |
 
 ---
 
@@ -179,7 +180,6 @@
 |--------|-------|-------|
 | 0009 | Ollama & Other Local LLM CORS Investigation | Document setup for other providers |
 | 0010 | WebAssembly In-Browser Model Spike | Explore zero-setup browser-native models |
-| 0110 | Group Visibility Redesign (* → General) | Replace wildcard with explicit "General" group |
 | 0111 | Persona Tool Use (Web Search) | 🌶️x5 - Enable external verification to prevent hallucinations |
 
 

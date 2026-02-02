@@ -116,6 +116,15 @@ export const DataItemCard = <T extends DataItemBase>({
             <span>Updated: {formatTimestamp(item.last_updated)}</span>
           </div>
         )}
+        {item.persona_groups && item.persona_groups.length > 0 && (
+          <div className="ei-data-card__groups">
+            {item.persona_groups.map((group, idx) => (
+              <span key={group} className={`ei-data-card__group-badge ${idx === 0 ? 'ei-data-card__group-badge--primary' : ''}`}>
+                {group}
+              </span>
+            ))}
+          </div>
+        )}
         <div className="ei-data-card__actions">
           <button 
             className="ei-control-btn ei-control-btn--danger" 

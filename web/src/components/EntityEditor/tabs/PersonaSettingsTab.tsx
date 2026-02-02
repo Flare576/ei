@@ -25,6 +25,10 @@ interface PersonaEntity {
   last_inactivity_ping?: string;
 }
 
+const isEiPersona = (persona: PersonaEntity): boolean => {
+  return persona.aliases?.[0]?.toLowerCase() === "ei";
+};
+
 interface PersonaSettingsTabProps {
   persona: PersonaEntity;
   onChange: (field: keyof PersonaEntity, value: PersonaEntity[keyof PersonaEntity]) => void;
@@ -202,91 +206,119 @@ export const PersonaSettingsTab: React.FC<PersonaSettingsTabProps> = ({
           </small>
         </div>
 
-        <div className="ei-form-group">
-          <label htmlFor="primary-group" className="ei-form-label">
-            Primary Group
-          </label>
-          <input
-            id="primary-group"
-            type="text"
-            className="ei-input"
-            value={persona.group_primary || ""}
-            onChange={(e) => onChange("group_primary", e.target.value || null)}
-            placeholder="Enter group name or click below"
-          />
-          {availableGroups.length > 0 && (
-            <div className="ei-group-chips">
-              {availableGroups.map((group) => (
-                <button
-                  key={group}
-                  type="button"
-                  className={`ei-group-chip ${persona.group_primary === group ? "ei-group-chip--selected" : ""}`}
-                  onClick={() => onChange("group_primary", group)}
-                >
-                  {group}
-                </button>
-              ))}
+        {isEiPersona(persona) ? (
+          <>
+            <div className="ei-form-group">
+              <label className="ei-form-label">Primary Group</label>
+              <input
+                type="text"
+                className="ei-input"
+                value="General"
+                disabled
+              />
+              <small className="ei-form-hint">Ei always belongs to the General group</small>
             </div>
-          )}
-          <small className="ei-form-hint">The main group this persona belongs to</small>
-        </div>
 
-        <div className="ei-form-group">
-          <label className="ei-form-label">Can See Data From</label>
-          <div className="ei-group-input-row">
-            <input
-              type="text"
-              className="ei-input"
-              value={newVisibleGroup}
-              onChange={(e) => setNewVisibleGroup(e.target.value)}
-              placeholder="Add new group"
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && newVisibleGroup.trim()) {
-                  e.preventDefault();
-                  const group = newVisibleGroup.trim();
-                  if (!(persona.groups_visible || []).includes(group)) {
-                    onChange("groups_visible", [...(persona.groups_visible || []), group]);
-                  }
-                  setNewVisibleGroup("");
-                }
-              }}
-            />
-            <button
-              type="button"
-              className="ei-btn ei-btn--secondary"
-              onClick={() => {
-                const group = newVisibleGroup.trim();
-                if (group && !(persona.groups_visible || []).includes(group)) {
-                  onChange("groups_visible", [...(persona.groups_visible || []), group]);
-                }
-                setNewVisibleGroup("");
-              }}
-              disabled={!newVisibleGroup.trim()}
-            >
-              Add
-            </button>
-          </div>
-          <div className="ei-group-chips">
-            {(() => {
-              const allGroups = [...new Set([...availableGroups, ...(persona.groups_visible || [])])];
-              return allGroups.map((group) => {
-                const isVisible = (persona.groups_visible || []).includes(group);
-                return (
-                  <button
-                    key={group}
-                    type="button"
-                    className={`ei-group-chip ei-group-chip--toggle ${isVisible ? "ei-group-chip--active" : ""}`}
-                    onClick={() => handleGroupVisibilityToggle(group)}
-                  >
-                    <span className="ei-group-chip__check">{isVisible ? "✓" : "○"}</span>
-                    {group}
-                  </button>
-                );
-              });
-            })()}
-          </div>
-          <small className="ei-form-hint">Groups whose data this persona can access</small>
-        </div>
+            <div className="ei-form-group">
+              <label className="ei-form-label">Can See Data From</label>
+              <div className="ei-group-chips">
+                <span className="ei-group-chip ei-group-chip--active ei-group-chip--disabled">
+                  <span className="ei-group-chip__check">✓</span>
+                  All Groups
+                </span>
+              </div>
+              <small className="ei-form-hint">Ei can see all data regardless of group</small>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="ei-form-group">
+              <label htmlFor="primary-group" className="ei-form-label">
+                Primary Group
+              </label>
+              <input
+                id="primary-group"
+                type="text"
+                className="ei-input"
+                value={persona.group_primary || ""}
+                onChange={(e) => onChange("group_primary", e.target.value || null)}
+                placeholder="Enter group name or click below"
+              />
+              {availableGroups.length > 0 && (
+                <div className="ei-group-chips">
+                  {availableGroups.map((group) => (
+                    <button
+                      key={group}
+                      type="button"
+                      className={`ei-group-chip ${persona.group_primary === group ? "ei-group-chip--selected" : ""}`}
+                      onClick={() => onChange("group_primary", group)}
+                    >
+                      {group}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <small className="ei-form-hint">The main group this persona belongs to</small>
+            </div>
+
+            <div className="ei-form-group">
+              <label className="ei-form-label">Can See Data From</label>
+              <div className="ei-group-input-row">
+                <input
+                  type="text"
+                  className="ei-input"
+                  value={newVisibleGroup}
+                  onChange={(e) => setNewVisibleGroup(e.target.value)}
+                  placeholder="Add new group"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newVisibleGroup.trim()) {
+                      e.preventDefault();
+                      const group = newVisibleGroup.trim();
+                      if (!(persona.groups_visible || []).includes(group)) {
+                        onChange("groups_visible", [...(persona.groups_visible || []), group]);
+                      }
+                      setNewVisibleGroup("");
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="ei-btn ei-btn--secondary"
+                  onClick={() => {
+                    const group = newVisibleGroup.trim();
+                    if (group && !(persona.groups_visible || []).includes(group)) {
+                      onChange("groups_visible", [...(persona.groups_visible || []), group]);
+                    }
+                    setNewVisibleGroup("");
+                  }}
+                  disabled={!newVisibleGroup.trim()}
+                >
+                  Add
+                </button>
+              </div>
+              <div className="ei-group-chips">
+                {(() => {
+                  const allGroups = [...new Set([...availableGroups, ...(persona.groups_visible || [])])];
+                  return allGroups.map((group) => {
+                    const isVisible = (persona.groups_visible || []).includes(group);
+                    return (
+                      <button
+                        key={group}
+                        type="button"
+                        className={`ei-group-chip ei-group-chip--toggle ${isVisible ? "ei-group-chip--active" : ""}`}
+                        onClick={() => handleGroupVisibilityToggle(group)}
+                      >
+                        <span className="ei-group-chip__check">{isVisible ? "✓" : "○"}</span>
+                        {group}
+                      </button>
+                    );
+                  });
+                })()}
+              </div>
+              <small className="ei-form-hint">Groups whose data this persona can access</small>
+            </div>
+          </>
+        )}
       </section>
     </div>
   );

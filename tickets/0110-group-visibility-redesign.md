@@ -1,6 +1,6 @@
 # 0110: Group Visibility Redesign (* → General)
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: None (can be done anytime, but UI changes depend on 0086)
 
 ## Summary
@@ -21,13 +21,13 @@ New design makes visibility explicit:
 
 ## Acceptance Criteria
 
-- [ ] Rename `*` to "General" in all existing data
-- [ ] Update default persona creation:
+- [x] Rename `*` to "General" in all existing data
+- [x] Update default persona creation:
   - `group_primary: "General"`
   - `groups_visible: ["General"]`
-- [ ] Update data filtering logic to use explicit group membership instead of `*` wildcard
-- [ ] Update UI to show "General" as a normal selectable group
-- [ ] Document the visibility model in CONTRACTS.md
+- [x] Update data filtering logic to use explicit group membership instead of `*` wildcard
+- [x] Update UI to show "General" as a normal selectable group
+- [x] Document the visibility model in CONTRACTS.md
 
 ## Examples
 
@@ -66,3 +66,20 @@ groups_visible: []  // no General!
 - When user changes `group_primary` to "Fellowship", they don't lose General visibility because it's still in `groups_visible`
 - This enables true persona isolation by simply not including "General" in `groups_visible`
 - TUI will benefit from this explicit model (e.g., `/group "MyGroup"` command)
+
+## Implementation Notes (2026-02-02)
+
+**Core changes:**
+- `processor.ts`: Removed `GLOBAL_GROUP = "*"` constant
+- `processor.ts`: `filterHumanDataByVisibility()` now special-cases Ei (sees all) and treats empty `persona_groups` as "General"
+- `processor.ts`: `createPersona()` now defaults to `group_primary: "General"` and `groups_visible: ["General"]`
+- `welcome.ts`: Ei's `group_primary` changed from `null` to `"General"`, `groups_visible` changed from `["*"]` to `[]`
+
+**UI changes:**
+- `PersonaSettingsTab.tsx`: Added Ei detection - shows "General" (disabled) for Primary Group and "All Groups" (disabled) for visibility
+- `QuoteCaptureModal.tsx`: Added `groupPrimary` prop, uses it for `persona_groups` instead of `personaName`
+- `App.tsx`: Passes `groupPrimary` from `activePersonaEntity` to `QuoteCaptureModal`
+
+**Documentation:**
+- `CONTRACTS.md`: Added "Group Visibility Model" section with full documentation
+- `CONTRACTS.md`: Updated changelog with group visibility redesign entries

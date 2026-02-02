@@ -514,19 +514,36 @@ function App() {
   }, [processor]);
 
   const getDeduplicatedDataItems = useCallback(() => {
-    const items = [
-      ...(human?.topics || []).map(i => ({ id: i.id, name: i.name, type: 'Topic' })),
-      ...(human?.people || []).map(i => ({ id: i.id, name: i.name, type: 'Person' })),
-      ...(human?.traits || []).map(i => ({ id: i.id, name: i.name, type: 'Trait' })),
-      ...(human?.facts || []).map(i => ({ id: i.id, name: i.name, type: 'Fact' })),
+    const DEFAULT_GROUP = "General";
+    const personaName = activePersonaEntity?.aliases?.[0] ?? "";
+    const isEi = personaName.toLowerCase() === "ei";
+
+    const visibleGroups = new Set<string>();
+    if (activePersonaEntity?.group_primary) {
+      visibleGroups.add(activePersonaEntity.group_primary);
+    }
+    (activePersonaEntity?.groups_visible ?? []).forEach(g => visibleGroups.add(g));
+
+    const isVisible = (itemGroups: string[] | undefined): boolean => {
+      if (isEi) return true;
+      const effectiveGroups = !itemGroups || itemGroups.length === 0 ? [DEFAULT_GROUP] : itemGroups;
+      return effectiveGroups.some(g => visibleGroups.has(g));
+    };
+
+    const allItems = [
+      ...(human?.topics || []).filter(i => isVisible(i.persona_groups)).map(i => ({ id: i.id, name: i.name, type: 'Topic' })),
+      ...(human?.people || []).filter(i => isVisible(i.persona_groups)).map(i => ({ id: i.id, name: i.name, type: 'Person' })),
+      ...(human?.traits || []).filter(i => isVisible(i.persona_groups)).map(i => ({ id: i.id, name: i.name, type: 'Trait' })),
+      ...(human?.facts || []).filter(i => isVisible(i.persona_groups)).map(i => ({ id: i.id, name: i.name, type: 'Fact' })),
     ];
+
     const seen = new Set<string>();
-    return items.filter(item => {
+    return allItems.filter(item => {
       if (seen.has(item.id)) return false;
       seen.add(item.id);
       return true;
     });
-  }, [human]);
+  }, [human, activePersonaEntity]);
 
   const handleQuoteSave = useCallback(async (quoteData: Omit<Quote, 'id' | 'created_at'>) => {
     if (!processor) return;
@@ -686,10 +703,11 @@ function App() {
      />
 
      <QuoteCaptureModal
-       isOpen={captureMessage !== null}
-       message={captureMessage}
-       personaName={activePersona || ''}
-dataItems={getDeduplicatedDataItems()}
+        isOpen={captureMessage !== null}
+        message={captureMessage}
+        personaName={activePersona || ''}
+        groupPrimary={activePersonaEntity?.group_primary || undefined}
+        dataItems={getDeduplicatedDataItems()}
         onClose={() => setCaptureMessage(null)}
         onSave={handleQuoteSave}
       />

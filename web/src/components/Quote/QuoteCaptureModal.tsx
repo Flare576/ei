@@ -13,6 +13,7 @@ interface QuoteCaptureModalProps {
   isOpen: boolean;
   message: Message | null;
   personaName: string;
+  groupPrimary?: string;
   dataItems: DataItem[];
   onClose: () => void;
   onSave: (quote: Omit<Quote, 'id' | 'created_at'>) => void;
@@ -22,6 +23,7 @@ export function QuoteCaptureModal({
   isOpen,
   message,
   personaName,
+  groupPrimary,
   dataItems,
   onClose,
   onSave,
@@ -86,7 +88,7 @@ export function QuoteCaptureModal({
     const quote: Omit<Quote, 'id' | 'created_at'> = {
       message_id: message.id,
       data_item_ids: selectedDataItems,
-      persona_groups: [personaName],
+      persona_groups: [groupPrimary || "General"],
       text: quoteText,
       speaker: message.role === 'human' ? 'human' : personaName,
       timestamp: message.timestamp,

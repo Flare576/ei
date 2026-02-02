@@ -639,6 +639,26 @@ function handleHumanItemUpdate(response: LLMResponse, state: StateManager): void
   const personaGroup = persona?.group_primary ?? null;
   const isEi = personaName.toLowerCase() === "ei";
 
+  const human = state.getHuman();
+  const getExistingItem = (): { learned_by?: string; persona_groups?: string[] } | undefined => {
+    if (isNewItem) return undefined;
+    switch (candidateType) {
+      case "fact": return human.facts.find(f => f.id === existingItemId);
+      case "trait": return human.traits.find(t => t.id === existingItemId);
+      case "topic": return human.topics.find(t => t.id === existingItemId);
+      case "person": return human.people.find(p => p.id === existingItemId);
+    }
+  };
+  const existingItem = getExistingItem();
+
+  const mergeGroups = (existing: string[] | undefined): string[] | undefined => {
+    if (!personaGroup) return existing;
+    if (isNewItem) return [personaGroup];
+    const groups = new Set(existing ?? []);
+    groups.add(personaGroup);
+    return Array.from(groups);
+  };
+
   switch (candidateType) {
     case "fact": {
       const fact: Fact = {
@@ -649,8 +669,8 @@ function handleHumanItemUpdate(response: LLMResponse, state: StateManager): void
         validated: ValidationLevel.None,
         validated_date: now,
         last_updated: now,
-        learned_by: isNewItem ? personaName : undefined,
-        persona_groups: isNewItem && personaGroup ? [personaGroup] : undefined,
+        learned_by: isNewItem ? personaName : existingItem?.learned_by,
+        persona_groups: mergeGroups(existingItem?.persona_groups),
       };
       applyOrValidate(state, "fact", fact, personaName, isEi, personaGroup);
       break;
@@ -663,8 +683,8 @@ function handleHumanItemUpdate(response: LLMResponse, state: StateManager): void
         sentiment: result.sentiment,
         strength: (result as any).strength ?? 0.5,
         last_updated: now,
-        learned_by: isNewItem ? personaName : undefined,
-        persona_groups: isNewItem && personaGroup ? [personaGroup] : undefined,
+        learned_by: isNewItem ? personaName : existingItem?.learned_by,
+        persona_groups: mergeGroups(existingItem?.persona_groups),
       };
       applyOrValidate(state, "trait", trait, personaName, isEi, personaGroup);
       break;
@@ -679,8 +699,8 @@ function handleHumanItemUpdate(response: LLMResponse, state: StateManager): void
         exposure_current: calculateExposureCurrent(exposureImpact),
         exposure_desired: (result as any).exposure_desired ?? 0.5,
         last_updated: now,
-        learned_by: isNewItem ? personaName : undefined,
-        persona_groups: isNewItem && personaGroup ? [personaGroup] : undefined,
+        learned_by: isNewItem ? personaName : existingItem?.learned_by,
+        persona_groups: mergeGroups(existingItem?.persona_groups),
       };
       applyOrValidate(state, "topic", topic, personaName, isEi, personaGroup);
       break;
@@ -696,8 +716,8 @@ function handleHumanItemUpdate(response: LLMResponse, state: StateManager): void
         exposure_current: calculateExposureCurrent(exposureImpact),
         exposure_desired: (result as any).exposure_desired ?? 0.5,
         last_updated: now,
-        learned_by: isNewItem ? personaName : undefined,
-        persona_groups: isNewItem && personaGroup ? [personaGroup] : undefined,
+        learned_by: isNewItem ? personaName : existingItem?.learned_by,
+        persona_groups: mergeGroups(existingItem?.persona_groups),
       };
       applyOrValidate(state, "person", person, personaName, isEi, personaGroup);
       break;
@@ -705,7 +725,7 @@ function handleHumanItemUpdate(response: LLMResponse, state: StateManager): void
   }
 
   const allMessages = state.messages_get(personaName);
-  validateAndStoreQuotes(result.quotes, allMessages, itemId, personaName, state);
+  validateAndStoreQuotes(result.quotes, allMessages, itemId, personaName, personaGroup, state);
 
   console.log(`[handleHumanItemUpdate] ${isNewItem ? "Created" : "Updated"} ${candidateType} "${result.name}"`);
 }
@@ -715,6 +735,7 @@ function validateAndStoreQuotes(
   messages: Message[],
   dataItemId: string,
   personaName: string,
+  personaGroup: string | null,
   state: StateManager
 ): void {
   if (!candidates || candidates.length === 0) return;
@@ -749,7 +770,7 @@ function validateAndStoreQuotes(
           id: crypto.randomUUID(),
           message_id: message.id,
           data_item_ids: [dataItemId],
-          persona_groups: ["General"],
+          persona_groups: [personaGroup || "General"],
           text: candidate.text,
           speaker: message.role === "human" ? "human" : personaName,
           timestamp: message.timestamp,

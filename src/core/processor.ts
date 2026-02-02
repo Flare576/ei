@@ -252,6 +252,7 @@ export class Processor {
 
     const human = this.stateManager.getHuman();
     const history = this.stateManager.messages_get(personaName);
+    const filteredHuman = this.filterHumanDataByVisibility(human, persona);
 
     const inactiveDays = persona.last_activity
       ? Math.floor((Date.now() - new Date(persona.last_activity).getTime()) / (1000 * 60 * 60 * 24))
@@ -267,8 +268,8 @@ export class Processor {
         topics: persona.topics,
       },
       human: {
-        topics: sortByEngagementGap(human.topics).slice(0, 5),
-        people: sortByEngagementGap(human.people).slice(0, 5),
+        topics: sortByEngagementGap(filteredHuman.topics).slice(0, 5),
+        people: sortByEngagementGap(filteredHuman.people).slice(0, 5),
       },
       recent_history: history.slice(-10),
       inactive_days: inactiveDays,
@@ -401,14 +402,15 @@ export class Processor {
 
   async createPersona(input: PersonaCreationInput): Promise<void> {
     const now = new Date().toISOString();
+    const DEFAULT_GROUP = "General";
     const placeholder: PersonaEntity = {
       entity: "system",
       aliases: input.aliases ?? [input.name],
       short_description: input.short_description,
       long_description: input.long_description,
       model: input.model,
-      group_primary: input.group_primary,
-      groups_visible: input.groups_visible,
+      group_primary: input.group_primary ?? DEFAULT_GROUP,
+      groups_visible: input.groups_visible ?? [DEFAULT_GROUP],
       traits: [],
       topics: [],
       is_paused: false,
@@ -678,9 +680,11 @@ export class Processor {
     human: HumanEntity,
     persona: PersonaEntity
   ): ResponsePromptData["human"] {
-    const GLOBAL_GROUP = "*";
+    const DEFAULT_GROUP = "General";
+    const personaName = persona.aliases?.[0] ?? "";
 
-    if (persona.groups_visible?.includes(GLOBAL_GROUP)) {
+    // Ei sees all data (special case - system persona with global visibility)
+    if (personaName.toLowerCase() === "ei") {
       return {
         facts: human.facts,
         traits: human.traits,
@@ -698,8 +702,9 @@ export class Processor {
     const filterByGroup = <T extends DataItemBase>(items: T[]): T[] => {
       return items.filter((item) => {
         const itemGroups = item.persona_groups ?? [];
-        const isGlobal = itemGroups.length === 0 || itemGroups.includes(GLOBAL_GROUP);
-        return isGlobal || itemGroups.some((g) => visibleGroups.has(g));
+        // Empty persona_groups means "General" (legacy/default data)
+        const effectiveGroups = itemGroups.length === 0 ? [DEFAULT_GROUP] : itemGroups;
+        return effectiveGroups.some((g) => visibleGroups.has(g));
       });
     };
 
