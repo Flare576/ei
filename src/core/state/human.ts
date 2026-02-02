@@ -10,6 +10,10 @@ export function createDefaultHumanEntity(): HumanEntity {
     quotes: [],
     last_updated: new Date().toISOString(),
     last_activity: new Date().toISOString(),
+    ceremony_config: {
+      enabled: true,
+      time: "09:00",
+    },
   };
 }
 

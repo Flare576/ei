@@ -585,26 +585,24 @@ export class Processor {
       data: { personaName },
     });
 
-    if (personaName.toLowerCase() === "ei") {
-      this.checkAndQueueHumanExtraction(history);
-    }
+    this.checkAndQueueHumanExtraction(personaName, history);
   }
 
-  private checkAndQueueHumanExtraction(history: Message[]): void {
+  private checkAndQueueHumanExtraction(personaName: string, history: Message[]): void {
     const human = this.stateManager.getHuman();
     const now = new Date().toISOString();
     
     const getContextForType = (lastSeeded: string | undefined): ExtractionContext => {
       if (!lastSeeded) {
-        return { personaName: "ei", messages_context: [], messages_analyze: history };
+        return { personaName, messages_context: [], messages_analyze: history };
       }
       const sinceTime = new Date(lastSeeded).getTime();
       const splitIndex = history.findIndex(m => new Date(m.timestamp).getTime() > sinceTime);
       if (splitIndex === -1) {
-        return { personaName: "ei", messages_context: history, messages_analyze: [] };
+        return { personaName, messages_context: history, messages_analyze: [] };
       }
       return {
-        personaName: "ei",
+        personaName,
         messages_context: history.slice(0, splitIndex),
         messages_analyze: history.slice(splitIndex),
       };

@@ -90,27 +90,25 @@ export function startCeremony(state: StateManager): void {
 export function queueExposurePhase(personaName: string, state: StateManager): void {
   console.log(`[ceremony:exposure] Starting for ${personaName}`);
   
-  if (personaName.toLowerCase() === "ei") {
-    const human = state.getHuman();
-    const lastCeremony = human.ceremony_config?.last_ceremony;
-    const messages = state.messages_get(personaName);
-    
-    const messagesSinceCeremony = lastCeremony 
-      ? messages.filter(m => new Date(m.timestamp) > new Date(lastCeremony))
-      : messages.slice(-20);
-    
-    if (messagesSinceCeremony.length > 0) {
-      const context: ExtractionContext = {
-        personaName,
-        messages_context: messages.slice(0, -messagesSinceCeremony.length),
-        messages_analyze: messagesSinceCeremony,
-      };
-      queueFactScan(context, state);
-      queueTraitScan(context, state);
-      queueTopicScan(context, state);
-      queuePersonScan(context, state);
-      console.log(`[ceremony:exposure] Queued human extraction scans for ${messagesSinceCeremony.length} messages`);
-    }
+  const human = state.getHuman();
+  const lastCeremony = human.ceremony_config?.last_ceremony;
+  const messages = state.messages_get(personaName);
+  
+  const messagesSinceCeremony = lastCeremony 
+    ? messages.filter(m => new Date(m.timestamp) > new Date(lastCeremony))
+    : messages.slice(-20);
+  
+  if (messagesSinceCeremony.length > 0) {
+    const context: ExtractionContext = {
+      personaName,
+      messages_context: messages.slice(0, -messagesSinceCeremony.length),
+      messages_analyze: messagesSinceCeremony,
+    };
+    queueFactScan(context, state);
+    queueTraitScan(context, state);
+    queueTopicScan(context, state);
+    queuePersonScan(context, state);
+    console.log(`[ceremony:exposure] Queued human extraction scans for ${messagesSinceCeremony.length} messages`);
   }
   
   applyDecayPhase(personaName, state);
