@@ -7,7 +7,6 @@ interface HumanQuotesTabProps {
   humanDisplayName?: string;
   onEdit: (quote: Quote) => void;
   onDelete: (id: string) => void;
-  onAdd: () => void;
 }
 
 export const HumanQuotesTab = ({
@@ -16,7 +15,6 @@ export const HumanQuotesTab = ({
   humanDisplayName,
   onEdit,
   onDelete,
-  onAdd,
 }: HumanQuotesTabProps) => {
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -64,6 +62,14 @@ export const HumanQuotesTab = ({
     return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
   };
 
+  const formatTimestamp = (timestamp: string) => {
+    try {
+      return new Date(timestamp).toLocaleString();
+    } catch {
+      return timestamp;
+    }
+  };
+
   return (
     <div className="ei-human-quotes-tab">
       <div className="ei-human-quotes-tab__header">
@@ -74,12 +80,6 @@ export const HumanQuotesTab = ({
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
-        <button
-          className="ei-btn ei-btn--primary"
-          onClick={onAdd}
-        >
-          + Add Quote Manually
-        </button>
       </div>
 
       {groupedQuotes.length === 0 ? (
@@ -106,10 +106,10 @@ export const HumanQuotesTab = ({
                         ))}
                       </div>
                     )}
+                    <div className="ei-human-quotes-tab__card-meta">
+                      Said: {formatTimestamp(quote.timestamp)}
+                    </div>
                     <div className="ei-human-quotes-tab__card-actions">
-                      <span className="ei-human-quotes-tab__timestamp">
-                        {new Date(quote.timestamp).toLocaleDateString()}
-                      </span>
                       <button
                         className="ei-btn ei-btn--small ei-btn--secondary"
                         onClick={() => onEdit(quote)}
@@ -130,6 +130,8 @@ export const HumanQuotesTab = ({
           ))}
         </div>
       )}
+
+      
     </div>
   );
 };

@@ -612,28 +612,28 @@ export class Processor {
     if (human.facts.length < factContext.messages_analyze.length) {
       queueFactScan(factContext, this.stateManager);
       this.stateManager.setHuman({ ...human, lastSeeded_fact: now });
-      console.log(`[Processor] Ei extraction: facts (${human.facts.length} < ${factContext.messages_analyze.length} messages)`);
+      console.log(`[Processor] Human Seed extraction: facts (${human.facts.length} < ${factContext.messages_analyze.length} messages)`);
     }
 
     const traitContext = getContextForType(human.lastSeeded_trait);
     if (human.traits.length < traitContext.messages_analyze.length) {
       queueTraitScan(traitContext, this.stateManager);
       this.stateManager.setHuman({ ...this.stateManager.getHuman(), lastSeeded_trait: now });
-      console.log(`[Processor] Ei extraction: traits (${human.traits.length} < ${traitContext.messages_analyze.length} messages)`);
+      console.log(`[Processor] Human Seed extraction: traits (${human.traits.length} < ${traitContext.messages_analyze.length} messages)`);
     }
 
     const topicContext = getContextForType(human.lastSeeded_topic);
     if (human.topics.length < topicContext.messages_analyze.length) {
       queueTopicScan(topicContext, this.stateManager);
       this.stateManager.setHuman({ ...this.stateManager.getHuman(), lastSeeded_topic: now });
-      console.log(`[Processor] Ei extraction: topics (${human.topics.length} < ${topicContext.messages_analyze.length} messages)`);
+      console.log(`[Processor] Human Seed extraction: topics (${human.topics.length} < ${topicContext.messages_analyze.length} messages)`);
     }
 
     const personContext = getContextForType(human.lastSeeded_person);
     if (human.people.length < personContext.messages_analyze.length) {
       queuePersonScan(personContext, this.stateManager);
       this.stateManager.setHuman({ ...this.stateManager.getHuman(), lastSeeded_person: now });
-      console.log(`[Processor] Ei extraction: people (${human.people.length} < ${personContext.messages_analyze.length} messages)`);
+      console.log(`[Processor] Human Seed extraction: people (${human.people.length} < ${personContext.messages_analyze.length} messages)`);
     }
   }
 

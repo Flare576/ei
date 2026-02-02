@@ -2062,14 +2062,16 @@
   border-radius: var(--ei-radius-sm);
 }
 
+.ei-human-quotes-tab__card-meta {
+  font-size: var(--ei-font-size-xs);
+  color: var(--ei-text-muted);
+}
+
 .ei-human-quotes-tab__card-actions {
   display: flex;
   gap: var(--ei-spacing-sm);
   align-items: center;
+  justify-content: flex-end;
   padding-top: var(--ei-spacing-xs);
   border-top: 1px solid var(--ei-border);
-}
-
-.ei-human-quotes-tab__card-actions .ei-human-quotes-tab__timestamp {
-  margin-right: auto;
 }

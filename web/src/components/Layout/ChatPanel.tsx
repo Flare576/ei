@@ -2,11 +2,9 @@ import { useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 
 import type { Message, Quote } from "../../../../src/core/types";
 import { MarkdownContent } from "../Chat";
 
-// Render message content with quote highlights
 function renderMessageContent(
   message: Message,
-  quotes: Quote[],
-  onQuoteClick?: (quote: Quote) => void
+  quotes: Quote[]
 ): React.ReactNode {
   const messageQuotes = quotes
     .filter(q => q.message_id === message.id && q.start !== null && q.end !== null)
@@ -16,45 +14,26 @@ function renderMessageContent(
     return <MarkdownContent content={message.content} />;
   }
   
-  // Build segments: [normal, highlight, normal, highlight, ...]
-  const segments: Array<{ text: string; quote?: Quote }> = [];
+  const segments: string[] = [];
   let cursor = 0;
   
   for (const quote of messageQuotes) {
+    if (quote.start! < cursor) continue;
+    
     if (quote.start! > cursor) {
-      segments.push({ text: message.content.slice(cursor, quote.start!) });
+      segments.push(message.content.slice(cursor, quote.start!));
     }
-    segments.push({ 
-      text: message.content.slice(quote.start!, quote.end!),
-      quote 
-    });
+    
+    const quotedText = message.content.slice(quote.start!, quote.end!);
+    segments.push(`<span class="ei-quote-highlight" data-quote-id="${quote.id}">${quotedText}</span>`);
     cursor = quote.end!;
   }
+  
   if (cursor < message.content.length) {
-    segments.push({ text: message.content.slice(cursor) });
+    segments.push(message.content.slice(cursor));
   }
   
-  return (
-    <>
-      {segments.map((seg, i) => 
-        seg.quote ? (
-          <span 
-            key={i}
-            className="ei-quote-highlight"
-            onClick={(e) => {
-              e.stopPropagation();
-              onQuoteClick?.(seg.quote!);
-            }}
-            title="Click to edit quote"
-          >
-            {seg.text}
-          </span>
-        ) : (
-          <span key={i}>{seg.text}</span>
-        )
-      )}
-    </>
-  );
+  return <MarkdownContent content={segments.join("")} />;
 }
 
 interface ChatPanelProps {
@@ -218,6 +197,20 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
     }
   };
 
+  const handleBubbleClick = (e: React.MouseEvent) => {
+    if (!onQuoteClick) return;
+    const target = e.target as HTMLElement;
+    const quoteSpan = target.closest("[data-quote-id]") as HTMLElement | null;
+    if (quoteSpan) {
+      const quoteId = quoteSpan.dataset.quoteId;
+      const quote = quotes.find(q => q.id === quoteId);
+      if (quote) {
+        e.stopPropagation();
+        onQuoteClick(quote);
+      }
+    }
+  };
+
   const formatTime = (timestamp: string) => {
     return new Date(timestamp).toLocaleTimeString([], { 
       hour: "2-digit", 
@@ -300,8 +293,8 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
                   style={{ cursor: isClickable(msg) ? "pointer" : undefined }}
                 >
                   {msg.role === "human" && scissorsButton}
-                  <div className="ei-message__bubble">
-                    {renderMessageContent(msg, quotes, onQuoteClick)}
+                  <div className="ei-message__bubble" onClick={handleBubbleClick}>
+                    {renderMessageContent(msg, quotes)}
                   </div>
                   {msg.role === "system" && scissorsButton}
                   <div className="ei-message__time">

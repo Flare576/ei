@@ -432,7 +432,6 @@ export const HumanEditor = ({
              humanDisplayName={human.name_display}
              onEdit={handleQuoteEdit}
              onDelete={handleQuoteDeleteClick}
-             onAdd={() => {}}
            />
          );
        default:

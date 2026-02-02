@@ -12,11 +12,12 @@ const sanitizeSchema = {
   ...defaultSchema,
   tagNames: [
     ...(defaultSchema.tagNames || []),
-    "u", "s", "del", "ins", "sub", "sup", "mark", "abbr", "kbd", "var", "samp",
+    "u", "mark", "abbr",
   ],
   attributes: {
     ...defaultSchema.attributes,
     abbr: ["title"],
+    span: ["className", "dataQuoteId"],
   },
 };
 

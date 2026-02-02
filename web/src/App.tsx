@@ -513,6 +513,21 @@ function App() {
     setArchivedPersonas(allPersonas.filter(p => p.is_archived));
   }, [processor]);
 
+  const getDeduplicatedDataItems = useCallback(() => {
+    const items = [
+      ...(human?.topics || []).map(i => ({ id: i.id, name: i.name, type: 'Topic' })),
+      ...(human?.people || []).map(i => ({ id: i.id, name: i.name, type: 'Person' })),
+      ...(human?.traits || []).map(i => ({ id: i.id, name: i.name, type: 'Trait' })),
+      ...(human?.facts || []).map(i => ({ id: i.id, name: i.name, type: 'Fact' })),
+    ];
+    const seen = new Set<string>();
+    return items.filter(item => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    });
+  }, [human]);
+
   const handleQuoteSave = useCallback(async (quoteData: Omit<Quote, 'id' | 'created_at'>) => {
     if (!processor) return;
     const quote: Quote = {
@@ -674,15 +689,10 @@ function App() {
        isOpen={captureMessage !== null}
        message={captureMessage}
        personaName={activePersona || ''}
-       dataItems={[
-         ...(human?.topics || []).map(i => ({ id: i.id, name: i.name, type: 'Topic' })),
-         ...(human?.people || []).map(i => ({ id: i.id, name: i.name, type: 'Person' })),
-         ...(human?.traits || []).map(i => ({ id: i.id, name: i.name, type: 'Trait' })),
-         ...(human?.facts || []).map(i => ({ id: i.id, name: i.name, type: 'Fact' })),
-       ]}
-       onClose={() => setCaptureMessage(null)}
-       onSave={handleQuoteSave}
-     />
+dataItems={getDeduplicatedDataItems()}
+        onClose={() => setCaptureMessage(null)}
+        onSave={handleQuoteSave}
+      />
 
      {editingQuote && (
        <QuoteManagementModal
@@ -690,12 +700,7 @@ function App() {
          quote={editingQuote}
          message={messages.find(m => m.id === editingQuote.message_id) || null}
          personaName={activePersona || ''}
-         dataItems={[
-           ...(human?.topics || []).map(i => ({ id: i.id, name: i.name, type: 'Topic' })),
-           ...(human?.people || []).map(i => ({ id: i.id, name: i.name, type: 'Person' })),
-           ...(human?.traits || []).map(i => ({ id: i.id, name: i.name, type: 'Trait' })),
-           ...(human?.facts || []).map(i => ({ id: i.id, name: i.name, type: 'Fact' })),
-         ]}
+         dataItems={getDeduplicatedDataItems()}
          skipDeleteConfirm={skipDeleteConfirm}
          onClose={() => setEditingQuote(null)}
          onSave={handleQuoteUpdate}

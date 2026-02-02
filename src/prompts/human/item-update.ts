@@ -30,6 +30,20 @@ export function buildHumanItemUpdatePrompt(data: ItemUpdatePromptData): PromptOu
   const typeLabel = data.data_type.toUpperCase();
   const personaName = data.persona_name;
 
+  const nameSection = data.data_type === "fact" ? `
+Should represent the _type_ of FACT, not the _value_ of the fact.
+
+Examples: "User's Name", "Birthday", "Birthplace", "Hometown", "Job", "Marital Status", "Eye Color", "Hair Color", "Nationality/Citizenship", "Languages Spoken", "Educational Background", "Wedding Anniversary", "Job Anniversary", "Pet Ownership", "Allergies", "Medical Conditions", "Dietary Restrictions"
+
+The only time we should be changing the name of a FACT is if it cannot fit into one of these _types_.
+  `: `
+Should be a short identifier of the ${typeLabel}.
+
+Only update this field for clarification or if further specificity is warranted.
+
+Examples: "Unknown" -> "Brother-In-Law", "Alice's" -> "Alice's Restaurant"
+  `;
+
   // This data isn't _specific_ to FACTS, but it only makes sense like this for them
   const itemFactType = data?.existing_item?.name || data.new_item_name;
   const descriptionSection = data.data_type === "fact" ? `
@@ -59,7 +73,7 @@ If the user expressed emotion, quote or paraphrase THEIR words, don't embellish.
 
 Examples: "Name Unknown" -> "Robert Jordan", "User was married in the Summer" -> "User was married in July, 2006"
   ` : `
-This free-text field should be used to capture interesting details, quotes, or references that the Human or Persona use while discussing this data point. Personas should be able to show topical recall, make references to the topic or event, or in other ways "Remember" details about it.
+This free-text field should be used to capture interesting details or references that the Human or Persona use while discussing this data point. Personas should be able to show topical recall, make references to the topic or event, or in other ways "Remember" details about it.
 
 **ABSOLUTELY VITAL INSTRUCTION**: Do **NOT** embelish these details - each Persona will use their own voice during interactions with the User - we need to capture EXACTLY what was said and how, or referring back to it won't have meaning.
   `;
@@ -123,7 +137,7 @@ You are CREATING a new ${typeLabel} from scratch based on what was discovered:
 Return all relevant fields for this ${typeLabel} based on what you find in the conversation.`;
 
   const jsonTemplateFields = [
-    '    "name": "Example Data Point",',
+    '    "name": "User\'s Name",',
     '    "description": "This is a story of a lovely lady...",',
     '    "sentiment": 0.9',
     data.data_type === "trait" ? ',\n    "strength": 0.5' : '',
@@ -147,13 +161,7 @@ This ${typeLabel} will be recorded in the HUMAN USER's profile for agents and pe
 # Field Definition and Explanation of Expected Changes
 
 ## Name (\`name\`)
-
-Should be a short identifier of the ${typeLabel}.
-
-Only update this field for clarification or if further specificity is warranted.
-
-Examples: "Unknown" -> "Brother-In-Law", "Alice's" -> "Alice's Restaurant"
-
+${nameSection}
 ## Description (\`description\`)
 ${descriptionSection}
 ## Sentiment (\`sentiment\`)
