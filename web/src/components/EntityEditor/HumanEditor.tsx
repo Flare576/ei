@@ -84,7 +84,7 @@ const tabs = [
   { id: 'traits', label: 'Traits', icon: '🎭' },
   { id: 'people', label: 'People', icon: '👥' },
   { id: 'topics', label: 'Topics', icon: '💬' },
-  { id: 'quotes', label: 'Quotes', icon: '💬' },
+  { id: 'quotes', label: 'Quotes', icon: '✂️' },
 ];
 
 export const HumanEditor = ({

@@ -588,6 +588,18 @@ export class Processor {
     this.checkAndQueueHumanExtraction(personaName, history);
   }
 
+  /**
+   * Flare Note: I've gone back and forth on this several times, and want to leave a note for myself here:
+   * ***This is fine.***
+   * The effect here is that, if a person has 5 facts already, starts a new persona and says:
+   *   "My name is Inigo Montoya"
+   * Then switches away, we won't process that message or the persona response for facts (or quotes about facts) until
+   * the Ceremony.
+   * And that's ***OK***
+   * The ONLY reason you need the facts on the Human record is so other Personas know _some_ information about the
+   * Human - the persona you just told it to will have it in it's context for their conversation, and we already know 5
+   * things **in that category** about them.
+   */
   private checkAndQueueHumanExtraction(personaName: string, history: Message[]): void {
     const human = this.stateManager.getHuman();
     const now = new Date().toISOString();

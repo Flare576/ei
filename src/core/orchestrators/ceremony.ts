@@ -24,6 +24,11 @@ export function isPastCeremonyTime(ceremonyTime: string, now: Date): boolean {
   return nowMinutes >= ceremonyMinutes;
 }
 
+/**
+ * Flare Note: if we wanted to run the ceremony every 24h _or_, say "1 hour after the user has 'gone idle' after using
+ * the system", this is where you'd add that condition. Bear in mind that the prompts an flow were written for
+ * 1-per-day, so you'll want to revist them carefully.
+ */
 export function shouldRunCeremony(config: CeremonyConfig, now: Date = new Date()): boolean {
   if (!config.enabled) return false;
   if (!isNewDay(config.last_ceremony, now)) return false;
