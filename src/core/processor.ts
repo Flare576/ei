@@ -168,8 +168,20 @@ export class Processor {
       if (this.shouldAutoSave()) {
         this.lastAutoSave = Date.now();
         this.interface.onCheckpointStart?.();
-        await this.stateManager.checkpoint_saveAuto();
-        this.interface.onCheckpointCreated?.();
+        try {
+          await this.stateManager.checkpoint_saveAuto();
+          this.interface.onCheckpointCreated?.();
+        } catch (e) {
+          if (e instanceof Error && e.message.includes("STORAGE_SAVE_FAILED")) {
+            console.warn("[Processor] Auto-save failed (quota exceeded), continuing...");
+            this.interface.onError?.({
+              code: "STORAGE_QUOTA_EXCEEDED",
+              message: "localStorage quota exceeded. Auto-save disabled until queue shrinks. Consider clearing the queue.",
+            });
+          } else {
+            throw e;
+          }
+        }
       }
 
       await this.checkScheduledTasks();
@@ -190,7 +202,7 @@ export class Processor {
             this.currentRequest = null;
             this.handleResponse(response);
             this.interface.onQueueStateChanged?.("idle");
-          });
+          }, { accounts: this.stateManager.getHuman().settings?.accounts });
         }
       }
 
@@ -923,6 +935,11 @@ export class Processor {
           : "idle",
       pending_count: this.stateManager.queue_length(),
     };
+  }
+
+  async clearQueue(): Promise<number> {
+    this.queueProcessor.abort();
+    return this.stateManager.queue_clear();
   }
 
   async submitOneShot(guid: string, systemPrompt: string, userPrompt: string): Promise<void> {

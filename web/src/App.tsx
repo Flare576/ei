@@ -231,6 +231,17 @@ function App() {
     processor.getQueueStatus().then(setQueueStatus);
   }, [processor]);
 
+  const handleClearQueue = useCallback(async () => {
+    if (!processor) return;
+    const confirmed = window.confirm(
+      "Clear all pending queue items? This will stop any pending responses, extractions, and ceremony tasks."
+    );
+    if (!confirmed) return;
+    const cleared = await processor.clearQueue();
+    console.log(`[App] Cleared ${cleared} queue items`);
+    processor.getQueueStatus().then(setQueueStatus);
+  }, [processor]);
+
   const handlePausePersona = useCallback(async (name: string, pauseUntil?: string) => {
     if (!processor) return;
     const persona = await processor.getPersona(name);
@@ -342,8 +353,8 @@ function App() {
 
   const handleHumanUpdate = useCallback(async (updates: Record<string, unknown>) => {
     if (!processor) return;
-    const { auto_save_interval_ms, default_model, queue_paused, name_display, name_color, time_mode, ...rest } = updates;
-    const settingsFields = { auto_save_interval_ms, default_model, queue_paused, name_display, name_color, time_mode };
+    const { auto_save_interval_ms, default_model, queue_paused, name_display, name_color, time_mode, accounts, ...rest } = updates;
+    const settingsFields = { auto_save_interval_ms, default_model, queue_paused, name_display, name_color, time_mode, accounts };
     const hasSettings = Object.values(settingsFields).some(v => v !== undefined);
     const coreUpdates: Partial<HumanEntity> = {
       ...(rest as Partial<HumanEntity>),
@@ -578,6 +589,7 @@ function App() {
           checkpoints={checkpoints}
           isCheckpointOperationInProgress={isCheckpointOperationInProgress}
           onPauseToggle={handlePauseToggle}
+          onClearQueue={handleClearQueue}
           onSave={handleSaveCheckpoint}
           onLoad={handleLoadCheckpoint}
           onDeleteCheckpoint={handleDeleteCheckpoint}
@@ -646,6 +658,7 @@ function App() {
           topics: human.topics,
           people: human.people,
           quotes: quotes,
+          accounts: human.settings?.accounts,
         }}
          onUpdate={handleHumanUpdate}
          onFactSave={handleFactSave}

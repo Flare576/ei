@@ -8,6 +8,7 @@ interface ControlAreaProps {
   checkpoints: Checkpoint[];
   isCheckpointOperationInProgress: boolean;
   onPauseToggle: () => void;
+  onClearQueue?: () => void;
   onSave: (index: number, name: string) => void;
   onLoad: (index: number) => void;
   onDeleteCheckpoint: (index: number) => void;
@@ -22,6 +23,7 @@ export function ControlArea({
   checkpoints,
   isCheckpointOperationInProgress,
   onPauseToggle,
+  onClearQueue,
   onSave,
   onLoad,
   onDeleteCheckpoint,
@@ -94,6 +96,16 @@ export function ControlArea({
         >
           {isPaused ? "▶" : "⏸"}
         </button>
+        {queueStatus.pending_count > 10 && onClearQueue && (
+          <button
+            className="ei-btn ei-btn--icon ei-btn--danger"
+            onClick={onClearQueue}
+            title={`Clear queue (${queueStatus.pending_count} items)`}
+            aria-label="Clear queue"
+          >
+            🗑️
+          </button>
+        )}
         <div ref={savePanelRef}>
           <button
             ref={saveButtonRef}

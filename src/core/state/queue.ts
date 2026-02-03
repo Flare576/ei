@@ -106,4 +106,10 @@ export class QueueState {
   isPaused(): boolean {
     return this.paused;
   }
+
+  clear(): number {
+    const count = this.queue.length;
+    this.queue = [];
+    return count;
+  }
 }

@@ -1,25 +1,31 @@
-import type { LLMRequest, LLMResponse, LLMRequestType } from "./types.js";
+import type { LLMRequest, LLMResponse, LLMRequestType, ProviderAccount } from "./types.js";
 import { callLLMRaw, parseJSONResponse, cleanResponseContent } from "./llm-client.js";
 
 type QueueProcessorState = "idle" | "busy";
 type ResponseCallback = (response: LLMResponse) => void;
 
+export interface QueueProcessorStartOptions {
+  accounts?: ProviderAccount[];
+}
+
 export class QueueProcessor {
   private state: QueueProcessorState = "idle";
   private abortController: AbortController | null = null;
   private currentCallback: ResponseCallback | null = null;
+  private currentAccounts: ProviderAccount[] | undefined;
 
   getState(): QueueProcessorState {
     return this.state;
   }
 
-  start(request: LLMRequest, callback: ResponseCallback): void {
+  start(request: LLMRequest, callback: ResponseCallback, options?: QueueProcessorStartOptions): void {
     if (this.state !== "idle") {
       throw new Error("QUEUE_BUSY: QueueProcessor is already processing a request");
     }
 
     this.state = "busy";
     this.currentCallback = callback;
+    this.currentAccounts = options?.accounts;
     this.abortController = new AbortController();
 
     this.processRequest(request)
@@ -46,6 +52,7 @@ export class QueueProcessor {
     const callback = this.currentCallback;
     this.state = "idle";
     this.currentCallback = null;
+    this.currentAccounts = undefined;
     this.abortController = null;
     callback?.(response);
   }
@@ -56,7 +63,8 @@ export class QueueProcessor {
       request.user,
       request.messages ?? [],
       request.model,
-      { signal: this.abortController?.signal }
+      { signal: this.abortController?.signal },
+      this.currentAccounts
     );
 
     if (!content) {

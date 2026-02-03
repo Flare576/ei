@@ -288,7 +288,8 @@ describe("QueueProcessor", () => {
         "Custom user",
         [{ role: "user", content: "History" }],
         "custom-model",
-        expect.objectContaining({ signal: expect.any(AbortSignal) })
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+        undefined
       );
     });
   });

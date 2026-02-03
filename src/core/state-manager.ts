@@ -237,6 +237,10 @@ export class StateManager {
     return this.queueState.isPaused();
   }
 
+  queue_clear(): number {
+    return this.queueState.clear();
+  }
+
   async checkpoint_saveAuto(): Promise<void> {
     await this.checkpointState.saveAuto(this.buildStorageState());
   }
