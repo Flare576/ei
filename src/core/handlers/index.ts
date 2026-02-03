@@ -541,12 +541,13 @@ function handleHumanItemMatch(response: LLMResponse, state: StateManager): void 
     }
   }
 
-  const context: ExtractionContext & { itemName: string; itemValue: string } = {
+  const context: ExtractionContext & { itemName: string; itemValue: string; itemCategory?: string } = {
     personaName,
     messages_context,
     messages_analyze,
     itemName,
     itemValue,
+    itemCategory: candidateType === "topic" ? itemValue : undefined,
   };
 
   queueItemUpdate(candidateType, result, context, state);
@@ -631,11 +632,14 @@ function handleHumanItemUpdate(response: LLMResponse, state: StateManager): void
     }
     case "topic": {
       const exposureImpact = (result as any).exposure_impact as ExposureImpact | undefined;
+      const itemCategory = response.request.data.itemCategory as string | undefined;
+      const existingTopic = human.topics.find(t => t.id === existingItemId);
       const topic: Topic = {
         id: itemId,
         name: result.name,
         description: result.description,
         sentiment: result.sentiment,
+        category: (result as any).category ?? itemCategory ?? existingTopic?.category,
         exposure_current: calculateExposureCurrent(exposureImpact),
         exposure_desired: (result as any).exposure_desired ?? 0.5,
         last_updated: now,

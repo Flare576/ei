@@ -108,6 +108,7 @@ export interface TraitUpdateResult extends ItemUpdateResultBase {
 }
 
 export interface TopicUpdateResult extends ItemUpdateResultBase {
+  category?: string;
   exposure_desired?: number;
   exposure_impact?: ExposureImpact;
 }

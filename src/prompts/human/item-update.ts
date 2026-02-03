@@ -99,6 +99,22 @@ Once known, changes to this field are infrequent - A HUMAN USER's "Father" may b
 
 Examples: "Unknown" -> "Coworker", "Mother" -> "Step-Mother", "Fiance" -> "Spouse"` : '';
 
+  const categorySection = data.data_type === "topic" ? `
+## Category (\`category\`)
+
+The type/category of this TOPIC. Pick the most appropriate from:
+- Interest: Hobbies, activities they enjoy
+- Goal: Things they want to achieve
+- Dream: Aspirational, maybe unrealistic desires  
+- Conflict: Internal struggles, dilemmas
+- Concern: Worries, anxieties
+- Fear: Things that scare them
+- Hope: Positive expectations for the future
+- Plan: Concrete intentions
+- Project: Active undertakings
+
+If the topic doesn't fit neatly, pick the closest match.` : '';
+
   const exposureSection = (data.data_type === "topic" || data.data_type === "person") ? `
 ## Desired Exposure (\`exposure_desired\`)
 
@@ -142,7 +158,7 @@ Return all relevant fields for this ${typeLabel} based on what you find in the c
     '    "sentiment": 0.9',
     data.data_type === "trait" ? ',\n    "strength": 0.5' : '',
     data.data_type === "person" ? ',\n    "relationship": "Mother-In-Law|Son|Coworker|etc.",\n    "exposure_desired": 0.4,\n    "exposure_impact": "high|medium|low|none"' : '',
-    data.data_type === "topic" ? ',\n    "exposure_desired": 0.4,\n    "exposure_impact": "high|medium|low|none"' : '',
+    data.data_type === "topic" ? ',\n    "category": "Interest|Goal|Dream|Conflict|Concern|Fear|Hope|Plan|Project",\n    "exposure_desired": 0.4,\n    "exposure_impact": "high|medium|low|none"' : '',
     ',\n    "quotes": [\n      {\n        "text": "exact phrase from message",\n        "reason": "why this matters"\n      }\n    ]'
   ].filter(Boolean).join('');
 
@@ -176,7 +192,7 @@ Scale of -1.0 to 1.0:
 - 1.0: This ${typeLabel} is the sole focus of the HUMAN USER's existence
 
 Do not make micro-adjustments. Close enough is OK for this field.
-${strengthSection}${relationshipSection}${exposureSection}
+${strengthSection}${relationshipSection}${categorySection}${exposureSection}
 
 ## Quotes
 

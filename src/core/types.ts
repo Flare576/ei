@@ -81,6 +81,7 @@ export interface Trait extends DataItemBase {
 }
 
 export interface Topic extends DataItemBase {
+  category?: string; // Interest, Goal, Dream, Conflict, Concern, Fear, Hope, Plan, Project
   exposure_current: number;
   exposure_desired: number;
 }

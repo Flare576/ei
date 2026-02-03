@@ -841,6 +841,7 @@ interface Trait extends DataItemBase {
 }
 
 interface Topic extends DataItemBase {
+  category?: string;           // Interest|Goal|Dream|Conflict|Concern|Fear|Hope|Plan|Project
   exposure_current: number;    // 0.0 to 1.0
   exposure_desired: number;    // 0.0 to 1.0
 }

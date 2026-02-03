@@ -28,6 +28,7 @@ interface DataItemCardProps<T extends DataItemBase> {
   onDelete: () => void;
   isDirty?: boolean;
   showMeta?: boolean;
+  renderAfterHeader?: () => React.ReactNode;
 }
 
 const defaultFormat = (v: number) => v.toFixed(2);
@@ -40,6 +41,7 @@ export const DataItemCard = <T extends DataItemBase>({
   onDelete,
   isDirty = false,
   showMeta = true,
+  renderAfterHeader,
 }: DataItemCardProps<T>): React.ReactElement => {
   const cardRef = React.useRef<HTMLDivElement>(null);
 
@@ -84,6 +86,8 @@ export const DataItemCard = <T extends DataItemBase>({
           placeholder="Name"
         />
       </div>
+
+      {renderAfterHeader?.()}
 
       <div className="ei-data-card__body">
         <textarea

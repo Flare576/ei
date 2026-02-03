@@ -1,3 +1,4 @@
+import React from 'react';
 import { GroupedCardList } from '../GroupedCardList';
 import { DataItemCard } from '../DataItemCard';
 
@@ -6,6 +7,7 @@ interface Topic {
   name: string;
   description: string;
   sentiment: number;
+  category?: string;
   exposure_current: number;
   exposure_desired: number;
   last_updated: string;
@@ -56,6 +58,10 @@ const getEngagementGapInfo = (current: number, desired: number) => {
   };
 };
 
+const CATEGORY_SUGGESTIONS = [
+  'Interest', 'Goal', 'Dream', 'Conflict', 'Concern', 'Fear', 'Hope', 'Plan', 'Project'
+];
+
 const renderTopicCard = (
   topic: Topic,
   onChange: (field: keyof Topic, value: Topic[keyof Topic]) => void,
@@ -66,6 +72,50 @@ const renderTopicCard = (
 ) => {
   const gapInfo = getEngagementGapInfo(topic.exposure_current, topic.exposure_desired);
 
+  const handleCategoryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    onChange('category', e.target.value);
+  };
+
+  const renderCategoryInput = () => (
+    <div style={{ 
+      padding: '0 12px 8px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+    }}>
+      <label 
+        style={{ 
+          fontSize: '0.75rem', 
+          color: 'var(--ei-text-secondary, #8b9aa8)',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        Category:
+      </label>
+      <input
+        type="text"
+        value={topic.category || ''}
+        onChange={handleCategoryChange}
+        placeholder="Interest, Goal, Conflict..."
+        list={`category-suggestions-${topic.id}`}
+        style={{
+          flex: 1,
+          fontSize: '0.8rem',
+          padding: '4px 8px',
+          border: '1px solid var(--ei-border, #3d4f5f)',
+          borderRadius: '4px',
+          backgroundColor: 'var(--ei-bg-secondary, #1a2332)',
+          color: 'var(--ei-text-primary, #e8eef4)',
+        }}
+      />
+      <datalist id={`category-suggestions-${topic.id}`}>
+        {CATEGORY_SUGGESTIONS.map(cat => (
+          <option key={cat} value={cat} />
+        ))}
+      </datalist>
+    </div>
+  );
+
   return (
     <div style={{ position: 'relative' }}>
       <DataItemCard
@@ -75,6 +125,7 @@ const renderTopicCard = (
         onSave={onSave}
         onDelete={onDelete}
         isDirty={isDirty}
+        renderAfterHeader={renderCategoryInput}
       />
       <div
         className={`ei-engagement-gap ${gapInfo.className}`}

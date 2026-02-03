@@ -143,8 +143,8 @@ export function queueItemMatch(
       itemValue = (candidate as TraitScanCandidate).value_of_trait;
       break;
     case "topic":
-      itemName = (candidate as TopicScanCandidate).type_of_topic;
-      itemValue = (candidate as TopicScanCandidate).value_of_topic;
+      itemName = (candidate as TopicScanCandidate).value_of_topic;
+      itemValue = (candidate as TopicScanCandidate).type_of_topic;
       break;
     case "person":
       itemName = (candidate as PersonScanCandidate).name_of_person;
@@ -222,7 +222,7 @@ export function queueItemMatch(
 export function queueItemUpdate(
   candidateType: DataItemType,
   matchResult: ItemMatchResult,
-  context: ExtractionContext & { itemName: string; itemValue: string },
+  context: ExtractionContext & { itemName: string; itemValue: string; itemCategory?: string },
   state: StateManager
 ): void {
   const human = state.getHuman();
@@ -274,6 +274,7 @@ export function queueItemUpdate(
       matchedType,
       isNewItem,
       existingItemId: existingItem?.id,
+      itemCategory: context.itemCategory,
       messages_analyze: context.messages_analyze,
     },
   });

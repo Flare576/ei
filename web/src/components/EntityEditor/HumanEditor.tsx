@@ -26,6 +26,7 @@ interface Topic {
   name: string;
   description: string;
   sentiment: number;
+  category?: string;
   exposure_current: number;
   exposure_desired: number;
   last_updated: string;

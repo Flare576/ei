@@ -1,6 +1,6 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-02-02 (0124 Persona Topic Ceremony Redesign)
+> Last updated: 2026-02-02 (0126 Human Topic Category Field)
 
 ## Overview
 
@@ -9,10 +9,10 @@
 | PENDING | 19 |
 | IN_PROGRESS | 0 |
 | QA | 0 |
-| DONE | 83 |
+| DONE | 84 |
 | BLOCKED | 0 |
 
-> 106 total tickets (80 done + 21 pending + 5 backlog).
+> 107 total tickets (84 done + 19 pending + 3 backlog + 1 new).
 
 ---
 
@@ -171,6 +171,7 @@
 | 0123 | PersonaTopic Data Model Separation | 2026-02-02 |
 | 0124 | Persona Topic Ceremony Redesign (3-Step) | 2026-02-02 |
 | 0125 | PersonaTopic UI Update | 2026-02-02 |
+| 0126 | Human Topic Category Field | 2026-02-02 |
 
 ---
 
