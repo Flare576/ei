@@ -127,6 +127,46 @@ export interface Quote {
 }
 
 // =============================================================================
+// PROVIDER ACCOUNTS
+// =============================================================================
+
+export enum ProviderType {
+  LLM = "llm",
+  Storage = "storage",
+}
+
+/**
+ * ProviderAccount - Configuration for external service connections
+ * 
+ * Used for both LLM providers (OpenRouter, Bedrock, etc.) and storage providers
+ * (flare576.com, Dropbox, Google Drive, etc.).
+ * 
+ * Model specification format: `account-name:model` (e.g., `MyOpenRouter:mistralai/mistral-7b`)
+ * Falls back to environment variables if no matching account is found.
+ */
+export interface ProviderAccount {
+  id: string;                      // UUID
+  name: string;                    // User-defined display name (e.g., "OpenRouter-Free", "Work Bedrock")
+  type: ProviderType;              // "llm" | "storage"
+  url: string;                     // Base URL for API (e.g., "https://openrouter.ai/api/v1")
+  
+  // Auth - use api_key for Bearer token, or username+password for basic/custom auth
+  api_key?: string;                // Bearer token auth (most common)
+  username?: string;               // Basic auth or custom (for storage providers)
+  password?: string;               // Basic auth or custom (for storage providers)
+  
+  // LLM-specific
+  default_model?: string;          // Default model for this account
+  
+  // Provider-specific extras (e.g., OpenRouter needs HTTP-Referer, X-Title)
+  extra_headers?: Record<string, string>;
+  
+  // Metadata
+  enabled?: boolean;               // Default: true
+  created_at: string;              // ISO timestamp
+}
+
+// =============================================================================
 // ENTITIES
 // =============================================================================
 
@@ -138,6 +178,7 @@ export interface HumanSettings {
   name_display?: string;
   name_color?: string;
   time_mode?: "24h" | "12h" | "local" | "utc";
+  accounts?: ProviderAccount[];
 }
 
 export interface CeremonyConfig {

@@ -8,7 +8,7 @@ import { HumanPeopleTab } from './tabs/HumanPeopleTab';
 import { HumanQuotesTab } from './tabs/HumanQuotesTab';
 import { QuoteManagementModal } from '../Quote/QuoteManagementModal';
 import { ValidationLevel } from '../../../../src/core/types';
-import type { Fact, Quote } from '../../../../src/core/types';
+import type { Fact, Quote, ProviderAccount } from '../../../../src/core/types';
 
 interface Trait {
   id: string;
@@ -60,6 +60,7 @@ interface HumanEntity {
   topics?: Topic[];
   people?: Person[];
   quotes?: Quote[];
+  accounts?: ProviderAccount[];
 }
 
 interface HumanEditorProps {
@@ -119,6 +120,9 @@ export const HumanEditor = ({
   const [localPeople, setLocalPeople] = useState<Person[]>(human.people || []);
   const [localQuotes, setLocalQuotes] = useState<Quote[]>(human.quotes || []);
   const [editingQuote, setEditingQuote] = useState<Quote | null>(null);
+  const [localAccounts, setLocalAccounts] = useState<ProviderAccount[]>(human.accounts || []);
+  const [accountEditorOpen, setAccountEditorOpen] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<ProviderAccount | null>(null);
   
   const [dirtyFactIds, setDirtyFactIds] = useState<Set<string>>(new Set());
   const [dirtyTraitIds, setDirtyTraitIds] = useState<Set<string>>(new Set());
@@ -141,12 +145,15 @@ export const HumanEditor = ({
       setLocalTopics(human.topics || []);
       setLocalPeople(human.people || []);
       setLocalQuotes(human.quotes || []);
+      setLocalAccounts(human.accounts || []);
       setDirtyFactIds(new Set());
       setDirtyTraitIds(new Set());
       setDirtyTopicIds(new Set());
       setDirtyPersonIds(new Set());
       setSettingsDirty(false);
       setEditingQuote(null);
+      setAccountEditorOpen(false);
+      setEditingAccount(null);
     }
   }, [isOpen, human]);
 
@@ -156,13 +163,19 @@ export const HumanEditor = ({
     dirtyTopicIds.size > 0 || 
     dirtyPersonIds.size > 0;
 
-  const handleSettingChange = (field: keyof typeof localSettings, value: typeof localSettings[keyof typeof localSettings]) => {
+  const handleSettingChange = (
+    field: keyof HumanEntity, 
+    value: string | number | boolean | ProviderAccount[] | undefined
+  ) => {
+    // Skip accounts - they're managed through dedicated handlers
+    if (field === 'accounts') return;
+    
     setLocalSettings(prev => ({ ...prev, [field]: value }));
     setSettingsDirty(true);
   };
 
   const handleSettingsSave = () => {
-    onUpdate(localSettings);
+    onUpdate({ ...localSettings, accounts: localAccounts });
     setSettingsDirty(false);
   };
 
@@ -338,6 +351,44 @@ export const HumanEditor = ({
     setDirtyPersonIds(prev => new Set(prev).add(newPerson.id));
   };
 
+  const handleAccountAdd = () => {
+    setEditingAccount(null);
+    setAccountEditorOpen(true);
+  };
+
+  const handleAccountEdit = (account: ProviderAccount) => {
+    setEditingAccount(account);
+    setAccountEditorOpen(true);
+  };
+
+  const handleAccountDelete = (id: string) => {
+    const updated = localAccounts.filter(a => a.id !== id);
+    setLocalAccounts(updated);
+    onUpdate({ ...localSettings, accounts: updated });
+  };
+
+  const handleAccountToggle = (id: string, enabled: boolean) => {
+    const updated = localAccounts.map(a => a.id === id ? { ...a, enabled } : a);
+    setLocalAccounts(updated);
+    onUpdate({ ...localSettings, accounts: updated });
+  };
+
+  const handleAccountSave = (account: ProviderAccount) => {
+    const existing = localAccounts.find(a => a.id === account.id);
+    const updated = existing
+      ? localAccounts.map(a => a.id === account.id ? account : a)
+      : [...localAccounts, account];
+    setLocalAccounts(updated);
+    onUpdate({ ...localSettings, accounts: updated });
+    setAccountEditorOpen(false);
+    setEditingAccount(null);
+  };
+
+  const handleAccountEditorClose = () => {
+    setAccountEditorOpen(false);
+    setEditingAccount(null);
+  };
+
   const handleQuoteEdit = (quote: Quote) => {
     setEditingQuote(quote);
   };
@@ -364,6 +415,15 @@ export const HumanEditor = ({
             <HumanSettingsTab 
               settings={localSettings} 
               onChange={handleSettingChange}
+              accounts={localAccounts}
+              onAccountAdd={handleAccountAdd}
+              onAccountEdit={handleAccountEdit}
+              onAccountDelete={handleAccountDelete}
+              onAccountToggle={handleAccountToggle}
+              editorOpen={accountEditorOpen}
+              editingAccount={editingAccount}
+              onEditorClose={handleAccountEditorClose}
+              onAccountSave={handleAccountSave}
             />
             {settingsDirty && (
               <button 

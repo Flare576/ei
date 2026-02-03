@@ -690,6 +690,45 @@ interface HumanSettings {
   name_display?: string;           // How user's name appears in chat
   name_color?: string;             // User's name color in chat
   time_mode?: "24h" | "12h" | "local" | "utc";  // Timestamp display format
+  
+  // Provider accounts (LLM and Storage)
+  accounts?: ProviderAccount[];
+}
+
+enum ProviderType {
+  LLM = "llm",
+  Storage = "storage",
+}
+
+/**
+ * ProviderAccount - Configuration for external service connections
+ * 
+ * Used for both LLM providers (OpenRouter, Bedrock, etc.) and storage providers
+ * (flare576.com, Dropbox, Google Drive, etc.).
+ * 
+ * Model specification format: `account-name:model` (e.g., `MyOpenRouter:mistralai/mistral-7b`)
+ * Falls back to environment variables if no matching account is found.
+ */
+interface ProviderAccount {
+  id: string;                      // UUID
+  name: string;                    // User-defined display name (e.g., "OpenRouter-Free", "Work Bedrock")
+  type: ProviderType;              // "llm" | "storage"
+  url: string;                     // Base URL for API (e.g., "https://openrouter.ai/api/v1")
+  
+  // Auth - use api_key for Bearer token, or username+password for basic/custom auth
+  api_key?: string;                // Bearer token auth (most common)
+  username?: string;               // Basic auth or custom (for storage providers)
+  password?: string;               // Basic auth or custom (for storage providers)
+  
+  // LLM-specific
+  default_model?: string;          // Default model for this account
+  
+  // Provider-specific extras (e.g., OpenRouter needs HTTP-Referer, X-Title)
+  extra_headers?: Record<string, string>;
+  
+  // Metadata
+  enabled?: boolean;               // Default: true
+  created_at: string;              // ISO timestamp
 }
 
 interface CeremonyConfig {
@@ -1273,3 +1312,5 @@ Standard error codes for `onError` events:
 | 2026-02-02 | Ei now has global visibility (special-cased), `group_primary: "General"`, immutable in UI |
 | 2026-02-02 | Empty `persona_groups` on data items treated as `["General"]` for backward compatibility |
 | 2026-02-02 | Added Group Visibility Model section to documentation |
+| 2026-02-03 | **Provider Accounts System**: Added `ProviderAccount` interface and `ProviderType` enum |
+| 2026-02-03 | Added `accounts?: ProviderAccount[]` to HumanSettings for LLM and Storage provider management |

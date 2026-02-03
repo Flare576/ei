@@ -1,9 +1,16 @@
-import type { ChatMessage } from "./types.js";
+import type { ChatMessage, ProviderAccount } from "./types.js";
 
 export interface ProviderConfig {
   baseURL: string;
   apiKey: string;
   name: string;
+}
+
+export interface ResolvedModel {
+  provider: string;
+  model: string;
+  config: ProviderConfig;
+  extraHeaders?: Record<string, string>;
 }
 
 export interface LLMCallOptions {
@@ -67,7 +74,7 @@ function getEnv(key: string, fallback: string): string {
   return fallback;
 }
 
-export function resolveModel(modelSpec?: string): { provider: string; model: string; config: ProviderConfig } {
+export function resolveModel(modelSpec?: string, accounts?: ProviderAccount[]): ResolvedModel {
   const spec = modelSpec || getEnv("EI_LLM_MODEL", "local-model");
   
   let provider = "local";
@@ -79,6 +86,27 @@ export function resolveModel(modelSpec?: string): { provider: string; model: str
     model = rest.join(":");
   }
   
+  // Try to find matching account by name (case-insensitive)
+  if (accounts) {
+    const matchingAccount = accounts.find(
+      (acc) => acc.name.toLowerCase() === provider.toLowerCase()
+    );
+    
+    if (matchingAccount) {
+      return {
+        provider: matchingAccount.name,
+        model,
+        config: {
+          name: matchingAccount.name,
+          baseURL: matchingAccount.url,
+          apiKey: matchingAccount.api_key || "",
+        },
+        extraHeaders: matchingAccount.extra_headers,
+      };
+    }
+  }
+  
+  // Fall back to env-based provider lookup
   const configFn = PROVIDERS[provider];
   if (!configFn) {
     throw new Error(`Unknown provider: ${provider}`);
@@ -92,7 +120,8 @@ export async function callLLMRaw(
   userPrompt: string,
   messages: ChatMessage[] = [],
   modelSpec?: string,
-  options: LLMCallOptions = {}
+  options: LLMCallOptions = {},
+  accounts?: ProviderAccount[]
 ): Promise<LLMRawResponse> {
   llmCallCount++;
   console.log(`[LLM] Call #${llmCallCount}`);
@@ -103,7 +132,7 @@ export async function callLLMRaw(
     throw new Error("LLM call aborted");
   }
   
-  const { model, config } = resolveModel(modelSpec);
+  const { model, config, extraHeaders } = resolveModel(modelSpec, accounts);
   
   const chatMessages: ChatMessage[] = [
     { role: "system", content: systemPrompt },
@@ -118,6 +147,7 @@ export async function callLLMRaw(
       ...(config.apiKey && config.apiKey !== "not-needed" 
         ? { Authorization: `Bearer ${config.apiKey}` } 
         : {}),
+      ...(extraHeaders || {}),
     },
     body: JSON.stringify({
       model,

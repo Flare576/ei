@@ -1,4 +1,6 @@
 import React from "react";
+import { ProviderList, ProviderEditor } from '../../Settings';
+import type { ProviderAccount } from '../../../../../src/core/types.js';
 
 interface HumanSettings {
   auto_save_interval_ms?: number;
@@ -7,14 +9,36 @@ interface HumanSettings {
   name_color?: string;
   name_display?: string;
   time_mode?: "24h" | "12h" | "local" | "utc";
+  accounts?: ProviderAccount[];
 }
 
 interface HumanSettingsTabProps {
   settings: HumanSettings;
   onChange: (field: keyof HumanSettings, value: HumanSettings[keyof HumanSettings]) => void;
+  accounts: ProviderAccount[];
+  onAccountAdd: () => void;
+  onAccountEdit: (account: ProviderAccount) => void;
+  onAccountDelete: (id: string) => void;
+  onAccountToggle: (id: string, enabled: boolean) => void;
+  editorOpen: boolean;
+  editingAccount: ProviderAccount | null;
+  onEditorClose: () => void;
+  onAccountSave: (account: ProviderAccount) => void;
 }
 
-export const HumanSettingsTab: React.FC<HumanSettingsTabProps> = ({ settings, onChange }) => {
+export const HumanSettingsTab: React.FC<HumanSettingsTabProps> = ({ 
+  settings, 
+  onChange,
+  accounts,
+  onAccountAdd,
+  onAccountEdit,
+  onAccountDelete,
+  onAccountToggle,
+  editorOpen,
+  editingAccount,
+  onEditorClose,
+  onAccountSave,
+}) => {
   const intervalMinutes = settings.auto_save_interval_ms ? Math.round(settings.auto_save_interval_ms / 60000) : 1;
 
   const handleIntervalChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -100,6 +124,27 @@ export const HumanSettingsTab: React.FC<HumanSettingsTabProps> = ({ settings, on
           <small className="ei-form-hint">Format: provider:model (e.g., openai:gpt-4o, local:google/gemma-3-12b)</small>
         </div>
       </section>
+
+      <section className="ei-settings-section">
+        <h3 className="ei-settings-section__title">Provider Accounts</h3>
+        <p className="ei-settings-section__description">
+          Configure LLM and storage providers. Use account-name:model format in Default Model above.
+        </p>
+        <ProviderList
+          accounts={accounts}
+          onAdd={onAccountAdd}
+          onEdit={onAccountEdit}
+          onDelete={onAccountDelete}
+          onToggle={onAccountToggle}
+        />
+      </section>
+
+      <ProviderEditor
+        isOpen={editorOpen}
+        account={editingAccount}
+        onSave={onAccountSave}
+        onClose={onEditorClose}
+      />
     </div>
   );
 };
