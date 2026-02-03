@@ -16,6 +16,8 @@ export interface LLMRawResponse {
   finishReason: string | null;
 }
 
+let llmCallCount = 0;
+
 const PROVIDERS: Record<string, () => ProviderConfig> = {
   local: () => ({
     name: "Local (LM Studio/Ollama)",
@@ -92,6 +94,9 @@ export async function callLLMRaw(
   modelSpec?: string,
   options: LLMCallOptions = {}
 ): Promise<LLMRawResponse> {
+  llmCallCount++;
+  console.log(`[LLM] Call #${llmCallCount}`);
+  
   const { signal, temperature = 0.7 } = options;
   
   if (signal?.aborted) {

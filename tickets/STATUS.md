@@ -45,7 +45,7 @@
 | 0093 | Rich Text Editor (Markdown + WYSIWYG) | 0080 |
 | 0094 | Name Color Customization | 0081 |
 | 0095 | Time Display Modes | 0081 |
-| 0096 | Settings Sync (flare576.com) | 0081 |
+| 0096 | Provider Accounts & Settings Sync | 0081 |
 | 0097 | LLM Streaming Support | 0011 |
 | 0098 | Pre-configured Persona Templates | 0087 |
 | 0099 | Story Co-Writer Agent (Non-Persona) | 0098 |

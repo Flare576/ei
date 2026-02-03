@@ -568,11 +568,6 @@ interface StateManager {
    * @param index - Slot 0-14
    */
   checkpoint_restore(index: number): Promise<boolean>;
-  
-  // === Settings ===
-  
-  settings_get<T>(key: string): T | null;
-  settings_set<T>(key: string, value: T): void;
 }
 ```
 
@@ -635,7 +630,6 @@ interface StorageState {
     messages: Message[];
   }>;
   queue: LLMRequest[];
-  settings: Record<string, unknown>;
 }
 ```
 

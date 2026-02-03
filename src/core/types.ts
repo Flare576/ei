@@ -328,7 +328,6 @@ export interface StorageState {
     }
   >;
   queue: LLMRequest[];
-  settings: Record<string, unknown>;
 }
 
 

@@ -280,18 +280,4 @@ describe("StateManager", () => {
       expect(restored).toBe(false);
     });
   });
-
-  describe("settings operations", () => {
-    it("sets and gets settings", () => {
-      sm.settings_set("testKey", { value: 42 });
-      
-      const result = sm.settings_get<{ value: number }>("testKey");
-      expect(result?.value).toBe(42);
-    });
-
-    it("returns null for non-existent setting", () => {
-      const result = sm.settings_get("nonexistent");
-      expect(result).toBeNull();
-    });
-  });
 });

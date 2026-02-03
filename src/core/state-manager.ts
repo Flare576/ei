@@ -26,7 +26,6 @@ export class StateManager {
   private personaState = new PersonaState();
   private queueState = new QueueState();
   private checkpointState = new CheckpointState();
-  private settings: Map<string, unknown> = new Map();
 
   async initialize(storage: Storage): Promise<void> {
     this.checkpointState.setStorage(storage);
@@ -37,10 +36,8 @@ export class StateManager {
       this.humanState.load(state.human);
       this.personaState.load(state.personas);
       this.queueState.load(state.queue);
-      this.settings = new Map(Object.entries(state.settings));
     } else {
       this.humanState.load(createDefaultHumanEntity());
-      this.settings = new Map();
     }
   }
 
@@ -51,7 +48,6 @@ export class StateManager {
       human: this.humanState.get(),
       personas: this.personaState.export(),
       queue: this.queueState.export(),
-      settings: Object.fromEntries(this.settings),
     };
   }
 
@@ -268,14 +264,5 @@ export class StateManager {
     this.humanState.load(state.human);
     this.personaState.load(state.personas);
     this.queueState.load(state.queue);
-    this.settings = new Map(Object.entries(state.settings));
-  }
-
-  settings_get<T>(key: string): T | null {
-    return (this.settings.get(key) as T) ?? null;
-  }
-
-  settings_set<T>(key: string, value: T): void {
-    this.settings.set(key, value);
   }
 }
