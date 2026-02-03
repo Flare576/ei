@@ -8,6 +8,7 @@ import {
   queuePersonScan,
   type ExtractionContext,
 } from "./human-extraction.js";
+import { queuePersonaTopicScan, type PersonaTopicContext } from "./persona-topics.js";
 import { buildPersonaExpirePrompt, buildPersonaExplorePrompt, buildDescriptionCheckPrompt } from "../../prompts/ceremony/index.js";
 
 export function isNewDay(lastCeremony: string | undefined, now: Date): boolean {
@@ -114,6 +115,14 @@ export function queueExposurePhase(personaName: string, state: StateManager): vo
     queueTopicScan(context, state);
     queuePersonScan(context, state);
     console.log(`[ceremony:exposure] Queued human extraction scans for ${messagesSinceCeremony.length} messages`);
+
+    const personaTopicContext: PersonaTopicContext = {
+      personaName,
+      messages_context: messages.slice(0, -messagesSinceCeremony.length),
+      messages_analyze: messagesSinceCeremony,
+    };
+    queuePersonaTopicScan(personaTopicContext, state);
+    console.log(`[ceremony:exposure] Queued persona topic scan for ${personaName}`);
   }
   
   applyDecayPhase(personaName, state);

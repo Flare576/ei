@@ -6,7 +6,7 @@ export function buildDescriptionCheckPrompt(data: DescriptionCheckPromptData): {
     : "No traits defined";
 
   const topicList = data.topics.length > 0
-    ? data.topics.map(t => `- ${t.name}: ${t.description} (exposure: ${t.exposure_current.toFixed(2)})`).join("\n")
+    ? data.topics.map(t => `- ${t.name}: ${t.perspective} (exposure: ${t.exposure_current.toFixed(2)})`).join("\n")
     : "No topics defined";
 
   const system = `You are evaluating whether a persona's description needs updating.

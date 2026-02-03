@@ -750,7 +750,7 @@ interface PersonaEntity {
   
   // Data
   traits: Trait[];
-  topics: Topic[];
+  topics: PersonaTopic[];
   
   // State
   is_paused: boolean;
@@ -772,6 +772,43 @@ interface PersonaEntity {
   last_inactivity_ping?: string;
 }
 ```
+
+### PersonaTopic
+
+Persona topics are distinct from Human topics (`Topic`). While Human topics track what the user knows/feels about subjects (shared across personas via groups), PersonaTopic tracks how each persona engages with topics (persona-local).
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Unique identifier (UUID) |
+| `name` | string | Topic name |
+| `perspective` | string | The persona's view/opinion on this topic |
+| `approach` | string | How they prefer to engage with this topic |
+| `personal_stake` | string | Why this topic matters to them personally |
+| `sentiment` | -1.0 to 1.0 | How they feel about it |
+| `exposure_current` | 0.0 to 1.0 | How recently/frequently discussed |
+| `exposure_desired` | 0.0 to 1.0 | How much they want to discuss |
+| `last_updated` | ISO string | When this record was last modified |
+
+```typescript
+interface PersonaTopic {
+  id: string;
+  name: string;
+  perspective: string;
+  approach: string;
+  personal_stake: string;
+  sentiment: number;
+  exposure_current: number;
+  exposure_desired: number;
+  last_updated: string;
+}
+```
+
+**Key differences from Human Topic:**
+- No `description` field - replaced by structured `perspective`, `approach`, `personal_stake`
+- No `learned_by` - persona topics aren't "learned", they're generated during Ceremony
+- No `persona_groups` - persona topics are local to each persona, no cross-visibility needed
+
+**Migration**: Existing persona topics with `description` field should map `description` → `perspective`, with `approach` and `personal_stake` empty until populated by Ceremony.
 
 ### Data Items
 

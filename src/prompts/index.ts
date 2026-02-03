@@ -25,14 +25,19 @@ export type {
 
 export {
   buildPersonaTraitExtractionPrompt,
-  buildPersonaTopicDetectionPrompt,
-  buildPersonaTopicExplorationPrompt,
+  buildPersonaTopicScanPrompt,
+  buildPersonaTopicMatchPrompt,
+  buildPersonaTopicUpdatePrompt,
 } from "./persona/index.js";
 export type {
   PersonaTraitExtractionPromptData,
-  PersonaTopicDetectionPromptData,
-  PersonaTopicExplorationPromptData,
-  TopicResult,
+  PersonaTopicScanPromptData,
+  PersonaTopicScanCandidate,
+  PersonaTopicScanResult,
+  PersonaTopicMatchPromptData,
+  PersonaTopicMatchResult,
+  PersonaTopicUpdatePromptData,
+  PersonaTopicUpdateResult,
   TraitResult,
 } from "./persona/types.js";
 

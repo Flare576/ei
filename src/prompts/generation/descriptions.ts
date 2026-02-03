@@ -1,5 +1,5 @@
 import type { PersonaDescriptionsPromptData, PromptOutput } from "./types.js";
-import type { Trait, Topic } from "../../core/types.js";
+import type { Trait, PersonaTopic } from "../../core/types.js";
 
 function formatTraitsForPrompt(traits: Trait[]): string {
   if (traits.length === 0) return "(No traits defined)";
@@ -10,12 +10,12 @@ function formatTraitsForPrompt(traits: Trait[]): string {
   }).join('\n');
 }
 
-function formatTopicsForPrompt(topics: Topic[]): string {
+function formatTopicsForPrompt(topics: PersonaTopic[]): string {
   if (topics.length === 0) return "(No topics defined)";
   
   return topics.map(t => {
     const sentiment = t.sentiment > 0.3 ? "enjoys" : t.sentiment < -0.3 ? "dislikes" : "neutral";
-    return `- **${t.name}** (${sentiment}): ${t.description}`;
+    return `- **${t.name}** (${sentiment}): ${t.perspective || t.name}`;
   }).join('\n');
 }
 

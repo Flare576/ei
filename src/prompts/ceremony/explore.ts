@@ -6,7 +6,7 @@ export function buildPersonaExplorePrompt(data: PersonaExplorePromptData): { sys
   ).join("\n");
 
   const topicList = data.remaining_topics.map(t => 
-    `- ${t.name}: ${t.description}`
+    `- ${t.name}: ${t.perspective || t.name}`
   ).join("\n");
 
   const themeList = data.recent_conversation_themes.length > 0
@@ -23,10 +23,25 @@ Topics should:
 
 Generate 1-3 new topics that this persona would genuinely care about.
 
-Return JSON: { "new_topics": [{ "name": "Topic Name", "description": "What this topic means to the persona", "sentiment": 0.5, "exposure_current": 0.2, "exposure_desired": 0.6 }] }
+Return JSON:
+{
+  "new_topics": [{
+    "name": "Topic Name",
+    "perspective": "The persona's view or opinion on this topic",
+    "approach": "How they prefer to engage with this topic",
+    "personal_stake": "Why this topic matters to them personally",
+    "sentiment": 0.5,
+    "exposure_current": 0.2,
+    "exposure_desired": 0.6
+  }]
+}
 
-Set exposure_current low (0.2) since these are new topics.
-Set exposure_desired based on how much the persona would want to discuss this.`;
+**Field guidance:**
+- perspective: REQUIRED - their actual view/opinion
+- approach: Optional if unclear - how they discuss this topic
+- personal_stake: Optional if unclear - why it matters to them
+- exposure_current: Low (0.2) since these are new topics
+- exposure_desired: How much the persona would want to discuss this`;
 
   const user = `Persona: ${data.persona_name}
 

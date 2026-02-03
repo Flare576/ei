@@ -342,8 +342,9 @@ export class Processor {
 
       if (
         response.request.next_step === LLMNextStep.HandlePersonaTraitExtraction ||
-        response.request.next_step === LLMNextStep.HandlePersonaTopicDetection ||
-        response.request.next_step === LLMNextStep.HandlePersonaTopicExploration
+        response.request.next_step === LLMNextStep.HandlePersonaTopicScan ||
+        response.request.next_step === LLMNextStep.HandlePersonaTopicMatch ||
+        response.request.next_step === LLMNextStep.HandlePersonaTopicUpdate
       ) {
         const personaName = response.request.data.personaName as string;
         if (personaName) {
@@ -475,8 +476,9 @@ export class Processor {
     const responsesToClear = [
       LLMNextStep.HandlePersonaResponse,
       LLMNextStep.HandlePersonaTraitExtraction,
-      LLMNextStep.HandlePersonaTopicDetection,
-      LLMNextStep.HandlePersonaTopicExploration,
+      LLMNextStep.HandlePersonaTopicScan,
+      LLMNextStep.HandlePersonaTopicMatch,
+      LLMNextStep.HandlePersonaTopicUpdate,
     ];
 
     let removedAny = false;

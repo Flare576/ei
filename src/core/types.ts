@@ -42,8 +42,9 @@ export enum LLMNextStep {
   HandleHumanItemMatch = "handleHumanItemMatch",
   HandleHumanItemUpdate = "handleHumanItemUpdate",
   HandlePersonaTraitExtraction = "handlePersonaTraitExtraction",
-  HandlePersonaTopicDetection = "handlePersonaTopicDetection",
-  HandlePersonaTopicExploration = "handlePersonaTopicExploration",
+  HandlePersonaTopicScan = "handlePersonaTopicScan",
+  HandlePersonaTopicMatch = "handlePersonaTopicMatch",
+  HandlePersonaTopicUpdate = "handlePersonaTopicUpdate",
   HandleHeartbeatCheck = "handleHeartbeatCheck",
   HandleEiHeartbeat = "handleEiHeartbeat",
   HandleEiValidation = "handleEiValidation",
@@ -82,6 +83,26 @@ export interface Trait extends DataItemBase {
 export interface Topic extends DataItemBase {
   exposure_current: number;
   exposure_desired: number;
+}
+
+/**
+ * PersonaTopic - How a persona engages with a topic
+ * 
+ * Different from Human Topic because:
+ * - Persona-local (not shared across personas via groups)
+ * - Richer fields: perspective, approach, personal_stake
+ * - Not "learned" - generated during Ceremony
+ */
+export interface PersonaTopic {
+  id: string;
+  name: string;
+  perspective: string;      // Their view/opinion on this topic
+  approach: string;         // How they prefer to engage with this topic
+  personal_stake: string;   // Why this topic matters to them personally
+  sentiment: number;        // -1.0 to 1.0
+  exposure_current: number; // 0.0 to 1.0 (how recently discussed)
+  exposure_desired: number; // 0.0 to 1.0 (how much they want to discuss)
+  last_updated: string;     // ISO timestamp
 }
 
 export interface Person extends DataItemBase {
@@ -152,7 +173,7 @@ export interface PersonaEntity {
   group_primary?: string | null;
   groups_visible?: string[];
   traits: Trait[];
-  topics: Topic[];
+  topics: PersonaTopic[];
   is_paused: boolean;
   pause_until?: string;
   is_archived: boolean;

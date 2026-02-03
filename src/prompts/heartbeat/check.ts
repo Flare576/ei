@@ -91,7 +91,7 @@ ${data.persona.traits.length > 0
 
 ### Topics You Care About
 ${data.persona.topics.length > 0
-  ? data.persona.topics.map(t => `- **${t.name}**: ${t.description}`).join('\n')
+  ? data.persona.topics.map(t => `- **${t.name}**: ${t.perspective || t.name}`).join('\n')
   : "(No topics defined)"}`;
 
   const opportunitiesFragment = `## Engagement Opportunities

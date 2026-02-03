@@ -1,6 +1,6 @@
 # 0123: PersonaTopic Data Model Separation
 
-**Status**: PENDING
+**Status**: DONE
 **Priority**: HIGH
 **Epic**: E009 (Polish & New Features)
 **Depends on**: None

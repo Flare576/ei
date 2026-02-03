@@ -3,7 +3,7 @@
  * Building blocks for constructing response prompts
  */
 
-import type { Trait, Topic, Quote } from "../../core/types.js";
+import type { Trait, Quote, PersonaTopic } from "../../core/types.js";
 import type { ResponsePromptData } from "./types.js";
 
 // =============================================================================
@@ -66,10 +66,9 @@ ${formatted}`;
 // TOPICS SECTION
 // =============================================================================
 
-export function buildTopicsSection(topics: Topic[], header: string): string {
+export function buildTopicsSection(topics: PersonaTopic[], header: string): string {
   if (topics.length === 0) return "";
   
-  // Sort by delta between desired and current exposure
   const sorted = [...topics]
     .map(t => ({ topic: t, delta: t.exposure_desired - t.exposure_current }))
     .sort((a, b) => b.delta - a.delta)
@@ -79,7 +78,8 @@ export function buildTopicsSection(topics: Topic[], header: string): string {
     const delta = t.exposure_desired - t.exposure_current;
     const indicator = delta > 0.1 ? "+" : delta < -0.1 ? "-" : "=";
     const sentiment = t.sentiment > 0.3 ? "(enjoys)" : t.sentiment < -0.3 ? "(dislikes)" : "";
-    return `- [${indicator}] **${t.name}** ${sentiment}: ${t.description}`;
+    const displayText = t.perspective || t.name;
+    return `- [${indicator}] **${t.name}** ${sentiment}: ${displayText}`;
   }).join("\n");
   
   return `## ${header}
@@ -177,11 +177,10 @@ export function buildPrioritiesSection(
 ): string {
   const priorities: string[] = [];
   
-  // Your needs (topics you want to discuss more)
   const yourNeeds = persona.topics
     .filter(t => t.exposure_desired - t.exposure_current > 0.2)
     .slice(0, 3)
-    .map(t => `- Bring up "${t.name}" - ${t.description}`);
+    .map(t => `- Bring up "${t.name}" - ${t.perspective || t.name}`);
   
   if (yourNeeds.length > 0) {
     priorities.push(`**Topics you want to discuss:**\n${yourNeeds.join("\n")}`);

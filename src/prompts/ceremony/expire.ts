@@ -1,9 +1,10 @@
 import type { PersonaExpirePromptData } from "./types.js";
 
 export function buildPersonaExpirePrompt(data: PersonaExpirePromptData): { system: string; user: string } {
-  const topicList = data.topics.map(t => 
-    `- "${t.name}" (exposure: ${t.exposure_current.toFixed(2)}, sentiment: ${t.sentiment.toFixed(2)})`
-  ).join("\n");
+  const topicList = data.topics.map(t => {
+    const display = t.perspective || t.name;
+    return `- "${t.name}" (exposure: ${t.exposure_current.toFixed(2)}, sentiment: ${t.sentiment.toFixed(2)})\n  Perspective: ${display}`;
+  }).join("\n");
 
   const system = `You are evaluating which topics a persona should stop caring about.
 

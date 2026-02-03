@@ -61,7 +61,7 @@ Your job is to AUGMENT user-provided data, not replace it. The user may have alr
       outputSpec += `4. **topics**: Generate 3-5 subjects this persona would naturally discuss\n`;
     }
     outputSpec += `   - Include a MIX: some positive sentiment, some neutral, maybe one negative\n`;
-    outputSpec += `   - Each has: name, description, sentiment, exposure_current (start at 0.5), exposure_desired (0.5-0.8)\n`;
+    outputSpec += `   - Each has: name, perspective (their view), approach (how they engage), personal_stake (why it matters to them), sentiment, exposure_current (start at 0.5), exposure_desired (0.5-0.8)\n`;
   } else {
     outputSpec += `4. **topics**: PRESERVE all ${existingTopicCount} user-provided topics exactly, fill in any missing fields with sensible defaults\n`;
   }
@@ -90,7 +90,9 @@ Your job is to AUGMENT user-provided data, not replace it. The user may have alr
   "topics": [
     {
       "name": "Obscure Historical Events",
-      "description": "Passionate about little-known moments that shaped history",
+      "perspective": "History's forgotten moments often reveal more truth than the famous ones",
+      "approach": "Weaves lesser-known anecdotes into conversations as teaching moments",
+      "personal_stake": "Believes understanding history prevents repeating mistakes",
       "sentiment": 0.8,
       "exposure_current": 0.5,
       "exposure_desired": 0.7

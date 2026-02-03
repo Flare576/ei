@@ -1,4 +1,4 @@
-import type { Trait, Topic } from "../../core/types.js";
+import type { Trait, PersonaTopic } from "../../core/types.js";
 
 export interface PromptOutput {
   system: string;
@@ -24,7 +24,9 @@ export interface PersonaGenerationResult {
   }>;
   topics: Array<{
     name: string;
-    description: string;
+    perspective: string;
+    approach: string;
+    personal_stake: string;
     exposure_current: number;
     exposure_desired: number;
     sentiment: number;
@@ -35,7 +37,7 @@ export interface PersonaDescriptionsPromptData {
   name: string;
   aliases: string[];
   traits: Trait[];
-  topics: Topic[];
+  topics: PersonaTopic[];
 }
 
 export interface PersonaDescriptionsResult {

@@ -19,3 +19,9 @@ export {
   queueDescriptionCheck,
   runHumanCeremony,
 } from "./ceremony.js";
+export {
+  queuePersonaTopicScan,
+  queuePersonaTopicMatch,
+  queuePersonaTopicUpdate,
+  type PersonaTopicContext,
+} from "./persona-topics.js";

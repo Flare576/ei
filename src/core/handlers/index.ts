@@ -6,6 +6,7 @@ import {
   type Message, 
   type Trait, 
   type Topic,
+  type PersonaTopic,
   type Fact,
   type Person,
   type Quote,
@@ -14,7 +15,13 @@ import {
 import type { StateManager } from "../state-manager.js";
 import type { HeartbeatCheckResult, EiHeartbeatResult } from "../../prompts/heartbeat/types.js";
 import type { PersonaGenerationResult, PersonaDescriptionsResult } from "../../prompts/generation/types.js";
-import type { TraitResult, TopicResult } from "../../prompts/persona/types.js";
+import type { 
+  TraitResult,
+  PersonaTopicScanResult,
+  PersonaTopicScanCandidate,
+  PersonaTopicMatchResult,
+  PersonaTopicUpdateResult,
+} from "../../prompts/persona/types.js";
 import type { EiValidationResult } from "../../prompts/validation/types.js";
 import type { 
   PersonaExpireResult, 
@@ -27,8 +34,11 @@ import {
   queueItemUpdate,
   queueExplorePhase,
   queueDescriptionCheck,
+  queuePersonaTopicMatch,
+  queuePersonaTopicUpdate,
   type PartialPersona,
   type ExtractionContext,
+  type PersonaTopicContext,
 } from "../orchestrators/index.js";
 import { buildPersonaDescriptionsPrompt } from "../../prompts/generation/index.js";
 import type {
@@ -162,10 +172,12 @@ function handlePersonaGeneration(response: LLMResponse, state: StateManager): vo
     last_updated: now,
   }));
 
-  const topics: Topic[] = (result?.topics || []).map(t => ({
+  const topics: PersonaTopic[] = (result?.topics || []).map(t => ({
     id: crypto.randomUUID(),
     name: t.name,
-    description: t.description,
+    perspective: t.perspective || "",
+    approach: t.approach || "",
+    personal_stake: t.personal_stake || "",
     sentiment: t.sentiment,
     exposure_current: t.exposure_current,
     exposure_desired: t.exposure_desired,
@@ -235,80 +247,6 @@ function handlePersonaTraitExtraction(response: LLMResponse, state: StateManager
 
   state.persona_update(personaName, { traits, last_updated: now });
   console.log(`[handlePersonaTraitExtraction] Updated ${traits.length} traits for ${personaName}`);
-}
-
-function handlePersonaTopicDetection(response: LLMResponse, state: StateManager): void {
-  const personaName = response.request.data.personaName as string;
-  if (!personaName) {
-    console.error("[handlePersonaTopicDetection] No personaName in request data");
-    return;
-  }
-
-  const result = response.parsed as TopicResult[] | undefined;
-  if (!result || !Array.isArray(result)) {
-    console.error("[handlePersonaTopicDetection] Invalid parsed result");
-    return;
-  }
-
-  const now = new Date().toISOString();
-  const topics: Topic[] = result.map(t => ({
-    id: crypto.randomUUID(),
-    name: t.name,
-    description: t.description,
-    sentiment: t.sentiment,
-    exposure_current: t.exposure_current,
-    exposure_desired: t.exposure_desired,
-    last_updated: now,
-  }));
-
-  state.persona_update(personaName, { topics, last_updated: now });
-  console.log(`[handlePersonaTopicDetection] Updated ${topics.length} topics for ${personaName}`);
-}
-
-function handlePersonaTopicExploration(response: LLMResponse, state: StateManager): void {
-  const personaName = response.request.data.personaName as string;
-  if (!personaName) {
-    console.error("[handlePersonaTopicExploration] No personaName in request data");
-    return;
-  }
-
-  const result = response.parsed as TopicResult[] | undefined;
-  if (!result || !Array.isArray(result)) {
-    console.error("[handlePersonaTopicExploration] Invalid parsed result");
-    return;
-  }
-
-  if (result.length === 0) {
-    console.log(`[handlePersonaTopicExploration] No new topics for ${personaName}`);
-    return;
-  }
-
-  const persona = state.persona_get(personaName);
-  if (!persona) {
-    console.error(`[handlePersonaTopicExploration] Persona not found: ${personaName}`);
-    return;
-  }
-
-  const now = new Date().toISOString();
-  const existingNames = new Set(persona.topics.map(t => t.name.toLowerCase()));
-  
-  const newTopics: Topic[] = result
-    .filter(t => !existingNames.has(t.name.toLowerCase()))
-    .map(t => ({
-      id: crypto.randomUUID(),
-      name: t.name,
-      description: t.description,
-      sentiment: t.sentiment,
-      exposure_current: t.exposure_current,
-      exposure_desired: t.exposure_desired,
-      last_updated: now,
-    }));
-
-  if (newTopics.length > 0) {
-    const allTopics = [...persona.topics, ...newTopics];
-    state.persona_update(personaName, { topics: allTopics, last_updated: now });
-    console.log(`[handlePersonaTopicExploration] Added ${newTopics.length} new topics for ${personaName}`);
-  }
 }
 
 function handleEiValidation(response: LLMResponse, state: StateManager): void {
@@ -444,12 +382,14 @@ function handlePersonaExplore(response: LLMResponse, state: StateManager): void 
   const now = new Date().toISOString();
   const existingNames = new Set(persona.topics.map(t => t.name.toLowerCase()));
 
-  const topicsToAdd: Topic[] = newTopics
+  const topicsToAdd: PersonaTopic[] = newTopics
     .filter(t => !existingNames.has(t.name.toLowerCase()))
     .map(t => ({
       id: crypto.randomUUID(),
       name: t.name,
-      description: t.description,
+      perspective: t.perspective || "",
+      approach: t.approach || "",
+      personal_stake: t.personal_stake || "",
       sentiment: t.sentiment,
       exposure_current: t.exposure_current ?? 0.2,
       exposure_desired: t.exposure_desired ?? 0.6,
@@ -838,6 +778,139 @@ function applyOrValidate(
   }
 }
 
+const MIN_MESSAGE_COUNT_FOR_CREATE = 2;
+
+function handlePersonaTopicScan(response: LLMResponse, state: StateManager): void {
+  const personaName = response.request.data.personaName as string;
+  if (!personaName) {
+    console.error("[handlePersonaTopicScan] No personaName in request data");
+    return;
+  }
+
+  const result = response.parsed as PersonaTopicScanResult | undefined;
+  if (!result?.topics || !Array.isArray(result.topics)) {
+    console.log("[handlePersonaTopicScan] No topics detected or invalid result");
+    return;
+  }
+
+  const messages_context = response.request.data.messages_context as Message[];
+  const messages_analyze = response.request.data.messages_analyze as Message[];
+
+  const context: PersonaTopicContext = {
+    personaName,
+    messages_context,
+    messages_analyze,
+  };
+
+  for (const candidate of result.topics) {
+    queuePersonaTopicMatch(candidate, context, state);
+  }
+  console.log(`[handlePersonaTopicScan] Queued ${result.topics.length} topic(s) for matching`);
+}
+
+function handlePersonaTopicMatch(response: LLMResponse, state: StateManager): void {
+  const personaName = response.request.data.personaName as string;
+  const candidate = response.request.data.candidate as PersonaTopicScanCandidate;
+  const messages_context = response.request.data.messages_context as Message[];
+  const messages_analyze = response.request.data.messages_analyze as Message[];
+
+  if (!personaName || !candidate) {
+    console.error("[handlePersonaTopicMatch] Missing required data");
+    return;
+  }
+
+  const result = response.parsed as PersonaTopicMatchResult | undefined;
+  if (!result) {
+    console.error("[handlePersonaTopicMatch] No parsed result");
+    return;
+  }
+
+  if (result.action === "match") {
+    console.log(`[handlePersonaTopicMatch] "${candidate.name}" matched existing topic`);
+  } else if (result.action === "create") {
+    if (candidate.message_count < MIN_MESSAGE_COUNT_FOR_CREATE) {
+      console.log(`[handlePersonaTopicMatch] "${candidate.name}" skipped: message_count ${candidate.message_count} < ${MIN_MESSAGE_COUNT_FOR_CREATE}`);
+      return;
+    }
+    console.log(`[handlePersonaTopicMatch] "${candidate.name}" will be created`);
+  } else if (result.action === "skip") {
+    console.log(`[handlePersonaTopicMatch] "${candidate.name}" skipped: ${result.reason}`);
+    return;
+  }
+
+  const context: PersonaTopicContext = {
+    personaName,
+    messages_context,
+    messages_analyze,
+  };
+
+  queuePersonaTopicUpdate(candidate, result, context, state);
+}
+
+function handlePersonaTopicUpdate(response: LLMResponse, state: StateManager): void {
+  const personaName = response.request.data.personaName as string;
+  const existingTopicId = response.request.data.existingTopicId as string | null;
+  const isNewTopic = response.request.data.isNewTopic as boolean;
+
+  if (!personaName) {
+    console.error("[handlePersonaTopicUpdate] No personaName in request data");
+    return;
+  }
+
+  const result = response.parsed as PersonaTopicUpdateResult | undefined;
+  if (!result) {
+    console.error("[handlePersonaTopicUpdate] No parsed result");
+    return;
+  }
+
+  const persona = state.persona_get(personaName);
+  if (!persona) {
+    console.error(`[handlePersonaTopicUpdate] Persona not found: ${personaName}`);
+    return;
+  }
+
+  const now = new Date().toISOString();
+
+  if (isNewTopic) {
+    const newTopic: PersonaTopic = {
+      id: crypto.randomUUID(),
+      name: result.name,
+      perspective: result.perspective || "",
+      approach: result.approach || "",
+      personal_stake: result.personal_stake || "",
+      sentiment: result.sentiment,
+      exposure_current: result.exposure_current,
+      exposure_desired: result.exposure_desired,
+      last_updated: now,
+    };
+
+    const allTopics = [...persona.topics, newTopic];
+    state.persona_update(personaName, { topics: allTopics, last_updated: now });
+    console.log(`[handlePersonaTopicUpdate] Created new topic "${result.name}" for ${personaName}`);
+  } else if (existingTopicId) {
+    const updatedTopics = persona.topics.map(t => {
+      if (t.id !== existingTopicId) return t;
+
+      const newExposure = Math.min(1.0, t.exposure_current + (result.exposure_current - t.exposure_current));
+
+      return {
+        ...t,
+        name: result.name,
+        perspective: result.perspective || t.perspective,
+        approach: result.approach || t.approach,
+        personal_stake: result.personal_stake || t.personal_stake,
+        sentiment: result.sentiment,
+        exposure_current: newExposure,
+        exposure_desired: result.exposure_desired,
+        last_updated: now,
+      };
+    });
+
+    state.persona_update(personaName, { topics: updatedTopics, last_updated: now });
+    console.log(`[handlePersonaTopicUpdate] Updated topic "${result.name}" for ${personaName}`);
+  }
+}
+
 function queueEiValidation(
   state: StateManager,
   dataType: DataItemType,
@@ -896,8 +969,9 @@ export const handlers: Record<LLMNextStep, ResponseHandler> = {
   handleHumanItemMatch,
   handleHumanItemUpdate,
   handlePersonaTraitExtraction,
-  handlePersonaTopicDetection,
-  handlePersonaTopicExploration,
+  handlePersonaTopicScan,
+  handlePersonaTopicMatch,
+  handlePersonaTopicUpdate,
   handleHeartbeatCheck,
   handleEiHeartbeat,
   handleEiValidation,
