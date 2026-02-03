@@ -3,7 +3,7 @@
  * Building blocks for constructing response prompts
  */
 
-import type { Trait, Topic } from "../../core/types.js";
+import type { Trait, Topic, Quote } from "../../core/types.js";
 import type { ResponsePromptData } from "./types.js";
 
 // =============================================================================
@@ -219,4 +219,45 @@ export function getConversationStateText(delayMs: number): string {
   } else {
     return `Reconnecting after a longer break (${delayHours} hours). A greeting may be appropriate.`;
   }
+}
+
+// =============================================================================
+// QUOTES SECTION (Memorable Moments)
+// =============================================================================
+
+function formatDate(isoString: string): string {
+  const date = new Date(isoString);
+  return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+}
+
+export function buildQuotesSection(quotes: Quote[], human: ResponsePromptData["human"]): string {
+  if (quotes.length === 0) return "";
+  
+  const allDataItems = [
+    ...human.facts.map(f => ({ id: f.id, name: f.name })),
+    ...human.traits.map(t => ({ id: t.id, name: t.name })),
+    ...human.topics.map(t => ({ id: t.id, name: t.name })),
+    ...human.people.map(p => ({ id: p.id, name: p.name })),
+  ];
+  const idToName = new Map(allDataItems.map(item => [item.id, item.name]));
+  
+  const formatted = quotes.map(q => {
+    const speaker = q.speaker === "human" ? "Human" : q.speaker;
+    const date = formatDate(q.timestamp);
+    const linkedNames = q.data_item_ids
+      .map(id => idToName.get(id))
+      .filter((name): name is string => name !== undefined);
+    
+    let line = `- "${q.text}" — ${speaker} (${date})`;
+    if (linkedNames.length > 0) {
+      line += `\n  Related to: ${linkedNames.join(", ")}`;
+    }
+    return line;
+  }).join("\n\n");
+  
+  return `## Memorable Moments
+
+These are quotes the human found worth preserving:
+
+${formatted}`;
 }

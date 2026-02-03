@@ -1083,6 +1083,7 @@ interface ResponsePromptData {
     traits: Trait[];     // Filtered by visibility
     topics: Topic[];     // Filtered by visibility
     people: Person[];    // Filtered by visibility
+    quotes: Quote[];     // Filtered by visibility, limited to 10 most recent
   };
   visible_personas: Array<{ name: string; short_description?: string }>;
   delay_ms: number;      // Time since last message

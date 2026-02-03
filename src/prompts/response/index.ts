@@ -16,6 +16,7 @@ import {
   buildHumanSection,
   buildAssociatesSection,
   buildPrioritiesSection,
+  buildQuotesSection,
   getConversationStateText,
 } from "./sections.js";
 
@@ -41,6 +42,7 @@ Your role is unique among personas:
   const yourTraits = buildTraitsSection(data.persona.traits, "Your Personality");
   const yourTopics = buildTopicsSection(data.persona.topics, "Your Interests");
   const humanSection = buildHumanSection(data.human);
+  const quotesSection = buildQuotesSection(data.human.quotes, data.human);
   const associatesSection = buildAssociatesSection(data.visible_personas);
   const priorities = buildPrioritiesSection(data.persona, data.human);
   const currentTime = new Date().toISOString();
@@ -54,6 +56,7 @@ ${yourTraits}
 ${yourTopics}
 
 ${humanSection}
+${quotesSection}
 ${associatesSection}
 ${priorities}
 
@@ -74,6 +77,7 @@ function buildStandardSystemPrompt(data: ResponsePromptData): string {
   const yourTraits = buildTraitsSection(data.persona.traits, "Your Personality");
   const yourTopics = buildTopicsSection(data.persona.topics, "Your Interests");
   const humanSection = buildHumanSection(data.human);
+  const quotesSection = buildQuotesSection(data.human.quotes, data.human);
   const associatesSection = buildAssociatesSection(data.visible_personas);
   const priorities = buildPrioritiesSection(data.persona, data.human);
   const currentTime = new Date().toISOString();
@@ -87,6 +91,7 @@ ${yourTraits}
 ${yourTopics}
 
 ${humanSection}
+${quotesSection}
 ${associatesSection}
 ${priorities}
 

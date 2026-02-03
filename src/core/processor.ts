@@ -685,11 +685,15 @@ export class Processor {
 
     // Ei sees all data (special case - system persona with global visibility)
     if (personaName.toLowerCase() === "ei") {
+      const recentQuotes = [...(human.quotes ?? [])]
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        .slice(0, 10);
       return {
         facts: human.facts,
         traits: human.traits,
         topics: human.topics,
         people: human.people,
+        quotes: recentQuotes,
       };
     }
 
@@ -708,11 +712,20 @@ export class Processor {
       });
     };
 
+    const filteredQuotes = (human.quotes ?? [])
+      .filter((q) => {
+        const effectiveGroups = q.persona_groups.length === 0 ? [DEFAULT_GROUP] : q.persona_groups;
+        return effectiveGroups.some((g) => visibleGroups.has(g));
+      })
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 10);
+
     return {
       facts: filterByGroup(human.facts),
       traits: filterByGroup(human.traits),
       topics: filterByGroup(human.topics),
       people: filterByGroup(human.people),
+      quotes: filteredQuotes,
     };
   }
 

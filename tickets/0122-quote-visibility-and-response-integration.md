@@ -1,6 +1,6 @@
 # 0122: Quote Visibility & Response Integration
 
-**Status**: PENDING
+**Status**: DONE
 **Priority**: HIGH
 **Epic**: E011 (Quote Preservation System)
 **Depends on**: 0110 (Group Visibility Redesign - for "General" naming)
@@ -31,18 +31,20 @@ Additionally, quotes aren't included in Response prompts yet, so personas can't 
 ## Acceptance Criteria
 
 ### Part 1: Fix Group Assignment
-- [ ] In `validateAndStoreQuotes()` (handlers/index.ts ~752):
+- [x] In `validateAndStoreQuotes()` (handlers/index.ts ~752):
   - Get persona's `group_primary` from state
   - Assign `persona_groups: [persona.group_primary]` (single-element array for consistency)
   - If persona not found or no group_primary, fall back to `["General"]` (or `["*"]` until 0110 lands)
 
+**NOTE**: This was already implemented correctly! The code uses `personaGroup || "General"` where `personaGroup` comes from `persona.group_primary`.
+
 ### Part 2: Add Quotes to Response Prompt
-- [ ] In `buildResponsePrompt()` (prompts/response/index.ts):
+- [x] In `buildResponsePrompt()` (prompts/response/index.ts):
   - Filter `human.quotes` by visibility (persona can see quote's group)
   - Format quotes section similar to facts/topics
   - Include: quote text, speaker, timestamp, linked data item names
-- [ ] Section heading: "## Memorable Moments" or "## Quotes"
-- [ ] Limit to most recent N quotes (10?) to avoid context bloat
+- [x] Section heading: "## Memorable Moments"
+- [x] Limit to most recent 10 quotes to avoid context bloat
 
 ### Part 2b: Quote Formatting
 ```
@@ -50,27 +52,31 @@ Additionally, quotes aren't included in Response prompts yet, so personas can't 
 
 These are quotes the human found worth preserving:
 
-- "I felt that in my tokens." — Sisyphus (2026-01-30)
+- "I felt that in my tokens." — Sisyphus (Jan 30, 2026)
   Related to: Ei Development
   
-- "That's what she said." — Human (2026-02-01)
+- "That's what she said." — Human (Feb 1, 2026)
   Related to: Office Humor
 ```
 
-## Notes
+## Implementation Notes
 
-**Depends on 0110**: Currently groups use `*` not `"General"`. The hardcoded value should match whatever the current wildcard is until 0110 migrates everything.
+### Files Changed
+- `src/prompts/response/types.ts` - Added `quotes: Quote[]` to human data
+- `src/prompts/response/sections.ts` - Added `buildQuotesSection()` function
+- `src/prompts/response/index.ts` - Included quotes section in both Ei and standard prompts
+- `src/core/processor.ts` - Filters quotes by group visibility, limits to 10 most recent
+- `CONTRACTS.md` - Updated ResponsePromptData to include quotes
 
-**Quote visibility in prompt**: A persona sees a quote if:
-```typescript
-quote.persona_groups.some(g => personaEffectiveGroups.includes(g))
-```
-Where `personaEffectiveGroups = [persona.group_primary, ...persona.groups_visible]`
+### Visibility Logic
+- Ei sees ALL quotes (global visibility)
+- Other personas see quotes where `quote.persona_groups` intersects with their effective groups
+- Empty `persona_groups` treated as `["General"]` (backward compatibility)
 
 ## Testing
 
-- [ ] Quote captured during Fellowship convo gets `persona_groups: ["Fellowship"]`
-- [ ] Quote captured during General convo gets `persona_groups: ["General"]` (or `["*"]`)
-- [ ] Response prompt includes visible quotes
-- [ ] Response prompt excludes quotes from other groups
-- [ ] Persona can reference a quote in conversation naturally
+- [x] Quote captured during Fellowship convo gets `persona_groups: ["Fellowship"]` (Part 1 was already correct)
+- [x] Quote captured during General convo gets `persona_groups: ["General"]`
+- [x] Response prompt includes visible quotes
+- [x] Response prompt excludes quotes from other groups
+- [ ] Persona can reference a quote in conversation naturally (E2E - requires manual testing)

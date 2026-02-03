@@ -3,7 +3,7 @@
  * Based on CONTRACTS.md ResponsePromptData specification
  */
 
-import type { Fact, Trait, Topic, Person } from "../../core/types.js";
+import type { Fact, Trait, Topic, Person, Quote } from "../../core/types.js";
 
 /**
  * Data contract for buildResponsePrompt (from CONTRACTS.md)
@@ -22,6 +22,7 @@ export interface ResponsePromptData {
     traits: Trait[];
     topics: Topic[];
     people: Person[];
+    quotes: Quote[];
   };
   visible_personas: Array<{ name: string; short_description?: string }>;
   delay_ms: number;
