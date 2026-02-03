@@ -52,6 +52,7 @@ function createMockStateManager() {
     people: [
       { id: "p1", name: "Alice", description: "Best friend", relationship: "friend", sentiment: 0.9, exposure_current: 0.6, exposure_desired: 0.8, last_updated: "" },
     ],
+    quotes: [],
     last_updated: new Date().toISOString(),
     last_activity: new Date().toISOString(),
   };
@@ -278,7 +279,7 @@ describe("queueItemMatch (Step 2)", () => {
 
   it("queues topic match with all items", () => {
     const candidate = {
-      type_of_topic: "Machine Learning",
+      type_of_topic: "Interest",
       value_of_topic: "Neural networks",
       reason: "User asked about ML",
     };
@@ -288,8 +289,8 @@ describe("queueItemMatch (Step 2)", () => {
     expect(buildHumanItemMatchPrompt).toHaveBeenCalledWith(
       expect.objectContaining({
         candidate_type: "topic",
-        candidate_name: "Machine Learning",
-        candidate_value: "Neural networks",
+        candidate_name: "Neural networks",
+        candidate_value: "Interest",
       })
     );
   });
