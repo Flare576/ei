@@ -1,18 +1,18 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-02-02 (0110 Group Visibility Redesign)
+> Last updated: 2026-02-02 (0122 Quote Visibility & Response Integration)
 
 ## Overview
 
 | Status | Count |
 |--------|-------|
-| PENDING | 20 |
+| PENDING | 21 |
 | IN_PROGRESS | 0 |
 | QA | 0 |
-| DONE | 79 |
+| DONE | 80 |
 | BLOCKED | 0 |
 
-> 104 total tickets (79 done + 20 pending + 5 backlog).
+> 106 total tickets (80 done + 21 pending + 5 backlog).
 
 ---
 
@@ -30,7 +30,7 @@
 | **E008** | 0080-0089 | DONE | UI: Entity Management |
 | **E009** | 0090-0099 | PENDING | Polish & New Features |
 | **E010** | 0100-0109 | PENDING | TUI & OpenCode Integration |
-| **E011** | 0116-0120 | DONE | Quote Preservation System |
+| **E011** | 0116-0120, 0122 | DONE | Quote Preservation System |
 
 ---
 
@@ -50,6 +50,8 @@
 | 0098 | Pre-configured Persona Templates | 0087 |
 | 0099 | Story Co-Writer Agent (Non-Persona) | 0098 |
 | 0121 | HumanEditor Smart Merge | None |
+| 0123 | PersonaTopic Data Model Separation | None |
+| 0124 | Persona Topic Ceremony Redesign (3-Step) | 0123 |
 
 ### E010: TUI & OpenCode Integration
 
@@ -165,6 +167,7 @@
 | 0119 | Quote Capture UI (Scissors Modal) | 2026-02-02 |
 | 0120 | Quote Management UI | 2026-02-02 |
 | 0110 | Group Visibility Redesign (* → General) | 2026-02-02 |
+| 0122 | Quote Visibility & Response Integration | 2026-02-02 |
 
 ---
 
