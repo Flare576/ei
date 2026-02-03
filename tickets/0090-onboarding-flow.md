@@ -27,3 +27,10 @@ First-time user experience: welcome, LLM configuration, initial setup.
 - "When user first hits page, greeted with explanation"
 - "CTA to enter username/passphrase if switching devices, or continue to initial settings"
 - "Walk them through: Local LLM API? Provider accounts? Model selection?"
+
+**2026-02-03 - Scope Update from 0096 Work**:
+- Ticket 0096 implements the `ProviderAccount` schema and account management UI in `HumanSettingsTab`
+- This ticket should **reuse** the `ProviderList` and `ProviderEditor` components created in 0096
+- Onboarding wizard can guide users through adding their first provider account using the same UI
+- The "edit/manage settings in main interface" requirement is satisfied by 0096's UI implementation
+- This ticket focuses on: first-run detection, welcome flow, guided setup wizard, and account sync flow

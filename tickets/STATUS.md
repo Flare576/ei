@@ -1,18 +1,18 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-02-02 (0126 Human Topic Category Field)
+> Last updated: 2026-02-03 (0096 Provider Accounts & Settings Sync)
 
 ## Overview
 
 | Status | Count |
 |--------|-------|
-| PENDING | 19 |
+| PENDING | 18 |
 | IN_PROGRESS | 0 |
 | QA | 0 |
-| DONE | 84 |
+| DONE | 85 |
 | BLOCKED | 0 |
 
-> 107 total tickets (84 done + 19 pending + 3 backlog + 1 new).
+> 108 total tickets (85 done + 19 pending + 3 backlog + 0 QA).
 
 ---
 
@@ -45,11 +45,12 @@
 | 0093 | Rich Text Editor (Markdown + WYSIWYG) | 0080 |
 | 0094 | Name Color Customization | 0081 |
 | 0095 | Time Display Modes | 0081 |
-| 0096 | Provider Accounts & Settings Sync | 0081 |
+
 | 0097 | LLM Streaming Support | 0011 |
 | 0098 | Pre-configured Persona Templates | 0087 |
 | 0099 | Story Co-Writer Agent (Non-Persona) | 0098 |
 | 0121 | HumanEditor Smart Merge | None |
+| 0127 | Queue Message Fetch Refactor | None |
 
 
 
@@ -172,6 +173,7 @@
 | 0124 | Persona Topic Ceremony Redesign (3-Step) | 2026-02-02 |
 | 0125 | PersonaTopic UI Update | 2026-02-02 |
 | 0126 | Human Topic Category Field | 2026-02-02 |
+| 0096 | Provider Accounts & Settings Sync | 2026-02-03 |
 
 ---
 
