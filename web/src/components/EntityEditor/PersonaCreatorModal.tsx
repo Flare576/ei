@@ -9,7 +9,7 @@ interface Trait {
 
 interface Topic {
   name: string;
-  description: string;
+  perspective: string;
   exposure_current?: number;
   exposure_desired?: number;
 }
@@ -167,7 +167,7 @@ export function PersonaCreatorModal({
   };
 
   const addTopic = () => {
-    setTopics([...topics, { name: '', description: '' }]);
+    setTopics([...topics, { name: '', perspective: '' }]);
   };
 
   const updateTopic = (index: number, field: keyof Topic, value: string | number) => {
@@ -394,10 +394,10 @@ export function PersonaCreatorModal({
                       />
                       <textarea
                         className="ei-textarea ei-textarea--sm"
-                        placeholder="Brief description..."
+                        placeholder="Their perspective on this topic..."
                         rows={2}
-                        value={topic.description || ''}
-                        onChange={(e) => updateTopic(index, 'description', e.target.value)}
+                        value={topic.perspective || ''}
+                        onChange={(e) => updateTopic(index, 'perspective', e.target.value)}
                       />
                       <button
                         className="ei-btn ei-btn--danger ei-btn--sm"

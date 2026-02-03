@@ -1,16 +1,16 @@
 import React from 'react';
-import { DataItemCard } from '../DataItemCard';
+import { SliderControl } from '../SliderControl';
 
 interface Topic {
   id: string;
   name: string;
-  description: string;
+  perspective: string;         // Their view/opinion on this topic
+  approach: string;            // How they prefer to engage
+  personal_stake: string;      // Why it matters to them
   sentiment: number;           // -1 to 1
   exposure_current: number;    // 0 to 1
   exposure_desired: number;    // 0 to 1
   last_updated: string;
-  learned_by?: string;
-  persona_groups?: string[];
 }
 
 interface PersonaTopicsTabProps {
@@ -58,7 +58,7 @@ const getEngagementGapInfo = (current: number, desired: number) => {
   };
 };
 
-const TopicCard = ({
+const PersonaTopicCard = ({
   topic,
   onChange,
   onSave,
@@ -71,31 +71,115 @@ const TopicCard = ({
   onDelete: () => void;
   isDirty: boolean;
 }): React.ReactElement => {
+  const cardRef = React.useRef<HTMLDivElement>(null);
+  
   const gapInfo = getEngagementGapInfo(
     topic.exposure_current,
     topic.exposure_desired
   );
 
+  const handleBlur = (e: React.FocusEvent) => {
+    if (isDirty && cardRef.current && !cardRef.current.contains(e.relatedTarget as Node)) {
+      onSave();
+    }
+  };
+
+  const formatTimestamp = (timestamp: string) => {
+    try {
+      return new Date(timestamp).toLocaleString();
+    } catch {
+      return timestamp;
+    }
+  };
+
   return (
-    <div style={{ position: 'relative' }}>
-      <DataItemCard
-        item={topic}
-        sliders={topicSliders}
-        onChange={onChange}
-        onSave={onSave}
-        onDelete={onDelete}
-        isDirty={isDirty}
-      />
+    <div 
+      ref={cardRef}
+      className={`ei-data-card ${isDirty ? 'ei-data-card--dirty' : ''}`}
+      onBlur={handleBlur}
+      style={{ position: 'relative' }}
+    >
       <div
         className={`ei-engagement-gap ${gapInfo.className}`}
-        style={{
-          position: 'absolute',
-          top: '12px',
-          right: '12px',
-        }}
+        style={{ position: 'absolute', top: '12px', right: '12px' }}
         title={gapInfo.description}
       >
         {gapInfo.label}
+      </div>
+
+      <div className="ei-data-card__header">
+        <input
+          type="text"
+          className="ei-data-card__name"
+          value={topic.name}
+          onChange={(e) => onChange('name', e.target.value)}
+          placeholder="Topic Name"
+        />
+      </div>
+
+      <div className="ei-data-card__body">
+        <div className="ei-form-group">
+          <label className="ei-form-label ei-form-label--sm">Perspective</label>
+          <textarea
+            className="ei-data-card__description"
+            value={topic.perspective || ''}
+            onChange={(e) => onChange('perspective', e.target.value)}
+            placeholder="Their view or opinion on this topic..."
+            rows={2}
+          />
+        </div>
+
+        <div className="ei-form-group">
+          <label className="ei-form-label ei-form-label--sm">Approach</label>
+          <textarea
+            className="ei-data-card__description"
+            value={topic.approach || ''}
+            onChange={(e) => onChange('approach', e.target.value)}
+            placeholder="How they prefer to engage with this topic... (optional)"
+            rows={2}
+          />
+        </div>
+
+        <div className="ei-form-group">
+          <label className="ei-form-label ei-form-label--sm">Personal Stake</label>
+          <textarea
+            className="ei-data-card__description"
+            value={topic.personal_stake || ''}
+            onChange={(e) => onChange('personal_stake', e.target.value)}
+            placeholder="Why this topic matters to them personally... (optional)"
+            rows={2}
+          />
+        </div>
+
+        <div className="ei-data-card__sliders">
+          {topicSliders.map((slider) => (
+            <SliderControl
+              key={slider.field}
+              label={slider.label}
+              value={topic[slider.field as keyof Topic] as number}
+              min={slider.min}
+              max={slider.max}
+              onChange={(value) => onChange(slider.field as keyof Topic, value)}
+              formatValue={(v) => v.toFixed(2)}
+              tooltip={slider.tooltip}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="ei-data-card__footer">
+        <div className="ei-data-card__meta">
+          <span>Updated: {formatTimestamp(topic.last_updated)}</span>
+        </div>
+        <div className="ei-data-card__actions">
+          <button 
+            className="ei-control-btn ei-control-btn--danger" 
+            onClick={onDelete}
+            title="Delete"
+          >
+            🗑️
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -130,10 +214,10 @@ export const PersonaTopicsTab = ({
     <div className="ei-grouped-list">
       <div className="ei-grouped-list__flat">
         {topics.map((topic) => (
-          <TopicCard
+          <PersonaTopicCard
             key={topic.id}
             topic={topic}
-            onChange={(field, value) => onChange(topic.id, field, value)}
+            onChange={(field: keyof Topic, value: Topic[keyof Topic]) => onChange(topic.id, field, value)}
             onSave={() => onSave(topic.id)}
             onDelete={() => onDelete(topic.id)}
             isDirty={dirtyIds.has(topic.id)}

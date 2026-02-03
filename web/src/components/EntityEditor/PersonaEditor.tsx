@@ -19,13 +19,13 @@ interface Trait {
 interface Topic {
   id: string;
   name: string;
-  description: string;
+  perspective: string;
+  approach: string;
+  personal_stake: string;
   sentiment: number;
   exposure_current: number;
   exposure_desired: number;
   last_updated: string;
-  learned_by?: string;
-  persona_groups?: string[];
 }
 
 interface PersonaEntity {
@@ -227,7 +227,9 @@ export function PersonaEditor({
     const newTopic: Topic = {
       id: `topic-${Date.now()}`,
       name: 'New Topic',
-      description: '',
+      perspective: '',
+      approach: '',
+      personal_stake: '',
       sentiment: 0,
       exposure_current: 0,
       exposure_desired: 0.5,

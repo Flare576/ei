@@ -1,6 +1,6 @@
 # 0125: PersonaTopic UI Update
 
-**Status**: PENDING
+**Status**: DONE
 **Priority**: MEDIUM
 **Epic**: E009 (Polish & New Features)
 **Depends on**: 0123, 0124

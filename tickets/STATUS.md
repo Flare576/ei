@@ -6,10 +6,10 @@
 
 | Status | Count |
 |--------|-------|
-| PENDING | 20 |
+| PENDING | 19 |
 | IN_PROGRESS | 0 |
 | QA | 0 |
-| DONE | 82 |
+| DONE | 83 |
 | BLOCKED | 0 |
 
 > 106 total tickets (80 done + 21 pending + 5 backlog).
@@ -50,7 +50,7 @@
 | 0098 | Pre-configured Persona Templates | 0087 |
 | 0099 | Story Co-Writer Agent (Non-Persona) | 0098 |
 | 0121 | HumanEditor Smart Merge | None |
-| 0125 | PersonaTopic UI Update | 0123, 0124 |
+
 
 
 ### E010: TUI & OpenCode Integration
@@ -170,6 +170,7 @@
 | 0122 | Quote Visibility & Response Integration | 2026-02-02 |
 | 0123 | PersonaTopic Data Model Separation | 2026-02-02 |
 | 0124 | Persona Topic Ceremony Redesign (3-Step) | 2026-02-02 |
+| 0125 | PersonaTopic UI Update | 2026-02-02 |
 
 ---
 

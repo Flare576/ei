@@ -12,6 +12,7 @@ import type {
   Fact,
   Trait,
   Topic,
+  PersonaTopic,
   Person,
   ContextStatus,
   Quote,
@@ -432,7 +433,7 @@ function App() {
     if (updated) setEditingPersona(updated);
   }, [processor, editingPersonaName]);
 
-  const handlePersonaTopicSave = useCallback(async (topic: Topic) => {
+  const handlePersonaTopicSave = useCallback(async (topic: PersonaTopic) => {
     if (!processor || !editingPersonaName) return;
     const persona = await processor.getPersona(editingPersonaName);
     if (!persona) return;
