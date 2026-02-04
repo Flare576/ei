@@ -98,6 +98,7 @@ body {
    ============================================ */
 
 .ei-app {
+  position: relative;
   display: flex;
   height: 100vh;
   overflow: hidden;
@@ -168,18 +169,21 @@ body {
 }
 
 /* ============================================
-   CONTROL AREA (Top of Left Panel)
+   CONTROL AREA (Top-Right of Viewport)
    ============================================ */
 
 .ei-control-area {
+  position: absolute;
+  top: 0;
+  right: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--ei-spacing-sm);
-  padding: var(--ei-spacing-md);
-  min-height: var(--ei-control-height);
+  padding: 0 var(--ei-spacing-md);
+  height: var(--ei-control-height);
   background: var(--ei-bg-primary);
-  border-bottom: 1px solid var(--ei-border);
+  z-index: 100;
 }
 
 .ei-control-area__status {
@@ -711,6 +715,12 @@ body {
   min-width: 280px;
 }
 
+.ei-save-popover--fixed-right {
+  position: fixed;
+  z-index: 10000;
+  min-width: 280px;
+}
+
 /* ============================================
    CHAT PANEL
    ============================================ */
@@ -727,8 +737,10 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: var(--ei-spacing-md);
+  padding-right: 320px;
   border-bottom: 1px solid var(--ei-border);
   background: var(--ei-bg-primary);
+  min-height: var(--ei-control-height);
 }
 
 .ei-chat-panel__title {
@@ -1052,8 +1064,20 @@ body {
    ============================================ */
 
 @media (max-width: 767px) {
+  .ei-app {
+    flex-direction: column;
+  }
+
+  .ei-control-area {
+    position: static;
+    order: -2;
+    width: 100%;
+    border-bottom: 1px solid var(--ei-border);
+  }
+
   .ei-layout {
     flex-direction: column;
+    order: -1;
   }
   
   .ei-panel-left {
@@ -1067,6 +1091,10 @@ body {
   
   .ei-divider {
     display: none;
+  }
+
+  .ei-chat-panel__header {
+    padding-right: var(--ei-spacing-md);
   }
   
   /* Persona panel becomes dropdown */
@@ -1400,4 +1428,201 @@ body {
   margin: var(--ei-spacing-xs) 0;
   color: var(--ei-text-secondary);
   font-size: var(--ei-font-size-sm);
+}
+
+/* ============================================
+   SAVE/LOAD MODAL
+   ============================================ */
+
+.ei-save-modal {
+  background: var(--ei-bg-primary);
+  border-radius: var(--ei-radius-lg);
+  max-width: 400px;
+  width: 90%;
+  max-height: 85vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--ei-shadow-lg);
+  animation: modal-in 0.2s ease;
+}
+
+.ei-save-modal.disabled {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.ei-save-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--ei-spacing-md) var(--ei-spacing-lg);
+  border-bottom: 1px solid var(--ei-border);
+}
+
+.ei-save-modal__header h2 {
+  margin: 0;
+  font-size: var(--ei-font-size-lg);
+  font-weight: 600;
+}
+
+.ei-save-modal__content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--ei-spacing-lg);
+}
+
+.ei-modal-overlay--nested {
+  z-index: 1001;
+}
+
+/* ============================================
+   CONFLICT RESOLUTION MODAL
+   ============================================ */
+
+.ei-conflict-modal {
+  background: var(--ei-bg-primary);
+  border-radius: var(--ei-radius-lg);
+  max-width: 450px;
+  width: 90%;
+  max-height: 85vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--ei-shadow-lg);
+  animation: modal-in 0.2s ease;
+}
+
+.ei-conflict-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--ei-spacing-md) var(--ei-spacing-lg);
+  border-bottom: 1px solid var(--ei-border);
+}
+
+.ei-conflict-modal__header h2 {
+  margin: 0;
+  font-size: var(--ei-font-size-lg);
+  font-weight: 600;
+  color: var(--ei-warning);
+}
+
+.ei-conflict-modal__content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--ei-spacing-lg);
+}
+
+.ei-conflict-modal__timestamps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ei-spacing-md);
+  margin-bottom: var(--ei-spacing-lg);
+}
+
+.ei-conflict-modal__timestamp {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ei-spacing-xs);
+  padding: var(--ei-spacing-md);
+  background: var(--ei-bg-secondary);
+  border-radius: var(--ei-radius-md);
+  border: 2px solid var(--ei-border);
+}
+
+.ei-conflict-modal__timestamp.newer {
+  border-color: var(--ei-accent);
+  background: var(--ei-bg-primary);
+  box-shadow: var(--ei-shadow-sm);
+}
+
+.ei-conflict-modal__timestamp-label {
+  font-size: var(--ei-font-size-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--ei-text-secondary);
+}
+
+.ei-conflict-modal__timestamp-value {
+  font-size: var(--ei-font-size-lg);
+  font-weight: 500;
+  color: var(--ei-text-primary);
+  font-family: var(--ei-font-mono);
+}
+
+.ei-conflict-modal__timestamp-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--ei-accent);
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: var(--ei-radius-full);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  align-self: flex-start;
+}
+
+.ei-conflict-modal__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ei-spacing-md);
+}
+
+.ei-conflict-modal__action {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ei-spacing-xs);
+}
+
+.ei-conflict-modal__action button {
+  width: 100%;
+}
+
+.ei-conflict-modal__action--warning {
+  opacity: 0.9;
+}
+
+.ei-conflict-modal__checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--ei-spacing-sm);
+  cursor: pointer;
+  font-size: var(--ei-font-size-sm);
+  color: var(--ei-text-secondary);
+  padding-left: var(--ei-spacing-xs);
+}
+
+.ei-conflict-modal__checkbox input[type="checkbox"] {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+}
+
+.ei-conflict-modal__warning-text {
+  margin: 0;
+  padding-left: var(--ei-spacing-xs);
+  font-size: var(--ei-font-size-sm);
+  color: var(--ei-warning);
+  font-style: italic;
+}
+
+.ei-conflict-modal__btn-warning {
+  border: 1px solid var(--ei-warning);
+}
+
+.ei-conflict-modal__btn-warning:hover {
+  background: rgba(255, 193, 7, 0.1);
+  border-color: var(--ei-warning);
+}
+
+.ei-conflict-modal__footer {
+  display: flex;
+  gap: var(--ei-spacing-sm);
+  justify-content: flex-end;
+  padding: var(--ei-spacing-md) var(--ei-spacing-lg);
+  border-top: 1px solid var(--ei-border);
+  background: var(--ei-bg-secondary);
 }

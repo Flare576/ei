@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Processor } from "../../src/core/processor";
 import { LocalStorage } from "../../src/storage/local";
+import { remoteSync } from "../../src/storage/remote";
 import type { 
   PersonaSummary, 
   QueueStatus, 
@@ -20,6 +21,8 @@ import type {
 import { Layout, PersonaPanel, ChatPanel, ControlArea, HelpModal, type PersonaPanelHandle, type ChatPanelHandle } from "./components/Layout";
 import { HumanEditor, PersonaEditor, PersonaCreatorModal, ArchivedPersonasModal } from "./components/EntityEditor";
 import { QuoteCaptureModal, QuoteManagementModal } from "./components/Quote";
+import { ConflictResolutionModal } from "./components/Sync/ConflictResolutionModal";
+import { yoloMerge } from "../../src/storage/merge";
 import { useKeyboardNavigation } from "./hooks/useKeyboardNavigation";
 import "./styles/layout.css";
 import "./styles/entity-editor.css";
@@ -56,6 +59,8 @@ function App() {
    const [captureMessage, setCaptureMessage] = useState<Message | null>(null);
    const [editingQuote, setEditingQuote] = useState<Quote | null>(null);
    const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false);
+   const [showConflictModal, setShowConflictModal] = useState(false);
+   const [conflictData, setConflictData] = useState<{ localTimestamp: Date; remoteTimestamp: Date } | null>(null);
 
   const personaPanelRef = useRef<PersonaPanelHandle | null>(null);
   const chatPanelRef = useRef<ChatPanelHandle | null>(null);
@@ -177,7 +182,21 @@ function App() {
       });
       p.getQueueStatus().then(setQueueStatus);
       p.getCheckpoints().then(setCheckpoints);
-      p.getHuman().then(setHuman);
+      p.getHuman().then(async (h) => {
+        setHuman(h);
+        if (h.settings?.sync) {
+          await remoteSync.configure(h.settings.sync);
+          const remoteInfo = await remoteSync.checkRemote();
+          if (remoteInfo.exists && remoteInfo.lastModified) {
+            const localTimestamp = new Date(h.last_updated);
+            const remoteTimestamp = remoteInfo.lastModified;
+            if (remoteTimestamp > localTimestamp) {
+              setConflictData({ localTimestamp, remoteTimestamp });
+              setShowConflictModal(true);
+            }
+          }
+        }
+      });
       p.getGroupList().then(setAvailableGroups);
       p.getQuotes().then(setQuotes);
     });
@@ -328,6 +347,23 @@ function App() {
     setShowHumanEditor(true);
   }, []);
 
+  const handleSaveAndExit = useCallback(async () => {
+    if (!processor) return;
+    
+    if (remoteSync.isConfigured()) {
+      const state = await processor.getStorageState();
+      const result = await remoteSync.sync(state);
+      if (!result.success) {
+        const proceed = window.confirm(`Remote backup failed: ${result.error}\n\nExit anyway?`);
+        if (!proceed) return;
+      }
+    }
+    
+    await processor.stop();
+    setQueueStatus({ state: "idle", pending_count: 0 });
+    setProcessingPersona(null);
+  }, [processor]);
+
   const handleEditPersona = useCallback(async (name: string) => {
     if (!processor) return;
     const persona = await processor.getPersona(name);
@@ -353,16 +389,61 @@ function App() {
 
   const handleHumanUpdate = useCallback(async (updates: Record<string, unknown>) => {
     if (!processor) return;
-    const { auto_save_interval_ms, default_model, queue_paused, name_display, name_color, time_mode, accounts, ...rest } = updates;
-    const settingsFields = { auto_save_interval_ms, default_model, queue_paused, name_display, name_color, time_mode, accounts };
+    const { auto_save_interval_ms, default_model, queue_paused, name_display, name_color, time_mode, accounts, sync, ...rest } = updates;
+    const settingsFields = { auto_save_interval_ms, default_model, queue_paused, name_display, name_color, time_mode, accounts, sync };
     const hasSettings = Object.values(settingsFields).some(v => v !== undefined);
     const coreUpdates: Partial<HumanEntity> = {
       ...(rest as Partial<HumanEntity>),
       ...(hasSettings ? { settings: { ...human?.settings, ...settingsFields } as HumanEntity['settings'] } : {}),
     };
+    
+    if (sync && typeof sync === 'object' && 'username' in sync && 'passphrase' in sync) {
+      await remoteSync.configure({ username: sync.username as string, passphrase: sync.passphrase as string });
+    } else if (sync === undefined && updates.hasOwnProperty('sync')) {
+      remoteSync.clear();
+    }
+    
     await processor.updateHuman(coreUpdates);
     processor.getHuman().then(setHuman);
   }, [processor, human]);
+
+  const handleConflictKeepLocal = useCallback(async (updateRemote: boolean) => {
+    setShowConflictModal(false);
+    setConflictData(null);
+    if (updateRemote && processor) {
+      const state = await processor.getStorageState();
+      await remoteSync.sync(state);
+    }
+  }, [processor]);
+
+  const handleConflictKeepRemote = useCallback(async () => {
+    if (!processor) return;
+    const result = await remoteSync.fetch();
+    if (result.success && result.state) {
+      await processor.restoreFromState(result.state);
+      processor.getHuman().then(setHuman);
+      processor.getPersonaList().then(setPersonas);
+      processor.getQuotes().then(setQuotes);
+    }
+    setShowConflictModal(false);
+    setConflictData(null);
+  }, [processor]);
+
+  const handleConflictYoloMerge = useCallback(async () => {
+    if (!processor) return;
+    const localState = await processor.getStorageState();
+    const remoteResult = await remoteSync.fetch();
+    if (remoteResult.success && remoteResult.state) {
+      const merged = yoloMerge(localState, remoteResult.state);
+      await processor.restoreFromState(merged);
+      await remoteSync.sync(merged);
+      processor.getHuman().then(setHuman);
+      processor.getPersonaList().then(setPersonas);
+      processor.getQuotes().then(setQuotes);
+    }
+    setShowConflictModal(false);
+    setConflictData(null);
+  }, [processor]);
 
   const handleFactSave = useCallback(async (fact: Fact) => {
     if (!processor) return;
@@ -580,6 +661,34 @@ function App() {
     setEditingQuote(null);
   }, [processor]);
 
+  const handleDownloadBackup = useCallback(async () => {
+    if (!processor) return;
+    
+    const state = await processor.exportState();
+    const blob = new Blob([state], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ei-backup-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [processor]);
+
+  const handleUploadBackup = useCallback(async (file: File) => {
+    if (!processor) return;
+    
+    try {
+      const text = await file.text();
+      await processor.importState(text);
+      setShowHumanEditor(false);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Unknown error';
+      alert(`Failed to restore backup: ${message}`);
+    }
+  }, [processor]);
+
   return (
     <>
     <Layout
@@ -597,6 +706,7 @@ function App() {
           onRefreshCheckpoints={handleRefreshCheckpoints}
           onHelpClick={handleHelpClick}
           onSettingsClick={handleSettingsClick}
+          onSaveAndExit={handleSaveAndExit}
         />
       }
       leftPanel={
@@ -659,6 +769,7 @@ function App() {
           people: human.people,
           quotes: quotes,
           accounts: human.settings?.accounts,
+          sync: human.settings?.sync,
         }}
          onUpdate={handleHumanUpdate}
          onFactSave={handleFactSave}
@@ -671,6 +782,8 @@ function App() {
          onPersonDelete={handlePersonDelete}
          onQuoteSave={handleQuoteUpdate}
          onQuoteDelete={handleQuoteDelete}
+         onDownloadBackup={handleDownloadBackup}
+         onUploadBackup={handleUploadBackup}
        />
     )}
 
@@ -738,6 +851,18 @@ function App() {
          onSave={handleQuoteUpdate}
          onDelete={handleQuoteDelete}
          onSkipDeleteConfirmChange={setSkipDeleteConfirm}
+       />
+     )}
+
+     {conflictData && (
+       <ConflictResolutionModal
+         isOpen={showConflictModal}
+         onClose={() => setShowConflictModal(false)}
+         localTimestamp={conflictData.localTimestamp}
+         remoteTimestamp={conflictData.remoteTimestamp}
+         onKeepLocal={handleConflictKeepLocal}
+         onKeepRemote={handleConflictKeepRemote}
+         onYoloMerge={handleConflictYoloMerge}
        />
      )}
     </>

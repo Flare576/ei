@@ -8,7 +8,7 @@ import { HumanPeopleTab } from './tabs/HumanPeopleTab';
 import { HumanQuotesTab } from './tabs/HumanQuotesTab';
 import { QuoteManagementModal } from '../Quote/QuoteManagementModal';
 import { ValidationLevel } from '../../../../src/core/types';
-import type { Fact, Quote, ProviderAccount } from '../../../../src/core/types';
+import type { Fact, Quote, ProviderAccount, SyncCredentials } from '../../../../src/core/types';
 
 interface Trait {
   id: string;
@@ -61,6 +61,7 @@ interface HumanEntity {
   people?: Person[];
   quotes?: Quote[];
   accounts?: ProviderAccount[];
+  sync?: SyncCredentials;
 }
 
 interface HumanEditorProps {
@@ -78,6 +79,8 @@ interface HumanEditorProps {
   onPersonDelete: (id: string) => void;
   onQuoteSave?: (id: string, updates: Partial<Quote>) => void;
   onQuoteDelete?: (id: string) => void;
+  onDownloadBackup: () => void;
+  onUploadBackup: (file: File) => void;
 }
 
 const tabs = [
@@ -104,6 +107,8 @@ export const HumanEditor = ({
   onPersonDelete,
   onQuoteSave,
   onQuoteDelete,
+  onDownloadBackup,
+  onUploadBackup,
 }: HumanEditorProps) => {
   const [activeTab, setActiveTab] = useState('settings');
   const [localSettings, setLocalSettings] = useState({
@@ -113,6 +118,7 @@ export const HumanEditor = ({
     name_color: human.name_color,
     name_display: human.name_display,
     time_mode: human.time_mode,
+    sync: human.sync,
   });
   const [localFacts, setLocalFacts] = useState<Fact[]>(human.facts || []);
   const [localTraits, setLocalTraits] = useState<Trait[]>(human.traits || []);
@@ -171,6 +177,7 @@ export const HumanEditor = ({
         name_color: human.name_color,
         name_display: human.name_display,
         time_mode: human.time_mode,
+        sync: human.sync,
       });
       setLocalFacts(human.facts || []);
       setLocalTraits(human.traits || []);
@@ -235,12 +242,17 @@ export const HumanEditor = ({
 
   const handleSettingChange = (
     field: keyof HumanEntity, 
-    value: string | number | boolean | ProviderAccount[] | undefined
+    value: string | number | boolean | ProviderAccount[] | SyncCredentials | undefined
   ) => {
-    if (field === 'accounts') return;
+    if (field === 'accounts' || field === 'sync') return;
     
     setLocalSettings(prev => ({ ...prev, [field]: value }));
     setDirtySettingFields(prev => new Set(prev).add(field));
+  };
+
+  const handleSyncCredentialsChange = (sync: SyncCredentials | undefined) => {
+    setLocalSettings(prev => ({ ...prev, sync }));
+    onUpdate({ ...localSettings, sync, accounts: localAccounts });
   };
 
   const handleSettingsSave = () => {
@@ -493,6 +505,9 @@ export const HumanEditor = ({
               editingAccount={editingAccount}
               onEditorClose={handleAccountEditorClose}
               onAccountSave={handleAccountSave}
+              onDownloadBackup={onDownloadBackup}
+              onUploadBackup={onUploadBackup}
+              onSyncCredentialsChange={handleSyncCredentialsChange}
             />
             {settingsDirty && (
               <button 

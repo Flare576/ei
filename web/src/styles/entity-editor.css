@@ -566,6 +566,36 @@
   font-style: italic;
 }
 
+.ei-form-hint--error {
+  color: var(--ei-danger);
+  font-style: normal;
+}
+
+.ei-form-warning {
+  margin-top: var(--ei-spacing-md);
+  padding: var(--ei-spacing-sm) var(--ei-spacing-md);
+  background: rgba(255, 193, 7, 0.15);
+  border: 1px solid rgba(255, 193, 7, 0.4);
+  border-radius: var(--ei-radius-md);
+  font-size: var(--ei-font-size-sm);
+  color: var(--ei-text-primary);
+}
+
+.ei-input-with-button {
+  display: flex;
+  gap: var(--ei-spacing-xs);
+  align-items: stretch;
+}
+
+.ei-input-with-button .ei-input {
+  flex: 1;
+}
+
+.ei-input-toggle {
+  flex-shrink: 0;
+  padding: 0 var(--ei-spacing-sm);
+}
+
 .ei-checkbox-label {
   display: flex;
   align-items: center;

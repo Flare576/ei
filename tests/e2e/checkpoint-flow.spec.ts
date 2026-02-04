@@ -283,7 +283,7 @@ test.describe("Checkpoint Flow", () => {
     await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
 
     await page.locator('button[aria-label="Save/Load"]').click();
-    await expect(page.locator(".ei-save-popover")).toBeVisible({ timeout: 2000 });
+    await expect(page.locator(".ei-save-modal")).toBeVisible({ timeout: 2000 });
 
     await page.locator(".ei-save-slot").first().locator('button:has-text("Save")').click();
 
@@ -343,7 +343,7 @@ test.describe("Checkpoint Flow", () => {
     await expect(page.locator("text=New message that will be lost")).toBeVisible({ timeout: 2000 });
 
     await page.locator('button[aria-label="Save/Load"]').click();
-    await expect(page.locator(".ei-save-popover")).toBeVisible({ timeout: 2000 });
+    await expect(page.locator(".ei-save-modal")).toBeVisible({ timeout: 2000 });
 
     await page.locator(".ei-save-panel__toggle").click();
     await page.waitForTimeout(300);
@@ -396,7 +396,7 @@ test.describe("Checkpoint Flow", () => {
     await expect(page.locator("text=Message that will be lost after restore")).toBeVisible({ timeout: 2000 });
 
     await page.locator('button[aria-label="Save/Load"]').click();
-    await expect(page.locator(".ei-save-popover")).toBeVisible({ timeout: 2000 });
+    await expect(page.locator(".ei-save-modal")).toBeVisible({ timeout: 2000 });
 
     await page.locator(".ei-save-panel__toggle").click();
     await page.waitForTimeout(300);
@@ -433,9 +433,9 @@ test.describe("Checkpoint Flow", () => {
 
     await page.locator('button[aria-label="Save/Load"]').click();
 
-    await expect(page.locator(".ei-save-popover")).toBeVisible({ timeout: 2000 });
+    await expect(page.locator(".ei-save-modal")).toBeVisible({ timeout: 2000 });
 
-    await expect(page.locator(".ei-save-panel")).toBeVisible();
+    await expect(page.locator(".ei-save-modal__content")).toBeVisible();
 
     await page.locator(".ei-save-panel__toggle").click();
     await page.waitForTimeout(300);

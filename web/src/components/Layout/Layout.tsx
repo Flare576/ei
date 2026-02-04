@@ -79,12 +79,12 @@ export function Layout({ leftPanel, centerPanel, controlArea }: LayoutProps) {
 
   return (
     <div className="ei-app">
+      {controlArea}
       <div className="ei-layout" ref={layoutRef}>
         <div 
           className="ei-panel-left" 
           style={{ width: `${leftWidth}px` }}
         >
-          {controlArea}
           {leftPanel}
         </div>
         
