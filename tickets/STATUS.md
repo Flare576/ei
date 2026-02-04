@@ -1,18 +1,18 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-02-03 (0127 Queue Message Fetch Refactor)
+> Last updated: 2026-02-03 (0121 HumanEditor Smart Merge)
 
 ## Overview
 
 | Status | Count |
 |--------|-------|
-| PENDING | 17 |
+| PENDING | 16 |
 | IN_PROGRESS | 0 |
 | QA | 0 |
-| DONE | 86 |
+| DONE | 87 |
 | BLOCKED | 0 |
 
-> 108 total tickets (86 done + 18 pending + 3 backlog + 0 QA).
+> 108 total tickets (87 done + 17 pending + 3 backlog + 0 QA).
 
 ---
 
@@ -49,7 +49,6 @@
 | 0097 | LLM Streaming Support | 0011 |
 | 0098 | Pre-configured Persona Templates | 0087 |
 | 0099 | Story Co-Writer Agent (Non-Persona) | 0098 |
-| 0121 | HumanEditor Smart Merge | None |
 
 
 
@@ -174,6 +173,7 @@
 | 0126 | Human Topic Category Field | 2026-02-02 |
 | 0096 | Provider Accounts & Settings Sync | 2026-02-03 |
 | 0127 | Queue Message Fetch Refactor | 2026-02-03 |
+| 0121 | HumanEditor Smart Merge | 2026-02-03 |
 
 ---
 

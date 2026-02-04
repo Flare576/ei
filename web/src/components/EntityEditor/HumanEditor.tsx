@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { TabContainer } from './TabContainer';
 import { HumanSettingsTab } from './tabs/HumanSettingsTab';
 import { HumanFactsTab } from './tabs/HumanFactsTab';
@@ -128,10 +128,42 @@ export const HumanEditor = ({
   const [dirtyTraitIds, setDirtyTraitIds] = useState<Set<string>>(new Set());
   const [dirtyTopicIds, setDirtyTopicIds] = useState<Set<string>>(new Set());
   const [dirtyPersonIds, setDirtyPersonIds] = useState<Set<string>>(new Set());
-  const [settingsDirty, setSettingsDirty] = useState(false);
+  const [dirtySettingFields, setDirtySettingFields] = useState<Set<string>>(new Set());
+  const [dirtyAccountIds, setDirtyAccountIds] = useState<Set<string>>(new Set());
+
+  const wasOpenRef = useRef(false);
+
+  function smartMergeList<T extends { id: string }>(
+    localItems: T[],
+    incomingItems: T[],
+    dirtyIds: Set<string>
+  ): T[] {
+    const localById = new Map(localItems.map(item => [item.id, item]));
+    
+    const merged: T[] = [];
+    const seen = new Set<string>();
+
+    for (const incoming of incomingItems) {
+      seen.add(incoming.id);
+      const local = localById.get(incoming.id);
+      if (local && dirtyIds.has(incoming.id)) {
+        merged.push(local);
+      } else {
+        merged.push(incoming);
+      }
+    }
+
+    for (const local of localItems) {
+      if (!seen.has(local.id) && dirtyIds.has(local.id)) {
+        merged.push(local);
+      }
+    }
+
+    return merged;
+  }
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !wasOpenRef.current) {
       setLocalSettings({
         auto_save_interval_ms: human.auto_save_interval_ms,
         default_model: human.default_model,
@@ -150,12 +182,50 @@ export const HumanEditor = ({
       setDirtyTraitIds(new Set());
       setDirtyTopicIds(new Set());
       setDirtyPersonIds(new Set());
-      setSettingsDirty(false);
+      setDirtySettingFields(new Set());
+      setDirtyAccountIds(new Set());
       setEditingQuote(null);
       setAccountEditorOpen(false);
       setEditingAccount(null);
     }
-  }, [isOpen, human]);
+    wasOpenRef.current = isOpen;
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    setLocalSettings(prev => {
+      const merged = { ...prev };
+      if (!dirtySettingFields.has('auto_save_interval_ms')) {
+        merged.auto_save_interval_ms = human.auto_save_interval_ms;
+      }
+      if (!dirtySettingFields.has('default_model')) {
+        merged.default_model = human.default_model;
+      }
+      if (!dirtySettingFields.has('queue_paused')) {
+        merged.queue_paused = human.queue_paused;
+      }
+      if (!dirtySettingFields.has('name_color')) {
+        merged.name_color = human.name_color;
+      }
+      if (!dirtySettingFields.has('name_display')) {
+        merged.name_display = human.name_display;
+      }
+      if (!dirtySettingFields.has('time_mode')) {
+        merged.time_mode = human.time_mode;
+      }
+      return merged;
+    });
+
+    setLocalFacts(prev => smartMergeList(prev, human.facts || [], dirtyFactIds));
+    setLocalTraits(prev => smartMergeList(prev, human.traits || [], dirtyTraitIds));
+    setLocalTopics(prev => smartMergeList(prev, human.topics || [], dirtyTopicIds));
+    setLocalPeople(prev => smartMergeList(prev, human.people || [], dirtyPersonIds));
+    setLocalQuotes(human.quotes || []);
+    setLocalAccounts(prev => smartMergeList(prev, human.accounts || [], dirtyAccountIds));
+  }, [human]);
+
+  const settingsDirty = dirtySettingFields.size > 0;
 
   const isDirty = settingsDirty || 
     dirtyFactIds.size > 0 || 
@@ -167,16 +237,15 @@ export const HumanEditor = ({
     field: keyof HumanEntity, 
     value: string | number | boolean | ProviderAccount[] | undefined
   ) => {
-    // Skip accounts - they're managed through dedicated handlers
     if (field === 'accounts') return;
     
     setLocalSettings(prev => ({ ...prev, [field]: value }));
-    setSettingsDirty(true);
+    setDirtySettingFields(prev => new Set(prev).add(field));
   };
 
   const handleSettingsSave = () => {
     onUpdate({ ...localSettings, accounts: localAccounts });
-    setSettingsDirty(false);
+    setDirtySettingFields(new Set());
   };
 
   const handleFactChange = (id: string, field: keyof Fact, value: Fact[keyof Fact]) => {

@@ -1,6 +1,6 @@
 # 0121: HumanEditor Smart Merge
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: None
 **Blocked by**: None
 
@@ -19,38 +19,26 @@ Current behavior is useful for live-updating lists (Facts, Traits, etc.) as extr
 
 ## Acceptance Criteria
 
-- [ ] Settings fields only reset if they're not dirty
-- [ ] Per-field dirty tracking for settings (not just boolean `settingsDirty`)
-- [ ] Dirty fields preserve user input through backend updates
-- [ ] Clean fields continue to live-update
-- [ ] After successful save, field becomes "clean" again
-- [ ] Same pattern applied to entity lists (Facts, Traits, Topics, People) if needed
+- [x] Settings fields only reset if they're not dirty
+- [x] Per-field dirty tracking for settings (not just boolean `settingsDirty`)
+- [x] Dirty fields preserve user input through backend updates
+- [x] Clean fields continue to live-update
+- [x] After successful save, field becomes "clean" again
+- [x] Same pattern applied to entity lists (Facts, Traits, Topics, People) if needed
 
 ## Technical Approach
 
-```typescript
-// Instead of:
-const [settingsDirty, setSettingsDirty] = useState(false);
+Split the single `useEffect` into two:
+1. **Modal open effect** - fires only on `isOpen` transition false→true, does full state reset
+2. **Human update effect** - fires on `human` changes while open, does smart merge
 
-// Track per-field:
-const [dirtySettings, setDirtySettings] = useState<Set<keyof Settings>>(new Set());
+Smart merge uses `smartMergeList()` helper that:
+- Preserves dirty items (user edits)
+- Updates non-dirty items from incoming data
+- Adds new items from incoming data
+- Keeps dirty items that were deleted upstream until user saves/discards
 
-// On update, merge intelligently:
-useEffect(() => {
-  if (isOpen) {
-    setLocalSettings(prev => {
-      const merged = { ...prev };
-      for (const key of Object.keys(human.settings)) {
-        if (!dirtySettings.has(key)) {
-          merged[key] = human.settings[key];
-        }
-      }
-      return merged;
-    });
-    // Similar logic for lists - update items not in dirtyIds
-  }
-}, [isOpen, human]);
-```
+Also preserves secondary modal states (`accountEditorOpen`, `editingQuote`) during human updates.
 
 ## Notes
 
