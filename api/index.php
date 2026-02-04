@@ -34,7 +34,7 @@ set_exception_handler(function($e) {
 require_once __DIR__ . '/sync.php';
 
 $requestUri = $_SERVER['REQUEST_URI'];
-$basePath = '/api/';
+$basePath = '/ei/api/';
 
 $path = parse_url($requestUri, PHP_URL_PATH);
 
