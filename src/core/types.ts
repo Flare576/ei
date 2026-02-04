@@ -170,6 +170,11 @@ export interface ProviderAccount {
 // ENTITIES
 // =============================================================================
 
+export interface SyncCredentials {
+  username: string;
+  passphrase: string;
+}
+
 export interface HumanSettings {
   auto_save_interval_ms?: number;
   default_model?: string;
@@ -179,6 +184,7 @@ export interface HumanSettings {
   name_color?: string;
   time_mode?: "24h" | "12h" | "local" | "utc";
   accounts?: ProviderAccount[];
+  sync?: SyncCredentials;
 }
 
 export interface CeremonyConfig {

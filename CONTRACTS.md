@@ -342,6 +342,14 @@ interface Processor {
   /** Export full state as JSON (for download) */
   exportState(): Promise<string>;
   
+  // === State Operations ===
+  
+  /** Get current state for remote sync */
+  getStorageState(): Promise<StorageState>;
+  
+  /** Restore state from external source (remote sync, conflict resolution) */
+  restoreFromState(state: StorageState): Promise<void>;
+  
   // === Templates ===
   
   /** Get persona creation template (for editor UI) */
@@ -563,11 +571,19 @@ interface StateManager {
    */
   checkpoint_delete(index: number): Promise<boolean>;
   
-  /** 
-   * Restore state from checkpoint slot.
-   * @param index - Slot 0-14
-   */
+/** 
+    * Restore state from checkpoint slot.
+    * @param index - Slot 0-14
+    */
   checkpoint_restore(index: number): Promise<boolean>;
+  
+  // === State Export/Import ===
+  
+  /** Get current state for external use (remote sync, export) */
+  getStorageState(): StorageState;
+  
+  /** Restore state from external source (remote sync, conflict resolution) */
+  restoreFromState(state: StorageState): void;
 }
 ```
 
@@ -652,6 +668,54 @@ interface StorageState {
 
 **Race Condition Handling**: `onCheckpointStart` fires before any checkpoint operation. UI should disable checkpoint interactions until `onCheckpointCreated` or `onCheckpointDeleted` fires.
 
+### RemoteSync Interface
+
+The RemoteSync module handles encrypted cloud backup to flare576.com. It's a singleton configured at app startup.
+
+```typescript
+interface RemoteSync {
+  /** Configure with user credentials. Call on app startup if sync enabled. */
+  configure(username: string, passphrase: string): Promise<void>;
+  
+  /** Check if sync is configured */
+  isConfigured(): boolean;
+  
+  /** Sync current state to remote (encrypts before upload) */
+  sync(state: StorageState): Promise<SyncResult>;
+  
+  /** Fetch remote state (decrypts after download) */
+  fetch(): Promise<StorageState | null>;
+  
+  /** Check if remote has newer data than local */
+  checkRemote(localTimestamp: string): Promise<RemoteCheckResult>;
+  
+  /** Clear configuration (disable sync) */
+  clear(): void;
+}
+
+interface SyncResult {
+  success: boolean;
+  error?: string;
+  rateLimited?: boolean;
+  retryAfter?: number;  // Seconds until rate limit resets
+}
+
+interface RemoteCheckResult {
+  hasRemote: boolean;
+  remoteNewer: boolean;
+  remoteTimestamp?: string;
+  localTimestamp?: string;
+}
+```
+
+**Security Model:**
+1. Credentials never leave the browser unencrypted
+2. User ID derived via PBKDF2(username:passphrase) → AES-GCM encrypt static string
+3. State encrypted with same derived key + random IV
+4. Server stores only encrypted blobs—cannot decrypt
+
+**Rate Limiting:** 3 uploads per hour per user. Server returns 429 with Retry-After header if exceeded.
+
 ---
 
 ## Entity Types
@@ -693,6 +757,14 @@ interface HumanSettings {
   
   // Provider accounts (LLM and Storage)
   accounts?: ProviderAccount[];
+  
+  // Remote sync credentials (encrypted cloud backup)
+  sync?: SyncCredentials;
+}
+
+interface SyncCredentials {
+  username: string;
+  passphrase: string;
 }
 
 enum ProviderType {
@@ -1314,3 +1386,8 @@ Standard error codes for `onError` events:
 | 2026-02-02 | Added Group Visibility Model section to documentation |
 | 2026-02-03 | **Provider Accounts System**: Added `ProviderAccount` interface and `ProviderType` enum |
 | 2026-02-03 | Added `accounts?: ProviderAccount[]` to HumanSettings for LLM and Storage provider management |
+| 2026-02-04 | **Remote Sync Implementation**: Added `SyncCredentials` interface to HumanSettings |
+| 2026-02-04 | Added `RemoteSync` interface with `configure()`, `sync()`, `fetch()`, `checkRemote()`, `clear()` |
+| 2026-02-04 | Added `SyncResult` and `RemoteCheckResult` types |
+| 2026-02-04 | Added `getStorageState()`, `restoreFromState()` to Processor API |
+| 2026-02-04 | Added `getStorageState()`, `restoreFromState()` to StateManager API
