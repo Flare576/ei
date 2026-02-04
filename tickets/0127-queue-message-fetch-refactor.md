@@ -1,6 +1,6 @@
 # 0127: Queue Message Fetch Refactor
 
-**Status**: IN_PROGRESS
+**Status**: DONE
 **Depends on**: None
 **Priority**: Medium
 
@@ -83,14 +83,14 @@ const analyze = messages.slice(splitIndex);
 
 ## Acceptance Criteria
 
-- [ ] Remove `messages?: ChatMessage[]` from `LLMRequest` type
-- [ ] Update `Processor.sendMessage()` to not store messages in queue
-- [ ] Update `QueueProcessor.processRequest()` to fetch messages before LLM call
-- [ ] Update all extraction orchestrators to store timestamps, not messages
-- [ ] Update extraction handlers if they rely on `request.data.messages_*`
-- [ ] Verify queue storage is significantly smaller
-- [ ] Verify behavior is unchanged (responses work, extractions work)
-- [ ] Add unit test verifying message fetch at execution time
+- [x] Remove `messages?: ChatMessage[]` from `LLMRequest` type
+- [x] Update `Processor.sendMessage()` to not store messages in queue
+- [x] Update `QueueProcessor.processRequest()` to fetch messages before LLM call
+- [x] Update all extraction orchestrators to store timestamps, not messages
+- [x] Update extraction handlers if they rely on `request.data.messages_*`
+- [x] Verify queue storage is significantly smaller
+- [x] Verify behavior is unchanged (responses work, extractions work)
+- [x] Add unit test verifying message fetch at execution time
 
 ## Edge Cases to Verify
 

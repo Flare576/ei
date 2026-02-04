@@ -1,18 +1,18 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-02-03 (0096 Provider Accounts & Settings Sync)
+> Last updated: 2026-02-03 (0127 Queue Message Fetch Refactor)
 
 ## Overview
 
 | Status | Count |
 |--------|-------|
-| PENDING | 18 |
+| PENDING | 17 |
 | IN_PROGRESS | 0 |
 | QA | 0 |
-| DONE | 85 |
+| DONE | 86 |
 | BLOCKED | 0 |
 
-> 108 total tickets (85 done + 19 pending + 3 backlog + 0 QA).
+> 108 total tickets (86 done + 18 pending + 3 backlog + 0 QA).
 
 ---
 
@@ -50,7 +50,6 @@
 | 0098 | Pre-configured Persona Templates | 0087 |
 | 0099 | Story Co-Writer Agent (Non-Persona) | 0098 |
 | 0121 | HumanEditor Smart Merge | None |
-| 0127 | Queue Message Fetch Refactor | None |
 
 
 
@@ -74,9 +73,7 @@
 
 ## IN_PROGRESS
 
-| Ticket | Title | Started |
-|--------|-------|---------|
-| 0127 | Queue Message Fetch Refactor | 2026-02-03 |
+(none)
 
 ---
 
@@ -176,6 +173,7 @@
 | 0125 | PersonaTopic UI Update | 2026-02-02 |
 | 0126 | Human Topic Category Field | 2026-02-02 |
 | 0096 | Provider Accounts & Settings Sync | 2026-02-03 |
+| 0127 | Queue Message Fetch Refactor | 2026-02-03 |
 
 ---
 
