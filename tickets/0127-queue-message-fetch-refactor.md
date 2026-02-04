@@ -1,6 +1,6 @@
 # 0127: Queue Message Fetch Refactor
 
-**Status**: PENDING
+**Status**: IN_PROGRESS
 **Depends on**: None
 **Priority**: Medium
 

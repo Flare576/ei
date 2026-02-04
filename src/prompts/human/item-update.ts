@@ -1,14 +1,6 @@
 import type { ItemUpdatePromptData, PromptOutput } from "./types.js";
-import type { Message, DataItemBase } from "../../core/types.js";
-
-function formatMessagesForPrompt(messages: Message[], personaName: string): string {
-  if (messages.length === 0) return "(No messages)";
-  
-  return messages.map(m => {
-    const role = m.role === "human" ? "[human]" : `[${personaName}]`;
-    return `${role}: ${m.content}`;
-  }).join('\n\n');
-}
+import type { DataItemBase } from "../../core/types.js";
+import { formatMessagesAsPlaceholders } from "../message-utils.js";
 
 function formatExistingItem(item: DataItemBase): string {
   return JSON.stringify({
@@ -46,6 +38,40 @@ Examples: "Unknown" -> "Brother-In-Law", "Alice's" -> "Alice's Restaurant"
 
   // This data isn't _specific_ to FACTS, but it only makes sense like this for them
   const itemFactType = data?.existing_item?.name || data.new_item_name;
+  const traitDescriptionSection = `
+A brief characterization of how the Human demonstrates this trait. **1-2 sentences maximum.**
+
+## CRITICAL: Traits are STABLE PATTERNS, not conversation logs
+
+A trait description captures the PATTERN, not the evidence for it.
+
+**Good description**: "Approaches problems methodically, breaking them into smaller components before tackling the whole."
+**Bad description**: "In this exchange, Jeremy demonstrated analytical thinking when he discussed the schema changes, and in the previous conversation he showed the same pattern when..."
+
+The description should:
+- State the trait pattern concisely
+- Focus on HOW the trait manifests in general terms
+- Be useful for a persona meeting this human for the first time
+
+The description should NOT:
+- Reference specific conversations or exchanges
+- Accumulate examples over time ("In this exchange... In this latest exchange...")
+- Include timestamps, dates, or temporal references
+- Exceed 2-3 sentences under any circumstances
+
+**Style**: Write as if describing the person to someone who hasn't met them. Brief, evergreen, pattern-focused.
+
+Examples:
+- "Prefers direct communication; appreciates when others get to the point quickly."
+- "Processes emotions internally before discussing them; may need time before opening up."
+  `;
+
+  const defaultDescriptionSection = `
+This free-text field should be used to capture interesting details or references that the Human or Persona use while discussing this data point. Personas should be able to show topical recall, make references to the topic or event, or in other ways "Remember" details about it.
+
+**ABSOLUTELY VITAL INSTRUCTION**: Do **NOT** embelish these details - each Persona will use their own voice during interactions with the User - we need to capture EXACTLY what was said and how, or referring back to it won't have meaning.
+  `;
+
   const descriptionSection = data.data_type === "fact" ? `
 A concise, specific piece of information about the Human's ${itemFactType}.
 
@@ -72,11 +98,7 @@ If the user expressed emotion, quote or paraphrase THEIR words, don't embellish.
 **Style**: Be factual and concise. Record what the user said or demonstrated, not your interpretation of its deeper meaning. Avoid flowery or poetic language unless the user themselves used such language.
 
 Examples: "Name Unknown" -> "Robert Jordan", "User was married in the Summer" -> "User was married in July, 2006"
-  ` : `
-This free-text field should be used to capture interesting details or references that the Human or Persona use while discussing this data point. Personas should be able to show topical recall, make references to the topic or event, or in other ways "Remember" details about it.
-
-**ABSOLUTELY VITAL INSTRUCTION**: Do **NOT** embelish these details - each Persona will use their own voice during interactions with the User - we need to capture EXACTLY what was said and how, or referring back to it won't have meaning.
-  `;
+  ` : data.data_type === "trait" ? traitDescriptionSection : defaultDescriptionSection;
 
   const strengthSection = data.data_type === "trait" ? `
 ## Strength (\`strength\`)
@@ -242,13 +264,13 @@ An empty object, \`{}\`, is the MOST COMMON expected response.`;
 
   const earlierSection = data.messages_context.length > 0
     ? `## Earlier Conversation
-${formatMessagesForPrompt(data.messages_context, personaName)}
+${formatMessagesAsPlaceholders(data.messages_context, personaName)}
 
 `
     : '';
 
   const recentSection = `## Most Recent Messages
-${formatMessagesForPrompt(data.messages_analyze, personaName)}`;
+${formatMessagesAsPlaceholders(data.messages_analyze, personaName)}`;
 
   const user = `# Conversation
 ${earlierSection}${recentSection}

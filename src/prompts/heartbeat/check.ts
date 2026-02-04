@@ -7,15 +7,7 @@
 
 import type { HeartbeatCheckPromptData, PromptOutput } from "./types.js";
 import type { Message, Topic, Person } from "../../core/types.js";
-
-function formatMessagesForPrompt(messages: Message[], personaName: string): string {
-  if (messages.length === 0) return "(No recent messages)";
-  
-  return messages.map(m => {
-    const role = m.role === "human" ? "[human]" : `[${personaName}]`;
-    return `${role}: ${m.content}`;
-  }).join('\n\n');
-}
+import { formatMessagesAsPlaceholders } from "../message-utils.js";
 
 function formatTopicsWithGaps(topics: Topic[]): string {
   if (topics.length === 0) return "(No topics with engagement gaps)";
@@ -149,7 +141,7 @@ ${outputFragment}`;
 
   const historySection = `## Recent Conversation History
 
-${formatMessagesForPrompt(data.recent_history, personaName)}`;
+${formatMessagesAsPlaceholders(data.recent_history, personaName)}`;
 
   const consecutiveMessages = countTrailingPersonaMessages(data.recent_history);
   const lastPersonaMsg = getLastPersonaMessage(data.recent_history);

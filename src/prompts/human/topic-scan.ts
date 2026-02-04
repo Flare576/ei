@@ -1,14 +1,5 @@
 import type { TopicScanPromptData, PromptOutput } from "./types.js";
-import type { Message } from "../../core/types.js";
-
-function formatMessagesForPrompt(messages: Message[], personaName: string): string {
-  if (messages.length === 0) return "(No messages)";
-  
-  return messages.map(m => {
-    const role = m.role === "human" ? "[human]" : `[${personaName}]`;
-    return `${role}: ${m.content}`;
-  }).join('\n\n');
-}
+import { formatMessagesAsPlaceholders } from "../message-utils.js";
 
 export function buildHumanTopicScanPrompt(data: TopicScanPromptData): PromptOutput {
   if (!data.persona_name) {
@@ -112,13 +103,13 @@ ${criticalFragment}`;
 
   const earlierSection = data.messages_context.length > 0
     ? `## Earlier Conversation
-${formatMessagesForPrompt(data.messages_context, personaName)}
+${formatMessagesAsPlaceholders(data.messages_context, personaName)}
 
 `
     : '';
 
   const recentSection = `## Most Recent Messages
-${formatMessagesForPrompt(data.messages_analyze, personaName)}`;
+${formatMessagesAsPlaceholders(data.messages_analyze, personaName)}`;
 
   const user = `# Conversation
 ${earlierSection}${recentSection}

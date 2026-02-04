@@ -22,6 +22,11 @@ export interface ExtractionContext {
   messages_analyze: Message[];
 }
 
+function getAnalyzeFromTimestamp(context: ExtractionContext): string | null {
+  if (context.messages_analyze.length === 0) return null;
+  return context.messages_analyze[0].timestamp;
+}
+
 export function queueFactScan(context: ExtractionContext, state: StateManager): void {
   const prompt = buildHumanFactScanPrompt({
     persona_name: context.personaName,
@@ -37,8 +42,7 @@ export function queueFactScan(context: ExtractionContext, state: StateManager): 
     next_step: LLMNextStep.HandleHumanFactScan,
     data: {
       personaName: context.personaName,
-      messages_context: context.messages_context,
-      messages_analyze: context.messages_analyze,
+      analyze_from_timestamp: getAnalyzeFromTimestamp(context),
     },
   });
 }
@@ -58,8 +62,7 @@ export function queueTraitScan(context: ExtractionContext, state: StateManager):
     next_step: LLMNextStep.HandleHumanTraitScan,
     data: {
       personaName: context.personaName,
-      messages_context: context.messages_context,
-      messages_analyze: context.messages_analyze,
+      analyze_from_timestamp: getAnalyzeFromTimestamp(context),
     },
   });
 }
@@ -79,8 +82,7 @@ export function queueTopicScan(context: ExtractionContext, state: StateManager):
     next_step: LLMNextStep.HandleHumanTopicScan,
     data: {
       personaName: context.personaName,
-      messages_context: context.messages_context,
-      messages_analyze: context.messages_analyze,
+      analyze_from_timestamp: getAnalyzeFromTimestamp(context),
     },
   });
 }
@@ -104,8 +106,7 @@ export function queuePersonScan(context: ExtractionContext, state: StateManager)
     next_step: LLMNextStep.HandleHumanPersonScan,
     data: {
       personaName: context.personaName,
-      messages_context: context.messages_context,
-      messages_analyze: context.messages_analyze,
+      analyze_from_timestamp: getAnalyzeFromTimestamp(context),
     },
   });
 }
@@ -213,8 +214,7 @@ export function queueItemMatch(
       candidateType: dataType,
       itemName,
       itemValue,
-      messages_context: context.messages_context,
-      messages_analyze: context.messages_analyze,
+      analyze_from_timestamp: getAnalyzeFromTimestamp(context),
     },
   });
 }
@@ -275,7 +275,7 @@ export function queueItemUpdate(
       isNewItem,
       existingItemId: existingItem?.id,
       itemCategory: context.itemCategory,
-      messages_analyze: context.messages_analyze,
+      analyze_from_timestamp: getAnalyzeFromTimestamp(context),
     },
   });
 }

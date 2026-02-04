@@ -275,14 +275,16 @@ describe("QueueProcessor", () => {
       const request = makeRequest();
       request.system = "Custom system";
       request.user = "Custom user";
-      request.messages = [{ role: "user", content: "History" }];
       request.model = "custom-model";
+      request.data.personaName = "TestPersona";
       
+      const messageFetcher = vi.fn().mockReturnValue([{ role: "user", content: "History" }]);
       const callback = vi.fn();
-      processor.start(request, callback);
+      processor.start(request, callback, { messageFetcher });
       
       await vi.waitFor(() => expect(callback).toHaveBeenCalled());
       
+      expect(messageFetcher).toHaveBeenCalledWith("TestPersona");
       expect(llmClient.callLLMRaw).toHaveBeenCalledWith(
         "Custom system",
         "Custom user",

@@ -1232,7 +1232,6 @@ describe("Processor Human Extraction Throttling", () => {
     
     const human = await processor.getHuman();
     expect(human.last_seeded_fact).toBeDefined();
-    expect(human.last_seeded_trait).toBeDefined();
     expect(human.last_seeded_topic).toBeDefined();
     expect(human.last_seeded_person).toBeDefined();
   });

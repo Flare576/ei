@@ -55,6 +55,24 @@ import { LLMRequestType, LLMPriority, LLMNextStep as NextStep } from "../types.j
 
 export type ResponseHandler = (response: LLMResponse, state: StateManager) => void;
 
+function splitMessagesByTimestamp(
+  messages: Message[], 
+  analyzeFromTimestamp: string | null
+): { messages_context: Message[]; messages_analyze: Message[] } {
+  if (!analyzeFromTimestamp) {
+    return { messages_context: [], messages_analyze: messages };
+  }
+  const splitTime = new Date(analyzeFromTimestamp).getTime();
+  const splitIndex = messages.findIndex(m => new Date(m.timestamp).getTime() >= splitTime);
+  if (splitIndex === -1) {
+    return { messages_context: messages, messages_analyze: [] };
+  }
+  return {
+    messages_context: messages.slice(0, splitIndex),
+    messages_analyze: messages.slice(splitIndex),
+  };
+}
+
 function handlePersonaResponse(response: LLMResponse, state: StateManager): void {
   const personaName = response.request.data.personaName as string;
   if (!personaName) {
@@ -460,7 +478,7 @@ function handleHumanFactScan(response: LLMResponse, state: StateManager): void {
     return;
   }
 
-  const context = extractContext(response);
+  const context = extractContext(response, state);
   if (!context) return;
 
   // TODO: we should de-dupe here - We don't need to process "Flare" 2+ times
@@ -477,7 +495,7 @@ function handleHumanTraitScan(response: LLMResponse, state: StateManager): void 
     return;
   }
 
-  const context = extractContext(response);
+  const context = extractContext(response, state);
   if (!context) return;
 
   for (const candidate of result.traits) {
@@ -493,7 +511,7 @@ function handleHumanTopicScan(response: LLMResponse, state: StateManager): void 
     return;
   }
 
-  const context = extractContext(response);
+  const context = extractContext(response, state);
   if (!context) return;
 
   for (const candidate of result.topics) {
@@ -509,7 +527,7 @@ function handleHumanPersonScan(response: LLMResponse, state: StateManager): void
     return;
   }
 
-  const context = extractContext(response);
+  const context = extractContext(response, state);
   if (!context) return;
 
   for (const candidate of result.people) {
@@ -529,8 +547,10 @@ function handleHumanItemMatch(response: LLMResponse, state: StateManager): void 
   const itemName = response.request.data.itemName as string;
   const itemValue = response.request.data.itemValue as string;
   const personaName = response.request.data.personaName as string;
-  const messages_context = response.request.data.messages_context as Message[];
-  const messages_analyze = response.request.data.messages_analyze as Message[];
+  const analyzeFrom = response.request.data.analyze_from_timestamp as string | null;
+  
+  const allMessages = state.messages_get(personaName);
+  const { messages_context, messages_analyze } = splitMessagesByTimestamp(allMessages, analyzeFrom);
 
   if (result.matched_guid) {
     const human = state.getHuman();
@@ -736,15 +756,17 @@ function validateAndStoreQuotes(
   }
 }
 
-function extractContext(response: LLMResponse): ExtractionContext | null {
+function extractContext(response: LLMResponse, state: StateManager): ExtractionContext | null {
   const personaName = response.request.data.personaName as string;
-  const messages_context = response.request.data.messages_context as Message[] | undefined;
-  const messages_analyze = response.request.data.messages_analyze as Message[] | undefined;
+  const analyzeFrom = response.request.data.analyze_from_timestamp as string | null;
 
-  if (!personaName || !messages_context || !messages_analyze) {
-    console.error("[extractContext] Missing required context in request data");
+  if (!personaName) {
+    console.error("[extractContext] Missing personaName in request data");
     return null;
   }
+
+  const allMessages = state.messages_get(personaName);
+  const { messages_context, messages_analyze } = splitMessagesByTimestamp(allMessages, analyzeFrom);
 
   return { personaName, messages_context, messages_analyze };
 }
@@ -797,8 +819,9 @@ function handlePersonaTopicScan(response: LLMResponse, state: StateManager): voi
     return;
   }
 
-  const messages_context = response.request.data.messages_context as Message[];
-  const messages_analyze = response.request.data.messages_analyze as Message[];
+  const analyzeFrom = response.request.data.analyze_from_timestamp as string | null;
+  const allMessages = state.messages_get(personaName);
+  const { messages_context, messages_analyze } = splitMessagesByTimestamp(allMessages, analyzeFrom);
 
   const context: PersonaTopicContext = {
     personaName,
@@ -815,8 +838,7 @@ function handlePersonaTopicScan(response: LLMResponse, state: StateManager): voi
 function handlePersonaTopicMatch(response: LLMResponse, state: StateManager): void {
   const personaName = response.request.data.personaName as string;
   const candidate = response.request.data.candidate as PersonaTopicScanCandidate;
-  const messages_context = response.request.data.messages_context as Message[];
-  const messages_analyze = response.request.data.messages_analyze as Message[];
+  const analyzeFrom = response.request.data.analyze_from_timestamp as string | null;
 
   if (!personaName || !candidate) {
     console.error("[handlePersonaTopicMatch] Missing required data");
@@ -841,6 +863,9 @@ function handlePersonaTopicMatch(response: LLMResponse, state: StateManager): vo
     console.log(`[handlePersonaTopicMatch] "${candidate.name}" skipped: ${result.reason}`);
     return;
   }
+
+  const allMessages = state.messages_get(personaName);
+  const { messages_context, messages_analyze } = splitMessagesByTimestamp(allMessages, analyzeFrom);
 
   const context: PersonaTopicContext = {
     personaName,

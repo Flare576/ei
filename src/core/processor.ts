@@ -36,7 +36,6 @@ import {
 import { 
   orchestratePersonaGeneration,
   queueFactScan,
-  queueTraitScan,
   queueTopicScan,
   queuePersonScan,
   shouldRunCeremony,
@@ -202,7 +201,11 @@ export class Processor {
             this.currentRequest = null;
             this.handleResponse(response);
             this.interface.onQueueStateChanged?.("idle");
-          }, { accounts: this.stateManager.getHuman().settings?.accounts });
+          }, { 
+            accounts: this.stateManager.getHuman().settings?.accounts,
+            messageFetcher: (pName) => this.fetchMessagesForLLM(pName),
+            rawMessageFetcher: (pName) => this.stateManager.messages_get(pName),
+          });
         }
       }
 
@@ -251,6 +254,24 @@ export class Processor {
       return persona?.model || human.settings?.default_model;
     }
     return human.settings?.default_model;
+  }
+
+  private fetchMessagesForLLM(personaName: string): import("./types.js").ChatMessage[] {
+    const persona = this.stateManager.persona_get(personaName);
+    if (!persona) return [];
+
+    const history = this.stateManager.messages_get(personaName);
+    const contextWindowHours = persona.context_window_hours ?? DEFAULT_CONTEXT_WINDOW_HOURS;
+    const filteredHistory = filterMessagesForContext(
+      history,
+      persona.context_boundary,
+      contextWindowHours
+    );
+    
+    return filteredHistory.map((m) => ({
+      role: m.role === "human" ? "user" : "assistant",
+      content: m.content,
+    })) as import("./types.js").ChatMessage[];
   }
 
   private queueHeartbeatCheck(personaName: string): void {
@@ -554,18 +575,6 @@ export class Processor {
       return;
     }
 
-    const history = this.stateManager.messages_get(personaName);
-    const contextWindowHours = persona.context_window_hours ?? DEFAULT_CONTEXT_WINDOW_HOURS;
-    const filteredHistory = filterMessagesForContext(
-      history,
-      persona.context_boundary,
-      contextWindowHours
-    );
-    const chatMessages = filteredHistory.map((m) => ({
-      role: m.role === "human" ? "user" : "assistant",
-      content: m.content,
-    })) as import("./types.js").ChatMessage[];
-
     const promptData = this.buildResponsePromptData(personaName, persona);
     const prompt = buildResponsePrompt(promptData);
 
@@ -574,20 +583,19 @@ export class Processor {
       priority: LLMPriority.Normal,
       system: prompt.system,
       user: prompt.user,
-      messages: chatMessages,
       next_step: LLMNextStep.HandlePersonaResponse,
       model: this.getModelForPersona(personaName),
       data: { personaName },
     });
     this.interface.onMessageQueued?.(personaName);
 
-    // Enqueue trait extraction to detect behavioral change requests (0024)
-    // "Did the human tell me to act a certain way?"
+    const history = this.stateManager.messages_get(personaName);
+    
     const traitExtractionData: PersonaTraitExtractionPromptData = {
       persona_name: personaName,
       current_traits: persona.traits,
-      messages_context: history.slice(0, -1), // All messages except the new one
-      messages_analyze: [message], // Just the new human message
+      messages_context: history.slice(0, -1),
+      messages_analyze: [message],
     };
     const traitPrompt = buildPersonaTraitExtractionPrompt(traitExtractionData);
 
@@ -615,6 +623,12 @@ export class Processor {
    * The ONLY reason you need the facts on the Human record is so other Personas know _some_ information about the
    * Human - the persona you just told it to will have it in it's context for their conversation, and we already know 5
    * things **in that category** about them.
+   * 
+   * TRAIT EXTRACTION NOTE: Traits are intentionally NOT extracted here. They're stable personality patterns that:
+   * 1. Don't change from message to message
+   * 2. Need more conversational data to identify accurately
+   * 3. Were causing massive queue bloat with cascading updates
+   * Trait extraction happens during Ceremony only, where we have a full day's context.
    */
   private checkAndQueueHumanExtraction(personaName: string, history: Message[]): void {
     const human = this.stateManager.getHuman();
@@ -641,13 +655,6 @@ export class Processor {
       queueFactScan(factContext, this.stateManager);
       this.stateManager.setHuman({ ...human, last_seeded_fact: now });
       console.log(`[Processor] Human Seed extraction: facts (${human.facts.length} < ${factContext.messages_analyze.length} messages)`);
-    }
-
-    const traitContext = getContextForType(human.last_seeded_trait);
-    if (human.traits.length < traitContext.messages_analyze.length) {
-      queueTraitScan(traitContext, this.stateManager);
-      this.stateManager.setHuman({ ...this.stateManager.getHuman(), last_seeded_trait: now });
-      console.log(`[Processor] Human Seed extraction: traits (${human.traits.length} < ${traitContext.messages_analyze.length} messages)`);
     }
 
     const topicContext = getContextForType(human.last_seeded_topic);

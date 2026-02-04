@@ -74,7 +74,9 @@
 
 ## IN_PROGRESS
 
-(none)
+| Ticket | Title | Started |
+|--------|-------|---------|
+| 0127 | Queue Message Fetch Refactor | 2026-02-03 |
 
 ---
 

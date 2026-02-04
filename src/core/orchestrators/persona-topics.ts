@@ -14,6 +14,11 @@ export interface PersonaTopicContext {
   messages_analyze: Message[];
 }
 
+function getAnalyzeFromTimestamp(context: PersonaTopicContext): string | null {
+  if (context.messages_analyze.length === 0) return null;
+  return context.messages_analyze[0].timestamp;
+}
+
 export function queuePersonaTopicScan(context: PersonaTopicContext, state: StateManager): void {
   const prompt = buildPersonaTopicScanPrompt({
     persona_name: context.personaName,
@@ -29,8 +34,7 @@ export function queuePersonaTopicScan(context: PersonaTopicContext, state: State
     next_step: LLMNextStep.HandlePersonaTopicScan,
     data: {
       personaName: context.personaName,
-      messages_context: context.messages_context,
-      messages_analyze: context.messages_analyze,
+      analyze_from_timestamp: getAnalyzeFromTimestamp(context),
     },
   });
 }
@@ -61,8 +65,7 @@ export function queuePersonaTopicMatch(
     data: {
       personaName: context.personaName,
       candidate,
-      messages_context: context.messages_context,
-      messages_analyze: context.messages_analyze,
+      analyze_from_timestamp: getAnalyzeFromTimestamp(context),
     },
   });
 }
@@ -105,8 +108,7 @@ export function queuePersonaTopicUpdate(
       candidate,
       existingTopicId: matchResult.matched_id ?? null,
       isNewTopic: matchResult.action === "create",
-      messages_context: context.messages_context,
-      messages_analyze: context.messages_analyze,
+      analyze_from_timestamp: getAnalyzeFromTimestamp(context),
     },
   });
 }

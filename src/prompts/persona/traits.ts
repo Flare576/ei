@@ -1,14 +1,6 @@
 import type { PersonaTraitExtractionPromptData, PromptOutput } from "./types.js";
-import type { Message, Trait } from "../../core/types.js";
-
-function formatMessagesForPrompt(messages: Message[], personaName: string): string {
-  if (messages.length === 0) return "(No messages)";
-  
-  return messages.map(m => {
-    const role = m.role === "human" ? "[human]" : `[${personaName}]`;
-    return `${role}: ${m.content}`;
-  }).join('\n\n');
-}
+import type { Trait } from "../../core/types.js";
+import { formatMessagesAsPlaceholders } from "../message-utils.js";
 
 function formatTraitsForPrompt(traits: Trait[]): string {
   if (traits.length === 0) return "(No traits yet)";
@@ -104,13 +96,13 @@ ${criticalFragment}`;
 
   const earlierSection = data.messages_context.length > 0
     ? `## Earlier Conversation (context only)
-${formatMessagesForPrompt(data.messages_context, personaName)}
+${formatMessagesAsPlaceholders(data.messages_context, personaName)}
 
 `
     : '';
 
   const recentSection = `## Most Recent Messages (analyze these)
-${formatMessagesForPrompt(data.messages_analyze, personaName)}`;
+${formatMessagesAsPlaceholders(data.messages_analyze, personaName)}`;
 
   const user = `# Conversation
 ${earlierSection}${recentSection}

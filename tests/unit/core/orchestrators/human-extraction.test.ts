@@ -134,8 +134,7 @@ describe("Scan Orchestrators (Step 1)", () => {
         next_step: LLMNextStep.HandleHumanFactScan,
         data: {
           personaName: "ei",
-          messages_context: context.messages_context,
-          messages_analyze: context.messages_analyze,
+          analyze_from_timestamp: context.messages_analyze[0].timestamp,
         },
       });
     });
@@ -313,7 +312,7 @@ describe("queueItemMatch (Step 2)", () => {
     );
   });
 
-  it("passes message context through to match request", () => {
+  it("passes analyze_from_timestamp through to match request", () => {
     const candidate = {
       type_of_fact: "Test",
       value_of_fact: "Value",
@@ -325,8 +324,7 @@ describe("queueItemMatch (Step 2)", () => {
     expect(state.queue_enqueue).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          messages_context: context.messages_context,
-          messages_analyze: context.messages_analyze,
+          analyze_from_timestamp: context.messages_analyze[0].timestamp,
           personaName: "ei",
         }),
       })
@@ -496,7 +494,7 @@ describe("Extraction Pipeline Integration", () => {
     vi.clearAllMocks();
   });
 
-  it("full pipeline: scan -> match -> update chain carries context", () => {
+  it("full pipeline: scan -> match -> update chain carries timestamp", () => {
     const context: ExtractionContext = {
       personaName: "ei",
       messages_context: [createMessage("ctx1", "Earlier conversation")],
@@ -506,16 +504,16 @@ describe("Extraction Pipeline Integration", () => {
     queueFactScan(context, state as any);
 
     const scanCall = state.queue_enqueue.mock.calls[0][0];
-    expect(scanCall.data.messages_context).toBe(context.messages_context);
-    expect(scanCall.data.messages_analyze).toBe(context.messages_analyze);
+    expect(scanCall.data.analyze_from_timestamp).toBe(context.messages_analyze[0].timestamp);
+    expect(scanCall.data.personaName).toBe("ei");
 
     vi.clearAllMocks();
     const candidate = { type_of_fact: "Location", value_of_fact: "Chicago", reason: "User mentioned" };
     queueItemMatch("fact", candidate, context, state as any);
 
     const matchCall = state.queue_enqueue.mock.calls[0][0];
-    expect(matchCall.data.messages_context).toBe(context.messages_context);
-    expect(matchCall.data.messages_analyze).toBe(context.messages_analyze);
+    expect(matchCall.data.analyze_from_timestamp).toBe(context.messages_analyze[0].timestamp);
+    expect(matchCall.data.personaName).toBe("ei");
 
     vi.clearAllMocks();
     const matchResult = { matched_guid: null };
@@ -528,5 +526,6 @@ describe("Extraction Pipeline Integration", () => {
 
     const updateCall = state.queue_enqueue.mock.calls[0][0];
     expect(updateCall.data.isNewItem).toBe(true);
+    expect(updateCall.data.analyze_from_timestamp).toBe(context.messages_analyze[0].timestamp);
   });
 });

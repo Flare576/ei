@@ -1,11 +1,16 @@
-import type { LLMRequest, LLMResponse, LLMRequestType, ProviderAccount } from "./types.js";
+import type { LLMRequest, LLMResponse, LLMRequestType, ProviderAccount, ChatMessage, Message } from "./types.js";
 import { callLLMRaw, parseJSONResponse, cleanResponseContent } from "./llm-client.js";
+import { hydratePromptPlaceholders } from "../prompts/message-utils.js";
 
 type QueueProcessorState = "idle" | "busy";
 type ResponseCallback = (response: LLMResponse) => void;
+type MessageFetcher = (personaName: string) => ChatMessage[];
+type RawMessageFetcher = (personaName: string) => Message[];
 
 export interface QueueProcessorStartOptions {
   accounts?: ProviderAccount[];
+  messageFetcher?: MessageFetcher;
+  rawMessageFetcher?: RawMessageFetcher;
 }
 
 export class QueueProcessor {
@@ -13,6 +18,8 @@ export class QueueProcessor {
   private abortController: AbortController | null = null;
   private currentCallback: ResponseCallback | null = null;
   private currentAccounts: ProviderAccount[] | undefined;
+  private currentMessageFetcher: MessageFetcher | undefined;
+  private currentRawMessageFetcher: RawMessageFetcher | undefined;
 
   getState(): QueueProcessorState {
     return this.state;
@@ -26,6 +33,8 @@ export class QueueProcessor {
     this.state = "busy";
     this.currentCallback = callback;
     this.currentAccounts = options?.accounts;
+    this.currentMessageFetcher = options?.messageFetcher;
+    this.currentRawMessageFetcher = options?.rawMessageFetcher;
     this.abortController = new AbortController();
 
     this.processRequest(request)
@@ -53,15 +62,43 @@ export class QueueProcessor {
     this.state = "idle";
     this.currentCallback = null;
     this.currentAccounts = undefined;
+    this.currentMessageFetcher = undefined;
+    this.currentRawMessageFetcher = undefined;
     this.abortController = null;
     callback?.(response);
   }
 
   private async processRequest(request: LLMRequest): Promise<LLMResponse> {
+    let messages: ChatMessage[] = [];
+    
+    if (request.type === "response" as LLMRequestType) {
+      const personaName = request.data.personaName as string | undefined;
+      if (personaName && this.currentMessageFetcher) {
+        messages = this.currentMessageFetcher(personaName);
+      }
+    }
+
+    let hydratedSystem = request.system;
+    let hydratedUser = request.user;
+    
+    if (this.currentRawMessageFetcher) {
+      const personaName = request.data.personaName as string | undefined;
+      if (personaName) {
+        const rawMessages = this.currentRawMessageFetcher(personaName);
+        const messageMap = new Map<string, Message>();
+        for (const msg of rawMessages) {
+          messageMap.set(msg.id, msg);
+        }
+        
+        hydratedSystem = hydratePromptPlaceholders(request.system, messageMap);
+        hydratedUser = hydratePromptPlaceholders(request.user, messageMap);
+      }
+    }
+
     const { content, finishReason } = await callLLMRaw(
-      request.system,
-      request.user,
-      request.messages ?? [],
+      hydratedSystem,
+      hydratedUser,
+      messages,
       request.model,
       { signal: this.abortController?.signal },
       this.currentAccounts

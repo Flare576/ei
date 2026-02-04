@@ -274,7 +274,6 @@ export interface LLMRequest {
   priority: LLMPriority;
   system: string;
   user: string;
-  messages?: ChatMessage[];
   next_step: LLMNextStep;
   model?: string;
   data: Record<string, unknown>;
