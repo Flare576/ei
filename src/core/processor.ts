@@ -20,8 +20,10 @@ import {
   type ContextStatus,
   type LLMResponse,
   type DataItemBase,
+  type StorageState,
 } from "./types.js";
 import type { Storage } from "../storage/interface.js";
+import { remoteSync } from "../storage/remote.js";
 import { StateManager } from "./state-manager.js";
 import { QueueProcessor } from "./queue-processor.js";
 import { handlers } from "./handlers/index.js";
@@ -224,6 +226,14 @@ export class Processor {
 
     const human = this.stateManager.getHuman();
     if (human.ceremony_config && shouldRunCeremony(human.ceremony_config)) {
+      // Auto-backup to remote before ceremony (if configured)
+      if (human.settings?.sync && remoteSync.isConfigured()) {
+        const state = this.stateManager.getStorageState();
+        const result = await remoteSync.sync(state);
+        if (!result.success) {
+          console.warn(`[Processor] Pre-ceremony remote backup failed: ${result.error}`);
+        }
+      }
       startCeremony(this.stateManager);
     }
 
@@ -816,6 +826,14 @@ export class Processor {
     this.interface.onHumanUpdated?.();
   }
 
+  async getStorageState(): Promise<StorageState> {
+    return this.stateManager.getStorageState();
+  }
+
+  async restoreFromState(state: StorageState): Promise<void> {
+    return this.stateManager.restoreFromState(state);
+  }
+
   async upsertFact(fact: Fact): Promise<void> {
     this.stateManager.human_fact_upsert(fact);
     this.interface.onHumanUpdated?.();
@@ -917,7 +935,17 @@ export class Processor {
   }
 
   async exportState(): Promise<string> {
-    return JSON.stringify(this.stateManager.getHuman(), null, 2);
+    const state = this.stateManager.getStorageState();
+    return JSON.stringify(state, null, 2);
+  }
+
+  async importState(json: string): Promise<void> {
+    const state = JSON.parse(json) as StorageState;
+    if (!state.version || !state.human || !state.personas) {
+      throw new Error("Invalid backup file format");
+    }
+    this.stateManager.restoreFromState(state);
+    this.interface.onCheckpointRestored?.(-1);
   }
 
   async getPersonaCreationTemplate(): Promise<string> {

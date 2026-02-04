@@ -264,9 +264,13 @@ export class StateManager {
     return true;
   }
 
-  private restoreFromState(state: StorageState): void {
+  restoreFromState(state: StorageState): void {
     this.humanState.load(state.human);
     this.personaState.load(state.personas);
     this.queueState.load(state.queue);
+  }
+
+  getStorageState(): StorageState {
+    return this.buildStorageState();
   }
 }

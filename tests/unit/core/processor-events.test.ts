@@ -994,12 +994,17 @@ describe("Processor Export and Templates", () => {
     await processor.stop();
   });
 
-  it("exportState returns JSON string of human entity", async () => {
+  it("exportState returns JSON string with full StorageState", async () => {
     const exported = await processor.exportState();
     
     expect(typeof exported).toBe("string");
     const parsed = JSON.parse(exported);
-    expect(parsed.entity).toBe("human");
+    expect(parsed).toHaveProperty("version");
+    expect(parsed).toHaveProperty("timestamp");
+    expect(parsed).toHaveProperty("human");
+    expect(parsed).toHaveProperty("personas");
+    expect(parsed).toHaveProperty("queue");
+    expect(parsed.human.entity).toBe("human");
   });
 
   it("getPersonaCreationTemplate returns a template string", async () => {
