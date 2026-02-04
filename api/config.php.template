@@ -1,12 +1,13 @@
 <?php
 /**
  * EI Sync API - Database Configuration
+ * Generated from config.php.template during deploy
  */
 
-define('DB_HOST', getenv('DB_HOSTNAME') ?: 'localhost');
-define('DB_NAME', getenv('DB_DATABASE') ?: 'ei_sync');
-define('DB_USER', getenv('DB_USERNAME') ?: 'ei_user');
-define('DB_PASS', getenv('DB_PASSWORD') ?: '');
+define('DB_HOST', '%%DB_HOSTNAME%%');
+define('DB_NAME', '%%DB_DATABASE%%');
+define('DB_USER', '%%DB_USERNAME%%');
+define('DB_PASS', '%%DB_PASSWORD%%');
 
 define('RATE_LIMIT_MAX', 3);
 define('RATE_LIMIT_WINDOW', 3600);

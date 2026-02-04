@@ -42,3 +42,4 @@ npm-debug.log*
 **/tests/model/results/
 **/*-ideal.json
 **/*-ideal-response.json
+api/config.php
