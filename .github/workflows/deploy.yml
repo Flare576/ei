@@ -51,6 +51,6 @@ jobs:
           username: ${{ secrets.SFTP_USERNAME }}
           password: ${{ secrets.SFTP_PASSWORD }}
           local_path: ./api/
-          remote_path: /api/
+          remote_path: /
           sftpArgs: '-o ConnectTimeout=5'
           sftp_only: true
