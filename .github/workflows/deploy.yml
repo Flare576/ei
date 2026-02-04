@@ -40,7 +40,7 @@ jobs:
           username: ${{ secrets.SFTP_USERNAME }}
           password: ${{ secrets.SFTP_PASSWORD }}
           local_path: ./web/dist/*
-          remote_path: /public_html/ei/
+          remote_path: /
           sftpArgs: '-o ConnectTimeout=5'
           sftp_only: true
 
@@ -51,6 +51,6 @@ jobs:
           username: ${{ secrets.SFTP_USERNAME }}
           password: ${{ secrets.SFTP_PASSWORD }}
           local_path: ./api/*
-          remote_path: /public_html/ei/api/
+          remote_path: /api/
           sftpArgs: '-o ConnectTimeout=5'
           sftp_only: true
