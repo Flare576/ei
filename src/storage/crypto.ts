@@ -37,8 +37,9 @@ async function deriveKey(credentials: CryptoCredentials): Promise<CryptoKey> {
 
 export async function generateUserId(credentials: CryptoCredentials): Promise<string> {
   const key = await deriveKey(credentials);
-  const iv = new Uint8Array(12);
-  crypto.getRandomValues(iv);
+  // Fixed IV for deterministic user ID - same credentials = same ID
+  // This is safe because we only ever encrypt the same static plaintext
+  const iv = new Uint8Array(12);  // All zeros - deterministic
 
   const ciphertext = await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv },
@@ -46,11 +47,7 @@ export async function generateUserId(credentials: CryptoCredentials): Promise<st
     new TextEncoder().encode(ID_PLAINTEXT)
   );
 
-  const combined = new Uint8Array(iv.length + ciphertext.byteLength);
-  combined.set(iv);
-  combined.set(new Uint8Array(ciphertext), iv.length);
-
-  return btoa(String.fromCharCode(...combined))
+  return btoa(String.fromCharCode(...new Uint8Array(ciphertext)))
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
     .replace(/=/g, '');
