@@ -48,6 +48,10 @@ export class HumanState {
     const idx = this.human.facts.findIndex((f) => f.id === id);
     if (idx >= 0) {
       this.human.facts.splice(idx, 1);
+      // Clean up quote references
+      this.human.quotes.forEach((q) => {
+        q.data_item_ids = q.data_item_ids.filter((itemId) => itemId !== id);
+      });
       this.human.last_updated = new Date().toISOString();
       return true;
     }
@@ -69,6 +73,10 @@ export class HumanState {
     const idx = this.human.traits.findIndex((t) => t.id === id);
     if (idx >= 0) {
       this.human.traits.splice(idx, 1);
+      // Clean up quote references
+      this.human.quotes.forEach((q) => {
+        q.data_item_ids = q.data_item_ids.filter((itemId) => itemId !== id);
+      });
       this.human.last_updated = new Date().toISOString();
       return true;
     }
@@ -90,6 +98,10 @@ export class HumanState {
     const idx = this.human.topics.findIndex((t) => t.id === id);
     if (idx >= 0) {
       this.human.topics.splice(idx, 1);
+      // Clean up quote references
+      this.human.quotes.forEach((q) => {
+        q.data_item_ids = q.data_item_ids.filter((itemId) => itemId !== id);
+      });
       this.human.last_updated = new Date().toISOString();
       return true;
     }
@@ -111,6 +123,10 @@ export class HumanState {
      const idx = this.human.people.findIndex((p) => p.id === id);
      if (idx >= 0) {
        this.human.people.splice(idx, 1);
+       // Clean up quote references
+       this.human.quotes.forEach((q) => {
+         q.data_item_ids = q.data_item_ids.filter((itemId) => itemId !== id);
+       });
        this.human.last_updated = new Date().toISOString();
        return true;
      }
