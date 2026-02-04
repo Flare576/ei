@@ -1,6 +1,6 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-02-03 (0121 HumanEditor Smart Merge)
+> Last updated: 2026-02-04 (0106 RemoteStorage Implementation - Settings Overhaul)
 
 ## Overview
 
@@ -9,10 +9,10 @@
 | PENDING | 16 |
 | IN_PROGRESS | 0 |
 | QA | 0 |
-| DONE | 87 |
+| DONE | 88 |
 | BLOCKED | 0 |
 
-> 108 total tickets (87 done + 17 pending + 3 backlog + 0 QA).
+> 109 total tickets (88 done + 17 pending + 3 backlog + 0 in_progress + 0 QA).
 
 ---
 
@@ -63,7 +63,8 @@
 | 0104 | Ei Context Exporter | 0101 |
 | 0105 | CLAUDE.md Context Injector | 0104 |
 | 0106 | RemoteStorage Implementation | 0003, 0096 |
-| 0107 | Sync Orchestrator | 0101, 0106 |
+| 0128 | Persona GUIDs | None |
+| 0107 | Sync Orchestrator | 0106 |
 | 0108 | OpenCode File Watcher | 0102, 0103 |
 | 0109 | Sisyphus Persona Bootstrap | 0103 |
 | 0115 | Fact Validation TUI | 0113, 0100 |
@@ -174,6 +175,7 @@
 | 0096 | Provider Accounts & Settings Sync | 2026-02-03 |
 | 0127 | Queue Message Fetch Refactor | 2026-02-03 |
 | 0121 | HumanEditor Smart Merge | 2026-02-03 |
+| 0106 | RemoteStorage Implementation | 2026-02-04 |
 
 ---
 
