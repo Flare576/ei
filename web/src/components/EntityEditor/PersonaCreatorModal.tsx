@@ -22,6 +22,7 @@ interface NewPersonaData {
   traits: Partial<Trait>[];
   topics: Partial<Topic>[];
   model?: string;
+  group_primary?: string;
 }
 
 interface PersonaCreatorModalProps {
@@ -40,6 +41,7 @@ export function PersonaCreatorModal({
   onAiAssist,
 }: PersonaCreatorModalProps) {
   const [name, setName] = useState('');
+  const [group, setGroup] = useState('');
   const [description, setDescription] = useState('');
   const [shortDescription, setShortDescription] = useState('');
   const [model, setModel] = useState('');
@@ -55,6 +57,7 @@ export function PersonaCreatorModal({
   useEffect(() => {
     if (isOpen) {
       setName('');
+      setGroup('');
       setDescription('');
       setShortDescription('');
       setModel('');
@@ -207,6 +210,7 @@ export function PersonaCreatorModal({
       traits,
       topics,
       model: model || undefined,
+      group_primary: group.trim() || undefined,
     };
 
     onCreate(personaData);
@@ -287,6 +291,20 @@ export function PersonaCreatorModal({
               </div>
               <span className="ei-form-hint ei-creator-help-text">
                 In a hurry? We'll pre-fill based on description
+              </span>
+            </div>
+
+            <div className="ei-form-group">
+              <label className="ei-form-label">Group</label>
+              <input
+                type="text"
+                className="ei-input"
+                placeholder="e.g., Work, Creative, Gaming..."
+                value={group}
+                onChange={(e) => setGroup(e.target.value)}
+              />
+              <span className="ei-form-hint">
+                Optional - organize personas into groups with shared visibility
               </span>
             </div>
           </div>

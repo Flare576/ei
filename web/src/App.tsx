@@ -17,15 +17,19 @@ import type {
   Person,
   ContextStatus,
   Quote,
+  ProviderAccount,
+  StorageState,
 } from "../../src/core/types";
 import { Layout, PersonaPanel, ChatPanel, ControlArea, HelpModal, type PersonaPanelHandle, type ChatPanelHandle } from "./components/Layout";
 import { HumanEditor, PersonaEditor, PersonaCreatorModal, ArchivedPersonasModal } from "./components/EntityEditor";
 import { QuoteCaptureModal, QuoteManagementModal } from "./components/Quote";
 import { ConflictResolutionModal } from "./components/Sync/ConflictResolutionModal";
+import { Onboarding } from "./components/Onboarding";
 import { yoloMerge } from "../../src/storage/merge";
 import { useKeyboardNavigation } from "./hooks/useKeyboardNavigation";
 import "./styles/layout.css";
 import "./styles/entity-editor.css";
+import "./styles/onboarding.css";
 
 function App() {
   const [processor, setProcessor] = useState<Processor | null>(null);
@@ -61,6 +65,7 @@ function App() {
    const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false);
    const [showConflictModal, setShowConflictModal] = useState(false);
    const [conflictData, setConflictData] = useState<{ localTimestamp: Date; remoteTimestamp: Date } | null>(null);
+   const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
 
   const personaPanelRef = useRef<PersonaPanelHandle | null>(null);
   const chatPanelRef = useRef<ChatPanelHandle | null>(null);
@@ -71,6 +76,14 @@ function App() {
     onScrollChat: (dir) => chatPanelRef.current?.scrollChat(dir),
   });
 
+  // Check for first-run on mount (before Processor starts)
+  useEffect(() => {
+    const storage = new LocalStorage();
+    storage.listCheckpoints().then((checkpoints) => {
+      setShowOnboarding(checkpoints.length === 0);
+    });
+  }, []);
+
   useEffect(() => {
     activePersonaRef.current = activePersona;
   }, [activePersona]);
@@ -80,6 +93,8 @@ function App() {
   }, [editingPersonaName]);
 
   useEffect(() => {
+    if (showOnboarding !== false) return;
+    
     const eiInterface: Ei_Interface = {
       onPersonaAdded: () => {
         processorRef.current?.getPersonaList().then(setPersonas);
@@ -204,7 +219,7 @@ function App() {
     return () => {
       p.stop();
     };
-  }, []);
+  }, [showOnboarding]);
 
   useEffect(() => {
     if (processor && activePersona) {
@@ -356,6 +371,8 @@ function App() {
       if (!result.success) {
         const proceed = window.confirm(`Remote backup failed: ${result.error}\n\nExit anyway?`);
         if (!proceed) return;
+      } else {
+        globalThis.localStorage?.removeItem('ei_autosaves');
       }
     }
     
@@ -576,6 +593,7 @@ function App() {
     traits?: Array<{ name?: string; description?: string; sentiment?: number; strength?: number }>;
     topics?: Array<{ name?: string; description?: string; exposure_current?: number; exposure_desired?: number }>;
     model?: string;
+    group_primary?: string;
   }) => {
     if (!processor) return;
     await processor.createPersona({
@@ -586,6 +604,7 @@ function App() {
       traits: data.traits,
       topics: data.topics,
       model: data.model,
+      group_primary: data.group_primary,
     });
     processor.getPersonaList().then(setPersonas);
     setShowPersonaCreator(false);
@@ -689,6 +708,52 @@ function App() {
     }
   }, [processor]);
 
+  const handleOnboardingComplete = useCallback(async (
+    accounts: ProviderAccount[],
+    syncCredentials?: { username: string; passphrase: string },
+    restoredState?: StorageState
+  ) => {
+    const storage = new LocalStorage();
+    
+    if (restoredState) {
+      await storage.saveAutoCheckpoint(restoredState);
+      if (syncCredentials) {
+        await remoteSync.configure(syncCredentials);
+      }
+    }
+    
+    setShowOnboarding(false);
+    
+    if (!restoredState && accounts.length > 0) {
+      const checkProcessor = setInterval(async () => {
+        if (processorRef.current) {
+          clearInterval(checkProcessor);
+          const h = await processorRef.current.getHuman();
+          const firstEnabled = accounts.find(a => a.enabled);
+          const defaultModel = firstEnabled?.name;
+          const newSettings = { ...h.settings, accounts, default_model: defaultModel };
+          if (syncCredentials) {
+            Object.assign(newSettings, { sync: syncCredentials });
+            await remoteSync.configure(syncCredentials);
+          }
+          await processorRef.current.updateHuman({ settings: newSettings });
+        }
+      }, 100);
+    }
+  }, []);
+
+  if (showOnboarding === null) {
+    return (
+      <div className="ei-loading">
+        <div className="ei-loading__spinner" />
+      </div>
+    );
+  }
+
+  if (showOnboarding) {
+    return <Onboarding onComplete={handleOnboardingComplete} />;
+  }
+
   return (
     <>
     <Layout
@@ -706,7 +771,7 @@ function App() {
           onRefreshCheckpoints={handleRefreshCheckpoints}
           onHelpClick={handleHelpClick}
           onSettingsClick={handleSettingsClick}
-          onSaveAndExit={handleSaveAndExit}
+          onSaveAndExit={human?.settings?.sync ? handleSaveAndExit : undefined}
         />
       }
       leftPanel={
