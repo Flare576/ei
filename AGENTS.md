@@ -212,3 +212,186 @@ if (timeSinceLastX >= delay) {
 **Examples in this codebase**:
 - `queueHeartbeatCheck()` updates `last_heartbeat` before queueing
 - Future: Ceremony triggers, extraction throttling
+
+---
+
+## V2: TUI Frontend (OpenTUI)
+
+### Framework: OpenTUI
+
+| Aspect | Details |
+|--------|---------|
+| **GitHub** | https://github.com/anomalyco/opentui (8k+ stars) |
+| **Packages** | `@opentui/core`, `@opentui/react`, `@opentui/solid` |
+| **Runtime** | Bun + Zig (for native rendering modules) |
+| **Layout Engine** | Yoga (CSS Flexbox for terminals) |
+| **Reference Project** | OpenCode (https://github.com/anomalyco/opencode) |
+
+**Why OpenTUI**:
+- Native TypeScript - matches Ei core
+- Same `Ei_Interface` event-driven integration as web
+- OpenCode demonstrates 3-panel chat layout (our exact use case)
+- Vim-style keybindings via `useKeyboard()`
+- Built by SST team (terminal.shop, OpenCode)
+
+### Project Structure (V2/TUI)
+
+```
+/
+├── src/                # Core layer (shared with web)
+│   ├── core/
+│   ├── storage/
+│   ├── prompts/
+│   └── index.ts
+├── web/                # React web frontend
+├── api/                # PHP sync API
+└── tui/                # OpenTUI frontend (V2)
+    ├── src/
+    │   ├── app.tsx              # Root component + providers
+    │   ├── routes/
+    │   │   ├── home.tsx         # Landing/persona selection
+    │   │   └── session/
+    │   │       ├── index.tsx    # Main chat screen (3-panel)
+    │   │       ├── sidebar.tsx  # Persona list
+    │   │       ├── messages.tsx # Chat history (scrollable)
+    │   │       └── prompt.tsx   # Input area
+    │   ├── components/
+    │   │   ├── message-item.tsx
+    │   │   ├── persona-card.tsx
+    │   │   └── status-bar.tsx
+    │   ├── context/
+    │   │   ├── ei.tsx           # Ei_Interface + Processor wrapper
+    │   │   ├── keyboard.tsx     # Vim keybindings
+    │   │   └── theme.tsx        # Terminal colors
+    │   └── util/
+    │       └── vim-keys.ts      # j/k navigation, focus management
+    ├── package.json
+    └── tsconfig.json
+```
+
+### Core Integration Pattern
+
+The TUI uses the **same Ei_Interface pattern** as web:
+
+```typescript
+// tui/src/context/ei.tsx
+import { createContext, useContext } from "solid-js"
+import { Processor, Ei_Interface, FileStorage } from "../../../src"
+
+export function EiProvider(props) {
+  const storage = new FileStorage(process.env.EI_DATA_PATH)
+  
+  const eiInterface: Ei_Interface = {
+    onPersonaAdded: () => setPersonaListDirty(true),
+    onMessageAdded: (personaName) => refreshMessages(personaName),
+    onQueueStateChanged: (state) => setQueueState(state),
+    // ... all event handlers trigger reactive state updates
+  }
+  
+  const processor = new Processor(eiInterface, storage)
+  
+  return (
+    <EiContext.Provider value={processor}>
+      {props.children}
+    </EiContext.Provider>
+  )
+}
+```
+
+### 3-Panel Layout (Flexbox)
+
+```tsx
+// tui/src/routes/session/index.tsx
+<Box flexDirection="row" width="100%" height="100%">
+  {/* Left: Persona list */}
+  <Sidebar width={30} />
+  
+  {/* Center: Chat + Input */}
+  <Box flexDirection="column" flexGrow={1}>
+    <MessageList flexGrow={1} />
+    <PromptInput height={5} />
+  </Box>
+</Box>
+```
+
+### Vim-Style Navigation
+
+```typescript
+// tui/src/context/keyboard.tsx
+keyboard.on("keypress", (key) => {
+  if (key.name === "j") scrollDown()
+  if (key.name === "k") scrollUp()
+  if (key.name === "h") focusSidebar()
+  if (key.name === "l") focusMessages()
+  if (key.ctrl && key.name === "c") abort()
+  if (key.name === "tab") cycleFocus()
+})
+```
+
+### Key Differences from Web
+
+| Aspect | Web | TUI |
+|--------|-----|-----|
+| Storage | `LocalStorage` (browser) | `FileStorage` (EI_DATA_PATH) |
+| Rendering | React DOM | OpenTUI + SolidJS |
+| Input | Mouse + keyboard | Keyboard-first (vim) |
+| Layout | CSS Grid/Flex | Yoga Flexbox |
+| Runtime | Browser | Bun + terminal |
+
+### OpenCode Reference Files
+
+When implementing the TUI, reference these OpenCode files for patterns:
+- Layout: `packages/opencode/src/cli/cmd/tui/routes/session/index.tsx`
+- Provider composition: `packages/opencode/src/cli/cmd/tui/app.tsx`
+- Keybindings: `packages/opencode/src/cli/cmd/tui/context/keyboard.tsx`
+- Scrollable content: Look for `ScrollBox` usage
+
+### TUI Testing Strategy
+
+Unlike blessed/Ink, OpenTUI has **built-in testing support**:
+
+#### Component Testing: `@opentui/core/testing`
+
+```typescript
+import { createTestRenderer } from '@opentui/core/testing';
+
+const { renderer, mockInput, captureCharFrame } = 
+  await createTestRenderer({ width: 100, height: 30 });
+
+await mockInput.typeText("Hello");
+await mockInput.pressEnter();
+
+const output = captureCharFrame();
+expect(output).toContain("Hello");
+```
+
+**APIs**: `mockInput.typeText()`, `mockInput.pressKey()`, `mockMouse.click()`, `captureCharFrame()`, `captureSpans()`
+
+#### E2E Testing: `@microsoft/tui-test`
+
+Full app E2E via real PTY + xterm.js:
+
+```typescript
+import { test, expect } from '@microsoft/tui-test';
+
+test.use({ program: { file: 'bun', args: ['run', './tui/src/app.tsx'] } });
+
+test('persona selection', async ({ terminal }) => {
+  await expect(terminal.getByText('Select persona')).toBeVisible();
+  terminal.keyDown();
+  terminal.keyEnter();
+  await expect(terminal.getByText('Chat with')).toBeVisible();
+});
+```
+
+**Features**: Headless execution, input simulation, `getByText()` assertions, snapshot testing, tracing
+
+#### Testing Tiers
+
+| Tier | Tool | Scope |
+|------|------|-------|
+| Unit | Vitest | Core logic (Processor, StateManager) |
+| Component | `@opentui/core/testing` | TUI components in isolation |
+| E2E | `@microsoft/tui-test` | Full app flows |
+
+This ensures Ceremony changes, data type additions, etc. don't silently break TUI (or Web).
