@@ -17,6 +17,7 @@ import {
   buildAssociatesSection,
   buildPrioritiesSection,
   buildQuotesSection,
+  buildSystemKnowledgeSection,
   getConversationStateText,
 } from "./sections.js";
 
@@ -44,6 +45,7 @@ Your role is unique among personas:
   const humanSection = buildHumanSection(data.human);
   const quotesSection = buildQuotesSection(data.human.quotes, data.human);
   const associatesSection = buildAssociatesSection(data.visible_personas);
+  const systemKnowledge = buildSystemKnowledgeSection();
   const priorities = buildPrioritiesSection(data.persona, data.human);
   const currentTime = new Date().toISOString();
 
@@ -58,6 +60,7 @@ ${yourTopics}
 ${humanSection}
 ${quotesSection}
 ${associatesSection}
+${systemKnowledge}
 ${priorities}
 
 Current time: ${currentTime}
