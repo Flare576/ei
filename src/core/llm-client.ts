@@ -75,9 +75,9 @@ function getEnv(key: string, fallback: string): string {
 }
 
 export function resolveModel(modelSpec?: string, accounts?: ProviderAccount[]): ResolvedModel {
-  const spec = modelSpec || getEnv("EI_LLM_MODEL", "local-model");
+  const spec = modelSpec || getEnv("EI_LLM_MODEL", "");
   
-  let provider = "local";
+  let provider = "";
   let model = spec;
   
   if (spec.includes(":")) {
@@ -87,15 +87,19 @@ export function resolveModel(modelSpec?: string, accounts?: ProviderAccount[]): 
   }
   
   // Try to find matching account by name (case-insensitive)
+  // Check both "provider:model" format AND bare account names
   if (accounts) {
+    const searchName = provider || spec; // If no ":", the whole spec might be an account name
     const matchingAccount = accounts.find(
-      (acc) => acc.name.toLowerCase() === provider.toLowerCase()
+      (acc) => acc.name.toLowerCase() === searchName.toLowerCase() && acc.enabled
     );
     
     if (matchingAccount) {
+      // If bare account name was used, get model from account's default_model
+      const resolvedModel = provider ? model : (matchingAccount.default_model || model);
       return {
         provider: matchingAccount.name,
-        model,
+        model: resolvedModel,
         config: {
           name: matchingAccount.name,
           baseURL: matchingAccount.url,
@@ -106,10 +110,15 @@ export function resolveModel(modelSpec?: string, accounts?: ProviderAccount[]): 
     }
   }
   
+  // Fall back to "local" provider if no match found and no explicit provider
+  if (!provider) {
+    provider = "local";
+  }
+  
   // Fall back to env-based provider lookup
   const configFn = PROVIDERS[provider];
   if (!configFn) {
-    throw new Error(`Unknown provider: ${provider}`);
+    throw new Error(`Unknown provider: ${provider}. Check that an account with this name exists and is enabled.`);
   }
   
   return { provider, model, config: configFn() };
