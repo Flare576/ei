@@ -322,7 +322,7 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
             Cancel
           </button>
           <button className="ei-btn ei-btn--primary" onClick={handleSave}>
-            {isNewAccount ? 'Create Account' : 'Save Changes'}
+                        {isNewAccount ? 'Save Provider' : 'Save Changes'}
           </button>
         </div>
       </div>

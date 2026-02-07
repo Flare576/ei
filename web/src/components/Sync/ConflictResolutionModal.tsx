@@ -158,6 +158,9 @@ export function ConflictResolutionModal({
         </div>
 
         <div className="ei-conflict-modal__footer">
+          <p className="ei-conflict-modal__hint">
+            <strong>Tip:</strong> Use the 🚪 Save and Exit button before switching devices to avoid conflicts.
+          </p>
           <button className="ei-btn ei-btn--secondary" onClick={onClose}>
             Cancel
           </button>
