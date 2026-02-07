@@ -6,13 +6,13 @@
 
 | Status | Count |
 |--------|-------|
-| PENDING | 16 |
+| PENDING | 15 |
 | IN_PROGRESS | 0 |
-| QA | 0 |
+| QA | 1 |
 | DONE | 88 |
 | BLOCKED | 0 |
 
-> 109 total tickets (88 done + 17 pending + 3 backlog + 0 in_progress + 0 QA).
+> 109 total tickets (88 done + 16 pending + 3 backlog + 0 in_progress + 1 QA).
 
 ---
 
@@ -40,7 +40,6 @@
 
 | Ticket | Title | Depends On |
 |--------|-------|------------|
-| 0090 | Onboarding Flow | 0087 |
 | 0092 | Persona Image Generation | 0087 |
 | 0093 | Rich Text Editor (Markdown + WYSIWYG) | 0080 |
 | 0094 | Name Color Customization | 0081 |
@@ -79,7 +78,9 @@
 
 ## QA
 
-(none)
+| Ticket | Title | Notes |
+|--------|-------|-------|
+| 0090 | Onboarding Flow | Multi-step wizard, account sync, provider setup |
 
 ---
 
