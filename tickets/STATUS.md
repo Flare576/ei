@@ -6,13 +6,13 @@
 
 | Status | Count |
 |--------|-------|
-| PENDING | 15 |
+| PENDING | 16 |
 | IN_PROGRESS | 0 |
 | QA | 1 |
 | DONE | 88 |
 | BLOCKED | 0 |
 
-> 109 total tickets (88 done + 16 pending + 3 backlog + 0 in_progress + 1 QA).
+> 110 total tickets (88 done + 17 pending + 3 backlog + 0 in_progress + 1 QA).
 
 ---
 
@@ -44,10 +44,10 @@
 | 0093 | Rich Text Editor (Markdown + WYSIWYG) | 0080 |
 | 0094 | Name Color Customization | 0081 |
 | 0095 | Time Display Modes | 0081 |
-
 | 0097 | LLM Streaming Support | 0011 |
 | 0098 | Pre-configured Persona Templates | 0087 |
 | 0099 | Story Co-Writer Agent (Non-Persona) | 0098 |
+| 0129 | Settings Menu Redesign | 0096 |
 
 
 
