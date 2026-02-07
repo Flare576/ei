@@ -125,6 +125,16 @@ export class Processor {
   private async bootstrapFirstRun(): Promise<void> {
     console.log(`[Processor ${this.instanceId}] First run detected, bootstrapping Ei`);
 
+    const human = this.stateManager.getHuman();
+    this.stateManager.setHuman({
+      ...human,
+      ceremony_config: {
+        enabled: human.ceremony_config?.enabled ?? true,
+        time: human.ceremony_config?.time ?? "09:00",
+        last_ceremony: new Date().toISOString(),
+      },
+    });
+
     const eiEntity: PersonaEntity = {
       ...EI_PERSONA_DEFINITION,
       last_updated: new Date().toISOString(),
