@@ -44,8 +44,9 @@
   --ei-spacing-xl: 32px;
   
   /* Typography */
-  --ei-font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --ei-font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji";
   --ei-font-mono: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  --ei-font-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Android Emoji", "EmojiSymbols", sans-serif;
   --ei-font-size-sm: 0.875rem;
   --ei-font-size-base: 1rem;
   --ei-font-size-lg: 1.125rem;
@@ -399,6 +400,7 @@ body {
   border-radius: var(--ei-radius-sm);
   cursor: pointer;
   font-size: 12px;
+  font-family: var(--ei-font-emoji);
   transition: all var(--ei-transition-fast);
 }
 
@@ -1620,9 +1622,18 @@ body {
 
 .ei-conflict-modal__footer {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--ei-spacing-sm);
   justify-content: flex-end;
+  align-items: center;
   padding: var(--ei-spacing-md) var(--ei-spacing-lg);
   border-top: 1px solid var(--ei-border);
   background: var(--ei-bg-secondary);
+}
+
+.ei-conflict-modal__hint {
+  flex: 1;
+  margin: 0;
+  font-size: var(--ei-font-size-sm);
+  color: var(--ei-text-muted);
 }
