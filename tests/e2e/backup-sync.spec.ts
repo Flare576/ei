@@ -1,4 +1,4 @@
-import { test, expect } from "./fixtures.js";
+import { test, expect, seedCheckpoint } from "./fixtures.js";
 
 const AUTO_SAVES_KEY = "ei_autosaves";
 
@@ -133,9 +133,7 @@ test.describe("Backup & Restore", () => {
 
     const backupContent = JSON.stringify(backupCheckpoint);
 
-    await page.addInitScript((url) => {
-      localStorage.setItem("EI_LLM_BASE_URL", url);
-    }, mockServerUrl);
+    await seedCheckpoint(page, mockServerUrl);
 
     await page.goto("/");
     await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
@@ -167,18 +165,13 @@ test.describe("Backup & Restore", () => {
 });
 
 test.describe("Cloud Sync Credentials", () => {
-  test.beforeEach(async ({ page, mockServer }) => {
+  test.beforeEach(async ({ mockServer }) => {
     mockServer.clearRequestHistory();
     mockServer.clearResponseQueue();
-    await page.addInitScript(() => {
-      localStorage.clear();
-    });
   });
 
   test("sync credentials require 15+ character combined length", async ({ page, mockServerUrl }) => {
-    await page.addInitScript((url) => {
-      localStorage.setItem("EI_LLM_BASE_URL", url);
-    }, mockServerUrl);
+    await seedCheckpoint(page, mockServerUrl);
 
     await page.goto("/");
     await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
@@ -207,9 +200,7 @@ test.describe("Cloud Sync Credentials", () => {
   });
 
   test("sync save creates enabled indicator, clear removes it", async ({ page, mockServerUrl }) => {
-    await page.addInitScript((url) => {
-      localStorage.setItem("EI_LLM_BASE_URL", url);
-    }, mockServerUrl);
+    await seedCheckpoint(page, mockServerUrl);
 
     await page.goto("/");
     await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
@@ -244,9 +235,7 @@ test.describe("Cloud Sync Credentials", () => {
   });
 
   test("passphrase toggle shows/hides text", async ({ page, mockServerUrl }) => {
-    await page.addInitScript((url) => {
-      localStorage.setItem("EI_LLM_BASE_URL", url);
-    }, mockServerUrl);
+    await seedCheckpoint(page, mockServerUrl);
 
     await page.goto("/");
     await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });

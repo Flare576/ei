@@ -104,3 +104,109 @@ export async function clearStorage(page: import("@playwright/test").Page) {
     localStorage.clear();
   });
 }
+
+const AUTO_SAVES_KEY = "ei_autosaves";
+
+const DEFAULT_WELCOME_MESSAGE = "Hello! I'm Ei, your personal companion. I'm here to chat, learn about you, and grow alongside you. What's on your mind today?";
+
+export interface MinimalCheckpoint {
+  version: number;
+  timestamp: string;
+  human: {
+    entity: string;
+    facts: never[];
+    traits: never[];
+    topics: never[];
+    people: never[];
+    last_updated: string;
+    last_activity: string;
+    settings: { auto_save_interval_ms: number };
+  };
+  personas: {
+    ei: {
+      entity: {
+        entity: string;
+        aliases: string[];
+        short_description: string;
+        long_description: string;
+        traits: never[];
+        topics: never[];
+        facts: never[];
+        people: never[];
+        is_paused: boolean;
+        is_archived: boolean;
+        last_updated: string;
+        last_activity: string;
+      };
+      messages: Array<{ id: string; role: string; content: string; timestamp: string }>;
+    };
+  };
+  queue: never[];
+  settings: Record<string, never>;
+}
+
+export function createMinimalCheckpoint(
+  messages: Array<{ role: string; content: string }> = [{ role: "assistant", content: DEFAULT_WELCOME_MESSAGE }]
+): MinimalCheckpoint {
+  const timestamp = new Date().toISOString();
+  return {
+    version: 1,
+    timestamp,
+    human: {
+      entity: "human",
+      facts: [],
+      traits: [],
+      topics: [],
+      people: [],
+      last_updated: timestamp,
+      last_activity: timestamp,
+      settings: { auto_save_interval_ms: 5000 },
+    },
+    personas: {
+      ei: {
+        entity: {
+          entity: "system",
+          aliases: ["Ei"],
+          short_description: "Your personal companion",
+          long_description: "A friendly AI companion",
+          traits: [],
+          topics: [],
+          facts: [],
+          people: [],
+          is_paused: false,
+          is_archived: false,
+          last_updated: timestamp,
+          last_activity: timestamp,
+        },
+        messages: messages.map((m, i) => ({
+          id: `msg-${i}`,
+          role: m.role,
+          content: m.content,
+          timestamp,
+        })),
+      },
+    },
+    queue: [],
+    settings: {},
+  };
+}
+
+/**
+ * Seeds localStorage with a minimal checkpoint to bypass onboarding.
+ * Call this before page.goto() to simulate a returning user.
+ */
+export async function seedCheckpoint(
+  page: import("@playwright/test").Page,
+  mockServerUrl: string,
+  messages: Array<{ role: string; content: string }> = [{ role: "assistant", content: DEFAULT_WELCOME_MESSAGE }]
+) {
+  const checkpoint = createMinimalCheckpoint(messages);
+  await page.addInitScript(
+    ({ url, key, data }) => {
+      localStorage.clear();
+      localStorage.setItem("EI_LLM_BASE_URL", url);
+      localStorage.setItem(key, JSON.stringify([data]));
+    },
+    { url: mockServerUrl, key: AUTO_SAVES_KEY, data: checkpoint }
+  );
+}

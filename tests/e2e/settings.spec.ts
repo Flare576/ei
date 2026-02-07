@@ -1,19 +1,13 @@
-import { test, expect } from "./fixtures.js";
+import { test, expect, seedCheckpoint } from "./fixtures.js";
 
 test.describe("Settings Management", () => {
-  test.beforeEach(async ({ page, mockServer }) => {
+  test.beforeEach(async ({ mockServer }) => {
     mockServer.clearRequestHistory();
     mockServer.clearResponseQueue();
-    await page.addInitScript(() => {
-      localStorage.clear();
-    });
   });
 
   test("can open human editor settings", async ({ page, mockServerUrl }) => {
-    await page.addInitScript((url) => {
-      localStorage.setItem("EI_LLM_BASE_URL", url);
-    }, mockServerUrl);
-
+    await seedCheckpoint(page, mockServerUrl);
     await page.goto("/");
     await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
     
@@ -25,10 +19,7 @@ test.describe("Settings Management", () => {
   });
 
   test("can navigate to provider accounts section", async ({ page, mockServerUrl }) => {
-    await page.addInitScript((url) => {
-      localStorage.setItem("EI_LLM_BASE_URL", url);
-    }, mockServerUrl);
-
+    await seedCheckpoint(page, mockServerUrl);
     await page.goto("/");
     await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
 

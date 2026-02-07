@@ -383,8 +383,8 @@ test.describe("Session Bug Coverage (0112)", () => {
     await page.locator("button:has-text('+ New')").click();
     await expect(page.locator(".ei-creator-modal")).toBeVisible({ timeout: 3000 });
 
-    // Fill in the form
-    const nameInput = page.locator('.ei-creator-modal__core .ei-input');
+    // Fill in the form (use placeholder to distinguish from Group input)
+    const nameInput = page.locator('.ei-creator-modal__core .ei-input[placeholder*="Primary Name"]');
     await nameInput.fill("Sophia");
 
     const descTextarea = page.locator('.ei-creator-modal__core .ei-textarea');

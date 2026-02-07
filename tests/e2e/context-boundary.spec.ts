@@ -1,18 +1,13 @@
-import { test, expect } from "./fixtures.js";
+import { test, expect, seedCheckpoint } from "./fixtures.js";
 
 test.describe("Context Boundary", () => {
-  test.beforeEach(async ({ page, mockServer }) => {
+  test.beforeEach(async ({ mockServer }) => {
     mockServer.clearRequestHistory();
     mockServer.clearResponseQueue();
-    await page.addInitScript(() => {
-      localStorage.clear();
-    });
   });
 
   test("New/Resume button toggles context boundary and shows divider", async ({ page, mockServerUrl }) => {
-    await page.addInitScript((url) => {
-      localStorage.setItem("EI_LLM_BASE_URL", url);
-    }, mockServerUrl);
+    await seedCheckpoint(page, mockServerUrl);
 
     await page.goto("/");
 
@@ -44,9 +39,7 @@ test.describe("Context Boundary", () => {
       statusCode: 200,
     });
 
-    await page.addInitScript((url) => {
-      localStorage.setItem("EI_LLM_BASE_URL", url);
-    }, mockServerUrl);
+    await seedCheckpoint(page, mockServerUrl);
 
     await page.goto("/");
 

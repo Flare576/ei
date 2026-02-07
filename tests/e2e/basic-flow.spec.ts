@@ -1,12 +1,9 @@
-import { test, expect } from "./fixtures.js";
+import { test, expect, seedCheckpoint } from "./fixtures.js";
 
 test.describe("Basic Chat Flow", () => {
-  test.beforeEach(async ({ page, mockServer }) => {
+  test.beforeEach(async ({ mockServer }) => {
     mockServer.clearRequestHistory();
     mockServer.clearResponseQueue();
-    await page.addInitScript(() => {
-      localStorage.clear();
-    });
   });
 
   test("user can send message and receive response", async ({ page, mockServer, mockServerUrl }) => {
@@ -16,10 +13,7 @@ test.describe("Basic Chat Flow", () => {
       statusCode: 200,
     });
 
-    await page.addInitScript((url) => {
-      localStorage.setItem("EI_LLM_BASE_URL", url);
-    }, mockServerUrl);
-
+    await seedCheckpoint(page, mockServerUrl);
     await page.goto("/");
 
     await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
@@ -40,10 +34,7 @@ test.describe("Basic Chat Flow", () => {
   });
 
   test("Ei welcome message appears on first load", async ({ page, mockServerUrl }) => {
-    await page.addInitScript((url) => {
-      localStorage.setItem("EI_LLM_BASE_URL", url);
-    }, mockServerUrl);
-
+    await seedCheckpoint(page, mockServerUrl);
     await page.goto("/");
 
     await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
@@ -68,10 +59,7 @@ test.describe("Basic Chat Flow", () => {
       statusCode: 200,
     });
 
-    await page.addInitScript((url) => {
-      localStorage.setItem("EI_LLM_BASE_URL", url);
-    }, mockServerUrl);
-
+    await seedCheckpoint(page, mockServerUrl);
     await page.goto("/");
     await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
     await page.locator(".ei-persona-pill").first().click();

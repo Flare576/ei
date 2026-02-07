@@ -1,4 +1,4 @@
-import { test, expect } from "./fixtures.js";
+import { test, expect, seedCheckpoint } from "./fixtures.js";
 import type { Page } from "@playwright/test";
 
 async function sendMessage(page: Page, text: string): Promise<void> {
@@ -16,9 +16,7 @@ async function waitForNthResponseContaining(page: Page, text: string, n: number,
 }
 
 async function setupPageWithMockServer(page: Page, mockServerUrl: string): Promise<void> {
-  await page.addInitScript((url) => {
-    localStorage.setItem("EI_LLM_BASE_URL", url);
-  }, mockServerUrl);
+  await seedCheckpoint(page, mockServerUrl);
   await page.goto("/");
   await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
   await page.locator(".ei-persona-pill").first().click();
@@ -47,12 +45,9 @@ function isExtractionRequest(body: { messages?: Array<{ role: string; content: s
 }
 
 test.describe("Message Flow - Comprehensive", () => {
-  test.beforeEach(async ({ page, mockServer }) => {
+  test.beforeEach(async ({ mockServer }) => {
     mockServer.clearRequestHistory();
     mockServer.clearResponseQueue();
-    await page.addInitScript(() => {
-      localStorage.clear();
-    });
   });
 
   test("multiple messages in sequence arrive in correct order", async ({ page, mockServer, mockServerUrl }) => {

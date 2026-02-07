@@ -186,7 +186,9 @@ export class MockLLMServerImpl implements MockLLMServer {
 
     const requestType = this.detectRequestType(req.body.messages);
     const response = this.getResponseForRequestType(requestType, endpoint);
-    const delay = this.getDelayForEndpoint(endpoint);
+    const endpointDelay = this.getDelayForEndpoint(endpoint);
+    const responseDelay = response.delayMs ?? 0;
+    const delay = responseDelay > 0 ? responseDelay : endpointDelay;
     const streamingChunks = this.streamingConfigs.get(endpoint);
 
     if (delay > 0) {
@@ -226,10 +228,7 @@ export class MockLLMServerImpl implements MockLLMServer {
 
     const content = systemMessage.content.toLowerCase();
 
-    if (content.includes("create") && content.includes("persona") && content.includes("traits")) {
-      return "persona-generation";
-    }
-    if (content.includes("helping create") && content.includes("persona")) {
+    if (content.includes("you are helping create a new ai persona named")) {
       return "persona-generation";
     }
 
