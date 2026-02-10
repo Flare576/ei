@@ -1,12 +1,23 @@
 {
-  "extends": "../tsconfig.json",
   "compilerOptions": {
-    "jsx": "preserve",
-    "jsxImportSource": "solid-js",
-    "outDir": "./dist",
-    "rootDir": "./src",
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "lib": ["ES2022"],
-    "noEmit": true
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "jsx": "preserve",
+    "jsxImportSource": "@opentui/solid",
+    "outDir": "./dist",
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*", "tests/**/*", "../src/**/*"]
 }

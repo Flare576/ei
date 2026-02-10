@@ -4,14 +4,15 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "bun run src/index.tsx",
-    "test": "vitest run",
+    "dev": "bun --conditions=browser run src/index.tsx",
+    "test": "vitest run && bun test ../tests/tui/storage/",
     "test:e2e": "bunx @microsoft/tui-test"
   },
   "devDependencies": {
     "@microsoft/tui-test": "^0.0.1-rc.5",
     "@types/bun": "latest",
     "@types/node": "^25.2.1",
+    "node-pty": "^1.1.0",
     "vite-plugin-solid": "^2.11.10",
     "vitest": "^4.0.18"
   },
@@ -20,6 +21,6 @@
   },
   "dependencies": {
     "@opentui/solid": "^0.1.77",
-    "solid-js": "^1.9.11"
+    "solid-js": "1.9.9"
   }
 }

@@ -15,7 +15,8 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:debug": "playwright test --debug",
     "typecheck": "tsc --noEmit",
-    "web": "cd web;npm run dev"
+    "web": "cd web;npm run dev",
+    "tui": "cd tui;npm run dev"
   },
   "keywords": [
     "ai",
