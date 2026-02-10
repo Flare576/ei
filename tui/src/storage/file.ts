@@ -18,7 +18,14 @@ export class FileStorage implements Storage {
   private dataPath: string;
 
   constructor(dataPath?: string) {
-    this.dataPath = dataPath || process.env.EI_DATA_PATH || join(process.env.HOME || "~", ".ei");
+    if (dataPath) {
+      this.dataPath = dataPath;
+    } else if (process.env.EI_DATA_PATH) {
+      this.dataPath = process.env.EI_DATA_PATH;
+    } else {
+      const xdgData = process.env.XDG_DATA_HOME || join(process.env.HOME || "~", ".local", "share");
+      this.dataPath = join(xdgData, "ei");
+    }
   }
 
   async isAvailable(): Promise<boolean> {

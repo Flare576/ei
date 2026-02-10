@@ -402,6 +402,8 @@ describe("Processor Heartbeat Scheduling", () => {
     const processor = new Processor(mock.interface);
     await processor.start(storage);
     
+    // Pause queue to prevent processing before we can check pending_count
+    await processor.abortCurrentOperation();
     await vi.advanceTimersByTimeAsync(200);
     
     const status = await processor.getQueueStatus();

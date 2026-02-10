@@ -5,7 +5,7 @@ import { join } from "path";
 
 const MOCK_PORT = 3099;
 const BUN_PATH = process.env.BUN_PATH || "/Users/flare576/.bun/bin/bun";
-const TEST_DATA_PATH = `${process.env.HOME}/.ei-test-error`;
+const TEST_DATA_PATH = `/tmp/ei-test-error-${process.pid}-${Date.now()}`;
 
 function createMinimalCheckpoint() {
   const timestamp = new Date().toISOString();

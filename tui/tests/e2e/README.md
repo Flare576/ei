@@ -14,7 +14,7 @@ E2E tests for the TUI using `@microsoft/tui-test`.
 source ~/.nvm/nvm.sh && nvm use 20
 
 # Clean previous runs and execute
-rm -rf .tui-test ~/.ei-test-*
+rm -rf .tui-test /tmp/ei-test-*
 npx @microsoft/tui-test tests/e2e/
 ```
 
@@ -46,7 +46,7 @@ test("...", async ({ terminal }) => {
 
 Each test file needs:
 - Unique mock server port (3098, 3099, etc.)
-- Unique data directory (`~/.ei-test-chat`, `~/.ei-test-error`, etc.)
+- Unique data directory (randomized `/tmp/ei-test-*` paths)
 
 This allows parallel file execution while sharing the mock server within a file.
 

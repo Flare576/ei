@@ -81,8 +81,7 @@ export const EiProvider: ParentComponent = (props) => {
     clearLog();
     logger.info("Ei TUI bootstrap starting");
     try {
-      const dataPath = Bun.env.EI_DATA_PATH || `${Bun.env.HOME}/.ei`;
-      const storage = new FileStorage(dataPath);
+      const storage = new FileStorage(Bun.env.EI_DATA_PATH);
 
       const eiInterface: Ei_Interface = {
         onPersonaAdded: () => void refreshPersonas(),

@@ -1,8 +1,17 @@
-/** File-based logger for TUI debugging. Usage: tail -f ~/.ei/tui.log */
+/** File-based logger for TUI debugging. Usage: tail -f $EI_DATA_PATH/tui.log */
 
 import { appendFileSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
 
-const LOG_PATH = `${Bun.env.HOME}/.ei/tui.log`;
+function getDataPath(): string {
+  if (Bun.env.EI_DATA_PATH) return Bun.env.EI_DATA_PATH;
+  const xdgData = Bun.env.XDG_DATA_HOME || join(Bun.env.HOME || "~", ".local", "share");
+  return join(xdgData, "ei");
+}
+
+function getLogPath(): string {
+  return join(getDataPath(), "tui.log");
+}
 
 type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -41,7 +50,7 @@ function writeLogSync(level: LogLevel, message: string, data?: unknown): void {
   const line = formatMessage(level, message, data);
   
   try {
-    appendFileSync(LOG_PATH, line);
+    appendFileSync(getLogPath(), line);
   } catch {}
 }
 
@@ -54,9 +63,11 @@ export const logger = {
 
 export function clearLog(): void {
   try {
-    mkdirSync(`${Bun.env.HOME}/.ei`, { recursive: true });
+    const logPath = getLogPath();
+    const dataDir = logPath.substring(0, logPath.lastIndexOf("/"));
+    mkdirSync(dataDir, { recursive: true });
     const header = `--- TUI Started at ${new Date().toISOString()} ---\n`;
-    Bun.write(LOG_PATH, header);
+    Bun.write(logPath, header);
   } catch {}
 }
 
