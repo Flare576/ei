@@ -185,5 +185,18 @@ Processor Calls
     * Opens helpful tips overlay (OpenCode functionality)
 ```
 
-> NOTE - OpenCode has a feature where if you type `/`, it opens a listing of commands. If you hit Enter/Tab while one is selected (say, `/agents`, it will open an overlay with your options (**AgentName** _agent description in gray_).
-> For the commands where the default is listing, we should follow that paradigm. We should also be able to show a list of "matching" slash commands as the user types. Looks like this might use some sort of fuzzy search? Not sure if it's built-in to OpenTUI or something that OpenCode adds, though.
+# Additional Thoughts & Requirements
+
+## Focus
+
+I haven't been able to find a method of changing focus between the input box and the other panels. This would be a neat feature, but I definitely do not want to force the UI to allow it - being able to see the list of personas and their states on the left is enough.
+
+## Scrolling
+
+PageUp/Down should always scroll the chat history, regardless of overlays or focus.
+
+## Lists
+
+OpenCode has a feature where if you type `/`, it opens a listing of commands. As you type, it filters the commands. We should have that - I don't know if that's an OpenTUI functionality or an OpenCode one, but I think it's just a fuzzy-search on the commands/descriptions.
+
+If you hit Enter/Tab while one is selected (say, `/agents`), it will open an overlay with your options (**AgentName** _agent description in gray_). This would be great for any feature where the default behavior is a list. It may be possible to catch different keys when this interface is open, so `d` could delete the Persona Nickname, Groups entry, or even Topic/Trait/etc., or `e` could open that specific entity in the $EDITOR.
