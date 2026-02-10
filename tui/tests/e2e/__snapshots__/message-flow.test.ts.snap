@@ -1,0 +1,31 @@
+// TUI Test Snapshot v1
+
+exports[`Message Flow E2E › Message from LLM appears in chat | 1`] = String.raw`
+╭────────────────────────────────────────────────────────────────────────────────╮
+│                        │┌─────────────────────────────────────────────────────┐│
+│ Personas               ││                                                     ││
+│                        ││ Ei (18:09):                                       █ ││
+│                        ││   Hello! I'm Ei, your personal companion in this  █ ││
+│  * Ei (2 new)          ││   space.                                          █ ││
+│                        ││                                                     ││
+│                        ││   I'm here to listen, remember, and help you        ││
+│                        ││   reflect. As we talk, I'll learn about you - your  ││
+│                        ││   interests, the people in your life, what matters  ││
+│                        ││   to you. This helps me (and any other personas     ││
+│                        ││   you create) have more meaningful conversations    ││
+│                        ││   with you.                                         ││
+│                        ││                                                     ││
+│                        ││   Everything stays private and local to your        ││
+│                        ││   device.                                           ││
+│                        ││                                                     ││
+│                        ││   To get started, what should I call you?           ││
+│                        ││                                                     ││
+│                        │└─────────────────────────────────────────────────────┘│
+│                        │───────────────────────────────────────────────────────│
+│                        │ Type your message here...                             │
+│                        │                                                       │
+│                        │                                                       │
+│ Ei                                                              [Input]  Ready │
+╰────────────────────────────────────────────────────────────────────────────────╯
+`;
+
