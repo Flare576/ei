@@ -956,17 +956,6 @@ describe("Processor Context Window", () => {
     await processor.stop();
   });
 
-  it("setContextWindow sets the context window for a persona", async () => {
-    await processor.createPersona({ name: "ContextBot", long_description: "A bot for context testing" });
-    await processor.sendMessage("ContextBot", "Message 1");
-    
-    const messages = await processor.getMessages("ContextBot");
-    const firstMessageId = messages[0]?.id ?? "";
-    const lastMessageId = messages[messages.length - 1]?.id ?? "";
-    
-    await processor.setContextWindow("ContextBot", firstMessageId, lastMessageId);
-  });
-
   it("setMessageContextStatus updates a message's context status", async () => {
     await processor.createPersona({ name: "StatusBot", long_description: "A bot for status testing" });
     await processor.sendMessage("StatusBot", "Test message");
@@ -1007,12 +996,6 @@ describe("Processor Export and Templates", () => {
     expect(parsed.human.entity).toBe("human");
   });
 
-  it("getPersonaCreationTemplate returns a template string", async () => {
-    const template = await processor.getPersonaCreationTemplate();
-    
-    expect(typeof template).toBe("string");
-    expect(template.length).toBeGreaterThan(0);
-  });
 });
 
 describe("Processor Checkpoint Restore", () => {

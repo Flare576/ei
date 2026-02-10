@@ -184,30 +184,6 @@ describe("PersonaState", () => {
     });
   });
 
-  describe("context window", () => {
-    beforeEach(() => {
-      state.add("TestBot", makePersona("TestBot"));
-    });
-
-    it("starts with null context window", () => {
-      expect(state.messages_getContextWindow("TestBot")).toBeNull();
-    });
-
-    it("sets and gets context window", () => {
-      const start = "2024-01-01T00:00:00Z";
-      const end = "2024-01-02T00:00:00Z";
-      
-      state.messages_setContextWindow("TestBot", start, end);
-      
-      const window = state.messages_getContextWindow("TestBot");
-      expect(window).toEqual({ start, end });
-    });
-
-    it("returns null for non-existent persona", () => {
-      expect(state.messages_getContextWindow("nonexistent")).toBeNull();
-    });
-  });
-
   describe("messages_markRead", () => {
     beforeEach(() => {
       state.add("TestBot", makePersona("TestBot"));

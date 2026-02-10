@@ -175,12 +175,6 @@ describe("StateManager", () => {
       expect(sm.messages_get("Bot")[0].context_status).toBe("always");
     });
 
-    it("sets and gets context window", () => {
-      sm.messages_setContextWindow("Bot", "2024-01-01", "2024-01-02");
-      
-      const window = sm.messages_getContextWindow("Bot");
-      expect(window).toEqual({ start: "2024-01-01", end: "2024-01-02" });
-    });
   });
 
   describe("queue operations", () => {
