@@ -809,10 +809,6 @@ export class Processor {
       }));
   }
 
-  async setContextWindow(personaName: string, start: string, end: string): Promise<void> {
-    this.stateManager.messages_setContextWindow(personaName, start, end);
-  }
-
   async setContextBoundary(personaName: string, timestamp: string | null): Promise<void> {
     this.stateManager.persona_setContextBoundary(personaName, timestamp);
     this.interface.onContextBoundaryChanged?.(personaName);
@@ -956,10 +952,6 @@ export class Processor {
     }
     this.stateManager.restoreFromState(state);
     this.interface.onCheckpointRestored?.(-1);
-  }
-
-  async getPersonaCreationTemplate(): Promise<string> {
-    return "Describe your persona's personality, interests, and communication style.";
   }
 
   async abortCurrentOperation(): Promise<void> {

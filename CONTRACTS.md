@@ -246,9 +246,6 @@ interface Processor {
   /** Send a message to a persona (queues response) */
   sendMessage(personaName: string, content: string): Promise<void>;
   
-  /** Set context window bounds for a persona */
-  setContextWindow(personaName: string, start: string, end: string): Promise<void>;
-  
   /** 
    * Set context boundary for a persona ("New" command).
    * Messages before this timestamp are excluded from LLM context (unless context_status="always").
@@ -349,11 +346,6 @@ interface Processor {
   
   /** Restore state from external source (remote sync, conflict resolution) */
   restoreFromState(state: StorageState): Promise<void>;
-  
-  // === Templates ===
-  
-  /** Get persona creation template (for editor UI) */
-  getPersonaCreationTemplate(): Promise<string>;
   
   // === LLM Operations ===
   
@@ -507,8 +499,6 @@ interface StateManager {
   messages_get(personaName: string): Message[];
   messages_append(personaName: string, message: Message): void;
   messages_setContextStatus(personaName: string, messageId: string, status: ContextStatus): boolean;
-  messages_getContextWindow(personaName: string): { start: string; end: string } | null;
-  messages_setContextWindow(personaName: string, start: string, end: string): void;
   messages_markRead(personaName: string, messageId: string): boolean;
   messages_markPendingAsRead(personaName: string): number;  // Mark unread human messages as read, returns count
   messages_countUnread(personaName: string): number;

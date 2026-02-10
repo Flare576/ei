@@ -152,17 +152,4 @@ export class PersonaState {
     });
     return removed;
   }
-
-  messages_getContextWindow(
-    personaName: string
-  ): { start: string; end: string } | null {
-    return this.personas.get(this.normalizeKey(personaName))?.contextWindow ?? null;
-  }
-
-  messages_setContextWindow(personaName: string, start: string, end: string): void {
-    const data = this.personas.get(this.normalizeKey(personaName));
-    if (data) {
-      data.contextWindow = { start, end };
-    }
-  }
 }

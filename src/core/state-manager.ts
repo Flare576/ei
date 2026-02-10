@@ -161,14 +161,6 @@ export class StateManager {
     return this.personaState.messages_setContextStatus(personaName, messageId, status);
   }
 
-  messages_getContextWindow(personaName: string): { start: string; end: string } | null {
-    return this.personaState.messages_getContextWindow(personaName);
-  }
-
-  messages_setContextWindow(personaName: string, start: string, end: string): void {
-    this.personaState.messages_setContextWindow(personaName, start, end);
-  }
-
   messages_markRead(personaName: string, messageId: string): boolean {
     return this.personaState.messages_markRead(personaName, messageId);
   }
