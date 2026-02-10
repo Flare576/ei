@@ -32,3 +32,10 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Finder (MacOS) folder config
 .DS_Store
+
+# tui-test artifacts
+.tui-test/
+tui-traces/
+
+# npm lock file (we use bun.lock)
+package-lock.json
