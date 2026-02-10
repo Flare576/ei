@@ -1,11 +1,7 @@
-import { render, Box, Text } from "@opentui/solid";
+import { render } from "@opentui/solid";
+import { App } from "./app";
 
-const App = () => {
-  return (
-    <Box>
-      <Text>Hello TUI</Text>
-    </Box>
-  );
-};
-
-render(App, { exitOnCtrlC: true });
+render(App, {
+  exitOnCtrlC: true,
+  targetFps: 30,
+});
