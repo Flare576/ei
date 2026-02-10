@@ -348,50 +348,83 @@ When implementing the TUI, reference these OpenCode files for patterns:
 
 ### TUI Testing Strategy
 
-Unlike blessed/Ink, OpenTUI has **built-in testing support**:
+**Critical Insight**: Component-level tests using `testRender` verify SolidJS reactivity works (it does). They do NOT verify the Processor→TUI integration. The Processor is battle-tested via the web app—what needs testing is the **integration between TUI and Processor**.
 
-#### Component Testing: `@opentui/core/testing`
+#### What Component Tests CAN Verify
+- SolidJS store reactivity
+- Render logic (conditionals, formatting)
+- Isolated component behavior
 
-```typescript
-import { createTestRenderer } from '@opentui/core/testing';
+#### What Component Tests CANNOT Verify
+- Processor event firing timing
+- Full message send→receive→display flow
+- Queue state transitions during LLM calls
+- Real user workflows
 
-const { renderer, mockInput, captureCharFrame } = 
-  await createTestRenderer({ width: 100, height: 30 });
+#### Required: Full E2E with Mock LLM
 
-await mockInput.typeText("Hello");
-await mockInput.pressEnter();
-
-const output = captureCharFrame();
-expect(output).toContain("Hello");
-```
-
-**APIs**: `mockInput.typeText()`, `mockInput.pressKey()`, `mockMouse.click()`, `captureCharFrame()`, `captureSpans()`
-
-#### E2E Testing: `@microsoft/tui-test`
-
-Full app E2E via real PTY + xterm.js:
+The web app already has a mock LLM service used extensively in E2E tests. The TUI needs the same approach:
 
 ```typescript
-import { test, expect } from '@microsoft/tui-test';
-
-test.use({ program: { file: 'bun', args: ['run', './tui/src/app.tsx'] } });
-
-test('persona selection', async ({ terminal }) => {
-  await expect(terminal.getByText('Select persona')).toBeVisible();
-  terminal.keyDown();
-  terminal.keyEnter();
-  await expect(terminal.getByText('Chat with')).toBeVisible();
-});
+// Conceptual E2E test flow
+1. Start mock LLM server (same one web uses)
+2. Launch TUI app with EI_LLM_BASE_URL pointing to mock
+3. Send a message
+4. Verify StatusBar shows "Processing"
+5. Wait for mock LLM response
+6. Verify StatusBar returns to "Ready"
+7. Verify message appears in chat
 ```
 
-**Features**: Headless execution, input simulation, `getByText()` assertions, snapshot testing, tracing
+**Blockers for TUI E2E**:
+- `@microsoft/tui-test` has native dependency issues with Node 25
+- Need to evaluate alternatives or wait for fix
 
-#### Testing Tiers
+#### Current Testing Tiers
 
-| Tier | Tool | Scope |
-|------|------|-------|
-| Unit | Vitest | Core logic (Processor, StateManager) |
-| Component | `@opentui/core/testing` | TUI components in isolation |
-| E2E | `@microsoft/tui-test` | Full app flows |
+| Tier | Tool | Scope | Status |
+|------|------|-------|--------|
+| Unit | Vitest/bun:test | Core logic (Processor, StateManager) | ✅ Working |
+| Component | `testRender` from `@opentui/solid` | SolidJS reactivity, render logic | ✅ Working |
+| E2E | TBD | Full app + mock LLM | ❌ Blocked |
 
-This ensures Ceremony changes, data type additions, etc. don't silently break TUI (or Web).
+#### Component Testing Pattern (for reference)
+
+When component tests ARE useful (testing render logic):
+
+```typescript
+import { describe, it, expect, afterEach } from "bun:test"
+import { testRender } from "@opentui/solid"
+import { createStore } from "solid-js/store"
+
+let testSetup: Awaited<ReturnType<typeof testRender>> | undefined
+
+afterEach(() => {
+  testSetup?.renderer.destroy()
+  testSetup = undefined
+})
+
+it("renders correctly based on state", async () => {
+  const [store, setStore] = createStore({ value: "initial" })
+  
+  testSetup = await testRender(
+    () => <text>{store.value}</text>,
+    { width: 40, height: 1 }
+  )
+  
+  await testSetup.renderOnce()
+  expect(testSetup.captureCharFrame()).toContain("initial")
+  
+  setStore("value", "updated")
+  await testSetup.renderOnce()
+  expect(testSetup.captureCharFrame()).toContain("updated")
+})
+```
+
+**bunfig.toml requirement**:
+```toml
+preload = ["@opentui/solid/preload"]
+
+[test]
+preload = ["@opentui/solid/preload"]
+```
