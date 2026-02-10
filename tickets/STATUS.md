@@ -1,18 +1,18 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-02-04 (0106 RemoteStorage Implementation - Settings Overhaul)
+> Last updated: 2026-02-10 (0130-0131 UX Polish tickets added)
 
 ## Overview
 
 | Status | Count |
 |--------|-------|
-| PENDING | 16 |
+| PENDING | 18 |
 | IN_PROGRESS | 0 |
-| QA | 1 |
+| QA | 2 |
 | DONE | 88 |
 | BLOCKED | 0 |
 
-> 110 total tickets (88 done + 17 pending + 3 backlog + 0 in_progress + 1 QA).
+> 113 total tickets (88 done + 18 pending + 3 backlog + 0 in_progress + 2 QA).
 
 ---
 
@@ -48,6 +48,9 @@
 | 0098 | Pre-configured Persona Templates | 0087 |
 | 0099 | Story Co-Writer Agent (Non-Persona) | 0098 |
 | 0129 | Settings Menu Redesign | 0096 |
+| 0130 | No Response Explanation UI | 0044 |
+| 0131 | Per-Persona Pause on Message Recall | 0046, 0048 |
+| 0132 | Poke Functionality (Prompt Response) | 0011 |
 
 
 
@@ -81,6 +84,7 @@
 | Ticket | Title | Notes |
 |--------|-------|-------|
 | 0090 | Onboarding Flow | Multi-step wizard, account sync, provider setup |
+| 0100 | TUI Frontend Skeleton | Core working, polish items in 0100i |
 
 ---
 
