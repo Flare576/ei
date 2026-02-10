@@ -1,6 +1,6 @@
 # 0100: TUI Frontend Skeleton
 
-**Status**: PENDING
+**Status**: QA
 **Depends on**: 0006, 0007
 
 ## Summary
@@ -23,7 +23,7 @@ Create the terminal-based frontend for Ei using OpenTUI framework. This is the f
 - Native TypeScript - matches Ei core layer
 - SolidJS reactive model works with Ei_Interface events
 - OpenCode demonstrates exact 3-panel chat layout we need
-- Vim-style keybindings via `useKeyboard()` hook
+- Command-based keybindings via `useKeyboard()` hook (like OpenCode, NOT vim h/j/k/l)
 - Built by SST team (production-tested in terminal.shop, OpenCode)
 
 **Alternatives Considered**:
@@ -60,17 +60,27 @@ tui/
 
 ## Acceptance Criteria
 
-- [ ] Bun + OpenTUI project scaffolded in `/tui/`
-- [ ] EiProvider context wraps Processor with Ei_Interface handlers
-- [ ] Uses FileStorage (EI_DATA_PATH) instead of LocalStorage
-- [ ] 3-panel layout renders: sidebar (30 cols) + messages (flex) + input (5 rows)
-- [ ] Persona list shows all non-archived personas with status indicators
-- [ ] Messages scroll with j/k keys
-- [ ] Input area accepts multi-line text with Enter to send
-- [ ] Vim-style focus: h/l to switch panels, Tab to cycle
-- [ ] Ctrl+C aborts current LLM operation (if busy)
-- [ ] Graceful terminal resize handling (Yoga recalculates)
-- [ ] Can run alongside OpenCode sessions (no port conflicts)
+- [x] Bun + OpenTUI project scaffolded in `/tui/`
+- [x] EiProvider context wraps Processor with Ei_Interface handlers
+- [x] Uses FileStorage (EI_DATA_PATH) instead of LocalStorage
+- [x] 3-panel layout renders: sidebar (30 cols) + messages (flex) + input (5 rows)
+- [x] Persona list shows all non-archived personas with status indicators
+- [x] Messages scroll (native OpenTUI scrollbox behavior)
+- [x] Input area accepts multi-line text with Enter to send
+- [x] Native OpenTUI focus management (no custom vim keys unless OpenCode uses them)
+- [ ] Ctrl+C aborts current LLM operation (if busy) - **Currently exits app; needs signal handler**
+- [x] Graceful terminal resize handling (Yoga recalculates)
+- [x] Can run alongside OpenCode sessions (no port conflicts)
+
+### Known Issues (to address in follow-up stories)
+
+| Issue | Impact | Story |
+|-------|--------|-------|
+| No auto-scroll to bottom on new messages | UX - must manually scroll | 0100i |
+| PageUp/PageDown only works after clicking message area | UX - keyboard nav limited | 0100i |
+| Ctrl+C exits app instead of aborting operation | UX - can't cancel LLM calls | 0100i |
+| No logging/notification system | Debug - errors go to console only | 0100i |
+| Status bar always shows "Ready" | UX - queue state not updating | 0100h |
 
 ## Stories (Sub-tasks)
 
@@ -118,18 +128,36 @@ tui/
 
 ### 0100g: Keybindings
 
-- [ ] useKeyboard hook for global bindings
-- [ ] h/l: switch focus between sidebar/messages
-- [ ] j/k: scroll in focused panel
-- [ ] Tab: cycle focus (sidebar -> messages -> input)
+- [ ] Follow OpenCode patterns for keyboard handling (command-based, not vim h/j/k/l)
+- [ ] Use native OpenTUI focus behavior where possible
 - [ ] Ctrl+C: abort current operation
-- [ ] ?: show help overlay
+- [ ] Only add custom keybinds when OpenTUI doesn't provide native behavior
 
 ### 0100h: Status Bar
 
-- [ ] Show queue state (idle/busy)
+- [ ] Show queue state (idle/busy) - **Bug: always shows "Ready"**
 - [ ] Show pending count if > 0
 - [ ] Show keybinding hints
+
+### 0100i: Polish & UX (Follow-up)
+
+- [ ] Auto-scroll message list to bottom on new messages
+- [ ] Ctrl+C signal handler to abort LLM operation instead of exit
+- [ ] Logging system: route Processor console.logs to file
+- [ ] Notification system: surface errors/warnings in TUI (toast or status bar)
+- [ ] Keyboard focus: PageUp/PageDown from input without clicking
+- [ ] Optional: Sidebar toggle for narrow terminals
+
+## Design Principle: Follow OpenTUI/OpenCode Patterns
+
+**IMPORTANT**: Do NOT carry over paradigms from web, blessed, or Ink. Until we hit something OpenTUI/OpenCode doesn't support, we use the Open* way.
+
+- **Focus**: Use native OpenTUI focus management, not custom panel tracking
+- **Keyboard**: Use OpenCode's command/keybind pattern, not vim h/j/k/l
+- **Scrolling**: Use native scrollbox behavior, not custom j/k handlers
+- **Input**: Let OpenTUI handle input focus natively
+
+Reference OpenCode (https://github.com/anomalyco/opencode) for patterns before inventing custom solutions.
 
 ## Notes
 
