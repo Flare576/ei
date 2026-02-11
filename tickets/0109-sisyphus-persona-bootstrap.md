@@ -1,6 +1,6 @@
 # 0109: OpenCode Agent Persona Bootstrap
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0102
 
 ## Summary
@@ -9,17 +9,17 @@ Create personas for OpenCode agents on-demand during session import. Each unique
 
 ## Acceptance Criteria
 
-- [ ] Function: `ensureAgentPersona(agentName: string): Promise<PersonaEntity>`
-- [ ] Creates persona if not exists, returns existing if found
-- [ ] `name` = agentName (e.g., "sisyphus", "build", "atlas")
-- [ ] `short_description` = Agent.description from OpenCode, or "OpenCode coding agent"
-- [ ] `long_description` = Generic: "An OpenCode agent that assists with coding tasks."
-- [ ] `is_dynamic: false` (no ceremony phases)
-- [ ] `heartbeat_delay_ms: 0` (disabled - never initiates)
-- [ ] `group` = "OpenCode"
-- [ ] No traits generated (static persona)
-- [ ] No topics generated (static persona)
-- [ ] Aliases: `[agentName]` (no additional aliases)
+- [x] Function: `ensureAgentPersona(agentName: string): Promise<PersonaEntity>`
+- [x] Creates persona if not exists, returns existing if found
+- [x] `name` = agentName (e.g., "sisyphus", "build", "atlas")
+- [x] `short_description` = Agent.description from OpenCode, or "OpenCode coding agent"
+- [x] `long_description` = Generic: "An OpenCode agent that assists with coding tasks."
+- [x] `is_dynamic: false` (no ceremony phases)
+- [x] `heartbeat_delay_ms: 0` (disabled - never initiates)
+- [x] `group` = "OpenCode"
+- [x] No traits generated (static persona)
+- [x] No topics generated (static persona)
+- [x] Aliases: `[agentName]` (no additional aliases)
 
 ## Notes
 
