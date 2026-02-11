@@ -5,7 +5,7 @@ E2E tests for the TUI using `@microsoft/tui-test`.
 ## Requirements
 
 - Node.js 20 (not 25 - tui-test has native dependency issues)
-- Mock LLM server from `./framework/mock-server.ts`
+- Mock LLM server from `../../../tests/e2e/framework/mock-server.ts` (shared with web E2E tests)
 
 ## Running Tests
 
@@ -90,11 +90,14 @@ Override with `mockServer.setResponseForType(type, config)`.
 ## File Structure
 
 ```
-tests/e2e/
+tui/tests/e2e/
 ├── chat-flow.test.ts      # Happy path: send/receive messages
 ├── error-handling.test.ts # LLM error scenarios
 ├── framework/
-│   └── mock-server.ts     # Mock LLM server implementation
+│   └── mock-server.ts     # Re-export shim (see file for why)
 ├── types.ts               # TypeScript interfaces
 └── README.md              # This file
+
+tests/e2e/framework/       # Canonical mock server (used by both web and TUI)
+└── mock-server.ts
 ```
