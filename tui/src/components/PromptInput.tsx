@@ -1,62 +1,58 @@
-import { createSignal, Show } from "solid-js";
+import type { TextareaRenderable, KeyBinding } from "@opentui/core";
 import { useEi } from "../context/ei";
+import { useKeyboardNav } from "../context/keyboard";
+
+// Enter submits, Ctrl+J or Meta+Enter for newline
+const TEXTAREA_KEYBINDINGS: KeyBinding[] = [
+  { name: "return", action: "submit" },
+  { name: "return", meta: true, action: "newline" },
+  { name: "j", ctrl: true, action: "newline" },
+];
 
 export function PromptInput() {
-  const { sendMessage, activePersona, queueStatus } = useEi();
-  const [inputValue, setInputValue] = createSignal("");
+  const { sendMessage, activePersona } = useEi();
+  const { registerTextarea } = useKeyboardNav();
 
-  const handleSubmit = (value: string) => {
-    const trimmed = value.trim();
-    if (!trimmed || !activePersona()) return;
+  const handleSubmit = () => {
+    const text = textareaRef?.plainText?.trim();
+    if (!text || !activePersona()) return;
     
-    sendMessage(trimmed);
-    setInputValue("");
+    sendMessage(text);
+    textareaRef?.clear();
   };
 
   const getPlaceholder = () => {
     if (!activePersona()) return "Select a persona...";
-    return "Type your message here...";
+    return "Type your message... (Enter to send, Ctrl+J for newline)";
   };
 
-  const getStatusText = () => {
-    const status = queueStatus();
-    if (status.state === "busy") {
-      return `⏳ Processing (${status.pending_count} pending)`;
-    }
-    if (status.state === "paused") {
-      return "⏸ Paused";
-    }
-    return "";
-  };
+  let textareaRef: TextareaRenderable | undefined;
 
   return (
     <box 
-      height={4} 
+      flexShrink={0}
       border={["top"]}
       borderStyle="single" 
       backgroundColor="#0f3460"
-      flexDirection="column"
+      paddingLeft={1}
+      paddingRight={1}
+      paddingTop={0.5}
+      paddingBottom={0.5}
     >
-      <box paddingLeft={1} paddingRight={1} paddingTop={0.5} height={1}>
-        <input
-          focused={true}
-          value={inputValue()}
-          onInput={(val) => setInputValue(val)}
-          onSubmit={handleSubmit as any}
-          placeholder={getPlaceholder()}
-          textColor="#eee8d5"
-          backgroundColor="#0f3460"
-          width="100%"
-        />
-      </box>
-      
-      <Show when={getStatusText()}>
-        <box paddingLeft={1} paddingRight={1} height={1}>
-          <text fg="#b58900">
-            {getStatusText()}
-          </text>
-        </box>
-      </Show>
+      <textarea
+        ref={(r: TextareaRenderable) => {
+          textareaRef = r;
+          registerTextarea(r);
+        }}
+        focused={true}
+        onSubmit={handleSubmit}
+        placeholder={getPlaceholder()}
+        textColor="#eee8d5"
+        backgroundColor="#0f3460"
+        minHeight={1}
+        maxHeight={6}
+        keyBindings={TEXTAREA_KEYBINDINGS}
+      />
     </box>
   );
 }
