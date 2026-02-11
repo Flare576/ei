@@ -1,13 +1,15 @@
 import type { Checkpoint, StorageState } from "../../../src/core/types";
 import type { Storage } from "../../../src/storage/interface";
 import { join } from "path";
-import { mkdir } from "fs/promises";
+import { mkdir, rename, unlink } from "fs/promises";
 
 const AUTO_SAVES_FILE = "autosaves.json";
 const MANUAL_SAVE_PREFIX = "manual_";
 const MAX_AUTO_SAVES = 10;
 const MANUAL_SLOT_MIN = 10;
 const MANUAL_SLOT_MAX = 14;
+const LOCK_TIMEOUT_MS = 5000;
+const LOCK_RETRY_DELAY_MS = 50;
 
 interface ManualSaveEntry {
   name: string;
@@ -70,21 +72,24 @@ export class FileStorage implements Storage {
 
   async saveAutoCheckpoint(state: StorageState): Promise<void> {
     await this.ensureDataDir();
-    const autoSaves = await this.getAutoSavesArray();
-    autoSaves.push(state);
-    if (autoSaves.length > MAX_AUTO_SAVES) {
-      autoSaves.shift();
-    }
+    const filePath = join(this.dataPath, AUTO_SAVES_FILE);
 
-    try {
-      const filePath = join(this.dataPath, AUTO_SAVES_FILE);
-      await Bun.write(filePath, JSON.stringify(autoSaves, null, 2));
-    } catch (e) {
-      if (this.isQuotaError(e)) {
-        throw new Error("STORAGE_SAVE_FAILED: Disk quota exceeded");
+    await this.withLock(filePath, async () => {
+      const autoSaves = await this.getAutoSavesArray();
+      autoSaves.push(state);
+      if (autoSaves.length > MAX_AUTO_SAVES) {
+        autoSaves.shift();
       }
-      throw e;
-    }
+
+      try {
+        await this.atomicWrite(filePath, JSON.stringify(autoSaves, null, 2));
+      } catch (e) {
+        if (this.isQuotaError(e)) {
+          throw new Error("STORAGE_SAVE_FAILED: Disk quota exceeded");
+        }
+        throw e;
+      }
+    });
   }
 
   async saveManualCheckpoint(index: number, name: string, state: StorageState): Promise<void> {
@@ -96,14 +101,16 @@ export class FileStorage implements Storage {
     const entry: ManualSaveEntry = { name, state };
     const filePath = join(this.dataPath, `${MANUAL_SAVE_PREFIX}${index}.json`);
 
-    try {
-      await Bun.write(filePath, JSON.stringify(entry, null, 2));
-    } catch (e) {
-      if (this.isQuotaError(e)) {
-        throw new Error("STORAGE_SAVE_FAILED: Disk quota exceeded");
+    await this.withLock(filePath, async () => {
+      try {
+        await this.atomicWrite(filePath, JSON.stringify(entry, null, 2));
+      } catch (e) {
+        if (this.isQuotaError(e)) {
+          throw new Error("STORAGE_SAVE_FAILED: Disk quota exceeded");
+        }
+        throw e;
       }
-      throw e;
-    }
+    });
   }
 
   async deleteManualCheckpoint(index: number): Promise<boolean> {
@@ -116,7 +123,9 @@ export class FileStorage implements Storage {
     const existed = await file.exists();
 
     if (existed) {
-      await Bun.write(filePath, "");
+      await this.withLock(filePath, async () => {
+        await unlink(filePath);
+      });
     }
 
     return existed;
@@ -161,5 +170,71 @@ export class FileStorage implements Storage {
       e instanceof Error &&
       (e.message.includes("ENOSPC") || e.message.includes("quota"))
     );
+  }
+
+  private async atomicWrite(filePath: string, content: string): Promise<void> {
+    const tempPath = `${filePath}.tmp.${Date.now()}.${Math.random().toString(36).slice(2)}`;
+    try {
+      await Bun.write(tempPath, content);
+      await rename(tempPath, filePath);
+    } catch (e) {
+      try {
+        await unlink(tempPath);
+      } catch {}
+      throw e;
+    }
+  }
+
+  private getLockPath(filePath: string): string {
+    return `${filePath}.lock`;
+  }
+
+  private async acquireLock(filePath: string): Promise<boolean> {
+    const lockPath = this.getLockPath(filePath);
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < LOCK_TIMEOUT_MS) {
+      const lockFile = Bun.file(lockPath);
+      if (await lockFile.exists()) {
+        const lockContent = await lockFile.text();
+        const lockTime = parseInt(lockContent, 10);
+        if (!isNaN(lockTime) && Date.now() - lockTime > LOCK_TIMEOUT_MS) {
+          try {
+            await unlink(lockPath);
+          } catch {}
+        } else {
+          await new Promise((r) => setTimeout(r, LOCK_RETRY_DELAY_MS));
+          continue;
+        }
+      }
+
+      try {
+        await Bun.write(lockPath, Date.now().toString());
+        return true;
+      } catch {
+        await new Promise((r) => setTimeout(r, LOCK_RETRY_DELAY_MS));
+      }
+    }
+
+    return false;
+  }
+
+  private async releaseLock(filePath: string): Promise<void> {
+    const lockPath = this.getLockPath(filePath);
+    try {
+      await unlink(lockPath);
+    } catch {}
+  }
+
+  private async withLock<T>(filePath: string, fn: () => Promise<T>): Promise<T> {
+    const acquired = await this.acquireLock(filePath);
+    if (!acquired) {
+      throw new Error("STORAGE_LOCK_TIMEOUT: Could not acquire file lock");
+    }
+    try {
+      return await fn();
+    } finally {
+      await this.releaseLock(filePath);
+    }
   }
 }
