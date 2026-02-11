@@ -71,4 +71,39 @@ export function clearLog(): void {
   } catch {}
 }
 
+export function interceptConsole(): void {
+  const originalLog = console.log.bind(console);
+  const originalWarn = console.warn.bind(console);
+  const originalError = console.error.bind(console);
+  const originalDebug = console.debug.bind(console);
+  const originalInfo = console.info.bind(console);
+
+  const formatArgs = (args: unknown[]): string => {
+    return args.map(arg => 
+      typeof arg === "string" ? arg : JSON.stringify(arg)
+    ).join(" ");
+  };
+
+  console.log = (...args: unknown[]) => {
+    writeLogSync("info", `[console.log] ${formatArgs(args)}`);
+    originalLog(...args);
+  };
+  console.warn = (...args: unknown[]) => {
+    writeLogSync("warn", `[console.warn] ${formatArgs(args)}`);
+    originalWarn(...args);
+  };
+  console.error = (...args: unknown[]) => {
+    writeLogSync("error", `[console.error] ${formatArgs(args)}`);
+    originalError(...args);
+  };
+  console.debug = (...args: unknown[]) => {
+    writeLogSync("debug", `[console.debug] ${formatArgs(args)}`);
+    originalDebug(...args);
+  };
+  console.info = (...args: unknown[]) => {
+    writeLogSync("info", `[console.info] ${formatArgs(args)}`);
+    originalInfo(...args);
+  };
+}
+
 export default logger;

@@ -3,7 +3,7 @@ import { useEi } from "../context/ei";
 import { useKeyboardNav } from "../context/keyboard";
 
 export function StatusBar() {
-  const { activePersona, queueStatus } = useEi();
+  const { activePersona, queueStatus, notification } = useEi();
   const { focusedPanel } = useKeyboardNav();
 
   const getQueueIndicator = () => {
@@ -22,6 +22,14 @@ export function StatusBar() {
     return panel.charAt(0).toUpperCase() + panel.slice(1);
   };
 
+  const getNotificationColor = () => {
+    const n = notification();
+    if (!n) return "#586e75";
+    if (n.level === "error") return "#dc322f";
+    if (n.level === "warn") return "#b58900";
+    return "#2aa198";
+  };
+
   return (
     <box
       height={1}
@@ -31,11 +39,17 @@ export function StatusBar() {
       flexDirection="row"
     >
       <box flexGrow={1}>
-        <text fg="#586e75">
-          <Show when={activePersona()} fallback="No persona selected">
-            {activePersona()}
-          </Show>
-        </text>
+        <Show when={notification()} fallback={
+          <text fg="#586e75">
+            <Show when={activePersona()} fallback="No persona selected">
+              {activePersona()}
+            </Show>
+          </text>
+        }>
+          <text fg={getNotificationColor()}>
+            {notification()?.message}
+          </text>
+        </Show>
       </box>
 
       <text fg="#586e75" marginRight={2}>

@@ -10,7 +10,7 @@ import {
 import { createStore } from "solid-js/store";
 import { Processor } from "../../../src/core/processor.js";
 import { FileStorage } from "../storage/file.js";
-import { logger, clearLog } from "../util/logger.js";
+import { logger, clearLog, interceptConsole } from "../util/logger.js";
 import type {
   Ei_Interface,
   PersonaSummary,
@@ -24,6 +24,7 @@ interface EiStore {
   activePersona: string | null;
   messages: Message[];
   queueStatus: QueueStatus;
+  notification: { message: string; level: "error" | "warn" | "info" } | null;
 }
 
 interface EiContextValue {
@@ -31,10 +32,13 @@ interface EiContextValue {
   activePersona: () => string | null;
   messages: () => Message[];
   queueStatus: () => QueueStatus;
+  notification: () => { message: string; level: "error" | "warn" | "info" } | null;
   selectPersona: (name: string) => void;
   sendMessage: (content: string) => Promise<void>;
   refreshPersonas: () => Promise<void>;
   refreshMessages: () => Promise<void>;
+  abortCurrentOperation: () => Promise<void>;
+  resumeQueue: () => Promise<void>;
 }
 
 const EiContext = createContext<EiContextValue>();
@@ -46,9 +50,20 @@ export const EiProvider: ParentComponent = (props) => {
     activePersona: null,
     messages: [],
     queueStatus: { state: "idle", pending_count: 0 },
+    notification: null,
   });
 
   let processor: Processor | null = null;
+  let notificationTimer: Timer | null = null;
+
+  const showNotification = (message: string, level: "error" | "warn" | "info") => {
+    if (notificationTimer) clearTimeout(notificationTimer);
+    setStore("notification", { message, level });
+    notificationTimer = setTimeout(() => {
+      setStore("notification", null);
+      notificationTimer = null;
+    }, 5000);
+  };
 
   const refreshPersonas = async () => {
     if (!processor) return;
@@ -77,8 +92,21 @@ export const EiProvider: ParentComponent = (props) => {
     await processor.sendMessage(current, content);
   };
 
+  const abortCurrentOperation = async () => {
+    if (!processor) return;
+    logger.info("Aborting current LLM operation");
+    await processor.abortCurrentOperation();
+  };
+
+  const resumeQueue = async () => {
+    if (!processor) return;
+    logger.info("Resuming queue");
+    await processor.resumeQueue();
+  };
+
   async function bootstrap() {
     clearLog();
+    interceptConsole();
     logger.info("Ei TUI bootstrap starting");
     try {
       const storage = new FileStorage(Bun.env.EI_DATA_PATH);
@@ -95,12 +123,21 @@ export const EiProvider: ParentComponent = (props) => {
         },
         onQueueStateChanged: (state) => {
           logger.debug(`onQueueStateChanged called with state: ${state}`);
-          const pending = processor ? 0 : 0;
-          setStore("queueStatus", { state, pending_count: pending });
-          logger.debug(`store.queueStatus after setStore:`, store.queueStatus);
+          if (processor) {
+            processor.getQueueStatus().then((status) => {
+              // Use the state parameter directly - it's authoritative.
+              // getQueueStatus() checks queueProcessor.getState() which may not
+              // be updated yet when this callback fires.
+              setStore("queueStatus", { state, pending_count: status.pending_count });
+              logger.debug(`store.queueStatus after setStore:`, store.queueStatus);
+            });
+          } else {
+            setStore("queueStatus", { state, pending_count: 0 });
+          }
         },
         onError: (error) => {
           logger.error(`${error.code}: ${error.message}`);
+          showNotification(`${error.code}: ${error.message}`, "error");
         },
       };
 
@@ -141,10 +178,13 @@ export const EiProvider: ParentComponent = (props) => {
     activePersona: () => store.activePersona,
     messages: () => store.messages,
     queueStatus: () => store.queueStatus,
+    notification: () => store.notification,
     selectPersona,
     sendMessage,
     refreshPersonas,
     refreshMessages,
+    abortCurrentOperation,
+    resumeQueue,
   };
 
   return (
