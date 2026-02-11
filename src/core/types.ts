@@ -185,6 +185,9 @@ export interface HumanSettings {
   time_mode?: "24h" | "12h" | "local" | "utc";
   accounts?: ProviderAccount[];
   sync?: SyncCredentials;
+  // OpenCode integration (TUI-only)
+  opencode_integration?: boolean;
+  opencode_polling_interval_ms?: number;  // Default: 1800000 (30 min)
 }
 
 export interface CeremonyConfig {
@@ -209,6 +212,7 @@ export interface HumanEntity {
   last_seeded_trait?: string;
   last_seeded_topic?: string;
   last_seeded_person?: string;
+  last_opencode_sync?: string;
   ceremony_config?: CeremonyConfig;
 }
 
@@ -348,7 +352,7 @@ export interface Ei_Interface {
   onQuoteAdded?: () => void;
   onQuoteUpdated?: () => void;
   onQuoteRemoved?: () => void;
-  onQueueStateChanged?: (state: "idle" | "busy") => void;
+  onQueueStateChanged?: (state: "idle" | "busy" | "paused") => void;
   onError?: (error: EiError) => void;
   onCheckpointStart?: () => void;
   onCheckpointCreated?: (index?: number) => void;

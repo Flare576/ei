@@ -1,4 +1,6 @@
 export { OpenCodeReader } from "./reader.js";
+export { importOpenCodeSessions } from "./importer.js";
+export type { ImportResult, OpenCodeImporterOptions } from "./importer.js";
 export type {
   OpenCodeSession,
   OpenCodeSessionRaw,

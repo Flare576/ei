@@ -1,6 +1,6 @@
 # 0103: OpenCode Session Importer
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0102, 0109
 
 ## Summary
@@ -10,34 +10,34 @@ Integrate OpenCode session reading into the Ei processor loop, creating Topics f
 ## Acceptance Criteria
 
 ### Settings
-- [ ] `Human.settings.opencode_integration?: boolean` (default false)
-- [ ] `Human.settings.opencode_polling_interval_ms?: number` (default 1800000 = 30min)
-- [ ] `Human.last_opencode_sync?: string` (ISO timestamp)
+- [x] `Human.settings.opencode_integration?: boolean` (default false)
+- [x] `Human.settings.opencode_polling_interval_ms?: number` (default 1800000 = 30min)
+- [x] `Human.last_opencode_sync?: string` (ISO timestamp)
 
 ### Processor Integration
-- [ ] TUI-only check (skip on web - no local filesystem access)
-- [ ] Respects `opencode_integration` setting
-- [ ] Respects polling interval (skip if not enough time elapsed)
-- [ ] Updates `last_opencode_sync` after processing
+- [x] TUI-only check (skip on web - no local filesystem access)
+- [x] Respects `opencode_integration` setting
+- [x] Respects polling interval (skip if not enough time elapsed)
+- [x] Updates `last_opencode_sync` after processing
 
 ### Session → Topic Mapping
-- [ ] One OpenCode session = one Human.Topic
-- [ ] `topic.id` = session.id (for deduplication)
-- [ ] `topic.name` = session.title
-- [ ] `topic.description` = session summary (if available) or empty
-- [ ] `topic.persona_groups` = `["General", "Coding", "OpenCode"]`
-- [ ] `topic.learned_by` = first agent in session's message history
-- [ ] Creates topic if not exists, updates if session.title changed
+- [x] One OpenCode session = one Human.Topic
+- [x] `topic.id` = session.id (for deduplication)
+- [x] `topic.name` = session.title
+- [x] `topic.description` = session summary (if available) or empty
+- [x] `topic.persona_groups` = `["General", "Coding", "OpenCode"]`
+- [x] `topic.learned_by` = first agent in session's message history
+- [x] Creates topic if not exists, updates if session.title changed
 
 ### Message → Persona Mapping
-- [ ] Group messages by `message.agent` field
-- [ ] Create persona for each unique agent (via 0109)
-- [ ] Append messages to persona, sorted by timestamp globally
-- [ ] All sessions processed, THEN personas updated (single write per persona)
+- [x] Group messages by `message.agent` field
+- [x] Create persona for each unique agent (via 0109)
+- [x] Append messages to persona, sorted by timestamp globally
+- [x] All sessions processed, THEN personas updated (single write per persona)
 
 ### Post-Processing
-- [ ] Trigger Human.Topic extraction on new messages (existing pipeline)
-- [ ] Trigger Human.Person extraction on new messages (existing pipeline)
+- [x] Trigger Human.Topic extraction on new messages (existing pipeline)
+- [x] Trigger Human.Person extraction on new messages (existing pipeline)
 
 ## Notes
 

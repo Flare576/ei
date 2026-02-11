@@ -46,10 +46,12 @@ import {
 } from "./orchestrators/index.js";
 import { EI_WELCOME_MESSAGE, EI_PERSONA_DEFINITION } from "../templates/welcome.js";
 import { ContextStatus as ContextStatusEnum } from "./types.js";
+import { importOpenCodeSessions } from "../integrations/opencode/importer.js";
 
 const DEFAULT_LOOP_INTERVAL_MS = 100;
 const DEFAULT_AUTO_SAVE_INTERVAL_MS = 60000;
 const DEFAULT_CONTEXT_WINDOW_HOURS = 8;
+const DEFAULT_OPENCODE_POLLING_MS = 1800000;
 
 let processorInstanceCount = 0;
 
@@ -88,11 +90,20 @@ export class Processor {
   private autoSaveInterval = DEFAULT_AUTO_SAVE_INTERVAL_MS;
   private instanceId: number;
   private currentRequest: LLMRequest | null = null;
+  private isTUI = false;
+  private lastOpenCodeSync = 0;
 
   constructor(ei: Ei_Interface) {
     this.interface = ei;
     this.instanceId = ++processorInstanceCount;
     console.log(`[Processor ${this.instanceId}] CREATED`);
+    this.detectEnvironment();
+  }
+  
+  private detectEnvironment(): void {
+    this.isTUI = typeof process !== "undefined" && 
+                 typeof process.versions?.node !== "undefined" &&
+                 typeof window === "undefined";
   }
 
   async start(storage: Storage): Promise<void> {
@@ -213,7 +224,7 @@ export class Processor {
             this.handleResponse(response);
             const nextState = this.stateManager.queue_isPaused() ? "paused" : "idle";
             this.interface.onQueueStateChanged?.(nextState);
-          }, { 
+          }, {
             accounts: this.stateManager.getHuman().settings?.accounts,
             messageFetcher: (pName) => this.fetchMessagesForLLM(pName),
             rawMessageFetcher: (pName) => this.stateManager.messages_get(pName),
@@ -237,6 +248,11 @@ export class Processor {
     const DEFAULT_HEARTBEAT_DELAY_MS = 1800000; //5 * 60 * 1000;//
 
     const human = this.stateManager.getHuman();
+    
+    if (this.isTUI && human.settings?.opencode_integration) {
+      await this.checkAndSyncOpenCode(human, now);
+    }
+    
     if (human.ceremony_config && shouldRunCeremony(human.ceremony_config)) {
       // Auto-backup to remote before ceremony (if configured)
       if (human.settings?.sync && remoteSync.isConfigured()) {
@@ -266,6 +282,43 @@ export class Processor {
           this.queueHeartbeatCheck(persona.aliases?.[0] ?? "Unknown");
         }
       }
+    }
+  }
+
+  private async checkAndSyncOpenCode(human: HumanEntity, now: number): Promise<void> {
+    const pollingInterval = human.settings?.opencode_polling_interval_ms ?? DEFAULT_OPENCODE_POLLING_MS;
+    const lastSync = human.last_opencode_sync
+      ? new Date(human.last_opencode_sync).getTime()
+      : 0;
+    const timeSinceSync = now - lastSync;
+
+    if (timeSinceSync < pollingInterval && this.lastOpenCodeSync > 0) {
+      return;
+    }
+
+    this.lastOpenCodeSync = now;
+    const syncTimestamp = new Date().toISOString();
+    this.stateManager.setHuman({
+      ...this.stateManager.getHuman(),
+      last_opencode_sync: syncTimestamp,
+    });
+
+    const since = lastSync > 0 ? new Date(lastSync) : new Date(0);
+
+    try {
+      const result = await importOpenCodeSessions(since, {
+        stateManager: this.stateManager,
+        interface: this.interface,
+      });
+
+      if (result.sessionsProcessed > 0) {
+        console.log(
+          `[Processor] OpenCode sync complete: ${result.sessionsProcessed} sessions, ` +
+          `${result.topicsCreated} topics created, ${result.messagesImported} messages imported`
+        );
+      }
+    } catch (err) {
+      console.warn(`[Processor] OpenCode sync failed:`, err);
     }
   }
 

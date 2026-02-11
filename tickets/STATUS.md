@@ -1,18 +1,18 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-02-11 (0109 DONE; OpenCode Agent Persona Bootstrap implemented)
+> Last updated: 2026-02-11 (0103 DONE; OpenCode Session Importer implemented)
 
 ## Overview
 
 | Status | Count |
 |--------|-------|
-| PENDING | 15 |
+| PENDING | 14 |
 | IN_PROGRESS | 0 |
 | QA | 1 |
-| DONE | 93 |
+| DONE | 94 |
 | BLOCKED | 0 |
 
-> 114 total tickets (93 done + 15 pending + 3 backlog + 0 in_progress + 1 QA).
+> 114 total tickets (94 done + 14 pending + 3 backlog + 0 in_progress + 1 QA).
 
 ---
 
@@ -58,9 +58,7 @@
 
 | Ticket | Title | Depends On |
 |--------|-------|------------|
-| 0100 | TUI Frontend Skeleton | 0006, 0007 |
 | 0101 | FileStorage Implementation | 0003 |
-| 0103 | OpenCode Session Importer | 0102, 0109 |
 | 0104 | Ei Context Exporter | 0101 |
 | 0105 | CLAUDE.md Context Injector | 0104 |
 | 0106 | RemoteStorage Implementation | 0003, 0096 |
@@ -184,6 +182,7 @@
 | 0133 | TUI Polish & Robustness | 2026-02-10 |
 | 0102 | OpenCode Session Reader | 2026-02-11 |
 | 0109 | OpenCode Agent Persona Bootstrap | 2026-02-11 |
+| 0103 | OpenCode Session Importer | 2026-02-11 |
 
 ---
 
