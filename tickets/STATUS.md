@@ -1,6 +1,6 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-02-10 (0100, 0133 DONE)
+> Last updated: 2026-02-11 (0102, 0103, 0109 refined; plan created)
 
 ## Overview
 
@@ -61,14 +61,14 @@
 | 0100 | TUI Frontend Skeleton | 0006, 0007 |
 | 0101 | FileStorage Implementation | 0003 |
 | 0102 | OpenCode Session Reader | 0101 |
-| 0103 | OpenCode Session Importer | 0102, 0060-0065 |
+| 0109 | OpenCode Agent Persona Bootstrap | 0102 |
+| 0103 | OpenCode Session Importer | 0102, 0109 |
 | 0104 | Ei Context Exporter | 0101 |
 | 0105 | CLAUDE.md Context Injector | 0104 |
 | 0106 | RemoteStorage Implementation | 0003, 0096 |
 | 0128 | Persona GUIDs | None |
 | 0107 | Sync Orchestrator | 0106 |
-| 0108 | OpenCode File Watcher | 0102, 0103 |
-| 0109 | Sisyphus Persona Bootstrap | 0103 |
+| 0108 | OpenCode File Watcher | 0103 |
 | 0115 | Fact Validation TUI | 0113, 0100 |
 | 0133 | TUI Polish & Robustness | 0100, 0101 |
 | 0134 | Single Instance Enforcement | 0101 |
