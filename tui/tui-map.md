@@ -121,7 +121,9 @@ Processor Calls
 - restoreCheckpoint
     * /load [1...15 or "Name"] - error when not found or invalid number
 - exportState
-    * /export (filePath) - default to $EI_DATA_DIR/exports
+    * /export (filePath) - default to $EI_DATA_DIR/exports/{datetime}.jsonc
+- importState*
+    * /import (filePath) - default to $EI_DATA_DIR/exports/{datetime}.jsonc
 - getStorageState
     * /settings
 - restoreFromState
@@ -132,6 +134,8 @@ Processor Calls
 - resumeQueue
     * [Escape]
 ```
+
+> * `importState` exists in processor but isn't in CONTRACTS.md
 
 # Other slash commands
 

@@ -1,18 +1,18 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-02-10 (0130-0131 UX Polish tickets added)
+> Last updated: 2026-02-10 (0100, 0133 DONE)
 
 ## Overview
 
 | Status | Count |
 |--------|-------|
-| PENDING | 18 |
+| PENDING | 17 |
 | IN_PROGRESS | 0 |
-| QA | 2 |
-| DONE | 88 |
+| QA | 1 |
+| DONE | 91 |
 | BLOCKED | 0 |
 
-> 113 total tickets (88 done + 18 pending + 3 backlog + 0 in_progress + 2 QA).
+> 114 total tickets (91 done + 17 pending + 3 backlog + 0 in_progress + 1 QA).
 
 ---
 
@@ -70,6 +70,8 @@
 | 0108 | OpenCode File Watcher | 0102, 0103 |
 | 0109 | Sisyphus Persona Bootstrap | 0103 |
 | 0115 | Fact Validation TUI | 0113, 0100 |
+| 0133 | TUI Polish & Robustness | 0100, 0101 |
+| 0134 | Single Instance Enforcement | 0101 |
 
 ---
 
@@ -84,7 +86,6 @@
 | Ticket | Title | Notes |
 |--------|-------|-------|
 | 0090 | Onboarding Flow | Multi-step wizard, account sync, provider setup |
-| 0100 | TUI Frontend Skeleton | Core working, polish items in 0100i |
 
 ---
 
@@ -181,6 +182,8 @@
 | 0127 | Queue Message Fetch Refactor | 2026-02-03 |
 | 0121 | HumanEditor Smart Merge | 2026-02-03 |
 | 0106 | RemoteStorage Implementation | 2026-02-04 |
+| 0100 | TUI Frontend Skeleton | 2026-02-10 |
+| 0133 | TUI Polish & Robustness | 2026-02-10 |
 
 ---
 

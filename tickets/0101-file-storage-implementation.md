@@ -1,6 +1,6 @@
 # 0101: FileStorage Implementation
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0003
 
 ## Summary
@@ -9,13 +9,20 @@ Implement the FileStorage backend for TUI mode, writing to EI_DATA_PATH on the l
 
 ## Acceptance Criteria
 
-- [ ] Implements Storage interface from CONTRACTS.md
-- [ ] Reads/writes to `$EI_DATA_PATH` (default: `~/.ei/`)
-- [ ] Same checkpoint system as LocalStorage (slots 0-9 auto, 10-14 manual)
-- [ ] Atomic writes (write to temp, then rename)
-- [ ] File locking for concurrent access safety
-- [ ] JSON format, human-readable when needed
-- [ ] Migration path from LocalStorage export
+- [x] Implements Storage interface from CONTRACTS.md
+- [x] Reads/writes to `$EI_DATA_PATH` (default: `~/.local/share/ei/` per XDG spec)
+- [x] Same checkpoint system as LocalStorage (slots 0-9 auto, 10-14 manual)
+- [x] JSON format, human-readable when needed
+- [x] Handles disk quota errors gracefully
+
+### Moved to 0133
+
+- Atomic writes (write to temp, then rename)
+- File locking for concurrent access safety
+
+### Out of Scope
+
+- Migration path from LocalStorage export (web → TUI sync handled by 0106/0107)
 
 ## Notes
 

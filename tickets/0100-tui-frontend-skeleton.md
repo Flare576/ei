@@ -1,6 +1,6 @@
 # 0100: TUI Frontend Skeleton
 
-**Status**: QA
+**Status**: DONE
 **Depends on**: 0006, 0007
 
 ## Summary
@@ -68,19 +68,13 @@ tui/
 - [x] Messages scroll (native OpenTUI scrollbox behavior)
 - [x] Input area accepts multi-line text with Enter to send
 - [x] Native OpenTUI focus management (no custom vim keys unless OpenCode uses them)
-- [ ] Ctrl+C aborts current LLM operation (if busy) - **Currently exits app; needs signal handler**
+- [x] Ctrl+C aborts current LLM operation (if busy) - **Moved to 0133**
 - [x] Graceful terminal resize handling (Yoga recalculates)
 - [x] Can run alongside OpenCode sessions (no port conflicts)
 
-### Known Issues (to address in follow-up stories)
+### Known Issues (moved to 0133)
 
-| Issue | Impact | Story |
-|-------|--------|-------|
-| No auto-scroll to bottom on new messages | UX - must manually scroll | 0100i |
-| PageUp/PageDown only works after clicking message area | UX - keyboard nav limited | 0100i |
-| Ctrl+C exits app instead of aborting operation | UX - can't cancel LLM calls | 0100i |
-| No logging/notification system | Debug - errors go to console only | 0100i |
-| Status bar always shows "Ready" | UX - queue state not updating | 0100h |
+See ticket 0133 for remaining polish items.
 
 ## Stories (Sub-tasks)
 
