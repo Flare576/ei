@@ -1,18 +1,18 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-02-11 (0102, 0103, 0109 refined; plan created)
+> Last updated: 2026-02-11 (0102 DONE; OpenCode Session Reader implemented)
 
 ## Overview
 
 | Status | Count |
 |--------|-------|
-| PENDING | 17 |
+| PENDING | 16 |
 | IN_PROGRESS | 0 |
 | QA | 1 |
-| DONE | 91 |
+| DONE | 92 |
 | BLOCKED | 0 |
 
-> 114 total tickets (91 done + 17 pending + 3 backlog + 0 in_progress + 1 QA).
+> 114 total tickets (92 done + 16 pending + 3 backlog + 0 in_progress + 1 QA).
 
 ---
 
@@ -60,7 +60,6 @@
 |--------|-------|------------|
 | 0100 | TUI Frontend Skeleton | 0006, 0007 |
 | 0101 | FileStorage Implementation | 0003 |
-| 0102 | OpenCode Session Reader | 0101 |
 | 0109 | OpenCode Agent Persona Bootstrap | 0102 |
 | 0103 | OpenCode Session Importer | 0102, 0109 |
 | 0104 | Ei Context Exporter | 0101 |
@@ -184,6 +183,7 @@
 | 0106 | RemoteStorage Implementation | 2026-02-04 |
 | 0100 | TUI Frontend Skeleton | 2026-02-10 |
 | 0133 | TUI Polish & Robustness | 2026-02-10 |
+| 0102 | OpenCode Session Reader | 2026-02-11 |
 
 ---
 

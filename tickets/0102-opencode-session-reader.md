@@ -1,6 +1,6 @@
 # 0102: OpenCode Session Reader
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0101
 
 ## Summary
@@ -9,14 +9,14 @@ Create a module that reads OpenCode session history from `~/.local/share/opencod
 
 ## Acceptance Criteria
 
-- [ ] Reads session metadata from `storage/session/{project_hash}/ses_xxx.json`
-- [ ] Reads message metadata from `storage/message/ses_xxx/msg_xxx.json`
-- [ ] Reads message content from `storage/part/msg_xxx/prt_xxx.json`
-- [ ] Filters parts: KEEP `type="text" && !synthetic`, SKIP everything else
-- [ ] Returns sessions updated since a given timestamp
-- [ ] Transforms to Ei Message format with agent attribution
-- [ ] Extracts agent info (name, description) from OpenCode Agent config
-- [ ] Handles large sessions gracefully (streaming/pagination)
+- [x] Reads session metadata from `storage/session/{project_hash}/ses_xxx.json`
+- [x] Reads message metadata from `storage/message/ses_xxx/msg_xxx.json`
+- [x] Reads message content from `storage/part/msg_xxx/prt_xxx.json`
+- [x] Filters parts: KEEP `type="text" && !synthetic`, SKIP everything else
+- [x] Returns sessions updated since a given timestamp
+- [x] Transforms to Ei Message format with agent attribution
+- [x] Extracts agent info (name, description) from OpenCode Agent config
+- [x] Handles large sessions gracefully (streaming/pagination)
 
 ## Notes
 
