@@ -1,5 +1,5 @@
 import { For, Show } from "solid-js";
-import { TextAttributes } from "@opentui/core";
+import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core";
 import { useEi } from "../context/ei.js";
 import { useKeyboardNav } from "../context/keyboard.js";
 
@@ -12,9 +12,13 @@ function formatTime(timestamp: string): string {
 
 export function MessageList() {
   const { messages, activePersona } = useEi();
-  const { focusedPanel } = useKeyboardNav();
+  const { focusedPanel, registerMessageScroll } = useKeyboardNav();
 
   const isFocused = () => focusedPanel() === "messages";
+
+  const handleScrollboxRef = (scrollbox: ScrollBoxRenderable) => {
+    registerMessageScroll(scrollbox);
+  };
 
   return (
     <box 
@@ -24,6 +28,7 @@ export function MessageList() {
       borderStyle="single"
     >
       <scrollbox
+        ref={handleScrollboxRef}
         flexGrow={1}
         padding={1}
         backgroundColor="#0f1419"

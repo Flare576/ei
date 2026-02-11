@@ -201,7 +201,6 @@ export class Processor {
         const request = this.stateManager.queue_peekHighest();
         if (request) {
           console.log(`[Processor ${this.instanceId}] processing request: ${request.next_step}`);
-          this.interface.onQueueStateChanged?.("busy");
           this.currentRequest = request;
 
           const personaName = request.data.personaName as string | undefined;
@@ -212,12 +211,15 @@ export class Processor {
           this.queueProcessor.start(request, (response) => {
             this.currentRequest = null;
             this.handleResponse(response);
-            this.interface.onQueueStateChanged?.("idle");
+            const nextState = this.stateManager.queue_isPaused() ? "paused" : "idle";
+            this.interface.onQueueStateChanged?.(nextState);
           }, { 
             accounts: this.stateManager.getHuman().settings?.accounts,
             messageFetcher: (pName) => this.fetchMessagesForLLM(pName),
             rawMessageFetcher: (pName) => this.stateManager.messages_get(pName),
           });
+
+          this.interface.onQueueStateChanged?.("busy");
         }
       }
 
@@ -955,8 +957,8 @@ export class Processor {
   }
 
   async abortCurrentOperation(): Promise<void> {
-    this.queueProcessor.abort();
     this.stateManager.queue_pause();
+    this.queueProcessor.abort();
   }
 
   async resumeQueue(): Promise<void> {

@@ -2,6 +2,6 @@ import { render } from "@opentui/solid";
 import { App } from "./app";
 
 render(App, {
-  exitOnCtrlC: true,
+  exitOnCtrlC: false,
   targetFps: 30,
 });
