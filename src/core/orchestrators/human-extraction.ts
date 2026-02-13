@@ -13,6 +13,7 @@ import {
   type PersonScanCandidate,
   type ItemMatchResult,
 } from "../../prompts/human/index.js";
+import { chunkExtractionContext } from "./extraction-chunker.js";
 
 type ScanCandidate = FactScanCandidate | TraitScanCandidate | TopicScanCandidate | PersonScanCandidate;
 
@@ -27,88 +28,120 @@ function getAnalyzeFromTimestamp(context: ExtractionContext): string | null {
   return context.messages_analyze[0].timestamp;
 }
 
-export function queueFactScan(context: ExtractionContext, state: StateManager): void {
-  const prompt = buildHumanFactScanPrompt({
-    persona_name: context.personaName,
-    messages_context: context.messages_context,
-    messages_analyze: context.messages_analyze,
-  });
+export function queueFactScan(context: ExtractionContext, state: StateManager): number {
+  const { chunks } = chunkExtractionContext(context);
+  
+  if (chunks.length === 0) return 0;
+  
+  for (const chunk of chunks) {
+    const prompt = buildHumanFactScanPrompt({
+      persona_name: chunk.personaName,
+      messages_context: chunk.messages_context,
+      messages_analyze: chunk.messages_analyze,
+    });
 
-  state.queue_enqueue({
-    type: LLMRequestType.JSON,
-    priority: LLMPriority.Normal,
-    system: prompt.system,
-    user: prompt.user,
-    next_step: LLMNextStep.HandleHumanFactScan,
-    data: {
-      personaName: context.personaName,
-      analyze_from_timestamp: getAnalyzeFromTimestamp(context),
-    },
-  });
+    state.queue_enqueue({
+      type: LLMRequestType.JSON,
+      priority: LLMPriority.Normal,
+      system: prompt.system,
+      user: prompt.user,
+      next_step: LLMNextStep.HandleHumanFactScan,
+      data: {
+        personaName: chunk.personaName,
+        analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
+      },
+    });
+  }
+  
+  return chunks.length;
 }
 
-export function queueTraitScan(context: ExtractionContext, state: StateManager): void {
-  const prompt = buildHumanTraitScanPrompt({
-    persona_name: context.personaName,
-    messages_context: context.messages_context,
-    messages_analyze: context.messages_analyze,
-  });
+export function queueTraitScan(context: ExtractionContext, state: StateManager): number {
+  const { chunks } = chunkExtractionContext(context);
+  
+  if (chunks.length === 0) return 0;
+  
+  for (const chunk of chunks) {
+    const prompt = buildHumanTraitScanPrompt({
+      persona_name: chunk.personaName,
+      messages_context: chunk.messages_context,
+      messages_analyze: chunk.messages_analyze,
+    });
 
-  state.queue_enqueue({
-    type: LLMRequestType.JSON,
-    priority: LLMPriority.Normal,
-    system: prompt.system,
-    user: prompt.user,
-    next_step: LLMNextStep.HandleHumanTraitScan,
-    data: {
-      personaName: context.personaName,
-      analyze_from_timestamp: getAnalyzeFromTimestamp(context),
-    },
-  });
+    state.queue_enqueue({
+      type: LLMRequestType.JSON,
+      priority: LLMPriority.Normal,
+      system: prompt.system,
+      user: prompt.user,
+      next_step: LLMNextStep.HandleHumanTraitScan,
+      data: {
+        personaName: chunk.personaName,
+        analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
+      },
+    });
+  }
+  
+  return chunks.length;
 }
 
-export function queueTopicScan(context: ExtractionContext, state: StateManager): void {
-  const prompt = buildHumanTopicScanPrompt({
-    persona_name: context.personaName,
-    messages_context: context.messages_context,
-    messages_analyze: context.messages_analyze,
-  });
+export function queueTopicScan(context: ExtractionContext, state: StateManager): number {
+  const { chunks } = chunkExtractionContext(context);
+  
+  if (chunks.length === 0) return 0;
+  
+  for (const chunk of chunks) {
+    const prompt = buildHumanTopicScanPrompt({
+      persona_name: chunk.personaName,
+      messages_context: chunk.messages_context,
+      messages_analyze: chunk.messages_analyze,
+    });
 
-  state.queue_enqueue({
-    type: LLMRequestType.JSON,
-    priority: LLMPriority.Low,
-    system: prompt.system,
-    user: prompt.user,
-    next_step: LLMNextStep.HandleHumanTopicScan,
-    data: {
-      personaName: context.personaName,
-      analyze_from_timestamp: getAnalyzeFromTimestamp(context),
-    },
-  });
+    state.queue_enqueue({
+      type: LLMRequestType.JSON,
+      priority: LLMPriority.Low,
+      system: prompt.system,
+      user: prompt.user,
+      next_step: LLMNextStep.HandleHumanTopicScan,
+      data: {
+        personaName: chunk.personaName,
+        analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
+      },
+    });
+  }
+  
+  return chunks.length;
 }
 
-export function queuePersonScan(context: ExtractionContext, state: StateManager): void {
+export function queuePersonScan(context: ExtractionContext, state: StateManager): number {
+  const { chunks } = chunkExtractionContext(context);
+  
+  if (chunks.length === 0) return 0;
+  
   const personas = state.persona_getAll();
   const knownPersonaNames = personas.flatMap(p => p.aliases ?? []);
 
-  const prompt = buildHumanPersonScanPrompt({
-    persona_name: context.personaName,
-    messages_context: context.messages_context,
-    messages_analyze: context.messages_analyze,
-    known_persona_names: knownPersonaNames,
-  });
+  for (const chunk of chunks) {
+    const prompt = buildHumanPersonScanPrompt({
+      persona_name: chunk.personaName,
+      messages_context: chunk.messages_context,
+      messages_analyze: chunk.messages_analyze,
+      known_persona_names: knownPersonaNames,
+    });
 
-  state.queue_enqueue({
-    type: LLMRequestType.JSON,
-    priority: LLMPriority.Normal,
-    system: prompt.system,
-    user: prompt.user,
-    next_step: LLMNextStep.HandleHumanPersonScan,
-    data: {
-      personaName: context.personaName,
-      analyze_from_timestamp: getAnalyzeFromTimestamp(context),
-    },
-  });
+    state.queue_enqueue({
+      type: LLMRequestType.JSON,
+      priority: LLMPriority.Normal,
+      system: prompt.system,
+      user: prompt.user,
+      next_step: LLMNextStep.HandleHumanPersonScan,
+      data: {
+        personaName: chunk.personaName,
+        analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
+      },
+    });
+  }
+  
+  return chunks.length;
 }
 
 export function queueAllScans(context: ExtractionContext, state: StateManager): void {
@@ -116,6 +149,56 @@ export function queueAllScans(context: ExtractionContext, state: StateManager): 
   queueTraitScan(context, state);
   queuePersonScan(context, state);
   queueTopicScan(context, state);
+}
+
+/**
+ * Queue a direct Topic Update, bypassing scan/match.
+ * 
+ * Use this when we KNOW the topic already exists (e.g., OpenCode sessions
+ * where each session IS a topic). This avoids the queue explosion from
+ * scan → match → update pipeline.
+ * 
+ * @param topic - The known Topic to update
+ * @param context - Messages to analyze for this topic
+ * @param state - StateManager for queue operations
+ * @returns Number of chunks queued
+ */
+export function queueDirectTopicUpdate(
+  topic: import("../types.js").Topic,
+  context: ExtractionContext,
+  state: StateManager
+): number {
+  const { chunks } = chunkExtractionContext(context);
+
+  if (chunks.length === 0) return 0;
+
+  for (const chunk of chunks) {
+    const prompt = buildHumanItemUpdatePrompt({
+      data_type: "topic",
+      existing_item: topic,
+      messages_context: chunk.messages_context,
+      messages_analyze: chunk.messages_analyze,
+      persona_name: chunk.personaName,
+    });
+
+    state.queue_enqueue({
+      type: LLMRequestType.JSON,
+      priority: LLMPriority.Low,
+      system: prompt.system,
+      user: prompt.user,
+      next_step: LLMNextStep.HandleHumanItemUpdate,
+      data: {
+        personaName: context.personaName,
+        candidateType: "topic",
+        matchedType: "topic",
+        isNewItem: false,
+        existingItemId: topic.id,
+        analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
+      },
+    });
+  }
+
+  return chunks.length;
 }
 
 function truncateDescription(description: string, maxLength: number = 255): string {
@@ -224,7 +307,7 @@ export function queueItemUpdate(
   matchResult: ItemMatchResult,
   context: ExtractionContext & { itemName: string; itemValue: string; itemCategory?: string },
   state: StateManager
-): void {
+): number {
   const human = state.getHuman();
   const matchedGuid = matchResult.matched_guid;
   const isNewItem = matchedGuid === null;
@@ -252,30 +335,38 @@ export function queueItemUpdate(
     }
   }
 
-  const prompt = buildHumanItemUpdatePrompt({
-    data_type: candidateType,
-    existing_item: existingItem,
-    messages_context: context.messages_context,
-    messages_analyze: context.messages_analyze,
-    persona_name: context.personaName,
-    new_item_name: isNewItem ? context.itemName : undefined,
-    new_item_value: isNewItem ? context.itemValue : undefined,
-  });
+  const { chunks } = chunkExtractionContext(context);
 
-  state.queue_enqueue({
-    type: LLMRequestType.JSON,
-    priority: LLMPriority.Low,
-    system: prompt.system,
-    user: prompt.user,
-    next_step: LLMNextStep.HandleHumanItemUpdate,
-    data: {
-      personaName: context.personaName,
-      candidateType,
-      matchedType,
-      isNewItem,
-      existingItemId: existingItem?.id,
-      itemCategory: context.itemCategory,
-      analyze_from_timestamp: getAnalyzeFromTimestamp(context),
-    },
-  });
+  if (chunks.length === 0) return 0;
+
+  for (const chunk of chunks) {
+    const prompt = buildHumanItemUpdatePrompt({
+      data_type: candidateType,
+      existing_item: existingItem,
+      messages_context: chunk.messages_context,
+      messages_analyze: chunk.messages_analyze,
+      persona_name: chunk.personaName,
+      new_item_name: isNewItem ? context.itemName : undefined,
+      new_item_value: isNewItem ? context.itemValue : undefined,
+    });
+
+    state.queue_enqueue({
+      type: LLMRequestType.JSON,
+      priority: LLMPriority.Low,
+      system: prompt.system,
+      user: prompt.user,
+      next_step: LLMNextStep.HandleHumanItemUpdate,
+      data: {
+        personaName: context.personaName,
+        candidateType,
+        matchedType,
+        isNewItem,
+        existingItemId: existingItem?.id,
+        itemCategory: context.itemCategory,
+        analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
+      },
+    });
+  }
+
+  return chunks.length;
 }
