@@ -8,6 +8,7 @@ export {
   queueItemMatch,
   queueItemUpdate,
   type ExtractionContext,
+  type ExtractionOptions,
 } from "./human-extraction.js";
 export { 
   shouldRunCeremony, 

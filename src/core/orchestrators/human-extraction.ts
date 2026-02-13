@@ -21,6 +21,11 @@ export interface ExtractionContext {
   personaName: string;
   messages_context: Message[];
   messages_analyze: Message[];
+  include_quotes?: boolean;
+}
+
+export interface ExtractionOptions {
+  include_quotes?: boolean;
 }
 
 function getAnalyzeFromTimestamp(context: ExtractionContext): string | null {
@@ -28,7 +33,7 @@ function getAnalyzeFromTimestamp(context: ExtractionContext): string | null {
   return context.messages_analyze[0].timestamp;
 }
 
-export function queueFactScan(context: ExtractionContext, state: StateManager): number {
+export function queueFactScan(context: ExtractionContext, state: StateManager, options?: ExtractionOptions): number {
   const { chunks } = chunkExtractionContext(context);
   
   if (chunks.length === 0) return 0;
@@ -49,6 +54,7 @@ export function queueFactScan(context: ExtractionContext, state: StateManager): 
       data: {
         personaName: chunk.personaName,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
+        include_quotes: options?.include_quotes,
       },
     });
   }
@@ -56,7 +62,7 @@ export function queueFactScan(context: ExtractionContext, state: StateManager): 
   return chunks.length;
 }
 
-export function queueTraitScan(context: ExtractionContext, state: StateManager): number {
+export function queueTraitScan(context: ExtractionContext, state: StateManager, options?: ExtractionOptions): number {
   const { chunks } = chunkExtractionContext(context);
   
   if (chunks.length === 0) return 0;
@@ -77,6 +83,7 @@ export function queueTraitScan(context: ExtractionContext, state: StateManager):
       data: {
         personaName: chunk.personaName,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
+        include_quotes: options?.include_quotes,
       },
     });
   }
@@ -84,7 +91,7 @@ export function queueTraitScan(context: ExtractionContext, state: StateManager):
   return chunks.length;
 }
 
-export function queueTopicScan(context: ExtractionContext, state: StateManager): number {
+export function queueTopicScan(context: ExtractionContext, state: StateManager, options?: ExtractionOptions): number {
   const { chunks } = chunkExtractionContext(context);
   
   if (chunks.length === 0) return 0;
@@ -105,6 +112,7 @@ export function queueTopicScan(context: ExtractionContext, state: StateManager):
       data: {
         personaName: chunk.personaName,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
+        include_quotes: options?.include_quotes,
       },
     });
   }
@@ -112,7 +120,7 @@ export function queueTopicScan(context: ExtractionContext, state: StateManager):
   return chunks.length;
 }
 
-export function queuePersonScan(context: ExtractionContext, state: StateManager): number {
+export function queuePersonScan(context: ExtractionContext, state: StateManager, options?: ExtractionOptions): number {
   const { chunks } = chunkExtractionContext(context);
   
   if (chunks.length === 0) return 0;
@@ -137,6 +145,7 @@ export function queuePersonScan(context: ExtractionContext, state: StateManager)
       data: {
         personaName: chunk.personaName,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
+        include_quotes: options?.include_quotes,
       },
     });
   }
@@ -144,11 +153,11 @@ export function queuePersonScan(context: ExtractionContext, state: StateManager)
   return chunks.length;
 }
 
-export function queueAllScans(context: ExtractionContext, state: StateManager): void {
-  queueFactScan(context, state);
-  queueTraitScan(context, state);
-  queuePersonScan(context, state);
-  queueTopicScan(context, state);
+export function queueAllScans(context: ExtractionContext, state: StateManager, options?: ExtractionOptions): void {
+  queueFactScan(context, state, options);
+  queueTraitScan(context, state, options);
+  queuePersonScan(context, state, options);
+  queueTopicScan(context, state, options);
 }
 
 /**
@@ -298,6 +307,7 @@ export function queueItemMatch(
       itemName,
       itemValue,
       analyze_from_timestamp: getAnalyzeFromTimestamp(context),
+      include_quotes: context.include_quotes,
     },
   });
 }
@@ -348,6 +358,7 @@ export function queueItemUpdate(
       persona_name: chunk.personaName,
       new_item_name: isNewItem ? context.itemName : undefined,
       new_item_value: isNewItem ? context.itemValue : undefined,
+      include_quotes: context.include_quotes,
     });
 
     state.queue_enqueue({

@@ -174,6 +174,7 @@ You are CREATING a new ${typeLabel} from scratch based on what was discovered:
 
 Return all relevant fields for this ${typeLabel} based on what you find in the conversation.`;
 
+  const includeQuotes = data.include_quotes !== false;
   const jsonTemplateFields = [
     '    "name": "User\'s Name",',
     '    "description": "This is a story of a lovely lady...",',
@@ -181,7 +182,7 @@ Return all relevant fields for this ${typeLabel} based on what you find in the c
     data.data_type === "trait" ? ',\n    "strength": 0.5' : '',
     data.data_type === "person" ? ',\n    "relationship": "Mother-In-Law|Son|Coworker|etc.",\n    "exposure_desired": 0.4,\n    "exposure_impact": "high|medium|low|none"' : '',
     data.data_type === "topic" ? ',\n    "category": "Interest|Goal|Dream|Conflict|Concern|Fear|Hope|Plan|Project",\n    "exposure_desired": 0.4,\n    "exposure_impact": "high|medium|low|none"' : '',
-    ',\n    "quotes": [\n      {\n        "text": "exact phrase from message",\n        "reason": "why this matters"\n      }\n    ]'
+    includeQuotes ? ',\n    "quotes": [\n      {\n        "text": "exact phrase from message",\n        "reason": "why this matters"\n      }\n    ]' : ''
   ].filter(Boolean).join('');
 
   const system = `# Task
@@ -215,7 +216,7 @@ Scale of -1.0 to 1.0:
 
 Do not make micro-adjustments. Close enough is OK for this field.
 ${strengthSection}${relationshipSection}${categorySection}${exposureSection}
-
+${includeQuotes ? `
 ## Quotes
 
 In addition to updating the ${typeLabel}, identify any **memorable, funny, important, or stand-out phrases** from the Most Recent Messages that relate to this ${typeLabel}.
@@ -237,7 +238,7 @@ Return them in the \`quotes\` array:
 \`\`\`
 
 **CRITICAL**: Return the EXACT text as it appears in the message. We will verify it.
-
+` : ''}
 # Current Details of ${typeLabel}
 
 ${currentDetailsSection}

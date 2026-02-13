@@ -548,6 +548,7 @@ function handleHumanItemMatch(response: LLMResponse, state: StateManager): void 
   const itemValue = response.request.data.itemValue as string;
   const personaName = response.request.data.personaName as string;
   const analyzeFrom = response.request.data.analyze_from_timestamp as string | null;
+  const includeQuotes = response.request.data.include_quotes as boolean | undefined;
   
   const allMessages = state.messages_get(personaName);
   const { messages_context, messages_analyze } = splitMessagesByTimestamp(allMessages, analyzeFrom);
@@ -568,6 +569,7 @@ function handleHumanItemMatch(response: LLMResponse, state: StateManager): void 
     itemName,
     itemValue,
     itemCategory: candidateType === "topic" ? itemValue : undefined,
+    include_quotes: includeQuotes,
   };
 
   queueItemUpdate(candidateType, result, context, state);
@@ -759,6 +761,7 @@ function validateAndStoreQuotes(
 function extractContext(response: LLMResponse, state: StateManager): ExtractionContext | null {
   const personaName = response.request.data.personaName as string;
   const analyzeFrom = response.request.data.analyze_from_timestamp as string | null;
+  const includeQuotes = response.request.data.include_quotes as boolean | undefined;
 
   if (!personaName) {
     console.error("[extractContext] Missing personaName in request data");
@@ -768,7 +771,7 @@ function extractContext(response: LLMResponse, state: StateManager): ExtractionC
   const allMessages = state.messages_get(personaName);
   const { messages_context, messages_analyze } = splitMessagesByTimestamp(allMessages, analyzeFrom);
 
-  return { personaName, messages_context, messages_analyze };
+  return { personaName, messages_context, messages_analyze, include_quotes: includeQuotes };
 }
 
 function calculateExposureCurrent(impact: ExposureImpact | undefined): number {
