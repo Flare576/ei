@@ -71,8 +71,8 @@ describe("ensureAgentPersona", () => {
         long_description: "An OpenCode agent that assists with coding tasks.",
         group_primary: "OpenCode",
         groups_visible: ["OpenCode"],
-        is_static: true,
-        heartbeat_delay_ms: 0,
+        is_static: false,
+        heartbeat_delay_ms: 43200000,
         traits: [],
         topics: [],
       })
@@ -93,24 +93,37 @@ describe("ensureAgentPersona", () => {
     expect(result.short_description).toBe("OpenCode coding agent");
   });
 
-  it("sets is_static to true", async () => {
+  it("sets is_static to false for dynamic persona behavior", async () => {
     const result = await ensureAgentPersona("build", {
       stateManager: mockStateManager as StateManager,
       interface: mockInterface as Ei_Interface,
       reader: mockReader as OpenCodeReader,
     });
 
-    expect(result.is_static).toBe(true);
+    expect(result.is_static).toBe(false);
   });
 
-  it("sets heartbeat_delay_ms to 0", async () => {
+  it("sets heartbeat_delay_ms to 12 hours", async () => {
     const result = await ensureAgentPersona("build", {
       stateManager: mockStateManager as StateManager,
       interface: mockInterface as Ei_Interface,
       reader: mockReader as OpenCodeReader,
     });
 
-    expect(result.heartbeat_delay_ms).toBe(0);
+    expect(result.heartbeat_delay_ms).toBe(43200000);
+  });
+
+  it("sets last_heartbeat to now to prevent immediate heartbeat", async () => {
+    const beforeTest = new Date().toISOString();
+    
+    const result = await ensureAgentPersona("build", {
+      stateManager: mockStateManager as StateManager,
+      interface: mockInterface as Ei_Interface,
+      reader: mockReader as OpenCodeReader,
+    });
+
+    expect(result.last_heartbeat).toBeDefined();
+    expect(new Date(result.last_heartbeat!).getTime()).toBeGreaterThanOrEqual(new Date(beforeTest).getTime());
   });
 
   it("sets group_primary to OpenCode", async () => {

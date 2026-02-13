@@ -79,7 +79,17 @@ D. Trigger extraction on new messages
 
 2. **All agents → separate personas**: Each OpenCode agent (build, sisyphus, atlas, etc.) becomes a separate Ei persona. Could consolidate later if desired.
 
-3. **Static personas only**: Agent personas don't participate in ceremonies. Traits/topics come from Human-side extraction, not persona generation.
+3. **Dynamic personas**: Agent personas ARE NOT static - they participate in ceremonies and can have traits extracted. `is_static: false` allows them to adapt and grow like regular personas.
+
+4. **Utility agent filtering**: Agents like `compaction`, `title`, and `summary` are internal housekeeping agents - no personas are created for them.
+
+5. **Agent-to-agent message filtering**: Messages starting with prefixes like `[search-mode]`, `[analyze-mode]`, `[CONTEXT]`, `<analysis>`, `<results>` are agent-to-agent communications and are filtered out during import.
+
+6. **Sub-agent session filtering**: Sessions with a `parentId` are spawned sub-agent sessions, not primary conversations - they are skipped to avoid duplicating content.
+
+7. **First-import trait extraction**: If `last_sync === 0` (first import), trait extraction is queued along with fact/topic/person extraction to seed persona traits from historical messages.
+
+8. **Token limit chunking**: Large message histories are automatically chunked to fit within ~10k token limit per LLM call. Uses sliding context window - each batch's context is the tail of the previous batch's analyze set for continuity. `src/core/orchestrators/extraction-chunker.ts` handles this.
 
 ### Privacy Consideration
 

@@ -26,10 +26,13 @@ describe("importOpenCodeSessions", () => {
     mockStateManager = {
       getHuman: vi.fn().mockReturnValue(mockHuman),
       persona_get: vi.fn().mockReturnValue(null),
+      persona_getAll: vi.fn().mockReturnValue([]),
       persona_add: vi.fn(),
       persona_update: vi.fn(),
+      messages_get: vi.fn().mockReturnValue([]),
       messages_append: vi.fn(),
       human_topic_upsert: vi.fn(),
+      queue_enqueue: vi.fn(),
     };
 
     mockInterface = {

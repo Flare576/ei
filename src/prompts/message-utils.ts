@@ -1,6 +1,6 @@
 import type { Message } from "../core/types.js";
 
-const MESSAGE_PLACEHOLDER_REGEX = /\[mid:([a-f0-9-]+):([^\]]+)\]/g;
+const MESSAGE_PLACEHOLDER_REGEX = /\[mid:([a-zA-Z0-9_-]+):([^\]]+)\]/g;
 
 export function formatMessageAsPlaceholder(message: Message, personaName: string): string {
   const role = message.role === "human" ? "human" : personaName;

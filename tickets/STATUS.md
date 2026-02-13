@@ -1,18 +1,18 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-02-11 (0103 DONE; OpenCode Session Importer implemented)
+> Last updated: 2026-02-11 (Settings refactor: opencode fields → settings.opencode.*)
 
 ## Overview
 
 | Status | Count |
 |--------|-------|
-| PENDING | 14 |
+| PENDING | 15 |
 | IN_PROGRESS | 0 |
 | QA | 1 |
 | DONE | 94 |
 | BLOCKED | 0 |
 
-> 114 total tickets (94 done + 14 pending + 3 backlog + 0 in_progress + 1 QA).
+> 115 total tickets (94 done + 15 pending + 3 backlog + 0 in_progress + 1 QA).
 
 ---
 
@@ -51,6 +51,7 @@
 | 0130 | No Response Explanation UI | 0044 |
 | 0131 | Per-Persona Pause on Message Recall | 0046, 0048 |
 | 0132 | Poke Functionality (Prompt Response) | 0011 |
+| 0135 | Settings Namespace Migration | None |
 
 
 
