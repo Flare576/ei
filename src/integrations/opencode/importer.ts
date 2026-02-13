@@ -8,6 +8,7 @@ import {
   queueDirectTopicUpdate,
   type ExtractionContext,
 } from "../../core/orchestrators/human-extraction.js";
+import { processGradualExtraction } from "./gradual-extraction.js";
 
 const OPENCODE_TOPIC_GROUPS = ["General", "Coding", "OpenCode"];
 
@@ -29,6 +30,7 @@ export interface ImportResult {
   messagesImported: number;
   personasCreated: string[];
   topicUpdatesQueued: number;
+  gradualExtractionQueued: number;
 }
 
 export interface OpenCodeImporterOptions {
@@ -51,6 +53,7 @@ export async function importOpenCodeSessions(
     messagesImported: 0,
     personasCreated: [],
     topicUpdatesQueued: 0,
+    gradualExtractionQueued: 0,
   };
 
   const sessions = await reader.getSessionsUpdatedSince(since);
@@ -149,15 +152,67 @@ export async function importOpenCodeSessions(
     eiInterface?.onHumanUpdated?.();
   }
 
+  let wasFirstImport = false;
+
   if (result.messagesImported > 0) {
     result.topicUpdatesQueued = queueDirectTopicUpdatesForSessions(
       sessionAgentBatches,
       stateManager
     );
     console.log(`[OpenCode] Queued ${result.topicUpdatesQueued} topic update chunks`);
+
+    wasFirstImport = initializeExtractionPointIfNeeded(sessionAgentBatches, stateManager);
+  }
+
+  if (!wasFirstImport) {
+    const gradualResult = processGradualExtraction(stateManager);
+    result.gradualExtractionQueued = gradualResult.scansQueued;
   }
 
   return result;
+}
+
+function initializeExtractionPointIfNeeded(
+  batches: SessionAgentMessages[],
+  stateManager: StateManager
+): boolean {
+  const human = stateManager.getHuman();
+  const existingPoint = human.settings?.opencode?.extraction_point;
+
+  if (existingPoint) {
+    return false;
+  }
+
+  let earliestTimestamp: number | null = null;
+
+  for (const batch of batches) {
+    for (const msg of batch.messages) {
+      const msgMs = new Date(msg.timestamp).getTime();
+      if (earliestTimestamp === null || msgMs < earliestTimestamp) {
+        earliestTimestamp = msgMs;
+      }
+    }
+  }
+
+  if (earliestTimestamp === null) {
+    return false;
+  }
+
+  const extractionPoint = new Date(earliestTimestamp).toISOString();
+  
+  stateManager.setHuman({
+    ...human,
+    settings: {
+      ...human.settings,
+      opencode: {
+        ...human.settings?.opencode,
+        extraction_point: extractionPoint,
+      },
+    },
+  });
+
+  console.log(`[OpenCode] Initialized extraction_point to ${extractionPoint}`);
+  return true;
 }
 
 function queueDirectTopicUpdatesForSessions(

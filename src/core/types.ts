@@ -179,6 +179,7 @@ export interface OpenCodeSettings {
   integration?: boolean;
   polling_interval_ms?: number;  // Default: 1800000 (30 min)
   last_sync?: string;  // ISO timestamp
+  extraction_point?: string;  // ISO timestamp - earliest unprocessed message, gradual extraction advances this
 }
 
 export interface HumanSettings {
