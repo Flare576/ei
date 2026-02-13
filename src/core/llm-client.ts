@@ -133,7 +133,6 @@ export async function callLLMRaw(
   accounts?: ProviderAccount[]
 ): Promise<LLMRawResponse> {
   llmCallCount++;
-  console.log(`[LLM] Call #${llmCallCount}`);
   
   const { signal, temperature = 0.7 } = options;
   
@@ -148,6 +147,10 @@ export async function callLLMRaw(
     ...messages,
     { role: "user", content: userPrompt },
   ];
+  
+  const totalChars = chatMessages.reduce((sum, m) => sum + m.content.length, 0);
+  const estimatedTokens = Math.ceil(totalChars / 4);
+  console.log(`[LLM] Call #${llmCallCount} - ~${estimatedTokens} tokens (${totalChars} chars)`);
   
   const response = await fetch(`${config.baseURL}/chat/completions`, {
     method: "POST",

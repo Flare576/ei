@@ -90,8 +90,16 @@ export class QueueProcessor {
           messageMap.set(msg.id, msg);
         }
         
+        const placeholderCount = (request.user.match(/\[mid:[^\]]+\]/g) || []).length;
+        console.log(`[QueueProcessor] Hydrating ${placeholderCount} placeholders with ${messageMap.size} messages for ${personaName}`);
+        
         hydratedSystem = hydratePromptPlaceholders(request.system, messageMap);
         hydratedUser = hydratePromptPlaceholders(request.user, messageMap);
+        
+        const hydratedPlaceholderCount = (hydratedUser.match(/\[mid:[^\]]+\]/g) || []).length;
+        if (hydratedPlaceholderCount > 0) {
+          console.log(`[QueueProcessor] WARNING: ${hydratedPlaceholderCount} placeholders not hydrated!`);
+        }
       }
     }
 

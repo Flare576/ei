@@ -46,7 +46,6 @@ import {
 } from "./orchestrators/index.js";
 import { EI_WELCOME_MESSAGE, EI_PERSONA_DEFINITION } from "../templates/welcome.js";
 import { ContextStatus as ContextStatusEnum } from "./types.js";
-import { importOpenCodeSessions } from "../integrations/opencode/importer.js";
 
 const DEFAULT_LOOP_INTERVAL_MS = 100;
 const DEFAULT_AUTO_SAVE_INTERVAL_MS = 60000;
@@ -92,6 +91,7 @@ export class Processor {
   private currentRequest: LLMRequest | null = null;
   private isTUI = false;
   private lastOpenCodeSync = 0;
+  private openCodeImportInProgress = false;
 
   constructor(ei: Ei_Interface) {
     this.interface = ei;
@@ -101,9 +101,12 @@ export class Processor {
   }
   
   private detectEnvironment(): void {
-    this.isTUI = typeof process !== "undefined" && 
-                 typeof process.versions?.node !== "undefined" &&
-                 typeof window === "undefined";
+    const hasProcess = typeof process !== "undefined" && typeof process.versions !== "undefined";
+    const hasBun = hasProcess && typeof process.versions.bun !== "undefined";
+    const hasNode = hasProcess && typeof process.versions.node !== "undefined";
+    const hasDocument = typeof document !== "undefined";
+    
+    this.isTUI = (hasBun || hasNode) && !hasDocument;
   }
 
   async start(storage: Storage): Promise<void> {
@@ -211,10 +214,11 @@ export class Processor {
       if (this.queueProcessor.getState() === "idle") {
         const request = this.stateManager.queue_peekHighest();
         if (request) {
-          console.log(`[Processor ${this.instanceId}] processing request: ${request.next_step}`);
+          const personaName = request.data.personaName as string | undefined;
+          const personaSuffix = personaName ? ` [${personaName}]` : "";
+          console.log(`[Processor ${this.instanceId}] processing request: ${request.next_step}${personaSuffix}`);
           this.currentRequest = request;
 
-          const personaName = request.data.personaName as string | undefined;
           if (personaName && request.next_step === LLMNextStep.HandlePersonaResponse) {
             this.interface.onMessageProcessing?.(personaName);
           }
@@ -249,7 +253,7 @@ export class Processor {
 
     const human = this.stateManager.getHuman();
     
-    if (this.isTUI && human.settings?.opencode_integration) {
+    if (this.isTUI && human.settings?.opencode?.integration) {
       await this.checkAndSyncOpenCode(human, now);
     }
     
@@ -286,9 +290,14 @@ export class Processor {
   }
 
   private async checkAndSyncOpenCode(human: HumanEntity, now: number): Promise<void> {
-    const pollingInterval = human.settings?.opencode_polling_interval_ms ?? DEFAULT_OPENCODE_POLLING_MS;
-    const lastSync = human.last_opencode_sync
-      ? new Date(human.last_opencode_sync).getTime()
+    if (this.openCodeImportInProgress) {
+      return;
+    }
+
+    const opencode = human.settings?.opencode;
+    const pollingInterval = opencode?.polling_interval_ms ?? DEFAULT_OPENCODE_POLLING_MS;
+    const lastSync = opencode?.last_sync
+      ? new Date(opencode.last_sync).getTime()
       : 0;
     const timeSinceSync = now - lastSync;
 
@@ -300,26 +309,40 @@ export class Processor {
     const syncTimestamp = new Date().toISOString();
     this.stateManager.setHuman({
       ...this.stateManager.getHuman(),
-      last_opencode_sync: syncTimestamp,
+      settings: {
+        ...this.stateManager.getHuman().settings,
+        opencode: {
+          ...opencode,
+          last_sync: syncTimestamp,
+        },
+      },
     });
 
     const since = lastSync > 0 ? new Date(lastSync) : new Date(0);
 
-    try {
-      const result = await importOpenCodeSessions(since, {
-        stateManager: this.stateManager,
-        interface: this.interface,
+    this.openCodeImportInProgress = true;
+    import("../integrations/opencode/importer.js")
+      .then(({ importOpenCodeSessions }) => 
+        importOpenCodeSessions(since, {
+          stateManager: this.stateManager,
+          interface: this.interface,
+        })
+      )
+      .then((result) => {
+        if (result.sessionsProcessed > 0) {
+          console.log(
+            `[Processor] OpenCode sync complete: ${result.sessionsProcessed} sessions, ` +
+            `${result.topicsCreated} topics created, ${result.messagesImported} messages imported, ` +
+            `${result.topicUpdatesQueued} topic updates queued`
+          );
+        }
+      })
+      .catch((err) => {
+        console.warn(`[Processor] OpenCode sync failed:`, err);
+      })
+      .finally(() => {
+        this.openCodeImportInProgress = false;
       });
-
-      if (result.sessionsProcessed > 0) {
-        console.log(
-          `[Processor] OpenCode sync complete: ${result.sessionsProcessed} sessions, ` +
-          `${result.topicsCreated} topics created, ${result.messagesImported} messages imported`
-        );
-      }
-    } catch (err) {
-      console.warn(`[Processor] OpenCode sync failed:`, err);
-    }
   }
 
   private getModelForPersona(personaName?: string): string | undefined {
@@ -655,7 +678,7 @@ export class Processor {
 
     this.stateManager.queue_enqueue({
       type: LLMRequestType.Response,
-      priority: LLMPriority.Normal,
+      priority: LLMPriority.High,
       system: prompt.system,
       user: prompt.user,
       next_step: LLMNextStep.HandlePersonaResponse,

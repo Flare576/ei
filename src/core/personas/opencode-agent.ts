@@ -3,6 +3,7 @@ import type { StateManager } from "../state-manager.js";
 import { OpenCodeReader } from "../../integrations/opencode/reader.js";
 
 const OPENCODE_GROUP = "OpenCode";
+const TWELVE_HOURS_MS = 43200000;
 
 export interface EnsureAgentPersonaOptions {
   stateManager: StateManager;
@@ -36,8 +37,9 @@ export async function ensureAgentPersona(
     topics: [],
     is_paused: false,
     is_archived: false,
-    is_static: true,
-    heartbeat_delay_ms: 0,
+    is_static: false,
+    heartbeat_delay_ms: TWELVE_HOURS_MS,
+    last_heartbeat: now,
     last_updated: now,
     last_activity: now,
   };

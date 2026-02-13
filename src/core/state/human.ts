@@ -14,6 +14,12 @@ export function createDefaultHumanEntity(): HumanEntity {
       enabled: true,
       time: "09:00",
     },
+    settings: {
+      opencode: {
+        integration: false,
+        polling_interval_ms: 1800000, // 30 minutes
+      },
+    },
   };
 }
 

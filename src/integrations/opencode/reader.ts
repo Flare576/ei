@@ -72,7 +72,7 @@ export class OpenCodeReader {
       }
     }
 
-    return sessions.sort((a, b) => a.time.updated - b.time.updated);
+    return sessions.sort((a, b) => b.time.updated - a.time.updated);
   }
 
   async getMessagesForSession(
@@ -106,7 +106,7 @@ export class OpenCodeReader {
         id: raw.id,
         sessionId: raw.sessionID,
         role: raw.role,
-        agent: raw.agent || "build",
+        agent: (raw.agent || "build").toLowerCase(),
         content,
         timestamp: new Date(raw.time.created).toISOString(),
       });
@@ -157,7 +157,7 @@ export class OpenCodeReader {
       if (!raw) continue;
 
       if (!earliest || raw.time.created < earliest.created) {
-        earliest = { agent: raw.agent || "build", created: raw.time.created };
+        earliest = { agent: (raw.agent || "build").toLowerCase(), created: raw.time.created };
       }
     }
 

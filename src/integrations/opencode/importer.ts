@@ -2,9 +2,25 @@ import type { StateManager } from "../../core/state-manager.js";
 import type { Ei_Interface, Topic, Message, ContextStatus } from "../../core/types.js";
 import { OpenCodeReader } from "./reader.js";
 import type { OpenCodeSession, OpenCodeMessage } from "./types.js";
+import { UTILITY_AGENTS, AGENT_TO_AGENT_PREFIXES } from "./types.js";
 import { ensureAgentPersona } from "../../core/personas/opencode-agent.js";
+import {
+  queueDirectTopicUpdate,
+  type ExtractionContext,
+} from "../../core/orchestrators/human-extraction.js";
 
 const OPENCODE_TOPIC_GROUPS = ["General", "Coding", "OpenCode"];
+
+function isAgentToAgentMessage(content: string): boolean {
+  const trimmed = content.trimStart();
+  return AGENT_TO_AGENT_PREFIXES.some(prefix => trimmed.startsWith(prefix));
+}
+
+interface SessionAgentMessages {
+  sessionId: string;
+  agentName: string;
+  messages: OpenCodeMessage[];
+}
 
 export interface ImportResult {
   sessionsProcessed: number;
@@ -12,6 +28,7 @@ export interface ImportResult {
   topicsUpdated: number;
   messagesImported: number;
   personasCreated: string[];
+  topicUpdatesQueued: number;
 }
 
 export interface OpenCodeImporterOptions {
@@ -33,18 +50,24 @@ export async function importOpenCodeSessions(
     topicsUpdated: 0,
     messagesImported: 0,
     personasCreated: [],
+    topicUpdatesQueued: 0,
   };
 
   const sessions = await reader.getSessionsUpdatedSince(since);
-  if (sessions.length === 0) {
+  const primarySessions = sessions.filter(s => !s.parentId);
+  console.log(`[OpenCode] Found ${sessions.length} sessions (${primarySessions.length} primary, ${sessions.length - primarySessions.length} sub-agent skipped) since ${since.toISOString()}`);
+  if (primarySessions.length === 0) {
     return result;
   }
 
-  const messagesByAgent = new Map<string, OpenCodeMessage[]>();
   const agentsForPersona = new Set<string>();
+  const sessionAgentBatches: SessionAgentMessages[] = [];
 
-  for (const session of sessions) {
+  for (const session of primarySessions) {
     result.sessionsProcessed++;
+    if (result.sessionsProcessed % 10 === 0 || result.sessionsProcessed === 1) {
+      console.log(`[OpenCode] Processing session ${result.sessionsProcessed}/${primarySessions.length}: ${session.title}`);
+    }
 
     const topicResult = await ensureSessionTopic(session, reader, stateManager);
     if (topicResult === "created") {
@@ -54,13 +77,31 @@ export async function importOpenCodeSessions(
     }
 
     const messages = await reader.getMessagesForSession(session.id, since);
+    const messagesByAgent = new Map<string, OpenCodeMessage[]>();
+    
     for (const msg of messages) {
+      if (UTILITY_AGENTS.includes(msg.agent as typeof UTILITY_AGENTS[number])) {
+        continue;
+      }
+      if (isAgentToAgentMessage(msg.content)) {
+        continue;
+      }
       agentsForPersona.add(msg.agent);
       const existing = messagesByAgent.get(msg.agent) ?? [];
       existing.push(msg);
       messagesByAgent.set(msg.agent, existing);
     }
+
+    for (const [agentName, agentMessages] of messagesByAgent) {
+      sessionAgentBatches.push({
+        sessionId: session.id,
+        agentName,
+        messages: agentMessages,
+      });
+    }
   }
+
+  console.log(`[OpenCode] Sessions done. Discovered ${agentsForPersona.size} personas, importing messages...`);
 
   for (const agentName of agentsForPersona) {
     const existing = stateManager.persona_get(agentName);
@@ -74,8 +115,8 @@ export async function importOpenCodeSessions(
     }
   }
 
-  for (const [agentName, ocMessages] of messagesByAgent) {
-    const sortedMessages = ocMessages.sort(
+  for (const batch of sessionAgentBatches) {
+    const sortedMessages = batch.messages.sort(
       (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );
 
@@ -88,21 +129,74 @@ export async function importOpenCodeSessions(
         read: true,
         context_status: "default" as ContextStatus,
       };
-      stateManager.messages_append(agentName, eiMessage);
+      stateManager.messages_append(batch.agentName, eiMessage);
       result.messagesImported++;
     }
+  }
 
-    stateManager.persona_update(agentName, {
-      last_activity: new Date().toISOString(),
-    });
-    eiInterface?.onMessageAdded?.(agentName);
+  const updatedAgents = new Set<string>();
+  for (const batch of sessionAgentBatches) {
+    if (!updatedAgents.has(batch.agentName)) {
+      stateManager.persona_update(batch.agentName, {
+        last_activity: new Date().toISOString(),
+      });
+      eiInterface?.onMessageAdded?.(batch.agentName);
+      updatedAgents.add(batch.agentName);
+    }
   }
 
   if (result.topicsCreated > 0 || result.topicsUpdated > 0) {
     eiInterface?.onHumanUpdated?.();
   }
 
+  if (result.messagesImported > 0) {
+    result.topicUpdatesQueued = queueDirectTopicUpdatesForSessions(
+      sessionAgentBatches,
+      stateManager
+    );
+    console.log(`[OpenCode] Queued ${result.topicUpdatesQueued} topic update chunks`);
+  }
+
   return result;
+}
+
+function queueDirectTopicUpdatesForSessions(
+  batches: SessionAgentMessages[],
+  stateManager: StateManager
+): number {
+  const human = stateManager.getHuman();
+  let totalChunks = 0;
+
+  for (const batch of batches) {
+    const topic = human.topics.find(t => t.id === batch.sessionId);
+    if (!topic) {
+      console.warn(`[OpenCode] Topic not found for session ${batch.sessionId}, skipping extraction`);
+      continue;
+    }
+
+    const allMessages = stateManager.messages_get(batch.agentName);
+    const batchMessageIds = new Set(batch.messages.map(m => m.id));
+    
+    const analyzeStartIndex = allMessages.findIndex(m => batchMessageIds.has(m.id));
+    if (analyzeStartIndex === -1) {
+      continue;
+    }
+
+    const context: ExtractionContext = {
+      personaName: batch.agentName,
+      messages_context: allMessages.slice(0, analyzeStartIndex),
+      messages_analyze: allMessages.filter(m => batchMessageIds.has(m.id)),
+    };
+
+    if (context.messages_analyze.length === 0) {
+      continue;
+    }
+
+    const chunks = queueDirectTopicUpdate(topic, context, stateManager);
+    totalChunks += chunks;
+  }
+
+  return totalChunks;
 }
 
 async function ensureSessionTopic(

@@ -130,6 +130,24 @@ export interface OpenCodeAgent {
 }
 
 /**
+ * Utility agents that should not have personas created for them.
+ * These are internal agents that do housekeeping tasks.
+ */
+export const UTILITY_AGENTS = ["compaction", "title", "summary"] as const;
+
+/**
+ * Message content prefixes that indicate agent-to-agent communication.
+ * Messages starting with these should be filtered out during import.
+ */
+export const AGENT_TO_AGENT_PREFIXES = [
+  "[search-mode]",
+  "[analyze-mode]",
+  "[CONTEXT]",
+  "<analysis>",
+  "<results>",
+] as const;
+
+/**
  * Built-in agent definitions (fallback when config unavailable)
  */
 export const BUILTIN_AGENTS: Record<string, OpenCodeAgent> = {
