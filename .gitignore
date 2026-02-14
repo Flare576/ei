@@ -43,3 +43,4 @@ npm-debug.log*
 **/*-ideal.json
 **/*-ideal-response.json
 api/config.php
+local_cache

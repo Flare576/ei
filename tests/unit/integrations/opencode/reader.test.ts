@@ -1,10 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { OpenCodeReader } from "../../../../src/integrations/opencode/reader.js";
 import { BUILTIN_AGENTS } from "../../../../src/integrations/opencode/types.js";
-import * as fs from "fs/promises";
 import * as path from "path";
 
-vi.mock("fs/promises");
+const mockReaddir = vi.fn();
+const mockReadFile = vi.fn();
+
+vi.mock("fs/promises", () => ({
+  readdir: mockReaddir,
+  readFile: mockReadFile,
+}));
 
 describe("OpenCodeReader", () => {
   let reader: OpenCodeReader;
@@ -22,7 +27,7 @@ describe("OpenCodeReader", () => {
 
   describe("getSessionsUpdatedSince", () => {
     it("returns empty array when session directory doesn't exist", async () => {
-      vi.mocked(fs.readdir).mockRejectedValue(new Error("ENOENT"));
+      mockReaddir.mockRejectedValue(new Error("ENOENT"));
 
       const sessions = await reader.getSessionsUpdatedSince(new Date(0));
 
@@ -45,11 +50,11 @@ describe("OpenCodeReader", () => {
         },
       };
 
-      vi.mocked(fs.readdir)
-        .mockResolvedValueOnce([projectHash] as unknown as Awaited<ReturnType<typeof fs.readdir>>)
-        .mockResolvedValueOnce([`${sessionId}.json`] as unknown as Awaited<ReturnType<typeof fs.readdir>>);
+      mockReaddir
+        .mockResolvedValueOnce([projectHash] as string[])
+        .mockResolvedValueOnce([`${sessionId}.json`] as string[]);
 
-      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(sessionData));
+      mockReadFile.mockResolvedValue(JSON.stringify(sessionData));
 
       const since = new Date(1500000);
       const sessions = await reader.getSessionsUpdatedSince(since);
@@ -82,11 +87,11 @@ describe("OpenCodeReader", () => {
         },
       };
 
-      vi.mocked(fs.readdir)
-        .mockResolvedValueOnce(["proj123"] as unknown as Awaited<ReturnType<typeof fs.readdir>>)
-        .mockResolvedValueOnce(["ses_old.json"] as unknown as Awaited<ReturnType<typeof fs.readdir>>);
+      mockReaddir
+        .mockResolvedValueOnce(["proj123"] as string[])
+        .mockResolvedValueOnce(["ses_old.json"] as string[]);
 
-      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(sessionData));
+      mockReadFile.mockResolvedValue(JSON.stringify(sessionData));
 
       const since = new Date(1500000);
       const sessions = await reader.getSessionsUpdatedSince(since);
@@ -95,18 +100,18 @@ describe("OpenCodeReader", () => {
     });
 
     it("skips hidden directories", async () => {
-      vi.mocked(fs.readdir).mockResolvedValueOnce([".hidden", "visible"] as unknown as Awaited<ReturnType<typeof fs.readdir>>);
-      vi.mocked(fs.readdir).mockResolvedValueOnce([] as unknown as Awaited<ReturnType<typeof fs.readdir>>);
+      mockReaddir.mockResolvedValueOnce([".hidden", "visible"] as string[]);
+      mockReaddir.mockResolvedValueOnce([] as string[]);
 
       await reader.getSessionsUpdatedSince(new Date(0));
 
-      expect(fs.readdir).toHaveBeenCalledTimes(2);
-      expect(fs.readdir).toHaveBeenLastCalledWith(
+      expect(mockReaddir).toHaveBeenCalledTimes(2);
+      expect(mockReaddir).toHaveBeenLastCalledWith(
         path.join(testStoragePath, "session", "visible")
       );
     });
 
-    it("sorts sessions by updated time ascending", async () => {
+    it("sorts sessions by updated time descending (newest first)", async () => {
       const session1 = {
         id: "ses_newer",
         slug: "newer",
@@ -126,18 +131,18 @@ describe("OpenCodeReader", () => {
         time: { created: 1000, updated: 2000 },
       };
 
-      vi.mocked(fs.readdir)
-        .mockResolvedValueOnce(["proj"] as unknown as Awaited<ReturnType<typeof fs.readdir>>)
-        .mockResolvedValueOnce(["ses_newer.json", "ses_older.json"] as unknown as Awaited<ReturnType<typeof fs.readdir>>);
+      mockReaddir
+        .mockResolvedValueOnce(["proj"] as string[])
+        .mockResolvedValueOnce(["ses_newer.json", "ses_older.json"] as string[]);
 
-      vi.mocked(fs.readFile)
+      mockReadFile
         .mockResolvedValueOnce(JSON.stringify(session1))
         .mockResolvedValueOnce(JSON.stringify(session2));
 
       const sessions = await reader.getSessionsUpdatedSince(new Date(0));
 
-      expect(sessions[0].id).toBe("ses_older");
-      expect(sessions[1].id).toBe("ses_newer");
+      expect(sessions[0].id).toBe("ses_newer");
+      expect(sessions[1].id).toBe("ses_older");
     });
   });
 
@@ -147,7 +152,7 @@ describe("OpenCodeReader", () => {
     const partId = "prt_test789";
 
     it("returns empty array when message directory doesn't exist", async () => {
-      vi.mocked(fs.readdir).mockRejectedValue(new Error("ENOENT"));
+      mockReaddir.mockRejectedValue(new Error("ENOENT"));
 
       const messages = await reader.getMessagesForSession(sessionId);
 
@@ -170,11 +175,11 @@ describe("OpenCodeReader", () => {
         text: "Hello world",
       };
 
-      vi.mocked(fs.readdir)
-        .mockResolvedValueOnce([`${messageId}.json`] as unknown as Awaited<ReturnType<typeof fs.readdir>>)
-        .mockResolvedValueOnce([`${partId}.json`] as unknown as Awaited<ReturnType<typeof fs.readdir>>);
+      mockReaddir
+        .mockResolvedValueOnce([`${messageId}.json`] as string[])
+        .mockResolvedValueOnce([`${partId}.json`] as string[]);
 
-      vi.mocked(fs.readFile)
+      mockReadFile
         .mockResolvedValueOnce(JSON.stringify(messageData))
         .mockResolvedValueOnce(JSON.stringify(partData));
 
@@ -216,11 +221,11 @@ describe("OpenCodeReader", () => {
         synthetic: true,
       };
 
-      vi.mocked(fs.readdir)
-        .mockResolvedValueOnce([`${messageId}.json`] as unknown as Awaited<ReturnType<typeof fs.readdir>>)
-        .mockResolvedValueOnce(["prt_real.json", "prt_synthetic.json"] as unknown as Awaited<ReturnType<typeof fs.readdir>>);
+      mockReaddir
+        .mockResolvedValueOnce([`${messageId}.json`] as string[])
+        .mockResolvedValueOnce(["prt_real.json", "prt_synthetic.json"] as string[]);
 
-      vi.mocked(fs.readFile)
+      mockReadFile
         .mockResolvedValueOnce(JSON.stringify(messageData))
         .mockResolvedValueOnce(JSON.stringify(realPart))
         .mockResolvedValueOnce(JSON.stringify(syntheticPart));
@@ -254,11 +259,11 @@ describe("OpenCodeReader", () => {
         tool: { name: "read" },
       };
 
-      vi.mocked(fs.readdir)
-        .mockResolvedValueOnce([`${messageId}.json`] as unknown as Awaited<ReturnType<typeof fs.readdir>>)
-        .mockResolvedValueOnce(["prt_text.json", "prt_tool.json"] as unknown as Awaited<ReturnType<typeof fs.readdir>>);
+      mockReaddir
+        .mockResolvedValueOnce([`${messageId}.json`] as string[])
+        .mockResolvedValueOnce(["prt_text.json", "prt_tool.json"] as string[]);
 
-      vi.mocked(fs.readFile)
+      mockReadFile
         .mockResolvedValueOnce(JSON.stringify(messageData))
         .mockResolvedValueOnce(JSON.stringify(textPart))
         .mockResolvedValueOnce(JSON.stringify(toolPart));
@@ -294,11 +299,11 @@ describe("OpenCodeReader", () => {
         time: { start: 2000, end: 2100 },
       };
 
-      vi.mocked(fs.readdir)
-        .mockResolvedValueOnce([`${messageId}.json`] as unknown as Awaited<ReturnType<typeof fs.readdir>>)
-        .mockResolvedValueOnce(["prt_2.json", "prt_1.json"] as unknown as Awaited<ReturnType<typeof fs.readdir>>);
+      mockReaddir
+        .mockResolvedValueOnce([`${messageId}.json`] as string[])
+        .mockResolvedValueOnce(["prt_2.json", "prt_1.json"] as string[]);
 
-      vi.mocked(fs.readFile)
+      mockReadFile
         .mockResolvedValueOnce(JSON.stringify(messageData))
         .mockResolvedValueOnce(JSON.stringify(part2))
         .mockResolvedValueOnce(JSON.stringify(part1));
@@ -318,11 +323,11 @@ describe("OpenCodeReader", () => {
         agent: "build",
       };
 
-      vi.mocked(fs.readdir)
-        .mockResolvedValueOnce([`${messageId}.json`] as unknown as Awaited<ReturnType<typeof fs.readdir>>)
-        .mockResolvedValueOnce([] as unknown as Awaited<ReturnType<typeof fs.readdir>>);
+      mockReaddir
+        .mockResolvedValueOnce([`${messageId}.json`] as string[])
+        .mockResolvedValueOnce([] as string[]);
 
-      vi.mocked(fs.readFile).mockResolvedValueOnce(JSON.stringify(messageData));
+      mockReadFile.mockResolvedValueOnce(JSON.stringify(messageData));
 
       const messages = await reader.getMessagesForSession(sessionId);
 
@@ -359,11 +364,11 @@ describe("OpenCodeReader", () => {
         text: "New",
       };
 
-      vi.mocked(fs.readdir)
-        .mockResolvedValueOnce(["msg_old.json", "msg_new.json"] as unknown as Awaited<ReturnType<typeof fs.readdir>>)
-        .mockResolvedValueOnce(["prt_new.json"] as unknown as Awaited<ReturnType<typeof fs.readdir>>);
+      mockReaddir
+        .mockResolvedValueOnce(["msg_old.json", "msg_new.json"] as string[])
+        .mockResolvedValueOnce(["prt_new.json"] as string[]);
 
-      vi.mocked(fs.readFile)
+      mockReadFile
         .mockResolvedValueOnce(JSON.stringify(oldMessage))
         .mockResolvedValueOnce(JSON.stringify(newMessage))
         .mockResolvedValueOnce(JSON.stringify(partNew));
@@ -389,11 +394,11 @@ describe("OpenCodeReader", () => {
         text: "Hello",
       };
 
-      vi.mocked(fs.readdir)
-        .mockResolvedValueOnce([`${messageId}.json`] as unknown as Awaited<ReturnType<typeof fs.readdir>>)
-        .mockResolvedValueOnce([`${partId}.json`] as unknown as Awaited<ReturnType<typeof fs.readdir>>);
+      mockReaddir
+        .mockResolvedValueOnce([`${messageId}.json`] as string[])
+        .mockResolvedValueOnce([`${partId}.json`] as string[]);
 
-      vi.mocked(fs.readFile)
+      mockReadFile
         .mockResolvedValueOnce(JSON.stringify(messageData))
         .mockResolvedValueOnce(JSON.stringify(partData));
 
@@ -428,7 +433,7 @@ describe("OpenCodeReader", () => {
 
   describe("getFirstAgent", () => {
     it("returns null when message directory doesn't exist", async () => {
-      vi.mocked(fs.readdir).mockRejectedValue(new Error("ENOENT"));
+      mockReaddir.mockRejectedValue(new Error("ENOENT"));
 
       const agent = await reader.getFirstAgent("ses_test");
 
@@ -451,9 +456,9 @@ describe("OpenCodeReader", () => {
         agent: "build",
       };
 
-      vi.mocked(fs.readdir).mockResolvedValueOnce(["msg_1.json", "msg_2.json"] as unknown as Awaited<ReturnType<typeof fs.readdir>>);
+      mockReaddir.mockResolvedValueOnce(["msg_1.json", "msg_2.json"] as string[]);
 
-      vi.mocked(fs.readFile)
+      mockReadFile
         .mockResolvedValueOnce(JSON.stringify(message1))
         .mockResolvedValueOnce(JSON.stringify(message2));
 
@@ -490,13 +495,13 @@ describe("OpenCodeReader", () => {
       const part2 = { id: "prt_2", sessionID: "ses_test", messageID: "msg_2", type: "text", text: "b" };
       const part3 = { id: "prt_3", sessionID: "ses_test", messageID: "msg_3", type: "text", text: "c" };
 
-      vi.mocked(fs.readdir)
-        .mockResolvedValueOnce(["msg_1.json", "msg_2.json", "msg_3.json"] as unknown as Awaited<ReturnType<typeof fs.readdir>>)
-        .mockResolvedValueOnce(["prt_1.json"] as unknown as Awaited<ReturnType<typeof fs.readdir>>)
-        .mockResolvedValueOnce(["prt_2.json"] as unknown as Awaited<ReturnType<typeof fs.readdir>>)
-        .mockResolvedValueOnce(["prt_3.json"] as unknown as Awaited<ReturnType<typeof fs.readdir>>);
+      mockReaddir
+        .mockResolvedValueOnce(["msg_1.json", "msg_2.json", "msg_3.json"] as string[])
+        .mockResolvedValueOnce(["prt_1.json"] as string[])
+        .mockResolvedValueOnce(["prt_2.json"] as string[])
+        .mockResolvedValueOnce(["prt_3.json"] as string[]);
 
-      vi.mocked(fs.readFile)
+      mockReadFile
         .mockResolvedValueOnce(JSON.stringify(message1))
         .mockResolvedValueOnce(JSON.stringify(part1))
         .mockResolvedValueOnce(JSON.stringify(message2))
@@ -512,28 +517,49 @@ describe("OpenCodeReader", () => {
     });
   });
 
-  describe("constructor", () => {
-    it("uses provided storage path", () => {
+  describe("constructor and initialization", () => {
+    it("stores configured path for later initialization", () => {
       const reader = new OpenCodeReader("/custom/path");
-      expect((reader as unknown as { storagePath: string }).storagePath).toBe("/custom/path");
+      // configuredPath is stored immediately, storagePath is set during lazy init
+      expect((reader as unknown as { configuredPath: string }).configuredPath).toBe("/custom/path");
     });
 
-    it("uses EI_OPENCODE_STORAGE_PATH env var if available", () => {
+    it("uses provided storage path after initialization", async () => {
+      const localReader = new OpenCodeReader("/custom/path");
+      mockReaddir.mockRejectedValue(new Error("ENOENT"));
+      
+      // Trigger initialization by calling a method
+      await localReader.getSessionsUpdatedSince(new Date());
+      
+      expect((localReader as unknown as { storagePath: string }).storagePath).toBe("/custom/path");
+    });
+
+    it("uses EI_OPENCODE_STORAGE_PATH env var after initialization", async () => {
       const originalEnv = process.env.EI_OPENCODE_STORAGE_PATH;
       process.env.EI_OPENCODE_STORAGE_PATH = "/env/path";
       
-      const reader = new OpenCodeReader();
-      expect((reader as unknown as { storagePath: string }).storagePath).toBe("/env/path");
+      const localReader = new OpenCodeReader();
+      mockReaddir.mockRejectedValue(new Error("ENOENT"));
+      
+      // Trigger initialization by calling a method
+      await localReader.getSessionsUpdatedSince(new Date());
+      
+      expect((localReader as unknown as { storagePath: string }).storagePath).toBe("/env/path");
       
       process.env.EI_OPENCODE_STORAGE_PATH = originalEnv;
     });
 
-    it("falls back to default path", () => {
+    it("falls back to default path after initialization", async () => {
       const originalEnv = process.env.EI_OPENCODE_STORAGE_PATH;
       delete process.env.EI_OPENCODE_STORAGE_PATH;
       
-      const reader = new OpenCodeReader();
-      expect((reader as unknown as { storagePath: string }).storagePath).toContain(".local/share/opencode/storage");
+      const localReader = new OpenCodeReader();
+      mockReaddir.mockRejectedValue(new Error("ENOENT"));
+      
+      // Trigger initialization by calling a method
+      await localReader.getSessionsUpdatedSince(new Date());
+      
+      expect((localReader as unknown as { storagePath: string }).storagePath).toContain(".local/share/opencode/storage");
       
       process.env.EI_OPENCODE_STORAGE_PATH = originalEnv;
     });

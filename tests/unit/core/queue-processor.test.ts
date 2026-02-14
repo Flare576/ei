@@ -58,11 +58,11 @@ describe("QueueProcessor", () => {
         finishReason: "stop",
       });
       
-      const callback = vi.fn();
+      const callback = vi.fn().mockResolvedValue(undefined);
       processor.start(makeRequest(), callback);
       
       await vi.waitFor(() => expect(callback).toHaveBeenCalled());
-      expect(processor.getState()).toBe("idle");
+      await vi.waitFor(() => expect(processor.getState()).toBe("idle"));
     });
 
     it("throws QUEUE_BUSY if started while busy", () => {
@@ -85,7 +85,7 @@ describe("QueueProcessor", () => {
       });
       
       let response: LLMResponse | undefined;
-      processor.start(makeRequest("raw"), (r) => { response = r; });
+      processor.start(makeRequest("raw"), async (r) => { response = r; });
       
       await vi.waitFor(() => expect(response).toBeDefined());
       expect(response?.success).toBe(true);
@@ -100,7 +100,7 @@ describe("QueueProcessor", () => {
       vi.mocked(llmClient.parseJSONResponse).mockReturnValue({ key: "value" });
       
       let response: LLMResponse | undefined;
-      processor.start(makeRequest("json"), (r) => { response = r; });
+      processor.start(makeRequest("json"), async (r) => { response = r; });
       
       await vi.waitFor(() => expect(response).toBeDefined());
       expect(response?.success).toBe(true);
@@ -117,7 +117,7 @@ describe("QueueProcessor", () => {
       });
       
       let response: LLMResponse | undefined;
-      processor.start(makeRequest("json"), (r) => { response = r; });
+      processor.start(makeRequest("json"), async (r) => { response = r; });
       
       await vi.waitFor(() => expect(response).toBeDefined());
       expect(response?.success).toBe(false);
@@ -132,7 +132,7 @@ describe("QueueProcessor", () => {
       vi.mocked(llmClient.cleanResponseContent).mockReturnValue("Hello world");
       
       let response: LLMResponse | undefined;
-      processor.start(makeRequest("response"), (r) => { response = r; });
+      processor.start(makeRequest("response"), async (r) => { response = r; });
       
       await vi.waitFor(() => expect(response).toBeDefined());
       expect(response?.content).toBe("Hello world");
@@ -146,7 +146,7 @@ describe("QueueProcessor", () => {
       vi.mocked(llmClient.cleanResponseContent).mockReturnValue("No message");
       
       let response: LLMResponse | undefined;
-      processor.start(makeRequest("response"), (r) => { response = r; });
+      processor.start(makeRequest("response"), async (r) => { response = r; });
       
       await vi.waitFor(() => expect(response).toBeDefined());
       expect(response?.success).toBe(true);
@@ -161,7 +161,7 @@ describe("QueueProcessor", () => {
       vi.mocked(llmClient.cleanResponseContent).mockReturnValue("[no message]");
       
       let response: LLMResponse | undefined;
-      processor.start(makeRequest("response"), (r) => { response = r; });
+      processor.start(makeRequest("response"), async (r) => { response = r; });
       
       await vi.waitFor(() => expect(response).toBeDefined());
       expect(response?.content).toBeNull();
@@ -176,7 +176,7 @@ describe("QueueProcessor", () => {
       });
       
       let response: LLMResponse | undefined;
-      processor.start(makeRequest(), (r) => { response = r; });
+      processor.start(makeRequest(), async (r) => { response = r; });
       
       await vi.waitFor(() => expect(response).toBeDefined());
       expect(response?.success).toBe(false);
@@ -189,7 +189,7 @@ describe("QueueProcessor", () => {
       );
       
       let response: LLMResponse | undefined;
-      processor.start(makeRequest(), (r) => { response = r; });
+      processor.start(makeRequest(), async (r) => { response = r; });
       
       await vi.waitFor(() => expect(response).toBeDefined());
       expect(response?.success).toBe(false);
@@ -204,7 +204,7 @@ describe("QueueProcessor", () => {
       vi.mocked(llmClient.cleanResponseContent).mockReturnValue("Test");
       
       let response: LLMResponse | undefined;
-      processor.start(makeRequest(), (r) => { response = r; });
+      processor.start(makeRequest(), async (r) => { response = r; });
       
       await vi.waitFor(() => expect(response).toBeDefined());
       expect(response?.finish_reason).toBe("length");
@@ -217,7 +217,7 @@ describe("QueueProcessor", () => {
         () => new Promise(() => {})
       );
       
-      processor.start(makeRequest(), vi.fn());
+      processor.start(makeRequest(), vi.fn().mockResolvedValue(undefined));
       
       expect(() => processor.abort()).not.toThrow();
     });
@@ -235,7 +235,7 @@ describe("QueueProcessor", () => {
       });
       vi.mocked(llmClient.cleanResponseContent).mockReturnValue("Test response");
       
-      const callback = vi.fn();
+      const callback = vi.fn().mockResolvedValue(undefined);
       processor.start(makeRequest(), callback);
       
       await vi.waitFor(() => expect(callback).toHaveBeenCalled());
@@ -245,22 +245,19 @@ describe("QueueProcessor", () => {
       expect(response.success).toBe(true);
     });
 
-    it("returns to idle before invoking callback", async () => {
+    it("returns to idle after callback completes", async () => {
       vi.mocked(llmClient.callLLMRaw).mockResolvedValue({
         content: "Test",
         finishReason: "stop",
       });
       vi.mocked(llmClient.cleanResponseContent).mockReturnValue("Test");
       
-      let stateInCallback: string | undefined;
-      const callback = vi.fn(() => {
-        stateInCallback = processor.getState();
-      });
+      const callback = vi.fn().mockResolvedValue(undefined);
       
       processor.start(makeRequest(), callback);
       
       await vi.waitFor(() => expect(callback).toHaveBeenCalled());
-      expect(stateInCallback).toBe("idle");
+      await vi.waitFor(() => expect(processor.getState()).toBe("idle"));
     });
   });
 
@@ -279,7 +276,7 @@ describe("QueueProcessor", () => {
       request.data.personaName = "TestPersona";
       
       const messageFetcher = vi.fn().mockReturnValue([{ role: "user", content: "History" }]);
-      const callback = vi.fn();
+      const callback = vi.fn().mockResolvedValue(undefined);
       processor.start(request, callback, { messageFetcher });
       
       await vi.waitFor(() => expect(callback).toHaveBeenCalled());

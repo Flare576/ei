@@ -413,7 +413,7 @@ describe("queueItemUpdate (Step 3)", () => {
     const context = {
       personaName: "ei",
       messages_context: [],
-      messages_analyze: [],
+      messages_analyze: [createMessage("1", "analyze")],
       itemName: "Curiosity",
       itemValue: "Updated value",
     };
@@ -433,7 +433,7 @@ describe("queueItemUpdate (Step 3)", () => {
     const context = {
       personaName: "ei",
       messages_context: [],
-      messages_analyze: [],
+      messages_analyze: [createMessage("1", "analyze")],
       itemName: "AI",
       itemValue: "Updated AI interest",
     };
@@ -452,7 +452,7 @@ describe("queueItemUpdate (Step 3)", () => {
     const context = {
       personaName: "ei",
       messages_context: [],
-      messages_analyze: [],
+      messages_analyze: [createMessage("1", "analyze")],
       itemName: "Alice",
       itemValue: "Colleague",
     };
@@ -471,7 +471,7 @@ describe("queueItemUpdate (Step 3)", () => {
     const context = {
       personaName: "ei",
       messages_context: [],
-      messages_analyze: [],
+      messages_analyze: [createMessage("1", "analyze")],
       itemName: "NonExistent",
       itemValue: "Value",
     };

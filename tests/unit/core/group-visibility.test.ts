@@ -131,7 +131,7 @@ function createItemUpdateResponse(options: {
 
 describe("Group Visibility", () => {
   describe("handleHumanItemUpdate - group merging", () => {
-    it("new item gets persona's group_primary", () => {
+    it("new item gets persona's group_primary", async () => {
       const state = createMockStateManager({
         personas: {
           Frodo: { group_primary: "Fellowship", groups_visible: ["General"] },
@@ -150,7 +150,7 @@ describe("Group Visibility", () => {
         },
       });
 
-      handlers[LLMNextStep.HandleHumanItemUpdate](response, state as any);
+      await handlers[LLMNextStep.HandleHumanItemUpdate](response, state as any);
 
       expect(state.human_trait_upsert).toHaveBeenCalled();
       const trait = state.human_trait_upsert.mock.calls[0][0];
@@ -158,7 +158,7 @@ describe("Group Visibility", () => {
       expect(trait.learned_by).toBe("Frodo");
     });
 
-    it("existing item gets persona's group added to existing groups", () => {
+    it("existing item gets persona's group added to existing groups", async () => {
       const existingTrait: Trait = {
         id: "trait-1",
         name: "Curious",
@@ -190,7 +190,7 @@ describe("Group Visibility", () => {
         },
       });
 
-      handlers[LLMNextStep.HandleHumanItemUpdate](response, state as any);
+      await handlers[LLMNextStep.HandleHumanItemUpdate](response, state as any);
 
       expect(state.human_trait_upsert).toHaveBeenCalled();
       const trait = state.human_trait_upsert.mock.calls[0][0];
@@ -200,7 +200,7 @@ describe("Group Visibility", () => {
       expect(trait.learned_by).toBe("Frodo");
     });
 
-    it("does not duplicate groups when persona's group already exists", () => {
+    it("does not duplicate groups when persona's group already exists", async () => {
       const existingTrait: Trait = {
         id: "trait-1",
         name: "Wise",
@@ -231,13 +231,13 @@ describe("Group Visibility", () => {
         },
       });
 
-      handlers[LLMNextStep.HandleHumanItemUpdate](response, state as any);
+      await handlers[LLMNextStep.HandleHumanItemUpdate](response, state as any);
 
       const trait = state.human_trait_upsert.mock.calls[0][0];
       expect(trait.persona_groups).toEqual(["Fellowship", "General"]);
     });
 
-    it("Ei updates preserve existing groups (Ei has no primary group effect)", () => {
+    it("Ei updates preserve existing groups (Ei has no primary group effect)", async () => {
       const existingFact: Fact = {
         id: "fact-1",
         name: "Name",
@@ -268,7 +268,7 @@ describe("Group Visibility", () => {
         },
       });
 
-      handlers[LLMNextStep.HandleHumanItemUpdate](response, state as any);
+      await handlers[LLMNextStep.HandleHumanItemUpdate](response, state as any);
 
       const fact = state.human_fact_upsert.mock.calls[0][0];
       expect(fact.persona_groups).toContain("Fellowship");
@@ -277,7 +277,7 @@ describe("Group Visibility", () => {
   });
 
   describe("handleHumanItemUpdate - topics and people with exposure", () => {
-    it("new topic gets correct group and exposure fields", () => {
+    it("new topic gets correct group and exposure fields", async () => {
       const state = createMockStateManager({
         personas: {
           Hermit: { group_primary: "Hermit", groups_visible: [] },
@@ -297,7 +297,7 @@ describe("Group Visibility", () => {
         },
       });
 
-      handlers[LLMNextStep.HandleHumanItemUpdate](response, state as any);
+      await handlers[LLMNextStep.HandleHumanItemUpdate](response, state as any);
 
       const topic = state.human_topic_upsert.mock.calls[0][0];
       expect(topic.persona_groups).toEqual(["Hermit"]);
@@ -305,7 +305,7 @@ describe("Group Visibility", () => {
       expect(topic.learned_by).toBe("Hermit");
     });
 
-    it("new person gets correct group and relationship", () => {
+    it("new person gets correct group and relationship", async () => {
       const state = createMockStateManager({
         personas: {
           Frodo: { group_primary: "Fellowship", groups_visible: ["General"] },
@@ -325,7 +325,7 @@ describe("Group Visibility", () => {
         },
       });
 
-      handlers[LLMNextStep.HandleHumanItemUpdate](response, state as any);
+      await handlers[LLMNextStep.HandleHumanItemUpdate](response, state as any);
 
       const person = state.human_person_upsert.mock.calls[0][0];
       expect(person.persona_groups).toEqual(["Fellowship"]);
@@ -335,7 +335,7 @@ describe("Group Visibility", () => {
   });
 
   describe("empty result handling", () => {
-    it("does not upsert when result is empty object", () => {
+    it("does not upsert when result is empty object", async () => {
       const state = createMockStateManager({
         personas: {
           Frodo: { group_primary: "Fellowship" },
@@ -349,7 +349,7 @@ describe("Group Visibility", () => {
         result: {},
       });
 
-      handlers[LLMNextStep.HandleHumanItemUpdate](response, state as any);
+      await handlers[LLMNextStep.HandleHumanItemUpdate](response, state as any);
 
       expect(state.human_trait_upsert).not.toHaveBeenCalled();
     });

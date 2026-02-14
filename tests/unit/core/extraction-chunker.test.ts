@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect } from "vitest";
 import { chunkExtractionContext, estimateContextTokens } from "../../../src/core/orchestrators/extraction-chunker.js";
 import type { ExtractionContext } from "../../../src/core/orchestrators/human-extraction.js";
 import { ContextStatus, type Message } from "../../../src/core/types.js";

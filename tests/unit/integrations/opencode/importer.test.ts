@@ -25,6 +25,7 @@ describe("importOpenCodeSessions", () => {
 
     mockStateManager = {
       getHuman: vi.fn().mockReturnValue(mockHuman),
+      setHuman: vi.fn((h: HumanEntity) => Object.assign(mockHuman, h)),
       persona_get: vi.fn().mockReturnValue(null),
       persona_getAll: vi.fn().mockReturnValue([]),
       persona_add: vi.fn(),

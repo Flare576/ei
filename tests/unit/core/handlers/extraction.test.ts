@@ -21,7 +21,7 @@ import {
 // Mock the orchestrators module
 vi.mock("../../../../src/core/orchestrators/index.js", () => ({
   orchestratePersonaGeneration: vi.fn(),
-  queueItemMatch: vi.fn(),
+  queueItemMatch: vi.fn().mockResolvedValue(1),
   queueItemUpdate: vi.fn(),
 }));
 
@@ -40,6 +40,7 @@ function createMockStateManager() {
     traits: [],
     topics: [],
     people: [],
+    quotes: [],
     last_updated: new Date().toISOString(),
     last_activity: new Date().toISOString(),
   };
@@ -110,7 +111,7 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
   });
 
   describe("handleHumanFactScan", () => {
-    it("queues item match for each detected fact", () => {
+    it("queues item match for each detected fact", async () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanFactScan,
         data: {
@@ -127,7 +128,7 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
         ],
       });
 
-      handlers.handleHumanFactScan(response, state as any);
+      await handlers.handleHumanFactScan(response, state as any);
 
       expect(queueItemMatch).toHaveBeenCalledTimes(2);
       expect(queueItemMatch).toHaveBeenCalledWith(
@@ -138,31 +139,31 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
       );
     });
 
-    it("does nothing when no facts detected", () => {
+    it("does nothing when no facts detected", async () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanFactScan,
       });
 
       const response = createMockResponse(request, { facts: [] });
 
-      handlers.handleHumanFactScan(response, state as any);
+      await handlers.handleHumanFactScan(response, state as any);
 
       expect(queueItemMatch).not.toHaveBeenCalled();
     });
 
-    it("handles missing facts array gracefully", () => {
+    it("handles missing facts array gracefully", async () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanFactScan,
       });
 
       const response = createMockResponse(request, {});
 
-      handlers.handleHumanFactScan(response, state as any);
+      await handlers.handleHumanFactScan(response, state as any);
 
       expect(queueItemMatch).not.toHaveBeenCalled();
     });
 
-    it("handles missing context gracefully", () => {
+    it("handles missing context gracefully", async () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanFactScan,
         data: {}, // Missing context
@@ -172,7 +173,7 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
         facts: [{ type_of_fact: "Test", value_of_fact: "Value", reason: "User stated it" }],
       });
 
-      handlers.handleHumanFactScan(response, state as any);
+      await handlers.handleHumanFactScan(response, state as any);
 
       // Should not throw, but also not queue (missing context)
       expect(queueItemMatch).not.toHaveBeenCalled();
@@ -180,7 +181,7 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
   });
 
   describe("handleHumanTraitScan", () => {
-    it("queues item match for each detected trait", () => {
+    it("queues item match for each detected trait", async () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanTraitScan,
         data: {
@@ -196,7 +197,7 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
         ],
       });
 
-      handlers.handleHumanTraitScan(response, state as any);
+      await handlers.handleHumanTraitScan(response, state as any);
 
       expect(queueItemMatch).toHaveBeenCalledTimes(1);
       expect(queueItemMatch).toHaveBeenCalledWith(
@@ -207,7 +208,7 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
       );
     });
 
-    it("does nothing when no traits detected", () => {
+    it("does nothing when no traits detected", async () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanTraitScan,
         data: {
@@ -219,14 +220,14 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
 
       const response = createMockResponse(request, { traits: [] });
 
-      handlers.handleHumanTraitScan(response, state as any);
+      await handlers.handleHumanTraitScan(response, state as any);
 
       expect(queueItemMatch).not.toHaveBeenCalled();
     });
   });
 
   describe("handleHumanTopicScan", () => {
-    it("queues item match for each detected topic", () => {
+    it("queues item match for each detected topic", async () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanTopicScan,
         data: {
@@ -243,7 +244,7 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
         ],
       });
 
-      handlers.handleHumanTopicScan(response, state as any);
+      await handlers.handleHumanTopicScan(response, state as any);
 
       expect(queueItemMatch).toHaveBeenCalledTimes(2);
       expect(queueItemMatch).toHaveBeenCalledWith(
@@ -256,7 +257,7 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
   });
 
   describe("handleHumanPersonScan", () => {
-    it("queues item match for each detected person", () => {
+    it("queues item match for each detected person", async () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanPersonScan,
         data: {
@@ -272,7 +273,7 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
         ],
       });
 
-      handlers.handleHumanPersonScan(response, state as any);
+      await handlers.handleHumanPersonScan(response, state as any);
 
       expect(queueItemMatch).toHaveBeenCalledTimes(1);
       expect(queueItemMatch).toHaveBeenCalledWith(
@@ -294,7 +295,7 @@ describe("Extraction Handlers - Step 2 (Match)", () => {
   });
 
   describe("handleHumanItemMatch", () => {
-    it("queues item update with match result", () => {
+    it("queues item update with match result", async () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanItemMatch,
         data: {
@@ -311,7 +312,7 @@ describe("Extraction Handlers - Step 2 (Match)", () => {
         name: "Birthday",
       });
 
-      handlers.handleHumanItemMatch(response, state as any);
+      await handlers.handleHumanItemMatch(response, state as any);
 
       expect(queueItemUpdate).toHaveBeenCalledTimes(1);
       expect(queueItemUpdate).toHaveBeenCalledWith(
@@ -326,7 +327,7 @@ describe("Extraction Handlers - Step 2 (Match)", () => {
       );
     });
 
-    it("queues item update for new item (Not Found)", () => {
+    it("queues item update for new item (Not Found)", async () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanItemMatch,
         data: {
@@ -343,7 +344,7 @@ describe("Extraction Handlers - Step 2 (Match)", () => {
         name: "Not Found",
       });
 
-      handlers.handleHumanItemMatch(response, state as any);
+      await handlers.handleHumanItemMatch(response, state as any);
 
       expect(queueItemUpdate).toHaveBeenCalledWith(
         "trait",
@@ -353,7 +354,7 @@ describe("Extraction Handlers - Step 2 (Match)", () => {
       );
     });
 
-    it("handles missing parsed result", () => {
+    it("handles missing parsed result", async () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanItemMatch,
         data: {
@@ -369,7 +370,7 @@ describe("Extraction Handlers - Step 2 (Match)", () => {
       const response = createMockResponse(request, null);
       response.parsed = undefined;
 
-      handlers.handleHumanItemMatch(response, state as any);
+      await handlers.handleHumanItemMatch(response, state as any);
 
       expect(queueItemUpdate).not.toHaveBeenCalled();
     });
@@ -397,7 +398,7 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
   });
 
   describe("handleHumanItemUpdate", () => {
-    it("creates new fact when isNewItem=true", () => {
+    it("creates new fact when isNewItem=true", async () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanItemUpdate,
         data: {
@@ -414,7 +415,7 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
         sentiment: 0.8,
       });
 
-      handlers.handleHumanItemUpdate(response, state as any);
+      await handlers.handleHumanItemUpdate(response, state as any);
 
       expect(state.human_fact_upsert).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -427,7 +428,7 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
       );
     });
 
-    it("updates existing fact when isNewItem=false", () => {
+    it("updates existing fact when isNewItem=false", async () => {
       const existingId = "existing-fact-id";
       state._human.facts.push({
         id: existingId,
@@ -455,7 +456,7 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
         sentiment: 0.9,
       });
 
-      handlers.handleHumanItemUpdate(response, state as any);
+      await handlers.handleHumanItemUpdate(response, state as any);
 
       expect(state.human_fact_upsert).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -470,7 +471,7 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
       expect(calledWith.learned_by).toBeUndefined();
     });
 
-    it("creates new trait with strength", () => {
+    it("creates new trait with strength", async () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanItemUpdate,
         data: {
@@ -487,7 +488,7 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
         strength: 0.8,
       });
 
-      handlers.handleHumanItemUpdate(response, state as any);
+      await handlers.handleHumanItemUpdate(response, state as any);
 
       expect(state.human_trait_upsert).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -497,7 +498,7 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
       );
     });
 
-    it("creates new topic with exposure_impact calculation", () => {
+    it("creates new topic with exposure_impact calculation", async () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanItemUpdate,
         data: {
@@ -515,7 +516,7 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
         exposure_desired: 0.8,
       });
 
-      handlers.handleHumanItemUpdate(response, state as any);
+      await handlers.handleHumanItemUpdate(response, state as any);
 
       expect(state.human_topic_upsert).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -526,7 +527,7 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
       );
     });
 
-    it("maps exposure_impact values correctly", () => {
+    it("maps exposure_impact values correctly", async () => {
       const testCases = [
         { impact: "high", expected: 0.9 },
         { impact: "medium", expected: 0.6 },
@@ -566,14 +567,14 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
           exposure_desired: 0.5,
         });
 
-        handlers.handleHumanItemUpdate(response, state as any);
+        await handlers.handleHumanItemUpdate(response, state as any);
 
         const calledWith = state.human_topic_upsert.mock.calls[0][0];
         expect(calledWith.exposure_current).toBe(expected);
       }
     });
 
-    it("creates new person with relationship", () => {
+    it("creates new person with relationship", async () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanItemUpdate,
         data: {
@@ -592,7 +593,7 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
         exposure_desired: 0.7,
       });
 
-      handlers.handleHumanItemUpdate(response, state as any);
+      await handlers.handleHumanItemUpdate(response, state as any);
 
       expect(state.human_person_upsert).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -603,7 +604,7 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
       );
     });
 
-    it("does nothing when result is empty", () => {
+    it("does nothing when result is empty", async () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanItemUpdate,
         data: {
@@ -615,12 +616,12 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
 
       const response = createMockResponse(request, {});
 
-      handlers.handleHumanItemUpdate(response, state as any);
+      await handlers.handleHumanItemUpdate(response, state as any);
 
       expect(state.human_fact_upsert).not.toHaveBeenCalled();
     });
 
-    it("does nothing when required fields missing", () => {
+    it("does nothing when required fields missing", async () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanItemUpdate,
         data: {
@@ -635,7 +636,7 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
         name: "Test",
       });
 
-      handlers.handleHumanItemUpdate(response, state as any);
+      await handlers.handleHumanItemUpdate(response, state as any);
 
       expect(state.human_fact_upsert).not.toHaveBeenCalled();
     });
@@ -650,7 +651,7 @@ describe("Cross-Persona Validation", () => {
     vi.clearAllMocks();
   });
 
-  it("queues Ei validation when non-Ei persona with General group learns item", () => {
+  it("queues Ei validation when non-Ei persona with General group learns item", async () => {
     state._personas["friend"] = {
       entity: "system",
       aliases: ["friend"],
@@ -679,7 +680,7 @@ describe("Cross-Persona Validation", () => {
       sentiment: 0.5,
     });
 
-    handlers.handleHumanItemUpdate(response, state as any);
+    await handlers.handleHumanItemUpdate(response, state as any);
 
     // Should upsert AND queue validation
     expect(state.human_fact_upsert).toHaveBeenCalled();
@@ -694,7 +695,7 @@ describe("Cross-Persona Validation", () => {
     );
   });
 
-  it("does NOT queue validation when Ei learns item", () => {
+  it("does NOT queue validation when Ei learns item", async () => {
     state._personas["ei"] = {
       entity: "system",
       aliases: ["ei"],
@@ -722,13 +723,13 @@ describe("Cross-Persona Validation", () => {
       sentiment: 0.5,
     });
 
-    handlers.handleHumanItemUpdate(response, state as any);
+    await handlers.handleHumanItemUpdate(response, state as any);
 
     expect(state.human_fact_upsert).toHaveBeenCalled();
     expect(state.queue_enqueue).not.toHaveBeenCalled();
   });
 
-  it("does NOT queue validation when persona has non-General group", () => {
+  it("does NOT queue validation when persona has non-General group", async () => {
     state._personas["work-buddy"] = {
       entity: "system",
       aliases: ["work-buddy"],
@@ -757,7 +758,7 @@ describe("Cross-Persona Validation", () => {
       sentiment: 0.5,
     });
 
-    handlers.handleHumanItemUpdate(response, state as any);
+    await handlers.handleHumanItemUpdate(response, state as any);
 
     expect(state.human_fact_upsert).toHaveBeenCalled();
     expect(state.queue_enqueue).not.toHaveBeenCalled();
@@ -773,7 +774,7 @@ describe("handleEiValidation", () => {
     vi.clearAllMocks();
   });
 
-  it("accepts item and applies it", () => {
+  it("accepts item and applies it", async () => {
     const request = createMockRequest({
       next_step: LLMNextStep.HandleEiValidation,
       data: {
@@ -797,7 +798,7 @@ describe("handleEiValidation", () => {
       reason: "Information seems accurate",
     });
 
-    handlers.handleEiValidation(response, state as any);
+    await handlers.handleEiValidation(response, state as any);
 
     expect(state.human_fact_upsert).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -807,7 +808,7 @@ describe("handleEiValidation", () => {
     expect(state.queue_clearValidations).toHaveBeenCalledWith(["val-123"]);
   });
 
-  it("rejects item and clears validation", () => {
+  it("rejects item and clears validation", async () => {
     const request = createMockRequest({
       next_step: LLMNextStep.HandleEiValidation,
       data: {
@@ -831,13 +832,13 @@ describe("handleEiValidation", () => {
       reason: "Information contradicts known facts",
     });
 
-    handlers.handleEiValidation(response, state as any);
+    await handlers.handleEiValidation(response, state as any);
 
     expect(state.human_fact_upsert).not.toHaveBeenCalled();
     expect(state.queue_clearValidations).toHaveBeenCalledWith(["val-123"]);
   });
 
-  it("modifies item and applies modification", () => {
+  it("modifies item and applies modification", async () => {
     const request = createMockRequest({
       next_step: LLMNextStep.HandleEiValidation,
       data: {
@@ -867,7 +868,7 @@ describe("handleEiValidation", () => {
       },
     });
 
-    handlers.handleEiValidation(response, state as any);
+    await handlers.handleEiValidation(response, state as any);
 
     expect(state.human_trait_upsert).toHaveBeenCalledWith(
       expect.objectContaining({
