@@ -52,8 +52,9 @@ import type {
 } from "../../prompts/human/types.js";
 import { buildEiValidationPrompt } from "../../prompts/validation/index.js";
 import { LLMRequestType, LLMPriority, LLMNextStep as NextStep } from "../types.js";
+import { getEmbeddingService, getItemEmbeddingText } from "../embedding-service.js";
 
-export type ResponseHandler = (response: LLMResponse, state: StateManager) => void;
+export type ResponseHandler = (response: LLMResponse, state: StateManager) => void | Promise<void>;
 
 function splitMessagesByTimestamp(
   messages: Message[], 
@@ -471,7 +472,7 @@ function handleDescriptionCheck(response: LLMResponse, state: StateManager): voi
   console.log(`[handleDescriptionCheck] Queued description regeneration for ${personaName}`);
 }
 
-function handleHumanFactScan(response: LLMResponse, state: StateManager): void {
+async function handleHumanFactScan(response: LLMResponse, state: StateManager): Promise<void> {
   const result = response.parsed as FactScanResult | undefined;
   if (!result?.facts || !Array.isArray(result.facts)) {
     console.log("[handleHumanFactScan] No facts detected or invalid result");
@@ -483,12 +484,12 @@ function handleHumanFactScan(response: LLMResponse, state: StateManager): void {
 
   // TODO: we should de-dupe here - We don't need to process "Flare" 2+ times
   for (const candidate of result.facts) {
-    queueItemMatch("fact", candidate, context, state);
+    await queueItemMatch("fact", candidate, context, state);
   }
   console.log(`[handleHumanFactScan] Queued ${result.facts.length} fact(s) for matching`);
 }
 
-function handleHumanTraitScan(response: LLMResponse, state: StateManager): void {
+async function handleHumanTraitScan(response: LLMResponse, state: StateManager): Promise<void> {
   const result = response.parsed as TraitScanResult | undefined;
   if (!result?.traits || !Array.isArray(result.traits)) {
     console.log("[handleHumanTraitScan] No traits detected or invalid result");
@@ -499,12 +500,12 @@ function handleHumanTraitScan(response: LLMResponse, state: StateManager): void 
   if (!context) return;
 
   for (const candidate of result.traits) {
-    queueItemMatch("trait", candidate, context, state);
+    await queueItemMatch("trait", candidate, context, state);
   }
   console.log(`[handleHumanTraitScan] Queued ${result.traits.length} trait(s) for matching`);
 }
 
-function handleHumanTopicScan(response: LLMResponse, state: StateManager): void {
+async function handleHumanTopicScan(response: LLMResponse, state: StateManager): Promise<void> {
   const result = response.parsed as TopicScanResult | undefined;
   if (!result?.topics || !Array.isArray(result.topics)) {
     console.log("[handleHumanTopicScan] No topics detected or invalid result");
@@ -515,12 +516,12 @@ function handleHumanTopicScan(response: LLMResponse, state: StateManager): void 
   if (!context) return;
 
   for (const candidate of result.topics) {
-    queueItemMatch("topic", candidate, context, state);
+    await queueItemMatch("topic", candidate, context, state);
   }
   console.log(`[handleHumanTopicScan] Queued ${result.topics.length} topic(s) for matching`);
 }
 
-function handleHumanPersonScan(response: LLMResponse, state: StateManager): void {
+async function handleHumanPersonScan(response: LLMResponse, state: StateManager): Promise<void> {
   const result = response.parsed as PersonScanResult | undefined;
   if (!result?.people || !Array.isArray(result.people)) {
     console.log("[handleHumanPersonScan] No people detected or invalid result");
@@ -531,7 +532,7 @@ function handleHumanPersonScan(response: LLMResponse, state: StateManager): void
   if (!context) return;
 
   for (const candidate of result.people) {
-    queueItemMatch("person", candidate, context, state);
+    await queueItemMatch("person", candidate, context, state);
   }
   console.log(`[handleHumanPersonScan] Queued ${result.people.length} person(s) for matching`);
 }
@@ -541,6 +542,10 @@ function handleHumanItemMatch(response: LLMResponse, state: StateManager): void 
   if (!result) {
     console.error("[handleHumanItemMatch] No parsed result");
     return;
+  }
+  // "new" isn't a valid guid and is used as a marker for LLMs to signify "no match" - update for processing
+  if (result?.matched_guid === "new") {
+    result.matched_guid = null;
   }
 
   const candidateType = response.request.data.candidateType as DataItemType;
@@ -577,7 +582,7 @@ function handleHumanItemMatch(response: LLMResponse, state: StateManager): void 
   console.log(`[handleHumanItemMatch] ${candidateType} "${itemName}": ${matched}`);
 }
 
-function handleHumanItemUpdate(response: LLMResponse, state: StateManager): void {
+async function handleHumanItemUpdate(response: LLMResponse, state: StateManager): Promise<void> {
   const result = response.parsed as ItemUpdateResult | undefined;
   
   if (!result || Object.keys(result).length === 0) {
@@ -622,6 +627,15 @@ function handleHumanItemUpdate(response: LLMResponse, state: StateManager): void
     return Array.from(groups);
   };
 
+  let embedding: number[] | undefined;
+  try {
+    const embeddingService = getEmbeddingService();
+    const text = getItemEmbeddingText({ name: result.name, description: result.description });
+    embedding = await embeddingService.embed(text);
+  } catch (err) {
+    console.warn(`[handleHumanItemUpdate] Failed to compute embedding for ${candidateType} "${result.name}":`, err);
+  }
+
   switch (candidateType) {
     case "fact": {
       const fact: Fact = {
@@ -634,6 +648,7 @@ function handleHumanItemUpdate(response: LLMResponse, state: StateManager): void
         last_updated: now,
         learned_by: isNewItem ? personaName : existingItem?.learned_by,
         persona_groups: mergeGroups(existingItem?.persona_groups),
+        embedding,
       };
       applyOrValidate(state, "fact", fact, personaName, isEi, personaGroup);
       break;
@@ -648,6 +663,7 @@ function handleHumanItemUpdate(response: LLMResponse, state: StateManager): void
         last_updated: now,
         learned_by: isNewItem ? personaName : existingItem?.learned_by,
         persona_groups: mergeGroups(existingItem?.persona_groups),
+        embedding,
       };
       applyOrValidate(state, "trait", trait, personaName, isEi, personaGroup);
       break;
@@ -667,6 +683,7 @@ function handleHumanItemUpdate(response: LLMResponse, state: StateManager): void
         last_updated: now,
         learned_by: isNewItem ? personaName : existingItem?.learned_by,
         persona_groups: mergeGroups(existingItem?.persona_groups),
+        embedding,
       };
       applyOrValidate(state, "topic", topic, personaName, isEi, personaGroup);
       break;
@@ -684,6 +701,7 @@ function handleHumanItemUpdate(response: LLMResponse, state: StateManager): void
         last_updated: now,
         learned_by: isNewItem ? personaName : existingItem?.learned_by,
         persona_groups: mergeGroups(existingItem?.persona_groups),
+        embedding,
       };
       applyOrValidate(state, "person", person, personaName, isEi, personaGroup);
       break;
@@ -691,35 +709,32 @@ function handleHumanItemUpdate(response: LLMResponse, state: StateManager): void
   }
 
   const allMessages = state.messages_get(personaName);
-  validateAndStoreQuotes(result.quotes, allMessages, itemId, personaName, personaGroup, state);
+  await validateAndStoreQuotes(result.quotes, allMessages, itemId, personaName, personaGroup, state);
 
   console.log(`[handleHumanItemUpdate] ${isNewItem ? "Created" : "Updated"} ${candidateType} "${result.name}"`);
 }
 
-function validateAndStoreQuotes(
+async function validateAndStoreQuotes(
   candidates: Array<{ text: string; reason: string }> | undefined,
   messages: Message[],
   dataItemId: string,
   personaName: string,
   personaGroup: string | null,
   state: StateManager
-): void {
+): Promise<void> {
   if (!candidates || candidates.length === 0) return;
   
   for (const candidate of candidates) {
-    // Search all messages for exact match
     let found = false;
     for (const message of messages) {
       const start = message.content.indexOf(candidate.text);
       if (start !== -1) {
         const end = start + candidate.text.length;
         
-        // Check for existing quote at same position
         const existing = state.human_quote_getForMessage(message.id);
         const existingQuote = existing.find(q => q.start === start && q.end === end);
         
         if (existingQuote) {
-          // Quote exists - append this data item if not already linked
           if (!existingQuote.data_item_ids.includes(dataItemId)) {
             state.human_quote_update(existingQuote.id, {
               data_item_ids: [...existingQuote.data_item_ids, dataItemId],
@@ -730,6 +745,14 @@ function validateAndStoreQuotes(
           }
           found = true;
           break;
+        }
+        
+        let embedding: number[] | undefined;
+        try {
+          const embeddingService = getEmbeddingService();
+          embedding = await embeddingService.embed(candidate.text);
+        } catch (err) {
+          console.warn(`[extraction] Failed to compute embedding for quote: "${candidate.text.slice(0, 30)}..."`, err);
         }
         
         const quote: Quote = {
@@ -744,14 +767,14 @@ function validateAndStoreQuotes(
           end: end,
           created_at: new Date().toISOString(),
           created_by: "extraction",
+          embedding,
         };
         state.human_quote_add(quote);
         console.log(`[extraction] Captured quote: "${candidate.text.slice(0, 50)}..."`);
         found = true;
-        break; // Found it, move to next candidate
+        break;
       }
     }
-    // If loop completes without finding, log it
     if (!found) {
       console.log(`[extraction] Quote not found in messages, skipping: "${candidate.text?.slice(0, 50)}..."`);
     }

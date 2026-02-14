@@ -69,6 +69,7 @@ export interface DataItemBase {
   last_updated: string;
   learned_by?: string;
   persona_groups?: string[];
+  embedding?: number[];
 }
 
 export interface Fact extends DataItemBase {
@@ -124,6 +125,7 @@ export interface Quote {
   end: number | null;            // Character offset in message (null = can't highlight)
   created_at: string;            // ISO timestamp when captured
   created_by: "extraction" | "human";  // How it was created
+  embedding?: number[];          // Semantic embedding for similarity search
 }
 
 // =============================================================================
