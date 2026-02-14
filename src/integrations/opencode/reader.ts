@@ -1,5 +1,3 @@
-import { join } from "path";
-import { readdir, readFile } from "fs/promises";
 import type {
   OpenCodeSession,
   OpenCodeSessionRaw,
@@ -10,30 +8,69 @@ import type {
 } from "./types.js";
 import { BUILTIN_AGENTS } from "./types.js";
 
-const DEFAULT_STORAGE_PATH = join(
-  process.env.HOME || "~",
-  ".local",
-  "share",
-  "opencode",
-  "storage"
-);
+const isBrowser = typeof window !== "undefined";
+
+let _join: typeof import("path").join;
+let _readdir: typeof import("fs/promises").readdir;
+let _readFile: typeof import("fs/promises").readFile;
+let _nodeModulesLoaded = false;
+
+async function ensureNodeModules(): Promise<boolean> {
+  if (isBrowser) return false;
+  if (_nodeModulesLoaded) return true;
+  
+  const PATH_MODULE = "path";
+  const FS_MODULE = "fs/promises";
+  
+  const pathMod = await import(/* @vite-ignore */ PATH_MODULE);
+  const fsMod = await import(/* @vite-ignore */ FS_MODULE);
+  
+  _join = pathMod.join;
+  _readdir = fsMod.readdir;
+  _readFile = fsMod.readFile;
+  _nodeModulesLoaded = true;
+  return true;
+}
+
+function getDefaultStoragePath(): string {
+  if (!_join) return "";
+  return _join(
+    process.env.HOME || "~",
+    ".local",
+    "share",
+    "opencode",
+    "storage"
+  );
+}
 
 export class OpenCodeReader {
-  private storagePath: string;
+  private storagePath: string | null = null;
+  private readonly configuredPath?: string;
 
   constructor(storagePath?: string) {
-    this.storagePath =
-      storagePath || process.env.EI_OPENCODE_STORAGE_PATH || DEFAULT_STORAGE_PATH;
+    this.configuredPath = storagePath;
+  }
+
+  private async init(): Promise<boolean> {
+    if (!(await ensureNodeModules())) return false;
+    if (!this.storagePath) {
+      this.storagePath = this.configuredPath || 
+        process.env.EI_OPENCODE_STORAGE_PATH || 
+        getDefaultStoragePath();
+    }
+    return true;
   }
 
   async getSessionsUpdatedSince(since: Date): Promise<OpenCodeSession[]> {
+    if (!(await this.init())) return [];
+    
     const sinceMs = since.getTime();
     const sessions: OpenCodeSession[] = [];
-    const sessionDir = join(this.storagePath, "session");
+    const sessionDir = _join(this.storagePath!, "session");
 
     let projectDirs: string[];
     try {
-      projectDirs = await readdir(sessionDir);
+      projectDirs = await _readdir(sessionDir);
     } catch {
       return [];
     }
@@ -41,10 +78,10 @@ export class OpenCodeReader {
     for (const projectHash of projectDirs) {
       if (projectHash.startsWith(".")) continue;
 
-      const projectPath = join(sessionDir, projectHash);
+      const projectPath = _join(sessionDir, projectHash);
       let sessionFiles: string[];
       try {
-        sessionFiles = await readdir(projectPath);
+        sessionFiles = await _readdir(projectPath);
       } catch {
         continue;
       }
@@ -52,7 +89,7 @@ export class OpenCodeReader {
       for (const fileName of sessionFiles) {
         if (!fileName.endsWith(".json")) continue;
 
-        const filePath = join(projectPath, fileName);
+        const filePath = _join(projectPath, fileName);
         const raw = await this.readJsonFile<OpenCodeSessionRaw>(filePath);
         if (!raw) continue;
 
@@ -79,13 +116,15 @@ export class OpenCodeReader {
     sessionId: string,
     since?: Date
   ): Promise<OpenCodeMessage[]> {
+    if (!(await this.init())) return [];
+    
     const sinceMs = since?.getTime() ?? 0;
     const messages: OpenCodeMessage[] = [];
-    const messageDir = join(this.storagePath, "message", sessionId);
+    const messageDir = _join(this.storagePath!, "message", sessionId);
 
     let messageFiles: string[];
     try {
-      messageFiles = await readdir(messageDir);
+      messageFiles = await _readdir(messageDir);
     } catch {
       return [];
     }
@@ -93,7 +132,7 @@ export class OpenCodeReader {
     for (const fileName of messageFiles) {
       if (!fileName.endsWith(".json")) continue;
 
-      const filePath = join(messageDir, fileName);
+      const filePath = _join(messageDir, fileName);
       const raw = await this.readJsonFile<OpenCodeMessageRaw>(filePath);
       if (!raw) continue;
 
@@ -138,11 +177,13 @@ export class OpenCodeReader {
   }
 
   async getFirstAgent(sessionId: string): Promise<string | null> {
-    const messageDir = join(this.storagePath, "message", sessionId);
+    if (!(await this.init())) return null;
+    
+    const messageDir = _join(this.storagePath!, "message", sessionId);
 
     let messageFiles: string[];
     try {
-      messageFiles = await readdir(messageDir);
+      messageFiles = await _readdir(messageDir);
     } catch {
       return null;
     }
@@ -152,7 +193,7 @@ export class OpenCodeReader {
     for (const fileName of messageFiles) {
       if (!fileName.endsWith(".json")) continue;
 
-      const filePath = join(messageDir, fileName);
+      const filePath = _join(messageDir, fileName);
       const raw = await this.readJsonFile<OpenCodeMessageRaw>(filePath);
       if (!raw) continue;
 
@@ -165,11 +206,11 @@ export class OpenCodeReader {
   }
 
   private async getMessageContent(messageId: string): Promise<string | null> {
-    const partDir = join(this.storagePath, "part", messageId);
+    const partDir = _join(this.storagePath!, "part", messageId);
 
     let partFiles: string[];
     try {
-      partFiles = await readdir(partDir);
+      partFiles = await _readdir(partDir);
     } catch {
       return null;
     }
@@ -179,7 +220,7 @@ export class OpenCodeReader {
     for (const fileName of partFiles) {
       if (!fileName.endsWith(".json")) continue;
 
-      const filePath = join(partDir, fileName);
+      const filePath = _join(partDir, fileName);
       const raw = await this.readJsonFile<OpenCodePartRaw>(filePath);
       if (!raw) continue;
 
@@ -201,7 +242,7 @@ export class OpenCodeReader {
 
   private async readJsonFile<T>(filePath: string): Promise<T | null> {
     try {
-      const text = await readFile(filePath, "utf-8");
+      const text = await _readFile(filePath, "utf-8");
       if (!text) return null;
       return JSON.parse(text) as T;
     } catch {
