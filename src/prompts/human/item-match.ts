@@ -33,7 +33,7 @@ If you find a match in a DIFFERENT type, still return it! The system will handle
 1. **Exact match**: Same name/concept → return its ID
 2. **Similar match**: Clearly the same thing with different wording → return its ID
 3. **Cross-type match**: Same concept stored as different type → return its ID
-4. **No match**: Genuinely new information → return null
+4. **No match**: Genuinely new information → return "new"
 
 # Existing Data
 
@@ -45,11 +45,11 @@ ${JSON.stringify(data.all_items, null, 2)}
 
 # Response Format
 
-Return ONLY the ID of the matching entry, or null if no match exists.
+Return ONLY the ID of the matching entry, or "new" if no match exists.
 
 \`\`\`json
 {
-    "matched_guid": "uuid-of-matching-entry" | null
+    "matched_guid": "uuid-of-matching-entry" | "new"
 }
 \`\`\`
 
@@ -61,12 +61,12 @@ Type: ${typeLabel}
 Name: ${data.candidate_name}
 Value: ${data.candidate_value}
 
-Find the best match in existing data, or return null if this is genuinely new.
+Find the best match in existing data, or return "new" if this is genuinely new.
 
 **Return JSON:**
 \`\`\`json
 {
-    "matched_guid": "..." | null
+    "matched_guid": "..." | "new"
 }
 \`\`\``;
 

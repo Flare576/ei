@@ -223,9 +223,9 @@ export class Processor {
             this.interface.onMessageProcessing?.(personaName);
           }
 
-          this.queueProcessor.start(request, (response) => {
+          this.queueProcessor.start(request, async (response) => {
             this.currentRequest = null;
-            this.handleResponse(response);
+            await this.handleResponse(response);
             const nextState = this.stateManager.queue_isPaused() ? "paused" : "idle";
             this.interface.onQueueStateChanged?.(nextState);
           }, {
@@ -419,7 +419,7 @@ export class Processor {
     });
   }
 
-  private handleResponse(response: LLMResponse): void {
+  private async handleResponse(response: LLMResponse): Promise<void> {
     if (!response.success) {
       this.interface.onError?.({
         code: response.error?.includes("rate") ? "LLM_RATE_LIMITED" : "LLM_TIMEOUT",
@@ -440,7 +440,7 @@ export class Processor {
     }
 
     try {
-      handler(response, this.stateManager);
+      await handler(response, this.stateManager);
       this.stateManager.queue_complete(response.request.id);
 
       if (response.request.next_step === LLMNextStep.HandlePersonaResponse) {

@@ -31,8 +31,8 @@ Your job is to quickly identify:
         - Use "Unknown" for the missing field and explain in the \`reason\`
         - This will trigger a later validation step to get more information!
     b. If you're adding a NEW PERSON, be as specific as you can, for example:
-        - { "type_of_person": "Unknown", "name_of_person": "Alice at Grocery Store", "reason": "Mentioned but relationship unclear" }
-        - { "type_of_person": "Sister that sews", "name_of_person": "Name Unknown", "reason": "Has a sister who sews, name not given" }
+        - { "type_of_person": "Unknown", "name_of_person": "Alice from work", "reason": "Mentioned but relationship unclear" }
+        - { "type_of_person": "Sibling", "name_of_person": "Name Unknown", "reason": "Mentioned a sibling, name not given" }
 
 **A PERSON Is**
 * Immediate Family: Father, Husband, Son, Brother, Mother, Wife, Daughter, Sister (and step/in-law variants)

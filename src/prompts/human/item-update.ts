@@ -66,16 +66,12 @@ Examples:
 - "Processes emotions internally before discussing them; may need time before opening up."
   `;
 
-  const defaultDescriptionSection = `
-This free-text field should be used to capture interesting details or references that the Human or Persona use while discussing this data point. Personas should be able to show topical recall, make references to the topic or event, or in other ways "Remember" details about it.
-
-**ABSOLUTELY VITAL INSTRUCTION**: Do **NOT** embelish these details - each Persona will use their own voice during interactions with the User - we need to capture EXACTLY what was said and how, or referring back to it won't have meaning.
-  `;
-
-  const descriptionSection = data.data_type === "fact" ? `
+  const factDescriptionSection = `
 A concise, specific piece of information about the Human's ${itemFactType}.
 
 If ${itemFactType} doesn't make sense as a type of FACT, return an empty object (\`{}\`).
+
+If ${itemFactType} was misinterpreted (i.e., a joke, expression, or otherwise "not literally" a fact), return an empty object (\`{}\`).
 
 ## CRITICAL: Facts are OBJECTIVE
 
@@ -98,7 +94,18 @@ If the user expressed emotion, quote or paraphrase THEIR words, don't embellish.
 **Style**: Be factual and concise. Record what the user said or demonstrated, not your interpretation of its deeper meaning. Avoid flowery or poetic language unless the user themselves used such language.
 
 Examples: "Name Unknown" -> "Robert Jordan", "User was married in the Summer" -> "User was married in July, 2006"
-  ` : data.data_type === "trait" ? traitDescriptionSection : defaultDescriptionSection;
+  `;
+
+  const defaultDescriptionSection = `
+This free-text field should be used to capture interesting details or references that the Human or Persona use while discussing this data point. Personas should be able to show topical recall, make references to the topic or event, or in other ways "Remember" details about it.
+
+**ABSOLUTELY VITAL INSTRUCTION**: Do **NOT** embelish these details - each Persona will use their own voice during interactions with the User - we need to capture EXACTLY what was said and how, or referring back to it won't have meaning.
+  `;
+
+  const descriptionSection =
+    data.data_type === "fact" ? factDescriptionSection :
+    data.data_type === "trait" ? traitDescriptionSection :
+    defaultDescriptionSection;
 
   const strengthSection = data.data_type === "trait" ? `
 ## Strength (\`strength\`)
@@ -170,15 +177,20 @@ You are UPDATING an existing ${typeLabel}.`
     : `**NEW ${typeLabel} - NOT YET IN SYSTEM**
 
 You are CREATING a new ${typeLabel} from scratch based on what was discovered:
-- Discovered: "${data.new_item_name || 'Unknown'}"${data.new_item_value ? `\n- Details: "${data.new_item_value}"` : ''}
+\`\`\`json
+{
+  "name": "${data.new_item_name || 'Uknown'}",
+  "description": "${data.new_item_value || 'Details Unknown'}"
+}
+\`\`\`
 
-Return all relevant fields for this ${typeLabel} based on what you find in the conversation.`;
+Return all fields for this ${typeLabel} based on what you find in the conversation.`;
 
   const includeQuotes = data.include_quotes !== false;
   const jsonTemplateFields = [
     '    "name": "User\'s Name",',
-    '    "description": "This is a story of a lovely lady...",',
-    '    "sentiment": 0.9',
+    '    "description": "Their Actual Name",',
+    '    "sentiment": 0.0',
     data.data_type === "trait" ? ',\n    "strength": 0.5' : '',
     data.data_type === "person" ? ',\n    "relationship": "Mother-In-Law|Son|Coworker|etc.",\n    "exposure_desired": 0.4,\n    "exposure_impact": "high|medium|low|none"' : '',
     data.data_type === "topic" ? ',\n    "category": "Interest|Goal|Dream|Conflict|Concern|Fear|Hope|Plan|Project",\n    "exposure_desired": 0.4,\n    "exposure_impact": "high|medium|low|none"' : '',
@@ -221,6 +233,22 @@ ${includeQuotes ? `
 
 In addition to updating the ${typeLabel}, identify any **memorable, funny, important, or stand-out phrases** from the Most Recent Messages that relate to this ${typeLabel}.
 
+### What Makes a Quote Worth Preserving
+
+**Prioritize:**
+- Humor, wit, colorful language, creative profanity
+- Emotional outbursts (positive or negative) — the raw stuff
+- Phrases that reveal personality or communication style
+- Things you'd quote back to them later to make them laugh
+- Unique expressions, malaphors, or turns of phrase
+
+**De-prioritize:**
+- Dry technical facts (those belong in TOPICS)
+- Status updates or process descriptions
+- Generic statements that could come from anyone
+
+A quote like "Does the Pope shit in his hat?" is GOLD. A quote like "We're running a batch of 44k students" is just... data.
+
 Return them in the \`quotes\` array:
 
 \`\`\`json
@@ -237,11 +265,8 @@ Return them in the \`quotes\` array:
 }
 \`\`\`
 
-**CRITICAL**: Return the EXACT text as it appears in the message. We will verify it.
+**CRITICAL**: Return the EXACT text as it appears in the message (spacing, punctuation, formatting, etc.). WE CAN ONLY USE IT IF WE FIND IT IN THE TEXT.
 ` : ''}
-# Current Details of ${typeLabel}
-
-${currentDetailsSection}
 
 # CRITICAL INSTRUCTIONS
 
@@ -261,7 +286,12 @@ If you find **NO EVIDENCE** of this ${typeLabel} in the "Most Recent Messages", 
 
 If you determine **NO CHANGES** are required to the ${typeLabel}, respond with an empty object: \`{}\`.
 
-An empty object, \`{}\`, is the MOST COMMON expected response.`;
+An empty object, \`{}\`, is the MOST COMMON expected response.
+
+# Current Details of ${typeLabel}
+
+${currentDetailsSection}
+`;
 
   const earlierSection = data.messages_context.length > 0
     ? `## Earlier Conversation

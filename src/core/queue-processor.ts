@@ -3,7 +3,7 @@ import { callLLMRaw, parseJSONResponse, cleanResponseContent } from "./llm-clien
 import { hydratePromptPlaceholders } from "../prompts/message-utils.js";
 
 type QueueProcessorState = "idle" | "busy";
-type ResponseCallback = (response: LLMResponse) => void;
+type ResponseCallback = (response: LLMResponse) => Promise<void>;
 type MessageFetcher = (personaName: string) => ChatMessage[];
 type RawMessageFetcher = (personaName: string) => Message[];
 
@@ -58,14 +58,15 @@ export class QueueProcessor {
   }
 
   private finishWith(response: LLMResponse): void {
-    const callback = this.currentCallback;
-    this.state = "idle";
-    this.currentCallback = null;
-    this.currentAccounts = undefined;
-    this.currentMessageFetcher = undefined;
-    this.currentRawMessageFetcher = undefined;
-    this.abortController = null;
-    callback?.(response);
+    const mortalKombat = this.currentCallback ? this.currentCallback : () => Promise.resolve();
+    mortalKombat(response).finally(() => {
+      this.state = "idle";
+      this.currentCallback = null;
+      this.currentAccounts = undefined;
+      this.currentMessageFetcher = undefined;
+      this.currentRawMessageFetcher = undefined;
+      this.abortController = null;
+    });
   }
 
   private async processRequest(request: LLMRequest): Promise<LLMResponse> {

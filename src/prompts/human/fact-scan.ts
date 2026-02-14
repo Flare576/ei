@@ -32,7 +32,15 @@ Your job is to quickly identify:
 3.  **Specificity over Generality:**
     *   If the user says "I live in a big city," do not extract "Location: big city." If they say "I live in New York," extract "Location: New York."
 4.  **Avoid Inference from Interests/Hobbies:**
-    *   If a user talks extensively about cooking, it's a Topic or Interest, not a Fact like "Job: Chef" unless they explicitly state they ARE a chef.`;
+    *   If a user talks extensively about cooking, it's a Topic or Interest, not a Fact like "Job: Chef" unless they explicitly state they ARE a chef.
+5.  **CRITICAL - Entity Attribution:**
+    *   ONLY extract facts about THE HUMAN USER THEMSELVES, not facts about other people they mention.
+    *   **Extract**: "I was born in 1984" → User's birthday
+    *   **Extract**: "I'm a software engineer" → User's job
+    *   **DO NOT Extract**: "My wife was a theater major" → This is about the wife, NOT the user
+    *   **DO NOT Extract**: "My daughter is 10 years old" → This is about the daughter, NOT the user
+    *   **DO NOT Extract**: "My brother lives in Texas" → This is about the brother, NOT the user
+    *   If the user shares information about someone else, that belongs in PEOPLE tracking, not FACTS.`;
 
   const examplesFragment = `# Specific Examples
 

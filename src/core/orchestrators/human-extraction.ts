@@ -1,4 +1,4 @@
-import { LLMRequestType, LLMPriority, LLMNextStep, type Message, type DataItemType } from "../types.js";
+import { LLMRequestType, LLMPriority, LLMNextStep, type Message, type DataItemType, type Fact, type Trait, type Topic, type Person } from "../types.js";
 import type { StateManager } from "../state-manager.js";
 import {
   buildHumanFactScanPrompt,
@@ -14,6 +14,7 @@ import {
   type ItemMatchResult,
 } from "../../prompts/human/index.js";
 import { chunkExtractionContext } from "./extraction-chunker.js";
+import { getEmbeddingService, findTopK } from "../embedding-service.js";
 
 type ScanCandidate = FactScanCandidate | TraitScanCandidate | TopicScanCandidate | PersonScanCandidate;
 
@@ -215,12 +216,25 @@ function truncateDescription(description: string, maxLength: number = 255): stri
   return description.slice(0, maxLength) + "...";
 }
 
-export function queueItemMatch(
+const EMBEDDING_TOP_K = 20;
+const EMBEDDING_MIN_SIMILARITY = 0.3;
+
+/**
+ * Queue an item match request using embedding-based similarity.
+ * 
+ * Instead of sending ALL items to the LLM, we:
+ * 1. Compute embedding for the candidate (name + value)
+ * 2. Find top-K most similar existing items via cosine similarity
+ * 3. Send only those candidates to the LLM for final matching decision
+ * 
+ * This reduces prompt size from O(all_items) to O(K) where K=20.
+ */
+export async function queueItemMatch(
   dataType: DataItemType,
   candidate: ScanCandidate,
   context: ExtractionContext,
   state: StateManager
-): void {
+): Promise<void> {
   const human = state.getHuman();
   
   let itemName: string;
@@ -245,54 +259,90 @@ export function queueItemMatch(
       break;
   }
 
-  const allItems: Array<{
+  const allItemsWithEmbeddings = [
+    ...human.facts.map(f => ({ ...f, data_type: "fact" as DataItemType })),
+    ...human.traits.map(t => ({ ...t, data_type: "trait" as DataItemType })),
+    ...human.topics.map(t => ({ ...t, data_type: "topic" as DataItemType })),
+    ...human.people.map(p => ({ ...p, data_type: "person" as DataItemType })),
+  ].filter(item => item.embedding && item.embedding.length > 0);
+
+  let topKItems: Array<{
     data_type: DataItemType;
     data_id: string;
     data_name: string;
     data_description: string;
   }> = [];
 
-  for (const fact of human.facts) {
-    allItems.push({
-      data_type: "fact",
-      data_id: fact.id,
-      data_name: fact.name,
-      data_description: dataType === "fact" ? fact.description : truncateDescription(fact.description),
-    });
+  if (allItemsWithEmbeddings.length > 0) {
+    try {
+      const embeddingService = getEmbeddingService();
+      const candidateText = `${itemName}: ${itemValue}`;
+      const candidateVector = await embeddingService.embed(candidateText);
+
+      const topK = findTopK(candidateVector, allItemsWithEmbeddings, EMBEDDING_TOP_K);
+      
+      topKItems = topK
+        .filter(({ similarity }) => similarity >= EMBEDDING_MIN_SIMILARITY)
+        .map(({ item }) => ({
+          data_type: item.data_type,
+          data_id: item.id,
+          data_name: item.name,
+          data_description: item.data_type === dataType 
+            ? item.description 
+            : truncateDescription(item.description),
+        }));
+
+      console.log(`[queueItemMatch] Embedding search: ${allItemsWithEmbeddings.length} items → ${topKItems.length} candidates (top-K=${EMBEDDING_TOP_K}, min_sim=${EMBEDDING_MIN_SIMILARITY})`);
+    } catch (err) {
+      console.error(`[queueItemMatch] Embedding search failed, falling back to all items:`, err);
+    }
   }
 
-  for (const trait of human.traits) {
-    allItems.push({
-      data_type: "trait",
-      data_id: trait.id,
-      data_name: trait.name,
-      data_description: dataType === "trait" ? trait.description : truncateDescription(trait.description),
-    });
-  }
+  if (topKItems.length === 0) {
+    console.log(`[queueItemMatch] No embeddings available, using all ${human.facts.length + human.traits.length + human.topics.length + human.people.length} items`);
+    
+    for (const fact of human.facts) {
+      topKItems.push({
+        data_type: "fact",
+        data_id: fact.id,
+        data_name: fact.name,
+        data_description: dataType === "fact" ? fact.description : truncateDescription(fact.description),
+      });
+    }
 
-  for (const topic of human.topics) {
-    allItems.push({
-      data_type: "topic",
-      data_id: topic.id,
-      data_name: topic.name,
-      data_description: dataType === "topic" ? topic.description : truncateDescription(topic.description),
-    });
-  }
+    for (const trait of human.traits) {
+      topKItems.push({
+        data_type: "trait",
+        data_id: trait.id,
+        data_name: trait.name,
+        data_description: dataType === "trait" ? trait.description : truncateDescription(trait.description),
+      });
+    }
 
-  for (const person of human.people) {
-    allItems.push({
-      data_type: "person",
-      data_id: person.id,
-      data_name: person.name,
-      data_description: dataType === "person" ? person.description : truncateDescription(person.description),
-    });
+    for (const topic of human.topics) {
+      topKItems.push({
+        data_type: "topic",
+        data_id: topic.id,
+        data_name: topic.name,
+        data_description: dataType === "topic" ? topic.description : truncateDescription(topic.description),
+      });
+    }
+
+    for (const person of human.people) {
+      topKItems.push({
+        data_type: "person",
+        data_id: person.id,
+        data_name: person.name,
+        data_description: dataType === "person" ? person.description : truncateDescription(person.description),
+      });
+    }
   }
 
   const prompt = buildHumanItemMatchPrompt({
     candidate_type: dataType,
     candidate_name: itemName,
     candidate_value: itemValue,
-    all_items: allItems,
+    all_items: topKItems,
   });
 
   state.queue_enqueue({
@@ -322,7 +372,7 @@ export function queueItemUpdate(
   const matchedGuid = matchResult.matched_guid;
   const isNewItem = matchedGuid === null;
 
-  let existingItem = null;
+  let existingItem: Fact | Trait | Topic | Person | null = null;
   let matchedType: DataItemType | null = null;
 
   if (!isNewItem) {

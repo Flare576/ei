@@ -186,7 +186,8 @@ export class StateManager {
       ...request,
       model: request.model ?? this.humanState.get().settings?.default_model,
     };
-    return this.queueState.enqueue(requestWithModel);
+    const id = this.queueState.enqueue(requestWithModel);
+    return id;
   }
 
   queue_peekHighest(): LLMRequest | null {

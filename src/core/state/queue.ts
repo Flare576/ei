@@ -37,7 +37,8 @@ export class QueueState {
     const sorted = [...this.queue].sort(
       (a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]
     );
-    return sorted[0] ?? null;
+    const result = sorted[0] ?? null;
+    return result;
   }
 
   complete(id: string): void {
