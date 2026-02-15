@@ -148,7 +148,13 @@ export async function callLLMRaw(
     { role: "user", content: userPrompt },
   ];
   
-  const totalChars = chatMessages.reduce((sum, m) => sum + m.content.length, 0);
+  const finalMessages = ensureUserFirst(chatMessages);
+  
+  if (finalMessages.length !== chatMessages.length) {
+    console.log(`[LLM] Injected user-first placeholder (${chatMessages.length} → ${finalMessages.length} messages)`);
+  }
+  
+  const totalChars = finalMessages.reduce((sum, m) => sum + m.content.length, 0);
   const estimatedTokens = Math.ceil(totalChars / 4);
   console.log(`[LLM] Call #${llmCallCount} - ~${estimatedTokens} tokens (${totalChars} chars)`);
   
@@ -163,7 +169,7 @@ export async function callLLMRaw(
     },
     body: JSON.stringify({
       model,
-      messages: chatMessages,
+      messages: finalMessages,
       temperature,
     }),
     signal,
@@ -181,6 +187,22 @@ export async function callLLMRaw(
     content: choice?.message?.content ?? null,
     finishReason: choice?.finish_reason ?? null,
   };
+}
+
+/**
+ * Ensures the message array starts with a user message after system.
+ * Some models (Gemma, Mistral) require system → user → assistant ordering.
+ */
+function ensureUserFirst(messages: ChatMessage[]): ChatMessage[] {
+  if (messages.length === 0) return [];
+  
+  const result = [...messages];
+  
+  if (result[0].role === "system" && result.length > 1 && result[1].role === "assistant") {
+    result.splice(1, 0, { role: "user", content: "(conversation start)" });
+  }
+  
+  return result;
 }
 
 const JSON_REPAIR_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [

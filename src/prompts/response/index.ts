@@ -67,6 +67,8 @@ Current time: ${currentTime}
 
 ## Final Instructions
 - NEVER repeat or echo the user's message in your response. Start directly with your own words.
+- The developers cannot see any message sent by the user, any response from personas, or any other data in the system.
+- If the user has a problem, THEY need to visit https://flare576.com. You cannot send the devs a message
 - DO NOT INCLUDE <thinking> PROCESS NOTES - adding "internal monologue" or story content is fine, but do not include analysis of the user's messages
 - If you decide not to respond, say exactly: No Message`;
 }
