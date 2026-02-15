@@ -1,12 +1,26 @@
-# EI Project - Agent Collaboration Guide
+# Ei - Agent Collaboration Guide
 
-This file guides AI coding agents (Claude, etc.) working on the EI codebase.
+AI coding agent guide for the Ei codebase.
 
-## V1 Architecture
+## Architecture Overview
 
-EI V1 is a **clean-room rewrite**. The V0 code in `/v0/` is for reference only.
+Ei is a local-first AI companion with persistent personas. Three frontends share one core:
 
-### Source of Truth
+```
+/
+├── src/                # Core library (TypeScript)
+│   ├── core/           # Processor, StateManager, handlers, orchestrators
+│   ├── prompts/        # LLM prompt builders (see src/prompts/AGENTS.md)
+│   ├── storage/        # Storage interface + implementations
+│   └── index.ts        # Public exports
+├── web/                # React web frontend (Vite)
+├── tui/                # Terminal UI (OpenTUI + SolidJS, Bun runtime)
+├── api/                # PHP sync API (remote storage)
+├── tests/              # Unit + E2E tests
+└── tickets/            # Project tickets (see STATUS.md)
+```
+
+## Source of Truth
 
 | Document | Purpose |
 |----------|---------|
@@ -15,44 +29,6 @@ EI V1 is a **clean-room rewrite**. The V0 code in `/v0/` is for reference only.
 | `tickets/` | Implementation tasks with acceptance criteria |
 
 > **CRITICAL**: If a ticket uses a different name for something defined in CONTRACTS.md, **STOP and ASK**. CONTRACTS.md wins.
-
-### V0 Reference Policy
-
-The `/v0/` folder contains the proof-of-concept implementation. When working on V1:
-
-- **DO** reference V0 for conceptual understanding
-- **DO** extract prompt engineering patterns (the English, not the code)
-- **DO NOT** copy code directly—V0 has accumulated technical debt
-- **DO NOT** assume V0 patterns are correct—many are experiments that didn't pan out
-- **WHEN IN DOUBT** about whether V0 did something intentionally, **ASK FLARE**
-
-### Project Structure (V1)
-
-```
-/
-├── AGENTS.md           # This file
-├── CONTRACTS.md        # Interface definitions (SOURCE OF TRUTH)
-├── v1.md               # Design philosophy
-├── tickets/
-│   ├── STATUS.md       # Ticket overview
-│   └── *.md            # Individual tickets
-├── v0/                 # Legacy PoC (REFERENCE ONLY)
-│   ├── src/            # Old source code
-│   ├── tests/          # Old tests
-│   └── tickets/        # Old tickets (historical)
-└── src/                # V1 source (to be created)
-    ├── core/
-    │   ├── processor.ts
-    │   ├── state-manager.ts
-    │   ├── queue-processor.ts
-    │   └── types.ts
-    ├── storage/
-    │   ├── interface.ts
-    │   └── local.ts
-    ├── prompts/
-    │   └── (organized by purpose)
-    └── index.ts
-```
 
 ## Ticket System
 
@@ -153,7 +129,7 @@ Bare model names assume `local` provider.
 
 ## Development
 
-### Commands (once V1 scaffolding exists)
+### Commands
 
 ```bash
 npm run dev      # Watch mode
@@ -174,13 +150,11 @@ npm start        # Run the app
 
 1. Check CONTRACTS.md for interface definitions
 2. Check if a ticket exists—follow its spec
-3. Match patterns from similar V1 code (not V0)
-4. Update STATUS.md when changing ticket status
+3. Update STATUS.md when changing ticket status
 
 ### When Confused
 
 - **About naming**: Check CONTRACTS.md
-- **About V0 behavior**: Ask Flare (don't assume V0 was right)
 - **About scope**: Ask before expanding beyond ticket criteria
 
 ### Code Quality
@@ -215,7 +189,7 @@ if (timeSinceLastX >= delay) {
 
 ---
 
-## V2: TUI Frontend (OpenTUI)
+## TUI Frontend (OpenTUI)
 
 ### Framework: OpenTUI
 
@@ -234,39 +208,25 @@ if (timeSinceLastX >= delay) {
 - Vim-style keybindings via `useKeyboard()`
 - Built by SST team (terminal.shop, OpenCode)
 
-### Project Structure (V2/TUI)
+### TUI Project Structure
 
 ```
-/
-├── src/                # Core layer (shared with web)
-│   ├── core/
-│   ├── storage/
-│   ├── prompts/
-│   └── index.ts
-├── web/                # React web frontend
-├── api/                # PHP sync API
-└── tui/                # OpenTUI frontend (V2)
-    ├── src/
-    │   ├── app.tsx              # Root component + providers
-    │   ├── routes/
-    │   │   ├── home.tsx         # Landing/persona selection
-    │   │   └── session/
-    │   │       ├── index.tsx    # Main chat screen (3-panel)
-    │   │       ├── sidebar.tsx  # Persona list
-    │   │       ├── messages.tsx # Chat history (scrollable)
-    │   │       └── prompt.tsx   # Input area
-    │   ├── components/
-    │   │   ├── message-item.tsx
-    │   │   ├── persona-card.tsx
-    │   │   └── status-bar.tsx
-    │   ├── context/
-    │   │   ├── ei.tsx           # Ei_Interface + Processor wrapper
-    │   │   ├── keyboard.tsx     # Vim keybindings
-    │   │   └── theme.tsx        # Terminal colors
-    │   └── util/
-    │       └── vim-keys.ts      # j/k navigation, focus management
-    ├── package.json
-    └── tsconfig.json
+tui/
+├── src/
+│   ├── app.tsx           # Root component + providers
+│   ├── index.tsx         # Entry point
+│   ├── components/       # UI components
+│   │   ├── Chat.tsx      # Message display
+│   │   ├── InputArea.tsx # Text input
+│   │   ├── Sidebar.tsx   # Persona list
+│   │   └── StatusBar.tsx # Queue/connection status
+│   ├── context/          # SolidJS contexts
+│   │   └── ei.tsx        # Processor wrapper
+│   ├── storage/          # TUI-specific storage
+│   └── util/             # Helpers
+├── package.json
+├── bunfig.toml           # Bun config (preloads)
+└── CLAUDE.md             # Bun-specific guidance
 ```
 
 ### Core Integration Pattern
@@ -298,87 +258,19 @@ export function EiProvider(props) {
 }
 ```
 
-### 3-Panel Layout (Flexbox)
-
-```tsx
-// tui/src/routes/session/index.tsx
-<Box flexDirection="row" width="100%" height="100%">
-  {/* Left: Persona list */}
-  <Sidebar width={30} />
-  
-  {/* Center: Chat + Input */}
-  <Box flexDirection="column" flexGrow={1}>
-    <MessageList flexGrow={1} />
-    <PromptInput height={5} />
-  </Box>
-</Box>
-```
-
-### Vim-Style Navigation
-
-```typescript
-// tui/src/context/keyboard.tsx
-keyboard.on("keypress", (key) => {
-  if (key.name === "j") scrollDown()
-  if (key.name === "k") scrollUp()
-  if (key.name === "h") focusSidebar()
-  if (key.name === "l") focusMessages()
-  if (key.ctrl && key.name === "c") abort()
-  if (key.name === "tab") cycleFocus()
-})
-```
-
 ### Key Differences from Web
 
 | Aspect | Web | TUI |
 |--------|-----|-----|
 | Storage | `LocalStorage` (browser) | `FileStorage` (EI_DATA_PATH) |
 | Rendering | React DOM | OpenTUI + SolidJS |
-| Input | Mouse + keyboard | Keyboard-first (vim) |
+| Input | Mouse + keyboard | Keyboard-first |
 | Layout | CSS Grid/Flex | Yoga Flexbox |
 | Runtime | Browser | Bun + terminal |
-
-### OpenCode Reference Files
-
-When implementing the TUI, reference these OpenCode files for patterns:
-- Layout: `packages/opencode/src/cli/cmd/tui/routes/session/index.tsx`
-- Provider composition: `packages/opencode/src/cli/cmd/tui/app.tsx`
-- Keybindings: `packages/opencode/src/cli/cmd/tui/context/keyboard.tsx`
-- Scrollable content: Look for `ScrollBox` usage
 
 ### TUI Testing Strategy
 
 **Critical Insight**: Component-level tests using `testRender` verify SolidJS reactivity works (it does). They do NOT verify the Processor→TUI integration. The Processor is battle-tested via the web app—what needs testing is the **integration between TUI and Processor**.
-
-#### What Component Tests CAN Verify
-- SolidJS store reactivity
-- Render logic (conditionals, formatting)
-- Isolated component behavior
-
-#### What Component Tests CANNOT Verify
-- Processor event firing timing
-- Full message send→receive→display flow
-- Queue state transitions during LLM calls
-- Real user workflows
-
-#### Required: Full E2E with Mock LLM
-
-The web app already has a mock LLM service used extensively in E2E tests. The TUI needs the same approach:
-
-```typescript
-// Conceptual E2E test flow
-1. Start mock LLM server (same one web uses)
-2. Launch TUI app with EI_LLM_BASE_URL pointing to mock
-3. Send a message
-4. Verify StatusBar shows "Processing"
-5. Wait for mock LLM response
-6. Verify StatusBar returns to "Ready"
-7. Verify message appears in chat
-```
-
-**Blockers for TUI E2E**:
-- `@microsoft/tui-test` has native dependency issues with Node 25
-- Need to evaluate alternatives or wait for fix
 
 #### Current Testing Tiers
 
@@ -386,40 +278,7 @@ The web app already has a mock LLM service used extensively in E2E tests. The TU
 |------|------|-------|--------|
 | Unit | Vitest/bun:test | Core logic (Processor, StateManager) | ✅ Working |
 | Component | `testRender` from `@opentui/solid` | SolidJS reactivity, render logic | ✅ Working |
-| E2E | TBD | Full app + mock LLM | ❌ Blocked |
-
-#### Component Testing Pattern (for reference)
-
-When component tests ARE useful (testing render logic):
-
-```typescript
-import { describe, it, expect, afterEach } from "bun:test"
-import { testRender } from "@opentui/solid"
-import { createStore } from "solid-js/store"
-
-let testSetup: Awaited<ReturnType<typeof testRender>> | undefined
-
-afterEach(() => {
-  testSetup?.renderer.destroy()
-  testSetup = undefined
-})
-
-it("renders correctly based on state", async () => {
-  const [store, setStore] = createStore({ value: "initial" })
-  
-  testSetup = await testRender(
-    () => <text>{store.value}</text>,
-    { width: 40, height: 1 }
-  )
-  
-  await testSetup.renderOnce()
-  expect(testSetup.captureCharFrame()).toContain("initial")
-  
-  setStore("value", "updated")
-  await testSetup.renderOnce()
-  expect(testSetup.captureCharFrame()).toContain("updated")
-})
-```
+| E2E | tui-test | Full app + mock LLM | ✅ Working |
 
 **bunfig.toml requirement**:
 ```toml

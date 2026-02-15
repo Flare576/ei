@@ -1,6 +1,6 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-02-11 (Settings refactor: opencode fields → settings.opencode.*)
+> Last updated: 2026-02-14 (TUI slash command tickets, rebrand to "Ei")
 
 ## Overview
 
@@ -8,11 +8,12 @@
 |--------|-------|
 | PENDING | 15 |
 | IN_PROGRESS | 0 |
-| QA | 1 |
-| DONE | 94 |
+| QA | 0 |
+| DONE | 98 |
 | BLOCKED | 0 |
+| SUPERSEDED | 3 |
 
-> 115 total tickets (94 done + 15 pending + 3 backlog + 0 in_progress + 1 QA).
+> 119 total tickets (98 done + 15 pending + 3 backlog + 0 in_progress + 3 superseded).
 
 ---
 
@@ -29,8 +30,9 @@
 | **E007** | 0070-0076 | DONE | Ceremony System |
 | **E008** | 0080-0089 | DONE | UI: Entity Management |
 | **E009** | 0090-0099 | PENDING | Polish & New Features |
-| **E010** | 0100-0109 | PENDING | TUI & OpenCode Integration |
+| **E010** | 0100-0109 | DONE | TUI & OpenCode Integration |
 | **E011** | 0116-0120, 0122 | DONE | Quote Preservation System |
+| **E012** | 0139-0142 | PENDING | TUI Commands (V1.2) |
 
 ---
 
@@ -60,15 +62,20 @@
 | Ticket | Title | Depends On |
 |--------|-------|------------|
 | 0101 | FileStorage Implementation | 0003 |
-| 0104 | Ei Context Exporter | 0101 |
-| 0105 | CLAUDE.md Context Injector | 0104 |
 | 0106 | RemoteStorage Implementation | 0003, 0096 |
 | 0128 | Persona GUIDs | None |
 | 0107 | Sync Orchestrator | 0106 |
-| 0108 | OpenCode File Watcher | 0103 |
 | 0115 | Fact Validation TUI | 0113, 0100 |
-| 0133 | TUI Polish & Robustness | 0100, 0101 |
 | 0134 | Single Instance Enforcement | 0101 |
+
+### E012: TUI Commands (V1.2)
+
+| Ticket | Title | Depends On |
+|--------|-------|------------|
+| 0139 | TUI Slash Command Foundation | 0100 |
+| 0140 | TUI Persona Switching | 0139 |
+| 0141 | TUI Basic Commands | 0139, 0140 |
+| 0142 | TUI $EDITOR Integration | 0139 |
 
 ---
 
@@ -80,9 +87,17 @@
 
 ## QA
 
-| Ticket | Title | Notes |
-|--------|-------|-------|
-| 0090 | Onboarding Flow | Multi-step wizard, account sync, provider setup |
+(none)
+
+---
+
+## SUPERSEDED
+
+| Ticket | Title | Superseded By |
+|--------|-------|---------------|
+| 0104 | Ei Context Exporter | Query-based CLI paradigm |
+| 0105 | CLAUDE.md Context Injector | MCP tool paradigm |
+| 0108 | OpenCode File Watcher | Polling-based session import |
 
 ---
 
@@ -184,6 +199,7 @@
 | 0102 | OpenCode Session Reader | 2026-02-11 |
 | 0109 | OpenCode Agent Persona Bootstrap | 2026-02-11 |
 | 0103 | OpenCode Session Importer | 2026-02-11 |
+| 0090 | Onboarding Flow | 2026-02-14 |
 
 ---
 

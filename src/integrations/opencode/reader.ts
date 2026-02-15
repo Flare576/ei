@@ -8,7 +8,8 @@ import type {
 } from "./types.js";
 import { BUILTIN_AGENTS } from "./types.js";
 
-const isBrowser = typeof window !== "undefined";
+// OpenTUI polyfills window but not document - check document for real browser
+const isBrowser = typeof document !== "undefined";
 
 let _join: typeof import("path").join;
 let _readdir: typeof import("fs/promises").readdir;
