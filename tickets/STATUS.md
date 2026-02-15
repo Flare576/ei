@@ -1,6 +1,6 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-02-14 (TUI slash command tickets, rebrand to "Ei")
+> Last updated: 2026-02-14 (TUI Slash Command Foundation)
 
 ## Overview
 
@@ -9,11 +9,11 @@
 | PENDING | 15 |
 | IN_PROGRESS | 0 |
 | QA | 0 |
-| DONE | 98 |
+| DONE | 99 |
 | BLOCKED | 0 |
 | SUPERSEDED | 3 |
 
-> 119 total tickets (98 done + 15 pending + 3 backlog + 0 in_progress + 3 superseded).
+> 120 total tickets (99 done + 15 pending + 3 backlog + 0 in_progress + 3 superseded).
 
 ---
 
@@ -54,6 +54,7 @@
 | 0131 | Per-Persona Pause on Message Recall | 0046, 0048 |
 | 0132 | Poke Functionality (Prompt Response) | 0011 |
 | 0135 | Settings Namespace Migration | None |
+| 0143 | Model Compatibility Guidance | 0096 |
 
 
 
@@ -72,7 +73,6 @@
 
 | Ticket | Title | Depends On |
 |--------|-------|------------|
-| 0139 | TUI Slash Command Foundation | 0100 |
 | 0140 | TUI Persona Switching | 0139 |
 | 0141 | TUI Basic Commands | 0139, 0140 |
 | 0142 | TUI $EDITOR Integration | 0139 |
@@ -200,6 +200,7 @@
 | 0109 | OpenCode Agent Persona Bootstrap | 2026-02-11 |
 | 0103 | OpenCode Session Importer | 2026-02-11 |
 | 0090 | Onboarding Flow | 2026-02-14 |
+| 0139 | TUI Slash Command Foundation | 2026-02-14 |
 
 ---
 

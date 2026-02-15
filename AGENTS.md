@@ -280,6 +280,8 @@ export function EiProvider(props) {
 | Component | `testRender` from `@opentui/solid` | SolidJS reactivity, render logic | ✅ Working |
 | E2E | tui-test | Full app + mock LLM | ✅ Working |
 
+**E2E requires Node 20** (not Bun): `npm run test:e2e` from `tui/` handles nvm switching automatically.
+
 **bunfig.toml requirement**:
 ```toml
 preload = ["@opentui/solid/preload"]

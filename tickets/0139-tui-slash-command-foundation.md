@@ -1,6 +1,6 @@
 # 0139: TUI Slash Command Foundation
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0100 (TUI Frontend Skeleton)
 **Priority**: High (TUI V1.2)
 
@@ -16,33 +16,33 @@ The TUI currently only supports sending messages. All navigation, configuration,
 
 ### Command Parser
 
-- [ ] Detect when input starts with `/`
-- [ ] Parse command name and arguments: `/command arg1 arg2 "quoted arg"`
-- [ ] Support command aliases (e.g., `/q` → `/quit`, `/h` → `/help`)
-- [ ] Show error in StatusBar for unknown commands
-- [ ] Commands execute on Enter, not on each keystroke
+- [x] Detect when input starts with `/`
+- [x] Parse command name and arguments: `/command arg1 arg2 "quoted arg"`
+- [x] Support command aliases (e.g., `/q` → `/quit`, `/h` → `/help`)
+- [x] Show error in StatusBar for unknown commands
+- [x] Commands execute on Enter, not on each keystroke
 
 ### /quit Command
 
-- [ ] `/quit` or `/q` exits the application
-- [ ] Calls `processor.stop()` before exit (saves state)
-- [ ] `/quit!` or `/q!` force-quits without save prompt
-- [ ] Show "Saving..." in StatusBar during shutdown
+- [x] `/quit` or `/q` exits the application
+- [x] Calls `processor.stop()` before exit (saves state)
+- [x] `/quit!` or `/q!` force-quits without save prompt
+- [x] Show "Saving..." in StatusBar during shutdown
 
 ### /help Command
 
-- [ ] `/help` or `/h` shows help overlay
-- [ ] List all available commands with brief descriptions
-- [ ] Show keybindings (Escape, Ctrl+C, PageUp/Down, etc.)
-- [ ] Include the kanji easter egg: `永 (ei) - eternal`
-- [ ] Press any key or Escape to dismiss overlay
+- [x] `/help` or `/h` shows help overlay
+- [x] List all available commands with brief descriptions
+- [x] Show keybindings (Escape, Ctrl+C, PageUp/Down, etc.)
+- [x] Include the kanji easter egg: `永 (ei) - eternal`
+- [x] Press any key or Escape to dismiss overlay
 
 ### Sidebar Toggle
 
-- [ ] `Ctrl+B` toggles sidebar visibility
-- [ ] When hidden, chat area expands to full width
-- [ ] State persists during session (not across restarts)
-- [ ] StatusBar shows indicator when sidebar is hidden (e.g., `[S]`)
+- [x] `Ctrl+B` toggles sidebar visibility
+- [x] When hidden, chat area expands to full width
+- [x] State persists during session (not across restarts)
+- [x] StatusBar shows indicator when sidebar is hidden (e.g., `[S]`)
 
 ## Technical Design
 
@@ -146,12 +146,12 @@ tui/src/
 
 ## Testing
 
-- [ ] Unit test: Command parser handles quoted args, edge cases
-- [ ] Unit test: Unknown command shows error
-- [ ] Manual test: /quit saves and exits
-- [ ] Manual test: /quit! exits without save
-- [ ] Manual test: /help shows overlay, any key dismisses
-- [ ] Manual test: Ctrl+B toggles sidebar
+- [x] Unit test: Command parser handles quoted args, edge cases
+- [x] Unit test: Unknown command shows error
+- [x] E2E test: /help shows overlay, any key dismisses
+- [x] E2E test: /quit exits application
+- [x] E2E test: Ctrl+B toggles sidebar, [S] indicator appears/disappears
+- [x] E2E test: Unknown command shows error notification
 
 ## Notes
 
