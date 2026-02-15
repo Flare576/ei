@@ -1,4 +1,5 @@
-import { JSX } from "solid-js";
+import { JSX, Show } from "solid-js";
+import { useKeyboardNav } from "../context/keyboard";
 
 interface LayoutProps {
   sidebar: JSX.Element;
@@ -7,9 +8,13 @@ interface LayoutProps {
 }
 
 export function Layout(props: LayoutProps) {
+  const { sidebarVisible } = useKeyboardNav();
+
   return (
     <box flexDirection="row" width="100%" height="100%">
-      {props.sidebar}
+      <Show when={sidebarVisible()}>
+        {props.sidebar}
+      </Show>
       <box flexDirection="column" flexGrow={1}>
         {props.messages}
         {props.input}

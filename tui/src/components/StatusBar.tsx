@@ -4,7 +4,7 @@ import { useKeyboardNav } from "../context/keyboard";
 
 export function StatusBar() {
   const { activePersona, queueStatus, notification } = useEi();
-  const { focusedPanel } = useKeyboardNav();
+  const { focusedPanel, sidebarVisible } = useKeyboardNav();
 
   const getQueueIndicator = () => {
     const status = queueStatus();
@@ -55,6 +55,12 @@ export function StatusBar() {
       <text fg="#586e75" marginRight={2}>
         [{getFocusIndicator()}]
       </text>
+
+      <Show when={!sidebarVisible()}>
+        <text fg="#586e75" marginRight={2}>
+          [S]
+        </text>
+      </Show>
 
       <text fg={queueStatus().state === "busy" ? "#b58900" : "#586e75"}>
         {getQueueIndicator()}

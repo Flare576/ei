@@ -17,12 +17,16 @@ interface KeyboardContextValue {
   setFocusedPanel: (panel: Panel) => void;
   registerMessageScroll: (scrollbox: ScrollBoxRenderable) => void;
   registerTextarea: (textarea: TextareaRenderable) => void;
+  sidebarVisible: Accessor<boolean>;
+  toggleSidebar: () => void;
+  exitApp: () => void;
 }
 
 const KeyboardContext = createContext<KeyboardContextValue>();
 
 export const KeyboardProvider: ParentComponent = (props) => {
   const [focusedPanel, setFocusedPanel] = createSignal<Panel>("input");
+  const [sidebarVisible, setSidebarVisible] = createSignal(true);
   const renderer = useRenderer();
   const { queueStatus, abortCurrentOperation, resumeQueue } = useEi();
   
@@ -37,6 +41,8 @@ export const KeyboardProvider: ParentComponent = (props) => {
     textareaRef = textarea;
   };
 
+  const toggleSidebar = () => setSidebarVisible(!sidebarVisible());
+
   const exitApp = () => {
     logger.info("Exiting app");
     renderer.destroy();
@@ -44,6 +50,12 @@ export const KeyboardProvider: ParentComponent = (props) => {
   };
 
   useKeyboard((event: KeyEvent) => {
+    if (event.name === "b" && event.ctrl) {
+      event.preventDefault();
+      toggleSidebar();
+      return;
+    }
+
     if (event.name === "c" && event.ctrl) {
       event.preventDefault();
       
@@ -88,6 +100,9 @@ export const KeyboardProvider: ParentComponent = (props) => {
     setFocusedPanel,
     registerMessageScroll,
     registerTextarea,
+    sidebarVisible,
+    toggleSidebar,
+    exitApp,
   };
 
   return (
