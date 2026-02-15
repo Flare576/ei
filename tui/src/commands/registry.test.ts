@@ -69,6 +69,24 @@ describe("parseAndExecute", () => {
     showNotification: mock(() => {}),
     exitApp: mock(() => {}),
     stopProcessor: mock(async () => {}),
+    ei: {
+      personas: () => [],
+      activePersona: () => null,
+      messages: () => [],
+      queueStatus: () => ({ state: "idle" as const, pending_count: 0 }),
+      notification: () => null,
+      selectPersona: () => {},
+      sendMessage: async () => {},
+      refreshPersonas: async () => {},
+      refreshMessages: async () => {},
+      abortCurrentOperation: async () => {},
+      resumeQueue: async () => {},
+      stopProcessor: async () => {},
+      showNotification: () => {},
+      createPersona: async () => {},
+      archivePersona: async () => {},
+      unarchivePersona: async () => {},
+    },
   };
 
   beforeEach(() => {

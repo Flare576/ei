@@ -1,4 +1,5 @@
 import type { OverlayRenderer } from "../context/overlay";
+import type { EiContextValue } from "../context/ei";
 
 export interface Command {
   name: string;
@@ -14,6 +15,7 @@ export interface CommandContext {
   showNotification: (msg: string, level: "error" | "warn" | "info") => void;
   exitApp: () => void;
   stopProcessor: () => Promise<void>;
+  ei: EiContextValue;
 }
 
 const commands = new Map<string, Command>();
