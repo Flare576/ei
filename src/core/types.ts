@@ -316,6 +316,7 @@ export interface PersonaSummary {
   is_archived: boolean;
   unread_count: number;
   last_activity?: string;
+  context_boundary?: string;
 }
 
 export interface MessageQueryOptions {

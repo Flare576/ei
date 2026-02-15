@@ -13,6 +13,7 @@
     "@microsoft/tui-test": "^0.0.1-rc.5",
     "@types/bun": "latest",
     "@types/node": "^25.2.1",
+    "express": "^5.2.1",
     "node-pty": "^1.1.0",
     "vite-plugin-solid": "^2.11.10",
     "vitest": "^4.0.18"

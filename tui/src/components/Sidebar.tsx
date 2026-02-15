@@ -61,8 +61,14 @@ export function Sidebar() {
                 const prefix = isActive() ? "* " : "  ";
                 const name = displayName();
                 const unread = persona.unread_count > 0 ? ` (${persona.unread_count} new)` : "";
-                const paused = persona.is_paused ? " [P]" : "";
+                const paused = persona.is_paused ? " ⏸" : "";
                 return `${prefix}${name}${unread}${paused}`;
+              };
+
+              const textColor = () => {
+                if (isActive()) return "#eee8d5";
+                if (persona.is_paused) return "#586e75";
+                return "#839496";
               };
 
               return (
@@ -77,7 +83,7 @@ export function Sidebar() {
                   padding={1}
                   marginBottom={0.5}
                 >
-                  <text fg={isActive() ? "#eee8d5" : "#839496"}>
+                  <text fg={textColor()}>
                     {getLabel()}
                   </text>
                 </box>

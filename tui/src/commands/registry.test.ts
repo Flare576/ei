@@ -86,6 +86,8 @@ describe("parseAndExecute", () => {
       createPersona: async () => {},
       archivePersona: async () => {},
       unarchivePersona: async () => {},
+      setContextBoundary: async () => {},
+      updatePersona: async () => {},
     },
   };
 

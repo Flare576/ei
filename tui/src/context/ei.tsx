@@ -5,6 +5,7 @@ import {
   onCleanup,
   Match,
   Switch,
+  createSignal,
   type ParentComponent,
 } from "solid-js";
 import { createStore } from "solid-js/store";
@@ -14,6 +15,7 @@ import { logger, clearLog, interceptConsole } from "../util/logger.js";
 import type {
   Ei_Interface,
   PersonaSummary,
+  PersonaEntity,
   Message,
   QueueStatus,
 } from "../../../src/core/types.js";
@@ -22,6 +24,7 @@ interface EiStore {
   ready: boolean;
   personas: PersonaSummary[];
   activePersona: string | null;
+  activeContextBoundary: string | undefined;
   messages: Message[];
   queueStatus: QueueStatus;
   notification: { message: string; level: "error" | "warn" | "info" } | null;
@@ -30,6 +33,7 @@ interface EiStore {
 export interface EiContextValue {
   personas: () => PersonaSummary[];
   activePersona: () => string | null;
+  activeContextBoundary: () => string | undefined;
   messages: () => Message[];
   queueStatus: () => QueueStatus;
   notification: () => { message: string; level: "error" | "warn" | "info" } | null;
@@ -44,6 +48,8 @@ export interface EiContextValue {
   createPersona: (input: { name: string }) => Promise<void>;
   archivePersona: (name: string) => Promise<void>;
   unarchivePersona: (name: string) => Promise<void>;
+  setContextBoundary: (personaName: string, timestamp: string | null) => Promise<void>;
+  updatePersona: (name: string, updates: Partial<PersonaEntity>) => Promise<void>;
 }
 
 const EiContext = createContext<EiContextValue>();
@@ -53,10 +59,13 @@ export const EiProvider: ParentComponent = (props) => {
     ready: false,
     personas: [],
     activePersona: null,
+    activeContextBoundary: undefined,
     messages: [],
     queueStatus: { state: "idle", pending_count: 0 },
     notification: null,
   });
+
+  const [contextBoundarySignal, setContextBoundarySignal] = createSignal<string | undefined>(undefined);
 
   let processor: Processor | null = null;
   let notificationTimer: Timer | null = null;
@@ -81,12 +90,15 @@ export const EiProvider: ParentComponent = (props) => {
     const current = store.activePersona;
     if (!current) return;
     const msgs = await processor.getMessages(current);
-    setStore("messages", msgs);
+    setStore("messages", [...msgs]);
   };
 
   const selectPersona = (name: string) => {
     setStore("activePersona", name);
     setStore("messages", []);
+    const persona = store.personas.find(p => p.name === name);
+    setStore("activeContextBoundary", persona?.context_boundary);
+    setContextBoundarySignal(persona?.context_boundary);
     if (processor) {
       processor.getMessages(name).then((msgs) => {
         setStore("messages", [...msgs]);
@@ -135,6 +147,29 @@ export const EiProvider: ParentComponent = (props) => {
     await refreshPersonas();
   };
 
+  const setContextBoundary = async (personaName: string, timestamp: string | null) => {
+    if (!processor) return;
+    // Set signal BEFORE processor call - processor fires callback synchronously
+    // which triggers refreshMessages() that needs the NEW boundary value
+    const newValue = timestamp ?? undefined;
+    logger.debug(`setContextBoundary: ${personaName}, timestamp=${timestamp}, newValue=${newValue}`);
+    if (personaName === store.activePersona) {
+      logger.debug(`setContextBoundary: updating signal to ${newValue}`);
+      setContextBoundarySignal(newValue);
+    }
+    await processor.setContextBoundary(personaName, timestamp);
+    await refreshPersonas();
+    if (personaName === store.activePersona) {
+      await refreshMessages();
+    }
+  };
+
+  const updatePersona = async (name: string, updates: Partial<PersonaEntity>) => {
+    if (!processor) return;
+    await processor.updatePersona(name, updates);
+    await refreshPersonas();
+  };
+
   async function bootstrap() {
     clearLog();
     interceptConsole();
@@ -165,6 +200,10 @@ export const EiProvider: ParentComponent = (props) => {
           } else {
             setStore("queueStatus", { state, pending_count: 0 });
           }
+        },
+        onContextBoundaryChanged: (personaName) => {
+          logger.debug(`onContextBoundaryChanged: ${personaName}`);
+          void refreshPersonas();
         },
         onError: (error) => {
           logger.error(`${error.code}: ${error.message}`);
@@ -207,6 +246,7 @@ export const EiProvider: ParentComponent = (props) => {
   const value: EiContextValue = {
     personas: () => store.personas,
     activePersona: () => store.activePersona,
+    activeContextBoundary: contextBoundarySignal,
     messages: () => store.messages,
     queueStatus: () => store.queueStatus,
     notification: () => store.notification,
@@ -221,6 +261,8 @@ export const EiProvider: ParentComponent = (props) => {
     createPersona,
     archivePersona,
     unarchivePersona,
+    setContextBoundary,
+    updatePersona,
   };
 
   return (

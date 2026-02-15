@@ -91,13 +91,27 @@ Override with `mockServer.setResponseForType(type, config)`.
 
 ```
 tui/tests/e2e/
-├── chat-flow.test.ts      # Happy path: send/receive messages
-├── error-handling.test.ts # LLM error scenarios
+├── slash-commands.test.ts   # /help, /quit, Ctrl+B (port 3097)
+├── chat-flow.test.ts        # Send/receive messages (port 3098)
+├── error-handling.test.ts   # LLM error scenarios (port 3099)
+├── persona-switching.test.ts # /persona, /archive, Tab (port 3100)
+├── basic-commands.test.ts   # /new, /pause, /resume, /model (port 3101)
+├── context-boundary.test.ts # /new divider behavior with messages (port 3102)
+├── fixtures.ts              # Shared test utilities and checkpoint factory
 ├── framework/
-│   └── mock-server.ts     # Re-export shim (see file for why)
-├── types.ts               # TypeScript interfaces
-└── README.md              # This file
+│   └── mock-server.ts       # Re-export shim (see file for why)
+├── types.ts                 # TypeScript interfaces
+└── README.md                # This file
 
-tests/e2e/framework/       # Canonical mock server (used by both web and TUI)
+tests/e2e/framework/         # Canonical mock server (used by both web and TUI)
 └── mock-server.ts
+```
+
+## Running Individual Test Files
+
+Since tui-test doesn't support running test subsets, tests are split into separate files. Run a specific file:
+
+```bash
+npx @microsoft/tui-test tests/e2e/basic-commands.test.ts
+npx @microsoft/tui-test tests/e2e/context-boundary.test.ts
 ```

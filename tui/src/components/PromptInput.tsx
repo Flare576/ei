@@ -6,6 +6,10 @@ import { quitCommand } from "../commands/quit";
 import { helpCommand } from "../commands/help";
 import { personaCommand } from "../commands/persona";
 import { archiveCommand, unarchiveCommand } from "../commands/archive";
+import { newCommand } from "../commands/new";
+import { pauseCommand } from "../commands/pause";
+import { resumeCommand } from "../commands/resume";
+import { modelCommand } from "../commands/model";
 import { useOverlay } from "../context/overlay";
 
 // Enter submits, Ctrl+J or Meta+Enter for newline
@@ -27,6 +31,10 @@ export function PromptInput() {
   registerCommand(personaCommand);
   registerCommand(archiveCommand);
   registerCommand(unarchiveCommand);
+  registerCommand(newCommand);
+  registerCommand(pauseCommand);
+  registerCommand(resumeCommand);
+  registerCommand(modelCommand);
 
   const handleSubmit = async () => {
     const text = textareaRef?.plainText?.trim();

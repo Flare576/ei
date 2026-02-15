@@ -524,6 +524,7 @@ export class Processor {
         is_archived: entity.is_archived,
         unread_count: this.stateManager.messages_countUnread(name),
         last_activity: entity.last_activity,
+        context_boundary: entity.context_boundary,
       };
     });
   }
