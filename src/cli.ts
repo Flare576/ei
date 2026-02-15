@@ -17,7 +17,7 @@ type Command = typeof COMMANDS[number];
 
 function printHelp(): void {
   console.log(`
-EI - Empathic Interface
+Ei
 
 Usage:
   ei                              Launch the TUI chat interface

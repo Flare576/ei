@@ -1,4 +1,4 @@
-# EI - Empathic Interface
+# Ei
 
 A local-first AI companion system with persistent personas.
 

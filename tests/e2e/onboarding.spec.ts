@@ -21,7 +21,7 @@ test.describe("Onboarding Flow", () => {
 
     // Should see the welcome step
     await expect(page.locator("text=Welcome to Ei")).toBeVisible({ timeout: 10000 });
-    await expect(page.locator("text=Empathic Interface")).toBeVisible();
+    await expect(page.locator("text=Your Local-First AI Companion")).toBeVisible();
     
     // Should see the restore form
     await expect(page.locator('input[placeholder="Username"]')).toBeVisible();

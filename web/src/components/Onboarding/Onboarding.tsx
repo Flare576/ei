@@ -155,7 +155,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
       </div>
       
       <h1 className="ei-onboarding__title">Welcome to Ei</h1>
-      <p className="ei-onboarding__subtitle">Empathic Interface - Your Local-First AI Companion</p>
+      <p className="ei-onboarding__subtitle">Your Local-First AI Companion</p>
     </>
   );
   // Info sections shown on Welcome and LocalLLMCheck only
@@ -223,7 +223,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
         <h2>Meet Your Guide</h2>
         <p>
           <strong>Ei</strong> (pronounced "eye" or "ee-eye") is your system guide and personal companion.
-          They're empathetic, curious, and genuinely interested in getting to know you. Ei sees everything 
+          They're curious and genuinely interested in getting to know you. Ei sees everything 
           across all your personas and helps you navigate the system.
         </p>
         <p>

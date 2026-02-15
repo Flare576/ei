@@ -15,7 +15,7 @@
   "bin": {
     "ei": "./src/cli.ts"
   },
-  "description": "EI - Empathic Interface",
+  "description": "Ei - Local-first AI companion with persistent personas",
   "keywords": [
     "ai",
     "llm",
