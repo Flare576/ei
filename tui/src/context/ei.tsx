@@ -27,7 +27,7 @@ interface EiStore {
   notification: { message: string; level: "error" | "warn" | "info" } | null;
 }
 
-interface EiContextValue {
+export interface EiContextValue {
   personas: () => PersonaSummary[];
   activePersona: () => string | null;
   messages: () => Message[];
@@ -41,6 +41,9 @@ interface EiContextValue {
   resumeQueue: () => Promise<void>;
   stopProcessor: () => Promise<void>;
   showNotification: (message: string, level: "error" | "warn" | "info") => void;
+  createPersona: (input: { name: string }) => Promise<void>;
+  archivePersona: (name: string) => Promise<void>;
+  unarchivePersona: (name: string) => Promise<void>;
 }
 
 const EiContext = createContext<EiContextValue>();
@@ -83,8 +86,11 @@ export const EiProvider: ParentComponent = (props) => {
 
   const selectPersona = (name: string) => {
     setStore("activePersona", name);
+    setStore("messages", []);
     if (processor) {
-      processor.getMessages(name).then((msgs) => setStore("messages", msgs));
+      processor.getMessages(name).then((msgs) => {
+        setStore("messages", [...msgs]);
+      });
     }
   };
 
@@ -110,6 +116,23 @@ export const EiProvider: ParentComponent = (props) => {
     if (processor) {
       await processor.stop();
     }
+  };
+
+  const createPersona = async (input: { name: string }) => {
+    if (!processor) return;
+    await processor.createPersona(input);
+  };
+
+  const archivePersona = async (name: string) => {
+    if (!processor) return;
+    await processor.archivePersona(name);
+    await refreshPersonas();
+  };
+
+  const unarchivePersona = async (name: string) => {
+    if (!processor) return;
+    await processor.unarchivePersona(name);
+    await refreshPersonas();
   };
 
   async function bootstrap() {
@@ -195,6 +218,9 @@ export const EiProvider: ParentComponent = (props) => {
     resumeQueue,
     stopProcessor,
     showNotification,
+    createPersona,
+    archivePersona,
+    unarchivePersona,
   };
 
   return (

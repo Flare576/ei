@@ -27,19 +27,21 @@ export function MessageList() {
       borderColor={isFocused() ? "#268bd2" : undefined}
       borderStyle="single"
     >
-      <scrollbox
-        ref={handleScrollboxRef}
-        flexGrow={1}
-        padding={1}
-        backgroundColor="#0f1419"
-        stickyScroll={true}
-        stickyStart="bottom"
-      >
-        <Show
-          when={messages().length > 0}
-          fallback={
+      <Show
+        when={messages().length > 0}
+        fallback={
+          <box flexGrow={1} padding={1} backgroundColor="#0f1419" justifyContent="center" alignItems="center">
             <text fg="#586e75" content="No messages yet. Start a conversation!" />
-          }
+          </box>
+        }
+      >
+        <scrollbox
+          ref={handleScrollboxRef}
+          flexGrow={1}
+          padding={1}
+          backgroundColor="#0f1419"
+          stickyScroll={true}
+          stickyStart="bottom"
         >
           <For each={messages()}>
             {(message) => {
@@ -63,8 +65,8 @@ export function MessageList() {
               );
             }}
           </For>
-        </Show>
-      </scrollbox>
+        </scrollbox>
+      </Show>
     </box>
   );
 }
