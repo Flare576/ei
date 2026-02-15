@@ -7,6 +7,7 @@ import {
 } from "solid-js";
 import { useKeyboard, useRenderer } from "@opentui/solid";
 import type { ScrollBoxRenderable, KeyEvent, TextareaRenderable } from "@opentui/core";
+import type { PersonaSummary } from "../../../src/core/types.js";
 import { useEi } from "./ei";
 import { logger } from "../util/logger";
 
@@ -28,7 +29,7 @@ export const KeyboardProvider: ParentComponent = (props) => {
   const [focusedPanel, setFocusedPanel] = createSignal<Panel>("input");
   const [sidebarVisible, setSidebarVisible] = createSignal(true);
   const renderer = useRenderer();
-  const { queueStatus, abortCurrentOperation, resumeQueue } = useEi();
+  const { queueStatus, abortCurrentOperation, resumeQueue, personas, activePersona, selectPersona } = useEi();
   
   let messageScrollRef: ScrollBoxRenderable | null = null;
   let textareaRef: TextareaRenderable | null = null;
@@ -50,6 +51,26 @@ export const KeyboardProvider: ParentComponent = (props) => {
   };
 
   useKeyboard((event: KeyEvent) => {
+    if (event.name === "tab") {
+      event.preventDefault();
+      if (textareaRef && textareaRef.plainText.length > 0) return;
+      
+      const unarchived = personas().filter((p: PersonaSummary) => !p.is_archived);
+      if (unarchived.length <= 1) return;
+      
+      const current = activePersona();
+      const currentIndex = unarchived.findIndex((p: PersonaSummary) => p.name === current);
+      
+      let nextIndex: number;
+      if (event.shift) {
+        nextIndex = (currentIndex - 1 + unarchived.length) % unarchived.length;
+      } else {
+        nextIndex = (currentIndex + 1) % unarchived.length;
+      }
+      selectPersona(unarchived[nextIndex].name);
+      return;
+    }
+
     if (event.name === "b" && event.ctrl) {
       event.preventDefault();
       toggleSidebar();

@@ -1,4 +1,4 @@
-import { For } from "solid-js";
+import { For, createSignal, createEffect, createMemo, onCleanup } from "solid-js";
 import { useEi } from "../context/ei";
 import { useKeyboardNav } from "../context/keyboard";
 
@@ -7,6 +7,32 @@ export function Sidebar() {
   const { focusedPanel } = useKeyboardNav();
 
   const isFocused = () => focusedPanel() === "sidebar";
+
+  // Memoize visible (non-archived) personas for proper reactivity
+  const visiblePersonas = createMemo(() => 
+    personas().filter(p => !p.is_archived)
+  );
+
+  const [highlightedPersona, setHighlightedPersona] = createSignal<string | null>(null);
+  let highlightTimer: ReturnType<typeof setTimeout> | null = null;
+
+  createEffect(() => {
+    const current = activePersona();
+    if (current) {
+      if (highlightTimer) clearTimeout(highlightTimer);
+      
+      setHighlightedPersona(current);
+      
+      highlightTimer = setTimeout(() => {
+        setHighlightedPersona(null);
+        highlightTimer = null;
+      }, 500);
+    }
+  });
+
+  onCleanup(() => {
+    if (highlightTimer) clearTimeout(highlightTimer);
+  });
 
   return (
     <box 
@@ -23,7 +49,7 @@ export function Sidebar() {
         </text>
         
         <scrollbox height="100%">
-          <For each={personas()}>
+          <For each={visiblePersonas()}>
             {(persona) => {
               const isActive = () => activePersona() === persona.name;
               const displayName = () => 
@@ -41,7 +67,13 @@ export function Sidebar() {
 
               return (
                 <box
-                  backgroundColor={isActive() ? "#2d3748" : "transparent"}
+                  backgroundColor={
+                    isActive() && highlightedPersona() === persona.name 
+                      ? "#3d5a80"
+                      : isActive() 
+                      ? "#2d3748"
+                      : "transparent"
+                  }
                   padding={1}
                   marginBottom={0.5}
                 >
