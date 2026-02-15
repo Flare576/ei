@@ -1,6 +1,6 @@
 # 0140: TUI Persona Switching
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0139 (TUI Slash Command Foundation)
 **Priority**: High (TUI V1.2)
 
@@ -20,41 +20,41 @@ Currently the TUI displays personas in the sidebar but provides no way to switch
 
 ### /persona Command
 
-- [ ] `/persona` or `/p` with no args shows persona list overlay
-- [ ] `/persona <name>` switches to matching persona (case-insensitive, partial match)
-- [ ] `/persona <unknown>` prompts: "Create persona '<name>'? (y/N)"
-  - [ ] If confirmed, calls `processor.createPersona(name)` and switches to it
-  - [ ] If declined, shows "Cancelled" in StatusBar
-- [ ] Active persona highlighted in sidebar after switch
-- [ ] Chat history updates to show new persona's messages
+- [x] `/persona` or `/p` with no args shows persona list overlay
+- [x] `/persona <name>` switches to matching persona (case-insensitive, partial match)
+- [x] `/persona <unknown>` prompts: "Create persona '<name>'? (y/N)"
+  - [x] If confirmed, calls `processor.createPersona(name)` and switches to it
+  - [x] If declined, shows "Cancelled" in StatusBar
+- [x] Active persona highlighted in sidebar after switch
+- [x] Chat history updates to show new persona's messages
 
 ### Tab Cycling
 
-- [ ] Tab key (when input is empty) cycles through unarchived personas
-- [ ] Cycle order: alphabetical by name
-- [ ] Visual feedback: brief highlight animation on sidebar item
-- [ ] If only one persona exists, Tab does nothing (no-op)
+- [x] Tab key (when input is empty) cycles through unarchived personas
+- [x] Cycle order: alphabetical by name
+- [x] Visual feedback: brief highlight animation on sidebar item
+- [x] If only one persona exists, Tab does nothing (no-op)
 
 ### Persona List Overlay
 
-- [ ] Shows all unarchived personas with: **Name** _description snippet_
-- [ ] Current persona marked with `>` or highlight
-- [ ] j/k to navigate list (vim-style)
-- [ ] Enter to select and switch
-- [ ] Escape to dismiss without switching
-- [ ] `/` in overlay filters the list (fuzzy search on name)
+- [x] Shows all unarchived personas with: **Name** _description snippet_
+- [x] Current persona marked with `>` or highlight
+- [x] j/k to navigate list (vim-style)
+- [x] Enter to select and switch
+- [x] Escape to dismiss without switching
+- [x] `/` in overlay filters the list (fuzzy search on name)
 
 ### /archive Command
 
-- [ ] `/archive` or `/a` with no args shows archived personas overlay
-- [ ] `/archive <name>` archives the named persona
-- [ ] `/archive` with no args and no archived personas shows "No archived personas"
-- [ ] Cannot archive the currently active persona (show error)
+- [x] `/archive` or `/a` with no args shows archived personas overlay
+- [x] `/archive <name>` archives the named persona
+- [x] `/archive` with no args and no archived personas shows "No archived personas"
+- [x] Cannot archive the currently active persona (show error)
 
 ### /unarchive Command
 
-- [ ] `/unarchive <name>` unarchives and switches to the persona
-- [ ] Tab-completion for archived persona names
+- [x] `/unarchive <name>` unarchives and switches to the persona
+- [ ] Tab-completion for archived persona names (deferred - requires input autocomplete infrastructure)
 
 ## Technical Design
 
@@ -189,15 +189,36 @@ tui/src/
 
 ## Testing
 
-- [ ] Unit test: Partial name matching finds correct persona
-- [ ] Unit test: Tab cycling wraps around correctly
-- [ ] Manual test: `/persona` shows overlay
-- [ ] Manual test: `/persona partial` switches to matching persona
-- [ ] Manual test: `/persona unknown` prompts to create
-- [ ] Manual test: Tab cycles through personas
-- [ ] Manual test: j/k navigation in overlay works
-- [ ] Manual test: Filter in overlay narrows list
-- [ ] Manual test: `/archive` and `/unarchive` work
+### Prerequisites
+
+Before starting work on this ticket:
+- [x] Run `npm run test:all` from project root - all tests must pass
+- [x] Run `npm run test:e2e` from `tui/` - all TUI E2E tests must pass
+
+### Unit Tests
+
+- [x] Partial name matching finds correct persona (exact > starts-with > contains)
+- [x] Tab cycling wraps around correctly
+- [x] Tab cycling with single persona is no-op
+
+### E2E Tests
+
+- [x] `/persona` shows persona list overlay
+- [x] `/persona partial` switches to matching persona
+- [x] `/persona unknown` prompts to create, confirm creates and switches
+- [x] `/persona unknown` prompts to create, cancel shows "Cancelled"
+- [x] Tab cycles through personas (verify sidebar highlight updates)
+- [ ] j/k navigation in persona list overlay works (deferred - terminal.write() sends chars to filter, not nav)
+- [ ] Filter in overlay narrows list (implemented but not E2E tested)
+- [x] Escape dismisses overlay
+- [x] `/archive <name>` archives persona, sidebar updates
+- [x] `/archive` (active persona) shows error
+- [x] `/unarchive <name>` unarchives and switches
+
+### Post-Implementation
+
+- [x] Run `npm run test:all` - all tests still pass
+- [x] Run `npm run test:e2e` from `tui/` - all tests pass including new ones
 
 ## Notes
 

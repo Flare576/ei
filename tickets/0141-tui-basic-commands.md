@@ -260,16 +260,40 @@ tui/src/
 
 ## Testing
 
-- [ ] Unit test: Duration parser handles all formats
-- [ ] Unit test: Duration parser rejects invalid input
-- [ ] Manual test: `/new` shows divider in chat
-- [ ] Manual test: `/pause` updates sidebar indicator
-- [ ] Manual test: `/pause 30m` sets correct expiration
-- [ ] Manual test: `/resume` clears pause
-- [ ] Manual test: `/resume all` clears all pauses
-- [ ] Manual test: `/model` shows current model
-- [ ] Manual test: `/model openai:gpt-4o` sets model
-- [ ] Manual test: `/model clear` removes model override
+### Prerequisites
+
+Before starting work on this ticket:
+- [ ] Run `npm run test:all` from project root - all tests must pass
+- [ ] Run `npm run test:e2e` from `tui/` - all TUI E2E tests must pass
+
+### Unit Tests
+
+- [ ] Duration parser handles all formats (30m, 2h, 1d, 1w)
+- [ ] Duration parser handles full words (30min, 2hours, 1day, 1week)
+- [ ] Duration parser rejects invalid input (returns null)
+- [ ] Duration formatter outputs correct shorthand
+
+### E2E Tests
+
+- [ ] `/new` shows "── New Conversation ──" divider in chat
+- [ ] `/new` StatusBar shows "New conversation started"
+- [ ] `/pause` pauses active persona, sidebar shows ⏸ indicator
+- [ ] `/pause 30m` sets correct expiration time
+- [ ] `/pause <persona>` pauses specific persona
+- [ ] `/pause` with only one unpaused persona shows error
+- [ ] `/resume` clears pause, sidebar indicator removed
+- [ ] `/resume <persona>` resumes specific persona
+- [ ] `/resume all` clears all pauses
+- [ ] `/resume` on non-paused persona shows "Already active"
+- [ ] `/model` shows current model in StatusBar
+- [ ] `/model openai:gpt-4o` sets model, StatusBar confirms
+- [ ] `/model clear` removes model override
+- [ ] `/model invalidformat` shows format error
+
+### Post-Implementation
+
+- [ ] Run `npm run test:all` - all tests still pass
+- [ ] Run `npm run test:e2e` from `tui/` - all tests pass including new ones
 
 ## Notes
 

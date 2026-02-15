@@ -32,7 +32,7 @@
 | **E009** | 0090-0099 | PENDING | Polish & New Features |
 | **E010** | 0100-0109 | DONE | TUI & OpenCode Integration |
 | **E011** | 0116-0120, 0122 | DONE | Quote Preservation System |
-| **E012** | 0139-0142 | PENDING | TUI Commands (V1.2) |
+| **E012** | 0139-0142, 0144 | PENDING | TUI Commands (V1.2) |
 
 ---
 
@@ -75,7 +75,8 @@
 |--------|-------|------------|
 | 0140 | TUI Persona Switching | 0139 |
 | 0141 | TUI Basic Commands | 0139, 0140 |
-| 0142 | TUI $EDITOR Integration | 0139 |
+| 0142 | TUI $EDITOR Integration | 0139, 0140 |
+| 0144 | TUI Unread Message Marking | 0100 |
 
 ---
 

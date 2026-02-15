@@ -1,7 +1,7 @@
 # 0142: TUI $EDITOR Integration
 
 **Status**: PENDING
-**Depends on**: 0139 (TUI Slash Command Foundation)
+**Depends on**: 0139 (TUI Slash Command Foundation), 0140 (TUI Persona Switching)
 **Priority**: High (TUI V1.2)
 
 ## Summary
@@ -33,6 +33,15 @@ This is how tools like `kubectl edit`, `git commit`, and `crontab -e` work.
 - [ ] `/details` or `/d` edits the active persona
 - [ ] `/details <name>` edits the named persona
 - [ ] `/details <unknown>` shows error in StatusBar
+
+### Persona Creation → Editor Flow (completes 0140)
+
+Per tui-map.md design: `/persona [unknown]` should create then immediately open `$EDITOR`.
+
+- [ ] Modify `/persona` command (from 0140) to call editor after creation
+- [ ] When user confirms "Create persona 'X'? (y/N)" → create → open $EDITOR with new persona
+- [ ] If user saves empty/default YAML, persona still exists (name-only is valid)
+- [ ] If user cancels editor (`:q!` in vim), persona still exists (already created before editor opened)
 - [ ] YAML includes all editable persona fields:
   ```yaml
   name: PersonaName
@@ -268,6 +277,57 @@ export const detailsCommand: Command = {
 };
 ```
 
+### Modifying /persona Command (from 0140)
+
+The `/persona` command from ticket 0140 creates personas with just a name. This ticket modifies
+the creation flow to immediately open `$EDITOR`:
+
+```typescript
+// tui/src/commands/persona.ts - MODIFIED from 0140
+// In the "create new persona" branch:
+
+ctx.showOverlay((hideOverlay) => (
+  <ConfirmOverlay
+    message={`Create persona '${name}'?`}
+    onConfirm={async () => {
+      // Create the persona first (from 0140)
+      await ctx.ei.createPersona({ name });
+      ctx.ei.selectPersona(name);
+      hideOverlay();
+      
+      // NEW: Immediately open editor for the new persona
+      // Import from details.ts or extract shared editPersona() function
+      await openPersonaEditor(name, ctx);
+      
+      ctx.showNotification(`Created ${name}`, "info");
+    }}
+    onCancel={() => {
+      hideOverlay();
+      ctx.showNotification("Cancelled", "info");
+    }}
+  />
+));
+
+// Consider extracting to shared utility:
+// tui/src/util/persona-editor.ts
+export async function openPersonaEditor(name: string, ctx: CommandContext) {
+  const persona = await ctx.ei.getPersona(name);  // May need to add this method
+  if (!persona) return;
+  
+  const editable = { /* ... same as /details */ };
+  
+  ctx.suspendTUI();
+  const result = await editInEditor(editable, { /* ... */ });
+  ctx.resumeTUI();
+  
+  if (result.success) {
+    const { name: _, ...changes } = result.data!;
+    await ctx.ei.updatePersona(name, changes);  // May need to add this method
+  }
+}
+```
+```
+
 ### TUI Suspend/Resume
 
 ```typescript
@@ -292,28 +352,68 @@ export function resumeTUI() {
 ```
 tui/src/
 ├── commands/
+│   ├── persona.ts       # MODIFY: Add editor launch after creation (from 0140)
 │   ├── details.ts       # /details command
 │   ├── me.ts            # /me command
 │   ├── settings.ts      # /settings command
 │   └── editor.ts        # /editor command
 ├── util/
-│   └── editor.ts        # $EDITOR spawning utility
+│   ├── editor.ts        # $EDITOR spawning utility
+│   └── persona-editor.ts  # Shared persona editing logic (used by /persona and /details)
 └── context/
     └── app.tsx          # Add suspend/resume methods
 ```
 
 ## Testing
 
-- [ ] Unit test: YAML serialization round-trips correctly
-- [ ] Unit test: Validation catches invalid changes
-- [ ] Manual test: `/details` opens editor with persona YAML
-- [ ] Manual test: Changes in editor are saved
-- [ ] Manual test: Invalid YAML shows error
-- [ ] Manual test: `/me` opens human data
-- [ ] Manual test: Adding new fact in YAML creates it
-- [ ] Manual test: Removing fact from YAML deletes it
-- [ ] Manual test: `/settings` shows system config
-- [ ] Manual test: `/editor` for composing messages works
+### Prerequisites
+
+Before starting work on this ticket:
+- [ ] Run `npm run test:all` from project root - all tests must pass
+- [ ] Run `npm run test:e2e` from `tui/` - all TUI E2E tests must pass
+
+### Unit Tests
+
+- [ ] YAML serialization round-trips correctly for persona data
+- [ ] YAML serialization round-trips correctly for human data
+- [ ] Validation catches invalid/malformed changes
+- [ ] Editor fallback chain works ($EDITOR → $VISUAL → vi)
+
+### E2E Tests
+
+Note: E2E tests for $EDITOR commands are tricky since they spawn external processes.
+Use mock editor approach: set $EDITOR to a script that modifies the file predictably.
+
+#### /details Tests
+- [ ] `/details` opens editor with persona YAML (verify temp file created)
+- [ ] `/details` changes in editor are saved to processor
+- [ ] `/details` invalid YAML shows error, offers re-edit
+- [ ] `/details <unknown>` shows "Persona not found" error
+
+#### Persona Creation → Editor Flow (completes 0140)
+- [ ] `/persona newguy` → confirm "y" → editor opens with new persona YAML
+- [ ] `/persona newguy` → confirm "y" → edit description → save → persona has description
+- [ ] `/persona newguy` → confirm "y" → cancel editor (`:q!`) → persona still exists (name-only)
+
+#### /me Tests
+- [ ] `/me` opens editor with human data (facts, traits, topics, people)
+- [ ] `/me` adding new fact (no id) creates it in storage
+- [ ] `/me` modifying existing fact updates it
+- [ ] `/me` removing fact from YAML deletes it (or prompts)
+
+#### /settings and /editor Tests
+- [ ] `/settings` shows system config YAML
+- [ ] `/settings` model changes are applied
+- [ ] `/editor` opens with current input content
+- [ ] `/editor` saved content replaces input box
+
+#### Infrastructure
+- [ ] TUI suspend/resume works cleanly (no rendering artifacts)
+
+### Post-Implementation
+
+- [ ] Run `npm run test:all` - all tests still pass
+- [ ] Run `npm run test:e2e` from `tui/` - all tests pass including new ones
 
 ## Notes
 
