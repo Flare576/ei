@@ -1,6 +1,6 @@
 # 0072: Decay Phase
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0070
 
 ## Summary
@@ -9,13 +9,13 @@ Ceremony phase that applies time-based decay to exposure values.
 
 ## Acceptance Criteria
 
-- [ ] No LLM call needed - pure computation
-- [ ] For each persona topic: Apply decay formula to `exposure_current`
-- [ ] Decay rate configurable (default: ~10% per day)
-- [ ] Topics not discussed decay toward 0
-- [ ] Record pre-decay values for delta calculation
-- [ ] On completion: Enqueue Expire phase (0073)
-- [ ] Static personas skip this phase
+- [x] No LLM call needed - pure computation
+- [x] For each persona topic: Apply decay formula to `exposure_current`
+- [x] Decay rate configurable (default: ~10% per day)
+- [x] Topics not discussed decay toward 0
+- [x] Record pre-decay values for delta calculation
+- [x] On completion: Enqueue Expire phase (0073)
+- [x] Static personas skip this phase
 
 ## Notes
 

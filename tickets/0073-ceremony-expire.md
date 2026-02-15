@@ -1,6 +1,6 @@
 # 0073: Expire Phase
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0072
 
 ## Summary
@@ -9,14 +9,14 @@ Ceremony phase that removes topics the persona no longer cares about.
 
 ## Acceptance Criteria
 
-- [ ] `buildPersonaExpirePrompt(data)` implemented
-- [ ] Prompt receives persona's topics with current exposure values
-- [ ] LLM identifies topics that have decayed below relevance threshold
-- [ ] Returns list of topic IDs to remove
-- [ ] `handlePersonaExpire` handler removes identified topics
-- [ ] Track removed count for Explore phase trigger
-- [ ] On completion: Enqueue Explore if needed (0074)
-- [ ] Static personas skip this phase
+- [x] `buildPersonaExpirePrompt(data)` implemented
+- [x] Prompt receives persona's topics with current exposure values
+- [x] LLM identifies topics that have decayed below relevance threshold
+- [x] Returns list of topic IDs to remove
+- [x] `handlePersonaExpire` handler removes identified topics
+- [x] Track removed count for Explore phase trigger
+- [x] On completion: Enqueue Explore if needed (0074)
+- [x] Static personas skip this phase
 
 ## Notes
 

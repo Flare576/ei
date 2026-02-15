@@ -1,6 +1,6 @@
 # 0074: Explore Phase
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0073
 
 ## Summary
@@ -9,14 +9,14 @@ Ceremony phase that generates new topics for personas running low.
 
 ## Acceptance Criteria
 
-- [ ] Triggered only if persona topic count below threshold after Expire
-- [ ] `buildPersonaExplorePrompt(data)` implemented
-- [ ] Prompt receives persona traits, remaining topics, recent conversation themes
-- [ ] LLM suggests new topics aligned with persona's personality
-- [ ] Returns array of new Topic objects
-- [ ] `handlePersonaExplore` handler adds topics to persona
-- [ ] New topics start with moderate exposure_desired, low exposure_current
-- [ ] Static personas skip this phase
+- [x] Triggered only if persona topic count below threshold after Expire
+- [x] `buildPersonaExplorePrompt(data)` implemented
+- [x] Prompt receives persona traits, remaining topics, recent conversation themes
+- [x] LLM suggests new topics aligned with persona's personality
+- [x] Returns array of new Topic objects
+- [x] `handlePersonaExplore` handler adds topics to persona
+- [x] New topics start with moderate exposure_desired, low exposure_current
+- [x] Static personas skip this phase
 
 ## Notes
 

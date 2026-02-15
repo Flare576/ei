@@ -1,6 +1,6 @@
 # 0070: Ceremony Orchestrator
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0065
 
 ## Summary
@@ -9,15 +9,15 @@ Nightly background job that coordinates the Ceremony phases across all entities.
 
 ## Acceptance Criteria
 
-- [ ] Scheduler triggers Ceremony at configurable time (default: 3am local)
-- [ ] Orchestrator processes personas in order, Ei last
-- [ ] For each active persona that had activity:
+- [x] Scheduler triggers Ceremony at configurable time (default: 3am local)
+- [x] Orchestrator processes personas in order, Ei last
+- [x] For each active persona that had activity:
   - Enqueue Exposure phase (0071)
   - On completion: Enqueue Decay phase (0072)
-- [ ] After all personas: Run Human Ceremony (0075)
-- [ ] Uses queue-driven chaining (handlers enqueue next step)
-- [ ] Skip paused/archived personas
-- [ ] Configurable via settings (enable/disable, time)
+- [x] After all personas: Run Human Ceremony (0075)
+- [x] Uses queue-driven chaining (handlers enqueue next step)
+- [x] Skip paused/archived personas
+- [x] Configurable via settings (enable/disable, time)
 
 ## Notes
 

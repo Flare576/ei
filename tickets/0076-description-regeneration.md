@@ -1,6 +1,6 @@
 # 0076: Description Regeneration
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0074
 
 ## Summary
@@ -9,14 +9,14 @@ After Ceremony phases, cautiously update persona descriptions if warranted.
 
 ## Acceptance Criteria
 
-- [ ] `buildDescriptionCheckPrompt(data)` implemented
-- [ ] Prompt receives current descriptions + updated traits/topics
-- [ ] LLM evaluates if "drastic departure" warrants update
-- [ ] Returns: `{ should_update: boolean, reason?: string }`
-- [ ] If update warranted: Call `buildPersonaDescriptionsPrompt` (0023)
-- [ ] Update long_description, then regenerate short_description
-- [ ] Very conservative threshold - user's initial description is precious
-- [ ] Static personas skip this entirely
+- [x] `buildDescriptionCheckPrompt(data)` implemented
+- [x] Prompt receives current descriptions + updated traits/topics
+- [x] LLM evaluates if "drastic departure" warrants update
+- [x] Returns: `{ should_update: boolean, reason?: string }`
+- [x] If update warranted: Call `buildPersonaDescriptionsPrompt` (0023)
+- [x] Update long_description, then regenerate short_description
+- [x] Very conservative threshold - user's initial description is precious
+- [x] Static personas skip this entirely
 
 ## Notes
 
