@@ -1,6 +1,6 @@
 # 0011: Response Prompt Builder
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: None
 **Epic**: E002 - MVP: Basic Chat
 
@@ -10,16 +10,16 @@ Create the `buildResponsePrompt` function that generates system/user prompts for
 
 ## Acceptance Criteria
 
-- [ ] Create `src/prompts/response/index.ts` with `buildResponsePrompt(data: ResponsePromptData): { system: string; user: string }`
-- [ ] Prompt includes persona identity (name, aliases, descriptions)
-- [ ] Prompt includes persona traits with strength values
-- [ ] Prompt includes persona topics with exposure levels
-- [ ] Prompt includes filtered human data (facts, traits, topics, people) based on visibility rules
-- [ ] Prompt includes visible personas list (for cross-persona awareness)
-- [ ] Prompt includes `delay_ms` for time-aware responses
-- [ ] Prompt instructs persona when NOT to respond (e.g., "goodnight" = no response needed)
-- [ ] Function is synchronous (receives pre-fetched, pre-filtered data)
-- [ ] Unit tests verify prompt structure
+- [x] Create `src/prompts/response/index.ts` with `buildResponsePrompt(data: ResponsePromptData): { system: string; user: string }`
+- [x] Prompt includes persona identity (name, aliases, descriptions)
+- [x] Prompt includes persona traits with strength values
+- [x] Prompt includes persona topics with exposure levels
+- [x] Prompt includes filtered human data (facts, traits, topics, people) based on visibility rules
+- [x] Prompt includes visible personas list (for cross-persona awareness)
+- [x] Prompt includes `delay_ms` for time-aware responses
+- [x] Prompt instructs persona when NOT to respond (e.g., "goodnight" = no response needed)
+- [x] Function is synchronous (receives pre-fetched, pre-filtered data)
+- [x] Unit tests verify prompt structure
 
 ## Technical Notes
 

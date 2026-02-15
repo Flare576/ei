@@ -1,6 +1,6 @@
 # 0012: Port Mock LLM Server
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: None
 **Epic**: E002 - MVP: Basic Chat
 
@@ -10,18 +10,18 @@ Port the V0 mock LLM server to V1's test infrastructure. This OpenAI-compatible 
 
 ## Acceptance Criteria
 
-- [ ] Create `tests/e2e/mock-server.ts` (or similar structure)
-- [ ] Server implements OpenAI `/v1/chat/completions` endpoint
-- [ ] Server supports request type detection (response, extraction, description, etc.)
-- [ ] Server supports response overrides via `setResponse()` and `setResponseForType()`
-- [ ] Server supports response queues for sequential test scenarios
-- [ ] Server supports configurable delays for timing tests
-- [ ] Server supports streaming responses (SSE format)
-- [ ] Server tracks request history for test assertions
-- [ ] Server can interrupt active streams (for abort testing)
-- [ ] Server starts on configurable port
-- [ ] Server cleans up properly on stop
-- [ ] Basic smoke test verifies server works
+- [x] Create `tests/e2e/mock-server.ts` (or similar structure)
+- [x] Server implements OpenAI `/v1/chat/completions` endpoint
+- [x] Server supports request type detection (response, extraction, description, etc.)
+- [x] Server supports response overrides via `setResponse()` and `setResponseForType()`
+- [x] Server supports response queues for sequential test scenarios
+- [x] Server supports configurable delays for timing tests
+- [x] Server supports streaming responses (SSE format)
+- [x] Server tracks request history for test assertions
+- [x] Server can interrupt active streams (for abort testing)
+- [x] Server starts on configurable port
+- [x] Server cleans up properly on stop
+- [x] Basic smoke test verifies server works
 
 ## Technical Notes
 

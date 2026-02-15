@@ -1,6 +1,6 @@
 # 0016: First E2E Test
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0012, 0015
 **Epic**: E002 - MVP: Basic Chat
 
@@ -10,15 +10,15 @@ Create the first end-to-end test that validates the complete message flow: user 
 
 ## Acceptance Criteria
 
-- [ ] Create `tests/e2e/basic-flow.spec.ts` (or similar)
-- [ ] Test starts mock LLM server before test
-- [ ] Test configures app to use mock server URL
-- [ ] Test loads the app in browser (Playwright)
-- [ ] Test sends a message via the input box
-- [ ] Test verifies human message appears in chat
-- [ ] Test verifies AI response appears in chat (from mock server)
-- [ ] Test cleans up mock server after test
-- [ ] Test passes consistently (no flakiness)
+- [x] Create `tests/e2e/basic-flow.spec.ts` (or similar)
+- [x] Test starts mock LLM server before test
+- [x] Test configures app to use mock server URL
+- [x] Test loads the app in browser (Playwright)
+- [x] Test sends a message via the input box
+- [x] Test verifies human message appears in chat
+- [x] Test verifies AI response appears in chat (from mock server)
+- [x] Test cleans up mock server after test
+- [x] Test passes consistently (no flakiness)
 
 ## Technical Notes
 

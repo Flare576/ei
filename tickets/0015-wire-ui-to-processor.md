@@ -1,6 +1,6 @@
 # 0015: Wire UI to Processor
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0011, 0013, 0014
 **Epic**: E002 - MVP: Basic Chat
 
@@ -10,18 +10,18 @@ Connect the UI components to the Processor, establishing the complete message fl
 
 ## Acceptance Criteria
 
-- [ ] App component creates Processor instance with Ei_Interface handlers
-- [ ] App calls `processor.start(storage)` on mount
-- [ ] App calls `processor.stop()` on unmount
-- [ ] Persona list populated from `processor.getPersonaList()`
-- [ ] Switching personas calls `processor.getMessages(name)` to load history
-- [ ] Sending message calls `processor.sendMessage(personaName, content)`
-- [ ] `onMessageAdded` event triggers re-fetch of messages
-- [ ] `onPersonaUpdated` event triggers re-fetch of persona list
-- [ ] `onQueueStateChanged` shows some indicator (can be simple)
-- [ ] Human message appears immediately after send
-- [ ] AI response appears when `onMessageAdded` fires
-- [ ] Basic error handling shows errors from `onError`
+- [x] App component creates Processor instance with Ei_Interface handlers
+- [x] App calls `processor.start(storage)` on mount
+- [x] App calls `processor.stop()` on unmount
+- [x] Persona list populated from `processor.getPersonaList()`
+- [x] Switching personas calls `processor.getMessages(name)` to load history
+- [x] Sending message calls `processor.sendMessage(personaName, content)`
+- [x] `onMessageAdded` event triggers re-fetch of messages
+- [x] `onPersonaUpdated` event triggers re-fetch of persona list
+- [x] `onQueueStateChanged` shows some indicator (can be simple)
+- [x] Human message appears immediately after send
+- [x] AI response appears when `onMessageAdded` fires
+- [x] Basic error handling shows errors from `onError`
 
 ## Technical Notes
 

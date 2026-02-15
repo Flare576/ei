@@ -1,6 +1,6 @@
 # 0017: Ei Welcome Message
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0015
 **Epic**: E002 - MVP: Basic Chat
 
@@ -10,13 +10,13 @@ When a user first opens Ei (no existing state), Ei should greet them with a welc
 
 ## Acceptance Criteria
 
-- [ ] On first run (no checkpoints exist), Ei persona is created automatically
-- [ ] Ei's first message is a welcome message (not LLM-generated)
-- [ ] Welcome message introduces Ei and the system concept
-- [ ] Welcome message asks for the user's name
-- [ ] Message is appended to Ei's history like any other message
-- [ ] Subsequent app loads (with existing state) do NOT show welcome again
-- [ ] Welcome message content is configurable/templated (not hardcoded in logic)
+- [x] On first run (no checkpoints exist), Ei persona is created automatically
+- [x] Ei's first message is a welcome message (not LLM-generated)
+- [x] Welcome message introduces Ei and the system concept
+- [x] Welcome message asks for the user's name
+- [x] Message is appended to Ei's history like any other message
+- [x] Subsequent app loads (with existing state) do NOT show welcome again
+- [x] Welcome message content is configurable/templated (not hardcoded in logic)
 
 ## Technical Notes
 

@@ -1,6 +1,6 @@
 # 0013: Chat UI Component
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0008
 **Epic**: E002 - MVP: Basic Chat
 
@@ -10,18 +10,18 @@ Build the chat panel UI component that displays message history and accepts user
 
 ## Acceptance Criteria
 
-- [ ] Create `src/ui/components/ChatPanel.tsx` (or similar)
-- [ ] Display message history with role differentiation (human vs system)
-- [ ] Messages show timestamp
-- [ ] Messages show sender name (persona name for system, "You" for human)
-- [ ] Input box at bottom accepts text
-- [ ] Enter sends message (calls Processor.sendMessage)
-- [ ] Shift+Enter inserts newline
-- [ ] Input clears after send
-- [ ] New messages appear immediately (optimistic UI)
-- [ ] Scroll to bottom on new message
-- [ ] Component receives `personaName` prop to know which history to display
-- [ ] Component receives `messages` prop (or fetches via Processor)
+- [x] Create `src/ui/components/ChatPanel.tsx` (or similar)
+- [x] Display message history with role differentiation (human vs system)
+- [x] Messages show timestamp
+- [x] Messages show sender name (persona name for system, "You" for human)
+- [x] Input box at bottom accepts text
+- [x] Enter sends message (calls Processor.sendMessage)
+- [x] Shift+Enter inserts newline
+- [x] Input clears after send
+- [x] New messages appear immediately (optimistic UI)
+- [x] Scroll to bottom on new message
+- [x] Component receives `personaName` prop to know which history to display
+- [x] Component receives `messages` prop (or fetches via Processor)
 
 ## Technical Notes
 

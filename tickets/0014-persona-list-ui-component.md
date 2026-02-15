@@ -1,6 +1,6 @@
 # 0014: Persona List UI Component
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0008
 **Epic**: E002 - MVP: Basic Chat
 
@@ -10,15 +10,15 @@ Build the persona list sidebar component that displays available personas and al
 
 ## Acceptance Criteria
 
-- [ ] Create `src/ui/components/PersonaPanel.tsx` (or similar)
-- [ ] Display list of personas from `processor.getPersonaList()`
-- [ ] Each persona shows name (primary alias)
-- [ ] Each persona shows short_description (truncated if needed)
-- [ ] Active persona is visually highlighted
-- [ ] Clicking a persona switches to it (calls parent handler)
-- [ ] Archived personas are hidden (or shown separately)
-- [ ] Paused personas show some indicator (can be simple for MVP)
-- [ ] "Ei" appears first in the list (system persona)
+- [x] Create `src/ui/components/PersonaPanel.tsx` (or similar)
+- [x] Display list of personas from `processor.getPersonaList()`
+- [x] Each persona shows name (primary alias)
+- [x] Each persona shows short_description (truncated if needed)
+- [x] Active persona is visually highlighted
+- [x] Clicking a persona switches to it (calls parent handler)
+- [x] Archived personas are hidden (or shown separately)
+- [x] Paused personas show some indicator (can be simple for MVP)
+- [x] "Ei" appears first in the list (system persona)
 
 ## Technical Notes
 
