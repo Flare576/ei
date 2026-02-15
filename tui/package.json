@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "bun --conditions=browser run src/index.tsx",
-    "test": "vitest run && bun test ../tests/tui/storage/",
+    "test": "vitest run && bun test src/ tests/*.test.tsx ../tests/tui/storage/",
     "test:e2e": "unset npm_config_prefix && source ~/.nvm/nvm.sh && nvm use 20 && npx @microsoft/tui-test",
     "test:e2e:debug": "unset npm_config_prefix && source ~/.nvm/nvm.sh && nvm use 20 && npx @microsoft/tui-test --debug"
   },
