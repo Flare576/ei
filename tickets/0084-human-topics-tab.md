@@ -1,6 +1,6 @@
 # 0084: Human Topics Tab
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0080
 
 ## Summary
@@ -9,13 +9,13 @@ Topics tab in Human entity editor showing interests and discussion topics.
 
 ## Acceptance Criteria
 
-- [ ] Card-based list of topics
-- [ ] Each card: Name, Description
-- [ ] Sliders: Sentiment, Exposure Current, Exposure Desired
-- [ ] Grouped by `persona_groups`
-- [ ] Visual indicator when exposure_current ≠ exposure_desired (engagement gap)
-- [ ] Add new topic button
-- [ ] Delete topic (with confirmation)
+- [x] Card-based list of topics
+- [x] Each card: Name, Description
+- [x] Sliders: Sentiment, Exposure Current, Exposure Desired
+- [x] Grouped by `persona_groups`
+- [x] Visual indicator when exposure_current ≠ exposure_desired (engagement gap)
+- [x] Add new topic button
+- [x] Delete topic (with confirmation)
 
 ## Notes
 

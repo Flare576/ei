@@ -1,6 +1,6 @@
 # 0082: Human Facts Tab
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0080
 
 ## Summary
@@ -9,14 +9,14 @@ Facts tab in Human entity editor showing all learned facts.
 
 ## Acceptance Criteria
 
-- [ ] Card-based list of facts
-- [ ] Each card shows: Name (full-width single line), Description (multi-line)
-- [ ] Split pane row: "Learned By: {persona}" left, Sentiment slider + Confidence slider center, Save/Restore right
-- [ ] Save/Restore light up when card is dirty
-- [ ] Grouped by `persona_groups` with collapsible headings
-- [ ] "General" group at top
-- [ ] Add new fact button
-- [ ] Delete fact (with confirmation)
+- [x] Card-based list of facts
+- [x] Each card shows: Name (full-width single line), Description (multi-line)
+- [x] Split pane row: "Learned By: {persona}" left, Sentiment slider + Confidence slider center, Save/Restore right
+- [x] Save/Restore light up when card is dirty
+- [x] Grouped by `persona_groups` with collapsible headings
+- [x] "General" group at top
+- [x] Add new fact button
+- [x] Delete fact (with confirmation)
 
 ## Notes
 

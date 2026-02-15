@@ -1,6 +1,6 @@
 # 0085: Human People Tab
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0080
 
 ## Summary
@@ -9,12 +9,12 @@ People tab in Human entity editor showing known individuals.
 
 ## Acceptance Criteria
 
-- [ ] Card-based list of people
-- [ ] Each card: Name, Relationship, Description
-- [ ] Sliders: Sentiment, Exposure Current, Exposure Desired
-- [ ] Grouped by `persona_groups`
-- [ ] Add new person button
-- [ ] Delete person (with confirmation)
+- [x] Card-based list of people
+- [x] Each card: Name, Relationship, Description
+- [x] Sliders: Sentiment, Exposure Current, Exposure Desired
+- [x] Grouped by `persona_groups`
+- [x] Add new person button
+- [x] Delete person (with confirmation)
 
 ## Notes
 

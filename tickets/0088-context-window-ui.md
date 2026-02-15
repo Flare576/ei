@@ -1,6 +1,6 @@
 # 0088: Context Window UI
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0086
 
 ## Summary
@@ -9,16 +9,16 @@ Complex interface for managing message context inclusion for a persona.
 
 ## Acceptance Criteria
 
-- [ ] Top controls: Start datetime picker, End datetime picker
-- [ ] Messages list: paginated, 50 at a time
-- [ ] Columns: Who, When, What (truncated), Context status
-- [ ] Background color indicates context window:
+- [x] Top controls: Start datetime picker, End datetime picker
+- [x] Messages list: paginated, 50 at a time
+- [x] Columns: Who, When, What (truncated), Context status
+- [x] Background color indicates context window:
   - Green: within sliding window (or Always)
   - Gray: outside window (or Never)
-- [ ] Click message "What" to view full content (sub-modal or expansion)
-- [ ] Context status dropdown: Default, Always, Never
-- [ ] Bulk action: "Set all matching time filter to {status}"
-- [ ] Sliding window size shown (from persona settings)
+- [x] Click message "What" to view full content (sub-modal or expansion)
+- [x] Context status dropdown: Default, Always, Never
+- [x] Bulk action: "Set all matching time filter to {status}"
+- [x] Sliding window size shown (from persona settings)
 
 ## Notes
 
