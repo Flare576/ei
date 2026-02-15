@@ -1,6 +1,10 @@
 import type { TextareaRenderable, KeyBinding } from "@opentui/core";
 import { useEi } from "../context/ei";
 import { useKeyboardNav } from "../context/keyboard";
+import { parseAndExecute, registerCommand, type CommandContext } from "../commands/registry";
+import { quitCommand } from "../commands/quit";
+import { helpCommand } from "../commands/help";
+import { useOverlay } from "../context/overlay";
 
 // Enter submits, Ctrl+J or Meta+Enter for newline
 const TEXTAREA_KEYBINDINGS: KeyBinding[] = [
@@ -10,15 +14,37 @@ const TEXTAREA_KEYBINDINGS: KeyBinding[] = [
 ];
 
 export function PromptInput() {
-  const { sendMessage, activePersona } = useEi();
-  const { registerTextarea } = useKeyboardNav();
+  const { sendMessage, activePersona, stopProcessor, showNotification } = useEi();
+  const { registerTextarea, exitApp } = useKeyboardNav();
+  const { showOverlay, hideOverlay } = useOverlay();
 
-  const handleSubmit = () => {
+  // Register commands (idempotent - safe to call multiple times)
+  registerCommand(quitCommand);
+  registerCommand(helpCommand);
+
+  const handleSubmit = async () => {
     const text = textareaRef?.plainText?.trim();
-    if (!text || !activePersona()) return;
+    if (!text) return;
     
-    sendMessage(text);
+    // Clear input immediately
     textareaRef?.clear();
+    
+    // Check if it's a command
+    if (text.startsWith("/")) {
+      const ctx: CommandContext = {
+        showOverlay,
+        hideOverlay,
+        showNotification,
+        exitApp,
+        stopProcessor,
+      };
+      await parseAndExecute(text, ctx);
+      return;
+    }
+    
+    // Regular message - requires active persona
+    if (!activePersona()) return;
+    await sendMessage(text);
   };
 
   const getPlaceholder = () => {
@@ -45,7 +71,7 @@ export function PromptInput() {
           registerTextarea(r);
         }}
         focused={true}
-        onSubmit={handleSubmit}
+        onSubmit={() => void handleSubmit()}
         placeholder={getPlaceholder()}
         textColor="#eee8d5"
         backgroundColor="#0f3460"

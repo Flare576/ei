@@ -39,6 +39,8 @@ interface EiContextValue {
   refreshMessages: () => Promise<void>;
   abortCurrentOperation: () => Promise<void>;
   resumeQueue: () => Promise<void>;
+  stopProcessor: () => Promise<void>;
+  showNotification: (message: string, level: "error" | "warn" | "info") => void;
 }
 
 const EiContext = createContext<EiContextValue>();
@@ -102,6 +104,12 @@ export const EiProvider: ParentComponent = (props) => {
     if (!processor) return;
     logger.info("Resuming queue");
     await processor.resumeQueue();
+  };
+
+  const stopProcessor = async () => {
+    if (processor) {
+      await processor.stop();
+    }
   };
 
   async function bootstrap() {
@@ -185,6 +193,8 @@ export const EiProvider: ParentComponent = (props) => {
     refreshMessages,
     abortCurrentOperation,
     resumeQueue,
+    stopProcessor,
+    showNotification,
   };
 
   return (
