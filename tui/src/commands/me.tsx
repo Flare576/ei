@@ -110,6 +110,7 @@ export const meCommand: Command = {
         if (shouldReEdit) {
           yamlContent = result.content;
           logger.debug("[me] continuing to next iteration");
+          await new Promise(r => setTimeout(r, 50));
           continue;
         } else {
           ctx.showNotification("Changes discarded", "info");

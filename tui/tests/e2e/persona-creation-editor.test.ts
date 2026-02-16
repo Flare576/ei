@@ -109,22 +109,18 @@ test.use({
     PATH: process.env.PATH!,
     HOME: process.env.HOME!,
     TERM: "xterm-256color",
-    EDITOR: "true",
+    // Editor that appends a comment to make content "changed" while keeping valid YAML
+    EDITOR: "bash -c 'echo \"# saved\" >> \"$1\"' --",
   },
 });
 
 test.describe("Persona Creation with Editor", () => {
-  test("/persona newpersona shows confirmation overlay", async ({ terminal }) => {
+  test("/p new opens editor and creates persona on save", async ({ terminal }) => {
     await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 15000 });
     
-    terminal.write("/persona newtest");
+    terminal.write("/p new newtest");
     terminal.submit();
     
-    await expect(terminal.getByText(/Create persona/g)).toBeVisible({ timeout: 5000 });
-    await expect(terminal.getByText(/newtest/g)).toBeVisible({ timeout: 5000 });
-    
-    terminal.keyEscape();
-    
-    await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText(/Created newtest/g)).toBeVisible({ timeout: 10000 });
   });
 });

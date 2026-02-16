@@ -160,7 +160,8 @@ test.use({
     PATH: process.env.PATH!,
     HOME: process.env.HOME!,
     TERM: "xterm-256color",
-    EDITOR: "true",
+    // Editor that appends a comment to make content "changed" while keeping valid YAML
+    EDITOR: "bash -c 'echo \"# saved\" >> \"$1\"' --",
   },
 });
 
@@ -218,36 +219,26 @@ test.describe("Persona Switching", () => {
     await expect(terminal.getByText(/Switched to alice/gi)).toBeVisible({ timeout: 5000 });
   });
 
-  test("/persona unknown prompts to create, y confirms", async ({ terminal }) => {
+  test("/p new creates persona via editor", async ({ terminal }) => {
     await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 15000 });
 
-    terminal.write("/persona charlie");
+    terminal.write("/p new charlie");
     terminal.submit();
 
-    // Should show confirmation overlay
-    await expect(terminal.getByText(/Create persona 'charlie'/gi)).toBeVisible({ timeout: 5000 });
-    await expect(terminal.getByText("(y/N)")).toBeVisible({ timeout: 5000 });
-
-    // Confirm with y
-    terminal.write("y");
-
+    // Editor opens directly (EDITOR=true simulates instant save)
     // Should create and switch
-    await expect(terminal.getByText(/Created and switched to charlie/gi)).toBeVisible({ timeout: 10000 });
+    await expect(terminal.getByText(/Created charlie/gi)).toBeVisible({ timeout: 10000 });
   });
 
-  test("/persona unknown prompts to create, n cancels", async ({ terminal }) => {
+  test("/persona unknown shows hint to use /p new", async ({ terminal }) => {
     await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 15000 });
 
     terminal.write("/persona newpersona");
     terminal.submit();
 
-    await expect(terminal.getByText(/Create persona 'newpersona'/gi)).toBeVisible({ timeout: 5000 });
-
-    // Cancel with n
-    terminal.write("n");
-
-    await expect(terminal.getByText("Cancelled")).toBeVisible({ timeout: 5000 });
-    await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 5000 });
+    // Should show hint notification, not confirmation overlay
+    await expect(terminal.getByText(/No persona named/gi)).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText(/\/p new/gi)).toBeVisible({ timeout: 5000 });
   });
 
   test("Tab cycles through personas in creation order", async ({ terminal }) => {
@@ -457,11 +448,9 @@ test.describe("Regression Tests", () => {
   test("creating new persona allows sending messages", async ({ terminal }) => {
     await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 15000 });
 
-    terminal.write("/persona testpersona");
+    terminal.write("/p new testpersona");
     terminal.submit();
-    await expect(terminal.getByText(/Create persona 'testpersona'/gi)).toBeVisible({ timeout: 5000 });
-    terminal.write("y");
-    await expect(terminal.getByText(/Created and switched to testpersona/gi)).toBeVisible({ timeout: 10000 });
+    await expect(terminal.getByText(/Created testpersona/gi)).toBeVisible({ timeout: 10000 });
 
     await expect(terminal.getByText(/\* testpersona/gi)).toBeVisible({ timeout: 5000 });
 
@@ -478,11 +467,9 @@ test.describe("Regression Tests", () => {
     terminal.submit();
     await expect(terminal.getByText(/Unique msg for Ei 12345/g)).toBeVisible({ timeout: 5000 });
 
-    terminal.write("/persona newtest");
+    terminal.write("/p new newtest");
     terminal.submit();
-    await expect(terminal.getByText(/Create persona 'newtest'/gi)).toBeVisible({ timeout: 5000 });
-    terminal.write("y");
-    await expect(terminal.getByText(/Created and switched to newtest/gi)).toBeVisible({ timeout: 10000 });
+    await expect(terminal.getByText(/Created newtest/gi)).toBeVisible({ timeout: 10000 });
 
     await expect(terminal.getByText(/\* newtest/gi)).toBeVisible({ timeout: 5000 });
     await expect(terminal.getByText(/No messages yet/gi)).toBeVisible({ timeout: 5000 });

@@ -90,6 +90,7 @@ export async function createPersonaViaEditor(options: NewPersonaEditorOptions): 
       
       if (shouldReEdit) {
         yamlContent = result.content;
+        await new Promise(r => setTimeout(r, 50));
         continue;
       } else {
         ctx.showNotification("Creation cancelled", "info");
@@ -158,6 +159,7 @@ export async function openPersonaEditor(options: PersonaEditorOptions): Promise<
       
       if (shouldReEdit) {
         yamlContent = result.content;
+        await new Promise(r => setTimeout(r, 50));
         continue;
       } else {
         ctx.showNotification("Changes discarded", "info");
