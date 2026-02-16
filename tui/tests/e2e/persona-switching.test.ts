@@ -160,6 +160,7 @@ test.use({
     PATH: process.env.PATH!,
     HOME: process.env.HOME!,
     TERM: "xterm-256color",
+    EDITOR: "true",
   },
 });
 
