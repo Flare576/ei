@@ -59,14 +59,21 @@ export function PromptInput() {
     if (!text) return;
     
     if (text.startsWith("/")) {
-      const opensEditor = text.startsWith("/me") || 
-                          text.startsWith("/details") || 
-                          text.startsWith("/p");
-      if (!opensEditor) {
+      const isEditorCmd = text.startsWith("/editor") ||
+                          text.startsWith("/edit") ||
+                          text.startsWith("/e ") ||
+                          text === "/e";
+      const opensEditorForData = text.startsWith("/me") || 
+                                 text.startsWith("/details") || 
+                                 text.startsWith("/d ") ||
+                                 text === "/d" ||
+                                 text.startsWith("/p");
+      
+      if (!isEditorCmd && !opensEditorForData) {
         textareaRef?.clear();
       }
       await parseAndExecute(text, getCommandContext());
-      if (opensEditor) {
+      if (opensEditorForData) {
         textareaRef?.clear();
       }
       return;

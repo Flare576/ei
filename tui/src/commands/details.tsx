@@ -4,11 +4,13 @@ import { openPersonaEditor } from "../util/persona-editor.js";
 export const detailsCommand: Command = {
   name: "details",
   aliases: ["d"],
-  description: "Edit current persona details in $EDITOR",
-  usage: "/details",
+  description: "Edit persona details in $EDITOR",
+  usage: "/details [persona] - Edit specified or current persona",
   
-  async execute(_args, ctx) {
-    const personaName = ctx.ei.activePersona();
+  async execute(args, ctx) {
+    // Use argument if provided, otherwise fall back to active persona
+    let personaName = args.length > 0 ? args.join(" ") : ctx.ei.activePersona();
+    
     if (!personaName) {
       ctx.showNotification("No active persona", "error");
       return;

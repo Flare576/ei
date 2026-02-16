@@ -31,6 +31,8 @@ interface EditablePerson extends Person {
 
 interface EditablePersonaData {
   name: string;
+  aliases?: string[];
+  short_description?: string;
   long_description?: string;
   model?: string;
   group_primary?: string | null;
@@ -39,6 +41,9 @@ interface EditablePersonaData {
   topics: YAMLPersonaTopic[];
   heartbeat_delay_ms?: number;
   context_window_hours?: number;
+  is_paused?: boolean;
+  pause_until?: string;
+  is_static?: boolean;
 }
 
 interface EditableHumanData {
@@ -176,6 +181,8 @@ export function personaToYAML(name: string, persona: PersonaEntity): string {
   
   const data: EditablePersonaData = {
     name,
+    aliases: persona.aliases,
+    short_description: persona.short_description,
     long_description: persona.long_description || PLACEHOLDER_LONG_DESC,
     model: persona.model,
     group_primary: persona.group_primary,
@@ -190,10 +197,13 @@ export function personaToYAML(name: string, persona: PersonaEntity): string {
         })),
     heartbeat_delay_ms: persona.heartbeat_delay_ms,
     context_window_hours: persona.context_window_hours,
+    is_paused: persona.is_paused || undefined,
+    pause_until: persona.pause_until,
+    is_static: persona.is_static || undefined,
   };
   
   return YAML.stringify(data, { 
-    lineWidth: 0,  // Don't wrap lines
+    lineWidth: 0,
   });
 }
 
@@ -269,6 +279,8 @@ export function personaFromYAML(yamlContent: string, original: PersonaEntity): P
   };
   
   const updates: Partial<PersonaEntity> = {
+    aliases: data.aliases,
+    short_description: data.short_description,
     long_description: stripPlaceholder(data.long_description, PLACEHOLDER_LONG_DESC),
     model: data.model,
     group_primary: data.group_primary,
@@ -277,6 +289,9 @@ export function personaFromYAML(yamlContent: string, original: PersonaEntity): P
     topics,
     heartbeat_delay_ms: data.heartbeat_delay_ms,
     context_window_hours: data.context_window_hours,
+    is_paused: data.is_paused ?? false,
+    pause_until: data.pause_until,
+    is_static: data.is_static ?? false,
     last_updated: new Date().toISOString(),
   };
   
