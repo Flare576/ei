@@ -259,6 +259,14 @@ export interface PersonaCreationInput {
   groups_visible?: string[];
 }
 
+// Reserved persona names (command keywords that conflict with /persona subcommands)
+export const RESERVED_PERSONA_NAMES = ["new", "clone"] as const;
+export type ReservedPersonaName = typeof RESERVED_PERSONA_NAMES[number];
+
+export function isReservedPersonaName(name: string): boolean {
+  return RESERVED_PERSONA_NAMES.includes(name.toLowerCase() as ReservedPersonaName);
+}
+
 // =============================================================================
 // MESSAGES
 // =============================================================================

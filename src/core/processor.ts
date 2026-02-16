@@ -2,6 +2,8 @@ import {
   LLMRequestType,
   LLMPriority,
   LLMNextStep,
+  RESERVED_PERSONA_NAMES,
+  isReservedPersonaName,
   type LLMRequest,
   type Ei_Interface,
   type PersonaSummary,
@@ -18,8 +20,8 @@ import {
   type Checkpoint,
   type QueueStatus,
   type ContextStatus,
-  type LLMResponse,
   type DataItemBase,
+  type LLMResponse,
   type StorageState,
 } from "./types.js";
 import type { Storage } from "../storage/interface.js";
@@ -46,6 +48,32 @@ import {
 } from "./orchestrators/index.js";
 import { EI_WELCOME_MESSAGE, EI_PERSONA_DEFINITION } from "../templates/welcome.js";
 import { ContextStatus as ContextStatusEnum } from "./types.js";
+
+// =============================================================================
+// EMBEDDING STRIPPING - Remove embeddings from data items before returning to FE
+// Embeddings are internal implementation details for similarity search.
+// =============================================================================
+
+function stripDataItemEmbedding<T extends DataItemBase>(item: T): T {
+  const { embedding, ...rest } = item;
+  return rest as T;
+}
+
+function stripQuoteEmbedding(quote: Quote): Quote {
+  const { embedding, ...rest } = quote;
+  return rest;
+}
+
+function stripHumanEmbeddings(human: HumanEntity): HumanEntity {
+  return {
+    ...human,
+    facts: (human.facts ?? []).map(stripDataItemEmbedding),
+    traits: (human.traits ?? []).map(stripDataItemEmbedding),
+    topics: (human.topics ?? []).map(stripDataItemEmbedding),
+    people: (human.people ?? []).map(stripDataItemEmbedding),
+    quotes: (human.quotes ?? []).map(stripQuoteEmbedding),
+  };
+}
 
 const DEFAULT_LOOP_INTERVAL_MS = 100;
 const DEFAULT_AUTO_SAVE_INTERVAL_MS = 60000;
@@ -534,6 +562,9 @@ export class Processor {
   }
 
   async createPersona(input: PersonaCreationInput): Promise<void> {
+    if (isReservedPersonaName(input.name)) {
+      throw new Error(`Cannot create persona with reserved name "${input.name}". Reserved names: ${RESERVED_PERSONA_NAMES.join(", ")}`);
+    }
     const now = new Date().toISOString();
     const DEFAULT_GROUP = "General";
     const placeholder: PersonaEntity = {
@@ -902,7 +933,7 @@ export class Processor {
   }
 
   async getHuman(): Promise<HumanEntity> {
-    return this.stateManager.getHuman();
+    return stripHumanEmbeddings(this.stateManager.getHuman());
   }
 
   async updateHuman(updates: Partial<HumanEntity>): Promise<void> {
@@ -974,20 +1005,21 @@ export class Processor {
 
    async getQuotes(filter?: { message_id?: string; data_item_id?: string }): Promise<Quote[]> {
      const human = this.stateManager.getHuman();
+     let quotes: Quote[];
      if (!filter) {
-       return human.quotes;
+       quotes = human.quotes;
+     } else if (filter.message_id) {
+       quotes = this.stateManager.human_quote_getForMessage(filter.message_id);
+     } else if (filter.data_item_id) {
+       quotes = this.stateManager.human_quote_getForDataItem(filter.data_item_id);
+     } else {
+       quotes = human.quotes;
      }
-     if (filter.message_id) {
-       return this.stateManager.human_quote_getForMessage(filter.message_id);
-     }
-     if (filter.data_item_id) {
-       return this.stateManager.human_quote_getForDataItem(filter.data_item_id);
-     }
-     return human.quotes;
+     return quotes.map(stripQuoteEmbedding);
    }
 
    async getQuotesForMessage(messageId: string): Promise<Quote[]> {
-     return this.stateManager.human_quote_getForMessage(messageId);
+     return this.stateManager.human_quote_getForMessage(messageId).map(stripQuoteEmbedding);
    }
 
   async getCheckpoints(): Promise<Checkpoint[]> {
