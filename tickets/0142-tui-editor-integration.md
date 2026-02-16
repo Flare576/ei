@@ -1,6 +1,6 @@
 # 0142: TUI $EDITOR Integration
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0139 (TUI Slash Command Foundation), 0140 (TUI Persona Switching)
 **Priority**: High (TUI V1.2)
 
@@ -23,26 +23,26 @@ This is how tools like `kubectl edit`, `git commit`, and `crontab -e` work.
 
 ### $EDITOR Spawning
 
-- [ ] Use `$EDITOR` environment variable, fallback to `$VISUAL`, then `vi`
-- [ ] Block TUI while editor is open (terminal returns to editor)
-- [ ] On editor exit, TUI resumes and processes changes
-- [ ] If YAML parse fails, show error and offer to re-edit
+- [x] Use `$EDITOR` environment variable, fallback to `$VISUAL`, then `vi`
+- [x] Block TUI while editor is open (terminal returns to editor)
+- [x] On editor exit, TUI resumes and processes changes
+- [x] If YAML parse fails, show error and offer to re-edit
 
 ### /details Command (Persona Editor)
 
-- [ ] `/details` or `/d` edits the active persona
-- [ ] `/details <name>` edits the named persona
-- [ ] `/details <unknown>` shows error in StatusBar
+- [x] `/details` or `/d` edits the active persona
+- [x] `/details <name>` edits the named persona
+- [x] `/details <unknown>` shows error in StatusBar
 
 ### Persona Creation → Editor Flow (completes 0140)
 
 Per tui-map.md design: `/persona [unknown]` should create then immediately open `$EDITOR`.
 
-- [ ] Modify `/persona` command (from 0140) to call editor after creation
-- [ ] When user confirms "Create persona 'X'? (y/N)" → create → open $EDITOR with new persona
-- [ ] If user saves empty/default YAML, persona still exists (name-only is valid)
-- [ ] If user cancels editor (`:q!` in vim), persona still exists (already created before editor opened)
-- [ ] YAML includes all editable persona fields:
+- [x] Modify `/persona` command (from 0140) to call editor after creation
+- [x] When user confirms "Create persona 'X'? (y/N)" → create → open $EDITOR with new persona
+- [x] If user saves empty/default YAML, persona still exists (name-only is valid)
+- [x] If user cancels editor (`:q!` in vim), persona still exists (already created before editor opened)
+- [x] YAML includes all editable persona fields:
   ```yaml
   name: PersonaName
   description: "Current description"
@@ -59,13 +59,13 @@ Per tui-map.md design: `/persona [unknown]` should create then immediately open 
   pause_until: 1  # 1=active, 0=indefinite, timestamp=until
   is_static: false
   ```
-- [ ] Changes saved via `processor.updatePersona()`
-- [ ] Cannot change `name` (show comment in YAML explaining this)
+- [x] Changes saved via `processor.updatePersona()`
+- [x] Cannot change `name` (show comment in YAML explaining this)
 
 ### /me Command (Human Editor)
 
-- [ ] `/me` edits the human profile
-- [ ] YAML includes human settings and all data items:
+- [x] `/me` edits the human profile
+- [x] YAML includes human settings and all data items:
   ```yaml
   # Human Settings
   name: "User's Name"
@@ -104,11 +104,11 @@ Per tui-map.md design: `/persona [unknown]` should create then immediately open 
       notes: "Notes about them"
     # ...
   ```
-- [ ] Can add/edit/remove items (processor handles diffs)
-- [ ] Items without `id` are created as new
-- [ ] Items removed from YAML are deleted (with confirmation?)
+- [ ] Can add/edit/remove items (processor handles diffs) **DEFERRED to ticket 0131**
+- [ ] Items without `id` are created as new **DEFERRED to ticket 0131**
+- [ ] Items removed from YAML are deleted (with confirmation?) **DEFERRED to ticket 0131**
 
-### /settings Command (System Settings)
+### /settings Command (System Settings) **DEFERRED to ticket 0129**
 
 - [ ] `/settings` edits system/storage settings
 - [ ] YAML includes:
@@ -141,9 +141,9 @@ Per tui-map.md design: `/persona [unknown]` should create then immediately open 
 
 ### /editor Command (Message Editor)
 
-- [ ] `/editor` or `/e` opens editor with current input + pending messages
-- [ ] On save, content replaces input box
-- [ ] Useful for composing long messages
+- [x] `/editor` or `/e` opens editor with current input + pending messages
+- [x] On save, content replaces input box
+- [x] Useful for composing long messages
 
 ## Technical Design
 
@@ -369,15 +369,15 @@ tui/src/
 ### Prerequisites
 
 Before starting work on this ticket:
-- [ ] Run `npm run test:all` from project root - all tests must pass
-- [ ] Run `npm run test:e2e` from `tui/` - all TUI E2E tests must pass
+- [x] Run `npm run test:all` from project root - all tests must pass
+- [x] Run `npm run test:e2e` from `tui/` - all TUI E2E tests must pass
 
 ### Unit Tests
 
-- [ ] YAML serialization round-trips correctly for persona data
-- [ ] YAML serialization round-trips correctly for human data
-- [ ] Validation catches invalid/malformed changes
-- [ ] Editor fallback chain works ($EDITOR → $VISUAL → vi)
+- [x] YAML serialization round-trips correctly for persona data
+- [x] YAML serialization round-trips correctly for human data
+- [x] Validation catches invalid/malformed changes
+- [x] Editor fallback chain works ($EDITOR → $VISUAL → vi)
 
 ### E2E Tests
 
@@ -385,35 +385,35 @@ Note: E2E tests for $EDITOR commands are tricky since they spawn external proces
 Use mock editor approach: set $EDITOR to a script that modifies the file predictably.
 
 #### /details Tests
-- [ ] `/details` opens editor with persona YAML (verify temp file created)
-- [ ] `/details` changes in editor are saved to processor
-- [ ] `/details` invalid YAML shows error, offers re-edit
-- [ ] `/details <unknown>` shows "Persona not found" error
+- [x] `/details` opens editor with persona YAML (verify temp file created)
+- [x] `/details` changes in editor are saved to processor
+- [x] `/details` invalid YAML shows error, offers re-edit
+- [x] `/details <unknown>` shows "Persona not found" error
 
 #### Persona Creation → Editor Flow (completes 0140)
-- [ ] `/persona newguy` → confirm "y" → editor opens with new persona YAML
-- [ ] `/persona newguy` → confirm "y" → edit description → save → persona has description
-- [ ] `/persona newguy` → confirm "y" → cancel editor (`:q!`) → persona still exists (name-only)
+- [x] `/persona newguy` → confirm "y" → editor opens with new persona YAML
+- [x] `/persona newguy` → confirm "y" → edit description → save → persona has description
+- [x] `/persona newguy` → confirm "y" → cancel editor (`:q!`) → persona still exists (name-only)
 
 #### /me Tests
-- [ ] `/me` opens editor with human data (facts, traits, topics, people)
-- [ ] `/me` adding new fact (no id) creates it in storage
-- [ ] `/me` modifying existing fact updates it
-- [ ] `/me` removing fact from YAML deletes it (or prompts)
+- [x] `/me` opens editor with human data (facts, traits, topics, people)
+- [ ] `/me` adding new fact (no id) creates it in storage **DEFERRED to ticket 0131**
+- [ ] `/me` modifying existing fact updates it **DEFERRED to ticket 0131**
+- [ ] `/me` removing fact from YAML deletes it (or prompts) **DEFERRED to ticket 0131**
 
 #### /settings and /editor Tests
-- [ ] `/settings` shows system config YAML
-- [ ] `/settings` model changes are applied
-- [ ] `/editor` opens with current input content
-- [ ] `/editor` saved content replaces input box
+- [ ] `/settings` shows system config YAML **DEFERRED to ticket 0129**
+- [ ] `/settings` model changes are applied **DEFERRED to ticket 0129**
+- [x] `/editor` opens with current input content
+- [x] `/editor` saved content replaces input box
 
 #### Infrastructure
-- [ ] TUI suspend/resume works cleanly (no rendering artifacts)
+- [x] TUI suspend/resume works cleanly (no rendering artifacts)
 
 ### Post-Implementation
 
-- [ ] Run `npm run test:all` - all tests still pass
-- [ ] Run `npm run test:e2e` from `tui/` - all tests pass including new ones
+- [x] Run `npm run test:all` - all tests still pass
+- [x] Run `npm run test:e2e` from `tui/` - all tests pass including new ones
 
 ## Notes
 

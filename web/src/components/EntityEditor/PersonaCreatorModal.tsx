@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { isReservedPersonaName, RESERVED_PERSONA_NAMES } from '../../../../src/core/types';
 
 interface Trait {
   name: string;
@@ -184,22 +185,25 @@ export function PersonaCreatorModal({
   };
 
   const handleSubmit = () => {
-    // Validation
     if (!name.trim()) {
       alert('Please provide a name for the persona');
       return;
     }
 
-    // Confirmation if no traits/topics
+    const namesParsed = name.split(',').map(n => n.trim()).filter(n => n);
+    const primaryName = namesParsed[0];
+    
+    if (isReservedPersonaName(primaryName)) {
+      alert(`Cannot use reserved name "${primaryName}". Reserved names: ${RESERVED_PERSONA_NAMES.join(", ")}`);
+      return;
+    }
+
     if (traits.length === 0 && topics.length === 0 && description) {
       if (!confirm('Generate personality from description? AI will create traits and topics based on the description.')) {
         return;
       }
     }
 
-    // Parse comma-delimited names into aliases
-    const namesParsed = name.split(',').map(n => n.trim()).filter(n => n);
-    const primaryName = namesParsed[0];
     const aliases = namesParsed;
 
     const personaData: NewPersonaData = {

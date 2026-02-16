@@ -56,6 +56,7 @@ export function HelpOverlay(props: HelpOverlayProps) {
         <text fg="#93a1a1">Escape - Abort operation / Resume queue</text>
         <text fg="#93a1a1">Ctrl+C - Clear input / Exit</text>
         <text fg="#93a1a1">Ctrl+B - Toggle sidebar</text>
+        <text fg="#93a1a1">Ctrl+E - Edit in $EDITOR</text>
         <text fg="#93a1a1">PageUp/Down - Scroll messages</text>
         <text> </text>
 

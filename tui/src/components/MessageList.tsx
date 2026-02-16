@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createEffect } from "solid-js";
+import { For, Show, createMemo } from "solid-js";
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core";
 import { useEi } from "../context/ei.js";
 import { useKeyboardNav } from "../context/keyboard.js";
@@ -11,7 +11,6 @@ function formatTime(timestamp: string): string {
   return `${hours}:${minutes}`;
 }
 
-let renderCount = 0;
 let instanceId = 0;
 
 export function MessageList() {
@@ -31,16 +30,7 @@ export function MessageList() {
     const boundary = activeContextBoundary();
     const msgs = messages();
     const lastMessage = msgs[msgs.length - 1];
-    const result = boundary ? (!lastMessage || boundary > lastMessage.timestamp) : false;
-    logger.debug(`boundaryIsActive: boundary=${boundary}, lastMsg=${lastMessage?.timestamp}, result=${result}`);
-    return result;
-  });
-
-  createEffect(() => {
-    renderCount++;
-    const msgs = messages();
-    const boundary = activeContextBoundary();
-    logger.debug(`MessageList render #${renderCount}: ${msgs.length} msgs, boundary=${boundary}, boundaryIsActive=${boundaryIsActive()}`);
+    return boundary ? (!lastMessage || boundary > lastMessage.timestamp) : false;
   });
 
   return (
