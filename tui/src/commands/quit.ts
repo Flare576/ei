@@ -7,12 +7,11 @@ export const quitCommand: Command = {
   usage: "/quit or /q (add ! to force quit without saving)",
   execute: async (args, ctx) => {
     if (args.includes("--force")) {
-      ctx.exitApp();
+      await ctx.exitApp();
       return;
     }
 
     ctx.showNotification("Saving...", "info");
-    await ctx.stopProcessor();
-    ctx.exitApp();
+    await ctx.exitApp();
   },
 };

@@ -10,9 +10,11 @@ import { newCommand } from "../commands/new";
 import { pauseCommand } from "../commands/pause";
 import { resumeCommand } from "../commands/resume";
 import { modelCommand } from "../commands/model";
+import { detailsCommand } from "../commands/details";
+import { meCommand } from "../commands/me";
+import { editorCommand } from "../commands/editor";
 import { useOverlay } from "../context/overlay";
 
-// Enter submits, Ctrl+J or Meta+Enter for newline
 const TEXTAREA_KEYBINDINGS: KeyBinding[] = [
   { name: "return", action: "submit" },
   { name: "return", meta: true, action: "newline" },
@@ -22,10 +24,9 @@ const TEXTAREA_KEYBINDINGS: KeyBinding[] = [
 export function PromptInput() {
   const ei = useEi();
   const { sendMessage, activePersona, stopProcessor, showNotification } = ei;
-  const { registerTextarea, exitApp } = useKeyboardNav();
+  const { registerTextarea, registerEditorHandler, exitApp, renderer } = useKeyboardNav();
   const { showOverlay, hideOverlay, overlayRenderer } = useOverlay();
 
-  // Register commands (idempotent - safe to call multiple times)
   registerCommand(quitCommand);
   registerCommand(helpCommand);
   registerCommand(personaCommand);
@@ -35,39 +36,57 @@ export function PromptInput() {
   registerCommand(pauseCommand);
   registerCommand(resumeCommand);
   registerCommand(modelCommand);
+  registerCommand(detailsCommand);
+  registerCommand(meCommand);
+  registerCommand(editorCommand);
+
+  let textareaRef: TextareaRenderable | undefined;
+
+  const getCommandContext = (): CommandContext => ({
+    showOverlay,
+    hideOverlay,
+    showNotification,
+    exitApp,
+    stopProcessor,
+    ei,
+    renderer,
+    setInputText: (text: string) => textareaRef?.setText(text),
+    getInputText: () => textareaRef?.plainText || "",
+  });
 
   const handleSubmit = async () => {
     const text = textareaRef?.plainText?.trim();
     if (!text) return;
     
-    // Clear input immediately
-    textareaRef?.clear();
-    
-    // Check if it's a command
     if (text.startsWith("/")) {
-      const ctx: CommandContext = {
-        showOverlay,
-        hideOverlay,
-        showNotification,
-        exitApp,
-        stopProcessor,
-        ei,
-      };
-      await parseAndExecute(text, ctx);
+      const opensEditor = text.startsWith("/me") || 
+                          text.startsWith("/details") || 
+                          text.startsWith("/p");
+      if (!opensEditor) {
+        textareaRef?.clear();
+      }
+      await parseAndExecute(text, getCommandContext());
+      if (opensEditor) {
+        textareaRef?.clear();
+      }
       return;
     }
     
-    // Regular message - requires active persona
+    textareaRef?.clear();
     if (!activePersona()) return;
     await sendMessage(text);
   };
 
-  const getPlaceholder = () => {
-    if (!activePersona()) return "Select a persona...";
-    return "Type your message... (Enter to send, Ctrl+J for newline)";
+  const handleEditor = async () => {
+    await editorCommand.execute([], getCommandContext());
   };
 
-  let textareaRef: TextareaRenderable | undefined;
+  registerEditorHandler(handleEditor);
+
+  const getPlaceholder = () => {
+    if (!activePersona()) return "Select a persona...";
+    return "Type your message... (Enter to send, Ctrl+E for editor)";
+  };
 
   return (
     <box 
@@ -90,6 +109,7 @@ export function PromptInput() {
         placeholder={getPlaceholder()}
         textColor="#eee8d5"
         backgroundColor="#0f3460"
+        cursorColor="#eee8d5"
         minHeight={1}
         maxHeight={6}
         keyBindings={overlayRenderer() ? [] : TEXTAREA_KEYBINDINGS}
