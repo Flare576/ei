@@ -1,5 +1,6 @@
 import type { OverlayRenderer } from "../context/overlay";
 import type { EiContextValue } from "../context/ei";
+import type { CliRenderer } from "@opentui/core";
 
 export interface Command {
   name: string;
@@ -13,9 +14,12 @@ export interface CommandContext {
   showOverlay: (renderer: OverlayRenderer) => void;
   hideOverlay: () => void;
   showNotification: (msg: string, level: "error" | "warn" | "info") => void;
-  exitApp: () => void;
+  exitApp: () => Promise<void>;
   stopProcessor: () => Promise<void>;
   ei: EiContextValue;
+  renderer: CliRenderer;
+  setInputText: (text: string) => void;
+  getInputText: () => string;
 }
 
 const commands = new Map<string, Command>();

@@ -4,4 +4,5 @@ import { App } from "./app";
 render(App, {
   exitOnCtrlC: false,
   targetFps: 30,
+  useAlternateScreen: true,
 });

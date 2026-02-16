@@ -6,8 +6,8 @@ import {
   type JSX,
   type Accessor,
 } from "solid-js";
+import { logger } from "../util/logger";
 
-// Overlay render function - called within reactive context to create JSX
 export type OverlayRenderer = (hideOverlay: () => void) => JSX.Element;
 
 interface OverlayContextValue {
@@ -22,10 +22,12 @@ export const OverlayProvider: ParentComponent = (props) => {
   const [overlayRenderer, setOverlayRenderer] = createSignal<OverlayRenderer | null>(null);
 
   const showOverlay = (renderer: OverlayRenderer) => {
+    logger.debug("[overlay] showOverlay called");
     setOverlayRenderer(() => renderer);
   };
 
   const hideOverlay = () => {
+    logger.debug("[overlay] hideOverlay called");
     setOverlayRenderer(null);
   };
 

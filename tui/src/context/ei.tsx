@@ -18,6 +18,11 @@ import type {
   PersonaEntity,
   Message,
   QueueStatus,
+  HumanEntity,
+  Fact,
+  Trait,
+  Topic,
+  Person,
 } from "../../../src/core/types.js";
 
 interface EiStore {
@@ -50,6 +55,14 @@ export interface EiContextValue {
   unarchivePersona: (name: string) => Promise<void>;
   setContextBoundary: (personaName: string, timestamp: string | null) => Promise<void>;
   updatePersona: (name: string, updates: Partial<PersonaEntity>) => Promise<void>;
+  getPersona: (name: string) => Promise<PersonaEntity | null>;
+  getHuman: () => Promise<HumanEntity>;
+  updateHuman: (updates: Partial<HumanEntity>) => Promise<void>;
+  upsertFact: (fact: Fact) => Promise<void>;
+  upsertTrait: (trait: Trait) => Promise<void>;
+  upsertTopic: (topic: Topic) => Promise<void>;
+  upsertPerson: (person: Person) => Promise<void>;
+  removeDataItem: (type: "fact" | "trait" | "topic" | "person", id: string) => Promise<void>;
 }
 
 const EiContext = createContext<EiContextValue>();
@@ -170,6 +183,46 @@ export const EiProvider: ParentComponent = (props) => {
     await refreshPersonas();
   };
 
+  const getPersona = async (name: string) => {
+    if (!processor) return null;
+    return processor.getPersona(name);
+  };
+
+  const getHuman = async () => {
+    if (!processor) throw new Error("Processor not initialized");
+    return processor.getHuman();
+  };
+
+  const updateHuman = async (updates: Partial<HumanEntity>) => {
+    if (!processor) return;
+    await processor.updateHuman(updates);
+  };
+
+  const upsertFact = async (fact: Fact) => {
+    if (!processor) return;
+    await processor.upsertFact(fact);
+  };
+
+  const upsertTrait = async (trait: Trait) => {
+    if (!processor) return;
+    await processor.upsertTrait(trait);
+  };
+
+  const upsertTopic = async (topic: Topic) => {
+    if (!processor) return;
+    await processor.upsertTopic(topic);
+  };
+
+  const upsertPerson = async (person: Person) => {
+    if (!processor) return;
+    await processor.upsertPerson(person);
+  };
+
+  const removeDataItem = async (type: "fact" | "trait" | "topic" | "person", id: string) => {
+    if (!processor) return;
+    await processor.removeDataItem(type, id);
+  };
+
   async function bootstrap() {
     clearLog();
     interceptConsole();
@@ -263,6 +316,14 @@ export const EiProvider: ParentComponent = (props) => {
     unarchivePersona,
     setContextBoundary,
     updatePersona,
+    getPersona,
+    getHuman,
+    updateHuman,
+    upsertFact,
+    upsertTrait,
+    upsertTopic,
+    upsertPerson,
+    removeDataItem,
   };
 
   return (

@@ -6,7 +6,7 @@ import {
   type Accessor,
 } from "solid-js";
 import { useKeyboard, useRenderer } from "@opentui/solid";
-import type { ScrollBoxRenderable, KeyEvent, TextareaRenderable } from "@opentui/core";
+import type { ScrollBoxRenderable, KeyEvent, TextareaRenderable, CliRenderer } from "@opentui/core";
 import type { PersonaSummary } from "../../../src/core/types.js";
 import { useEi } from "./ei";
 import { logger } from "../util/logger";
@@ -18,9 +18,11 @@ interface KeyboardContextValue {
   setFocusedPanel: (panel: Panel) => void;
   registerMessageScroll: (scrollbox: ScrollBoxRenderable) => void;
   registerTextarea: (textarea: TextareaRenderable) => void;
+  registerEditorHandler: (handler: () => Promise<void>) => void;
   sidebarVisible: Accessor<boolean>;
   toggleSidebar: () => void;
-  exitApp: () => void;
+  exitApp: () => Promise<void>;
+  renderer: CliRenderer;
 }
 
 const KeyboardContext = createContext<KeyboardContextValue>();
@@ -29,10 +31,11 @@ export const KeyboardProvider: ParentComponent = (props) => {
   const [focusedPanel, setFocusedPanel] = createSignal<Panel>("input");
   const [sidebarVisible, setSidebarVisible] = createSignal(true);
   const renderer = useRenderer();
-  const { queueStatus, abortCurrentOperation, resumeQueue, personas, activePersona, selectPersona } = useEi();
+  const { queueStatus, abortCurrentOperation, resumeQueue, personas, activePersona, selectPersona, stopProcessor } = useEi();
   
   let messageScrollRef: ScrollBoxRenderable | null = null;
   let textareaRef: TextareaRenderable | null = null;
+  let editorHandler: (() => Promise<void>) | null = null;
 
   const registerMessageScroll = (scrollbox: ScrollBoxRenderable) => {
     messageScrollRef = scrollbox;
@@ -42,10 +45,15 @@ export const KeyboardProvider: ParentComponent = (props) => {
     textareaRef = textarea;
   };
 
+  const registerEditorHandler = (handler: () => Promise<void>) => {
+    editorHandler = handler;
+  };
+
   const toggleSidebar = () => setSidebarVisible(!sidebarVisible());
 
-  const exitApp = () => {
-    logger.info("Exiting app");
+  const exitApp = async () => {
+    await stopProcessor();
+    renderer.setTerminalTitle("");
     renderer.destroy();
     process.exit(0);
   };
@@ -77,6 +85,14 @@ export const KeyboardProvider: ParentComponent = (props) => {
       return;
     }
 
+    if (event.name === "e" && event.ctrl) {
+      event.preventDefault();
+      if (editorHandler) {
+        void editorHandler();
+      }
+      return;
+    }
+
     if (event.name === "c" && event.ctrl) {
       event.preventDefault();
       
@@ -84,7 +100,7 @@ export const KeyboardProvider: ParentComponent = (props) => {
         logger.info("Ctrl+C pressed - clearing input");
         textareaRef.clear();
       } else {
-        exitApp();
+        void exitApp();
       }
       return;
     }
@@ -121,9 +137,11 @@ export const KeyboardProvider: ParentComponent = (props) => {
     setFocusedPanel,
     registerMessageScroll,
     registerTextarea,
+    registerEditorHandler,
     sidebarVisible,
     toggleSidebar,
     exitApp,
+    renderer,
   };
 
   return (
