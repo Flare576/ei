@@ -26,6 +26,7 @@ function createCheckpointWithHumanData() {
       people: [
         { id: "p1", name: "Alice", relationship: "friend", sentiment: 0.8, last_updated: timestamp },
       ],
+      quotes: [],
       last_updated: timestamp,
       last_activity: timestamp,
       settings: { auto_save_interval_ms: 999999999 },
@@ -35,6 +36,8 @@ function createCheckpointWithHumanData() {
         entity: {
           entity: "system",
           aliases: ["Ei"],
+          id: "ei",
+          display_name: "Ei",
           short_description: "Test companion",
           long_description: "A test companion",
           traits: [],

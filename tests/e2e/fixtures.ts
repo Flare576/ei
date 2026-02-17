@@ -118,6 +118,7 @@ export interface MinimalCheckpoint {
     traits: never[];
     topics: never[];
     people: never[];
+    quotes: never[];
     last_updated: string;
     last_activity: string;
     settings: { auto_save_interval_ms: number };
@@ -126,6 +127,8 @@ export interface MinimalCheckpoint {
     ei: {
       entity: {
         entity: string;
+        id: string;
+        display_name: string;
         aliases: string[];
         short_description: string;
         long_description: string;
@@ -158,6 +161,7 @@ export function createMinimalCheckpoint(
       traits: [],
       topics: [],
       people: [],
+      quotes: [],
       last_updated: timestamp,
       last_activity: timestamp,
       settings: { auto_save_interval_ms: 5000 },
@@ -166,6 +170,8 @@ export function createMinimalCheckpoint(
       ei: {
         entity: {
           entity: "system",
+          id: "ei",
+          display_name: "Ei",
           aliases: ["Ei"],
           short_description: "Your personal companion",
           long_description: "A friendly AI companion",

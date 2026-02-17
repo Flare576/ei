@@ -20,6 +20,8 @@ function createValidCheckpoint(messages: Array<{ role: string; content: string }
     personas: {
       ei: {
         entity: {
+          id: "ei",
+          display_name: "Ei",
           entity: "system",
           aliases: ["Ei"],
           short_description: "Your personal companion",

@@ -25,6 +25,7 @@ export function createCheckpointWithTwoPersonas() {
       traits: [],
       topics: [],
       people: [],
+      quotes: [],
       last_updated: timestamp,
       last_activity: timestamp,
       settings: { auto_save_interval_ms: 999999999 },
@@ -32,6 +33,8 @@ export function createCheckpointWithTwoPersonas() {
     personas: {
       ei: {
         entity: {
+          id: "ei",
+          display_name: "Ei",
           entity: "system",
           aliases: ["Ei"],
           short_description: "Your personal companion",
@@ -62,6 +65,8 @@ export function createCheckpointWithTwoPersonas() {
       sage: {
         entity: {
           entity: "system",
+          id: "007",
+          display_name: "Sage",
           aliases: ["Sage"],
           short_description: "A wise mentor",
           long_description: "A wise mentor for testing",

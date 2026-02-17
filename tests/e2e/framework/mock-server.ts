@@ -216,7 +216,7 @@ export class MockLLMServerImpl implements MockLLMServer {
 
   private detectRequestType(
     messages: Array<{ role: string; content: string }>
-  ): "response" | "system-concepts" | "human-concepts" | "description" | "persona-generation" | "trait-extraction" | "fact-extraction" | "topic-extraction" | "person-extraction" | "unknown" {
+  ): "response" | "system-concepts" | "human-concepts" | "description" | "persona-generation" | "persona-trait" | "trait-extraction" | "fact-extraction" | "topic-extraction" | "person-extraction" | "unknown" {
     if (!messages || messages.length === 0) {
       return "unknown";
     }
@@ -230,6 +230,10 @@ export class MockLLMServerImpl implements MockLLMServer {
 
     if (content.includes("you are helping create a new ai persona named")) {
       return "persona-generation";
+    }
+
+    if (content.includes("instructions on how the persona")) {
+      return "persona-trait";
     }
 
     if (content.includes("scanning a conversation to quickly identify")) {
@@ -293,6 +297,13 @@ export class MockLLMServerImpl implements MockLLMServer {
               { name: "Testing", description: "Interested in software testing", sentiment: 0.6, exposure_current: 0.5, exposure_desired: 0.7 }
             ],
           }),
+          statusCode: 200,
+        };
+
+      case "persona-trait":
+        return {
+          type: "fixed",
+          content : "```json\n[]\n```",
           statusCode: 200,
         };
 

@@ -20,6 +20,7 @@ function createMinimalCheckpoint() {
       traits: [],
       topics: [],
       people: [],
+      quotes: [],
       last_updated: timestamp,
       last_activity: timestamp,
       settings: { auto_save_interval_ms: 999999999 },
@@ -28,6 +29,8 @@ function createMinimalCheckpoint() {
       ei: {
         entity: {
           entity: "system",
+          id: "ei",
+          display_name: "Ei",
           aliases: ["Ei"],
           short_description: "Your personal companion",
           long_description: "A friendly AI companion for testing",

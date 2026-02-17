@@ -20,6 +20,7 @@ function createMultiPersonaCheckpoint() {
       traits: [],
       topics: [],
       people: [],
+      quotes: [],
       last_updated: timestamp,
       last_activity: timestamp,
       settings: { auto_save_interval_ms: 999999999 },
@@ -28,6 +29,8 @@ function createMultiPersonaCheckpoint() {
       ei: {
         entity: {
           entity: "system",
+          id: "ei",
+          display_name: "Ei",
           aliases: ["Ei"],
           short_description: "Your personal companion",
           long_description: "A friendly AI companion for testing",
@@ -54,6 +57,8 @@ function createMultiPersonaCheckpoint() {
       alice: {
         entity: {
           entity: "system",
+          id: "001",
+          display_name: "Alice",
           aliases: ["Alice"],
           short_description: "A helpful assistant",
           long_description: "Alice is a helpful assistant for testing",
@@ -80,6 +85,8 @@ function createMultiPersonaCheckpoint() {
       bob: {
         entity: {
           entity: "system",
+          id: "002",
+          display_name: "Bob",
           aliases: ["Bob"],
           short_description: "An archived persona",
           long_description: "Bob is archived for testing",

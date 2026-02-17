@@ -21,6 +21,8 @@ function createValidCheckpoint(messages: Array<{ role: string; content: string }
       ei: {
         entity: {
           entity: "system",
+          id: "ei",
+          display_name: "Ei",
           aliases: ["Ei"],
           short_description: "Your personal companion",
           long_description: "A friendly AI companion",
