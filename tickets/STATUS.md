@@ -1,19 +1,19 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-02-16 (Added 0150 TUI /quotes Command)
+> Last updated: 2026-02-16 (0128 Persona GUIDs to QA)
 
 ## Overview
 
 | Status | Count |
 |--------|-------|
-| PENDING | 15 |
+| PENDING | 13 |
 | IN_PROGRESS | 0 |
-| QA | 0 |
+| QA | 1 |
 | DONE | 103 |
 | BLOCKED | 0 |
 | SUPERSEDED | 3 |
 
-> 124 total tickets (103 done + 15 pending + 3 backlog + 0 in_progress + 0 QA + 3 superseded).
+> 124 total tickets (103 done + 14 pending + 3 backlog + 0 in_progress + 1 QA + 3 superseded).
 
 ---
 
@@ -64,7 +64,6 @@
 |--------|-------|------------|
 | 0101 | FileStorage Implementation | 0003 |
 | 0106 | RemoteStorage Implementation | 0003, 0096 |
-| 0128 | Persona GUIDs | None |
 | 0107 | Sync Orchestrator | 0106 |
 | 0115 | Fact Validation TUI | 0113, 0100 |
 | 0134 | Single Instance Enforcement | 0101 |
@@ -92,7 +91,9 @@
 
 ## QA
 
-(none)
+| Ticket | Title | Started |
+|--------|-------|---------|
+| 0128 | Persona GUIDs | 2026-02-16 |
 
 ---
 

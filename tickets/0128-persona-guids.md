@@ -1,6 +1,6 @@
 # 0128: Persona GUIDs
 
-**Status**: PENDING
+**Status**: QA
 **Depends on**: None
 **Blocked by**: None
 **Priority**: CRITICAL (pre-release, 48h window)
@@ -409,56 +409,56 @@ if (!persona) {
 ## Acceptance Criteria
 
 ### Phase 1: Data Model
-- [ ] Add `id: string` to PersonaEntity
-- [ ] Add `display_name: string` to PersonaEntity
-- [ ] Change `DataItemBase.learned_by` to store persona ID
-- [ ] Change `Quote.speaker` to store persona ID (or "human")
-- [ ] Update `PersonaCreationInput` if needed
+- [x] Add `id: string` to PersonaEntity
+- [x] Add `display_name: string` to PersonaEntity
+- [x] Change `DataItemBase.learned_by` to store persona ID
+- [x] Change `Quote.speaker` to store persona ID (or "human")
+- [x] Update `PersonaCreationInput` if needed
 
 ### Phase 2: Storage Layer
-- [ ] Update PersonaState to key by `id`
-- [ ] Add `getByName()` fuzzy lookup
-- [ ] Update all PersonaState methods to use ID
-- [ ] Update StateManager methods to use ID
-- [ ] Add `persona_resolve()` for name→entity lookup
+- [x] Update PersonaState to key by `id`
+- [x] Add `getByName()` fuzzy lookup
+- [x] Update all PersonaState methods to use ID
+- [x] Update StateManager methods to use ID
+- [x] Add `persona_resolve()` for name→entity lookup
 
 ### Phase 3: Processor Boundary
-- [ ] `sendMessage()` resolves name to ID at entry
-- [ ] `getPersona()` returns entity by fuzzy name match
-- [ ] `getPersonaById()` returns entity by direct ID
-- [ ] `createPersona()` generates UUID and sets display_name
-- [ ] Ei initialization uses reserved ID "ei"
-- [ ] All internal methods pass ID, not name
+- [x] `sendMessage()` resolves name to ID at entry
+- [x] `getPersona()` returns entity by fuzzy name match
+- [x] `getPersonaById()` returns entity by direct ID
+- [x] `createPersona()` generates UUID and sets display_name
+- [x] Ei initialization uses reserved ID "ei"
+- [x] All internal methods pass ID, not name
 
 ### Phase 4: Handlers
-- [ ] Change all `personaName` extractions to `personaId`
-- [ ] Update all `persona_get()` calls
-- [ ] Update all `persona_update()` calls
-- [ ] Update all `messages_*()` calls
-- [ ] Update `learned_by` assignment to use ID
-- [ ] Update `Quote.speaker` assignment to use ID
+- [x] Change all `personaName` extractions to `personaId`
+- [x] Update all `persona_get()` calls
+- [x] Update all `persona_update()` calls
+- [x] Update all `messages_*()` calls
+- [x] Update `learned_by` assignment to use ID
+- [x] Update `Quote.speaker` assignment to use ID
 
 ### Phase 5: Orchestrators
-- [ ] Update ceremony.ts - all functions use ID
-- [ ] Update persona-generation.ts
-- [ ] Update human-extraction.ts
-- [ ] Update persona-topics.ts
-- [ ] Update extraction-chunker.ts
+- [x] Update ceremony.ts - all functions use ID
+- [x] Update persona-generation.ts
+- [x] Update human-extraction.ts
+- [x] Update persona-topics.ts
+- [x] Update extraction-chunker.ts
 
 ### Phase 6: Prompts
-- [ ] Add `persona_display_name` to all prompt data types
-- [ ] Change `persona_name` to `persona_id` in types
-- [ ] Update prompt builders to use display_name for LLM text
+- [x] Add `persona_display_name` to all prompt data types
+- [x] Change `persona_name` to `persona_id` in types
+- [x] Update prompt builders to use display_name for LLM text
 
 ### Phase 7: Queue Processor
-- [ ] Change message fetching to use `personaId`
-- [ ] Verify hydration still works (uses message.id, should be fine)
+- [x] Change message fetching to use `personaId`
+- [x] Verify hydration still works (uses message.id, should be fine)
 
 ### Phase 8: Dependencies & Testing
-- [ ] Add `fuzzysort` dependency
-- [ ] Update unit tests for new signatures
-- [ ] Verify CLI still works
-- [ ] Verify TUI slash commands still work
+- [x] Add `fuzzysort` dependency
+- [x] Update unit tests for new signatures
+- [x] Verify CLI still works
+- [x] Verify TUI slash commands still work
 - [ ] E2E: Create persona, rename alias, send message - should work
 
 ## Files to Modify
