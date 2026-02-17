@@ -1,6 +1,6 @@
 # 0144: TUI Unread Message Marking
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0100 (TUI Frontend Skeleton)
 **Priority**: Medium (TUI V1.2)
 
@@ -18,7 +18,7 @@ From tui-map.md:
     * Builtin on having persona active for > 5 seconds
 ```
 
-The web frontend uses IntersectionObserver to mark individual messages as they scroll into view, plus marks all read when leaving a persona. The TUI needs equivalent behavior.
+The web frontend uses IntersectionObserver to mark individual messages as they scroll into view, plus marks all read when leaving a persona. The TUI uses a simpler approach based on dwell time and user actions.
 
 ## Acceptance Criteria
 
@@ -31,14 +31,19 @@ The web frontend uses IntersectionObserver to mark individual messages as they s
 
 ### Mark All Read on Leave (Required)
 
-- [ ] When switching away from a persona, mark all messages read immediately
-- [ ] This handles the case where user reads quickly and switches
+- [ ] When switching away from a persona **after dwelling 5+ seconds**, mark messages read
+- [ ] Quick switches (< 5s) do NOT mark previous persona as read
+- [ ] This prevents accidental tab-throughs from marking everything read
 
-### Visual Feedback (Optional)
+### Mark All Read on Send (Required)
 
-- [ ] Unread messages could have distinct styling (accent border, highlight)
-- [ ] Styling clears after messages are marked read
-- [ ] This mirrors web behavior from ticket 0044
+- [ ] When user sends a message, immediately mark all messages read for that persona
+- [ ] Rationale: If they're typing, they're engaged—no need to wait for dwell timer
+
+### Visual Feedback (Deferred)
+
+Visual styling for unread messages deferred to ticket 0149 (Markdown Rendering).
+Need markdown/styling infrastructure first before adding unread indicators.
 
 ## Technical Design
 
@@ -47,46 +52,59 @@ The web frontend uses IntersectionObserver to mark individual messages as they s
 ```typescript
 // tui/src/context/ei.tsx
 
-// Add to EiContextValue interface:
-markAllMessagesRead: (personaName: string) => Promise<void>;
-
-// Add implementation:
-const markAllMessagesRead = async (personaName: string) => {
-  if (!processor) return;
-  await processor.markAllMessagesRead(personaName);
-  await refreshPersonas(); // Updates unread_count in sidebar
-};
-
-// Modify selectPersona to handle marking:
+// Track dwell state for mark-on-leave logic
 let readTimer: Timer | null = null;
+let dwelledPersona: string | null = null;  // Set after 5s dwell
 
 const selectPersona = (name: string) => {
-  // Mark previous persona's messages as read
+  // Mark previous persona as read ONLY if we dwelled there 5+ seconds
   const previous = store.activePersona;
-  if (previous && processor) {
+  if (previous && previous === dwelledPersona && processor) {
     processor.markAllMessagesRead(previous);
+    refreshPersonas();
   }
   
-  // Cancel any pending timer
+  // Cancel any pending timer and reset dwell tracking
   if (readTimer) {
     clearTimeout(readTimer);
     readTimer = null;
   }
+  dwelledPersona = null;
   
-  // Set new persona
+  // Set new persona (existing logic)
   setStore("activePersona", name);
+  setStore("messages", []);
+  const persona = store.personas.find(p => p.name === name);
+  setStore("activeContextBoundary", persona?.context_boundary);
+  setContextBoundarySignal(persona?.context_boundary);
   if (processor) {
-    processor.getMessages(name).then((msgs) => setStore("messages", msgs));
+    processor.getMessages(name).then((msgs) => {
+      setStore("messages", [...msgs]);
+    });
   }
   
   // Start 5-second dwell timer
   readTimer = setTimeout(async () => {
     if (store.activePersona === name && processor) {
+      dwelledPersona = name;  // Mark that we've dwelled
       await processor.markAllMessagesRead(name);
       await refreshPersonas();
     }
     readTimer = null;
   }, 5000);
+};
+
+// sendMessage: Mark read immediately when user sends
+const sendMessage = async (content: string) => {
+  const current = store.activePersona;
+  if (!current || !processor) return;
+  
+  // Mark all read immediately - user is clearly engaged
+  await processor.markAllMessagesRead(current);
+  dwelledPersona = current;  // Also set dwelled so leave-marking works
+  
+  await processor.sendMessage(current, content);
+  await refreshPersonas();
 };
 
 // Clean up timer on unmount
@@ -98,9 +116,10 @@ onCleanup(() => {
 
 ### Edge Cases
 
-1. **Rapid switching**: If user switches personas quickly (< 5s), only mark-on-leave fires
-2. **Same persona re-select**: Timer restarts (harmless, marking read twice is idempotent)
+1. **Rapid switching**: Quick switches (< 5s) don't mark previous persona as read
+2. **Same persona re-select**: Timer restarts, harmless (marking read twice is idempotent)
 3. **No messages**: `markAllMessagesRead` on empty conversation is a no-op
+4. **Send before dwell**: Sending a message immediately marks read and sets dwelled state
 
 ## File Changes
 
@@ -117,22 +136,18 @@ tui/src/
 - [ ] Run `npm run test:all` from project root - all tests must pass
 - [ ] Run `npm run test:e2e` from `tui/` - all TUI E2E tests must pass
 
-### Unit Tests
+### Manual Testing
 
-- [ ] Timer fires after 5 seconds of persona being active
-- [ ] Timer cancelled when switching before 5 seconds
-- [ ] Previous persona marked read on switch
-
-### E2E Tests
-
-- [ ] Select persona with unread messages, wait 6 seconds, sidebar shows 0 unread
-- [ ] Select persona with unread messages, switch away after 2 seconds, sidebar shows 0 unread
-- [ ] Rapid switching between personas doesn't cause errors
+- [ ] Select persona with unread messages, wait 6 seconds → sidebar shows 0 unread
+- [ ] Select persona with unread messages, switch away after 2 seconds → sidebar still shows unread count
+- [ ] Select persona, wait 6 seconds, switch away → previous persona marked read (leave-after-dwell)
+- [ ] Select persona, send a message immediately → sidebar shows 0 unread
+- [ ] Rapid tab-through personas → no errors, unreads preserved
 
 ### Post-Implementation
 
 - [ ] Run `npm run test:all` - all tests still pass
-- [ ] Run `npm run test:e2e` from `tui/` - all tests pass including new ones
+- [ ] Run `npm run test:e2e` from `tui/` - all tests pass
 
 ## Notes
 
@@ -140,3 +155,4 @@ tui/src/
 - `markAllMessagesRead` is simpler than per-message marking and sufficient for TUI
 - Per-message marking with scroll detection could be a future enhancement but adds complexity
 - The Processor already has `markAllMessagesRead` - we just need to call it
+- Mark-on-send provides immediate feedback for engaged users

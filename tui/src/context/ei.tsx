@@ -82,6 +82,8 @@ export const EiProvider: ParentComponent = (props) => {
 
   let processor: Processor | null = null;
   let notificationTimer: Timer | null = null;
+  let readTimer: Timer | null = null;
+  let dwelledPersona: string | null = null;
 
   const showNotification = (message: string, level: "error" | "warn" | "info") => {
     if (notificationTimer) clearTimeout(notificationTimer);
@@ -107,6 +109,21 @@ export const EiProvider: ParentComponent = (props) => {
   };
 
   const selectPersona = (name: string) => {
+    // Mark previous persona as read ONLY if we dwelled there 5+ seconds
+    const previous = store.activePersona;
+    if (previous && previous === dwelledPersona && processor) {
+      void processor.markAllMessagesRead(previous);
+      void refreshPersonas();
+    }
+    
+    // Cancel any pending timer and reset dwell tracking
+    if (readTimer) {
+      clearTimeout(readTimer);
+      readTimer = null;
+    }
+    dwelledPersona = null;
+    
+    // Set new persona
     setStore("activePersona", name);
     setStore("messages", []);
     const persona = store.personas.find(p => p.name === name);
@@ -117,12 +134,28 @@ export const EiProvider: ParentComponent = (props) => {
         setStore("messages", [...msgs]);
       });
     }
+    
+    // Start 5-second dwell timer
+    readTimer = setTimeout(async () => {
+      if (store.activePersona === name && processor) {
+        dwelledPersona = name;  // Mark that we've dwelled
+        await processor.markAllMessagesRead(name);
+        await refreshPersonas();
+      }
+      readTimer = null;
+    }, 5000);
   };
 
   const sendMessage = async (content: string) => {
     const current = store.activePersona;
     if (!current || !processor) return;
+    
+    // Mark all read immediately - user is engaged
+    await processor.markAllMessagesRead(current);
+    dwelledPersona = current;
+    
     await processor.sendMessage(current, content);
+    await refreshPersonas();
   };
 
   const abortCurrentOperation = async () => {
@@ -293,6 +326,7 @@ export const EiProvider: ParentComponent = (props) => {
   });
 
   onCleanup(() => {
+    if (readTimer) clearTimeout(readTimer);
     processor?.stop();
   });
 
