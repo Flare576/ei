@@ -88,7 +88,9 @@ describe("StateManager", () => {
   });
 
   describe("persona operations", () => {
-    const makePersona = (name: string): PersonaEntity => ({
+    const makePersona = (id: string, name: string): PersonaEntity => ({
+      id,
+      display_name: name,
       entity: "system",
       aliases: [name],
       short_description: `${name} description`,
@@ -102,34 +104,35 @@ describe("StateManager", () => {
     });
 
     it("adds and retrieves personas", () => {
-      sm.persona_add("Bot", makePersona("Bot"));
+      sm.persona_add(makePersona("bot-id", "Bot"));
       
       expect(sm.persona_getAll()).toHaveLength(1);
-      expect(sm.persona_get("Bot")).not.toBeNull();
+      expect(sm.persona_getById("bot-id")).not.toBeNull();
+      expect(sm.persona_getByName("Bot")).not.toBeNull();
     });
 
     it("updates persona", () => {
-      sm.persona_add("Bot", makePersona("Bot"));
-      sm.persona_update("Bot", { short_description: "Updated" });
+      sm.persona_add(makePersona("bot-id", "Bot"));
+      sm.persona_update("bot-id", { short_description: "Updated" });
       
-      expect(sm.persona_get("Bot")?.short_description).toBe("Updated");
+      expect(sm.persona_getById("bot-id")?.short_description).toBe("Updated");
     });
 
     it("archives and unarchives persona", () => {
-      sm.persona_add("Bot", makePersona("Bot"));
+      sm.persona_add(makePersona("bot-id", "Bot"));
       
-      sm.persona_archive("Bot");
-      expect(sm.persona_get("Bot")?.is_archived).toBe(true);
+      sm.persona_archive("bot-id");
+      expect(sm.persona_getById("bot-id")?.is_archived).toBe(true);
       
-      sm.persona_unarchive("Bot");
-      expect(sm.persona_get("Bot")?.is_archived).toBe(false);
+      sm.persona_unarchive("bot-id");
+      expect(sm.persona_getById("bot-id")?.is_archived).toBe(false);
     });
 
     it("deletes persona", () => {
-      sm.persona_add("Bot", makePersona("Bot"));
-      sm.persona_delete("Bot");
+      sm.persona_add(makePersona("bot-id", "Bot"));
+      sm.persona_delete("bot-id");
       
-      expect(sm.persona_get("Bot")).toBeNull();
+      expect(sm.persona_getById("bot-id")).toBeNull();
     });
   });
 
@@ -144,7 +147,9 @@ describe("StateManager", () => {
     });
 
     beforeEach(() => {
-      sm.persona_add("Bot", {
+      sm.persona_add({
+        id: "bot-id",
+        display_name: "Bot",
         entity: "system",
         aliases: ["Bot"],
         traits: [],
@@ -159,20 +164,20 @@ describe("StateManager", () => {
 
     it("appends and retrieves messages", () => {
       const msg = makeMessage("Hello");
-      sm.messages_append("Bot", msg);
+      sm.messages_append("bot-id", msg);
       
-      const messages = sm.messages_get("Bot");
+      const messages = sm.messages_get("bot-id");
       expect(messages).toHaveLength(1);
       expect(messages[0].content).toBe("Hello");
     });
 
     it("sets message context status", () => {
       const msg = makeMessage("Test");
-      sm.messages_append("Bot", msg);
+      sm.messages_append("bot-id", msg);
       
-      sm.messages_setContextStatus("Bot", msg.id, ContextStatus.Always);
+      sm.messages_setContextStatus("bot-id", msg.id, ContextStatus.Always);
       
-      expect(sm.messages_get("Bot")[0].context_status).toBe("always");
+      expect(sm.messages_get("bot-id")[0].context_status).toBe("always");
     });
 
   });

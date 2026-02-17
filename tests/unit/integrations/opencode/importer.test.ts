@@ -10,8 +10,11 @@ describe("importOpenCodeSessions", () => {
   let mockInterface: Partial<Ei_Interface>;
   let mockReader: Partial<OpenCodeReader>;
   let mockHuman: HumanEntity;
+  let createdPersonas: Map<string, { id: string; display_name: string }>;
 
   beforeEach(() => {
+    createdPersonas = new Map();
+    
     mockHuman = {
       entity: "human",
       facts: [],
@@ -26,9 +29,49 @@ describe("importOpenCodeSessions", () => {
     mockStateManager = {
       getHuman: vi.fn().mockReturnValue(mockHuman),
       setHuman: vi.fn((h: HumanEntity) => Object.assign(mockHuman, h)),
-      persona_get: vi.fn().mockReturnValue(null),
+      persona_getById: vi.fn((id: string) => {
+        for (const [name, data] of createdPersonas.entries()) {
+          if (data.id === id) {
+            return {
+              id,
+              display_name: name,
+              entity: "system" as const,
+              aliases: [name],
+              traits: [],
+              topics: [],
+              is_paused: false,
+              is_archived: false,
+              is_static: false,
+              last_updated: "2026-01-01T00:00:00.000Z",
+              last_activity: "2026-01-01T00:00:00.000Z",
+            };
+          }
+        }
+        return null;
+      }),
+      persona_getByName: vi.fn((name: string) => {
+        const data = createdPersonas.get(name);
+        if (!data) return null;
+        return {
+          id: data.id,
+          display_name: name,
+          entity: "system" as const,
+          aliases: [name],
+          traits: [],
+          topics: [],
+          is_paused: false,
+          is_archived: false,
+          is_static: false,
+          last_updated: "2026-01-01T00:00:00.000Z",
+          last_activity: "2026-01-01T00:00:00.000Z",
+        };
+      }),
       persona_getAll: vi.fn().mockReturnValue([]),
-      persona_add: vi.fn(),
+      persona_add: vi.fn((entity) => {
+        const id = entity.id || crypto.randomUUID();
+        createdPersonas.set(entity.display_name, { id, display_name: entity.display_name });
+        return id;
+      }),
       persona_update: vi.fn(),
       messages_get: vi.fn().mockReturnValue([]),
       messages_append: vi.fn(),
@@ -210,7 +253,7 @@ describe("importOpenCodeSessions", () => {
       last_activity: "2026-01-01T00:00:00.000Z",
     };
 
-    mockStateManager.persona_get = vi.fn().mockImplementation((name: string) =>
+    mockStateManager.persona_getByName = vi.fn().mockImplementation((name: string) =>
       name === "sisyphus" ? existingPersona : null
     );
 
@@ -282,8 +325,13 @@ describe("importOpenCodeSessions", () => {
 
     expect(result.messagesImported).toBe(2);
     expect(mockStateManager.messages_append).toHaveBeenCalledTimes(2);
+    
+    // Get the persona ID that was created for "build"
+    const buildPersona = createdPersonas.get("build");
+    expect(buildPersona).toBeDefined();
+    
     expect(mockStateManager.messages_append).toHaveBeenCalledWith(
-      "build",
+      buildPersona!.id,
       expect.objectContaining({
         id: "msg_user1",
         role: "human",
@@ -291,7 +339,7 @@ describe("importOpenCodeSessions", () => {
       })
     );
     expect(mockStateManager.messages_append).toHaveBeenCalledWith(
-      "build",
+      buildPersona!.id,
       expect.objectContaining({
         id: "msg_assist1",
         role: "system",
@@ -369,8 +417,9 @@ describe("importOpenCodeSessions", () => {
       reader: mockReader as OpenCodeReader,
     });
 
+    const buildPersona = createdPersonas.get("build");
     expect(mockStateManager.messages_append).toHaveBeenCalledWith(
-      "build",
+      buildPersona!.id,
       expect.objectContaining({
         read: true,
       })
@@ -404,8 +453,9 @@ describe("importOpenCodeSessions", () => {
       reader: mockReader as OpenCodeReader,
     });
 
+    const buildPersona = createdPersonas.get("build");
     expect(mockStateManager.persona_update).toHaveBeenCalledWith(
-      "build",
+      buildPersona!.id,
       expect.objectContaining({
         last_activity: expect.any(String),
       })
@@ -449,8 +499,11 @@ describe("importOpenCodeSessions", () => {
       reader: mockReader as OpenCodeReader,
     });
 
-    expect(mockInterface.onMessageAdded).toHaveBeenCalledWith("build");
-    expect(mockInterface.onMessageAdded).toHaveBeenCalledWith("sisyphus");
+    const buildPersona = createdPersonas.get("build");
+    const sisyphusPersona = createdPersonas.get("sisyphus");
+    
+    expect(mockInterface.onMessageAdded).toHaveBeenCalledWith(buildPersona!.id);
+    expect(mockInterface.onMessageAdded).toHaveBeenCalledWith(sisyphusPersona!.id);
   });
 
   it("processes multiple sessions", async () => {

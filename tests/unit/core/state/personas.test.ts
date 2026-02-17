@@ -6,7 +6,9 @@ import { ContextStatus as ContextStatusEnum } from "../../../../src/core/types.j
 describe("PersonaState", () => {
   let state: PersonaState;
 
-  const makePersona = (name: string): PersonaEntity => ({
+  const makePersona = (name: string, id?: string): PersonaEntity => ({
+    id: id ?? `${name.toLowerCase()}-id`,
+    display_name: name,
     entity: "system",
     aliases: [name],
     short_description: `${name} description`,
@@ -38,31 +40,32 @@ describe("PersonaState", () => {
     });
 
     it("adds a persona", () => {
-      state.add("TestBot", makePersona("TestBot"));
+      state.add(makePersona("TestBot"));
       
       expect(state.getAll()).toHaveLength(1);
-      expect(state.get("TestBot")?.aliases?.[0]).toBe("TestBot");
+      expect(state.getByName("TestBot")?.aliases?.[0]).toBe("TestBot");
     });
 
     it("gets persona by name (case insensitive)", () => {
-      state.add("TestBot", makePersona("TestBot"));
+      state.add(makePersona("TestBot"));
       
-      expect(state.get("testbot")).not.toBeNull();
-      expect(state.get("TESTBOT")).not.toBeNull();
-      expect(state.get("TestBot")).not.toBeNull();
+      expect(state.getByName("testbot")).not.toBeNull();
+      expect(state.getByName("TESTBOT")).not.toBeNull();
+      expect(state.getByName("TestBot")).not.toBeNull();
     });
 
     it("returns null for non-existent persona", () => {
-      expect(state.get("nonexistent")).toBeNull();
+      expect(state.getByName("nonexistent")).toBeNull();
     });
 
     it("updates persona fields", () => {
-      state.add("TestBot", makePersona("TestBot"));
+      const persona = makePersona("TestBot");
+      state.add(persona);
       
-      const updated = state.update("TestBot", { short_description: "Updated description" });
+      const updated = state.update(persona.id, { short_description: "Updated description" });
       
       expect(updated).toBe(true);
-      expect(state.get("TestBot")?.short_description).toBe("Updated description");
+      expect(state.getById(persona.id)?.short_description).toBe("Updated description");
     });
 
     it("returns false when updating non-existent persona", () => {
@@ -71,33 +74,36 @@ describe("PersonaState", () => {
     });
 
     it("archives persona", () => {
-      state.add("TestBot", makePersona("TestBot"));
+      const persona = makePersona("TestBot");
+      state.add(persona);
       
-      const archived = state.archive("TestBot");
+      const archived = state.archive(persona.id);
       
       expect(archived).toBe(true);
-      expect(state.get("TestBot")?.is_archived).toBe(true);
-      expect(state.get("TestBot")?.archived_at).toBeDefined();
+      expect(state.getById(persona.id)?.is_archived).toBe(true);
+      expect(state.getById(persona.id)?.archived_at).toBeDefined();
     });
 
     it("unarchives persona", () => {
-      state.add("TestBot", makePersona("TestBot"));
-      state.archive("TestBot");
+      const persona = makePersona("TestBot");
+      state.add(persona);
+      state.archive(persona.id);
       
-      const unarchived = state.unarchive("TestBot");
+      const unarchived = state.unarchive(persona.id);
       
       expect(unarchived).toBe(true);
-      expect(state.get("TestBot")?.is_archived).toBe(false);
-      expect(state.get("TestBot")?.archived_at).toBeUndefined();
+      expect(state.getById(persona.id)?.is_archived).toBe(false);
+      expect(state.getById(persona.id)?.archived_at).toBeUndefined();
     });
 
     it("deletes persona", () => {
-      state.add("TestBot", makePersona("TestBot"));
+      const persona = makePersona("TestBot");
+      state.add(persona);
       
-      const deleted = state.delete("TestBot");
+      const deleted = state.delete(persona.id);
       
       expect(deleted).toBe(true);
-      expect(state.get("TestBot")).toBeNull();
+      expect(state.getById(persona.id)).toBeNull();
       expect(state.getAll()).toHaveLength(0);
     });
 
@@ -108,19 +114,23 @@ describe("PersonaState", () => {
   });
 
   describe("messages", () => {
+    let personaId: string;
+    
     beforeEach(() => {
-      state.add("TestBot", makePersona("TestBot"));
+      const persona = makePersona("TestBot");
+      personaId = persona.id;
+      state.add(persona);
     });
 
     it("starts with empty message array", () => {
-      expect(state.messages_get("TestBot")).toEqual([]);
+      expect(state.messages_get(personaId)).toEqual([]);
     });
 
     it("appends messages", () => {
-      state.messages_append("TestBot", makeMessage("Hello"));
-      state.messages_append("TestBot", makeMessage("World"));
+      state.messages_append(personaId, makeMessage("Hello"));
+      state.messages_append(personaId, makeMessage("World"));
       
-      const messages = state.messages_get("TestBot");
+      const messages = state.messages_get(personaId);
       
       expect(messages).toHaveLength(2);
       expect(messages[0].content).toBe("Hello");
@@ -137,39 +147,42 @@ describe("PersonaState", () => {
     });
 
     it("updates persona last_activity on message append", async () => {
-      const before = state.get("TestBot")?.last_activity;
+      const before = state.getById(personaId)?.last_activity;
       
       await new Promise((r) => setTimeout(r, 2));
       
-      state.messages_append("TestBot", makeMessage("Hello"));
+      state.messages_append(personaId, makeMessage("Hello"));
       
-      const after = state.get("TestBot")?.last_activity;
+      const after = state.getById(personaId)?.last_activity;
       expect(new Date(after ?? 0).getTime()).toBeGreaterThanOrEqual(new Date(before ?? 0).getTime());
     });
   });
 
   describe("message context status", () => {
+    let personaId: string;
     let messageId: string;
 
     beforeEach(() => {
-      state.add("TestBot", makePersona("TestBot"));
+      const persona = makePersona("TestBot");
+      personaId = persona.id;
+      state.add(persona);
       const msg = makeMessage("Test message");
       messageId = msg.id;
-      state.messages_append("TestBot", msg);
+      state.messages_append(personaId, msg);
     });
 
     it("sets context status to Always", () => {
-      const result = state.messages_setContextStatus("TestBot", messageId, ContextStatusEnum.Always);
+      const result = state.messages_setContextStatus(personaId, messageId, ContextStatusEnum.Always);
       
       expect(result).toBe(true);
-      const messages = state.messages_get("TestBot");
+      const messages = state.messages_get(personaId);
       expect(messages[0].context_status).toBe("always");
     });
 
     it("sets context status to Never", () => {
-      state.messages_setContextStatus("TestBot", messageId, ContextStatusEnum.Never);
+      state.messages_setContextStatus(personaId, messageId, ContextStatusEnum.Never);
       
-      const messages = state.messages_get("TestBot");
+      const messages = state.messages_get(personaId);
       expect(messages[0].context_status).toBe("never");
     });
 
@@ -179,25 +192,29 @@ describe("PersonaState", () => {
     });
 
     it("returns false for non-existent message", () => {
-      const result = state.messages_setContextStatus("TestBot", "nonexistent", ContextStatusEnum.Always);
+      const result = state.messages_setContextStatus(personaId, "nonexistent", ContextStatusEnum.Always);
       expect(result).toBe(false);
     });
   });
 
   describe("messages_markRead", () => {
+    let personaId: string;
+    
     beforeEach(() => {
-      state.add("TestBot", makePersona("TestBot"));
+      const persona = makePersona("TestBot");
+      personaId = persona.id;
+      state.add(persona);
     });
 
     it("marks a message as read", () => {
       const msg = makeMessage("Test", "system");
       msg.read = false;
-      state.messages_append("TestBot", msg);
+      state.messages_append(personaId, msg);
 
-      const result = state.messages_markRead("TestBot", msg.id);
+      const result = state.messages_markRead(personaId, msg.id);
 
       expect(result).toBe(true);
-      expect(state.messages_get("TestBot")[0].read).toBe(true);
+      expect(state.messages_get(personaId)[0].read).toBe(true);
     });
 
     it("returns false for non-existent persona", () => {
@@ -206,14 +223,18 @@ describe("PersonaState", () => {
     });
 
     it("returns false for non-existent message", () => {
-      const result = state.messages_markRead("TestBot", "nonexistent");
+      const result = state.messages_markRead(personaId, "nonexistent");
       expect(result).toBe(false);
     });
   });
 
   describe("messages_markPendingAsRead", () => {
+    let personaId: string;
+    
     beforeEach(() => {
-      state.add("TestBot", makePersona("TestBot"));
+      const persona = makePersona("TestBot");
+      personaId = persona.id;
+      state.add(persona);
     });
 
     it("marks all unread human messages as read", () => {
@@ -224,14 +245,14 @@ describe("PersonaState", () => {
       const msg3 = makeMessage("Response", "system");
       msg3.read = false;
 
-      state.messages_append("TestBot", msg1);
-      state.messages_append("TestBot", msg2);
-      state.messages_append("TestBot", msg3);
+      state.messages_append(personaId, msg1);
+      state.messages_append(personaId, msg2);
+      state.messages_append(personaId, msg3);
 
-      const count = state.messages_markPendingAsRead("TestBot");
+      const count = state.messages_markPendingAsRead(personaId);
 
       expect(count).toBe(2);
-      const messages = state.messages_get("TestBot");
+      const messages = state.messages_get(personaId);
       expect(messages[0].read).toBe(true);
       expect(messages[1].read).toBe(true);
       expect(messages[2].read).toBe(false);
@@ -240,9 +261,9 @@ describe("PersonaState", () => {
     it("returns 0 when no pending human messages", () => {
       const msg = makeMessage("Already read");
       msg.read = true;
-      state.messages_append("TestBot", msg);
+      state.messages_append(personaId, msg);
 
-      const count = state.messages_markPendingAsRead("TestBot");
+      const count = state.messages_markPendingAsRead(personaId);
 
       expect(count).toBe(0);
     });
@@ -254,8 +275,12 @@ describe("PersonaState", () => {
   });
 
   describe("messages_remove", () => {
+    let personaId: string;
+    
     beforeEach(() => {
-      state.add("TestBot", makePersona("TestBot"));
+      const persona = makePersona("TestBot");
+      personaId = persona.id;
+      state.add(persona);
     });
 
     it("removes specified messages and returns them", () => {
@@ -263,17 +288,17 @@ describe("PersonaState", () => {
       const msg2 = makeMessage("Second");
       const msg3 = makeMessage("Third");
 
-      state.messages_append("TestBot", msg1);
-      state.messages_append("TestBot", msg2);
-      state.messages_append("TestBot", msg3);
+      state.messages_append(personaId, msg1);
+      state.messages_append(personaId, msg2);
+      state.messages_append(personaId, msg3);
 
-      const removed = state.messages_remove("TestBot", [msg1.id, msg3.id]);
+      const removed = state.messages_remove(personaId, [msg1.id, msg3.id]);
 
       expect(removed).toHaveLength(2);
       expect(removed.map(m => m.content)).toContain("First");
       expect(removed.map(m => m.content)).toContain("Third");
-      expect(state.messages_get("TestBot")).toHaveLength(1);
-      expect(state.messages_get("TestBot")[0].content).toBe("Second");
+      expect(state.messages_get(personaId)).toHaveLength(1);
+      expect(state.messages_get(personaId)[0].content).toBe("Second");
     });
 
     it("returns empty array for non-existent persona", () => {
@@ -283,32 +308,35 @@ describe("PersonaState", () => {
 
     it("ignores non-existent message ids", () => {
       const msg = makeMessage("Keep me");
-      state.messages_append("TestBot", msg);
+      state.messages_append(personaId, msg);
 
-      const removed = state.messages_remove("TestBot", ["nonexistent"]);
+      const removed = state.messages_remove(personaId, ["nonexistent"]);
 
       expect(removed).toHaveLength(0);
-      expect(state.messages_get("TestBot")).toHaveLength(1);
+      expect(state.messages_get(personaId)).toHaveLength(1);
     });
   });
 
   describe("load/export", () => {
     it("exports personas to serializable format", () => {
-      state.add("Bot1", makePersona("Bot1"));
-      state.add("Bot2", makePersona("Bot2"));
-      state.messages_append("Bot1", makeMessage("Hello"));
+      const bot1 = makePersona("Bot1");
+      const bot2 = makePersona("Bot2");
+      state.add(bot1);
+      state.add(bot2);
+      state.messages_append(bot1.id, makeMessage("Hello"));
       
       const exported = state.export();
       
       expect(Object.keys(exported)).toHaveLength(2);
-      expect(exported["bot1"]).toBeDefined();
-      expect(exported["bot1"].messages).toHaveLength(1);
+      expect(exported[bot1.id]).toBeDefined();
+      expect(exported[bot1.id].messages).toHaveLength(1);
     });
 
     it("loads personas from serialized format", () => {
+      const persona = makePersona("TestBot");
       const data = {
-        testbot: {
-          entity: makePersona("TestBot"),
+        [persona.id]: {
+          entity: persona,
           messages: [makeMessage("Loaded message")],
         },
       };
@@ -316,7 +344,7 @@ describe("PersonaState", () => {
       state.load(data);
       
       expect(state.getAll()).toHaveLength(1);
-      expect(state.messages_get("testbot")).toHaveLength(1);
+      expect(state.messages_get(persona.id)).toHaveLength(1);
     });
   });
 });

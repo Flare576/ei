@@ -55,10 +55,11 @@ function createMockStateManager() {
     human_trait_upsert: vi.fn((trait: Trait) => human.traits.push(trait)),
     human_topic_upsert: vi.fn((topic: Topic) => human.topics.push(topic)),
     human_person_upsert: vi.fn((person: Person) => human.people.push(person)),
-    persona_get: vi.fn((name: string) => personas[name] ?? null),
-    persona_add: vi.fn((name: string, entity: PersonaEntity) => { personas[name] = entity; }),
+    persona_getById: vi.fn((id: string) => Object.values(personas).find(p => p.id === id) ?? null),
+    persona_getByName: vi.fn((name: string) => Object.values(personas).find(p => p.display_name === name || p.aliases?.includes(name)) ?? null),
+    persona_add: vi.fn((entity: PersonaEntity) => { personas[entity.id] = entity; }),
     persona_update: vi.fn(),
-    messages_get: vi.fn((name: string) => messages[name] ?? []),
+    messages_get: vi.fn((id: string) => messages[id] ?? []),
     messages_append: vi.fn(),
     messages_markPendingAsRead: vi.fn(),
     queue_enqueue: vi.fn(),
@@ -80,7 +81,8 @@ function createMockRequest(overrides: Partial<LLMRequest> = {}): LLMRequest {
     user: "user",
     next_step: LLMNextStep.HandleHumanFactScan,
     data: {
-      personaName: "ei",
+      personaId: "ei",
+        personaDisplayName: "Ei",
       messages_context: [],
       messages_analyze: [],
     },
@@ -115,7 +117,8 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanFactScan,
         data: {
-          personaName: "ei",
+          personaId: "ei",
+        personaDisplayName: "Ei",
           messages_context: [{ id: "1", role: "human", content: "context", timestamp: "", read: true, context_status: "default" }],
           messages_analyze: [{ id: "2", role: "human", content: "analyze", timestamp: "", read: true, context_status: "default" }],
         },
@@ -134,7 +137,8 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
       expect(queueItemMatch).toHaveBeenCalledWith(
         "fact",
         expect.objectContaining({ type_of_fact: "Birthday" }),
-        expect.objectContaining({ personaName: "ei" }),
+        expect.objectContaining({ personaId: "ei",
+        personaDisplayName: "Ei" }),
         state
       );
     });
@@ -185,7 +189,8 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanTraitScan,
         data: {
-          personaName: "ei",
+          personaId: "ei",
+        personaDisplayName: "Ei",
           messages_context: [],
           messages_analyze: [{ id: "1", role: "human", content: "test", timestamp: "", read: true, context_status: "default" }],
         },
@@ -212,7 +217,8 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanTraitScan,
         data: {
-          personaName: "ei",
+          personaId: "ei",
+        personaDisplayName: "Ei",
           messages_context: [],
           messages_analyze: [],
         },
@@ -231,7 +237,8 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanTopicScan,
         data: {
-          personaName: "ei",
+          personaId: "ei",
+        personaDisplayName: "Ei",
           messages_context: [],
           messages_analyze: [{ id: "1", role: "human", content: "test", timestamp: "", read: true, context_status: "default" }],
         },
@@ -261,7 +268,8 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanPersonScan,
         data: {
-          personaName: "ei",
+          personaId: "ei",
+        personaDisplayName: "Ei",
           messages_context: [],
           messages_analyze: [{ id: "1", role: "human", content: "test", timestamp: "", read: true, context_status: "default" }],
         },
@@ -299,7 +307,8 @@ describe("Extraction Handlers - Step 2 (Match)", () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanItemMatch,
         data: {
-          personaName: "ei",
+          personaId: "ei",
+        personaDisplayName: "Ei",
           candidateType: "fact",
           itemName: "Birthday",
           itemValue: "January 15th",
@@ -319,7 +328,8 @@ describe("Extraction Handlers - Step 2 (Match)", () => {
         "fact",
         expect.objectContaining({ name: "Birthday" }),
         expect.objectContaining({
-          personaName: "ei",
+          personaId: "ei",
+        personaDisplayName: "Ei",
           itemName: "Birthday",
           itemValue: "January 15th",
         }),
@@ -331,7 +341,8 @@ describe("Extraction Handlers - Step 2 (Match)", () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanItemMatch,
         data: {
-          personaName: "ei",
+          personaId: "ei",
+        personaDisplayName: "Ei",
           candidateType: "trait",
           itemName: "Curiosity",
           itemValue: "Loves to learn new things",
@@ -358,7 +369,8 @@ describe("Extraction Handlers - Step 2 (Match)", () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanItemMatch,
         data: {
-          personaName: "ei",
+          personaId: "ei",
+        personaDisplayName: "Ei",
           candidateType: "fact",
           itemName: "Test",
           itemValue: "Value",
@@ -384,6 +396,8 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
     state = createMockStateManager();
     // Add Ei persona so isEi check passes
     state._personas["ei"] = {
+      id: "ei",
+      display_name: "Ei",
       entity: "system",
       aliases: ["ei"],
       traits: [],
@@ -402,7 +416,8 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanItemUpdate,
         data: {
-          personaName: "ei",
+          personaId: "ei",
+        personaDisplayName: "Ei",
           candidateType: "fact",
           isNewItem: true,
           existingItemId: undefined,
@@ -423,7 +438,7 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
           description: "User's birthday is January 15th",
           sentiment: 0.8,
           validated: ValidationLevel.None,
-          learned_by: "ei",
+          learned_by: "Ei",
         })
       );
     });
@@ -443,7 +458,8 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanItemUpdate,
         data: {
-          personaName: "ei",
+          personaId: "ei",
+        personaDisplayName: "Ei",
           candidateType: "fact",
           isNewItem: false,
           existingItemId: existingId,
@@ -475,7 +491,8 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanItemUpdate,
         data: {
-          personaName: "ei",
+          personaId: "ei",
+        personaDisplayName: "Ei",
           candidateType: "trait",
           isNewItem: true,
         },
@@ -502,7 +519,8 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanItemUpdate,
         data: {
-          personaName: "ei",
+          personaId: "ei",
+        personaDisplayName: "Ei",
           candidateType: "topic",
           isNewItem: true,
         },
@@ -539,6 +557,8 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
       for (const { impact, expected } of testCases) {
         state = createMockStateManager();
         state._personas["ei"] = {
+          id: "ei",
+          display_name: "Ei",
           entity: "system",
           aliases: ["ei"],
           traits: [],
@@ -553,7 +573,8 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
         const request = createMockRequest({
           next_step: LLMNextStep.HandleHumanItemUpdate,
           data: {
-            personaName: "ei",
+            personaId: "ei",
+        personaDisplayName: "Ei",
             candidateType: "topic",
             isNewItem: true,
           },
@@ -578,7 +599,8 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanItemUpdate,
         data: {
-          personaName: "ei",
+          personaId: "ei",
+        personaDisplayName: "Ei",
           candidateType: "person",
           isNewItem: true,
         },
@@ -608,7 +630,8 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanItemUpdate,
         data: {
-          personaName: "ei",
+          personaId: "ei",
+        personaDisplayName: "Ei",
           candidateType: "fact",
           isNewItem: true,
         },
@@ -625,7 +648,8 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanItemUpdate,
         data: {
-          personaName: "ei",
+          personaId: "ei",
+        personaDisplayName: "Ei",
           candidateType: "fact",
           isNewItem: true,
         },
@@ -653,6 +677,8 @@ describe("Cross-Persona Validation", () => {
 
   it("queues Ei validation when non-Ei persona with General group learns item", async () => {
     state._personas["friend"] = {
+      id: "friend-id",
+      display_name: "Friend",
       entity: "system",
       aliases: ["friend"],
       group_primary: null,
@@ -668,7 +694,8 @@ describe("Cross-Persona Validation", () => {
     const request = createMockRequest({
       next_step: LLMNextStep.HandleHumanItemUpdate,
       data: {
-        personaName: "friend",
+        personaId: "friend-id",
+        personaDisplayName: "Friend",
         candidateType: "fact",
         isNewItem: true,
       },
@@ -682,14 +709,13 @@ describe("Cross-Persona Validation", () => {
 
     await handlers.handleHumanItemUpdate(response, state as any);
 
-    // Should upsert AND queue validation
     expect(state.human_fact_upsert).toHaveBeenCalled();
     expect(state.queue_enqueue).toHaveBeenCalledWith(
       expect.objectContaining({
         next_step: LLMNextStep.HandleEiValidation,
         data: expect.objectContaining({
           dataType: "fact",
-          sourcePersona: "friend",
+          sourcePersona: "Friend",
         }),
       })
     );
@@ -697,6 +723,8 @@ describe("Cross-Persona Validation", () => {
 
   it("does NOT queue validation when Ei learns item", async () => {
     state._personas["ei"] = {
+      id: "ei",
+      display_name: "Ei",
       entity: "system",
       aliases: ["ei"],
       traits: [],
@@ -711,7 +739,8 @@ describe("Cross-Persona Validation", () => {
     const request = createMockRequest({
       next_step: LLMNextStep.HandleHumanItemUpdate,
       data: {
-        personaName: "ei",
+        personaId: "ei",
+        personaDisplayName: "Ei",
         candidateType: "fact",
         isNewItem: true,
       },
@@ -731,6 +760,8 @@ describe("Cross-Persona Validation", () => {
 
   it("does NOT queue validation when persona has non-General group", async () => {
     state._personas["work-buddy"] = {
+      id: "work-buddy-id",
+      display_name: "Work Buddy",
       entity: "system",
       aliases: ["work-buddy"],
       group_primary: "work",
@@ -746,7 +777,8 @@ describe("Cross-Persona Validation", () => {
     const request = createMockRequest({
       next_step: LLMNextStep.HandleHumanItemUpdate,
       data: {
-        personaName: "work-buddy",
+        personaId: "work-buddy-id",
+        personaDisplayName: "Work Buddy",
         candidateType: "fact",
         isNewItem: true,
       },

@@ -62,7 +62,7 @@ function createMockInterface(): { interface: Ei_Interface; calls: string[]; reca
         recalledContent.push(content);
       },
       onHumanUpdated: () => calls.push("onHumanUpdated"),
-      onQueueStateChanged: (state: "idle" | "busy") => calls.push(`onQueueStateChanged:${state}`),
+      onQueueStateChanged: (state: "idle" | "busy" | "paused") => calls.push(`onQueueStateChanged:${state}`),
       onError: (error) => calls.push(`onError:${error.code}`),
       onCheckpointStart: () => calls.push("onCheckpointStart"),
       onCheckpointCreated: (index?: number) =>
@@ -88,7 +88,10 @@ function createMockStorage() {
 }
 
 function createTestPersona(overrides: Partial<PersonaEntity> = {}): PersonaEntity {
+  const name = (overrides.aliases?.[0] || "TestBot").toLowerCase();
   return {
+    id: `${name}-id`,
+    display_name: overrides.aliases?.[0] || "TestBot",
     entity: "system",
     aliases: ["TestBot"],
     short_description: "A test persona",
@@ -122,24 +125,27 @@ describe("Processor Event System", () => {
 
   it("fires onPersonaRemoved when archiving a persona", async () => {
     await processor.createPersona({ name: "TestBot", long_description: "A test persona" });
+    const personaId = await processor.resolvePersonaName("TestBot");
     mock.calls.length = 0;
-    await processor.archivePersona("TestBot");
+    await processor.archivePersona(personaId!);
     expect(mock.calls).toContain("onPersonaRemoved");
   });
 
   it("fires onPersonaUpdated when updating a persona", async () => {
     await processor.createPersona({ name: "TestBot", long_description: "A test persona" });
+    const personaId = await processor.resolvePersonaName("TestBot");
     mock.calls.length = 0;
-    await processor.updatePersona("TestBot", { short_description: "Updated" });
-    expect(mock.calls).toContain("onPersonaUpdated:TestBot");
+    await processor.updatePersona(personaId!, { short_description: "Updated" });
+    expect(mock.calls).toContain(`onPersonaUpdated:${personaId}`);
   });
 
   it("fires onMessageAdded and onMessageQueued when sending a message", async () => {
     await processor.createPersona({ name: "TestBot", long_description: "A test persona" });
+    const personaId = await processor.resolvePersonaName("TestBot");
     mock.calls.length = 0;
-    await processor.sendMessage("TestBot", "Hello!");
-    expect(mock.calls).toContain("onMessageAdded:TestBot");
-    expect(mock.calls).toContain("onMessageQueued:TestBot");
+    await processor.sendMessage(personaId!, "Hello!");
+    expect(mock.calls).toContain(`onMessageAdded:${personaId}`);
+    expect(mock.calls).toContain(`onMessageQueued:${personaId}`);
   });
 
   it("fires onHumanUpdated when upserting facts", async () => {
@@ -149,6 +155,8 @@ describe("Processor Event System", () => {
       description: "A test fact",
       sentiment: 0,
       last_updated: new Date().toISOString(),
+      validated: "none" as import("../../../src/core/types.js").ValidationLevel,
+      validated_date: new Date().toISOString(),
     });
     expect(mock.calls).toContain("onHumanUpdated");
   });
@@ -171,6 +179,8 @@ describe("Processor Event System", () => {
       description: "A test fact",
       sentiment: 0,
       last_updated: new Date().toISOString(),
+      validated: "none" as import("../../../src/core/types.js").ValidationLevel,
+      validated_date: new Date().toISOString(),
     });
     mock.calls.length = 0;
     await processor.removeDataItem("fact", "fact-1");
@@ -372,6 +382,12 @@ describe("Processor Heartbeat Scheduling", () => {
 
   it("queues heartbeat check after heartbeat_delay_ms elapses since last_activity", async () => {
     const oldActivity = new Date(Date.now() - 3600000).toISOString();
+    const testBotPersona = createTestPersona({
+      aliases: ["TestBot"],
+      heartbeat_delay_ms: 1800000,
+      last_activity: oldActivity,
+    });
+    
     storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
     storage.loadCheckpoint.mockResolvedValue({
       version: 1,
@@ -386,12 +402,8 @@ describe("Processor Heartbeat Scheduling", () => {
         last_activity: new Date().toISOString(),
       },
       personas: {
-        TestBot: {
-          entity: createTestPersona({
-            aliases: ["TestBot"],
-            heartbeat_delay_ms: 1800000,
-            last_activity: oldActivity,
-          }),
+        [testBotPersona.id]: {
+          entity: testBotPersona,
           messages: [],
         },
       },
@@ -402,7 +414,6 @@ describe("Processor Heartbeat Scheduling", () => {
     const processor = new Processor(mock.interface);
     await processor.start(storage);
     
-    // Pause queue to prevent processing before we can check pending_count
     await processor.abortCurrentOperation();
     await vi.advanceTimersByTimeAsync(200);
     
@@ -558,7 +569,7 @@ describe("Processor API Methods", () => {
       const list = await processor.getPersonaList();
       
       expect(list.length).toBeGreaterThanOrEqual(2);
-      const testBot = list.find(p => p.name === "TestBot");
+      const testBot = list.find(p => p.display_name === "TestBot");
       expect(testBot).toBeDefined();
       expect(testBot?.short_description).toBe("A test persona");
       expect(testBot?.is_paused).toBe(false);
@@ -567,7 +578,7 @@ describe("Processor API Methods", () => {
 
     it("includes Ei persona from bootstrap", async () => {
       const list = await processor.getPersonaList();
-      const ei = list.find(p => p.name.toLowerCase() === "ei");
+      const ei = list.find(p => p.display_name.toLowerCase() === "ei");
       expect(ei).toBeDefined();
     });
   });
@@ -575,15 +586,16 @@ describe("Processor API Methods", () => {
   describe("getPersona", () => {
     it("returns persona entity when found", async () => {
       await processor.createPersona({ name: "TestBot", long_description: "A test persona" });
+      const personaId = await processor.resolvePersonaName("TestBot");
       
-      const persona = await processor.getPersona("TestBot");
+      const persona = await processor.getPersona(personaId!);
       
       expect(persona).not.toBeNull();
       expect(persona?.long_description).toBe("A test persona");
     });
 
     it("returns null when persona not found", async () => {
-      const persona = await processor.getPersona("NonExistent");
+      const persona = await processor.getPersona("nonexistent-id");
       expect(persona).toBeNull();
     });
   });
@@ -595,7 +607,8 @@ describe("Processor API Methods", () => {
       await processor.createPersona({ name: "NewBot", long_description: "A new persona" });
       
       expect(mock.calls).toContain("onPersonaAdded");
-      const persona = await processor.getPersona("NewBot");
+      const personaId = await processor.resolvePersonaName("NewBot");
+      const persona = await processor.getPersona(personaId!);
       expect(persona).not.toBeNull();
     });
   });
@@ -603,12 +616,13 @@ describe("Processor API Methods", () => {
   describe("archivePersona", () => {
     it("archives persona and fires onPersonaRemoved", async () => {
       await processor.createPersona({ name: "ToArchive", long_description: "Will be archived" });
+      const personaId = await processor.resolvePersonaName("ToArchive");
       mock.calls.length = 0;
       
-      await processor.archivePersona("ToArchive");
+      await processor.archivePersona(personaId!);
       
       expect(mock.calls).toContain("onPersonaRemoved");
-      const persona = await processor.getPersona("ToArchive");
+      const persona = await processor.getPersona(personaId!);
       expect(persona?.is_archived).toBe(true);
     });
   });
@@ -616,13 +630,14 @@ describe("Processor API Methods", () => {
   describe("unarchivePersona", () => {
     it("unarchives persona and fires onPersonaAdded", async () => {
       await processor.createPersona({ name: "ToUnarchive", long_description: "Will be unarchived" });
-      await processor.archivePersona("ToUnarchive");
+      const personaId = await processor.resolvePersonaName("ToUnarchive");
+      await processor.archivePersona(personaId!);
       mock.calls.length = 0;
       
-      await processor.unarchivePersona("ToUnarchive");
+      await processor.unarchivePersona(personaId!);
       
       expect(mock.calls).toContain("onPersonaAdded");
-      const persona = await processor.getPersona("ToUnarchive");
+      const persona = await processor.getPersona(personaId!);
       expect(persona?.is_archived).toBe(false);
     });
   });
@@ -630,12 +645,13 @@ describe("Processor API Methods", () => {
   describe("deletePersona", () => {
     it("deletes persona and fires onPersonaRemoved", async () => {
       await processor.createPersona({ name: "ToDelete", long_description: "Will be deleted" });
+      const personaId = await processor.resolvePersonaName("ToDelete");
       mock.calls.length = 0;
       
-      await processor.deletePersona("ToDelete", false);
+      await processor.deletePersona(personaId!, false);
       
       expect(mock.calls).toContain("onPersonaRemoved");
-      const persona = await processor.getPersona("ToDelete");
+      const persona = await processor.getPersona(personaId!);
       expect(persona).toBeNull();
     });
   });
@@ -643,12 +659,13 @@ describe("Processor API Methods", () => {
   describe("updatePersona", () => {
     it("updates persona and fires onPersonaUpdated", async () => {
       await processor.createPersona({ name: "ToUpdate", long_description: "Original description" });
+      const personaId = await processor.resolvePersonaName("ToUpdate");
       mock.calls.length = 0;
       
-      await processor.updatePersona("ToUpdate", { short_description: "Updated description" });
+      await processor.updatePersona(personaId!, { short_description: "Updated description" });
       
-      expect(mock.calls).toContain("onPersonaUpdated:ToUpdate");
-      const persona = await processor.getPersona("ToUpdate");
+      expect(mock.calls).toContain(`onPersonaUpdated:${personaId}`);
+      const persona = await processor.getPersona(personaId!);
       expect(persona?.short_description).toBe("Updated description");
     });
   });
@@ -656,18 +673,20 @@ describe("Processor API Methods", () => {
   describe("sendMessage", () => {
     it("appends message and fires onMessageAdded and onMessageQueued", async () => {
       await processor.createPersona({ name: "ChatBot", long_description: "A chat persona" });
+      const personaId = await processor.resolvePersonaName("ChatBot");
       mock.calls.length = 0;
       
-      await processor.sendMessage("ChatBot", "Hello!");
+      await processor.sendMessage(personaId!, "Hello!");
       
-      expect(mock.calls).toContain("onMessageAdded:ChatBot");
-      expect(mock.calls).toContain("onMessageQueued:ChatBot");
+      expect(mock.calls).toContain(`onMessageAdded:${personaId}`);
+      expect(mock.calls).toContain(`onMessageQueued:${personaId}`);
     });
 
     it("queues response request for persona", async () => {
       await processor.createPersona({ name: "ChatBot", long_description: "A chat persona" });
+      const personaId = await processor.resolvePersonaName("ChatBot");
       
-      await processor.sendMessage("ChatBot", "Hello!");
+      await processor.sendMessage(personaId!, "Hello!");
       
       const status = await processor.getQueueStatus();
       expect(status.pending_count).toBeGreaterThan(0);
@@ -677,9 +696,10 @@ describe("Processor API Methods", () => {
   describe("getMessages", () => {
     it("returns messages for persona", async () => {
       await processor.createPersona({ name: "ChatBot", long_description: "A chat persona" });
-      await processor.sendMessage("ChatBot", "Hello!");
+      const personaId = await processor.resolvePersonaName("ChatBot");
+      await processor.sendMessage(personaId!, "Hello!");
       
-      const messages = await processor.getMessages("ChatBot");
+      const messages = await processor.getMessages(personaId!);
       
       expect(messages.length).toBeGreaterThan(0);
       const humanMsg = messages.find(m => m.role === "human");
@@ -742,7 +762,8 @@ describe("Processor API Methods", () => {
 
     it("returns correct pending_count", async () => {
       await processor.createPersona({ name: "QueueBot", long_description: "A bot for queue testing" });
-      await processor.sendMessage("QueueBot", "Message 1");
+      const personaId = await processor.resolvePersonaName("QueueBot");
+      await processor.sendMessage(personaId!, "Message 1");
       
       const status = await processor.getQueueStatus();
       expect(status.pending_count).toBeGreaterThan(0);
@@ -872,6 +893,10 @@ describe("Processor Visibility Filtering", () => {
   });
 
   it("Ei can see all non-archived personas", async () => {
+    const eiPersona = createTestPersona({ aliases: ["Ei"] });
+    const friendPersona = createTestPersona({ aliases: ["Friend"], short_description: "A friend" });
+    const archivedPersona = createTestPersona({ aliases: ["Archived"], is_archived: true });
+    
     storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
     storage.loadCheckpoint.mockResolvedValue({
       version: 1,
@@ -886,9 +911,9 @@ describe("Processor Visibility Filtering", () => {
         last_activity: new Date().toISOString(),
       },
       personas: {
-        ei: { entity: createTestPersona({ aliases: ["Ei"] }), messages: [] },
-        friend: { entity: createTestPersona({ aliases: ["Friend"], short_description: "A friend" }), messages: [] },
-        archived: { entity: createTestPersona({ aliases: ["Archived"], is_archived: true }), messages: [] },
+        [eiPersona.id]: { entity: eiPersona, messages: [] },
+        [friendPersona.id]: { entity: friendPersona, messages: [] },
+        [archivedPersona.id]: { entity: archivedPersona, messages: [] },
       },
       queue: [],
       settings: {},
@@ -897,11 +922,21 @@ describe("Processor Visibility Filtering", () => {
     
     const list = await processor.getPersonaList();
     
-    expect(list.find(p => p.name === "Friend")).toBeDefined();
-    expect(list.find(p => p.name === "Archived")).toBeDefined();
+    expect(list.find(p => p.display_name === "Friend")).toBeDefined();
+    expect(list.find(p => p.display_name === "Archived")).toBeDefined();
   });
 
   it("personas with group_primary can see each other", async () => {
+    const eiPersona = createTestPersona({ aliases: ["Ei"] });
+    const persona1Entity = createTestPersona({
+      aliases: ["Persona1"],
+      group_primary: "work",
+    });
+    const persona2Entity = createTestPersona({
+      aliases: ["Persona2"],
+      group_primary: "work",
+    });
+    
     storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
     storage.loadCheckpoint.mockResolvedValue({
       version: 1,
@@ -916,19 +951,13 @@ describe("Processor Visibility Filtering", () => {
         last_activity: new Date().toISOString(),
       },
       personas: {
-        ei: { entity: createTestPersona({ aliases: ["Ei"] }), messages: [] },
-        persona1: {
-          entity: createTestPersona({
-            aliases: ["Persona1"],
-            group_primary: "work",
-          }),
+        [eiPersona.id]: { entity: eiPersona, messages: [] },
+        [persona1Entity.id]: {
+          entity: persona1Entity,
           messages: [],
         },
-        persona2: {
-          entity: createTestPersona({
-            aliases: ["Persona2"],
-            group_primary: "work",
-          }),
+        [persona2Entity.id]: {
+          entity: persona2Entity,
           messages: [],
         },
       },
@@ -937,7 +966,7 @@ describe("Processor Visibility Filtering", () => {
     });
     await processor.start(storage);
     
-    const persona1 = await processor.getPersona("Persona1");
+    const persona1 = await processor.getPersona(persona1Entity.id);
     expect(persona1?.group_primary).toBe("work");
   });
 });
@@ -960,12 +989,13 @@ describe("Processor Context Window", () => {
 
   it("setMessageContextStatus updates a message's context status", async () => {
     await processor.createPersona({ name: "StatusBot", long_description: "A bot for status testing" });
-    await processor.sendMessage("StatusBot", "Test message");
+    const personaId = await processor.resolvePersonaName("StatusBot");
+    await processor.sendMessage(personaId!, "Test message");
     
-    const messages = await processor.getMessages("StatusBot");
+    const messages = await processor.getMessages(personaId!);
     const messageId = messages.find(m => m.role === "human")?.id ?? "";
     
-    await processor.setMessageContextStatus("StatusBot", messageId, "always" as import("../../../src/core/types.js").ContextStatus);
+    await processor.setMessageContextStatus(personaId!, messageId, "always" as import("../../../src/core/types.js").ContextStatus);
   });
 });
 
@@ -1191,6 +1221,8 @@ describe("Processor Human Extraction Throttling", () => {
   });
 
   it("updates lastSeeded timestamps after queueing extraction", async () => {
+    const eiPersona = createTestPersona({ id: "ei", aliases: ["Ei", "ei"] });
+    
     storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
     storage.loadCheckpoint.mockResolvedValue({
       version: 1,
@@ -1205,8 +1237,8 @@ describe("Processor Human Extraction Throttling", () => {
         last_activity: new Date().toISOString(),
       },
       personas: {
-        ei: {
-          entity: createTestPersona({ aliases: ["Ei", "ei"] }),
+        [eiPersona.id]: {
+          entity: eiPersona,
           messages: [
             { id: "1", role: "system", content: "Welcome", timestamp: new Date(Date.now() - 60000).toISOString(), read: true, context_status: "default" },
           ],
@@ -1243,6 +1275,8 @@ describe("Processor Message Recall", () => {
   });
 
   it("recallPendingMessages returns empty string when no pending messages", async () => {
+    const testBotPersona = createTestPersona();
+    
     storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
     storage.loadCheckpoint.mockResolvedValue({
       version: 1,
@@ -1257,8 +1291,8 @@ describe("Processor Message Recall", () => {
         last_activity: new Date().toISOString(),
       },
       personas: {
-        testbot: {
-          entity: createTestPersona(),
+        [testBotPersona.id]: {
+          entity: testBotPersona,
           messages: [
             { id: "1", role: "human", content: "Already read", timestamp: new Date().toISOString(), read: true, context_status: "default" },
           ],
@@ -1270,12 +1304,14 @@ describe("Processor Message Recall", () => {
 
     await processor.start(storage);
     
-    const recalled = await processor.recallPendingMessages("TestBot");
+    const recalled = await processor.recallPendingMessages(testBotPersona.id);
     
     expect(recalled).toBe("");
   });
 
   it("recallPendingMessages returns content of pending messages and fires onMessageRecalled", async () => {
+    const testBotPersona = createTestPersona();
+    
     storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
     storage.loadCheckpoint.mockResolvedValue({
       version: 1,
@@ -1290,8 +1326,8 @@ describe("Processor Message Recall", () => {
         last_activity: new Date().toISOString(),
       },
       personas: {
-        testbot: {
-          entity: createTestPersona(),
+        [testBotPersona.id]: {
+          entity: testBotPersona,
           messages: [
             { id: "1", role: "human", content: "First pending", timestamp: new Date().toISOString(), read: false, context_status: "default" },
             { id: "2", role: "human", content: "Second pending", timestamp: new Date().toISOString(), read: false, context_status: "default" },
@@ -1304,15 +1340,17 @@ describe("Processor Message Recall", () => {
 
     await processor.start(storage);
     
-    const recalled = await processor.recallPendingMessages("TestBot");
+    const recalled = await processor.recallPendingMessages(testBotPersona.id);
     
     expect(recalled).toContain("First pending");
     expect(recalled).toContain("Second pending");
-    expect(mock.calls).toContain("onMessageRecalled:TestBot");
+    expect(mock.calls).toContain(`onMessageRecalled:${testBotPersona.id}`);
     expect(mock.recalledContent[0]).toContain("First pending");
   });
 
   it("recallPendingMessages removes messages from history", async () => {
+    const testBotPersona = createTestPersona();
+    
     storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
     storage.loadCheckpoint.mockResolvedValue({
       version: 1,
@@ -1327,8 +1365,8 @@ describe("Processor Message Recall", () => {
         last_activity: new Date().toISOString(),
       },
       personas: {
-        testbot: {
-          entity: createTestPersona(),
+        [testBotPersona.id]: {
+          entity: testBotPersona,
           messages: [
             { id: "1", role: "system", content: "Hello!", timestamp: new Date().toISOString(), read: true, context_status: "default" },
             { id: "2", role: "human", content: "Pending message", timestamp: new Date().toISOString(), read: false, context_status: "default" },
@@ -1341,14 +1379,16 @@ describe("Processor Message Recall", () => {
 
     await processor.start(storage);
     
-    await processor.recallPendingMessages("TestBot");
+    await processor.recallPendingMessages(testBotPersona.id);
     
-    const messages = await processor.getMessages("TestBot");
+    const messages = await processor.getMessages(testBotPersona.id);
     expect(messages).toHaveLength(1);
     expect(messages[0].role).toBe("system");
   });
 
   it("human messages start with read: false", async () => {
+    const testBotPersona = createTestPersona();
+    
     storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
     storage.loadCheckpoint.mockResolvedValue({
       version: 1,
@@ -1363,8 +1403,8 @@ describe("Processor Message Recall", () => {
         last_activity: new Date().toISOString(),
       },
       personas: {
-        testbot: {
-          entity: createTestPersona(),
+        [testBotPersona.id]: {
+          entity: testBotPersona,
           messages: [],
         },
       },
@@ -1374,9 +1414,9 @@ describe("Processor Message Recall", () => {
 
     await processor.start(storage);
     
-    await processor.sendMessage("TestBot", "New message");
+    await processor.sendMessage(testBotPersona.id, "New message");
     
-    const messages = await processor.getMessages("TestBot");
+    const messages = await processor.getMessages(testBotPersona.id);
     const humanMessage = messages.find(m => m.role === "human");
     expect(humanMessage?.read).toBe(false);
   });
@@ -1398,6 +1438,8 @@ describe("Processor markMessageRead", () => {
   });
 
   it("marks a message as read", async () => {
+    const testBotPersona = createTestPersona();
+    
     storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
     storage.loadCheckpoint.mockResolvedValue({
       version: 1,
@@ -1412,8 +1454,8 @@ describe("Processor markMessageRead", () => {
         last_activity: new Date().toISOString(),
       },
       personas: {
-        testbot: {
-          entity: createTestPersona(),
+        [testBotPersona.id]: {
+          entity: testBotPersona,
           messages: [
             { id: "msg-1", role: "system", content: "Hello!", timestamp: new Date().toISOString(), read: false, context_status: "default" },
           ],
@@ -1425,14 +1467,16 @@ describe("Processor markMessageRead", () => {
 
     await processor.start(storage);
     
-    const result = await processor.markMessageRead("TestBot", "msg-1");
+    const result = await processor.markMessageRead(testBotPersona.id, "msg-1");
     
     expect(result).toBe(true);
-    const messages = await processor.getMessages("TestBot");
+    const messages = await processor.getMessages(testBotPersona.id);
     expect(messages[0].read).toBe(true);
   });
 
   it("returns false for non-existent message", async () => {
+    const testBotPersona = createTestPersona();
+    
     storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
     storage.loadCheckpoint.mockResolvedValue({
       version: 1,
@@ -1447,8 +1491,8 @@ describe("Processor markMessageRead", () => {
         last_activity: new Date().toISOString(),
       },
       personas: {
-        testbot: {
-          entity: createTestPersona(),
+        [testBotPersona.id]: {
+          entity: testBotPersona,
           messages: [],
         },
       },
@@ -1458,7 +1502,7 @@ describe("Processor markMessageRead", () => {
 
     await processor.start(storage);
     
-    const result = await processor.markMessageRead("TestBot", "nonexistent");
+    const result = await processor.markMessageRead(testBotPersona.id, "nonexistent");
     
     expect(result).toBe(false);
   });

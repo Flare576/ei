@@ -59,6 +59,8 @@ function createMockStateManager() {
 
   const personas: PersonaEntity[] = [
     {
+      id: "ei",
+      display_name: "Ei",
       entity: "system",
       aliases: ["ei", "Ei"],
       traits: [],
@@ -70,6 +72,8 @@ function createMockStateManager() {
       last_activity: "",
     },
     {
+      id: "friend-id",
+      display_name: "Friend",
       entity: "system",
       aliases: ["friend", "Friend"],
       traits: [],
@@ -109,7 +113,8 @@ describe("Scan Orchestrators (Step 1)", () => {
   beforeEach(() => {
     state = createMockStateManager();
     context = {
-      personaName: "ei",
+      personaId: "ei",
+      personaDisplayName: "Ei",
       messages_context: [createMessage("1", "Earlier message")],
       messages_analyze: [createMessage("2", "Recent message to analyze")],
     };
@@ -121,7 +126,7 @@ describe("Scan Orchestrators (Step 1)", () => {
       queueFactScan(context, state as any);
 
       expect(buildHumanFactScanPrompt).toHaveBeenCalledWith({
-        persona_name: "ei",
+        persona_name: "Ei",
         messages_context: context.messages_context,
         messages_analyze: context.messages_analyze,
       });
@@ -133,7 +138,8 @@ describe("Scan Orchestrators (Step 1)", () => {
         user: "fact-usr",
         next_step: LLMNextStep.HandleHumanFactScan,
         data: {
-          personaName: "ei",
+          personaId: "ei",
+          personaDisplayName: "Ei",
           analyze_from_timestamp: context.messages_analyze[0].timestamp,
         },
       });
@@ -145,7 +151,7 @@ describe("Scan Orchestrators (Step 1)", () => {
       queueTraitScan(context, state as any);
 
       expect(buildHumanTraitScanPrompt).toHaveBeenCalledWith({
-        persona_name: "ei",
+        persona_name: "Ei",
         messages_context: context.messages_context,
         messages_analyze: context.messages_analyze,
       });
@@ -163,7 +169,7 @@ describe("Scan Orchestrators (Step 1)", () => {
       queueTopicScan(context, state as any);
 
       expect(buildHumanTopicScanPrompt).toHaveBeenCalledWith({
-        persona_name: "ei",
+        persona_name: "Ei",
         messages_context: context.messages_context,
         messages_analyze: context.messages_analyze,
       });
@@ -182,7 +188,7 @@ describe("Scan Orchestrators (Step 1)", () => {
 
       expect(state.persona_getAll).toHaveBeenCalled();
       expect(buildHumanPersonScanPrompt).toHaveBeenCalledWith({
-        persona_name: "ei",
+        persona_name: "Ei",
         messages_context: context.messages_context,
         messages_analyze: context.messages_analyze,
         known_persona_names: ["ei", "Ei", "friend", "Friend"],
@@ -218,7 +224,8 @@ describe("queueItemMatch (Step 2)", () => {
   beforeEach(() => {
     state = createMockStateManager();
     context = {
-      personaName: "ei",
+      personaId: "ei",
+      personaDisplayName: "Ei",
       messages_context: [createMessage("1", "context")],
       messages_analyze: [createMessage("2", "analyze")],
     };
@@ -325,7 +332,8 @@ describe("queueItemMatch (Step 2)", () => {
       expect.objectContaining({
         data: expect.objectContaining({
           analyze_from_timestamp: context.messages_analyze[0].timestamp,
-          personaName: "ei",
+          personaId: "ei",
+          personaDisplayName: "Ei",
         }),
       })
     );
@@ -343,7 +351,8 @@ describe("queueItemUpdate (Step 3)", () => {
   it("queues update for new item (null matched_guid)", () => {
     const matchResult = { matched_guid: null };
     const context = {
-      personaName: "ei",
+      personaId: "ei",
+      personaDisplayName: "Ei",
       messages_context: [createMessage("1", "context")],
       messages_analyze: [createMessage("2", "analyze")],
       itemName: "NewFact",
@@ -357,7 +366,7 @@ describe("queueItemUpdate (Step 3)", () => {
       existing_item: null,
       messages_context: context.messages_context,
       messages_analyze: context.messages_analyze,
-      persona_name: "ei",
+      persona_name: "Ei",
       new_item_name: "NewFact",
       new_item_value: "New value",
     });
@@ -376,7 +385,8 @@ describe("queueItemUpdate (Step 3)", () => {
   it("queues update for existing fact match by GUID", () => {
     const matchResult = { matched_guid: "f1" };
     const context = {
-      personaName: "ei",
+      personaId: "ei",
+      personaDisplayName: "Ei",
       messages_context: [],
       messages_analyze: [createMessage("1", "analyze")],
       itemName: "Birthday",
@@ -393,7 +403,7 @@ describe("queueItemUpdate (Step 3)", () => {
       }),
       messages_context: [],
       messages_analyze: context.messages_analyze,
-      persona_name: "ei",
+      persona_name: "Ei",
       new_item_name: undefined,
       new_item_value: undefined,
     });
@@ -411,7 +421,8 @@ describe("queueItemUpdate (Step 3)", () => {
   it("queues update for existing trait match by GUID", () => {
     const matchResult = { matched_guid: "t1" };
     const context = {
-      personaName: "ei",
+      personaId: "ei",
+      personaDisplayName: "Ei",
       messages_context: [],
       messages_analyze: [createMessage("1", "analyze")],
       itemName: "Curiosity",
@@ -431,7 +442,8 @@ describe("queueItemUpdate (Step 3)", () => {
   it("queues update for existing topic match by GUID", () => {
     const matchResult = { matched_guid: "top1" };
     const context = {
-      personaName: "ei",
+      personaId: "ei",
+      personaDisplayName: "Ei",
       messages_context: [],
       messages_analyze: [createMessage("1", "analyze")],
       itemName: "AI",
@@ -450,7 +462,8 @@ describe("queueItemUpdate (Step 3)", () => {
   it("queues update for existing person match by GUID", () => {
     const matchResult = { matched_guid: "p1" };
     const context = {
-      personaName: "ei",
+      personaId: "ei",
+      personaDisplayName: "Ei",
       messages_context: [],
       messages_analyze: [createMessage("1", "analyze")],
       itemName: "Alice",
@@ -469,7 +482,8 @@ describe("queueItemUpdate (Step 3)", () => {
   it("handles match to non-existent GUID gracefully (treats as new)", () => {
     const matchResult = { matched_guid: "non-existent-guid" };
     const context = {
-      personaName: "ei",
+      personaId: "ei",
+      personaDisplayName: "Ei",
       messages_context: [],
       messages_analyze: [createMessage("1", "analyze")],
       itemName: "NonExistent",
@@ -496,7 +510,8 @@ describe("Extraction Pipeline Integration", () => {
 
   it("full pipeline: scan -> match -> update chain carries timestamp", () => {
     const context: ExtractionContext = {
-      personaName: "ei",
+      personaId: "ei",
+      personaDisplayName: "Ei",
       messages_context: [createMessage("ctx1", "Earlier conversation")],
       messages_analyze: [createMessage("analyze1", "I live in Chicago")],
     };
@@ -505,7 +520,8 @@ describe("Extraction Pipeline Integration", () => {
 
     const scanCall = state.queue_enqueue.mock.calls[0][0];
     expect(scanCall.data.analyze_from_timestamp).toBe(context.messages_analyze[0].timestamp);
-    expect(scanCall.data.personaName).toBe("ei");
+    expect(scanCall.data.personaId).toBe("ei");
+    expect(scanCall.data.personaDisplayName).toBe("Ei");
 
     vi.clearAllMocks();
     const candidate = { type_of_fact: "Location", value_of_fact: "Chicago", reason: "User mentioned" };
@@ -513,7 +529,8 @@ describe("Extraction Pipeline Integration", () => {
 
     const matchCall = state.queue_enqueue.mock.calls[0][0];
     expect(matchCall.data.analyze_from_timestamp).toBe(context.messages_analyze[0].timestamp);
-    expect(matchCall.data.personaName).toBe("ei");
+    expect(matchCall.data.personaId).toBe("ei");
+    expect(matchCall.data.personaDisplayName).toBe("Ei");
 
     vi.clearAllMocks();
     const matchResult = { matched_guid: null };

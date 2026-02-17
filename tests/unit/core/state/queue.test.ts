@@ -219,7 +219,7 @@ describe("QueueState", () => {
 
   describe("clearPersonaResponses", () => {
     const makeRequestForPersona = (
-      personaName: string,
+      personaId: string,
       nextStep: LLMNextStep = LLMNextStep.HandlePersonaResponse
     ): Omit<LLMRequest, "id" | "created_at" | "attempts"> => ({
       type: LLMRequestType.Response,
@@ -227,7 +227,7 @@ describe("QueueState", () => {
       system: "System prompt",
       user: "User prompt",
       next_step: nextStep,
-      data: { personaName },
+      data: { personaId },
     });
 
     it("removes requests matching personaName and nextStep", () => {

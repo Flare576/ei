@@ -14,7 +14,7 @@ describe("ensureAgentPersona", () => {
 
   beforeEach(() => {
     mockStateManager = {
-      persona_get: vi.fn().mockReturnValue(null),
+      persona_getByName: vi.fn().mockReturnValue(null),
       persona_add: vi.fn(),
     };
     mockInterface = {
@@ -30,6 +30,8 @@ describe("ensureAgentPersona", () => {
 
   it("returns existing persona if found", async () => {
     const existingPersona: PersonaEntity = {
+      id: "build-id",
+      display_name: "build",
       entity: "system",
       aliases: ["build"],
       short_description: "Existing persona",
@@ -42,7 +44,7 @@ describe("ensureAgentPersona", () => {
       last_activity: "2026-01-01T00:00:00.000Z",
     };
 
-    mockStateManager.persona_get = vi.fn().mockReturnValue(existingPersona);
+    mockStateManager.persona_getByName = vi.fn().mockReturnValue(existingPersona);
 
     const result = await ensureAgentPersona("build", {
       stateManager: mockStateManager as StateManager,
@@ -63,8 +65,9 @@ describe("ensureAgentPersona", () => {
     });
 
     expect(mockStateManager.persona_add).toHaveBeenCalledWith(
-      "build",
       expect.objectContaining({
+        id: expect.any(String),
+        display_name: "build",
         entity: "system",
         aliases: ["build"],
         short_description: "The main coding agent",
@@ -176,7 +179,7 @@ describe("ensureAllAgentPersonas", () => {
 
   beforeEach(() => {
     mockStateManager = {
-      persona_get: vi.fn().mockReturnValue(null),
+      persona_getByName: vi.fn().mockReturnValue(null),
       persona_add: vi.fn(),
     };
     mockInterface = {
@@ -209,6 +212,8 @@ describe("ensureAllAgentPersonas", () => {
 
   it("returns existing personas without creating duplicates", async () => {
     const existingPersona: PersonaEntity = {
+      id: "build-id",
+      display_name: "build",
       entity: "system",
       aliases: ["build"],
       short_description: "Existing",
@@ -221,7 +226,7 @@ describe("ensureAllAgentPersonas", () => {
       last_activity: "2026-01-01T00:00:00.000Z",
     };
 
-    mockStateManager.persona_get = vi.fn().mockImplementation((name: string) =>
+    mockStateManager.persona_getByName = vi.fn().mockImplementation((name: string) =>
       name === "build" ? existingPersona : null
     );
 
@@ -238,8 +243,10 @@ describe("ensureAllAgentPersonas", () => {
     expect(result.get("build")).toBe(existingPersona);
     expect(mockStateManager.persona_add).toHaveBeenCalledTimes(1);
     expect(mockStateManager.persona_add).toHaveBeenCalledWith(
-      "sisyphus",
-      expect.anything()
+      expect.objectContaining({
+        id: expect.any(String),
+        display_name: "sisyphus",
+      })
     );
   });
 

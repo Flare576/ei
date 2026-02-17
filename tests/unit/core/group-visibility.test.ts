@@ -47,6 +47,8 @@ function createMockStateManager(options: {
   const personas: Record<string, PersonaEntity> = {};
   for (const [name, partial] of Object.entries(options.personas ?? {})) {
     personas[name] = {
+      id: `${name.toLowerCase()}-id`,
+      display_name: name,
       entity: "system",
       aliases: [name],
       traits: [],
@@ -88,8 +90,9 @@ function createMockStateManager(options: {
     human_quote_add: vi.fn((quote: Quote) => human.quotes.push(quote)),
     human_quote_update: vi.fn(),
     human_quote_getForMessage: vi.fn(() => []),
-    persona_get: vi.fn((name: string) => personas[name] ?? null),
-    persona_add: vi.fn((name: string, entity: PersonaEntity) => { personas[name] = entity; }),
+    persona_getById: vi.fn((id: string) => Object.values(personas).find(p => p.id === id) ?? null),
+    persona_getByName: vi.fn((name: string) => Object.values(personas).find(p => p.display_name === name || p.aliases?.includes(name)) ?? null),
+    persona_add: vi.fn((entity: PersonaEntity) => { personas[entity.id] = entity; }),
     persona_update: vi.fn(),
     messages_get: vi.fn((name: string) => messages[name] ?? []),
     queue_enqueue: vi.fn(),
@@ -100,7 +103,8 @@ function createMockStateManager(options: {
 }
 
 function createItemUpdateResponse(options: {
-  personaName: string;
+  personaId: string;
+  personaDisplayName: string;
   candidateType: "fact" | "trait" | "topic" | "person";
   isNewItem: boolean;
   existingItemId?: string;
@@ -120,7 +124,8 @@ function createItemUpdateResponse(options: {
       user: "",
       next_step: LLMNextStep.HandleHumanItemUpdate,
       data: {
-        personaName: options.personaName,
+        personaId: options.personaId,
+        personaDisplayName: options.personaDisplayName,
         candidateType: options.candidateType,
         isNewItem: options.isNewItem,
         existingItemId: options.existingItemId,
@@ -139,7 +144,8 @@ describe("Group Visibility", () => {
       });
 
       const response = createItemUpdateResponse({
-        personaName: "Frodo",
+        personaId: "frodo-id",
+    personaDisplayName: "Frodo",
         candidateType: "trait",
         isNewItem: true,
         result: {
@@ -178,7 +184,8 @@ describe("Group Visibility", () => {
       });
 
       const response = createItemUpdateResponse({
-        personaName: "Hermit",
+        personaId: "hermit-id",
+        personaDisplayName: "Hermit",
         candidateType: "trait",
         isNewItem: false,
         existingItemId: "trait-1",
@@ -219,7 +226,8 @@ describe("Group Visibility", () => {
       });
 
       const response = createItemUpdateResponse({
-        personaName: "Frodo",
+        personaId: "frodo-id",
+        personaDisplayName: "Frodo",
         candidateType: "trait",
         isNewItem: false,
         existingItemId: "trait-1",
@@ -252,12 +260,13 @@ describe("Group Visibility", () => {
       const state = createMockStateManager({
         human: { facts: [existingFact] },
         personas: {
-          Ei: { aliases: ["Ei"], group_primary: "General", groups_visible: [] },
+          Ei: { id: "ei", aliases: ["Ei"], group_primary: null, groups_visible: [] },
         },
       });
 
       const response = createItemUpdateResponse({
-        personaName: "Ei",
+        personaId: "ei",
+        personaDisplayName: "Ei",
         candidateType: "fact",
         isNewItem: false,
         existingItemId: "fact-1",
@@ -271,8 +280,9 @@ describe("Group Visibility", () => {
       await handlers[LLMNextStep.HandleHumanItemUpdate](response, state as any);
 
       const fact = state.human_fact_upsert.mock.calls[0][0];
-      expect(fact.persona_groups).toContain("Fellowship");
-      expect(fact.persona_groups).toContain("General");
+      // Ei has no group_primary (null), so existing groups are preserved unchanged
+      // mergeGroups returns existing when personaGroup is null
+      expect(fact.persona_groups).toEqual(["Fellowship"]);
     });
   });
 
@@ -285,7 +295,8 @@ describe("Group Visibility", () => {
       });
 
       const response = createItemUpdateResponse({
-        personaName: "Hermit",
+        personaId: "hermit-id",
+        personaDisplayName: "Hermit",
         candidateType: "topic",
         isNewItem: true,
         result: {
@@ -313,7 +324,8 @@ describe("Group Visibility", () => {
       });
 
       const response = createItemUpdateResponse({
-        personaName: "Frodo",
+        personaId: "frodo-id",
+        personaDisplayName: "Frodo",
         candidateType: "person",
         isNewItem: true,
         result: {
@@ -343,7 +355,8 @@ describe("Group Visibility", () => {
       });
 
       const response = createItemUpdateResponse({
-        personaName: "Frodo",
+        personaId: "frodo-id",
+    personaDisplayName: "Frodo",
         candidateType: "trait",
         isNewItem: true,
         result: {},
