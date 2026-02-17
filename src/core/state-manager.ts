@@ -115,70 +115,74 @@ export class StateManager {
     return this.personaState.getAll();
   }
 
-  persona_get(name: string): PersonaEntity | null {
-    return this.personaState.get(name);
+  persona_getById(personaId: string): PersonaEntity | null {
+    return this.personaState.getById(personaId);
   }
 
-  persona_add(name: string, entity: PersonaEntity): void {
-    this.personaState.add(name, entity);
+  persona_getByName(nameOrAlias: string): PersonaEntity | null {
+    return this.personaState.getByName(nameOrAlias);
   }
 
-  persona_update(name: string, updates: Partial<PersonaEntity>): boolean {
-    return this.personaState.update(name, updates);
+  persona_add(entity: PersonaEntity): void {
+    this.personaState.add(entity);
   }
 
-  persona_archive(name: string): boolean {
-    return this.personaState.archive(name);
+  persona_update(personaId: string, updates: Partial<PersonaEntity>): boolean {
+    return this.personaState.update(personaId, updates);
   }
 
-  persona_unarchive(name: string): boolean {
-    return this.personaState.unarchive(name);
+  persona_archive(personaId: string): boolean {
+    return this.personaState.archive(personaId);
   }
 
-  persona_delete(name: string): boolean {
-    return this.personaState.delete(name);
+  persona_unarchive(personaId: string): boolean {
+    return this.personaState.unarchive(personaId);
   }
 
-  persona_setContextBoundary(name: string, timestamp: string | null): void {
-    this.personaState.update(name, {
+  persona_delete(personaId: string): boolean {
+    return this.personaState.delete(personaId);
+  }
+
+  persona_setContextBoundary(personaId: string, timestamp: string | null): void {
+    this.personaState.update(personaId, {
       context_boundary: timestamp ?? undefined,
     });
   }
 
-  messages_get(personaName: string): Message[] {
-    return this.personaState.messages_get(personaName);
+  messages_get(personaId: string): Message[] {
+    return this.personaState.messages_get(personaId);
   }
 
-  messages_append(personaName: string, message: Message): void {
-    this.personaState.messages_append(personaName, message);
+  messages_append(personaId: string, message: Message): void {
+    this.personaState.messages_append(personaId, message);
   }
 
   messages_setContextStatus(
-    personaName: string,
+    personaId: string,
     messageId: string,
     status: ContextStatus
   ): boolean {
-    return this.personaState.messages_setContextStatus(personaName, messageId, status);
+    return this.personaState.messages_setContextStatus(personaId, messageId, status);
   }
 
-  messages_markRead(personaName: string, messageId: string): boolean {
-    return this.personaState.messages_markRead(personaName, messageId);
+  messages_markRead(personaId: string, messageId: string): boolean {
+    return this.personaState.messages_markRead(personaId, messageId);
   }
 
-  messages_markPendingAsRead(personaName: string): number {
-    return this.personaState.messages_markPendingAsRead(personaName);
+  messages_markPendingAsRead(personaId: string): number {
+    return this.personaState.messages_markPendingAsRead(personaId);
   }
 
-  messages_countUnread(personaName: string): number {
-    return this.personaState.messages_countUnread(personaName);
+  messages_countUnread(personaId: string): number {
+    return this.personaState.messages_countUnread(personaId);
   }
 
-  messages_markAllRead(personaName: string): number {
-    return this.personaState.messages_markAllRead(personaName);
+  messages_markAllRead(personaId: string): number {
+    return this.personaState.messages_markAllRead(personaId);
   }
 
-  messages_remove(personaName: string, messageIds: string[]): Message[] {
-    return this.personaState.messages_remove(personaName, messageIds);
+  messages_remove(personaId: string, messageIds: string[]): Message[] {
+    return this.personaState.messages_remove(personaId, messageIds);
   }
 
   queue_enqueue(request: Omit<LLMRequest, "id" | "created_at" | "attempts">): string {
@@ -210,8 +214,8 @@ export class StateManager {
     this.queueState.clearValidations(ids);
   }
 
-  queue_clearPersonaResponses(personaName: string, nextStep: string): string[] {
-    return this.queueState.clearPersonaResponses(personaName, nextStep);
+  queue_clearPersonaResponses(personaId: string, nextStep: string): string[] {
+    return this.queueState.clearPersonaResponses(personaId, nextStep);
   }
 
   queue_length(): number {

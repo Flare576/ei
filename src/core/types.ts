@@ -67,7 +67,7 @@ export interface DataItemBase {
   description: string;
   sentiment: number;
   last_updated: string;
-  learned_by?: string;
+  learned_by?: string;           // Persona ID that learned this item
   persona_groups?: string[];
   embedding?: number[];
 }
@@ -119,7 +119,7 @@ export interface Quote {
   data_item_ids: string[];       // FK[] to DataItemBase.id
   persona_groups: string[];      // Visibility groups
   text: string;                  // The quote content
-  speaker: "human" | string;     // Who said it (persona name or "human")
+  speaker: "human" | string;     // Who said it (persona ID or "human")
   timestamp: string;             // ISO timestamp (from original message)
   start: number | null;          // Character offset in message (null = can't highlight)
   end: number | null;            // Character offset in message (null = can't highlight)
@@ -223,8 +223,10 @@ export interface HumanEntity {
 }
 
 export interface PersonaEntity {
+  id: string;                    // UUID (or "ei" for built-in Ei persona)
+  display_name: string;          // What shows in UI (user's chosen name)
   entity: "system";
-  aliases?: string[];
+  aliases?: string[];            // For fuzzy matching (user types "/persona Bob")
   short_description?: string;
   long_description?: string;
   model?: string;
@@ -317,7 +319,8 @@ export interface LLMResponse {
 // =============================================================================
 
 export interface PersonaSummary {
-  name: string;
+  id: string;
+  display_name: string;
   aliases: string[];
   short_description?: string;
   is_paused: boolean;
@@ -358,11 +361,11 @@ export interface EiError {
 export interface Ei_Interface {
   onPersonaAdded?: () => void;
   onPersonaRemoved?: () => void;
-  onPersonaUpdated?: (personaName: string) => void;
-  onMessageAdded?: (personaName: string) => void;
-  onMessageRecalled?: (personaName: string, content: string) => void;
-  onMessageProcessing?: (personaName: string) => void;
-  onMessageQueued?: (personaName: string) => void;
+  onPersonaUpdated?: (personaId: string) => void;
+  onMessageAdded?: (personaId: string) => void;
+  onMessageRecalled?: (personaId: string, content: string) => void;
+  onMessageProcessing?: (personaId: string) => void;
+  onMessageQueued?: (personaId: string) => void;
   onHumanUpdated?: () => void;
   onQuoteAdded?: () => void;
   onQuoteUpdated?: () => void;
@@ -374,7 +377,7 @@ export interface Ei_Interface {
   onCheckpointRestored?: (index: number) => void;
   onCheckpointDeleted?: (index: number) => void;
   onOneShotReturned?: (guid: string, content: string) => void;
-  onContextBoundaryChanged?: (personaName: string) => void;
+  onContextBoundaryChanged?: (personaId: string) => void;
 }
 
 // =============================================================================

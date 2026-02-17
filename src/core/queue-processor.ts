@@ -4,8 +4,8 @@ import { hydratePromptPlaceholders } from "../prompts/message-utils.js";
 
 type QueueProcessorState = "idle" | "busy";
 type ResponseCallback = (response: LLMResponse) => Promise<void>;
-type MessageFetcher = (personaName: string) => ChatMessage[];
-type RawMessageFetcher = (personaName: string) => Message[];
+type MessageFetcher = (personaId: string) => ChatMessage[];
+type RawMessageFetcher = (personaId: string) => Message[];
 
 export interface QueueProcessorStartOptions {
   accounts?: ProviderAccount[];
@@ -73,9 +73,9 @@ export class QueueProcessor {
     let messages: ChatMessage[] = [];
     
     if (request.type === "response" as LLMRequestType) {
-      const personaName = request.data.personaName as string | undefined;
-      if (personaName && this.currentMessageFetcher) {
-        messages = this.currentMessageFetcher(personaName);
+      const personaId = request.data.personaId as string | undefined;
+      if (personaId && this.currentMessageFetcher) {
+        messages = this.currentMessageFetcher(personaId);
       }
     }
 
@@ -83,16 +83,16 @@ export class QueueProcessor {
     let hydratedUser = request.user;
     
     if (this.currentRawMessageFetcher) {
-      const personaName = request.data.personaName as string | undefined;
-      if (personaName) {
-        const rawMessages = this.currentRawMessageFetcher(personaName);
+      const personaId = request.data.personaId as string | undefined;
+      if (personaId) {
+        const rawMessages = this.currentRawMessageFetcher(personaId);
         const messageMap = new Map<string, Message>();
         for (const msg of rawMessages) {
           messageMap.set(msg.id, msg);
         }
         
         const placeholderCount = (request.user.match(/\[mid:[^\]]+\]/g) || []).length;
-        console.log(`[QueueProcessor] Hydrating ${placeholderCount} placeholders with ${messageMap.size} messages for ${personaName}`);
+        console.log(`[QueueProcessor] Hydrating ${placeholderCount} placeholders with ${messageMap.size} messages for ${personaId}`);
         
         hydratedSystem = hydratePromptPlaceholders(request.system, messageMap);
         hydratedUser = hydratePromptPlaceholders(request.user, messageMap);

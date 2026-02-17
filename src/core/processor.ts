@@ -179,10 +179,12 @@ export class Processor {
 
     const eiEntity: PersonaEntity = {
       ...EI_PERSONA_DEFINITION,
+      id: "ei",
+      display_name: "Ei",
       last_updated: new Date().toISOString(),
       last_activity: new Date().toISOString(),
     };
-    this.stateManager.persona_add("ei", eiEntity);
+    this.stateManager.persona_add(eiEntity);
 
     const welcomeMessage: Message = {
       id: crypto.randomUUID(),
@@ -192,10 +194,10 @@ export class Processor {
       read: false,
       context_status: ContextStatusEnum.Always,
     };
-    this.stateManager.messages_append("ei", welcomeMessage);
+    this.stateManager.messages_append(eiEntity.id, welcomeMessage);
 
     this.interface.onPersonaAdded?.();
-    this.interface.onMessageAdded?.("ei");
+    this.interface.onMessageAdded?.(eiEntity.id);
   }
 
   async stop(): Promise<void> {
@@ -242,20 +244,22 @@ export class Processor {
       if (this.queueProcessor.getState() === "idle") {
         const request = this.stateManager.queue_peekHighest();
         if (request) {
-          const personaName = request.data.personaName as string | undefined;
-          const personaSuffix = personaName ? ` [${personaName}]` : "";
+          const personaId = request.data.personaId as string | undefined;
+          const personaDisplayName = request.data.personaDisplayName as string | undefined;
+          const personaSuffix = personaDisplayName ? ` [${personaDisplayName}]` : "";
           console.log(`[Processor ${this.instanceId}] processing request: ${request.next_step}${personaSuffix}`);
           this.currentRequest = request;
 
-          if (personaName && request.next_step === LLMNextStep.HandlePersonaResponse) {
-            this.interface.onMessageProcessing?.(personaName);
+          if (personaId && request.next_step === LLMNextStep.HandlePersonaResponse) {
+            this.interface.onMessageProcessing?.(personaId);
           }
 
           this.queueProcessor.start(request, async (response) => {
             this.currentRequest = null;
             await this.handleResponse(response);
             const nextState = this.stateManager.queue_isPaused() ? "paused" : "idle";
-            this.interface.onQueueStateChanged?.(nextState);
+            // the processor state is set in the caller, so this needs a bit of delay
+            setTimeout(() => this.interface.onQueueStateChanged?.(nextState),0);
           }, {
             accounts: this.stateManager.getHuman().settings?.accounts,
             messageFetcher: (pName) => this.fetchMessagesForLLM(pName),
@@ -311,7 +315,7 @@ export class Processor {
         const timeSinceHeartbeat = now - lastHeartbeat;
 
         if (timeSinceHeartbeat >= heartbeatDelay) {
-          this.queueHeartbeatCheck(persona.aliases?.[0] ?? "Unknown");
+          this.queueHeartbeatCheck(persona.id);
         }
       }
     }
@@ -373,20 +377,20 @@ export class Processor {
       });
   }
 
-  private getModelForPersona(personaName?: string): string | undefined {
+  private getModelForPersona(personaId?: string): string | undefined {
     const human = this.stateManager.getHuman();
-    if (personaName) {
-      const persona = this.stateManager.persona_get(personaName);
+    if (personaId) {
+      const persona = this.stateManager.persona_getById(personaId);
       return persona?.model || human.settings?.default_model;
     }
     return human.settings?.default_model;
   }
 
-  private fetchMessagesForLLM(personaName: string): import("./types.js").ChatMessage[] {
-    const persona = this.stateManager.persona_get(personaName);
+  private fetchMessagesForLLM(personaId: string): import("./types.js").ChatMessage[] {
+    const persona = this.stateManager.persona_getById(personaId);
     if (!persona) return [];
 
-    const history = this.stateManager.messages_get(personaName);
+    const history = this.stateManager.messages_get(personaId);
     const contextWindowHours = persona.context_window_hours ?? DEFAULT_CONTEXT_WINDOW_HOURS;
     const filteredHistory = filterMessagesForContext(
       history,
@@ -400,17 +404,14 @@ export class Processor {
     })) as import("./types.js").ChatMessage[];
   }
 
-  private queueHeartbeatCheck(personaName: string): void {
-    const persona = this.stateManager.persona_get(personaName);
+  private queueHeartbeatCheck(personaId: string): void {
+    const persona = this.stateManager.persona_getById(personaId);
     if (!persona) return;
 
-    // Update last_heartbeat NOW to prevent duplicate queueing during LLM processing
-    // (checkScheduledTasks runs every 100ms; without this, it would queue many heartbeats
-    // before the first one completes)
-    this.stateManager.persona_update(personaName, { last_heartbeat: new Date().toISOString() });
+    this.stateManager.persona_update(personaId, { last_heartbeat: new Date().toISOString() });
 
     const human = this.stateManager.getHuman();
-    const history = this.stateManager.messages_get(personaName);
+    const history = this.stateManager.messages_get(personaId);
     const filteredHuman = this.filterHumanDataByVisibility(human, persona);
 
     const inactiveDays = persona.last_activity
@@ -422,7 +423,7 @@ export class Processor {
 
     const promptData: HeartbeatCheckPromptData = {
       persona: {
-        name: personaName,
+        name: persona.display_name,
         traits: persona.traits,
         topics: persona.topics,
       },
@@ -442,8 +443,8 @@ export class Processor {
       system: prompt.system,
       user: prompt.user,
       next_step: LLMNextStep.HandleHeartbeatCheck,
-      model: this.getModelForPersona(personaName),
-      data: { personaName },
+      model: this.getModelForPersona(personaId),
+      data: { personaId, personaDisplayName: persona.display_name },
     });
   }
 
@@ -473,9 +474,9 @@ export class Processor {
 
       if (response.request.next_step === LLMNextStep.HandlePersonaResponse) {
         // Always notify FE - even without content, user's message was "read" by the persona
-        const personaName = response.request.data.personaName as string;
-        if (personaName) {
-          this.interface.onMessageAdded?.(personaName);
+        const personaId = response.request.data.personaId as string;
+        if (personaId) {
+          this.interface.onMessageAdded?.(personaId);
         }
       }
 
@@ -486,16 +487,16 @@ export class Processor {
       }
 
       if (response.request.next_step === LLMNextStep.HandlePersonaGeneration) {
-        const personaName = response.request.data.personaName as string;
-        if (personaName) {
-          this.interface.onPersonaUpdated?.(personaName);
+        const personaId = response.request.data.personaId as string;
+        if (personaId) {
+          this.interface.onPersonaUpdated?.(personaId);
         }
       }
 
       if (response.request.next_step === LLMNextStep.HandlePersonaDescriptions) {
-        const personaName = response.request.data.personaName as string;
-        if (personaName) {
-          this.interface.onPersonaUpdated?.(personaName);
+        const personaId = response.request.data.personaId as string;
+        if (personaId) {
+          this.interface.onPersonaUpdated?.(personaId);
         }
       }
 
@@ -505,17 +506,17 @@ export class Processor {
         response.request.next_step === LLMNextStep.HandlePersonaTopicMatch ||
         response.request.next_step === LLMNextStep.HandlePersonaTopicUpdate
       ) {
-        const personaName = response.request.data.personaName as string;
-        if (personaName) {
-          this.interface.onPersonaUpdated?.(personaName);
+        const personaId = response.request.data.personaId as string;
+        if (personaId) {
+          this.interface.onPersonaUpdated?.(personaId);
         }
       }
 
       if (response.request.next_step === LLMNextStep.HandleHeartbeatCheck ||
           response.request.next_step === LLMNextStep.HandleEiHeartbeat) {
-        const personaName = response.request.data.personaName as string ?? "ei";
+        const personaId = response.request.data.personaId as string ?? "ei";
         if (response.content) {
-          this.interface.onMessageAdded?.(personaName);
+          this.interface.onMessageAdded?.(personaId);
         }
       }
 
@@ -543,22 +544,32 @@ export class Processor {
 
   async getPersonaList(): Promise<PersonaSummary[]> {
     return this.stateManager.persona_getAll().map((entity) => {
-      const name = entity.aliases?.[0] ?? "Unknown";
       return {
-        name,
+        id: entity.id,
+        display_name: entity.display_name,
         aliases: entity.aliases ?? [],
         short_description: entity.short_description,
         is_paused: entity.is_paused,
         is_archived: entity.is_archived,
-        unread_count: this.stateManager.messages_countUnread(name),
+        unread_count: this.stateManager.messages_countUnread(entity.id),
         last_activity: entity.last_activity,
         context_boundary: entity.context_boundary,
       };
     });
   }
 
-  async getPersona(name: string): Promise<PersonaEntity | null> {
-    return this.stateManager.persona_get(name);
+  /**
+   * Resolve a persona name or alias to its ID.
+   * Use this when the user types a name (e.g., "/persona Bob").
+   * Returns null if no matching persona is found.
+   */
+  async resolvePersonaName(nameOrAlias: string): Promise<string | null> {
+    const persona = this.stateManager.persona_getByName(nameOrAlias);
+    return persona?.id ?? null;
+  }
+
+  async getPersona(personaId: string): Promise<PersonaEntity | null> {
+    return this.stateManager.persona_getById(personaId);
   }
 
   async createPersona(input: PersonaCreationInput): Promise<void> {
@@ -567,7 +578,10 @@ export class Processor {
     }
     const now = new Date().toISOString();
     const DEFAULT_GROUP = "General";
+    const personaId = crypto.randomUUID();
     const placeholder: PersonaEntity = {
+      id: personaId,
+      display_name: input.name,
       entity: "system",
       aliases: input.aliases ?? [input.name],
       short_description: input.short_description,
@@ -583,34 +597,42 @@ export class Processor {
       last_updated: now,
       last_activity: now,
     };
-    this.stateManager.persona_add(input.name, placeholder);
+    this.stateManager.persona_add(placeholder);
     this.interface.onPersonaAdded?.();
 
     orchestratePersonaGeneration(
-      input,
+      { ...input, id: personaId },
       this.stateManager,
-      () => this.interface.onPersonaUpdated?.(input.name)
+      () => this.interface.onPersonaUpdated?.(placeholder.display_name)
     );
   }
 
-  async archivePersona(name: string): Promise<void> {
-    this.stateManager.persona_archive(name);
+  async archivePersona(personaId: string): Promise<void> {
+    const persona = this.stateManager.persona_getById(personaId);
+    if (!persona) return;
+    this.stateManager.persona_archive(personaId);
     this.interface.onPersonaRemoved?.();
   }
 
-  async unarchivePersona(name: string): Promise<void> {
-    this.stateManager.persona_unarchive(name);
+  async unarchivePersona(personaId: string): Promise<void> {
+    const persona = this.stateManager.persona_getById(personaId);
+    if (!persona) return;
+    this.stateManager.persona_unarchive(personaId);
     this.interface.onPersonaAdded?.();
   }
 
-  async deletePersona(name: string, _deleteHumanData: boolean): Promise<void> {
-    this.stateManager.persona_delete(name);
+  async deletePersona(personaId: string, _deleteHumanData: boolean): Promise<void> {
+    const persona = this.stateManager.persona_getById(personaId);
+    if (!persona) return;
+    this.stateManager.persona_delete(personaId);
     this.interface.onPersonaRemoved?.();
   }
 
-  async updatePersona(name: string, updates: Partial<PersonaEntity>): Promise<void> {
-    this.stateManager.persona_update(name, updates);
-    this.interface.onPersonaUpdated?.(name);
+  async updatePersona(personaId: string, updates: Partial<PersonaEntity>): Promise<void> {
+    const persona = this.stateManager.persona_getById(personaId);
+    if (!persona) return;
+    this.stateManager.persona_update(personaId, updates);
+    this.interface.onPersonaUpdated?.(personaId);
   }
 
   async getGroupList(): Promise<string[]> {
@@ -623,19 +645,25 @@ export class Processor {
     return [...groups].sort();
   }
 
-  async getMessages(personaName: string, _options?: MessageQueryOptions): Promise<Message[]> {
-    return this.stateManager.messages_get(personaName);
+  async getMessages(personaId: string, _options?: MessageQueryOptions): Promise<Message[]> {
+    const persona = this.stateManager.persona_getById(personaId);
+    if (!persona) return [];
+    return this.stateManager.messages_get(personaId);
   }
 
-  async markMessageRead(personaName: string, messageId: string): Promise<boolean> {
-    return this.stateManager.messages_markRead(personaName, messageId);
+  async markMessageRead(personaId: string, messageId: string): Promise<boolean> {
+    const persona = this.stateManager.persona_getById(personaId);
+    if (!persona) return false;
+    return this.stateManager.messages_markRead(personaId, messageId);
   }
 
-  async markAllMessagesRead(personaName: string): Promise<number> {
-    return this.stateManager.messages_markAllRead(personaName);
+  async markAllMessagesRead(personaId: string): Promise<number> {
+    const persona = this.stateManager.persona_getById(personaId);
+    if (!persona) return 0;
+    return this.stateManager.messages_markAllRead(personaId);
   }
 
-  private clearPendingRequestsFor(personaName: string): boolean {
+  private clearPendingRequestsFor(personaId: string): boolean {
     const responsesToClear = [
       LLMNextStep.HandlePersonaResponse,
       LLMNextStep.HandlePersonaTraitExtraction,
@@ -646,13 +674,13 @@ export class Processor {
 
     let removedAny = false;
     for (const nextStep of responsesToClear) {
-      const removedIds = this.stateManager.queue_clearPersonaResponses(personaName, nextStep);
+      const removedIds = this.stateManager.queue_clearPersonaResponses(personaId, nextStep);
       if (removedIds.length > 0) removedAny = true;
     }
 
     const currentMatchesPersona = this.currentRequest &&
       responsesToClear.includes(this.currentRequest.next_step as LLMNextStep) &&
-      this.currentRequest.data.personaName === personaName;
+      this.currentRequest.data.personaId === personaId;
 
     if (currentMatchesPersona) {
       this.queueProcessor.abort();
@@ -662,28 +690,40 @@ export class Processor {
     return removedAny;
   }
 
-  async recallPendingMessages(personaName: string): Promise<string> {
-    this.clearPendingRequestsFor(personaName);
+  async recallPendingMessages(personaId: string): Promise<string> {
+    const persona = this.stateManager.persona_getById(personaId);
+    if (!persona) return "";
+    
+    this.clearPendingRequestsFor(personaId);
     this.stateManager.queue_pause();
     
-    const messages = this.stateManager.messages_get(personaName);
+    const messages = this.stateManager.messages_get(personaId);
     const pendingIds = messages
       .filter(m => m.role === "human" && !m.read)
       .map(m => m.id);
     
     if (pendingIds.length === 0) return "";
     
-    const removed = this.stateManager.messages_remove(personaName, pendingIds);
+    const removed = this.stateManager.messages_remove(personaId, pendingIds);
     const recalledContent = removed.map(m => m.content).join("\n\n");
     
-    this.interface.onMessageAdded?.(personaName);
-    this.interface.onMessageRecalled?.(personaName, recalledContent);
+    this.interface.onMessageAdded?.(personaId);
+    this.interface.onMessageRecalled?.(personaId, recalledContent);
     
     return recalledContent;
   }
 
-  async sendMessage(personaName: string, content: string): Promise<void> {
-    this.clearPendingRequestsFor(personaName);
+  async sendMessage(personaId: string, content: string): Promise<void> {
+    const persona = this.stateManager.persona_getById(personaId);
+    if (!persona) {
+      this.interface.onError?.({
+        code: "PERSONA_NOT_FOUND",
+        message: `Persona with ID "${personaId}" not found`,
+      });
+      return;
+    }
+
+    this.clearPendingRequestsFor(personaId);
 
     const message: Message = {
       id: crypto.randomUUID(),
@@ -693,19 +733,10 @@ export class Processor {
       read: false,
       context_status: "default" as ContextStatus,
     };
-    this.stateManager.messages_append(personaName, message);
-    this.interface.onMessageAdded?.(personaName);
+    this.stateManager.messages_append(persona.id, message);
+    this.interface.onMessageAdded?.(persona.id);
 
-    const persona = this.stateManager.persona_get(personaName);
-    if (!persona) {
-      this.interface.onError?.({
-        code: "PERSONA_NOT_FOUND",
-        message: `Persona "${personaName}" not found`,
-      });
-      return;
-    }
-
-    const promptData = this.buildResponsePromptData(personaName, persona);
+    const promptData = this.buildResponsePromptData(persona);
     const prompt = buildResponsePrompt(promptData);
 
     this.stateManager.queue_enqueue({
@@ -714,15 +745,15 @@ export class Processor {
       system: prompt.system,
       user: prompt.user,
       next_step: LLMNextStep.HandlePersonaResponse,
-      model: this.getModelForPersona(personaName),
-      data: { personaName },
+      model: this.getModelForPersona(persona.id),
+      data: { personaId: persona.id, personaDisplayName: persona.display_name },
     });
-    this.interface.onMessageQueued?.(personaName);
+    this.interface.onMessageQueued?.(persona.id);
 
-    const history = this.stateManager.messages_get(personaName);
+    const history = this.stateManager.messages_get(persona.id);
     
     const traitExtractionData: PersonaTraitExtractionPromptData = {
-      persona_name: personaName,
+      persona_name: persona.display_name,
       current_traits: persona.traits,
       messages_context: history.slice(0, -1),
       messages_analyze: [message],
@@ -735,11 +766,11 @@ export class Processor {
       system: traitPrompt.system,
       user: traitPrompt.user,
       next_step: LLMNextStep.HandlePersonaTraitExtraction,
-      model: this.getModelForPersona(personaName),
-      data: { personaName },
+      model: this.getModelForPersona(persona.id),
+      data: { personaId: persona.id, personaDisplayName: persona.display_name },
     });
 
-    this.checkAndQueueHumanExtraction(personaName, history);
+    this.checkAndQueueHumanExtraction(persona.id, persona.display_name, history);
   }
 
   /**
@@ -760,21 +791,22 @@ export class Processor {
    * 3. Were causing massive queue bloat with cascading updates
    * Trait extraction happens during Ceremony only, where we have a full day's context.
    */
-  private checkAndQueueHumanExtraction(personaName: string, history: Message[]): void {
+  private checkAndQueueHumanExtraction(personaId: string, personaDisplayName: string, history: Message[]): void {
     const human = this.stateManager.getHuman();
     const now = new Date().toISOString();
     
     const getContextForType = (lastSeeded: string | undefined): ExtractionContext => {
       if (!lastSeeded) {
-        return { personaName, messages_context: [], messages_analyze: history };
+        return { personaId, personaDisplayName, messages_context: [], messages_analyze: history };
       }
       const sinceTime = new Date(lastSeeded).getTime();
       const splitIndex = history.findIndex(m => new Date(m.timestamp).getTime() > sinceTime);
       if (splitIndex === -1) {
-        return { personaName, messages_context: history, messages_analyze: [] };
+        return { personaId, personaDisplayName, messages_context: history, messages_analyze: [] };
       }
       return {
-        personaName,
+        personaId,
+        personaDisplayName,
         messages_context: history.slice(0, splitIndex),
         messages_analyze: history.slice(splitIndex),
       };
@@ -802,11 +834,11 @@ export class Processor {
     }
   }
 
-  private buildResponsePromptData(personaName: string, persona: PersonaEntity): ResponsePromptData {
+  private buildResponsePromptData(persona: PersonaEntity): ResponsePromptData {
     const human = this.stateManager.getHuman();
     const filteredHuman = this.filterHumanDataByVisibility(human, persona);
-    const visiblePersonas = this.getVisiblePersonas(personaName, persona);
-    const messages = this.stateManager.messages_get(personaName);
+    const visiblePersonas = this.getVisiblePersonas(persona);
+    const messages = this.stateManager.messages_get(persona.id);
     const previousMessage = messages.length >= 2 ? messages[messages.length - 2] : null;
     const delayMs = previousMessage
       ? Date.now() - new Date(previousMessage.timestamp).getTime()
@@ -814,7 +846,7 @@ export class Processor {
 
     return {
       persona: {
-        name: personaName,
+        name: persona.display_name,
         aliases: persona.aliases ?? [],
         short_description: persona.short_description,
         long_description: persona.long_description,
@@ -832,10 +864,8 @@ export class Processor {
     persona: PersonaEntity
   ): ResponsePromptData["human"] {
     const DEFAULT_GROUP = "General";
-    const personaName = persona.aliases?.[0] ?? "";
 
-    // Ei sees all data (special case - system persona with global visibility)
-    if (personaName.toLowerCase() === "ei") {
+    if (persona.id === "ei") {
       const recentQuotes = [...(human.quotes ?? [])]
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
         .slice(0, 10);
@@ -881,16 +911,15 @@ export class Processor {
   }
 
   private getVisiblePersonas(
-    currentName: string,
     currentPersona: PersonaEntity
   ): Array<{ name: string; short_description?: string }> {
     const allPersonas = this.stateManager.persona_getAll();
 
-    if (currentName.toLowerCase() === "ei") {
+    if (currentPersona.id === "ei") {
       return allPersonas
-        .filter((p) => (p.aliases?.[0] ?? "").toLowerCase() !== "ei" && !p.is_archived)
+        .filter((p) => p.id !== "ei" && !p.is_archived)
         .map((p) => ({
-          name: p.aliases?.[0] ?? "Unknown",
+          name: p.display_name,
           short_description: p.short_description,
         }));
     }
@@ -907,29 +936,28 @@ export class Processor {
 
     return allPersonas
       .filter((p) => {
-        const name = p.aliases?.[0] ?? "";
-        if (name === currentName || name.toLowerCase() === "ei" || p.is_archived) {
+        if (p.id === currentPersona.id || p.id === "ei" || p.is_archived) {
           return false;
         }
         return p.group_primary && visibleGroups.has(p.group_primary);
       })
       .map((p) => ({
-        name: p.aliases?.[0] ?? "Unknown",
+        name: p.display_name,
         short_description: p.short_description,
       }));
   }
 
-  async setContextBoundary(personaName: string, timestamp: string | null): Promise<void> {
-    this.stateManager.persona_setContextBoundary(personaName, timestamp);
-    this.interface.onContextBoundaryChanged?.(personaName);
+  async setContextBoundary(personaId: string, timestamp: string | null): Promise<void> {
+    this.stateManager.persona_setContextBoundary(personaId, timestamp);
+    this.interface.onContextBoundaryChanged?.(personaId);
   }
 
   async setMessageContextStatus(
-    personaName: string,
+    personaId: string,
     messageId: string,
     status: ContextStatus
   ): Promise<void> {
-    this.stateManager.messages_setContextStatus(personaName, messageId, status);
+    this.stateManager.messages_setContextStatus(personaId, messageId, status);
   }
 
   async getHuman(): Promise<HumanEntity> {
