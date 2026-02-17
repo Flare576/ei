@@ -8,22 +8,32 @@ export const detailsCommand: Command = {
   usage: "/details [persona] - Edit specified or current persona",
   
   async execute(args, ctx) {
-    // Use argument if provided, otherwise fall back to active persona
-    let personaName = args.length > 0 ? args.join(" ") : ctx.ei.activePersona();
+    let personaId: string | null;
     
-    if (!personaName) {
+    if (args.length > 0) {
+      const nameOrAlias = args.join(" ");
+      personaId = await ctx.ei.resolvePersonaName(nameOrAlias);
+      if (!personaId) {
+        ctx.showNotification(`Persona "${nameOrAlias}" not found`, "error");
+        return;
+      }
+    } else {
+      personaId = ctx.ei.activePersonaId();
+    }
+    
+    if (!personaId) {
       ctx.showNotification("No active persona", "error");
       return;
     }
     
-    const persona = await ctx.ei.getPersona(personaName);
+    const persona = await ctx.ei.getPersona(personaId);
     if (!persona) {
-      ctx.showNotification(`Persona "${personaName}" not found`, "error");
+      ctx.showNotification(`Persona not found`, "error");
       return;
     }
     
     await openPersonaEditor({
-      personaName,
+      personaId,
       persona,
       ctx,
     });

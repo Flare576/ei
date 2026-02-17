@@ -28,7 +28,7 @@ import type {
 interface EiStore {
   ready: boolean;
   personas: PersonaSummary[];
-  activePersona: string | null;
+  activePersonaId: string | null;
   activeContextBoundary: string | undefined;
   messages: Message[];
   queueStatus: QueueStatus;
@@ -37,12 +37,12 @@ interface EiStore {
 
 export interface EiContextValue {
   personas: () => PersonaSummary[];
-  activePersona: () => string | null;
+  activePersonaId: () => string | null;
   activeContextBoundary: () => string | undefined;
   messages: () => Message[];
   queueStatus: () => QueueStatus;
   notification: () => { message: string; level: "error" | "warn" | "info" } | null;
-  selectPersona: (name: string) => void;
+  selectPersona: (personaId: string) => void;
   sendMessage: (content: string) => Promise<void>;
   refreshPersonas: () => Promise<void>;
   refreshMessages: () => Promise<void>;
@@ -51,11 +51,12 @@ export interface EiContextValue {
   stopProcessor: () => Promise<void>;
   showNotification: (message: string, level: "error" | "warn" | "info") => void;
   createPersona: (input: { name: string }) => Promise<void>;
-  archivePersona: (name: string) => Promise<void>;
-  unarchivePersona: (name: string) => Promise<void>;
-  setContextBoundary: (personaName: string, timestamp: string | null) => Promise<void>;
-  updatePersona: (name: string, updates: Partial<PersonaEntity>) => Promise<void>;
-  getPersona: (name: string) => Promise<PersonaEntity | null>;
+  archivePersona: (personaId: string) => Promise<void>;
+  unarchivePersona: (personaId: string) => Promise<void>;
+  setContextBoundary: (personaId: string, timestamp: string | null) => Promise<void>;
+  updatePersona: (personaId: string, updates: Partial<PersonaEntity>) => Promise<void>;
+  getPersona: (personaId: string) => Promise<PersonaEntity | null>;
+  resolvePersonaName: (nameOrAlias: string) => Promise<string | null>;
   getHuman: () => Promise<HumanEntity>;
   updateHuman: (updates: Partial<HumanEntity>) => Promise<void>;
   upsertFact: (fact: Fact) => Promise<void>;
@@ -71,7 +72,7 @@ export const EiProvider: ParentComponent = (props) => {
   const [store, setStore] = createStore<EiStore>({
     ready: false,
     personas: [],
-    activePersona: null,
+    activePersonaId: null,
     activeContextBoundary: undefined,
     messages: [],
     queueStatus: { state: "idle", pending_count: 0 },
@@ -102,17 +103,17 @@ export const EiProvider: ParentComponent = (props) => {
 
   const refreshMessages = async () => {
     if (!processor) return;
-    const current = store.activePersona;
-    if (!current) return;
-    const msgs = await processor.getMessages(current);
+    const currentId = store.activePersonaId;
+    if (!currentId) return;
+    const msgs = await processor.getMessages(currentId);
     setStore("messages", [...msgs]);
   };
 
-  const selectPersona = (name: string) => {
+  const selectPersona = (personaId: string) => {
     // Mark previous persona as read ONLY if we dwelled there 5+ seconds
-    const previous = store.activePersona;
-    if (previous && previous === dwelledPersona && processor) {
-      void processor.markAllMessagesRead(previous);
+    const previousId = store.activePersonaId;
+    if (previousId && previousId === dwelledPersona && processor) {
+      void processor.markAllMessagesRead(previousId);
       void refreshPersonas();
     }
     
@@ -124,22 +125,22 @@ export const EiProvider: ParentComponent = (props) => {
     dwelledPersona = null;
     
     // Set new persona
-    setStore("activePersona", name);
+    setStore("activePersonaId", personaId);
     setStore("messages", []);
-    const persona = store.personas.find(p => p.name === name);
+    const persona = store.personas.find(p => p.id === personaId);
     setStore("activeContextBoundary", persona?.context_boundary);
     setContextBoundarySignal(persona?.context_boundary);
     if (processor) {
-      processor.getMessages(name).then((msgs) => {
+      processor.getMessages(personaId).then((msgs) => {
         setStore("messages", [...msgs]);
       });
     }
     
     // Start 5-second dwell timer
     readTimer = setTimeout(async () => {
-      if (store.activePersona === name && processor) {
-        dwelledPersona = name;  // Mark that we've dwelled
-        await processor.markAllMessagesRead(name);
+      if (store.activePersonaId === personaId && processor) {
+        dwelledPersona = personaId;  // Mark that we've dwelled
+        await processor.markAllMessagesRead(personaId);
         await refreshPersonas();
       }
       readTimer = null;
@@ -147,14 +148,14 @@ export const EiProvider: ParentComponent = (props) => {
   };
 
   const sendMessage = async (content: string) => {
-    const current = store.activePersona;
-    if (!current || !processor) return;
+    const currentId = store.activePersonaId;
+    if (!currentId || !processor) return;
     
     // Mark all read immediately - user is engaged
-    await processor.markAllMessagesRead(current);
-    dwelledPersona = current;
+    await processor.markAllMessagesRead(currentId);
+    dwelledPersona = currentId;
     
-    await processor.sendMessage(current, content);
+    await processor.sendMessage(currentId, content);
     await refreshPersonas();
   };
 
@@ -181,44 +182,49 @@ export const EiProvider: ParentComponent = (props) => {
     await processor.createPersona(input);
   };
 
-  const archivePersona = async (name: string) => {
+  const archivePersona = async (personaId: string) => {
     if (!processor) return;
-    await processor.archivePersona(name);
+    await processor.archivePersona(personaId);
     await refreshPersonas();
   };
 
-  const unarchivePersona = async (name: string) => {
+  const unarchivePersona = async (personaId: string) => {
     if (!processor) return;
-    await processor.unarchivePersona(name);
+    await processor.unarchivePersona(personaId);
     await refreshPersonas();
   };
 
-  const setContextBoundary = async (personaName: string, timestamp: string | null) => {
+  const setContextBoundary = async (personaId: string, timestamp: string | null) => {
     if (!processor) return;
     // Set signal BEFORE processor call - processor fires callback synchronously
     // which triggers refreshMessages() that needs the NEW boundary value
     const newValue = timestamp ?? undefined;
-    logger.debug(`setContextBoundary: ${personaName}, timestamp=${timestamp}, newValue=${newValue}`);
-    if (personaName === store.activePersona) {
+    logger.debug(`setContextBoundary: ${personaId}, timestamp=${timestamp}, newValue=${newValue}`);
+    if (personaId === store.activePersonaId) {
       logger.debug(`setContextBoundary: updating signal to ${newValue}`);
       setContextBoundarySignal(newValue);
     }
-    await processor.setContextBoundary(personaName, timestamp);
+    await processor.setContextBoundary(personaId, timestamp);
     await refreshPersonas();
-    if (personaName === store.activePersona) {
+    if (personaId === store.activePersonaId) {
       await refreshMessages();
     }
   };
 
-  const updatePersona = async (name: string, updates: Partial<PersonaEntity>) => {
+  const updatePersona = async (personaId: string, updates: Partial<PersonaEntity>) => {
     if (!processor) return;
-    await processor.updatePersona(name, updates);
+    await processor.updatePersona(personaId, updates);
     await refreshPersonas();
   };
 
-  const getPersona = async (name: string) => {
+  const getPersona = async (personaId: string) => {
     if (!processor) return null;
-    return processor.getPersona(name);
+    return processor.getPersona(personaId);
+  };
+
+  const resolvePersonaName = async (nameOrAlias: string) => {
+    if (!processor) return null;
+    return processor.resolvePersonaName(nameOrAlias);
   };
 
   const getHuman = async () => {
@@ -267,9 +273,9 @@ export const EiProvider: ParentComponent = (props) => {
         onPersonaAdded: () => void refreshPersonas(),
         onPersonaRemoved: () => void refreshPersonas(),
         onPersonaUpdated: () => void refreshPersonas(),
-        onMessageAdded: (personaName) => {
+        onMessageAdded: (personaId) => {
           void refreshPersonas();
-          if (personaName === store.activePersona) {
+          if (personaId === store.activePersonaId) {
             void refreshMessages();
           }
         },
@@ -287,8 +293,8 @@ export const EiProvider: ParentComponent = (props) => {
             setStore("queueStatus", { state, pending_count: 0 });
           }
         },
-        onContextBoundaryChanged: (personaName) => {
-          logger.debug(`onContextBoundaryChanged: ${personaName}`);
+        onContextBoundaryChanged: (personaId) => {
+          logger.debug(`onContextBoundaryChanged: ${personaId}`);
           void refreshPersonas();
         },
         onError: (error) => {
@@ -311,8 +317,8 @@ export const EiProvider: ParentComponent = (props) => {
       logger.debug("Initial queueStatus set in store:", store.queueStatus);
 
       const list = store.personas;
-      if (list.length > 0 && !store.activePersona) {
-        selectPersona(list[0].name);
+      if (list.length > 0 && !store.activePersonaId && list[0].id) {
+        selectPersona(list[0].id);
       }
 
       setStore("ready", true);
@@ -332,7 +338,7 @@ export const EiProvider: ParentComponent = (props) => {
 
   const value: EiContextValue = {
     personas: () => store.personas,
-    activePersona: () => store.activePersona,
+    activePersonaId: () => store.activePersonaId,
     activeContextBoundary: contextBoundarySignal,
     messages: () => store.messages,
     queueStatus: () => store.queueStatus,
@@ -351,6 +357,7 @@ export const EiProvider: ParentComponent = (props) => {
     setContextBoundary,
     updatePersona,
     getPersona,
+    resolvePersonaName,
     getHuman,
     updateHuman,
     upsertFact,

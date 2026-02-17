@@ -6,8 +6,8 @@ export const modelCommand: Command = {
   description: "Set the LLM model for the current persona",
   usage: "/model <provider:model> - e.g., /model openai:gpt-4o",
   execute: async (args, ctx) => {
-    const personaName = ctx.ei.activePersona();
-    if (!personaName) {
+    const personaId = ctx.ei.activePersonaId();
+    if (!personaId) {
       ctx.showNotification("No persona selected", "error");
       return;
     }
@@ -23,7 +23,7 @@ export const modelCommand: Command = {
       return;
     }
 
-    await ctx.ei.updatePersona(personaName, { model: modelSpec });
+    await ctx.ei.updatePersona(personaId, { model: modelSpec });
     ctx.showNotification(`Model set to ${modelSpec}`, "info");
   },
 };

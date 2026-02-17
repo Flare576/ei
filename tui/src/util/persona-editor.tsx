@@ -6,7 +6,7 @@ import { logger } from "./logger.js";
 import { ConfirmOverlay } from "../components/ConfirmOverlay.js";
 
 export interface PersonaEditorOptions {
-  personaName: string;
+  personaId: string;
   persona: PersonaEntity;
   ctx: CommandContext;
 }
@@ -101,14 +101,13 @@ export async function createPersonaViaEditor(options: NewPersonaEditorOptions): 
 }
 
 export async function openPersonaEditor(options: PersonaEditorOptions): Promise<PersonaEditorResult> {
-  const { personaName, persona, ctx } = options;
-  
-  let yamlContent = personaToYAML(personaName, persona);
+  const { personaId, persona, ctx } = options;
+  let yamlContent = personaToYAML(persona);
   
   while (true) {
     const result = await spawnEditor({
       initialContent: yamlContent,
-      filename: `${personaName}-details.yaml`,
+      filename: `${personaId}-details.yaml`,
       renderer: ctx.renderer,
     });
     
@@ -130,9 +129,9 @@ export async function openPersonaEditor(options: PersonaEditorOptions): Promise<
     try {
       const parsed = personaFromYAML(result.content, persona);
       
-      await ctx.ei.updatePersona(personaName, parsed.updates);
+      await ctx.ei.updatePersona(personaId, parsed.updates);
       
-      ctx.showNotification(`Updated ${personaName}`, "info");
+      ctx.showNotification(`Updated ${persona.display_name}`, "info");
       return { success: true, cancelled: false, personaWasModified: true };
       
     } catch (parseError) {

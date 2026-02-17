@@ -31,7 +31,7 @@ export const KeyboardProvider: ParentComponent = (props) => {
   const [focusedPanel, setFocusedPanel] = createSignal<Panel>("input");
   const [sidebarVisible, setSidebarVisible] = createSignal(true);
   const renderer = useRenderer();
-  const { queueStatus, abortCurrentOperation, resumeQueue, personas, activePersona, selectPersona, stopProcessor } = useEi();
+  const { queueStatus, abortCurrentOperation, resumeQueue, personas, activePersonaId, selectPersona, stopProcessor } = useEi();
   
   let messageScrollRef: ScrollBoxRenderable | null = null;
   let textareaRef: TextareaRenderable | null = null;
@@ -66,8 +66,8 @@ export const KeyboardProvider: ParentComponent = (props) => {
       const unarchived = personas().filter((p: PersonaSummary) => !p.is_archived);
       if (unarchived.length <= 1) return;
       
-      const current = activePersona();
-      const currentIndex = unarchived.findIndex((p: PersonaSummary) => p.name === current);
+      const current = activePersonaId();
+      const currentIndex = unarchived.findIndex((p: PersonaSummary) => p.id === current);
       
       let nextIndex: number;
       if (event.shift) {
@@ -75,7 +75,7 @@ export const KeyboardProvider: ParentComponent = (props) => {
       } else {
         nextIndex = (currentIndex + 1) % unarchived.length;
       }
-      selectPersona(unarchived[nextIndex].name);
+      selectPersona(unarchived[nextIndex].id);
       return;
     }
 

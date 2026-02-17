@@ -7,13 +7,14 @@ export const pauseCommand: Command = {
   description: "Pause the current persona (optionally for a duration)",
   usage: "/pause [duration] - e.g., /pause 2h, /pause 1d",
   execute: async (args, ctx) => {
-    const personaName = ctx.ei.activePersona();
-    if (!personaName) {
+    const personaId = ctx.ei.activePersonaId();
+    if (!personaId) {
       ctx.showNotification("No persona selected", "error");
       return;
     }
 
     const personas = ctx.ei.personas();
+    const persona = personas.find(p => p.id === personaId);
     const visibleActive = personas.filter(p => !p.is_archived && !p.is_paused);
     
     if (visibleActive.length <= 1) {
@@ -21,6 +22,7 @@ export const pauseCommand: Command = {
       return;
     }
 
+    const displayName = persona?.display_name ?? personaId;
     let pauseUntil: string;
     let message: string;
 
@@ -32,13 +34,13 @@ export const pauseCommand: Command = {
       }
       const resumeTime = new Date(Date.now() + durationMs);
       pauseUntil = resumeTime.toISOString();
-      message = `Paused ${personaName} for ${formatDuration(durationMs)}`;
+      message = `Paused ${displayName} for ${formatDuration(durationMs)}`;
     } else {
       pauseUntil = "0";
-      message = `Paused ${personaName} indefinitely`;
+      message = `Paused ${displayName} indefinitely`;
     }
 
-    await ctx.ei.updatePersona(personaName, { is_paused: true, pause_until: pauseUntil });
+    await ctx.ei.updatePersona(personaId, { is_paused: true, pause_until: pauseUntil });
     ctx.showNotification(message, "info");
   },
 };

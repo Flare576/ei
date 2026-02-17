@@ -1,17 +1,7 @@
 import type { Command } from "./registry";
-import type { PersonaSummary } from "../../../src/core/types.js";
 import { isReservedPersonaName } from "../../../src/core/types.js";
 import { PersonaListOverlay } from "../components/PersonaListOverlay";
 import { createPersonaViaEditor } from "../util/persona-editor.js";
-
-function findPersona(name: string, personas: PersonaSummary[]): PersonaSummary | null {
-  const lower = name.toLowerCase();
-  let match = personas.find(p => p.name.toLowerCase() === lower);
-  if (match) return match;
-  match = personas.find(p => p.name.toLowerCase().startsWith(lower));
-  if (match) return match;
-  return personas.find(p => p.name.toLowerCase().includes(lower)) || null;
-}
 
 export const personaCommand: Command = {
   name: "persona",
@@ -26,11 +16,12 @@ export const personaCommand: Command = {
       ctx.showOverlay((hideOverlay) => (
         <PersonaListOverlay
           personas={unarchived}
-          activePersona={ctx.ei.activePersona()}
-          onSelect={(name) => {
-            ctx.ei.selectPersona(name);
+          activePersonaId={ctx.ei.activePersonaId()}
+          onSelect={(personaId) => {
+            const persona = unarchived.find(p => p.id === personaId);
+            ctx.ei.selectPersona(personaId);
             hideOverlay();
-            ctx.showNotification(`Switched to ${name}`, "info");
+            ctx.showNotification(`Switched to ${persona?.display_name ?? personaId}`, "info");
           }}
           onDismiss={hideOverlay}
         />
@@ -52,14 +43,16 @@ export const personaCommand: Command = {
       return;
     }
     
-    const name = args.join(" ");
-    const match = findPersona(name, unarchived);
+    // User typed a name - resolve it to ID, then switch
+    const nameOrAlias = args.join(" ");
+    const personaId = await ctx.ei.resolvePersonaName(nameOrAlias);
     
-    if (match) {
-      ctx.ei.selectPersona(match.name);
-      ctx.showNotification(`Switched to ${match.name}`, "info");
+    if (personaId) {
+      const persona = unarchived.find(p => p.id === personaId);
+      ctx.ei.selectPersona(personaId);
+      ctx.showNotification(`Switched to ${persona?.display_name ?? nameOrAlias}`, "info");
     } else {
-      ctx.showNotification(`No persona named "${name}". Run \`/p new ${name}\` to create.`, "warn");
+      ctx.showNotification(`No persona named "${nameOrAlias}". Run \`/p new ${nameOrAlias}\` to create.`, "warn");
     }
   }
 };

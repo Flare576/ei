@@ -175,12 +175,12 @@ export function newPersonaFromYAML(yamlContent: string): Partial<PersonaEntity> 
   };
 }
 
-export function personaToYAML(name: string, persona: PersonaEntity): string {
+export function personaToYAML(persona: PersonaEntity): string {
   const useTraitPlaceholder = persona.traits.length === 0;
   const useTopicPlaceholder = persona.topics.length === 0;
   
   const data: EditablePersonaData = {
-    name,
+    display_name: persona.display_name,
     aliases: persona.aliases,
     short_description: persona.short_description,
     long_description: persona.long_description || PLACEHOLDER_LONG_DESC,
@@ -279,6 +279,7 @@ export function personaFromYAML(yamlContent: string, original: PersonaEntity): P
   };
   
   const updates: Partial<PersonaEntity> = {
+    display_name: data.display_name,
     aliases: data.aliases,
     short_description: data.short_description,
     long_description: stripPlaceholder(data.long_description, PLACEHOLDER_LONG_DESC),

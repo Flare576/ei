@@ -1,11 +1,5 @@
 import type { Command } from "./registry";
-import type { PersonaSummary } from "../../../src/core/types.js";
 import { PersonaListOverlay } from "../components/PersonaListOverlay";
-
-function findPersonaByName(name: string, personas: PersonaSummary[]): PersonaSummary | null {
-  const lower = name.toLowerCase();
-  return personas.find(p => p.name.toLowerCase() === lower) || null;
-}
 
 export const archiveCommand: Command = {
   name: "archive",
@@ -25,13 +19,14 @@ export const archiveCommand: Command = {
       ctx.showOverlay((hideOverlay) => (
         <PersonaListOverlay
           personas={archived}
-          activePersona={null}
+          activePersonaId={null}
           title="Archived Personas (Enter to unarchive)"
-          onSelect={async (name) => {
+          onSelect={async (personaId) => {
+            const persona = archived.find(p => p.id === personaId);
             hideOverlay();
-            await ctx.ei.unarchivePersona(name);
-            ctx.ei.selectPersona(name);
-            ctx.showNotification(`Unarchived and switched to ${name}`, "info");
+            await ctx.ei.unarchivePersona(personaId);
+            ctx.ei.selectPersona(personaId);
+            ctx.showNotification(`Unarchived and switched to ${persona?.display_name ?? personaId}`, "info");
           }}
           onDismiss={hideOverlay}
         />
@@ -39,26 +34,28 @@ export const archiveCommand: Command = {
       return;
     }
     
-    const name = args.join(" ");
-    const persona = findPersonaByName(name, allPersonas);
+    const nameOrAlias = args.join(" ");
+    const personaId = await ctx.ei.resolvePersonaName(nameOrAlias);
     
-    if (!persona) {
-      ctx.showNotification(`Persona '${name}' not found`, "error");
+    if (!personaId) {
+      ctx.showNotification(`Persona '${nameOrAlias}' not found`, "error");
       return;
     }
     
-    if (persona.is_archived) {
-      ctx.showNotification(`'${persona.name}' is already archived`, "warn");
+    const persona = allPersonas.find(p => p.id === personaId);
+    
+    if (persona?.is_archived) {
+      ctx.showNotification(`'${persona.display_name}' is already archived`, "warn");
       return;
     }
     
-    if (ctx.ei.activePersona() === persona.name) {
+    if (ctx.ei.activePersonaId() === personaId) {
       ctx.showNotification("Cannot archive active persona", "error");
       return;
     }
     
-    await ctx.ei.archivePersona(persona.name);
-    ctx.showNotification(`Archived ${persona.name}`, "info");
+    await ctx.ei.archivePersona(personaId);
+    ctx.showNotification(`Archived ${persona?.display_name ?? nameOrAlias}`, "info");
   }
 };
 
@@ -74,17 +71,23 @@ export const unarchiveCommand: Command = {
       return;
     }
     
-    const name = args.join(" ");
-    const archived = ctx.ei.personas().filter(p => p.is_archived);
-    const persona = findPersonaByName(name, archived);
+    const nameOrAlias = args.join(" ");
+    const personaId = await ctx.ei.resolvePersonaName(nameOrAlias);
     
-    if (!persona) {
-      ctx.showNotification(`Archived persona '${name}' not found`, "error");
+    if (!personaId) {
+      ctx.showNotification(`Archived persona '${nameOrAlias}' not found`, "error");
       return;
     }
     
-    await ctx.ei.unarchivePersona(persona.name);
-    ctx.ei.selectPersona(persona.name);
-    ctx.showNotification(`Unarchived and switched to ${persona.name}`, "info");
+    const persona = ctx.ei.personas().find(p => p.id === personaId);
+    
+    if (!persona?.is_archived) {
+      ctx.showNotification(`'${persona?.display_name ?? nameOrAlias}' is not archived`, "warn");
+      return;
+    }
+    
+    await ctx.ei.unarchivePersona(personaId);
+    ctx.ei.selectPersona(personaId);
+    ctx.showNotification(`Unarchived and switched to ${persona.display_name}`, "info");
   }
 };

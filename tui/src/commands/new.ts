@@ -6,13 +6,13 @@ export const newCommand: Command = {
   description: "Toggle context boundary - persona forgets earlier messages",
   usage: "/new",
   execute: async (_args, ctx) => {
-    const personaName = ctx.ei.activePersona();
-    if (!personaName) {
+    const personaId = ctx.ei.activePersonaId();
+    if (!personaId) {
       ctx.showNotification("No persona selected", "error");
       return;
     }
 
-    const persona = ctx.ei.personas().find(p => p.name === personaName);
+    const persona = ctx.ei.personas().find(p => p.id === personaId);
     const messages = ctx.ei.messages();
     const lastMessage = messages[messages.length - 1];
     
@@ -20,11 +20,11 @@ export const newCommand: Command = {
       (!lastMessage || persona.context_boundary > lastMessage.timestamp);
 
     if (boundaryIsActive) {
-      await ctx.ei.setContextBoundary(personaName, null);
+      await ctx.ei.setContextBoundary(personaId, null);
       ctx.showNotification("Context boundary cleared - previous messages restored", "info");
     } else {
       const timestamp = new Date().toISOString();
-      await ctx.ei.setContextBoundary(personaName, timestamp);
+      await ctx.ei.setContextBoundary(personaId, timestamp);
       ctx.showNotification("Context boundary set - conversation starts fresh", "info");
     }
   },
