@@ -1,4 +1,4 @@
-import { LLMRequestType, LLMPriority, LLMNextStep, type CeremonyConfig, type Topic } from "../types.js";
+import { LLMRequestType, LLMPriority, LLMNextStep, type CeremonyConfig, type PersonaTopic, type Topic } from "../types.js";
 import type { StateManager } from "../state-manager.js";
 import { applyDecayToValue } from "../utils/decay.js";
 import {
@@ -72,11 +72,10 @@ export function startCeremony(state: StateManager): void {
   
   for (let i = 0; i < personasWithActivity.length; i++) {
     const persona = personasWithActivity[i];
-    const personaName = persona.aliases?.[0] ?? "Unknown";
     const isLast = i === personasWithActivity.length - 1;
     
-    console.log(`[ceremony] Processing ${personaName} (${i + 1}/${personasWithActivity.length})${isLast ? " (last)" : ""}`);
-    queueExposurePhase(personaName, state);
+    console.log(`[ceremony] Processing ${persona.display_name} (${i + 1}/${personasWithActivity.length})${isLast ? " (last)" : ""}`);
+    queueExposurePhase(persona.id, state);
   }
   
   runHumanCeremony(state);
@@ -93,12 +92,18 @@ export function startCeremony(state: StateManager): void {
   console.log(`[ceremony] Ceremony initiated in ${duration}ms, phases will execute via queue`);
 }
 
-export function queueExposurePhase(personaName: string, state: StateManager): void {
-  console.log(`[ceremony:exposure] Starting for ${personaName}`);
+export function queueExposurePhase(personaId: string, state: StateManager): void {
+  const persona = state.persona_getById(personaId);
+  if (!persona) {
+    console.error(`[ceremony:exposure] Persona not found: ${personaId}`);
+    return;
+  }
+  
+  console.log(`[ceremony:exposure] Starting for ${persona.display_name}`);
   
   const human = state.getHuman();
   const lastCeremony = human.ceremony_config?.last_ceremony;
-  const messages = state.messages_get(personaName);
+  const messages = state.messages_get(personaId);
   
   const messagesSinceCeremony = lastCeremony 
     ? messages.filter(m => new Date(m.timestamp) > new Date(lastCeremony))
@@ -106,7 +111,8 @@ export function queueExposurePhase(personaName: string, state: StateManager): vo
   
   if (messagesSinceCeremony.length > 0) {
     const context: ExtractionContext = {
-      personaName,
+      personaId,
+      personaDisplayName: persona.display_name,
       messages_context: messages.slice(0, -messagesSinceCeremony.length),
       messages_analyze: messagesSinceCeremony,
     };
@@ -117,29 +123,30 @@ export function queueExposurePhase(personaName: string, state: StateManager): vo
     console.log(`[ceremony:exposure] Queued human extraction scans for ${messagesSinceCeremony.length} messages`);
 
     const personaTopicContext: PersonaTopicContext = {
-      personaName,
+      personaId,
+      personaDisplayName: persona.display_name,
       messages_context: messages.slice(0, -messagesSinceCeremony.length),
       messages_analyze: messagesSinceCeremony,
     };
     queuePersonaTopicScan(personaTopicContext, state);
-    console.log(`[ceremony:exposure] Queued persona topic scan for ${personaName}`);
+    console.log(`[ceremony:exposure] Queued persona topic scan for ${persona.display_name}`);
   }
   
-  applyDecayPhase(personaName, state);
+  applyDecayPhase(personaId, state);
 }
 
-function applyDecayPhase(personaName: string, state: StateManager): void {
-  console.log(`[ceremony:decay] Applying decay for ${personaName}`);
-  
-  const persona = state.persona_get(personaName);
+function applyDecayPhase(personaId: string, state: StateManager): void {
+  const persona = state.persona_getById(personaId);
   if (!persona) {
-    console.error(`[ceremony:decay] Persona not found: ${personaName}`);
+    console.error(`[ceremony:decay] Persona not found: ${personaId}`);
     return;
   }
   
+  console.log(`[ceremony:decay] Applying decay for ${persona.display_name}`);
+  
   if (persona.topics.length === 0) {
-    console.log(`[ceremony:decay] ${personaName} has no topics, skipping decay`);
-    queueExpirePhase(personaName, state);
+    console.log(`[ceremony:decay] ${persona.display_name} has no topics, skipping decay`);
+    queueExpirePhase(personaId, state);
     return;
   }
   
@@ -148,7 +155,7 @@ function applyDecayPhase(personaName: string, state: StateManager): void {
   const K = human.ceremony_config?.decay_rate ?? 0.1;
   
   let decayedCount = 0;
-  const updatedTopics = persona.topics.map(topic => {
+  const updatedTopics = persona.topics.map((topic: PersonaTopic) => {
     const result = applyDecayToValue(
       topic.exposure_current,
       topic.last_updated,
@@ -167,32 +174,37 @@ function applyDecayPhase(personaName: string, state: StateManager): void {
     };
   });
   
-  state.persona_update(personaName, { 
+  state.persona_update(personaId, { 
     topics: updatedTopics,
     last_updated: now.toISOString(),
   });
   
-  console.log(`[ceremony:decay] Applied decay to ${decayedCount}/${updatedTopics.length} topics for ${personaName}`);
+  console.log(`[ceremony:decay] Applied decay to ${decayedCount}/${updatedTopics.length} topics for ${persona.display_name}`);
   
-  queueExpirePhase(personaName, state);
+  queueExpirePhase(personaId, state);
 }
 
-export function queueDecayPhase(personaName: string, state: StateManager): void {
-  applyDecayPhase(personaName, state);
+export function queueDecayPhase(personaId: string, state: StateManager): void {
+  applyDecayPhase(personaId, state);
 }
 
-export function queueExpirePhase(personaName: string, state: StateManager): void {
-  console.log(`[ceremony:expire] Queueing for ${personaName}`);
+export function queueExpirePhase(personaId: string, state: StateManager): void {
+  const persona = state.persona_getById(personaId);
+  if (!persona) {
+    console.error(`[ceremony:expire] Persona not found: ${personaId}`);
+    return;
+  }
   
-  const persona = state.persona_get(personaName);
-  if (!persona || persona.topics.length === 0) {
-    console.log(`[ceremony:expire] ${personaName} has no topics, skipping to description check`);
-    queueDescriptionCheck(personaName, state);
+  console.log(`[ceremony:expire] Queueing for ${persona.display_name}`);
+  
+  if (persona.topics.length === 0) {
+    console.log(`[ceremony:expire] ${persona.display_name} has no topics, skipping to description check`);
+    queueDescriptionCheck(personaId, state);
     return;
   }
   
   const prompt = buildPersonaExpirePrompt({
-    persona_name: personaName,
+    persona_name: persona.display_name,
     topics: persona.topics,
   });
   
@@ -202,26 +214,26 @@ export function queueExpirePhase(personaName: string, state: StateManager): void
     system: prompt.system,
     user: prompt.user,
     next_step: LLMNextStep.HandlePersonaExpire,
-    data: { personaName },
+    data: { personaId, personaDisplayName: persona.display_name },
   });
 }
 
-export function queueExplorePhase(personaName: string, state: StateManager): void {
-  console.log(`[ceremony:explore] Queueing for ${personaName}`);
-  
-  const persona = state.persona_get(personaName);
+export function queueExplorePhase(personaId: string, state: StateManager): void {
+  const persona = state.persona_getById(personaId);
   if (!persona) {
-    console.error(`[ceremony:explore] Persona not found: ${personaName}`);
-    queueDescriptionCheck(personaName, state);
+    console.error(`[ceremony:explore] Persona not found: ${personaId}`);
+    queueDescriptionCheck(personaId, state);
     return;
   }
   
-  const messages = state.messages_get(personaName);
+  console.log(`[ceremony:explore] Queueing for ${persona.display_name}`);
+  
+  const messages = state.messages_get(personaId);
   const recentMessages = messages.slice(-20);
   const themes = extractConversationThemes(recentMessages);
   
   const prompt = buildPersonaExplorePrompt({
-    persona_name: personaName,
+    persona_name: persona.display_name,
     traits: persona.traits,
     remaining_topics: persona.topics,
     recent_conversation_themes: themes,
@@ -233,7 +245,7 @@ export function queueExplorePhase(personaName: string, state: StateManager): voi
     system: prompt.system,
     user: prompt.user,
     next_step: LLMNextStep.HandlePersonaExplore,
-    data: { personaName },
+    data: { personaId, personaDisplayName: persona.display_name },
   });
 }
 
@@ -259,17 +271,17 @@ function extractConversationThemes(messages: { content: string; role: string }[]
     .map(([word]) => word);
 }
 
-export function queueDescriptionCheck(personaName: string, state: StateManager): void {
-  console.log(`[ceremony:description] Queueing for ${personaName}`);
-  
-  const persona = state.persona_get(personaName);
+export function queueDescriptionCheck(personaId: string, state: StateManager): void {
+  const persona = state.persona_getById(personaId);
   if (!persona) {
-    console.error(`[ceremony:description] Persona not found: ${personaName}`);
+    console.error(`[ceremony:description] Persona not found: ${personaId}`);
     return;
   }
   
+  console.log(`[ceremony:description] Queueing for ${persona.display_name}`);
+  
   const prompt = buildDescriptionCheckPrompt({
-    persona_name: personaName,
+    persona_name: persona.display_name,
     current_short_description: persona.short_description,
     current_long_description: persona.long_description,
     traits: persona.traits,
@@ -282,7 +294,7 @@ export function queueDescriptionCheck(personaName: string, state: StateManager):
     system: prompt.system,
     user: prompt.user,
     next_step: LLMNextStep.HandleDescriptionCheck,
-    data: { personaName },
+    data: { personaId, personaDisplayName: persona.display_name },
   });
 }
 

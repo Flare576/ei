@@ -1,4 +1,4 @@
-import { LLMRequestType, LLMPriority, LLMNextStep, type Message } from "../types.js";
+import { LLMRequestType, LLMPriority, LLMNextStep, type Message, type PersonaTopic } from "../types.js";
 import type { StateManager } from "../state-manager.js";
 import {
   buildPersonaTopicScanPrompt,
@@ -9,7 +9,8 @@ import {
 } from "../../prompts/persona/index.js";
 
 export interface PersonaTopicContext {
-  personaName: string;
+  personaId: string;
+  personaDisplayName: string;
   messages_context: Message[];
   messages_analyze: Message[];
 }
@@ -21,7 +22,7 @@ function getAnalyzeFromTimestamp(context: PersonaTopicContext): string | null {
 
 export function queuePersonaTopicScan(context: PersonaTopicContext, state: StateManager): void {
   const prompt = buildPersonaTopicScanPrompt({
-    persona_name: context.personaName,
+    persona_name: context.personaDisplayName,
     messages_context: context.messages_context,
     messages_analyze: context.messages_analyze,
   });
@@ -33,7 +34,8 @@ export function queuePersonaTopicScan(context: PersonaTopicContext, state: State
     user: prompt.user,
     next_step: LLMNextStep.HandlePersonaTopicScan,
     data: {
-      personaName: context.personaName,
+      personaId: context.personaId,
+      personaDisplayName: context.personaDisplayName,
       analyze_from_timestamp: getAnalyzeFromTimestamp(context),
     },
   });
@@ -44,14 +46,14 @@ export function queuePersonaTopicMatch(
   context: PersonaTopicContext,
   state: StateManager
 ): void {
-  const persona = state.persona_get(context.personaName);
+  const persona = state.persona_getById(context.personaId);
   if (!persona) {
-    console.error(`[queuePersonaTopicMatch] Persona not found: ${context.personaName}`);
+    console.error(`[queuePersonaTopicMatch] Persona not found: ${context.personaId}`);
     return;
   }
 
   const prompt = buildPersonaTopicMatchPrompt({
-    persona_name: context.personaName,
+    persona_name: context.personaDisplayName,
     candidate,
     existing_topics: persona.topics,
   });
@@ -63,7 +65,8 @@ export function queuePersonaTopicMatch(
     user: prompt.user,
     next_step: LLMNextStep.HandlePersonaTopicMatch,
     data: {
-      personaName: context.personaName,
+      personaId: context.personaId,
+      personaDisplayName: context.personaDisplayName,
       candidate,
       analyze_from_timestamp: getAnalyzeFromTimestamp(context),
     },
@@ -76,18 +79,18 @@ export function queuePersonaTopicUpdate(
   context: PersonaTopicContext,
   state: StateManager
 ): void {
-  const persona = state.persona_get(context.personaName);
+  const persona = state.persona_getById(context.personaId);
   if (!persona) {
-    console.error(`[queuePersonaTopicUpdate] Persona not found: ${context.personaName}`);
+    console.error(`[queuePersonaTopicUpdate] Persona not found: ${context.personaId}`);
     return;
   }
 
   const existingTopic = matchResult.matched_id
-    ? persona.topics.find(t => t.id === matchResult.matched_id)
+    ? persona.topics.find((t: PersonaTopic) => t.id === matchResult.matched_id)
     : undefined;
 
   const prompt = buildPersonaTopicUpdatePrompt({
-    persona_name: context.personaName,
+    persona_name: context.personaDisplayName,
     short_description: persona.short_description,
     long_description: persona.long_description,
     traits: persona.traits,
@@ -104,10 +107,10 @@ export function queuePersonaTopicUpdate(
     user: prompt.user,
     next_step: LLMNextStep.HandlePersonaTopicUpdate,
     data: {
-      personaName: context.personaName,
+      personaId: context.personaId,
+      personaDisplayName: context.personaDisplayName,
       candidate,
-      existingTopicId: matchResult.matched_id ?? null,
-      isNewTopic: matchResult.action === "create",
+      matched_id: matchResult.matched_id,
       analyze_from_timestamp: getAnalyzeFromTimestamp(context),
     },
   });

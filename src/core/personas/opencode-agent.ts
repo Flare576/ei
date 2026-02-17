@@ -17,7 +17,7 @@ export async function ensureAgentPersona(
 ): Promise<PersonaEntity> {
   const { stateManager, interface: eiInterface, reader } = options;
 
-  const existing = stateManager.persona_get(agentName);
+  const existing = stateManager.persona_getByName(agentName);
   if (existing) {
     return existing;
   }
@@ -26,7 +26,10 @@ export async function ensureAgentPersona(
   const agentInfo = await agentReader.getAgentInfo(agentName);
 
   const now = new Date().toISOString();
+  const personaId = crypto.randomUUID();
   const persona: PersonaEntity = {
+    id: personaId,
+    display_name: agentName,
     entity: "system",
     aliases: [agentName],
     short_description: agentInfo?.description ?? "OpenCode coding agent",
@@ -44,7 +47,7 @@ export async function ensureAgentPersona(
     last_activity: now,
   };
 
-  stateManager.persona_add(agentName, persona);
+  stateManager.persona_add(persona);
   eiInterface?.onPersonaAdded?.();
 
   return persona;

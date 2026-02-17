@@ -19,7 +19,8 @@ import { getEmbeddingService, findTopK } from "../embedding-service.js";
 type ScanCandidate = FactScanCandidate | TraitScanCandidate | TopicScanCandidate | PersonScanCandidate;
 
 export interface ExtractionContext {
-  personaName: string;
+  personaId: string;
+  personaDisplayName: string;
   messages_context: Message[];
   messages_analyze: Message[];
   include_quotes?: boolean;
@@ -41,7 +42,7 @@ export function queueFactScan(context: ExtractionContext, state: StateManager, o
   
   for (const chunk of chunks) {
     const prompt = buildHumanFactScanPrompt({
-      persona_name: chunk.personaName,
+      persona_name: chunk.personaDisplayName,
       messages_context: chunk.messages_context,
       messages_analyze: chunk.messages_analyze,
     });
@@ -53,7 +54,8 @@ export function queueFactScan(context: ExtractionContext, state: StateManager, o
       user: prompt.user,
       next_step: LLMNextStep.HandleHumanFactScan,
       data: {
-        personaName: chunk.personaName,
+        personaId: chunk.personaId,
+        personaDisplayName: chunk.personaDisplayName,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
         include_quotes: options?.include_quotes,
       },
@@ -70,7 +72,7 @@ export function queueTraitScan(context: ExtractionContext, state: StateManager, 
   
   for (const chunk of chunks) {
     const prompt = buildHumanTraitScanPrompt({
-      persona_name: chunk.personaName,
+      persona_name: chunk.personaDisplayName,
       messages_context: chunk.messages_context,
       messages_analyze: chunk.messages_analyze,
     });
@@ -82,7 +84,8 @@ export function queueTraitScan(context: ExtractionContext, state: StateManager, 
       user: prompt.user,
       next_step: LLMNextStep.HandleHumanTraitScan,
       data: {
-        personaName: chunk.personaName,
+        personaId: chunk.personaId,
+        personaDisplayName: chunk.personaDisplayName,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
         include_quotes: options?.include_quotes,
       },
@@ -99,7 +102,7 @@ export function queueTopicScan(context: ExtractionContext, state: StateManager, 
   
   for (const chunk of chunks) {
     const prompt = buildHumanTopicScanPrompt({
-      persona_name: chunk.personaName,
+      persona_name: chunk.personaDisplayName,
       messages_context: chunk.messages_context,
       messages_analyze: chunk.messages_analyze,
     });
@@ -111,7 +114,8 @@ export function queueTopicScan(context: ExtractionContext, state: StateManager, 
       user: prompt.user,
       next_step: LLMNextStep.HandleHumanTopicScan,
       data: {
-        personaName: chunk.personaName,
+        personaId: chunk.personaId,
+        personaDisplayName: chunk.personaDisplayName,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
         include_quotes: options?.include_quotes,
       },
@@ -131,7 +135,7 @@ export function queuePersonScan(context: ExtractionContext, state: StateManager,
 
   for (const chunk of chunks) {
     const prompt = buildHumanPersonScanPrompt({
-      persona_name: chunk.personaName,
+      persona_name: chunk.personaDisplayName,
       messages_context: chunk.messages_context,
       messages_analyze: chunk.messages_analyze,
       known_persona_names: knownPersonaNames,
@@ -144,7 +148,8 @@ export function queuePersonScan(context: ExtractionContext, state: StateManager,
       user: prompt.user,
       next_step: LLMNextStep.HandleHumanPersonScan,
       data: {
-        personaName: chunk.personaName,
+        personaId: chunk.personaId,
+        personaDisplayName: chunk.personaDisplayName,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
         include_quotes: options?.include_quotes,
       },
@@ -188,7 +193,7 @@ export function queueDirectTopicUpdate(
       existing_item: topic,
       messages_context: chunk.messages_context,
       messages_analyze: chunk.messages_analyze,
-      persona_name: chunk.personaName,
+      persona_name: chunk.personaDisplayName,
     });
 
     state.queue_enqueue({
@@ -198,7 +203,8 @@ export function queueDirectTopicUpdate(
       user: prompt.user,
       next_step: LLMNextStep.HandleHumanItemUpdate,
       data: {
-        personaName: context.personaName,
+        personaId: context.personaId,
+        personaDisplayName: context.personaDisplayName,
         candidateType: "topic",
         matchedType: "topic",
         isNewItem: false,
@@ -352,7 +358,8 @@ export async function queueItemMatch(
     user: prompt.user,
     next_step: LLMNextStep.HandleHumanItemMatch,
     data: {
-      personaName: context.personaName,
+      personaId: context.personaId,
+      personaDisplayName: context.personaDisplayName,
       candidateType: dataType,
       itemName,
       itemValue,
@@ -405,7 +412,7 @@ export function queueItemUpdate(
       existing_item: existingItem,
       messages_context: chunk.messages_context,
       messages_analyze: chunk.messages_analyze,
-      persona_name: chunk.personaName,
+      persona_name: chunk.personaDisplayName,
       new_item_name: isNewItem ? context.itemName : undefined,
       new_item_value: isNewItem ? context.itemValue : undefined,
       include_quotes: context.include_quotes,
@@ -418,7 +425,8 @@ export function queueItemUpdate(
       user: prompt.user,
       next_step: LLMNextStep.HandleHumanItemUpdate,
       data: {
-        personaName: context.personaName,
+        personaId: context.personaId,
+        personaDisplayName: context.personaDisplayName,
         candidateType,
         matchedType,
         isNewItem,

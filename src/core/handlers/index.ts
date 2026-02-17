@@ -75,18 +75,19 @@ function splitMessagesByTimestamp(
 }
 
 function handlePersonaResponse(response: LLMResponse, state: StateManager): void {
-  const personaName = response.request.data.personaName as string;
-  if (!personaName) {
-    console.error("[handlePersonaResponse] No personaName in request data");
+  const personaId = response.request.data.personaId as string;
+  const personaDisplayName = response.request.data.personaDisplayName as string;
+  if (!personaId) {
+    console.error("[handlePersonaResponse] No personaId in request data");
     return;
   }
 
   // Always mark user messages as read - even if persona chooses not to respond,
   // the messages were "seen" and processed
-  state.messages_markPendingAsRead(personaName);
+  state.messages_markPendingAsRead(personaId);
 
   if (!response.content) {
-    console.log("[handlePersonaResponse] No content in response (persona chose not to respond)");
+    console.log(`[handlePersonaResponse] No content in response (${personaDisplayName} chose not to respond)`);
     return;
   }
 
@@ -99,14 +100,15 @@ function handlePersonaResponse(response: LLMResponse, state: StateManager): void
     context_status: ContextStatus.Default,
   };
 
-  state.messages_append(personaName, message);
-  console.log(`[handlePersonaResponse] Appended response to ${personaName}`);
+  state.messages_append(personaId, message);
+  console.log(`[handlePersonaResponse] Appended response to ${personaDisplayName}`);
 }
 
 function handleHeartbeatCheck(response: LLMResponse, state: StateManager): void {
-  const personaName = response.request.data.personaName as string;
-  if (!personaName) {
-    console.error("[handleHeartbeatCheck] No personaName in request data");
+  const personaId = response.request.data.personaId as string;
+  const personaDisplayName = response.request.data.personaDisplayName as string;
+  if (!personaId) {
+    console.error("[handleHeartbeatCheck] No personaId in request data");
     return;
   }
 
@@ -117,10 +119,10 @@ function handleHeartbeatCheck(response: LLMResponse, state: StateManager): void 
   }
 
   const now = new Date().toISOString();
-  state.persona_update(personaName, { last_heartbeat: now });
+  state.persona_update(personaId, { last_heartbeat: now });
 
   if (!result.should_respond) {
-    console.log(`[handleHeartbeatCheck] ${personaName} chose not to reach out`);
+    console.log(`[handleHeartbeatCheck] ${personaDisplayName} chose not to reach out`);
     return;
   }
 
@@ -133,8 +135,8 @@ function handleHeartbeatCheck(response: LLMResponse, state: StateManager): void 
       read: false,
       context_status: ContextStatus.Default,
     };
-    state.messages_append(personaName, message);
-    console.log(`[handleHeartbeatCheck] ${personaName} proactively messaged about: ${result.topic ?? "general"}`);
+    state.messages_append(personaId, message);
+    console.log(`[handleHeartbeatCheck] ${personaDisplayName} proactively messaged about: ${result.topic ?? "general"}`);
   }
 }
 
@@ -171,14 +173,15 @@ function handleEiHeartbeat(response: LLMResponse, state: StateManager): void {
 }
 
 function handlePersonaGeneration(response: LLMResponse, state: StateManager): void {
-  const personaName = response.request.data.personaName as string;
-  if (!personaName) {
-    console.error("[handlePersonaGeneration] No personaName in request data");
+  const personaId = response.request.data.personaId as string;
+  const personaDisplayName = response.request.data.personaDisplayName as string;
+  if (!personaId) {
+    console.error("[handlePersonaGeneration] No personaId in request data");
     return;
   }
 
   const result = response.parsed as PersonaGenerationResult | undefined;
-  const existingPartial = (response.request.data.partial as PartialPersona) ?? { name: personaName };
+  const existingPartial = (response.request.data.partial as PartialPersona) ?? { id: personaId, name: personaDisplayName };
 
   const now = new Date().toISOString();
 
@@ -212,13 +215,14 @@ function handlePersonaGeneration(response: LLMResponse, state: StateManager): vo
   };
 
   orchestratePersonaGeneration(updatedPartial, state);
-  console.log(`[handlePersonaGeneration] Orchestrated: ${personaName}`);
+  console.log(`[handlePersonaGeneration] Orchestrated: ${personaDisplayName}`);
 }
 
 function handlePersonaDescriptions(response: LLMResponse, state: StateManager): void {
-  const personaName = response.request.data.personaName as string;
-  if (!personaName) {
-    console.error("[handlePersonaDescriptions] No personaName in request data");
+  const personaId = response.request.data.personaId as string;
+  const personaDisplayName = response.request.data.personaDisplayName as string;
+  if (!personaId) {
+    console.error("[handlePersonaDescriptions] No personaId in request data");
     return;
   }
 
@@ -229,22 +233,23 @@ function handlePersonaDescriptions(response: LLMResponse, state: StateManager): 
   }
 
   if (result.no_change) {
-    console.log(`[handlePersonaDescriptions] No change needed for ${personaName}`);
+    console.log(`[handlePersonaDescriptions] No change needed for ${personaDisplayName}`);
     return;
   }
 
-  state.persona_update(personaName, {
+  state.persona_update(personaId, {
     short_description: result.short_description,
     long_description: result.long_description,
     last_updated: new Date().toISOString(),
   });
-  console.log(`[handlePersonaDescriptions] Updated descriptions for ${personaName}`);
+  console.log(`[handlePersonaDescriptions] Updated descriptions for ${personaDisplayName}`);
 }
 
 function handlePersonaTraitExtraction(response: LLMResponse, state: StateManager): void {
-  const personaName = response.request.data.personaName as string;
-  if (!personaName) {
-    console.error("[handlePersonaTraitExtraction] No personaName in request data");
+  const personaId = response.request.data.personaId as string;
+  const personaDisplayName = response.request.data.personaDisplayName as string;
+  if (!personaId) {
+    console.error("[handlePersonaTraitExtraction] No personaId in request data");
     return;
   }
 
@@ -264,8 +269,8 @@ function handlePersonaTraitExtraction(response: LLMResponse, state: StateManager
     last_updated: now,
   }));
 
-  state.persona_update(personaName, { traits, last_updated: now });
-  console.log(`[handlePersonaTraitExtraction] Updated ${traits.length} traits for ${personaName}`);
+  state.persona_update(personaId, { traits, last_updated: now });
+  console.log(`[handlePersonaTraitExtraction] Updated ${traits.length} traits for ${personaDisplayName}`);
 }
 
 function handleEiValidation(response: LLMResponse, state: StateManager): void {
@@ -336,70 +341,72 @@ function handleCeremonyDecayComplete(_response: LLMResponse, _state: StateManage
 }
 
 function handlePersonaExpire(response: LLMResponse, state: StateManager): void {
-  const personaName = response.request.data.personaName as string;
-  if (!personaName) {
-    console.error("[handlePersonaExpire] No personaName in request data");
+  const personaId = response.request.data.personaId as string;
+  const personaDisplayName = response.request.data.personaDisplayName as string;
+  if (!personaId) {
+    console.error("[handlePersonaExpire] No personaId in request data");
     return;
   }
 
   const result = response.parsed as PersonaExpireResult | undefined;
-  const persona = state.persona_get(personaName);
+  const persona = state.persona_getById(personaId);
   
   if (!persona) {
-    console.error(`[handlePersonaExpire] Persona not found: ${personaName}`);
+    console.error(`[handlePersonaExpire] Persona not found: ${personaDisplayName}`);
     return;
   }
 
   const idsToRemove = new Set(result?.topic_ids_to_remove ?? []);
-  const remainingTopics = persona.topics.filter(t => !idsToRemove.has(t.id));
+  const remainingTopics = persona.topics.filter((t: PersonaTopic) => !idsToRemove.has(t.id));
   const removedCount = persona.topics.length - remainingTopics.length;
 
   if (removedCount > 0) {
-    state.persona_update(personaName, { 
+    state.persona_update(personaId, { 
       topics: remainingTopics,
       last_updated: new Date().toISOString(),
     });
-    console.log(`[handlePersonaExpire] Removed ${removedCount} topic(s) from ${personaName}`);
+    console.log(`[handlePersonaExpire] Removed ${removedCount} topic(s) from ${personaDisplayName}`);
   } else {
-    console.log(`[handlePersonaExpire] No topics removed for ${personaName}`);
+    console.log(`[handlePersonaExpire] No topics removed for ${personaDisplayName}`);
   }
 
   const human = state.getHuman();
   const exploreThreshold = human.ceremony_config?.explore_threshold ?? 3;
 
   if (remainingTopics.length < exploreThreshold) {
-    console.log(`[handlePersonaExpire] ${personaName} has ${remainingTopics.length} topic(s) (< ${exploreThreshold}), triggering Explore`);
-    queueExplorePhase(personaName, state);
+    console.log(`[handlePersonaExpire] ${personaDisplayName} has ${remainingTopics.length} topic(s) (< ${exploreThreshold}), triggering Explore`);
+    queueExplorePhase(personaId, state);
   } else {
-    queueDescriptionCheck(personaName, state);
+    queueDescriptionCheck(personaId, state);
   }
 }
 
 function handlePersonaExplore(response: LLMResponse, state: StateManager): void {
-  const personaName = response.request.data.personaName as string;
-  if (!personaName) {
-    console.error("[handlePersonaExplore] No personaName in request data");
+  const personaId = response.request.data.personaId as string;
+  const personaDisplayName = response.request.data.personaDisplayName as string;
+  if (!personaId) {
+    console.error("[handlePersonaExplore] No personaId in request data");
     return;
   }
 
   const result = response.parsed as PersonaExploreResult | undefined;
-  const persona = state.persona_get(personaName);
+  const persona = state.persona_getById(personaId);
 
   if (!persona) {
-    console.error(`[handlePersonaExplore] Persona not found: ${personaName}`);
-    queueDescriptionCheck(personaName, state);
+    console.error(`[handlePersonaExplore] Persona not found: ${personaDisplayName}`);
+    queueDescriptionCheck(personaId, state);
     return;
   }
 
   const newTopics = result?.new_topics ?? [];
   if (newTopics.length === 0) {
-    console.log(`[handlePersonaExplore] No new topics generated for ${personaName}`);
-    queueDescriptionCheck(personaName, state);
+    console.log(`[handlePersonaExplore] No new topics generated for ${personaDisplayName}`);
+    queueDescriptionCheck(personaId, state);
     return;
   }
 
   const now = new Date().toISOString();
-  const existingNames = new Set(persona.topics.map(t => t.name.toLowerCase()));
+  const existingNames = new Set(persona.topics.map((t: PersonaTopic) => t.name.toLowerCase()));
 
   const topicsToAdd: PersonaTopic[] = newTopics
     .filter(t => !existingNames.has(t.name.toLowerCase()))
@@ -417,20 +424,21 @@ function handlePersonaExplore(response: LLMResponse, state: StateManager): void 
 
   if (topicsToAdd.length > 0) {
     const allTopics = [...persona.topics, ...topicsToAdd];
-    state.persona_update(personaName, { 
+    state.persona_update(personaId, { 
       topics: allTopics,
       last_updated: now,
     });
-    console.log(`[handlePersonaExplore] Added ${topicsToAdd.length} new topic(s) to ${personaName}: ${topicsToAdd.map(t => t.name).join(", ")}`);
+    console.log(`[handlePersonaExplore] Added ${topicsToAdd.length} new topic(s) to ${personaDisplayName}: ${topicsToAdd.map(t => t.name).join(", ")}`);
   }
 
-  queueDescriptionCheck(personaName, state);
+  queueDescriptionCheck(personaId, state);
 }
 
 function handleDescriptionCheck(response: LLMResponse, state: StateManager): void {
-  const personaName = response.request.data.personaName as string;
-  if (!personaName) {
-    console.error("[handleDescriptionCheck] No personaName in request data");
+  const personaId = response.request.data.personaId as string;
+  const personaDisplayName = response.request.data.personaDisplayName as string;
+  if (!personaId) {
+    console.error("[handleDescriptionCheck] No personaId in request data");
     return;
   }
 
@@ -440,21 +448,21 @@ function handleDescriptionCheck(response: LLMResponse, state: StateManager): voi
     return;
   }
 
-  console.log(`[handleDescriptionCheck] ${personaName}: ${result.should_update ? "UPDATE NEEDED" : "No update needed"} - ${result.reason ?? "no reason given"}`);
+  console.log(`[handleDescriptionCheck] ${personaDisplayName}: ${result.should_update ? "UPDATE NEEDED" : "No update needed"} - ${result.reason ?? "no reason given"}`);
 
   if (!result.should_update) {
-    console.log(`[handleDescriptionCheck] Ceremony complete for ${personaName}`);
+    console.log(`[handleDescriptionCheck] Ceremony complete for ${personaDisplayName}`);
     return;
   }
 
-  const persona = state.persona_get(personaName);
+  const persona = state.persona_getById(personaId);
   if (!persona) {
-    console.error(`[handleDescriptionCheck] Persona not found: ${personaName}`);
+    console.error(`[handleDescriptionCheck] Persona not found: ${personaDisplayName}`);
     return;
   }
 
   const prompt = buildPersonaDescriptionsPrompt({
-    name: personaName,
+    name: persona.display_name,
     aliases: persona.aliases ?? [],
     traits: persona.traits,
     topics: persona.topics,
@@ -466,10 +474,10 @@ function handleDescriptionCheck(response: LLMResponse, state: StateManager): voi
     system: prompt.system,
     user: prompt.user,
     next_step: LLMNextStep.HandlePersonaDescriptions,
-    data: { personaName },
+    data: { personaId, personaDisplayName },
   });
 
-  console.log(`[handleDescriptionCheck] Queued description regeneration for ${personaName}`);
+  console.log(`[handleDescriptionCheck] Queued description regeneration for ${personaDisplayName}`);
 }
 
 async function handleHumanFactScan(response: LLMResponse, state: StateManager): Promise<void> {
@@ -551,11 +559,12 @@ function handleHumanItemMatch(response: LLMResponse, state: StateManager): void 
   const candidateType = response.request.data.candidateType as DataItemType;
   const itemName = response.request.data.itemName as string;
   const itemValue = response.request.data.itemValue as string;
-  const personaName = response.request.data.personaName as string;
+  const personaId = response.request.data.personaId as string;
+  const personaDisplayName = response.request.data.personaDisplayName as string;
   const analyzeFrom = response.request.data.analyze_from_timestamp as string | null;
   const includeQuotes = response.request.data.include_quotes as boolean | undefined;
   
-  const allMessages = state.messages_get(personaName);
+  const allMessages = state.messages_get(personaId);
   const { messages_context, messages_analyze } = splitMessagesByTimestamp(allMessages, analyzeFrom);
 
   if (result.matched_guid) {
@@ -568,7 +577,8 @@ function handleHumanItemMatch(response: LLMResponse, state: StateManager): void 
   }
 
   const context: ExtractionContext & { itemName: string; itemValue: string; itemCategory?: string } = {
-    personaName,
+    personaId,
+    personaDisplayName,
     messages_context,
     messages_analyze,
     itemName,
@@ -593,7 +603,8 @@ async function handleHumanItemUpdate(response: LLMResponse, state: StateManager)
   const candidateType = response.request.data.candidateType as DataItemType;
   const isNewItem = response.request.data.isNewItem as boolean;
   const existingItemId = response.request.data.existingItemId as string | undefined;
-  const personaName = response.request.data.personaName as string;
+  const personaId = response.request.data.personaId as string;
+  const personaDisplayName = response.request.data.personaDisplayName as string;
 
   if (!result.name || !result.description || result.sentiment === undefined) {
     console.error("[handleHumanItemUpdate] Missing required fields in result");
@@ -603,9 +614,9 @@ async function handleHumanItemUpdate(response: LLMResponse, state: StateManager)
   const now = new Date().toISOString();
   const itemId = isNewItem ? crypto.randomUUID() : (existingItemId ?? crypto.randomUUID());
 
-  const persona = state.persona_get(personaName);
+  const persona = state.persona_getById(personaId);
   const personaGroup = persona?.group_primary ?? null;
-  const isEi = personaName.toLowerCase() === "ei";
+  const isEi = personaDisplayName.toLowerCase() === "ei";
 
   const human = state.getHuman();
   const getExistingItem = (): { learned_by?: string; persona_groups?: string[] } | undefined => {
@@ -646,11 +657,11 @@ async function handleHumanItemUpdate(response: LLMResponse, state: StateManager)
         validated: ValidationLevel.None,
         validated_date: now,
         last_updated: now,
-        learned_by: isNewItem ? personaName : existingItem?.learned_by,
+        learned_by: isNewItem ? personaDisplayName : existingItem?.learned_by,
         persona_groups: mergeGroups(existingItem?.persona_groups),
         embedding,
       };
-      applyOrValidate(state, "fact", fact, personaName, isEi, personaGroup);
+      applyOrValidate(state, "fact", fact, personaDisplayName, isEi, personaGroup);
       break;
     }
     case "trait": {
@@ -661,11 +672,11 @@ async function handleHumanItemUpdate(response: LLMResponse, state: StateManager)
         sentiment: result.sentiment,
         strength: (result as any).strength ?? 0.5,
         last_updated: now,
-        learned_by: isNewItem ? personaName : existingItem?.learned_by,
+        learned_by: isNewItem ? personaDisplayName : existingItem?.learned_by,
         persona_groups: mergeGroups(existingItem?.persona_groups),
         embedding,
       };
-      applyOrValidate(state, "trait", trait, personaName, isEi, personaGroup);
+      applyOrValidate(state, "trait", trait, personaDisplayName, isEi, personaGroup);
       break;
     }
     case "topic": {
@@ -681,11 +692,11 @@ async function handleHumanItemUpdate(response: LLMResponse, state: StateManager)
         exposure_current: calculateExposureCurrent(exposureImpact),
         exposure_desired: (result as any).exposure_desired ?? 0.5,
         last_updated: now,
-        learned_by: isNewItem ? personaName : existingItem?.learned_by,
+        learned_by: isNewItem ? personaDisplayName : existingItem?.learned_by,
         persona_groups: mergeGroups(existingItem?.persona_groups),
         embedding,
       };
-      applyOrValidate(state, "topic", topic, personaName, isEi, personaGroup);
+      applyOrValidate(state, "topic", topic, personaDisplayName, isEi, personaGroup);
       break;
     }
     case "person": {
@@ -699,17 +710,17 @@ async function handleHumanItemUpdate(response: LLMResponse, state: StateManager)
         exposure_current: calculateExposureCurrent(exposureImpact),
         exposure_desired: (result as any).exposure_desired ?? 0.5,
         last_updated: now,
-        learned_by: isNewItem ? personaName : existingItem?.learned_by,
+        learned_by: isNewItem ? personaDisplayName : existingItem?.learned_by,
         persona_groups: mergeGroups(existingItem?.persona_groups),
         embedding,
       };
-      applyOrValidate(state, "person", person, personaName, isEi, personaGroup);
+      applyOrValidate(state, "person", person, personaDisplayName, isEi, personaGroup);
       break;
     }
   }
 
-  const allMessages = state.messages_get(personaName);
-  await validateAndStoreQuotes(result.quotes, allMessages, itemId, personaName, personaGroup, state);
+  const allMessages = state.messages_get(personaId);
+  await validateAndStoreQuotes(result.quotes, allMessages, itemId, personaDisplayName, personaGroup, state);
 
   console.log(`[handleHumanItemUpdate] ${isNewItem ? "Created" : "Updated"} ${candidateType} "${result.name}"`);
 }
@@ -782,19 +793,20 @@ async function validateAndStoreQuotes(
 }
 
 function extractContext(response: LLMResponse, state: StateManager): ExtractionContext | null {
-  const personaName = response.request.data.personaName as string;
+  const personaId = response.request.data.personaId as string;
+  const personaDisplayName = response.request.data.personaDisplayName as string;
   const analyzeFrom = response.request.data.analyze_from_timestamp as string | null;
   const includeQuotes = response.request.data.include_quotes as boolean | undefined;
 
-  if (!personaName) {
-    console.error("[extractContext] Missing personaName in request data");
+  if (!personaId) {
+    console.error("[extractContext] Missing personaId in request data");
     return null;
   }
 
-  const allMessages = state.messages_get(personaName);
+  const allMessages = state.messages_get(personaId);
   const { messages_context, messages_analyze } = splitMessagesByTimestamp(allMessages, analyzeFrom);
 
-  return { personaName, messages_context, messages_analyze, include_quotes: includeQuotes };
+  return { personaId, personaDisplayName, messages_context, messages_analyze, include_quotes: includeQuotes };
 }
 
 function calculateExposureCurrent(impact: ExposureImpact | undefined): number {
@@ -833,9 +845,10 @@ function applyOrValidate(
 const MIN_MESSAGE_COUNT_FOR_CREATE = 2;
 
 function handlePersonaTopicScan(response: LLMResponse, state: StateManager): void {
-  const personaName = response.request.data.personaName as string;
-  if (!personaName) {
-    console.error("[handlePersonaTopicScan] No personaName in request data");
+  const personaId = response.request.data.personaId as string;
+  const personaDisplayName = response.request.data.personaDisplayName as string;
+  if (!personaId || !personaDisplayName) {
+    console.error("[handlePersonaTopicScan] Missing personaId or personaDisplayName in request data");
     return;
   }
 
@@ -846,11 +859,12 @@ function handlePersonaTopicScan(response: LLMResponse, state: StateManager): voi
   }
 
   const analyzeFrom = response.request.data.analyze_from_timestamp as string | null;
-  const allMessages = state.messages_get(personaName);
+  const allMessages = state.messages_get(personaId);
   const { messages_context, messages_analyze } = splitMessagesByTimestamp(allMessages, analyzeFrom);
 
   const context: PersonaTopicContext = {
-    personaName,
+    personaId,
+    personaDisplayName,
     messages_context,
     messages_analyze,
   };
@@ -862,11 +876,12 @@ function handlePersonaTopicScan(response: LLMResponse, state: StateManager): voi
 }
 
 function handlePersonaTopicMatch(response: LLMResponse, state: StateManager): void {
-  const personaName = response.request.data.personaName as string;
+  const personaId = response.request.data.personaId as string;
+  const personaDisplayName = response.request.data.personaDisplayName as string;
   const candidate = response.request.data.candidate as PersonaTopicScanCandidate;
   const analyzeFrom = response.request.data.analyze_from_timestamp as string | null;
 
-  if (!personaName || !candidate) {
+  if (!personaId || !personaDisplayName || !candidate) {
     console.error("[handlePersonaTopicMatch] Missing required data");
     return;
   }
@@ -890,11 +905,12 @@ function handlePersonaTopicMatch(response: LLMResponse, state: StateManager): vo
     return;
   }
 
-  const allMessages = state.messages_get(personaName);
+  const allMessages = state.messages_get(personaId);
   const { messages_context, messages_analyze } = splitMessagesByTimestamp(allMessages, analyzeFrom);
 
   const context: PersonaTopicContext = {
-    personaName,
+    personaId,
+    personaDisplayName,
     messages_context,
     messages_analyze,
   };
@@ -903,12 +919,13 @@ function handlePersonaTopicMatch(response: LLMResponse, state: StateManager): vo
 }
 
 function handlePersonaTopicUpdate(response: LLMResponse, state: StateManager): void {
-  const personaName = response.request.data.personaName as string;
+  const personaId = response.request.data.personaId as string;
+  const personaDisplayName = response.request.data.personaDisplayName as string;
   const existingTopicId = response.request.data.existingTopicId as string | null;
   const isNewTopic = response.request.data.isNewTopic as boolean;
 
-  if (!personaName) {
-    console.error("[handlePersonaTopicUpdate] No personaName in request data");
+  if (!personaId) {
+    console.error("[handlePersonaTopicUpdate] No personaId in request data");
     return;
   }
 
@@ -918,9 +935,9 @@ function handlePersonaTopicUpdate(response: LLMResponse, state: StateManager): v
     return;
   }
 
-  const persona = state.persona_get(personaName);
+  const persona = state.persona_getById(personaId);
   if (!persona) {
-    console.error(`[handlePersonaTopicUpdate] Persona not found: ${personaName}`);
+    console.error(`[handlePersonaTopicUpdate] Persona not found: ${personaDisplayName}`);
     return;
   }
 
@@ -940,10 +957,10 @@ function handlePersonaTopicUpdate(response: LLMResponse, state: StateManager): v
     };
 
     const allTopics = [...persona.topics, newTopic];
-    state.persona_update(personaName, { topics: allTopics, last_updated: now });
-    console.log(`[handlePersonaTopicUpdate] Created new topic "${result.name}" for ${personaName}`);
+    state.persona_update(personaId, { topics: allTopics, last_updated: now });
+    console.log(`[handlePersonaTopicUpdate] Created new topic "${result.name}" for ${personaDisplayName}`);
   } else if (existingTopicId) {
-    const updatedTopics = persona.topics.map(t => {
+    const updatedTopics = persona.topics.map((t: PersonaTopic) => {
       if (t.id !== existingTopicId) return t;
 
       const newExposure = Math.min(1.0, t.exposure_current + (result.exposure_current - t.exposure_current));
@@ -961,8 +978,8 @@ function handlePersonaTopicUpdate(response: LLMResponse, state: StateManager): v
       };
     });
 
-    state.persona_update(personaName, { topics: updatedTopics, last_updated: now });
-    console.log(`[handlePersonaTopicUpdate] Updated topic "${result.name}" for ${personaName}`);
+    state.persona_update(personaId, { topics: updatedTopics, last_updated: now });
+    console.log(`[handlePersonaTopicUpdate] Updated topic "${result.name}" for ${personaDisplayName}`);
   }
 }
 

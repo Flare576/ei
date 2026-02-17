@@ -5,6 +5,7 @@ import { buildPersonaGenerationPrompt } from "../../prompts/index.js";
 const MAX_ORCHESTRATOR_LOOPS = 4;
 
 export interface PartialPersona {
+  id: string;
   name: string;
   aliases?: string[];
   description?: string;
@@ -53,7 +54,8 @@ export function orchestratePersonaGeneration(
       user: prompt.user,
       next_step: LLMNextStep.HandlePersonaGeneration,
       data: {
-        personaName: partial.name,
+        personaId: partial.id,
+        personaDisplayName: partial.name,
         partial: { ...partial, loop_counter: loopCounter },
       },
     });
@@ -61,7 +63,7 @@ export function orchestratePersonaGeneration(
   }
 
   const now = new Date().toISOString();
-  stateManager.persona_update(partial.name, {
+  stateManager.persona_update(partial.id, {
     short_description: partial.short_description,
     long_description: partial.long_description,
     traits: partial.traits as Trait[],
