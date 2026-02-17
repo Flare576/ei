@@ -148,6 +148,24 @@ export const AGENT_TO_AGENT_PREFIXES = [
 ] as const;
 
 /**
+ * Agent name aliases for consolidating variants into a single persona.
+ * OpenCode's plugin ecosystem results in the same logical agent having
+ * different names across versions/configs (e.g., "sisyphus", "Sisyphus",
+ * "Sisyphus (Ultraworker)", "Planner-Sisyphus" are all the same agent).
+ * 
+ * Key = canonical name (used for display_name, Title Case)
+ * Value = array of variants that should resolve to this persona
+ */
+export const AGENT_ALIASES: Record<string, string[]> = {
+  Sisyphus: [
+    "sisyphus",
+    "Sisyphus",
+    "Sisyphus (Ultraworker)",
+    "Planner-Sisyphus",
+  ],
+};
+
+/**
  * Built-in agent definitions (fallback when config unavailable)
  */
 export const BUILTIN_AGENTS: Record<string, OpenCodeAgent> = {

@@ -1,6 +1,7 @@
 import type { PersonaEntity, Ei_Interface } from "../types.js";
 import type { StateManager } from "../state-manager.js";
 import { OpenCodeReader } from "../../integrations/opencode/reader.js";
+import { AGENT_ALIASES } from "../../integrations/opencode/types.js";
 
 const OPENCODE_GROUP = "OpenCode";
 const TWELVE_HOURS_MS = 43200000;
@@ -11,27 +12,38 @@ export interface EnsureAgentPersonaOptions {
   reader?: OpenCodeReader;
 }
 
+function resolveCanonicalAgent(agentName: string): { canonical: string; aliases: string[] } {
+  for (const [canonical, variants] of Object.entries(AGENT_ALIASES)) {
+    if (variants.includes(agentName)) {
+      return { canonical, aliases: variants };
+    }
+  }
+  return { canonical: agentName, aliases: [agentName] };
+}
+
 export async function ensureAgentPersona(
   agentName: string,
   options: EnsureAgentPersonaOptions
 ): Promise<PersonaEntity> {
   const { stateManager, interface: eiInterface, reader } = options;
 
-  const existing = stateManager.persona_getByName(agentName);
+  const { canonical, aliases } = resolveCanonicalAgent(agentName);
+
+  const existing = stateManager.persona_getByName(canonical);
   if (existing) {
     return existing;
   }
 
   const agentReader = reader ?? new OpenCodeReader();
-  const agentInfo = await agentReader.getAgentInfo(agentName);
+  const agentInfo = await agentReader.getAgentInfo(canonical);
 
   const now = new Date().toISOString();
   const personaId = crypto.randomUUID();
   const persona: PersonaEntity = {
     id: personaId,
-    display_name: agentName,
+    display_name: canonical,
     entity: "system",
-    aliases: [agentName],
+    aliases,
     short_description: agentInfo?.description ?? "OpenCode coding agent",
     long_description: "An OpenCode agent that assists with coding tasks.",
     group_primary: OPENCODE_GROUP,

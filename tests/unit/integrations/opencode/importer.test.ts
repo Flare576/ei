@@ -500,7 +500,7 @@ describe("importOpenCodeSessions", () => {
     });
 
     const buildPersona = createdPersonas.get("build");
-    const sisyphusPersona = createdPersonas.get("sisyphus");
+    const sisyphusPersona = createdPersonas.get("Sisyphus"); // Canonical name from AGENT_ALIASES
     
     expect(mockInterface.onMessageAdded).toHaveBeenCalledWith(buildPersona!.id);
     expect(mockInterface.onMessageAdded).toHaveBeenCalledWith(sisyphusPersona!.id);

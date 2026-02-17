@@ -150,14 +150,31 @@ describe("ensureAgentPersona", () => {
     expect(result.short_description).toBe("The main coding agent");
   });
 
-  it("sets alias to agent name", async () => {
+  it("sets aliases from AGENT_ALIASES for known agents", async () => {
     const result = await ensureAgentPersona("sisyphus", {
       stateManager: mockStateManager as StateManager,
       interface: mockInterface as Ei_Interface,
       reader: mockReader as OpenCodeReader,
     });
 
-    expect(result.aliases).toEqual(["sisyphus"]);
+    expect(result.aliases).toEqual([
+      "sisyphus",
+      "Sisyphus",
+      "Sisyphus (Ultraworker)",
+      "Planner-Sisyphus",
+    ]);
+    expect(result.display_name).toBe("Sisyphus");
+  });
+
+  it("sets alias to agent name for unknown agents", async () => {
+    const result = await ensureAgentPersona("build", {
+      stateManager: mockStateManager as StateManager,
+      interface: mockInterface as Ei_Interface,
+      reader: mockReader as OpenCodeReader,
+    });
+
+    expect(result.aliases).toEqual(["build"]);
+    expect(result.display_name).toBe("build");
   });
 
   it("creates persona with empty traits and topics", async () => {
@@ -227,7 +244,7 @@ describe("ensureAllAgentPersonas", () => {
     };
 
     mockStateManager.persona_getByName = vi.fn().mockImplementation((name: string) =>
-      name === "build" ? existingPersona : null
+      name === "build" ? existingPersona : name === "Sisyphus" ? null : null
     );
 
     const result = await ensureAllAgentPersonas(
@@ -245,7 +262,7 @@ describe("ensureAllAgentPersonas", () => {
     expect(mockStateManager.persona_add).toHaveBeenCalledWith(
       expect.objectContaining({
         id: expect.any(String),
-        display_name: "sisyphus",
+        display_name: "Sisyphus",
       })
     );
   });
