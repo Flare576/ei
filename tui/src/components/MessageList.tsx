@@ -18,7 +18,7 @@ export function MessageList() {
   const myId = ++instanceId;
   logger.info(`MessageList instance ${myId} MOUNTED`);
   
-  const { messages, activePersona, activeContextBoundary } = useEi();
+  const { messages, activePersonaId, personas, activeContextBoundary } = useEi();
   const { focusedPanel, registerMessageScroll } = useKeyboardNav();
 
   const isFocused = () => focusedPanel() === "messages";
@@ -59,7 +59,11 @@ export function MessageList() {
         >
           <For each={messages()}>
             {(message, index) => {
-              const speaker = message.role === "human" ? "Human" : activePersona() || "Ei";
+              const getDisplayName = () => {
+                const persona = personas().find(p => p.id === activePersonaId());
+                return persona?.display_name ?? "Ei";
+              };
+              const speaker = message.role === "human" ? "Human" : getDisplayName();
               const speakerColor = message.role === "human" ? "#2aa198" : "#b58900";
               const header = `${speaker} (${formatTime(message.timestamp)}):`;
               

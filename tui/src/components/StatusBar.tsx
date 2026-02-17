@@ -3,8 +3,15 @@ import { useEi } from "../context/ei";
 import { useKeyboardNav } from "../context/keyboard";
 
 export function StatusBar() {
-  const { activePersona, queueStatus, notification } = useEi();
+  const { activePersonaId, personas, queueStatus, notification } = useEi();
   const { focusedPanel, sidebarVisible } = useKeyboardNav();
+
+  const getActiveDisplayName = () => {
+    const id = activePersonaId();
+    if (!id) return null;
+    const persona = personas().find(p => p.id === id);
+    return persona?.display_name ?? id;
+  };
 
   const getQueueIndicator = () => {
     const status = queueStatus();
@@ -41,8 +48,8 @@ export function StatusBar() {
       <box flexGrow={1}>
         <Show when={notification()} fallback={
           <text fg="#586e75">
-            <Show when={activePersona()} fallback="No persona selected">
-              {activePersona()}
+            <Show when={getActiveDisplayName()} fallback="No persona selected">
+              {getActiveDisplayName()}
             </Show>
           </text>
         }>

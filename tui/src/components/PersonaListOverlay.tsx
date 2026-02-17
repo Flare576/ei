@@ -5,9 +5,9 @@ import type { PersonaSummary } from "../../../src/core/types.js";
 
 interface PersonaListOverlayProps {
   personas: PersonaSummary[];
-  activePersona: string | null;
+  activePersonaId: string | null;
   title?: string;
-  onSelect: (name: string) => void;
+  onSelect: (personaId: string) => void;
   onDismiss: () => void;
 }
 
@@ -20,7 +20,7 @@ export function PersonaListOverlay(props: PersonaListOverlayProps) {
     const filter = filterText().toLowerCase();
     if (!filter) return props.personas;
     return props.personas.filter((p) =>
-      p.name.toLowerCase().includes(filter)
+      p.display_name.toLowerCase().includes(filter)
     );
   });
 
@@ -53,7 +53,7 @@ export function PersonaListOverlay(props: PersonaListOverlayProps) {
         event.preventDefault();
         if (listLength > 0) {
           const selected = filteredPersonas()[selectedIndex()];
-          props.onSelect(selected.name);
+          props.onSelect(selected.id);
         }
         return;
       }
@@ -80,7 +80,7 @@ export function PersonaListOverlay(props: PersonaListOverlayProps) {
         event.preventDefault();
         if (listLength > 0) {
           const selected = filteredPersonas()[selectedIndex()];
-          props.onSelect(selected.name);
+          props.onSelect(selected.id);
         }
         return;
       }
@@ -133,13 +133,13 @@ export function PersonaListOverlay(props: PersonaListOverlayProps) {
         <scrollbox height="100%">
           <For each={filteredPersonas()}>
             {(persona, index) => {
-              const isActive = () => props.activePersona === persona.name;
+              const isActive = () => props.activePersonaId === persona.id;
               const isSelected = () => selectedIndex() === index();
               const description = truncateDescription(persona.short_description);
               const label = () => {
                 const prefix = isActive() ? "> " : "  ";
                 const descText = description ? ` - ${description}` : "";
-                return `${prefix}${persona.name}${descText}`;
+                return `${prefix}${persona.display_name}${descText}`;
               };
 
               return (

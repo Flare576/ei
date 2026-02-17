@@ -23,7 +23,7 @@ const TEXTAREA_KEYBINDINGS: KeyBinding[] = [
 
 export function PromptInput() {
   const ei = useEi();
-  const { sendMessage, activePersona, stopProcessor, showNotification } = ei;
+  const { sendMessage, activePersonaId, stopProcessor, showNotification } = ei;
   const { registerTextarea, registerEditorHandler, exitApp, renderer } = useKeyboardNav();
   const { showOverlay, hideOverlay, overlayRenderer } = useOverlay();
 
@@ -80,7 +80,7 @@ export function PromptInput() {
     }
     
     textareaRef?.clear();
-    if (!activePersona()) return;
+    if (!activePersonaId()) return;
     await sendMessage(text);
   };
 
@@ -91,7 +91,7 @@ export function PromptInput() {
   registerEditorHandler(handleEditor);
 
   const getPlaceholder = () => {
-    if (!activePersona()) return "Select a persona...";
+    if (!activePersonaId()) return "Select a persona...";
     return "Type your message... (Enter to send, Ctrl+E for editor)";
   };
 

@@ -3,7 +3,7 @@ import { useEi } from "../context/ei";
 import { useKeyboardNav } from "../context/keyboard";
 
 export function Sidebar() {
-  const { personas, activePersona } = useEi();
+  const { personas, activePersonaId } = useEi();
   const { focusedPanel } = useKeyboardNav();
 
   const isFocused = () => focusedPanel() === "sidebar";
@@ -17,11 +17,11 @@ export function Sidebar() {
   let highlightTimer: ReturnType<typeof setTimeout> | null = null;
 
   createEffect(() => {
-    const current = activePersona();
-    if (current) {
+    const currentId = activePersonaId();
+    if (currentId) {
       if (highlightTimer) clearTimeout(highlightTimer);
       
-      setHighlightedPersona(current);
+      setHighlightedPersona(currentId);
       
       highlightTimer = setTimeout(() => {
         setHighlightedPersona(null);
@@ -51,11 +51,11 @@ export function Sidebar() {
         <scrollbox height="100%">
           <For each={visiblePersonas()}>
             {(persona) => {
-              const isActive = () => activePersona() === persona.name;
+              const isActive = () => activePersonaId() === persona.id;
               const displayName = () => 
                 persona.aliases.length > 0 
                   ? persona.aliases[0] 
-                  : persona.name;
+                  : persona.display_name;
 
               const getLabel = () => {
                 const prefix = isActive() ? "* " : "  ";
@@ -74,7 +74,7 @@ export function Sidebar() {
               return (
                 <box
                   backgroundColor={
-                    isActive() && highlightedPersona() === persona.name 
+                    isActive() && highlightedPersona() === persona.id 
                       ? "#3d5a80"
                       : isActive() 
                       ? "#2d3748"
