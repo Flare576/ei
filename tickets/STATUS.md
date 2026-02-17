@@ -1,6 +1,6 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-02-15 (TUI $EDITOR Integration DONE)
+> Last updated: 2026-02-16 (Added 0150 TUI /quotes Command)
 
 ## Overview
 
@@ -9,11 +9,11 @@
 | PENDING | 15 |
 | IN_PROGRESS | 0 |
 | QA | 0 |
-| DONE | 101 |
+| DONE | 103 |
 | BLOCKED | 0 |
 | SUPERSEDED | 3 |
 
-> 122 total tickets (101 done + 15 pending + 3 backlog + 0 in_progress + 0 QA + 3 superseded).
+> 124 total tickets (103 done + 15 pending + 3 backlog + 0 in_progress + 0 QA + 3 superseded).
 
 ---
 
@@ -78,7 +78,9 @@
 | 0140 | TUI Persona Switching | 0139 | DONE |
 | 0141 | TUI Basic Commands | 0139, 0140 | DONE |
 | 0142 | TUI $EDITOR Integration | 0139, 0140 | DONE |
-| 0144 | TUI Unread Message Marking | 0100 | PENDING |
+| 0144 | TUI Unread Message Marking | 0100 | DONE |
+| 0149 | TUI Markdown Rendering | 0100 | DONE |
+| 0150 | TUI /quotes Command | 0100, 0116 | PENDING |
 
 ---
 
@@ -207,6 +209,8 @@
 | 0140 | TUI Persona Switching | 2026-02-14 |
 | 0141 | TUI Basic Commands | 2026-02-15 |
 | 0142 | TUI $EDITOR Integration | 2026-02-15 |
+| 0144 | TUI Unread Message Marking | 2026-02-16 |
+| 0149 | TUI Markdown Rendering | 2026-02-16 |
 
 ---
 
