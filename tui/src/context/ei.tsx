@@ -50,7 +50,7 @@ export interface EiContextValue {
   resumeQueue: () => Promise<void>;
   stopProcessor: () => Promise<void>;
   showNotification: (message: string, level: "error" | "warn" | "info") => void;
-  createPersona: (input: { name: string }) => Promise<void>;
+  createPersona: (input: { name: string }) => Promise<string>;
   archivePersona: (personaId: string) => Promise<void>;
   unarchivePersona: (personaId: string) => Promise<void>;
   setContextBoundary: (personaId: string, timestamp: string | null) => Promise<void>;
@@ -177,9 +177,9 @@ export const EiProvider: ParentComponent = (props) => {
     }
   };
 
-  const createPersona = async (input: { name: string }) => {
-    if (!processor) return;
-    await processor.createPersona(input);
+  const createPersona = async (input: { name: string }): Promise<string> => {
+    if (!processor) return "";
+    return await processor.createPersona(input);
   };
 
   const archivePersona = async (personaId: string) => {

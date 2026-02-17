@@ -572,7 +572,7 @@ export class Processor {
     return this.stateManager.persona_getById(personaId);
   }
 
-  async createPersona(input: PersonaCreationInput): Promise<void> {
+  async createPersona(input: PersonaCreationInput): Promise<string> {
     if (isReservedPersonaName(input.name)) {
       throw new Error(`Cannot create persona with reserved name "${input.name}". Reserved names: ${RESERVED_PERSONA_NAMES.join(", ")}`);
     }
@@ -605,6 +605,8 @@ export class Processor {
       this.stateManager,
       () => this.interface.onPersonaUpdated?.(placeholder.display_name)
     );
+
+    return personaId;
   }
 
   async archivePersona(personaId: string): Promise<void> {

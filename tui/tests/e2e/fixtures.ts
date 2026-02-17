@@ -62,7 +62,7 @@ export function createCheckpointWithTwoPersonas() {
           },
         ],
       },
-      sage: {
+      "007": {
         entity: {
           entity: "system",
           id: "007",

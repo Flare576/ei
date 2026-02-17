@@ -54,7 +54,7 @@ function createMultiPersonaCheckpoint() {
           },
         ],
       },
-      alice: {
+      "001": {
         entity: {
           entity: "system",
           id: "001",
@@ -82,7 +82,7 @@ function createMultiPersonaCheckpoint() {
           },
         ],
       },
-      bob: {
+      "002": {
         entity: {
           entity: "system",
           id: "002",

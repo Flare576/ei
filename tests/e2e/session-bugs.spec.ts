@@ -65,7 +65,6 @@ function createCheckpoint(
   personaConfigs: Array<{
     id: string;
     display_name: string;
-    name: string;
     short_description?: string;
     messages?: Array<{ role: "human" | "system"; content: string; read?: boolean }>;
     is_paused?: boolean;
@@ -82,10 +81,10 @@ function createCheckpoint(
       entity: {
         entity: "system",
         id: config.id,
-        display_name: config.name,
-        aliases: [config.name],
-        short_description: config.short_description ?? `${config.name} persona`,
-        long_description: `${config.name} is a test persona for E2E testing.`,
+        display_name: config.display_name,
+        aliases: [config.display_name],
+        short_description: config.short_description ?? `${config.display_name} persona`,
+        long_description: `${config.display_name} is a test persona for E2E testing.`,
         traits: [],
         topics: [],
         facts: [],
@@ -158,8 +157,8 @@ test.describe("Session Bug Coverage (0112)", () => {
   }) => {
     // Setup: Create checkpoint with TestPersona
     const checkpoint = createCheckpoint([
-      { id: "ei", name: "Ei", short_description: "Your companion" },
-      { id: "00", name: "TestPersona", short_description: "Test persona for archiving" },
+      { id: "ei", display_name: "Ei", short_description: "Your companion" },
+      { id: "00", display_name: "TestPersona", short_description: "Test persona for archiving" },
     ]);
 
     mockServer.setResponseForType("response", {
@@ -217,7 +216,7 @@ test.describe("Session Bug Coverage (0112)", () => {
     const checkpoint = createCheckpoint([
       { 
         id: "00",
-        name: "Alice", 
+        display_name: "Alice", 
         short_description: "First persona",
         messages: [
           { role: "human", content: "Hello Alice" },
@@ -226,7 +225,7 @@ test.describe("Session Bug Coverage (0112)", () => {
       },
       { 
         id: "01",
-        name: "Bob", 
+        display_name: "Bob", 
         short_description: "Second persona",
         messages: [
           { role: "human", content: "Hello Bob" },
@@ -297,7 +296,7 @@ test.describe("Session Bug Coverage (0112)", () => {
     const checkpoint = createCheckpoint([
       { 
         id: "01",
-        name: "ContextTest", 
+        display_name: "ContextTest", 
         short_description: "Persona with many messages",
         messages,
       },
@@ -361,7 +360,7 @@ test.describe("Session Bug Coverage (0112)", () => {
     test.slow(); // Allow extra time for LLM generation
 
     const checkpoint = createCheckpoint([
-      { id: "ei", name: "Ei", short_description: "Your companion" },
+      { id: "ei", display_name: "Ei", short_description: "Your companion" },
     ]);
 
     mockServer.setResponseForType("persona-generation", {
@@ -443,8 +442,8 @@ test.describe("Session Bug Coverage (0112)", () => {
     mockServerUrl,
   }) => {
     const checkpoint = createCheckpoint([
-      { "id": "ei", name: "Ei", short_description: "Your companion" },
-      { "id": "01", name: "TestBot", short_description: "Test persona for pausing" },
+      { "id": "ei", display_name: "Ei", short_description: "Your companion" },
+      { "id": "01", display_name: "TestBot", short_description: "Test persona for pausing" },
     ]);
 
     mockServer.setResponseForType("response", {

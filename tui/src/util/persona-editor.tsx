@@ -57,11 +57,14 @@ export async function createPersonaViaEditor(options: NewPersonaEditorOptions): 
     try {
       const parsed = newPersonaFromYAML(result.content);
       
-      await ctx.ei.createPersona({ 
+      const personaId = await ctx.ei.createPersona({ 
         name: personaName,
         ...parsed,
       });
-      ctx.ei.selectPersona(personaName);
+      // Ensure store has the new persona before selecting
+      // (onPersonaAdded fires refreshPersonas but doesn't await it)
+      await ctx.ei.refreshPersonas();
+      ctx.ei.selectPersona(personaId);
       
       ctx.showNotification(`Created ${personaName}`, "info");
       return { created: true, cancelled: false };
