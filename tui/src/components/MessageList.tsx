@@ -3,6 +3,7 @@ import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core";
 import { useEi } from "../context/ei.js";
 import { useKeyboardNav } from "../context/keyboard.js";
 import { logger } from "../util/logger.js";
+import { solarizedDarkSyntax } from "../util/syntax.js";
 
 function formatTime(timestamp: string): string {
   const date = new Date(timestamp);
@@ -94,11 +95,13 @@ export function MessageList() {
                       attributes={TextAttributes.BOLD}
                       content={header}
                     />
-                    <text 
-                      fg="#839496" 
-                      marginLeft={2}
-                      content={message.content}
-                    />
+                    <box marginLeft={2}>
+                      <markdown
+                        content={message.content}
+                        syntaxStyle={solarizedDarkSyntax}
+                        conceal={true}
+                      />
+                    </box>
                   </box>
                   <box marginTop={1} marginBottom={1} visible={showTrailingDivider()}>
                     <text fg="#586e75" content="─── New Context ───" />
