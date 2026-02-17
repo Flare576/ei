@@ -7,6 +7,8 @@ Everything stays private and local to your device.
 To get started, what should I call you?`;
 
 export const EI_PERSONA_DEFINITION = {
+  id: "ei",
+  display_name: "Ei",
   entity: "system" as const,
   aliases: ["Ei", "ei"],
   short_description: "Your system guide and companion",

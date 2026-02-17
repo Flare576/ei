@@ -20,6 +20,7 @@ function isAgentToAgentMessage(content: string): boolean {
 interface SessionAgentMessages {
   sessionId: string;
   agentName: string;
+  personaId?: string;  // Set after ensureAgentPersona
   messages: OpenCodeMessage[];
 }
 
@@ -106,19 +107,28 @@ export async function importOpenCodeSessions(
 
   console.log(`[OpenCode] Sessions done. Discovered ${agentsForPersona.size} personas, importing messages...`);
 
+  const agentNameToPersonaId = new Map<string, string>();
+  
   for (const agentName of agentsForPersona) {
-    const existing = stateManager.persona_get(agentName);
+    let existing = stateManager.persona_getByName(agentName);
     if (!existing) {
-      await ensureAgentPersona(agentName, {
+      existing = await ensureAgentPersona(agentName, {
         stateManager,
         interface: eiInterface,
         reader,
       });
       result.personasCreated.push(agentName);
     }
+    agentNameToPersonaId.set(agentName, existing.id);
   }
 
   for (const batch of sessionAgentBatches) {
+    batch.personaId = agentNameToPersonaId.get(batch.agentName);
+    if (!batch.personaId) {
+      console.warn(`[OpenCode] No persona ID for agent ${batch.agentName}, skipping batch`);
+      continue;
+    }
+    
     const sortedMessages = batch.messages.sort(
       (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );
@@ -132,19 +142,19 @@ export async function importOpenCodeSessions(
         read: true,
         context_status: "default" as ContextStatus,
       };
-      stateManager.messages_append(batch.agentName, eiMessage);
+      stateManager.messages_append(batch.personaId, eiMessage);
       result.messagesImported++;
     }
   }
 
-  const updatedAgents = new Set<string>();
+  const updatedPersonaIds = new Set<string>();
   for (const batch of sessionAgentBatches) {
-    if (!updatedAgents.has(batch.agentName)) {
-      stateManager.persona_update(batch.agentName, {
+    if (batch.personaId && !updatedPersonaIds.has(batch.personaId)) {
+      stateManager.persona_update(batch.personaId, {
         last_activity: new Date().toISOString(),
       });
-      eiInterface?.onMessageAdded?.(batch.agentName);
-      updatedAgents.add(batch.agentName);
+      eiInterface?.onMessageAdded?.(batch.personaId);
+      updatedPersonaIds.add(batch.personaId);
     }
   }
 
@@ -223,13 +233,23 @@ function queueDirectTopicUpdatesForSessions(
   let totalChunks = 0;
 
   for (const batch of batches) {
+    if (!batch.personaId) {
+      continue;
+    }
+    
     const topic = human.topics.find(t => t.id === batch.sessionId);
     if (!topic) {
       console.warn(`[OpenCode] Topic not found for session ${batch.sessionId}, skipping extraction`);
       continue;
     }
 
-    const allMessages = stateManager.messages_get(batch.agentName);
+    const persona = stateManager.persona_getById(batch.personaId);
+    if (!persona) {
+      console.warn(`[OpenCode] Persona not found: ${batch.personaId}, skipping extraction`);
+      continue;
+    }
+
+    const allMessages = stateManager.messages_get(batch.personaId);
     const batchMessageIds = new Set(batch.messages.map(m => m.id));
     
     const analyzeStartIndex = allMessages.findIndex(m => batchMessageIds.has(m.id));
@@ -238,7 +258,8 @@ function queueDirectTopicUpdatesForSessions(
     }
 
     const context: ExtractionContext = {
-      personaName: batch.agentName,
+      personaId: batch.personaId,
+      personaDisplayName: persona.display_name,
       messages_context: allMessages.slice(0, analyzeStartIndex),
       messages_analyze: allMessages.filter(m => batchMessageIds.has(m.id)),
     };

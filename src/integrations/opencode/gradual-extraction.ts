@@ -54,10 +54,9 @@ export function processGradualExtraction(stateManager: StateManager): GradualExt
   const options: ExtractionOptions = { include_quotes: false };
 
   for (const persona of openCodePersonas) {
-    const personaName = persona.aliases?.[0];
-    if (!personaName) continue;
+    if (!persona.id) continue;
 
-    const allMessages = stateManager.messages_get(personaName);
+    const allMessages = stateManager.messages_get(persona.id);
     const messagesInScope = allMessages.filter(msg => {
       const msgMs = new Date(msg.timestamp).getTime();
       return msgMs >= extractionPointMs && msgMs < scopeLimit;
@@ -71,7 +70,8 @@ export function processGradualExtraction(stateManager: StateManager): GradualExt
     }).slice(-20);
 
     const context: ExtractionContext = {
-      personaName,
+      personaId: persona.id,
+      personaDisplayName: persona.display_name,
       messages_context: contextMessages,
       messages_analyze: messagesInScope,
       include_quotes: false,
