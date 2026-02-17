@@ -37,7 +37,8 @@ function renderMessageContent(
 }
 
 interface ChatPanelProps {
-  activePersona: string | null;
+  activePersonaId: string | null;
+  activePersonaDisplayName: string | null;
   messages: Message[];
   inputValue: string;
   isProcessing: boolean;
@@ -58,7 +59,8 @@ export interface ChatPanelHandle {
 }
 
 export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function ChatPanel({
-  activePersona,
+  activePersonaId,
+  activePersonaDisplayName,
   messages,
   inputValue,
   isProcessing,
@@ -239,7 +241,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
     <div className="ei-chat-panel">
       <div className="ei-chat-panel__header">
         <h2 className="ei-chat-panel__title">
-          {activePersona ? `Chat with ${activePersona}` : "Chat"}
+          {activePersonaDisplayName ? `Chat with ${activePersonaDisplayName}` : "Chat"}
         </h2>
         {hasPendingMessages && (
           <button 
@@ -255,7 +257,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
       <div className="ei-chat-panel__messages" ref={messagesContainerRef}>
         {messages.length === 0 ? (
           <div className="ei-chat-panel__empty">
-            {activePersona 
+            {activePersonaId 
               ? "No messages yet. Say hello!" 
               : "Select a persona to start chatting"}
           </div>
@@ -317,7 +319,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
       </div>
 
       <div className="ei-input-area">
-        {activePersona && onSetContextBoundary && (
+        {activePersonaId && onSetContextBoundary && (
           <button 
             className="ei-boundary-btn"
             onClick={handleBoundaryToggle}
@@ -332,18 +334,18 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
           value={inputValue}
           onChange={(e) => onInputChange(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={activePersona 
+          placeholder={activePersonaId 
             ? hasPendingMessages 
               ? "Type a message... (Up arrow to recall pending)" 
               : "Type a message... (Enter to send, Shift+Enter for newline)"
             : "Select a persona first"}
-          disabled={!activePersona}
+          disabled={!activePersonaId}
           rows={1}
         />
         <button
           className="ei-input-area__send"
           onClick={onSendMessage}
-          disabled={!activePersona || !inputValue.trim() || isProcessing}
+          disabled={!activePersonaId || !inputValue.trim() || isProcessing}
         >
           Send
         </button>

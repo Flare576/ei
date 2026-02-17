@@ -34,14 +34,14 @@ import "./styles/onboarding.css";
 function App() {
   const [processor, setProcessor] = useState<Processor | null>(null);
   const processorRef = useRef<Processor | null>(null);
-  const activePersonaRef = useRef<string | null>(null);
-  const editingPersonaNameRef = useRef<string | null>(null);
+  const activePersonaIdRef = useRef<string | null>(null);
+  const editingPersonaIdRef = useRef<string | null>(null);
   const [personas, setPersonas] = useState<PersonaSummary[]>([]);
   const [queueStatus, setQueueStatus] = useState<QueueStatus>({
     state: "idle",
     pending_count: 0,
   });
-  const [activePersona, setActivePersona] = useState<string | null>(null);
+  const [activePersonaId, setActivePersonaId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [processingPersona, setProcessingPersona] = useState<string | null>(null);
@@ -52,7 +52,7 @@ function App() {
   const [showPersonaEditor, setShowPersonaEditor] = useState(false);
   const [showPersonaCreator, setShowPersonaCreator] = useState(false);
   const [showArchivedPersonas, setShowArchivedPersonas] = useState(false);
-  const [editingPersonaName, setEditingPersonaName] = useState<string | null>(null);
+  const [editingPersonaId, setEditingPersonaId] = useState<string | null>(null);
   const [human, setHuman] = useState<HumanEntity | null>(null);
   const [editingPersona, setEditingPersona] = useState<PersonaEntity | null>(null);
   const [editingPersonaMessages, setEditingPersonaMessages] = useState<Message[]>([]);
@@ -85,12 +85,12 @@ function App() {
   }, []);
 
   useEffect(() => {
-    activePersonaRef.current = activePersona;
-  }, [activePersona]);
+    activePersonaIdRef.current = activePersonaId;
+  }, [activePersonaId]);
 
   useEffect(() => {
-    editingPersonaNameRef.current = editingPersonaName;
-  }, [editingPersonaName]);
+    editingPersonaIdRef.current = editingPersonaId;
+  }, [editingPersonaId]);
 
   useEffect(() => {
     if (showOnboarding !== false) return;
@@ -105,21 +105,21 @@ function App() {
       onPersonaUpdated: () => {
         processorRef.current?.getPersonaList().then(setPersonas);
         processorRef.current?.getGroupList().then(setAvailableGroups);
-        if (editingPersonaNameRef.current) {
-          processorRef.current?.getPersona(editingPersonaNameRef.current).then(p => {
+        if (editingPersonaIdRef.current) {
+          processorRef.current?.getPersona(editingPersonaIdRef.current).then(p => {
             if (p) setEditingPersona(p);
           });
-          processorRef.current?.getMessages(editingPersonaNameRef.current).then(setEditingPersonaMessages);
+          processorRef.current?.getMessages(editingPersonaIdRef.current).then(setEditingPersonaMessages);
         }
       },
-      onMessageAdded: (name) => {
-        if (name === activePersonaRef.current) {
-          processorRef.current?.getMessages(name).then(setMessages);
+      onMessageAdded: (personaId) => {
+        if (personaId === activePersonaIdRef.current) {
+          processorRef.current?.getMessages(personaId).then(setMessages);
         }
         processorRef.current?.getPersonaList().then(setPersonas);
       },
-      onMessageProcessing: (name) => {
-        setProcessingPersona(name);
+      onMessageProcessing: (personaId) => {
+        setProcessingPersona(personaId);
       },
       onMessageQueued: () => {
         processorRef.current?.getQueueStatus().then(setQueueStatus);
@@ -153,22 +153,22 @@ function App() {
         processorRef.current?.getPersonaList().then((list) => {
           setPersonas(list);
           if (list.length > 0) {
-            const currentPersona = activePersonaRef.current;
-            const personaExists = list.find(p => p.name === currentPersona);
+            const currentPersonaId = activePersonaIdRef.current;
+            const personaExists = list.find(p => p.id === currentPersonaId);
             if (!personaExists) {
-              setActivePersona(list[0].name);
-              processorRef.current?.getMessages(list[0].name).then(setMessages);
-            } else if (currentPersona) {
-              processorRef.current?.getMessages(currentPersona).then(setMessages);
+              setActivePersonaId(list[0].id);
+              processorRef.current?.getMessages(list[0].id).then(setMessages);
+            } else if (currentPersonaId) {
+              processorRef.current?.getMessages(currentPersonaId).then(setMessages);
             }
           }
         });
         processorRef.current?.getQueueStatus().then(setQueueStatus);
       },
-      onContextBoundaryChanged: (name) => {
-        if (name === activePersonaRef.current) {
-          processorRef.current?.getPersona(name).then(setActivePersonaEntity);
-          processorRef.current?.getMessages(name).then(setMessages);
+      onContextBoundaryChanged: (personaId) => {
+        if (personaId === activePersonaIdRef.current) {
+          processorRef.current?.getPersona(personaId).then(setActivePersonaEntity);
+          processorRef.current?.getMessages(personaId).then(setMessages);
         }
       },
       onQuoteAdded: () => {
@@ -191,8 +191,8 @@ function App() {
       p.getPersonaList().then((list) => {
         setPersonas(list);
         if (list.length > 0) {
-          setActivePersona(list[0].name);
-          p.getMessages(list[0].name).then(setMessages);
+          setActivePersonaId(list[0].id);
+          p.getMessages(list[0].id).then(setMessages);
         }
       });
       p.getQueueStatus().then(setQueueStatus);
@@ -222,37 +222,37 @@ function App() {
   }, [showOnboarding]);
 
   useEffect(() => {
-    if (processor && activePersona) {
-      processor.getMessages(activePersona).then(setMessages);
-      processor.getPersona(activePersona).then(setActivePersonaEntity);
+    if (processor && activePersonaId) {
+      processor.getMessages(activePersonaId).then(setMessages);
+      processor.getPersona(activePersonaId).then(setActivePersonaEntity);
     } else {
       setActivePersonaEntity(null);
     }
-  }, [processor, activePersona]);
+  }, [processor, activePersonaId]);
 
   const handleSendMessage = useCallback(async () => {
-    if (!processor || !activePersona || !inputValue.trim()) return;
-    await processor.sendMessage(activePersona, inputValue.trim());
+    if (!processor || !activePersonaId || !inputValue.trim()) return;
+    await processor.sendMessage(activePersonaId, inputValue.trim());
     setInputValue("");
     chatPanelRef.current?.focusInput();
-  }, [processor, activePersona, inputValue]);
+  }, [processor, activePersonaId, inputValue]);
 
   
 
-  const handleSelectPersona = useCallback(async (name: string) => {
-    if (processor && activePersona && activePersona !== name) {
-      await processor.markAllMessagesRead(activePersona);
+  const handleSelectPersona = useCallback(async (personaId: string) => {
+    if (processor && activePersonaId && activePersonaId !== personaId) {
+      await processor.markAllMessagesRead(activePersonaId);
       processor.getPersonaList().then(setPersonas);
     }
-    setActivePersona(name);
+    setActivePersonaId(personaId);
     chatPanelRef.current?.focusInput();
-  }, [processor, activePersona]);
+  }, [processor, activePersonaId]);
 
   const handleMarkMessageRead = useCallback(async (messageId: string) => {
-    if (!processor || !activePersona) return;
-    await processor.markMessageRead(activePersona, messageId);
-    processor.getMessages(activePersona).then(setMessages);
-  }, [processor, activePersona]);
+    if (!processor || !activePersonaId) return;
+    await processor.markMessageRead(activePersonaId, messageId);
+    processor.getMessages(activePersonaId).then(setMessages);
+  }, [processor, activePersonaId]);
 
   const handlePauseToggle = useCallback(async () => {
     if (!processor) return;
@@ -276,47 +276,47 @@ function App() {
     processor.getQueueStatus().then(setQueueStatus);
   }, [processor]);
 
-  const handlePausePersona = useCallback(async (name: string, pauseUntil?: string) => {
+  const handlePausePersona = useCallback(async (personaId: string, pauseUntil?: string) => {
     if (!processor) return;
-    const persona = await processor.getPersona(name);
+    const persona = await processor.getPersona(personaId);
     if (!persona) return;
-    await processor.updatePersona(name, {
+    await processor.updatePersona(personaId, {
       is_paused: !persona.is_paused,
       pause_until: pauseUntil,
     });
     processor.getPersonaList().then(setPersonas);
   }, [processor]);
 
-  const handleArchivePersona = useCallback(async (name: string) => {
+  const handleArchivePersona = useCallback(async (personaId: string) => {
     if (!processor) return;
-    await processor.archivePersona(name);
+    await processor.archivePersona(personaId);
     processor.getPersonaList().then(setPersonas);
-    if (activePersona === name) {
+    if (activePersonaId === personaId) {
       const list = await processor.getPersonaList();
-      setActivePersona(list.length > 0 ? list[0].name : null);
+      setActivePersonaId(list.length > 0 ? list[0].id : null);
     }
-  }, [processor, activePersona]);
+  }, [processor, activePersonaId]);
 
-  const handleDeletePersona = useCallback(async (name: string, _deleteData: boolean) => {
+  const handleDeletePersona = useCallback(async (personaId: string, _deleteData: boolean) => {
     if (!processor) return;
-    await processor.deletePersona(name, _deleteData);
+    await processor.deletePersona(personaId, _deleteData);
     processor.getPersonaList().then(setPersonas);
-    if (activePersona === name) {
+    if (activePersonaId === personaId) {
       const list = await processor.getPersonaList();
-      setActivePersona(list.length > 0 ? list[0].name : null);
+      setActivePersonaId(list.length > 0 ? list[0].id : null);
     }
-  }, [processor, activePersona]);
+  }, [processor, activePersonaId]);
 
   
 
   const handleRecallPending = useCallback(async () => {
-    if (!processor || !activePersona) return;
-    const recalled = await processor.recallPendingMessages(activePersona);
+    if (!processor || !activePersonaId) return;
+    const recalled = await processor.recallPendingMessages(activePersonaId);
     if (recalled) {
       setInputValue((prev) => prev ? `${prev}\n\n${recalled}` : recalled);
-      processor.getMessages(activePersona).then(setMessages);
+      processor.getMessages(activePersonaId).then(setMessages);
     }
-  }, [processor, activePersona]);
+  }, [processor, activePersonaId]);
 
   const handleSaveCheckpoint = useCallback(async (index: number, name: string) => {
     if (!processor) return;
@@ -328,14 +328,14 @@ function App() {
     await processor.restoreCheckpoint(index);
     processor.getPersonaList().then((list) => {
       setPersonas(list);
-      if (list.length > 0 && (!activePersona || !list.find(p => p.name === activePersona))) {
-        setActivePersona(list[0].name);
-        processor.getMessages(list[0].name).then(setMessages);
-      } else if (activePersona) {
-        processor.getMessages(activePersona).then(setMessages);
+      if (list.length > 0 && (!activePersonaId || !list.find(p => p.id === activePersonaId))) {
+        setActivePersonaId(list[0].id);
+        processor.getMessages(list[0].id).then(setMessages);
+      } else if (activePersonaId) {
+        processor.getMessages(activePersonaId).then(setMessages);
       }
     });
-  }, [processor, activePersona]);
+  }, [processor, activePersonaId]);
 
   const handleDeleteCheckpoint = useCallback(async (index: number) => {
     if (!processor) return;
@@ -381,12 +381,12 @@ function App() {
     setProcessingPersona(null);
   }, [processor]);
 
-  const handleEditPersona = useCallback(async (name: string) => {
+  const handleEditPersona = useCallback(async (personaId: string) => {
     if (!processor) return;
-    const persona = await processor.getPersona(name);
+    const persona = await processor.getPersona(personaId);
     if (persona) {
-      const personaMessages = await processor.getMessages(name);
-      setEditingPersonaName(name);
+      const personaMessages = await processor.getMessages(personaId);
+      setEditingPersonaId(personaId);
       setEditingPersona(persona);
       setEditingPersonaMessages(personaMessages);
       setShowPersonaEditor(true);
@@ -511,79 +511,79 @@ function App() {
   }, [processor]);
 
   const handlePersonaUpdate = useCallback(async (updates: Partial<PersonaEntity>) => {
-    if (!processor || !editingPersonaName) return;
-    await processor.updatePersona(editingPersonaName, updates);
-    const updated = await processor.getPersona(editingPersonaName);
+    if (!processor || !editingPersonaId) return;
+    await processor.updatePersona(editingPersonaId, updates);
+    const updated = await processor.getPersona(editingPersonaId);
     if (updated) setEditingPersona(updated);
     processor.getPersonaList().then(setPersonas);
-  }, [processor, editingPersonaName]);
+  }, [processor, editingPersonaId]);
 
   const handlePersonaTraitSave = useCallback(async (trait: Trait) => {
-    if (!processor || !editingPersonaName) return;
-    const persona = await processor.getPersona(editingPersonaName);
+    if (!processor || !editingPersonaId) return;
+    const persona = await processor.getPersona(editingPersonaId);
     if (!persona) return;
     const existingIndex = persona.traits.findIndex(t => t.id === trait.id);
     const newTraits = existingIndex >= 0
       ? persona.traits.map((t, i) => i === existingIndex ? trait : t)
       : [...persona.traits, trait];
-    await processor.updatePersona(editingPersonaName, { traits: newTraits });
-    const updated = await processor.getPersona(editingPersonaName);
+    await processor.updatePersona(editingPersonaId, { traits: newTraits });
+    const updated = await processor.getPersona(editingPersonaId);
     if (updated) setEditingPersona(updated);
-  }, [processor, editingPersonaName]);
+  }, [processor, editingPersonaId]);
 
   const handlePersonaTraitDelete = useCallback(async (id: string) => {
-    if (!processor || !editingPersonaName) return;
-    const persona = await processor.getPersona(editingPersonaName);
+    if (!processor || !editingPersonaId) return;
+    const persona = await processor.getPersona(editingPersonaId);
     if (!persona) return;
-    await processor.updatePersona(editingPersonaName, {
+    await processor.updatePersona(editingPersonaId, {
       traits: persona.traits.filter(t => t.id !== id)
     });
-    const updated = await processor.getPersona(editingPersonaName);
+    const updated = await processor.getPersona(editingPersonaId);
     if (updated) setEditingPersona(updated);
-  }, [processor, editingPersonaName]);
+  }, [processor, editingPersonaId]);
 
   const handlePersonaTopicSave = useCallback(async (topic: PersonaTopic) => {
-    if (!processor || !editingPersonaName) return;
-    const persona = await processor.getPersona(editingPersonaName);
+    if (!processor || !editingPersonaId) return;
+    const persona = await processor.getPersona(editingPersonaId);
     if (!persona) return;
     const existingIndex = persona.topics.findIndex(t => t.id === topic.id);
     const newTopics = existingIndex >= 0
       ? persona.topics.map((t, i) => i === existingIndex ? topic : t)
       : [...persona.topics, topic];
-    await processor.updatePersona(editingPersonaName, { topics: newTopics });
-    const updated = await processor.getPersona(editingPersonaName);
+    await processor.updatePersona(editingPersonaId, { topics: newTopics });
+    const updated = await processor.getPersona(editingPersonaId);
     if (updated) setEditingPersona(updated);
-  }, [processor, editingPersonaName]);
+  }, [processor, editingPersonaId]);
 
   const handlePersonaTopicDelete = useCallback(async (id: string) => {
-    if (!processor || !editingPersonaName) return;
-    const persona = await processor.getPersona(editingPersonaName);
+    if (!processor || !editingPersonaId) return;
+    const persona = await processor.getPersona(editingPersonaId);
     if (!persona) return;
-    await processor.updatePersona(editingPersonaName, {
+    await processor.updatePersona(editingPersonaId, {
       topics: persona.topics.filter(t => t.id !== id)
     });
-    const updated = await processor.getPersona(editingPersonaName);
+    const updated = await processor.getPersona(editingPersonaId);
     if (updated) setEditingPersona(updated);
-  }, [processor, editingPersonaName]);
+  }, [processor, editingPersonaId]);
 
   const handleContextStatusChange = useCallback(async (messageId: string, status: ContextStatus) => {
-    if (!processor || !editingPersonaName) return;
-    await processor.setMessageContextStatus(editingPersonaName, messageId, status);
-    processor.getMessages(editingPersonaName).then(setEditingPersonaMessages);
-  }, [processor, editingPersonaName]);
+    if (!processor || !editingPersonaId) return;
+    await processor.setMessageContextStatus(editingPersonaId, messageId, status);
+    processor.getMessages(editingPersonaId).then(setEditingPersonaMessages);
+  }, [processor, editingPersonaId]);
 
   const handleBulkContextStatusChange = useCallback(async (messageIds: string[], status: ContextStatus) => {
-    if (!processor || !editingPersonaName) return;
+    if (!processor || !editingPersonaId) return;
     for (const id of messageIds) {
-      await processor.setMessageContextStatus(editingPersonaName, id, status);
+      await processor.setMessageContextStatus(editingPersonaId, id, status);
     }
-    processor.getMessages(editingPersonaName).then(setEditingPersonaMessages);
-  }, [processor, editingPersonaName]);
+    processor.getMessages(editingPersonaId).then(setEditingPersonaMessages);
+  }, [processor, editingPersonaId]);
 
   const handleContextBoundaryChange = useCallback(async (timestamp: string | null) => {
-    if (!processor || !activePersona) return;
-    await processor.setContextBoundary(activePersona, timestamp);
-  }, [processor, activePersona]);
+    if (!processor || !activePersonaId) return;
+    await processor.setContextBoundary(activePersonaId, timestamp);
+  }, [processor, activePersonaId]);
 
   const handlePersonaCreate = useCallback(async (data: {
     name: string;
@@ -610,17 +610,17 @@ function App() {
     setShowPersonaCreator(false);
   }, [processor]);
 
-  const handleUnarchivePersona = useCallback(async (name: string) => {
+  const handleUnarchivePersona = useCallback(async (personaId: string) => {
     if (!processor) return;
-    await processor.unarchivePersona(name);
+    await processor.unarchivePersona(personaId);
     processor.getPersonaList().then(setPersonas);
     const allPersonas = await processor.getPersonaList();
     setArchivedPersonas(allPersonas.filter(p => p.is_archived));
   }, [processor]);
 
-  const handleDeleteArchivedPersona = useCallback(async (name: string) => {
+  const handleDeleteArchivedPersona = useCallback(async (personaId: string) => {
     if (!processor) return;
-    await processor.deletePersona(name, false);
+    await processor.deletePersona(personaId, false);
     const allPersonas = await processor.getPersonaList();
     setArchivedPersonas(allPersonas.filter(p => p.is_archived));
   }, [processor]);
@@ -778,8 +778,8 @@ function App() {
         <PersonaPanel
           ref={personaPanelRef}
           personas={personas.filter(p => !p.is_archived)}
-          activePersona={activePersona}
-          processingPersona={processingPersona}
+          activePersonaId={activePersonaId}
+          processingPersonaId={processingPersona}
           onSelectPersona={handleSelectPersona}
           onCreatePersona={handleCreatePersona}
           onPausePersona={handlePausePersona}
@@ -792,7 +792,8 @@ function App() {
       centerPanel={
         <ChatPanel
           ref={chatPanelRef}
-          activePersona={activePersona}
+          activePersonaId={activePersonaId}
+          activePersonaDisplayName={personas.find(p => p.id === activePersonaId)?.display_name ?? null}
           messages={messages}
           inputValue={inputValue}
           isProcessing={processingPersona !== null}
@@ -852,15 +853,15 @@ function App() {
        />
     )}
 
-    {editingPersona && editingPersonaName && (
+    {editingPersona && editingPersonaId && (
       <PersonaEditor
         isOpen={showPersonaEditor}
         onClose={() => {
           setShowPersonaEditor(false);
-          setEditingPersonaName(null);
+          setEditingPersonaId(null);
           setEditingPersona(null);
         }}
-        personaName={editingPersonaName}
+        personaId={editingPersonaId}
         persona={editingPersona}
         messages={editingPersonaMessages}
         availableGroups={availableGroups}
@@ -885,7 +886,8 @@ function App() {
        isOpen={showArchivedPersonas}
        onClose={() => setShowArchivedPersonas(false)}
        archivedPersonas={archivedPersonas.map(p => ({
-         name: p.name,
+         id: p.id,
+         display_name: p.display_name,
          aliases: p.aliases,
          short_description: p.short_description,
          archived_at: new Date().toISOString(),
@@ -897,7 +899,7 @@ function App() {
      <QuoteCaptureModal
         isOpen={captureMessage !== null}
         message={captureMessage}
-        personaName={activePersona || ''}
+        personaName={activePersonaEntity?.display_name || ''}
         groupPrimary={activePersonaEntity?.group_primary || undefined}
         dataItems={getDeduplicatedDataItems()}
         onClose={() => setCaptureMessage(null)}
@@ -909,7 +911,7 @@ function App() {
          isOpen={editingQuote !== null}
          quote={editingQuote}
          message={messages.find(m => m.id === editingQuote.message_id) || null}
-         personaName={activePersona || ''}
+         personaName={activePersonaEntity?.display_name || ''}
          dataItems={getDeduplicatedDataItems()}
          skipDeleteConfirm={skipDeleteConfirm}
          onClose={() => setEditingQuote(null)}

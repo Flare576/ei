@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
 export interface ArchivedPersonaSummary {
-  name: string;
+  id: string;
+  display_name: string;
   aliases: string[];
   short_description?: string;
   long_description?: string;
@@ -13,8 +14,8 @@ interface ArchivedPersonasModalProps {
   isOpen: boolean;
   onClose: () => void;
   archivedPersonas: ArchivedPersonaSummary[];
-  onUnarchive: (name: string) => void;
-  onDelete: (name: string) => void;
+  onUnarchive: (personaId: string) => void;
+  onDelete: (personaId: string) => void;
 }
 
 export function ArchivedPersonasModal({
@@ -137,23 +138,23 @@ export function ArchivedPersonasModal({
           ) : (
             <div className="ei-archived-grid">
               {archivedPersonas.map((persona) => (
-                <div key={persona.name} className="ei-persona-card">
+                <div key={persona.id} className="ei-persona-card">
                   <div className="ei-persona-card__identity">
                     <div className="ei-persona-card__image">
                       {persona.image_url ? (
                         <img
                           src={persona.image_url}
-                          alt={persona.name}
+                          alt={persona.display_name}
                           className="ei-persona-card__image-img"
                         />
                       ) : (
                         <div className="ei-persona-card__image-placeholder">
-                          {persona.name.charAt(0).toUpperCase()}
+                          {persona.display_name.charAt(0).toUpperCase()}
                         </div>
                       )}
                     </div>
                     <div className="ei-persona-card__name-section">
-                      <div className="ei-persona-card__name">{persona.name}</div>
+                      <div className="ei-persona-card__name">{persona.display_name}</div>
                       {persona.aliases.length > 0 && (
                         <div className="ei-persona-card__aliases">
                           {persona.aliases.join(", ")}
@@ -184,11 +185,11 @@ export function ArchivedPersonasModal({
                     <div className="ei-persona-card__actions">
                       <button
                         className="ei-btn ei-btn--secondary ei-btn--sm"
-                        onClick={() => onUnarchive(persona.name)}
+                        onClick={() => onUnarchive(persona.id)}
                       >
                         Unarchive
                       </button>
-                      {deleteConfirm === persona.name ? (
+                      {deleteConfirm === persona.id ? (
                         <div className="ei-persona-card__delete-confirm">
                           <span className="ei-persona-card__delete-confirm-text">
                             Sure?
@@ -209,8 +210,8 @@ export function ArchivedPersonasModal({
                       ) : (
                         <button
                           className="ei-btn ei-btn--secondary ei-btn--sm"
-                          onClick={() => handleDelete(persona.name)}
-                          aria-label={`Delete ${persona.name}`}
+                          onClick={() => handleDelete(persona.id)}
+                          aria-label={`Delete ${persona.display_name}`}
                         >
                           🗑️
                         </button>

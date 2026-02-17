@@ -3,14 +3,14 @@ import type { PersonaSummary } from "../../../../src/core/types";
 
 interface PersonaPanelProps {
   personas: PersonaSummary[];
-  activePersona: string | null;
-  processingPersona: string | null;
-  onSelectPersona: (name: string) => void;
+  activePersonaId: string | null;
+  processingPersonaId: string | null;
+  onSelectPersona: (personaId: string) => void;
   onCreatePersona: () => void;
-  onPausePersona?: (name: string, pauseUntil?: string) => void;
-  onArchivePersona?: (name: string) => void;
-  onDeletePersona?: (name: string, deleteData: boolean) => void;
-  onEditPersona?: (name: string) => void;
+  onPausePersona?: (personaId: string, pauseUntil?: string) => void;
+  onArchivePersona?: (personaId: string) => void;
+  onDeletePersona?: (personaId: string, deleteData: boolean) => void;
+  onEditPersona?: (personaId: string) => void;
   onShowArchived?: () => void;
 }
 
@@ -20,8 +20,8 @@ export interface PersonaPanelHandle {
 
 export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(function PersonaPanel({
   personas,
-  activePersona,
-  processingPersona,
+  activePersonaId,
+  processingPersonaId,
   onSelectPersona,
   onCreatePersona,
   onPausePersona,
@@ -31,7 +31,7 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
   onShowArchived,
 }, ref) {
   const [expanded, setExpanded] = useState(false);
-  const [hoveredPersona, setHoveredPersona] = useState<string | null>(null);
+  const [hoveredPersonaId, setHoveredPersonaId] = useState<string | null>(null);
   const [showPauseOptions, setShowPauseOptions] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [deleteWithData, setDeleteWithData] = useState(false);
@@ -42,7 +42,7 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
 
   useImperativeHandle(ref, () => ({
     focusPanel: () => {
-      const currentIndex = personas.findIndex(p => p.name === activePersona);
+      const currentIndex = personas.findIndex(p => p.id === activePersonaId);
       const index = currentIndex >= 0 ? currentIndex : 0;
       setFocusedIndex(index);
       const pills = listRef.current?.querySelectorAll(".ei-persona-pill");
@@ -70,13 +70,13 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
 
   const getStatusClass = (persona: PersonaSummary) => {
     if (persona.is_paused) return "paused";
-    if (processingPersona === persona.name) return "thinking";
+    if (processingPersonaId === persona.id) return "thinking";
     if (persona.unread_count > 0) return "unread";
     return "";
   };
 
-  const getInitials = (name: string) => {
-    return name
+  const getInitials = (displayName: string) => {
+    return displayName
       .split(/\s+/)
       .map(w => w[0])
       .join("")
@@ -84,24 +84,24 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
       .slice(0, 2);
   };
 
-  const handlePause = (name: string, hours?: number) => {
+  const handlePause = (personaId: string, hours?: number) => {
     if (!onPausePersona) return;
     const pauseUntil = hours 
       ? new Date(Date.now() + hours * 60 * 60 * 1000).toISOString()
       : undefined;
-    onPausePersona(name, pauseUntil);
+    onPausePersona(personaId, pauseUntil);
     setShowPauseOptions(null);
   };
 
-  const handleArchive = (name: string) => {
+  const handleArchive = (personaId: string, displayName: string) => {
     if (!onArchivePersona) return;
-    onArchivePersona(name);
-    setToast(`${name} archived. View archived personas in settings.`);
+    onArchivePersona(personaId);
+    setToast(`${displayName} archived. View archived personas in settings.`);
   };
 
-  const handleDelete = (name: string) => {
+  const handleDelete = (personaId: string) => {
     if (!onDeletePersona) return;
-    onDeletePersona(name, deleteWithData);
+    onDeletePersona(personaId, deleteWithData);
     setShowDeleteConfirm(null);
     setDeleteWithData(false);
   };
@@ -127,10 +127,15 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
     }
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      onSelectPersona(personas[index].name);
+      onSelectPersona(personas[index].id);
       setExpanded(false);
     }
   }, [personas, onSelectPersona]);
+
+  const getActiveDisplayName = () => {
+    const activePersona = personas.find(p => p.id === activePersonaId);
+    return activePersona?.display_name || "Select persona";
+  };
 
   return (
     <div className={`ei-persona-panel ${expanded ? "expanded" : ""}`}>
@@ -153,7 +158,7 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
           className="ei-persona-dropdown__toggle"
           onClick={() => setExpanded(!expanded)}
         >
-          <span>{activePersona || "Select persona"}</span>
+          <span>{getActiveDisplayName()}</span>
           <span>{expanded ? "▲" : "▼"}</span>
         </button>
       </div>
@@ -166,15 +171,15 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
         ) : (
           personas.map((persona, index) => (
             <div
-              key={persona.name}
-              className={`ei-persona-pill ${persona.name === activePersona ? "active" : ""} ${index === focusedIndex ? "focused" : ""}`}
+              key={persona.id}
+              className={`ei-persona-pill ${persona.id === activePersonaId ? "active" : ""} ${index === focusedIndex ? "focused" : ""}`}
               onClick={() => {
-                onSelectPersona(persona.name);
+                onSelectPersona(persona.id);
                 setExpanded(false);
               }}
-              onMouseEnter={() => setHoveredPersona(persona.name)}
+              onMouseEnter={() => setHoveredPersonaId(persona.id)}
               onMouseLeave={() => {
-                setHoveredPersona(null);
+                setHoveredPersonaId(null);
                 setShowPauseOptions(null);
               }}
               onKeyDown={(e) => handlePillKeyDown(e, index)}
@@ -182,11 +187,11 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
               role="button"
             >
               <div className={`ei-persona-pill__avatar ${persona.is_paused ? "paused" : ""}`}>
-                {getInitials(persona.name)}
+                {getInitials(persona.display_name)}
                 <span className={`ei-persona-pill__status ${getStatusClass(persona)}`} />
               </div>
               <div className="ei-persona-pill__info">
-                <div className="ei-persona-pill__name">{persona.name}</div>
+                <div className="ei-persona-pill__name">{persona.display_name}</div>
                 {persona.short_description && (
                   <div className="ei-persona-pill__desc">{persona.short_description}</div>
                 )}
@@ -195,31 +200,31 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
                 <span className="ei-persona-pill__badge">{persona.unread_count}</span>
               )}
               
-              {hoveredPersona === persona.name && (
+              {hoveredPersonaId === persona.id && (
                 <div className="ei-persona-pill__controls" onClick={handleControlClick}>
                   <button
                     className={`ei-control-btn ${persona.is_paused ? "active" : ""}`}
                     onClick={() => persona.is_paused 
-                      ? handlePause(persona.name) 
-                      : setShowPauseOptions(persona.name)
+                      ? handlePause(persona.id) 
+                      : setShowPauseOptions(persona.id)
                     }
                     title={persona.is_paused ? "Resume" : "Pause"}
                   >
                     {persona.is_paused ? "▶" : "⏸"}
                   </button>
                   
-                  {showPauseOptions === persona.name && (
+                  {showPauseOptions === persona.id && (
                     <div className="ei-pause-options" ref={pauseOptionsRef}>
-                      <button onClick={() => handlePause(persona.name, 1)}>1 hour</button>
-                      <button onClick={() => handlePause(persona.name, 8)}>8 hours</button>
-                      <button onClick={() => handlePause(persona.name, 24)}>24 hours</button>
-                      <button onClick={() => handlePause(persona.name)}>Forever</button>
+                      <button onClick={() => handlePause(persona.id, 1)}>1 hour</button>
+                      <button onClick={() => handlePause(persona.id, 8)}>8 hours</button>
+                      <button onClick={() => handlePause(persona.id, 24)}>24 hours</button>
+                      <button onClick={() => handlePause(persona.id)}>Forever</button>
                     </div>
                   )}
                   
                   <button
                     className="ei-control-btn"
-                    onClick={() => onEditPersona?.(persona.name)}
+                    onClick={() => onEditPersona?.(persona.id)}
                     title="Edit"
                   >
                     ✏️
@@ -227,7 +232,7 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
                   
                   <button
                     className="ei-control-btn ei-control-btn--archive"
-                    onClick={() => handleArchive(persona.name)}
+                    onClick={() => handleArchive(persona.id, persona.display_name)}
                     title="Archive"
                   >
                     📦
@@ -235,7 +240,7 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
                   
                   <button
                     className="ei-control-btn ei-control-btn--danger"
-                    onClick={() => setShowDeleteConfirm(persona.name)}
+                    onClick={() => setShowDeleteConfirm(persona.id)}
                     title="Delete"
                   >
                     🗑️

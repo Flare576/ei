@@ -29,6 +29,8 @@ interface Topic {
 }
 
 interface PersonaEntity {
+  id: string;
+  display_name: string;
   entity: "system";
   aliases?: string[];
   short_description?: string;
@@ -65,7 +67,7 @@ type PersonaEntityForIdentity = Omit<PersonaEntity, 'topics'> & {
 interface PersonaEditorProps {
   isOpen: boolean;
   onClose: () => void;
-  personaName: string;
+  personaId: string;
   persona: PersonaEntity;
   messages: Message[];
   onUpdate: (updates: Partial<PersonaEntity>) => void;
@@ -89,7 +91,7 @@ const tabs = [
 export function PersonaEditor({
   isOpen,
   onClose,
-  personaName,
+  personaId: _personaId,
   persona,
   messages,
   onUpdate,
@@ -247,7 +249,7 @@ export function PersonaEditor({
 
   return (
     <TabContainer
-      title={`Edit Persona: ${personaName}`}
+      title={`Edit Persona: ${persona.display_name}`}
       tabs={tabs}
       activeTab={activeTab}
       onTabChange={setActiveTab}
@@ -287,7 +289,7 @@ export function PersonaEditor({
 
       {activeTab === 'context' && (
         <ContextWindowTab
-          personaName={personaName}
+          personaName={persona.display_name}
           messages={messages}
           contextBoundary={localPersona.context_boundary}
           contextWindowHours={localPersona.context_window_hours ?? 8}

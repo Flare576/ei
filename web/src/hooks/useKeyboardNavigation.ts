@@ -40,9 +40,9 @@ export function useKeyboardNavigation({
 }
 
 export function usePersonaPanelNavigation(
-  personas: { name: string }[],
-  activePersona: string | null,
-  onSelectPersona: (name: string) => void,
+  personas: { id: string }[],
+  activePersonaId: string | null,
+  onSelectPersona: (personaId: string) => void,
   onFocusInput: () => void
 ) {
   const focusedIndex = useRef(0);
@@ -65,7 +65,7 @@ export function usePersonaPanelNavigation(
       e.preventDefault();
       const persona = personas[focusedIndex.current];
       if (persona) {
-        onSelectPersona(persona.name);
+        onSelectPersona(persona.id);
         onFocusInput();
       }
     }
@@ -78,10 +78,10 @@ export function usePersonaPanelNavigation(
   };
 
   const focusPanel = useCallback(() => {
-    const currentIndex = personas.findIndex(p => p.name === activePersona);
+    const currentIndex = personas.findIndex(p => p.id === activePersonaId);
     focusedIndex.current = currentIndex >= 0 ? currentIndex : 0;
     focusPill(focusedIndex.current);
-  }, [personas, activePersona]);
+  }, [personas, activePersonaId]);
 
   return { containerRef, handleKeyDown, focusPanel };
 }
