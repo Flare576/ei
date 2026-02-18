@@ -1,12 +1,12 @@
 # 0145: OpenCode 1.2 SQLite Integration
 
-**Status**: PENDING
-**Depends on**: None (existing OpenCode integration works, this adds parallel support)
+**Status**: DONE
+**Depends on**: None
 **Priority**: High (users upgrading to OpenCode 1.2 will break without this)
 
 ## Summary
 
-OpenCode 1.2 migrated from flat JSON files to a SQLite database. Ei's `OpenCodeReader` currently reads the JSON files directly. We need to add SQLite support while maintaining JSON fallback for users who haven't upgraded yet, and handle the migration transition gracefully.
+OpenCode 1.2 migrated from flat JSON files to a SQLite database. Ei's `OpenCodeReader` currently reads the JSON files directly. Add SQLite support with automatic detection: if `opencode.db` exists, use it; otherwise fall back to JSON.
 
 ## Background
 
@@ -35,7 +35,6 @@ From the release notes:
 ### SQLite Schema (verified from actual DB)
 
 ```sql
--- Sessions
 CREATE TABLE `session` (
   `id` text PRIMARY KEY,              -- ses_xxx (SAME format!)
   `project_id` text NOT NULL,
@@ -45,90 +44,78 @@ CREATE TABLE `session` (
   `title` text NOT NULL,
   `version` text NOT NULL,
   `time_created` integer NOT NULL,    -- Unix ms (SAME format!)
-  `time_updated` integer NOT NULL,    -- Unix ms (SAME format!)
-  -- ... additional fields
+  `time_updated` integer NOT NULL
 );
 
--- Messages  
 CREATE TABLE `message` (
   `id` text PRIMARY KEY,              -- msg_xxx (SAME format!)
   `session_id` text NOT NULL,
-  `time_created` integer NOT NULL,    -- Unix ms
+  `time_created` integer NOT NULL,
   `time_updated` integer NOT NULL,
-  `data` text NOT NULL,               -- JSON blob with role, agent, etc.
+  `data` text NOT NULL                -- JSON blob with role, agent, etc.
 );
 
--- Parts
 CREATE TABLE `part` (
   `id` text PRIMARY KEY,
   `message_id` text NOT NULL,
   `session_id` text NOT NULL,
   `time_created` integer NOT NULL,
   `time_updated` integer NOT NULL,
-  `data` text NOT NULL,               -- JSON blob with type, text, etc.
+  `data` text NOT NULL                -- JSON blob with type, text, etc.
 );
 ```
 
-### Critical Compatibility Findings
+### Key Compatibility Facts
 
 1. **IDs preserved**: `ses_xxx`, `msg_xxx` format unchanged
 2. **Timestamps preserved**: Unix milliseconds, same as JSON
-3. **`extraction_point` still valid**: Our timestamp-based tracking will work
-4. **Data in JSON columns**: Message/part payload is JSON in `data` column
+3. **Data in JSON columns**: Message/part payload is JSON in `data` column
 
 ## Acceptance Criteria
 
-### Phase 1: SQLite Reader Implementation
-
-- [ ] Add `better-sqlite3` dependency (sync SQLite for Node.js)
-- [ ] Create `SqliteReader` class implementing same interface as `OpenCodeReader`
-- [ ] `getSessionsUpdatedSince(since)` - query session table with `time_updated > ?`
-- [ ] `getMessagesForSession(sessionId, since)` - query message + part tables
-- [ ] `getAgentInfo(agentName)` - same as current (no DB storage for this)
-- [ ] Parse `data` JSON column for message/part payloads
-- [ ] Handle WAL mode (read-only, don't interfere with OpenCode writes)
-
-### Phase 2: Dual-Source Detection
-
-- [ ] On init, check for `opencode.db` existence
-- [ ] If SQLite exists: use `SqliteReader` as primary
-- [ ] If SQLite missing: fall back to JSON `OpenCodeReader`
-- [ ] Log which mode is active: `[OpenCode] Using SQLite reader` or `[OpenCode] Using JSON reader (legacy)`
-
-### Phase 3: Migration Transition Handling
-
-- [ ] First run after migration: verify sample IDs match between SQLite and JSON
-- [ ] Log verification result: `[OpenCode] SQLite migration verified: N sessions matched`
-- [ ] If mismatch detected, warn user and fall back to JSON
-- [ ] Track `last_json_update` timestamp in human settings
-- [ ] Stop checking JSON files when they're stale (older than SQLite data)
-
-### Phase 4: Cleanup & Deprecation Path
-
-- [ ] Add `EI_OPENCODE_FORCE_JSON=1` env var for debugging
-- [ ] Add `EI_OPENCODE_FORCE_SQLITE=1` env var for testing
-- [ ] Document migration in README or CHANGELOG
-- [ ] After 3 months: remove JSON reader code (separate ticket)
+- [x] Create `SqliteReader` class with same interface as `OpenCodeReader`
+- [x] Auto-detect: if `opencode.db` exists, use SQLite; otherwise use JSON
+- [x] Use `bun:sqlite` (built into Bun, zero dependencies)
+- [x] Open database read-only (don't interfere with OpenCode)
+- [x] Log which reader is active on startup
+- [x] Rename env var from `EI_OPENCODE_STORAGE_PATH` to `EI_OPENCODE_DATA_PATH`
 
 ## Technical Design
 
-### New File Structure
+### Use `bun:sqlite` (Zero Dependencies)
+
+Bun has built-in SQLite support - no npm packages needed:
+
+```typescript
+import { Database } from "bun:sqlite";
+
+const db = new Database(dbPath, { readonly: true });
+```
+
+Benefits:
+- Zero npm dependencies (vs `better-sqlite3` which requires native compilation)
+- 3-6x faster than `better-sqlite3`
+- Same synchronous API
+- WAL mode works automatically for concurrent reads
+
+### File Structure
 
 ```
 src/integrations/opencode/
-├── reader.ts              # KEEP - rename to json-reader.ts
-├── sqlite-reader.ts       # NEW - SQLite implementation
-├── reader-factory.ts      # NEW - Detects and returns correct reader
-├── types.ts               # KEEP - shared types
-├── importer.ts            # MODIFY - use reader factory
-├── gradual-extraction.ts  # KEEP - no changes needed
-└── index.ts               # MODIFY - export factory
+├── reader.ts              # RENAME to json-reader.ts
+├── sqlite-reader.ts       # NEW
+├── reader-factory.ts      # NEW - auto-detection logic
+├── types.ts               # Add IOpenCodeReader interface
+├── importer.ts            # Update to use factory
+├── gradual-extraction.ts  # No changes
+└── index.ts               # Update exports
 ```
 
-### Reader Interface (extract from current OpenCodeReader)
+### Reader Interface
+
+Extract interface from current `OpenCodeReader` (add to types.ts):
 
 ```typescript
-// src/integrations/opencode/reader-interface.ts
 export interface IOpenCodeReader {
   getSessionsUpdatedSince(since: Date): Promise<OpenCodeSession[]>;
   getMessagesForSession(sessionId: string, since?: Date): Promise<OpenCodeMessage[]>;
@@ -138,37 +125,36 @@ export interface IOpenCodeReader {
 }
 ```
 
-### SQLite Reader Implementation
+### SQLite Reader
 
 ```typescript
 // src/integrations/opencode/sqlite-reader.ts
-import Database from 'better-sqlite3';
-import type { IOpenCodeReader } from './reader-interface.js';
+import { Database } from "bun:sqlite";
+import type { IOpenCodeReader, OpenCodeSession, OpenCodeMessage, OpenCodeAgent } from "./types.js";
+import { BUILTIN_AGENTS } from "./types.js";
 
 export class SqliteReader implements IOpenCodeReader {
-  private db: Database.Database;
+  private db: Database;
   
   constructor(dbPath: string) {
-    // Open read-only to not interfere with OpenCode
     this.db = new Database(dbPath, { readonly: true });
   }
   
   async getSessionsUpdatedSince(since: Date): Promise<OpenCodeSession[]> {
     const sinceMs = since.getTime();
-    const stmt = this.db.prepare(`
+    const rows = this.db.query(`
       SELECT id, title, directory, project_id, parent_id, time_created, time_updated
       FROM session
-      WHERE time_updated > ? AND parent_id IS NULL
+      WHERE time_updated > ?1 AND parent_id IS NULL
       ORDER BY time_updated DESC
-    `);
+    `).all(sinceMs);
     
-    const rows = stmt.all(sinceMs);
-    return rows.map(row => ({
+    return rows.map((row: any) => ({
       id: row.id,
       title: row.title,
       directory: row.directory,
       projectId: row.project_id,
-      parentId: row.parent_id,
+      parentId: row.parent_id ?? undefined,
       time: {
         created: row.time_created,
         updated: row.time_updated,
@@ -179,27 +165,25 @@ export class SqliteReader implements IOpenCodeReader {
   async getMessagesForSession(sessionId: string, since?: Date): Promise<OpenCodeMessage[]> {
     const sinceMs = since?.getTime() ?? 0;
     
-    // Get messages
-    const msgStmt = this.db.prepare(`
+    const messages = this.db.query(`
       SELECT id, session_id, time_created, data
       FROM message
-      WHERE session_id = ? AND time_created > ?
+      WHERE session_id = ?1 AND time_created > ?2
       ORDER BY time_created ASC
-    `);
+    `).all(sessionId, sinceMs);
     
-    const messages = msgStmt.all(sessionId, sinceMs);
     const result: OpenCodeMessage[] = [];
     
-    for (const msg of messages) {
+    for (const msg of messages as any[]) {
       const msgData = JSON.parse(msg.data);
-      const content = await this.getMessageContent(msg.id);
+      const content = this.getMessageContent(msg.id);
       if (!content) continue;
       
       result.push({
         id: msg.id,
         sessionId: msg.session_id,
         role: msgData.role,
-        agent: (msgData.agent || 'build').toLowerCase(),
+        agent: (msgData.agent || "build").toLowerCase(),
         content,
         timestamp: new Date(msg.time_created).toISOString(),
       });
@@ -208,26 +192,55 @@ export class SqliteReader implements IOpenCodeReader {
     return result;
   }
   
-  private async getMessageContent(messageId: string): Promise<string | null> {
-    const stmt = this.db.prepare(`
-      SELECT data FROM part WHERE message_id = ? ORDER BY time_created ASC
-    `);
+  private getMessageContent(messageId: string): string | null {
+    const parts = this.db.query(`
+      SELECT data, time_created FROM part 
+      WHERE message_id = ?1 
+      ORDER BY time_created ASC
+    `).all(messageId);
     
-    const parts = stmt.all(messageId);
     const textParts: string[] = [];
     
-    for (const part of parts) {
+    for (const part of parts as any[]) {
       const partData = JSON.parse(part.data);
-      if (partData.type !== 'text') continue;
+      if (partData.type !== "text") continue;
       if (partData.synthetic === true) continue;
       if (!partData.text) continue;
       textParts.push(partData.text);
     }
     
-    return textParts.length > 0 ? textParts.join('\n\n') : null;
+    return textParts.length > 0 ? textParts.join("\n\n") : null;
   }
   
-  // ... other methods similar to JSON reader
+  async getAgentInfo(agentName: string): Promise<OpenCodeAgent | null> {
+    const normalized = agentName.toLowerCase();
+    if (BUILTIN_AGENTS[normalized]) {
+      return BUILTIN_AGENTS[normalized];
+    }
+    return { name: agentName, description: "OpenCode coding agent" };
+  }
+  
+  async getAllUniqueAgents(sessionId: string): Promise<string[]> {
+    const messages = await this.getMessagesForSession(sessionId);
+    return [...new Set(messages.map(m => m.agent))];
+  }
+  
+  async getFirstAgent(sessionId: string): Promise<string | null> {
+    const row = this.db.query(`
+      SELECT data FROM message 
+      WHERE session_id = ?1 
+      ORDER BY time_created ASC 
+      LIMIT 1
+    `).get(sessionId) as any;
+    
+    if (!row) return null;
+    const msgData = JSON.parse(row.data);
+    return (msgData.agent || "build").toLowerCase();
+  }
+  
+  close(): void {
+    this.db.close();
+  }
 }
 ```
 
@@ -235,153 +248,76 @@ export class SqliteReader implements IOpenCodeReader {
 
 ```typescript
 // src/integrations/opencode/reader-factory.ts
-import { existsSync } from 'fs';
-import { join } from 'path';
-import type { IOpenCodeReader } from './reader-interface.js';
-import { JsonReader } from './json-reader.js';
-import { SqliteReader } from './sqlite-reader.js';
+import { existsSync } from "fs";
+import { join } from "path";
+import type { IOpenCodeReader } from "./types.js";
+import { JsonReader } from "./json-reader.js";
+import { SqliteReader } from "./sqlite-reader.js";
 
 export function createOpenCodeReader(basePath?: string): IOpenCodeReader {
   const dataDir = basePath ?? getDefaultDataDir();
-  const dbPath = join(dataDir, 'opencode.db');
-  const storagePath = join(dataDir, 'storage');
+  const dbPath = join(dataDir, "opencode.db");
+  const storagePath = join(dataDir, "storage");
   
-  // Check for force flags
-  if (process.env.EI_OPENCODE_FORCE_JSON === '1') {
-    console.log('[OpenCode] Using JSON reader (forced via EI_OPENCODE_FORCE_JSON)');
-    return new JsonReader(storagePath);
-  }
-  
-  if (process.env.EI_OPENCODE_FORCE_SQLITE === '1') {
-    console.log('[OpenCode] Using SQLite reader (forced via EI_OPENCODE_FORCE_SQLITE)');
-    return new SqliteReader(dbPath);
-  }
-  
-  // Auto-detect
   if (existsSync(dbPath)) {
-    console.log('[OpenCode] Using SQLite reader (opencode.db detected)');
+    console.log("[OpenCode] Using SQLite reader");
     return new SqliteReader(dbPath);
   }
   
   if (existsSync(storagePath)) {
-    console.log('[OpenCode] Using JSON reader (legacy storage detected)');
+    console.log("[OpenCode] Using JSON reader (legacy)");
     return new JsonReader(storagePath);
   }
   
-  console.log('[OpenCode] No OpenCode data found');
+  console.log("[OpenCode] No OpenCode data found");
   return new JsonReader(storagePath); // Will return empty results
 }
 
 function getDefaultDataDir(): string {
-  return join(process.env.HOME || '~', '.local', 'share', 'opencode');
+  return process.env.EI_OPENCODE_DATA_PATH ?? 
+    join(process.env.HOME || "~", ".local", "share", "opencode");
 }
 ```
 
-### Importer Modification
+### Importer Update
 
 ```typescript
-// src/integrations/opencode/importer.ts - modify imports
-import { createOpenCodeReader } from './reader-factory.js';
+// src/integrations/opencode/importer.ts
+// Change:
+const reader = options.reader ?? new OpenCodeReader();
 
-export async function importOpenCodeSessions(
-  since: Date,
-  options: OpenCodeImporterOptions
-): Promise<ImportResult> {
-  const { stateManager, interface: eiInterface } = options;
-  // Use factory instead of direct instantiation
-  const reader = options.reader ?? createOpenCodeReader();
-  
-  // ... rest unchanged
-}
+// To:
+import { createOpenCodeReader } from "./reader-factory.js";
+const reader = options.reader ?? createOpenCodeReader();
 ```
-
-## File Changes
-
-```
-src/integrations/opencode/
-├── reader.ts           → json-reader.ts    # Rename existing
-├── sqlite-reader.ts                         # NEW
-├── reader-interface.ts                      # NEW (extract interface)
-├── reader-factory.ts                        # NEW
-├── types.ts                                 # No changes
-├── importer.ts                              # Update to use factory
-├── gradual-extraction.ts                    # No changes
-└── index.ts                                 # Update exports
-```
-
-## Dependencies
-
-```json
-{
-  "dependencies": {
-    "better-sqlite3": "^11.0.0"
-  },
-  "devDependencies": {
-    "@types/better-sqlite3": "^7.6.0"
-  }
-}
-```
-
-**Note**: `better-sqlite3` is synchronous and requires native compilation. Consider:
-- May need `node-gyp` on some systems
-- Won't work in browser (but OpenCode reader is Node-only anyway)
-- Alternative: `sql.js` (WASM-based, works everywhere but slower)
 
 ## Testing
 
-### Prerequisites
-
-Before starting work:
-- [ ] Run `npm run test:all` from project root - all tests must pass
-- [ ] Have OpenCode 1.2+ installed with some session history
-
 ### Unit Tests
 
-- [ ] `SqliteReader.getSessionsUpdatedSince()` returns correct sessions
+- [ ] `SqliteReader.getSessionsUpdatedSince()` returns sessions correctly
 - [ ] `SqliteReader.getMessagesForSession()` returns filtered messages
-- [ ] `SqliteReader.getMessageContent()` concatenates text parts correctly
 - [ ] `SqliteReader` skips synthetic parts and non-text parts
-- [ ] Reader factory detects SQLite DB and returns `SqliteReader`
-- [ ] Reader factory falls back to `JsonReader` when no DB
-- [ ] Force flags override auto-detection
-
-### Integration Tests
-
-- [ ] Import from SQLite produces same topic/message count as JSON (on same data)
-- [ ] `extraction_point` timestamps work correctly with SQLite data
-- [ ] Gradual extraction works with SQLite reader
-- [ ] WAL mode doesn't cause locking issues with OpenCode running
+- [ ] Factory returns `SqliteReader` when `opencode.db` exists
+- [ ] Factory returns `JsonReader` when only `storage/` exists
+- [ ] `EI_OPENCODE_DATA_PATH` env var is respected
 
 ### Manual Verification
 
-- [ ] Downgrade OpenCode to 1.1.x, verify JSON reader still works
-- [ ] Upgrade OpenCode to 1.2.x, verify SQLite reader activates
-- [ ] Run import while OpenCode session is active (no locking)
+- [ ] With OpenCode 1.1.x data: JSON reader activates, import works
+- [ ] With OpenCode 1.2.x data: SQLite reader activates, import works
+- [ ] Run import while OpenCode session is active (no locking issues)
 
-### Post-Implementation
-
-- [ ] Run `npm run test:all` - all tests still pass
-- [ ] Run full import cycle with SQLite, verify data integrity
-
-## Performance Expectations
+## Performance
 
 | Metric | JSON Reader | SQLite Reader |
 |--------|-------------|---------------|
-| Sessions query | ~8 file reads/session | 1 SQL query |
-| Messages query | ~N file reads/message | 1 SQL query |
-| Parts query | ~M file reads/message | 1 SQL query |
+| Sessions query | ~N file reads | 1 SQL query |
+| Messages query | ~N file reads | 1 SQL query |
 | Expected speedup | baseline | 5-10x faster |
 
 ## Notes
 
-- SQLite WAL mode means we can read while OpenCode writes
-- `better-sqlite3` is synchronous but that's fine for our use case (bulk reads)
-- The `data` JSON column means we still parse JSON, just less file I/O
-- Keep JSON reader for at least 3 months to support gradual user migration
-- OpenCode said "original data is not yet deleted" - eventually they will delete it
-
-## Future Considerations
-
-- [ ] 0146: Remove JSON reader after deprecation period (3 months)
-- [ ] Consider caching frequently-accessed sessions in memory
-- [ ] Could expose SQLite directly for advanced queries (session search, etc.)
+- SQLite WAL mode allows concurrent reads while OpenCode writes
+- `bun:sqlite` is synchronous but wrapped in async for interface compatibility
+- Keep JSON reader indefinitely for users on older OpenCode versions

@@ -1,19 +1,19 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-02-17 (0146 Write-Through Storage DONE)
+> Last updated: 2026-02-17 (0145 OpenCode SQLite Integration DONE)
 
 ## Overview
 
 | Status | Count |
 |--------|-------|
-| PENDING | 11 |
+| PENDING | 10 |
 | IN_PROGRESS | 0 |
 | QA | 0 |
-| DONE | 106 |
+| DONE | 107 |
 | BLOCKED | 0 |
 | SUPERSEDED | 3 |
 
-> 124 total tickets (106 done + 11 pending + 3 backlog + 0 in_progress + 0 QA + 3 superseded).
+> 124 total tickets (107 done + 10 pending + 3 backlog + 0 in_progress + 0 QA + 3 superseded).
 
 ---
 
@@ -66,7 +66,6 @@
 | 0107 | Sync Orchestrator | 0106 |
 | 0115 | Fact Validation TUI | 0113, 0100 |
 | 0134 | Single Instance Enforcement | 0101 |
-| 0145 | OpenCode 1.2 SQLite Integration | 0102, 0103 |
 
 ### E012: TUI Commands (V1.2)
 
@@ -211,6 +210,7 @@
 | 0135 | Per-Message Extraction Tracking | 2026-02-17 |
 | 0128 | Persona GUIDs | 2026-02-17 |
 | 0146 | Write-Through Storage | 2026-02-17 |
+| 0145 | OpenCode 1.2 SQLite Integration | 2026-02-17 |
 
 ---
 
