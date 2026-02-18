@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import { TabContainer } from './TabContainer';
-import { HumanSettingsTab } from './tabs/HumanSettingsTab';
 import { HumanFactsTab } from './tabs/HumanFactsTab';
 import { HumanTraitsTab } from './tabs/HumanTraitsTab';
 import { HumanTopicsTab } from './tabs/HumanTopicsTab';
@@ -8,7 +7,7 @@ import { HumanPeopleTab } from './tabs/HumanPeopleTab';
 import { HumanQuotesTab } from './tabs/HumanQuotesTab';
 import { QuoteManagementModal } from '../Quote/QuoteManagementModal';
 import { ValidationLevel } from '../../../../src/core/types';
-import type { Fact, Quote, ProviderAccount, SyncCredentials } from '../../../../src/core/types';
+import type { Fact, Quote } from '../../../../src/core/types';
 
 interface Trait {
   id: string;
@@ -49,26 +48,18 @@ interface Person {
 
 interface HumanEntity {
   id: string;
-  auto_save_interval_ms?: number;
-  default_model?: string;
-  queue_paused?: boolean;
-  name_color?: string;
   name_display?: string;
-  time_mode?: "24h" | "12h" | "local" | "utc";
   facts?: Fact[];
   traits?: Trait[];
   topics?: Topic[];
   people?: Person[];
   quotes?: Quote[];
-  accounts?: ProviderAccount[];
-  sync?: SyncCredentials;
 }
 
 interface HumanEditorProps {
   isOpen: boolean;
   onClose: () => void;
   human: HumanEntity;
-  onUpdate: (updates: Partial<HumanEntity>) => void;
   onFactSave: (fact: Fact) => void;
   onFactDelete: (id: string) => void;
   onTraitSave: (trait: Trait) => void;
@@ -79,12 +70,9 @@ interface HumanEditorProps {
   onPersonDelete: (id: string) => void;
   onQuoteSave?: (id: string, updates: Partial<Quote>) => void;
   onQuoteDelete?: (id: string) => void;
-  onDownloadBackup: () => void;
-  onUploadBackup: (file: File) => void;
 }
 
 const tabs = [
-  { id: 'settings', label: 'Settings', icon: '⚙️' },
   { id: 'facts', label: 'Facts', icon: '📋' },
   { id: 'traits', label: 'Traits', icon: '🎭' },
   { id: 'people', label: 'People', icon: '👥' },
@@ -96,7 +84,6 @@ export const HumanEditor = ({
   isOpen,
   onClose,
   human,
-  onUpdate,
   onFactSave,
   onFactDelete,
   onTraitSave,
@@ -107,35 +94,19 @@ export const HumanEditor = ({
   onPersonDelete,
   onQuoteSave,
   onQuoteDelete,
-  onDownloadBackup,
-  onUploadBackup,
 }: HumanEditorProps) => {
-  const [activeTab, setActiveTab] = useState('settings');
-  const [localSettings, setLocalSettings] = useState({
-    auto_save_interval_ms: human.auto_save_interval_ms,
-    default_model: human.default_model,
-    queue_paused: human.queue_paused,
-    name_color: human.name_color,
-    name_display: human.name_display,
-    time_mode: human.time_mode,
-    sync: human.sync,
-  });
+  const [activeTab, setActiveTab] = useState('facts');
   const [localFacts, setLocalFacts] = useState<Fact[]>(human.facts || []);
   const [localTraits, setLocalTraits] = useState<Trait[]>(human.traits || []);
   const [localTopics, setLocalTopics] = useState<Topic[]>(human.topics || []);
   const [localPeople, setLocalPeople] = useState<Person[]>(human.people || []);
   const [localQuotes, setLocalQuotes] = useState<Quote[]>(human.quotes || []);
   const [editingQuote, setEditingQuote] = useState<Quote | null>(null);
-  const [localAccounts, setLocalAccounts] = useState<ProviderAccount[]>(human.accounts || []);
-  const [accountEditorOpen, setAccountEditorOpen] = useState(false);
-  const [editingAccount, setEditingAccount] = useState<ProviderAccount | null>(null);
   
   const [dirtyFactIds, setDirtyFactIds] = useState<Set<string>>(new Set());
   const [dirtyTraitIds, setDirtyTraitIds] = useState<Set<string>>(new Set());
   const [dirtyTopicIds, setDirtyTopicIds] = useState<Set<string>>(new Set());
   const [dirtyPersonIds, setDirtyPersonIds] = useState<Set<string>>(new Set());
-  const [dirtySettingFields, setDirtySettingFields] = useState<Set<string>>(new Set());
-  const [dirtyAccountIds, setDirtyAccountIds] = useState<Set<string>>(new Set());
 
   const wasOpenRef = useRef(false);
 
@@ -170,30 +141,16 @@ export const HumanEditor = ({
 
   useEffect(() => {
     if (isOpen && !wasOpenRef.current) {
-      setLocalSettings({
-        auto_save_interval_ms: human.auto_save_interval_ms,
-        default_model: human.default_model,
-        queue_paused: human.queue_paused,
-        name_color: human.name_color,
-        name_display: human.name_display,
-        time_mode: human.time_mode,
-        sync: human.sync,
-      });
       setLocalFacts(human.facts || []);
       setLocalTraits(human.traits || []);
       setLocalTopics(human.topics || []);
       setLocalPeople(human.people || []);
       setLocalQuotes(human.quotes || []);
-      setLocalAccounts(human.accounts || []);
       setDirtyFactIds(new Set());
       setDirtyTraitIds(new Set());
       setDirtyTopicIds(new Set());
       setDirtyPersonIds(new Set());
-      setDirtySettingFields(new Set());
-      setDirtyAccountIds(new Set());
       setEditingQuote(null);
-      setAccountEditorOpen(false);
-      setEditingAccount(null);
     }
     wasOpenRef.current = isOpen;
   }, [isOpen]);
@@ -201,64 +158,18 @@ export const HumanEditor = ({
   useEffect(() => {
     if (!isOpen) return;
 
-    setLocalSettings(prev => {
-      const merged = { ...prev };
-      if (!dirtySettingFields.has('auto_save_interval_ms')) {
-        merged.auto_save_interval_ms = human.auto_save_interval_ms;
-      }
-      if (!dirtySettingFields.has('default_model')) {
-        merged.default_model = human.default_model;
-      }
-      if (!dirtySettingFields.has('queue_paused')) {
-        merged.queue_paused = human.queue_paused;
-      }
-      if (!dirtySettingFields.has('name_color')) {
-        merged.name_color = human.name_color;
-      }
-      if (!dirtySettingFields.has('name_display')) {
-        merged.name_display = human.name_display;
-      }
-      if (!dirtySettingFields.has('time_mode')) {
-        merged.time_mode = human.time_mode;
-      }
-      return merged;
-    });
-
     setLocalFacts(prev => smartMergeList(prev, human.facts || [], dirtyFactIds));
     setLocalTraits(prev => smartMergeList(prev, human.traits || [], dirtyTraitIds));
     setLocalTopics(prev => smartMergeList(prev, human.topics || [], dirtyTopicIds));
     setLocalPeople(prev => smartMergeList(prev, human.people || [], dirtyPersonIds));
     setLocalQuotes(human.quotes || []);
-    setLocalAccounts(prev => smartMergeList(prev, human.accounts || [], dirtyAccountIds));
   }, [human]);
 
-  const settingsDirty = dirtySettingFields.size > 0;
-
-  const isDirty = settingsDirty || 
+  const isDirty = 
     dirtyFactIds.size > 0 || 
     dirtyTraitIds.size > 0 || 
     dirtyTopicIds.size > 0 || 
     dirtyPersonIds.size > 0;
-
-  const handleSettingChange = (
-    field: keyof HumanEntity, 
-    value: string | number | boolean | ProviderAccount[] | SyncCredentials | undefined
-  ) => {
-    if (field === 'accounts' || field === 'sync') return;
-    
-    setLocalSettings(prev => ({ ...prev, [field]: value }));
-    setDirtySettingFields(prev => new Set(prev).add(field));
-  };
-
-  const handleSyncCredentialsChange = (sync: SyncCredentials | undefined) => {
-    setLocalSettings(prev => ({ ...prev, sync }));
-    onUpdate({ ...localSettings, sync, accounts: localAccounts });
-  };
-
-  const handleSettingsSave = () => {
-    onUpdate({ ...localSettings, accounts: localAccounts });
-    setDirtySettingFields(new Set());
-  };
 
   const handleFactChange = (id: string, field: keyof Fact, value: Fact[keyof Fact]) => {
     setLocalFacts(prev => prev.map(fact => 
@@ -432,44 +343,6 @@ export const HumanEditor = ({
     setDirtyPersonIds(prev => new Set(prev).add(newPerson.id));
   };
 
-  const handleAccountAdd = () => {
-    setEditingAccount(null);
-    setAccountEditorOpen(true);
-  };
-
-  const handleAccountEdit = (account: ProviderAccount) => {
-    setEditingAccount(account);
-    setAccountEditorOpen(true);
-  };
-
-  const handleAccountDelete = (id: string) => {
-    const updated = localAccounts.filter(a => a.id !== id);
-    setLocalAccounts(updated);
-    onUpdate({ ...localSettings, accounts: updated });
-  };
-
-  const handleAccountToggle = (id: string, enabled: boolean) => {
-    const updated = localAccounts.map(a => a.id === id ? { ...a, enabled } : a);
-    setLocalAccounts(updated);
-    onUpdate({ ...localSettings, accounts: updated });
-  };
-
-  const handleAccountSave = (account: ProviderAccount) => {
-    const existing = localAccounts.find(a => a.id === account.id);
-    const updated = existing
-      ? localAccounts.map(a => a.id === account.id ? account : a)
-      : [...localAccounts, account];
-    setLocalAccounts(updated);
-    onUpdate({ ...localSettings, accounts: updated });
-    setAccountEditorOpen(false);
-    setEditingAccount(null);
-  };
-
-  const handleAccountEditorClose = () => {
-    setAccountEditorOpen(false);
-    setEditingAccount(null);
-  };
-
   const handleQuoteEdit = (quote: Quote) => {
     setEditingQuote(quote);
   };
@@ -490,36 +363,6 @@ export const HumanEditor = ({
 
   const renderTabContent = () => {
     switch (activeTab) {
-      case 'settings':
-        return (
-          <div>
-            <HumanSettingsTab 
-              settings={localSettings} 
-              onChange={handleSettingChange}
-              accounts={localAccounts}
-              onAccountAdd={handleAccountAdd}
-              onAccountEdit={handleAccountEdit}
-              onAccountDelete={handleAccountDelete}
-              onAccountToggle={handleAccountToggle}
-              editorOpen={accountEditorOpen}
-              editingAccount={editingAccount}
-              onEditorClose={handleAccountEditorClose}
-              onAccountSave={handleAccountSave}
-              onDownloadBackup={onDownloadBackup}
-              onUploadBackup={onUploadBackup}
-              onSyncCredentialsChange={handleSyncCredentialsChange}
-            />
-            {settingsDirty && (
-              <button 
-                className="ei-btn ei-btn--primary"
-                onClick={handleSettingsSave}
-                style={{ marginTop: '1rem' }}
-              >
-                Save Settings
-              </button>
-            )}
-          </div>
-        );
       case 'facts':
         return (
           <HumanFactsTab
@@ -587,7 +430,7 @@ export const HumanEditor = ({
   return (
     <>
       <TabContainer
-        title={`Edit Human: ${human.name_display || 'Unknown'}`}
+        title="My Data"
         tabs={tabs}
         activeTab={activeTab}
         onTabChange={setActiveTab}

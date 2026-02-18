@@ -22,6 +22,7 @@ import type {
 import { Layout, PersonaPanel, ChatPanel, ControlArea, HelpModal, type PersonaPanelHandle, type ChatPanelHandle } from "./components/Layout";
 import { HumanEditor, PersonaEditor, PersonaCreatorModal, ArchivedPersonasModal } from "./components/EntityEditor";
 import { QuoteCaptureModal, QuoteManagementModal } from "./components/Quote";
+import { SettingsModal } from "./components/Settings";
 import { ConflictResolutionModal } from "./components/Sync/ConflictResolutionModal";
 import { Onboarding } from "./components/Onboarding";
 import { yoloMerge } from "../../src/storage/merge";
@@ -45,6 +46,7 @@ function App() {
   const [inputValue, setInputValue] = useState("");
   const [processingPersona, setProcessingPersona] = useState<string | null>(null);
   const [showHelp, setShowHelp] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showHumanEditor, setShowHumanEditor] = useState(false);
   const [showPersonaEditor, setShowPersonaEditor] = useState(false);
   const [showPersonaCreator, setShowPersonaCreator] = useState(false);
@@ -308,26 +310,26 @@ function App() {
   }, []);
 
   const handleSettingsClick = useCallback(() => {
+    setShowSettingsModal(true);
+  }, []);
+
+  const handleMyDataClick = useCallback(() => {
     setShowHumanEditor(true);
   }, []);
 
   const handleSaveAndExit = useCallback(async () => {
     if (!processor) return;
     
-    if (remoteSync.isConfigured()) {
-      const state = await processor.getStorageState();
-      const result = await remoteSync.sync(state);
-      if (!result.success) {
-        const proceed = window.confirm(`Remote backup failed: ${result.error}\n\nExit anyway?`);
-        if (!proceed) return;
-      } else {
-        globalThis.localStorage?.removeItem('ei_autosaves');
-      }
+    const result = await processor.saveAndExit();
+    if (!result.success) {
+      const proceed = window.confirm(`Remote backup failed: ${result.error}\n\nExit anyway?`);
+      if (!proceed) return;
+      await processor.stop();
     }
     
-    await processor.stop();
     setQueueStatus({ state: "idle", pending_count: 0 });
     setProcessingPersona(null);
+    setShowOnboarding(true);
   }, [processor]);
 
   const handleEditPersona = useCallback(async (personaId: string) => {
@@ -355,12 +357,23 @@ function App() {
 
   const handleHumanUpdate = useCallback(async (updates: Record<string, unknown>) => {
     if (!processor) return;
-    const { auto_save_interval_ms, default_model, queue_paused, name_display, name_color, time_mode, accounts, sync, ...rest } = updates;
-    const settingsFields = { auto_save_interval_ms, default_model, queue_paused, name_display, name_color, time_mode, accounts, sync };
-    const hasSettings = Object.values(settingsFields).some(v => v !== undefined);
+    const { default_model, queue_paused, name_display, time_mode, accounts, sync, ceremony_time, ...rest } = updates;
+    
+    const settingsUpdates: Record<string, unknown> = {};
+    if (default_model !== undefined) settingsUpdates.default_model = default_model;
+    if (queue_paused !== undefined) settingsUpdates.queue_paused = queue_paused;
+    if (name_display !== undefined) settingsUpdates.name_display = name_display;
+    if (time_mode !== undefined) settingsUpdates.time_mode = time_mode;
+    if (accounts !== undefined) settingsUpdates.accounts = accounts;
+    if (sync !== undefined || updates.hasOwnProperty('sync')) settingsUpdates.sync = sync;
+    if (ceremony_time !== undefined) {
+      settingsUpdates.ceremony = { ...human?.settings?.ceremony, time: ceremony_time as string };
+    }
+    
+    const hasSettings = Object.keys(settingsUpdates).length > 0;
     const coreUpdates: Partial<HumanEntity> = {
       ...(rest as Partial<HumanEntity>),
-      ...(hasSettings ? { settings: { ...human?.settings, ...settingsFields } as HumanEntity['settings'] } : {}),
+      ...(hasSettings ? { settings: { ...human?.settings, ...settingsUpdates } as HumanEntity['settings'] } : {}),
     };
     
     if (sync && typeof sync === 'object' && 'username' in sync && 'passphrase' in sync) {
@@ -711,9 +724,10 @@ function App() {
           queueStatus={queueStatus} 
           onPauseToggle={handlePauseToggle}
           onClearQueue={handleClearQueue}
-          onHelpClick={handleHelpClick}
+          onMyDataClick={handleMyDataClick}
           onSettingsClick={handleSettingsClick}
-          onSaveAndExit={human?.settings?.sync ? handleSaveAndExit : undefined}
+          onHelpClick={handleHelpClick}
+          onSyncAndExit={human?.settings?.sync ? handleSaveAndExit : undefined}
         />
       }
       leftPanel={
@@ -760,39 +774,47 @@ function App() {
     <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
     
     {human && (
-      <HumanEditor
-        isOpen={showHumanEditor}
-        onClose={() => setShowHumanEditor(false)}
-        human={{
-          id: "human",
-          auto_save_interval_ms: human.settings?.auto_save_interval_ms,
-          default_model: human.settings?.default_model,
-          queue_paused: human.settings?.queue_paused,
-          name_display: human.settings?.name_display,
-          name_color: human.settings?.name_color,
-          time_mode: human.settings?.time_mode,
-          facts: human.facts,
-          traits: human.traits,
-          topics: human.topics,
-          people: human.people,
-          quotes: quotes,
-          accounts: human.settings?.accounts,
-          sync: human.settings?.sync,
-        }}
-         onUpdate={handleHumanUpdate}
-         onFactSave={handleFactSave}
-         onFactDelete={handleFactDelete}
-         onTraitSave={handleTraitSave}
-         onTraitDelete={handleTraitDelete}
-         onTopicSave={handleTopicSave}
-         onTopicDelete={handleTopicDelete}
-         onPersonSave={handlePersonSave}
-         onPersonDelete={handlePersonDelete}
-         onQuoteSave={handleQuoteUpdate}
-         onQuoteDelete={handleQuoteDelete}
-         onDownloadBackup={handleDownloadBackup}
-         onUploadBackup={handleUploadBackup}
-       />
+      <>
+        <SettingsModal
+          isOpen={showSettingsModal}
+          onClose={() => setShowSettingsModal(false)}
+          settings={{
+            name_display: human.settings?.name_display,
+            time_mode: human.settings?.time_mode,
+            ceremony_time: human.settings?.ceremony?.time ?? "09:00",
+            default_model: human.settings?.default_model,
+            accounts: human.settings?.accounts,
+            sync: human.settings?.sync,
+          }}
+          onUpdate={handleHumanUpdate}
+          onDownloadBackup={handleDownloadBackup}
+          onUploadBackup={handleUploadBackup}
+        />
+
+        <HumanEditor
+          isOpen={showHumanEditor}
+          onClose={() => setShowHumanEditor(false)}
+          human={{
+            id: "human",
+            name_display: human.settings?.name_display,
+            facts: human.facts,
+            traits: human.traits,
+            topics: human.topics,
+            people: human.people,
+            quotes: quotes,
+          }}
+          onFactSave={handleFactSave}
+          onFactDelete={handleFactDelete}
+          onTraitSave={handleTraitSave}
+          onTraitDelete={handleTraitDelete}
+          onTopicSave={handleTopicSave}
+          onTopicDelete={handleTopicDelete}
+          onPersonSave={handlePersonSave}
+          onPersonDelete={handlePersonDelete}
+          onQuoteSave={handleQuoteUpdate}
+          onQuoteDelete={handleQuoteDelete}
+        />
+      </>
     )}
 
     {editingPersona && editingPersonaId && (
