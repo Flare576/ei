@@ -160,10 +160,12 @@ export class Processor {
     const human = this.stateManager.getHuman();
     this.stateManager.setHuman({
       ...human,
-      ceremony_config: {
-        enabled: human.ceremony_config?.enabled ?? true,
-        time: human.ceremony_config?.time ?? "09:00",
-        last_ceremony: new Date().toISOString(),
+      settings: {
+        ...human.settings,
+        ceremony: {
+          time: human.settings?.ceremony?.time ?? "09:00",
+          last_ceremony: new Date().toISOString(),
+        },
       },
     });
 
@@ -205,6 +207,40 @@ export class Processor {
     console.log(`[Processor ${this.instanceId}] stopped`);
   }
 
+  async saveAndExit(): Promise<{ success: boolean; error?: string }> {
+    console.log(`[Processor ${this.instanceId}] saveAndExit() called`);
+    this.interface.onSaveAndExitStart?.();
+
+    this.queueProcessor.abort();
+    if (this.openCodeImportInProgress) {
+      console.log(`[Processor ${this.instanceId}] Aborting OpenCode import in progress`);
+      this.openCodeImportInProgress = false;
+    }
+
+    await this.stateManager.flush();
+
+    const human = this.stateManager.getHuman();
+    const hasSyncCreds = !!human.settings?.sync?.username && !!human.settings?.sync?.passphrase;
+
+    if (hasSyncCreds && remoteSync.isConfigured()) {
+      const state = this.stateManager.getStorageState();
+      const result = await remoteSync.sync(state);
+      
+      if (!result.success) {
+        console.log(`[Processor ${this.instanceId}] Remote sync failed: ${result.error}`);
+        this.interface.onSaveAndExitFinish?.();
+        return { success: false, error: result.error };
+      }
+
+      await this.stateManager.moveToBackup();
+      console.log(`[Processor ${this.instanceId}] State moved to backup after successful sync`);
+    }
+
+    await this.stop();
+    this.interface.onSaveAndExitFinish?.();
+    return { success: true };
+  }
+
   private async runLoop(): Promise<void> {
     console.log(`[Processor ${this.instanceId}] runLoop() started`);
     while (this.running) {
@@ -228,7 +264,7 @@ export class Processor {
             await this.handleResponse(response);
             const nextState = this.stateManager.queue_isPaused() ? "paused" : "idle";
             // the processor state is set in the caller, so this needs a bit of delay
-            setTimeout(() => this.interface.onQueueStateChanged?.(nextState),0);
+            setTimeout(() => this.interface.onQueueStateChanged?.(nextState),1);
           }, {
             accounts: this.stateManager.getHuman().settings?.accounts,
             messageFetcher: (pName) => this.fetchMessagesForLLM(pName),
@@ -254,7 +290,7 @@ export class Processor {
       await this.checkAndSyncOpenCode(human, now);
     }
     
-    if (human.ceremony_config && shouldRunCeremony(human.ceremony_config)) {
+    if (human.settings?.ceremony && shouldRunCeremony(human.settings.ceremony)) {
       // Auto-backup to remote before ceremony (if configured)
       if (human.settings?.sync && remoteSync.isConfigured()) {
         const state = this.stateManager.getStorageState();
@@ -1103,14 +1139,13 @@ export class Processor {
    * USE FROM BROWSER DEVTOOLS:
    *   processor.getCeremonyStatus()
    */
-  getCeremonyStatus(): { enabled: boolean; lastRun: string | null; nextRunTime: string | null } {
+  getCeremonyStatus(): { lastRun: string | null; nextRunTime: string } {
     const human = this.stateManager.getHuman();
-    const config = human.ceremony_config;
+    const config = human.settings?.ceremony;
     
     return {
-      enabled: config?.enabled ?? false,
       lastRun: config?.last_ceremony ?? null,
-      nextRunTime: config?.enabled ? `Today at ${config.time}` : null,
+      nextRunTime: `Today at ${config?.time ?? "09:00"}`,
     };
   }
 }

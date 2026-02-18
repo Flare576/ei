@@ -31,7 +31,6 @@ export function isPastCeremonyTime(ceremonyTime: string, now: Date): boolean {
  * 1-per-day, so you'll want to revist them carefully.
  */
 export function shouldRunCeremony(config: CeremonyConfig, now: Date = new Date()): boolean {
-  if (!config.enabled) return false;
   if (!isNewDay(config.last_ceremony, now)) return false;
   return isPastCeremonyTime(config.time, now);
 }
@@ -59,8 +58,8 @@ export function startCeremony(state: StateManager): void {
     activePersonas.push(ei);
   }
   
-  const lastCeremony = human.ceremony_config?.last_ceremony 
-    ? new Date(human.ceremony_config.last_ceremony).getTime() 
+  const lastCeremony = human.settings?.ceremony?.last_ceremony 
+    ? new Date(human.settings.ceremony.last_ceremony).getTime() 
     : 0;
   
   const personasWithActivity = activePersonas.filter(p => {
@@ -82,9 +81,13 @@ export function startCeremony(state: StateManager): void {
   
   state.setHuman({
     ...human,
-    ceremony_config: {
-      ...human.ceremony_config!,
-      last_ceremony: now.toISOString(),
+    settings: {
+      ...human.settings,
+      ceremony: {
+        ...human.settings?.ceremony,
+        time: human.settings?.ceremony?.time ?? "09:00",
+        last_ceremony: now.toISOString(),
+      },
     },
   });
   
@@ -188,7 +191,7 @@ function applyDecayPhase(personaId: string, state: StateManager): void {
   
   const now = new Date();
   const human = state.getHuman();
-  const K = human.ceremony_config?.decay_rate ?? 0.1;
+  const K = human.settings?.ceremony?.decay_rate ?? 0.1;
   
   let decayedCount = 0;
   const updatedTopics = persona.topics.map((topic: PersonaTopic) => {
@@ -339,7 +342,7 @@ export function runHumanCeremony(state: StateManager): void {
   
   const human = state.getHuman();
   const now = new Date();
-  const K = human.ceremony_config?.decay_rate ?? 0.1;
+  const K = human.settings?.ceremony?.decay_rate ?? 0.1;
   
   let topicDecayCount = 0;
   const updatedTopics: Topic[] = human.topics.map(topic => {

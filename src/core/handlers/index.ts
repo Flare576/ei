@@ -389,7 +389,7 @@ function handlePersonaExpire(response: LLMResponse, state: StateManager): void {
   }
 
   const human = state.getHuman();
-  const exploreThreshold = human.ceremony_config?.explore_threshold ?? 3;
+  const exploreThreshold = human.settings?.ceremony?.explore_threshold ?? 3;
 
   if (remainingTopics.length < exploreThreshold) {
     console.log(`[handlePersonaExpire] ${personaDisplayName} has ${remainingTopics.length} topic(s) (< ${exploreThreshold}), triggering Explore`);

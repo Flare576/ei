@@ -61,17 +61,10 @@ describe("Ceremony Trigger Logic", () => {
 
   describe("shouldRunCeremony", () => {
     const baseConfig: CeremonyConfig = {
-      enabled: true,
       time: "03:00",
     };
 
-    it("returns false when ceremony is disabled", () => {
-      const config = { ...baseConfig, enabled: false };
-      const now = new Date("2026-01-29T04:00:00");
-      expect(shouldRunCeremony(config, now)).toBe(false);
-    });
-
-    it("returns true when enabled, new day, and past time", () => {
+    it("returns true when new day and past time", () => {
       const config = { 
         ...baseConfig, 
         last_ceremony: "2026-01-28T03:00:00Z" 
