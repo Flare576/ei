@@ -9,6 +9,11 @@ import { test, expect } from "./fixtures.js";
 
 const STATE_KEY = "ei_state";
 
+async function openMyDataModal(page: import("@playwright/test").Page) {
+  await page.locator('button[aria-label="Menu"]').click();
+  await page.locator('.ei-hamburger-menu__item:has-text("My Data")').click();
+}
+
 interface Message {
   id: string;
   role: "human" | "system";
@@ -540,10 +545,10 @@ test.describe("Session Bug Coverage (0112)", () => {
 
     await expect(page.locator(".ei-persona-pill").filter({ hasText: "Ei" })).toBeVisible({ timeout: 10000 });
 
-    // Settings button opens Human editor
-    await page.locator('button[aria-label="Settings"]').click();
+    // Open My Data (Human editor) via hamburger menu
+    await openMyDataModal(page);
 
-    await expect(page.locator("text=Edit Human")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator("text=My Data")).toBeVisible({ timeout: 5000 });
 
     // Navigate to Facts tab
     await page.locator('button[role="tab"]').filter({ hasText: "Facts" }).click();
@@ -564,11 +569,11 @@ test.describe("Session Bug Coverage (0112)", () => {
 
     // Close editor via X button
     await page.locator('.ei-tab-container button[aria-label="Close"]').click();
-    await expect(page.locator("text=Edit Human")).not.toBeVisible({ timeout: 3000 });
+    await expect(page.locator("text=My Data")).not.toBeVisible({ timeout: 3000 });
 
     // Reopen Human editor
-    await page.locator('button[aria-label="Settings"]').click();
-    await expect(page.locator("text=Edit Human")).toBeVisible({ timeout: 5000 });
+    await openMyDataModal(page);
+    await expect(page.locator("text=My Data")).toBeVisible({ timeout: 5000 });
 
     await page.locator('button[role="tab"]').filter({ hasText: "Facts" }).click();
 

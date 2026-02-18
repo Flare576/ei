@@ -2,6 +2,16 @@ import { test, expect, seedCheckpoint } from "./fixtures.js";
 
 const STATE_KEY = "ei_state";
 
+async function openSettingsModal(page: import("@playwright/test").Page) {
+  await page.locator('button[aria-label="Menu"]').click();
+  await page.locator('.ei-hamburger-menu__item:has-text("Settings")').click();
+}
+
+async function navigateToDataTab(page: import("@playwright/test").Page) {
+  await page.locator('.ei-modal__tab:has-text("Data")').click();
+  await page.waitForTimeout(200);
+}
+
 function createValidCheckpoint(messages: Array<{ role: string; content: string }> = []) {
   const timestamp = new Date().toISOString();
   return {
@@ -92,10 +102,10 @@ test.describe("Backup & Restore", () => {
     await page.locator(".ei-persona-pill").first().click();
     await expect(page.locator(`text=${testMessage}`)).toBeVisible({ timeout: 10000 });
 
-    await page.locator('button[aria-label="Settings"]').click();
-    await expect(page.locator('.ei-settings-section__title').first()).toContainText('Display Settings', { timeout: 5000 });
+    await openSettingsModal(page);
+    await expect(page.locator('.ei-settings-section__title').first()).toContainText('Display', { timeout: 5000 });
 
-    await scrollToSection(page, "Backup");
+    await navigateToDataTab(page);
 
     const downloadPromise = page.waitForEvent('download');
     await page.locator('button:has-text("Download Backup")').click();
@@ -140,10 +150,10 @@ test.describe("Backup & Restore", () => {
     await page.goto("/");
     await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
 
-    await page.locator('button[aria-label="Settings"]').click();
-    await expect(page.locator('.ei-settings-section__title').first()).toContainText('Display Settings', { timeout: 5000 });
+    await openSettingsModal(page);
+    await expect(page.locator('.ei-settings-section__title').first()).toContainText('Display', { timeout: 5000 });
 
-    await scrollToSection(page, "Backup");
+    await navigateToDataTab(page);
 
     const fileInput = page.locator('input[type="file"][accept=".json"]');
     await fileInput.setInputFiles({
@@ -154,7 +164,7 @@ test.describe("Backup & Restore", () => {
 
     await page.waitForTimeout(1000);
 
-    const closeButton = page.locator('.ei-entity-editor button[aria-label="Close"]');
+    const closeButton = page.locator('.ei-settings-modal button[aria-label="Close settings"]');
     if (await closeButton.isVisible()) {
       await closeButton.click();
     }
@@ -178,10 +188,10 @@ test.describe("Cloud Sync Credentials", () => {
     await page.goto("/");
     await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
 
-    await page.locator('button[aria-label="Settings"]').click();
-    await expect(page.locator('.ei-settings-section__title').first()).toContainText('Display Settings', { timeout: 5000 });
+    await openSettingsModal(page);
+    await expect(page.locator('.ei-settings-section__title').first()).toContainText('Display', { timeout: 5000 });
 
-    await scrollToSection(page, "Cloud Sync");
+    await navigateToDataTab(page);
 
     const usernameInput = page.locator('#sync-username');
     const passphraseInput = page.locator('#sync-passphrase');
@@ -207,10 +217,10 @@ test.describe("Cloud Sync Credentials", () => {
     await page.goto("/");
     await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
 
-    await page.locator('button[aria-label="Settings"]').click();
-    await expect(page.locator('.ei-settings-section__title').first()).toContainText('Display Settings', { timeout: 5000 });
+    await openSettingsModal(page);
+    await expect(page.locator('.ei-settings-section__title').first()).toContainText('Display', { timeout: 5000 });
 
-    await scrollToSection(page, "Cloud Sync");
+    await navigateToDataTab(page);
 
     const usernameInput = page.locator('#sync-username');
     const passphraseInput = page.locator('#sync-passphrase');
@@ -242,10 +252,10 @@ test.describe("Cloud Sync Credentials", () => {
     await page.goto("/");
     await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
 
-    await page.locator('button[aria-label="Settings"]').click();
-    await expect(page.locator('.ei-settings-section__title').first()).toContainText('Display Settings', { timeout: 5000 });
+    await openSettingsModal(page);
+    await expect(page.locator('.ei-settings-section__title').first()).toContainText('Display', { timeout: 5000 });
 
-    await scrollToSection(page, "Cloud Sync");
+    await navigateToDataTab(page);
 
     const passphraseInput = page.locator('#sync-passphrase');
     const toggleButton = page.locator('.ei-input-toggle');
