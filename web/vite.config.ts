@@ -9,4 +9,14 @@ export default defineConfig({
       "@ei": "../src",
     },
   },
+  build: {
+    rollupOptions: {
+      external: [
+        "bun:sqlite",
+        "fs",
+        "path",
+        /integrations\/opencode/,
+      ],
+    },
+  },
 });
