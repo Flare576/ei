@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { OpenCodeReader } from "../../../../src/integrations/opencode/reader.js";
+import { JsonReader } from "../../../../src/integrations/opencode/json-reader.js";
 import { BUILTIN_AGENTS } from "../../../../src/integrations/opencode/types.js";
 import * as path from "path";
 
@@ -11,13 +11,13 @@ vi.mock("fs/promises", () => ({
   readFile: mockReadFile,
 }));
 
-describe("OpenCodeReader", () => {
-  let reader: OpenCodeReader;
+describe("JsonReader", () => {
+  let reader: JsonReader;
   let testStoragePath: string;
 
   beforeEach(() => {
     testStoragePath = "/test/storage/path";
-    reader = new OpenCodeReader(testStoragePath);
+    reader = new JsonReader(testStoragePath);
     vi.clearAllMocks();
   });
 
@@ -519,13 +519,13 @@ describe("OpenCodeReader", () => {
 
   describe("constructor and initialization", () => {
     it("stores configured path for later initialization", () => {
-      const reader = new OpenCodeReader("/custom/path");
+      const reader = new JsonReader("/custom/path");
       // configuredPath is stored immediately, storagePath is set during lazy init
       expect((reader as unknown as { configuredPath: string }).configuredPath).toBe("/custom/path");
     });
 
     it("uses provided storage path after initialization", async () => {
-      const localReader = new OpenCodeReader("/custom/path");
+      const localReader = new JsonReader("/custom/path");
       mockReaddir.mockRejectedValue(new Error("ENOENT"));
       
       // Trigger initialization by calling a method
@@ -534,34 +534,14 @@ describe("OpenCodeReader", () => {
       expect((localReader as unknown as { storagePath: string }).storagePath).toBe("/custom/path");
     });
 
-    it("uses EI_OPENCODE_STORAGE_PATH env var after initialization", async () => {
-      const originalEnv = process.env.EI_OPENCODE_STORAGE_PATH;
-      process.env.EI_OPENCODE_STORAGE_PATH = "/env/path";
-      
-      const localReader = new OpenCodeReader();
-      mockReaddir.mockRejectedValue(new Error("ENOENT"));
-      
-      // Trigger initialization by calling a method
-      await localReader.getSessionsUpdatedSince(new Date());
-      
-      expect((localReader as unknown as { storagePath: string }).storagePath).toBe("/env/path");
-      
-      process.env.EI_OPENCODE_STORAGE_PATH = originalEnv;
-    });
-
     it("falls back to default path after initialization", async () => {
-      const originalEnv = process.env.EI_OPENCODE_STORAGE_PATH;
-      delete process.env.EI_OPENCODE_STORAGE_PATH;
-      
-      const localReader = new OpenCodeReader();
+      const localReader = new JsonReader();
       mockReaddir.mockRejectedValue(new Error("ENOENT"));
       
       // Trigger initialization by calling a method
       await localReader.getSessionsUpdatedSince(new Date());
       
       expect((localReader as unknown as { storagePath: string }).storagePath).toContain(".local/share/opencode/storage");
-      
-      process.env.EI_OPENCODE_STORAGE_PATH = originalEnv;
     });
   });
 });

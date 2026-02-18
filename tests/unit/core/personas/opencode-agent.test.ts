@@ -5,12 +5,12 @@ import {
 } from "../../../../src/core/personas/opencode-agent.js";
 import type { StateManager } from "../../../../src/core/state-manager.js";
 import type { Ei_Interface, PersonaEntity } from "../../../../src/core/types.js";
-import type { OpenCodeReader } from "../../../../src/integrations/opencode/reader.js";
+import type { IOpenCodeReader } from "../../../../src/integrations/opencode/types.js";
 
 describe("ensureAgentPersona", () => {
   let mockStateManager: Partial<StateManager>;
   let mockInterface: Partial<Ei_Interface>;
-  let mockReader: Partial<OpenCodeReader>;
+  let mockReader: Partial<IOpenCodeReader>;
 
   beforeEach(() => {
     mockStateManager = {
@@ -49,7 +49,7 @@ describe("ensureAgentPersona", () => {
     const result = await ensureAgentPersona("build", {
       stateManager: mockStateManager as StateManager,
       interface: mockInterface as Ei_Interface,
-      reader: mockReader as OpenCodeReader,
+      reader: mockReader as IOpenCodeReader,
     });
 
     expect(result).toBe(existingPersona);
@@ -61,7 +61,7 @@ describe("ensureAgentPersona", () => {
     const result = await ensureAgentPersona("build", {
       stateManager: mockStateManager as StateManager,
       interface: mockInterface as Ei_Interface,
-      reader: mockReader as OpenCodeReader,
+      reader: mockReader as IOpenCodeReader,
     });
 
     expect(mockStateManager.persona_add).toHaveBeenCalledWith(
@@ -90,7 +90,7 @@ describe("ensureAgentPersona", () => {
     const result = await ensureAgentPersona("unknown-agent", {
       stateManager: mockStateManager as StateManager,
       interface: mockInterface as Ei_Interface,
-      reader: mockReader as OpenCodeReader,
+      reader: mockReader as IOpenCodeReader,
     });
 
     expect(result.short_description).toBe("OpenCode coding agent");
@@ -100,7 +100,7 @@ describe("ensureAgentPersona", () => {
     const result = await ensureAgentPersona("build", {
       stateManager: mockStateManager as StateManager,
       interface: mockInterface as Ei_Interface,
-      reader: mockReader as OpenCodeReader,
+      reader: mockReader as IOpenCodeReader,
     });
 
     expect(result.is_static).toBe(false);
@@ -110,7 +110,7 @@ describe("ensureAgentPersona", () => {
     const result = await ensureAgentPersona("build", {
       stateManager: mockStateManager as StateManager,
       interface: mockInterface as Ei_Interface,
-      reader: mockReader as OpenCodeReader,
+      reader: mockReader as IOpenCodeReader,
     });
 
     expect(result.heartbeat_delay_ms).toBe(43200000);
@@ -122,7 +122,7 @@ describe("ensureAgentPersona", () => {
     const result = await ensureAgentPersona("build", {
       stateManager: mockStateManager as StateManager,
       interface: mockInterface as Ei_Interface,
-      reader: mockReader as OpenCodeReader,
+      reader: mockReader as IOpenCodeReader,
     });
 
     expect(result.last_heartbeat).toBeDefined();
@@ -133,7 +133,7 @@ describe("ensureAgentPersona", () => {
     const result = await ensureAgentPersona("build", {
       stateManager: mockStateManager as StateManager,
       interface: mockInterface as Ei_Interface,
-      reader: mockReader as OpenCodeReader,
+      reader: mockReader as IOpenCodeReader,
     });
 
     expect(result.group_primary).toBe("OpenCode");
@@ -143,7 +143,7 @@ describe("ensureAgentPersona", () => {
   it("works without interface (no callback)", async () => {
     const result = await ensureAgentPersona("build", {
       stateManager: mockStateManager as StateManager,
-      reader: mockReader as OpenCodeReader,
+      reader: mockReader as IOpenCodeReader,
     });
 
     expect(mockStateManager.persona_add).toHaveBeenCalled();
@@ -154,7 +154,7 @@ describe("ensureAgentPersona", () => {
     const result = await ensureAgentPersona("sisyphus", {
       stateManager: mockStateManager as StateManager,
       interface: mockInterface as Ei_Interface,
-      reader: mockReader as OpenCodeReader,
+      reader: mockReader as IOpenCodeReader,
     });
 
     expect(result.aliases).toEqual([
@@ -170,7 +170,7 @@ describe("ensureAgentPersona", () => {
     const result = await ensureAgentPersona("build", {
       stateManager: mockStateManager as StateManager,
       interface: mockInterface as Ei_Interface,
-      reader: mockReader as OpenCodeReader,
+      reader: mockReader as IOpenCodeReader,
     });
 
     expect(result.aliases).toEqual(["build"]);
@@ -181,7 +181,7 @@ describe("ensureAgentPersona", () => {
     const result = await ensureAgentPersona("build", {
       stateManager: mockStateManager as StateManager,
       interface: mockInterface as Ei_Interface,
-      reader: mockReader as OpenCodeReader,
+      reader: mockReader as IOpenCodeReader,
     });
 
     expect(result.traits).toEqual([]);
@@ -192,7 +192,7 @@ describe("ensureAgentPersona", () => {
 describe("ensureAllAgentPersonas", () => {
   let mockStateManager: Partial<StateManager>;
   let mockInterface: Partial<Ei_Interface>;
-  let mockReader: Partial<OpenCodeReader>;
+  let mockReader: Partial<IOpenCodeReader>;
 
   beforeEach(() => {
     mockStateManager = {
@@ -216,7 +216,7 @@ describe("ensureAllAgentPersonas", () => {
       {
         stateManager: mockStateManager as StateManager,
         interface: mockInterface as Ei_Interface,
-        reader: mockReader as OpenCodeReader,
+        reader: mockReader as IOpenCodeReader,
       }
     );
 
@@ -252,7 +252,7 @@ describe("ensureAllAgentPersonas", () => {
       {
         stateManager: mockStateManager as StateManager,
         interface: mockInterface as Ei_Interface,
-        reader: mockReader as OpenCodeReader,
+        reader: mockReader as IOpenCodeReader,
       }
     );
 
@@ -271,7 +271,7 @@ describe("ensureAllAgentPersonas", () => {
     const result = await ensureAllAgentPersonas([], {
       stateManager: mockStateManager as StateManager,
       interface: mockInterface as Ei_Interface,
-      reader: mockReader as OpenCodeReader,
+      reader: mockReader as IOpenCodeReader,
     });
 
     expect(result.size).toBe(0);

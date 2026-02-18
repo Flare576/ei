@@ -1,8 +1,8 @@
 import type { StateManager } from "../../core/state-manager.js";
 import type { Ei_Interface, Topic, Message, ContextStatus } from "../../core/types.js";
-import { OpenCodeReader } from "./reader.js";
-import type { OpenCodeSession, OpenCodeMessage } from "./types.js";
+import type { IOpenCodeReader, OpenCodeSession, OpenCodeMessage } from "./types.js";
 import { UTILITY_AGENTS, AGENT_TO_AGENT_PREFIXES } from "./types.js";
+import { createOpenCodeReader } from "./reader-factory.js";
 import { ensureAgentPersona } from "../../core/personas/opencode-agent.js";
 import {
   queueDirectTopicUpdate,
@@ -37,7 +37,7 @@ export interface ImportResult {
 export interface OpenCodeImporterOptions {
   stateManager: StateManager;
   interface?: Ei_Interface;
-  reader?: OpenCodeReader;
+  reader?: IOpenCodeReader;
 }
 
 export async function importOpenCodeSessions(
@@ -45,7 +45,7 @@ export async function importOpenCodeSessions(
   options: OpenCodeImporterOptions
 ): Promise<ImportResult> {
   const { stateManager, interface: eiInterface } = options;
-  const reader = options.reader ?? new OpenCodeReader();
+  const reader = options.reader ?? await createOpenCodeReader();
 
   const result: ImportResult = {
     sessionsProcessed: 0,
@@ -277,7 +277,7 @@ function queueDirectTopicUpdatesForSessions(
 
 async function ensureSessionTopic(
   session: OpenCodeSession,
-  reader: OpenCodeReader,
+  reader: IOpenCodeReader,
   stateManager: StateManager
 ): Promise<"created" | "updated" | "unchanged"> {
   const human = stateManager.getHuman();

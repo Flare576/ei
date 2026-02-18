@@ -2,13 +2,12 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { importOpenCodeSessions } from "../../../../src/integrations/opencode/importer.js";
 import type { StateManager } from "../../../../src/core/state-manager.js";
 import type { Ei_Interface, HumanEntity, Topic } from "../../../../src/core/types.js";
-import type { OpenCodeReader } from "../../../../src/integrations/opencode/reader.js";
-import type { OpenCodeSession, OpenCodeMessage } from "../../../../src/integrations/opencode/types.js";
+import type { IOpenCodeReader, OpenCodeSession, OpenCodeMessage } from "../../../../src/integrations/opencode/types.js";
 
 describe("importOpenCodeSessions", () => {
   let mockStateManager: Partial<StateManager>;
   let mockInterface: Partial<Ei_Interface>;
-  let mockReader: Partial<OpenCodeReader>;
+  let mockReader: Partial<IOpenCodeReader>;
   let mockHuman: HumanEntity;
   let createdPersonas: Map<string, { id: string; display_name: string }>;
 
@@ -97,7 +96,7 @@ describe("importOpenCodeSessions", () => {
     const result = await importOpenCodeSessions(new Date(0), {
       stateManager: mockStateManager as StateManager,
       interface: mockInterface as Ei_Interface,
-      reader: mockReader as OpenCodeReader,
+      reader: mockReader as IOpenCodeReader,
     });
 
     expect(result.sessionsProcessed).toBe(0);
@@ -120,7 +119,7 @@ describe("importOpenCodeSessions", () => {
     const result = await importOpenCodeSessions(new Date(0), {
       stateManager: mockStateManager as StateManager,
       interface: mockInterface as Ei_Interface,
-      reader: mockReader as OpenCodeReader,
+      reader: mockReader as IOpenCodeReader,
     });
 
     expect(result.topicsCreated).toBe(1);
@@ -162,7 +161,7 @@ describe("importOpenCodeSessions", () => {
     const result = await importOpenCodeSessions(new Date(0), {
       stateManager: mockStateManager as StateManager,
       interface: mockInterface as Ei_Interface,
-      reader: mockReader as OpenCodeReader,
+      reader: mockReader as IOpenCodeReader,
     });
 
     expect(result.topicsUpdated).toBe(1);
@@ -202,7 +201,7 @@ describe("importOpenCodeSessions", () => {
     const result = await importOpenCodeSessions(new Date(0), {
       stateManager: mockStateManager as StateManager,
       interface: mockInterface as Ei_Interface,
-      reader: mockReader as OpenCodeReader,
+      reader: mockReader as IOpenCodeReader,
     });
 
     expect(result.topicsUpdated).toBe(0);
@@ -233,7 +232,7 @@ describe("importOpenCodeSessions", () => {
     const result = await importOpenCodeSessions(new Date(0), {
       stateManager: mockStateManager as StateManager,
       interface: mockInterface as Ei_Interface,
-      reader: mockReader as OpenCodeReader,
+      reader: mockReader as IOpenCodeReader,
     });
 
     expect(result.personasCreated).toContain("sisyphus");
@@ -280,7 +279,7 @@ describe("importOpenCodeSessions", () => {
     const result = await importOpenCodeSessions(new Date(0), {
       stateManager: mockStateManager as StateManager,
       interface: mockInterface as Ei_Interface,
-      reader: mockReader as OpenCodeReader,
+      reader: mockReader as IOpenCodeReader,
     });
 
     expect(result.personasCreated).not.toContain("sisyphus");
@@ -320,7 +319,7 @@ describe("importOpenCodeSessions", () => {
     const result = await importOpenCodeSessions(new Date(0), {
       stateManager: mockStateManager as StateManager,
       interface: mockInterface as Ei_Interface,
-      reader: mockReader as OpenCodeReader,
+      reader: mockReader as IOpenCodeReader,
     });
 
     expect(result.messagesImported).toBe(2);
@@ -382,7 +381,7 @@ describe("importOpenCodeSessions", () => {
     await importOpenCodeSessions(new Date(0), {
       stateManager: mockStateManager as StateManager,
       interface: mockInterface as Ei_Interface,
-      reader: mockReader as OpenCodeReader,
+      reader: mockReader as IOpenCodeReader,
     });
 
     const calls = (mockStateManager.messages_append as ReturnType<typeof vi.fn>).mock.calls;
@@ -414,7 +413,7 @@ describe("importOpenCodeSessions", () => {
     await importOpenCodeSessions(new Date(0), {
       stateManager: mockStateManager as StateManager,
       interface: mockInterface as Ei_Interface,
-      reader: mockReader as OpenCodeReader,
+      reader: mockReader as IOpenCodeReader,
     });
 
     const buildPersona = createdPersonas.get("build");
@@ -450,7 +449,7 @@ describe("importOpenCodeSessions", () => {
     await importOpenCodeSessions(new Date(0), {
       stateManager: mockStateManager as StateManager,
       interface: mockInterface as Ei_Interface,
-      reader: mockReader as OpenCodeReader,
+      reader: mockReader as IOpenCodeReader,
     });
 
     const buildPersona = createdPersonas.get("build");
@@ -496,7 +495,7 @@ describe("importOpenCodeSessions", () => {
     await importOpenCodeSessions(new Date(0), {
       stateManager: mockStateManager as StateManager,
       interface: mockInterface as Ei_Interface,
-      reader: mockReader as OpenCodeReader,
+      reader: mockReader as IOpenCodeReader,
     });
 
     const buildPersona = createdPersonas.get("build");
@@ -529,7 +528,7 @@ describe("importOpenCodeSessions", () => {
     const result = await importOpenCodeSessions(new Date(0), {
       stateManager: mockStateManager as StateManager,
       interface: mockInterface as Ei_Interface,
-      reader: mockReader as OpenCodeReader,
+      reader: mockReader as IOpenCodeReader,
     });
 
     expect(result.sessionsProcessed).toBe(2);
@@ -551,7 +550,7 @@ describe("importOpenCodeSessions", () => {
     await importOpenCodeSessions(new Date(0), {
       stateManager: mockStateManager as StateManager,
       interface: mockInterface as Ei_Interface,
-      reader: mockReader as OpenCodeReader,
+      reader: mockReader as IOpenCodeReader,
     });
 
     expect(mockStateManager.human_topic_upsert).toHaveBeenCalledWith(
@@ -576,7 +575,7 @@ describe("importOpenCodeSessions", () => {
     await importOpenCodeSessions(new Date(0), {
       stateManager: mockStateManager as StateManager,
       interface: mockInterface as Ei_Interface,
-      reader: mockReader as OpenCodeReader,
+      reader: mockReader as IOpenCodeReader,
     });
 
     expect(mockStateManager.human_topic_upsert).toHaveBeenCalledWith(

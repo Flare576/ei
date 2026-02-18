@@ -1,7 +1,8 @@
 import type { PersonaEntity, Ei_Interface } from "../types.js";
 import type { StateManager } from "../state-manager.js";
-import { OpenCodeReader } from "../../integrations/opencode/reader.js";
+import type { IOpenCodeReader } from "../../integrations/opencode/types.js";
 import { AGENT_ALIASES } from "../../integrations/opencode/types.js";
+import { createOpenCodeReader } from "../../integrations/opencode/reader-factory.js";
 
 const OPENCODE_GROUP = "OpenCode";
 const TWELVE_HOURS_MS = 43200000;
@@ -9,7 +10,7 @@ const TWELVE_HOURS_MS = 43200000;
 export interface EnsureAgentPersonaOptions {
   stateManager: StateManager;
   interface?: Ei_Interface;
-  reader?: OpenCodeReader;
+  reader?: IOpenCodeReader;
 }
 
 function resolveCanonicalAgent(agentName: string): { canonical: string; aliases: string[] } {
@@ -34,7 +35,7 @@ export async function ensureAgentPersona(
     return existing;
   }
 
-  const agentReader = reader ?? new OpenCodeReader();
+  const agentReader = reader ?? await createOpenCodeReader();
   const agentInfo = await agentReader.getAgentInfo(canonical);
 
   const now = new Date().toISOString();
