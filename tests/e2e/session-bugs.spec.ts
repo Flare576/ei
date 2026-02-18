@@ -7,7 +7,7 @@
  */
 import { test, expect } from "./fixtures.js";
 
-const AUTO_SAVES_KEY = "ei_autosaves";
+const STATE_KEY = "ei_state";
 
 interface Message {
   id: string;
@@ -133,9 +133,9 @@ async function loadCheckpoint(
     ({ url, key, data }) => {
       localStorage.clear();
       localStorage.setItem("EI_LLM_BASE_URL", url);
-      localStorage.setItem(key, JSON.stringify([data]));
+      localStorage.setItem(key, JSON.stringify(data));
     },
-    { url: mockServerUrl, key: AUTO_SAVES_KEY, data: checkpoint }
+    { url: mockServerUrl, key: STATE_KEY, data: checkpoint }
   );
 }
 

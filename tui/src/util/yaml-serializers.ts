@@ -30,7 +30,7 @@ interface EditablePerson extends Person {
 }
 
 interface EditablePersonaData {
-  name: string;
+  display_name?: string;
   aliases?: string[];
   short_description?: string;
   long_description?: string;
@@ -98,7 +98,7 @@ const PLACEHOLDER_TOPIC: YAMLPersonaTopic = {
  */
 export function newPersonaToYAML(name: string): string {
   const data: EditablePersonaData = {
-    name,
+    display_name: name,
     long_description: PLACEHOLDER_LONG_DESC,
     model: undefined,
     group_primary: "General",

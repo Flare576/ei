@@ -1,48 +1,58 @@
-import type { Checkpoint, StorageState } from "../types.js";
+import type { StorageState } from "../types.js";
 import type { Storage } from "../../storage/interface.js";
 
-export class CheckpointState {
+const DEBOUNCE_MS = 100;
+
+export class PersistenceState {
   private storage: Storage | null = null;
+  private saveTimeout: ReturnType<typeof setTimeout> | null = null;
+  private pendingState: StorageState | null = null;
+  private loadedExistingData = false;
 
   setStorage(storage: Storage): void {
     this.storage = storage;
   }
 
-  async saveAuto(state: StorageState): Promise<void> {
-    if (!this.storage) throw new Error("Storage not initialized");
-    state.timestamp = new Date().toISOString();
-    await this.storage.saveAutoCheckpoint(state);
+  scheduleSave(state: StorageState): void {
+    this.pendingState = state;
+    
+    if (this.saveTimeout) {
+      clearTimeout(this.saveTimeout);
+    }
+    
+    this.saveTimeout = setTimeout(async () => {
+      this.saveTimeout = null;
+      if (this.pendingState) {
+        await this.saveNow(this.pendingState);
+        this.pendingState = null;
+      }
+    }, DEBOUNCE_MS);
   }
 
-  async saveManual(index: number, name: string, state: StorageState): Promise<void> {
+  async saveNow(state: StorageState): Promise<void> {
     if (!this.storage) throw new Error("Storage not initialized");
-    state.timestamp = new Date().toISOString();
-    await this.storage.saveManualCheckpoint(index, name, state);
+    await this.storage.save(state);
   }
 
-  async list(): Promise<Checkpoint[]> {
+  async load(): Promise<StorageState | null> {
     if (!this.storage) throw new Error("Storage not initialized");
-    return this.storage.listCheckpoints();
+    const state = await this.storage.load();
+    this.loadedExistingData = state !== null;
+    return state;
   }
 
-  async delete(index: number): Promise<boolean> {
-    if (!this.storage) throw new Error("Storage not initialized");
-    return this.storage.deleteManualCheckpoint(index);
+  hasExistingData(): boolean {
+    return this.loadedExistingData;
   }
 
-  async load(index: number): Promise<StorageState | null> {
-    if (!this.storage) throw new Error("Storage not initialized");
-    return this.storage.loadCheckpoint(index);
-  }
-
-  async loadNewest(): Promise<StorageState | null> {
-    if (!this.storage) throw new Error("Storage not initialized");
-    const checkpoints = await this.storage.listCheckpoints();
-    if (checkpoints.length === 0) return null;
-
-    const newest = checkpoints.reduce((a, b) =>
-      new Date(a.timestamp).getTime() > new Date(b.timestamp).getTime() ? a : b
-    );
-    return this.storage.loadCheckpoint(newest.index);
+  async flush(): Promise<void> {
+    if (this.saveTimeout) {
+      clearTimeout(this.saveTimeout);
+      this.saveTimeout = null;
+    }
+    if (this.pendingState && this.storage) {
+      await this.storage.save(this.pendingState);
+      this.pendingState = null;
+    }
   }
 }

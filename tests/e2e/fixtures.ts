@@ -105,7 +105,7 @@ export async function clearStorage(page: import("@playwright/test").Page) {
   });
 }
 
-const AUTO_SAVES_KEY = "ei_autosaves";
+const STATE_KEY = "ei_state";
 
 const DEFAULT_WELCOME_MESSAGE = "Hello! I'm Ei, your personal companion. I'm here to chat, learn about you, and grow alongside you. What's on your mind today?";
 
@@ -198,7 +198,7 @@ export function createMinimalCheckpoint(
 }
 
 /**
- * Seeds localStorage with a minimal checkpoint to bypass onboarding.
+ * Seeds localStorage with state to bypass onboarding.
  * Call this before page.goto() to simulate a returning user.
  */
 export async function seedCheckpoint(
@@ -206,13 +206,13 @@ export async function seedCheckpoint(
   mockServerUrl: string,
   messages: Array<{ role: string; content: string }> = [{ role: "assistant", content: DEFAULT_WELCOME_MESSAGE }]
 ) {
-  const checkpoint = createMinimalCheckpoint(messages);
+  const state = createMinimalCheckpoint(messages);
   await page.addInitScript(
     ({ url, key, data }) => {
       localStorage.clear();
       localStorage.setItem("EI_LLM_BASE_URL", url);
-      localStorage.setItem(key, JSON.stringify([data]));
+      localStorage.setItem(key, JSON.stringify(data));
     },
-    { url: mockServerUrl, key: AUTO_SAVES_KEY, data: checkpoint }
+    { url: mockServerUrl, key: STATE_KEY, data: state }
   );
 }

@@ -1,6 +1,6 @@
 import { test, expect, seedCheckpoint } from "./fixtures.js";
 
-const AUTO_SAVES_KEY = "ei_autosaves";
+const STATE_KEY = "ei_state";
 
 function createValidCheckpoint(messages: Array<{ role: string; content: string }> = []) {
   const timestamp = new Date().toISOString();
@@ -81,9 +81,9 @@ test.describe("Backup & Restore", () => {
       ({ url, key, checkpoint }) => {
         localStorage.clear();
         localStorage.setItem("EI_LLM_BASE_URL", url);
-        localStorage.setItem(key, JSON.stringify([checkpoint]));
+        localStorage.setItem(key, JSON.stringify(checkpoint));
       },
-      { url: mockServerUrl, key: AUTO_SAVES_KEY, checkpoint }
+      { url: mockServerUrl, key: STATE_KEY, checkpoint }
     );
 
     await page.reload();

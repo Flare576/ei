@@ -64,11 +64,7 @@ function createMockInterface(): { interface: Ei_Interface; calls: string[]; reca
       onHumanUpdated: () => calls.push("onHumanUpdated"),
       onQueueStateChanged: (state: "idle" | "busy" | "paused") => calls.push(`onQueueStateChanged:${state}`),
       onError: (error) => calls.push(`onError:${error.code}`),
-      onCheckpointStart: () => calls.push("onCheckpointStart"),
-      onCheckpointCreated: (index?: number) =>
-        calls.push(index !== undefined ? `onCheckpointCreated:${index}` : "onCheckpointCreated:auto"),
-      onCheckpointRestored: (index: number) => calls.push(`onCheckpointRestored:${index}`),
-      onCheckpointDeleted: (index: number) => calls.push(`onCheckpointDeleted:${index}`),
+      onStateImported: () => calls.push("onStateImported"),
       onOneShotReturned: (guid: string, content: string) => calls.push(`onOneShotReturned:${guid}:${content}`),
     },
     calls,
@@ -78,12 +74,9 @@ function createMockInterface(): { interface: Ei_Interface; calls: string[]; reca
 
 function createMockStorage() {
   return {
-    isAvailable: vi.fn().mockResolvedValue(true),
-    listCheckpoints: vi.fn().mockResolvedValue([]),
-    loadCheckpoint: vi.fn().mockResolvedValue(null),
-    saveAutoCheckpoint: vi.fn().mockResolvedValue(undefined),
-    saveManualCheckpoint: vi.fn().mockResolvedValue(undefined),
-    deleteManualCheckpoint: vi.fn().mockResolvedValue(true),
+    isAvailable: vi.fn().mockReturnValue(true),
+    load: vi.fn().mockResolvedValue(null),
+    save: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -216,11 +209,11 @@ describe("Processor Lifecycle", () => {
     const processor = new Processor(mock.interface);
     await processor.start(storage);
     
-    expect(storage.listCheckpoints).toHaveBeenCalled();
+    expect(storage.load).toHaveBeenCalled();
     await processor.stop();
   });
 
-  it("start() bootstraps Ei on first run (no checkpoints)", async () => {
+  it("start() bootstraps Ei on first run (no existing data)", async () => {
     const processor = new Processor(mock.interface);
     await processor.start(storage);
     
@@ -229,9 +222,8 @@ describe("Processor Lifecycle", () => {
     await processor.stop();
   });
 
-  it("start() does not bootstrap when checkpoints exist", async () => {
-    storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
-    storage.loadCheckpoint.mockResolvedValue({
+  it("start() does not bootstrap when existing data exists", async () => {
+    storage.load.mockResolvedValue({
       version: 1,
       timestamp: new Date().toISOString(),
       human: {
@@ -261,24 +253,22 @@ describe("Processor Lifecycle", () => {
     await processor.stop();
   });
 
-  it("stop() saves checkpoint and fires events", async () => {
+  it("stop() saves state", async () => {
     const processor = new Processor(mock.interface);
     await processor.start(storage);
     mock.calls.length = 0;
+    storage.save.mockClear();
     
     await processor.stop();
     
-    expect(storage.saveAutoCheckpoint).toHaveBeenCalled();
-    expect(mock.calls).toContain("onCheckpointStart");
-    expect(mock.calls).toContain("onCheckpointCreated:auto");
+    expect(storage.save).toHaveBeenCalled();
   });
 
   it("stop() does not save if never started running", async () => {
     const processor = new Processor(mock.interface);
     await processor.stop();
     
-    expect(storage.saveAutoCheckpoint).not.toHaveBeenCalled();
-    expect(mock.calls).not.toContain("onCheckpointStart");
+    expect(storage.save).not.toHaveBeenCalled();
   });
 
   it("stop() prevents runLoop from continuing", async () => {
@@ -288,81 +278,6 @@ describe("Processor Lifecycle", () => {
     
     const statusAfterStop = await processor.getQueueStatus();
     expect(statusAfterStop.state).toBe("idle");
-  });
-});
-
-describe("Processor Auto-Save", () => {
-  let mock: ReturnType<typeof createMockInterface>;
-  let storage: ReturnType<typeof createMockStorage>;
-
-  beforeEach(() => {
-    vi.useFakeTimers();
-    mock = createMockInterface();
-    storage = createMockStorage();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it("triggers auto-save after default interval (60s)", async () => {
-    const processor = new Processor(mock.interface);
-    await processor.start(storage);
-    mock.calls.length = 0;
-    storage.saveAutoCheckpoint.mockClear();
-    
-    await vi.advanceTimersByTimeAsync(60001);
-    
-    expect(storage.saveAutoCheckpoint).toHaveBeenCalled();
-    expect(mock.calls).toContain("onCheckpointStart");
-    expect(mock.calls).toContain("onCheckpointCreated:auto");
-    
-    await processor.stop();
-  });
-
-  it("respects custom auto_save_interval_ms from human settings", async () => {
-    storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
-    storage.loadCheckpoint.mockResolvedValue({
-      version: 1,
-      timestamp: new Date().toISOString(),
-      human: {
-        entity: "human",
-        facts: [],
-        traits: [],
-        topics: [],
-        people: [],
-        last_updated: new Date().toISOString(),
-        last_activity: new Date().toISOString(),
-        settings: { auto_save_interval_ms: 30000 },
-      },
-      personas: {
-        ei: { entity: createTestPersona({ aliases: ["Ei"] }), messages: [] },
-      },
-      queue: [],
-      settings: {},
-    });
-    
-    const processor = new Processor(mock.interface);
-    await processor.start(storage);
-    mock.calls.length = 0;
-    storage.saveAutoCheckpoint.mockClear();
-    
-    await vi.advanceTimersByTimeAsync(30001);
-    
-    expect(storage.saveAutoCheckpoint).toHaveBeenCalled();
-    await processor.stop();
-  });
-
-  it("does not auto-save before interval elapses", async () => {
-    const processor = new Processor(mock.interface);
-    await processor.start(storage);
-    mock.calls.length = 0;
-    storage.saveAutoCheckpoint.mockClear();
-    
-    await vi.advanceTimersByTimeAsync(30000);
-    
-    expect(storage.saveAutoCheckpoint).not.toHaveBeenCalled();
-    await processor.stop();
   });
 });
 
@@ -388,8 +303,7 @@ describe("Processor Heartbeat Scheduling", () => {
       last_activity: oldActivity,
     });
     
-    storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
-    storage.loadCheckpoint.mockResolvedValue({
+    storage.load.mockResolvedValue({
       version: 1,
       timestamp: new Date().toISOString(),
       human: {
@@ -425,8 +339,7 @@ describe("Processor Heartbeat Scheduling", () => {
 
   it("does NOT queue heartbeat for paused personas", async () => {
     const oldActivity = new Date(Date.now() - 3600000).toISOString();
-    storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
-    storage.loadCheckpoint.mockResolvedValue({
+    storage.load.mockResolvedValue({
       version: 1,
       timestamp: new Date().toISOString(),
       human: {
@@ -466,8 +379,7 @@ describe("Processor Heartbeat Scheduling", () => {
 
   it("does NOT queue heartbeat for archived personas", async () => {
     const oldActivity = new Date(Date.now() - 3600000).toISOString();
-    storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
-    storage.loadCheckpoint.mockResolvedValue({
+    storage.load.mockResolvedValue({
       version: 1,
       timestamp: new Date().toISOString(),
       human: {
@@ -507,8 +419,7 @@ describe("Processor Heartbeat Scheduling", () => {
 
   it("does NOT queue heartbeat if last_activity is recent", async () => {
     const recentActivity = new Date().toISOString();
-    storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
-    storage.loadCheckpoint.mockResolvedValue({
+    storage.load.mockResolvedValue({
       version: 1,
       timestamp: new Date().toISOString(),
       human: {
@@ -707,53 +618,6 @@ describe("Processor API Methods", () => {
     });
   });
 
-  describe("getCheckpoints", () => {
-    it("returns list of checkpoints from storage", async () => {
-      storage.listCheckpoints.mockResolvedValue([
-        { index: 0, timestamp: "2024-01-01T00:00:00Z" },
-        { index: 10, timestamp: "2024-01-02T00:00:00Z", name: "Manual Save" },
-      ]);
-      
-      const checkpoints = await processor.getCheckpoints();
-      
-      expect(checkpoints).toHaveLength(2);
-    });
-  });
-
-  describe("createCheckpoint", () => {
-    it("saves checkpoint and fires onCheckpointStart and onCheckpointCreated", async () => {
-      mock.calls.length = 0;
-      
-      await processor.createCheckpoint(10, "Test Save");
-      
-      expect(mock.calls).toContain("onCheckpointStart");
-      expect(mock.calls).toContain("onCheckpointCreated:10");
-      expect(storage.saveManualCheckpoint).toHaveBeenCalled();
-    });
-  });
-
-  describe("deleteCheckpoint", () => {
-    it("deletes checkpoint and fires onCheckpointDeleted", async () => {
-      mock.calls.length = 0;
-      
-      await processor.deleteCheckpoint(10);
-      
-      expect(mock.calls).toContain("onCheckpointStart");
-      expect(mock.calls).toContain("onCheckpointDeleted:10");
-      expect(storage.deleteManualCheckpoint).toHaveBeenCalled();
-    });
-
-    it("does not fire onCheckpointDeleted if deletion fails", async () => {
-      storage.deleteManualCheckpoint.mockResolvedValue(false);
-      mock.calls.length = 0;
-      
-      await processor.deleteCheckpoint(10);
-      
-      expect(mock.calls).toContain("onCheckpointStart");
-      expect(mock.calls).not.toContain("onCheckpointDeleted:10");
-    });
-  });
-
   describe("getQueueStatus", () => {
     it("returns idle when queue is empty and not processing", async () => {
       const status = await processor.getQueueStatus();
@@ -897,8 +761,7 @@ describe("Processor Visibility Filtering", () => {
     const friendPersona = createTestPersona({ aliases: ["Friend"], short_description: "A friend" });
     const archivedPersona = createTestPersona({ aliases: ["Archived"], is_archived: true });
     
-    storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
-    storage.loadCheckpoint.mockResolvedValue({
+    storage.load.mockResolvedValue({
       version: 1,
       timestamp: new Date().toISOString(),
       human: {
@@ -937,8 +800,7 @@ describe("Processor Visibility Filtering", () => {
       group_primary: "work",
     });
     
-    storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
-    storage.loadCheckpoint.mockResolvedValue({
+    storage.load.mockResolvedValue({
       version: 1,
       timestamp: new Date().toISOString(),
       human: {
@@ -1030,55 +892,6 @@ describe("Processor Export and Templates", () => {
 
 });
 
-describe("Processor Checkpoint Restore", () => {
-  let mock: ReturnType<typeof createMockInterface>;
-  let processor: Processor;
-  let storage: ReturnType<typeof createMockStorage>;
-
-  beforeEach(async () => {
-    mock = createMockInterface();
-    processor = new Processor(mock.interface);
-    storage = createMockStorage();
-    await processor.start(storage);
-  });
-
-  afterEach(async () => {
-    await processor.stop();
-  });
-
-  it("restoreCheckpoint returns true when checkpoint exists", async () => {
-    storage.loadCheckpoint.mockResolvedValue({
-      version: 1,
-      timestamp: new Date().toISOString(),
-      human: {
-        entity: "human",
-        facts: [],
-        traits: [],
-        topics: [],
-        people: [],
-        last_updated: new Date().toISOString(),
-        last_activity: new Date().toISOString(),
-      },
-      personas: {},
-      queue: [],
-      settings: {},
-    });
-    
-    const result = await processor.restoreCheckpoint(10);
-    
-    expect(result).toBe(true);
-    expect(mock.calls).toContain("onCheckpointStart");
-  });
-
-  it("restoreCheckpoint returns false when checkpoint does not exist", async () => {
-    storage.loadCheckpoint.mockResolvedValue(null);
-    
-    const result = await processor.restoreCheckpoint(99);
-    
-    expect(result).toBe(false);
-  });
-});
-
 describe("Processor Human Extraction Throttling", () => {
   let mock: ReturnType<typeof createMockInterface>;
   let processor: Processor;
@@ -1095,8 +908,7 @@ describe("Processor Human Extraction Throttling", () => {
   });
 
   it("triggers extraction when sending message to Ei", async () => {
-    storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
-    storage.loadCheckpoint.mockResolvedValue({
+    storage.load.mockResolvedValue({
       version: 1,
       timestamp: new Date().toISOString(),
       human: {
@@ -1135,8 +947,7 @@ describe("Processor Human Extraction Throttling", () => {
   });
 
   it("does NOT trigger extraction when sending message to non-Ei persona", async () => {
-    storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
-    storage.loadCheckpoint.mockResolvedValue({
+    storage.load.mockResolvedValue({
       version: 1,
       timestamp: new Date().toISOString(),
       human: {
@@ -1175,8 +986,7 @@ describe("Processor Human Extraction Throttling", () => {
   it("throttles extraction based on items vs messages ratio", async () => {
     const now = new Date();
     
-    storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: now.toISOString() }]);
-    storage.loadCheckpoint.mockResolvedValue({
+    storage.load.mockResolvedValue({
       version: 1,
       timestamp: now.toISOString(),
       human: {
@@ -1218,8 +1028,7 @@ describe("Processor Human Extraction Throttling", () => {
   it("queues extraction for unextracted messages", async () => {
     const eiPersona = createTestPersona({ id: "ei", aliases: ["Ei", "ei"] });
     
-    storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
-    storage.loadCheckpoint.mockResolvedValue({
+    storage.load.mockResolvedValue({
       version: 1,
       timestamp: new Date().toISOString(),
       human: {
@@ -1270,8 +1079,7 @@ describe("Processor Message Recall", () => {
   it("recallPendingMessages returns empty string when no pending messages", async () => {
     const testBotPersona = createTestPersona();
     
-    storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
-    storage.loadCheckpoint.mockResolvedValue({
+    storage.load.mockResolvedValue({
       version: 1,
       timestamp: new Date().toISOString(),
       human: {
@@ -1305,8 +1113,7 @@ describe("Processor Message Recall", () => {
   it("recallPendingMessages returns content of pending messages and fires onMessageRecalled", async () => {
     const testBotPersona = createTestPersona();
     
-    storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
-    storage.loadCheckpoint.mockResolvedValue({
+    storage.load.mockResolvedValue({
       version: 1,
       timestamp: new Date().toISOString(),
       human: {
@@ -1344,8 +1151,7 @@ describe("Processor Message Recall", () => {
   it("recallPendingMessages removes messages from history", async () => {
     const testBotPersona = createTestPersona();
     
-    storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
-    storage.loadCheckpoint.mockResolvedValue({
+    storage.load.mockResolvedValue({
       version: 1,
       timestamp: new Date().toISOString(),
       human: {
@@ -1382,8 +1188,7 @@ describe("Processor Message Recall", () => {
   it("human messages start with read: false", async () => {
     const testBotPersona = createTestPersona();
     
-    storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
-    storage.loadCheckpoint.mockResolvedValue({
+    storage.load.mockResolvedValue({
       version: 1,
       timestamp: new Date().toISOString(),
       human: {
@@ -1433,8 +1238,7 @@ describe("Processor markMessageRead", () => {
   it("marks a message as read", async () => {
     const testBotPersona = createTestPersona();
     
-    storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
-    storage.loadCheckpoint.mockResolvedValue({
+    storage.load.mockResolvedValue({
       version: 1,
       timestamp: new Date().toISOString(),
       human: {
@@ -1470,8 +1274,7 @@ describe("Processor markMessageRead", () => {
   it("returns false for non-existent message", async () => {
     const testBotPersona = createTestPersona();
     
-    storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
-    storage.loadCheckpoint.mockResolvedValue({
+    storage.load.mockResolvedValue({
       version: 1,
       timestamp: new Date().toISOString(),
       human: {
@@ -1498,82 +1301,5 @@ describe("Processor markMessageRead", () => {
     const result = await processor.markMessageRead(testBotPersona.id, "nonexistent");
     
     expect(result).toBe(false);
-  });
-});
-
-describe("Processor onCheckpointRestored", () => {
-  let mock: ReturnType<typeof createMockInterface>;
-  let processor: Processor;
-  let storage: ReturnType<typeof createMockStorage>;
-
-  beforeEach(async () => {
-    mock = createMockInterface();
-    processor = new Processor(mock.interface);
-    storage = createMockStorage();
-  });
-
-  afterEach(async () => {
-    await processor.stop();
-  });
-
-  it("fires onCheckpointRestored when restore succeeds", async () => {
-    storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
-    storage.loadCheckpoint.mockResolvedValue({
-      version: 1,
-      timestamp: new Date().toISOString(),
-      human: {
-        entity: "human",
-        facts: [],
-        traits: [],
-        topics: [],
-        people: [],
-        last_updated: new Date().toISOString(),
-        last_activity: new Date().toISOString(),
-      },
-      personas: {},
-      queue: [],
-      settings: {},
-    });
-
-    await processor.start(storage);
-    mock.calls.length = 0;
-    
-    await processor.restoreCheckpoint(5);
-    
-    expect(mock.calls).toContain("onCheckpointStart");
-    expect(mock.calls).toContain("onCheckpointRestored:5");
-  });
-
-  it("does not fire onCheckpointRestored when restore fails", async () => {
-    storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
-    storage.loadCheckpoint.mockImplementation(async (index: number) => {
-      if (index === 0) {
-        return {
-          version: 1,
-          timestamp: new Date().toISOString(),
-          human: {
-            entity: "human",
-            facts: [],
-            traits: [],
-            topics: [],
-            people: [],
-            last_updated: new Date().toISOString(),
-            last_activity: new Date().toISOString(),
-          },
-          personas: {},
-          queue: [],
-          settings: {},
-        };
-      }
-      return null;
-    });
-
-    await processor.start(storage);
-    mock.calls.length = 0;
-    
-    await processor.restoreCheckpoint(99);
-    
-    expect(mock.calls).toContain("onCheckpointStart");
-    expect(mock.calls).not.toContain("onCheckpointRestored:99");
   });
 });

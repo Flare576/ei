@@ -64,8 +64,8 @@ const mockServer = new MockLLMServerImpl();
 rmSync(TEST_DATA_PATH, { recursive: true, force: true });
 mkdirSync(TEST_DATA_PATH, { recursive: true });
 const checkpoint = createMinimalCheckpoint();
-const autosavesPath = join(TEST_DATA_PATH, "autosaves.json");
-writeFileSync(autosavesPath, JSON.stringify([checkpoint], null, 2));
+const statePath = join(TEST_DATA_PATH, "state.json");
+writeFileSync(statePath, JSON.stringify(checkpoint, null, 2));
 
 await mockServer.start(MOCK_PORT, {
   responses: {},

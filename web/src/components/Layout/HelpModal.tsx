@@ -127,8 +127,8 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
               <dt>Ei</dt>
               <dd>Your default companion persona. Ei helps manage other personas and learns about you.</dd>
               
-              <dt>Checkpoints</dt>
-              <dd>Save/restore points like video game saves. Auto-saves happen every minute (slots 0-9). Manual saves go to slots 1-5.</dd>
+              <dt>Auto-save</dt>
+              <dd>Your state is saved automatically after every change. Use Export/Import from Settings to backup or restore.</dd>
               
               <dt>Pending Messages</dt>
               <dd>Messages waiting to be processed. Click or press ↑ to recall them for editing.</dd>

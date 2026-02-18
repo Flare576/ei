@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { StateManager } from "../../../src/core/state-manager.js";
-import { LLMRequestType, LLMPriority, LLMNextStep, ContextStatus } from "../../../src/core/types.js";
+import { LLMRequestType, LLMPriority, LLMNextStep, ContextStatus, ValidationLevel } from "../../../src/core/types.js";
 import { createMockStorage, createDefaultTestState } from "../../helpers/mock-storage.js";
 import type { Fact, Trait, Topic, Person, PersonaEntity, Message } from "../../../src/core/types.js";
 
@@ -15,21 +15,31 @@ describe("StateManager", () => {
   });
 
   describe("initialization", () => {
-    it("loads from storage if checkpoint exists", async () => {
+    it("loads from storage if data exists", async () => {
       const testState = createDefaultTestState();
-      testState.human.facts = [{ id: "f1", name: "Loaded", description: "", sentiment: 0, last_updated: "" }];
-      storage._autoSaves.push(testState);
+      testState.human.facts = [{ 
+        id: "f1", 
+        name: "Loaded", 
+        description: "", 
+        sentiment: 0, 
+        last_updated: "",
+        validated: ValidationLevel.None,
+        validated_date: ""
+      }];
       
       const newSm = new StateManager();
-      await newSm.initialize(storage);
+      const testStorage = createMockStorage();
+      (testStorage.load as any).mockResolvedValue(testState);
+      await newSm.initialize(testStorage);
       
       expect(newSm.getHuman().facts).toHaveLength(1);
       expect(newSm.getHuman().facts[0].name).toBe("Loaded");
     });
 
-    it("creates default state if no checkpoint", async () => {
+    it("creates default state if no data exists", async () => {
       const newSm = new StateManager();
       const emptyStorage = createMockStorage();
+      (emptyStorage.load as any).mockResolvedValue(null);
       await newSm.initialize(emptyStorage);
       
       expect(newSm.getHuman().facts).toEqual([]);
@@ -39,7 +49,7 @@ describe("StateManager", () => {
 
   describe("human entity operations", () => {
     const makeFact = (id: string, name: string): Fact => ({
-      id, name, description: "", sentiment: 0, last_updated: ""
+      id, name, description: "", sentiment: 0, last_updated: "", validated: ValidationLevel.None, validated_date: ""
     });
 
     const makeTrait = (id: string, name: string): Trait => ({
@@ -226,57 +236,6 @@ describe("StateManager", () => {
       sm.queue_resume();
       expect(sm.queue_isPaused()).toBe(false);
       expect(sm.queue_peekHighest()).not.toBeNull();
-    });
-  });
-
-  describe("checkpoint operations", () => {
-    it("saves auto checkpoint", async () => {
-      await sm.checkpoint_saveAuto();
-      
-      expect(storage.saveAutoCheckpoint).toHaveBeenCalled();
-    });
-
-    it("saves manual checkpoint", async () => {
-      await sm.checkpoint_saveManual(10, "My Save");
-      
-      expect(storage.saveManualCheckpoint).toHaveBeenCalledWith(
-        10,
-        "My Save",
-        expect.any(Object)
-      );
-    });
-
-    it("lists checkpoints", async () => {
-      storage._autoSaves.push(createDefaultTestState());
-      
-      const list = await sm.checkpoint_list();
-      
-      expect(list).toHaveLength(1);
-    });
-
-    it("deletes manual checkpoint", async () => {
-      storage._manualSaves.set(10, { state: createDefaultTestState(), name: "Test" });
-      
-      const result = await sm.checkpoint_delete(10);
-      
-      expect(result).toBe(true);
-    });
-
-    it("restores checkpoint", async () => {
-      const savedState = createDefaultTestState();
-      savedState.human.facts = [{ id: "f1", name: "Restored", description: "", sentiment: 0, last_updated: "" }];
-      storage._autoSaves.push(savedState);
-      
-      const restored = await sm.checkpoint_restore(0);
-      
-      expect(restored).toBe(true);
-      expect(sm.getHuman().facts[0].name).toBe("Restored");
-    });
-
-    it("returns false when restoring non-existent checkpoint", async () => {
-      const restored = await sm.checkpoint_restore(5);
-      
-      expect(restored).toBe(false);
     });
   });
 });

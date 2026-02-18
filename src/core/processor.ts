@@ -17,7 +17,6 @@ import {
   type Topic,
   type Person,
   type Quote,
-  type Checkpoint,
   type QueueStatus,
   type ContextStatus,
   type DataItemBase,
@@ -76,7 +75,6 @@ function stripHumanEmbeddings(human: HumanEntity): HumanEntity {
 }
 
 const DEFAULT_LOOP_INTERVAL_MS = 100;
-const DEFAULT_AUTO_SAVE_INTERVAL_MS = 60000;
 const DEFAULT_CONTEXT_WINDOW_HOURS = 8;
 const DEFAULT_OPENCODE_POLLING_MS = 1800000;
 
@@ -113,8 +111,6 @@ export class Processor {
   private interface: Ei_Interface;
   private running = false;
   private stopped = false;
-  private lastAutoSave = 0;
-  private autoSaveInterval = DEFAULT_AUTO_SAVE_INTERVAL_MS;
   private instanceId: number;
   private currentRequest: LLMRequest | null = null;
   private isTUI = false;
@@ -146,20 +142,14 @@ export class Processor {
       return;
     }
 
-    const checkpoints = await this.stateManager.checkpoint_list();
+    const isFirstRun = !this.stateManager.hasExistingData();
     const hasNoPersonas = this.stateManager.persona_getAll().length === 0;
-    if (checkpoints.length === 0 && hasNoPersonas) {
+    if (isFirstRun && hasNoPersonas) {
       await this.bootstrapFirstRun();
     }
 
     this.running = true;
-    this.lastAutoSave = Date.now();
     console.log(`[Processor ${this.instanceId}] initialized, starting loop`);
-
-    const settings = this.stateManager.getHuman().settings;
-    if (settings?.auto_save_interval_ms) {
-      this.autoSaveInterval = settings.auto_save_interval_ms;
-    }
 
     this.runLoop();
   }
@@ -211,34 +201,13 @@ export class Processor {
 
     this.running = false;
     this.queueProcessor.abort();
-    this.interface.onCheckpointStart?.();
-    await this.stateManager.checkpoint_saveAuto();
-    this.interface.onCheckpointCreated?.();
+    await this.stateManager.flush();
     console.log(`[Processor ${this.instanceId}] stopped`);
   }
 
   private async runLoop(): Promise<void> {
     console.log(`[Processor ${this.instanceId}] runLoop() started`);
     while (this.running) {
-      if (this.shouldAutoSave()) {
-        this.lastAutoSave = Date.now();
-        this.interface.onCheckpointStart?.();
-        try {
-          await this.stateManager.checkpoint_saveAuto();
-          this.interface.onCheckpointCreated?.();
-        } catch (e) {
-          if (e instanceof Error && e.message.includes("STORAGE_SAVE_FAILED")) {
-            console.warn("[Processor] Auto-save failed (quota exceeded), continuing...");
-            this.interface.onError?.({
-              code: "STORAGE_QUOTA_EXCEEDED",
-              message: "localStorage quota exceeded. Auto-save disabled until queue shrinks. Consider clearing the queue.",
-            });
-          } else {
-            throw e;
-          }
-        }
-      }
-
       await this.checkScheduledTasks();
 
       if (this.queueProcessor.getState() === "idle") {
@@ -273,10 +242,6 @@ export class Processor {
       await this.sleep(DEFAULT_LOOP_INTERVAL_MS);
     }
     console.log(`[Processor ${this.instanceId}] runLoop() exited`);
-  }
-
-  private shouldAutoSave(): boolean {
-    return Date.now() - this.lastAutoSave >= this.autoSaveInterval;
   }
 
   private async checkScheduledTasks(): Promise<void> {
@@ -1052,35 +1017,6 @@ export class Processor {
      return this.stateManager.human_quote_getForMessage(messageId).map(stripQuoteEmbedding);
    }
 
-  async getCheckpoints(): Promise<Checkpoint[]> {
-    return this.stateManager.checkpoint_list();
-  }
-
-  async createCheckpoint(index: number, name: string): Promise<void> {
-    this.interface.onCheckpointStart?.();
-    await this.stateManager.checkpoint_saveManual(index, name);
-    this.interface.onCheckpointCreated?.(index);
-  }
-
-  async deleteCheckpoint(index: number): Promise<void> {
-    this.interface.onCheckpointStart?.();
-    const deleted = await this.stateManager.checkpoint_delete(index);
-    if (deleted) {
-      this.interface.onCheckpointDeleted?.(index);
-    }
-  }
-
-  async restoreCheckpoint(index: number): Promise<boolean> {
-    this.interface.onCheckpointStart?.();
-    this.queueProcessor.abort();
-    const result = await this.stateManager.checkpoint_restore(index);
-    if (result) {
-      this.interface.onCheckpointRestored?.(index);
-      this.interface.onQueueStateChanged?.("idle");
-    }
-    return result;
-  }
-
   async exportState(): Promise<string> {
     const state = this.stateManager.getStorageState();
     return JSON.stringify(state, null, 2);
@@ -1092,7 +1028,7 @@ export class Processor {
       throw new Error("Invalid backup file format");
     }
     this.stateManager.restoreFromState(state);
-    this.interface.onCheckpointRestored?.(-1);
+    this.interface.onStateImported?.();
   }
 
   async abortCurrentOperation(): Promise<void> {

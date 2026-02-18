@@ -1,19 +1,19 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-02-17 (0128 Persona GUIDs to DONE)
+> Last updated: 2026-02-17 (0146 Write-Through Storage DONE)
 
 ## Overview
 
 | Status | Count |
 |--------|-------|
-| PENDING | 12 |
+| PENDING | 11 |
 | IN_PROGRESS | 0 |
 | QA | 0 |
-| DONE | 105 |
+| DONE | 106 |
 | BLOCKED | 0 |
 | SUPERSEDED | 3 |
 
-> 124 total tickets (105 done + 13 pending + 3 backlog + 0 in_progress + 0 QA + 3 superseded).
+> 124 total tickets (106 done + 11 pending + 3 backlog + 0 in_progress + 0 QA + 3 superseded).
 
 ---
 
@@ -67,7 +67,6 @@
 | 0115 | Fact Validation TUI | 0113, 0100 |
 | 0134 | Single Instance Enforcement | 0101 |
 | 0145 | OpenCode 1.2 SQLite Integration | 0102, 0103 |
-| 0146 | Write-Through Storage | None |
 
 ### E012: TUI Commands (V1.2)
 
@@ -211,6 +210,7 @@
 | 0149 | TUI Markdown Rendering | 2026-02-16 |
 | 0135 | Per-Message Extraction Tracking | 2026-02-17 |
 | 0128 | Persona GUIDs | 2026-02-17 |
+| 0146 | Write-Through Storage | 2026-02-17 |
 
 ---
 
@@ -248,21 +248,3 @@
 7. **Sisyphus Persona** - Static persona representing coding agent, history = imported sessions
 8. **Quote Preservation** - Quotes are a separate entity (not on Topic/Fact), validated via exact string match, human-in-the-loop for capture/management
 
----
-
-## Ticket Sequencing: Settings & Storage Refactor
-
-The following tickets form a logical sequence for settings/storage cleanup:
-
-| Order | Ticket | Title | Rationale |
-|-------|--------|-------|-----------|
-| 1 | **0146** | Write-Through Storage | Simplifies storage model, may remove `auto_save_interval_ms` |
-| 2 | **0135** | Settings Namespace Migration | Consolidates scattered settings into `settings.*` |
-| 3 | **0129** | Settings Menu Redesign | UI assumes clean `settings.*` namespace |
-| 4 | **0145** | OpenCode SQLite Integration | Independent, can parallel with 0129 |
-
-**Why this order:**
-- 0146 changes what settings exist (removes auto-save interval)
-- 0135 moves remaining settings to proper namespace
-- 0129 builds UI assuming settings are organized
-- 0145 is storage-related but doesn't touch user settings

@@ -44,86 +44,37 @@ describe("FileStorage", () => {
     expect(result).toBe(true);
   });
 
-  test("listCheckpoints returns empty array when no checkpoints exist", async () => {
-    const checkpoints = await storage.listCheckpoints();
-    expect(checkpoints).toEqual([]);
+  test("load returns null when no data exists", async () => {
+    const result = await storage.load();
+    expect(result).toBeNull();
   });
 
-  test("saveAutoCheckpoint and loadCheckpoint work for auto-saves", async () => {
+  test("save and load work correctly", async () => {
     const state = createMockState("2024-01-01T00:00:00Z");
-    await storage.saveAutoCheckpoint(state);
+    await storage.save(state);
 
-    const loaded = await storage.loadCheckpoint(0);
+    const loaded = await storage.load();
     expect(loaded).toEqual(state);
   });
 
-  test("auto-saves maintain FIFO queue with max 10 items", async () => {
-    for (let i = 0; i < 12; i++) {
-      const state = createMockState(`2024-01-01T00:00:${String(i).padStart(2, "0")}Z`);
-      await storage.saveAutoCheckpoint(state);
-    }
+  test("save overwrites existing data", async () => {
+    const state1 = createMockState("2024-01-01T00:00:00Z");
+    await storage.save(state1);
 
-    const checkpoints = await storage.listCheckpoints();
-    const autoSaves = checkpoints.filter((c) => c.index < 10);
-    expect(autoSaves.length).toBe(10);
+    const state2 = createMockState("2024-01-01T12:00:00Z");
+    state2.human.facts = [{ 
+      id: "test", 
+      name: "Test Fact", 
+      description: "", 
+      sentiment: 0, 
+      last_updated: "",
+      validated: "none" as any,
+      validated_date: ""
+    }];
+    await storage.save(state2);
 
-    const firstSave = await storage.loadCheckpoint(0);
-    expect(firstSave?.timestamp).toBe("2024-01-01T00:00:02Z");
-  });
-
-  test("saveManualCheckpoint and loadCheckpoint work for manual saves", async () => {
-    const state = createMockState("2024-01-01T12:00:00Z");
-    await storage.saveManualCheckpoint(10, "Test Save", state);
-
-    const loaded = await storage.loadCheckpoint(10);
-    expect(loaded).toEqual(state);
-  });
-
-  test("listCheckpoints includes manual checkpoint names", async () => {
-    const state = createMockState("2024-01-01T12:00:00Z");
-    await storage.saveManualCheckpoint(12, "My Manual Save", state);
-
-    const checkpoints = await storage.listCheckpoints();
-    const manual = checkpoints.find((c) => c.index === 12);
-    expect(manual?.name).toBe("My Manual Save");
-  });
-
-  test("saveManualCheckpoint throws error for invalid slot numbers", async () => {
-    const state = createMockState();
-
-    expect(async () => {
-      await storage.saveManualCheckpoint(5, "Invalid", state);
-    }).toThrow("CHECKPOINT_INVALID_SLOT");
-
-    expect(async () => {
-      await storage.saveManualCheckpoint(15, "Invalid", state);
-    }).toThrow("CHECKPOINT_INVALID_SLOT");
-  });
-
-  test("deleteManualCheckpoint removes checkpoint and returns true", async () => {
-    const state = createMockState();
-    await storage.saveManualCheckpoint(11, "To Delete", state);
-
-    const deleted = await storage.deleteManualCheckpoint(11);
-    expect(deleted).toBe(true);
-
-    const loaded = await storage.loadCheckpoint(11);
-    expect(loaded).toBeNull();
-  });
-
-  test("deleteManualCheckpoint returns false when checkpoint doesn't exist", async () => {
-    const deleted = await storage.deleteManualCheckpoint(13);
-    expect(deleted).toBe(false);
-  });
-
-  test("deleteManualCheckpoint throws error for auto-save slots", async () => {
-    expect(async () => {
-      await storage.deleteManualCheckpoint(5);
-    }).toThrow("CHECKPOINT_SLOT_PROTECTED");
-  });
-
-  test("loadCheckpoint returns null for non-existent checkpoint", async () => {
-    const loaded = await storage.loadCheckpoint(7);
-    expect(loaded).toBeNull();
+    const loaded = await storage.load();
+    expect(loaded?.human.facts).toHaveLength(1);
+    expect(loaded?.human.facts[0].name).toBe("Test Fact");
   });
 });

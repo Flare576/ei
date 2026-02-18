@@ -1,6 +1,6 @@
 # 0146: Write-Through Storage Simplification
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: None (can be done independently, but consider sequencing with 0129)
 **Blocked by**: None
 
@@ -51,51 +51,45 @@ if (this.shouldAutoSave()) {
 ```
 LocalStorage:
 ├── ei_state: {human, personas, messages, ...}  # Single current state
-├── ei_manual_1: {name, state, timestamp}       # Named snapshot
-├── ei_manual_2: {name, state, timestamp}       # Named snapshot
-└── ...
+└── (manual saves removed - use JSON export/import)
 ```
 
 - Every mutation immediately writes to `ei_state`
 - No carousel, no 60s timer, no data loss window
-- Manual saves remain for "export state" / rollback scenarios
+- Manual saves removed (export/import via JSON files is sufficient)
 - Reduce storage footprint by ~90% (1 state vs 10)
 
 ## Acceptance Criteria
 
 ### Phase 1: Write-Through Core
-- [ ] Modify `StateManager` to save after every mutation
-- [ ] Add debounce (100ms) to batch rapid mutations (e.g., message + extraction)
-- [ ] Remove `checkpoint_saveAuto()` carousel logic
-- [ ] Remove `shouldAutoSave()` timer in Processor
-- [ ] Remove `lastAutoSave` / `autoSaveInterval` tracking
+- [x] Modify `StateManager` to save after every mutation
+- [x] Add debounce (100ms) to batch rapid mutations (e.g., message + extraction)
+- [x] Remove `checkpoint_saveAuto()` carousel logic
+- [x] Remove `shouldAutoSave()` timer in Processor
+- [x] Remove `lastAutoSave` / `autoSaveInterval` tracking
 
 ### Phase 2: Storage Interface Changes
-- [ ] `Storage.save(state)` - immediate write (replaces `saveAutoCheckpoint`)
-- [ ] `Storage.load()` - read current state (replaces carousel lookup)
-- [ ] Keep `saveManualCheckpoint(slot, name, state)` for explicit saves
-- [ ] Keep `loadCheckpoint(slot)` for manual restore
-- [ ] Keep `listCheckpoints()` for UI (manual saves only)
-- [ ] Keep `deleteManualCheckpoint(slot)` for cleanup
+- [x] `Storage.save(state)` - immediate write (replaces `saveAutoCheckpoint`)
+- [x] `Storage.load()` - read current state (replaces carousel lookup)
+- [x] Remove entire checkpoint system (manual checkpoints removed - export/import via JSON is sufficient)
 
 ### Phase 3: LocalStorage Implementation
-- [ ] Replace `ei_autosaves` array with single `ei_state` key
-- [ ] Migration: on load, if `ei_autosaves` exists, use latest and delete array
-- [ ] Update quota error handling (single write vs carousel push)
+- [x] Replace `ei_autosaves` array with single `ei_state` key
+- [x] Migration: on load, if `ei_autosaves` exists, use latest and delete array
 
 ### Phase 4: FileStorage Implementation (TUI)
-- [ ] Same pattern: single `state.json` instead of checkpoint files
-- [ ] Migration: if old checkpoint files exist, use latest and clean up
+- [x] Same pattern: single `state.json` instead of checkpoint files
+- [x] Migration: if old checkpoint files exist, use latest and clean up
 
-### Phase 5: UI Updates (if 0129 not done first)
-- [ ] Remove "auto-save interval" setting (no longer meaningful)
-- [ ] Save/Load modal shows only manual saves (no auto-save slots 0-9)
-- [ ] Consider: Add "Export State" button for JSON download
+### Phase 5: UI Updates
+- [x] Remove SavePanel component (checkpoint management UI)
+- [x] Update HelpModal to reference "Auto-save" instead of "Checkpoints"
 
-### Phase 6: Cleanup
-- [ ] Remove `HumanSettings.auto_save_interval_ms` from types
-- [ ] Remove carousel constants (`MAX_AUTO_SAVES`, etc.)
-- [ ] Update tests for new save behavior
+### Phase 6: Cleanup & Tests
+- [x] Remove carousel constants (`MAX_AUTO_SAVES`, etc.)
+- [x] Update tests for new save behavior
+- [x] Remove checkpoint-related tests
+- [x] Update E2E tests for new storage format
 
 ## Technical Details
 

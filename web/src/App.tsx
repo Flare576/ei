@@ -7,7 +7,6 @@ import type {
   QueueStatus, 
   Message, 
   Ei_Interface, 
-  Checkpoint,
   HumanEntity,
   PersonaEntity,
   Fact,
@@ -45,8 +44,6 @@ function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [processingPersona, setProcessingPersona] = useState<string | null>(null);
-  const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
-  const [isCheckpointOperationInProgress, setIsCheckpointOperationInProgress] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showHumanEditor, setShowHumanEditor] = useState(false);
   const [showPersonaEditor, setShowPersonaEditor] = useState(false);
@@ -79,8 +76,8 @@ function App() {
   // Check for first-run on mount (before Processor starts)
   useEffect(() => {
     const storage = new LocalStorage();
-    storage.listCheckpoints().then((checkpoints) => {
-      setShowOnboarding(checkpoints.length === 0);
+    storage.load().then((existingState) => {
+      setShowOnboarding(existingState === null);
     });
   }, []);
 
@@ -136,20 +133,7 @@ function App() {
       onError: (error) => {
         console.error(`[EI Error] ${error.code}: ${error.message}`);
       },
-      onCheckpointStart: () => {
-        setIsCheckpointOperationInProgress(true);
-      },
-      onCheckpointCreated: () => {
-        setIsCheckpointOperationInProgress(false);
-        processorRef.current?.getCheckpoints().then(setCheckpoints);
-      },
-      onCheckpointDeleted: () => {
-        setIsCheckpointOperationInProgress(false);
-        processorRef.current?.getCheckpoints().then(setCheckpoints);
-      },
-      onCheckpointRestored: () => {
-        setIsCheckpointOperationInProgress(false);
-        processorRef.current?.getCheckpoints().then(setCheckpoints);
+      onStateImported: () => {
         processorRef.current?.getPersonaList().then((list) => {
           setPersonas(list);
           if (list.length > 0) {
@@ -163,6 +147,8 @@ function App() {
             }
           }
         });
+        processorRef.current?.getHuman().then(setHuman);
+        processorRef.current?.getQuotes().then(setQuotes);
         processorRef.current?.getQueueStatus().then(setQueueStatus);
       },
       onContextBoundaryChanged: (personaId) => {
@@ -196,7 +182,6 @@ function App() {
         }
       });
       p.getQueueStatus().then(setQueueStatus);
-      p.getCheckpoints().then(setCheckpoints);
       p.getHuman().then(async (h) => {
         setHuman(h);
         if (h.settings?.sync) {
@@ -317,42 +302,6 @@ function App() {
       processor.getMessages(activePersonaId).then(setMessages);
     }
   }, [processor, activePersonaId]);
-
-  const handleSaveCheckpoint = useCallback(async (index: number, name: string) => {
-    if (!processor) return;
-    await processor.createCheckpoint(index, name);
-  }, [processor]);
-
-  const handleLoadCheckpoint = useCallback(async (index: number) => {
-    if (!processor) return;
-    await processor.restoreCheckpoint(index);
-    processor.getPersonaList().then((list) => {
-      setPersonas(list);
-      if (list.length > 0 && (!activePersonaId || !list.find(p => p.id === activePersonaId))) {
-        setActivePersonaId(list[0].id);
-        processor.getMessages(list[0].id).then(setMessages);
-      } else if (activePersonaId) {
-        processor.getMessages(activePersonaId).then(setMessages);
-      }
-    });
-  }, [processor, activePersonaId]);
-
-  const handleDeleteCheckpoint = useCallback(async (index: number) => {
-    if (!processor) return;
-    await processor.deleteCheckpoint(index);
-  }, [processor]);
-
-  const handleUndo = useCallback(async () => {
-    if (!processor) return;
-    const autoSaves = checkpoints.filter(c => c.index < 10).sort((a, b) => b.index - a.index);
-    if (autoSaves.length > 0) {
-      await handleLoadCheckpoint(autoSaves[0].index);
-    }
-  }, [processor, checkpoints, handleLoadCheckpoint]);
-
-  const handleRefreshCheckpoints = useCallback(() => {
-    processor?.getCheckpoints().then(setCheckpoints);
-  }, [processor]);
 
   const handleHelpClick = useCallback(() => {
     setShowHelp(true);
@@ -716,7 +665,7 @@ function App() {
     const storage = new LocalStorage();
     
     if (restoredState) {
-      await storage.saveAutoCheckpoint(restoredState);
+      await storage.save(restoredState);
       if (syncCredentials) {
         await remoteSync.configure(syncCredentials);
       }
@@ -760,15 +709,8 @@ function App() {
       controlArea={
         <ControlArea 
           queueStatus={queueStatus} 
-          checkpoints={checkpoints}
-          isCheckpointOperationInProgress={isCheckpointOperationInProgress}
           onPauseToggle={handlePauseToggle}
           onClearQueue={handleClearQueue}
-          onSave={handleSaveCheckpoint}
-          onLoad={handleLoadCheckpoint}
-          onDeleteCheckpoint={handleDeleteCheckpoint}
-          onUndo={handleUndo}
-          onRefreshCheckpoints={handleRefreshCheckpoints}
           onHelpClick={handleHelpClick}
           onSettingsClick={handleSettingsClick}
           onSaveAndExit={human?.settings?.sync ? handleSaveAndExit : undefined}

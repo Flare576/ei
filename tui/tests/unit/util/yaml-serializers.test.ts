@@ -5,19 +5,21 @@ import {
   humanToYAML, 
   humanFromYAML 
 } from "../../../src/util/yaml-serializers";
-import type { PersonaEntity, HumanEntity, PersonaTopic, Trait } from "../../../../src/core/types";
+import type { PersonaEntity, HumanEntity } from "../../../../src/core/types";
+import { ValidationLevel } from "../../../../src/core/types";
 
 describe("personaToYAML", () => {
   const timestamp = "2024-01-01T00:00:00.000Z";
   
   const minimalPersona: PersonaEntity = {
+    id: "test-id",
+    display_name: "TestBot",
     entity: "system",
     traits: [],
     topics: [],
-    facts: [],
-    people: [],
     is_paused: false,
     is_archived: false,
+    is_static: false,
     last_updated: timestamp,
     last_activity: timestamp,
     last_heartbeat: timestamp,
@@ -25,8 +27,8 @@ describe("personaToYAML", () => {
   };
 
   test("serializes minimal persona with placeholders", () => {
-    const yaml = personaToYAML("TestBot", minimalPersona);
-    expect(yaml).toContain("name: TestBot");
+    const yaml = personaToYAML(minimalPersona);
+    expect(yaml).toContain("display_name: TestBot");
     expect(yaml).toContain("name: Example Trait");
     expect(yaml).toContain("name: Example Topic");
     expect(yaml).not.toContain("id:");
@@ -45,7 +47,7 @@ describe("personaToYAML", () => {
       ],
     };
     
-    const yaml = personaToYAML("TestBot", persona);
+    const yaml = personaToYAML(persona);
     expect(yaml).toContain("long_description: A bot for testing purposes");
     expect(yaml).toContain("name: friendly");
     expect(yaml).toContain("description: always kind");
@@ -65,7 +67,7 @@ describe("personaToYAML", () => {
       groups_visible: ["work", "personal"],
     };
     
-    const yaml = personaToYAML("TestBot", persona);
+    const yaml = personaToYAML(persona);
     expect(yaml).toContain("model: gpt-4o");
     expect(yaml).toContain("group_primary: work");
     expect(yaml).toContain("groups_visible:");
@@ -85,7 +87,7 @@ describe("personaToYAML", () => {
       ],
     };
     
-    const yaml = personaToYAML("TestBot", persona);
+    const yaml = personaToYAML(persona);
     expect(yaml).not.toContain("id:");
     expect(yaml).not.toContain("_delete:");
   });
@@ -95,13 +97,14 @@ describe("personaFromYAML", () => {
   const timestamp = "2024-01-01T00:00:00.000Z";
   
   const emptyOriginal: PersonaEntity = {
+    id: "test-id",
+    display_name: "TestBot",
     entity: "system",
     traits: [],
     topics: [],
-    facts: [],
-    people: [],
     is_paused: false,
     is_archived: false,
+    is_static: false,
     last_updated: timestamp,
     last_activity: timestamp,
     last_heartbeat: timestamp,
@@ -110,7 +113,7 @@ describe("personaFromYAML", () => {
 
   test("parses minimal YAML with empty original", () => {
     const yaml = `
-name: TestBot
+display_name: TestBot
 traits: []
 topics: []
 `;
@@ -123,7 +126,7 @@ topics: []
 
   test("generates new IDs for new traits", () => {
     const yaml = `
-name: TestBot
+display_name: TestBot
 traits:
   - name: friendly
     description: always kind
@@ -147,7 +150,7 @@ topics: []
     };
     
     const yaml = `
-name: TestBot
+display_name: TestBot
 traits:
   - name: friendly
     description: updated description
@@ -171,7 +174,7 @@ topics: []
     };
     
     const yaml = `
-name: TestBot
+display_name: TestBot
 traits:
   - name: keep-me
     description: staying
@@ -194,7 +197,7 @@ topics: []
     };
     
     const yaml = `
-name: TestBot
+display_name: TestBot
 traits: []
 topics:
   - name: keep-me
@@ -212,7 +215,7 @@ topics:
 
   test("parses all persona fields", () => {
     const yaml = `
-name: TestBot
+display_name: TestBot
 long_description: A bot for testing
 model: gpt-4o
 group_primary: work
@@ -235,7 +238,7 @@ topics: []
 
   test("sets last_updated to current time", () => {
     const yaml = `
-name: TestBot
+display_name: TestBot
 traits: []
 topics: []
 `;
@@ -250,7 +253,7 @@ topics: []
 
   test("strips placeholder traits", () => {
     const yaml = `
-name: TestBot
+display_name: TestBot
 traits:
   - name: Example Trait
     description: Delete this placeholder or modify it to define a real trait
@@ -263,7 +266,7 @@ topics: []
 
   test("strips placeholder topics", () => {
     const yaml = `
-name: TestBot
+display_name: TestBot
 traits: []
 topics:
   - name: Example Topic
@@ -287,6 +290,7 @@ describe("humanToYAML", () => {
     traits: [],
     topics: [],
     people: [],
+    quotes: [],
     last_updated: timestamp,
     last_activity: timestamp,
     settings: {},
@@ -304,7 +308,7 @@ describe("humanToYAML", () => {
     const human: HumanEntity = {
       ...minimalHuman,
       facts: [
-        { id: "fact-1", name: "location", description: "Lives in NYC", sentiment: 0, last_updated: timestamp, validated: "unvalidated", validated_date: timestamp },
+        { id: "fact-1", name: "location", description: "Lives in NYC", sentiment: 0, last_updated: timestamp, validated: ValidationLevel.None, validated_date: timestamp },
       ],
       traits: [
         { id: "trait-1", name: "curious", description: "always learning", strength: 0.8, sentiment: 0.5, last_updated: timestamp },
@@ -329,7 +333,7 @@ describe("humanToYAML", () => {
   test("adds _delete: false to all items", () => {
     const human: HumanEntity = {
       ...minimalHuman,
-      facts: [{ id: "f1", name: "test", description: "test desc", sentiment: 0, last_updated: timestamp, validated: "unvalidated", validated_date: timestamp }],
+      facts: [{ id: "f1", name: "test", description: "test desc", sentiment: 0, last_updated: timestamp, validated: ValidationLevel.None, validated_date: timestamp }],
       traits: [{ id: "t1", name: "test", description: "test desc", strength: 1, sentiment: 0, last_updated: timestamp }],
       topics: [{ id: "top1", name: "test", description: "test desc", exposure_current: 0.5, exposure_desired: 0.5, sentiment: 0, last_updated: timestamp }],
       people: [{ id: "p1", name: "Test", description: "test desc", relationship: "test", sentiment: 0, exposure_current: 0.5, exposure_desired: 0.5, last_updated: timestamp }],
@@ -368,7 +372,7 @@ facts:
     description: Keep this fact
     sentiment: 0
     last_updated: 2024-01-01T00:00:00.000Z
-    validated: unvalidated
+    validated: none
     validated_date: 2024-01-01T00:00:00.000Z
     _delete: false
   - id: fact-2
@@ -376,7 +380,7 @@ facts:
     description: Delete this fact
     sentiment: 0
     last_updated: 2024-01-01T00:00:00.000Z
-    validated: unvalidated
+    validated: none
     validated_date: 2024-01-01T00:00:00.000Z
     _delete: true
 traits: []
@@ -500,7 +504,7 @@ facts:
     description: test
     sentiment: 0
     last_updated: 2024-01-01T00:00:00.000Z
-    validated: unvalidated
+    validated: none
     validated_date: 2024-01-01T00:00:00.000Z
     _delete: false
 traits:
@@ -544,6 +548,8 @@ describe("round-trip serialization", () => {
 
   test("persona survives round-trip without data loss", () => {
     const original: PersonaEntity = {
+      id: "test-id",
+      display_name: "TestBot",
       entity: "system",
       long_description: "A comprehensive test bot",
       model: "gpt-4o",
@@ -556,10 +562,9 @@ describe("round-trip serialization", () => {
       topics: [
         { id: "top1", name: "AI", perspective: "fascinated by it", approach: "deep discussion", personal_stake: "wants to understand", sentiment: 0.8, exposure_current: 0.8, exposure_desired: 0.9, last_updated: timestamp },
       ],
-      facts: [],
-      people: [],
       is_paused: false,
       is_archived: false,
+      is_static: false,
       last_updated: timestamp,
       last_activity: timestamp,
       last_heartbeat: timestamp,
@@ -567,7 +572,7 @@ describe("round-trip serialization", () => {
       context_window_hours: 24,
     };
 
-    const yaml = personaToYAML("TestBot", original);
+    const yaml = personaToYAML(original);
     const result = personaFromYAML(yaml, original);
 
     expect(result.updates.long_description).toBe(original.long_description);
@@ -589,7 +594,7 @@ describe("round-trip serialization", () => {
     const original: HumanEntity = {
       entity: "human",
       facts: [
-        { id: "f1", name: "coffee", description: "Loves coffee", sentiment: 0.8, last_updated: timestamp, validated: "unvalidated", validated_date: timestamp },
+        { id: "f1", name: "coffee", description: "Loves coffee", sentiment: 0.8, last_updated: timestamp, validated: ValidationLevel.None, validated_date: timestamp },
       ],
       traits: [
         { id: "t1", name: "introverted", description: "prefers quiet time", strength: 0.7, sentiment: 0, last_updated: timestamp },
@@ -600,6 +605,7 @@ describe("round-trip serialization", () => {
       people: [
         { id: "p1", name: "Jane", description: "colleague from work", relationship: "colleague", sentiment: 0.6, exposure_current: 0.5, exposure_desired: 0.5, last_updated: timestamp },
       ],
+      quotes: [],
       last_updated: timestamp,
       last_activity: timestamp,
       settings: {},

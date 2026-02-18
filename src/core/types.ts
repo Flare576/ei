@@ -337,12 +337,6 @@ export interface MessageQueryOptions {
   includeOutOfContext?: boolean;
 }
 
-export interface Checkpoint {
-  index: number;           // Slot number: 0-9 = auto-save, 10-14 = manual save
-  timestamp: string;       // When created
-  name?: string;           // Display name (manual saves should have one)
-}
-
 export interface QueueStatus {
   state: "idle" | "busy" | "paused";
   pending_count: number;
@@ -372,10 +366,7 @@ export interface Ei_Interface {
   onQuoteRemoved?: () => void;
   onQueueStateChanged?: (state: "idle" | "busy" | "paused") => void;
   onError?: (error: EiError) => void;
-  onCheckpointStart?: () => void;
-  onCheckpointCreated?: (index?: number) => void;
-  onCheckpointRestored?: (index: number) => void;
-  onCheckpointDeleted?: (index: number) => void;
+  onStateImported?: () => void;
   onOneShotReturned?: (guid: string, content: string) => void;
   onContextBoundaryChanged?: (personaId: string) => void;
 }
