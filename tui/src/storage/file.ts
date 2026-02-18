@@ -4,6 +4,7 @@ import { join } from "path";
 import { mkdir, rename, unlink } from "fs/promises";
 
 const STATE_FILE = "state.json";
+const BACKUP_FILE = "state.backup.json";
 const LOCK_TIMEOUT_MS = 5000;
 const LOCK_RETRY_DELAY_MS = 50;
 
@@ -66,6 +67,16 @@ export class FileStorage implements Storage {
     }
 
     return null;
+  }
+
+  async moveToBackup(): Promise<void> {
+    const statePath = join(this.dataPath, STATE_FILE);
+    const backupPath = join(this.dataPath, BACKUP_FILE);
+    const stateFile = Bun.file(statePath);
+    
+    if (await stateFile.exists()) {
+      await rename(statePath, backupPath);
+    }
   }
 
   private async ensureDataDir(): Promise<void> {

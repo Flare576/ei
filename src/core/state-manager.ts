@@ -305,6 +305,10 @@ export class StateManager {
     await this.persistenceState.flush();
   }
 
+  async moveToBackup(): Promise<void> {
+    await this.persistenceState.moveToBackup();
+  }
+
   hasExistingData(): boolean {
     return this.persistenceState.hasExistingData();
   }

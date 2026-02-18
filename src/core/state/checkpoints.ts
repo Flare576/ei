@@ -55,4 +55,9 @@ export class PersistenceState {
       this.pendingState = null;
     }
   }
+
+  async moveToBackup(): Promise<void> {
+    if (!this.storage) throw new Error("Storage not initialized");
+    await this.storage.moveToBackup();
+  }
 }
