@@ -1,6 +1,9 @@
 import type { StateManager } from "../../core/state-manager.js";
 import {
-  queueAllScans,
+  queueFactScan,
+  queueTraitScan,
+  queuePersonScan,
+  queueTopicScan,
   type ExtractionContext,
   type ExtractionOptions,
 } from "../../core/orchestrators/human-extraction.js";
@@ -57,6 +60,7 @@ export function processGradualExtraction(stateManager: StateManager): GradualExt
     if (!persona.id) continue;
 
     const allMessages = stateManager.messages_get(persona.id);
+    
     const messagesInScope = allMessages.filter(msg => {
       const msgMs = new Date(msg.timestamp).getTime();
       return msgMs >= extractionPointMs && msgMs < scopeLimit;
@@ -69,17 +73,68 @@ export function processGradualExtraction(stateManager: StateManager): GradualExt
       return msgMs < extractionPointMs;
     }).slice(-20);
 
-    const context: ExtractionContext = {
-      personaId: persona.id,
-      personaDisplayName: persona.display_name,
-      messages_context: contextMessages,
-      messages_analyze: messagesInScope,
-      include_quotes: false,
-    };
+    let scansForPersona = 0;
 
-    queueAllScans(context, stateManager, options);
-    result.personasProcessed++;
-    result.scansQueued += 4;
+    const unextractedFacts = messagesInScope.filter(m => m.f !== true);
+    if (unextractedFacts.length > 0) {
+      const context: ExtractionContext = {
+        personaId: persona.id,
+        personaDisplayName: persona.display_name,
+        messages_context: contextMessages,
+        messages_analyze: unextractedFacts,
+        include_quotes: false,
+        extraction_flag: "f",
+      };
+      queueFactScan(context, stateManager, options);
+      scansForPersona++;
+    }
+
+    const unextractedTraits = messagesInScope.filter(m => m.r !== true);
+    if (unextractedTraits.length > 0) {
+      const context: ExtractionContext = {
+        personaId: persona.id,
+        personaDisplayName: persona.display_name,
+        messages_context: contextMessages,
+        messages_analyze: unextractedTraits,
+        include_quotes: false,
+        extraction_flag: "r",
+      };
+      queueTraitScan(context, stateManager, options);
+      scansForPersona++;
+    }
+
+    const unextractedPeople = messagesInScope.filter(m => m.o !== true);
+    if (unextractedPeople.length > 0) {
+      const context: ExtractionContext = {
+        personaId: persona.id,
+        personaDisplayName: persona.display_name,
+        messages_context: contextMessages,
+        messages_analyze: unextractedPeople,
+        include_quotes: false,
+        extraction_flag: "o",
+      };
+      queuePersonScan(context, stateManager, options);
+      scansForPersona++;
+    }
+
+    const unextractedTopics = messagesInScope.filter(m => m.p !== true);
+    if (unextractedTopics.length > 0) {
+      const context: ExtractionContext = {
+        personaId: persona.id,
+        personaDisplayName: persona.display_name,
+        messages_context: contextMessages,
+        messages_analyze: unextractedTopics,
+        include_quotes: false,
+        extraction_flag: "p",
+      };
+      queueTopicScan(context, stateManager, options);
+      scansForPersona++;
+    }
+
+    if (scansForPersona > 0) {
+      result.personasProcessed++;
+      result.scansQueued += scansForPersona;
+    }
   }
 
   result.newExtractionPoint = scopeLimitIso;
@@ -87,7 +142,7 @@ export function processGradualExtraction(stateManager: StateManager): GradualExt
 
   if (result.personasProcessed > 0) {
     console.log(
-      `[OpenCode] Gradual extraction: queued scans for ${result.personasProcessed} persona(s), ` +
+      `[OpenCode] Gradual extraction: queued ${result.scansQueued} scans for ${result.personasProcessed} persona(s), ` +
       `scope: ${extractionPoint} → ${scopeLimitIso}`
     );
   }

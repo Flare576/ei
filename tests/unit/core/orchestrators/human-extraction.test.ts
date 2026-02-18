@@ -141,6 +141,9 @@ describe("Scan Orchestrators (Step 1)", () => {
           personaId: "ei",
           personaDisplayName: "Ei",
           analyze_from_timestamp: context.messages_analyze[0].timestamp,
+          extraction_flag: undefined,
+          include_quotes: undefined,
+          message_ids_to_mark: ["2"],
         },
       });
     });

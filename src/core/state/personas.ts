@@ -182,4 +182,28 @@ export class PersonaState {
     });
     return removed;
   }
+
+  messages_getUnextracted(personaId: string, flag: "f" | "r" | "p" | "o", limit?: number): Message[] {
+    const data = this.personas.get(personaId);
+    if (!data) return [];
+    const unextracted = data.messages.filter(m => m[flag] !== true);
+    if (limit && unextracted.length > limit) {
+      return unextracted.slice(0, limit).map(m => ({ ...m }));
+    }
+    return unextracted.map(m => ({ ...m }));
+  }
+
+  messages_markExtracted(personaId: string, messageIds: string[], flag: "f" | "r" | "p" | "o"): number {
+    const data = this.personas.get(personaId);
+    if (!data) return 0;
+    const idsSet = new Set(messageIds);
+    let count = 0;
+    for (const msg of data.messages) {
+      if (idsSet.has(msg.id) && msg[flag] !== true) {
+        msg[flag] = true;
+        count++;
+      }
+    }
+    return count;
+  }
 }

@@ -185,6 +185,14 @@ export class StateManager {
     return this.personaState.messages_remove(personaId, messageIds);
   }
 
+  messages_getUnextracted(personaId: string, flag: "f" | "r" | "p" | "o", limit?: number): Message[] {
+    return this.personaState.messages_getUnextracted(personaId, flag, limit);
+  }
+
+  messages_markExtracted(personaId: string, messageIds: string[], flag: "f" | "r" | "p" | "o"): number {
+    return this.personaState.messages_markExtracted(personaId, messageIds, flag);
+  }
+
   queue_enqueue(request: Omit<LLMRequest, "id" | "created_at" | "attempts">): string {
     const requestWithModel = {
       ...request,

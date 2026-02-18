@@ -795,44 +795,44 @@ export class Processor {
    */
   private checkAndQueueHumanExtraction(personaId: string, personaDisplayName: string, history: Message[]): void {
     const human = this.stateManager.getHuman();
-    const now = new Date().toISOString();
     
-    const getContextForType = (lastSeeded: string | undefined): ExtractionContext => {
-      if (!lastSeeded) {
-        return { personaId, personaDisplayName, messages_context: [], messages_analyze: history };
-      }
-      const sinceTime = new Date(lastSeeded).getTime();
-      const splitIndex = history.findIndex(m => new Date(m.timestamp).getTime() > sinceTime);
-      if (splitIndex === -1) {
-        return { personaId, personaDisplayName, messages_context: history, messages_analyze: [] };
-      }
-      return {
+    const unextractedFacts = this.stateManager.messages_getUnextracted(personaId, "f");
+    if (human.facts.length < unextractedFacts.length) {
+      const context: ExtractionContext = {
         personaId,
         personaDisplayName,
-        messages_context: history.slice(0, splitIndex),
-        messages_analyze: history.slice(splitIndex),
+        messages_context: history.filter(m => m.f === true),
+        messages_analyze: unextractedFacts,
+        extraction_flag: "f",
       };
-    };
-
-    const factContext = getContextForType(human.last_seeded_fact);
-    if (human.facts.length < factContext.messages_analyze.length) {
-      queueFactScan(factContext, this.stateManager);
-      this.stateManager.setHuman({ ...human, last_seeded_fact: now });
-      console.log(`[Processor] Human Seed extraction: facts (${human.facts.length} < ${factContext.messages_analyze.length} messages)`);
+      queueFactScan(context, this.stateManager);
+      console.log(`[Processor] Human Seed extraction: facts (${human.facts.length} < ${unextractedFacts.length} unextracted)`);
     }
 
-    const topicContext = getContextForType(human.last_seeded_topic);
-    if (human.topics.length < topicContext.messages_analyze.length) {
-      queueTopicScan(topicContext, this.stateManager);
-      this.stateManager.setHuman({ ...this.stateManager.getHuman(), last_seeded_topic: now });
-      console.log(`[Processor] Human Seed extraction: topics (${human.topics.length} < ${topicContext.messages_analyze.length} messages)`);
+    const unextractedTopics = this.stateManager.messages_getUnextracted(personaId, "p");
+    if (human.topics.length < unextractedTopics.length) {
+      const context: ExtractionContext = {
+        personaId,
+        personaDisplayName,
+        messages_context: history.filter(m => m.p === true),
+        messages_analyze: unextractedTopics,
+        extraction_flag: "p",
+      };
+      queueTopicScan(context, this.stateManager);
+      console.log(`[Processor] Human Seed extraction: topics (${human.topics.length} < ${unextractedTopics.length} unextracted)`);
     }
 
-    const personContext = getContextForType(human.last_seeded_person);
-    if (human.people.length < personContext.messages_analyze.length) {
-      queuePersonScan(personContext, this.stateManager);
-      this.stateManager.setHuman({ ...this.stateManager.getHuman(), last_seeded_person: now });
-      console.log(`[Processor] Human Seed extraction: people (${human.people.length} < ${personContext.messages_analyze.length} messages)`);
+    const unextractedPeople = this.stateManager.messages_getUnextracted(personaId, "o");
+    if (human.people.length < unextractedPeople.length) {
+      const context: ExtractionContext = {
+        personaId,
+        personaDisplayName,
+        messages_context: history.filter(m => m.o === true),
+        messages_analyze: unextractedPeople,
+        extraction_flag: "o",
+      };
+      queuePersonScan(context, this.stateManager);
+      console.log(`[Processor] Human Seed extraction: people (${human.people.length} < ${unextractedPeople.length} unextracted)`);
     }
   }
 

@@ -1,184 +1,127 @@
-# 0135: Settings Namespace Migration
+# 0135: Per-Message Extraction Tracking
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: None
 **Blocked by**: None
 
 ## Summary
 
-Migrate legacy root-level HumanEntity settings to the namespaced `settings.*` structure for consistency with the new OpenCode pattern (`settings.opencode.*`).
+Replace global `last_seeded_*` timestamps on HumanEntity with per-message extraction flags. This enables multi-machine synchronization where any device can write messages and any device can run extraction without duplicate processing or race conditions.
 
-## Complete Settings Inventory
+## Problem
 
-### ROOT-LEVEL FIELDS (Need Migration)
+The current approach uses global timestamps on HumanEntity:
+```typescript
+last_seeded_fact?: string    // ISO timestamp
+last_seeded_trait?: string
+last_seeded_topic?: string
+last_seeded_person?: string
+```
 
-These are scattered at the HumanEntity root level and need to move under `settings.*`:
+This breaks with multi-machine sync:
+1. Machine1 writes Message1 at T1, syncs to cloud
+2. Machine2 imports, writes Message2 at T2
+3. Machine2 runs extraction - which `last_seeded_*` value wins?
+4. If Machine2's timestamps were empty, it re-processes Message1
+5. If Machine2's timestamps were from Machine1, it might skip Message2
 
-| Current Location | Target Location | Type |
-|------------------|-----------------|------|
-| `ceremony_config` | `settings.ceremony` | `CeremonyConfig` |
-| `last_seeded_fact` | `settings.seed.last_fact` | `string` |
-| `last_seeded_trait` | `settings.seed.last_trait` | `string` |
-| `last_seeded_topic` | `settings.seed.last_topic` | `string` |
-| `last_seeded_person` | `settings.seed.last_person` | `string` |
+**Root cause**: Global timestamps assume a single writer. Messages can come from anywhere (direct chat, OpenCode imports, future integrations).
 
-### ALREADY IN `settings.*` (No Migration Needed)
+## Solution
 
-These are correctly namespaced:
+Add extraction completion flags directly to each Message:
 
 ```typescript
-settings: {
-  // Display preferences
-  name_display?: string           // How Human's name appears
-  name_color?: string             // Color for Human's name  
-  time_mode?: "absolute" | "relative"  // Timestamp format
-
-  // System behavior
-  auto_save_interval_ms?: number  // Auto-save frequency (0146 may remove)
-  default_model?: string          // Global default LLM model
-  queue_paused?: boolean          // Queue processing paused
-  skip_quote_delete_confirm?: boolean  // Skip confirmation dialogs
-
-  // Provider accounts
-  accounts?: ProviderAccount[]    // LLM provider credentials
-
-  // Cloud sync
-  sync?: SyncCredentials          // Remote sync configuration
-
-  // OpenCode integration
-  opencode?: {
-    integration?: boolean         // Feature enabled
-    polling_interval_ms?: number  // How often to check for new sessions
-    last_sync?: number           // Unix timestamp of last sync
-    extraction_point?: number    // Message timestamp watermark
-  }
+interface Message {
+  // ... existing fields
+  f?: boolean;  // Fact extraction completed
+  r?: boolean;  // tRait extraction completed  
+  p?: boolean;  // Person extraction completed
+  o?: boolean;  // tOpic extraction completed
 }
 ```
 
-### HARDCODED VALUES (Not Migrated, But Documented)
+**Why single-letter names**: With ~15k messages (from OpenCode imports), minimizing field name overhead matters. Using "omit when false" pattern, most messages add zero bytes.
 
-These are constants in code, not user settings:
-
-| Location | Value | Purpose |
-|----------|-------|---------|
-| `processor.ts:252` | `1800000` (30min) | Heartbeat delay |
-| `processor.ts:88` | `60000` (60s) | Auto-save interval default |
-| `processor.ts:84` | `100` (100ms) | Main loop interval |
-| `queue-processor.ts` | `30000` (30s) | Queue processing timeout |
+**Extraction flow becomes**:
+1. Query messages where `p !== true` (example: person extraction)
+2. Process those messages
+3. Mark `p = true` on each processed message
+4. Sync happens naturally - each message carries its own state
 
 ## Acceptance Criteria
 
 ### Phase 1: Type Updates
-- [ ] Add `seed` namespace to `HumanSettings` interface in types.ts:
+- [x] Add optional extraction flags to `Message` interface in types.ts:
   ```typescript
-  seed?: {
-    last_fact?: string
-    last_trait?: string
-    last_topic?: string
-    last_person?: string
-  }
+  f?: boolean;  // Fact extraction completed
+  r?: boolean;  // tRait extraction completed
+  p?: boolean;  // Person extraction completed
+  o?: boolean;  // tOpic extraction completed
   ```
-- [ ] Move `ceremony_config` type from `HumanEntity` root to `settings.ceremony`
-- [ ] Mark root-level fields as deprecated with `@deprecated` JSDoc
+- [x] Update CONTRACTS.md with new Message schema
+- [x] Remove `last_seeded_*` fields from HumanEntity (not live yet, no deprecation needed)
 
-### Phase 2: Code References
-- [ ] Update `createDefaultHumanEntity()` in state/human.ts
-- [ ] Update Processor ceremony references (`human.ceremony_config` → `human.settings?.ceremony`)
-- [ ] Update Ceremony orchestrator references
-- [ ] Update seeding logic (facts/traits/topics/people seed timestamps)
-- [ ] Grep for all `last_seeded_*` references and update
+### Phase 2: StateManager Updates
+- [x] Add `messages_markExtracted(personaId: string, messageIds: string[], flag: 'f'|'r'|'p'|'o')` method
+- [x] Add `messages_getUnextracted(personaId: string, flag: 'f'|'r'|'p'|'o', limit?: number)` method
 
-### Phase 3: Migration Logic
-- [ ] Add migration in `StateManager.load()`:
-  ```typescript
-  // Auto-upgrade old saves
-  if (human.ceremony_config && !human.settings?.ceremony) {
-    human.settings = {
-      ...human.settings,
-      ceremony: human.ceremony_config
-    }
-    delete human.ceremony_config
-  }
-  // Similar for last_seeded_* fields
-  ```
-- [ ] Migration runs silently on load (no user action)
-- [ ] Old saves with root-level fields load correctly
+### Phase 3: Extraction Logic Updates
+- [x] Update `human-extraction.ts` orchestrator to:
+  - Pass `extraction_flag` in ExtractionContext
+  - Pass `message_ids_to_mark` in request data
+- [x] Update handlers to mark messages as extracted after processing:
+  - `handleHumanFactScan` marks messages with `f` flag
+  - `handleHumanTraitScan` marks messages with `r` flag
+  - `handleHumanTopicScan` marks messages with `p` flag
+  - `handleHumanPersonScan` marks messages with `o` flag
+- [x] Update `processor.ts` `checkAndQueueHumanExtraction`:
+  - Use `messages_getUnextracted()` instead of timestamp-based splitting
+  - Remove all `last_seeded_*` timestamp logic
+- [x] Update `ceremony.ts` `queueExposurePhase`:
+  - Use flag-based queries for each extraction type
+  - Remove `last_ceremony` timestamp-based filtering
 
-### Phase 4: Cleanup
-- [ ] After migration period (30 days?), remove deprecated root-level fields
-- [ ] Update any documentation referencing old field locations
+### Phase 4: Tests
+- [x] Update tests that referenced `last_seeded_*` fields
+- [x] All tests passing
 
-## Code Locations to Update
+## Size Analysis
 
-### Types (src/core/types.ts)
-- Line 187-198: `HumanSettings` interface - add `seed` and `ceremony`
-- Line 200-206: `CeremonyConfig` interface - no change, just move reference
-- Line 208-223: `HumanEntity` interface - deprecate root fields
+With "omit when false" pattern:
+- Unprocessed messages: 0 bytes added
+- Fully processed messages: ~44 bytes (`"f":true,"r":true,"p":true,"o":true`)
+- Typical case (most messages unprocessed): Negligible impact
 
-### State Creation (src/core/state/human.ts)
-- `createDefaultHumanEntity()` - update defaults location
+Worst case (15k messages, all processed): ~660KB total - acceptable.
 
-### Processor (src/core/processor.ts)
-- Line 260: `human.ceremony_config` reference
-- Any `last_seeded_*` references
+## Migration Notes
 
-### Ceremony Orchestrator (src/core/orchestrators/ceremony.ts)
-- All `ceremony_config` references
+**No data migration needed**: Old messages without flags are treated as unprocessed (flags undefined = needs extraction). This is actually the correct behavior - if we don't know whether a message was extracted, we should process it.
 
-## New Structure
+**Backward compatibility**: Old saves load fine. New extraction logic simply processes all messages without flags.
 
-```typescript
-interface HumanSettings {
-  // Existing flat fields stay:
-  auto_save_interval_ms?: number
-  default_model?: string
-  queue_paused?: boolean
-  skip_quote_delete_confirm?: boolean
-  name_display?: string
-  name_color?: string
-  time_mode?: "absolute" | "relative"
-  accounts?: ProviderAccount[]
-  sync?: SyncCredentials
-  
-  // Nested namespaces:
-  opencode?: OpenCodeSettings
-  ceremony?: CeremonyConfig       // NEW: moved from root
-  seed?: {                        // NEW: moved from root
-    last_fact?: string
-    last_trait?: string
-    last_topic?: string
-    last_person?: string
-  }
-}
+## Relation to Other Tickets
 
-interface HumanEntity {
-  // ... other fields ...
-  settings?: HumanSettings
-  
-  // DEPRECATED - remove after migration period
-  /** @deprecated Use settings.ceremony instead */
-  ceremony_config?: CeremonyConfig
-  /** @deprecated Use settings.seed.last_fact instead */
-  last_seeded_fact?: string
-  // ... etc
-}
-```
-
-## Sequencing Notes
-
-### Relation to Other Tickets
-- **0129 (Settings Menu Redesign)**: UI assumes settings are in `settings.*` namespace. This ticket ensures data matches that expectation.
-- **0146 (Write-Through Storage)**: May remove `auto_save_interval_ms`. Do 0146 first or coordinate.
-- **0145 (SQLite Integration)**: No direct dependency, but both touch storage layer.
-
-### Recommended Order
-1. **0146** - Simplify storage (may remove `auto_save_interval_ms`)
-2. **0135** - Migrate settings namespace (this ticket)
-3. **0129** - Redesign settings UI (assumes clean namespace)
-4. **0145** - SQLite integration (independent, can parallel with 0129)
+- **0129 (Settings Menu Redesign)**: Independent - this doesn't change settings location
+- **0146 (Write-Through Storage)**: Independent - this doesn't change storage mechanism  
+- **Local vs Global Settings** (future): This ticket removes one source of sync conflicts. Further local/global settings split is a separate concern.
 
 ## Notes
 
-Pattern established by 0103: `settings.opencode.{integration, polling_interval_ms, last_sync}`
+Original ticket was about migrating `last_seeded_*` and `ceremony_config` to `settings.*` namespace. That approach doesn't solve the multi-machine sync problem. This redesign addresses the root cause.
 
-**Future consideration**: Personas should have GUIDs instead of relying on names as identifiers. This became apparent when OpenCode data had both `sisyphus` and `Sisyphus` as separate agents (case-sensitivity bug). GUIDs would prevent similar issues and enable safe renames. Consider adding to this ticket or creating a separate one.
+**ceremony_config migration**: Deferred to a separate ticket if still needed. The namespace location is orthogonal to the sync problem this ticket solves.
+
+## Implementation Summary
+
+**Files Modified:**
+- `src/core/types.ts` - Added f/r/p/o flags to Message, removed last_seeded_* from HumanEntity
+- `src/core/state/personas.ts` - Added messages_getUnextracted, messages_markExtracted
+- `src/core/state-manager.ts` - Added passthrough methods
+- `src/core/orchestrators/human-extraction.ts` - Added extraction_flag and message_ids_to_mark to context/requests
+- `src/core/handlers/index.ts` - Added markMessagesExtracted helper, updated all scan handlers
+- `src/core/processor.ts` - Rewrote checkAndQueueHumanExtraction to use flag-based queries
+- `src/core/orchestrators/ceremony.ts` - Updated queueExposurePhase to use flag-based queries
+- `CONTRACTS.md` - Updated Message interface documentation
+- Tests updated to match new behavior

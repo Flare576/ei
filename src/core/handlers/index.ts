@@ -74,6 +74,24 @@ function splitMessagesByTimestamp(
   };
 }
 
+type ExtractionFlag = "f" | "r" | "p" | "o";
+
+function markMessagesExtracted(
+  response: LLMResponse, 
+  state: StateManager, 
+  flag: ExtractionFlag
+): void {
+  const personaId = response.request.data.personaId as string | undefined;
+  const messageIds = response.request.data.message_ids_to_mark as string[] | undefined;
+  
+  if (!personaId || !messageIds?.length) return;
+  
+  const count = state.messages_markExtracted(personaId, messageIds, flag);
+  if (count > 0) {
+    console.log(`[markMessagesExtracted] Marked ${count} messages with flag '${flag}' for persona ${personaId}`);
+  }
+}
+
 function handlePersonaResponse(response: LLMResponse, state: StateManager): void {
   const personaId = response.request.data.personaId as string;
   const personaDisplayName = response.request.data.personaDisplayName as string;
@@ -482,6 +500,10 @@ function handleDescriptionCheck(response: LLMResponse, state: StateManager): voi
 
 async function handleHumanFactScan(response: LLMResponse, state: StateManager): Promise<void> {
   const result = response.parsed as FactScanResult | undefined;
+  
+  // Mark messages as scanned regardless of whether facts were found
+  markMessagesExtracted(response, state, "f");
+  
   if (!result?.facts || !Array.isArray(result.facts)) {
     console.log("[handleHumanFactScan] No facts detected or invalid result");
     return;
@@ -499,6 +521,9 @@ async function handleHumanFactScan(response: LLMResponse, state: StateManager): 
 
 async function handleHumanTraitScan(response: LLMResponse, state: StateManager): Promise<void> {
   const result = response.parsed as TraitScanResult | undefined;
+  
+  markMessagesExtracted(response, state, "r");
+  
   if (!result?.traits || !Array.isArray(result.traits)) {
     console.log("[handleHumanTraitScan] No traits detected or invalid result");
     return;
@@ -515,6 +540,9 @@ async function handleHumanTraitScan(response: LLMResponse, state: StateManager):
 
 async function handleHumanTopicScan(response: LLMResponse, state: StateManager): Promise<void> {
   const result = response.parsed as TopicScanResult | undefined;
+  
+  markMessagesExtracted(response, state, "p");
+  
   if (!result?.topics || !Array.isArray(result.topics)) {
     console.log("[handleHumanTopicScan] No topics detected or invalid result");
     return;
@@ -531,6 +559,9 @@ async function handleHumanTopicScan(response: LLMResponse, state: StateManager):
 
 async function handleHumanPersonScan(response: LLMResponse, state: StateManager): Promise<void> {
   const result = response.parsed as PersonScanResult | undefined;
+  
+  markMessagesExtracted(response, state, "o");
+  
   if (!result?.people || !Array.isArray(result.people)) {
     console.log("[handleHumanPersonScan] No people detected or invalid result");
     return;

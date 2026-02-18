@@ -1,6 +1,6 @@
 # 0128: Persona GUIDs
 
-**Status**: QA
+**Status**: DONE
 **Depends on**: None
 **Blocked by**: None
 **Priority**: CRITICAL (pre-release, 48h window)
@@ -459,7 +459,7 @@ if (!persona) {
 - [x] Update unit tests for new signatures
 - [x] Verify CLI still works
 - [x] Verify TUI slash commands still work
-- [ ] E2E: Create persona, rename alias, send message - should work
+- [x] E2E: Create persona, rename alias, send message - should work
 
 ## Files to Modify
 

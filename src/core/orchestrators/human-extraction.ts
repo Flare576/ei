@@ -24,6 +24,7 @@ export interface ExtractionContext {
   messages_context: Message[];
   messages_analyze: Message[];
   include_quotes?: boolean;
+  extraction_flag?: "f" | "r" | "p" | "o";
 }
 
 export interface ExtractionOptions {
@@ -58,6 +59,8 @@ export function queueFactScan(context: ExtractionContext, state: StateManager, o
         personaDisplayName: chunk.personaDisplayName,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
         include_quotes: options?.include_quotes,
+        extraction_flag: context.extraction_flag,
+        message_ids_to_mark: chunk.messages_analyze.map(m => m.id),
       },
     });
   }
@@ -88,6 +91,8 @@ export function queueTraitScan(context: ExtractionContext, state: StateManager, 
         personaDisplayName: chunk.personaDisplayName,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
         include_quotes: options?.include_quotes,
+        extraction_flag: context.extraction_flag,
+        message_ids_to_mark: chunk.messages_analyze.map(m => m.id),
       },
     });
   }
@@ -118,6 +123,8 @@ export function queueTopicScan(context: ExtractionContext, state: StateManager, 
         personaDisplayName: chunk.personaDisplayName,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
         include_quotes: options?.include_quotes,
+        extraction_flag: context.extraction_flag,
+        message_ids_to_mark: chunk.messages_analyze.map(m => m.id),
       },
     });
   }
@@ -152,6 +159,8 @@ export function queuePersonScan(context: ExtractionContext, state: StateManager,
         personaDisplayName: chunk.personaDisplayName,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
         include_quotes: options?.include_quotes,
+        extraction_flag: context.extraction_flag,
+        message_ids_to_mark: chunk.messages_analyze.map(m => m.id),
       },
     });
   }

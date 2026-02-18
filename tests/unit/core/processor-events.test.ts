@@ -1174,7 +1174,6 @@ describe("Processor Human Extraction Throttling", () => {
 
   it("throttles extraction based on items vs messages ratio", async () => {
     const now = new Date();
-    const tenMinutesAgo = new Date(now.getTime() - 600000);
     
     storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: now.toISOString() }]);
     storage.loadCheckpoint.mockResolvedValue({
@@ -1194,17 +1193,13 @@ describe("Processor Human Extraction Throttling", () => {
         people: [],
         last_updated: now.toISOString(),
         last_activity: now.toISOString(),
-        last_seeded_fact: tenMinutesAgo.toISOString(),
-        last_seeded_trait: tenMinutesAgo.toISOString(),
-        last_seeded_topic: tenMinutesAgo.toISOString(),
-        last_seeded_person: tenMinutesAgo.toISOString(),
       },
       personas: {
         ei: {
           entity: createTestPersona({ aliases: ["Ei", "ei"] }),
           messages: [
-            { id: "m1", role: "human", content: "msg1", timestamp: new Date(now.getTime() - 500000).toISOString(), read: true, context_status: "default" },
-            { id: "m2", role: "system", content: "resp1", timestamp: new Date(now.getTime() - 400000).toISOString(), read: true, context_status: "default" },
+            { id: "m1", role: "human", content: "msg1", timestamp: new Date(now.getTime() - 500000).toISOString(), read: true, context_status: "default", f: true, r: true, p: true, o: true },
+            { id: "m2", role: "system", content: "resp1", timestamp: new Date(now.getTime() - 400000).toISOString(), read: true, context_status: "default", f: true, r: true, p: true, o: true },
           ],
         },
       },
@@ -1220,7 +1215,7 @@ describe("Processor Human Extraction Throttling", () => {
     expect(status.pending_count).toBeGreaterThanOrEqual(2);
   });
 
-  it("updates lastSeeded timestamps after queueing extraction", async () => {
+  it("queues extraction for unextracted messages", async () => {
     const eiPersona = createTestPersona({ id: "ei", aliases: ["Ei", "ei"] });
     
     storage.listCheckpoints.mockResolvedValue([{ index: 0, timestamp: new Date().toISOString() }]);
@@ -1252,10 +1247,8 @@ describe("Processor Human Extraction Throttling", () => {
     
     await processor.sendMessage("ei", "My name is John and I live in NYC");
     
-    const human = await processor.getHuman();
-    expect(human.last_seeded_fact).toBeDefined();
-    expect(human.last_seeded_topic).toBeDefined();
-    expect(human.last_seeded_person).toBeDefined();
+    const status = await processor.getQueueStatus();
+    expect(status.pending_count).toBeGreaterThanOrEqual(2);
   });
 });
 

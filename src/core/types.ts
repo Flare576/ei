@@ -215,10 +215,6 @@ export interface HumanEntity {
   last_updated: string;
   last_activity: string;
   settings?: HumanSettings;
-  last_seeded_fact?: string;
-  last_seeded_trait?: string;
-  last_seeded_topic?: string;
-  last_seeded_person?: string;
   ceremony_config?: CeremonyConfig;
 }
 
@@ -280,6 +276,10 @@ export interface Message {
   timestamp: string;
   read: boolean;
   context_status: ContextStatus;
+  f?: boolean;  // fact extraction done
+  r?: boolean;  // trait extraction done
+  p?: boolean;  // person extraction done
+  o?: boolean;  // topic extraction done
 }
 
 export interface ChatMessage {

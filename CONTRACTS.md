@@ -723,14 +723,6 @@ interface HumanEntity {
   last_updated: string;
   last_activity: string;  // When human last sent a message (any persona)
   settings?: HumanSettings;
-  
-  // Extraction tracking (when each data type was last seeded for extraction)
-  last_seeded_fact?: string;    // ISO timestamp
-  last_seeded_trait?: string;   // ISO timestamp
-  last_seeded_topic?: string;   // ISO timestamp
-  last_seeded_person?: string;  // ISO timestamp
-  
-  // Ceremony configuration
   ceremony_config?: CeremonyConfig;
 }
 
@@ -972,6 +964,13 @@ interface Message {
   timestamp: string;
   read: boolean;               // Has human seen this system message?
   context_status: ContextStatus;
+  
+  // Extraction completion flags (omit when false to save space)
+  // Single-letter names minimize storage overhead for large message histories
+  f?: boolean;                 // Fact extraction completed
+  r?: boolean;                 // tRait extraction completed
+  p?: boolean;                 // Person extraction completed
+  o?: boolean;                 // tOpic extraction completed
 }
 
 enum ContextStatus {

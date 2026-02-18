@@ -1,19 +1,19 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-02-16 (0128 Persona GUIDs to QA)
+> Last updated: 2026-02-17 (0128 Persona GUIDs to DONE)
 
 ## Overview
 
 | Status | Count |
 |--------|-------|
-| PENDING | 13 |
+| PENDING | 12 |
 | IN_PROGRESS | 0 |
-| QA | 1 |
-| DONE | 103 |
+| QA | 0 |
+| DONE | 105 |
 | BLOCKED | 0 |
 | SUPERSEDED | 3 |
 
-> 124 total tickets (103 done + 14 pending + 3 backlog + 0 in_progress + 1 QA + 3 superseded).
+> 124 total tickets (105 done + 13 pending + 3 backlog + 0 in_progress + 0 QA + 3 superseded).
 
 ---
 
@@ -53,7 +53,6 @@
 | 0130 | No Response Explanation UI | 0044 |
 | 0131 | Per-Persona Pause on Message Recall | 0046, 0048 |
 | 0132 | Poke Functionality (Prompt Response) | 0011 |
-| 0135 | Settings Namespace Migration | None |
 | 0143 | Model Compatibility Guidance | 0096 |
 
 
@@ -91,9 +90,7 @@
 
 ## QA
 
-| Ticket | Title | Started |
-|--------|-------|---------|
-| 0128 | Persona GUIDs | 2026-02-16 |
+(none)
 
 ---
 
@@ -212,6 +209,8 @@
 | 0142 | TUI $EDITOR Integration | 2026-02-15 |
 | 0144 | TUI Unread Message Marking | 2026-02-16 |
 | 0149 | TUI Markdown Rendering | 2026-02-16 |
+| 0135 | Per-Message Extraction Tracking | 2026-02-17 |
+| 0128 | Persona GUIDs | 2026-02-17 |
 
 ---
 
