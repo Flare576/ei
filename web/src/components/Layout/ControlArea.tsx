@@ -1,22 +1,25 @@
 import { useEffect, useCallback } from "react";
+import { HamburgerMenu } from "./HamburgerMenu";
 import type { QueueStatus } from "../../../../src/core/types";
 
 export interface ControlAreaProps {
   queueStatus: QueueStatus;
   onPauseToggle: () => void;
   onClearQueue?: () => void;
-  onHelpClick?: () => void;
+  onMyDataClick?: () => void;
   onSettingsClick?: () => void;
-  onSaveAndExit?: () => void;
+  onHelpClick?: () => void;
+  onSyncAndExit?: () => void;
 }
 
 export function ControlArea({ 
   queueStatus, 
   onPauseToggle,
   onClearQueue,
-  onHelpClick,
+  onMyDataClick,
   onSettingsClick,
-  onSaveAndExit,
+  onHelpClick,
+  onSyncAndExit,
 }: ControlAreaProps) {
   const isPaused = queueStatus.state === "paused";
   const isBusy = queueStatus.state === "busy";
@@ -47,16 +50,18 @@ export function ControlArea({
           className={`ei-control-area__indicator ${isBusy ? "busy" : ""} ${isPaused ? "paused" : ""}`}
         />
         <span>{statusText}</span>
+        {isPaused && (
+          <button
+            className="ei-btn ei-btn--icon ei-play-btn"
+            onClick={onPauseToggle}
+            title="Resume (Escape)"
+            aria-label="Resume"
+          >
+            ▶
+          </button>
+        )}
       </div>
       <div className="ei-control-area__buttons">
-        <button
-          className={`ei-btn ei-btn--icon ei-pause-btn ${isPaused ? "paused" : ""}`}
-          onClick={onPauseToggle}
-          title={isPaused ? "Resume (Escape)" : "Pause (Escape)"}
-          aria-label={isPaused ? "Resume" : "Pause"}
-        >
-          {isPaused ? "▶" : "⏸"}
-        </button>
         {queueStatus.pending_count > 10 && onClearQueue && (
           <button
             className="ei-btn ei-btn--icon ei-btn--danger"
@@ -67,35 +72,13 @@ export function ControlArea({
             🗑️
           </button>
         )}
-        {onSettingsClick && (
-          <button
-            className="ei-btn ei-btn--icon"
-            onClick={onSettingsClick}
-            title="Settings"
-            aria-label="Settings"
-          >
-            ⚙️
-          </button>
-        )}
-        {onHelpClick && (
-          <button
-            className="ei-btn ei-btn--icon"
-            onClick={onHelpClick}
-            title="Help"
-            aria-label="Help"
-          >
-            ?
-          </button>
-        )}
-        {onSaveAndExit && (
-          <button
-            className="ei-btn ei-btn--icon"
-            onClick={onSaveAndExit}
-            title="Save and Exit"
-            aria-label="Save and Exit"
-          >
-            🚪
-          </button>
+        {(onMyDataClick || onSettingsClick || onHelpClick || onSyncAndExit) && (
+          <HamburgerMenu
+            onMyDataClick={onMyDataClick || (() => {})}
+            onSettingsClick={onSettingsClick || (() => {})}
+            onHelpClick={onHelpClick || (() => {})}
+            onSyncAndExit={onSyncAndExit}
+          />
         )}
       </div>
     </div>

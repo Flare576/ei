@@ -243,15 +243,6 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
         <h2 className="ei-chat-panel__title">
           {activePersonaDisplayName ? `Chat with ${activePersonaDisplayName}` : "Chat"}
         </h2>
-        {hasPendingMessages && (
-          <button 
-            className="ei-btn ei-btn--secondary ei-recall-btn"
-            onClick={onRecallPending}
-            title="Recall pending messages (Up arrow)"
-          >
-            Recall
-          </button>
-        )}
       </div>
 
       <div className="ei-chat-panel__messages" ref={messagesContainerRef}>

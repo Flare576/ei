@@ -1637,3 +1637,106 @@ body {
   font-size: var(--ei-font-size-sm);
   color: var(--ei-text-muted);
 }
+
+/* ============================================
+   HAMBURGER MENU
+   ============================================ */
+
+.ei-hamburger-menu {
+  position: relative;
+  display: inline-block;
+}
+
+.ei-hamburger-menu__toggle {
+  font-size: 1.25rem;
+  line-height: 1;
+  background: transparent;
+  color: var(--ei-text-primary);
+  border: 1px solid transparent;
+}
+
+.ei-hamburger-menu__toggle:hover {
+  background: var(--ei-bg-tertiary);
+  border-color: var(--ei-border);
+}
+
+.ei-hamburger-menu__toggle[aria-expanded="true"] {
+  background: var(--ei-bg-tertiary);
+  border-color: var(--ei-border);
+}
+
+.ei-hamburger-menu__dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 180px;
+  background: var(--ei-bg-primary);
+  border: 1px solid var(--ei-border);
+  border-radius: var(--ei-radius-md);
+  box-shadow: var(--ei-shadow-lg);
+  overflow: hidden;
+  z-index: 1000;
+  animation: slideDown 150ms ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ei-hamburger-menu__item {
+  display: flex;
+  align-items: center;
+  gap: var(--ei-spacing-md);
+  width: 100%;
+  padding: var(--ei-spacing-md);
+  background: transparent;
+  border: none;
+  text-align: left;
+  font-family: var(--ei-font-family);
+  font-size: var(--ei-font-size-base);
+  color: var(--ei-text-primary);
+  cursor: pointer;
+  transition: background var(--ei-transition-fast);
+}
+
+.ei-hamburger-menu__item:hover {
+  background: var(--ei-bg-tertiary);
+}
+
+.ei-hamburger-menu__item:focus {
+  outline: none;
+  background: var(--ei-bg-tertiary);
+}
+
+.ei-hamburger-menu__icon {
+  font-size: 1.125rem;
+  width: 24px;
+  text-align: center;
+  font-family: var(--ei-font-emoji);
+}
+
+.ei-hamburger-menu__divider {
+  height: 1px;
+  background: var(--ei-border-light);
+  margin: var(--ei-spacing-xs) 0;
+}
+
+/* Play button (conditional resume) */
+.ei-play-btn {
+  margin-left: var(--ei-spacing-sm);
+  background: var(--ei-success);
+  color: white;
+  font-size: 0.875rem;
+}
+
+.ei-play-btn:hover {
+  background: #218838;
+  transform: scale(1.05);
+}
