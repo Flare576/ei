@@ -184,25 +184,23 @@ export interface OpenCodeSettings {
   extraction_point?: string;  // ISO timestamp - earliest unprocessed message, gradual extraction advances this
 }
 
+export interface CeremonyConfig {
+  time: string;  // "HH:MM" format (e.g., "09:00")
+  last_ceremony?: string;  // ISO timestamp
+  decay_rate?: number;  // Default: 0.1
+  explore_threshold?: number;  // Default: 3
+}
+
 export interface HumanSettings {
-  auto_save_interval_ms?: number;
   default_model?: string;
   queue_paused?: boolean;
   skip_quote_delete_confirm?: boolean;
   name_display?: string;
-  name_color?: string;
   time_mode?: "24h" | "12h" | "local" | "utc";
   accounts?: ProviderAccount[];
   sync?: SyncCredentials;
   opencode?: OpenCodeSettings;
-}
-
-export interface CeremonyConfig {
-  enabled: boolean;
-  time: string;  // "HH:MM" format (e.g., "03:00")
-  last_ceremony?: string;  // ISO timestamp
-  decay_rate?: number;  // Default: 0.1
-  explore_threshold?: number;  // Default: 3
+  ceremony?: CeremonyConfig;
 }
 
 export interface HumanEntity {
@@ -215,7 +213,6 @@ export interface HumanEntity {
   last_updated: string;
   last_activity: string;
   settings?: HumanSettings;
-  ceremony_config?: CeremonyConfig;
 }
 
 export interface PersonaEntity {
@@ -369,6 +366,8 @@ export interface Ei_Interface {
   onStateImported?: () => void;
   onOneShotReturned?: (guid: string, content: string) => void;
   onContextBoundaryChanged?: (personaId: string) => void;
+  onSaveAndExitStart?: () => void;
+  onSaveAndExitFinish?: () => void;
 }
 
 // =============================================================================

@@ -10,14 +10,13 @@ export function createDefaultHumanEntity(): HumanEntity {
     quotes: [],
     last_updated: new Date().toISOString(),
     last_activity: new Date().toISOString(),
-    ceremony_config: {
-      enabled: true,
-      time: "09:00",
-    },
     settings: {
+      ceremony: {
+        time: "09:00",
+      },
       opencode: {
         integration: false,
-        polling_interval_ms: 1800000, // 30 minutes
+        polling_interval_ms: 1800000,
       },
     },
   };
