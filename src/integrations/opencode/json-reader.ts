@@ -1,4 +1,5 @@
 import type {
+  IOpenCodeReader,
   OpenCodeSession,
   OpenCodeSessionRaw,
   OpenCodeMessage,
@@ -44,7 +45,7 @@ function getDefaultStoragePath(): string {
   );
 }
 
-export class OpenCodeReader {
+export class JsonReader implements IOpenCodeReader {
   private storagePath: string | null = null;
   private readonly configuredPath?: string;
 
@@ -55,9 +56,7 @@ export class OpenCodeReader {
   private async init(): Promise<boolean> {
     if (!(await ensureNodeModules())) return false;
     if (!this.storagePath) {
-      this.storagePath = this.configuredPath || 
-        process.env.EI_OPENCODE_STORAGE_PATH || 
-        getDefaultStoragePath();
+      this.storagePath = this.configuredPath || getDefaultStoragePath();
     }
     return true;
   }
