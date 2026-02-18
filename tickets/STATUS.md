@@ -1,6 +1,6 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-02-17 (0145 OpenCode SQLite Integration DONE)
+> Last updated: 2026-02-18 (0129 Settings Menu Redesign completed)
 
 ## Overview
 
@@ -9,11 +9,11 @@
 | PENDING | 10 |
 | IN_PROGRESS | 0 |
 | QA | 0 |
-| DONE | 107 |
+| DONE | 108 |
 | BLOCKED | 0 |
 | SUPERSEDED | 3 |
 
-> 124 total tickets (107 done + 10 pending + 3 backlog + 0 in_progress + 0 QA + 3 superseded).
+> 125 total tickets (108 done + 10 pending + 3 backlog + 0 in_progress + 0 QA + 3 superseded).
 
 ---
 
@@ -49,7 +49,6 @@
 | 0097 | LLM Streaming Support | 0011 |
 | 0098 | Pre-configured Persona Templates | 0087 |
 | 0099 | Story Co-Writer Agent (Non-Persona) | 0098 |
-| 0129 | Settings Menu Redesign | 0096 |
 | 0130 | No Response Explanation UI | 0044 |
 | 0131 | Per-Persona Pause on Message Recall | 0046, 0048 |
 | 0132 | Poke Functionality (Prompt Response) | 0011 |
@@ -77,6 +76,7 @@
 | 0144 | TUI Unread Message Marking | 0100 | DONE |
 | 0149 | TUI Markdown Rendering | 0100 | DONE |
 | 0150 | TUI /quotes Command | 0100, 0116 | PENDING |
+| 0151 | TUI /settings Command | 0139, 0129 | PENDING |
 
 ---
 
@@ -211,6 +211,7 @@
 | 0128 | Persona GUIDs | 2026-02-17 |
 | 0146 | Write-Through Storage | 2026-02-17 |
 | 0145 | OpenCode 1.2 SQLite Integration | 2026-02-17 |
+| 0129 | Settings Menu Redesign (Web) | 2026-02-18 |
 
 ---
 
