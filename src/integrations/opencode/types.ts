@@ -3,7 +3,24 @@
  *
  * These types represent the data structures read from OpenCode's storage.
  * They are based on the actual file format in ~/.local/share/opencode/storage/
+ * and the SQLite database in ~/.local/share/opencode/opencode.db (1.2+)
  */
+
+// ============================================================================
+// Reader Interface
+// ============================================================================
+
+/**
+ * Common interface for reading OpenCode data.
+ * Implemented by both JsonReader (legacy) and SqliteReader (1.2+).
+ */
+export interface IOpenCodeReader {
+  getSessionsUpdatedSince(since: Date): Promise<OpenCodeSession[]>;
+  getMessagesForSession(sessionId: string, since?: Date): Promise<OpenCodeMessage[]>;
+  getAgentInfo(agentName: string): Promise<OpenCodeAgent | null>;
+  getAllUniqueAgents(sessionId: string): Promise<string[]>;
+  getFirstAgent(sessionId: string): Promise<string | null>;
+}
 
 // ============================================================================
 // Session Types (storage/session/{project_hash}/ses_xxx.json)
