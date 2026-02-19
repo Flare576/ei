@@ -14,6 +14,7 @@ import { detailsCommand } from "../commands/details";
 import { meCommand } from "../commands/me";
 import { editorCommand } from "../commands/editor";
 import { settingsCommand } from "../commands/settings";
+import { deleteCommand } from "../commands/delete";
 import { useOverlay } from "../context/overlay";
 
 const TEXTAREA_KEYBINDINGS: KeyBinding[] = [
@@ -28,19 +29,20 @@ export function PromptInput() {
   const { registerTextarea, registerEditorHandler, exitApp, renderer } = useKeyboardNav();
   const { showOverlay, hideOverlay, overlayRenderer } = useOverlay();
 
-  registerCommand(quitCommand);
   registerCommand(helpCommand);
+  registerCommand(quitCommand);
+  registerCommand(meCommand);
+  registerCommand(editorCommand);
   registerCommand(personaCommand);
+  registerCommand(detailsCommand);
   registerCommand(archiveCommand);
   registerCommand(unarchiveCommand);
   registerCommand(newCommand);
+  registerCommand(settingsCommand);
   registerCommand(pauseCommand);
   registerCommand(resumeCommand);
   registerCommand(modelCommand);
-  registerCommand(detailsCommand);
-  registerCommand(meCommand);
-  registerCommand(editorCommand);
-  registerCommand(settingsCommand);
+  registerCommand(deleteCommand);
 
   let textareaRef: TextareaRenderable | undefined;
 

@@ -56,6 +56,7 @@ export interface EiContextValue {
   createPersona: (input: { name: string }) => Promise<string>;
   archivePersona: (personaId: string) => Promise<void>;
   unarchivePersona: (personaId: string) => Promise<void>;
+  deletePersona: (personaId: string) => Promise<void>;
   setContextBoundary: (personaId: string, timestamp: string | null) => Promise<void>;
   updatePersona: (personaId: string, updates: Partial<PersonaEntity>) => Promise<void>;
   getPersona: (personaId: string) => Promise<PersonaEntity | null>;
@@ -70,6 +71,7 @@ export interface EiContextValue {
   removeDataItem: (type: "fact" | "trait" | "topic" | "person", id: string) => Promise<void>;
   syncStatus: () => { configured: boolean; envBased: boolean };
   triggerSync: () => Promise<{ success: boolean; error?: string }>;
+  getGroupList: () => Promise<string[]>;
 }
 
 const EiContext = createContext<EiContextValue>();
@@ -201,6 +203,12 @@ export const EiProvider: ParentComponent = (props) => {
     await refreshPersonas();
   };
 
+  const deletePersona = async (personaId: string) => {
+    if (!processor) return;
+    await processor.deletePersona(personaId, false);
+    await refreshPersonas();
+  };
+
   const setContextBoundary = async (personaId: string, timestamp: string | null) => {
     if (!processor) return;
     // Set signal BEFORE processor call - processor fires callback synchronously
@@ -300,6 +308,11 @@ export const EiProvider: ParentComponent = (props) => {
     }
     const state = await processor.getStorageState();
     return remoteSync.sync(state);
+  };
+
+  const getGroupList = async (): Promise<string[]> => {
+    if (!processor) return [];
+    return processor.getGroupList();
   };
 
   async function bootstrap() {
@@ -412,6 +425,7 @@ export const EiProvider: ParentComponent = (props) => {
     createPersona,
     archivePersona,
     unarchivePersona,
+    deletePersona,
     setContextBoundary,
     updatePersona,
     getPersona,
@@ -426,6 +440,7 @@ export const EiProvider: ParentComponent = (props) => {
     removeDataItem,
     syncStatus,
     triggerSync,
+    getGroupList,
   };
 
   return (

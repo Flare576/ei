@@ -33,15 +33,11 @@ export function HelpOverlay(props: HelpOverlayProps) {
         padding={2}
         flexDirection="column"
       >
-        <text fg="#eee8d5">
-          Ei - 永 (ei) - eternal
-        </text>
-        <text> </text>
 
         <text fg="#eee8d5">
           Commands:
         </text>
-        <For each={commands}>
+        <For each={commands.sort()}>
           {(cmd) => (
             <text fg="#93a1a1">
               /{cmd.name} - {cmd.description}
@@ -62,6 +58,10 @@ export function HelpOverlay(props: HelpOverlayProps) {
 
         <text fg="#586e75">
           Press any key to dismiss
+        </text>
+        <text> </text>
+        <text fg="#2a2a3e">
+          Ei - 永 (ei) - eternal
         </text>
       </box>
     </box>
