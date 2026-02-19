@@ -7,7 +7,7 @@ import { ConfirmOverlay } from "../components/ConfirmOverlay.js";
 export const settingsCommand: Command = {
   name: "settings",
   aliases: ["set"],
-  description: "Edit your settings (model, time_mode, ceremony, opencode) in $EDITOR",
+  description: "Edit your settings in $EDITOR",
   usage: "/settings",
   
   async execute(_args, ctx) {

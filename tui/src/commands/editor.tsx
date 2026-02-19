@@ -4,7 +4,7 @@ import { spawnEditor } from "../util/editor.js";
 export const editorCommand: Command = {
   name: "editor",
   aliases: ["e", "edit"],
-  description: "Edit current input in $EDITOR",
+  description: "Open $EDITOR",
   usage: "/editor - Opens editor (Ctrl+E preserves current input)",
   
   async execute(_args, ctx) {

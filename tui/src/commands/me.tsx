@@ -7,7 +7,7 @@ import { ConfirmOverlay } from "../components/ConfirmOverlay.js";
 export const meCommand: Command = {
   name: "me",
   aliases: [],
-  description: "Edit your facts, traits, topics, and people in $EDITOR",
+  description: "Edit your data in $EDITOR",
   usage: "/me",
   
   async execute(_args, ctx) {

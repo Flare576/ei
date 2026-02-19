@@ -3,7 +3,7 @@ import type { Command } from "./registry";
 export const newCommand: Command = {
   name: "new",
   aliases: [],
-  description: "Toggle context boundary - persona forgets earlier messages",
+  description: "Toggle context boundary (new convo)",
   usage: "/new",
   execute: async (_args, ctx) => {
     const personaId = ctx.ei.activePersonaId();

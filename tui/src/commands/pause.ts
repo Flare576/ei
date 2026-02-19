@@ -4,7 +4,7 @@ import { parseDuration, formatDuration } from "../util/duration";
 export const pauseCommand: Command = {
   name: "pause",
   aliases: [],
-  description: "Pause the current persona (optionally for a duration)",
+  description: "Pause persona (optionally for a duration)",
   usage: "/pause [duration] - e.g., /pause 2h, /pause 1d",
   execute: async (args, ctx) => {
     const personaId = ctx.ei.activePersonaId();
