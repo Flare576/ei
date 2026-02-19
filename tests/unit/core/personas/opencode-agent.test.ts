@@ -162,6 +162,7 @@ describe("ensureAgentPersona", () => {
       "Sisyphus",
       "Sisyphus (Ultraworker)",
       "Planner-Sisyphus",
+      "planner-sisyphus",
     ]);
     expect(result.display_name).toBe("Sisyphus");
   });

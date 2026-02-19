@@ -74,6 +74,7 @@ describe("importOpenCodeSessions", () => {
       persona_update: vi.fn(),
       messages_get: vi.fn().mockReturnValue([]),
       messages_append: vi.fn(),
+      messages_sort: vi.fn(),
       human_topic_upsert: vi.fn(),
       queue_enqueue: vi.fn(),
     };
