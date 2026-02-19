@@ -1,9 +1,15 @@
-import { For, Show, createMemo } from "solid-js";
+import { For, Show, createMemo, createSignal, createEffect, on } from "solid-js";
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core";
 import { useEi } from "../context/ei.js";
 import { useKeyboardNav } from "../context/keyboard.js";
 import { logger } from "../util/logger.js";
 import { solarizedDarkSyntax } from "../util/syntax.js";
+import type { Quote, Message } from "../../../src/core/types.js";
+
+interface MessageWithQuotes extends Message {
+  _quotes: Quote[];
+  _quoteIndex: number;
+}
 
 function formatTime(timestamp: string): string {
   const date = new Date(timestamp);
@@ -12,16 +18,60 @@ function formatTime(timestamp: string): string {
   return `${hours}:${minutes}`;
 }
 
+function insertQuoteMarkers(content: string, quotes: Quote[]): string {
+  const validQuotes = quotes
+    .filter(q => q.end !== null && q.end !== undefined)
+    .sort((a, b) => b.end! - a.end!);
+  
+  let result = content;
+  for (const quote of validQuotes) {
+    let insertPos = quote.end!;
+    if (insertPos >= 0 && insertPos <= result.length) {
+      while (insertPos > 0 && (result[insertPos - 1] === '\n' || result[insertPos - 1] === ' ')) {
+        insertPos--;
+      }
+      result = result.slice(0, insertPos) + "⁺" + result.slice(insertPos);
+    }
+  }
+  return result;
+}
+
 let instanceId = 0;
 
 export function MessageList() {
   const myId = ++instanceId;
   logger.info(`MessageList instance ${myId} MOUNTED`);
   
-  const { messages, activePersonaId, personas, activeContextBoundary } = useEi();
+  const { messages, activePersonaId, personas, activeContextBoundary, getQuotes, quotesVersion } = useEi();
   const { focusedPanel, registerMessageScroll } = useKeyboardNav();
 
   const isFocused = () => focusedPanel() === "messages";
+
+  const [allQuotes, setAllQuotes] = createSignal<Quote[]>([]);
+
+  createEffect(on(() => [messages(), quotesVersion()], () => {
+    void getQuotes().then(setAllQuotes);
+  }));
+
+  const messagesWithQuotes = createMemo<MessageWithQuotes[]>(() => {
+    const quotesByMessage = new Map<string, Quote[]>();
+    for (const quote of allQuotes()) {
+      if (quote.message_id) {
+        const existing = quotesByMessage.get(quote.message_id) ?? [];
+        existing.push(quote);
+        quotesByMessage.set(quote.message_id, existing);
+      }
+    }
+
+    return messages().map((msg, idx) => {
+      const quotes = quotesByMessage.get(msg.id) ?? [];
+      return {
+        ...msg,
+        _quotes: quotes,
+        _quoteIndex: idx + 1,
+      };
+    });
+  });
 
   const handleScrollboxRef = (scrollbox: ScrollBoxRenderable) => {
     registerMessageScroll(scrollbox);
@@ -42,7 +92,7 @@ export function MessageList() {
       borderStyle="single"
     >
       <Show
-        when={messages().length > 0}
+        when={messagesWithQuotes().length > 0}
         fallback={
           <box flexGrow={1} padding={1} backgroundColor="#0f1419" justifyContent="center" alignItems="center">
             <text fg="#586e75" content="No messages yet. Start a conversation!" />
@@ -57,7 +107,7 @@ export function MessageList() {
           stickyScroll={true}
           stickyStart="bottom"
         >
-          <For each={messages()}>
+          <For each={messagesWithQuotes()}>
             {(message, index) => {
               const getDisplayName = () => {
                 const persona = personas().find(p => p.id === activePersonaId());
@@ -65,14 +115,17 @@ export function MessageList() {
               };
               const speaker = message.role === "human" ? "Human" : getDisplayName();
               const speakerColor = message.role === "human" ? "#2aa198" : "#b58900";
-              const header = `${speaker} (${formatTime(message.timestamp)}):`;
+              
+              const header = () => `${speaker} (${formatTime(message.timestamp)}) [✂️  ${message._quoteIndex}]:`;
+              
+              const displayContent = insertQuoteMarkers(message.content, message._quotes);
               
               const showDivider = () => {
                 const boundary = activeContextBoundary();
                 if (!boundary) return false;
                 const i = index();
                 if (i === 0) return false;
-                const msgs = messages();
+                const msgs = messagesWithQuotes();
                 const prevMsg = msgs[i - 1];
                 const result = prevMsg.timestamp < boundary && message.timestamp >= boundary;
                 if (result) {
@@ -82,7 +135,7 @@ export function MessageList() {
               };
 
               const showTrailingDivider = () => {
-                const msgs = messages();
+                const msgs = messagesWithQuotes();
                 const isLast = index() === msgs.length - 1;
                 if (!isLast) return false;
                 return boundaryIsActive();
@@ -97,11 +150,11 @@ export function MessageList() {
                     <text
                       fg={speakerColor}
                       attributes={TextAttributes.BOLD}
-                      content={header}
+                      content={header()}
                     />
                     <box marginLeft={2}>
                       <markdown
-                        content={message.content}
+                        content={displayContent}
                         syntaxStyle={solarizedDarkSyntax}
                         conceal={true}
                       />

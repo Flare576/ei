@@ -25,6 +25,7 @@ import type {
   Trait,
   Topic,
   Person,
+  Quote,
 } from "../../../src/core/types.js";
 
 interface EiStore {
@@ -72,6 +73,11 @@ export interface EiContextValue {
   syncStatus: () => { configured: boolean; envBased: boolean };
   triggerSync: () => Promise<{ success: boolean; error?: string }>;
   getGroupList: () => Promise<string[]>;
+  getQuotes: (filter?: { message_id?: string; speaker?: string }) => Promise<Quote[]>;
+  getQuotesForMessage: (messageId: string) => Promise<Quote[]>;
+  updateQuote: (id: string, updates: Partial<Quote>) => Promise<void>;
+  removeQuote: (id: string) => Promise<void>;
+  quotesVersion: () => number;
 }
 
 const EiContext = createContext<EiContextValue>();
@@ -88,6 +94,7 @@ export const EiProvider: ParentComponent = (props) => {
   });
 
   const [contextBoundarySignal, setContextBoundarySignal] = createSignal<string | undefined>(undefined);
+  const [quotesVersion, setQuotesVersion] = createSignal(0);
 
   let processor: Processor | null = null;
   let notificationTimer: Timer | null = null;
@@ -315,6 +322,30 @@ export const EiProvider: ParentComponent = (props) => {
     return processor.getGroupList();
   };
 
+  const getQuotes = async (filter?: { message_id?: string; speaker?: string }): Promise<Quote[]> => {
+    if (!processor) return [];
+    const all = await processor.getQuotes(filter?.message_id ? { message_id: filter.message_id } : undefined);
+    if (filter?.speaker) {
+      return all.filter(q => q.speaker.toLowerCase() === filter.speaker!.toLowerCase());
+    }
+    return all;
+  };
+
+  const getQuotesForMessage = async (messageId: string): Promise<Quote[]> => {
+    if (!processor) return [];
+    return processor.getQuotesForMessage(messageId);
+  };
+
+  const updateQuote = async (id: string, updates: Partial<Quote>): Promise<void> => {
+    if (!processor) return;
+    await processor.updateQuote(id, updates);
+  };
+
+  const removeQuote = async (id: string): Promise<void> => {
+    if (!processor) return;
+    await processor.removeQuote(id);
+  };
+
   async function bootstrap() {
     clearLog();
     interceptConsole();
@@ -350,6 +381,9 @@ export const EiProvider: ParentComponent = (props) => {
           logger.debug(`onContextBoundaryChanged: ${personaId}`);
           void refreshPersonas();
         },
+        onQuoteAdded: () => {console.log("JDF FIRE ZEE EVENT"); return setQuotesVersion(v => v + 1)},
+        onQuoteUpdated: () => setQuotesVersion(v => v + 1),
+        onQuoteRemoved: () => setQuotesVersion(v => v + 1),
         onError: (error) => {
           logger.error(`${error.code}: ${error.message}`);
           showNotification(`${error.code}: ${error.message}`, "error");
@@ -441,6 +475,11 @@ export const EiProvider: ParentComponent = (props) => {
     syncStatus,
     triggerSync,
     getGroupList,
+    getQuotes,
+    getQuotesForMessage,
+    updateQuote,
+    removeQuote,
+    quotesVersion,
   };
 
   return (
