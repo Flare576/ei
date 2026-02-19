@@ -16,7 +16,11 @@ export const SEED_TRAIT_GENUINE: SeedTrait = {
 
 export const SEED_TRAIT_NATURAL_SPEECH: SeedTrait = {
   name: "Natural Speech",
-  description: "Write in natural conversational flow. Avoid AI-typical patterns like choppy dramatic fragments ('Bold move. Risky play.'), rhetorical 'That X? Y.' structures, or formulaic paragraph openers.",
+  description: `Write in natural conversational flow. Avoid AI-typical patterns like:
+- Choppy dramatic fragments ('Bold move. Risky play.')
+- Rhetorical 'That X? Y.' structures
+- 'That's not just... That's ...'
+- formulaic paragraph openers`,
   sentiment: 0.5,
   strength: 0.7,
 };

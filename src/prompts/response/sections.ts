@@ -59,6 +59,14 @@ export function buildTraitsSection(traits: Trait[], header: string): string {
   }).join("\n");
   
   return `## ${header}
+
+> NOTE: Strength of a trait should guide you to your response style, meaning a Strength of:
+> - 0% should never be used - the user has asked you to stop
+> - 25% should be used sparingly or subtly
+> - 50% should be noticable in casual messages, but not dominating
+> - 75% should be frequently used, but not in every resposne or throughout the entire conversation
+> - 100% should be tracable throughout every response
+
 ${formatted}`;
 }
 
@@ -76,19 +84,36 @@ export function buildTopicsSection(topics: PersonaTopic[], header: string): stri
   
   const formatted = sorted.map(t => {
     const delta = t.exposure_desired - t.exposure_current;
-    const indicator = delta > 0.1 ? "+" : delta < -0.1 ? "-" : "=";
-    const sentiment = t.sentiment > 0.3 ? "(enjoys)" : t.sentiment < -0.3 ? "(dislikes)" : "";
+    let indicator = "Neutral";
+    if (delta > 0.5) {
+      indicator = "Very Strong";
+    } else if (delta >= 0.25) {
+      indicator = "Strong";
+    } else if (delta >= 0.1) {
+      indicator = "Normal";
+    } else if (delta >= -0.1) {
+      indicator = "Low";
+    } else if (delta >= -0.25) {
+      indicator = "Avoid";
+    } else if (delta >= -0.5) {
+      indicator = "Change Subject";
+    }
+
+    const sentimentGuide = t.sentiment > 0 ? "(Liked)" : "(Disliked)";
+    const sentiment = Math.round(t.sentiment * 100)+`% ${sentimentGuide}`;
     const displayText = t.perspective || t.name;
-    return `- [${indicator}] **${t.name}** ${sentiment}: ${displayText}`;
+    return `### ${t.name}
+- Perspective: ${t.perspective}
+- Approach: ${t.approach}
+- Personal Stake: ${t.personal_stake}
+- General Sentiment: ${sentiment}
+- Desire to Discuss: ${indicator}
+`;
   }).join("\n");
-  
+
   return `## ${header}
 ${formatted}
-
-### Legend
-[+] Eager to discuss this topic
-[=] Satisfied with current discussion level
-[-] Would prefer to avoid this topic`;
+`;
 }
 
 // =============================================================================
@@ -265,8 +290,23 @@ ${formatted}`;
 // SYSTEM KNOWLEDGE SECTION (Ei-only)
 // =============================================================================
 
-export function buildSystemKnowledgeSection(): string {
+export function buildSystemKnowledgeSection(isTUI): string {
+  const interfaceIntro = isTUI ? "their command line Terminal User Interface (TUI)" : "a web browser";
+  const createPersonaAction = isTUI ? "Use the `/p[ersona] new` command" : "Click the [+] button in the left panel";
+  const editPersonaAction = isTUI ? "`/d[etails]` command" : "clicking the Edit (Pencil) icon on the left";
+  const viewQuotesAction = isTUI ? "`/quotes [number_by_scissors]` command" : "the scissors icon ✂️ ";
+  const seeHumanDataAction = isTUI ? "Using the `/me` command" : "Upper-right menu -> My Data";
+  const editorNotes = isTUI ? "Ctrl+E to open their editor" : "Ctrl+L to focus the input box";
+  const helpNotes = isTUI ? "`/h[elp]` to see all the commands" : "'Help' is in the Upper-right menu";
+  const settingsAction = isTUI ? "`/settings` command" : "Hamburger Menu, Top-Right of screen";
+  const leftPanelNotes = isTUI ? "\n- Can be hidden with Ctrl+B" : `
+- Hover over a persona to see controls: pause, edit (Pencil), archive, delete (Trash)
+- Click a persona to switch conversations
+- The [+] button creates new personas`;
+
   return `# System Knowledge
+
+The user is messaging you from ${interfaceIntro}
 
 You can help the human navigate this system. Here's what you know:
 
@@ -276,18 +316,16 @@ Ei is a privacy-first AI companion system. Everything stays local on the user's 
 ## Personas
 The human can create multiple AI personas, each with unique personalities and interests. Unlike cloud AI assistants, personas here remember the human across conversations because they share knowledge about the human (facts, traits, topics, people).
 
-**To create a persona**: Click the [+] button in the left panel. They can describe what kind of companion they want (creative partner, study buddy, philosophical debater, etc.) and the system will help build it.
+**To create a persona**: ${createPersonaAction}. They can describe what kind of companion they want (creative partner, study buddy, philosophical debater, etc.) and the system will help build it.
 
 ### Persona Groups
-Personas can be assigned Groups during creation and on their "Settings" tab in their Edit panel. Personas in Groups will create attributes in the Human's profile specific to their Group, so only you (Ei) and other members of that Group can see them.
+Personas can be assigned Groups during creation and when editing their details via the ${editPersonaAction} in the Settings area. Personas in Groups will create attributes in the Human's profile specific to their Group, so only you (Ei) and other members of that Group can see them.
 
 Additionally, if the user wants a Persona to feel "Fresh" without prior knowledge, they can **remove** the "General" group from its visibility.
 
 ## The Left Panel
 - Shows all personas (you're always at the top)
-- Hover over a persona to see controls: pause, edit (Pencil), archive, delete (Trash)
-- Click a persona to switch conversations
-- The [+] button creates new personas
+${leftPanelNotes}
 
 ## Learning About the Human
 As the human chats, the system learns about them:
@@ -295,27 +333,24 @@ As the human chats, the system learns about them:
 - **Traits**: Personality characteristics and tendencies
 - **Topics**: Interests and how they feel about them
 - **People**: Relationships in their life
-- **Quotes**: Memorable things said in conversation (human selects these with the scissors icon ✂️)
+- **Quotes**: Memorable things said in conversation (human selects these with ${viewQuotesAction})
 
-The human can view and edit all of this by clicking on your name in the left panel to open the editor.
+The human can view and edit all of this by ${seeHumanDataAction}.
 
 ## Keyboard Shortcuts
 - **Escape**: Pause/resume all AI processing
 - **Ctrl+H**: Focus the persona panel
-- **Ctrl+L**: Focus the input box
-- **?**: Open help modal
+- ${editorNotes}
+- ${helpNotes}
 
-## Settings (Gear Icon, Top-Right of screen)
-- Set display name and preferred color scheme
-- Edit Facts, Traits, People, and Topics known about the user
+## Settings (${settingsAction})
+- Set display name and preferred Time Format
 - Configure LLM providers (local or cloud)
 - Set up device sync (encrypted backup to restore on other devices)
 - Adjust ceremony timing (overnight persona evolution)
 
 ### Tips You Can Share
-- They can click on any unread message to mark it as read
 - If they want to talk to a persona privately, tell them about the "Groups" functionality
-- The save system works like video game checkpoints - encourage them to save before big changes
-- If they want you to remember something specific, tell them about the quote capture feature (scissors icon on messages)
+- If they want you to remember something specific, tell them about the quote capture feature (${viewQuotesAction})
 - Pausing the system (Escape) immediately stops AI processing but preserves messages`;
 }

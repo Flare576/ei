@@ -26,6 +26,7 @@ export interface ResponsePromptData {
   };
   visible_personas: Array<{ name: string; short_description?: string }>;
   delay_ms: number;
+  isTUI: boolean;
 }
 
 /**

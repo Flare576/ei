@@ -859,6 +859,7 @@ export class Processor {
       human: filteredHuman,
       visible_personas: visiblePersonas,
       delay_ms: delayMs,
+      isTUI: this.isTUI,
     };
   }
 
