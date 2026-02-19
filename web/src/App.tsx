@@ -252,17 +252,6 @@ function App() {
     processor.getQueueStatus().then(setQueueStatus);
   }, [processor]);
 
-  const handleClearQueue = useCallback(async () => {
-    if (!processor) return;
-    const confirmed = window.confirm(
-      "Clear all pending queue items? This will stop any pending responses, extractions, and ceremony tasks."
-    );
-    if (!confirmed) return;
-    const cleared = await processor.clearQueue();
-    console.log(`[App] Cleared ${cleared} queue items`);
-    processor.getQueueStatus().then(setQueueStatus);
-  }, [processor]);
-
   const handlePausePersona = useCallback(async (personaId: string, pauseUntil?: string) => {
     if (!processor) return;
     const persona = await processor.getPersona(personaId);
@@ -723,7 +712,6 @@ function App() {
         <ControlArea 
           queueStatus={queueStatus} 
           onPauseToggle={handlePauseToggle}
-          onClearQueue={handleClearQueue}
           onMyDataClick={handleMyDataClick}
           onSettingsClick={handleSettingsClick}
           onHelpClick={handleHelpClick}

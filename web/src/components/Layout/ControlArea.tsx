@@ -5,7 +5,6 @@ import type { QueueStatus } from "../../../../src/core/types";
 export interface ControlAreaProps {
   queueStatus: QueueStatus;
   onPauseToggle: () => void;
-  onClearQueue?: () => void;
   onMyDataClick?: () => void;
   onSettingsClick?: () => void;
   onHelpClick?: () => void;
@@ -15,7 +14,6 @@ export interface ControlAreaProps {
 export function ControlArea({ 
   queueStatus, 
   onPauseToggle,
-  onClearQueue,
   onMyDataClick,
   onSettingsClick,
   onHelpClick,
@@ -62,16 +60,6 @@ export function ControlArea({
         )}
       </div>
       <div className="ei-control-area__buttons">
-        {queueStatus.pending_count > 10 && onClearQueue && (
-          <button
-            className="ei-btn ei-btn--icon ei-btn--danger"
-            onClick={onClearQueue}
-            title={`Clear queue (${queueStatus.pending_count} items)`}
-            aria-label="Clear queue"
-          >
-            🗑️
-          </button>
-        )}
         {(onMyDataClick || onSettingsClick || onHelpClick || onSyncAndExit) && (
           <HamburgerMenu
             onMyDataClick={onMyDataClick || (() => {})}
