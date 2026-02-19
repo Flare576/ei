@@ -4,15 +4,38 @@ import { humanToYAML, humanFromYAML } from "../util/yaml-serializers.js";
 import { logger } from "../util/logger.js";
 import { ConfirmOverlay } from "../components/ConfirmOverlay.js";
 
+type DataType = "facts" | "traits" | "topics" | "people";
+
+const VALID_TYPES: DataType[] = ["facts", "traits", "topics", "people"];
+
 export const meCommand: Command = {
   name: "me",
   aliases: [],
   description: "Edit your data in $EDITOR",
-  usage: "/me",
+  usage: "/me [facts|traits|topics|people]",
   
-  async execute(_args, ctx) {
+  async execute(args, ctx) {
     const human = await ctx.ei.getHuman();
-    let yamlContent = humanToYAML(human);
+    
+    const filterArg = args[0]?.toLowerCase();
+    const filterType: DataType | null = filterArg && VALID_TYPES.includes(filterArg as DataType) 
+      ? filterArg as DataType 
+      : null;
+    
+    if (filterArg && !filterType) {
+      ctx.showNotification(`Invalid type: ${filterArg}. Use: facts, traits, topics, people`, "error");
+      return;
+    }
+    
+    const filteredHuman = filterType ? {
+      ...human,
+      facts: filterType === "facts" ? human.facts : [],
+      traits: filterType === "traits" ? human.traits : [],
+      topics: filterType === "topics" ? human.topics : [],
+      people: filterType === "people" ? human.people : [],
+    } : human;
+    
+    let yamlContent = humanToYAML(filteredHuman);
     let editorIteration = 0;
     
     while (true) {

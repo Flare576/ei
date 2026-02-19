@@ -125,4 +125,59 @@ test.describe("/me Command", () => {
     
     await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 5000 });
   });
+
+  test("/me facts filters to facts only", async ({ terminal }) => {
+    await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 15000 });
+    
+    terminal.write("/me facts");
+    terminal.submit();
+    
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 5000 });
+  });
+
+  test("/me traits filters to traits only", async ({ terminal }) => {
+    await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 15000 });
+    
+    terminal.write("/me traits");
+    terminal.submit();
+    
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 5000 });
+  });
+
+  test("/me topics filters to topics only", async ({ terminal }) => {
+    await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 15000 });
+    
+    terminal.write("/me topics");
+    terminal.submit();
+    
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 5000 });
+  });
+
+  test("/me people filters to people only", async ({ terminal }) => {
+    await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 15000 });
+    
+    terminal.write("/me people");
+    terminal.submit();
+    
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 5000 });
+  });
+
+  test("/me with invalid type shows error", async ({ terminal }) => {
+    await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 15000 });
+    
+    terminal.write("/me invalid");
+    terminal.submit();
+    
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    await expect(terminal.getByText("Invalid type")).toBeVisible({ timeout: 5000 });
+  });
 });
