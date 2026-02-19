@@ -53,9 +53,7 @@ export function Sidebar() {
             {(persona) => {
               const isActive = () => activePersonaId() === persona.id;
               const displayName = () => 
-                persona.aliases.length > 0 
-                  ? persona.aliases[0] 
-                  : persona.display_name;
+                persona.display_name || persona.aliases[0] || persona.id;
 
               const getLabel = () => {
                 const prefix = isActive() ? "* " : "  ";
