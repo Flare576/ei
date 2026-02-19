@@ -78,6 +78,16 @@ export interface EiContextValue {
   updateQuote: (id: string, updates: Partial<Quote>) => Promise<void>;
   removeQuote: (id: string) => Promise<void>;
   quotesVersion: () => number;
+  searchHumanData: (
+    query: string,
+    options?: { types?: Array<"fact" | "trait" | "topic" | "person" | "quote">; limit?: number }
+  ) => Promise<{
+    facts: Fact[];
+    traits: Trait[];
+    topics: Topic[];
+    people: Person[];
+    quotes: Quote[];
+  }>;
 }
 
 const EiContext = createContext<EiContextValue>();
@@ -346,6 +356,14 @@ export const EiProvider: ParentComponent = (props) => {
     await processor.removeQuote(id);
   };
 
+  const searchHumanData = async (
+    query: string,
+    options?: { types?: Array<"fact" | "trait" | "topic" | "person" | "quote">; limit?: number }
+  ) => {
+    if (!processor) return { facts: [], traits: [], topics: [], people: [], quotes: [] };
+    return processor.searchHumanData(query, options);
+  };
+
   async function bootstrap() {
     clearLog();
     interceptConsole();
@@ -480,6 +498,7 @@ export const EiProvider: ParentComponent = (props) => {
     updateQuote,
     removeQuote,
     quotesVersion,
+    searchHumanData,
   };
 
   return (

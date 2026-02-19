@@ -54,6 +54,45 @@ export function getItemEmbeddingText(item: { name: string; description?: string 
   return item.name;
 }
 
+export function needsEmbeddingUpdate(
+  existing: { name: string; description?: string } | undefined,
+  incoming: { name: string; description?: string }
+): boolean {
+  if (!existing) return true;
+  return existing.name !== incoming.name || existing.description !== incoming.description;
+}
+
+export function needsQuoteEmbeddingUpdate(
+  existing: { text: string } | undefined,
+  incoming: { text: string }
+): boolean {
+  if (!existing) return true;
+  return existing.text !== incoming.text;
+}
+
+export async function computeDataItemEmbedding(
+  item: { name: string; description?: string }
+): Promise<number[] | undefined> {
+  try {
+    const service = getEmbeddingService();
+    const text = getItemEmbeddingText(item);
+    return await service.embed(text);
+  } catch (err) {
+    console.warn(`[computeDataItemEmbedding] Failed for "${item.name}":`, err);
+    return undefined;
+  }
+}
+
+export async function computeQuoteEmbedding(text: string): Promise<number[] | undefined> {
+  try {
+    const service = getEmbeddingService();
+    return await service.embed(text);
+  } catch (err) {
+    console.warn(`[computeQuoteEmbedding] Failed for "${text.slice(0, 30)}...":`, err);
+    return undefined;
+  }
+}
+
 // =============================================================================
 // FACTORY - Lazy loading based on environment
 // =============================================================================

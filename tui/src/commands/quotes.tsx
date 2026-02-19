@@ -122,11 +122,8 @@ export const quotesCommand: Command = {
 
     if (args[0] === "search" && args.length > 1) {
       const term = args.slice(1).join(" ").replace(/^"|"$/g, "");
-      const all = await ctx.ei.getQuotes();
-      const filtered = all.filter((q) =>
-        q.text.toLowerCase().includes(term.toLowerCase())
-      );
-      await openQuotesInEditor(ctx, filtered, `quotes matching "${term}"`);
+      const results = await ctx.ei.searchHumanData(term, { types: ["quote"], limit: 20 });
+      await openQuotesInEditor(ctx, results.quotes, `quotes matching "${term}"`);
       return;
     }
 

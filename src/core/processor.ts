@@ -46,6 +46,7 @@ import {
   type ExtractionContext,
 } from "./orchestrators/index.js";
 import { EI_WELCOME_MESSAGE, EI_PERSONA_DEFINITION } from "../templates/welcome.js";
+import { getEmbeddingService, findTopK, needsEmbeddingUpdate, needsQuoteEmbeddingUpdate, computeDataItemEmbedding, computeQuoteEmbedding } from "./embedding-service.js";
 import { ContextStatus as ContextStatusEnum } from "./types.js";
 
 // =============================================================================
@@ -405,7 +406,7 @@ export class Processor {
     })) as import("./types.js").ChatMessage[];
   }
 
-  private queueHeartbeatCheck(personaId: string): void {
+  private async queueHeartbeatCheck(personaId: string): Promise<void> {
     const persona = this.stateManager.persona_getById(personaId);
     if (!persona) return;
 
@@ -413,7 +414,7 @@ export class Processor {
 
     const human = this.stateManager.getHuman();
     const history = this.stateManager.messages_get(personaId);
-    const filteredHuman = this.filterHumanDataByVisibility(human, persona);
+    const filteredHuman = await this.filterHumanDataByVisibility(human, persona);
 
     const inactiveDays = persona.last_activity
       ? Math.floor((Date.now() - new Date(persona.last_activity).getTime()) / (1000 * 60 * 60 * 24))
@@ -739,7 +740,7 @@ export class Processor {
     this.stateManager.messages_append(persona.id, message);
     this.interface.onMessageAdded?.(persona.id);
 
-    const promptData = this.buildResponsePromptData(persona);
+    const promptData = await this.buildResponsePromptData(persona, content);
     const prompt = buildResponsePrompt(promptData);
 
     this.stateManager.queue_enqueue({
@@ -837,9 +838,9 @@ export class Processor {
     }
   }
 
-  private buildResponsePromptData(persona: PersonaEntity): ResponsePromptData {
+  private async buildResponsePromptData(persona: PersonaEntity, currentMessage?: string): Promise<ResponsePromptData> {
     const human = this.stateManager.getHuman();
-    const filteredHuman = this.filterHumanDataByVisibility(human, persona);
+    const filteredHuman = await this.filterHumanDataByVisibility(human, persona, currentMessage);
     const visiblePersonas = this.getVisiblePersonas(persona);
     const messages = this.stateManager.messages_get(persona.id);
     const previousMessage = messages.length >= 2 ? messages[messages.length - 2] : null;
@@ -863,22 +864,48 @@ export class Processor {
     };
   }
 
-  private filterHumanDataByVisibility(
+  private async filterHumanDataByVisibility(
     human: HumanEntity,
-    persona: PersonaEntity
-  ): ResponsePromptData["human"] {
+    persona: PersonaEntity,
+    currentMessage?: string
+  ): Promise<ResponsePromptData["human"]> {
     const DEFAULT_GROUP = "General";
+    const QUOTE_LIMIT = 10;
+    const SIMILARITY_THRESHOLD = 0.3;
+
+    const selectRelevantQuotes = async (quotes: Quote[]): Promise<Quote[]> => {
+      if (quotes.length === 0) return [];
+      
+      const withEmbeddings = quotes.filter(q => q.embedding?.length);
+      
+      if (currentMessage && withEmbeddings.length > 0) {
+        try {
+          const embeddingService = getEmbeddingService();
+          const queryVector = await embeddingService.embed(currentMessage);
+          const results = findTopK(queryVector, withEmbeddings, QUOTE_LIMIT);
+          const relevant = results
+            .filter(({ similarity }) => similarity >= SIMILARITY_THRESHOLD)
+            .map(({ item }) => item);
+          
+          if (relevant.length > 0) return relevant;
+        } catch (err) {
+          console.warn("[filterHumanDataByVisibility] Embedding search failed:", err);
+        }
+      }
+      
+      return [...quotes]
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        .slice(0, QUOTE_LIMIT);
+    };
 
     if (persona.id === "ei") {
-      const recentQuotes = [...(human.quotes ?? [])]
-        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-        .slice(0, 10);
+      const relevantQuotes = await selectRelevantQuotes(human.quotes ?? []);
       return {
         facts: human.facts,
         traits: human.traits,
         topics: human.topics,
         people: human.people,
-        quotes: recentQuotes,
+        quotes: relevantQuotes,
       };
     }
 
@@ -891,26 +918,24 @@ export class Processor {
     const filterByGroup = <T extends DataItemBase>(items: T[]): T[] => {
       return items.filter((item) => {
         const itemGroups = item.persona_groups ?? [];
-        // Empty persona_groups means "General" (legacy/default data)
         const effectiveGroups = itemGroups.length === 0 ? [DEFAULT_GROUP] : itemGroups;
         return effectiveGroups.some((g) => visibleGroups.has(g));
       });
     };
 
-    const filteredQuotes = (human.quotes ?? [])
-      .filter((q) => {
-        const effectiveGroups = q.persona_groups.length === 0 ? [DEFAULT_GROUP] : q.persona_groups;
-        return effectiveGroups.some((g) => visibleGroups.has(g));
-      })
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-      .slice(0, 10);
+    const groupFilteredQuotes = (human.quotes ?? []).filter((q) => {
+      const effectiveGroups = q.persona_groups.length === 0 ? [DEFAULT_GROUP] : q.persona_groups;
+      return effectiveGroups.some((g) => visibleGroups.has(g));
+    });
+
+    const relevantQuotes = await selectRelevantQuotes(groupFilteredQuotes);
 
     return {
       facts: filterByGroup(human.facts),
       traits: filterByGroup(human.traits),
       topics: filterByGroup(human.topics),
       people: filterByGroup(human.people),
-      quotes: filteredQuotes,
+      quotes: relevantQuotes,
     };
   }
 
@@ -983,21 +1008,57 @@ export class Processor {
   }
 
   async upsertFact(fact: Fact): Promise<void> {
+    const human = this.stateManager.getHuman();
+    const existing = human.facts.find(f => f.id === fact.id);
+    
+    if (needsEmbeddingUpdate(existing, fact)) {
+      fact.embedding = await computeDataItemEmbedding(fact);
+    } else if (existing?.embedding) {
+      fact.embedding = existing.embedding;
+    }
+    
     this.stateManager.human_fact_upsert(fact);
     this.interface.onHumanUpdated?.();
   }
 
   async upsertTrait(trait: Trait): Promise<void> {
+    const human = this.stateManager.getHuman();
+    const existing = human.traits.find(t => t.id === trait.id);
+    
+    if (needsEmbeddingUpdate(existing, trait)) {
+      trait.embedding = await computeDataItemEmbedding(trait);
+    } else if (existing?.embedding) {
+      trait.embedding = existing.embedding;
+    }
+    
     this.stateManager.human_trait_upsert(trait);
     this.interface.onHumanUpdated?.();
   }
 
   async upsertTopic(topic: Topic): Promise<void> {
+    const human = this.stateManager.getHuman();
+    const existing = human.topics.find(t => t.id === topic.id);
+    
+    if (needsEmbeddingUpdate(existing, topic)) {
+      topic.embedding = await computeDataItemEmbedding(topic);
+    } else if (existing?.embedding) {
+      topic.embedding = existing.embedding;
+    }
+    
     this.stateManager.human_topic_upsert(topic);
     this.interface.onHumanUpdated?.();
   }
 
   async upsertPerson(person: Person): Promise<void> {
+    const human = this.stateManager.getHuman();
+    const existing = human.people.find(p => p.id === person.id);
+    
+    if (needsEmbeddingUpdate(existing, person)) {
+      person.embedding = await computeDataItemEmbedding(person);
+    } else if (existing?.embedding) {
+      person.embedding = existing.embedding;
+    }
+    
     this.stateManager.human_person_upsert(person);
     this.interface.onHumanUpdated?.();
   }
@@ -1021,11 +1082,22 @@ export class Processor {
    }
 
    async addQuote(quote: Quote): Promise<void> {
+     if (!quote.embedding) {
+       quote.embedding = await computeQuoteEmbedding(quote.text);
+     }
      this.stateManager.human_quote_add(quote);
      this.interface.onQuoteAdded?.();
    }
 
    async updateQuote(id: string, updates: Partial<Quote>): Promise<void> {
+     if (updates.text !== undefined) {
+       const human = this.stateManager.getHuman();
+       const existing = human.quotes.find(q => q.id === id);
+       
+       if (needsQuoteEmbeddingUpdate(existing, { text: updates.text })) {
+         updates.embedding = await computeQuoteEmbedding(updates.text);
+       }
+     }
      this.stateManager.human_quote_update(id, updates);
      this.interface.onQuoteUpdated?.();
    }
@@ -1052,6 +1124,73 @@ export class Processor {
 
    async getQuotesForMessage(messageId: string): Promise<Quote[]> {
      return this.stateManager.human_quote_getForMessage(messageId).map(stripQuoteEmbedding);
+   }
+
+   async searchHumanData(
+     query: string,
+     options: { types?: Array<"fact" | "trait" | "topic" | "person" | "quote">; limit?: number } = {}
+   ): Promise<{
+     facts: Fact[];
+     traits: Trait[];
+     topics: Topic[];
+     people: Person[];
+     quotes: Quote[];
+   }> {
+     const { types = ["fact", "trait", "topic", "person", "quote"], limit = 10 } = options;
+     const human = this.stateManager.getHuman();
+     const SIMILARITY_THRESHOLD = 0.3;
+
+     const result = {
+       facts: [] as Fact[],
+       traits: [] as Trait[],
+       topics: [] as Topic[],
+       people: [] as Person[],
+       quotes: [] as Quote[],
+     };
+
+     let queryVector: number[] | null = null;
+     try {
+       const embeddingService = getEmbeddingService();
+       queryVector = await embeddingService.embed(query);
+     } catch (err) {
+       console.warn("[searchHumanData] Failed to generate query embedding:", err);
+     }
+
+     const searchItems = <T extends { id: string; embedding?: number[] }>(
+       items: T[],
+       textExtractor: (item: T) => string
+     ): T[] => {
+       const withEmbeddings = items.filter(i => i.embedding?.length);
+       
+       if (queryVector && withEmbeddings.length > 0) {
+         return findTopK(queryVector, withEmbeddings, limit)
+           .filter(({ similarity }) => similarity >= SIMILARITY_THRESHOLD)
+           .map(({ item }) => item);
+       }
+       
+       const lowerQuery = query.toLowerCase();
+       return items
+         .filter(i => textExtractor(i).toLowerCase().includes(lowerQuery))
+         .slice(0, limit);
+     };
+
+     if (types.includes("fact")) {
+       result.facts = searchItems(human.facts, f => `${f.name} ${f.description || ""}`).map(stripDataItemEmbedding);
+     }
+     if (types.includes("trait")) {
+       result.traits = searchItems(human.traits, t => `${t.name} ${t.description || ""}`).map(stripDataItemEmbedding);
+     }
+     if (types.includes("topic")) {
+       result.topics = searchItems(human.topics, t => `${t.name} ${t.description || ""}`).map(stripDataItemEmbedding);
+     }
+     if (types.includes("person")) {
+       result.people = searchItems(human.people, p => `${p.name} ${p.description || ""} ${p.relationship}`).map(stripDataItemEmbedding);
+     }
+     if (types.includes("quote")) {
+       result.quotes = searchItems(human.quotes, q => q.text).map(stripQuoteEmbedding);
+     }
+
+     return result;
    }
 
   async exportState(): Promise<string> {

@@ -101,7 +101,6 @@ export function buildTopicsSection(topics: PersonaTopic[], header: string): stri
 
     const sentimentGuide = t.sentiment > 0 ? "(Liked)" : "(Disliked)";
     const sentiment = Math.round(t.sentiment * 100)+`% ${sentimentGuide}`;
-    const displayText = t.perspective || t.name;
     return `### ${t.name}
 - Perspective: ${t.perspective}
 - Approach: ${t.approach}
@@ -290,7 +289,7 @@ ${formatted}`;
 // SYSTEM KNOWLEDGE SECTION (Ei-only)
 // =============================================================================
 
-export function buildSystemKnowledgeSection(isTUI): string {
+export function buildSystemKnowledgeSection(isTUI: boolean): string {
   const interfaceIntro = isTUI ? "their command line Terminal User Interface (TUI)" : "a web browser";
   const createPersonaAction = isTUI ? "Use the `/p[ersona] new` command" : "Click the [+] button in the left panel";
   const editPersonaAction = isTUI ? "`/d[etails]` command" : "clicking the Edit (Pencil) icon on the left";
