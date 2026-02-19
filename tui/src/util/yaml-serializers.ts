@@ -39,7 +39,7 @@ interface EditablePersonaData {
   long_description?: string;
   model?: string;
   group_primary?: string | null;
-  groups_visible?: string[];
+  groups_visible?: Record<string, boolean>[];
   traits: YAMLTrait[];
   topics: YAMLPersonaTopic[];
   heartbeat_delay_ms?: number;
@@ -105,7 +105,7 @@ export function newPersonaToYAML(name: string): string {
     long_description: PLACEHOLDER_LONG_DESC,
     model: undefined,
     group_primary: "General",
-    groups_visible: ["General"],
+    groups_visible: [{ General: true }],
     traits: [PLACEHOLDER_TRAIT],
     topics: [PLACEHOLDER_TOPIC],
   };
@@ -166,11 +166,21 @@ export function newPersonaFromYAML(yamlContent: string): Partial<PersonaEntity> 
     return value === placeholder ? undefined : value;
   };
   
+  // Convert Record<string, boolean>[] to string[] - only include groups with true value
+  const groupsVisible: string[] = [];
+  for (const groupRecord of data.groups_visible ?? []) {
+    for (const [groupName, isVisible] of Object.entries(groupRecord)) {
+      if (isVisible) {
+        groupsVisible.push(groupName);
+      }
+    }
+  }
+  
   return {
     long_description: stripPlaceholder(data.long_description, PLACEHOLDER_LONG_DESC),
     model: data.model,
     group_primary: data.group_primary ?? "General",
-    groups_visible: data.groups_visible ?? ["General"],
+    groups_visible: groupsVisible.length > 0 ? groupsVisible : ["General"],
     traits,
     topics,
     heartbeat_delay_ms: data.heartbeat_delay_ms,
@@ -178,9 +188,16 @@ export function newPersonaFromYAML(yamlContent: string): Partial<PersonaEntity> 
   };
 }
 
-export function personaToYAML(persona: PersonaEntity): string {
+export function personaToYAML(persona: PersonaEntity, allGroups?: string[]): string {
   const useTraitPlaceholder = persona.traits.length === 0;
   const useTopicPlaceholder = persona.topics.length === 0;
+  
+  const groupsForYAML: Record<string, boolean>[] = [];
+  const visibleSet = new Set(persona.groups_visible ?? []);
+  const groupsToShow = allGroups ?? persona.groups_visible ?? [];
+  for (const groupName of groupsToShow) {
+    groupsForYAML.push({ [groupName]: visibleSet.has(groupName) });
+  }
   
   const data: EditablePersonaData = {
     display_name: persona.display_name,
@@ -189,7 +206,7 @@ export function personaToYAML(persona: PersonaEntity): string {
     long_description: persona.long_description || PLACEHOLDER_LONG_DESC,
     model: persona.model,
     group_primary: persona.group_primary,
-    groups_visible: persona.groups_visible,
+    groups_visible: groupsForYAML,
     traits: useTraitPlaceholder 
       ? [PLACEHOLDER_TRAIT]
       : persona.traits.map(({ name, description, strength }) => ({ name, description, strength: strength ?? 0.5 })),
@@ -281,6 +298,15 @@ export function personaFromYAML(yamlContent: string, original: PersonaEntity): P
     return value === placeholder ? undefined : value;
   };
   
+  const groupsVisible: string[] = [];
+  for (const groupRecord of data.groups_visible ?? []) {
+    for (const [groupName, isVisible] of Object.entries(groupRecord)) {
+      if (isVisible) {
+        groupsVisible.push(groupName);
+      }
+    }
+  }
+  
   const updates: Partial<PersonaEntity> = {
     display_name: data.display_name,
     aliases: data.aliases,
@@ -288,7 +314,7 @@ export function personaFromYAML(yamlContent: string, original: PersonaEntity): P
     long_description: stripPlaceholder(data.long_description, PLACEHOLDER_LONG_DESC),
     model: data.model,
     group_primary: data.group_primary,
-    groups_visible: data.groups_visible,
+    groups_visible: groupsVisible,
     traits,
     topics,
     heartbeat_delay_ms: data.heartbeat_delay_ms,

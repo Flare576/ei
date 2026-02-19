@@ -105,7 +105,8 @@ export async function createPersonaViaEditor(options: NewPersonaEditorOptions): 
 
 export async function openPersonaEditor(options: PersonaEditorOptions): Promise<PersonaEditorResult> {
   const { personaId, persona, ctx } = options;
-  let yamlContent = personaToYAML(persona);
+  const allGroups = await ctx.ei.getGroupList();
+  let yamlContent = personaToYAML(persona, allGroups);
   
   while (true) {
     const result = await spawnEditor({
