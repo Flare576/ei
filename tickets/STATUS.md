@@ -75,7 +75,7 @@
 | 0142 | TUI $EDITOR Integration | 0139, 0140 | DONE |
 | 0144 | TUI Unread Message Marking | 0100 | DONE |
 | 0149 | TUI Markdown Rendering | 0100 | DONE |
-| 0150 | TUI /quotes Command | 0100, 0116 | PENDING |
+| 0150 | TUI /quotes Command | 0100, 0116 | DONE |
 | 0151 | TUI /settings Command | 0139, 0129 | DONE |
 
 ---

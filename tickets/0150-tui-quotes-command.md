@@ -1,6 +1,6 @@
 # 0150: TUI /quotes Command
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0100 (TUI Frontend Skeleton), 0116 (Quote Data Type & Storage)
 **Priority**: Low (Post-V1 Polish)
 
