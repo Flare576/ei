@@ -1,6 +1,7 @@
 const PBKDF2_ITERATIONS = 310000;
 const SALT = new TextEncoder().encode('ei-the-answer-is-42');
 const ID_PLAINTEXT = 'the_answer_is_42';
+const CHUNK_SIZE = 0x8000; // 32KB chunks for base64 conversion
 
 export interface CryptoCredentials {
   username: string;
@@ -10,6 +11,15 @@ export interface CryptoCredentials {
 export interface EncryptedPayload {
   iv: string;
   ciphertext: string;
+}
+
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+    const chunk = bytes.subarray(i, Math.min(i + CHUNK_SIZE, bytes.length));
+    binary += String.fromCharCode.apply(null, chunk as unknown as number[]);
+  }
+  return btoa(binary);
 }
 
 async function deriveKey(credentials: CryptoCredentials): Promise<CryptoKey> {
@@ -65,8 +75,8 @@ export async function encrypt(data: string, credentials: CryptoCredentials): Pro
   );
 
   return {
-    iv: btoa(String.fromCharCode(...iv)),
-    ciphertext: btoa(String.fromCharCode(...new Uint8Array(ciphertext))),
+    iv: uint8ArrayToBase64(iv),
+    ciphertext: uint8ArrayToBase64(new Uint8Array(ciphertext)),
   };
 }
 

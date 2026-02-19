@@ -1,19 +1,19 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-02-18 (0129 Settings Menu Redesign completed)
+> Last updated: 2026-02-18 (0151 TUI /settings Command DONE)
 
 ## Overview
 
 | Status | Count |
 |--------|-------|
-| PENDING | 10 |
+| PENDING | 9 |
 | IN_PROGRESS | 0 |
 | QA | 0 |
-| DONE | 108 |
+| DONE | 109 |
 | BLOCKED | 0 |
 | SUPERSEDED | 3 |
 
-> 125 total tickets (108 done + 10 pending + 3 backlog + 0 in_progress + 0 QA + 3 superseded).
+> 125 total tickets (109 done + 9 pending + 3 backlog + 0 in_progress + 0 QA + 3 superseded).
 
 ---
 
@@ -76,7 +76,7 @@
 | 0144 | TUI Unread Message Marking | 0100 | DONE |
 | 0149 | TUI Markdown Rendering | 0100 | DONE |
 | 0150 | TUI /quotes Command | 0100, 0116 | PENDING |
-| 0151 | TUI /settings Command | 0139, 0129 | PENDING |
+| 0151 | TUI /settings Command | 0139, 0129 | DONE |
 
 ---
 
@@ -212,6 +212,7 @@
 | 0146 | Write-Through Storage | 2026-02-17 |
 | 0145 | OpenCode 1.2 SQLite Integration | 2026-02-17 |
 | 0129 | Settings Menu Redesign (Web) | 2026-02-18 |
+| 0151 | TUI /settings Command | 2026-02-18 |
 
 ---
 

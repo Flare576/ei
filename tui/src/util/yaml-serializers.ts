@@ -2,6 +2,9 @@ import YAML from "yaml";
 import type { 
   PersonaEntity, 
   HumanEntity, 
+  HumanSettings,
+  CeremonyConfig,
+  OpenCodeSettings,
   Fact, 
   Trait, 
   Topic, 
@@ -384,5 +387,82 @@ export function humanFromYAML(yamlContent: string): HumanYAMLResult {
     deletedTraitIds,
     deletedTopicIds,
     deletedPersonIds,
+  };
+}
+
+// =============================================================================
+// SETTINGS SERIALIZATION
+// =============================================================================
+
+interface EditableSettingsData {
+  default_model?: string | null;
+  time_mode?: "24h" | "12h" | "local" | "utc" | null;
+  name_display?: string | null;
+  ceremony?: {
+    time: string;
+    decay_rate?: number | null;
+    explore_threshold?: number | null;
+  };
+  opencode?: {
+    integration?: boolean | null;
+    polling_interval_ms?: number | null;
+  };
+}
+
+export function settingsToYAML(settings: HumanSettings | undefined): string {
+  // Always show all editable fields, using null for unset values so YAML displays them
+  const data: EditableSettingsData = {
+    default_model: settings?.default_model ?? null,
+    time_mode: settings?.time_mode ?? null,
+    name_display: settings?.name_display ?? null,
+    ceremony: {
+      time: settings?.ceremony?.time ?? "09:00",
+      decay_rate: settings?.ceremony?.decay_rate ?? null,
+      explore_threshold: settings?.ceremony?.explore_threshold ?? null,
+    },
+    opencode: {
+      integration: settings?.opencode?.integration ?? null,
+      polling_interval_ms: settings?.opencode?.polling_interval_ms ?? null,
+    },
+  };
+  
+  return YAML.stringify(data, {
+    lineWidth: 0,
+  });
+}
+
+export function settingsFromYAML(yamlContent: string, original: HumanSettings | undefined): HumanSettings {
+  const data = YAML.parse(yamlContent) as EditableSettingsData;
+  
+  const nullToUndefined = <T>(value: T | null | undefined): T | undefined => 
+    value === null ? undefined : value;
+  
+  let ceremony: CeremonyConfig | undefined;
+  if (data.ceremony) {
+    ceremony = {
+      time: data.ceremony.time,
+      decay_rate: nullToUndefined(data.ceremony.decay_rate),
+      explore_threshold: nullToUndefined(data.ceremony.explore_threshold),
+      last_ceremony: original?.ceremony?.last_ceremony,
+    };
+  }
+  
+  let opencode: OpenCodeSettings | undefined;
+  if (data.opencode) {
+    opencode = {
+      integration: nullToUndefined(data.opencode.integration),
+      polling_interval_ms: nullToUndefined(data.opencode.polling_interval_ms),
+      last_sync: original?.opencode?.last_sync,
+      extraction_point: original?.opencode?.extraction_point,
+    };
+  }
+  
+  return {
+    ...original,
+    default_model: nullToUndefined(data.default_model),
+    time_mode: nullToUndefined(data.time_mode),
+    name_display: nullToUndefined(data.name_display),
+    ceremony,
+    opencode,
   };
 }

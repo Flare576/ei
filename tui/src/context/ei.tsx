@@ -11,6 +11,7 @@ import {
 import { createStore } from "solid-js/store";
 import { Processor } from "../../../src/core/processor.js";
 import { FileStorage } from "../storage/file.js";
+import { remoteSync } from "../../../src/storage/remote.js";
 import { logger, clearLog, interceptConsole } from "../util/logger.js";
 import type {
   Ei_Interface,
@@ -19,6 +20,7 @@ import type {
   Message,
   QueueStatus,
   HumanEntity,
+  HumanSettings,
   Fact,
   Trait,
   Topic,
@@ -49,6 +51,7 @@ export interface EiContextValue {
   abortCurrentOperation: () => Promise<void>;
   resumeQueue: () => Promise<void>;
   stopProcessor: () => Promise<void>;
+  saveAndExit: () => Promise<{ success: boolean; error?: string }>;
   showNotification: (message: string, level: "error" | "warn" | "info") => void;
   createPersona: (input: { name: string }) => Promise<string>;
   archivePersona: (personaId: string) => Promise<void>;
@@ -59,11 +62,14 @@ export interface EiContextValue {
   resolvePersonaName: (nameOrAlias: string) => Promise<string | null>;
   getHuman: () => Promise<HumanEntity>;
   updateHuman: (updates: Partial<HumanEntity>) => Promise<void>;
+  updateSettings: (updates: Partial<HumanSettings>) => Promise<void>;
   upsertFact: (fact: Fact) => Promise<void>;
   upsertTrait: (trait: Trait) => Promise<void>;
   upsertTopic: (topic: Topic) => Promise<void>;
   upsertPerson: (person: Person) => Promise<void>;
   removeDataItem: (type: "fact" | "trait" | "topic" | "person", id: string) => Promise<void>;
+  syncStatus: () => { configured: boolean; envBased: boolean };
+  triggerSync: () => Promise<{ success: boolean; error?: string }>;
 }
 
 const EiContext = createContext<EiContextValue>();
@@ -85,6 +91,7 @@ export const EiProvider: ParentComponent = (props) => {
   let notificationTimer: Timer | null = null;
   let readTimer: Timer | null = null;
   let dwelledPersona: string | null = null;
+  let syncConfiguredFromEnv = false;
 
   const showNotification = (message: string, level: "error" | "warn" | "info") => {
     if (notificationTimer) clearTimeout(notificationTimer);
@@ -262,6 +269,39 @@ export const EiProvider: ParentComponent = (props) => {
     await processor.removeDataItem(type, id);
   };
 
+  const saveAndExit = async (): Promise<{ success: boolean; error?: string }> => {
+    if (!processor) return { success: false, error: "Processor not initialized" };
+    return processor.saveAndExit();
+  };
+
+  const updateSettings = async (updates: Partial<HumanSettings>): Promise<void> => {
+    if (!processor) return;
+    const human = await processor.getHuman();
+    const newSettings = { ...human.settings, ...updates };
+    await processor.updateHuman({ settings: newSettings });
+  };
+
+  const syncStatus = (): { configured: boolean; envBased: boolean } => {
+    return {
+      configured: remoteSync.isConfigured(),
+      envBased: syncConfiguredFromEnv,
+    };
+  };
+
+  const triggerSync = async (): Promise<{ success: boolean; error?: string }> => {
+    if (!processor) return { success: false, error: "Processor not initialized" };
+    if (!remoteSync.isConfigured()) {
+      return { success: false, error: "Sync not configured" };
+    }
+    const human = await processor.getHuman();
+    const hasSyncCreds = !!human.settings?.sync?.username && !!human.settings?.sync?.passphrase;
+    if (!hasSyncCreds) {
+      return { success: false, error: "No sync credentials in settings" };
+    }
+    const state = await processor.getStorageState();
+    return remoteSync.sync(state);
+  };
+
   async function bootstrap() {
     clearLog();
     interceptConsole();
@@ -308,6 +348,23 @@ export const EiProvider: ParentComponent = (props) => {
       await processor.start(storage);
       logger.debug("Processor started");
 
+      const syncUsername = Bun.env.EI_SYNC_USERNAME;
+      const syncPassphrase = Bun.env.EI_SYNC_PASSPHRASE;
+      if (syncUsername && syncPassphrase) {
+        logger.info("Sync credentials found in env, configuring remoteSync");
+        const syncCreds = { username: syncUsername, passphrase: syncPassphrase };
+        await remoteSync.configure(syncCreds);
+        syncConfiguredFromEnv = true;
+        
+        const human = await processor.getHuman();
+        if (!human.settings?.sync?.username || !human.settings?.sync?.passphrase) {
+          await processor.updateHuman({
+            settings: { ...human.settings, sync: syncCreds }
+          });
+          logger.debug("Sync credentials written to settings");
+        }
+      }
+
       await refreshPersonas();
       logger.debug(`refreshPersonas done, count: ${store.personas.length}`);
       
@@ -350,6 +407,7 @@ export const EiProvider: ParentComponent = (props) => {
     abortCurrentOperation,
     resumeQueue,
     stopProcessor,
+    saveAndExit,
     showNotification,
     createPersona,
     archivePersona,
@@ -360,11 +418,14 @@ export const EiProvider: ParentComponent = (props) => {
     resolvePersonaName,
     getHuman,
     updateHuman,
+    updateSettings,
     upsertFact,
     upsertTrait,
     upsertTopic,
     upsertPerson,
     removeDataItem,
+    syncStatus,
+    triggerSync,
   };
 
   return (

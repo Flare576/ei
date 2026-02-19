@@ -13,6 +13,7 @@ import { modelCommand } from "../commands/model";
 import { detailsCommand } from "../commands/details";
 import { meCommand } from "../commands/me";
 import { editorCommand } from "../commands/editor";
+import { settingsCommand } from "../commands/settings";
 import { useOverlay } from "../context/overlay";
 
 const TEXTAREA_KEYBINDINGS: KeyBinding[] = [
@@ -39,6 +40,7 @@ export function PromptInput() {
   registerCommand(detailsCommand);
   registerCommand(meCommand);
   registerCommand(editorCommand);
+  registerCommand(settingsCommand);
 
   let textareaRef: TextareaRenderable | undefined;
 
@@ -67,6 +69,9 @@ export function PromptInput() {
                                  text.startsWith("/details") || 
                                  text.startsWith("/d ") ||
                                  text === "/d" ||
+                                 text.startsWith("/settings") ||
+                                 text.startsWith("/set ") ||
+                                 text === "/set" ||
                                  text.startsWith("/p");
       
       if (!isEditorCmd && !opensEditorForData) {

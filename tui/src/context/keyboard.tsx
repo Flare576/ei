@@ -31,7 +31,7 @@ export const KeyboardProvider: ParentComponent = (props) => {
   const [focusedPanel, setFocusedPanel] = createSignal<Panel>("input");
   const [sidebarVisible, setSidebarVisible] = createSignal(true);
   const renderer = useRenderer();
-  const { queueStatus, abortCurrentOperation, resumeQueue, personas, activePersonaId, selectPersona, stopProcessor } = useEi();
+  const { queueStatus, abortCurrentOperation, resumeQueue, personas, activePersonaId, selectPersona, saveAndExit, showNotification } = useEi();
   
   let messageScrollRef: ScrollBoxRenderable | null = null;
   let textareaRef: TextareaRenderable | null = null;
@@ -52,7 +52,11 @@ export const KeyboardProvider: ParentComponent = (props) => {
   const toggleSidebar = () => setSidebarVisible(!sidebarVisible());
 
   const exitApp = async () => {
-    await stopProcessor();
+    const result = await saveAndExit();
+    if (!result.success) {
+      showNotification(`Sync failed: ${result.error}. Use /quit force to exit anyway.`, "error");
+      return;
+    }
     renderer.setTerminalTitle("");
     renderer.destroy();
     process.exit(0);
