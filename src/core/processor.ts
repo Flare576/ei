@@ -264,7 +264,7 @@ export class Processor {
             await this.handleResponse(response);
             const nextState = this.stateManager.queue_isPaused() ? "paused" : "idle";
             // the processor state is set in the caller, so this needs a bit of delay
-            setTimeout(() => this.interface.onQueueStateChanged?.(nextState),1);
+            setTimeout(() => this.interface.onQueueStateChanged?.(nextState), 0);
           }, {
             accounts: this.stateManager.getHuman().settings?.accounts,
             messageFetcher: (pName) => this.fetchMessagesForLLM(pName),
