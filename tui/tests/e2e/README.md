@@ -98,6 +98,8 @@ tui/tests/e2e/
 ├── basic-commands.test.ts   # /new, /pause, /resume, /model (port 3101)
 ├── context-boundary.test.ts # /new divider behavior with messages (port 3102)
 ├── delete-command.test.ts   # /delete persona deletion with confirmation (port 3103)
+├── me-command.test.ts       # /me human entity editing (port 3105)
+├── quotes-command.test.ts   # /quotes quote management and overlay (port 3106)
 ├── fixtures.ts              # Shared test utilities and checkpoint factory
 ├── framework/
 │   └── mock-server.ts       # Re-export shim (see file for why)
