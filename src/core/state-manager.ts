@@ -189,6 +189,11 @@ export class StateManager {
     this.scheduleSave();
   }
 
+  messages_sort(personaId: string): void {
+    this.personaState.messages_sort(personaId);
+    this.scheduleSave();
+  }
+
   messages_setContextStatus(
     personaId: string,
     messageId: string,

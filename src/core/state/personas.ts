@@ -114,6 +114,14 @@ export class PersonaState {
     data.entity.last_updated = new Date().toISOString();
   }
 
+  messages_sort(personaId: string): void {
+    const data = this.personas.get(personaId);
+    if (!data) return;
+    data.messages.sort((a, b) => 
+      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
+  }
+
   messages_setContextStatus(
     personaId: string,
     messageId: string,
