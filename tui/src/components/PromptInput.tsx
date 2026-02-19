@@ -15,6 +15,7 @@ import { meCommand } from "../commands/me";
 import { editorCommand } from "../commands/editor";
 import { settingsCommand } from "../commands/settings";
 import { deleteCommand } from "../commands/delete";
+import { quotesCommand } from "../commands/quotes";
 import { useOverlay } from "../context/overlay";
 
 const TEXTAREA_KEYBINDINGS: KeyBinding[] = [
@@ -43,6 +44,7 @@ export function PromptInput() {
   registerCommand(resumeCommand);
   registerCommand(modelCommand);
   registerCommand(deleteCommand);
+  registerCommand(quotesCommand);
 
   let textareaRef: TextareaRenderable | undefined;
 
@@ -74,7 +76,9 @@ export function PromptInput() {
                                  text.startsWith("/settings") ||
                                  text.startsWith("/set ") ||
                                  text === "/set" ||
-                                 text.startsWith("/p");
+                                 text.startsWith("/p") ||
+                                 text.startsWith("/quotes") ||
+                                 text.startsWith("/q ");
       
       if (!isEditorCmd && !opensEditorForData) {
         textareaRef?.clear();
