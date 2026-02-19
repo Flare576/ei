@@ -97,6 +97,7 @@ tui/tests/e2e/
 ├── persona-switching.test.ts # /persona, /archive, Tab (port 3100)
 ├── basic-commands.test.ts   # /new, /pause, /resume, /model (port 3101)
 ├── context-boundary.test.ts # /new divider behavior with messages (port 3102)
+├── delete-command.test.ts   # /delete persona deletion with confirmation (port 3103)
 ├── fixtures.ts              # Shared test utilities and checkpoint factory
 ├── framework/
 │   └── mock-server.ts       # Re-export shim (see file for why)

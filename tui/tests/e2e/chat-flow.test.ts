@@ -114,6 +114,9 @@ test.describe("Chat Flow", () => {
 
     await expect(terminal.getByText(/Processing \(\d+\)/g)).toBeVisible({ timeout: 5000 });
     await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 30000 });
+    //
+    // Also verify "Human" label appears (message attribution)
+    await expect(terminal.getByText(/Human \(/g)).toBeVisible({ timeout: 5000 });
 
     await expect(terminal.getByText(EXPECTED_RESPONSE, { full: true })).toBeVisible({ timeout: 10000 });
   });
@@ -129,8 +132,6 @@ test.describe("Chat Flow", () => {
     // User message should appear immediately in the chat
     await expect(terminal.getByText(userMessage, { full: true })).toBeVisible({ timeout: 5000 });
     
-    // Also verify "Human" label appears (message attribution)
-    await expect(terminal.getByText(/Human \(/g)).toBeVisible({ timeout: 5000 });
   });
 
   test("multiple messages can be sent in sequence", async ({ terminal }) => {
