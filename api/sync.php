@@ -1,10 +1,12 @@
 <?php
 /**
- * EI Sync API - Sync Handlers
+ * EI Sync API - Sync Handlers (v2 - Hybrid Storage)
  * 
  * POST   /ei/api/{id} - Upsert encrypted state (rate limited)
  * GET    /ei/api/{id} - Retrieve encrypted state
  * HEAD   /ei/api/{id} - Check last_updated timestamp
+ * 
+ * Data stored on filesystem, metadata in MySQL.
  */
 
 require_once __DIR__ . '/config.php';
@@ -54,20 +56,36 @@ function handlePost(string $encryptedId): void {
         return;
     }
     
+    $filePath = getFilePath($encryptedId);
+    
+    if (!ensureDirectoryExists($filePath)) {
+        http_response_code(500);
+        echo json_encode(['error' => 'Failed to create storage directory']);
+        return;
+    }
+    
+    if (file_put_contents($filePath, $data['data'], LOCK_EX) === false) {
+        http_response_code(500);
+        echo json_encode(['error' => 'Failed to write data file']);
+        return;
+    }
+    
     $timestamps = $rateCheck['timestamps'];
     $timestamps[] = time();
     $rateLimitJson = json_encode(array_values($timestamps));
     
+    $relativeFilePath = substr($encryptedId, 0, 2) . '/' . $encryptedId . '.json';
+    
     $stmt = $pdo->prepare('
-        INSERT INTO ei_sync (encrypted_id, data, last_updated, rate_limit)
+        INSERT INTO ei_sync (encrypted_id, file_path, last_updated, rate_limit)
         VALUES (?, ?, NOW(), ?)
         ON DUPLICATE KEY UPDATE
-            data = VALUES(data),
+            file_path = VALUES(file_path),
             last_updated = NOW(),
             rate_limit = VALUES(rate_limit)
     ');
     
-    $stmt->execute([$encryptedId, $data['data'], $rateLimitJson]);
+    $stmt->execute([$encryptedId, $relativeFilePath, $rateLimitJson]);
     
     http_response_code(200);
     echo json_encode(['success' => true]);
@@ -76,7 +94,7 @@ function handlePost(string $encryptedId): void {
 function handleGet(string $encryptedId): void {
     $pdo = getConnection();
     
-    $stmt = $pdo->prepare('SELECT data, last_updated FROM ei_sync WHERE encrypted_id = ?');
+    $stmt = $pdo->prepare('SELECT file_path, last_updated FROM ei_sync WHERE encrypted_id = ?');
     $stmt->execute([$encryptedId]);
     $row = $stmt->fetch();
     
@@ -86,12 +104,27 @@ function handleGet(string $encryptedId): void {
         return;
     }
     
+    $filePath = DATA_PATH . '/' . $row['file_path'];
+    
+    if (!file_exists($filePath)) {
+        http_response_code(404);
+        echo json_encode(['error' => 'Data file not found']);
+        return;
+    }
+    
+    $data = file_get_contents($filePath);
+    if ($data === false) {
+        http_response_code(500);
+        echo json_encode(['error' => 'Failed to read data file']);
+        return;
+    }
+    
     $lastUpdated = strtotime($row['last_updated']);
     header('Last-Modified: ' . gmdate('D, d M Y H:i:s', $lastUpdated) . ' GMT');
     
     http_response_code(200);
     header('Content-Type: application/json');
-    echo json_encode(['data' => $row['data']]);
+    echo json_encode(['data' => $data]);
 }
 
 function handleHead(string $encryptedId): void {

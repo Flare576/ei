@@ -1,6 +1,6 @@
 <?php
 /**
- * EI Sync API - Database Configuration
+ * EI Sync API - Configuration
  * Generated from config.php.template during deploy
  */
 
@@ -8,6 +8,8 @@ define('DB_HOST', '%%DB_HOSTNAME%%');
 define('DB_NAME', '%%DB_DATABASE%%');
 define('DB_USER', '%%DB_USERNAME%%');
 define('DB_PASS', '%%DB_PASSWORD%%');
+
+define('DATA_PATH', '%%DATA_PATH%%');
 
 define('RATE_LIMIT_MAX', 3);
 define('RATE_LIMIT_WINDOW', 3600);
@@ -30,4 +32,17 @@ function getConnection(): PDO {
     }
     
     return $pdo;
+}
+
+function getFilePath(string $encryptedId): string {
+    $prefix = substr($encryptedId, 0, 2);
+    return DATA_PATH . '/' . $prefix . '/' . $encryptedId . '.json';
+}
+
+function ensureDirectoryExists(string $filePath): bool {
+    $dir = dirname($filePath);
+    if (!is_dir($dir)) {
+        return mkdir($dir, 0755, true);
+    }
+    return true;
 }
