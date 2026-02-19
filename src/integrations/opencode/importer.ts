@@ -150,6 +150,7 @@ export async function importOpenCodeSessions(
   const updatedPersonaIds = new Set<string>();
   for (const batch of sessionAgentBatches) {
     if (batch.personaId && !updatedPersonaIds.has(batch.personaId)) {
+      stateManager.messages_sort(batch.personaId);
       stateManager.persona_update(batch.personaId, {
         last_activity: new Date().toISOString(),
       });
