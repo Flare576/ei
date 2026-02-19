@@ -71,8 +71,21 @@ describe("personaToYAML", () => {
     expect(yaml).toContain("model: gpt-4o");
     expect(yaml).toContain("group_primary: work");
     expect(yaml).toContain("groups_visible:");
-    expect(yaml).toContain("- work");
-    expect(yaml).toContain("- personal");
+    expect(yaml).toContain("work: true");
+    expect(yaml).toContain("personal: true");
+  });
+
+  test("serializes all groups with visibility flags when allGroups provided", () => {
+    const persona: PersonaEntity = {
+      ...minimalPersona,
+      groups_visible: ["work"],
+    };
+    const allGroups = ["work", "personal", "family"];
+    
+    const yaml = personaToYAML(persona, allGroups);
+    expect(yaml).toContain("work: true");
+    expect(yaml).toContain("personal: false");
+    expect(yaml).toContain("family: false");
   });
 
   test("does not include id or _delete in output", () => {
@@ -220,8 +233,8 @@ long_description: A bot for testing
 model: gpt-4o
 group_primary: work
 groups_visible:
-  - work
-  - personal
+  - work: true
+  - personal: true
 heartbeat_delay_ms: 600000
 context_window_hours: 48
 traits: []
@@ -234,6 +247,20 @@ topics: []
     expect(result.updates.groups_visible).toEqual(["work", "personal"]);
     expect(result.updates.heartbeat_delay_ms).toBe(600000);
     expect(result.updates.context_window_hours).toBe(48);
+  });
+
+  test("parses groups_visible with mixed true/false values", () => {
+    const yaml = `
+display_name: TestBot
+groups_visible:
+  - work: true
+  - personal: false
+  - family: true
+traits: []
+topics: []
+`;
+    const result = personaFromYAML(yaml, emptyOriginal);
+    expect(result.updates.groups_visible).toEqual(["work", "family"]);
   });
 
   test("sets last_updated to current time", () => {
