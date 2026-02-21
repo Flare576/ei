@@ -41,8 +41,9 @@ import {
   queueFactScan,
   queueTopicScan,
   queuePersonScan,
-  shouldRunCeremony,
+  shouldStartCeremony,
   startCeremony,
+  handleCeremonyProgress,
   type ExtractionContext,
 } from "./orchestrators/index.js";
 import { EI_WELCOME_MESSAGE, EI_PERSONA_DEFINITION } from "../templates/welcome.js";
@@ -291,7 +292,7 @@ export class Processor {
       await this.checkAndSyncOpenCode(human, now);
     }
     
-    if (human.settings?.ceremony && shouldRunCeremony(human.settings.ceremony)) {
+    if (human.settings?.ceremony && shouldStartCeremony(human.settings.ceremony)) {
       // Auto-backup to remote before ceremony (if configured)
       if (human.settings?.sync && remoteSync.isConfigured()) {
         const state = this.stateManager.getStorageState();
@@ -529,6 +530,10 @@ export class Processor {
       if (response.request.next_step === LLMNextStep.HandleHumanItemUpdate) {
         this.interface.onHumanUpdated?.();
         this.interface.onQuoteAdded?.();
+      }
+
+      if (response.request.data.ceremony_progress) {
+        handleCeremonyProgress(this.stateManager);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
