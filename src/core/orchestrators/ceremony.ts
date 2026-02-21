@@ -7,9 +7,13 @@ import {
   queueTopicScan,
   queuePersonScan,
   type ExtractionContext,
+  type ExtractionOptions,
 } from "./human-extraction.js";
 import { queuePersonaTopicScan, type PersonaTopicContext } from "./persona-topics.js";
 import { buildPersonaExpirePrompt, buildPersonaExplorePrompt, buildDescriptionCheckPrompt } from "../../prompts/ceremony/index.js";
+
+const MIN_MESSAGES = 200;
+const MAX_AGE_DAYS = 14;
 
 export function isNewDay(lastCeremony: string | undefined, now: Date): boolean {
   if (!lastCeremony) return true;
@@ -27,14 +31,21 @@ export function isPastCeremonyTime(ceremonyTime: string, now: Date): boolean {
 
 /**
  * Flare Note: if we wanted to run the ceremony every 24h _or_, say "1 hour after the user has 'gone idle' after using
- * the system", this is where you'd add that condition. Bear in mind that the prompts an flow were written for
- * 1-per-day, so you'll want to revist them carefully.
+ * the system", this is where you'd add that condition. Bear in mind that the prompts and flow were written for
+ * 1-per-day, so you'll want to revisit them carefully.
  */
-export function shouldRunCeremony(config: CeremonyConfig, now: Date = new Date()): boolean {
+export function shouldStartCeremony(config: CeremonyConfig, now: Date = new Date()): boolean {
   if (!isNewDay(config.last_ceremony, now)) return false;
   return isPastCeremonyTime(config.time, now);
 }
 
+/**
+ * Start the ceremony by queuing Exposure scans for all active personas with recent activity.
+ * 
+ * IMPORTANT: Sets last_ceremony FIRST to prevent re-triggering from the processor loop.
+ * The actual Decay → Prune → Expire → Explore phases happen later via handleCeremonyProgress
+ * once all exposure scans have completed.
+ */
 export function startCeremony(state: StateManager): void {
   const startTime = Date.now();
   console.log(`[ceremony] Starting ceremony at ${new Date().toISOString()}`);
@@ -42,43 +53,8 @@ export function startCeremony(state: StateManager): void {
   const human = state.getHuman();
   const now = new Date();
   
-  const personas = state.persona_getAll();
-  const activePersonas = personas.filter(p => 
-    !p.is_paused && 
-    !p.is_archived && 
-    !p.is_static
-  );
-  
-  const eiIndex = activePersonas.findIndex(p => 
-    (p.aliases?.[0] ?? "").toLowerCase() === "ei"
-  );
-  
-  if (eiIndex > -1) {
-    const ei = activePersonas.splice(eiIndex, 1)[0];
-    activePersonas.push(ei);
-  }
-  
-  const lastCeremony = human.settings?.ceremony?.last_ceremony 
-    ? new Date(human.settings.ceremony.last_ceremony).getTime() 
-    : 0;
-  
-  const personasWithActivity = activePersonas.filter(p => {
-    const lastActivity = p.last_activity ? new Date(p.last_activity).getTime() : 0;
-    return lastActivity > lastCeremony;
-  });
-  
-  console.log(`[ceremony] Processing ${personasWithActivity.length} personas with activity (of ${activePersonas.length} active)`);
-  
-  for (let i = 0; i < personasWithActivity.length; i++) {
-    const persona = personasWithActivity[i];
-    const isLast = i === personasWithActivity.length - 1;
-    
-    console.log(`[ceremony] Processing ${persona.display_name} (${i + 1}/${personasWithActivity.length})${isLast ? " (last)" : ""}`);
-    queueExposurePhase(persona.id, state);
-  }
-  
-  runHumanCeremony(state);
-  
+  // Set last_ceremony FIRST — this is our start gate.
+  // Prevents the processor loop from re-triggering startCeremony.
   state.setHuman({
     ...human,
     settings: {
@@ -91,11 +67,47 @@ export function startCeremony(state: StateManager): void {
     },
   });
   
+  const personas = state.persona_getAll();
+  const activePersonas = personas.filter(p => 
+    !p.is_paused && 
+    !p.is_archived && 
+    !p.is_static
+  );
+  
+  const lastCeremony = human.settings?.ceremony?.last_ceremony 
+    ? new Date(human.settings.ceremony.last_ceremony).getTime() 
+    : 0;
+  
+  const personasWithActivity = activePersonas.filter(p => {
+    const lastActivity = p.last_activity ? new Date(p.last_activity).getTime() : 0;
+    return lastActivity > lastCeremony;
+  });
+  
+  console.log(`[ceremony] Processing ${personasWithActivity.length} personas with activity (of ${activePersonas.length} active)`);
+  
+  const options: ExtractionOptions = { ceremony_progress: true };
+  
+  for (let i = 0; i < personasWithActivity.length; i++) {
+    const persona = personasWithActivity[i];
+    const isLast = i === personasWithActivity.length - 1;
+    
+    console.log(`[ceremony] Queuing exposure for ${persona.display_name} (${i + 1}/${personasWithActivity.length})${isLast ? " (last)" : ""}`);
+    queueExposurePhase(persona.id, state, options);
+  }
+  
   const duration = Date.now() - startTime;
-  console.log(`[ceremony] Ceremony initiated in ${duration}ms, phases will execute via queue`);
+  console.log(`[ceremony] Exposure phase queued in ${duration}ms`);
+  
+  // Check immediately — if zero messages were queued (no unextracted messages for any persona),
+  // this will see an empty queue and proceed directly to Decay → Expire.
+  handleCeremonyProgress(state);
 }
 
-export function queueExposurePhase(personaId: string, state: StateManager): void {
+/**
+ * Queue all extraction scans for a persona's unextracted messages.
+ * Called during ceremony with ceremony_progress option to flag queue items.
+ */
+function queueExposurePhase(personaId: string, state: StateManager, options?: ExtractionOptions): void {
   const persona = state.persona_getById(personaId);
   if (!persona) {
     console.error(`[ceremony:exposure] Persona not found: ${personaId}`);
@@ -115,7 +127,7 @@ export function queueExposurePhase(personaId: string, state: StateManager): void
       messages_analyze: unextractedFacts,
       extraction_flag: "f",
     };
-    queueFactScan(context, state);
+    queueFactScan(context, state, options);
   }
   
   const unextractedTraits = state.messages_getUnextracted(personaId, "r");
@@ -127,7 +139,7 @@ export function queueExposurePhase(personaId: string, state: StateManager): void
       messages_analyze: unextractedTraits,
       extraction_flag: "r",
     };
-    queueTraitScan(context, state);
+    queueTraitScan(context, state, options);
   }
   
   const unextractedTopics = state.messages_getUnextracted(personaId, "p");
@@ -139,7 +151,7 @@ export function queueExposurePhase(personaId: string, state: StateManager): void
       messages_analyze: unextractedTopics,
       extraction_flag: "p",
     };
-    queueTopicScan(context, state);
+    queueTopicScan(context, state, options);
   }
   
   const unextractedPeople = state.messages_getUnextracted(personaId, "o");
@@ -151,7 +163,7 @@ export function queueExposurePhase(personaId: string, state: StateManager): void
       messages_analyze: unextractedPeople,
       extraction_flag: "o",
     };
-    queuePersonScan(context, state);
+    queuePersonScan(context, state, options);
   }
   
   const totalUnextracted = unextractedFacts.length + unextractedTraits.length + unextractedTopics.length + unextractedPeople.length;
@@ -170,9 +182,59 @@ export function queueExposurePhase(personaId: string, state: StateManager): void
     queuePersonaTopicScan(personaTopicContext, state);
     console.log(`[ceremony:exposure] Queued persona topic scan for ${persona.display_name}`);
   }
-  
-  applyDecayPhase(personaId, state);
 }
+
+/**
+ * Called after every LLM response that had ceremony_progress in its data,
+ * AND at the end of startCeremony (for the zero-messages edge case).
+ * 
+ * If any ceremony_progress items remain in the queue, does nothing — more work pending.
+ * If the queue is clear of ceremony items, advances to Decay → Prune → Expire.
+ */
+export function handleCeremonyProgress(state: StateManager): void {
+  if (state.queue_hasPendingCeremonies()) {
+    return; // Still processing exposure scans
+  }
+  
+  console.log("[ceremony:progress] All exposure scans complete, advancing to Decay");
+  
+  const personas = state.persona_getAll();
+  const activePersonas = personas.filter(p => 
+    !p.is_paused && 
+    !p.is_archived && 
+    !p.is_static
+  );
+  
+  const eiIndex = activePersonas.findIndex(p => 
+    (p.aliases?.[0] ?? "").toLowerCase() === "ei"
+  );
+  
+  // Ei's topics don't change
+  if (eiIndex > -1) {
+    const ei = activePersonas.splice(eiIndex, 1)[0];
+  }
+  
+  // Decay phase: apply decay + prune for ALL active personas
+  for (const persona of activePersonas) {
+    applyDecayPhase(persona.id, state);
+    prunePersonaMessages(persona.id, state);
+  }
+  
+  // Human ceremony: decay topics + people
+  runHumanCeremony(state);
+  
+  // Expire phase: queue LLM calls for each active persona
+  // handlePersonaExpire already chains to Explore → DescriptionCheck
+  for (const persona of activePersonas) {
+    queueExpirePhase(persona.id, state);
+  }
+  
+  console.log("[ceremony:progress] Ceremony Decay complete, Expire queued");
+}
+
+// =============================================================================
+// DECAY PHASE (synchronous)
+// =============================================================================
 
 function applyDecayPhase(personaId: string, state: StateManager): void {
   const persona = state.persona_getById(personaId);
@@ -181,11 +243,8 @@ function applyDecayPhase(personaId: string, state: StateManager): void {
     return;
   }
   
-  console.log(`[ceremony:decay] Applying decay for ${persona.display_name}`);
-  
   if (persona.topics.length === 0) {
     console.log(`[ceremony:decay] ${persona.display_name} has no topics, skipping decay`);
-    queueExpirePhase(personaId, state);
     return;
   }
   
@@ -219,13 +278,42 @@ function applyDecayPhase(personaId: string, state: StateManager): void {
   });
   
   console.log(`[ceremony:decay] Applied decay to ${decayedCount}/${updatedTopics.length} topics for ${persona.display_name}`);
-  
-  queueExpirePhase(personaId, state);
 }
 
-export function queueDecayPhase(personaId: string, state: StateManager): void {
-  applyDecayPhase(personaId, state);
+// =============================================================================
+// PRUNE PHASE (synchronous, runs as part of Decay)
+// =============================================================================
+
+export function prunePersonaMessages(personaId: string, state: StateManager): void {
+  const messages = state.messages_get(personaId);
+  if (messages.length <= MIN_MESSAGES) return;
+  
+  const cutoffMs = Date.now() - (MAX_AGE_DAYS * 24 * 60 * 60 * 1000);
+  
+  // Messages are sorted by timestamp (oldest first from messages_sort)
+  const toRemove: string[] = [];
+  for (const m of messages) {
+    if (messages.length - toRemove.length <= MIN_MESSAGES) break;
+    
+    const msgMs = new Date(m.timestamp).getTime();
+    if (msgMs >= cutoffMs) break; // Sorted by time, no more old ones
+    
+    const fullyExtracted = m.p && m.r && m.o && m.f;
+    if (fullyExtracted) {
+      toRemove.push(m.id);
+    }
+  }
+  
+  if (toRemove.length > 0) {
+    state.messages_remove(personaId, toRemove);
+    const persona = state.persona_getById(personaId);
+    console.log(`[ceremony:prune] Removed ${toRemove.length} old messages from ${persona?.display_name ?? personaId}`);
+  }
 }
+
+// =============================================================================
+// EXPIRE PHASE (queues LLM calls)
+// =============================================================================
 
 export function queueExpirePhase(personaId: string, state: StateManager): void {
   const persona = state.persona_getById(personaId);
@@ -256,6 +344,10 @@ export function queueExpirePhase(personaId: string, state: StateManager): void {
     data: { personaId, personaDisplayName: persona.display_name },
   });
 }
+
+// =============================================================================
+// EXPLORE PHASE (queues LLM calls — chained from handlePersonaExpire in handlers)
+// =============================================================================
 
 export function queueExplorePhase(personaId: string, state: StateManager): void {
   const persona = state.persona_getById(personaId);
@@ -336,6 +428,10 @@ export function queueDescriptionCheck(personaId: string, state: StateManager): v
     data: { personaId, personaDisplayName: persona.display_name },
   });
 }
+
+// =============================================================================
+// HUMAN CEREMONY (synchronous — runs during Decay phase)
+// =============================================================================
 
 export function runHumanCeremony(state: StateManager): void {
   console.log("[ceremony:human] Running Human ceremony (decay)...");

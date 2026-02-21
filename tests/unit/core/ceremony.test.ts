@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { 
-  shouldRunCeremony, 
+  shouldStartCeremony, 
   isNewDay, 
   isPastCeremonyTime 
 } from "../../../src/core/orchestrators/ceremony.js";
@@ -59,7 +59,7 @@ describe("Ceremony Trigger Logic", () => {
     });
   });
 
-  describe("shouldRunCeremony", () => {
+  describe("shouldStartCeremony", () => {
     const baseConfig: CeremonyConfig = {
       time: "03:00",
     };
@@ -70,7 +70,7 @@ describe("Ceremony Trigger Logic", () => {
         last_ceremony: "2026-01-28T03:00:00Z" 
       };
       const now = new Date("2026-01-29T04:00:00");
-      expect(shouldRunCeremony(config, now)).toBe(true);
+      expect(shouldStartCeremony(config, now)).toBe(true);
     });
 
     it("returns false when already ran today", () => {
@@ -79,7 +79,7 @@ describe("Ceremony Trigger Logic", () => {
         ...baseConfig, 
         last_ceremony: new Date("2026-01-29T03:00:00").toISOString()
       };
-      expect(shouldRunCeremony(config, now)).toBe(false);
+      expect(shouldStartCeremony(config, now)).toBe(false);
     });
 
     it("returns false when past time but not new day", () => {
@@ -88,7 +88,7 @@ describe("Ceremony Trigger Logic", () => {
         ...baseConfig, 
         last_ceremony: new Date("2026-01-29T03:00:00").toISOString()
       };
-      expect(shouldRunCeremony(config, now)).toBe(false);
+      expect(shouldStartCeremony(config, now)).toBe(false);
     });
 
     it("returns false when new day but not past time yet", () => {
@@ -97,12 +97,12 @@ describe("Ceremony Trigger Logic", () => {
         last_ceremony: "2026-01-28T03:00:00Z" 
       };
       const now = new Date("2026-01-29T02:00:00");
-      expect(shouldRunCeremony(config, now)).toBe(false);
+      expect(shouldStartCeremony(config, now)).toBe(false);
     });
 
     it("returns true on first run (no last_ceremony)", () => {
       const now = new Date("2026-01-29T04:00:00");
-      expect(shouldRunCeremony(baseConfig, now)).toBe(true);
+      expect(shouldStartCeremony(baseConfig, now)).toBe(true);
     });
   });
 });

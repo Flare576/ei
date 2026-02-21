@@ -50,8 +50,6 @@ export enum LLMNextStep {
   HandleEiValidation = "handleEiValidation",
   HandleOneShot = "handleOneShot",
   // Ceremony handlers
-  HandleCeremonyExposure = "handleCeremonyExposure",
-  HandleCeremonyDecayComplete = "handleCeremonyDecayComplete",
   HandlePersonaExpire = "handlePersonaExpire",
   HandlePersonaExplore = "handlePersonaExplore",
   HandleDescriptionCheck = "handleDescriptionCheck",

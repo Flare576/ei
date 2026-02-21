@@ -11,10 +11,10 @@ export {
   type ExtractionOptions,
 } from "./human-extraction.js";
 export { 
-  shouldRunCeremony, 
+  shouldStartCeremony, 
   startCeremony,
-  queueExposurePhase,
-  queueDecayPhase,
+  handleCeremonyProgress,
+  prunePersonaMessages,
   queueExpirePhase,
   queueExplorePhase,
   queueDescriptionCheck,
