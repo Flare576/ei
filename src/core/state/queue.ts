@@ -108,6 +108,10 @@ export class QueueState {
     return this.paused;
   }
 
+  hasPendingCeremonies(): boolean {
+    return this.queue.some(r => r.data.ceremony_progress === true);
+  }
+
   clear(): number {
     const count = this.queue.length;
     this.queue = [];

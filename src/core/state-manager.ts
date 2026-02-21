@@ -300,6 +300,10 @@ export class StateManager {
     return this.queueState.isPaused();
   }
 
+  queue_hasPendingCeremonies(): boolean {
+    return this.queueState.hasPendingCeremonies();
+  }
+
   queue_clear(): number {
     const result = this.queueState.clear();
     this.scheduleSave();
