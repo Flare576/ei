@@ -512,7 +512,6 @@ async function handleHumanFactScan(response: LLMResponse, state: StateManager): 
   const context = extractContext(response, state);
   if (!context) return;
 
-  // TODO: we should de-dupe here - We don't need to process "Flare" 2+ times
   for (const candidate of result.facts) {
     await queueItemMatch("fact", candidate, context, state);
   }

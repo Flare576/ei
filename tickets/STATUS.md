@@ -1,19 +1,19 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-02-21 (0153, 0154, 0155 added)
+> Last updated: 2026-02-21 (0152, 0156 added)
 
 ## Overview
 
 | Status | Count |
 |--------|-------|
-| PENDING | 12 |
+| PENDING | 14 |
 | IN_PROGRESS | 0 |
-| QA | 0 |
+| QA | 1 |
 | DONE | 109 |
 | BLOCKED | 0 |
 | SUPERSEDED | 3 |
 
-> 128 total tickets (109 done + 12 pending + 3 backlog + 0 in_progress + 0 QA + 3 superseded).
+> 130 total tickets (109 done + 14 pending + 3 backlog + 0 in_progress + 1 QA + 3 superseded).
 
 ---
 
@@ -79,11 +79,18 @@
 | 0151 | TUI /settings Command | 0139, 0129 | DONE |
 | 0154 | TUI /context Command | 0100 | PENDING |
 
+### New: OpenCode & Core
+
+| Ticket | Title | Depends On |
+|--------|-------|------------|
+| 0152 | OpenCode Import V2 — Session-Aware Pruning & Ceremony Fix | 0103, 0145 |
+| 0156 | Per-Model Token Limits | 0096 |
+
 ### New: CLI & Web
 
 | Ticket | Title | Depends On |
 |--------|-------|------------|
-| 0153 | CLI Search Signature Redesign | None | QA |
+| 0153 | CLI Search Signature Redesign | None |
 | 0155 | Web Persona Editor — Delete Message Button | 0154 |
 
 ---
