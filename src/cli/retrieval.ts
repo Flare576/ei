@@ -1,8 +1,8 @@
-import type { StorageState } from "../core/types";
+import type { StorageState, Quote, Fact, Trait, Person, Topic } from "../core/types";
 import { join } from "path";
 import { getEmbeddingService, findTopK } from "../core/embedding-service";
 
-const AUTO_SAVES_FILE = "autosaves.json";
+const STATE_FILE = "state.json";
 const EMBEDDING_MIN_SIMILARITY = 0.3;
 
 export function getDataPath(): string {
@@ -15,19 +15,19 @@ export function getDataPath(): string {
 
 export async function loadLatestState(): Promise<StorageState | null> {
   const dataPath = getDataPath();
-  const filePath = join(dataPath, AUTO_SAVES_FILE);
-  
+  const filePath = join(dataPath, STATE_FILE);
+  console.log("Where: " + filePath);
+
   try {
     const file = Bun.file(filePath);
     if (!(await file.exists())) return null;
-    
+
     const text = await file.text();
     if (!text) return null;
-    
-    const autoSaves = JSON.parse(text) as StorageState[];
-    if (autoSaves.length === 0) return null;
-    
-    return autoSaves[autoSaves.length - 1];
+
+    const state = JSON.parse(text) as StorageState;
+    console.log("How Beeg? " + state.human.topics.length);
+    return state;
   } catch {
     return null;
   }
@@ -35,19 +35,18 @@ export async function loadLatestState(): Promise<StorageState | null> {
 
 export async function retrieve<T extends { id: string; embedding?: number[] }>(
   items: T[],
-  snippets: string[],
+  query: string,
   limit: number = 10
 ): Promise<T[]> {
-  if (items.length === 0 || snippets.length === 0) {
+  if (items.length === 0 || !query) {
     return [];
   }
 
-  const queryText = snippets.join(" ");
   const embeddingService = getEmbeddingService();
-  const queryVector = await embeddingService.embed(queryText);
+  const queryVector = await embeddingService.embed(query);
 
   const results = findTopK(queryVector, items, limit);
-  
+
   return results
     .filter(({ similarity }) => similarity >= EMBEDDING_MIN_SIMILARITY)
     .map(({ item }) => item);
@@ -91,4 +90,144 @@ export interface TopicResult {
   description: string;
   category?: string;
   sentiment: number;
+}
+
+export type BalancedResult =
+  | ({ type: "quote" } & QuoteResult)
+  | ({ type: "fact" } & FactResult)
+  | ({ type: "trait" } & TraitResult)
+  | ({ type: "person" } & PersonResult)
+  | ({ type: "topic" } & TopicResult);
+
+const DATA_TYPES = ["quote", "fact", "trait", "person", "topic"] as const;
+type DataType = typeof DATA_TYPES[number];
+
+interface ScoredEntry {
+  type: DataType;
+  similarity: number;
+  mapped: QuoteResult | FactResult | TraitResult | PersonResult | TopicResult;
+  itemId: string;
+}
+
+function mapQuote(quote: Quote, state: StorageState): QuoteResult {
+  const linkedTopics = state.human.topics
+    .filter(t => quote.data_item_ids.includes(t.id))
+    .map(t => t.name);
+  const linkedPeople = state.human.people
+    .filter(p => quote.data_item_ids.includes(p.id))
+    .map(p => p.name);
+  return {
+    id: quote.id,
+    text: quote.text,
+    speaker: quote.speaker,
+    timestamp: quote.timestamp,
+    linked_topics: [...linkedTopics, ...linkedPeople],
+  };
+}
+
+function mapFact(fact: Fact): FactResult {
+  return {
+    id: fact.id,
+    name: fact.name,
+    description: fact.description,
+    sentiment: fact.sentiment,
+    validated: fact.validated,
+  };
+}
+
+function mapTrait(trait: Trait): TraitResult {
+  return {
+    id: trait.id,
+    name: trait.name,
+    description: trait.description,
+    strength: trait.strength ?? 0.5,
+    sentiment: trait.sentiment,
+  };
+}
+
+function mapPerson(person: Person): PersonResult {
+  return {
+    id: person.id,
+    name: person.name,
+    description: person.description,
+    relationship: person.relationship,
+    sentiment: person.sentiment,
+  };
+}
+
+function mapTopic(topic: Topic): TopicResult {
+  return {
+    id: topic.id,
+    name: topic.name,
+    description: topic.description,
+    category: topic.category,
+    sentiment: topic.sentiment,
+  };
+}
+
+export async function retrieveBalanced(
+  query: string,
+  limit: number = 10
+): Promise<BalancedResult[]> {
+  const state = await loadLatestState();
+  if (!state) {
+    console.error("No saved state found. Is EI_DATA_PATH set correctly?");
+    return [];
+  }
+
+  const embeddingService = getEmbeddingService();
+  const queryVector = await embeddingService.embed(query);
+
+  const allScored: ScoredEntry[] = [];
+
+  const typeConfigs: Array<{
+    type: DataType;
+    items: Array<{ id: string; embedding?: number[] }>;
+    mapper: (item: any) => any;
+  }> = [
+    { type: "quote", items: state.human.quotes, mapper: (q: Quote) => mapQuote(q, state) },
+    { type: "fact", items: state.human.facts, mapper: mapFact },
+    { type: "trait", items: state.human.traits, mapper: mapTrait },
+    { type: "person", items: state.human.people, mapper: mapPerson },
+    { type: "topic", items: state.human.topics, mapper: mapTopic },
+  ];
+
+  for (const { type, items, mapper } of typeConfigs) {
+    const scored = findTopK(queryVector, items, items.length);
+    for (const { item, similarity } of scored) {
+      if (similarity >= EMBEDDING_MIN_SIMILARITY) {
+        allScored.push({ type, similarity, mapped: mapper(item), itemId: item.id });
+      }
+    }
+  }
+
+  const result: ScoredEntry[] = [];
+  const used = new Set<string>();
+
+  // Floor: at least 1 result per type (if available and meets threshold)
+  for (const type of DATA_TYPES) {
+    if (result.length >= limit) break;
+    const best = allScored
+      .filter(r => r.type === type && !used.has(r.itemId))
+      .sort((a, b) => b.similarity - a.similarity)[0];
+    if (best) {
+      result.push(best);
+      used.add(best.itemId);
+    }
+  }
+
+  // Fill remaining slots with highest-similarity results across all types
+  const remaining = allScored
+    .filter(r => !used.has(r.itemId))
+    .sort((a, b) => b.similarity - a.similarity);
+
+  for (const entry of remaining) {
+    if (result.length >= limit) break;
+    result.push(entry);
+    used.add(entry.itemId);
+  }
+
+  result.sort((a, b) => b.similarity - a.similarity);
+
+  return result.map(({ type, mapped }) => ({ type, ...mapped }) as BalancedResult);
 }
