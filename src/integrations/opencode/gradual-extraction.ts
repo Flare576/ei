@@ -54,7 +54,7 @@ export function processGradualExtraction(stateManager: StateManager): GradualExt
     return result;
   }
 
-  const options: ExtractionOptions = { include_quotes: false };
+  const options: ExtractionOptions = {};
 
   for (const persona of openCodePersonas) {
     if (!persona.id) continue;
@@ -82,7 +82,6 @@ export function processGradualExtraction(stateManager: StateManager): GradualExt
         personaDisplayName: persona.display_name,
         messages_context: contextMessages,
         messages_analyze: unextractedFacts,
-        include_quotes: false,
         extraction_flag: "f",
       };
       queueFactScan(context, stateManager, options);
@@ -96,7 +95,6 @@ export function processGradualExtraction(stateManager: StateManager): GradualExt
         personaDisplayName: persona.display_name,
         messages_context: contextMessages,
         messages_analyze: unextractedTraits,
-        include_quotes: false,
         extraction_flag: "r",
       };
       queueTraitScan(context, stateManager, options);
@@ -110,7 +108,6 @@ export function processGradualExtraction(stateManager: StateManager): GradualExt
         personaDisplayName: persona.display_name,
         messages_context: contextMessages,
         messages_analyze: unextractedPeople,
-        include_quotes: false,
         extraction_flag: "o",
       };
       queuePersonScan(context, stateManager, options);
@@ -124,7 +121,6 @@ export function processGradualExtraction(stateManager: StateManager): GradualExt
         personaDisplayName: persona.display_name,
         messages_context: contextMessages,
         messages_analyze: unextractedTopics,
-        include_quotes: false,
         extraction_flag: "p",
       };
       queueTopicScan(context, stateManager, options);

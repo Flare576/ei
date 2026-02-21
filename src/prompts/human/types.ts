@@ -85,7 +85,6 @@ export interface ItemUpdatePromptData {
   persona_name: string;
   new_item_name?: string;
   new_item_value?: string;
-  include_quotes?: boolean;  // Default true; set false to skip quote extraction
 }
 
 export type ExposureImpact = "high" | "medium" | "low" | "none";
