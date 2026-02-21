@@ -1,19 +1,19 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-02-18 (0151 TUI /settings Command DONE)
+> Last updated: 2026-02-21 (0153, 0154, 0155 added)
 
 ## Overview
 
 | Status | Count |
 |--------|-------|
-| PENDING | 9 |
+| PENDING | 12 |
 | IN_PROGRESS | 0 |
 | QA | 0 |
 | DONE | 109 |
 | BLOCKED | 0 |
 | SUPERSEDED | 3 |
 
-> 125 total tickets (109 done + 9 pending + 3 backlog + 0 in_progress + 0 QA + 3 superseded).
+> 128 total tickets (109 done + 12 pending + 3 backlog + 0 in_progress + 0 QA + 3 superseded).
 
 ---
 
@@ -77,6 +77,14 @@
 | 0149 | TUI Markdown Rendering | 0100 | DONE |
 | 0150 | TUI /quotes Command | 0100, 0116 | DONE |
 | 0151 | TUI /settings Command | 0139, 0129 | DONE |
+| 0154 | TUI /context Command | 0100 | PENDING |
+
+### New: CLI & Web
+
+| Ticket | Title | Depends On |
+|--------|-------|------------|
+| 0153 | CLI Search Signature Redesign | None | QA |
+| 0155 | Web Persona Editor — Delete Message Button | 0154 |
 
 ---
 
@@ -88,7 +96,9 @@
 
 ## QA
 
-(none)
+| Ticket | Title | Notes |
+|--------|-------|-------|
+| 0153 | CLI Search Signature Redesign | All acceptance criteria met |
 
 ---
 
