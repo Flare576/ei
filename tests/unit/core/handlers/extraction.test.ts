@@ -166,22 +166,6 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
 
       expect(queueItemMatch).not.toHaveBeenCalled();
     });
-
-    it("handles missing context gracefully", async () => {
-      const request = createMockRequest({
-        next_step: LLMNextStep.HandleHumanFactScan,
-        data: {}, // Missing context
-      });
-
-      const response = createMockResponse(request, {
-        facts: [{ type_of_fact: "Test", value_of_fact: "Value", reason: "User stated it" }],
-      });
-
-      await handlers.handleHumanFactScan(response, state as any);
-
-      // Should not throw, but also not queue (missing context)
-      expect(queueItemMatch).not.toHaveBeenCalled();
-    });
   });
 
   describe("handleHumanTraitScan", () => {

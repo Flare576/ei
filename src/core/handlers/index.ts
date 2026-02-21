@@ -350,14 +350,6 @@ function handleOneShot(_response: LLMResponse, _state: StateManager): void {
   // This handler is a no-op placeholder
 }
 
-function handleCeremonyExposure(_response: LLMResponse, _state: StateManager): void {
-  console.log("[handleCeremonyExposure] No-op - exposure is handled synchronously in orchestrator");
-}
-
-function handleCeremonyDecayComplete(_response: LLMResponse, _state: StateManager): void {
-  console.log("[handleCeremonyDecayComplete] No-op - decay is handled synchronously in orchestrator");
-}
-
 function handlePersonaExpire(response: LLMResponse, state: StateManager): void {
   const personaId = response.request.data.personaId as string;
   const personaDisplayName = response.request.data.personaDisplayName as string;
@@ -509,7 +501,7 @@ async function handleHumanFactScan(response: LLMResponse, state: StateManager): 
     return;
   }
 
-  const context = extractContext(response, state);
+  const context = response.request.data;
   if (!context) return;
 
   for (const candidate of result.facts) {
@@ -528,7 +520,7 @@ async function handleHumanTraitScan(response: LLMResponse, state: StateManager):
     return;
   }
 
-  const context = extractContext(response, state);
+  const context = response.request.data;
   if (!context) return;
 
   for (const candidate of result.traits) {
@@ -547,7 +539,7 @@ async function handleHumanTopicScan(response: LLMResponse, state: StateManager):
     return;
   }
 
-  const context = extractContext(response, state);
+  const context = response.request.data;
   if (!context) return;
 
   for (const candidate of result.topics) {
@@ -566,7 +558,7 @@ async function handleHumanPersonScan(response: LLMResponse, state: StateManager)
     return;
   }
 
-  const context = extractContext(response, state);
+  const context = response.request.data;
   if (!context) return;
 
   for (const candidate of result.people) {
@@ -592,7 +584,6 @@ function handleHumanItemMatch(response: LLMResponse, state: StateManager): void 
   const personaId = response.request.data.personaId as string;
   const personaDisplayName = response.request.data.personaDisplayName as string;
   const analyzeFrom = response.request.data.analyze_from_timestamp as string | null;
-  const includeQuotes = response.request.data.include_quotes as boolean | undefined;
   
   const allMessages = state.messages_get(personaId);
   const { messages_context, messages_analyze } = splitMessagesByTimestamp(allMessages, analyzeFrom);
@@ -614,7 +605,6 @@ function handleHumanItemMatch(response: LLMResponse, state: StateManager): void 
     itemName,
     itemValue,
     itemCategory: candidateType === "topic" ? itemValue : undefined,
-    include_quotes: includeQuotes,
   };
 
   queueItemUpdate(candidateType, result, context, state);
@@ -820,23 +810,6 @@ async function validateAndStoreQuotes(
       console.log(`[extraction] Quote not found in messages, skipping: "${candidate.text?.slice(0, 50)}..."`);
     }
   }
-}
-
-function extractContext(response: LLMResponse, state: StateManager): ExtractionContext | null {
-  const personaId = response.request.data.personaId as string;
-  const personaDisplayName = response.request.data.personaDisplayName as string;
-  const analyzeFrom = response.request.data.analyze_from_timestamp as string | null;
-  const includeQuotes = response.request.data.include_quotes as boolean | undefined;
-
-  if (!personaId) {
-    console.error("[extractContext] Missing personaId in request data");
-    return null;
-  }
-
-  const allMessages = state.messages_get(personaId);
-  const { messages_context, messages_analyze } = splitMessagesByTimestamp(allMessages, analyzeFrom);
-
-  return { personaId, personaDisplayName, messages_context, messages_analyze, include_quotes: includeQuotes };
 }
 
 function calculateExposureCurrent(impact: ExposureImpact | undefined): number {
@@ -1078,8 +1051,6 @@ export const handlers: Record<LLMNextStep, ResponseHandler> = {
   handleEiHeartbeat,
   handleEiValidation,
   handleOneShot,
-  handleCeremonyExposure,
-  handleCeremonyDecayComplete,
   handlePersonaExpire,
   handlePersonaExplore,
   handleDescriptionCheck,

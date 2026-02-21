@@ -142,7 +142,6 @@ describe("Scan Orchestrators (Step 1)", () => {
           personaDisplayName: "Ei",
           analyze_from_timestamp: context.messages_analyze[0].timestamp,
           extraction_flag: undefined,
-          include_quotes: undefined,
           message_ids_to_mark: ["2"],
         },
       });
@@ -232,6 +231,7 @@ describe("queueItemMatch (Step 2)", () => {
       messages_context: [createMessage("1", "context")],
       messages_analyze: [createMessage("2", "analyze")],
     };
+    context.analyze_from_timestamp = context.messages_analyze[0].timestamp;
     vi.clearAllMocks();
   });
 
@@ -518,6 +518,7 @@ describe("Extraction Pipeline Integration", () => {
       messages_context: [createMessage("ctx1", "Earlier conversation")],
       messages_analyze: [createMessage("analyze1", "I live in Chicago")],
     };
+    context.analyze_from_timestamp = context.messages_analyze[0].timestamp;
 
     queueFactScan(context, state as any);
 

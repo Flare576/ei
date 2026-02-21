@@ -23,12 +23,11 @@ export interface ExtractionContext {
   personaDisplayName: string;
   messages_context: Message[];
   messages_analyze: Message[];
-  include_quotes?: boolean;
   extraction_flag?: "f" | "r" | "p" | "o";
 }
 
 export interface ExtractionOptions {
-  include_quotes?: boolean;
+  ceremony_progress?: boolean;
 }
 
 function getAnalyzeFromTimestamp(context: ExtractionContext): string | null {
@@ -55,10 +54,10 @@ export function queueFactScan(context: ExtractionContext, state: StateManager, o
       user: prompt.user,
       next_step: LLMNextStep.HandleHumanFactScan,
       data: {
+        ...options,
         personaId: chunk.personaId,
         personaDisplayName: chunk.personaDisplayName,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
-        include_quotes: options?.include_quotes,
         extraction_flag: context.extraction_flag,
         message_ids_to_mark: chunk.messages_analyze.map(m => m.id),
       },
@@ -87,10 +86,10 @@ export function queueTraitScan(context: ExtractionContext, state: StateManager, 
       user: prompt.user,
       next_step: LLMNextStep.HandleHumanTraitScan,
       data: {
+        ...options,
         personaId: chunk.personaId,
         personaDisplayName: chunk.personaDisplayName,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
-        include_quotes: options?.include_quotes,
         extraction_flag: context.extraction_flag,
         message_ids_to_mark: chunk.messages_analyze.map(m => m.id),
       },
@@ -119,10 +118,10 @@ export function queueTopicScan(context: ExtractionContext, state: StateManager, 
       user: prompt.user,
       next_step: LLMNextStep.HandleHumanTopicScan,
       data: {
+        ...options,
         personaId: chunk.personaId,
         personaDisplayName: chunk.personaDisplayName,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
-        include_quotes: options?.include_quotes,
         extraction_flag: context.extraction_flag,
         message_ids_to_mark: chunk.messages_analyze.map(m => m.id),
       },
@@ -155,10 +154,10 @@ export function queuePersonScan(context: ExtractionContext, state: StateManager,
       user: prompt.user,
       next_step: LLMNextStep.HandleHumanPersonScan,
       data: {
+        ...options,
         personaId: chunk.personaId,
         personaDisplayName: chunk.personaDisplayName,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
-        include_quotes: options?.include_quotes,
         extraction_flag: context.extraction_flag,
         message_ids_to_mark: chunk.messages_analyze.map(m => m.id),
       },
@@ -360,6 +359,8 @@ export async function queueItemMatch(
     all_items: topKItems,
   });
 
+
+
   state.queue_enqueue({
     type: LLMRequestType.JSON,
     priority: LLMPriority.Low,
@@ -367,13 +368,10 @@ export async function queueItemMatch(
     user: prompt.user,
     next_step: LLMNextStep.HandleHumanItemMatch,
     data: {
-      personaId: context.personaId,
-      personaDisplayName: context.personaDisplayName,
+      ...context,
       candidateType: dataType,
       itemName,
       itemValue,
-      analyze_from_timestamp: getAnalyzeFromTimestamp(context),
-      include_quotes: context.include_quotes,
     },
   });
 }
@@ -424,7 +422,6 @@ export function queueItemUpdate(
       persona_name: chunk.personaDisplayName,
       new_item_name: isNewItem ? context.itemName : undefined,
       new_item_value: isNewItem ? context.itemValue : undefined,
-      include_quotes: context.include_quotes,
     });
 
     state.queue_enqueue({
