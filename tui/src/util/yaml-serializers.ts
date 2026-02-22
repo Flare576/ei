@@ -10,6 +10,8 @@ import type {
   Topic, 
   Person,
   PersonaTopic,
+  ProviderAccount,
+  ProviderType,
   Quote,
 } from "../../../src/core/types.js";
 
@@ -494,6 +496,36 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
   };
 }
 
+
+/**
+ * Validate that a model spec (e.g. "Anthropic:sonnet") references a real provider.
+ * Case-insensitive match — auto-corrects casing to the actual provider name.
+ * Throws if no matching provider found (caller's catch triggers re-edit).
+ */
+export function validateModelProvider(
+  modelSpec: string | undefined,
+  accounts: ProviderAccount[]
+): string | undefined {
+  if (!modelSpec) return undefined;
+  
+  const colonIdx = modelSpec.indexOf(":");
+  const providerPart = colonIdx >= 0 ? modelSpec.substring(0, colonIdx) : modelSpec;
+  const modelPart = colonIdx >= 0 ? modelSpec.substring(colonIdx + 1) : undefined;
+  
+  const match = accounts.find(a => a.name.toLowerCase() === providerPart.toLowerCase());
+  
+  if (!match) {
+    const available = accounts.map(a => a.name).join(", ");
+    throw new Error(
+      available
+        ? `No provider named "${providerPart}". Available: ${available}`
+        : `No provider named "${providerPart}". Create one with /provider new`
+    );
+  }
+  
+  return modelPart ? `${match.name}:${modelPart}` : match.name;
+}
+
 // =============================================================================
 // QUOTE SERIALIZATION
 // =============================================================================
@@ -542,5 +574,122 @@ export function quotesFromYAML(yamlContent: string): QuotesYAMLResult {
   return {
     quotes,
     deletedQuoteIds,
+  };
+}
+
+
+// =============================================================================
+// PROVIDER ACCOUNT SERIALIZATION
+// =============================================================================
+
+interface EditableProviderData {
+  name: string;
+  type: "llm" | "storage";
+  url: string;
+  api_key?: string;
+  default_model?: string;
+  extra_headers?: Record<string, string>;
+  enabled?: boolean;
+}
+
+
+function resolveEnvVar(value: string | undefined): string | undefined {
+  if (!value || !value.startsWith("$")) return value;
+  const varName = value.slice(1);
+  return process.env[varName] || value;
+}
+const PLACEHOLDER_PROVIDER: EditableProviderData = {
+  name: "My Provider",
+  type: "llm",
+  url: "https://api.example.com/v1",
+  api_key: "your-api-key-or-$ENVAR",
+  default_model: "model-name",
+  extra_headers: {},
+  enabled: true,
+};
+
+/**
+ * Generate YAML template for a NEW provider account
+ */
+export function newProviderToYAML(): string {
+  return YAML.stringify(PLACEHOLDER_PROVIDER, {
+    lineWidth: 0,
+  });
+}
+
+/**
+ * Parse YAML for a NEW provider account
+ */
+export function newProviderFromYAML(yamlContent: string): ProviderAccount {
+  const data = YAML.parse(yamlContent) as EditableProviderData;
+  
+  if (!data.name || data.name === PLACEHOLDER_PROVIDER.name) {
+    throw new Error("Provider name is required");
+  }
+  if (!data.url || data.url === PLACEHOLDER_PROVIDER.url) {
+    throw new Error("Provider URL is required");
+  }
+  if (data.api_key === PLACEHOLDER_PROVIDER.api_key) {
+    data.api_key = undefined;
+  }
+  if (data.default_model === PLACEHOLDER_PROVIDER.default_model) {
+    data.default_model = undefined;
+  }
+  
+  return {
+    id: crypto.randomUUID(),
+    name: data.name,
+    type: (data.type === "storage" ? "storage" : "llm") as ProviderType,
+    url: data.url,
+    api_key: resolveEnvVar(data.api_key),
+    default_model: data.default_model,
+    extra_headers: data.extra_headers && Object.keys(data.extra_headers).length > 0 ? data.extra_headers : undefined,
+    enabled: data.enabled ?? true,
+    created_at: new Date().toISOString(),
+  };
+}
+
+/**
+ * Serialize existing provider account to YAML for editing
+ */
+export function providerToYAML(account: ProviderAccount): string {
+  const data: EditableProviderData = {
+    name: account.name,
+    type: account.type as "llm" | "storage",
+    url: account.url,
+    api_key: account.api_key,
+    default_model: account.default_model,
+    extra_headers: account.extra_headers,
+    enabled: account.enabled ?? true,
+  };
+  
+  return YAML.stringify(data, {
+    lineWidth: 0,
+  });
+}
+
+/**
+ * Parse YAML for an existing provider account (preserves id and created_at)
+ */
+export function providerFromYAML(yamlContent: string, original: ProviderAccount): ProviderAccount {
+  const data = YAML.parse(yamlContent) as EditableProviderData;
+  
+  if (!data.name) {
+    throw new Error("Provider name is required");
+  }
+  if (!data.url) {
+    throw new Error("Provider URL is required");
+  }
+  
+  return {
+    id: original.id,
+    name: data.name,
+    type: (data.type === "storage" ? "storage" : "llm") as ProviderType,
+    url: data.url,
+    api_key: resolveEnvVar(data.api_key),
+    default_model: data.default_model,
+    extra_headers: data.extra_headers && Object.keys(data.extra_headers).length > 0 ? data.extra_headers : undefined,
+    enabled: data.enabled ?? true,
+    created_at: original.created_at,
   };
 }

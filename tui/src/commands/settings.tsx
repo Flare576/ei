@@ -1,6 +1,6 @@
 import type { Command } from "./registry.js";
 import { spawnEditor } from "../util/editor.js";
-import { settingsToYAML, settingsFromYAML } from "../util/yaml-serializers.js";
+import { settingsToYAML, settingsFromYAML, validateModelProvider } from "../util/yaml-serializers.js";
 import { logger } from "../util/logger.js";
 import { ConfirmOverlay } from "../components/ConfirmOverlay.js";
 
@@ -42,6 +42,9 @@ export const settingsCommand: Command = {
       
       try {
         const newSettings = settingsFromYAML(result.content, human.settings);
+        // Validate provider name in default_model (case-insensitive match + auto-correct)
+        const llmAccounts = human.settings?.accounts?.filter(a => a.type === "llm") ?? [];
+        newSettings.default_model = validateModelProvider(newSettings.default_model, llmAccounts);
         await ctx.ei.updateSettings(newSettings);
         ctx.showNotification("Settings updated", "info");
         return;

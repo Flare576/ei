@@ -1,5 +1,5 @@
 import { spawnEditor } from "./editor.js";
-import { personaToYAML, personaFromYAML, newPersonaToYAML, newPersonaFromYAML } from "./yaml-serializers.js";
+import { personaToYAML, personaFromYAML, newPersonaToYAML, newPersonaFromYAML, validateModelProvider } from "./yaml-serializers.js";
 import type { CommandContext } from "../commands/registry.js";
 import type { PersonaEntity } from "../../../src/core/types.js";
 import { logger } from "./logger.js";
@@ -56,6 +56,10 @@ export async function createPersonaViaEditor(options: NewPersonaEditorOptions): 
     
     try {
       const parsed = newPersonaFromYAML(result.content);
+      // Validate provider name in model (case-insensitive match + auto-correct)
+      const human = await ctx.ei.getHuman();
+      const llmAccounts = human.settings?.accounts?.filter(a => a.type === "llm") ?? [];
+      parsed.model = validateModelProvider(parsed.model, llmAccounts);
       
       const personaId = await ctx.ei.createPersona({ 
         name: personaName,
@@ -132,6 +136,10 @@ export async function openPersonaEditor(options: PersonaEditorOptions): Promise<
     
     try {
       const parsed = personaFromYAML(result.content, persona);
+      // Validate provider name in model (case-insensitive match + auto-correct)
+      const human = await ctx.ei.getHuman();
+      const llmAccounts = human.settings?.accounts?.filter(a => a.type === "llm") ?? [];
+      parsed.updates.model = validateModelProvider(parsed.updates.model, llmAccounts);
       
       await ctx.ei.updatePersona(personaId, parsed.updates);
       
