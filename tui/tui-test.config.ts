@@ -7,7 +7,7 @@ export default defineConfig({
     timeout: 10000,
   },
   retries: 1,
-  workers: 1,
+  workers: 4,
   trace: true,
   traceFolder: "tui-traces",
 });

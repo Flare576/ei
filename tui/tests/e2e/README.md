@@ -27,13 +27,12 @@ tui-test spawns the terminal BEFORE test callbacks run. All setup must happen at
 const mockServer = new MockLLMServerImpl();
 await mockServer.start(PORT);
 mockServer.setResponseForType("response", { type: "fixed", content: "..." });
-
-// Seed checkpoint data
-writeFileSync(autosavesPath, JSON.stringify([checkpoint]));
-
+// Seed checkpoint data (settings must include provider account pointing at mock server)
+const checkpoint = createCheckpointWithTwoPersonas(`http://127.0.0.1:${PORT}/v1`);
+writeFileSync(statePath, JSON.stringify(checkpoint));
 test.use({
   program: { file: BUN_PATH, args: ["run", "dev"] },
-  env: { EI_LLM_BASE_URL: `http://127.0.0.1:${PORT}/v1` }
+  env: { EI_DATA_PATH: TEST_DATA_PATH }
 });
 
 // ❌ WRONG - terminal already spawned, too late
@@ -91,22 +90,23 @@ Override with `mockServer.setResponseForType(type, config)`.
 
 ```
 tui/tests/e2e/
-├── slash-commands.test.ts   # /help, /quit, Ctrl+B (port 3097)
-├── chat-flow.test.ts        # Send/receive messages (port 3098)
-├── error-handling.test.ts   # LLM error scenarios (port 3099)
-├── persona-switching.test.ts # /persona, /archive, Tab (port 3100)
-├── basic-commands.test.ts   # /new, /pause, /resume, /model (port 3101)
-├── context-boundary.test.ts # /new divider behavior with messages (port 3102)
-├── delete-command.test.ts   # /delete persona deletion with confirmation (port 3103)
-├── me-command.test.ts       # /me human entity editing (port 3105)
-├── quotes-command.test.ts   # /quotes quote management and overlay (port 3106)
-├── fixtures.ts              # Shared test utilities and checkpoint factory
+├── slash-commands.test.ts       # /help, /quit, Ctrl+B (port 3097)
+├── chat-flow.test.ts            # Send/receive messages (port 3098)
+├── error-handling.test.ts       # LLM error scenarios (port 3099)
+├── persona-switching.test.ts    # /persona, /archive, Tab (port 3100)
+├── basic-commands.test.ts       # /new, /pause, /resume, /model (port 3101)
+├── context-boundary.test.ts     # /new divider behavior with messages (port 3102)
+├── delete-command.test.ts       # /delete persona deletion with confirmation (port 3103)
+├── me-command.test.ts           # /me human entity editing (port 3105)
+├── quotes-command.test.ts       # /quotes quote management and overlay (port 3106)
+├── provider-command.test.ts     # /provider overlay, direct set, /model inference (port 3107)
+├── provider-editor.test.ts      # /provider new via $EDITOR (port 3108)
+├── fixtures.ts                  # Shared test utilities and checkpoint factory
 ├── framework/
-│   └── mock-server.ts       # Re-export shim (see file for why)
-├── types.ts                 # TypeScript interfaces
+│   └── mock-server.ts           # Re-export shim (see file for why)
+├── types.ts                     # TypeScript interfaces
 └── README.md                # This file
-
-tests/e2e/framework/         # Canonical mock server (used by both web and TUI)
+tests/e2e/framework/             # Canonical mock server (used by both web and TUI)
 └── mock-server.ts
 ```
 
