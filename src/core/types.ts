@@ -252,6 +252,10 @@ export interface PersonaCreationInput {
   groups_visible?: string[];
 }
 
+// Message pruning thresholds (shared by ceremony and import)
+export const MESSAGE_MIN_COUNT = 200;
+export const MESSAGE_MAX_AGE_DAYS = 14;
+
 // Reserved persona names (command keywords that conflict with /persona subcommands)
 export const RESERVED_PERSONA_NAMES = ["new", "clone"] as const;
 export type ReservedPersonaName = typeof RESERVED_PERSONA_NAMES[number];

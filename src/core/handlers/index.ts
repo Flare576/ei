@@ -501,8 +501,8 @@ async function handleHumanFactScan(response: LLMResponse, state: StateManager): 
     return;
   }
 
-  const context = response.request.data;
-  if (!context) return;
+  const context = response.request.data as unknown as ExtractionContext;
+  if (!context?.personaId) return;
 
   for (const candidate of result.facts) {
     await queueItemMatch("fact", candidate, context, state);
@@ -520,8 +520,8 @@ async function handleHumanTraitScan(response: LLMResponse, state: StateManager):
     return;
   }
 
-  const context = response.request.data;
-  if (!context) return;
+  const context = response.request.data as unknown as ExtractionContext;
+  if (!context?.personaId) return;
 
   for (const candidate of result.traits) {
     await queueItemMatch("trait", candidate, context, state);
@@ -539,8 +539,8 @@ async function handleHumanTopicScan(response: LLMResponse, state: StateManager):
     return;
   }
 
-  const context = response.request.data;
-  if (!context) return;
+  const context = response.request.data as unknown as ExtractionContext;
+  if (!context?.personaId) return;
 
   for (const candidate of result.topics) {
     await queueItemMatch("topic", candidate, context, state);
@@ -558,8 +558,8 @@ async function handleHumanPersonScan(response: LLMResponse, state: StateManager)
     return;
   }
 
-  const context = response.request.data;
-  if (!context) return;
+  const context = response.request.data as unknown as ExtractionContext;
+  if (!context?.personaId) return;
 
   for (const candidate of result.people) {
     await queueItemMatch("person", candidate, context, state);

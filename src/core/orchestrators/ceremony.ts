@@ -1,4 +1,4 @@
-import { LLMRequestType, LLMPriority, LLMNextStep, type CeremonyConfig, type PersonaTopic, type Topic } from "../types.js";
+import { LLMRequestType, LLMPriority, LLMNextStep, MESSAGE_MIN_COUNT, MESSAGE_MAX_AGE_DAYS, type CeremonyConfig, type PersonaTopic, type Topic } from "../types.js";
 import type { StateManager } from "../state-manager.js";
 import { applyDecayToValue } from "../utils/decay.js";
 import {
@@ -11,9 +11,6 @@ import {
 } from "./human-extraction.js";
 import { queuePersonaTopicScan, type PersonaTopicContext } from "./persona-topics.js";
 import { buildPersonaExpirePrompt, buildPersonaExplorePrompt, buildDescriptionCheckPrompt } from "../../prompts/ceremony/index.js";
-
-const MIN_MESSAGES = 200;
-const MAX_AGE_DAYS = 14;
 
 export function isNewDay(lastCeremony: string | undefined, now: Date): boolean {
   if (!lastCeremony) return true;
@@ -211,7 +208,7 @@ export function handleCeremonyProgress(state: StateManager): void {
   
   // Ei's topics don't change
   if (eiIndex > -1) {
-    const ei = activePersonas.splice(eiIndex, 1)[0];
+    activePersonas.splice(eiIndex, 1);
   }
   
   // Decay phase: apply decay + prune for ALL active personas
@@ -286,14 +283,14 @@ function applyDecayPhase(personaId: string, state: StateManager): void {
 
 export function prunePersonaMessages(personaId: string, state: StateManager): void {
   const messages = state.messages_get(personaId);
-  if (messages.length <= MIN_MESSAGES) return;
+  if (messages.length <= MESSAGE_MIN_COUNT) return;
   
-  const cutoffMs = Date.now() - (MAX_AGE_DAYS * 24 * 60 * 60 * 1000);
+  const cutoffMs = Date.now() - (MESSAGE_MAX_AGE_DAYS * 24 * 60 * 60 * 1000);
   
   // Messages are sorted by timestamp (oldest first from messages_sort)
   const toRemove: string[] = [];
   for (const m of messages) {
-    if (messages.length - toRemove.length <= MIN_MESSAGES) break;
+    if (messages.length - toRemove.length <= MESSAGE_MIN_COUNT) break;
     
     const msgMs = new Date(m.timestamp).getTime();
     if (msgMs >= cutoffMs) break; // Sorted by time, no more old ones

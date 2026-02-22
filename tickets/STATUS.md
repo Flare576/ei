@@ -1,6 +1,6 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-02-21 (0152, 0156 added)
+> Last updated: 2026-02-21 (0152 DONE, 0157 added)
 
 ## Overview
 
@@ -9,11 +9,11 @@
 | PENDING | 14 |
 | IN_PROGRESS | 0 |
 | QA | 1 |
-| DONE | 109 |
+| DONE | 110 |
 | BLOCKED | 0 |
 | SUPERSEDED | 3 |
 
-> 130 total tickets (109 done + 14 pending + 3 backlog + 0 in_progress + 1 QA + 3 superseded).
+> 131 total tickets (110 done + 14 pending + 3 backlog + 0 in_progress + 1 QA + 3 superseded).
 
 ---
 
@@ -83,7 +83,7 @@
 
 | Ticket | Title | Depends On |
 |--------|-------|------------|
-| 0152 | OpenCode Import V2 — Session-Aware Pruning & Ceremony Fix | 0103, 0145 |
+| 0157 | OpenCode Import V2 — Session-Aware Pruning & Archive Extraction | 0103, 0145, 0152 |
 | 0156 | Per-Model Token Limits | 0096 |
 
 ### New: CLI & Web
@@ -230,6 +230,7 @@
 | 0145 | OpenCode 1.2 SQLite Integration | 2026-02-17 |
 | 0129 | Settings Menu Redesign (Web) | 2026-02-18 |
 | 0151 | TUI /settings Command | 2026-02-18 |
+| 0152 | OpenCode Import V2 — Ceremony Fix & Pruning | 2026-02-21 |
 
 ---
 
