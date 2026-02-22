@@ -16,6 +16,7 @@
  */
 export interface IOpenCodeReader {
   getSessionsUpdatedSince(since: Date): Promise<OpenCodeSession[]>;
+  getSessionsInRange(from: Date, to: Date): Promise<OpenCodeSession[]>;
   getMessagesForSession(sessionId: string, since?: Date): Promise<OpenCodeMessage[]>;
   getAgentInfo(agentName: string): Promise<OpenCodeAgent | null>;
   getAllUniqueAgents(sessionId: string): Promise<string[]>;

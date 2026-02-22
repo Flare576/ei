@@ -112,6 +112,58 @@ export class JsonReader implements IOpenCodeReader {
     return sessions.sort((a, b) => b.time.updated - a.time.updated);
   }
 
+  async getSessionsInRange(from: Date, to: Date): Promise<OpenCodeSession[]> {
+    if (!(await this.init())) return [];
+
+    const fromMs = from.getTime();
+    const toMs = to.getTime();
+    const sessions: OpenCodeSession[] = [];
+    const sessionDir = _join(this.storagePath!, "session");
+
+    let projectDirs: string[];
+    try {
+      projectDirs = await _readdir(sessionDir);
+    } catch {
+      return [];
+    }
+
+    for (const projectHash of projectDirs) {
+      if (projectHash.startsWith(".")) continue;
+
+      const projectPath = _join(sessionDir, projectHash);
+      let sessionFiles: string[];
+      try {
+        sessionFiles = await _readdir(projectPath);
+      } catch {
+        continue;
+      }
+
+      for (const fileName of sessionFiles) {
+        if (!fileName.endsWith(".json")) continue;
+
+        const filePath = _join(projectPath, fileName);
+        const raw = await this.readJsonFile<OpenCodeSessionRaw>(filePath);
+        if (!raw) continue;
+
+        if (raw.time.updated > fromMs && raw.time.updated <= toMs && !raw.parentID) {
+          sessions.push({
+            id: raw.id,
+            title: raw.title,
+            directory: raw.directory,
+            projectId: raw.projectID,
+            parentId: raw.parentID,
+            time: {
+              created: raw.time.created,
+              updated: raw.time.updated,
+            },
+          });
+        }
+      }
+    }
+
+    return sessions.sort((a, b) => a.time.updated - b.time.updated);
+  }
+
   async getMessagesForSession(
     sessionId: string,
     since?: Date

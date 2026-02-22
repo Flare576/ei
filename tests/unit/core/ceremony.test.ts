@@ -9,6 +9,9 @@ import {
   applyDecayToValue 
 } from "../../../src/core/utils/decay.js";
 import type { CeremonyConfig } from "../../../src/core/types.js";
+import type { StateManager } from "../../../src/core/state-manager.js";
+
+const mockState = (queueLength = 0) => ({ queue_length: () => queueLength }) as unknown as StateManager;
 
 describe("Ceremony Trigger Logic", () => {
   describe("isNewDay", () => {
@@ -70,7 +73,7 @@ describe("Ceremony Trigger Logic", () => {
         last_ceremony: "2026-01-28T03:00:00Z" 
       };
       const now = new Date("2026-01-29T04:00:00");
-      expect(shouldStartCeremony(config, now)).toBe(true);
+      expect(shouldStartCeremony(config, mockState(), now)).toBe(true);
     });
 
     it("returns false when already ran today", () => {
@@ -79,7 +82,7 @@ describe("Ceremony Trigger Logic", () => {
         ...baseConfig, 
         last_ceremony: new Date("2026-01-29T03:00:00").toISOString()
       };
-      expect(shouldStartCeremony(config, now)).toBe(false);
+      expect(shouldStartCeremony(config, mockState(), now)).toBe(false);
     });
 
     it("returns false when past time but not new day", () => {
@@ -88,7 +91,7 @@ describe("Ceremony Trigger Logic", () => {
         ...baseConfig, 
         last_ceremony: new Date("2026-01-29T03:00:00").toISOString()
       };
-      expect(shouldStartCeremony(config, now)).toBe(false);
+      expect(shouldStartCeremony(config, mockState(), now)).toBe(false);
     });
 
     it("returns false when new day but not past time yet", () => {
@@ -97,12 +100,21 @@ describe("Ceremony Trigger Logic", () => {
         last_ceremony: "2026-01-28T03:00:00Z" 
       };
       const now = new Date("2026-01-29T02:00:00");
-      expect(shouldStartCeremony(config, now)).toBe(false);
+      expect(shouldStartCeremony(config, mockState(), now)).toBe(false);
     });
 
     it("returns true on first run (no last_ceremony)", () => {
       const now = new Date("2026-01-29T04:00:00");
-      expect(shouldStartCeremony(baseConfig, now)).toBe(true);
+      expect(shouldStartCeremony(baseConfig, mockState(), now)).toBe(true);
+    });
+
+    it("returns false when queue has pending items", () => {
+      const config = { 
+        ...baseConfig, 
+        last_ceremony: "2026-01-28T03:00:00Z" 
+      };
+      const now = new Date("2026-01-29T04:00:00");
+      expect(shouldStartCeremony(config, mockState(5), now)).toBe(false);
     });
   });
 });

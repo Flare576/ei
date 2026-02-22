@@ -31,9 +31,14 @@ export function isPastCeremonyTime(ceremonyTime: string, now: Date): boolean {
  * the system", this is where you'd add that condition. Bear in mind that the prompts and flow were written for
  * 1-per-day, so you'll want to revisit them carefully.
  */
-export function shouldStartCeremony(config: CeremonyConfig, now: Date = new Date()): boolean {
+export function shouldStartCeremony(config: CeremonyConfig, state: StateManager, now: Date = new Date()): boolean {
   if (!isNewDay(config.last_ceremony, now)) return false;
-  return isPastCeremonyTime(config.time, now);
+  if (!isPastCeremonyTime(config.time, now)) return false;
+  // Don't start ceremony while import extraction or other queued work is pending.
+  // Archive scan injects messages that need extraction — pruning before extraction
+  // completes would lose knowledge.
+  if (state.queue_length() > 0) return false;
+  return true;
 }
 
 /**
@@ -282,6 +287,8 @@ function applyDecayPhase(personaId: string, state: StateManager): void {
 // =============================================================================
 
 export function prunePersonaMessages(personaId: string, state: StateManager): void {
+  // Sort first — injected messages (session update, archive scan) may be out of order.
+  state.messages_sort(personaId);
   const messages = state.messages_get(personaId);
   if (messages.length <= MESSAGE_MIN_COUNT) return;
   

@@ -292,7 +292,7 @@ export class Processor {
       await this.checkAndSyncOpenCode(human, now);
     }
     
-    if (human.settings?.ceremony && shouldStartCeremony(human.settings.ceremony)) {
+    if (human.settings?.ceremony && shouldStartCeremony(human.settings.ceremony, this.stateManager)) {
       // Auto-backup to remote before ceremony (if configured)
       if (human.settings?.sync && remoteSync.isConfigured()) {
         const state = this.stateManager.getStorageState();

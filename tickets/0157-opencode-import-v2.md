@@ -1,6 +1,6 @@
 # 0157: OpenCode Import V2 — Session-Aware Pruning & Archive Extraction
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0103 (OpenCode Session Importer), 0145 (OpenCode SQLite Integration), 0152 (Ceremony Fix)
 **Blocked by**: None
 

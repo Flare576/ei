@@ -48,6 +48,41 @@ export class SqliteReader implements IOpenCodeReader {
     }));
   }
 
+  async getSessionsInRange(from: Date, to: Date): Promise<OpenCodeSession[]> {
+    const fromMs = from.getTime();
+    const toMs = to.getTime();
+    const rows = this.db
+      .query(
+        `
+      SELECT id, title, directory, project_id, parent_id, time_created, time_updated
+      FROM session
+      WHERE time_updated > ?1 AND time_updated <= ?2 AND parent_id IS NULL
+      ORDER BY time_updated ASC
+    `
+      )
+      .all(fromMs, toMs) as Array<{
+      id: string;
+      title: string;
+      directory: string;
+      project_id: string;
+      parent_id: string | null;
+      time_created: number;
+      time_updated: number;
+    }>;
+
+    return rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      directory: row.directory,
+      projectId: row.project_id,
+      parentId: row.parent_id ?? undefined,
+      time: {
+        created: row.time_created,
+        updated: row.time_updated,
+      },
+    }));
+  }
+
   async getMessagesForSession(
     sessionId: string,
     since?: Date
