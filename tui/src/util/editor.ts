@@ -24,10 +24,10 @@ export interface EditorResult {
 
 export async function spawnEditorRaw(options: EditorRawOptions): Promise<EditorResult> {
   const { initialContent, filename } = options;
-  
   const editor = process.env.EDITOR || process.env.VISUAL || "vi";
   const tmpDir = os.tmpdir();
-  const tmpFile = path.join(tmpDir, `ei-${Date.now()}-${filename}`);
+  const safeName = filename.replace(/\s+/g, "-");
+  const tmpFile = path.join(tmpDir, `ei-${Date.now()}-${safeName}`);
   
   logger.debug("[editor] spawnEditorRaw called", { filename, editor });
   
@@ -98,10 +98,10 @@ export async function spawnEditorRaw(options: EditorRawOptions): Promise<EditorR
 
 export async function spawnEditor(options: EditorOptions): Promise<EditorResult> {
   const { initialContent, filename, renderer } = options;
-  
   const editor = process.env.EDITOR || process.env.VISUAL || "vi";
   const tmpDir = os.tmpdir();
-  const tmpFile = path.join(tmpDir, `ei-${Date.now()}-${filename}`);
+  const safeName = filename.replace(/\s+/g, "-");
+  const tmpFile = path.join(tmpDir, `ei-${Date.now()}-${safeName}`);
   
   logger.debug("[editor] spawnEditor called", { filename, editor });
   
