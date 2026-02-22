@@ -105,27 +105,23 @@ All prompt builders:
 
 The Processor is responsible for fetching, filtering, and formatting data before calling prompt builders.
 
-## LLM Configuration
+## Configuration
 
 ### Environment Variables
-
 | Variable | Purpose |
 |----------|---------|
-| `EI_LLM_BASE_URL` | Local provider endpoint (default: `http://127.0.0.1:1234/v1`) |
-| `EI_LLM_MODEL` | Global default model |
-| `EI_MODEL_RESPONSE` | Model for conversations |
-| `EI_MODEL_CONCEPT` | Model for extraction |
-| `EI_MODEL_GENERATION` | Model for persona generation |
-| `EI_OPENAI_API_KEY` | OpenAI API key |
-| `EI_GOOGLE_API_KEY` | Google AI Studio key |
-| `EI_ANTHROPIC_API_KEY` | Anthropic key |
-| `EI_XAI_API_KEY` | xAI (Grok) key |
+| `EI_DATA_PATH` | Path to Ei's persistent data directory |
+| `EI_SYNC_USERNAME` | Username for remote sync API |
+| `EI_SYNC_PASSPHRASE` | Passphrase for remote sync API |
+
+### Provider Setup
+
+Providers are configured per-user via `/provider new` (TUI) or the onboarding flow (Web).
+On first TUI launch, a "Local LLM" provider is auto-created if a local LLM is detected on port 1234.
 
 ### Model Specification
 
-Format: `provider:model` (e.g., `openai:gpt-4o`, `local:google/gemma-3-12b`)
-
-Bare model names assume `local` provider.
+Format: `ProviderName:model` (e.g., `Local LLM:llama-3.1-8b`, `My OpenAI:gpt-4o`)
 
 ## Development
 
