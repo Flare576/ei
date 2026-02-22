@@ -26,6 +26,8 @@ import type {
   Topic,
   Person,
   Quote,
+  ProviderAccount,
+  ProviderType,
 } from "../../../src/core/types.js";
 
 interface EiStore {
@@ -88,6 +90,8 @@ export interface EiContextValue {
     people: Person[];
     quotes: Quote[];
   }>;
+  showWelcomeOverlay: () => boolean;
+  dismissWelcomeOverlay: () => void;
 }
 
 const EiContext = createContext<EiContextValue>();
@@ -105,6 +109,7 @@ export const EiProvider: ParentComponent = (props) => {
 
   const [contextBoundarySignal, setContextBoundarySignal] = createSignal<string | undefined>(undefined);
   const [quotesVersion, setQuotesVersion] = createSignal(0);
+  const [showWelcomeOverlay, setShowWelcomeOverlay] = createSignal(false);
 
   let processor: Processor | null = null;
   let notificationTimer: Timer | null = null;
@@ -385,10 +390,7 @@ export const EiProvider: ParentComponent = (props) => {
           logger.debug(`onQueueStateChanged called with state: ${state}`);
           if (processor) {
             processor.getQueueStatus().then((status) => {
-              // Use the state parameter directly - it's authoritative.
-              // getQueueStatus() checks queueProcessor.getState() which may not
-              // be updated yet when this callback fires.
-              setStore("queueStatus", { state, pending_count: status.pending_count });
+              setStore("queueStatus", { state: status.state, pending_count: status.pending_count });
               logger.debug(`store.queueStatus after setStore:`, store.queueStatus);
             });
           } else {
@@ -399,7 +401,7 @@ export const EiProvider: ParentComponent = (props) => {
           logger.debug(`onContextBoundaryChanged: ${personaId}`);
           void refreshPersonas();
         },
-        onQuoteAdded: () => {console.log("JDF FIRE ZEE EVENT"); return setQuotesVersion(v => v + 1)},
+        onQuoteAdded: () => setQuotesVersion(v => v + 1),
         onQuoteUpdated: () => setQuotesVersion(v => v + 1),
         onQuoteRemoved: () => setQuotesVersion(v => v + 1),
         onError: (error) => {
@@ -442,6 +444,52 @@ export const EiProvider: ParentComponent = (props) => {
       if (list.length > 0 && !store.activePersonaId && list[0].id) {
         selectPersona(list[0].id);
       }
+
+      // LLM detection: run async after processor starts, don't block ready state
+      void (async () => {
+        try {
+          const human = await processor!.getHuman();
+          const hasAccounts = human.settings?.accounts && human.settings.accounts.length > 0;
+          if (!hasAccounts) {
+            logger.info("No LLM accounts configured, checking for local LLM...");
+            try {
+              const response = await fetch("http://127.0.0.1:1234/v1/models", {
+                method: "GET",
+                signal: AbortSignal.timeout(3000),
+              });
+              if (response.ok) {
+                logger.info("Local LLM detected, auto-configuring...");
+                const localAccount: ProviderAccount = {
+                  id: crypto.randomUUID(),
+                  name: "Local LLM",
+                  type: "llm" as ProviderType,
+                  url: "http://127.0.0.1:1234/v1",
+                  enabled: true,
+                  created_at: new Date().toISOString(),
+                };
+                const currentHuman = await processor!.getHuman();
+                await processor!.updateHuman({
+                  settings: {
+                    ...currentHuman.settings,
+                    accounts: [localAccount],
+                    default_model: "Local LLM",
+                  },
+                });
+                showNotification("Local LLM detected and configured!", "info");
+                logger.info("Local LLM auto-configured successfully");
+              } else {
+                logger.info("Local LLM check failed, showing welcome overlay");
+                setShowWelcomeOverlay(true);
+              }
+            } catch {
+              logger.info("No local LLM found, showing welcome overlay");
+              setShowWelcomeOverlay(true);
+            }
+          }
+        } catch (err: any) {
+          logger.warn(`LLM detection failed: ${err?.message || err}`);
+        }
+      })();
 
       setStore("ready", true);
     } catch (err: any) {
@@ -499,6 +547,8 @@ export const EiProvider: ParentComponent = (props) => {
     removeQuote,
     quotesVersion,
     searchHumanData,
+    showWelcomeOverlay,
+    dismissWelcomeOverlay: () => setShowWelcomeOverlay(false),
   };
 
   return (
