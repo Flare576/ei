@@ -30,8 +30,6 @@ function isResponseRequest(body: { messages?: Array<{ role: string; content: str
 function isUserInitiatedRequest(body: { messages?: Array<{ role: string; content: string }> }): boolean {
   if (!isResponseRequest(body)) return false;
   const userMessages = body?.messages?.filter(m => m.role === "user") || [];
-  // JDF - I don't know why this was set to 2, but unless the user sent back-to-back messags, it will never be
-  // right?
   return userMessages.length >= 2;
 }
 

@@ -121,7 +121,20 @@ export interface MinimalCheckpoint {
     quotes: never[];
     last_updated: string;
     last_activity: string;
-    settings: { auto_save_interval_ms: number };
+    settings: {
+      auto_save_interval_ms: number;
+      default_model: string;
+      accounts: Array<{
+        id: string;
+        name: string;
+        type: string;
+        url: string;
+        api_key: string;
+        default_model: string;
+        enabled: boolean;
+        created_at: string;
+      }>;
+    };
   };
   personas: {
     ei: {
@@ -149,6 +162,7 @@ export interface MinimalCheckpoint {
 }
 
 export function createMinimalCheckpoint(
+  mockServerUrl: string,
   messages: Array<{ role: string; content: string }> = [{ role: "assistant", content: DEFAULT_WELCOME_MESSAGE }]
 ): MinimalCheckpoint {
   const timestamp = new Date().toISOString();
@@ -164,7 +178,20 @@ export function createMinimalCheckpoint(
       quotes: [],
       last_updated: timestamp,
       last_activity: timestamp,
-      settings: { auto_save_interval_ms: 5000 },
+      settings: {
+        auto_save_interval_ms: 5000,
+        default_model: "Mock LLM:mock-model",
+        accounts: [{
+          id: "mock-llm-account",
+          name: "Mock LLM",
+          type: "llm",
+          url: mockServerUrl,
+          api_key: "",
+          default_model: "mock-model",
+          enabled: true,
+          created_at: timestamp,
+        }],
+      },
     },
     personas: {
       ei: {
@@ -206,13 +233,12 @@ export async function seedCheckpoint(
   mockServerUrl: string,
   messages: Array<{ role: string; content: string }> = [{ role: "assistant", content: DEFAULT_WELCOME_MESSAGE }]
 ) {
-  const state = createMinimalCheckpoint(messages);
+  const state = createMinimalCheckpoint(mockServerUrl, messages);
   await page.addInitScript(
-    ({ url, key, data }) => {
+    ({ key, data }) => {
       localStorage.clear();
-      localStorage.setItem("EI_LLM_BASE_URL", url);
       localStorage.setItem(key, JSON.stringify(data));
     },
-    { url: mockServerUrl, key: STATE_KEY, data: state }
+    { key: STATE_KEY, data: state }
   );
 }

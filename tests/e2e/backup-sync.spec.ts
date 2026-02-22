@@ -12,7 +12,7 @@ async function navigateToDataTab(page: import("@playwright/test").Page) {
   await page.waitForTimeout(200);
 }
 
-function createValidCheckpoint(messages: Array<{ role: string; content: string }> = []) {
+function createValidCheckpoint(mockServerUrl: string, messages: Array<{ role: string; content: string }> = []) {
   const timestamp = new Date().toISOString();
   return {
     version: 1,
@@ -25,7 +25,20 @@ function createValidCheckpoint(messages: Array<{ role: string; content: string }
       people: [],
       last_updated: timestamp,
       last_activity: timestamp,
-      settings: { auto_save_interval_ms: 5000 },
+      settings: {
+        auto_save_interval_ms: 5000,
+        default_model: "Mock LLM:mock-model",
+        accounts: [{
+          id: "mock-llm-account",
+          name: "Mock LLM",
+          type: "llm",
+          url: mockServerUrl,
+          api_key: "",
+          default_model: "mock-model",
+          enabled: true,
+          created_at: timestamp,
+        }],
+      },
     },
     personas: {
       ei: {
@@ -80,7 +93,7 @@ test.describe("Backup & Restore", () => {
 
   test("download backup produces valid JSON with full state", async ({ page, mockServerUrl }) => {
     const testMessage = "Message to verify in backup";
-    const checkpoint = createValidCheckpoint([
+    const checkpoint = createValidCheckpoint(mockServerUrl, [
       { role: "human", content: testMessage },
       { role: "assistant", content: "I'll remember this!" },
     ]);
@@ -88,12 +101,11 @@ test.describe("Backup & Restore", () => {
     await page.goto("/");
 
     await page.evaluate(
-      ({ url, key, checkpoint }) => {
+      ({ key, checkpoint }) => {
         localStorage.clear();
-        localStorage.setItem("EI_LLM_BASE_URL", url);
         localStorage.setItem(key, JSON.stringify(checkpoint));
       },
-      { url: mockServerUrl, key: STATE_KEY, checkpoint }
+      { key: STATE_KEY, checkpoint }
     );
 
     await page.reload();
@@ -135,7 +147,7 @@ test.describe("Backup & Restore", () => {
 
   test("upload backup restores state correctly", async ({ page, mockServerUrl }) => {
     const uniqueMessage = `Restored message ${Date.now()}`;
-    const backupCheckpoint = createValidCheckpoint([
+    const backupCheckpoint = createValidCheckpoint(mockServerUrl, [
       { role: "human", content: uniqueMessage },
       { role: "assistant", content: "This was restored from backup!" },
     ]);

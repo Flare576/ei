@@ -59,7 +59,7 @@ interface Checkpoint {
     people: unknown[];
     last_updated: string;
     last_activity: string;
-    settings: { auto_save_interval_ms: number };
+    settings: { auto_save_interval_ms: number; default_model: string; accounts: unknown[] };
   };
   personas: Record<string, PersonaData>;
   queue: unknown[];
@@ -67,6 +67,7 @@ interface Checkpoint {
 }
 
 function createCheckpoint(
+  mockServerUrl: string,
   personaConfigs: Array<{
     id: string;
     display_name: string;
@@ -121,7 +122,20 @@ function createCheckpoint(
       people: [],
       last_updated: timestamp,
       last_activity: timestamp,
-      settings: { auto_save_interval_ms: 30000 },
+      settings: {
+        auto_save_interval_ms: 30000,
+        default_model: "Mock LLM:mock-model",
+        accounts: [{
+          id: "mock-llm-account",
+          name: "Mock LLM",
+          type: "llm",
+          url: mockServerUrl,
+          api_key: "",
+          default_model: "mock-model",
+          enabled: true,
+          created_at: timestamp,
+        }],
+      },
     },
     personas,
     queue: [],
@@ -135,12 +149,11 @@ async function loadCheckpoint(
   checkpoint: Checkpoint
 ): Promise<void> {
   await page.addInitScript(
-    ({ url, key, data }) => {
+    ({ key, data }) => {
       localStorage.clear();
-      localStorage.setItem("EI_LLM_BASE_URL", url);
       localStorage.setItem(key, JSON.stringify(data));
     },
-    { url: mockServerUrl, key: STATE_KEY, data: checkpoint }
+    { key: STATE_KEY, data: checkpoint }
   );
 }
 
@@ -161,7 +174,7 @@ test.describe("Session Bug Coverage (0112)", () => {
     mockServerUrl,
   }) => {
     // Setup: Create checkpoint with TestPersona
-    const checkpoint = createCheckpoint([
+    const checkpoint = createCheckpoint(mockServerUrl, [
       { id: "ei", display_name: "Ei", short_description: "Your companion" },
       { id: "00", display_name: "TestPersona", short_description: "Test persona for archiving" },
     ]);
@@ -218,7 +231,7 @@ test.describe("Session Bug Coverage (0112)", () => {
     mockServer,
     mockServerUrl,
   }) => {
-    const checkpoint = createCheckpoint([
+    const checkpoint = createCheckpoint(mockServerUrl, [
       { 
         id: "00",
         display_name: "Alice", 
@@ -298,7 +311,7 @@ test.describe("Session Bug Coverage (0112)", () => {
       messages.push({ role: "system", content: `AI response ${i + 1}`, read: true });
     }
 
-    const checkpoint = createCheckpoint([
+    const checkpoint = createCheckpoint(mockServerUrl, [
       { 
         id: "01",
         display_name: "ContextTest", 
@@ -364,7 +377,7 @@ test.describe("Session Bug Coverage (0112)", () => {
   }) => {
     test.slow(); // Allow extra time for LLM generation
 
-    const checkpoint = createCheckpoint([
+    const checkpoint = createCheckpoint(mockServerUrl, [
       { id: "ei", display_name: "Ei", short_description: "Your companion" },
     ]);
 
@@ -446,7 +459,7 @@ test.describe("Session Bug Coverage (0112)", () => {
     mockServer,
     mockServerUrl,
   }) => {
-    const checkpoint = createCheckpoint([
+    const checkpoint = createCheckpoint(mockServerUrl, [
       { "id": "ei", display_name: "Ei", short_description: "Your companion" },
       { "id": "01", display_name: "TestBot", short_description: "Test persona for pausing" },
     ]);
@@ -513,7 +526,20 @@ test.describe("Session Bug Coverage (0112)", () => {
         people: [],
         last_updated: timestamp,
         last_activity: timestamp,
-        settings: { auto_save_interval_ms: 30000 },
+        settings: {
+          auto_save_interval_ms: 30000,
+          default_model: "Mock LLM:mock-model",
+          accounts: [{
+            id: "mock-llm-account",
+            name: "Mock LLM",
+            type: "llm",
+            url: mockServerUrl,
+            api_key: "",
+            default_model: "mock-model",
+            enabled: true,
+            created_at: timestamp,
+          }],
+        },
       },
       personas: {
         ei: {
