@@ -25,75 +25,27 @@ export interface LLMRawResponse {
 
 let llmCallCount = 0;
 
-const PROVIDERS: Record<string, () => ProviderConfig> = {
-  local: () => ({
-    name: "Local (LM Studio/Ollama)",
-    baseURL: getEnv("EI_LLM_BASE_URL", "http://127.0.0.1:1234/v1"),
-    apiKey: getEnv("EI_LLM_API_KEY", "not-needed"),
-  }),
-  openai: () => ({
-    name: "OpenAI",
-    baseURL: "https://api.openai.com/v1",
-    apiKey: getEnv("EI_OPENAI_API_KEY", ""),
-  }),
-  google: () => ({
-    name: "Google AI Studio",
-    baseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
-    apiKey: getEnv("EI_GOOGLE_API_KEY", ""),
-  }),
-  anthropic: () => ({
-    name: "Anthropic",
-    baseURL: "https://api.anthropic.com/v1",
-    apiKey: getEnv("EI_ANTHROPIC_API_KEY", ""),
-  }),
-  x: () => ({
-    name: "xAI (Grok)",
-    baseURL: "https://api.x.ai/v1",
-    apiKey: getEnv("EI_XAI_API_KEY", ""),
-  }),
-};
 
-function getEnv(key: string, fallback: string): string {
-  try {
-    if (typeof localStorage !== "undefined") {
-      const stored = localStorage.getItem(key);
-      if (stored) return stored;
-    }
-  } catch {
-    // localStorage not available
-  }
-
-  try {
-    if (typeof globalThis !== "undefined" && "process" in globalThis) {
-      const proc = (globalThis as unknown as { process?: { env?: Record<string, string> } }).process;
-      return proc?.env?.[key] ?? fallback;
-    }
-  } catch {
-    // Browser environment without process
-  }
-  return fallback;
-}
 
 export function resolveModel(modelSpec?: string, accounts?: ProviderAccount[]): ResolvedModel {
-  const spec = modelSpec || getEnv("EI_LLM_MODEL", "");
-  
+  if (!modelSpec) {
+    throw new Error("No model specified. Set a provider on this persona with /provider, or set a default_model in settings.");
+  }
   let provider = "";
-  let model = spec;
+  let model = modelSpec;
   
-  if (spec.includes(":")) {
-    const [p, ...rest] = spec.split(":");
+  if (modelSpec.includes(":")) {
+    const [p, ...rest] = modelSpec.split(":");
     provider = p;
     model = rest.join(":");
   }
-  
   // Try to find matching account by name (case-insensitive)
   // Check both "provider:model" format AND bare account names
   if (accounts) {
-    const searchName = provider || spec; // If no ":", the whole spec might be an account name
+    const searchName = provider || modelSpec; // If no ":", the whole spec might be an account name
     const matchingAccount = accounts.find(
       (acc) => acc.name.toLowerCase() === searchName.toLowerCase() && acc.enabled
     );
-    
     if (matchingAccount) {
       // If bare account name was used, get model from account's default_model
       const resolvedModel = provider ? model : (matchingAccount.default_model || model);
@@ -110,18 +62,9 @@ export function resolveModel(modelSpec?: string, accounts?: ProviderAccount[]): 
     }
   }
   
-  // Fall back to "local" provider if no match found and no explicit provider
-  if (!provider) {
-    provider = "local";
-  }
-  
-  // Fall back to env-based provider lookup
-  const configFn = PROVIDERS[provider];
-  if (!configFn) {
-    throw new Error(`Unknown provider: ${provider}. Check that an account with this name exists and is enabled.`);
-  }
-  
-  return { provider, model, config: configFn() };
+  throw new Error(
+    `No provider "${provider || modelSpec}" found. Create one with /provider new, or check that it's enabled.`
+  );
 }
 
 export async function callLLMRaw(
@@ -162,9 +105,7 @@ export async function callLLMRaw(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...(config.apiKey && config.apiKey !== "not-needed" 
-        ? { Authorization: `Bearer ${config.apiKey}` } 
-        : {}),
+      ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
       ...(extraHeaders || {}),
     },
     body: JSON.stringify({
