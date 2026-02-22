@@ -2,10 +2,11 @@ import { test, expect } from "@microsoft/tui-test";
 import { MockLLMServerImpl } from "./framework/mock-server.js";
 import { rmSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
+import { createTestSettings, BUN_PATH, getTestDataPath } from "./fixtures.js";
 
 const MOCK_PORT = 3097;
-const BUN_PATH = process.env.BUN_PATH || "/Users/flare576/.bun/bin/bun";
-const TEST_DATA_PATH = `/tmp/ei-test-commands-${process.pid}-${Date.now()}`;
+const MOCK_SERVER_URL = `http://127.0.0.1:${MOCK_PORT}/v1`;
+const TEST_DATA_PATH = getTestDataPath("commands");
 
 const CTRL_B = String.fromCharCode(2);
 
@@ -23,7 +24,7 @@ function createMinimalCheckpoint() {
       quotes: [],
       last_updated: timestamp,
       last_activity: timestamp,
-      settings: { auto_save_interval_ms: 999999999 },
+      settings: createTestSettings(MOCK_SERVER_URL),
     },
     personas: {
       ei: {
@@ -96,7 +97,6 @@ test.use({
   rows: 30,
   columns: 100,
   env: {
-    EI_LLM_BASE_URL: `http://127.0.0.1:${MOCK_PORT}/v1`,
     EI_DATA_PATH: TEST_DATA_PATH,
     PATH: process.env.PATH!,
     HOME: process.env.HOME!,

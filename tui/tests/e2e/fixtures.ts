@@ -14,7 +14,7 @@ export const TAB = "\t";
  * Creates a checkpoint with two personas (Ei and Sage) for testing.
  * Both have heartbeat and autosave disabled to prevent unwanted LLM calls.
  */
-export function createCheckpointWithTwoPersonas() {
+export function createCheckpointWithTwoPersonas(mockServerUrl: string) {
   const timestamp = new Date().toISOString();
   return {
     version: 1,
@@ -28,7 +28,7 @@ export function createCheckpointWithTwoPersonas() {
       quotes: [],
       last_updated: timestamp,
       last_activity: timestamp,
-      settings: { auto_save_interval_ms: 999999999 },
+      settings: createTestSettings(mockServerUrl),
     },
     personas: {
       ei: {
@@ -94,4 +94,26 @@ export function createCheckpointWithTwoPersonas() {
  */
 export function getTestDataPath(testName: string): string {
   return `/tmp/ei-test-${testName}-${process.pid}-${Date.now()}`;
+}
+
+/**
+ * Creates the standard test settings object with a Mock LLM provider account.
+ * All "post-onboarding" test checkpoints should use this for settings.
+ * The provider account URL points to the mock server so resolveModel() works.
+ */
+export function createTestSettings(mockServerUrl: string) {
+  return {
+    auto_save_interval_ms: 999999999,
+    default_model: "Mock LLM:mock-model",
+    accounts: [{
+      id: "mock-llm-account",
+      name: "Mock LLM",
+      type: "llm",
+      url: mockServerUrl,
+      api_key: "",
+      default_model: "mock-model",
+      enabled: true,
+      created_at: new Date().toISOString(),
+    }],
+  };
 }

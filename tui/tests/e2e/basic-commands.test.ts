@@ -11,7 +11,7 @@ const mockServer = new MockLLMServerImpl();
 
 rmSync(TEST_DATA_PATH, { recursive: true, force: true });
 mkdirSync(TEST_DATA_PATH, { recursive: true });
-const checkpoint = createCheckpointWithTwoPersonas();
+const checkpoint = createCheckpointWithTwoPersonas(`http://127.0.0.1:${MOCK_PORT}/v1`);
 const statePath = join(TEST_DATA_PATH, "state.json");
 writeFileSync(statePath, JSON.stringify(checkpoint, null, 2));
 
@@ -39,7 +39,6 @@ test.use({
   rows: 30,
   columns: 100,
   env: {
-    EI_LLM_BASE_URL: `http://127.0.0.1:${MOCK_PORT}/v1`,
     EI_DATA_PATH: TEST_DATA_PATH,
     PATH: process.env.PATH!,
     HOME: process.env.HOME!,
@@ -124,13 +123,11 @@ test.describe("/model command", () => {
     await expect(terminal.getByText(/Usage:/g)).toBeVisible({ timeout: 5000 });
   });
 
-  test("rejects invalid model format (missing colon)", async ({ terminal }) => {
+  test("no colon with no provider set shows 'No provider set' error", async ({ terminal }) => {
     await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 15000 });
-
     terminal.write("/model gpt4");
     terminal.submit();
-
-    await expect(terminal.getByText(/Invalid model format/g)).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText(/No provider set/g)).toBeVisible({ timeout: 5000 });
   });
 
   test("accepts valid model format", async ({ terminal }) => {
