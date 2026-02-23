@@ -318,6 +318,10 @@ export class StateManager {
     await this.persistenceState.moveToBackup();
   }
 
+  async loadBackup(): Promise<StorageState | null> {
+    return this.persistenceState.loadBackup();
+  }
+
   hasExistingData(): boolean {
     return this.persistenceState.hasExistingData();
   }

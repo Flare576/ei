@@ -79,6 +79,29 @@ export class FileStorage implements Storage {
     }
   }
 
+
+  /**
+   * Read backup state without removing it.
+   * Used to peek sync credentials from a previous session's backup.
+   */
+  async loadBackup(): Promise<StorageState | null> {
+    const backupPath = join(this.dataPath, BACKUP_FILE);
+    const backupFile = Bun.file(backupPath);
+
+    if (await backupFile.exists()) {
+      try {
+        const text = await backupFile.text();
+        if (text) {
+          return JSON.parse(text) as StorageState;
+        }
+      } catch {
+        return null;
+      }
+    }
+
+    return null;
+  }
+
   private async ensureDataDir(): Promise<void> {
     try {
       await mkdir(this.dataPath, { recursive: true });

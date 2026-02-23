@@ -53,6 +53,23 @@ export class LocalStorage implements Storage {
     }
   }
 
+
+  /**
+   * Read backup state without removing it.
+   * Used to peek sync credentials from a previous session's backup.
+   */
+  async loadBackup(): Promise<StorageState | null> {
+    const backup = globalThis.localStorage?.getItem(BACKUP_KEY);
+    if (backup) {
+      try {
+        return JSON.parse(backup) as StorageState;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+
   private isQuotaError(e: unknown): boolean {
     return (
       e instanceof DOMException &&

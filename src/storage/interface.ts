@@ -5,4 +5,5 @@ export interface Storage {
   save(state: StorageState): Promise<void>;
   load(): Promise<StorageState | null>;
   moveToBackup(): Promise<void>;
+  loadBackup(): Promise<StorageState | null>;
 }
