@@ -6,7 +6,7 @@
 
 ## Summary
 
-Add a `/context` (alias `/messages`) slash command to the TUI that lets users view and manage message context status for the active persona. Mirrors the web's `ContextWindowTab`. Also adds soft-delete (`is_deleted`) to the `Message` type and a `deleteMessage` method to the Processor.
+Add a `/context` (alias `/messages`) slash command to the TUI that lets users view and manage message context status for the active persona. Mirrors the web's `ContextWindowTab`. Also adds a `deleteMessages` method to the Processor using the existing `messages_remove` hard-delete path.
 
 ## Background
 
@@ -32,61 +32,54 @@ Single mode only — open in `$EDITOR` following the pattern of `/me`, `/details
 
 ```yaml
 # context_status: default | always | never
+# _delete: true — permanently removes the message
 messages:
   - id: "msg-uuid"          # read-only
     role: "human"           # read-only
     timestamp: "2026-01-15T10:30:00Z"  # read-only
     context_status: default
-    is_deleted: false
+    _delete: false
     content: |
       The message content here...
 ```
 
-The comment on the first line communicates the allowed `context_status` values inline — no external reference needed.
+The comments on the first lines communicate the allowed `context_status` values and delete behavior inline — no external reference needed.
 
-Read-only fields (`id`, `role`, `timestamp`, `content`) are included for human readability but ignored on parse. Only `context_status` and `is_deleted` are applied on save.
+Read-only fields (`id`, `role`, `timestamp`, `content`) are included for human readability but ignored on parse. Only `context_status` and `_delete` are applied on save.
 
-### Soft Delete
+### Delete
 
-`is_deleted: true` marks a message as deleted without removing it from storage. Deleted messages:
-- Are excluded from LLM context (treated as `never`, overrides `always`)
-- Are hidden from normal message display in the TUI chat view
-- Are not sent to extraction/ceremony passes
-- Are still retrievable for audit purposes
+`_delete: true` hard-deletes the message via the existing `messages_remove()` path — the same mechanism used by ceremony pruning, message recall, and OpenCode import. Deleted messages are permanently removed from storage.
 
-This requires:
-1. Adding `is_deleted?: boolean` to the `Message` interface in `src/core/types.ts` (default `false`)
-2. Adding `deleteMessage(id: string): void` and `restoreMessage(id: string): void` to `Processor`
-3. Adding `messages_delete` / `messages_restore` methods to `StateManager`
-4. Filtering `is_deleted` messages out of context building in the Processor's response prompt logic
+The `_delete` field is a write-only action flag in the YAML, not a persisted field on Message — matching the existing pattern used by facts, traits, topics, people, and quotes in `yaml-serializers.ts`. On parse, messages marked `_delete: true` are collected and removed via `messages_remove()`. The field defaults to `false` in the YAML output.
 
 ## Acceptance Criteria
 
-### Message Type
-
-- [ ] `is_deleted?: boolean` added to `Message` in `src/core/types.ts` (defaults to `false`)
-- [ ] Existing messages without the field treated as `is_deleted: false`
-
 ### Processor
 
-- [ ] `deleteMessage(personaId: string, messageId: string): void` added
-- [ ] `restoreMessage(personaId: string, messageId: string): void` added
+- [ ] `deleteMessages(personaId: string, messageIds: string[]): void` added (thin wrapper around existing `messages_remove`)
 - [ ] `updateMessageContextStatus(personaId: string, messageId: string, status: ContextStatus): void` added (if not already present)
-- [ ] Deleted messages excluded from response prompt context
-- [ ] Deleted messages excluded from extraction scans
 
 ### TUI Command
 
 - [ ] `/context` and `/messages` both registered
 - [ ] Opens current persona's messages in `$EDITOR` as YAML
-- [ ] Inline comment documents `context_status` allowed values
-- [ ] On save: applies `context_status` changes and `is_deleted: true` flags
+- [ ] Inline comments document `context_status` allowed values and `_delete` behavior
+- [ ] On save: applies `context_status` changes and hard-deletes messages marked `_delete: true`
 - [ ] Confirmation shown: "Context updated" or error on YAML parse failure
+- [ ] If messages were deleted, confirmation includes count: "Context updated (N messages deleted)"
 - [ ] Re-edit or discard prompt on parse error (matches `/me` pattern)
 
 ### TUI Chat View
 
-- [ ] Messages with `is_deleted: true` hidden from `MessageList`
+- [ ] Deleted messages disappear from `MessageList` after save (natural consequence of hard delete)
+
+## Stretch Goal: Quote Cleanup on Delete
+
+Currently, `messages_remove()` does not clean up `Quote.message_id` references — quotes extracted from deleted messages retain a dangling `message_id`. This is a pre-existing issue (ceremony pruning has the same behavior), but since this ticket gives users direct access to deletion, it's worth addressing:
+
+- [ ] `messages_remove()` in `src/core/state/personas.ts` nullifies `Quote.message_id` for any quotes referencing removed message IDs
+- [ ] This benefits all callers (ceremony, recall, import, and the new `/context` command)
 
 ## Technical Notes
 
@@ -95,3 +88,5 @@ This requires:
 - Command file: `tui/src/commands/context.tsx`
 - Register in `tui/src/components/PromptInput.tsx`
 - Web reference for context status logic: `web/src/components/EntityEditor/tabs/ContextWindowTab.tsx`
+- Hard delete uses existing `stateManager.messages_remove()` — no new storage methods needed
+- `_delete` is a YAML-only action flag, NOT a field on the Message type — follows the existing `_delete` convention in `yaml-serializers.ts`
