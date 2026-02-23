@@ -77,6 +77,8 @@ function createMockStorage() {
     isAvailable: vi.fn().mockReturnValue(true),
     load: vi.fn().mockResolvedValue(null),
     save: vi.fn().mockResolvedValue(undefined),
+    moveToBackup: vi.fn().mockResolvedValue(undefined),
+    loadBackup: vi.fn().mockResolvedValue(null),
   };
 }
 
