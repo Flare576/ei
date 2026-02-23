@@ -157,13 +157,22 @@ export async function callLLMRaw(
   const estimatedTokens = Math.ceil(totalChars / 4);
   console.log(`[LLM] Call #${llmCallCount} - ~${estimatedTokens} tokens (${totalChars} chars)`);
   
-  const response = await fetch(`${config.baseURL}/chat/completions`, {
+  const normalizedBaseURL = config.baseURL.replace(/\/+$/, "");
+  
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
+    ...(extraHeaders || {}),
+  };
+  
+  // Anthropic requires this header for browser-based CORS access
+  if (normalizedBaseURL.includes("anthropic.com")) {
+    headers["anthropic-dangerous-direct-browser-access"] = "true";
+  }
+  
+  const response = await fetch(`${normalizedBaseURL}/chat/completions`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
-      ...(extraHeaders || {}),
-    },
+    headers,
     body: JSON.stringify({
       model,
       messages: finalMessages,
