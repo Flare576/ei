@@ -26,6 +26,7 @@ export class RemoteSync {
   private credentials: RemoteSyncCredentials | null = null;
   private userId: string | null = null;
 
+  private lastEtag: string | null = null;
   async configure(credentials: RemoteSyncCredentials): Promise<void> {
     this.credentials = credentials;
     this.userId = await generateUserId(credentials);
@@ -55,7 +56,8 @@ export class RemoteSync {
 
       const lastModifiedHeader = response.headers.get("Last-Modified");
       const lastModified = lastModifiedHeader ? new Date(lastModifiedHeader) : null;
-
+      // Capture etag for concurrency protection
+      this.lastEtag = response.headers.get("ETag");
       return { exists: true, lastModified };
     } catch {
       return { exists: false, lastModified: null };
@@ -72,21 +74,29 @@ export class RemoteSync {
       const encrypted = await encrypt(stateJson, this.credentials);
       const encryptedJson = JSON.stringify(encrypted);
 
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (this.lastEtag) {
+        headers["If-Match"] = this.lastEtag;
+      }
       const response = await fetch(`${API_BASE}/${this.userId}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ data: encryptedJson }),
       });
 
+      if (response.status === 412) {
+        return { success: false, error: "conflict" };
+      }
       if (response.status === 429) {
         const retryAfter = parseInt(response.headers.get("Retry-After") || "3600", 10);
         return { success: false, error: "Rate limit exceeded", retryAfter };
       }
-
       if (!response.ok) {
         return { success: false, error: `Server error: ${response.status}` };
       }
 
+      // Capture new etag after successful push
+      this.lastEtag = response.headers.get("ETag");
       return { success: true };
     } catch (e) {
       const message = e instanceof Error ? e.message : "Unknown error";
@@ -116,7 +126,8 @@ export class RemoteSync {
       const encrypted: EncryptedPayload = JSON.parse(body.data);
       const decryptedJson = await decrypt(encrypted, this.credentials);
       const state = JSON.parse(decryptedJson) as StorageState;
-
+      // Capture etag for concurrency protection
+      this.lastEtag = response.headers.get("ETag");
       return { success: true, state };
     } catch (e) {
       const message = e instanceof Error ? e.message : "Unknown error";
@@ -127,6 +138,7 @@ export class RemoteSync {
   clear(): void {
     this.credentials = null;
     this.userId = null;
+    this.lastEtag = null;
   }
 }
 
