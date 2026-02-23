@@ -1,6 +1,6 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-02-23 (0154 DONE)
+> Last updated: 2026-02-23 (0155 DONE)
 
 ## Overview
 
@@ -9,11 +9,11 @@
 | PENDING | 11 |
 | IN_PROGRESS | 0 |
 | QA | 1 |
-| DONE | 113 |
+| DONE | 114 |
 | BLOCKED | 0 |
 | SUPERSEDED | 3 |
 
-> 131 total tickets (112 done + 12 pending + 3 backlog + 0 in_progress + 1 QA + 3 superseded).
+> 131 total tickets (113 done + 11 pending + 3 backlog + 0 in_progress + 1 QA + 3 superseded).
 
 ---
 
@@ -84,7 +84,7 @@
 | Ticket | Title | Depends On |
 |--------|-------|------------|
 | 0153 | CLI Search Signature Redesign | None |
-| 0155 | Web Persona Editor — Delete Message Button | 0154 |
+| 0155 | Web Persona Editor — Delete Message Button | 0154 | DONE |
 
 ---
 
@@ -227,6 +227,7 @@
 | 0157 | OpenCode Import V2 — Session-Aware Pruning & Archive Extraction | 2026-02-21 |
 | 0156 | Per-Model Token Limits | 2026-02-22 |
 | 0154 | TUI /context Command | 2026-02-23 |
+| 0155 | Web Persona Editor — Delete Message Button | 2026-02-23 |
 
 ---
 

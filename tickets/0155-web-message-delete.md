@@ -1,12 +1,12 @@
 # 0155: Web Persona Editor — Delete Message Button
 
-**Status**: PENDING
-**Depends on**: 0154 (adds `is_deleted` to Message type and Processor.deleteMessage)
-**Blocked by**: 0154
+**Status**: DONE
+**Depends on**: 0154 (adds `Processor.deleteMessages` hard-delete)
+**Blocked by**: None (0154 is DONE)
 
 ## Summary
 
-Add a trash can (🗑) delete button to each message row in the web persona editor's Context Window tab. Clicking it prompts a confirmation dialog and, on confirm, calls the new `deleteMessage` Processor endpoint introduced in 0154.
+Add a trash can (🗑) delete button to each message row in the web persona editor's Context Window tab. Clicking it prompts a confirmation dialog and, on confirm, calls `Processor.deleteMessages()` introduced in 0154. Messages are hard-deleted (removed from state entirely).
 
 ## Design
 
@@ -21,8 +21,6 @@ Add a delete column to the existing `ContextWindowTab` message table:
 | 🤖  | 10:31| Hello!       | Always  |  🗑 |
 ```
 
-The 🗑 button is shown on every non-deleted message row. Already-deleted messages show a muted "deleted" badge instead and a restore option (stretch goal).
-
 ### Confirmation Dialog
 
 Standard browser `confirm()` is acceptable for MVP. Content:
@@ -35,21 +33,21 @@ Two actions: **Delete** (destructive) and **Cancel**.
 
 ### Post-Delete Behavior
 
-- Row is immediately hidden from the table (optimistic UI)
+- On confirm: calls `processor.deleteMessages(personaId, [messageId])`
 - Parent component refreshes message list from Processor state
+- Row disappears on next render (no optimistic UI needed — refresh is fast)
 
 ## Acceptance Criteria
 
-- [ ] Trash can button (🗑) rendered in each message row of `ContextWindowTab`
-- [ ] Clicking opens confirmation dialog with persona name and data-retention warning
-- [ ] On confirm: calls `processor.deleteMessage(personaId, messageId)`
-- [ ] Deleted message row disappears from the table immediately
-- [ ] No button shown on already-deleted messages (or stretch: show restore)
-- [ ] Button is keyboard accessible (focusable, Enter/Space triggers)
+ [x] Trash can button (🗑) rendered in each message row of `ContextWindowTab`
+ [x] Clicking opens confirmation dialog with persona name and data-retention warning
+ [x] On confirm: calls `processor.deleteMessages(personaId, [messageId])`
+ [x] Deleted message row disappears from the table after refresh
+ [x] Button is keyboard accessible (focusable, Enter/Space triggers)
 
 ## Notes
 
-- Depends on 0154 for `Processor.deleteMessage()` and `Message.is_deleted`
+- Depends on 0154 for `Processor.deleteMessages(personaId, messageIds: string[]): Promise<Message[]>`
 - `ContextWindowTab` lives in `web/src/components/EntityEditor/tabs/ContextWindowTab.tsx`
-- Parent (`PersonaEditor` or `HumanEditor`) passes `onDeleteMessage` callback down
+- Parent chain: `App.tsx` → `PersonaEditor` → `ContextWindowTab` (same pattern as `onContextStatusChange`)
 - The warning text is intentional — extracted data is a side effect of conversation, not owned by the message
