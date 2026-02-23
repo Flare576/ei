@@ -228,6 +228,13 @@ export class StateManager {
 
   messages_remove(personaId: string, messageIds: string[]): Message[] {
     const result = this.personaState.messages_remove(personaId, messageIds);
+    const removedIds = new Set(result.map(m => m.id));
+    const quotes = this.humanState.get().quotes ?? [];
+    for (const quote of quotes) {
+      if (quote.message_id && removedIds.has(quote.message_id)) {
+        quote.message_id = null;
+      }
+    }
     this.scheduleSave();
     return result;
   }

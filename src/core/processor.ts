@@ -1075,6 +1075,12 @@ export class Processor {
     this.stateManager.messages_setContextStatus(personaId, messageId, status);
   }
 
+  async deleteMessages(personaId: string, messageIds: string[]): Promise<Message[]> {
+    const removed = this.stateManager.messages_remove(personaId, messageIds);
+    this.interface.onMessageAdded?.(personaId);
+    return removed;
+  }
+
   async getHuman(): Promise<HumanEntity> {
     return stripHumanEmbeddings(this.stateManager.getHuman());
   }
