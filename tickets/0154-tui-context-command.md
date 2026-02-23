@@ -1,6 +1,6 @@
 # 0154: TUI /context Command
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0100 (TUI Frontend Skeleton)
 **Blocked by**: None
 
