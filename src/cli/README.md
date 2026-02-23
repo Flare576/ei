@@ -11,9 +11,18 @@ ei traits -n 5 "query string"  # Return up to 5 traits
 ei people -n 5 "query string"  # Return up to 5 people
 ei topics -n 5 "query string"  # Return up to 5 topics
 ei quotes -n 5 "query string"  # Return up to 5 quotes
+ei --id <id>                   # Look up a specific entity by ID
+echo <id> | ei --id            # Look up entity by ID from stdin
 ```
 
 # An Agentic Tool
+
+
+The `--id` flag is designed for piping. For example, search for a topic and then fetch the full entity:
+
+```sh
+ei "memory leak" | jq '.[0].id' | ei --id
+```
 
 To register Ei as an explicit OpenCode tool (optional — agents can also just call `ei` via shell):
 
