@@ -71,7 +71,7 @@ More information can be found in the [Web Readme](web/README.md)
 
 ### TUI
 
-When you `npm install -g eio`, you pull down this package and it's dependencies.
+When you `npm install -g ei-tui`, you pull down this package and it's dependencies.
 
 If you have a Local LLM, that's the first and last set of signals that leave your machine for Ei unless you tell it otherwise.
 
