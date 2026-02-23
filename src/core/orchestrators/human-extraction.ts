@@ -15,6 +15,7 @@ import {
 } from "../../prompts/human/index.js";
 import { chunkExtractionContext } from "./extraction-chunker.js";
 import { getEmbeddingService, findTopK } from "../embedding-service.js";
+import { resolveTokenLimit } from "../llm-client.js";
 
 type ScanCandidate = FactScanCandidate | TraitScanCandidate | TopicScanCandidate | PersonScanCandidate;
 
@@ -35,8 +36,17 @@ function getAnalyzeFromTimestamp(context: ExtractionContext): string | null {
   return context.messages_analyze[0].timestamp;
 }
 
+const EXTRACTION_BUDGET_RATIO = 0.75;
+const MIN_EXTRACTION_TOKENS = 10000;
+
+function getExtractionMaxTokens(state: StateManager): number {
+  const human = state.getHuman();
+  const tokenLimit = resolveTokenLimit(human.settings?.default_model, human.settings?.accounts);
+  return Math.max(MIN_EXTRACTION_TOKENS, Math.floor(tokenLimit * EXTRACTION_BUDGET_RATIO));
+}
+
 export function queueFactScan(context: ExtractionContext, state: StateManager, options?: ExtractionOptions): number {
-  const { chunks } = chunkExtractionContext(context);
+  const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state));
   
   if (chunks.length === 0) return 0;
   
@@ -68,7 +78,7 @@ export function queueFactScan(context: ExtractionContext, state: StateManager, o
 }
 
 export function queueTraitScan(context: ExtractionContext, state: StateManager, options?: ExtractionOptions): number {
-  const { chunks } = chunkExtractionContext(context);
+  const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state));
   
   if (chunks.length === 0) return 0;
   
@@ -100,7 +110,7 @@ export function queueTraitScan(context: ExtractionContext, state: StateManager, 
 }
 
 export function queueTopicScan(context: ExtractionContext, state: StateManager, options?: ExtractionOptions): number {
-  const { chunks } = chunkExtractionContext(context);
+  const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state));
   
   if (chunks.length === 0) return 0;
   
@@ -132,7 +142,7 @@ export function queueTopicScan(context: ExtractionContext, state: StateManager, 
 }
 
 export function queuePersonScan(context: ExtractionContext, state: StateManager, options?: ExtractionOptions): number {
-  const { chunks } = chunkExtractionContext(context);
+  const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state));
   
   if (chunks.length === 0) return 0;
   
@@ -191,7 +201,7 @@ export function queueDirectTopicUpdate(
   context: ExtractionContext,
   state: StateManager
 ): number {
-  const { chunks } = chunkExtractionContext(context);
+  const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state));
 
   if (chunks.length === 0) return 0;
 
@@ -409,7 +419,7 @@ export function queueItemUpdate(
     }
   }
 
-  const { chunks } = chunkExtractionContext(context);
+  const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state));
 
   if (chunks.length === 0) return 0;
 

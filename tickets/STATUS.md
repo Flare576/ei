@@ -1,15 +1,15 @@
 # EI V1 - Ticket Status
 
-> Last updated: 2026-02-21 (0152 DONE, 0157 DONE)
+> Last updated: 2026-02-22 (0156 DONE)
 
 ## Overview
 
 | Status | Count |
 |--------|-------|
-| PENDING | 13 |
+| PENDING | 12 |
 | IN_PROGRESS | 0 |
 | QA | 1 |
-| DONE | 111 |
+| DONE | 112 |
 | BLOCKED | 0 |
 | SUPERSEDED | 3 |
 
@@ -78,12 +78,6 @@
 | 0150 | TUI /quotes Command | 0100, 0116 | DONE |
 | 0151 | TUI /settings Command | 0139, 0129 | DONE |
 | 0154 | TUI /context Command | 0100 | PENDING |
-
-### New: OpenCode & Core
-
-| Ticket | Title | Depends On |
-|--------|-------|------------|
-| 0156 | Per-Model Token Limits | 0096 |
 
 ### New: CLI & Web
 
@@ -231,6 +225,7 @@
 | 0151 | TUI /settings Command | 2026-02-18 |
 | 0152 | OpenCode Import V2 — Ceremony Fix & Pruning | 2026-02-21 |
 | 0157 | OpenCode Import V2 — Session-Aware Pruning & Archive Extraction | 2026-02-21 |
+| 0156 | Per-Model Token Limits | 2026-02-22 |
 
 ---
 

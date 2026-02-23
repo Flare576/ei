@@ -1,4 +1,5 @@
 import type { ChatMessage, ProviderAccount } from "./types.js";
+import { getKnownContextWindow, DEFAULT_TOKEN_LIMIT } from "./model-context-windows.js";
 
 export interface ProviderConfig {
   baseURL: string;
@@ -65,6 +66,61 @@ export function resolveModel(modelSpec?: string, accounts?: ProviderAccount[]): 
   throw new Error(
     `No provider "${provider || modelSpec}" found. Create one with /provider new, or check that it's enabled.`
   );
+}
+
+const tokenLimitLoggedModels = new Set<string>();
+
+export function resolveTokenLimit(
+  modelSpec?: string,
+  accounts?: ProviderAccount[]
+): number {
+  const spec = modelSpec || "";
+
+  let provider = "";
+  let model = spec;
+  if (spec.includes(":")) {
+    const [p, ...rest] = spec.split(":");
+    provider = p;
+    model = rest.join(":");
+  }
+
+  // 1. User override on matching account
+  if (accounts) {
+    const searchName = provider || spec;
+    const matchingAccount = accounts.find(
+      (acc) => acc.name.toLowerCase() === searchName.toLowerCase() && acc.enabled
+    );
+    if (matchingAccount?.token_limit) {
+      logTokenLimit(model, "user-override", matchingAccount.token_limit);
+      return matchingAccount.token_limit;
+    }
+    if (matchingAccount && !provider) {
+      model = matchingAccount.default_model || model;
+    }
+  }
+
+  // 2. Lookup table
+  const known = getKnownContextWindow(model);
+  if (known) {
+    logTokenLimit(model, "lookup-table", known);
+    return known;
+  }
+
+  // 3. Conservative default
+  logTokenLimit(model, "default", DEFAULT_TOKEN_LIMIT);
+  return DEFAULT_TOKEN_LIMIT;
+}
+
+function logTokenLimit(model: string, source: string, tokens: number): void {
+  if (tokenLimitLoggedModels.has(model)) return;
+  tokenLimitLoggedModels.add(model);
+
+  const budget = Math.floor(tokens * 0.75);
+  if (source === "default") {
+    console.warn(`[TokenLimit] Unknown model "${model}" — using conservative default (${DEFAULT_TOKEN_LIMIT})`);
+  } else {
+    console.log(`[TokenLimit] ${model}: ${source} → ${tokens} tokens (extraction budget: ${budget})`);
+  }
 }
 
 export async function callLLMRaw(

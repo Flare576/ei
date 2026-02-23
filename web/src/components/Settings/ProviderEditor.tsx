@@ -19,6 +19,7 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
   const [url, setUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [defaultModel, setDefaultModel] = useState('');
+  const [tokenLimit, setTokenLimit] = useState('');
   const [extraHeaders, setExtraHeaders] = useState<Array<{ key: string; value: string }>>([]);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -37,6 +38,7 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
         setUrl(account.url);
         setApiKey(account.api_key || '');
         setDefaultModel(account.default_model || '');
+        setTokenLimit(account.token_limit ? String(account.token_limit) : '');
         setExtraHeaders(
           account.extra_headers
             ? Object.entries(account.extra_headers).map(([key, value]) => ({ key, value }))
@@ -49,6 +51,7 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
         setUrl('');
         setApiKey('');
         setDefaultModel('');
+        setTokenLimit('');
         setExtraHeaders([]);
         setShowAdvanced(false);
       }
@@ -122,6 +125,7 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
       url: url.trim(),
       api_key: apiKey.trim() || undefined,
       default_model: type === ProviderType.LLM && defaultModel.trim() ? defaultModel.trim() : undefined,
+      token_limit: type === ProviderType.LLM && tokenLimit.trim() ? parseInt(tokenLimit.trim(), 10) || undefined : undefined,
       extra_headers: Object.keys(extraHeadersObj).length > 0 ? extraHeadersObj : undefined,
       enabled: account?.enabled ?? true,
       created_at: account?.created_at || new Date().toISOString(),
@@ -255,6 +259,26 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
               />
               <small className="ei-form-hint">
                 Model name to use by default with this provider
+              </small>
+            </div>
+          )}
+
+          {type === ProviderType.LLM && (
+            <div className="ei-form-group">
+              <label htmlFor="provider-token-limit" className="ei-form-label">
+                Token Limit <span className="ei-form-optional">(optional)</span>
+              </label>
+              <input
+                id="provider-token-limit"
+                type="number"
+                className="ei-input"
+                value={tokenLimit}
+                onChange={(e) => setTokenLimit(e.target.value)}
+                placeholder="e.g., 128000"
+                min="1000"
+              />
+              <small className="ei-form-hint">
+                Context window size in tokens. Auto-detected for common models if not set.
               </small>
             </div>
           )}

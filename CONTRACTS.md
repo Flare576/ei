@@ -776,6 +776,7 @@ interface ProviderAccount {
   
   // LLM-specific
   default_model?: string;          // Default model for this account
+  token_limit?: number;            // Context window override (tokens). Used for extraction chunking.
   
   // Provider-specific extras (e.g., OpenRouter needs HTTP-Referer, X-Title)
   extra_headers?: Record<string, string>;

@@ -1,6 +1,6 @@
 # 0156: Per-Model Token Limits
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0096 (Provider Accounts & Settings Sync)
 **Blocked by**: None
 

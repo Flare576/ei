@@ -588,6 +588,7 @@ interface EditableProviderData {
   url: string;
   api_key?: string;
   default_model?: string;
+  token_limit?: number | null;
   extra_headers?: Record<string, string>;
   enabled?: boolean;
 }
@@ -604,6 +605,7 @@ const PLACEHOLDER_PROVIDER: EditableProviderData = {
   url: "https://api.example.com/v1",
   api_key: "your-api-key-or-$ENVAR",
   default_model: "model-name",
+  token_limit: null,
   extra_headers: {},
   enabled: true,
 };
@@ -643,6 +645,7 @@ export function newProviderFromYAML(yamlContent: string): ProviderAccount {
     url: data.url,
     api_key: resolveEnvVar(data.api_key),
     default_model: data.default_model,
+    token_limit: data.token_limit ?? undefined,
     extra_headers: data.extra_headers && Object.keys(data.extra_headers).length > 0 ? data.extra_headers : undefined,
     enabled: data.enabled ?? true,
     created_at: new Date().toISOString(),
@@ -659,6 +662,7 @@ export function providerToYAML(account: ProviderAccount): string {
     url: account.url,
     api_key: account.api_key,
     default_model: account.default_model,
+    token_limit: account.token_limit ?? null,
     extra_headers: account.extra_headers,
     enabled: account.enabled ?? true,
   };
@@ -688,6 +692,7 @@ export function providerFromYAML(yamlContent: string, original: ProviderAccount)
     url: data.url,
     api_key: resolveEnvVar(data.api_key),
     default_model: data.default_model,
+    token_limit: data.token_limit ?? undefined,
     extra_headers: data.extra_headers && Object.keys(data.extra_headers).length > 0 ? data.extra_headers : undefined,
     enabled: data.enabled ?? true,
     created_at: original.created_at,
