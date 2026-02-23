@@ -14,7 +14,7 @@ vi.mock("../../../src/core/embedding-service.js", async (importOriginal) => {
   };
 });
 
-import { retrieve, retrieveBalanced } from "../../../src/cli/retrieval.js";
+import { retrieve, retrieveBalanced, resolveLinkedItems, lookupById } from "../../../src/cli/retrieval.js";
 
 const EMBEDDING = new Array(384).fill(1);
 const NOW = "2026-01-01T00:00:00Z";
@@ -163,5 +163,95 @@ describe("retrieveBalanced (global search)", () => {
     writeTestState(createTestState({ facts: 10, traits: 10, people: 10, topics: 10, quotes: 10 }));
     const result = await retrieveBalanced("test", 5);
     expect(result).toHaveLength(5);
+  });
+});
+
+describe("resolveLinkedItems", () => {
+  it("resolves items across all 4 collection types", () => {
+    const state = createTestState({ facts: 2, traits: 2, people: 2, topics: 2 });
+    const ids = ["fact_0", "trait_1", "person_0", "topic_1"];
+    const result = resolveLinkedItems(ids, state as any);
+    expect(result).toHaveLength(4);
+    expect(result).toEqual(expect.arrayContaining([
+      { id: "fact_0", name: "Test fact 0", type: "fact" },
+      { id: "trait_1", name: "Test trait 1", type: "trait" },
+      { id: "person_0", name: "Test person 0", type: "person" },
+      { id: "topic_1", name: "Test topic 1", type: "topic" },
+    ]));
+  });
+
+  it("returns [] for empty data_item_ids", () => {
+    const state = createTestState({ facts: 2, topics: 2 });
+    expect(resolveLinkedItems([], state as any)).toEqual([]);
+  });
+
+  it("ignores IDs that don't match any entity", () => {
+    const state = createTestState({ facts: 1 });
+    const result = resolveLinkedItems(["nonexistent_id"], state as any);
+    expect(result).toEqual([]);
+  });
+});
+
+describe("lookupById", () => {
+  it("finds a fact by ID", async () => {
+    writeTestState(createTestState({ facts: 3 }));
+    const result = await lookupById("fact_1");
+    expect(result).not.toBeNull();
+    expect(result!.type).toBe("fact");
+    expect(result!.id).toBe("fact_1");
+    expect(result!.name).toBe("Test fact 1");
+  });
+
+  it("finds a topic by ID", async () => {
+    writeTestState(createTestState({ topics: 2 }));
+    const result = await lookupById("topic_0");
+    expect(result).not.toBeNull();
+    expect(result!.type).toBe("topic");
+  });
+
+  it("finds a quote by ID", async () => {
+    writeTestState(createTestState({ quotes: 2 }));
+    const result = await lookupById("quote_1");
+    expect(result).not.toBeNull();
+    expect(result!.type).toBe("quote");
+    expect(result!.text).toBe("Test quote 1");
+  });
+
+  it("strips embedding from result", async () => {
+    writeTestState(createTestState({ facts: 1 }));
+    const result = await lookupById("fact_0");
+    expect(result).not.toBeNull();
+    expect(result).not.toHaveProperty("embedding");
+  });
+
+  it("returns null for nonexistent ID", async () => {
+    writeTestState(createTestState({ facts: 1, topics: 1 }));
+    const result = await lookupById("nonexistent_id");
+    expect(result).toBeNull();
+  });
+
+  it("returns null when no state exists", async () => {
+    process.env.EI_DATA_PATH = "/tmp/nonexistent-ei-path";
+    const result = await lookupById("fact_0");
+    expect(result).toBeNull();
+  });
+});
+
+describe("quote linked_items shape", () => {
+  it("returns linked_items (not linked_topics) on quote results", async () => {
+    const state = createTestState({ topics: 2, people: 1, quotes: 1 });
+    // Wire up quote to reference a topic and a person
+    state.human.quotes[0].data_item_ids = ["topic_0", "person_0"];
+    writeTestState(state);
+    const results = await retrieveBalanced("test");
+    const quoteResult = results.find(r => r.type === "quote");
+    expect(quoteResult).toBeDefined();
+    expect(quoteResult).toHaveProperty("linked_items");
+    expect(quoteResult).not.toHaveProperty("linked_topics");
+    const items = (quoteResult as any).linked_items;
+    expect(items).toHaveLength(2);
+    expect(items[0]).toHaveProperty("id");
+    expect(items[0]).toHaveProperty("name");
+    expect(items[0]).toHaveProperty("type");
   });
 });

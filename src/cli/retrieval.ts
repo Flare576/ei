@@ -47,12 +47,17 @@ export async function retrieve<T extends { id: string; embedding?: number[] }>(
     .map(({ item }) => item);
 }
 
+export interface LinkedItem {
+  id: string;
+  name: string;
+  type: string;
+}
 export interface QuoteResult {
   id: string;
   text: string;
   speaker: string;
   timestamp: string;
-  linked_topics: string[];
+  linked_items: LinkedItem[];
 }
 
 export interface FactResult {
@@ -104,19 +109,30 @@ interface ScoredEntry {
   itemId: string;
 }
 
-function mapQuote(quote: Quote, state: StorageState): QuoteResult {
-  const linkedTopics = state.human.topics
-    .filter(t => quote.data_item_ids.includes(t.id))
-    .map(t => t.name);
-  const linkedPeople = state.human.people
-    .filter(p => quote.data_item_ids.includes(p.id))
-    .map(p => p.name);
+export function resolveLinkedItems(dataItemIds: string[], state: StorageState): LinkedItem[] {
+  const items: LinkedItem[] = [];
+  const collections: Array<{ type: string; source: Array<{ id: string; name: string }> }> = [
+    { type: "topic", source: state.human.topics },
+    { type: "person", source: state.human.people },
+    { type: "fact", source: state.human.facts },
+    { type: "trait", source: state.human.traits },
+  ];
+  for (const { type, source } of collections) {
+    for (const entity of source) {
+      if (dataItemIds.includes(entity.id)) {
+        items.push({ id: entity.id, name: entity.name, type });
+      }
+    }
+  }
+  return items;
+}
+export function mapQuote(quote: Quote, state: StorageState): QuoteResult {
   return {
     id: quote.id,
     text: quote.text,
     speaker: quote.speaker,
     timestamp: quote.timestamp,
-    linked_topics: [...linkedTopics, ...linkedPeople],
+    linked_items: resolveLinkedItems(quote.data_item_ids, state),
   };
 }
 
@@ -225,4 +241,29 @@ export async function retrieveBalanced(
   result.sort((a, b) => b.similarity - a.similarity);
 
   return result.map(({ type, mapped }) => ({ type, ...mapped }) as BalancedResult);
+}
+
+export async function lookupById(id: string): Promise<({ type: string } & Record<string, unknown>) | null> {
+  const state = await loadLatestState();
+  if (!state) {
+    return null;
+  }
+
+  const collections: Array<{ type: string; source: Array<{ id: string; [k: string]: unknown }> }> = [
+    { type: "fact", source: state.human.facts },
+    { type: "trait", source: state.human.traits },
+    { type: "person", source: state.human.people },
+    { type: "topic", source: state.human.topics },
+    { type: "quote", source: state.human.quotes },
+  ];
+
+  for (const { type, source } of collections) {
+    const entity = source.find(item => item.id === id);
+    if (entity) {
+      const { embedding, ...rest } = entity;
+      return { type, ...rest };
+    }
+  }
+
+  return null;
 }
