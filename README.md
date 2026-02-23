@@ -1,24 +1,46 @@
 # Ei
 
-A local-first AI companion system with persistent personas.
+A local-first AI companion system with persistent personas and Opencode Integration.
+
+You can access the Web version at [ei.flare576.com](https://ei.flare576.com).
+
+You can install the local version via `npm install -g ei-tui` (see [### TUI](#tui) for details).
+
+If you're here to give Opencode perpetual memory (yes), jump over to [TUI README.md](./tui/README.md) to learn how to get information _into_ Ei, and [CLI README.md](./src/cli/README.md) to get it back _out_.
 
 ## What Does "Local First" Mean?
 
-By default, I don't pull analytics, usage information, debugging information, anonymized or otherwise. The only data I get from you is the bare minimum my host needs to deliver web assets to you (your public IP address, basically), or what NPM pulls from you when you install that way.
+All of the data Ei learns about you from your conversations is stored on your device (LocalStorage on the Web, and `$EI_DATA_PATH` or `~/.local/share/ei` in the TUI).
+
+Unless you enable Syncing, that's where it stays.
 
 If you have a local LLM, literally no data leaves your system(s) by default. If you don't, you'll need to provide an LLM for Ei to use. I tried to make that as easy as possible via adding Providers via API Key.
 
+There's no other usage, debugging, analytics, tracking, or history information stored or transmitted - anonymized or otherwise.
+
+If there's a problem with the system, you need to tell me here on GitHub, or on Bluesky, or Discord, or whatever. There's no "report a bug" button, no "DONATE" link in the app.
+
+Don't get me wrong -I absolutely want to fix whatever problem you run into, or hear about the feature you want - but your Ei system, and the data you build with it, is yours.
+
+That's what "Local First" means.
+
 ### What Does Sync Do?
 
-Optionally, you can choose to "Sync" to flare576.com. This is done in as a single, encrypted file.
+Optionally, you can choose to "Sync" to flare576.com. The only reason you would do this is if you wanted to easily move between two or more devices.
 
-That I can't decrypt. Even if I wanted to (I definitely do not), I wouldn't be able to divulge your information because **You** are the only one that can generate the key. It's not a public/private keypair, it's not a "handshake".
+If you just want data back-ups, there's an "Backup & Restore" feature built into the system on the same page as "Sync" (actually, above Sync, because I honestly don't think anyone besides me wants to use Ei enough to use two devices...).
+
+After you enable it, Sync kicks in when you close the TUI, or if you click "Save and Exit" in the web app. It sends a single, encrypted file to a file store for Ei...
+
+That I can't decrypt.
+
+Even if I wanted to (I definitely do not), I wouldn't be able to divulge your information because **You** are the only one that can generate the key. It's not a public/private keypair, it's not a "handshake".
 
 It's your data - I have no right to it, and neither does anyone else except you.
 
 ## What's a Persona?
 
-At the core of the technology, LLM "Agents" are made up of two to three components:
+At the core of the technology, LLM "Agents" are made up of two or three components, depending on who you ask:
 
 1. System Prompt
 2. User Prompt
@@ -33,7 +55,7 @@ The "User Prompt" is the part where you put your messages
 > user: "OMG ARE YOU REALLY A PIRATE?!"
 > assistant: "Yar."
 
-A "Persona" is the combination of these two pieces of data. The reason I didn't call it an "Agent" is because Personas aren't static<sup>1</sup> - they'll grow and adapt as you talk to them. See the [Core Readme](core/README.md) for more information!
+A "Persona" is the combination of these two pieces of data, plus some _personality_. The reason I didn't call it an "Agent" is because Personas aren't static<sup>1</sup> - they'll grow and adapt as you talk to them. See the [Core Readme](core/README.md) for more information!
 
 > <sup>1</sup>: By default. You can make them static.
 
@@ -71,7 +93,11 @@ More information can be found in the [Web Readme](web/README.md)
 
 ### TUI
 
-When you `npm install -g ei-tui`, you pull down this package and it's dependencies.
+```
+npm install -g ei-tui
+```
+
+When you install Ei, you pull down this package and it's dependencies.
 
 If you have a Local LLM, that's the first and last set of signals that leave your machine for Ei unless you tell it otherwise.
 
@@ -85,7 +111,7 @@ Opencode saves all of its sessions locally, either in a JSON structure or, if yo
 
 Then, Opencode can call into Ei and pull those details back out.
 
-Yes, I did make a dynamic, perpetual RAG. No, I didn't do it on purpose; that's why you always have a side-project or two going.
+Yes, I did make a dynamic, perpetual RAG. No, I didn't do it on purpose; that's why you always have a side-project or two going. See [TUI Readme](tui/README.md)
 
 ## Technical Details
 
@@ -115,10 +141,9 @@ This project is separated into five (5) logical parts:
     c. Technically, ships with the TUI
 
 ## Requirements
-
-- Node.js 18+
-- Local LLM provider (LM Studio, Ollama, etc.)
-    * OR API access to a remote LLM host (OpenCode, Anthropic, OpenAi, Bedrock, your uncle's LLM farm, etc.)
+ [Bun](https://bun.sh) runtime (>=1.0.0)
+ Local LLM provider (LM Studio, Ollama, etc.)
+    * OR API access to a remote LLM host (Anthropic, OpenAI, Bedrock, your uncle's LLM farm, etc.)
 
 ## LM Studio Setup
 

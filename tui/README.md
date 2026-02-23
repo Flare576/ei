@@ -1,6 +1,20 @@
-# tui
+# Terminal User Interface (TUI)
 
-EI Terminal User Interface built with OpenTUI and SolidJS.
+EI TUI is built with OpenTUI and SolidJS.
+
+Offering Opencode integration via import (`/settings` -> opencode.integration: true) and export: [CLI](../src/cli/README.md)
+
+# Installation
+
+```
+npm install -g ei-tui
+```
+
+## TUI Commands
+
+Coming soon! In the TUI, you can do /h to see a quick list.
+
+# Development
 
 ## Requirements
 
