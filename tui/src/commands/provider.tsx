@@ -62,7 +62,7 @@ function findProvider(providers: ProviderListItem[], name: string): ProviderList
 export const providerCommand: Command = {
   name: "provider",
   aliases: ["providers"],
-  description: "Manage LLM providers, set provider for current persona",
+  description: "Manage LLM providers",
   usage: "/provider [name] | /provider new",
   
   async execute(args, ctx) {

@@ -35,20 +35,20 @@ export function PromptInput() {
   registerCommand(helpCommand);
   registerCommand(quitCommand);
   registerCommand(meCommand);
+  registerCommand(quotesCommand);
   registerCommand(editorCommand);
   registerCommand(personaCommand);
   registerCommand(detailsCommand);
   registerCommand(archiveCommand);
   registerCommand(unarchiveCommand);
   registerCommand(newCommand);
-  registerCommand(settingsCommand);
   registerCommand(pauseCommand);
   registerCommand(resumeCommand);
   registerCommand(modelCommand);
-  registerCommand(deleteCommand);
-  registerCommand(quotesCommand);
+  registerCommand(settingsCommand);
   registerCommand(providerCommand);
   registerCommand(setSyncCommand);
+  registerCommand(deleteCommand);
 
   let textareaRef: TextareaRenderable | undefined;
 

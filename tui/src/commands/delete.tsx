@@ -5,7 +5,7 @@ import { ConfirmOverlay } from "../components/ConfirmOverlay";
 export const deleteCommand: Command = {
   name: "delete",
   aliases: ["del"],
-  description: "Permanently delete a persona and all its messages",
+  description: "*Permanently* delete a persona",
   usage: "/delete [name]",
   
   async execute(args, ctx) {

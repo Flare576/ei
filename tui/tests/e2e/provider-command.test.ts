@@ -279,10 +279,14 @@ test.describe("/provider command — with NO configured providers", () => {
     },
   });
 
-  test("/provider with empty accounts shows 'No providers configured' message", async ({ terminal }) => {
-    // Welcome overlay appears when no accounts exist (local LLM detection fails)
-    await expect(terminal.getByText("Welcome to Ei!")).toBeVisible({ timeout: 15000 });
-    terminal.keyEscape(); // Dismiss welcome overlay
+  test("/provider with empty accounts and no local LLM shows 'No providers configured' message", async ({ terminal }) => {
+    try {
+      // As long as nothing is running on :1234, Welcome overlay appears when no accounts exist
+      await expect(terminal.getByText("Welcome to Ei!")).toBeVisible({ timeout: 5000 });
+      terminal.keyEscape(); // Dismiss welcome overlay
+    } catch {
+      console.log("Turn of your local LLM to run these tests");
+    }
     await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 5000 });
     terminal.write("/provider");
     terminal.submit();
@@ -308,20 +312,14 @@ test.describe("/model command — with NO configured providers", () => {
     },
   });
 
-  test("/provider with empty accounts shows 'No providers configured' message", async ({ terminal }) => {
-    // Welcome overlay appears when no accounts exist (local LLM detection fails)
-    await expect(terminal.getByText("Welcome to Ei!")).toBeVisible({ timeout: 15000 });
-    terminal.keyEscape(); // Dismiss welcome overlay
-    await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 5000 });
-    terminal.write("/provider");
-    terminal.submit();
-
-    await expect(terminal.getByText(/No providers configured/gi)).toBeVisible({ timeout: 5000 });
-  });
-  test("/model some-model with NO provider set on persona shows 'No provider set' error", async ({ terminal }) => {
-    // Welcome overlay appears when no accounts exist (local LLM detection fails)
-    await expect(terminal.getByText("Welcome to Ei!")).toBeVisible({ timeout: 15000 });
-    terminal.keyEscape(); // Dismiss welcome overlay
+  test("/model some-model with NO provider and no local LLM shows 'No provider set' error", async ({ terminal }) => {
+    try {
+      // As long as nothing is running on :1234, Welcome overlay appears when no accounts exist
+      await expect(terminal.getByText("Welcome to Ei!")).toBeVisible({ timeout: 5000 });
+      terminal.keyEscape(); // Dismiss welcome overlay
+    } catch {
+      console.log("Turn of your local LLM to run these tests");
+    }
     await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 5000 });
     terminal.write("/model some-model");
     terminal.submit();

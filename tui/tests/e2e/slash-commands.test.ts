@@ -106,6 +106,8 @@ test.use({
 
 test.describe("Slash Commands", () => {
   test("/help command shows help overlay and dismisses on Escape", async ({ terminal }) => {
+    // HEADS UP: If this test fails, it's most likely because you added a new command or key combo and the help is now
+    // stupid long. Make it shorter, or figure out how make it pages... probably shorter ¯\_(ツ)_/¯
     await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 15000 });
 
     terminal.write("/help");
