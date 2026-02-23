@@ -13,6 +13,7 @@ import { Processor } from "../../../src/core/processor.js";
 import { FileStorage } from "../storage/file.js";
 import { remoteSync } from "../../../src/storage/remote.js";
 import { logger, clearLog, interceptConsole } from "../util/logger.js";
+import { ConflictOverlay } from "../components/ConflictOverlay.js";
 import type {
   Ei_Interface,
   PersonaSummary,
@@ -28,6 +29,8 @@ import type {
   Quote,
   ProviderAccount,
   ProviderType,
+  StateConflictData,
+  StateConflictResolution,
 } from "../../../src/core/types.js";
 
 interface EiStore {
@@ -110,6 +113,7 @@ export const EiProvider: ParentComponent = (props) => {
   const [contextBoundarySignal, setContextBoundarySignal] = createSignal<string | undefined>(undefined);
   const [quotesVersion, setQuotesVersion] = createSignal(0);
   const [showWelcomeOverlay, setShowWelcomeOverlay] = createSignal(false);
+  const [conflictData, setConflictData] = createSignal<StateConflictData | null>(null);
 
   let processor: Processor | null = null;
   let notificationTimer: Timer | null = null;
@@ -369,13 +373,103 @@ export const EiProvider: ParentComponent = (props) => {
     return processor.searchHumanData(query, options);
   };
 
+  // Post-start initialization: refresh UI state, select first persona, detect LLM
+  async function finishBootstrap() {
+    if (!processor) return;
+
+    // If env vars provided sync creds, ensure they're written to settings
+    // (needed for first-ever-use where bootstrapFirstRun was called)
+    const syncUsername = Bun.env.EI_SYNC_USERNAME;
+    const syncPassphrase = Bun.env.EI_SYNC_PASSPHRASE;
+    if (syncUsername && syncPassphrase) {
+      const human = await processor.getHuman();
+      if (!human.settings?.sync?.username || !human.settings?.sync?.passphrase) {
+        await processor.updateHuman({
+          settings: { ...human.settings, sync: { username: syncUsername, passphrase: syncPassphrase } }
+        });
+        logger.debug("Sync credentials written to settings");
+      }
+    }
+    await refreshPersonas();
+    logger.debug(`refreshPersonas done, count: ${store.personas.length}`);
+    const status = await processor.getQueueStatus();
+    logger.debug("Initial getQueueStatus:", status);
+    setStore("queueStatus", status);
+    logger.debug("Initial queueStatus set in store:", store.queueStatus);
+    const list = store.personas;
+    if (list.length > 0 && !store.activePersonaId && list[0].id) {
+      selectPersona(list[0].id);
+    }
+    // LLM detection: run async after processor starts, don't block ready state
+    void (async () => {
+      try {
+        const human = await processor!.getHuman();
+        const hasAccounts = human.settings?.accounts && human.settings.accounts.length > 0;
+        if (!hasAccounts) {
+          logger.info("No LLM accounts configured, checking for local LLM...");
+          try {
+            const response = await fetch("http://127.0.0.1:1234/v1/models", {
+              method: "GET",
+              signal: AbortSignal.timeout(3000),
+            });
+            if (response.ok) {
+              logger.info("Local LLM detected, auto-configuring...");
+              const localAccount: ProviderAccount = {
+                id: crypto.randomUUID(),
+                name: "Local LLM",
+                type: "llm" as ProviderType,
+                url: "http://127.0.0.1:1234/v1",
+                enabled: true,
+                created_at: new Date().toISOString(),
+              };
+              const currentHuman = await processor!.getHuman();
+              await processor!.updateHuman({
+                settings: {
+                  ...currentHuman.settings,
+                  accounts: [localAccount],
+                  default_model: "Local LLM",
+                },
+              });
+              showNotification("Local LLM detected and configured!", "info");
+              logger.info("Local LLM auto-configured successfully");
+            } else {
+              logger.info("Local LLM check failed, showing welcome overlay");
+              setShowWelcomeOverlay(true);
+            }
+          } catch {
+            logger.info("No local LLM found, showing welcome overlay");
+            setShowWelcomeOverlay(true);
+          }
+        }
+      } catch (err: any) {
+        logger.warn(`LLM detection failed: ${err?.message || err}`);
+      }
+    })();
+    setStore("ready", true);
+  }
+
+  const resolveStateConflict = async (resolution: StateConflictResolution): Promise<void> => {
+    if (!processor) return;
+    logger.info(`Resolving state conflict: ${resolution}`);
+    await processor.resolveStateConflict(resolution);
+    setConflictData(null);
+    await finishBootstrap();
+  };
   async function bootstrap() {
     clearLog();
     interceptConsole();
     logger.info("Ei TUI bootstrap starting");
     try {
       const storage = new FileStorage(Bun.env.EI_DATA_PATH);
-
+      // Pre-configure remoteSync from env vars BEFORE processor.start()
+      // so the processor's sync decision tree can detect remote state
+      const syncUsername = Bun.env.EI_SYNC_USERNAME;
+      const syncPassphrase = Bun.env.EI_SYNC_PASSPHRASE;
+      if (syncUsername && syncPassphrase) {
+        logger.info("Sync credentials found in env, pre-configuring remoteSync");
+        await remoteSync.configure({ username: syncUsername, passphrase: syncPassphrase });
+        syncConfiguredFromEnv = true;
+      }
       const eiInterface: Ei_Interface = {
         onPersonaAdded: () => void refreshPersonas(),
         onPersonaRemoved: () => void refreshPersonas(),
@@ -408,90 +502,23 @@ export const EiProvider: ParentComponent = (props) => {
           logger.error(`${error.code}: ${error.message}`);
           showNotification(`${error.code}: ${error.message}`, "error");
         },
+        onStateConflict: (data) => {
+          logger.info("State conflict detected, waiting for user resolution");
+          setConflictData(data);
+        },
       };
-
       processor = new Processor(eiInterface);
       logger.debug("Processor created, calling start()");
       await processor.start(storage);
       logger.debug("Processor started");
-
-      const syncUsername = Bun.env.EI_SYNC_USERNAME;
-      const syncPassphrase = Bun.env.EI_SYNC_PASSPHRASE;
-      if (syncUsername && syncPassphrase) {
-        logger.info("Sync credentials found in env, configuring remoteSync");
-        const syncCreds = { username: syncUsername, passphrase: syncPassphrase };
-        await remoteSync.configure(syncCreds);
-        syncConfiguredFromEnv = true;
-        
-        const human = await processor.getHuman();
-        if (!human.settings?.sync?.username || !human.settings?.sync?.passphrase) {
-          await processor.updateHuman({
-            settings: { ...human.settings, sync: syncCreds }
-          });
-          logger.debug("Sync credentials written to settings");
-        }
+      // If start() detected a conflict, it returned without starting the loop.
+      // Don't set ready — wait for resolveStateConflict() to be called.
+      if (conflictData()) {
+        logger.info("Conflict pending, waiting for user resolution before finishing bootstrap");
+        return;
       }
 
-      await refreshPersonas();
-      logger.debug(`refreshPersonas done, count: ${store.personas.length}`);
-      
-      const status = await processor.getQueueStatus();
-      logger.debug("Initial getQueueStatus:", status);
-      setStore("queueStatus", status);
-      logger.debug("Initial queueStatus set in store:", store.queueStatus);
-
-      const list = store.personas;
-      if (list.length > 0 && !store.activePersonaId && list[0].id) {
-        selectPersona(list[0].id);
-      }
-
-      // LLM detection: run async after processor starts, don't block ready state
-      void (async () => {
-        try {
-          const human = await processor!.getHuman();
-          const hasAccounts = human.settings?.accounts && human.settings.accounts.length > 0;
-          if (!hasAccounts) {
-            logger.info("No LLM accounts configured, checking for local LLM...");
-            try {
-              const response = await fetch("http://127.0.0.1:1234/v1/models", {
-                method: "GET",
-                signal: AbortSignal.timeout(3000),
-              });
-              if (response.ok) {
-                logger.info("Local LLM detected, auto-configuring...");
-                const localAccount: ProviderAccount = {
-                  id: crypto.randomUUID(),
-                  name: "Local LLM",
-                  type: "llm" as ProviderType,
-                  url: "http://127.0.0.1:1234/v1",
-                  enabled: true,
-                  created_at: new Date().toISOString(),
-                };
-                const currentHuman = await processor!.getHuman();
-                await processor!.updateHuman({
-                  settings: {
-                    ...currentHuman.settings,
-                    accounts: [localAccount],
-                    default_model: "Local LLM",
-                  },
-                });
-                showNotification("Local LLM detected and configured!", "info");
-                logger.info("Local LLM auto-configured successfully");
-              } else {
-                logger.info("Local LLM check failed, showing welcome overlay");
-                setShowWelcomeOverlay(true);
-              }
-            } catch {
-              logger.info("No local LLM found, showing welcome overlay");
-              setShowWelcomeOverlay(true);
-            }
-          }
-        } catch (err: any) {
-          logger.warn(`LLM detection failed: ${err?.message || err}`);
-        }
-      })();
-
-      setStore("ready", true);
+      await finishBootstrap();
     } catch (err: any) {
       logger.error(`bootstrap() failed: ${err?.message || err}`);
     }
@@ -553,6 +580,13 @@ export const EiProvider: ParentComponent = (props) => {
 
   return (
     <Switch>
+      <Match when={conflictData()}>
+        <ConflictOverlay
+          localTimestamp={conflictData()!.localTimestamp}
+          remoteTimestamp={conflictData()!.remoteTimestamp}
+          onResolve={(resolution) => void resolveStateConflict(resolution)}
+        />
+      </Match>
       <Match when={store.ready}>
         <EiContext.Provider value={value}>{props.children}</EiContext.Provider>
       </Match>
