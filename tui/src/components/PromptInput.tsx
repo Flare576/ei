@@ -17,6 +17,7 @@ import { settingsCommand } from "../commands/settings";
 import { deleteCommand } from "../commands/delete";
 import { quotesCommand } from "../commands/quotes";
 import { providerCommand } from "../commands/provider";
+import { setSyncCommand } from "../commands/setsync";
 import { useOverlay } from "../context/overlay";
 
 const TEXTAREA_KEYBINDINGS: KeyBinding[] = [
@@ -47,6 +48,7 @@ export function PromptInput() {
   registerCommand(deleteCommand);
   registerCommand(quotesCommand);
   registerCommand(providerCommand);
+  registerCommand(setSyncCommand);
 
   let textareaRef: TextareaRenderable | undefined;
 
