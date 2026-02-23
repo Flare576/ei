@@ -14,6 +14,7 @@ import { detailsCommand } from "../commands/details";
 import { meCommand } from "../commands/me";
 import { editorCommand } from "../commands/editor";
 import { settingsCommand } from "../commands/settings";
+import { contextCommand } from "../commands/context.js";
 import { deleteCommand } from "../commands/delete";
 import { quotesCommand } from "../commands/quotes";
 import { providerCommand } from "../commands/provider";
@@ -48,6 +49,7 @@ export function PromptInput() {
   registerCommand(settingsCommand);
   registerCommand(providerCommand);
   registerCommand(setSyncCommand);
+  registerCommand(contextCommand);
   registerCommand(deleteCommand);
 
   let textareaRef: TextareaRenderable | undefined;
@@ -82,7 +84,9 @@ export function PromptInput() {
                                  text === "/set" ||
                                  text.startsWith("/p") ||
                                  text.startsWith("/quotes") ||
-                                 text.startsWith("/q ");
+                                 text.startsWith("/q ") ||
+                                 text.startsWith("/context") ||
+                                 text.startsWith("/messages");
       
       if (!isEditorCmd && !opensEditorForData) {
         textareaRef?.clear();

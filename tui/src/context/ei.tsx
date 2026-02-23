@@ -31,6 +31,7 @@ import type {
   ProviderType,
   StateConflictData,
   StateConflictResolution,
+  ContextStatus,
 } from "../../../src/core/types.js";
 
 interface EiStore {
@@ -95,6 +96,8 @@ export interface EiContextValue {
   }>;
   showWelcomeOverlay: () => boolean;
   dismissWelcomeOverlay: () => void;
+  deleteMessages: (personaId: string, messageIds: string[]) => Promise<void>;
+  setMessageContextStatus: (personaId: string, messageId: string, status: ContextStatus) => Promise<void>;
 }
 
 const EiContext = createContext<EiContextValue>();
@@ -365,6 +368,16 @@ export const EiProvider: ParentComponent = (props) => {
     await processor.removeQuote(id);
   };
 
+  const deleteMessages = async (personaId: string, messageIds: string[]): Promise<void> => {
+    if (!processor) return;
+    await processor.deleteMessages(personaId, messageIds);
+  };
+
+  const setMessageContextStatus = async (personaId: string, messageId: string, status: ContextStatus): Promise<void> => {
+    if (!processor) return;
+    await processor.setMessageContextStatus(personaId, messageId, status);
+  };
+
   const searchHumanData = async (
     query: string,
     options?: { types?: Array<"fact" | "trait" | "topic" | "person" | "quote">; limit?: number }
@@ -576,6 +589,8 @@ export const EiProvider: ParentComponent = (props) => {
     searchHumanData,
     showWelcomeOverlay,
     dismissWelcomeOverlay: () => setShowWelcomeOverlay(false),
+    deleteMessages,
+    setMessageContextStatus,
   };
 
   return (

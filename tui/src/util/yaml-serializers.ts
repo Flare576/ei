@@ -13,7 +13,9 @@ import type {
   ProviderAccount,
   ProviderType,
   Quote,
+  Message,
 } from "../../../src/core/types.js";
+import { ContextStatus } from "../../../src/core/types.js";
 
 // =============================================================================
 // TYPES FOR YAML EDITING
@@ -697,4 +699,57 @@ export function providerFromYAML(yamlContent: string, original: ProviderAccount)
     enabled: data.enabled ?? true,
     created_at: original.created_at,
   };
+}
+
+// =============================================================================
+// CONTEXT / MESSAGE SERIALIZATION
+// =============================================================================
+
+interface EditableMessage {
+  id: string;
+  role: "human" | "system";
+  timestamp: string;
+  context_status: ContextStatus;
+  _delete?: boolean;
+  content: string;
+}
+
+export function contextToYAML(messages: Message[]): string {
+  const header = [
+    "# context_status: default | always | never",
+    "# _delete: true — permanently removes the message",
+  ].join("\n");
+
+  const data: EditableMessage[] = messages.map((m) => ({
+    id: m.id,
+    role: m.role,
+    timestamp: m.timestamp,
+    context_status: m.context_status,
+    _delete: false,
+    content: m.content,
+  }));
+
+  return header + "\n" + YAML.stringify(data, { lineWidth: 0 });
+}
+
+export interface ContextYAMLResult {
+  messages: Array<{ id: string; context_status: ContextStatus }>;
+  deletedMessageIds: string[];
+}
+
+export function contextFromYAML(yamlContent: string): ContextYAMLResult {
+  const data = YAML.parse(yamlContent) as EditableMessage[];
+
+  const deletedMessageIds: string[] = [];
+  const messages: Array<{ id: string; context_status: ContextStatus }> = [];
+
+  for (const m of data ?? []) {
+    if (m._delete) {
+      deletedMessageIds.push(m.id);
+    } else {
+      messages.push({ id: m.id, context_status: m.context_status });
+    }
+  }
+
+  return { messages, deletedMessageIds };
 }
