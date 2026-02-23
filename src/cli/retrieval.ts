@@ -4,6 +4,7 @@ import { readFile } from "fs/promises";
 import { getEmbeddingService, findTopK } from "../core/embedding-service";
 
 const STATE_FILE = "state.json";
+const BACKUP_FILE = "state.backup.json";
 const EMBEDDING_MIN_SIMILARITY = 0.3;
 
 export function getDataPath(): string {
@@ -16,16 +17,15 @@ export function getDataPath(): string {
 
 export async function loadLatestState(): Promise<StorageState | null> {
   const dataPath = getDataPath();
-  const filePath = join(dataPath, STATE_FILE);
-
-  try {
-    const text = await readFile(filePath, "utf-8");
-    if (!text) return null;
-
-    return JSON.parse(text) as StorageState;
-  } catch {
-    return null;
+  for (const file of [STATE_FILE, BACKUP_FILE]) {
+    try {
+      const text = await readFile(join(dataPath, file), "utf-8");
+      if (text) return JSON.parse(text) as StorageState;
+    } catch {
+      continue;
+    }
   }
+    return null;
 }
 
 export async function retrieve<T extends { id: string; embedding?: number[] }>(
