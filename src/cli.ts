@@ -7,10 +7,12 @@
  *   ei -n 5 "search text"          Limit results
  *   ei quote "search text"         Search specific type
  *   ei quote -n 5 "search text"    Type-specific with limit
+ *   ei --id <id>                   Look up entity by ID
+ *   echo <id> | ei --id             Look up entity by ID from stdin
  */
 
 import { parseArgs } from "util";
-import { retrieveBalanced } from "./cli/retrieval";
+import { retrieveBalanced, lookupById } from "./cli/retrieval";
 
 const TYPE_ALIASES: Record<string, string> = {
   quote: "quotes",
@@ -35,6 +37,8 @@ Usage:
   ei -n 5 "search text"         Limit results
   ei <type> "search text"       Search a specific data type
   ei <type> -n 5 "search text"  Type-specific with limit
+  ei --id <id>                  Look up a specific entity by ID
+  echo <id> | ei --id           Look up entity by ID from stdin
 
 Types:
   quote / quotes    Quotes from conversation history
@@ -45,6 +49,7 @@ Types:
 
 Options:
   --number, -n     Maximum number of results (default: 10)
+  --id             Look up entity by ID (accepts value or stdin)
   --help, -h       Show this help message
 
 Examples:
@@ -52,6 +57,8 @@ Examples:
   ei -n 5 "API design"                   # Top 5 across all types
   ei quote "you guessed it"              # Search quotes only
   ei trait -n 3 "problem solving"        # Top 3 matching traits
+  ei --id abc-123                          # Look up entity by ID
+  ei "memory leak" | jq .[0].id | ei --id  # Pipe ID from search
 `);
 }
 
@@ -75,6 +82,37 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
+
+  // Handle --id flag: look up entity by ID
+  const idFlagIndex = args.indexOf("--id");
+  if (idFlagIndex !== -1) {
+    let id = args[idFlagIndex + 1]?.trim();
+
+    // If no value after --id, try reading from stdin
+    if (!id && !process.stdin.isTTY) {
+      const chunks: Buffer[] = [];
+      for await (const chunk of process.stdin) {
+        chunks.push(chunk as Buffer);
+      }
+      id = Buffer.concat(chunks).toString("utf-8").trim();
+    }
+
+    if (!id) {
+      console.error("--id requires a value. Usage: ei --id <id> or echo <id> | ei --id");
+      process.exit(1);
+    }
+
+    // Strip surrounding quotes (from jq output or shell quoting)
+    id = id.replace(/^["']|["']$/g, "");
+
+    const entity = await lookupById(id);
+    if (!entity) {
+      console.error(`No entity found with ID: ${id}`);
+      process.exit(1);
+    }
+    console.log(JSON.stringify(entity, null, 2));
+    process.exit(0);
+  }
   let targetType: string | null = null;
   let parseableArgs = args;
 
