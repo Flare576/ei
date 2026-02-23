@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { remoteSync } from '../../../../src/storage/remote.js';
-import { ProviderType, type ProviderAccount, type StorageState } from '../../../../src/core/types.js';
+import { ProviderType, type ProviderAccount } from '../../../../src/core/types.js';
 import { ProviderList, ProviderEditor } from '../Settings';
 
 enum OnboardingStep {
@@ -14,7 +14,6 @@ interface OnboardingProps {
   onComplete: (
     accounts: ProviderAccount[],
     syncCredentials?: { username: string; passphrase: string },
-    restoredState?: StorageState
   ) => void;
 }
 
@@ -42,31 +41,21 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
       setSyncError('Please enter both username and passphrase');
       return;
     }
-
     setIsSyncing(true);
     setSyncError(null);
-
     try {
       await remoteSync.configure({ username: username.trim(), passphrase: passphrase.trim() });
       const remoteInfo = await remoteSync.checkRemote();
-
       if (!remoteInfo.exists) {
         setSyncError('No saved data found for this account. Try a different username/passphrase, or start fresh.');
         setIsSyncing(false);
         return;
       }
 
-      const result = await remoteSync.fetch();
-      if (!result.success || !result.state) {
-        setSyncError(`Failed to retrieve your data: ${result.error || 'Unknown error'}`);
-        setIsSyncing(false);
-        return;
-      }
-
+      // Creds validated — remote exists. Let processor.start() handle the actual pull.
       onComplete(
-        result.state.human?.settings?.accounts || [],
+        [],
         { username: username.trim(), passphrase: passphrase.trim() },
-        result.state
       );
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Unknown error';

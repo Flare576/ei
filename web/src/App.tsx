@@ -17,7 +17,8 @@ import type {
   ContextStatus,
   Quote,
   ProviderAccount,
-  StorageState,
+  StateConflictData,
+  StateConflictResolution,
 } from "../../src/core/types";
 import { Layout, PersonaPanel, ChatPanel, ControlArea, HelpModal, type PersonaPanelHandle, type ChatPanelHandle } from "./components/Layout";
 import { HumanEditor, PersonaEditor, PersonaCreatorModal, ArchivedPersonasModal } from "./components/EntityEditor";
@@ -25,8 +26,8 @@ import { QuoteCaptureModal, QuoteManagementModal } from "./components/Quote";
 import { SettingsModal } from "./components/Settings";
 import { ConflictResolutionModal } from "./components/Sync/ConflictResolutionModal";
 import { Onboarding } from "./components/Onboarding";
-import { yoloMerge } from "../../src/storage/merge";
 import { useKeyboardNavigation } from "./hooks/useKeyboardNavigation";
+
 import "./styles/layout.css";
 import "./styles/entity-editor.css";
 import "./styles/onboarding.css";
@@ -78,8 +79,21 @@ function App() {
   // Check for first-run on mount (before Processor starts)
   useEffect(() => {
     const storage = new LocalStorage();
-    storage.load().then((existingState) => {
-      setShowOnboarding(existingState === null);
+    storage.load().then(async (existingState) => {
+      if (existingState !== null) {
+        // Primary state exists — skip onboarding
+        setShowOnboarding(false);
+        return;
+      }
+      // No primary state — check backup for sync creds
+      const backup = await storage.loadBackup();
+      if (backup?.human?.settings?.sync?.username && backup?.human?.settings?.sync?.passphrase) {
+        // Backup has sync creds — processor.start() will handle sync pull
+        setShowOnboarding(false);
+        return;
+      }
+      // No state, no backup with creds — show onboarding
+      setShowOnboarding(true);
     });
   }, []);
 
@@ -159,6 +173,10 @@ function App() {
           processorRef.current?.getMessages(personaId).then(setMessages);
         }
       },
+      onStateConflict: (data: StateConflictData) => {
+        setConflictData({ localTimestamp: data.localTimestamp, remoteTimestamp: data.remoteTimestamp });
+        setShowConflictModal(true);
+      },
       onQuoteAdded: () => {
         processorRef.current?.getQuotes().then(setQuotes);
       },
@@ -184,21 +202,7 @@ function App() {
         }
       });
       p.getQueueStatus().then(setQueueStatus);
-      p.getHuman().then(async (h) => {
-        setHuman(h);
-        if (h.settings?.sync) {
-          await remoteSync.configure(h.settings.sync);
-          const remoteInfo = await remoteSync.checkRemote();
-          if (remoteInfo.exists && remoteInfo.lastModified) {
-            const localTimestamp = new Date(h.last_updated);
-            const remoteTimestamp = remoteInfo.lastModified;
-            if (remoteTimestamp > localTimestamp) {
-              setConflictData({ localTimestamp, remoteTimestamp });
-              setShowConflictModal(true);
-            }
-          }
-        }
-      });
+      p.getHuman().then(setHuman);
       p.getGroupList().then(setAvailableGroups);
       p.getQuotes().then(setQuotes);
     });
@@ -375,40 +379,10 @@ function App() {
     processor.getHuman().then(setHuman);
   }, [processor, human]);
 
-  const handleConflictKeepLocal = useCallback(async (updateRemote: boolean) => {
-    setShowConflictModal(false);
-    setConflictData(null);
-    if (updateRemote && processor) {
-      const state = await processor.getStorageState();
-      await remoteSync.sync(state);
-    }
-  }, [processor]);
-
-  const handleConflictKeepRemote = useCallback(async () => {
+  const handleConflictResolve = useCallback(async (resolution: StateConflictResolution) => {
     if (!processor) return;
-    const result = await remoteSync.fetch();
-    if (result.success && result.state) {
-      await processor.restoreFromState(result.state);
-      processor.getHuman().then(setHuman);
-      processor.getPersonaList().then(setPersonas);
-      processor.getQuotes().then(setQuotes);
-    }
-    setShowConflictModal(false);
-    setConflictData(null);
-  }, [processor]);
-
-  const handleConflictYoloMerge = useCallback(async () => {
-    if (!processor) return;
-    const localState = await processor.getStorageState();
-    const remoteResult = await remoteSync.fetch();
-    if (remoteResult.success && remoteResult.state) {
-      const merged = yoloMerge(localState, remoteResult.state);
-      await processor.restoreFromState(merged);
-      await remoteSync.sync(merged);
-      processor.getHuman().then(setHuman);
-      processor.getPersonaList().then(setPersonas);
-      processor.getQuotes().then(setQuotes);
-    }
+    await processor.resolveStateConflict(resolution);
+    // The processor fires onStateImported which refreshes UI
     setShowConflictModal(false);
     setConflictData(null);
   }, [processor]);
@@ -662,30 +636,28 @@ function App() {
   const handleOnboardingComplete = useCallback(async (
     accounts: ProviderAccount[],
     syncCredentials?: { username: string; passphrase: string },
-    restoredState?: StorageState
   ) => {
-    const storage = new LocalStorage();
-    
-    if (restoredState) {
-      await storage.save(restoredState);
-      if (syncCredentials) {
-        await remoteSync.configure(syncCredentials);
-      }
+    // Pre-configure remoteSync if creds provided (onboarding restore path)
+    // This must happen BEFORE processor.start() so the sync decision tree can find remote
+    if (syncCredentials) {
+      await remoteSync.configure(syncCredentials);
     }
-    
+
     setShowOnboarding(false);
-    
-    if (!restoredState && accounts.length > 0) {
+
+    if (accounts.length > 0 || syncCredentials) {
       const checkProcessor = setInterval(async () => {
         if (processorRef.current) {
           clearInterval(checkProcessor);
           const h = await processorRef.current.getHuman();
           const firstEnabled = accounts.find(a => a.enabled);
           const defaultModel = firstEnabled?.name;
-          const newSettings = { ...h.settings, accounts, default_model: defaultModel };
+          const newSettings = { ...h.settings };
+          if (accounts.length > 0) {
+            Object.assign(newSettings, { accounts, default_model: defaultModel });
+          }
           if (syncCredentials) {
             Object.assign(newSettings, { sync: syncCredentials });
-            await remoteSync.configure(syncCredentials);
           }
           await processorRef.current.updateHuman({ settings: newSettings });
         }
@@ -879,9 +851,9 @@ function App() {
          onClose={() => setShowConflictModal(false)}
          localTimestamp={conflictData.localTimestamp}
          remoteTimestamp={conflictData.remoteTimestamp}
-         onKeepLocal={handleConflictKeepLocal}
-         onKeepRemote={handleConflictKeepRemote}
-         onYoloMerge={handleConflictYoloMerge}
+         onKeepLocal={() => handleConflictResolve("local")}
+         onKeepRemote={() => handleConflictResolve("server")}
+         onYoloMerge={() => handleConflictResolve("yolo")}
        />
      )}
     </>
