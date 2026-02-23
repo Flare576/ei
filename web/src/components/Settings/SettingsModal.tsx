@@ -54,9 +54,14 @@ export const SettingsModal = ({
       setLocalAccounts(settings.accounts || []);
       setSyncUsername(settings.sync?.username || "");
       setSyncPassphrase(settings.sync?.passphrase || "");
-      modalRef.current?.focus();
     }
   }, [isOpen, settings]);
+
+  useEffect(() => {
+    if (isOpen) {
+      modalRef.current?.focus();
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
