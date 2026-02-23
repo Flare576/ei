@@ -532,23 +532,46 @@ export class Processor {
     });
   }
 
+
+  private classifyLLMError(error: string): string {
+    const match = error.match(/\((\d{3})\)/);
+    if (match) {
+      const status = parseInt(match[1], 10);
+      if (status === 429) return "LLM_RATE_LIMITED";
+      if (status === 401 || status === 403) return "LLM_AUTH_ERROR";
+      if (status >= 500) return "LLM_SERVER_ERROR";
+      if (status >= 400) return "LLM_REQUEST_ERROR";
+    }
+    if (/timeout|ETIMEDOUT|ECONNRESET|ECONNREFUSED/i.test(error)) {
+      return "LLM_TIMEOUT";
+    }
+    return "LLM_ERROR";
+  }
   private async handleResponse(response: LLMResponse): Promise<void> {
     if (!response.success) {
-      this.interface.onError?.({
-        code: response.error?.includes("rate") ? "LLM_RATE_LIMITED" : "LLM_TIMEOUT",
-        message: response.error ?? "Unknown LLM error",
-      });
-      this.stateManager.queue_fail(response.request.id, response.error ?? "LLM error");
+      const errorMsg = response.error ?? "Unknown LLM error";
+      const result = this.stateManager.queue_fail(response.request.id, errorMsg);
+      const code = this.classifyLLMError(errorMsg);
+
+      let message = errorMsg;
+      if (!result.dropped && result.retryDelay != null) {
+        message += ` (attempt ${response.request.attempts}, retrying in ${Math.round(result.retryDelay / 1000)}s)`;
+      } else if (result.dropped) {
+        message += " (permanent failure \u2014 request removed)";
+      }
+
+      this.interface.onError?.({ code, message });
       return;
     }
 
     const handler = handlers[response.request.next_step as LLMNextStep];
     if (!handler) {
+      const errorMsg = `No handler for ${response.request.next_step}`;
+      this.stateManager.queue_fail(response.request.id, errorMsg, true);
       this.interface.onError?.({
         code: "HANDLER_NOT_FOUND",
-        message: `No handler for ${response.request.next_step}`,
+        message: `${errorMsg} (permanent failure \u2014 request removed)`,
       });
-      this.stateManager.queue_fail(response.request.id, "No handler");
       return;
     }
 
@@ -617,12 +640,19 @@ export class Processor {
         handleCeremonyProgress(this.stateManager);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      const result = this.stateManager.queue_fail(response.request.id, errorMsg);
+
+      let message = errorMsg;
+      if (!result.dropped && result.retryDelay != null) {
+        message += ` (attempt ${response.request.attempts}, retrying in ${Math.round(result.retryDelay / 1000)}s)`;
+      } else if (result.dropped) {
+        message += " (permanent failure \u2014 request removed)";
+      }
       this.interface.onError?.({
         code: "HANDLER_ERROR",
         message,
       });
-      this.stateManager.queue_fail(response.request.id, message);
     }
   }
 

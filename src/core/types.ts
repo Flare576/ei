@@ -296,6 +296,7 @@ export interface LLMRequest {
   created_at: string;
   attempts: number;
   last_attempt?: string;
+  retry_after?: string;
   type: LLMRequestType;
   priority: LLMPriority;
   system: string;
@@ -305,6 +306,11 @@ export interface LLMRequest {
   data: Record<string, unknown>;
 }
 
+
+export interface QueueFailResult {
+  dropped: boolean;
+  retryDelay?: number;
+}
 export interface LLMResponse {
   request: LLMRequest;
   success: boolean;

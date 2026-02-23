@@ -10,6 +10,7 @@ import type {
   LLMRequest,
   StorageState,
   ContextStatus,
+  QueueFailResult,
 } from "./types.js";
 import type { Storage } from "../storage/interface.js";
 import {
@@ -268,8 +269,8 @@ export class StateManager {
     this.scheduleSave();
   }
 
-  queue_fail(id: string, error?: string): boolean {
-    const result = this.queueState.fail(id, error);
+  queue_fail(id: string, error?: string, permanent?: boolean): QueueFailResult {
+    const result = this.queueState.fail(id, error, permanent);
     this.scheduleSave();
     return result;
   }

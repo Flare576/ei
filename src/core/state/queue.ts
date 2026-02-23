@@ -1,10 +1,26 @@
-import type { LLMRequest, LLMNextStep } from "../types.js";
+import type { LLMRequest, LLMNextStep, QueueFailResult } from "../types.js";
 
-const MAX_RETRY_ATTEMPTS = 3;
-const PERMANENT_FAILURE_PATTERNS = [
-  /\(4\d{2}\):/,
-  /bad request/i,
-];
+const BASE_BACKOFF_MS = 2_000;
+const MAX_BACKOFF_MS = 30_000;
+
+function extractHTTPStatus(error: string): number | null {
+  const match = error.match(/\((\d{3})\)/);
+  return match ? parseInt(match[1], 10) : null;
+}
+
+function isPermanentError(error: string): boolean {
+  const status = extractHTTPStatus(error);
+  if (status !== null) {
+    // 4xx are permanent EXCEPT 429 (rate limit) and 408 (request timeout)
+    return status >= 400 && status < 500 && status !== 429 && status !== 408;
+  }
+  // Pattern-based fallback for non-HTTP errors
+  return /bad request|invalid api key|unauthorized|forbidden/i.test(error);
+}
+
+function calculateBackoff(attempts: number): number {
+  return Math.min(BASE_BACKOFF_MS * Math.pow(2, attempts - 1), MAX_BACKOFF_MS);
+}
 
 export class QueueState {
   private queue: LLMRequest[] = [];
@@ -32,13 +48,14 @@ export class QueueState {
 
   peekHighest(): LLMRequest | null {
     if (this.paused || this.queue.length === 0) return null;
-
+    const now = new Date().toISOString();
+    const available = this.queue.filter(r => !r.retry_after || r.retry_after <= now);
+    if (available.length === 0) return null;
     const priorityOrder = { high: 0, normal: 1, low: 2 };
-    const sorted = [...this.queue].sort(
+    const sorted = [...available].sort(
       (a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]
     );
-    const result = sorted[0] ?? null;
-    return result;
+    return sorted[0] ?? null;
   }
 
   complete(id: string): void {
@@ -48,25 +65,32 @@ export class QueueState {
     }
   }
 
-  fail(id: string, error?: string): boolean {
+  fail(id: string, error?: string, permanent?: boolean): QueueFailResult {
     const idx = this.queue.findIndex((r) => r.id === id);
-    if (idx < 0) return false;
-    
+    if (idx < 0) return { dropped: false };
     const request = this.queue[idx];
     request.attempts++;
     request.last_attempt = new Date().toISOString();
     if (error) {
       request.data._lastError = error;
     }
-    
-    const isPermanentFailure = error && PERMANENT_FAILURE_PATTERNS.some(p => p.test(error));
-    const exceededRetries = request.attempts >= MAX_RETRY_ATTEMPTS;
-    
-    if (isPermanentFailure || exceededRetries) {
-      this.queue.splice(idx, 1);
-      return true;
+
+    // No error string and not flagged permanent = just increment, no classification
+    if (!error && !permanent) {
+      return { dropped: false };
     }
-    return false;
+
+    const shouldDrop = permanent || (error ? isPermanentError(error) : false);
+
+    if (shouldDrop) {
+      this.queue.splice(idx, 1);
+      return { dropped: true };
+    }
+
+    // Transient error — apply exponential backoff, never drop
+    const delay = calculateBackoff(request.attempts);
+    request.retry_after = new Date(Date.now() + delay).toISOString();
+    return { dropped: false, retryDelay: delay };
   }
 
   getValidations(): LLMRequest[] {

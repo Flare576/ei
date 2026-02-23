@@ -221,7 +221,7 @@ describe("StateManager", () => {
 
     it("fails requests (increments attempts)", () => {
       const id = sm.queue_enqueue(makeRequest());
-      sm.queue_fail(id, "Error");
+      sm.queue_fail(id);
       
       expect(sm.queue_peekHighest()?.attempts).toBe(1);
     });
