@@ -211,9 +211,9 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
       <div className="ei-onboarding__section">
         <h2>Meet Your Guide</h2>
         <p>
-          <strong>Ei</strong> (pronounced "eye" or "ee-eye") is your system guide and personal companion.
-          They're curious and genuinely interested in getting to know you. Ei sees everything 
-          across all your personas and helps you navigate the system.
+          <strong>Ei</strong> (pronounced "eye" or "ee-eye", or however you like!) is your system guide and personal
+            companion.  They're curious and genuinely interested in getting to know you. Ei sees everything across all
+            your personas and helps you navigate the system.
         </p>
         <p>
           Later, you can create additional personas - a creative writing partner, a coding mentor, 
