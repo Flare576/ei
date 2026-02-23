@@ -1,15 +1,27 @@
 <?php
 /**
- * EI Sync API - Sync Handlers (v2 - Hybrid Storage)
+ * EI Sync API - Sync Handlers (v3 - Hybrid Storage + ETags)
  * 
- * POST   /ei/api/{id} - Upsert encrypted state (rate limited)
- * GET    /ei/api/{id} - Retrieve encrypted state
- * HEAD   /ei/api/{id} - Check last_updated timestamp
+ * POST   /ei/api/{id} - Upsert encrypted state (rate limited, etag-checked)
+ * GET    /ei/api/{id} - Retrieve encrypted state (returns ETag)
+ * HEAD   /ei/api/{id} - Check last_updated timestamp (returns ETag)
  * 
  * Data stored on filesystem, metadata in MySQL.
+ * ETags prevent concurrent overwrites between devices.
  */
 
 require_once __DIR__ . '/config.php';
+
+/**
+ * Compute ETag for a file. Uses md5 of file content.
+ */
+function computeEtag(string $filePath): ?string {
+    if (!file_exists($filePath)) {
+        return null;
+    }
+    $hash = md5_file($filePath);
+    return $hash ? '"' . $hash . '"' : null;
+}
 
 function checkRateLimit(PDO $pdo, string $encryptedId): array {
     $stmt = $pdo->prepare('SELECT rate_limit FROM ei_sync WHERE encrypted_id = ?');
@@ -64,6 +76,20 @@ function handlePost(string $encryptedId): void {
         return;
     }
     
+    // ETag check: if file exists and client sent If-Match, verify it
+    if (file_exists($filePath)) {
+        $ifMatch = $_SERVER['HTTP_IF_MATCH'] ?? null;
+        if ($ifMatch !== null) {
+            $currentEtag = computeEtag($filePath);
+            if ($currentEtag !== null && $ifMatch !== $currentEtag) {
+                http_response_code(412);
+                header('ETag: ' . $currentEtag);
+                echo json_encode(['error' => 'Precondition failed: state was modified by another device']);
+                return;
+            }
+        }
+    }
+    
     if (file_put_contents($filePath, $data['data'], LOCK_EX) === false) {
         http_response_code(500);
         echo json_encode(['error' => 'Failed to write data file']);
@@ -86,6 +112,12 @@ function handlePost(string $encryptedId): void {
     ');
     
     $stmt->execute([$encryptedId, $relativeFilePath, $rateLimitJson]);
+    
+    // Return new ETag after successful write
+    $newEtag = computeEtag($filePath);
+    if ($newEtag) {
+        header('ETag: ' . $newEtag);
+    }
     
     http_response_code(200);
     echo json_encode(['success' => true]);
@@ -122,6 +154,11 @@ function handleGet(string $encryptedId): void {
     $lastUpdated = strtotime($row['last_updated']);
     header('Last-Modified: ' . gmdate('D, d M Y H:i:s', $lastUpdated) . ' GMT');
     
+    $etag = computeEtag($filePath);
+    if ($etag) {
+        header('ETag: ' . $etag);
+    }
+    
     http_response_code(200);
     header('Content-Type: application/json');
     echo json_encode(['data' => $data]);
@@ -130,7 +167,7 @@ function handleGet(string $encryptedId): void {
 function handleHead(string $encryptedId): void {
     $pdo = getConnection();
     
-    $stmt = $pdo->prepare('SELECT last_updated FROM ei_sync WHERE encrypted_id = ?');
+    $stmt = $pdo->prepare('SELECT file_path, last_updated FROM ei_sync WHERE encrypted_id = ?');
     $stmt->execute([$encryptedId]);
     $row = $stmt->fetch();
     
@@ -141,5 +178,12 @@ function handleHead(string $encryptedId): void {
     
     $lastUpdated = strtotime($row['last_updated']);
     header('Last-Modified: ' . gmdate('D, d M Y H:i:s', $lastUpdated) . ' GMT');
+    
+    $filePath = DATA_PATH . '/' . $row['file_path'];
+    $etag = computeEtag($filePath);
+    if ($etag) {
+        header('ETag: ' . $etag);
+    }
+    
     http_response_code(200);
 }

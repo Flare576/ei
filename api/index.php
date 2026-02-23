@@ -14,7 +14,8 @@
 // Using header() with replace=true to ensure they're always set
 header('Access-Control-Allow-Origin: *', true);
 header('Access-Control-Allow-Methods: GET, POST, HEAD, OPTIONS', true);
-header('Access-Control-Allow-Headers: Content-Type', true);
+header('Access-Control-Allow-Headers: Content-Type, If-Match', true);
+header('Access-Control-Expose-Headers: ETag, Last-Modified', true);
 
 // Handle preflight immediately
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
