@@ -1,10 +1,16 @@
+# Behind The Curtain
+
+Welcome to the Core of Ei. If you're reading this, you're probably interested about the inner-workings of the system.
+
+Or you're lost. That's ok, too.
+
 # Data Models
 
 There are two distinct types of data: Human and Persona.
 
 ## Human
 
-Human data is sort of the "Global" data - Each persona can read and write elements to the humans Facts, Traits, People, and Topics. In addition, there are "Quotes" that can tie to those four types of data.
+Human data is sort of the "Global" data - Each Persona can read and write elements to the humans Facts, Traits, People, and Topics. In addition, there are "Quotes" that can tie to those four types of data.
 
 As the user uses the system, it tries to keep track of several data points for these elements:
 
@@ -19,7 +25,7 @@ As the user uses the system, it tries to keep track of several data points for t
         + 0.0: Obi-Wan Kenobi ...now that’s a name I’ve not heard in a long time
         + 1.0: The user just spent 4 hours talking about Star Wars
 
-Each of those types represents a piece of what the system "knows" about the person, and all but "Traits" are kept up-to-date as the person chats with personas, but not on always on every message. On each message to a persona, a check is made:
+Each of those types represents a piece of what the system "knows" about the person, and all but "Traits" are kept up-to-date as the person chats with Personas, but not on always on every message. On each message to a Persona, a check is made:
 
 ```
 if(Person.newMessages > count_of_human_[type]) {
@@ -27,12 +33,9 @@ if(Person.newMessages > count_of_human_[type]) {
 }
 ```
 
-
 Again, except for Traits<sup>1</sup>, this is to extract quotes, description updates, title updates, etc. for the conversations the user is having, and keep them feeling alive.
 
 > <sup>1</sup> Traits are unique because, after trying to extract them in the same way as the other pieces of data, I realized that it's sorta hard to understand a core aspect of someone in one message, or even 10. Even doing this analysis over a full 24 hours hasn't proven to be particularly effective, but it's the best we have so far.
-
-TODO: Describe exposure here
 
 ## Persona
 
@@ -63,7 +66,7 @@ I also frequently refer to this as "Extract," but this is the first step where w
 
 ### Detail Extraction
 
-Since we also pull out details during normal discourse (see above), this is the less-important step at this point, but still vital for catching up with the last few messages, or personas that only received a few messages during the day and may not have hit the current limit for natural extraction.
+Since we also pull out details during normal discourse (see above), this is the less-important step at this point, but still vital for catching up with the last few messages, or Personas that only received a few messages during the day and may not have hit the current limit for natural extraction.
 
 Additionally, this is the ONLY time when Human Traits are created or updated - after (hopefully) enough messages have been exchanged for an agent to analyze it and say "Yup, Flare is _definitely_ verbose."
 
