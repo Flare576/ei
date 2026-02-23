@@ -3,10 +3,12 @@ import {
   personaToYAML, 
   personaFromYAML, 
   humanToYAML, 
-  humanFromYAML 
+  humanFromYAML,
+  contextToYAML,
+  contextFromYAML,
 } from "../../../src/util/yaml-serializers";
-import type { PersonaEntity, HumanEntity } from "../../../../src/core/types";
-import { ValidationLevel } from "../../../../src/core/types";
+import type { PersonaEntity, HumanEntity, Message } from "../../../../src/core/types";
+import { ValidationLevel, ContextStatus } from "../../../../src/core/types";
 
 describe("personaToYAML", () => {
   const timestamp = "2024-01-01T00:00:00.000Z";
