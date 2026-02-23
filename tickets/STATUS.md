@@ -85,6 +85,7 @@
 |--------|-------|------------|
 | 0153 | CLI Search Signature Redesign | None |
 | 0155 | Web Persona Editor — Delete Message Button | 0154 | DONE |
+| 0138 | CLI Distribution (npm publish) | None |
 
 ---
 
@@ -99,6 +100,7 @@
 | Ticket | Title | Notes |
 |--------|-------|-------|
 | 0153 | CLI Search Signature Redesign | All acceptance criteria met |
+| 0138 | CLI Distribution (npm publish) | Dev complete, package ready for `npm publish` |
 
 ---
 

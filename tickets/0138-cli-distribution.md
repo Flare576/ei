@@ -1,6 +1,6 @@
 # 0138: CLI Distribution (npm publish)
 
-**Status**: PENDING
+**Status**: QA
 **Depends on**: None
 **Priority**: High (V1.2 release blocker)
 
