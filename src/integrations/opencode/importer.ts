@@ -10,6 +10,7 @@ import {
   queueAllScans,
   type ExtractionContext,
 } from "../../core/orchestrators/human-extraction.js";
+import { resolveTokenLimit } from "../../core/llm-client.js";
 
 // =============================================================================
 // Constants
@@ -20,7 +21,8 @@ const OPENCODE_TOPIC_GROUPS = ["General", "Coding", "OpenCode"];
 /** Max extraction calls per archive scan cycle (bounds queue flooding). */
 const ARCHIVE_SCAN_MAX_CALLS = 50;
 const CHARS_PER_TOKEN = 4;
-const DEFAULT_MAX_TOKENS_PER_CALL = 10000;
+const MIN_EXTRACTION_TOKENS = 10000;
+const EXTRACTION_BUDGET_RATIO = 0.75;
 
 // =============================================================================
 // Transient Types (used only during import analysis, never persisted)
@@ -582,7 +584,9 @@ async function processArchiveScan(
   }
 
   let tokenBudget = 0;
-  const tokenLimit = ARCHIVE_SCAN_MAX_CALLS * DEFAULT_MAX_TOKENS_PER_CALL;
+  const modelTokenLimit = resolveTokenLimit(human.settings?.default_model, human.settings?.accounts);
+  const perCallBudget = Math.max(MIN_EXTRACTION_TOKENS, Math.floor(modelTokenLimit * EXTRACTION_BUDGET_RATIO));
+  const tokenLimit = ARCHIVE_SCAN_MAX_CALLS * perCallBudget;
   let scansQueued = 0;
   let lastProcessed: OpenCodeSession | null = null;
 
