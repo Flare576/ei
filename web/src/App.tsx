@@ -510,6 +510,12 @@ function App() {
     await processor.setContextBoundary(activePersonaId, timestamp);
   }, [processor, activePersonaId]);
 
+  const handleDeleteMessage = useCallback(async (messageId: string) => {
+    if (!processor || !editingPersonaId) return;
+    await processor.deleteMessages(editingPersonaId, [messageId]);
+    processor.getMessages(editingPersonaId).then(setEditingPersonaMessages);
+  }, [processor, editingPersonaId]);
+
   const handlePersonaCreate = useCallback(async (data: {
     name: string;
     aliases: string[];
@@ -797,6 +803,7 @@ function App() {
         onContextStatusChange={handleContextStatusChange}
         onBulkContextStatusChange={handleBulkContextStatusChange}
         onContextBoundaryChange={handleContextBoundaryChange}
+        onDeleteMessage={handleDeleteMessage}
       />
     )}
 

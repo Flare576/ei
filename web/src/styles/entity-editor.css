@@ -1404,6 +1404,12 @@
   width: 99px;
 }
 
+.ei-context-table__header--delete {
+  width: 36px;
+  text-align: center;
+}
+
+
 .ei-context-table__row {
   transition: background var(--ei-transition-fast);
 }
@@ -1430,6 +1436,33 @@
 
 .ei-context-table__cell--who {
   text-align: center;
+}
+
+.ei-context-table__cell--delete {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.ei-context-delete-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-family: var(--ei-font-emoji);
+  padding: 2px 4px;
+  border-radius: 4px;
+  opacity: 0.4;
+  transition: opacity var(--ei-transition-fast);
+}
+
+.ei-context-delete-btn:hover {
+  opacity: 1;
+}
+
+.ei-context-delete-btn:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--ei-accent);
+  outline-offset: 1px;
 }
 
 .ei-context-table__cell--what {

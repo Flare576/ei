@@ -78,6 +78,7 @@ interface PersonaEditorProps {
   onContextStatusChange: (messageId: string, status: ContextStatus) => void;
   onBulkContextStatusChange: (messageIds: string[], status: ContextStatus) => void;
   onContextBoundaryChange: (timestamp: string | null) => void;
+  onDeleteMessage: (messageId: string) => void;
   availableGroups?: string[];
 }
 
@@ -102,6 +103,7 @@ export function PersonaEditor({
   onContextStatusChange,
   onBulkContextStatusChange,
   onContextBoundaryChange,
+  onDeleteMessage,
   availableGroups = [],
 }: PersonaEditorProps) {
   const [activeTab, setActiveTab] = useState('settings');
@@ -296,6 +298,7 @@ export function PersonaEditor({
           onContextStatusChange={onContextStatusChange}
           onBulkContextStatusChange={onBulkContextStatusChange}
           onContextBoundaryChange={onContextBoundaryChange}
+          onDeleteMessage={onDeleteMessage}
         />
       )}
     </TabContainer>

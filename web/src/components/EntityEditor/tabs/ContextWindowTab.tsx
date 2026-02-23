@@ -23,6 +23,7 @@ interface ContextWindowTabProps {
   onContextStatusChange: (messageId: string, status: ContextStatus) => void;
   onBulkContextStatusChange: (messageIds: string[], status: ContextStatus) => void;
   onContextBoundaryChange: (timestamp: string | null) => void;
+  onDeleteMessage: (messageId: string) => void;
 }
 
 const MESSAGES_PER_PAGE = 50;
@@ -76,6 +77,7 @@ export const ContextWindowTab = ({
   onContextStatusChange,
   onBulkContextStatusChange,
   onContextBoundaryChange,
+  onDeleteMessage,
 }: ContextWindowTabProps) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [startFilter, setStartFilter] = useState<string>('');
@@ -217,6 +219,7 @@ export const ContextWindowTab = ({
               <th className="ei-context-table__header ei-context-table__header--when">When</th>
               <th className="ei-context-table__header ei-context-table__header--what">What</th>
               <th className="ei-context-table__header ei-context-table__header--status">Status</th>
+              <th className="ei-context-table__header ei-context-table__header--delete"></th>
             </tr>
           </thead>
           <tbody>
@@ -267,6 +270,18 @@ export const ContextWindowTab = ({
                         <option value={ContextStatus.Always}>Always</option>
                         <option value={ContextStatus.Never}>Never</option>
                       </select>
+                    </td>
+                    <td className="ei-context-table__cell ei-context-table__cell--delete">
+                      <button
+                        className="ei-context-delete-btn"
+                        title="Delete message"
+                        onClick={() => {
+                          const ok = confirm(`Delete this message from ${personaName}'s history?\n\nNote: Any Quotes, Topics, Facts, or People extracted from this message will not be reverted.`);
+                          if (ok) onDeleteMessage(message.id);
+                        }}
+                      >
+                        🗑️
+                      </button>
                     </td>
                   </tr>
                 </React.Fragment>
