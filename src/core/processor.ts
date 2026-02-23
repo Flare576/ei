@@ -22,9 +22,12 @@ import {
   type DataItemBase,
   type LLMResponse,
   type StorageState,
+  type StateConflictResolution,
+  type StateConflictData,
 } from "./types.js";
 import type { Storage } from "../storage/interface.js";
 import { remoteSync } from "../storage/remote.js";
+import { yoloMerge } from "../storage/merge.js";
 import { StateManager } from "./state-manager.js";
 import { QueueProcessor } from "./queue-processor.js";
 import { handlers } from "./handlers/index.js";
@@ -118,6 +121,7 @@ export class Processor {
   private isTUI = false;
   private lastOpenCodeSync = 0;
   private openCodeImportInProgress = false;
+  private pendingConflict: StateConflictData | null = null;
 
   constructor(ei: Ei_Interface) {
     this.interface = ei;
@@ -138,21 +142,62 @@ export class Processor {
   async start(storage: Storage): Promise<void> {
     console.log(`[Processor ${this.instanceId}] start() called`);
     await this.stateManager.initialize(storage);
-
     if (this.stopped) {
       console.log(`[Processor ${this.instanceId}] stopped during init, not starting loop`);
       return;
     }
 
-    const isFirstRun = !this.stateManager.hasExistingData();
-    const hasNoPersonas = this.stateManager.persona_getAll().length === 0;
-    if (isFirstRun && hasNoPersonas) {
+    // === SYNC DECISION TREE ===
+    const primary = this.stateManager.hasExistingData();
+    const backup = await this.stateManager.loadBackup();
+    const syncCreds = primary
+      ? this.stateManager.getHuman().settings?.sync
+      : backup?.human?.settings?.sync;
+    // Sync creds can come from state/backup OR from pre-configuration
+    // (TUI pre-configures from env vars, Web from onboarding form)
+    const hasSyncCreds = !!(syncCreds?.username && syncCreds?.passphrase);
+    if (hasSyncCreds || remoteSync.isConfigured()) {
+      // State/backup creds always win over env var pre-config
+      // (env vars bootstrap you; once creds are in state, state is source of truth)
+      if (hasSyncCreds) {
+        await remoteSync.configure(syncCreds);
+      }
+
+      try {
+        const remoteInfo = await remoteSync.checkRemote(); // also captures etag
+        if (!primary && remoteInfo.exists) {
+          // CASE A: No primary state (clean exit or fresh install with env vars)
+          // → Silent pull, no questions asked
+          console.log(`[Processor ${this.instanceId}] No primary state, remote exists — silent pull`);
+          const result = await remoteSync.fetch(); // captures etag
+          if (result.success && result.state) {
+            this.stateManager.restoreFromState(result.state);
+          }
+          // If fetch fails, fall through to bootstrapFirstRun below
+        } else if (primary && remoteInfo.exists) {
+          // CASE B: Both primary AND remote exist
+          // This means: crash recovery, stale etag rejection, or multi-device conflict
+          // → ALWAYS ask user: [L]ocal / [S]erver / [Y]olo
+          console.log(`[Processor ${this.instanceId}] Both primary and remote exist — conflict`);
+          const localTimestamp = new Date(this.stateManager.getHuman().last_updated);
+          const remoteTimestamp = remoteInfo.lastModified ?? new Date();
+          this.pendingConflict = { localTimestamp, remoteTimestamp, hasLocalState: true };
+          this.interface.onStateConflict?.(this.pendingConflict);
+          // Loop does NOT start — waits for resolveStateConflict()
+          return;
+        }
+        // primary exists, no remote → normal boot (first time syncing from this device)
+        // no primary, no remote → fall through to bootstrapFirstRun
+      } catch (err) {
+        console.warn(`[Processor ${this.instanceId}] Sync check failed, continuing without sync:`, err);
+      }
+    }
+    // If still no data after sync attempts, bootstrap
+    if (!this.stateManager.hasExistingData() || this.stateManager.persona_getAll().length === 0) {
       await this.bootstrapFirstRun();
     }
-
     this.running = true;
     console.log(`[Processor ${this.instanceId}] initialized, starting loop`);
-
     this.runLoop();
   }
 
@@ -229,7 +274,11 @@ export class Processor {
       const result = await remoteSync.sync(state);
       
       if (!result.success) {
+        // Push failed — likely 412 etag mismatch or network error
+        // Do NOT moveToBackup — leave state.json intact
+        // Next boot will detect primary + remote → conflict resolution
         console.log(`[Processor ${this.instanceId}] Remote sync failed: ${result.error}`);
+        await this.stop();
         this.interface.onSaveAndExitFinish?.();
         return { success: false, error: result.error };
       }
@@ -241,6 +290,38 @@ export class Processor {
     await this.stop();
     this.interface.onSaveAndExitFinish?.();
     return { success: true };
+  }
+
+
+  async resolveStateConflict(resolution: StateConflictResolution): Promise<void> {
+    if (!this.pendingConflict) return;
+
+    switch (resolution) {
+      case "local":
+        // Keep local, push to server on next exit
+        break;
+      case "server": {
+        const result = await remoteSync.fetch(); // gets fresh etag
+        if (result.success && result.state) {
+          this.stateManager.restoreFromState(result.state);
+        }
+        break;
+      }
+      case "yolo": {
+        const localState = this.stateManager.getStorageState();
+        const remoteResult = await remoteSync.fetch(); // gets fresh etag
+        if (remoteResult.success && remoteResult.state) {
+          const merged = yoloMerge(localState, remoteResult.state);
+          this.stateManager.restoreFromState(merged);
+        }
+        break;
+      }
+    }
+
+    this.pendingConflict = null;
+    this.running = true;
+    this.runLoop();
+    this.interface.onStateImported?.();
   }
 
   private async runLoop(): Promise<void> {

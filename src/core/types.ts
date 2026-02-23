@@ -370,6 +370,19 @@ export interface Ei_Interface {
   onContextBoundaryChanged?: (personaId: string) => void;
   onSaveAndExitStart?: () => void;
   onSaveAndExitFinish?: () => void;
+  onStateConflict?: (data: StateConflictData) => void;
+}
+
+// =============================================================================
+// SYNC TYPES
+// =============================================================================
+
+export type StateConflictResolution = "local" | "server" | "yolo";
+
+export interface StateConflictData {
+  localTimestamp: Date;
+  remoteTimestamp: Date;
+  hasLocalState: boolean;
 }
 
 // =============================================================================
