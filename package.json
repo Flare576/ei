@@ -1,8 +1,17 @@
 {
-  "name": "ei",
-  "version": "1.0.0",
+  "name": "ei-tui",
+  "version": "0.1.3",
   "author": "Flare576",
-  "main": "./dist/index.js",
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "files": [
+    "src/",
+    "tui/src/",
+    "tui/bunfig.toml",
+    "README.md",
+    "LICENSE"
+  ],
   "devDependencies": {
     "@playwright/test": "^1.58.0",
     "@types/bun": "latest",
@@ -20,7 +29,10 @@
   "keywords": [
     "ai",
     "llm",
-    "personas"
+    "personas",
+    "tui",
+    "cli",
+    "companion"
   ],
   "license": "MIT",
   "scripts": {
@@ -40,12 +52,12 @@
     "web": "cd web && npm run dev",
     "tui": "cd tui && npm run dev"
   },
-  "trustedDependencies": [
-    "sharp"
-  ],
   "type": "module",
-  "types": "./dist/index.d.ts",
   "dependencies": {
-    "fastembed": "^2.1.0"
+    "@opentui/core": "^0.1.79",
+    "@opentui/solid": "^0.1.79",
+    "fastembed": "^2.1.0",
+    "solid-js": "1.9.9",
+    "yaml": "^2.8.2"
   }
 }
