@@ -1,5 +1,6 @@
 import type { StorageState, Quote, Fact, Trait, Person, Topic } from "../core/types";
 import { join } from "path";
+import { readFile } from "fs/promises";
 import { getEmbeddingService, findTopK } from "../core/embedding-service";
 
 const STATE_FILE = "state.json";
@@ -16,18 +17,12 @@ export function getDataPath(): string {
 export async function loadLatestState(): Promise<StorageState | null> {
   const dataPath = getDataPath();
   const filePath = join(dataPath, STATE_FILE);
-  console.log("Where: " + filePath);
 
   try {
-    const file = Bun.file(filePath);
-    if (!(await file.exists())) return null;
-
-    const text = await file.text();
+    const text = await readFile(filePath, "utf-8");
     if (!text) return null;
 
-    const state = JSON.parse(text) as StorageState;
-    console.log("How Beeg? " + state.human.topics.length);
-    return state;
+    return JSON.parse(text) as StorageState;
   } catch {
     return null;
   }

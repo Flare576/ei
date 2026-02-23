@@ -56,13 +56,15 @@ Examples:
 }
 
 async function main(): Promise<void> {
-  const args = Bun.argv.slice(2);
+  const args = process.argv.slice(2);
 
   if (args.length === 0) {
-    const tuiPath = new URL("../tui/src/index.tsx", import.meta.url).pathname;
-    const proc = Bun.spawn(["bun", "--conditions=browser", "run", tuiPath], {
+    const tuiDir = new URL("../tui", import.meta.url).pathname;
+    const tuiEntry = new URL("../tui/src/index.tsx", import.meta.url).pathname;
+    const proc = Bun.spawn(["bun", "--conditions=browser", "run", tuiEntry], {
       stdio: ["inherit", "inherit", "inherit"],
       env: { ...process.env },
+      cwd: tuiDir,
     });
     await proc.exited;
     process.exit(proc.exitCode ?? 0);
