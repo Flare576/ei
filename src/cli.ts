@@ -12,6 +12,7 @@
  */
 
 import { parseArgs } from "util";
+import { join } from "path";
 import { retrieveBalanced, lookupById } from "./cli/retrieval";
 
 const TYPE_ALIASES: Record<string, string> = {
@@ -50,6 +51,7 @@ Types:
 Options:
   --number, -n     Maximum number of results (default: 10)
   --id             Look up entity by ID (accepts value or stdin)
+  --install        Write the Ei tool file to ~/.config/opencode/tools/
   --help, -h       Show this help message
 
 Examples:
@@ -60,6 +62,68 @@ Examples:
   ei --id abc-123                          # Look up entity by ID
   ei "memory leak" | jq .[0].id | ei --id  # Pipe ID from search
 `);
+}
+
+function buildOpenCodeToolContent(): string {
+  const lines = [
+    'import { tool } from "@opencode-ai/plugin"',
+    '',
+    'export default tool({',
+    '  description: [',
+    '    "Search the user\'s Ei knowledge base \u2014 a persistent memory store built from conversations.",',
+    '    "Returns facts, personality traits, people, topics of interest, and quotes.",',
+    '    "Use this to recall anything about the user: preferences, relationships, or past discussions.",',
+    '    "Results include entity IDs that can be passed back with lookup=true to get full detail.",',
+    '  ].join(" "),',
+    '  args: {',
+    '    query: tool.schema.string().describe(',
+    '      "Search text, or an entity ID when lookup=true. Supports natural language."',
+    '    ),',
+    '    type: tool.schema',
+    '      .enum(["facts", "traits", "people", "topics", "quotes"])',
+    '      .optional()',
+    '      .describe(',
+    '        "Filter to a specific data type. Omit to search all types (balanced across all 5)."',
+    '      ),',
+    '    limit: tool.schema',
+    '      .number()',
+    '      .int()',
+    '      .positive()',
+    '      .default(10)',
+    '      .optional()',
+    '      .describe("Maximum number of results to return. Default: 10."),',
+    '    lookup: tool.schema',
+    '      .boolean()',
+    '      .optional()',
+    '      .describe(',
+    '        "If true, treat query as an entity ID and return that single entity in full detail."',
+    '      ),',
+    '  },',
+    '  async execute(args) {',
+    '    const cmd: string[] = ["ei"];',
+    '    if (args.lookup) {',
+    '      cmd.push("--id", args.query);',
+    '    } else {',
+    '      if (args.type) cmd.push(args.type);',
+    '      if (args.limit && args.limit !== 10) cmd.push("-n", String(args.limit));',
+    '      cmd.push(args.query);',
+    '    }',
+    '    return Bun.$`${cmd}`.text();',
+    '  },',
+    '})',
+    '',
+  ];
+  return lines.join('\n');
+}
+
+async function installOpenCodeTool(): Promise<void> {
+  const toolsDir = join(process.env.HOME || "~", ".config", "opencode", "tools");
+  const toolPath = join(toolsDir, "ei.ts");
+
+  await Bun.$`mkdir -p ${toolsDir}`;
+  await Bun.write(toolPath, buildOpenCodeToolContent());
+  console.log(`✓ Installed Ei tool to ${toolPath}`);
+  console.log(`  Restart OpenCode to activate.`);
 }
 
 async function main(): Promise<void> {
@@ -79,6 +143,11 @@ async function main(): Promise<void> {
 
   if (args[0] === "--help" || args[0] === "-h") {
     printHelp();
+    process.exit(0);
+  }
+
+  if (args[0] === "--install") {
+    await installOpenCodeTool();
     process.exit(0);
   }
 
