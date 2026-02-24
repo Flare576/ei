@@ -369,7 +369,7 @@ export class Processor {
 
     const human = this.stateManager.getHuman();
     
-    if (this.isTUI && human.settings?.opencode?.integration) {
+    if (this.isTUI && human.settings?.opencode?.integration && this.stateManager.queue_length() === 0) {
       await this.checkAndSyncOpenCode(human, now);
     }
     
@@ -434,12 +434,10 @@ export class Processor {
       },
     });
 
-    const since = lastSync > 0 ? new Date(lastSync) : new Date(0);
-
     this.openCodeImportInProgress = true;
     import("../integrations/opencode/importer.js")
-      .then(({ importOpenCodeSessions }) => 
-        importOpenCodeSessions(since, {
+      .then(({ importOpenCodeSessions }) =>
+        importOpenCodeSessions({
           stateManager: this.stateManager,
           interface: this.interface,
         })
@@ -449,7 +447,7 @@ export class Processor {
           console.log(
             `[Processor] OpenCode sync complete: ${result.sessionsProcessed} sessions, ` +
             `${result.topicsCreated} topics created, ${result.messagesImported} messages imported, ` +
-            `${result.topicUpdatesQueued} topic updates queued`
+            `${result.extractionScansQueued} extraction scans queued`
           );
         }
       })
@@ -813,23 +811,16 @@ export class Processor {
   async recallPendingMessages(personaId: string): Promise<string> {
     const persona = this.stateManager.persona_getById(personaId);
     if (!persona) return "";
-    
     this.clearPendingRequestsFor(personaId);
-    this.stateManager.queue_pause();
-    
     const messages = this.stateManager.messages_get(personaId);
     const pendingIds = messages
       .filter(m => m.role === "human" && !m.read)
       .map(m => m.id);
-    
     if (pendingIds.length === 0) return "";
-    
     const removed = this.stateManager.messages_remove(personaId, pendingIds);
     const recalledContent = removed.map(m => m.content).join("\n\n");
-    
     this.interface.onMessageAdded?.(personaId);
     this.interface.onMessageRecalled?.(personaId, recalledContent);
-    
     return recalledContent;
   }
 
@@ -987,13 +978,40 @@ export class Processor {
   ): Promise<ResponsePromptData["human"]> {
     const DEFAULT_GROUP = "General";
     const QUOTE_LIMIT = 10;
+    const DATA_ITEM_LIMIT = 15;
     const SIMILARITY_THRESHOLD = 0.3;
+    // Generic relevance selector for embedding-capable items.
+    // Falls back to returning all items when no message/embeddings are available.
+    const selectRelevantItems = async <T extends { id: string; embedding?: number[] }>(
+      items: T[],
+      limit: number
+    ): Promise<T[]> => {
+      if (items.length === 0) return [];
 
+      const withEmbeddings = items.filter(i => i.embedding?.length);
+
+      if (currentMessage && withEmbeddings.length > 0) {
+        try {
+          const embeddingService = getEmbeddingService();
+          const queryVector = await embeddingService.embed(currentMessage);
+          const results = findTopK(queryVector, withEmbeddings, limit);
+          const relevant = results
+            .filter(({ similarity }) => similarity >= SIMILARITY_THRESHOLD)
+            .map(({ item }) => item);
+
+          if (relevant.length > 0) return relevant;
+        } catch (err) {
+          console.warn("[filterHumanDataByVisibility] Embedding search failed:", err);
+        }
+      }
+
+      // Fallback: return all items (caller may apply its own limit)
+      return items;
+    };
     const selectRelevantQuotes = async (quotes: Quote[]): Promise<Quote[]> => {
       if (quotes.length === 0) return [];
-      
       const withEmbeddings = quotes.filter(q => q.embedding?.length);
-      
+
       if (currentMessage && withEmbeddings.length > 0) {
         try {
           const embeddingService = getEmbeddingService();
@@ -1002,35 +1020,31 @@ export class Processor {
           const relevant = results
             .filter(({ similarity }) => similarity >= SIMILARITY_THRESHOLD)
             .map(({ item }) => item);
-          
+
           if (relevant.length > 0) return relevant;
         } catch (err) {
           console.warn("[filterHumanDataByVisibility] Embedding search failed:", err);
         }
       }
-      
       return [...quotes]
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
         .slice(0, QUOTE_LIMIT);
     };
-
     if (persona.id === "ei") {
-      const relevantQuotes = await selectRelevantQuotes(human.quotes ?? []);
-      return {
-        facts: human.facts,
-        traits: human.traits,
-        topics: human.topics,
-        people: human.people,
-        quotes: relevantQuotes,
-      };
+      const [facts, traits, topics, people, quotes] = await Promise.all([
+        selectRelevantItems(human.facts, DATA_ITEM_LIMIT),
+        selectRelevantItems(human.traits, DATA_ITEM_LIMIT),
+        selectRelevantItems(human.topics, DATA_ITEM_LIMIT),
+        selectRelevantItems(human.people, DATA_ITEM_LIMIT),
+        selectRelevantQuotes(human.quotes ?? []),
+      ]);
+      return { facts, traits, topics, people, quotes };
     }
-
     const visibleGroups = new Set<string>();
     if (persona.group_primary) {
       visibleGroups.add(persona.group_primary);
     }
     (persona.groups_visible ?? []).forEach((g) => visibleGroups.add(g));
-
     const filterByGroup = <T extends DataItemBase>(items: T[]): T[] => {
       return items.filter((item) => {
         const itemGroups = item.persona_groups ?? [];
@@ -1038,21 +1052,20 @@ export class Processor {
         return effectiveGroups.some((g) => visibleGroups.has(g));
       });
     };
-
     const groupFilteredQuotes = (human.quotes ?? []).filter((q) => {
       const effectiveGroups = q.persona_groups.length === 0 ? [DEFAULT_GROUP] : q.persona_groups;
       return effectiveGroups.some((g) => visibleGroups.has(g));
     });
 
-    const relevantQuotes = await selectRelevantQuotes(groupFilteredQuotes);
+    const [facts, traits, topics, people, quotes] = await Promise.all([
+      selectRelevantItems(filterByGroup(human.facts), DATA_ITEM_LIMIT),
+      selectRelevantItems(filterByGroup(human.traits), DATA_ITEM_LIMIT),
+      selectRelevantItems(filterByGroup(human.topics), DATA_ITEM_LIMIT),
+      selectRelevantItems(filterByGroup(human.people), DATA_ITEM_LIMIT),
+      selectRelevantQuotes(groupFilteredQuotes),
+    ]);
 
-    return {
-      facts: filterByGroup(human.facts),
-      traits: filterByGroup(human.traits),
-      topics: filterByGroup(human.topics),
-      people: filterByGroup(human.people),
-      quotes: relevantQuotes,
-    };
+    return { facts, traits, topics, people, quotes };
   }
 
   private getVisiblePersonas(

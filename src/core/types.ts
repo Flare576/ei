@@ -180,7 +180,8 @@ export interface OpenCodeSettings {
   integration?: boolean;
   polling_interval_ms?: number;  // Default: 1800000 (30 min)
   last_sync?: string;  // ISO timestamp
-  extraction_point?: string;  // ISO timestamp - earliest unprocessed message, gradual extraction advances this
+  extraction_point?: string;  // ISO timestamp - cursor for single-session archive scan
+  processed_sessions?: Record<string, string>;  // sessionId → ISO timestamp of last import
 }
 
 export interface CeremonyConfig {

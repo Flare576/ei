@@ -338,6 +338,7 @@ export class StateManager {
     this.humanState.load(state.human);
     this.personaState.load(state.personas);
     this.queueState.load(state.queue);
+    this.persistenceState.markExistingData();
     this.scheduleSave();
   }
 

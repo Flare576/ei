@@ -45,6 +45,10 @@ export class PersistenceState {
     return this.loadedExistingData;
   }
 
+  markExistingData(): void {
+    this.loadedExistingData = true;
+  }
+
   async flush(): Promise<void> {
     if (this.saveTimeout) {
       clearTimeout(this.saveTimeout);
