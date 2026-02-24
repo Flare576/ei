@@ -98,6 +98,7 @@ export interface EiContextValue {
   dismissWelcomeOverlay: () => void;
   deleteMessages: (personaId: string, messageIds: string[]) => Promise<void>;
   setMessageContextStatus: (personaId: string, messageId: string, status: ContextStatus) => Promise<void>;
+  recallPendingMessages: () => Promise<string>;
 }
 
 const EiContext = createContext<EiContextValue>();
@@ -378,6 +379,14 @@ export const EiProvider: ParentComponent = (props) => {
     await processor.setMessageContextStatus(personaId, messageId, status);
   };
 
+  const recallPendingMessages = async (): Promise<string> => {
+    if (!processor) return "";
+    const personaId = store.activePersonaId;
+    if (!personaId) return "";
+    return processor.recallPendingMessages(personaId);
+  };
+
+
   const searchHumanData = async (
     query: string,
     options?: { types?: Array<"fact" | "trait" | "topic" | "person" | "quote">; limit?: number }
@@ -591,6 +600,7 @@ export const EiProvider: ParentComponent = (props) => {
     dismissWelcomeOverlay: () => setShowWelcomeOverlay(false),
     deleteMessages,
     setMessageContextStatus,
+    recallPendingMessages,
   };
 
   return (
