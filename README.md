@@ -20,7 +20,7 @@ There's no other usage, debugging, analytics, tracking, or history information s
 
 If there's a problem with the system, you need to tell me here on GitHub, or on Bluesky, or Discord, or whatever. There's no "report a bug" button, no "DONATE" link in the app.
 
-Don't get me wrong -I absolutely want to fix whatever problem you run into, or hear about the feature you want - but your Ei system, and the data you build with it, is yours.
+Don't get me wrong - I absolutely want to fix whatever problem you run into, or hear about the feature you want - but your Ei system, and the data you build with it, is yours.
 
 That's what "Local First" means.
 
@@ -36,15 +36,14 @@ That I can't decrypt.
 
 Even if I wanted to (I definitely do not), I wouldn't be able to divulge your information because **You** are the only one that can generate the key. It's not a public/private keypair, it's not a "handshake".
 
-It's your data - I have no right to it, and neither does anyone else except you.
+It's *your* data - I have no right to it, and neither does anyone else except you.
 
 ## What's a Persona?
 
 At the core of the technology, LLM "Agents" are made up of two or three components, depending on who you ask:
 
 1. System Prompt
-2. User Prompt
-    a. Which can be broken into "Messages", but they're still basically the User Prompt
+2. User Prompt (which can be broken into "Messages", but they're still basically the User Prompt)
 
 The "System Prompt" is the part where you usually say
 
@@ -55,7 +54,7 @@ The "User Prompt" is the part where you put your messages
 > user: "OMG ARE YOU REALLY A PIRATE?!"
 > assistant: "Yar."
 
-A "Persona" is the combination of these two pieces of data, plus some _personality_. The reason I didn't call it an "Agent" is because Personas aren't static<sup>1</sup> - they'll grow and adapt as you talk to them. See the [Core Readme](core/README.md) for more information!
+A "Persona" is the combination of these two pieces of data, plus some _personality_. The reason I didn't call it an "Agent" is because Personas aren't static<sup>1</sup> - they'll grow and adapt as you talk to them. See the [Core Readme](src/README.md) for more information!
 
 > <sup>1</sup>: By default. You can make them static.
 
@@ -83,7 +82,7 @@ Optionally, users can opt into a server-side data sync. This is ideal for users 
 
 ### Web
 
-When you access Ei via https://ei.flare576.com, your browser will download the assets and walk you through onboarding. If you're running a Local LLM on port :1234 it will auto-detect it, otherwise it will  allowing you to enter it.
+When you access Ei via https://ei.flare576.com, your browser will download the assets and walk you through onboarding. If you're running a Local LLM on port :1234 it will auto-detect it, otherwise it prompts you to enter one.
 
 Then you'll land on the chat interface. As you enter messages, they'll go to *YOUR* server. As Ei discovers information about you, summaries will be built with *YOUR* server, and data will be stored to *YOUR* LocalStorage in *YOUR* browser.
 
@@ -107,43 +106,28 @@ More information (including commands) can be found in the [TUI Readme](tui/READM
 
 ### Opencode
 
+Ei gives OpenCode a persistent memory. Yes, this is a dynamic, perpetual RAG — I didn't plan it that way, but here we are.
+
 Opencode saves all of its sessions locally, either in a JSON structure or, if you're running the latest version, in a SQLite DB. If you enable the integration, Ei will pull all of the conversational parts of those sessions and summarize them, pulling out details, quotes, and keeping the summaries up-to-date.
 
-Then, Opencode can call into Ei and pull those details back out.
-
-Yes, I did make a dynamic, perpetual RAG. No, I didn't do it on purpose; that's why you always have a side-project or two going. See [TUI Readme](tui/README.md)
+Then, Opencode can call into Ei and pull those details back out. That's why you always have a side-project or two going. See [TUI Readme](tui/README.md)
 
 ## Technical Details
 
 This project is separated into five (5) logical parts:
 
-1. Ei Core
-    a. Location: `/src`
-    b. Purpose: Shared between TUI and Web, it's The event-driven core of Ei, housing:
-        i. Business logic
-        ii. Prompts
-        iii. Integrations
-2. Ei Online
-    a. Location: `/web`
-    b. Purpose: Provides a web interface for Ei.
-    c. Deployed to: https://ei.flare576.com
-3. Ei Terminal User Interface (TUI)
-    a. Location: `/tui`
-    b. Purpose: Provides a TUI interface for Ei
-    c. Deployed to: NPM for you to install
-4. Ei API
-    a. Location: `/api`
-    b. Purpose: Provides remote sync for Ei.
-    c. Deployed to: https://ei.flare576.com/api
-5. Ei Command Line Interface (CLI)
-    a. Location: `/src/cli`
-    b. Purpose: Provides a CLI interface for Opencode to use as a tool
-    c. Technically, ships with the TUI
+| Part | Location | Purpose | Deployed To |
+|------|----------|---------|-------------|
+| Ei Core | `/src` | Shared between TUI and Web. The event-driven core of Ei, housing business logic, prompts, and integrations. | (library) |
+| Ei Online | `/web` | Web interface for Ei. | https://ei.flare576.com |
+| Ei Terminal UI (TUI) | `/tui` | TUI interface for Ei. | NPM for you to install |
+| Ei API | `/api` | Remote sync for Ei. | https://ei.flare576.com/api |
+| Ei CLI | `/src/cli` | CLI interface for Opencode to use as a tool. Technically ships with the TUI. | (ships with TUI) |
 
 ## Requirements
- [Bun](https://bun.sh) runtime (>=1.0.0)
- Local LLM provider (LM Studio, Ollama, etc.)
-    * OR API access to a remote LLM host (Anthropic, OpenAI, Bedrock, your uncle's LLM farm, etc.)
+
+- [Bun](https://bun.sh) runtime (>=1.0.0)
+- A local LLM (LM Studio, Ollama, etc.) OR API access to a cloud provider (Anthropic, OpenAI, Bedrock, your uncle's LLM farm, etc.)
 
 ## LM Studio Setup
 
@@ -164,6 +148,19 @@ npm run dev      # Watch mode
 npm run build    # Compile TypeScript
 npm run test     # Run tests
 ```
+
+## Releases
+
+Tag a version to publish automatically:
+
+```bash
+# bump version in package.json
+git commit -am "chore: bump to v0.1.4"
+git tag v0.1.4
+git push && git push --tags
+```
+
+GitHub Actions picks up the tag and publishes to npm with provenance via OIDC. No stored secrets.
 
 ## Project Structure
 
