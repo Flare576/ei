@@ -2,6 +2,10 @@
   "name": "ei-tui",
   "version": "0.1.3",
   "author": "Flare576",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/flare576/ei.git"
+  },
   "engines": {
     "bun": ">=1.0.0"
   },
