@@ -640,6 +640,10 @@ export function newProviderFromYAML(yamlContent: string): ProviderAccount {
     data.default_model = undefined;
   }
   
+  if (data.token_limit !== undefined && data.token_limit !== null && (typeof data.token_limit !== "number" || isNaN(data.token_limit))) {
+    throw new Error(`token_limit must be a number (got: ${JSON.stringify(data.token_limit)}). Note: underscore separators (100_000) are not valid in YAML.`);
+  }
+
   return {
     id: crypto.randomUUID(),
     name: data.name,
@@ -687,6 +691,10 @@ export function providerFromYAML(yamlContent: string, original: ProviderAccount)
     throw new Error("Provider URL is required");
   }
   
+  if (data.token_limit !== undefined && data.token_limit !== null && (typeof data.token_limit !== "number" || isNaN(data.token_limit))) {
+    throw new Error(`token_limit must be a number (got: ${JSON.stringify(data.token_limit)}). Note: underscore separators (100_000) are not valid in YAML.`);
+  }
+
   return {
     id: original.id,
     name: data.name,
