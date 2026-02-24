@@ -71,6 +71,7 @@ export function Sidebar() {
 
               return (
                 <box
+                  flexDirection="column"
                   backgroundColor={
                     isActive() && highlightedPersona() === persona.id 
                       ? "#3d5a80"
@@ -78,11 +79,14 @@ export function Sidebar() {
                       ? "#2d3748"
                       : "transparent"
                   }
-                  padding={1}
-                  marginBottom={0.5}
+                  paddingX={1}
+                  marginBottom={1}
                 >
                   <text fg={textColor()}>
                     {getLabel()}
+                  </text>
+                  <text fg="#586e75" wrapMode="word" height={2} visible={!!persona.short_description}>
+                    {persona.short_description ?? ""}
                   </text>
                 </box>
               );

@@ -21,7 +21,7 @@ export const editorCommand: Command = {
     
     const result = await spawnEditor({
       initialContent: currentText,
-      filename: "message.txt",
+      filename: "message.md",
       renderer: ctx.renderer,
     });
     
