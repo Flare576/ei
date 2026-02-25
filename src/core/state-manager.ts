@@ -275,14 +275,7 @@ export class StateManager {
     return result;
   }
 
-  queue_getValidations(): LLMRequest[] {
-    return this.queueState.getValidations();
-  }
 
-  queue_clearValidations(ids: string[]): void {
-    this.queueState.clearValidations(ids);
-    this.scheduleSave();
-  }
 
   queue_clearPersonaResponses(personaId: string, nextStep: string): string[] {
     const result = this.queueState.clearPersonaResponses(personaId, nextStep);

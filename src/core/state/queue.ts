@@ -1,4 +1,4 @@
-import type { LLMRequest, LLMNextStep, QueueFailResult } from "../types.js";
+import type { LLMRequest, QueueFailResult } from "../types.js";
 
 const BASE_BACKOFF_MS = 2_000;
 const MAX_BACKOFF_MS = 30_000;
@@ -93,16 +93,7 @@ export class QueueState {
     return { dropped: false, retryDelay: delay };
   }
 
-  getValidations(): LLMRequest[] {
-    return this.queue.filter(
-      (r) => r.next_step === ("handleEiValidation" as LLMNextStep)
-    );
-  }
 
-  clearValidations(ids: string[]): void {
-    const idSet = new Set(ids);
-    this.queue = this.queue.filter((r) => !idSet.has(r.id));
-  }
 
   clearPersonaResponses(personaId: string, nextStep: string): string[] {
     const removedIds: string[] = [];
