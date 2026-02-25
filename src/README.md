@@ -24,6 +24,10 @@ As the user uses the system, it tries to keep track of several data points for t
     * Current: How much the user has talked or heard about a subject, where:
         + 0.0: Obi-Wan Kenobi ...now that's a name I've not heard in a long time
         + 1.0: The user just spent 4 hours talking about Star Wars
+- Strength: The system will try to gauge how strongly you exhibit a Trait
+    * 1.0 on "Visual Learner" would mean that you've said or shown that it is the absolute best way for you to learn
+    * 0.0 on "Public Speaker" would mean you've said or shown that you have no desire, aptitude, or willingness to present
+- Validated: "Facts" have proven almost as hard to get right as Traits, so I added a way for Ei and you to mark the ones that are true as "Validated"
 
 Each of those types represents a piece of what the system "knows" about the person, and all but "Traits" are kept up-to-date as the person chats with Personas, but not on always on every message. On each message to a Persona, a check is made:
 
