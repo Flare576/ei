@@ -1,16 +1,17 @@
-import { 
-  ContextStatus, 
-  LLMNextStep, 
+import {
+  ContextStatus,
+  LLMNextStep,
   ValidationLevel,
-  type LLMResponse, 
-  type Message, 
-  type Trait, 
+  type LLMResponse,
+  type Message,
+  type Trait,
   type Topic,
   type PersonaTopic,
   type Fact,
   type Person,
   type Quote,
   type DataItemType,
+  type DataItemBase,
 } from "../types.js";
 import type { StateManager } from "../state-manager.js";
 import type { HeartbeatCheckResult, EiHeartbeatResult } from "../../prompts/heartbeat/types.js";
@@ -22,7 +23,7 @@ import type {
   PersonaTopicMatchResult,
   PersonaTopicUpdateResult,
 } from "../../prompts/persona/types.js";
-import type { EiValidationResult } from "../../prompts/validation/types.js";
+
 import type { 
   PersonaExpireResult, 
   PersonaExploreResult,
@@ -50,9 +51,10 @@ import type {
   ItemUpdateResult,
   ExposureImpact,
 } from "../../prompts/human/types.js";
-import { buildEiValidationPrompt } from "../../prompts/validation/index.js";
-import { LLMRequestType, LLMPriority, LLMNextStep as NextStep } from "../types.js";
+
+import { LLMRequestType, LLMPriority } from "../types.js";
 import { getEmbeddingService, getItemEmbeddingText } from "../embedding-service.js";
+import { crossFind } from "../utils/index.js";
 
 export type ResponseHandler = (response: LLMResponse, state: StateManager) => void | Promise<void>;
 
@@ -164,29 +166,52 @@ function handleEiHeartbeat(response: LLMResponse, state: StateManager): void {
     console.error("[handleEiHeartbeat] No parsed result");
     return;
   }
-
   const now = new Date().toISOString();
   state.persona_update("ei", { last_heartbeat: now });
-
-  if (!result.should_respond) {
+  if (!result.should_respond || !result.id) {
     console.log("[handleEiHeartbeat] Ei chose not to reach out");
     return;
   }
+  const isTUI = response.request.data.isTUI as boolean;
+  const found = crossFind(result.id, state.getHuman(), state.persona_getAll());
+  if (!found) {
+    console.warn(`[handleEiHeartbeat] Could not find item with id "${result.id}"`);
+    return;
+  }
 
-  if (result.message) {
-    const message: Message = {
-      id: crypto.randomUUID(),
-      role: "system",
-      content: result.message,
-      timestamp: now,
-      read: false,
-      context_status: ContextStatus.Default,
-    };
-    state.messages_append("ei", message);
-    console.log("[handleEiHeartbeat] Ei proactively messaged");
-    if (result.priorities) {
-      console.log("[handleEiHeartbeat] Priorities:", result.priorities.map(p => p.name).join(", "));
-    }
+  const sendMessage = (content: string) => state.messages_append("ei", {
+    id: crypto.randomUUID(),
+    role: "system",
+    content,
+    timestamp: now,
+    read: false,
+    context_status: ContextStatus.Default,
+  });
+
+  if (found.type === "fact") {
+    const factsNav = isTUI ? "using /me facts" : "using \u2630 \u2192 My Data";
+    sendMessage(`Another persona updated a fact called "${found.name}" to "${found.description}". If that's right, you can lock it from further changes by ${factsNav}.`);
+    state.human_fact_upsert({ ...found, validated: ValidationLevel.Ei, validated_date: now });
+    console.log(`[handleEiHeartbeat] Notified about fact "${found.name}"`);
+    return;
+  }
+
+  if (result.my_response) sendMessage(result.my_response);
+
+  switch (found.type) {
+    case "person":
+      state.human_person_upsert({ ...found, last_ei_asked: now });
+      console.log(`[handleEiHeartbeat] Reached out about person "${found.name}"`);
+      break;
+    case "topic":
+      state.human_topic_upsert({ ...found, last_ei_asked: now });
+      console.log(`[handleEiHeartbeat] Reached out about topic "${found.name}"`);
+      break;
+    case "persona":
+      console.log(`[handleEiHeartbeat] Reached out about persona "${found.display_name}"`);
+      break;
+    default:
+      console.warn(`[handleEiHeartbeat] Unexpected item type "${found.type}" for id "${result.id}"`);
   }
 }
 
@@ -291,59 +316,7 @@ function handlePersonaTraitExtraction(response: LLMResponse, state: StateManager
   console.log(`[handlePersonaTraitExtraction] Updated ${traits.length} traits for ${personaDisplayName}`);
 }
 
-function handleEiValidation(response: LLMResponse, state: StateManager): void {
-  const validationId = response.request.data.validationId as string;
-  const dataType = response.request.data.dataType as string;
-  const itemName = response.request.data.itemName as string;
 
-  const result = response.parsed as EiValidationResult | undefined;
-  if (!result) {
-    console.error("[handleEiValidation] No parsed result");
-    return;
-  }
-
-  console.log(`[handleEiValidation] Decision for ${dataType} "${itemName}": ${result.decision} - ${result.reason}`);
-
-  if (result.decision === "reject") {
-    if (validationId) {
-      state.queue_clearValidations([validationId]);
-    }
-    return;
-  }
-
-  const itemToApply = result.decision === "modify" && result.modified_item
-    ? result.modified_item
-    : response.request.data.proposedItem;
-
-  if (itemToApply && dataType) {
-    const now = new Date().toISOString();
-    const item = { ...itemToApply, last_updated: now };
-
-    switch (dataType) {
-      case "fact":
-        state.human_fact_upsert({
-          ...item,
-          validated: ValidationLevel.Ei,
-          validated_date: now,
-        } as Fact);
-        break;
-      case "trait":
-        state.human_trait_upsert(item as Trait);
-        break;
-      case "topic":
-        state.human_topic_upsert(item as Topic);
-        break;
-      case "person":
-        state.human_person_upsert(item as Person);
-        break;
-    }
-    console.log(`[handleEiValidation] Applied ${result.decision} for ${dataType} "${itemName}"`);
-  }
-
-  if (validationId) {
-    state.queue_clearValidations([validationId]);
-  }
-}
 
 function handleOneShot(_response: LLMResponse, _state: StateManager): void {
   // One-shot is handled specially in Processor to fire onOneShotReturned
@@ -573,43 +546,48 @@ function handleHumanItemMatch(response: LLMResponse, state: StateManager): void 
     console.error("[handleHumanItemMatch] No parsed result");
     return;
   }
-  // "new" isn't a valid guid and is used as a marker for LLMs to signify "no match" - update for processing
-  if (result?.matched_guid === "new") {
-    result.matched_guid = null;
-  }
 
   const candidateType = response.request.data.candidateType as DataItemType;
-  const itemName = response.request.data.itemName as string;
-  const itemValue = response.request.data.itemValue as string;
   const personaId = response.request.data.personaId as string;
   const personaDisplayName = response.request.data.personaDisplayName as string;
   const analyzeFrom = response.request.data.analyze_from_timestamp as string | null;
-  
   const allMessages = state.messages_get(personaId);
   const { messages_context, messages_analyze } = splitMessagesByTimestamp(allMessages, analyzeFrom);
-
-  if (result.matched_guid) {
-    const human = state.getHuman();
-    const matchedFact = human.facts.find(f => f.id === result.matched_guid);
-    if (matchedFact?.validated === ValidationLevel.Human) {
-      console.log(`[handleHumanItemMatch] Skipping locked fact "${matchedFact.name}" (human-validated)`);
-      return;
-    }
-  }
-
   const context: ExtractionContext & { itemName: string; itemValue: string; itemCategory?: string } = {
     personaId,
     personaDisplayName,
     messages_context,
     messages_analyze,
-    itemName,
-    itemValue,
-    itemCategory: candidateType === "topic" ? itemValue : undefined,
+    itemName: response.request.data.itemName as string,
+    itemValue: response.request.data.itemValue as string,
+    itemCategory: response.request.data.itemCategory as string | undefined,
   };
 
-  queueItemUpdate(candidateType, result, context, state);
-  const matched = result.matched_guid ? `matched GUID "${result.matched_guid}"` : "no match (new item)";
-  console.log(`[handleHumanItemMatch] ${candidateType} "${itemName}": ${matched}`);
+  let resolvedType: DataItemType = candidateType;
+  let matched_guid = result.matched_guid;
+  if (matched_guid === "new") {
+    matched_guid = null;
+  } else if (matched_guid) {
+    const found = crossFind(matched_guid, state.getHuman());
+    if (!found) {
+      console.warn(`[handleHumanItemMatch] matched_guid "${matched_guid}" not found in human data — treating as new item`);
+      matched_guid = null;
+    } else if (found.type === "fact" && found.validated === ValidationLevel.Human) {
+      console.log(`[handleHumanItemMatch] Skipping locked fact "${found.name}" (human-validated)`);
+      return;
+    } else if (!(found.type === "fact" || found.type === "trait" || found.type === "topic" || found.type === "person")) {
+      console.warn(`[handleHumanItemMatch] matched_guid "${matched_guid}" resolved to non-human type "${found.type}" - Ignoring`);
+      return;
+    } else {
+      resolvedType = found.type;
+      context.itemName = found.name || context.itemName;
+      context.itemValue = found.description || context.itemValue;
+    }
+  }
+  result.matched_guid = matched_guid;
+  queueItemUpdate(resolvedType, result, context, state);
+  const matched = matched_guid ? `matched GUID "${matched_guid}"` : "no match (new item)";
+  console.log(`[handleHumanItemMatch] ${resolvedType} "${context.itemName}": ${matched}`);
 }
 
 async function handleHumanItemUpdate(response: LLMResponse, state: StateManager): Promise<void> {
@@ -632,7 +610,15 @@ async function handleHumanItemUpdate(response: LLMResponse, state: StateManager)
   }
 
   const now = new Date().toISOString();
-  const itemId = isNewItem ? crypto.randomUUID() : (existingItemId ?? crypto.randomUUID());
+  const resolveItemId = (): string => {
+    if (isNewItem || !existingItemId) return crypto.randomUUID();
+    const h = state.getHuman();
+    const arr = candidateType === "fact" ? h.facts : candidateType === "trait" ? h.traits : candidateType === "topic" ? h.topics : h.people;
+    // Guard: if existingItemId isn't in the correct type array, treat as new
+    // (prevents cross-type ID reuse when LLM matches against a different type's UUID)
+    return arr.find((x: DataItemBase) => x.id === existingItemId) ? existingItemId : crypto.randomUUID();
+  };
+  const itemId = resolveItemId();
 
   const persona = state.persona_getById(personaId);
   const personaGroup = persona?.group_primary ?? null;
@@ -826,22 +812,15 @@ function applyOrValidate(
   state: StateManager,
   dataType: DataItemType,
   item: Fact | Trait | Topic | Person,
-  personaName: string,
-  isEi: boolean,
-  personaGroup: string | null
+  _personaName: string,
+  _isEi: boolean,
+  _personaGroup: string | null
 ): void {
-  const isGeneralGroup = !personaGroup || personaGroup.toLowerCase() === "general";
-  const needsValidation = !isEi && isGeneralGroup;
-
   switch (dataType) {
     case "fact": state.human_fact_upsert(item as Fact); break;
     case "trait": state.human_trait_upsert(item as Trait); break;
     case "topic": state.human_topic_upsert(item as Topic); break;
     case "person": state.human_person_upsert(item as Person); break;
-  }
-
-  if (needsValidation) {
-    queueEiValidation(state, dataType, item, personaName);
   }
 }
 
@@ -986,52 +965,7 @@ function handlePersonaTopicUpdate(response: LLMResponse, state: StateManager): v
   }
 }
 
-function queueEiValidation(
-  state: StateManager,
-  dataType: DataItemType,
-  item: Fact | Trait | Topic | Person,
-  sourcePersona: string
-): void {
-  const human = state.getHuman();
-  let existingItem: Fact | Trait | Topic | Person | undefined;
 
-  switch (dataType) {
-    case "fact": existingItem = human.facts.find(f => f.id === item.id); break;
-    case "trait": existingItem = human.traits.find(t => t.id === item.id); break;
-    case "topic": existingItem = human.topics.find(t => t.id === item.id); break;
-    case "person": existingItem = human.people.find(p => p.id === item.id); break;
-  }
-
-  const prompt = buildEiValidationPrompt({
-    validation_type: "cross_persona",
-    item_name: item.name,
-    data_type: dataType,
-    context: `Learned from conversation with ${sourcePersona}`,
-    source_persona: sourcePersona,
-    current_item: existingItem,
-    proposed_item: item,
-  });
-
-  // Cross-persona validation is always normal priority
-  const priority = LLMPriority.Normal;
-
-  state.queue_enqueue({
-    type: LLMRequestType.JSON,
-    priority,
-    system: prompt.system,
-    user: prompt.user,
-    next_step: NextStep.HandleEiValidation,
-    data: {
-      validationId: crypto.randomUUID(),
-      dataType,
-      itemName: item.name,
-      proposedItem: item,
-      sourcePersona,
-    },
-  });
-
-  console.log(`[queueEiValidation] Queued ${dataType} "${item.name}" from ${sourcePersona} for Ei validation`);
-}
 
 export const handlers: Record<LLMNextStep, ResponseHandler> = {
   handlePersonaResponse,
@@ -1049,7 +983,6 @@ export const handlers: Record<LLMNextStep, ResponseHandler> = {
   handlePersonaTopicUpdate,
   handleHeartbeatCheck,
   handleEiHeartbeat,
-  handleEiValidation,
   handleOneShot,
   handlePersonaExpire,
   handlePersonaExplore,
