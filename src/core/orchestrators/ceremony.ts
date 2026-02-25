@@ -1,6 +1,6 @@
 import { LLMRequestType, LLMPriority, LLMNextStep, MESSAGE_MIN_COUNT, MESSAGE_MAX_AGE_DAYS, type CeremonyConfig, type PersonaTopic, type Topic } from "../types.js";
 import type { StateManager } from "../state-manager.js";
-import { applyDecayToValue } from "../utils/decay.js";
+import { applyDecayToValue } from "../utils/index.js";
 import {
   queueFactScan,
   queueTraitScan,
