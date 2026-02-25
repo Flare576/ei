@@ -18,7 +18,6 @@ export enum ValidationLevel {
   Ei = "ei",         // Ei mentioned it to user (don't mention again)
   Human = "human",   // User explicitly confirmed (locked)
 }
-
 export enum LLMRequestType {
   Response = "response",
   JSON = "json",
@@ -47,9 +46,7 @@ export enum LLMNextStep {
   HandlePersonaTopicUpdate = "handlePersonaTopicUpdate",
   HandleHeartbeatCheck = "handleHeartbeatCheck",
   HandleEiHeartbeat = "handleEiHeartbeat",
-  HandleEiValidation = "handleEiValidation",
   HandleOneShot = "handleOneShot",
-  // Ceremony handlers
   HandlePersonaExpire = "handlePersonaExpire",
   HandlePersonaExplore = "handlePersonaExplore",
   HandleDescriptionCheck = "handleDescriptionCheck",
@@ -83,6 +80,7 @@ export interface Topic extends DataItemBase {
   category?: string; // Interest, Goal, Dream, Conflict, Concern, Fear, Hope, Plan, Project
   exposure_current: number;
   exposure_desired: number;
+  last_ei_asked?: string | null;  // ISO timestamp of last time Ei proactively asked about this
 }
 
 /**
@@ -109,6 +107,7 @@ export interface Person extends DataItemBase {
   relationship: string;
   exposure_current: number;
   exposure_desired: number;
+  last_ei_asked?: string | null;  // ISO timestamp of last time Ei proactively asked about this
 }
 
 export interface Quote {
@@ -239,7 +238,6 @@ export interface PersonaEntity {
   last_activity: string;
   last_heartbeat?: string;
   last_extraction?: string;
-  last_inactivity_ping?: string;
 }
 
 export interface PersonaCreationInput {

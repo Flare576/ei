@@ -44,8 +44,8 @@ These field names have **specific meanings** and should be used consistently:
 | `exposure_desired` | 0.0-1.0 | How much the entity wants to discuss this |
 | `sentiment` | -1.0 to 1.0 | Emotional valence (negative to positive) |
 | `strength` | 0.0-1.0 | How strongly a trait manifests |
-| `validated` | ValidationLevel | Whether fact has been acknowledged (none/ei/human) |
-| `validated_date` | ISO string | When validation state last changed |
+| `validated` | ValidationLevel | Whether/how this fact was validated (`None`, `Ei`, `Human`) |
+| `last_ei_asked` | ISO string \| null | When Ei last proactively asked about this Person/Topic |
 | `last_updated` | ISO string | When this record was last modified |
 | `last_activity` | ISO string | When the user last interacted with this entity |
 
@@ -914,14 +914,13 @@ interface DataItemBase {
 }
 
 interface Fact extends DataItemBase {
-  validated: ValidationLevel;  // none | ei | human
-  validated_date: string;      // When validation state changed
+  validated: ValidationLevel;
 }
 
 enum ValidationLevel {
-  None = "none",     // Fresh data, never acknowledged
-  Ei = "ei",         // Ei mentioned it to user (don't mention again)
-  Human = "human",   // User explicitly confirmed (locked)
+  None = "none",               // Fresh data, never acknowledged
+  Ei = "ei",                   // Ei mentioned it to user (don't mention again)
+  Human = "human"              // User explicitly confirmed (locked
 }
 
 interface Trait extends DataItemBase {
@@ -932,12 +931,14 @@ interface Topic extends DataItemBase {
   category?: string;           // Interest|Goal|Dream|Conflict|Concern|Fear|Hope|Plan|Project
   exposure_current: number;    // 0.0 to 1.0
   exposure_desired: number;    // 0.0 to 1.0
+  last_ei_asked?: string | null; // When Ei last proactively asked about this
 }
 
 interface Person extends DataItemBase {
   relationship: string;
   exposure_current: number;    // 0.0 to 1.0
   exposure_desired: number;    // 0.0 to 1.0
+  last_ei_asked?: string | null; // When Ei last proactively asked about this
 }
 
 interface Quote {
@@ -1115,9 +1116,6 @@ enum LLMNextStep {
   // Heartbeat
   HandleHeartbeatCheck = "handleHeartbeatCheck",
   HandleEiHeartbeat = "handleEiHeartbeat",
-  
-  // Validation
-  HandleEiValidation = "handleEiValidation",
   
   // One-Shot (AI-assist buttons)
   HandleOneShot = "handleOneShot",
