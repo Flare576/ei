@@ -1,4 +1,5 @@
 import type { StorageState, Quote, Fact, Trait, Person, Topic } from "../core/types";
+import { crossFind } from "../core/utils/index.ts";
 import { join } from "path";
 import { readFile } from "fs/promises";
 import { getEmbeddingService, findTopK } from "../core/embedding-service";
@@ -249,21 +250,8 @@ export async function lookupById(id: string): Promise<({ type: string } & Record
     return null;
   }
 
-  const collections: Array<{ type: string; source: Array<{ id: string; [k: string]: unknown }> }> = [
-    { type: "fact", source: state.human.facts },
-    { type: "trait", source: state.human.traits },
-    { type: "person", source: state.human.people },
-    { type: "topic", source: state.human.topics },
-    { type: "quote", source: state.human.quotes },
-  ];
-
-  for (const { type, source } of collections) {
-    const entity = source.find(item => item.id === id);
-    if (entity) {
-      const { embedding, ...rest } = entity;
-      return { type, ...rest };
-    }
-  }
-
-  return null;
+  const found = crossFind(id, state.human);
+  if (!found) return null;
+  const { type, embedding, ...rest } = found;
+  return { type, ...rest };
 }
