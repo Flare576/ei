@@ -220,7 +220,7 @@ export function personaToYAML(persona: PersonaEntity, allGroups?: string[]): str
       : persona.topics.map(({ name, perspective, approach, personal_stake, exposure_current, exposure_desired }) => ({ 
           name, perspective, approach, personal_stake, exposure_current, exposure_desired 
         })),
-    heartbeat_delay_ms: persona.heartbeat_delay_ms,
+    heartbeat_delay_ms: persona.heartbeat_delay_ms || 'default',
     context_window_hours: persona.context_window_hours,
     is_paused: persona.is_paused || undefined,
     pause_until: persona.pause_until,
@@ -322,7 +322,7 @@ export function personaFromYAML(yamlContent: string, original: PersonaEntity): P
     groups_visible: groupsVisible,
     traits,
     topics,
-    heartbeat_delay_ms: data.heartbeat_delay_ms,
+    heartbeat_delay_ms: stripPlaceholder(data.heartbeat_delay_ms, 'default'),
     context_window_hours: data.context_window_hours,
     is_paused: data.is_paused ?? false,
     pause_until: data.pause_until,
@@ -347,7 +347,7 @@ export function humanToYAML(human: HumanEntity): string {
   
   return YAML.stringify(data, {
     lineWidth: 0,
-  });
+  }).replace(/^(\s+validated:\s+\S+)$/mg, '$1 # none | ei | human');
 }
 
 export interface HumanYAMLResult {
