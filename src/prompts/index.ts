@@ -10,6 +10,7 @@ export type {
   HeartbeatCheckResult,
   EiHeartbeatPromptData,
   EiHeartbeatResult,
+  EiHeartbeatItem,
 } from "./heartbeat/types.js";
 
 export {
@@ -41,11 +42,7 @@ export type {
   TraitResult,
 } from "./persona/types.js";
 
-export { buildEiValidationPrompt } from "./validation/index.js";
-export type {
-  EiValidationPromptData,
-  EiValidationResult,
-} from "./validation/types.js";
+
 
 export {
   buildHumanFactScanPrompt,
