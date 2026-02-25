@@ -4,6 +4,7 @@ import {
   LLMRequestType,
   LLMPriority,
   ValidationLevel,
+
   type LLMResponse,
   type LLMRequest,
   type Message,
@@ -25,10 +26,7 @@ vi.mock("../../../../src/core/orchestrators/index.js", () => ({
   queueItemUpdate: vi.fn(),
 }));
 
-// Mock the validation prompt builder
-vi.mock("../../../../src/prompts/validation/index.js", () => ({
-  buildEiValidationPrompt: vi.fn().mockReturnValue({ system: "sys", user: "usr" }),
-}));
+
 
 import { handlers } from "../../../../src/core/handlers/index.js";
 import { queueItemMatch, queueItemUpdate } from "../../../../src/core/orchestrators/index.js";
@@ -63,7 +61,7 @@ function createMockStateManager() {
     messages_append: vi.fn(),
     messages_markPendingAsRead: vi.fn(),
     queue_enqueue: vi.fn(),
-    queue_clearValidations: vi.fn(),
+
     _human: human,
     _personas: personas,
     _messages: messages,
@@ -434,8 +432,8 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
         name: "Birthday",
         description: "Old description",
         sentiment: 0.5,
-        validated: ValidationLevel.None,
-        validated_date: new Date().toISOString(),
+          validated: ValidationLevel.None,
+          validated_date: new Date().toISOString(),
         last_updated: new Date().toISOString(),
       });
 
@@ -651,246 +649,6 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
   });
 });
 
-describe("Cross-Persona Validation", () => {
-  let state: ReturnType<typeof createMockStateManager>;
 
-  beforeEach(() => {
-    state = createMockStateManager();
-    vi.clearAllMocks();
-  });
 
-  it("queues Ei validation when non-Ei persona with General group learns item", async () => {
-    state._personas["friend"] = {
-      id: "friend-id",
-      display_name: "Friend",
-      entity: "system",
-      aliases: ["friend"],
-      group_primary: null,
-      traits: [],
-      topics: [],
-      is_paused: false,
-      is_archived: false,
-      is_static: false,
-      last_updated: new Date().toISOString(),
-      last_activity: new Date().toISOString(),
-    };
 
-    const request = createMockRequest({
-      next_step: LLMNextStep.HandleHumanItemUpdate,
-      data: {
-        personaId: "friend-id",
-        personaDisplayName: "Friend",
-        candidateType: "fact",
-        isNewItem: true,
-      },
-    });
-
-    const response = createMockResponse(request, {
-      name: "TestFact",
-      description: "Test description",
-      sentiment: 0.5,
-    });
-
-    await handlers.handleHumanItemUpdate(response, state as any);
-
-    expect(state.human_fact_upsert).toHaveBeenCalled();
-    expect(state.queue_enqueue).toHaveBeenCalledWith(
-      expect.objectContaining({
-        next_step: LLMNextStep.HandleEiValidation,
-        data: expect.objectContaining({
-          dataType: "fact",
-          sourcePersona: "Friend",
-        }),
-      })
-    );
-  });
-
-  it("does NOT queue validation when Ei learns item", async () => {
-    state._personas["ei"] = {
-      id: "ei",
-      display_name: "Ei",
-      entity: "system",
-      aliases: ["ei"],
-      traits: [],
-      topics: [],
-      is_paused: false,
-      is_archived: false,
-      is_static: false,
-      last_updated: new Date().toISOString(),
-      last_activity: new Date().toISOString(),
-    };
-
-    const request = createMockRequest({
-      next_step: LLMNextStep.HandleHumanItemUpdate,
-      data: {
-        personaId: "ei",
-        personaDisplayName: "Ei",
-        candidateType: "fact",
-        isNewItem: true,
-      },
-    });
-
-    const response = createMockResponse(request, {
-      name: "TestFact",
-      description: "Test description",
-      sentiment: 0.5,
-    });
-
-    await handlers.handleHumanItemUpdate(response, state as any);
-
-    expect(state.human_fact_upsert).toHaveBeenCalled();
-    expect(state.queue_enqueue).not.toHaveBeenCalled();
-  });
-
-  it("does NOT queue validation when persona has non-General group", async () => {
-    state._personas["work-buddy"] = {
-      id: "work-buddy-id",
-      display_name: "Work Buddy",
-      entity: "system",
-      aliases: ["work-buddy"],
-      group_primary: "work",
-      traits: [],
-      topics: [],
-      is_paused: false,
-      is_archived: false,
-      is_static: false,
-      last_updated: new Date().toISOString(),
-      last_activity: new Date().toISOString(),
-    };
-
-    const request = createMockRequest({
-      next_step: LLMNextStep.HandleHumanItemUpdate,
-      data: {
-        personaId: "work-buddy-id",
-        personaDisplayName: "Work Buddy",
-        candidateType: "fact",
-        isNewItem: true,
-      },
-    });
-
-    const response = createMockResponse(request, {
-      name: "TestFact",
-      description: "Test description",
-      sentiment: 0.5,
-    });
-
-    await handlers.handleHumanItemUpdate(response, state as any);
-
-    expect(state.human_fact_upsert).toHaveBeenCalled();
-    expect(state.queue_enqueue).not.toHaveBeenCalled();
-  });
-
-});
-
-describe("handleEiValidation", () => {
-  let state: ReturnType<typeof createMockStateManager>;
-
-  beforeEach(() => {
-    state = createMockStateManager();
-    vi.clearAllMocks();
-  });
-
-  it("accepts item and applies it", async () => {
-    const request = createMockRequest({
-      next_step: LLMNextStep.HandleEiValidation,
-      data: {
-        validationId: "val-123",
-        dataType: "fact",
-        itemName: "TestFact",
-        proposedItem: {
-          id: "fact-1",
-          name: "TestFact",
-          description: "Proposed description",
-          sentiment: 0.5,
-          validated: ValidationLevel.None,
-          validated_date: new Date().toISOString(),
-          last_updated: new Date().toISOString(),
-        },
-      },
-    });
-
-    const response = createMockResponse(request, {
-      decision: "accept",
-      reason: "Information seems accurate",
-    });
-
-    await handlers.handleEiValidation(response, state as any);
-
-    expect(state.human_fact_upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: "TestFact",
-      })
-    );
-    expect(state.queue_clearValidations).toHaveBeenCalledWith(["val-123"]);
-  });
-
-  it("rejects item and clears validation", async () => {
-    const request = createMockRequest({
-      next_step: LLMNextStep.HandleEiValidation,
-      data: {
-        validationId: "val-123",
-        dataType: "fact",
-        itemName: "TestFact",
-        proposedItem: {
-          id: "fact-1",
-          name: "TestFact",
-          description: "Wrong info",
-          sentiment: 0.5,
-          validated: ValidationLevel.None,
-          validated_date: new Date().toISOString(),
-          last_updated: new Date().toISOString(),
-        },
-      },
-    });
-
-    const response = createMockResponse(request, {
-      decision: "reject",
-      reason: "Information contradicts known facts",
-    });
-
-    await handlers.handleEiValidation(response, state as any);
-
-    expect(state.human_fact_upsert).not.toHaveBeenCalled();
-    expect(state.queue_clearValidations).toHaveBeenCalledWith(["val-123"]);
-  });
-
-  it("modifies item and applies modification", async () => {
-    const request = createMockRequest({
-      next_step: LLMNextStep.HandleEiValidation,
-      data: {
-        validationId: "val-123",
-        dataType: "trait",
-        itemName: "Curiosity",
-        proposedItem: {
-          id: "trait-1",
-          name: "Curiosity",
-          description: "Original description",
-          sentiment: 0.5,
-          strength: 0.5,
-          last_updated: new Date().toISOString(),
-        },
-      },
-    });
-
-    const response = createMockResponse(request, {
-      decision: "modify",
-      reason: "Adjusted description for accuracy",
-      modified_item: {
-        id: "trait-1",
-        name: "Curiosity",
-        description: "Modified description",
-        sentiment: 0.7,
-        strength: 0.8,
-      },
-    });
-
-    await handlers.handleEiValidation(response, state as any);
-
-    expect(state.human_trait_upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        description: "Modified description",
-        sentiment: 0.7,
-      })
-    );
-  });
-});

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, writeFileSync, rmSync, existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import { ValidationLevel } from "../../../src/core/types.js";
+
 
 vi.mock("../../../src/core/embedding-service.js", async (importOriginal) => {
   const actual = await importOriginal() as Record<string, unknown>;
@@ -15,6 +15,7 @@ vi.mock("../../../src/core/embedding-service.js", async (importOriginal) => {
 });
 
 import { retrieve, retrieveBalanced, resolveLinkedItems, lookupById } from "../../../src/cli/retrieval.js";
+import { ValidationLevel } from "../../../src/core/types.js";
 
 const EMBEDDING = new Array(384).fill(1);
 const NOW = "2026-01-01T00:00:00Z";

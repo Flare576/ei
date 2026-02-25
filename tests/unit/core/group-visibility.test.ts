@@ -4,6 +4,7 @@ import {
   LLMRequestType,
   LLMPriority,
   ValidationLevel,
+
   type LLMResponse,
   type LLMRequest,
   type Message,
@@ -96,7 +97,7 @@ function createMockStateManager(options: {
     persona_update: vi.fn(),
     messages_get: vi.fn((name: string) => messages[name] ?? []),
     queue_enqueue: vi.fn(),
-    queue_clearValidations: vi.fn(),
+
     _human: human,
     _personas: personas,
   };

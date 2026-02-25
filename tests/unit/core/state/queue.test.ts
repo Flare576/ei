@@ -288,31 +288,7 @@ describe("QueueState", () => {
     });
   });
 
-  describe("validations", () => {
-    it("getValidations returns only ei_validation requests", () => {
-      state.enqueue(makeRequest("normal", LLMNextStep.HandlePersonaResponse));
-      state.enqueue(makeRequest("normal", LLMNextStep.HandleEiValidation));
-      state.enqueue(makeRequest("normal", LLMNextStep.HandleHeartbeatCheck));
-      
-      const validations = state.getValidations();
-      
-      expect(validations).toHaveLength(1);
-      expect(validations[0].next_step).toBe(LLMNextStep.HandleEiValidation);
-    });
 
-    it("clearValidations removes specified requests", () => {
-      const id1 = state.enqueue(makeRequest("normal", LLMNextStep.HandleEiValidation));
-      const id2 = state.enqueue(makeRequest("normal", LLMNextStep.HandleEiValidation));
-      state.enqueue(makeRequest("normal", LLMNextStep.HandlePersonaResponse));
-      
-      state.clearValidations([id1]);
-      
-      expect(state.length()).toBe(2);
-      const validations = state.getValidations();
-      expect(validations).toHaveLength(1);
-      expect(validations[0].id).toBe(id2);
-    });
-  });
 
   describe("pause/resume", () => {
     it("isPaused returns correct state", () => {

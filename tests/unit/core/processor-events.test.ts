@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { Processor } from "../../../src/core/processor.js";
+import { ValidationLevel } from "../../../src/core/types.js";
 import type { Ei_Interface, PersonaEntity } from "../../../src/core/types.js";
 
 // Mock the handlers module to intercept handler calls
@@ -19,7 +20,7 @@ vi.mock("../../../src/core/handlers/index.js", () => ({
     handlePersonaTopicExploration: vi.fn(),
     handleHeartbeatCheck: vi.fn(),
     handleEiHeartbeat: vi.fn(),
-    handleEiValidation: vi.fn(),
+
     handleOneShot: vi.fn(),
   },
 }));
@@ -150,7 +151,7 @@ describe("Processor Event System", () => {
       description: "A test fact",
       sentiment: 0,
       last_updated: new Date().toISOString(),
-      validated: "none" as import("../../../src/core/types.js").ValidationLevel,
+      validated: ValidationLevel.None,
       validated_date: new Date().toISOString(),
     });
     expect(mock.calls).toContain("onHumanUpdated");
@@ -174,7 +175,7 @@ describe("Processor Event System", () => {
       description: "A test fact",
       sentiment: 0,
       last_updated: new Date().toISOString(),
-      validated: "none" as import("../../../src/core/types.js").ValidationLevel,
+      validated: ValidationLevel.None,
       validated_date: new Date().toISOString(),
     });
     mock.calls.length = 0;

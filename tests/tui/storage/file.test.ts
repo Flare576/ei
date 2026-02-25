@@ -1,6 +1,7 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { FileStorage } from "../../../tui/src/storage/file";
 import type { StorageState, HumanEntity } from "../../../src/core/types";
+import { ValidationLevel } from "../../../src/core/types";
 import { join } from "path";
 import { rm } from "fs/promises";
 import { tmpdir } from "os";
@@ -68,7 +69,7 @@ describe("FileStorage", () => {
       description: "", 
       sentiment: 0, 
       last_updated: "",
-      validated: "none" as any,
+      validated: ValidationLevel.None,
       validated_date: ""
     }];
     await storage.save(state2);
