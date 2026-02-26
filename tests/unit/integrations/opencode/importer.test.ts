@@ -377,8 +377,8 @@ describe("importOpenCodeSessions", () => {
 
     const stored = messageStore.get(buildPersona!.id) ?? [];
     expect(stored).toHaveLength(2);
-    expect(stored[0]).toMatchObject({ id: "msg_user1", role: "human", content: "User message" });
-    expect(stored[1]).toMatchObject({ id: "msg_assist1", role: "system", content: "Assistant response" });
+    expect(stored[0]).toMatchObject({ id: "msg_user1", role: "human", verbal_response: "User message" });
+    expect(stored[1]).toMatchObject({ id: "msg_assist1", role: "system", verbal_response: "Assistant response" });
   });
 
   it("maps user role to human and assistant to system", async () => {

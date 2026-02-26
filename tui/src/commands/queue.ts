@@ -6,7 +6,7 @@ import { ConfirmOverlay } from "../components/ConfirmOverlay.js";
 export const queueCommand: Command = {
   name: "queue",
   aliases: [],
-  description: "Pause the queue and open all pending/processing items in $EDITOR",
+  description: "Pause & open queue items in $EDITOR",
   usage: "/queue - Inspect and edit active queue items",
 
   async execute(_args, ctx) {

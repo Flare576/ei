@@ -12,7 +12,7 @@ function estimateTokens(text: string): number {
 }
 
 function estimateMessageTokens(messages: Message[]): number {
-  return messages.reduce((sum, msg) => sum + estimateTokens(msg.content) + 4, 0);
+  return messages.reduce((sum, msg) => sum + estimateTokens(msg.verbal_response ?? '') + 4, 0);
 }
 
 function fitMessagesFromEnd(messages: Message[], maxTokens: number): Message[] {
@@ -20,7 +20,7 @@ function fitMessagesFromEnd(messages: Message[], maxTokens: number): Message[] {
   let tokens = 0;
 
   for (let i = messages.length - 1; i >= 0; i--) {
-    const msgTokens = estimateTokens(messages[i].content) + 4;
+    const msgTokens = estimateTokens(messages[i].verbal_response ?? '') + 4;
     if (tokens + msgTokens > maxTokens) break;
     result.unshift(messages[i]);
     tokens += msgTokens;
@@ -39,7 +39,7 @@ function pullMessagesFromStart(
   let i = startIndex;
 
   while (i < messages.length) {
-    const msgTokens = estimateTokens(messages[i].content) + 4;
+    const msgTokens = estimateTokens(messages[i].verbal_response ?? '') + 4;
     if (tokens + msgTokens > maxTokens && pulled.length > 0) break;
     pulled.push(messages[i]);
     tokens += msgTokens;

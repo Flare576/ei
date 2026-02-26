@@ -78,7 +78,7 @@ function createCheckpointWithQuotes() {
           {
             id: "msg-1",
             role: "system",
-            content: "Hello! System initialized.",
+            verbal_response: "Hello! System initialized.",
             timestamp: new Date(Date.now() - 120000).toISOString(),
             read: true,
             context_status: "default",
@@ -86,7 +86,7 @@ function createCheckpointWithQuotes() {
           {
             id: "msg-2",
             role: "user",
-            content: "This is a memorable quote from the human user.",
+            verbal_response: "This is a memorable quote from the human user.",
             timestamp: msgTimestamp,
             read: true,
             context_status: "default",
@@ -94,7 +94,7 @@ function createCheckpointWithQuotes() {
           {
             id: "msg-3",
             role: "assistant",
-            content: "Ei's wise words about life and coding.",
+            verbal_response: "Ei's wise words about life and coding.",
             timestamp: new Date(Date.now() - 30000).toISOString(),
             read: true,
             context_status: "default",
@@ -122,7 +122,11 @@ await mockServer.start(MOCK_PORT, {
 
 mockServer.setResponseForType("response", {
   type: "fixed",
-  content: "Test response",
+  content: JSON.stringify({
+    should_respond: true,
+    verbal_response: "Test response",
+    reason: "responding"
+  }),
 });
 
 process.on("exit", () => {

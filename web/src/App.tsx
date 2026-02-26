@@ -41,6 +41,7 @@ function App() {
   const [queueStatus, setQueueStatus] = useState<QueueStatus>({
     state: "idle",
     pending_count: 0,
+    dlq_count: 0,
   });
   const [activePersonaId, setActivePersonaId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -320,7 +321,7 @@ function App() {
       await processor.stop();
     }
     
-    setQueueStatus({ state: "idle", pending_count: 0 });
+    setQueueStatus({ state: "idle", pending_count: 0, dlq_count: 0 });
     setProcessingPersona(null);
     setShowOnboarding(true);
   }, [processor]);

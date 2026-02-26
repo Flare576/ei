@@ -2,16 +2,37 @@ import { useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 
 import type { Message, Quote } from "../../../../src/core/types";
 import { MarkdownContent } from "../Chat";
 
+function buildMessageDisplayText(message: Message): string {
+  if (message.silence_reason !== undefined) return "";
+  const parts: string[] = [];
+  if (message.action_response) parts.push(`_${message.action_response}_`);
+  if (message.verbal_response) parts.push(message.verbal_response);
+  return parts.join('\n\n');
+}
+
 function renderMessageContent(
   message: Message,
-  quotes: Quote[]
+  quotes: Quote[],
+  activePersonaDisplayName: string | null
 ): React.ReactNode {
+  // Silence-reason messages get muted rendering
+  if (message.silence_reason !== undefined) {
+    const label = activePersonaDisplayName ?? "Persona";
+    return (
+      <span className="silence-reason">
+        [{label} chose not to respond because: {message.silence_reason}]
+      </span>
+    );
+  }
+
+  const displayText = buildMessageDisplayText(message);
+
   const messageQuotes = quotes
     .filter(q => q.message_id === message.id && q.start !== null && q.end !== null)
     .sort((a, b) => a.start! - b.start!);
   
   if (messageQuotes.length === 0) {
-    return <MarkdownContent content={message.content} />;
+    return <MarkdownContent content={displayText} />;
   }
   
   const segments: string[] = [];
@@ -21,16 +42,16 @@ function renderMessageContent(
     if (quote.start! < cursor) continue;
     
     if (quote.start! > cursor) {
-      segments.push(message.content.slice(cursor, quote.start!));
+      segments.push(displayText.slice(cursor, quote.start!));
     }
     
-    const quotedText = message.content.slice(quote.start!, quote.end!);
+    const quotedText = displayText.slice(quote.start!, quote.end!);
     segments.push(`<span class="ei-quote-highlight" data-quote-id="${quote.id}">${quotedText}</span>`);
     cursor = quote.end!;
   }
   
-  if (cursor < message.content.length) {
-    segments.push(message.content.slice(cursor));
+  if (cursor < displayText.length) {
+    segments.push(displayText.slice(cursor));
   }
   
   return <MarkdownContent content={segments.join("")} />;
@@ -287,7 +308,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
                 >
                   {msg.role === "human" && scissorsButton}
                   <div className="ei-message__bubble" onClick={handleBubbleClick}>
-                    {renderMessageContent(msg, quotes)}
+                    {renderMessageContent(msg, quotes, activePersonaDisplayName)}
                   </div>
                   {msg.role === "system" && scissorsButton}
                   <div className="ei-message__time">

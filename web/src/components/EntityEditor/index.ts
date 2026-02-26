@@ -6,5 +6,5 @@ export { HumanEditor } from './HumanEditor';
 export { PersonaEditor } from './PersonaEditor';
 export { PersonaCreatorModal } from './PersonaCreatorModal';
 export { ArchivedPersonasModal } from './ArchivedPersonasModal';
-export { ContextStatus } from './tabs/ContextWindowTab';
-export type { Message } from './tabs/ContextWindowTab';
+export { ContextStatus } from '../../../../src/core/types';
+export type { Message } from '../../../../src/core/types';

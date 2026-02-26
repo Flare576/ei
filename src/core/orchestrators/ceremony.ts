@@ -1,4 +1,4 @@
-import { LLMRequestType, LLMPriority, LLMNextStep, MESSAGE_MIN_COUNT, MESSAGE_MAX_AGE_DAYS, type CeremonyConfig, type PersonaTopic, type Topic } from "../types.js";
+import { LLMRequestType, LLMPriority, LLMNextStep, MESSAGE_MIN_COUNT, MESSAGE_MAX_AGE_DAYS, type CeremonyConfig, type PersonaTopic, type Topic, type Message } from "../types.js";
 import type { StateManager } from "../state-manager.js";
 import { applyDecayToValue } from "../utils/index.js";
 import {
@@ -384,12 +384,12 @@ export function queueExplorePhase(personaId: string, state: StateManager): void 
   });
 }
 
-function extractConversationThemes(messages: { content: string; role: string }[]): string[] {
+function extractConversationThemes(messages: Message[]): string[] {
   const humanMessages = messages.filter(m => m.role === "human");
   if (humanMessages.length === 0) return [];
   
   const words = humanMessages
-    .map(m => m.content.toLowerCase())
+    .map(m => (m.verbal_response ?? '').toLowerCase())
     .join(" ")
     .split(/\s+/)
     .filter(w => w.length > 4);

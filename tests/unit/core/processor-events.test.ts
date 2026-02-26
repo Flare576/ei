@@ -617,7 +617,7 @@ describe("Processor API Methods", () => {
       
       expect(messages.length).toBeGreaterThan(0);
       const humanMsg = messages.find(m => m.role === "human");
-      expect(humanMsg?.content).toBe("Hello!");
+      expect(humanMsg?.verbal_response).toBe("Hello!");
     });
   });
 

@@ -46,7 +46,7 @@ function createCheckpointWithThreePersonas() {
           {
             id: "ei-msg-1",
             role: "assistant",
-            content: "Hello from Ei!",
+            verbal_response: "Hello from Ei!",
             timestamp,
             read: true,
             context_status: "default",
@@ -74,7 +74,7 @@ function createCheckpointWithThreePersonas() {
           {
             id: "alice-msg-1",
             role: "assistant",
-            content: "Hello from Alice!",
+            verbal_response: "Hello from Alice!",
             timestamp,
             read: true,
             context_status: "default",
@@ -102,7 +102,7 @@ function createCheckpointWithThreePersonas() {
           {
             id: "todelete-msg-1",
             role: "assistant",
-            content: "Hello from ToDelete!",
+            verbal_response: "Hello from ToDelete!",
             timestamp,
             read: true,
             context_status: "default",

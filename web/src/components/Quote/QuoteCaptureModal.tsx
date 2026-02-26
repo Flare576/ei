@@ -38,10 +38,10 @@ export function QuoteCaptureModal({
   // Initialize state when modal opens
   useEffect(() => {
     if (isOpen && message) {
-      const contentLength = message.content.length;
+      const contentLength = (message.verbal_response ?? '').length;
       setStartPos(0);
       setEndPos(Math.min(100, contentLength));
-      setQuoteText(message.content.substring(0, Math.min(100, contentLength)));
+      setQuoteText((message.verbal_response ?? '').substring(0, Math.min(100, contentLength)));
       setSelectedDataItems([]);
     }
   }, [isOpen, message]);
@@ -77,7 +77,7 @@ export function QuoteCaptureModal({
   const handleRangeChange = (start: number, end: number) => {
     setStartPos(start);
     setEndPos(end);
-    setQuoteText(message.content.substring(start, end));
+    setQuoteText((message.verbal_response ?? '').substring(start, end));
   };
 
   const handleDataItemsChange = (ids: string[]) => {
@@ -125,7 +125,7 @@ export function QuoteCaptureModal({
             <label className="ei-quote-capture-modal__label">Select Range</label>
             <RangeSlider
               min={0}
-              max={message.content.length}
+              max={(message.verbal_response ?? '').length}
               startValue={startPos}
               endValue={endPos}
               onChange={handleRangeChange}
@@ -149,13 +149,13 @@ export function QuoteCaptureModal({
                 className="ei-quote-capture-modal__range-input"
                 value={endPos}
                 min={startPos + 1}
-                max={message.content.length}
+                max={(message.verbal_response ?? '').length}
                 onChange={(e) => {
-                  const val = Math.max(startPos + 1, Math.min(message.content.length, parseInt(e.target.value) || startPos + 1));
+                  const val = Math.max(startPos + 1, Math.min((message.verbal_response ?? '').length, parseInt(e.target.value) || startPos + 1));
                   handleRangeChange(startPos, val);
                 }}
               />
-              {' '}of {message.content.length}
+              {' '}of {(message.verbal_response ?? '').length}
             </div>
           </div>
 
@@ -163,11 +163,11 @@ export function QuoteCaptureModal({
           <div className="ei-quote-capture-modal__section">
             <label className="ei-quote-capture-modal__label">Preview</label>
             <div className="ei-quote-preview">
-              <span>{message.content.substring(0, startPos)}</span>
+              <span>{(message.verbal_response ?? '').substring(0, startPos)}</span>
               <span className="ei-quote-preview__highlight">
-                {message.content.substring(startPos, endPos)}
+                {(message.verbal_response ?? '').substring(startPos, endPos)}
               </span>
-              <span>{message.content.substring(endPos)}</span>
+              <span>{(message.verbal_response ?? '').substring(endPos)}</span>
             </div>
           </div>
 

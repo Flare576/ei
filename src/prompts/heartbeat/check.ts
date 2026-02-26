@@ -6,9 +6,8 @@
  */
 
 import type { HeartbeatCheckPromptData, PromptOutput } from "./types.js";
-import { ContextStatus, type Message, type Topic, type Person } from "../../core/types.js";
-import { formatMessagesAsPlaceholders } from "../message-utils.js";
-
+import { type Message, type Topic, type Person } from "../../core/types.js";
+import { formatMessagesAsPlaceholders, getMessageDisplayText } from "../message-utils.js";
 function formatTopicsWithGaps(topics: Topic[]): string {
   if (topics.length === 0) return "(No topics with engagement gaps)";
   
@@ -33,14 +32,14 @@ function formatPeopleWithGaps(people: Person[]): string {
 
 /**
  * A "real" persona message is one the persona actually said to the human.
- * Silent-reason messages (ContextStatus.Never) and action-only messages
- * (content is purely italic stage directions) don't count as outreach.
+ * silence_reason messages (persona chose not to speak) and action-only messages
+ * (no verbal_response) don't count as conversational outreach.
  */
 function isConversationalMessage(m: Message): boolean {
   if (m.role !== 'system') return false;
-  if (m.context_status === ContextStatus.Never) return false;
-  // Action-only: entire content is a single italic block
-  if (/^_[^_]+_$/.test(m.content.trim())) return false;
+  if (m.silence_reason !== undefined) return false;
+  // Action-only: has action but no verbal response
+  if (!m.verbal_response) return false;
   return true;
 }
 
@@ -162,9 +161,10 @@ ${formatMessagesAsPlaceholders(data.recent_history, personaName)}`;
   
   let unansweredWarning = '';
   if (lastPersonaMsg && consecutiveMessages >= 1) {
-    const preview = lastPersonaMsg.content.length > 100 
-      ? lastPersonaMsg.content.substring(0, 100) + "..." 
-      : lastPersonaMsg.content;
+    const rawPreview = getMessageDisplayText(lastPersonaMsg) ?? "";
+    const preview = rawPreview.length > 100 
+      ? rawPreview.substring(0, 100) + "..." 
+      : rawPreview;
     
     unansweredWarning = `
 ### CRITICAL: You Already Reached Out

@@ -1,5 +1,17 @@
 import type { PersonaEntity, Message, ContextStatus } from "../types.js";
 
+/**
+ * Migration: If a persisted message has the old `content` field but no `verbal_response`,
+ * move content → verbal_response. Runs on every load (no-op for already-migrated data).
+ */
+function migrateMessage(msg: Message & { content?: string }): Message {
+  if (msg.content !== undefined && msg.verbal_response === undefined) {
+    const { content, ...rest } = msg;
+    return { ...rest, verbal_response: content };
+  }
+  return msg;
+}
+
 export interface PersonaData {
   entity: PersonaEntity;
   messages: Message[];
@@ -13,7 +25,7 @@ export class PersonaState {
     this.personas = new Map(
       Object.entries(personas).map(([id, data]) => [
         id,
-        { entity: data.entity, messages: data.messages },
+        { entity: data.entity, messages: data.messages.map(migrateMessage) },
       ])
     );
   }

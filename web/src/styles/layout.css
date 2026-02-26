@@ -893,6 +893,13 @@ body {
   box-shadow: 0 0 0 2px var(--ei-accent);
 }
 
+/* Silence reason messages (persona chose not to respond) */
+.silence-reason {
+  color: var(--ei-text-muted);
+  font-style: italic;
+  opacity: 0.7;
+}
+
 /* Empty chat */
 .ei-chat-panel__empty {
   display: flex;

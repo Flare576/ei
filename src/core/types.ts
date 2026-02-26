@@ -275,14 +275,19 @@ export function isReservedPersonaName(name: string): boolean {
 export interface Message {
   id: string;
   role: "human" | "system";
-  content: string;
+  verbal_response?: string;   // Human text or persona's spoken reply
+  action_response?: string;  // Stage direction / action the persona performs
+  silence_reason?: string;   // Why the persona chose not to respond (not shown to LLM)
   timestamp: string;
-  read: boolean;
+  read: boolean;               // Has human seen this system message?
   context_status: ContextStatus;
-  f?: boolean;  // fact extraction done
-  r?: boolean;  // trait extraction done
-  p?: boolean;  // person extraction done
-  o?: boolean;  // topic extraction done
+  
+  // Extraction completion flags (omit when false to save space)
+  // Single-letter names minimize storage overhead for large message histories
+  f?: boolean;                 // Fact extraction completed
+  r?: boolean;                 // tRait extraction completed
+  p?: boolean;                 // Person extraction completed
+  o?: boolean;                 // tOpic extraction completed
 }
 
 export interface ChatMessage {

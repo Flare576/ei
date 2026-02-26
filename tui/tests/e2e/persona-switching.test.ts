@@ -50,7 +50,7 @@ function createMultiPersonaCheckpoint() {
           {
             id: "ei-msg-1",
             role: "assistant",
-            content: "Hello from Ei!",
+            verbal_response: "Hello from Ei!",
             timestamp,
           },
         ],
@@ -78,7 +78,7 @@ function createMultiPersonaCheckpoint() {
           {
             id: "alice-msg-1",
             role: "assistant",
-            content: "Hello from Alice!",
+            verbal_response: "Hello from Alice!",
             timestamp,
           },
         ],
@@ -107,7 +107,7 @@ function createMultiPersonaCheckpoint() {
           {
             id: "bob-msg-1",
             role: "assistant",
-            content: "Hello from Bob!",
+            verbal_response: "Hello from Bob!",
             timestamp,
           },
         ],
@@ -133,7 +133,11 @@ await mockServer.start(MOCK_PORT, {
 
 mockServer.setResponseForType("response", {
   type: "fixed",
-  content: "Test response from mock server",
+  content: JSON.stringify({
+    should_respond: true,
+    verbal_response: "Test response from mock server",
+    reason: "responding"
+  }),
 });
 
 mockServer.setResponseForType("generation", {

@@ -152,7 +152,7 @@ export const KeyboardProvider: ParentComponent = (props) => {
         }
       }
       // Navigate backward through sent-message history
-      const history = messages().filter(m => m.role === "human").map(m => m.content);
+      const history = messages().filter(m => m.role === "human").map(m => (m.verbal_response ?? ''));
       if (history.length === 0) return;
       if (historyIndex === -1) {
         savedDraft = textareaRef.plainText;
@@ -180,7 +180,7 @@ export const KeyboardProvider: ParentComponent = (props) => {
         textareaRef.gotoBufferEnd();
       } else {
         historyIndex -= 1;
-        const history = messages().filter(m => m.role === "human").map(m => m.content);
+        const history = messages().filter(m => m.role === "human").map(m => (m.verbal_response ?? ''));
         const entry = history[history.length - 1 - historyIndex];
         textareaRef.setText(entry);
         textareaRef.gotoBufferEnd();  // cursor at end so next Down continues forward

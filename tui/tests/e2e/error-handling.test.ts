@@ -48,7 +48,7 @@ function createMinimalCheckpoint() {
           {
             id: "welcome-1",
             role: "assistant",
-            content: "Hello! I'm ready for testing.",
+            verbal_response: "Hello! I'm ready for testing.",
             timestamp,
           },
         ],
@@ -74,8 +74,8 @@ await mockServer.start(MOCK_PORT, {
 
 mockServer.setResponseForType("response", {
   type: "error",
-  content: "Service temporarily unavailable",
-  statusCode: 503,
+  content: "Bad request - invalid input",
+  statusCode: 400,
 });
 
 process.on("exit", () => {

@@ -18,6 +18,16 @@ function formatTime(timestamp: string): string {
   return `${hours}:${minutes}`;
 }
 
+function buildMessageText(message: Message): string {
+  if (message.silence_reason !== undefined) {
+    return `[chose not to respond: ${message.silence_reason}]`;
+  }
+  const parts: string[] = [];
+  if (message.action_response) parts.push(`_${message.action_response}_`);
+  if (message.verbal_response) parts.push(message.verbal_response);
+  return parts.join('\n\n');
+}
+
 function insertQuoteMarkers(content: string, quotes: Quote[]): string {
   const validQuotes = quotes
     .filter(q => q.end !== null && q.end !== undefined)
@@ -30,7 +40,7 @@ function insertQuoteMarkers(content: string, quotes: Quote[]): string {
       while (insertPos > 0 && (result[insertPos - 1] === '\n' || result[insertPos - 1] === ' ')) {
         insertPos--;
       }
-      result = result.slice(0, insertPos) + "⁺" + result.slice(insertPos);
+      result = result.slice(0, insertPos) + "\u207a" + result.slice(insertPos);
     }
   }
   return result;
@@ -118,7 +128,7 @@ export function MessageList() {
               
               const header = () => `${speaker} (${formatTime(message.timestamp)}) [✂️  ${message._quoteIndex}]:`;
               
-              const displayContent = insertQuoteMarkers(message.content, message._quotes);
+              const displayContent = insertQuoteMarkers(buildMessageText(message), message._quotes);
               
               const showDivider = () => {
                 const boundary = activeContextBoundary();
