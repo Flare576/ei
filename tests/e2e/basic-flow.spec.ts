@@ -9,7 +9,11 @@ test.describe("Basic Chat Flow", () => {
   test("user can send message and receive response", async ({ page, mockServer, mockServerUrl }) => {
     mockServer.setResponseForType("response", {
       type: "fixed",
-      content: "Hello! Nice to meet you. I am Ei, your companion.",
+      content: JSON.stringify({
+        should_respond: true,
+        verbal_response: "Hello! Nice to meet you. I am Ei, your companion.",
+        reason: "greeting"
+      }),
       statusCode: 200,
     });
 
@@ -48,7 +52,11 @@ test.describe("Basic Chat Flow", () => {
   test("sending message triggers trait extraction", async ({ page, mockServer, mockServerUrl }) => {
     mockServer.setResponseForType("response", {
       type: "fixed",
-      content: "Ahoy! Nice to meet ye, matey!",
+      content: JSON.stringify({
+        should_respond: true,
+        verbal_response: "Ahoy! Nice to meet ye, matey!",
+        reason: "greeting"
+      }),
       statusCode: 200,
     });
     mockServer.setResponseForType("trait-extraction", {

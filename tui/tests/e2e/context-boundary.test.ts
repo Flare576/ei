@@ -23,7 +23,11 @@ await mockServer.start(MOCK_PORT, {
 
 mockServer.setResponseForType("response", {
   type: "fixed",
-  content: "Test response from mock server",
+  content: JSON.stringify({
+    should_respond: true,
+    verbal_response: "Test response from mock server",
+    reason: "responding"
+  }),
 });
 
 process.on("exit", () => {

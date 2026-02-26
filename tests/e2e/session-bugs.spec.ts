@@ -17,7 +17,7 @@ async function openMyDataModal(page: import("@playwright/test").Page) {
 interface Message {
   id: string;
   role: "human" | "system";
-  content: string;
+  verbal_response?: string;
   timestamp: string;
   read?: boolean;
   context_status?: "default" | "always" | "never";
@@ -72,7 +72,7 @@ function createCheckpoint(
     id: string;
     display_name: string;
     short_description?: string;
-    messages?: Array<{ role: "human" | "system"; content: string; read?: boolean }>;
+    messages?: Array<{ role: "human" | "system"; verbal_response: string; read?: boolean }>;
     is_paused?: boolean;
     is_archived?: boolean;
   }>
@@ -103,7 +103,7 @@ function createCheckpoint(
       messages: (config.messages ?? []).map((m, i) => ({
         id: `msg-${key}-${i}`,
         role: m.role,
-        content: m.content,
+        verbal_response: m.verbal_response,
         timestamp: new Date(Date.now() - (config.messages!.length - i) * 60000).toISOString(),
         read: m.read ?? (m.role === "human"), // Human messages are always "read"
         context_status: "default",
@@ -181,7 +181,11 @@ test.describe("Session Bug Coverage (0112)", () => {
 
     mockServer.setResponseForType("response", {
       type: "fixed",
-      content: "Acknowledged",
+      content: JSON.stringify({
+        should_respond: true,
+        verbal_response: "Acknowledged",
+        reason: "responding"
+      }),
       statusCode: 200,
     });
 
@@ -237,8 +241,8 @@ test.describe("Session Bug Coverage (0112)", () => {
         display_name: "Alice", 
         short_description: "First persona",
         messages: [
-          { role: "human", content: "Hello Alice" },
-          { role: "system", content: "Hi there!", read: true },
+          { role: "human", verbal_response: "Hello Alice" },
+          { role: "system", verbal_response: "Hi there!", read: true },
         ],
       },
       { 
@@ -246,16 +250,20 @@ test.describe("Session Bug Coverage (0112)", () => {
         display_name: "Bob", 
         short_description: "Second persona",
         messages: [
-          { role: "human", content: "Hello Bob" },
-          { role: "system", content: "Hey! How are you?", read: false },
-          { role: "system", content: "I have more to say!", read: false },
+          { role: "human", verbal_response: "Hello Bob" },
+          { role: "system", verbal_response: "Hey! How are you?", read: false },
+          { role: "system", verbal_response: "I have more to say!", read: false },
         ],
       },
     ]);
 
     mockServer.setResponseForType("response", {
       type: "fixed",
-      content: "Mock response from AI",
+      content: JSON.stringify({
+        should_respond: true,
+        verbal_response: "Mock response from AI",
+        reason: "responding"
+      }),
       statusCode: 200,
     });
     mockServer.setResponseForType("trait-extraction", {
@@ -305,10 +313,10 @@ test.describe("Session Bug Coverage (0112)", () => {
     mockServerUrl,
   }) => {
     // Setup: Persona with many messages for bulk testing
-    const messages: Array<{ role: "human" | "system"; content: string; read: boolean }> = [];
+    const messages: Array<{ role: "human" | "system"; verbal_response: string; read: boolean }> = [];
     for (let i = 0; i < 15; i++) {
-      messages.push({ role: "human", content: `Human message ${i + 1}`, read: true });
-      messages.push({ role: "system", content: `AI response ${i + 1}`, read: true });
+      messages.push({ role: "human", verbal_response: `Human message ${i + 1}`, read: true });
+      messages.push({ role: "system", verbal_response: `AI response ${i + 1}`, read: true });
     }
 
     const checkpoint = createCheckpoint(mockServerUrl, [
@@ -466,7 +474,11 @@ test.describe("Session Bug Coverage (0112)", () => {
 
     mockServer.setResponseForType("response", {
       type: "fixed",
-      content: "I will respond!",
+      content: JSON.stringify({
+        should_respond: true,
+        verbal_response: "I will respond!",
+        reason: "responding"
+      }),
       statusCode: 200,
     });
 

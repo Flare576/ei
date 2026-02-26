@@ -48,7 +48,7 @@ function createMinimalCheckpoint() {
           {
             id: "welcome-1",
             role: "assistant",
-            content: "Hello! I'm ready for testing.",
+            verbal_response: "Hello! I'm ready for testing.",
             timestamp,
           },
         ],
@@ -75,7 +75,11 @@ await mockServer.start(MOCK_PORT, {
 const EXPECTED_RESPONSE = "UNIQUE_E2E_TEST_RESPONSE_XYZ123";
 mockServer.setResponseForType("response", {
   type: "fixed",
-  content: EXPECTED_RESPONSE,
+  content: JSON.stringify({
+    should_respond: true,
+    verbal_response: EXPECTED_RESPONSE,
+    reason: "responding"
+  }),
 });
 
 process.on("exit", () => {

@@ -35,7 +35,11 @@ test.describe("Context Boundary", () => {
   test("divider appears between old and new messages after boundary set", async ({ page, mockServer, mockServerUrl }) => {
     mockServer.setResponseForType("response", {
       type: "fixed",
-      content: "This is a new message after the boundary!",
+      content: JSON.stringify({
+        should_respond: true,
+        verbal_response: "This is a new message after the boundary!",
+        reason: "responding to user"
+      }),
       statusCode: 200,
     });
 

@@ -66,7 +66,7 @@ function createCheckpointWithMessages() {
           {
             id: "msg-1",
             role: "system",
-            content: "Hello! I'm ready for testing.",
+            verbal_response: "Hello! I'm ready for testing.",
             timestamp: oldTimestamp,
             read: true,
             context_status: "default",
@@ -74,7 +74,7 @@ function createCheckpointWithMessages() {
           {
             id: "msg-2",
             role: "human",
-            content: "A quoted message from the user.",
+            verbal_response: "A quoted message from the user.",
             timestamp: recentTimestamp,
             read: true,
             context_status: "always",
@@ -82,7 +82,7 @@ function createCheckpointWithMessages() {
           {
             id: "msg-3",
             role: "system",
-            content: "A response that should never be in context.",
+            verbal_response: "A response that should never be in context.",
             timestamp: new Date(Date.now() - 30000).toISOString(),
             read: true,
             context_status: "never",
@@ -154,7 +154,11 @@ await mockServer.start(MOCK_PORT, {
 
 mockServer.setResponseForType("response", {
   type: "fixed",
-  content: "Test response",
+  content: JSON.stringify({
+    should_respond: true,
+    verbal_response: "Test response",
+    reason: "responding"
+  }),
 });
 
 process.on("exit", () => {

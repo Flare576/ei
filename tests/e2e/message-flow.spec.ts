@@ -53,7 +53,11 @@ test.describe("Message Flow - Comprehensive", () => {
   test("multiple messages in sequence arrive in correct order", async ({ page, mockServer, mockServerUrl }) => {
     mockServer.setResponseForType("response", {
       type: "fixed",
-      content: "I hear you!",
+      content: JSON.stringify({
+        should_respond: true,
+        verbal_response: "I hear you!",
+        reason: "responding"
+      }),
       statusCode: 200,
     });
     mockServer.setResponseForType("trait-extraction", {
@@ -99,7 +103,11 @@ test.describe("Message Flow - Comprehensive", () => {
   test("conversation context is maintained across messages", async ({ page, mockServer, mockServerUrl }) => {
     mockServer.setResponseForType("response", {
       type: "fixed",
-      content: "I remember our conversation!",
+      content: JSON.stringify({
+        should_respond: true,
+        verbal_response: "I remember our conversation!",
+        reason: "responding"
+      }),
       statusCode: 200,
     });
     mockServer.setResponseForType("trait-extraction", {
@@ -144,7 +152,11 @@ test.describe("Message Flow - Comprehensive", () => {
   test("extraction requests are triggered after user messages", async ({ page, mockServer, mockServerUrl }) => {
     mockServer.setResponseForType("response", {
       type: "fixed",
-      content: "Thank you for sharing!",
+      content: JSON.stringify({
+        should_respond: true,
+        verbal_response: "Thank you for sharing!",
+        reason: "responding"
+      }),
       statusCode: 200,
     });
     mockServer.setResponseForType("trait-extraction", {
@@ -185,7 +197,11 @@ test.describe("Message Flow - Comprehensive", () => {
   test("requests are processed in chronological order", async ({ page, mockServer, mockServerUrl }) => {
     mockServer.setResponseForType("response", {
       type: "fixed",
-      content: "Processing your message!",
+      content: JSON.stringify({
+        should_respond: true,
+        verbal_response: "Processing your message!",
+        reason: "responding"
+      }),
       statusCode: 200,
     });
     mockServer.setResponseForType("trait-extraction", {
@@ -233,7 +249,11 @@ test.describe("Message Flow - Comprehensive", () => {
   test("conversation history grows with each exchange", async ({ page, mockServer, mockServerUrl }) => {
     mockServer.setResponseForType("response", {
       type: "fixed",
-      content: "Understood!",
+      content: JSON.stringify({
+        should_respond: true,
+        verbal_response: "Understood!",
+        reason: "responding"
+      }),
       statusCode: 200,
     });
     mockServer.setResponseForType("trait-extraction", {
@@ -281,7 +301,11 @@ test.describe("Message Flow - Comprehensive", () => {
   test("pressing up-arrow recalls pending message back to input", async ({ page, mockServer, mockServerUrl }) => {
     mockServer.setResponseForType("response", {
       type: "fixed",
-      content: "Slow response coming...",
+      content: JSON.stringify({
+        should_respond: true,
+        verbal_response: "Slow response coming...",
+        reason: "responding"
+      }),
       statusCode: 200,
       delayMs: 3000,
     });
@@ -314,7 +338,11 @@ test.describe("Message Flow - Comprehensive", () => {
   test("up-arrow does nothing when no pending messages", async ({ page, mockServer, mockServerUrl }) => {
     mockServer.setResponseForType("response", {
       type: "fixed",
-      content: "Quick response!",
+      content: JSON.stringify({
+        should_respond: true,
+        verbal_response: "Quick response!",
+        reason: "responding"
+      }),
       statusCode: 200,
     });
     mockServer.setResponseForType("trait-extraction", {
@@ -345,7 +373,11 @@ test.describe("Message Flow - Comprehensive", () => {
   test("human messages start as unread and are marked read after AI response", async ({ page, mockServer, mockServerUrl }) => {
     mockServer.setResponseForType("response", {
       type: "fixed",
-      content: "I got your message!",
+      content: JSON.stringify({
+        should_respond: true,
+        verbal_response: "I got your message!",
+        reason: "responding"
+      }),
       statusCode: 200,
     });
     mockServer.setResponseForType("trait-extraction", {

@@ -57,7 +57,7 @@ function createCheckpointWithHumanData() {
           {
             id: "msg-1",
             role: "system",
-            content: "Hello! I'm ready for testing.",
+            verbal_response: "Hello! I'm ready for testing.",
             timestamp,
             read: true,
             context_status: "default",
@@ -85,7 +85,11 @@ await mockServer.start(MOCK_PORT, {
 
 mockServer.setResponseForType("response", {
   type: "fixed",
-  content: "Test response",
+  content: JSON.stringify({
+    should_respond: true,
+    verbal_response: "Test response",
+    reason: "responding"
+  }),
 });
 
 process.on("exit", () => {

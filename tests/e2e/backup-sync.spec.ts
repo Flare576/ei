@@ -12,7 +12,7 @@ async function navigateToDataTab(page: import("@playwright/test").Page) {
   await page.waitForTimeout(200);
 }
 
-function createValidCheckpoint(mockServerUrl: string, messages: Array<{ role: string; content: string }> = []) {
+function createValidCheckpoint(mockServerUrl: string, messages: Array<{ role: string; verbal_response: string }> = []) {
   const timestamp = new Date().toISOString();
   return {
     version: 1,
@@ -61,7 +61,7 @@ function createValidCheckpoint(mockServerUrl: string, messages: Array<{ role: st
         messages: messages.map((m, i) => ({
           id: `msg-${i}`,
           role: m.role,
-          content: m.content,
+          verbal_response: m.verbal_response,
           timestamp,
         })),
       },
@@ -94,8 +94,8 @@ test.describe("Backup & Restore", () => {
   test("download backup produces valid JSON with full state", async ({ page, mockServerUrl }) => {
     const testMessage = "Message to verify in backup";
     const checkpoint = createValidCheckpoint(mockServerUrl, [
-      { role: "human", content: testMessage },
-      { role: "assistant", content: "I'll remember this!" },
+      { role: "human", verbal_response: testMessage },
+      { role: "assistant", verbal_response: "I'll remember this!" },
     ]);
 
     await page.goto("/");
@@ -141,15 +141,15 @@ test.describe("Backup & Restore", () => {
     expect(backup.personas.ei).toHaveProperty("messages");
 
     const messages = backup.personas.ei.messages;
-    const hasTestMessage = messages.some((m: { content: string }) => m.content.includes(testMessage));
+    const hasTestMessage = messages.some((m: { verbal_response: string }) => m.verbal_response.includes(testMessage));
     expect(hasTestMessage).toBe(true);
   });
 
   test("upload backup restores state correctly", async ({ page, mockServerUrl }) => {
     const uniqueMessage = `Restored message ${Date.now()}`;
     const backupCheckpoint = createValidCheckpoint(mockServerUrl, [
-      { role: "human", content: uniqueMessage },
-      { role: "assistant", content: "This was restored from backup!" },
+      { role: "human", verbal_response: uniqueMessage },
+      { role: "assistant", verbal_response: "This was restored from backup!" },
     ]);
     backupCheckpoint.human.facts = [
       { content: "Restored fact from backup", confidence: 0.95, last_updated: backupCheckpoint.timestamp },

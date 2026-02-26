@@ -50,7 +50,7 @@ function createMinimalCheckpoint() {
           {
             id: "welcome-1",
             role: "assistant",
-            content: "Hello! I'm ready for testing.",
+            verbal_response: "Hello! I'm ready for testing.",
             timestamp,
           },
         ],
@@ -76,7 +76,11 @@ await mockServer.start(MOCK_PORT, {
 
 mockServer.setResponseForType("response", {
   type: "fixed",
-  content: "Test response from mock server",
+  content: JSON.stringify({
+    should_respond: true,
+    verbal_response: "Test response from mock server",
+    reason: "responding"
+  }),
 });
 
 process.on("exit", () => {
@@ -94,7 +98,7 @@ test.use({
     file: BUN_PATH,
     args: ["run", "dev"],
   },
-  rows: 30,
+  rows: 80,
   columns: 100,
   env: {
     EI_DATA_PATH: TEST_DATA_PATH,

@@ -154,7 +154,7 @@ export interface MinimalCheckpoint {
         last_updated: string;
         last_activity: string;
       };
-      messages: Array<{ id: string; role: string; content: string; timestamp: string }>;
+      messages: Array<{ id: string; role: string; verbal_response: string; timestamp: string }>;
     };
   };
   queue: never[];
@@ -163,7 +163,7 @@ export interface MinimalCheckpoint {
 
 export function createMinimalCheckpoint(
   mockServerUrl: string,
-  messages: Array<{ role: string; content: string }> = [{ role: "assistant", content: DEFAULT_WELCOME_MESSAGE }]
+  messages: Array<{ role: string; verbal_response: string }> = [{ role: "assistant", verbal_response: DEFAULT_WELCOME_MESSAGE }]
 ): MinimalCheckpoint {
   const timestamp = new Date().toISOString();
   return {
@@ -214,7 +214,7 @@ export function createMinimalCheckpoint(
         messages: messages.map((m, i) => ({
           id: `msg-${i}`,
           role: m.role,
-          content: m.content,
+          verbal_response: m.verbal_response,
           timestamp,
         })),
       },
@@ -231,7 +231,7 @@ export function createMinimalCheckpoint(
 export async function seedCheckpoint(
   page: import("@playwright/test").Page,
   mockServerUrl: string,
-  messages: Array<{ role: string; content: string }> = [{ role: "assistant", content: DEFAULT_WELCOME_MESSAGE }]
+  messages: Array<{ role: string; verbal_response: string }> = [{ role: "assistant", verbal_response: DEFAULT_WELCOME_MESSAGE }]
 ) {
   const state = createMinimalCheckpoint(mockServerUrl, messages);
   await page.addInitScript(
