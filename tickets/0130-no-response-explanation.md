@@ -1,27 +1,40 @@
 # 0130: No Response Explanation UI
 
-**Status**: PENDING
+**Status**: DONE
 **Depends on**: 0044
 
 ## Summary
 
-When a persona chooses "No Response" for the first time with a user, explain what happened via a grayed-out informational message in the chat history. This prevents confusion (e.g., thinking the system is broken) when users first encounter this behavior.
+When a persona chooses not to respond, show the reason inline in chat so the user understands what happened.
 
 ## Context
 
-User's daughter didn't realize "No Response" was a valid persona choice and thought the system was broken when it happened.
+User's daughter didn't realize "No Response" was a valid persona choice and thought the system was broken when it happened. Original approach was a one-time explanation on first occurrence.
+
+## Superseded By
+
+The one-time explanation approach was superseded by a richer structured response schema. The response prompt now asks personas to return JSON:
+
+```json
+{
+  "should_respond": boolean,
+  "verbal_response": string,   // optional
+  "action_response": string,   // optional, rendered as _italics_
+  "reason": string             // optional, shown when should_respond=false
+}
+```
+
+When `should_respond` is false and `reason` is provided, `handlePersonaResponse` appends a `ContextStatus.Never` message to the chat:
+
+```
+[PersonaName chose not to respond because: {reason}]
+```
+
+This appears every time (not just the first), gives the actual reason rather than a generic explanation, and is excluded from the LLM context window via `ContextStatus.Never`.
 
 ## Acceptance Criteria
 
-- [ ] Track whether user has seen a "No Response" from each persona
-- [ ] On first "No Response", display an explanatory message in chat
-- [ ] Message is visually distinct (grayed out, different styling than normal messages)
-- [ ] Suggested text: "The Persona chose not to respond! This can happen when the Persona doesn't know what to say, doesn't have anything constructive to add, or doesn't have any questions for you."
-- [ ] Subsequent "No Response" events from same persona do not show explanation
-- [ ] Explanation persists across sessions (stored, not ephemeral)
-
-## Notes
-
-- Consider whether this should be stored per-persona or globally (first time ever vs first time per persona)
-- The explanatory message should not be treated as a real message in the conversation history (no extraction, no context window impact)
-- May want to add a dismissible tooltip or link to "learn more" in future iterations
+- [x] Silent responses show reason inline in chat
+- [x] Message is visually distinct (ContextStatus.Never excludes it from context)
+- [x] Reason is logged to console for debugging
+- [x] Fallback: if no reason given, silently drops (no message shown)

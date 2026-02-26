@@ -21,6 +21,8 @@ import { deleteCommand } from "../commands/delete";
 import { quotesCommand } from "../commands/quotes";
 import { providerCommand } from "../commands/provider";
 import { setSyncCommand } from "../commands/setsync";
+import { queueCommand } from "../commands/queue";
+import { dlqCommand } from "../commands/dlq";
 import { useOverlay } from "../context/overlay";
 import { CommandSuggest } from "./CommandSuggest";
 import { useKeyboard } from "@opentui/solid";
@@ -56,6 +58,8 @@ export function PromptInput() {
   registerCommand(setSyncCommand);
   registerCommand(contextCommand);
   registerCommand(deleteCommand);
+  registerCommand(queueCommand);
+  registerCommand(dlqCommand);
 
   let textareaRef: TextareaRenderable | undefined;
 
@@ -153,7 +157,9 @@ export function PromptInput() {
                                  text.startsWith("/quotes") ||
                                  text.startsWith("/q ") ||
                                  text.startsWith("/context") ||
-                                 text.startsWith("/messages");
+                                 text.startsWith("/messages") ||
+                                 text === "/queue" ||
+                                 text === "/dlq";
 
       if (!isEditorCmd && !opensEditorForData) {
         textareaRef?.clear();

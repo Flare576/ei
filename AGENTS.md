@@ -222,7 +222,7 @@ tui/
 │   └── util/             # Helpers
 ├── package.json
 ├── bunfig.toml           # Bun config (preloads)
-└── CLAUDE.md             # Bun-specific guidance
+└── AGENTS.md             # TUI-specific agent guidance
 ```
 
 ### Core Integration Pattern

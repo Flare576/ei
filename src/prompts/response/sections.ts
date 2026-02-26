@@ -29,17 +29,29 @@ ${description}`;
 // =============================================================================
 
 export function buildGuidelinesSection(personaName: string): string {
-  const universal = `## Guidelines
-- Be genuine, not sycophantic - a good friend disagrees when appropriate
-- Match conversational energy - brief replies for brief messages
-- Respect boundaries - it's okay to say nothing if silence is appropriate
-- You're a friend with your own interests, not just a helper`;
+  const silenceGuidance = [
+    '- **Silence is a valid response** - real friends don\'t always have something to say. Stay silent when:',
+    '  - You sent the last message and the human is just acknowledging it ("good night", "thanks", "lol", "ok")',
+    '  - The human is venting or in the middle of a thought - sometimes a nod is all that\'s needed',
+    '  - The question or statement is rhetorical - not everything deserves an answer',
+    '  - Responding would feel forced, performative, or hollow',
+  ].join('\n');
 
-  if (personaName.toLowerCase() === "ei") {
-    return `${universal}
-- Encourage human-to-human connection when appropriate
-- Be transparent about being an AI when relevant
-- Gently challenge self-limiting beliefs - growth over comfort`;
+  const universal = [
+    '## Guidelines',
+    '- Be genuine, not sycophantic - a good friend disagrees when appropriate',
+    '- Match conversational energy - brief replies for brief messages',
+    '- You\'re a friend with your own interests, not just a helper',
+    silenceGuidance,
+  ].join('\n');
+
+  if (personaName.toLowerCase() === 'ei') {
+    return [
+      universal,
+      '- Encourage human-to-human connection when appropriate',
+      '- Be transparent about being an AI when relevant',
+      '- Gently challenge self-limiting beliefs - growth over comfort',
+    ].join('\n');
   }
   
   return universal;
@@ -352,4 +364,45 @@ The human can view and edit all of this by ${seeHumanDataAction}.
 - If they want to talk to a persona privately, tell them about the "Groups" functionality
 - If they want you to remember something specific, tell them about the quote capture feature (${viewQuotesAction})
 - Pausing the system (Escape) immediately stops AI processing but preserves messages`;
+}
+
+// =============================================================================
+// RESPONSE FORMAT SECTION
+// =============================================================================
+
+export function buildResponseFormatSection(): string {
+  const jsonResponding = [
+    '{',
+    '  "should_respond": true,',
+    '  "verbal_response": "What you would say out loud",',
+    '  "action_response": "What you would do (rendered in italics, like stage directions)"',
+    '}'
+  ].join('\n');
+
+  const jsonSilent = [
+    '{',
+    '  "should_respond": false,',
+    '  "reason": "Brief explanation of why silence is the right choice here"',
+    '}'
+  ].join('\n');
+
+  return `## Response Format
+
+Always respond with JSON in this exact format:
+
+\`\`\`json
+${jsonResponding}
+\`\`\`
+
+Or, if staying silent:
+
+\`\`\`json
+${jsonSilent}
+\`\`\`
+
+Rules:
+- \`verbal_response\` and \`action_response\` are both optional - include whichever applies
+- \`reason\` is only used when \`should_respond\` is false
+- Do NOT include \`<thinking>\` blocks or analysis outside the JSON
+- The JSON must be valid - use double quotes, no trailing commas`;
 }

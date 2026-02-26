@@ -32,6 +32,7 @@ import type {
   StateConflictData,
   StateConflictResolution,
   ContextStatus,
+  LLMRequest,
 } from "../../../src/core/types.js";
 
 interface EiStore {
@@ -57,6 +58,10 @@ export interface EiContextValue {
   refreshMessages: () => Promise<void>;
   abortCurrentOperation: () => Promise<void>;
   resumeQueue: () => Promise<void>;
+  pauseQueue: () => void;
+  getQueueActiveItems: () => LLMRequest[];
+  getDLQItems: () => LLMRequest[];
+  updateQueueItem: (id: string, updates: Partial<LLMRequest>) => Promise<boolean>;
   stopProcessor: () => Promise<void>;
   saveAndExit: () => Promise<{ success: boolean; error?: string }>;
   showNotification: (message: string, level: "error" | "warn" | "info") => void;
@@ -110,7 +115,7 @@ export const EiProvider: ParentComponent = (props) => {
     activePersonaId: null,
     activeContextBoundary: undefined,
     messages: [],
-    queueStatus: { state: "idle", pending_count: 0 },
+    queueStatus: { state: "idle", pending_count: 0, dlq_count: 0 },
     notification: null,
   });
 
@@ -208,6 +213,27 @@ export const EiProvider: ParentComponent = (props) => {
     if (!processor) return;
     logger.info("Resuming queue");
     await processor.resumeQueue();
+  };
+
+  const pauseQueue = () => {
+    if (!processor) return;
+    logger.info("Pausing queue");
+    processor.pauseQueue();
+  };
+
+  const getQueueActiveItems = (): LLMRequest[] => {
+    if (!processor) return [];
+    return processor.getQueueActiveItems();
+  };
+
+  const getDLQItems = (): LLMRequest[] => {
+    if (!processor) return [];
+    return processor.getDLQItems();
+  };
+
+  const updateQueueItem = async (id: string, updates: Partial<LLMRequest>): Promise<boolean> => {
+    if (!processor) return false;
+    return processor.updateQueueItem(id, updates);
   };
 
   const stopProcessor = async () => {
@@ -506,11 +532,11 @@ export const EiProvider: ParentComponent = (props) => {
           logger.debug(`onQueueStateChanged called with state: ${state}`);
           if (processor) {
             processor.getQueueStatus().then((status) => {
-              setStore("queueStatus", { state: status.state, pending_count: status.pending_count });
+              setStore("queueStatus", { state: status.state, pending_count: status.pending_count, dlq_count: status.dlq_count });
               logger.debug(`store.queueStatus after setStore:`, store.queueStatus);
             });
           } else {
-            setStore("queueStatus", { state, pending_count: 0 });
+            setStore("queueStatus", { state, pending_count: 0, dlq_count: 0 });
           }
         },
         onContextBoundaryChanged: (personaId) => {
@@ -568,6 +594,10 @@ export const EiProvider: ParentComponent = (props) => {
     refreshMessages,
     abortCurrentOperation,
     resumeQueue,
+    pauseQueue,
+    getQueueActiveItems,
+    getDLQItems,
+    updateQueueItem,
     stopProcessor,
     saveAndExit,
     showNotification,

@@ -212,6 +212,18 @@ body {
   animation: pulse 0.5s ease-in-out infinite;
 }
 
+.ei-control-area__indicator.waiting {
+  background: var(--ei-status-thinking);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.ei-control-area__dlq {
+  color: var(--ei-danger);
+  font-size: var(--ei-font-size-sm);
+  font-weight: 600;
+  margin-left: var(--ei-spacing-xs);
+}
+
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }

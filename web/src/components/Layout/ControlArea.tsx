@@ -21,13 +21,14 @@ export function ControlArea({
 }: ControlAreaProps) {
   const isPaused = queueStatus.state === "paused";
   const isBusy = queueStatus.state === "busy";
+  const isWaiting = !isBusy && !isPaused && queueStatus.pending_count > 0;
   
   const statusText = isPaused
     ? "Paused"
     : isBusy
     ? `Processing... (${queueStatus.pending_count} pending)`
-    : queueStatus.pending_count > 0
-    ? `${queueStatus.pending_count} pending`
+    : isWaiting
+    ? `Waiting on server... (${queueStatus.pending_count} pending)`
     : "Ready";
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -45,9 +46,12 @@ export function ControlArea({
     <div className="ei-control-area">
       <div className="ei-control-area__status">
         <span 
-          className={`ei-control-area__indicator ${isBusy ? "busy" : ""} ${isPaused ? "paused" : ""}`}
+          className={`ei-control-area__indicator ${isBusy ? "busy" : ""} ${isPaused ? "paused" : ""} ${isWaiting ? "waiting" : ""}`}
         />
         <span>{statusText}</span>
+        {queueStatus.dlq_count > 0 && (
+          <span className="ei-control-area__dlq">[DLQ:{queueStatus.dlq_count}]</span>
+        )}
         {isPaused && (
           <button
             className="ei-btn ei-btn--icon ei-play-btn"

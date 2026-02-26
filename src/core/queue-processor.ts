@@ -1,5 +1,5 @@
-import type { LLMRequest, LLMResponse, LLMRequestType, ProviderAccount, ChatMessage, Message } from "./types.js";
-import { callLLMRaw, parseJSONResponse, cleanResponseContent } from "./llm-client.js";
+import { LLMRequest, LLMResponse, LLMRequestType, ProviderAccount, ChatMessage, Message } from "./types.js";
+import { callLLMRaw, parseJSONResponse } from "./llm-client.js";
 import { hydratePromptPlaceholders } from "../prompts/message-utils.js";
 
 type QueueProcessorState = "idle" | "busy";
@@ -133,9 +133,8 @@ export class QueueProcessor {
   ): LLMResponse {
     switch (request.type) {
       case "json" as LLMRequestType:
-        return this.handleJSONResponse(request, content, finishReason);
       case "response" as LLMRequestType:
-        return this.handleConversationResponse(request, content, finishReason);
+        return this.handleJSONResponse(request, content, finishReason);
       case "raw" as LLMRequestType:
       default:
         return {
@@ -172,26 +171,4 @@ export class QueueProcessor {
     }
   }
 
-  private handleConversationResponse(
-    request: LLMRequest,
-    content: string,
-    finishReason: string | null
-  ): LLMResponse {
-    const cleaned = cleanResponseContent(content);
-    
-    const noMessagePatterns = [
-      /^no\s*(new\s*)?(message|response)/i,
-      /^nothing\s+to\s+(say|add)/i,
-      /^\[no\s+message\]/i,
-    ];
-    
-    const isNoMessage = noMessagePatterns.some((p) => p.test(cleaned));
-    
-    return {
-      request,
-      success: true,
-      content: isNoMessage ? null : cleaned,
-      finish_reason: finishReason ?? undefined,
-    };
   }
-}

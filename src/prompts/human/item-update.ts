@@ -240,13 +240,26 @@ In addition to updating the ${typeLabel}, identify any **memorable, funny, impor
 - Phrases that reveal personality or communication style
 - Things you'd quote back to them later to make them laugh
 - Unique expressions, malaphors, or turns of phrase
+- Quotable moments from EITHER speaker — humans AND AI personas both say memorable things
 
-**De-prioritize:**
-- Dry technical facts (those belong in TOPICS)
-- Status updates or process descriptions
-- Generic statements that could come from anyone
+**NEVER extract these — they are NOT quotes:**
+- Technical identifiers: ARNs, URLs, file paths, UUIDs, config keys, environment variable values, role/policy names
+- AI agent self-talk: "I notice I'm in Plan Mode", "I'll start by...", "Let me help you with...", status updates about the agent's own process
+- AI apologies or acknowledgments: "You're absolutely right", "I apologize for that overreach", "Good decision to revert"
+- Generic AI instructions or tips: "Remember to include X in your prompts", tool usage advice, workflow suggestions
+- Dry technical facts: infrastructure descriptions, process status, batch sizes, system architecture summaries
+- Status updates or process descriptions: "We're running a batch of...", "The pipeline is...", "I'm currently working on..."
+- Generic statements that could come from anyone or any AI session
+- Credentials, secrets, connection strings, or anything that looks like an access token
 
-A quote like "Does the Pope shit in his hat?" is GOLD. A quote like "We're running a batch of 44k students" is just... data.
+**The litmus test**: Would you bring this up at a bar with a friend? Would it make someone laugh, think, or feel something?
+- "Does the Pope shit in his hat?" → YES. Hilarious malaphor.
+- "AWSReservedSSO_cmidp-nihl-sandbox-adm_db7b191e026bdd85" → NO. That's a credential.
+- "Slow is smooth. Smooth is fast." → YES (once). Pithy wisdom.
+- "The authentication flow is working correctly now" → NO. Status update.
+- "I built this, and now it's live." → YES. Pride and accomplishment.
+
+**When in doubt, leave it out.** An empty quotes array is always acceptable.
 
 Return them in the \`quotes\` array:
 
@@ -265,7 +278,6 @@ Return them in the \`quotes\` array:
 \`\`\`
 
 **CRITICAL**: Return the EXACT text as it appears in the message (spacing, punctuation, formatting, etc.). WE CAN ONLY USE IT IF WE FIND IT IN THE TEXT.
-
 
 # CRITICAL INSTRUCTIONS
 

@@ -9,7 +9,7 @@ describe("QueueState", () => {
   const makeRequest = (
     priority: "high" | "normal" | "low" = "normal",
     nextStep: LLMNextStep = LLMNextStep.HandlePersonaResponse
-  ): Omit<LLMRequest, "id" | "created_at" | "attempts"> => ({
+  ): Omit<LLMRequest, "id" | "created_at" | "attempts" | "state"> => ({
     type: LLMRequestType.Response,
     priority: priority as LLMPriority,
     system: "System prompt",
@@ -41,47 +41,57 @@ describe("QueueState", () => {
     it("sets created_at and attempts on enqueue", () => {
       state.enqueue(makeRequest());
       
-      const request = state.peekHighest();
+      const request = state.claimHighest();
       expect(request?.created_at).toBeDefined();
       expect(request?.attempts).toBe(0);
     });
   });
 
-  describe("peekHighest", () => {
+  describe("claimHighest", () => {
     it("returns null when queue is empty", () => {
-      expect(state.peekHighest()).toBeNull();
+      expect(state.claimHighest()).toBeNull();
     });
 
     it("returns high priority before normal", () => {
       state.enqueue(makeRequest("normal"));
       state.enqueue(makeRequest("high"));
       state.enqueue(makeRequest("low"));
-      
-      const request = state.peekHighest();
+
+      const request = state.claimHighest();
       expect(request?.priority).toBe("high");
     });
 
     it("returns normal priority before low", () => {
       state.enqueue(makeRequest("low"));
       state.enqueue(makeRequest("normal"));
-      
-      const request = state.peekHighest();
+
+      const request = state.claimHighest();
       expect(request?.priority).toBe("normal");
     });
 
     it("returns null when paused", () => {
       state.enqueue(makeRequest());
       state.pause();
-      
-      expect(state.peekHighest()).toBeNull();
+
+      expect(state.claimHighest()).toBeNull();
     });
 
     it("returns request after resume", () => {
       state.enqueue(makeRequest());
       state.pause();
       state.resume();
-      
-      expect(state.peekHighest()).not.toBeNull();
+
+      expect(state.claimHighest()).not.toBeNull();
+    });
+
+    it("marks claimed item as processing", () => {
+      state.enqueue(makeRequest());
+      const claimed = state.claimHighest();
+      expect(claimed?.state).toBe("processing");
+      // Item still in queue (pending count includes processing)
+      expect(state.length()).toBe(1);
+      // But not claimable again (already processing)
+      expect(state.claimHighest()).toBeNull();
     });
   });
 
@@ -106,16 +116,16 @@ describe("QueueState", () => {
   describe("fail", () => {
     it("increments attempt count", () => {
       const id = state.enqueue(makeRequest());
-      const before = state.peekHighest()?.attempts;
+      const before = state.export()[0]?.attempts;
       state.fail(id);
-      const after = state.peekHighest()?.attempts;
+      const after = state.export()[0]?.attempts;
       expect(after).toBe((before ?? 0) + 1);
     });
     it("sets last_attempt timestamp", () => {
       const id = state.enqueue(makeRequest());
 
       state.fail(id);
-      expect(state.peekHighest()?.last_attempt).toBeDefined();
+      expect(state.export()[0]?.last_attempt).toBeDefined();
     });
     it("stores error in data._lastError", () => {
       const id = state.enqueue(makeRequest());
@@ -127,22 +137,25 @@ describe("QueueState", () => {
       expect(exported[0]?.data._lastError).toBe("Test error message");
     });
 
-    it("drops permanent 4xx errors immediately", () => {
+    it("moves permanently-failed items to DLQ instead of dropping", () => {
       const id = state.enqueue(makeRequest());
 
-      const result = state.fail(id, 'LLM API error (400): bad request');
+      const result = state.fail(id, "LLM API error (400): bad request");
 
       expect(result.dropped).toBe(true);
       expect(state.length()).toBe(0);
+      expect(state.dlqLength()).toBe(1);
+      expect(state.getDLQItems()[0].state).toBe("dlq");
     });
 
-    it("drops 401 auth errors", () => {
+    it("moves 401 auth errors to DLQ", () => {
       const id = state.enqueue(makeRequest());
 
-      const result = state.fail(id, 'LLM API error (401): unauthorized');
+      const result = state.fail(id, "LLM API error (401): unauthorized");
 
       expect(result.dropped).toBe(true);
       expect(state.length()).toBe(0);
+      expect(state.dlqLength()).toBe(1);
     });
 
     it("does NOT drop 429 rate limit errors", () => {
@@ -174,13 +187,14 @@ describe("QueueState", () => {
       expect(state.length()).toBe(1);
     });
 
-    it("drops when permanent flag is true regardless of error type", () => {
+    it("moves to DLQ when permanent flag is true regardless of error type", () => {
       const id = state.enqueue(makeRequest());
 
-      const result = state.fail(id, 'LLM API error (529): overloaded', true);
+      const result = state.fail(id, "LLM API error (529): overloaded", true);
 
       expect(result.dropped).toBe(true);
       expect(state.length()).toBe(0);
+      expect(state.dlqLength()).toBe(1);
     });
 
     it("applies exponential backoff on transient errors", () => {
@@ -211,37 +225,37 @@ describe("QueueState", () => {
       expect(result.retryDelay).toBe(30000);
     });
 
-    it("sets retry_after timestamp on transient errors", () => {
+    it("sets retry_after on transient errors (for processor backoff)", () => {
       const id = state.enqueue(makeRequest());
 
       state.fail(id, 'LLM API error (529): overloaded');
 
       const exported = state.export();
       expect(exported[0]?.retry_after).toBeDefined();
-      // retry_after should be in the future
       expect(new Date(exported[0].retry_after!).getTime()).toBeGreaterThan(Date.now() - 1000);
     });
 
-    it("never drops transient errors regardless of attempt count", () => {
+    it("never moves transient errors to DLQ regardless of attempt count", () => {
       const id = state.enqueue(makeRequest());
 
-      // Fail 20 times — old behavior would drop after 3
       for (let i = 0; i < 20; i++) {
-        const result = state.fail(id, 'LLM API error (529): overloaded');
+        const result = state.fail(id, "LLM API error (529): overloaded");
         expect(result.dropped).toBe(false);
       }
 
       expect(state.length()).toBe(1);
+      expect(state.dlqLength()).toBe(0);
       expect(state.export()[0].attempts).toBe(20);
     });
 
-    it("drops pattern-based permanent errors", () => {
+    it("moves pattern-based permanent errors to DLQ", () => {
       const id = state.enqueue(makeRequest());
 
-      const result = state.fail(id, 'invalid api key provided');
+      const result = state.fail(id, "invalid api key provided");
 
       expect(result.dropped).toBe(true);
       expect(state.length()).toBe(0);
+      expect(state.dlqLength()).toBe(1);
     });
 
     it("treats unknown errors as transient (safe default)", () => {
@@ -255,39 +269,35 @@ describe("QueueState", () => {
     });
   });
 
-  describe("peekHighest with backoff", () => {
-    it("skips items in backoff", () => {
+  describe("claimHighest after failure", () => {
+    it("claimHighest does NOT gate on retry_after (processor checks nextItemRetryAfter instead)", () => {
       const id1 = state.enqueue(makeRequest("normal"));
       state.enqueue(makeRequest("low"));
 
-      // Put first item into backoff
-      state.fail(id1, 'LLM API error (529): overloaded');
+      state.fail(id1, "LLM API error (529): overloaded");
 
-      // Should return the low-priority item since normal is in backoff
-      const next = state.peekHighest();
-      expect(next?.priority).toBe("low");
+      // claimHighest ignores retry_after — returns highest priority pending item regardless
+      const next = state.claimHighest();
+      expect(next?.id).toBe(id1);
+      expect(next?.priority).toBe("normal");
     });
 
-    it("returns null when all items are in backoff", () => {
+    it("nextItemRetryAfter returns future timestamp when top item is in backoff", () => {
       const id = state.enqueue(makeRequest());
 
-      state.fail(id, 'LLM API error (529): overloaded');
+      state.fail(id, "LLM API error (529): overloaded");
 
-      expect(state.peekHighest()).toBeNull();
+      const retryAfter = state.nextItemRetryAfter();
+      expect(retryAfter).toBeDefined();
+      expect(new Date(retryAfter!).getTime()).toBeGreaterThan(Date.now());
     });
 
-    it("returns backed-off item after retry_after has passed", () => {
-      const id = state.enqueue(makeRequest());
+    it("nextItemRetryAfter returns null when top item has no backoff", () => {
+      state.enqueue(makeRequest());
 
-      // Manually set retry_after to the past
-      const exported = state.export();
-      exported[0].retry_after = new Date(Date.now() - 1000).toISOString();
-
-      expect(state.peekHighest()).not.toBeNull();
-      expect(state.peekHighest()?.id).toBe(id);
+      expect(state.nextItemRetryAfter()).toBeNull();
     });
   });
-
 
 
   describe("pause/resume", () => {
@@ -319,6 +329,7 @@ describe("QueueState", () => {
           id: "test-1",
           created_at: new Date().toISOString(),
           attempts: 0,
+          state: "pending",
           type: LLMRequestType.Response,
           priority: LLMPriority.Normal,
           system: "Test",
@@ -327,11 +338,11 @@ describe("QueueState", () => {
           data: {},
         },
       ];
-      
+
       state.load(requests);
-      
+
       expect(state.length()).toBe(1);
-      expect(state.peekHighest()?.id).toBe("test-1");
+      expect(state.claimHighest()?.id).toBe("test-1");
     });
   });
 
@@ -345,7 +356,8 @@ describe("QueueState", () => {
       state.enqueue(makeRequest());
       expect(state.length()).toBe(2);
       
-      state.complete(state.peekHighest()!.id);
+      const claimed = state.claimHighest()!;
+      state.complete(claimed.id);
       expect(state.length()).toBe(1);
     });
   });
@@ -354,7 +366,7 @@ describe("QueueState", () => {
     const makeRequestForPersona = (
       personaId: string,
       nextStep: LLMNextStep = LLMNextStep.HandlePersonaResponse
-    ): Omit<LLMRequest, "id" | "created_at" | "attempts"> => ({
+    ): Omit<LLMRequest, "id" | "created_at" | "attempts" | "state"> => ({
       type: LLMRequestType.Response,
       priority: LLMPriority.Normal,
       system: "System prompt",
@@ -402,4 +414,71 @@ describe("QueueState", () => {
       expect(removed).toContain(id1);
     });
   });
+
+  describe("DLQ management", () => {
+    it("dlqLength returns count of dlq items only", () => {
+      state.enqueue(makeRequest());
+      const id2 = state.enqueue(makeRequest());
+      state.fail(id2, "LLM API error (400): bad request");
+
+      expect(state.length()).toBe(1);
+      expect(state.dlqLength()).toBe(1);
+    });
+
+    it("getDLQItems returns only dlq items", () => {
+      state.enqueue(makeRequest());
+      const id2 = state.enqueue(makeRequest());
+      state.fail(id2, "LLM API error (400): bad request");
+
+      const dlq = state.getDLQItems();
+      expect(dlq).toHaveLength(1);
+      expect(dlq[0].state).toBe("dlq");
+    });
+
+    it("getAllActiveItems excludes dlq items", () => {
+      state.enqueue(makeRequest());
+      const id2 = state.enqueue(makeRequest());
+      state.fail(id2, "LLM API error (400): bad request");
+
+      const active = state.getAllActiveItems();
+      expect(active).toHaveLength(1);
+      expect(active[0].state).not.toBe("dlq");
+    });
+
+    it("updateItem can recover a DLQ item to pending", () => {
+      const id = state.enqueue(makeRequest());
+      state.fail(id, "LLM API error (400): bad request");
+      expect(state.dlqLength()).toBe(1);
+
+      state.updateItem(id, { state: "pending", attempts: 0 });
+
+      expect(state.dlqLength()).toBe(0);
+      expect(state.length()).toBe(1);
+      const claimed = state.claimHighest();
+      expect(claimed?.id).toBe(id);
+      expect(claimed?.attempts).toBe(0);
+    });
+
+    it("trimDLQ removes items older than DLQ_MAX_AGE_DAYS", () => {
+      const id = state.enqueue(makeRequest());
+      state.fail(id, "LLM API error (400): bad request");
+      const exported = state.export();
+      exported[0].created_at = new Date(Date.now() - 20 * 86_400_000).toISOString();
+      state.load(exported);
+
+      const trimmed = state.trimDLQ();
+      expect(trimmed).toBe(1);
+      expect(state.dlqLength()).toBe(0);
+    });
+
+    it("trimDLQ keeps items within age threshold", () => {
+      const id = state.enqueue(makeRequest());
+      state.fail(id, "LLM API error (400): bad request");
+
+      const trimmed = state.trimDLQ();
+      expect(trimmed).toBe(0);
+      expect(state.dlqLength()).toBe(1);
+    });
+  });
 });
+

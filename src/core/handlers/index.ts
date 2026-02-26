@@ -23,6 +23,7 @@ import type {
   PersonaTopicMatchResult,
   PersonaTopicUpdateResult,
 } from "../../prompts/persona/types.js";
+import type { PersonaResponseResult } from "../../prompts/response/index.js";
 
 import type { 
   PersonaExpireResult, 
@@ -106,8 +107,56 @@ function handlePersonaResponse(response: LLMResponse, state: StateManager): void
   // the messages were "seen" and processed
   state.messages_markPendingAsRead(personaId);
 
+  // Structured JSON path: queue-processor parsed valid JSON into `parsed`
+  if (response.parsed !== undefined) {
+    const result = response.parsed as PersonaResponseResult;
+
+    if (!result.should_respond) {
+      const reason = result.reason;
+      if (reason) {
+        console.log(`[handlePersonaResponse] ${personaDisplayName} chose silence: ${reason}`);
+        const silentMessage: Message = {
+          id: crypto.randomUUID(),
+          role: "system",
+          content: `[${personaDisplayName} chose not to respond because: ${reason}]`,
+          timestamp: new Date().toISOString(),
+          read: false,
+          context_status: ContextStatus.Never,
+        };
+        state.messages_append(personaId, silentMessage);
+      } else {
+        console.log(`[handlePersonaResponse] ${personaDisplayName} chose not to respond (no reason given)`);
+      }
+      return;
+    }
+
+    // Build message content from verbal/action fields
+    const parts: string[] = [];
+    if (result.action_response) parts.push(`_${result.action_response}_`);
+    if (result.verbal_response) parts.push(result.verbal_response);
+    const messageContent = parts.join('\n\n');
+
+    if (!messageContent) {
+      console.log(`[handlePersonaResponse] ${personaDisplayName} JSON had should_respond=true but no content fields`);
+      return;
+    }
+
+    const message: Message = {
+      id: crypto.randomUUID(),
+      role: "system",
+      content: messageContent,
+      timestamp: new Date().toISOString(),
+      read: false,
+      context_status: ContextStatus.Default,
+    };
+    state.messages_append(personaId, message);
+    console.log(`[handlePersonaResponse] Appended structured response to ${personaDisplayName}`);
+    return;
+  }
+
+  // Legacy plain-text fallback
   if (!response.content) {
-    console.log(`[handlePersonaResponse] No content in response (${personaDisplayName} chose not to respond)`);
+    console.log(`[handlePersonaResponse] ${personaDisplayName} chose not to respond (no reason given)`);
     return;
   }
 
@@ -119,7 +168,6 @@ function handlePersonaResponse(response: LLMResponse, state: StateManager): void
     read: false,
     context_status: ContextStatus.Default,
   };
-
   state.messages_append(personaId, message);
   console.log(`[handlePersonaResponse] Appended response to ${personaDisplayName}`);
 }
@@ -748,18 +796,48 @@ async function validateAndStoreQuotes(
       if (start !== -1) {
         const end = start + candidate.text.length;
         
+        // Check for ANY overlapping quote in this message (not just exact match)
         const existing = state.human_quote_getForMessage(message.id);
-        const existingQuote = existing.find(q => q.start === start && q.end === end);
+        const overlapping = existing.find(q =>
+          q.start !== null && q.end !== null &&
+          start < q.end && end > q.start  // ranges overlap
+        );
         
-        if (existingQuote) {
-          if (!existingQuote.data_item_ids.includes(dataItemId)) {
-            state.human_quote_update(existingQuote.id, {
-              data_item_ids: [...existingQuote.data_item_ids, dataItemId],
-            });
-            console.log(`[extraction] Linked existing quote to "${dataItemId}": "${candidate.text.slice(0, 30)}..."`);
-          } else {
-            console.log(`[extraction] Quote already linked to "${dataItemId}": "${candidate.text.slice(0, 30)}..."`);
+        if (overlapping) {
+          // Merge: expand to the union of both ranges
+          const mergedStart = Math.min(start, overlapping.start!);
+          const mergedEnd = Math.max(end, overlapping.end!);
+          const mergedText = message.content.slice(mergedStart, mergedEnd);
+          
+          // Merge data_item_ids and persona_groups (deduplicated)
+          const mergedDataItemIds = overlapping.data_item_ids.includes(dataItemId)
+            ? overlapping.data_item_ids
+            : [...overlapping.data_item_ids, dataItemId];
+          const group = personaGroup || "General";
+          const mergedGroups = overlapping.persona_groups.includes(group)
+            ? overlapping.persona_groups
+            : [...overlapping.persona_groups, group];
+          
+          // Only recompute embedding if the text actually changed
+          let embedding = overlapping.embedding;
+          if (mergedText !== overlapping.text) {
+            try {
+              const embeddingService = getEmbeddingService();
+              embedding = await embeddingService.embed(mergedText);
+            } catch (err) {
+              console.warn(`[extraction] Failed to recompute embedding for merged quote: "${mergedText.slice(0, 30)}..."`, err);
+            }
           }
+          
+          state.human_quote_update(overlapping.id, {
+            start: mergedStart,
+            end: mergedEnd,
+            text: mergedText,
+            data_item_ids: mergedDataItemIds,
+            persona_groups: mergedGroups,
+            embedding,
+          });
+          console.log(`[extraction] Merged overlapping quote: "${mergedText.slice(0, 50)}..." (${mergedStart}-${mergedEnd})`);
           found = true;
           break;
         }

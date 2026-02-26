@@ -10,6 +10,28 @@ Agent-specific guidance for the TUI frontend.
 
 See root `AGENTS.md` for overall project structure.
 
+## Bun Runtime
+
+Default to Bun instead of Node.js for all TUI development.
+
+- Use `bun <file>` instead of `node <file>` or `ts-node <file>`
+- Use `bun install` instead of `npm install`
+- Use `bun run <script>` instead of `npm run <script>`
+- Use `bunx <package>` instead of `npx <package>`
+- Bun automatically loads `.env` — don't use dotenv
+
+### Prefer Bun Built-in APIs
+
+| Instead of | Use |
+|------------|-----|
+| `express` | `Bun.serve()` (supports WebSockets, HTTPS, routes) |
+| `better-sqlite3` | `bun:sqlite` |
+| `ioredis` | `Bun.redis` |
+| `pg` / `postgres.js` | `Bun.sql` |
+| `ws` | Built-in `WebSocket` |
+| `node:fs` readFile/writeFile | `Bun.file` |
+| `execa` | `Bun.$\`ls\`` |
+
 ## Critical: OpenTUI Conditional Rendering
 
 **DO NOT use `<Show>` inside `<scrollbox>`** - it causes element accumulation bugs.
@@ -60,11 +82,22 @@ Use the `visible` prop instead of `<Show>` for conditional rendering inside scro
 
 ## Testing
 
-### Unit Tests (Bun)
+### Unit Tests (Two Runners)
 
 ```bash
-bun run test
+# Vitest - for tests needing SolidJS JSX (testRender, providers)
+bun run vitest run
+
+# Bun test - for pure logic tests (faster)
+bun test src/ tests/*.test.tsx
+
+# Combined (recommended):
+bun run test    # Runs both
 ```
+
+**When to use which:**
+- `bun:test` — Pure functions, command parser, registry logic
+- `vitest` — Components using `testRender()` from `@opentui/solid`
 
 ### E2E Tests (Node 20 Required)
 
@@ -100,7 +133,6 @@ tui/
 │   └── util/             # Helpers
 ├── tests/
 │   └── e2e/              # E2E tests (Node 20)
-├── CLAUDE.md             # Bun-specific guidance
 └── AGENTS.md             # This file
 ```
 

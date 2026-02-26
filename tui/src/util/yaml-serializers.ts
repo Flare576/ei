@@ -1,19 +1,22 @@
 import YAML from "yaml";
-import type { 
-  PersonaEntity, 
-  HumanEntity, 
+import type {
+  PersonaEntity,
+  HumanEntity,
   HumanSettings,
   CeremonyConfig,
   OpenCodeSettings,
-  Fact, 
-  Trait, 
-  Topic, 
+  Fact,
+  Trait,
+  Topic,
   Person,
   PersonaTopic,
   ProviderAccount,
   ProviderType,
   Quote,
   Message,
+  LLMRequest,
+  LLMRequestState,
+  LLMPriority,
 } from "../../../src/core/types.js";
 import { ContextStatus } from "../../../src/core/types.js";
 
@@ -760,4 +763,57 @@ export function contextFromYAML(yamlContent: string): ContextYAMLResult {
   }
 
   return { messages, deletedMessageIds };
+}
+
+
+// =============================================================================
+// QUEUE ITEM YAML
+// =============================================================================
+
+export function queueItemsToYAML(items: LLMRequest[]): string {
+  const data = items.map(item => ({
+    id: item.id,
+    state: item.state,
+    created_at: item.created_at,
+    attempts: item.attempts,
+    last_attempt: item.last_attempt,
+    retry_after: item.retry_after,
+    type: item.type,
+    priority: item.priority,
+    next_step: item.next_step,
+    model: item.model,
+    data: item.data,
+    // NOTE: system/user prompts omitted (large); to requeue: set state='pending', attempts=0
+  }));
+  return YAML.stringify(data, { lineWidth: 0 });
+}
+
+export interface QueueItemUpdate {
+  id: string;
+  state: LLMRequestState;
+  attempts: number;
+  model?: string;
+  priority?: LLMPriority;
+  data?: Record<string, unknown>;
+}
+
+export function queueItemsFromYAML(yamlContent: string): QueueItemUpdate[] {
+  const data = YAML.parse(yamlContent) as QueueItemUpdate[];
+  if (!Array.isArray(data)) throw new Error("Expected a YAML array of queue items");
+  return data.map(item => {
+    if (!item.id) throw new Error(`Queue item missing 'id' field`);
+    if (!item.state) throw new Error(`Queue item ${item.id} missing 'state' field`);
+    const validStates: LLMRequestState[] = ["pending", "processing", "dlq"];
+    if (!validStates.includes(item.state)) {
+      throw new Error(`Queue item ${item.id} has invalid state '${item.state}'. Valid: ${validStates.join(", ")}`);
+    }
+    return {
+      id: item.id,
+      state: item.state,
+      attempts: typeof item.attempts === "number" ? item.attempts : 0,
+      model: item.model,
+      priority: item.priority,
+      data: item.data,
+    };
+  });
 }

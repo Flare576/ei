@@ -15,13 +15,20 @@ export function StatusBar() {
 
   const getQueueIndicator = () => {
     const status = queueStatus();
+    let label: string;
     if (status.state === "busy") {
-      return `Processing (${status.pending_count})`;
+      label = `Processing (${status.pending_count})`;
+    } else if (status.state === "paused") {
+      label = `Paused (${status.pending_count})`;
+    } else if (status.pending_count > 0) {
+      label = `Waiting (${status.pending_count})`;
+    } else {
+      label = "Ready";
     }
-    if (status.state === "paused") {
-      return "Paused";
+    if (status.dlq_count > 0) {
+      label += ` [DLQ:${status.dlq_count}]`;
     }
-    return "Ready";
+    return label;
   };
 
   const getFocusIndicator = () => {
@@ -69,7 +76,7 @@ export function StatusBar() {
         </text>
       </Show>
 
-      <text fg={queueStatus().state === "busy" ? "#b58900" : "#586e75"}>
+      <text fg={queueStatus().state === "busy" ? "#b58900" : queueStatus().dlq_count > 0 ? "#dc322f" : queueStatus().pending_count > 0 ? "#2aa198" : "#586e75"}>
         {getQueueIndicator()}
       </text>
     </box>

@@ -250,7 +250,7 @@ export class StateManager {
     return result;
   }
 
-  queue_enqueue(request: Omit<LLMRequest, "id" | "created_at" | "attempts">): string {
+  queue_enqueue(request: Omit<LLMRequest, "id" | "created_at" | "attempts" | "state">): string {
     const requestWithModel = {
       ...request,
       model: request.model ?? this.humanState.get().settings?.default_model,
@@ -260,8 +260,8 @@ export class StateManager {
     return id;
   }
 
-  queue_peekHighest(): LLMRequest | null {
-    return this.queueState.peekHighest();
+  queue_claimHighest(): LLMRequest | null {
+    return this.queueState.claimHighest();
   }
 
   queue_complete(id: string): void {
@@ -287,6 +287,14 @@ export class StateManager {
     return this.queueState.length();
   }
 
+  queue_hasProcessingItem(): boolean {
+    return this.queueState.hasProcessingItem();
+  }
+
+  queue_nextItemRetryAfter(): string | null {
+    return this.queueState.nextItemRetryAfter();
+  }
+
   queue_pause(): void {
     this.queueState.pause();
     this.scheduleSave();
@@ -308,6 +316,30 @@ export class StateManager {
   queue_clear(): number {
     const result = this.queueState.clear();
     this.scheduleSave();
+    return result;
+  }
+
+  queue_dlqLength(): number {
+    return this.queueState.dlqLength();
+  }
+
+  queue_getDLQItems(): LLMRequest[] {
+    return this.queueState.getDLQItems();
+  }
+
+  queue_getAllActiveItems(): LLMRequest[] {
+    return this.queueState.getAllActiveItems();
+  }
+
+  queue_updateItem(id: string, updates: Partial<LLMRequest>): boolean {
+    const result = this.queueState.updateItem(id, updates);
+    if (result) this.scheduleSave();
+    return result;
+  }
+
+  queue_trimDLQ(): number {
+    const result = this.queueState.trimDLQ();
+    if (result > 0) this.scheduleSave();
     return result;
   }
 

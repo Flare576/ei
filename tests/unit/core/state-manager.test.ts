@@ -208,7 +208,7 @@ describe("StateManager", () => {
       expect(id).toBeDefined();
       expect(sm.queue_length()).toBe(1);
       
-      const request = sm.queue_peekHighest();
+      const request = sm.queue_claimHighest();
       expect(request?.id).toBe(id);
     });
 
@@ -223,7 +223,7 @@ describe("StateManager", () => {
       const id = sm.queue_enqueue(makeRequest());
       sm.queue_fail(id);
       
-      expect(sm.queue_peekHighest()?.attempts).toBe(1);
+      expect(sm.getStorageState().queue[0]?.attempts).toBe(1);
     });
 
     it("pauses and resumes queue", () => {
@@ -231,11 +231,11 @@ describe("StateManager", () => {
       
       sm.queue_pause();
       expect(sm.queue_isPaused()).toBe(true);
-      expect(sm.queue_peekHighest()).toBeNull();
+      expect(sm.queue_claimHighest()).toBeNull();
       
       sm.queue_resume();
       expect(sm.queue_isPaused()).toBe(false);
-      expect(sm.queue_peekHighest()).not.toBeNull();
+      expect(sm.queue_claimHighest()).not.toBeNull();
     });
   });
 });

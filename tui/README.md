@@ -6,7 +6,11 @@ OpenCode integration: import via `/settings` (`opencode.integration: true`) · e
 
 # Installation
 
-```
+```bash
+# Install Bun (if you don't have it)
+curl -fsSL https://bun.sh/install | bash
+
+# Install Ei
 npm install -g ei-tui
 ```
 

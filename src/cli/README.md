@@ -1,4 +1,6 @@
 # The CLI
+
+> For installation, see the [TUI README](../../tui/README.md#installation).
 ```sh
 ei                             # Start the TUI
 ei "query string"              # Return up to 10 results across all types

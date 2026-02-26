@@ -92,7 +92,11 @@ More information can be found in the [Web Readme](web/README.md)
 
 ### TUI
 
-```
+```bash
+# Install Bun (if you don't have it)
+curl -fsSL https://bun.sh/install | bash
+
+# Install Ei
 npm install -g ei-tui
 ```
 
@@ -126,7 +130,7 @@ This project is separated into five (5) logical parts:
 
 ## Requirements
 
-- [Bun](https://bun.sh) runtime (>=1.0.0)
+- [Bun](https://bun.sh) runtime (>=1.0.0) — install with `curl -fsSL https://bun.sh/install | bash`
 - A local LLM (LM Studio, Ollama, etc.) OR API access to a cloud provider (Anthropic, OpenAI, Bedrock, your uncle's LLM farm, etc.)
 
 ## LM Studio Setup

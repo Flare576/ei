@@ -6,7 +6,6 @@ import type { LLMRequest, LLMResponse } from "../../../src/core/types.js";
 vi.mock("../../../src/core/llm-client.js", () => ({
   callLLMRaw: vi.fn(),
   parseJSONResponse: vi.fn((content: string) => JSON.parse(content)),
-  cleanResponseContent: vi.fn((content: string) => content.trim()),
 }));
 
 import * as llmClient from "../../../src/core/llm-client.js";
@@ -124,47 +123,48 @@ describe("QueueProcessor", () => {
       expect(response?.error).toContain("JSON parse failed");
     });
 
-    it("handles response type - cleans content", async () => {
+    it("handles response type - parsed as JSON (response→json redirect)", async () => {
+      const jsonContent = '{"should_respond": true, "verbal_response": "Hello world"}';
       vi.mocked(llmClient.callLLMRaw).mockResolvedValue({
-        content: "  Hello world  ",
+        content: jsonContent,
         finishReason: "stop",
       });
-      vi.mocked(llmClient.cleanResponseContent).mockReturnValue("Hello world");
-      
-      let response: LLMResponse | undefined;
-      processor.start(makeRequest("response"), async (r) => { response = r; });
-      
-      await vi.waitFor(() => expect(response).toBeDefined());
-      expect(response?.content).toBe("Hello world");
-    });
-
-    it("handles response type - detects 'no message' patterns", async () => {
-      vi.mocked(llmClient.callLLMRaw).mockResolvedValue({
-        content: "No message",
-        finishReason: "stop",
+      vi.mocked(llmClient.parseJSONResponse).mockReturnValue({
+        should_respond: true,
+        verbal_response: "Hello world",
       });
-      vi.mocked(llmClient.cleanResponseContent).mockReturnValue("No message");
       
       let response: LLMResponse | undefined;
       processor.start(makeRequest("response"), async (r) => { response = r; });
       
       await vi.waitFor(() => expect(response).toBeDefined());
       expect(response?.success).toBe(true);
-      expect(response?.content).toBeNull();
+      expect(response?.parsed).toEqual({
+        should_respond: true,
+        verbal_response: "Hello world",
+      });
     });
 
-    it("handles response type - detects '[no message]' pattern", async () => {
+    it("handles response type - should_respond false", async () => {
+      const jsonContent = '{"should_respond": false, "reason": "User said goodnight"}';
       vi.mocked(llmClient.callLLMRaw).mockResolvedValue({
-        content: "[no message]",
+        content: jsonContent,
         finishReason: "stop",
       });
-      vi.mocked(llmClient.cleanResponseContent).mockReturnValue("[no message]");
+      vi.mocked(llmClient.parseJSONResponse).mockReturnValue({
+        should_respond: false,
+        reason: "User said goodnight",
+      });
       
       let response: LLMResponse | undefined;
       processor.start(makeRequest("response"), async (r) => { response = r; });
       
       await vi.waitFor(() => expect(response).toBeDefined());
-      expect(response?.content).toBeNull();
+      expect(response?.success).toBe(true);
+      expect(response?.parsed).toEqual({
+        should_respond: false,
+        reason: "User said goodnight",
+      });
     });
   });
 
@@ -201,7 +201,6 @@ describe("QueueProcessor", () => {
         content: "Test",
         finishReason: "length",
       });
-      vi.mocked(llmClient.cleanResponseContent).mockReturnValue("Test");
       
       let response: LLMResponse | undefined;
       processor.start(makeRequest(), async (r) => { response = r; });
@@ -233,7 +232,6 @@ describe("QueueProcessor", () => {
         content: "Test response",
         finishReason: "stop",
       });
-      vi.mocked(llmClient.cleanResponseContent).mockReturnValue("Test response");
       
       const callback = vi.fn().mockResolvedValue(undefined);
       processor.start(makeRequest(), callback);
@@ -250,7 +248,6 @@ describe("QueueProcessor", () => {
         content: "Test",
         finishReason: "stop",
       });
-      vi.mocked(llmClient.cleanResponseContent).mockReturnValue("Test");
       
       const callback = vi.fn().mockResolvedValue(undefined);
       
@@ -267,7 +264,6 @@ describe("QueueProcessor", () => {
         content: "Test",
         finishReason: "stop",
       });
-      vi.mocked(llmClient.cleanResponseContent).mockReturnValue("Test");
       
       const request = makeRequest();
       request.system = "Custom system";

@@ -30,6 +30,16 @@ export interface ResponsePromptData {
 }
 
 /**
+ * Structured response from LLM (new JSON schema)
+ */
+export interface PersonaResponseResult {
+  should_respond: boolean;
+  verbal_response?: string;
+  action_response?: string;
+  reason?: string;
+}
+
+/**
  * Prompt output structure (all prompts return this)
  */
 export interface PromptOutput {

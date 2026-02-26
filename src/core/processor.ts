@@ -124,6 +124,7 @@ export class Processor {
   private currentRequest: LLMRequest | null = null;
   private isTUI = false;
   private lastOpenCodeSync = 0;
+  private lastDLQTrim = 0;
   private openCodeImportInProgress = false;
   private pendingConflict: StateConflictData | null = null;
 
@@ -334,31 +335,36 @@ export class Processor {
       await this.checkScheduledTasks();
 
       if (this.queueProcessor.getState() === "idle") {
-        const request = this.stateManager.queue_peekHighest();
-        if (request) {
-          const personaId = request.data.personaId as string | undefined;
-          const personaDisplayName = request.data.personaDisplayName as string | undefined;
-          const personaSuffix = personaDisplayName ? ` [${personaDisplayName}]` : "";
-          console.log(`[Processor ${this.instanceId}] processing request: ${request.next_step}${personaSuffix}`);
-          this.currentRequest = request;
+        const retryAfter = this.stateManager.queue_nextItemRetryAfter();
+        const isBackingOff = retryAfter !== null && retryAfter > new Date().toISOString();
 
-          if (personaId && request.next_step === LLMNextStep.HandlePersonaResponse) {
-            this.interface.onMessageProcessing?.(personaId);
+        if (!isBackingOff) {
+          const request = this.stateManager.queue_claimHighest();
+          if (request) {
+            const personaId = request.data.personaId as string | undefined;
+            const personaDisplayName = request.data.personaDisplayName as string | undefined;
+            const personaSuffix = personaDisplayName ? ` [${personaDisplayName}]` : "";
+            console.log(`[Processor ${this.instanceId}] processing request: ${request.next_step}${personaSuffix}`);
+            this.currentRequest = request;
+
+            if (personaId && request.next_step === LLMNextStep.HandlePersonaResponse) {
+              this.interface.onMessageProcessing?.(personaId);
+            }
+
+            this.queueProcessor.start(request, async (response) => {
+              this.currentRequest = null;
+              await this.handleResponse(response);
+              const nextState = this.stateManager.queue_isPaused() ? "paused" : "idle";
+              // the processor state is set in the caller, so this needs a bit of delay
+              setTimeout(() => this.interface.onQueueStateChanged?.(nextState), 0);
+            }, {
+              accounts: this.stateManager.getHuman().settings?.accounts,
+              messageFetcher: (pName) => this.fetchMessagesForLLM(pName),
+              rawMessageFetcher: (pName) => this.stateManager.messages_get(pName),
+            });
+
+            this.interface.onQueueStateChanged?.("busy");
           }
-
-          this.queueProcessor.start(request, async (response) => {
-            this.currentRequest = null;
-            await this.handleResponse(response);
-            const nextState = this.stateManager.queue_isPaused() ? "paused" : "idle";
-            // the processor state is set in the caller, so this needs a bit of delay
-            setTimeout(() => this.interface.onQueueStateChanged?.(nextState), 0);
-          }, {
-            accounts: this.stateManager.getHuman().settings?.accounts,
-            messageFetcher: (pName) => this.fetchMessagesForLLM(pName),
-            rawMessageFetcher: (pName) => this.stateManager.messages_get(pName),
-          });
-
-          this.interface.onQueueStateChanged?.("busy");
         }
       }
 
@@ -405,6 +411,15 @@ export class Processor {
         if (timeSinceHeartbeat >= heartbeatDelay) {
           this.queueHeartbeatCheck(persona.id);
         }
+      }
+    }
+    // DLQ rolloff — once per day
+    const MS_PER_DAY = 86_400_000;
+    if (now - this.lastDLQTrim >= MS_PER_DAY) {
+      this.lastDLQTrim = now;
+      const trimmed = this.stateManager.queue_trimDLQ();
+      if (trimmed > 0) {
+        console.log(`[Processor] DLQ trim: removed ${trimmed} expired items`);
       }
     }
   }
@@ -542,7 +557,7 @@ export class Processor {
     const items: EiHeartbeatItem[] = [];
 
     const unverifiedFacts = human.facts
-      .filter(f => f.validated === ValidationLevel.None && f.learned_by !== "ei")
+      .filter(f => f.validated === ValidationLevel.None && f.learned_by !== "Ei")
       .slice(0, 5);
     for (const fact of unverifiedFacts) {
       const quote = human.quotes.find(q => q.data_item_ids.includes(fact.id));
@@ -1469,11 +1484,29 @@ export class Processor {
     return {
       state: this.stateManager.queue_isPaused()
         ? "paused"
-        : this.queueProcessor.getState() === "busy"
+        : this.stateManager.queue_hasProcessingItem()
           ? "busy"
           : "idle",
       pending_count: this.stateManager.queue_length(),
+      dlq_count: this.stateManager.queue_dlqLength(),
     };
+  }
+
+  pauseQueue(): void {
+    this.stateManager.queue_pause();
+    this.queueProcessor.abort();
+  }
+
+  getQueueActiveItems(): LLMRequest[] {
+    return this.stateManager.queue_getAllActiveItems();
+  }
+
+  getDLQItems(): LLMRequest[] {
+    return this.stateManager.queue_getDLQItems();
+  }
+
+  updateQueueItem(id: string, updates: Partial<LLMRequest>): boolean {
+    return this.stateManager.queue_updateItem(id, updates);
   }
 
   async clearQueue(): Promise<number> {

@@ -256,6 +256,10 @@ export interface PersonaCreationInput {
 export const MESSAGE_MIN_COUNT = 200;
 export const MESSAGE_MAX_AGE_DAYS = 14;
 
+// DLQ rolloff thresholds
+export const DLQ_MAX_COUNT = 50;
+export const DLQ_MAX_AGE_DAYS = 14;
+
 // Reserved persona names (command keywords that conflict with /persona subcommands)
 export const RESERVED_PERSONA_NAMES = ["new", "clone"] as const;
 export type ReservedPersonaName = typeof RESERVED_PERSONA_NAMES[number];
@@ -290,12 +294,15 @@ export interface ChatMessage {
 // LLM TYPES
 // =============================================================================
 
+export type LLMRequestState = "pending" | "processing" | "dlq";
+
 export interface LLMRequest {
   id: string;
   created_at: string;
   attempts: number;
   last_attempt?: string;
   retry_after?: string;
+  state: LLMRequestState;
   type: LLMRequestType;
   priority: LLMPriority;
   system: string;
@@ -345,6 +352,7 @@ export interface MessageQueryOptions {
 export interface QueueStatus {
   state: "idle" | "busy" | "paused";
   pending_count: number;
+  dlq_count: number;
   current_operation?: string;
 }
 

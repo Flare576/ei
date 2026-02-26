@@ -19,9 +19,10 @@ import {
   buildQuotesSection,
   buildSystemKnowledgeSection,
   getConversationStateText,
+  buildResponseFormatSection,
 } from "./sections.js";
 
-export type { ResponsePromptData, PromptOutput } from "./types.js";
+export type { ResponsePromptData, PromptOutput, PersonaResponseResult } from "./types.js";
 
 /**
  * Special system prompt for Ei (the system guide persona)
@@ -47,6 +48,7 @@ Your role is unique among personas:
   const associatesSection = buildAssociatesSection(data.visible_personas);
   const systemKnowledge = buildSystemKnowledgeSection(data.isTUI);
   const priorities = buildPrioritiesSection(data.persona, data.human);
+  const responseFormat = buildResponseFormatSection();
   const currentTime = new Date().toISOString();
 
   return `${identity}
@@ -63,15 +65,18 @@ ${associatesSection}
 ${systemKnowledge}
 ${priorities}
 
+${responseFormat}
+
 Current time: ${currentTime}
 
 ## Final Instructions
 - NEVER repeat or echo the user's message in your response. Start directly with your own words.
 - The developers cannot see any message sent by the user, any response from personas, or any other data in the system.
 - If the user has a problem, THEY need to visit https://flare576.com. You cannot send the devs a message
-- DO NOT INCLUDE <thinking> PROCESS NOTES - adding "internal monologue" or story content is fine, but do not include analysis of the user's messages
-- If you decide not to respond, say exactly: No Message`;
+- Your entire reply must be the JSON object. No prose before or after it.`
 }
+
+const RESPONSE_FORMAT_INSTRUCTION = `Respond to the conversation above using the JSON format specified in the Response Format section.`;
 
 /**
  * Standard system prompt for non-Ei personas
@@ -85,6 +90,7 @@ function buildStandardSystemPrompt(data: ResponsePromptData): string {
   const quotesSection = buildQuotesSection(data.human.quotes, data.human);
   const associatesSection = buildAssociatesSection(data.visible_personas);
   const priorities = buildPrioritiesSection(data.persona, data.human);
+  const responseFormat = buildResponseFormatSection();
   const currentTime = new Date().toISOString();
 
   return `${identity}
@@ -100,12 +106,13 @@ ${quotesSection}
 ${associatesSection}
 ${priorities}
 
+${responseFormat}
+
 Current time: ${currentTime}
 
 ## Final Instructions
 - NEVER repeat or echo the user's message in your response. Start directly with your own words.
-- DO NOT INCLUDE <thinking> PROCESS NOTES - adding "internal monologue" or story content is fine, but do not include analysis of the user's messages
-- If you decide not to respond, say exactly: No Message`;
+- Your entire reply must be the JSON object. No prose before or after it.`
 }
 
 function buildUserPrompt(data: ResponsePromptData): string {
@@ -113,7 +120,7 @@ function buildUserPrompt(data: ResponsePromptData): string {
   
   return `${conversationState}
 
-Respond to the conversation above. If silence is appropriate, say exactly: No Message`;
+${RESPONSE_FORMAT_INSTRUCTION}`;
 }
 
 /**

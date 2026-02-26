@@ -6,7 +6,7 @@
  */
 
 import type { HeartbeatCheckPromptData, PromptOutput } from "./types.js";
-import type { Message, Topic, Person } from "../../core/types.js";
+import { ContextStatus, type Message, type Topic, type Person } from "../../core/types.js";
 import { formatMessagesAsPlaceholders } from "../message-utils.js";
 
 function formatTopicsWithGaps(topics: Topic[]): string {
@@ -31,23 +31,37 @@ function formatPeopleWithGaps(people: Person[]): string {
     .join('\n');
 }
 
+/**
+ * A "real" persona message is one the persona actually said to the human.
+ * Silent-reason messages (ContextStatus.Never) and action-only messages
+ * (content is purely italic stage directions) don't count as outreach.
+ */
+function isConversationalMessage(m: Message): boolean {
+  if (m.role !== 'system') return false;
+  if (m.context_status === ContextStatus.Never) return false;
+  // Action-only: entire content is a single italic block
+  if (/^_[^_]+_$/.test(m.content.trim())) return false;
+  return true;
+}
+
 function countTrailingPersonaMessages(history: Message[]): number {
   if (history.length === 0) return 0;
 
   let count = 0;
   for (let i = history.length - 1; i >= 0; i--) {
-    // In heartbeat context, persona messages are "system" role (not from human)
-    if (history[i].role === "system") {
-      count++;
-    } else {
-      break;
-    }
+    const msg = history[i];
+    if (msg.role === 'human') break;
+    if (isConversationalMessage(msg)) count++;
+    // Skip non-conversational system messages and keep looking back
   }
   return count;
 }
 
 function getLastPersonaMessage(history: Message[]): Message | undefined {
-  return history.filter(m => m.role === "system").slice(-1)[0];
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (isConversationalMessage(history[i])) return history[i];
+  }
+  return undefined;
 }
 
 /**
