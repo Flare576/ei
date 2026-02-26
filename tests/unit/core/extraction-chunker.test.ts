@@ -7,7 +7,7 @@ function createMessage(content: string): Message {
   return {
     id: crypto.randomUUID(),
     role: "human",
-    content,
+    verbal_response: content,
     timestamp: new Date().toISOString(),
     read: false,
     context_status: ContextStatus.Default,
@@ -82,11 +82,11 @@ describe("extraction-chunker", () => {
 
       if (result.chunks.length > 1) {
         expect(result.chunks[0].messages_context.some(m => 
-          m.content.includes("original-context-marker")
+          (m.verbal_response ?? '').includes("original-context-marker")
         )).toBe(true);
 
         expect(result.chunks[1].messages_context.every(m => 
-          !m.content.includes("original-context-marker")
+          !(m.verbal_response ?? '').includes("original-context-marker")
         )).toBe(true);
       }
     });
