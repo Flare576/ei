@@ -82,6 +82,13 @@ All commands start with `/`. Append `!` to any command as a shorthand for `--for
 |---------|---------|-------------|
 | `/editor` | `/e`, `/edit` | Open current input text in `$EDITOR`, update on save |
 
+### Queue & Debugging
+
+| Command | Aliases | Description |
+|---------|---------|-------------|
+| `/queue` | | Pause queue and inspect/edit active items in `$EDITOR` |
+| `/dlq` | | Inspect and recover failed (dead-letter) queue items in `$EDITOR` |
+
 ### Keybindings
 
 | Key | Action |
