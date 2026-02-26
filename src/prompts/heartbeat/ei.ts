@@ -1,6 +1,6 @@
 import type { EiHeartbeatPromptData, EiHeartbeatItem, PromptOutput } from "./types.js";
 import type { Message } from "../../core/types.js";
-import { formatMessagesAsPlaceholders } from "../message-utils.js";
+import { formatMessagesAsPlaceholders, getMessageDisplayText } from "../message-utils.js";
 
 function formatItem(item: EiHeartbeatItem): string {
   switch (item.type) {
@@ -105,9 +105,10 @@ ${formatMessagesAsPlaceholders(data.recent_history, "Ei")}`;
 
   let unansweredWarning = "";
   if (lastEiMsg && consecutiveMessages >= 1) {
-    const preview = lastEiMsg.content.length > 100
-      ? lastEiMsg.content.substring(0, 100) + "..."
-      : lastEiMsg.content;
+    const rawPreview = getMessageDisplayText(lastEiMsg) ?? "";
+    const preview = rawPreview.length > 100
+      ? rawPreview.substring(0, 100) + "..."
+      : rawPreview;
 
     unansweredWarning = `
 ### CRITICAL: You Already Reached Out

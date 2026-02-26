@@ -292,7 +292,7 @@ export function buildQuotesSection(quotes: Quote[], human: ResponsePromptData["h
   
   return `## Memorable Moments
 
-These are quotes the human found worth preserving:
+These are quotes the human or the system found worth preserving:
 
 ${formatted}`;
 }
