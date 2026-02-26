@@ -722,13 +722,17 @@ interface EditableMessage {
   timestamp: string;
   context_status: ContextStatus;
   _delete?: boolean;
-  content: string;
+  // verbal_response | action_response | silence_reason
+  verbal_response?: string;
+  action_response?: string;
+  silence_reason?: string;
 }
 
 export function contextToYAML(messages: Message[]): string {
   const header = [
     "# context_status: default | always | never",
     "# _delete: true — permanently removes the message",
+    "# verbal_response | action_response | silence_reason",
   ].join("\n");
 
   const data: EditableMessage[] = messages.map((m) => ({
@@ -737,7 +741,9 @@ export function contextToYAML(messages: Message[]): string {
     timestamp: m.timestamp,
     context_status: m.context_status,
     _delete: false,
-    content: m.content,
+    verbal_response: m.verbal_response,
+    action_response: m.action_response,
+    silence_reason: m.silence_reason,
   }));
 
   return header + "\n" + YAML.stringify(data, { lineWidth: 0 });

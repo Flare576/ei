@@ -6,7 +6,7 @@ import { ConfirmOverlay } from "../components/ConfirmOverlay.js";
 export const dlqCommand: Command = {
   name: "dlq",
   aliases: [],
-  description: "Open dead-letter queue items in $EDITOR (queue not paused)",
+  description: "Open dead-letter queue $EDITOR",
   usage: "/dlq - Inspect and recover failed queue items",
 
   async execute(_args, ctx) {
