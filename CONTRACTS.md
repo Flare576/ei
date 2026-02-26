@@ -962,7 +962,9 @@ interface Quote {
 interface Message {
   id: string;                  // Unique identifier
   role: "human" | "system";
-  content: string;
+  verbal_response?: string;   // Human text or persona's spoken reply
+  action_response?: string;   // Stage direction / action the persona performs
+  silence_reason?: string;    // Why the persona chose not to respond (not shown to LLM)
   timestamp: string;
   read: boolean;               // Has human seen this system message?
   context_status: ContextStatus;
@@ -993,6 +995,8 @@ enum ContextStatus {
 > **Note**: The `state` field from V0 has been removed. Message processing state is now tracked via the LLM queue, not on individual messages.
 
 > **Future**: Batch message context updates (e.g., "add this conversation to context") will be added post-V1.0. The `onMessagesChanged` event is reserved for this.
+
+> **Migration**: On load, if a persisted message has the old `content` field but no `verbal_response`, `content` is moved to `verbal_response`. This is a "fix on read" migration — no separate migration step needed.
 
 ---
 
@@ -1379,3 +1383,5 @@ Standard error codes for `onError` events:
 | 2026-02-04 | Added `SyncResult` and `RemoteCheckResult` types |
 | 2026-02-04 | Added `getStorageState()`, `restoreFromState()` to Processor API |
 | 2026-02-04 | Added `getStorageState()`, `restoreFromState()` to StateManager API
+| 2026-02-26 | **Structured Message Fields**: Replaced `Message.content: string` with `verbal_response?: string`, `action_response?: string`, `silence_reason?: string` |
+| 2026-02-26 | Added migration-on-load for old `content` field → `verbal_response` |
