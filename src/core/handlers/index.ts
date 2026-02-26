@@ -118,7 +118,7 @@ function handlePersonaResponse(response: LLMResponse, state: StateManager): void
         const silentMessage: Message = {
           id: crypto.randomUUID(),
           role: "system",
-          content: `[${personaDisplayName} chose not to respond because: ${reason}]`,
+          silence_reason: reason,
           timestamp: new Date().toISOString(),
           read: false,
           context_status: ContextStatus.Never,
@@ -130,13 +130,11 @@ function handlePersonaResponse(response: LLMResponse, state: StateManager): void
       return;
     }
 
-    // Build message content from verbal/action fields
-    const parts: string[] = [];
-    if (result.action_response) parts.push(`_${result.action_response}_`);
-    if (result.verbal_response) parts.push(result.verbal_response);
-    const messageContent = parts.join('\n\n');
+    // Build message with structured fields
+    const verbal = result.verbal_response || undefined;
+    const action = result.action_response || undefined;
 
-    if (!messageContent) {
+    if (!verbal && !action) {
       console.log(`[handlePersonaResponse] ${personaDisplayName} JSON had should_respond=true but no content fields`);
       return;
     }
@@ -144,7 +142,8 @@ function handlePersonaResponse(response: LLMResponse, state: StateManager): void
     const message: Message = {
       id: crypto.randomUUID(),
       role: "system",
-      content: messageContent,
+      verbal_response: verbal,
+      action_response: action,
       timestamp: new Date().toISOString(),
       read: false,
       context_status: ContextStatus.Default,
@@ -163,7 +162,7 @@ function handlePersonaResponse(response: LLMResponse, state: StateManager): void
   const message: Message = {
     id: crypto.randomUUID(),
     role: "system",
-    content: response.content,
+    verbal_response: response.content ?? undefined,
     timestamp: new Date().toISOString(),
     read: false,
     context_status: ContextStatus.Default,
@@ -198,7 +197,7 @@ function handleHeartbeatCheck(response: LLMResponse, state: StateManager): void 
     const message: Message = {
       id: crypto.randomUUID(),
       role: "system",
-      content: result.message,
+      verbal_response: result.message,
       timestamp: now,
       read: false,
       context_status: ContextStatus.Default,
@@ -227,10 +226,10 @@ function handleEiHeartbeat(response: LLMResponse, state: StateManager): void {
     return;
   }
 
-  const sendMessage = (content: string) => state.messages_append("ei", {
+  const sendMessage = (verbal_response: string) => state.messages_append("ei", {
     id: crypto.randomUUID(),
     role: "system",
-    content,
+    verbal_response,
     timestamp: now,
     read: false,
     context_status: ContextStatus.Default,
@@ -779,6 +778,18 @@ async function handleHumanItemUpdate(response: LLMResponse, state: StateManager)
   console.log(`[handleHumanItemUpdate] ${isNewItem ? "Created" : "Updated"} ${candidateType} "${result.name}"`);
 }
 
+/**
+ * Returns the combined display text of a message for quote indexing.
+ * Mirrors the rendering logic used in the frontends.
+ */
+function getMessageText(message: Message): string {
+  const parts: string[] = [];
+  if (message.action_response) parts.push(`_${message.action_response}_`);
+  if (message.verbal_response) parts.push(message.verbal_response);
+  return parts.join('\n\n');
+}
+
+
 async function validateAndStoreQuotes(
   candidates: Array<{ text: string; reason: string }> | undefined,
   messages: Message[],
@@ -792,7 +803,8 @@ async function validateAndStoreQuotes(
   for (const candidate of candidates) {
     let found = false;
     for (const message of messages) {
-      const start = message.content.indexOf(candidate.text);
+      const msgText = getMessageText(message);
+      const start = msgText.indexOf(candidate.text);
       if (start !== -1) {
         const end = start + candidate.text.length;
         
@@ -807,7 +819,7 @@ async function validateAndStoreQuotes(
           // Merge: expand to the union of both ranges
           const mergedStart = Math.min(start, overlapping.start!);
           const mergedEnd = Math.max(end, overlapping.end!);
-          const mergedText = message.content.slice(mergedStart, mergedEnd);
+          const mergedText = msgText.slice(mergedStart, mergedEnd);
           
           // Merge data_item_ids and persona_groups (deduplicated)
           const mergedDataItemIds = overlapping.data_item_ids.includes(dataItemId)

@@ -56,6 +56,7 @@ import {
 import { EI_WELCOME_MESSAGE, EI_PERSONA_DEFINITION } from "../templates/welcome.js";
 import { getEmbeddingService, findTopK, needsEmbeddingUpdate, needsQuoteEmbeddingUpdate, computeDataItemEmbedding, computeQuoteEmbedding } from "./embedding-service.js";
 import { ContextStatus as ContextStatusEnum } from "./types.js";
+import { buildChatMessageContent } from "../prompts/message-utils.js";
 
 // =============================================================================
 // EMBEDDING STRIPPING - Remove embeddings from data items before returning to FE
@@ -233,7 +234,7 @@ export class Processor {
     const welcomeMessage: Message = {
       id: crypto.randomUUID(),
       role: "system",
-      content: EI_WELCOME_MESSAGE,
+      verbal_response: EI_WELCOME_MESSAGE,
       timestamp: new Date().toISOString(),
       read: false,
       context_status: ContextStatusEnum.Always,
@@ -499,10 +500,17 @@ export class Processor {
       contextWindowHours
     );
     
-    return filteredHistory.map((m) => ({
-      role: m.role === "human" ? "user" : "assistant",
-      content: m.content,
-    })) as import("./types.js").ChatMessage[];
+    return filteredHistory
+      .reduce<import("./types.js").ChatMessage[]>((acc, m) => {
+        const content = buildChatMessageContent(m);
+        if (content.length > 0) {
+          acc.push({
+            role: m.role === "human" ? "user" : "assistant",
+            content,
+          });
+        }
+        return acc;
+      }, []);
   }
 
   private async queueHeartbeatCheck(personaId: string): Promise<void> {
@@ -947,7 +955,7 @@ export class Processor {
       .map(m => m.id);
     if (pendingIds.length === 0) return "";
     const removed = this.stateManager.messages_remove(personaId, pendingIds);
-    const recalledContent = removed.map(m => m.content).join("\n\n");
+    const recalledContent = removed.map(m => m.verbal_response ?? '').join("\n\n");
     this.interface.onMessageAdded?.(personaId);
     this.interface.onMessageRecalled?.(personaId, recalledContent);
     return recalledContent;
@@ -968,7 +976,7 @@ export class Processor {
     const message: Message = {
       id: crypto.randomUUID(),
       role: "human",
-      content,
+      verbal_response: content,
       timestamp: new Date().toISOString(),
       read: false,
       context_status: "default" as ContextStatus,
