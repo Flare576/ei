@@ -180,7 +180,7 @@ export function QuoteManagementModal({
                 <div className="ei-quote-capture-modal__section">
                   <label className="ei-quote-capture-modal__label">Original Message</label>
                   <div className="ei-quote-capture-modal__message-display">
-                    {message.content}
+                    {(message.verbal_response ?? '')}
                   </div>
                 </div>
               )}

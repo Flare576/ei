@@ -1,19 +1,7 @@
 import React, { useState, useMemo } from 'react';
-
-export enum ContextStatus {
-  Default = "default",
-  Always = "always",
-  Never = "never"
-}
-
-export interface Message {
-  id: string;
-  role: "human" | "system";
-  content: string;
-  timestamp: string;
-  read: boolean;
-  context_status: ContextStatus;
-}
+import type { Message } from '../../../../../src/core/types';
+import { ContextStatus } from '../../../../../src/core/types';
+import { getMessageDisplayText } from '../../../../../src/prompts/message-utils';
 
 interface ContextWindowTabProps {
   personaName: string;
@@ -249,13 +237,11 @@ export const ContextWindowTab = ({
                     >
                       {isExpanded ? (
                         <div className="ei-context-message-content ei-context-message-content--expanded">
-                          {message.content}
+                          {getMessageDisplayText(message) ?? ''}
                         </div>
                       ) : (
                         <div className="ei-context-message-preview">
-                          {message.content.length > 80 
-                            ? `${message.content.substring(0, 80)}...` 
-                            : message.content}
+                          {(() => { const text = getMessageDisplayText(message) ?? ''; return text.length > 80 ? `${text.substring(0, 80)}...` : text; })()}
                         </div>
                       )}
                     </td>

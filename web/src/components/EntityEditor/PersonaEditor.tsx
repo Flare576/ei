@@ -3,7 +3,9 @@ import { TabContainer } from './TabContainer';
 import { PersonaSettingsTab } from './tabs/PersonaSettingsTab';
 import { PersonaIdentityTab } from './tabs/PersonaIdentityTab';
 import { PersonaTopicsTab } from './tabs/PersonaTopicsTab';
-import { ContextWindowTab, ContextStatus, Message } from './tabs/ContextWindowTab';
+import { ContextWindowTab } from './tabs/ContextWindowTab';
+import { ContextStatus } from '../../../../src/core/types';
+import type { Message } from '../../../../src/core/types';
 
 interface Trait {
   id: string;
