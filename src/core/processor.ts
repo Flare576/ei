@@ -87,6 +87,7 @@ function stripHumanEmbeddings(human: HumanEntity): HumanEntity {
 const DEFAULT_LOOP_INTERVAL_MS = 100;
 const DEFAULT_CONTEXT_WINDOW_HOURS = 8;
 const DEFAULT_OPENCODE_POLLING_MS = 1800000;
+const DEFAULT_CLAUDE_CODE_POLLING_MS = 1800000;
 
 let processorInstanceCount = 0;
 
@@ -127,6 +128,8 @@ export class Processor {
   private lastOpenCodeSync = 0;
   private lastDLQTrim = 0;
   private openCodeImportInProgress = false;
+  private lastClaudeCodeSync = 0;
+  private claudeCodeImportInProgress = false;
   private pendingConflict: StateConflictData | null = null;
 
   constructor(ei: Ei_Interface) {
@@ -269,6 +272,10 @@ export class Processor {
       console.log(`[Processor ${this.instanceId}] Aborting OpenCode import in progress`);
       this.openCodeImportInProgress = false;
     }
+    if (this.claudeCodeImportInProgress) {
+      console.log(`[Processor ${this.instanceId}] Aborting Claude Code import in progress`);
+      this.claudeCodeImportInProgress = false;
+    }
 
     await this.stateManager.flush();
 
@@ -383,6 +390,10 @@ export class Processor {
     if (this.isTUI && human.settings?.opencode?.integration && this.stateManager.queue_length() === 0) {
       await this.checkAndSyncOpenCode(human, now);
     }
+
+    if (this.isTUI && human.settings?.claudeCode?.integration && this.stateManager.queue_length() === 0) {
+      await this.checkAndSyncClaudeCode(human, now);
+    }
     
     if (human.settings?.ceremony && shouldStartCeremony(human.settings.ceremony, this.stateManager)) {
       // Auto-backup to remote before ceremony (if configured)
@@ -476,6 +487,60 @@ export class Processor {
       })
       .finally(() => {
         this.openCodeImportInProgress = false;
+      });
+  }
+
+  private async checkAndSyncClaudeCode(human: HumanEntity, now: number): Promise<void> {
+    if (this.claudeCodeImportInProgress) {
+      return;
+    }
+
+    const claudeCode = human.settings?.claudeCode;
+    const pollingInterval = claudeCode?.polling_interval_ms ?? DEFAULT_CLAUDE_CODE_POLLING_MS;
+    const lastSync = claudeCode?.last_sync
+      ? new Date(claudeCode.last_sync).getTime()
+      : 0;
+    const timeSinceSync = now - lastSync;
+
+    if (timeSinceSync < pollingInterval && this.lastClaudeCodeSync > 0) {
+      return;
+    }
+
+    this.lastClaudeCodeSync = now;
+    const syncTimestamp = new Date().toISOString();
+    this.stateManager.setHuman({
+      ...this.stateManager.getHuman(),
+      settings: {
+        ...this.stateManager.getHuman().settings,
+        claudeCode: {
+          ...claudeCode,
+          last_sync: syncTimestamp,
+        },
+      },
+    });
+
+    this.claudeCodeImportInProgress = true;
+    import("../integrations/claude-code/importer.js")
+      .then(({ importClaudeCodeSessions }) =>
+        importClaudeCodeSessions({
+          stateManager: this.stateManager,
+          interface: this.interface,
+        })
+      )
+      .then((result) => {
+        if (result.sessionsProcessed > 0) {
+          console.log(
+            `[Processor] Claude Code sync complete: ${result.sessionsProcessed} sessions, ` +
+              `${result.topicsCreated} topics created, ${result.messagesImported} messages imported, ` +
+              `${result.extractionScansQueued} extraction scans queued`
+          );
+        }
+      })
+      .catch((err) => {
+        console.warn(`[Processor] Claude Code sync failed:`, err);
+      })
+      .finally(() => {
+        this.claudeCodeImportInProgress = false;
       });
   }
 
