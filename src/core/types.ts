@@ -249,7 +249,7 @@ export interface PersonaCreationInput {
   long_description?: string;
   short_description?: string;
   traits?: Partial<Trait>[];
-  topics?: Partial<Topic>[];
+  topics?: Partial<PersonaTopic>[];
   model?: string;
   group_primary?: string;
   groups_visible?: string[];
