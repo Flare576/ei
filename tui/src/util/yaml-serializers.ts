@@ -17,8 +17,9 @@ import type {
   LLMRequest,
   LLMRequestState,
   LLMPriority,
-} from "../../../src/core/types.js";
+  } from "../../../src/core/types.js";
 import { ContextStatus } from "../../../src/core/types.js";
+import type { ClaudeCodeSettings } from "../../../src/integrations/claude-code/types.js";
 
 // =============================================================================
 // TYPES FOR YAML EDITING
@@ -449,6 +450,10 @@ interface EditableSettingsData {
     integration?: boolean | null;
     polling_interval_ms?: number | null;
   };
+  claudeCode?: {
+    integration?: boolean | null;
+    polling_interval_ms?: number | null;
+  };
 }
 
 export function settingsToYAML(settings: HumanSettings | undefined): string {
@@ -463,8 +468,12 @@ export function settingsToYAML(settings: HumanSettings | undefined): string {
       explore_threshold: settings?.ceremony?.explore_threshold ?? null,
     },
     opencode: {
-      integration: settings?.opencode?.integration ?? null,
-      polling_interval_ms: settings?.opencode?.polling_interval_ms ?? null,
+      integration: settings?.opencode?.integration ?? false,
+      polling_interval_ms: settings?.opencode?.polling_interval_ms ?? 1800000,
+    },
+    claudeCode: {
+      integration: settings?.claudeCode?.integration ?? false,
+      polling_interval_ms: settings?.claudeCode?.polling_interval_ms ?? 1800000,
     },
   };
   
@@ -498,6 +507,15 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
       extraction_point: original?.opencode?.extraction_point,
     };
   }
+
+  let claudeCode: ClaudeCodeSettings | undefined;
+  if (data.claudeCode) {
+    claudeCode = {
+      integration: nullToUndefined(data.claudeCode.integration),
+      polling_interval_ms: nullToUndefined(data.claudeCode.polling_interval_ms),
+      last_sync: original?.claudeCode?.last_sync,
+    };
+  }
   
   return {
     ...original,
@@ -506,6 +524,7 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
     name_display: nullToUndefined(data.name_display),
     ceremony,
     opencode,
+    claudeCode,
   };
 }
 
