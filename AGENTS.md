@@ -16,8 +16,7 @@ Ei is a local-first AI companion with persistent personas. Three frontends share
 ├── web/                # React web frontend (Vite)
 ├── tui/                # Terminal UI (OpenTUI + SolidJS, Bun runtime)
 ├── api/                # PHP sync API (remote storage)
-├── tests/              # Unit + E2E tests
-└── tickets/            # Project tickets (see STATUS.md)
+└── tests/              # Unit + E2E tests
 ```
 
 ## Source of Truth
@@ -26,50 +25,10 @@ Ei is a local-first AI companion with persistent personas. Three frontends share
 |----------|---------|
 | `CONTRACTS.md` | **THE** source of truth for interfaces, types, and naming |
 | `v1.md` | Design philosophy and background context |
-| `tickets/` | Implementation tasks with acceptance criteria |
+| GitHub Issues | Active feature requests and bugs |
 
-> **CRITICAL**: If a ticket uses a different name for something defined in CONTRACTS.md, **STOP and ASK**. CONTRACTS.md wins.
+> **CRITICAL**: If code contradicts something defined in CONTRACTS.md, **STOP and ASK**. CONTRACTS.md wins.
 
-## Ticket System
-
-Tickets live in `/tickets/` as markdown files.
-
-### Status Values
-
-| Status | Meaning |
-|--------|---------|
-| `PENDING` | Not started |
-| `IN_PROGRESS` | Active work |
-| `QA` | Dev complete, awaiting review |
-| `DONE` | Completed and verified |
-| `BLOCKED` | Waiting on something (note blocker) |
-
-### Working on Tickets
-
-1. **Before starting**: Update status to `IN_PROGRESS` in both ticket file AND `tickets/STATUS.md`
-2. **While working**: Keep acceptance criteria checkboxes updated
-3. **When done**: Update status to `QA` or `DONE`, update STATUS.md
-4. **Don't delete tickets** — they're project history
-
-### Ticket Format
-
-```markdown
-# XXXX: Title
-
-**Status**: PENDING
-**Depends on**: (list ticket numbers or "None")
-**Blocked by**: (if BLOCKED, explain why)
-
-## Summary
-One paragraph describing the goal.
-
-## Acceptance Criteria
-- [ ] Criterion 1
-- [ ] Criterion 2
-
-## Notes
-Implementation details, gotchas, decisions made.
-```
 
 ## Code Conventions
 
@@ -145,13 +104,12 @@ npm start        # Run the app
 ### When Implementing Features
 
 1. Check CONTRACTS.md for interface definitions
-2. Check if a ticket exists—follow its spec
-3. Update STATUS.md when changing ticket status
+2. Check GitHub Issues for context on the feature being built
 
 ### When Confused
 
 - **About naming**: Check CONTRACTS.md
-- **About scope**: Ask before expanding beyond ticket criteria
+- **About scope**: Ask before expanding beyond the stated criteria
 
 ### Code Quality
 

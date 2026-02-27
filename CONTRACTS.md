@@ -109,59 +109,45 @@ interface Ei_Interface {
   onPersonaRemoved?: () => void;
   
   /** A persona's entity data changed (traits, topics, description, model, etc.) */
-  onPersonaUpdated?: (personaName: string) => void;
+  onPersonaUpdated?: (personaId: string) => void;
   
   // === Message Events ===
   
   /** A message was added to a persona's history (human or system) */
-  onMessageAdded?: (personaName: string) => void;
+  onMessageAdded?: (personaId: string) => void;
   
   /** A message is being processed (LLM call in progress) */
-  onMessageProcessing?: (personaName: string) => void;
+  onMessageProcessing?: (personaId: string) => void;
   
   /** A message was queued for processing */
-  onMessageQueued?: (personaName: string) => void;
+  onMessageQueued?: (personaId: string) => void;
   
   /** Pending human messages were recalled (for edit). Payload includes combined content for input field. */
-  onMessageRecalled?: (personaName: string, content: string) => void;
+  onMessageRecalled?: (personaId: string, content: string) => void;
   
-   // === Human Entity Events ===
-   
-   /** Human entity data changed (facts, traits, topics, people) */
-   onHumanUpdated?: () => void;
-   
-   // === Quote Events ===
-   
-   /** A quote was added */
-   onQuoteAdded?: () => void;
-   
-   /** A quote was updated */
-   onQuoteUpdated?: () => void;
-   
-   /** A quote was removed */
-   onQuoteRemoved?: () => void;
-   
-   // === System Events ===
+  // === Human Entity Events ===
   
-  /** Queue processor state changed (idle ↔ busy) */
-  onQueueStateChanged?: (state: "idle" | "busy") => void;
+  /** Human entity data changed (facts, traits, topics, people) */
+  onHumanUpdated?: () => void;
+  
+  // === Quote Events ===
+  
+  /** A quote was added */
+  onQuoteAdded?: () => void;
+  
+  /** A quote was updated */
+  onQuoteUpdated?: () => void;
+  
+  /** A quote was removed */
+  onQuoteRemoved?: () => void;
+  
+  // === System Events ===
+  
+  /** Queue processor state changed */
+  onQueueStateChanged?: (state: "idle" | "busy" | "paused") => void;
   
   /** An error occurred that the user should know about */
-  onError?: (error: { code: string; message: string }) => void;
-  
-  // === Checkpoint Events ===
-  
-  /** A checkpoint operation is starting. UI should disable checkpoint interactions until onCheckpointCreated/Deleted fires. */
-  onCheckpointStart?: () => void;
-  
-  /** A checkpoint was created. If index provided, it was manual save (10-14). No index = auto-save (0-9). */
-  onCheckpointCreated?: (index?: number) => void;
-  
-  /** A checkpoint was restored. UI should refresh all state. */
-  onCheckpointRestored?: (index: number) => void;
-  
-  /** A manual checkpoint was deleted (slots 10-14 only) */
-  onCheckpointDeleted?: (index: number) => void;
+  onError?: (error: EiError) => void;
   
   // === One-Shot Events ===
   
@@ -170,8 +156,22 @@ interface Ei_Interface {
   
   // === Context Events ===
   
-  /** A persona's context boundary changed (via "New" command) */
-  onContextBoundaryChanged?: (personaName: string) => void;
+  /** A persona's context boundary changed (via /new command) */
+  onContextBoundaryChanged?: (personaId: string) => void;
+  
+  // === Save/Exit & Sync Events ===
+  
+  /** saveAndExit() has started (sync in progress) */
+  onSaveAndExitStart?: () => void;
+  
+  /** saveAndExit() completed (success or failure) */
+  onSaveAndExitFinish?: () => void;
+  
+  /** Remote state is newer than local — user must resolve conflict */
+  onStateConflict?: (data: StateConflictData) => void;
+  
+  /** State was imported from external source (importState or post-conflict resolution) */
+  onStateImported?: () => void;
 }
 ```
 
@@ -179,23 +179,22 @@ interface Ei_Interface {
 
 | Event | Emitted When |
 |-------|--------------|
-| `onPersonaAdded` | After `persona_add` completes in StateManager |
-| `onPersonaRemoved` | After `persona_archive` or `persona_delete` completes |
+| `onPersonaAdded` | After persona creation completes |
+| `onPersonaRemoved` | After persona archive or delete |
 | `onPersonaUpdated` | After any persona entity field changes |
 | `onMessageAdded` | After a message is appended to history |
 | `onMessageProcessing` | When QueueProcessor starts a response-type request |
 | `onMessageQueued` | When a user message is added and response is queued |
 | `onMessageRecalled` | When pending human messages are recalled via `recallPendingMessages` |
 | `onHumanUpdated` | After any human entity field changes |
-| `onQueueStateChanged` | When QueueProcessor transitions between idle/busy |
+| `onQueueStateChanged` | When QueueProcessor transitions between idle/busy/paused |
 | `onError` | When a recoverable error occurs (e.g., LLM failure after retries) |
-| `onCheckpointStart` | Before any checkpoint save/delete/restore operation begins |
-| `onCheckpointCreated` | After auto-save (no index) or manual save (with index 10-14) |
-| `onCheckpointRestored` | After state is restored from a checkpoint |
-| `onCheckpointDeleted` | After a manual checkpoint (10-14) is deleted |
-| `onOneShotReturned` | When a one-shot LLM request completes (AI-assist buttons) |
-| `onContextBoundaryChanged` | When `setContextBoundary` updates a persona's boundary |
-
+| `onOneShotReturned` | When a one-shot LLM request completes |
+| `onContextBoundaryChanged` | When context boundary updates for a persona |
+| `onSaveAndExitStart` | When `saveAndExit()` begins (sync starting) |
+| `onSaveAndExitFinish` | When `saveAndExit()` completes (success or failure) |
+| `onStateConflict` | When remote state is newer than local on startup |
+| `onStateImported` | After `importState()` or post-conflict state restore |
 ---
 
 ## Processor API (Frontend → Processor)
@@ -206,34 +205,54 @@ All methods are **async** and return Promises. The Processor instance is created
 interface Processor {
   // === Lifecycle ===
   
-  /** Start the processor loop. Call once after construction. */
-  start(): Promise<void>;
+  /** Start the processor loop. Call once after construction, passing the storage backend. */
+  start(storage: Storage): Promise<void>;
   
   /** Stop the processor loop. Call before app shutdown. */
   stop(): Promise<void>;
+  
+  /**
+   * Abort current LLM operation, sync to remote, and stop.
+   * Fires onSaveAndExitStart → (sync) → onSaveAndExitFinish.
+   */
+  saveAndExit(): Promise<{ success: boolean; error?: string }>;
+  
+  /**
+   * Resolve a pending state conflict (set by onStateConflict).
+   * Resumes the processor loop after resolution.
+   * @param resolution - "local" (keep local), "server" (pull server), "yolo" (merge both)
+   */
+  resolveStateConflict(resolution: StateConflictResolution): Promise<void>;
   
   // === Persona Operations ===
   
   /** Get list of all personas with summary info */
   getPersonaList(): Promise<PersonaSummary[]>;
   
-  /** Get full persona entity by name */
-  getPersona(name: string): Promise<PersonaEntity | null>;
+  /** Get full persona entity by ID */
+  getPersona(personaId: string): Promise<PersonaEntity | null>;
   
-  /** Create a new persona from structured user input */
-  createPersona(input: PersonaCreationInput): Promise<void>;
+  /**
+   * Resolve a persona name or alias to its ID.
+   * Use this when the user types a name (e.g., "/persona Bob").
+   * Returns null if no matching persona is found.
+   */
+  resolvePersonaName(nameOrAlias: string): Promise<string | null>;
+  
+  /** Create a new persona from structured user input. Returns the new persona's ID. */
+  createPersona(input: PersonaCreationInput): Promise<string>;
   
   /** Archive a persona (soft delete) */
-  archivePersona(name: string): Promise<void>;
+  archivePersona(personaId: string): Promise<void>;
   
   /** Unarchive a persona */
-  unarchivePersona(name: string): Promise<void>;
+  unarchivePersona(personaId: string): Promise<void>;
   
   /** Permanently delete an archived persona */
-  deletePersona(name: string, deleteHumanData: boolean): Promise<void>;
+  deletePersona(personaId: string, deleteHumanData: boolean): Promise<void>;
   
   /** Update persona fields (model, description, group, etc.) */
-  updatePersona(name: string, updates: Partial<PersonaEntity>): Promise<void>;
+  updatePersona(personaId: string, updates: Partial<PersonaEntity>): Promise<void>;
   
   /** Get all known groups across all personas (derived from group_primary + groups_visible) */
   getGroupList(): Promise<string[]>;
@@ -241,33 +260,36 @@ interface Processor {
   // === Message Operations ===
   
   /** Get message history for a persona */
-  getMessages(personaName: string, options?: MessageQueryOptions): Promise<Message[]>;
+  getMessages(personaId: string, options?: MessageQueryOptions): Promise<Message[]>;
   
   /** Send a message to a persona (queues response) */
-  sendMessage(personaName: string, content: string): Promise<void>;
+  sendMessage(personaId: string, content: string): Promise<void>;
   
-  /** 
+  /**
    * Set context boundary for a persona ("New" command).
    * Messages before this timestamp are excluded from LLM context (unless context_status="always").
    * Pass null to clear the boundary.
    */
-  setContextBoundary(personaName: string, timestamp: string | null): Promise<void>;
+  setContextBoundary(personaId: string, timestamp: string | null): Promise<void>;
   
   /** Set a message's context status */
-  setMessageContextStatus(personaName: string, messageId: string, status: ContextStatus): Promise<void>;
+  setMessageContextStatus(personaId: string, messageId: string, status: ContextStatus): Promise<void>;
+  
+  /** Delete specific messages by ID. Returns the removed messages. */
+  deleteMessages(personaId: string, messageIds: string[]): Promise<Message[]>;
   
   /** Mark a message as read */
-  markMessageRead(personaName: string, messageId: string): Promise<boolean>;
+  markMessageRead(personaId: string, messageId: string): Promise<boolean>;
   
   /** Mark all messages as read for a persona, returns count marked */
-  markAllMessagesRead(personaName: string): Promise<number>;
+  markAllMessagesRead(personaId: string): Promise<number>;
   
-  /** 
+  /**
    * Recall pending (unread) human messages for editing.
    * Removes the messages from history, cancels queued responses, and returns combined content.
    * Human messages start as read=false and become read=true when the AI responds.
    */
-  recallPendingMessages(personaName: string): Promise<string>;
+  recallPendingMessages(personaId: string): Promise<string>;
   
   // === Human Entity Operations ===
   
@@ -289,57 +311,45 @@ interface Processor {
   /** Add/update a person (matched by id) */
   upsertPerson(person: Person): Promise<void>;
   
-   /** Remove a data item by type and id */
-   removeDataItem(type: "fact" | "trait" | "topic" | "person", id: string): Promise<void>;
-   
-   // === Quote Operations ===
-   
-   /** Add a new quote */
-   addQuote(quote: Quote): Promise<void>;
-   
-   /** Update an existing quote by id */
-   updateQuote(id: string, updates: Partial<Quote>): Promise<void>;
-   
-   /** Remove a quote by id */
-   removeQuote(id: string): Promise<void>;
-   
-   /** Get quotes with optional filtering */
-   getQuotes(filter?: { message_id?: string; data_item_id?: string }): Promise<Quote[]>;
-   
-   /** Get all quotes for a specific message */
-   getQuotesForMessage(messageId: string): Promise<Quote[]>;
-   
-   // === Checkpoint Operations ===
-  
-  /** Get list of all checkpoints, sorted by timestamp desc */
-  getCheckpoints(): Promise<Checkpoint[]>;
-  
-  /** 
-   * Create a manual checkpoint in a save slot.
-   * @param index - Slot 10-14 only
-   * @param name - Display name for the save (FE provides default if user doesn't)
-   * @throws If index is not 10-14
-   */
-  createCheckpoint(index: number, name: string): Promise<void>;
+  /** Remove a data item by type and id */
+  removeDataItem(type: "fact" | "trait" | "topic" | "person", id: string): Promise<void>;
   
   /**
-   * Delete a manual checkpoint.
-   * @param index - Slot 10-14 only (cannot delete auto-saves)
-   * @throws If index is not 10-14
+   * Search human data using semantic similarity (embedding-based).
+   * Falls back to substring match if embeddings are unavailable.
    */
-  deleteCheckpoint(index: number): Promise<void>;
+  searchHumanData(
+    query: string,
+    options?: { types?: Array<"fact" | "trait" | "topic" | "person" | "quote">; limit?: number }
+  ): Promise<{ facts: Fact[]; traits: Trait[]; topics: Topic[]; people: Person[]; quotes: Quote[] }>;
   
-  /**
-   * Restore state from a checkpoint.
-   * @param index - Slot index (0-14)
-   * @returns true if restored, false if slot is empty
-   */
-  restoreCheckpoint(index: number): Promise<boolean>;
+  // === Quote Operations ===
   
-  /** Export full state as JSON (for download) */
-  exportState(): Promise<string>;
+  /** Add a new quote */
+  addQuote(quote: Quote): Promise<void>;
+  
+  /** Update an existing quote by id */
+  updateQuote(id: string, updates: Partial<Quote>): Promise<void>;
+  
+  /** Remove a quote by id */
+  removeQuote(id: string): Promise<void>;
+  
+  /** Get quotes with optional filtering */
+  getQuotes(filter?: { message_id?: string; data_item_id?: string }): Promise<Quote[]>;
+  
+  /** Get all quotes for a specific message */
+  getQuotesForMessage(messageId: string): Promise<Quote[]>;
   
   // === State Operations ===
+  
+  /** Export full state as JSON (for download / backup) */
+  exportState(): Promise<string>;
+  
+  /**
+   * Import state from a JSON string (restore from backup).
+   * Fires onStateImported when complete.
+   */
+  importState(json: string): Promise<void>;
   
   /** Get current state for remote sync */
   getStorageState(): Promise<StorageState>;
@@ -347,9 +357,9 @@ interface Processor {
   /** Restore state from external source (remote sync, conflict resolution) */
   restoreFromState(state: StorageState): Promise<void>;
   
-  // === LLM Operations ===
+  // === LLM Queue Operations ===
   
-  /** 
+  /**
    * Abort current LLM operation and pause queue processing.
    * Call resumeQueue() to continue processing.
    */
@@ -358,14 +368,38 @@ interface Processor {
   /** Resume queue processing after abort */
   resumeQueue(): Promise<void>;
   
+  /** Pause queue processing (synchronous). Aborts current operation. */
+  pauseQueue(): void;
+  
   /** Get queue status */
   getQueueStatus(): Promise<QueueStatus>;
   
-  /** 
+  /** Get all active (non-DLQ) queue items */
+  getQueueActiveItems(): LLMRequest[];
+  
+  /** Get all dead-letter queue items */
+  getDLQItems(): LLMRequest[];
+  
+  /** Update a queue item in place. Returns true if found. */
+  updateQueueItem(id: string, updates: Partial<LLMRequest>): boolean;
+  
+  /** Clear all pending queue items. Aborts current operation. Returns count cleared. */
+  clearQueue(): Promise<number>;
+  
+  /**
    * Submit a one-shot LLM request (for AI-assist buttons).
    * Result returned via onOneShotReturned event with matching guid.
    */
   submitOneShot(guid: string, systemPrompt: string, userPrompt: string): Promise<void>;
+  
+  // === Debug / DevTools Only ===
+  // Not for production use. Accessible via browser devtools or TUI debug commands.
+  
+  /** Manually trigger ceremony, bypassing time checks. */
+  triggerCeremonyNow(): void;
+  
+  /** Get ceremony status (last run, next scheduled run). */
+  getCeremonyStatus(): { lastRun: string | null; nextRunTime: string };
 }
 ```
 
@@ -373,13 +407,15 @@ interface Processor {
 
 ```typescript
 interface PersonaSummary {
-  name: string;
+  id: string;
+  display_name: string;
   aliases: string[];
   short_description?: string;
   is_paused: boolean;
   is_archived: boolean;
   unread_count: number;
   last_activity?: string;
+  context_boundary?: string;
 }
 
 interface MessageQueryOptions {
@@ -393,60 +429,23 @@ interface MessageQueryOptions {
   includeOutOfContext?: boolean;
 }
 
-interface Checkpoint {
-  index: number;           // Slot number: 0-9 = auto-save, 10-14 = manual save
-  timestamp: string;       // When created
-  name?: string;           // Display name (manual saves should have one)
-}
-
 interface QueueStatus {
   state: "idle" | "busy" | "paused";
   pending_count: number;
+  dlq_count: number;
   current_operation?: string;
 }
+
+/** Payload for onStateConflict event */
+interface StateConflictData {
+  localTimestamp: Date;
+  remoteTimestamp: Date;
+  hasLocalState: boolean;
+}
+
+/** Resolution choice for resolveStateConflict() */
+type StateConflictResolution = "local" | "server" | "yolo";
 ```
-
-### Checkpoint System
-
-The checkpoint system uses a **video game save slot** model:
-
-| Slot Range | Type | Behavior |
-|------------|------|----------|
-| 0-9 | Auto-save | System creates every 60s. FIFO ring buffer—oldest drops when full. Cannot be deleted by user. |
-| 10-14 | Manual save | User creates on demand. Can be overwritten or deleted. |
-
-**Auto-save flow:**
-1. Every 60s, Processor calls `StateManager.checkpoint_saveAuto()`
-2. StateManager calls `Storage.saveAutoCheckpoint(state)`
-3. Storage writes to next available slot in 0-9, dropping slot 0 if full
-4. Processor fires `onCheckpointCreated()` (no index)
-
-**Manual save flow:**
-1. User selects slot (10-14) and provides name
-2. FE calls `Processor.createCheckpoint(index, name)`
-3. Processor calls `StateManager.checkpoint_saveManual(index, name)`
-4. StateManager calls `Storage.saveManualCheckpoint(index, name, state)`
-5. Processor fires `onCheckpointCreated(index)`
-
-**Restore**: Load any slot (0-14) into memory. If you want to undo a restore, manually save first.
-
-```
-Checkpoint Slots Example:
-───────────────────────────────────────────────
-Slot   Type       Timestamp            Name
-───────────────────────────────────────────────
-0      auto       2026-01-26T13:00:00  -
-1      auto       2026-01-26T13:01:00  -
-...
-9      auto       2026-01-26T13:09:00  -
-10     manual     2026-01-26T12:00:00  "before-refactor"
-11     manual     2026-01-26T10:00:00  "morning-backup"
-12     (empty)    -                    -
-13     (empty)    -                    -
-14     (empty)    -                    -
-───────────────────────────────────────────────
-```
-
 ---
 
 ## StateManager API (Processor → StateManager)
@@ -457,7 +456,7 @@ The StateManager holds all in-memory state and provides CRUD operations. It does
 interface StateManager {
   // === Lifecycle ===
   
-  /** Load newest checkpoint from storage. Call once at startup. */
+  /** Load state from storage. Call once at startup. */
   initialize(storage: Storage): Promise<void>;
   
   // === Human Entity ===
@@ -486,24 +485,24 @@ interface StateManager {
    // === Personas ===
   
   persona_getAll(): PersonaEntity[];
-  persona_get(name: string): PersonaEntity | null;
-  persona_add(name: string, entity: PersonaEntity): void;
-  persona_update(name: string, updates: Partial<PersonaEntity>): boolean;
-  persona_archive(name: string): boolean;
-  persona_unarchive(name: string): boolean;
-  persona_delete(name: string): boolean;
-  persona_setContextBoundary(name: string, timestamp: string | null): void;
+  persona_get(personaId: string): PersonaEntity | null;
+  persona_add(entity: PersonaEntity): void;
+  persona_update(personaId: string, updates: Partial<PersonaEntity>): boolean;
+  persona_archive(personaId: string): boolean;
+  persona_unarchive(personaId: string): boolean;
+  persona_delete(personaId: string): boolean;
+  persona_setContextBoundary(personaId: string, timestamp: string | null): void;
   
   // === Messages ===
   
-  messages_get(personaName: string): Message[];
-  messages_append(personaName: string, message: Message): void;
-  messages_setContextStatus(personaName: string, messageId: string, status: ContextStatus): boolean;
-  messages_markRead(personaName: string, messageId: string): boolean;
-  messages_markPendingAsRead(personaName: string): number;  // Mark unread human messages as read, returns count
-  messages_countUnread(personaName: string): number;
-  messages_markAllRead(personaName: string): number;  // Returns count marked
-  messages_remove(personaName: string, messageIds: string[]): Message[];  // Returns removed messages
+  messages_get(personaId: string): Message[];
+  messages_append(personaId: string, message: Message): void;
+  messages_setContextStatus(personaId: string, messageId: string, status: ContextStatus): boolean;
+  messages_markRead(personaId: string, messageId: string): boolean;
+  messages_markPendingAsRead(personaId: string): number;  // Mark unread human messages as read, returns count
+  messages_countUnread(personaId: string): number;
+  messages_markAllRead(personaId: string): number;  // Returns count marked
+  messages_remove(personaId: string, messageIds: string[]): Message[];  // Returns removed messages
   
   // === LLM Queue ===
   
@@ -526,7 +525,7 @@ interface StateManager {
   queue_clearValidations(ids: string[]): void;
   
   /** Clear pending response requests for a persona (used when canceling/recalling) */
-  queue_clearPersonaResponses(personaName: string, nextStep: string): string[];
+  queue_clearPersonaResponses(personaId: string, nextStep: string): string[];
   
   /** Get queue length */
   queue_length(): number;
@@ -539,33 +538,6 @@ interface StateManager {
   
   /** Check if queue is paused */
   queue_isPaused(): boolean;
-  
-  // === Checkpoints ===
-  
-  /** Create an auto-save checkpoint (slots 0-9, FIFO) */
-  checkpoint_saveAuto(): Promise<void>;
-  
-  /** 
-   * Create a manual checkpoint.
-   * @param index - Slot 10-14 only
-   * @param name - Display name for the save
-   */
-  checkpoint_saveManual(index: number, name: string): Promise<void>;
-  
-  /** Get all checkpoints (0-14), sorted by timestamp desc */
-  checkpoint_list(): Promise<Checkpoint[]>;
-  
-  /** 
-   * Delete a manual checkpoint.
-   * @param index - Must be 10-14 (cannot delete auto-saves)
-   */
-  checkpoint_delete(index: number): Promise<boolean>;
-  
-/** 
-    * Restore state from checkpoint slot.
-    * @param index - Slot 0-14
-    */
-  checkpoint_restore(index: number): Promise<boolean>;
   
   // === State Export/Import ===
   
@@ -604,32 +576,29 @@ interface QueueProcessor {
 
 ## Storage Interface
 
-Storage is an abstraction over persistence backends. Uses an **array-based** checkpoint system for simplicity.
+Storage is an abstraction over persistence backends.
 
 ```typescript
 interface Storage {
   /** Check if storage is available/configured */
   isAvailable(): Promise<boolean>;
   
-  /** Get all checkpoints with metadata */
-  listCheckpoints(): Promise<Checkpoint[]>;
+  /** Load persisted state. Returns null if no state exists. */
+  loadState(): Promise<StorageState | null>;
   
-  /** Load checkpoint by index. 0-9 = auto-save, 10-14 = manual. */
-  loadCheckpoint(index: number): Promise<StorageState | null>;
+  /** Save current state. */
+  saveState(state: StorageState): Promise<void>;
   
-  /** Save an auto-checkpoint. Appends to array, drops oldest if > 10. */
-  saveAutoCheckpoint(state: StorageState): Promise<void>;
+  /** Load backup state (used for sync conflict detection). */
+  loadBackup(): Promise<StorageState | null>;
   
-  /** Save a manual checkpoint to slot 10-14. */
-  saveManualCheckpoint(index: number, name: string, state: StorageState): Promise<void>;
-  
-  /** Delete a manual checkpoint. Cannot delete auto-saves (0-9). */
-  deleteManualCheckpoint(index: number): Promise<boolean>;
+  /** Move current state file to backup slot. Called after successful remote sync. */
+  moveToBackup(): Promise<void>;
 }
 
 interface StorageState {
   version: number;
-  timestamp: string;           // When this checkpoint was created
+  timestamp: string;           // When this state was saved
   human: HumanEntity;
   personas: Record<string, {
     entity: PersonaEntity;
@@ -647,16 +616,7 @@ interface StorageState {
 | `FileStorage` | Node.js file system (EI_DATA_PATH) | V1.1 (TUI) |
 | `RemoteStorage` | flare576.com encrypted sync | V1.2 |
 
-### Checkpoint Indices
 
-| Index Range | Type | Count | Behavior |
-|-------------|------|-------|----------|
-| 0-9 | Auto-save | 10 | Array: newest pushed to end, oldest shifted from front. Index 0 = oldest, 9 = newest. |
-| 10-14 | Manual save | 5 | Individual slots. User-managed, can overwrite or delete. |
-
-**UI Display**: Auto-saves should be shown oldest-first (index 0 at top) so users can easily select "revert to N minutes ago".
-
-**Race Condition Handling**: `onCheckpointStart` fires before any checkpoint operation. UI should disable checkpoint interactions until `onCheckpointCreated` or `onCheckpointDeleted` fires.
 
 ### RemoteSync Interface
 
@@ -723,18 +683,15 @@ interface HumanEntity {
   last_updated: string;
   last_activity: string;  // When human last sent a message (any persona)
   settings?: HumanSettings;
-  ceremony_config?: CeremonyConfig;
 }
 
 interface HumanSettings {
-  auto_save_interval_ms?: number;  // Default: 60000 (1 min)
   default_model?: string;          // Default: from EI_LLM_MODEL env
   queue_paused?: boolean;          // Default: false
   skip_quote_delete_confirm?: boolean;  // Skip confirmation dialog when deleting quotes
   
   // Display preferences
   name_display?: string;           // How user's name appears in chat
-  name_color?: string;             // User's name color in chat
   time_mode?: "24h" | "12h" | "local" | "utc";  // Timestamp display format
   
   // Provider accounts (LLM and Storage)
@@ -742,6 +699,12 @@ interface HumanSettings {
   
   // Remote sync credentials (encrypted cloud backup)
   sync?: SyncCredentials;
+  
+  // OpenCode integration settings
+  opencode?: OpenCodeSettings;
+  
+  // Nightly ceremony configuration
+  ceremony?: CeremonyConfig;
 }
 
 interface SyncCredentials {
@@ -787,13 +750,21 @@ interface ProviderAccount {
 }
 
 interface CeremonyConfig {
-  enabled: boolean;               // Whether nightly ceremony runs
-  time: string;                   // "HH:MM" format (e.g., "03:00")
+  time: string;                   // "HH:MM" format (e.g., "09:00")
   last_ceremony?: string;         // ISO timestamp of last run
   decay_rate?: number;            // Exposure decay rate (default: 0.1)
   explore_threshold?: number;     // Days before topic exploration triggers (default: 3)
+  dedup_threshold?: number;       // Cosine similarity threshold for dedup candidates (default: 0.85)
 }
 ```
+
+interface OpenCodeSettings {
+  integration?: boolean;           // Whether OpenCode integration is enabled
+  polling_interval_ms?: number;   // How often to check for new sessions (default: 1800000 = 30 min)
+  last_sync?: string;             // ISO timestamp of last sync
+  extraction_point?: string;      // ISO timestamp cursor for single-session archive scan
+  processed_sessions?: Record<string, string>;  // sessionId → ISO timestamp of last import
+}
 
 ### PersonaCreationInput
 
@@ -824,10 +795,12 @@ interface PersonaCreationInput {
 
 ```typescript
 interface PersonaEntity {
+  id: string;                    // UUID (or "ei" for built-in Ei persona)
+  display_name: string;          // What shows in UI (user's chosen name)
   entity: "system";
   
   // Identity
-  aliases?: string[];
+  aliases?: string[];            // For fuzzy matching (user types "/persona Bob")
   short_description?: string;
   long_description?: string;
   model?: string;
@@ -857,7 +830,6 @@ interface PersonaEntity {
   last_activity: string;           // Last message (human or system)
   last_heartbeat?: string;
   last_extraction?: string;
-  last_inactivity_ping?: string;
 }
 ```
 
@@ -1063,6 +1035,8 @@ interface LLMRequest {
   created_at: string;
   attempts: number;
   last_attempt?: string;
+  retry_after?: string;        // ISO timestamp — don't retry until after this time
+  state: LLMRequestState;      // "pending" | "processing" | "dlq"
   
   // Request details
   type: LLMRequestType;
@@ -1071,7 +1045,6 @@ interface LLMRequest {
   // Prompt
   system: string;
   user: string;
-  messages?: ChatMessage[];    // For conversation context
   
   // Routing
   next_step: LLMNextStep;      // Handler name for response
@@ -1080,6 +1053,8 @@ interface LLMRequest {
   // Context (passed through to handler)
   data: Record<string, unknown>;
 }
+
+type LLMRequestState = "pending" | "processing" | "dlq";
 
 enum LLMRequestType {
   Response = "response",       // Conversational response
@@ -1113,10 +1088,15 @@ enum LLMNextStep {
   // Extraction (human) - Step 3: Update
   HandleHumanItemUpdate = "handleHumanItemUpdate",
   
-  // Extraction (persona)
+  // Extraction (persona) - Step 1: Scan
   HandlePersonaTraitExtraction = "handlePersonaTraitExtraction",
-  HandlePersonaTopicDetection = "handlePersonaTopicDetection",
-  HandlePersonaTopicExploration = "handlePersonaTopicExploration",
+  HandlePersonaTopicScan = "handlePersonaTopicScan",
+  
+  // Extraction (persona) - Step 2: Match
+  HandlePersonaTopicMatch = "handlePersonaTopicMatch",
+  
+  // Extraction (persona) - Step 3: Update
+  HandlePersonaTopicUpdate = "handlePersonaTopicUpdate",
   
   // Heartbeat
   HandleHeartbeatCheck = "handleHeartbeatCheck",
@@ -1126,8 +1106,6 @@ enum LLMNextStep {
   HandleOneShot = "handleOneShot",
   
   // Ceremony System
-  HandleCeremonyExposure = "handleCeremonyExposure",
-  HandleCeremonyDecayComplete = "handleCeremonyDecayComplete",
   HandlePersonaExpire = "handlePersonaExpire",
   HandlePersonaExplore = "handlePersonaExplore",
   HandleDescriptionCheck = "handleDescriptionCheck"
@@ -1326,14 +1304,17 @@ Standard error codes for `onError` events:
 | `LLM_TIMEOUT` | LLM call timed out |
 | `LLM_INVALID_JSON` | JSON parse failed after retries |
 | `LLM_TRUNCATED` | Response was truncated |
-| `STORAGE_LOAD_FAILED` | Could not load checkpoint from storage |
-| `STORAGE_SAVE_FAILED` | Could not save checkpoint to storage |
+| `LLM_AUTH_ERROR` | Authentication failed (401/403) |
+| `LLM_SERVER_ERROR` | LLM server error (5xx) |
+| `LLM_REQUEST_ERROR` | Invalid request (4xx) |
+| `LLM_ERROR` | Unclassified LLM error |
+| `HANDLER_NOT_FOUND` | No handler registered for next_step |
+| `HANDLER_ERROR` | Handler threw an exception |
+| `STORAGE_LOAD_FAILED` | Could not load state from storage |
+| `STORAGE_SAVE_FAILED` | Could not save state to storage |
 | `PERSONA_NOT_FOUND` | Requested persona doesn't exist |
 | `PERSONA_ARCHIVED` | Operation not allowed on archived persona |
 | `QUEUE_BUSY` | QueueProcessor already processing |
-| `CHECKPOINT_SLOT_EMPTY` | Requested checkpoint slot is empty |
-| `CHECKPOINT_INVALID_SLOT` | Slot index out of range (must be 0-14) |
-| `CHECKPOINT_SLOT_PROTECTED` | Cannot delete auto-save slots (0-9) |
 
 ---
 
@@ -1346,43 +1327,40 @@ Standard error codes for `onError` events:
 | 2026-01-26 | Removed `state` from Message |
 | 2026-01-26 | Changed extraction prompts to use `messages_context`/`messages_analyze` |
 | 2026-01-26 | Moved `heartbeat_delay_ms` to PersonaEntity (per-persona) |
-| 2026-01-26 | Redesigned checkpoint system (video game save slots) |
 | 2026-01-26 | Added `queue_paused` to HumanSettings |
 | 2026-01-26 | Added `queue_pause()`/`queue_resume()` to StateManager |
 | 2026-01-26 | Changed `LLMNextStep` to enum |
 | 2026-01-26 | Changed `in_context: boolean` to `context_status: ContextStatus` enum (default/always/never) |
-| 2026-01-26 | **Checkpoint system overhaul**: Slots 0-9 auto-save (FIFO), slots 10-14 manual save |
-| 2026-01-26 | Removed `persist()`, `checkpoint_persist()` from StateManager |
-| 2026-01-26 | Removed `load()`, `save()`, `loadCheckpoint()`, `listCheckpoints()` from Storage |
-| 2026-01-26 | Added `timestamp` to StorageState |
-| 2026-01-26 | Removed `PersistedCheckpoint` interface (no longer needed) |
-| 2026-01-26 | Replaced `onCheckpointPersisted` with `onCheckpointCreated` and `onCheckpointDeleted` |
-| 2026-01-27 | **Simplified checkpoint storage**: Array-based auto-saves instead of slot-based ring buffer |
-| 2026-01-27 | Added `onCheckpointStart` event for UI race condition handling |
-| 2026-01-27 | Storage interface simplified: `listCheckpoints`, `loadCheckpoint`, `saveAutoCheckpoint`, `saveManualCheckpoint`, `deleteManualCheckpoint` |
-| 2026-01-28 | **E005 UI Polish**: Added `onMessageRecalled`, `onCheckpointRestored` events |
-| 2026-01-28 | Added `recallPendingMessages()`, `markMessageRead()` to Processor API |
+| 2026-01-28 | Added `onMessageRecalled`, `markMessageRead()`, `recallPendingMessages()` |
 | 2026-01-28 | Human messages now start `read: false`, marked `read: true` when AI responds |
 | 2026-02-02 | **V1.Web Documentation Sync**: Added `onOneShotReturned`, `onContextBoundaryChanged` events |
-| 2026-02-02 | Added 6 LLMNextStep handlers: `HandleOneShot`, `HandleCeremonyExposure`, `HandleCeremonyDecayComplete`, `HandlePersonaExpire`, `HandlePersonaExplore`, `HandleDescriptionCheck` |
-| 2026-02-02 | Added `CeremonyConfig` interface for nightly ceremony configuration |
-| 2026-02-02 | Added `name_display`, `name_color`, `time_mode` to HumanSettings |
-| 2026-02-02 | Added `last_seeded_*` fields and `ceremony_config` to HumanEntity |
+| 2026-02-02 | Added `HandleOneShot`, `HandlePersonaExpire`, `HandlePersonaExplore`, `HandleDescriptionCheck` to LLMNextStep |
+| 2026-02-02 | Added `CeremonyConfig` interface (in HumanSettings.ceremony) |
 | 2026-02-02 | Added `is_static` field to PersonaEntity |
 | 2026-02-02 | Added `markAllMessagesRead()`, `submitOneShot()` to Processor API |
-| 2026-02-02 | Fixed StateManager: `checkpoint_create()` → `checkpoint_saveAuto()` + `checkpoint_saveManual()` |
 | 2026-02-02 | Added StateManager methods: `messages_markRead`, `messages_markPendingAsRead`, `messages_countUnread`, `messages_markAllRead`, `messages_remove`, `queue_clearPersonaResponses`, `persona_setContextBoundary` |
-| 2026-02-02 | **Naming convention fix**: Renamed `lastSeeded_*` → `last_seeded_*` in HumanEntity |
 | 2026-02-02 | **Group Visibility Redesign**: Replaced `*` wildcard with explicit "General" group |
 | 2026-02-02 | Ei now has global visibility (special-cased), `group_primary: "General"`, immutable in UI |
 | 2026-02-02 | Empty `persona_groups` on data items treated as `["General"]` for backward compatibility |
-| 2026-02-02 | Added Group Visibility Model section to documentation |
 | 2026-02-03 | **Provider Accounts System**: Added `ProviderAccount` interface and `ProviderType` enum |
-| 2026-02-03 | Added `accounts?: ProviderAccount[]` to HumanSettings for LLM and Storage provider management |
-| 2026-02-04 | **Remote Sync Implementation**: Added `SyncCredentials` interface to HumanSettings |
-| 2026-02-04 | Added `RemoteSync` interface with `configure()`, `sync()`, `fetch()`, `checkRemote()`, `clear()` |
-| 2026-02-04 | Added `SyncResult` and `RemoteCheckResult` types |
-| 2026-02-04 | Added `getStorageState()`, `restoreFromState()` to Processor API |
-| 2026-02-04 | Added `getStorageState()`, `restoreFromState()` to StateManager API
-| 2026-02-26 | **Structured Message Fields**: Replaced `Message.content: string` with `verbal_response?: string`, `action_response?: string`, `silence_reason?: string` |
-| 2026-02-26 | Added migration-on-load for old `content` field → `verbal_response` |
+| 2026-02-04 | **Remote Sync Implementation**: Added `SyncCredentials`, `RemoteSync` interface, `SyncResult`, `RemoteCheckResult` |
+| 2026-02-04 | Added `getStorageState()`, `restoreFromState()` to Processor API and StateManager |
+| 2026-02-26 | **Structured Message Fields**: Replaced `Message.content: string` with `verbal_response?`, `action_response?`, `silence_reason?` |
+| 2026-02-27 | **CONTRACTS Audit Sweep**: Full sync with actual codebase (checkpoint system retired, see below) |
+| 2026-02-27 | Removed entire Checkpoint system: `Ei_Interface` checkpoint events, Processor checkpoint methods, StateManager `checkpoint_*` methods, Storage checkpoint methods, `Checkpoint` interface |
+| 2026-02-27 | Storage interface simplified to `loadState`/`saveState`/`loadBackup`/`moveToBackup` |
+| 2026-02-27 | Added `PersonaEntity.id` and `PersonaEntity.display_name` (replaces implicit name-as-key pattern) |
+| 2026-02-27 | Fixed `PersonaSummary`: added `id`, `display_name`, `context_boundary`; removed `name` |
+| 2026-02-27 | Fixed `QueueStatus`: added `dlq_count` |
+| 2026-02-27 | Fixed `HumanSettings`: removed `auto_save_interval_ms`, `name_color`; added `opencode`, `ceremony` |
+| 2026-02-27 | Removed `HumanEntity.ceremony_config` (moved to `settings.ceremony`) |
+| 2026-02-27 | Fixed `CeremonyConfig`: removed `enabled`, added `dedup_threshold` |
+| 2026-02-27 | Added `OpenCodeSettings` interface |
+| 2026-02-27 | Added `StateConflictData` interface and `StateConflictResolution` type |
+| 2026-02-27 | Added `onSaveAndExitStart`, `onSaveAndExitFinish`, `onStateConflict`, `onStateImported` to `Ei_Interface` |
+| 2026-02-27 | All `personaName: string` params across Processor/StateManager APIs updated to `personaId: string` |
+| 2026-02-27 | Added Processor methods: `saveAndExit`, `resolveStateConflict`, `resolvePersonaName`, `deleteMessages`, `searchHumanData`, `importState`, `pauseQueue`, `getQueueActiveItems`, `getDLQItems`, `updateQueueItem`, `clearQueue` |
+| 2026-02-27 | Added Processor debug methods: `triggerCeremonyNow`, `getCeremonyStatus` |
+| 2026-02-27 | Fixed `LLMNextStep`: replaced `HandlePersonaTopicDetection`/`Exploration` with `HandlePersonaTopicScan`/`Match`/`Update`; removed `HandleCeremonyExposure`/`DecayComplete` |
+| 2026-02-27 | Added `LLMRequestState` type and `state`/`retry_after` fields to `LLMRequest` |
+| 2026-02-27 | Updated Error Codes: removed checkpoint codes, added `LLM_AUTH_ERROR`, `LLM_SERVER_ERROR`, `LLM_REQUEST_ERROR`, `HANDLER_NOT_FOUND`, `HANDLER_ERROR` |
