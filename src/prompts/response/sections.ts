@@ -371,7 +371,21 @@ The human can view and edit all of this by ${seeHumanDataAction}.
 // =============================================================================
 
 export function buildResponseFormatSection(): string {
-  const jsonResponding = [
+  const jsonVerbalOnly = [
+    '{',
+    '  "should_respond": true,',
+    '  "verbal_response": "What you would say out loud"',
+    '}'
+  ].join('\n');
+
+  const jsonActionOnly = [
+    '{',
+    '  "should_respond": true,',
+    '  "action_response": "What you would do (rendered in italics, like stage directions)"',
+    '}'
+  ].join('\n');
+
+  const jsonBoth = [
     '{',
     '  "should_respond": true,',
     '  "verbal_response": "What you would say out loud",',
@@ -388,20 +402,31 @@ export function buildResponseFormatSection(): string {
 
   return `## Response Format
 
-Always respond with JSON in this exact format:
+Always respond with JSON. You have four valid forms:
 
+**Words only** (most common):
 \`\`\`json
-${jsonResponding}
+${jsonVerbalOnly}
 \`\`\`
 
-Or, if staying silent:
+**Action only** (a gesture, expression, or physical reaction with no words):
+\`\`\`json
+${jsonActionOnly}
+\`\`\`
 
+**Words and action** (speaking while doing something):
+\`\`\`json
+${jsonBoth}
+\`\`\`
+
+**Silent** (choosing not to respond):
 \`\`\`json
 ${jsonSilent}
 \`\`\`
 
 Rules:
-- \`verbal_response\` and \`action_response\` are both optional - include whichever applies
+- Use whichever combination fits the moment — both fields are optional, but at least one must be present when \`should_respond\` is true
+- \`action_response\` alone is valid — a smile, a shrug, or a thoughtful pause can speak volumes
 - \`reason\` is only used when \`should_respond\` is false
 - Do NOT include \`<thinking>\` blocks or analysis outside the JSON
 - The JSON must be valid - use double quotes, no trailing commas`;

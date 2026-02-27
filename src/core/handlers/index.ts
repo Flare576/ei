@@ -121,7 +121,7 @@ function handlePersonaResponse(response: LLMResponse, state: StateManager): void
           silence_reason: reason,
           timestamp: new Date().toISOString(),
           read: false,
-          context_status: ContextStatus.Never,
+          context_status: ContextStatus.Default,
         };
         state.messages_append(personaId, silentMessage);
       } else {

@@ -44,10 +44,8 @@ export function formatMessageAsPlaceholder(message: Message, personaName: string
 }
 
 export function formatMessagesAsPlaceholders(messages: Message[], personaName: string): string {
-  // Skip silence-only messages — they're not conversational context for the LLM
-  const conversational = messages.filter(m => m.silence_reason === undefined);
-  if (conversational.length === 0) return "(No messages)";
-  return conversational.map(m => formatMessageAsPlaceholder(m, personaName)).join('\n\n');
+  if (messages.length === 0) return "(No messages)";
+  return messages.map(m => formatMessageAsPlaceholder(m, personaName)).join('\n\n');
 }
 
 export function hydratePromptPlaceholders(
