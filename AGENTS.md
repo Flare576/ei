@@ -285,3 +285,45 @@ preload = ["@opentui/solid/preload"]
 [test]
 preload = ["@opentui/solid/preload"]
 ```
+
+---
+
+## Release Protocol
+
+**MANDATORY pre-flight before any `git tag` or version bump.**
+
+The v0.1.9 incident: two syntax errors slipped through `tsc` and only `vite build` caught them.
+All 34 E2E tests failed. The tag pointed to a broken commit. Don't repeat this.
+
+### Checklist
+
+1. `git status` — working tree must be clean
+2. `git branch --show-current` — must be `main`
+3. `git pull` — must be up to date with origin
+4. `npm test` — all unit tests must pass (runs core + TUI)
+5. `cd web && npx vite build` — **Vite build must succeed** (`tsc` alone is not sufficient; it misses bundler errors)
+6. `npm run test:e2e` — all web E2E tests must pass
+
+If **any step fails**: STOP. Fix before tagging.
+
+### Why Vite Build Is Non-Negotiable
+
+`tsc` only checks types — it does not exercise the full Vite bundler pipeline.
+Vite can fail on valid TypeScript (e.g., circular imports, JSX transform issues, missing
+assets). The build step in CI will catch this, but so should you before tagging.
+
+### The `/release` slash command
+
+The `.opencode/commands/release.md` slash command enforces this checklist.
+Use it. If you're tempted to tag manually without running it, that's the smell.
+
+### CI Gates
+
+Both `publish.yml` (tag-triggered) and `deploy.yml` (push-to-main) run:
+- Core unit tests
+- TUI unit tests (via Bun)
+- Web Vite build
+- Web Playwright E2E (34 tests)
+
+Tags that push to npm will be blocked if CI fails. But CI is the last line of defense —
+the pre-flight checklist is your first.
