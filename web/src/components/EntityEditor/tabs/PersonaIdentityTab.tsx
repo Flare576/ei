@@ -44,6 +44,7 @@ interface PersonaIdentityTabProps {
   onTraitDelete: (id: string) => void;
   onTraitAdd: () => void;
   dirtyTraitIds: Set<string>;
+  onAiAssist?: (systemPrompt: string, userPrompt: string) => Promise<string>;
 }
 
 const traitSliders = [
@@ -59,8 +60,24 @@ export const PersonaIdentityTab = ({
   onTraitDelete,
   onTraitAdd,
   dirtyTraitIds,
+  onAiAssist,
 }: PersonaIdentityTabProps) => {
   const [newAlias, setNewAlias] = useState('');
+  const [aiLoadingField, setAiLoadingField] = useState<string | null>(null);
+
+  const handleAiAssist = async (field: string, systemPrompt: string, userPrompt: string) => {
+    if (!onAiAssist) return;
+    setAiLoadingField(field);
+    try {
+      const result = await onAiAssist(systemPrompt, userPrompt);
+      if (field === 'short_description') onChange('short_description', result);
+      if (field === 'long_description') onChange('long_description', result);
+    } catch (err) {
+      console.error('AI assist failed:', err);
+    } finally {
+      setAiLoadingField(null);
+    }
+  };
 
   const handleAddAlias = () => {
     const trimmed = newAlias.trim();
@@ -144,26 +161,68 @@ export const PersonaIdentityTab = ({
 
       {/* Short Description Section */}
       <div className="ei-form-group">
-        <label className="ei-form-label">Short Description</label>
-        <input
-          type="text"
-          className="ei-input"
-          placeholder="Brief one-line description..."
-          value={persona.short_description || ''}
-          onChange={(e) => onChange('short_description', e.target.value)}
-        />
+        <div className="ei-creator-modal__field-with-assist">
+          <label className="ei-form-label">Short Description</label>
+          {onAiAssist && (
+            <button
+              className="ei-ai-assist-btn"
+              onClick={() => handleAiAssist('short_description',
+                `You are helping improve a persona's short description. Return only the improved one-line description, nothing else.`,
+                `Current description: "${persona.short_description || ''}"\n\nPersona context: ${persona.long_description || 'No long description yet'}\n\nImprove this short description to be vivid and memorable in one sentence.`
+              )}
+              disabled={aiLoadingField === 'short_description'}
+            >
+              🪄
+            </button>
+          )}
+        </div>
+        <div style={{ position: 'relative' }}>
+          <input
+            type="text"
+            className="ei-input"
+            placeholder="Brief one-line description..."
+            value={persona.short_description || ''}
+            onChange={(e) => onChange('short_description', e.target.value)}
+          />
+          {aiLoadingField === 'short_description' && (
+            <div className="ei-field-loading-overlay">
+              <div className="ei-field-loading-overlay__spinner" />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Long Description Section */}
       <div className="ei-form-group">
-        <label className="ei-form-label">Long Description</label>
-        <textarea
-          className="ei-textarea"
-          placeholder="Detailed description of this persona..."
-          rows={6}
-          value={persona.long_description || ''}
-          onChange={(e) => onChange('long_description', e.target.value)}
-        />
+        <div className="ei-creator-modal__field-with-assist">
+          <label className="ei-form-label">Long Description</label>
+          {onAiAssist && (
+            <button
+              className="ei-ai-assist-btn"
+              onClick={() => handleAiAssist('long_description',
+                `You are helping improve a persona's long description. Return only the improved description, nothing else. Use vivid, specific language.`,
+                `Current description: "${persona.long_description || ''}"\n\nShort description: ${persona.short_description || 'None'}\n\nImprove or expand this description to bring the persona to life.`
+              )}
+              disabled={aiLoadingField === 'long_description'}
+            >
+              🪄
+            </button>
+          )}
+        </div>
+        <div style={{ position: 'relative' }}>
+          <textarea
+            className="ei-textarea"
+            placeholder="Detailed description of this persona..."
+            rows={6}
+            value={persona.long_description || ''}
+            onChange={(e) => onChange('long_description', e.target.value)}
+          />
+          {aiLoadingField === 'long_description' && (
+            <div className="ei-field-loading-overlay">
+              <div className="ei-field-loading-overlay__spinner" />
+            </div>
+          )}
+        </div>
         <span className="ei-form-hint">
           Dual-mode markdown editor will be available in a future update
         </span>

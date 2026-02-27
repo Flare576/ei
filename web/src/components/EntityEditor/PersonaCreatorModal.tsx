@@ -11,6 +11,8 @@ interface Trait {
 interface Topic {
   name: string;
   perspective: string;
+  approach?: string;
+  personal_stake?: string;
   exposure_current?: number;
   exposure_desired?: number;
 }
@@ -30,7 +32,7 @@ interface PersonaCreatorModalProps {
   isOpen: boolean;
   onClose: () => void;
   onCreate: (persona: NewPersonaData) => void;
-  onAiAssist?: (field: string, currentValue: string) => Promise<string>;
+  onAiAssist?: (systemPrompt: string, userPrompt: string) => Promise<string>;
 }
 
 type ExpandableSection = 'traits' | 'communication' | 'relationships' | 'topics' | 'model';
@@ -134,21 +136,13 @@ export function PersonaCreatorModal({
     setExpandedSections(newExpanded);
   };
 
-  const handleAiAssistClick = async (field: string, currentValue: string) => {
+  const handleAiAssistClick = async (field: string, systemPrompt: string, userPrompt: string) => {
     if (!onAiAssist) return;
-    
     setAiLoadingField(field);
     try {
-      const result = await onAiAssist(field, currentValue);
-      
-      // Apply result based on field
-      if (field === 'description') {
-        setDescription(result);
-      } else if (field === 'short_description') {
-        setShortDescription(result);
-      }
-      // Add more field handlers as needed
-      
+      const result = await onAiAssist(systemPrompt, userPrompt);
+      if (field === 'description') setDescription(result);
+      else if (field === 'short_description') setShortDescription(result);
     } catch (error) {
       console.error('AI assist failed:', error);
     } finally {
@@ -272,7 +266,10 @@ export function PersonaCreatorModal({
                 {onAiAssist && (
                   <button
                     className="ei-ai-assist-btn"
-                    onClick={() => handleAiAssistClick('description', description)}
+                    onClick={() => handleAiAssistClick('description',
+                      `You are helping craft a vivid, compelling persona description. Return only the improved description, nothing else.`,
+                      `Persona name: ${name}\n\nCurrent description: "${description}"\n\nImprove this description to make the persona feel alive and specific.`
+                    )}
                     disabled={aiLoadingField === 'description'}
                   >
                     ✨ AI Assist
@@ -329,7 +326,10 @@ export function PersonaCreatorModal({
                     className="ei-ai-assist-btn"
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleAiAssistClick('traits', description);
+                      handleAiAssistClick('traits',
+                        `You are helping define personality traits for a persona. Return only the improved description, nothing else.`,
+                        `Persona: ${name}\nDescription: ${description}\n\nSuggest 2-3 vivid personality traits.`
+                      );
                     }}
                     disabled={aiLoadingField === 'traits'}
                   >
@@ -391,7 +391,10 @@ export function PersonaCreatorModal({
                     className="ei-ai-assist-btn"
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleAiAssistClick('topics', description);
+                      handleAiAssistClick('topics',
+                        `You are helping define topics of interest for a persona. Return only the improved description, nothing else.`,
+                        `Persona: ${name}\nDescription: ${description}\n\nSuggest 2-3 topics this persona would be passionate about.`
+                      );
                     }}
                     disabled={aiLoadingField === 'topics'}
                   >
@@ -420,6 +423,20 @@ export function PersonaCreatorModal({
                         rows={2}
                         value={topic.perspective || ''}
                         onChange={(e) => updateTopic(index, 'perspective', e.target.value)}
+                      />
+                      <textarea
+                        className="ei-textarea ei-textarea--sm"
+                        placeholder="How they engage with this topic..."
+                        rows={2}
+                        value={topic.approach || ''}
+                        onChange={(e) => updateTopic(index, 'approach', e.target.value)}
+                      />
+                      <textarea
+                        className="ei-textarea ei-textarea--sm"
+                        placeholder="Why this topic matters to them personally..."
+                        rows={2}
+                        value={topic.personal_stake || ''}
+                        onChange={(e) => updateTopic(index, 'personal_stake', e.target.value)}
                       />
                       <button
                         className="ei-btn ei-btn--danger ei-btn--sm"

@@ -70,6 +70,7 @@ function App() {
 
   const personaPanelRef = useRef<PersonaPanelHandle | null>(null);
   const chatPanelRef = useRef<ChatPanelHandle | null>(null);
+  const oneShotResolvers = useRef<Map<string, (result: string) => void>>(new Map());
 
   useKeyboardNavigation({
     onFocusPersonaPanel: () => personaPanelRef.current?.focusPanel(),
@@ -186,6 +187,13 @@ function App() {
       },
       onQuoteRemoved: () => {
         processorRef.current?.getQuotes().then(setQuotes);
+      },
+      onOneShotReturned: (guid, content) => {
+        const resolve = oneShotResolvers.current.get(guid);
+        if (resolve) {
+          oneShotResolvers.current.delete(guid);
+          resolve(content);
+        }
       },
     };
 
@@ -517,6 +525,18 @@ function App() {
     processor.getMessages(editingPersonaId).then(setEditingPersonaMessages);
   }, [processor, editingPersonaId]);
 
+  const handleAiAssist = useCallback(async (systemPrompt: string, userPrompt: string): Promise<string> => {
+    if (!processorRef.current) throw new Error('Processor not ready');
+    const guid = crypto.randomUUID();
+    return new Promise<string>((resolve, reject) => {
+      oneShotResolvers.current.set(guid, resolve);
+      processorRef.current!.submitOneShot(guid, systemPrompt, userPrompt).catch((err) => {
+        oneShotResolvers.current.delete(guid);
+        reject(err);
+      });
+    });
+  }, []);
+
   const handlePersonaCreate = useCallback(async (data: {
     name: string;
     aliases: string[];
@@ -809,6 +829,7 @@ function App() {
         onBulkContextStatusChange={handleBulkContextStatusChange}
         onContextBoundaryChange={handleContextBoundaryChange}
         onDeleteMessage={handleDeleteMessage}
+        onAiAssist={handleAiAssist}
       />
     )}
 
@@ -816,6 +837,7 @@ function App() {
       isOpen={showPersonaCreator}
       onClose={() => setShowPersonaCreator(false)}
       onCreate={handlePersonaCreate}
+      onAiAssist={handleAiAssist}
     />
 
     <ArchivedPersonasModal

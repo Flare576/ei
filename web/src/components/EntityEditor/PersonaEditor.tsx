@@ -82,6 +82,7 @@ interface PersonaEditorProps {
   onContextBoundaryChange: (timestamp: string | null) => void;
   onDeleteMessage: (messageId: string) => void;
   availableGroups?: string[];
+  onAiAssist?: (systemPrompt: string, userPrompt: string) => Promise<string>;
 }
 
 const tabs = [
@@ -107,6 +108,7 @@ export function PersonaEditor({
   onContextBoundaryChange,
   onDeleteMessage,
   availableGroups = [],
+  onAiAssist,
 }: PersonaEditorProps) {
   const [activeTab, setActiveTab] = useState('settings');
   const [localPersona, setLocalPersona] = useState<PersonaEntity>(persona);
@@ -277,6 +279,7 @@ export function PersonaEditor({
           onTraitDelete={handleTraitDelete}
           onTraitAdd={handleTraitAdd}
           dirtyTraitIds={dirtyTraitIds}
+          onAiAssist={onAiAssist}
         />
       )}
 
