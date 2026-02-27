@@ -1,4 +1,4 @@
-import { LLMRequestType, LLMPriority, LLMNextStep, MESSAGE_MIN_COUNT, MESSAGE_MAX_AGE_DAYS, type CeremonyConfig, type PersonaTopic, type Topic, type Message } from "../types.js";
+import { LLMRequestType, LLMPriority, LLMNextStep, MESSAGE_MIN_COUNT, MESSAGE_MAX_AGE_DAYS, type CeremonyConfig, type PersonaTopic, type Topic, type Message, type DataItemBase } from "../types.js";
 import type { StateManager } from "../state-manager.js";
 import { applyDecayToValue } from "../utils/index.js";
 import {
@@ -224,6 +224,9 @@ export function handleCeremonyProgress(state: StateManager): void {
   
   // Human ceremony: decay topics + people
   runHumanCeremony(state);
+
+  // Dedup phase: log near-duplicate human entities (dry-run only, no mutations)
+  runDedupPhase(state);
   
   // Expire phase: queue LLM calls for each active persona
   // handlePersonaExpire already chains to Explore → DescriptionCheck
@@ -497,4 +500,77 @@ export function runHumanCeremony(state: StateManager): void {
   if (lowExposureTopics.length > 0 || lowExposurePeople.length > 0) {
     console.log(`[ceremony:human] Low exposure items: ${lowExposureTopics.length} topics, ${lowExposurePeople.length} people`);
   }
+}
+
+// =============================================================================
+// DEDUP PHASE (synchronous, dry-run — logs candidates, no mutations)
+// =============================================================================
+
+const DEDUP_DEFAULT_THRESHOLD = 0.85;
+
+type DedupableItem = DataItemBase & { relationship?: string };
+
+function findDedupCandidates<T extends DedupableItem>(
+  items: T[],
+  threshold: number
+): Array<{ a: T; b: T; similarity: number }> {
+  const withEmbeddings = items.filter(item =>
+    item.embedding && item.embedding.length > 0 &&
+    item.relationship !== "Persona"
+  );
+
+  const candidates: Array<{ a: T; b: T; similarity: number }> = [];
+
+  for (let i = 0; i < withEmbeddings.length; i++) {
+    for (let j = i + 1; j < withEmbeddings.length; j++) {
+      const a = withEmbeddings[i];
+      const b = withEmbeddings[j];
+      const dot = a.embedding!.reduce((sum, v, k) => sum + v * b.embedding![k], 0);
+      const normA = Math.sqrt(a.embedding!.reduce((sum, v) => sum + v * v, 0));
+      const normB = Math.sqrt(b.embedding!.reduce((sum, v) => sum + v * v, 0));
+      const similarity = normA && normB ? dot / (normA * normB) : 0;
+
+      if (similarity >= threshold) {
+        candidates.push({ a, b, similarity });
+      }
+    }
+  }
+
+  return candidates.sort((x, y) => y.similarity - x.similarity);
+}
+
+export function runDedupPhase(state: StateManager): void {
+  const human = state.getHuman();
+  const threshold = human.settings?.ceremony?.dedup_threshold ?? DEDUP_DEFAULT_THRESHOLD;
+
+  console.log(`[ceremony:dedup] Running dry-run dedup (threshold: ${threshold})`);
+
+  const types: Array<{ label: string; items: DedupableItem[] }> = [
+    { label: "facts",  items: human.facts },
+    { label: "traits", items: human.traits },
+    { label: "topics", items: human.topics },
+    { label: "people", items: human.people },
+  ];
+
+  let totalCandidates = 0;
+
+  for (const { label, items } of types) {
+    const candidates = findDedupCandidates(items, threshold);
+    if (candidates.length === 0) {
+      console.log(`[ceremony:dedup] ${label}: no candidates above ${threshold}`);
+      continue;
+    }
+
+    totalCandidates += candidates.length;
+    console.log(`[ceremony:dedup] ${label}: ${candidates.length} candidate pair(s)`);
+    for (const { a, b, similarity } of candidates) {
+      console.log(
+        `[ceremony:dedup]   ${(similarity * 100).toFixed(1)}% "${a.name}" ↔ "${b.name}"` +
+        (a.description ? `\n[ceremony:dedup]     A: ${a.description.slice(0, 80)}` : "") +
+        (b.description ? `\n[ceremony:dedup]     B: ${b.description.slice(0, 80)}` : "")
+      );
+    }
+  }
+
+  console.log(`[ceremony:dedup] Done. ${totalCandidates} total candidate pair(s) found.`);
 }

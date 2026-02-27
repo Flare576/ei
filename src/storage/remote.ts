@@ -1,5 +1,6 @@
 import type { StorageState } from "../core/types.js";
 import { encrypt, decrypt, generateUserId, type CryptoCredentials, type EncryptedPayload } from "./crypto.js";
+import { compress, decompress, isCompressed } from "./compress.js";
 
 const API_BASE = "https://flare576.com/ei/api";
 
@@ -71,7 +72,8 @@ export class RemoteSync {
 
     try {
       const stateJson = JSON.stringify(state);
-      const encrypted = await encrypt(stateJson, this.credentials);
+      const compressed = await compress(stateJson);
+      const encrypted = await encrypt(compressed, this.credentials);
       const encryptedJson = JSON.stringify(encrypted);
 
       const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -124,7 +126,9 @@ export class RemoteSync {
 
       const body = await response.json();
       const encrypted: EncryptedPayload = JSON.parse(body.data);
-      const decryptedJson = await decrypt(encrypted, this.credentials);
+      const decryptedPayload = await decrypt(encrypted, this.credentials);
+      // Support both compressed (new) and uncompressed (legacy) remote state
+      const decryptedJson = isCompressed(decryptedPayload) ? await decompress(decryptedPayload) : decryptedPayload;
       const state = JSON.parse(decryptedJson) as StorageState;
       // Capture etag for concurrency protection
       this.lastEtag = response.headers.get("ETag");

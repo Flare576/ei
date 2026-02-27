@@ -601,9 +601,10 @@ test.describe("Session Bug Coverage (0112)", () => {
     await descriptionTextarea.click();
     await descriptionTextarea.fill("The user's favorite color is now green");
 
-    // Blur triggers auto-save (click outside the card)
+    // Click outside the card to trigger blur → onSave fires → awaits embedding → clears dirty
     await page.locator('.ei-tab-container__content').click({ position: { x: 10, y: 10 } });
-    await page.waitForTimeout(500);
+    // Wait for dirty class to clear — this now only happens AFTER upsertFact (including embedding) completes
+    await expect(factCard).not.toHaveClass(/ei-data-card--dirty/, { timeout: 5000 });
 
     // Close editor via X button
     await page.locator('.ei-tab-container button[aria-label="Close"]').click();
