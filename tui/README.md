@@ -99,6 +99,19 @@ All commands start with `/`. Append `!` to any command as a shorthand for `--for
 | `Ctrl+E` | Open `$EDITOR` (preserves current input) |
 | `PageUp / PageDown` | Scroll message history |
 
+# Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `EI_DATA_PATH` | `~/.local/share/ei` | Path to Ei's persistent data directory. Set this to keep multiple profiles or point to a shared/synced folder. |
+| `XDG_DATA_HOME` | `~/.local/share` | XDG base directory. Ignored if `EI_DATA_PATH` is set. |
+| `EI_SYNC_USERNAME` | — | Username for remote sync. If set at startup, bootstraps sync credentials automatically (useful for dotfiles/scripts). |
+| `EI_SYNC_PASSPHRASE` | — | Passphrase for remote sync. Paired with `EI_SYNC_USERNAME`. |
+| `EDITOR` / `VISUAL` | `vi` | Editor opened by `/details`, `/me`, `/settings`, `/context`, `/quotes`, etc. Falls back to `VISUAL` if `EDITOR` is unset. |
+
+> **Tip**: `tail -f $EI_DATA_PATH/tui.log` to watch live debug output.
+
+
 # Development
 
 ## Requirements
