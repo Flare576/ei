@@ -987,9 +987,9 @@ export class Processor {
     const responsesToClear = [
       LLMNextStep.HandlePersonaResponse,
       LLMNextStep.HandlePersonaTraitExtraction,
-      LLMNextStep.HandlePersonaTopicScan,
-      LLMNextStep.HandlePersonaTopicMatch,
-      LLMNextStep.HandlePersonaTopicUpdate,
+      LLMNextStep.HandleHeartbeatCheck,  // clear stale heartbeat when user is active
+      LLMNextStep.HandleEiHeartbeat,     // clear stale Ei heartbeat when user is active
+      // Note: TopicScan/Match/Update are ceremony-only — never clear them here
     ];
 
     let removedAny = false;
