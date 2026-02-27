@@ -233,6 +233,7 @@ function handleEiHeartbeat(response: LLMResponse, state: StateManager): void {
     timestamp: now,
     read: false,
     context_status: ContextStatus.Default,
+    f: true, r: true, p: true, o: true,
   });
 
   if (found.type === "fact") {
@@ -672,7 +673,7 @@ async function handleHumanItemUpdate(response: LLMResponse, state: StateManager)
   const isEi = personaDisplayName.toLowerCase() === "ei";
 
   const human = state.getHuman();
-  const getExistingItem = (): { learned_by?: string; persona_groups?: string[] } | undefined => {
+  const getExistingItem = (): { learned_by?: string; last_changed_by?: string; persona_groups?: string[] } | undefined => {
     if (isNewItem) return undefined;
     switch (candidateType) {
       case "fact": return human.facts.find(f => f.id === existingItemId);
@@ -710,7 +711,8 @@ async function handleHumanItemUpdate(response: LLMResponse, state: StateManager)
         validated: ValidationLevel.None,
         validated_date: now,
         last_updated: now,
-        learned_by: isNewItem ? personaDisplayName : existingItem?.learned_by,
+        learned_by: isNewItem ? personaId : existingItem?.learned_by,
+        last_changed_by: personaId,
         persona_groups: mergeGroups(existingItem?.persona_groups),
         embedding,
       };
@@ -725,7 +727,8 @@ async function handleHumanItemUpdate(response: LLMResponse, state: StateManager)
         sentiment: result.sentiment,
         strength: (result as any).strength ?? 0.5,
         last_updated: now,
-        learned_by: isNewItem ? personaDisplayName : existingItem?.learned_by,
+        learned_by: isNewItem ? personaId : existingItem?.learned_by,
+        last_changed_by: personaId,
         persona_groups: mergeGroups(existingItem?.persona_groups),
         embedding,
       };
@@ -745,7 +748,8 @@ async function handleHumanItemUpdate(response: LLMResponse, state: StateManager)
         exposure_current: calculateExposureCurrent(exposureImpact),
         exposure_desired: (result as any).exposure_desired ?? 0.5,
         last_updated: now,
-        learned_by: isNewItem ? personaDisplayName : existingItem?.learned_by,
+        learned_by: isNewItem ? personaId : existingItem?.learned_by,
+        last_changed_by: personaId,
         persona_groups: mergeGroups(existingItem?.persona_groups),
         embedding,
       };
@@ -763,7 +767,8 @@ async function handleHumanItemUpdate(response: LLMResponse, state: StateManager)
         exposure_current: calculateExposureCurrent(exposureImpact),
         exposure_desired: (result as any).exposure_desired ?? 0.5,
         last_updated: now,
-        learned_by: isNewItem ? personaDisplayName : existingItem?.learned_by,
+        learned_by: isNewItem ? personaId : existingItem?.learned_by,
+        last_changed_by: personaId,
         persona_groups: mergeGroups(existingItem?.persona_groups),
         embedding,
       };

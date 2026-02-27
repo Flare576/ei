@@ -22,6 +22,7 @@ interface HumanTopicsTabProps {
   onDelete: (id: string) => void;
   onAdd: () => void;
   dirtyIds: Set<string>;
+  resolvePersonaName?: (id: string) => string;
 }
 
 const topicSliders = [
@@ -68,7 +69,8 @@ const renderTopicCard = (
   onSave: () => void,
   onDelete: () => void,
   isDirty: boolean,
-  sliders: { field: string; label: string; min?: number; max?: number }[]
+  sliders: { field: string; label: string; min?: number; max?: number }[],
+  resolvePersonaName?: (id: string) => string
 ) => {
   const gapInfo = getEngagementGapInfo(topic.exposure_current, topic.exposure_desired);
 
@@ -126,6 +128,7 @@ const renderTopicCard = (
         onDelete={onDelete}
         isDirty={isDirty}
         renderAfterHeader={renderCategoryInput}
+        resolvePersonaName={resolvePersonaName}
       />
       <div
         className={`ei-engagement-gap ${gapInfo.className}`}
@@ -145,6 +148,7 @@ export const HumanTopicsTab = ({
   onDelete,
   onAdd,
   dirtyIds,
+  resolvePersonaName,
 }: HumanTopicsTabProps) => {
   return (
     <GroupedCardList
@@ -156,6 +160,7 @@ export const HumanTopicsTab = ({
       onAdd={onAdd}
       dirtyIds={dirtyIds}
       renderCard={renderTopicCard}
+      resolvePersonaName={resolvePersonaName}
     />
   );
 };

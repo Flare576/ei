@@ -36,9 +36,58 @@ export class StateManager {
       this.humanState.load(state.human);
       this.personaState.load(state.personas);
       this.queueState.load(state.queue);
+      this.migrateLearnedByToIds();
     } else {
       this.humanState.load(createDefaultHumanEntity());
     }
+  }
+
+  /**
+   * Migration: learned_by used to store display names; now stores persona IDs.
+   * On load, attempt to resolve display names -> IDs using current persona map.
+   * Unresolvable values (renamed/deleted personas) are cleared to avoid stale display.
+   * No-op for already-migrated data (UUIDs or "ei" won't match display names).
+   */
+  private migrateLearnedByToIds(): void {
+    const personas = this.personaState.getAll();
+    const nameToId = new Map<string, string>();
+    for (const p of personas) {
+      nameToId.set(p.display_name.toLowerCase(), p.id);
+      for (const alias of p.aliases ?? []) {
+        nameToId.set(alias.toLowerCase(), p.id);
+      }
+    }
+    // "Ei" display name -> "ei" id (hardcoded, always valid)
+    nameToId.set("ei", "ei");
+
+    const human = this.humanState.get();
+    let dirty = false;
+    const migrateItem = (item: { learned_by?: string; last_changed_by?: string }) => {
+      if (item.learned_by && !this.isPersonaId(item.learned_by)) {
+        const resolved = nameToId.get(item.learned_by.toLowerCase());
+        item.learned_by = resolved ?? undefined;  // clear if unresolvable
+        dirty = true;
+      }
+      if (item.last_changed_by && !this.isPersonaId(item.last_changed_by)) {
+        const resolved = nameToId.get(item.last_changed_by.toLowerCase());
+        item.last_changed_by = resolved ?? undefined;
+        dirty = true;
+      }
+    };
+    [...human.facts, ...human.traits, ...human.topics, ...human.people].forEach(migrateItem);
+    if (dirty) {
+      this.humanState.set(human);
+      console.log("[StateManager] Migrated learned_by fields from display names to persona IDs");
+    }
+  }
+
+  /**
+   * Returns true if value looks like a persona ID (UUID or the special "ei" id).
+   * Display names are free-form strings that won't match UUID format.
+   */
+  private isPersonaId(value: string): boolean {
+    if (value === "ei") return true;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
   }
 
   private buildStorageState(): StorageState {

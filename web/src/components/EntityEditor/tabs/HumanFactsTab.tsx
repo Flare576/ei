@@ -19,6 +19,7 @@ interface HumanFactsTabProps {
   onDelete: (id: string) => void;
   onAdd: () => void;
   dirtyIds: Set<string>;
+  resolvePersonaName?: (id: string) => string;
 }
 
 const factSliders: SliderConfig[] = [
@@ -32,6 +33,7 @@ export const HumanFactsTab = ({
   onDelete,
   onAdd,
   dirtyIds,
+  resolvePersonaName,
 }: HumanFactsTabProps) => {
   const renderFactCard = (
     item: Fact,
@@ -39,7 +41,8 @@ export const HumanFactsTab = ({
     onItemSave: () => void,
     onItemDelete: () => void,
     isDirty: boolean,
-    sliders: SliderConfig[]
+    sliders: SliderConfig[],
+    resolvePersonaName?: (id: string) => string
   ) => (
     <FactCard
       key={item.id}
@@ -49,6 +52,7 @@ export const HumanFactsTab = ({
       onSave={onItemSave}
       onDelete={onItemDelete}
       isDirty={isDirty}
+      resolvePersonaName={resolvePersonaName}
     />
   );
 
@@ -62,6 +66,7 @@ export const HumanFactsTab = ({
       onAdd={onAdd}
       dirtyIds={dirtyIds}
       renderCard={renderFactCard}
+      resolvePersonaName={resolvePersonaName}
     />
   );
 };

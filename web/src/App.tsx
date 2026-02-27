@@ -780,6 +780,10 @@ function App() {
           onPersonDelete={handlePersonDelete}
           onQuoteSave={handleQuoteUpdate}
           onQuoteDelete={handleQuoteDelete}
+          resolvePersonaName={(id) => {
+            if (id === 'ei') return 'Ei';
+            return personas.find(p => p.id === id)?.display_name ?? id;
+          }}
         />
       </>
     )}

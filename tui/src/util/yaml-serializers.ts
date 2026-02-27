@@ -350,7 +350,10 @@ export function humanToYAML(human: HumanEntity): string {
   
   return YAML.stringify(data, {
     lineWidth: 0,
-  }).replace(/^(\s+validated:\s+\S+)$/mg, '$1 # none | ei | human');
+  })
+  .replace(/^(\s+validated:\s+\S+)$/mg, '$1 # none | ei | human')
+  .replace(/^(\s+)(learned_by: .+)$/mg, '$1# [read-only] $2')
+  .replace(/^(\s+)(last_changed_by: .+)$/mg, '$1# [read-only] $2');
 }
 
 export interface HumanYAMLResult {
@@ -365,7 +368,12 @@ export interface HumanYAMLResult {
 }
 
 export function humanFromYAML(yamlContent: string): HumanYAMLResult {
-  const data = YAML.parse(yamlContent) as EditableHumanData;
+  // Strip read-only comment lines before parsing so users can't accidentally corrupt them
+  const stripped = yamlContent
+    .split('\n')
+    .filter(line => !/^\s*#\s*\[read-only\]/.test(line))
+    .join('\n');
+  const data = YAML.parse(stripped) as EditableHumanData;
   
   const deletedFactIds: string[] = [];
   const deletedTraitIds: string[] = [];

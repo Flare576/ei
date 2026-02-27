@@ -420,7 +420,7 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
           description: "User's birthday is January 15th",
           sentiment: 0.8,
           validated: ValidationLevel.None,
-          learned_by: "Ei",
+          learned_by: "ei",
         })
       );
     });

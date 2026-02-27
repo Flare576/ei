@@ -162,7 +162,7 @@ describe("Group Visibility", () => {
       expect(state.human_trait_upsert).toHaveBeenCalled();
       const trait = state.human_trait_upsert.mock.calls[0][0];
       expect(trait.persona_groups).toEqual(["Fellowship"]);
-      expect(trait.learned_by).toBe("Frodo");
+      expect(trait.learned_by).toBe("frodo-id");
     });
 
     it("existing item gets persona's group added to existing groups", async () => {
@@ -314,7 +314,7 @@ describe("Group Visibility", () => {
       const topic = state.human_topic_upsert.mock.calls[0][0];
       expect(topic.persona_groups).toEqual(["Hermit"]);
       expect(topic.exposure_desired).toBe(0.8);
-      expect(topic.learned_by).toBe("Hermit");
+      expect(topic.learned_by).toBe("hermit-id");
     });
 
     it("new person gets correct group and relationship", async () => {
@@ -343,7 +343,7 @@ describe("Group Visibility", () => {
       const person = state.human_person_upsert.mock.calls[0][0];
       expect(person.persona_groups).toEqual(["Fellowship"]);
       expect(person.relationship).toBe("Best Friend");
-      expect(person.learned_by).toBe("Frodo");
+      expect(person.learned_by).toBe("frodo-id");
     });
   });
 

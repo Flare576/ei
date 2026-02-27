@@ -62,7 +62,8 @@ export interface DataItemBase {
   description: string;
   sentiment: number;
   last_updated: string;
-  learned_by?: string;           // Persona ID that learned this item
+  learned_by?: string;           // Persona ID that originally learned this item (stable UUID)
+  last_changed_by?: string;      // Persona ID that most recently updated this item (stable UUID)
   persona_groups?: string[];
   embedding?: number[];
 }

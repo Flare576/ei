@@ -565,7 +565,7 @@ export class Processor {
     const items: EiHeartbeatItem[] = [];
 
     const unverifiedFacts = human.facts
-      .filter(f => f.validated === ValidationLevel.None && f.learned_by !== "Ei")
+      .filter(f => f.validated === ValidationLevel.None && f.learned_by !== "ei" && (f.last_changed_by === undefined || f.last_changed_by !== "ei"))
       .slice(0, 5);
     for (const fact of unverifiedFacts) {
       const quote = human.quotes.find(q => q.data_item_ids.includes(fact.id));

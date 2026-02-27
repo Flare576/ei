@@ -18,6 +18,7 @@ interface HumanTraitsTabProps {
   onDelete: (id: string) => void;
   onAdd: () => void;
   dirtyIds: Set<string>;
+  resolvePersonaName?: (id: string) => string;
 }
 
 const traitSliders = [
@@ -32,6 +33,7 @@ export const HumanTraitsTab = ({
   onDelete,
   onAdd,
   dirtyIds,
+  resolvePersonaName,
 }: HumanTraitsTabProps) => {
   return (
     <GroupedCardList
@@ -42,6 +44,7 @@ export const HumanTraitsTab = ({
       onDelete={onDelete}
       onAdd={onAdd}
       dirtyIds={dirtyIds}
+      resolvePersonaName={resolvePersonaName}
     />
   );
 };

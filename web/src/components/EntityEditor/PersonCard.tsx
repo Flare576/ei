@@ -11,6 +11,7 @@ interface Person {
   exposure_desired: number;
   last_updated: string;
   learned_by?: string;
+  last_changed_by?: string;
   persona_groups?: string[];
 }
 
@@ -30,6 +31,7 @@ interface PersonCardProps {
   onDelete: () => void;
   isDirty?: boolean;
   showMeta?: boolean;
+  resolvePersonaName?: (id: string) => string;
 }
 
 const defaultFormat = (v: number) => v.toFixed(2);
@@ -163,7 +165,7 @@ export const PersonCard = ({
       <div className="ei-data-card__footer">
         {showMeta && (
           <div className="ei-data-card__meta">
-            {person.learned_by && <span>Learned by: {person.learned_by} • </span>}
+            {person.learned_by && <span>Learned by: {resolvePersonaName ? resolvePersonaName(person.learned_by) : person.learned_by} • </span>}
             <span>Updated: {formatTimestamp(person.last_updated)}</span>
           </div>
         )}
