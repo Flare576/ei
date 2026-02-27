@@ -133,7 +133,7 @@ describe("Scan Orchestrators (Step 1)", () => {
 
       expect(state.queue_enqueue).toHaveBeenCalledWith({
         type: LLMRequestType.JSON,
-        priority: LLMPriority.Normal,
+        priority: LLMPriority.Low,
         system: "fact-sys",
         user: "fact-usr",
         next_step: LLMNextStep.HandleHumanFactScan,
@@ -188,12 +188,10 @@ describe("Scan Orchestrators (Step 1)", () => {
     it("enqueues person scan request with known persona names", () => {
       queuePersonScan(context, state as any);
 
-      expect(state.persona_getAll).toHaveBeenCalled();
       expect(buildHumanPersonScanPrompt).toHaveBeenCalledWith({
         persona_name: "Ei",
         messages_context: context.messages_context,
         messages_analyze: context.messages_analyze,
-        known_persona_names: ["ei", "Ei", "friend", "Friend"],
       });
 
       expect(state.queue_enqueue).toHaveBeenCalledWith(

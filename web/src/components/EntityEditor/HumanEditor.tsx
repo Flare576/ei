@@ -60,13 +60,13 @@ interface HumanEditorProps {
   isOpen: boolean;
   onClose: () => void;
   human: HumanEntity;
-  onFactSave: (fact: Fact) => void;
+  onFactSave: (fact: Fact) => Promise<void>;
   onFactDelete: (id: string) => void;
-  onTraitSave: (trait: Trait) => void;
+  onTraitSave: (trait: Trait) => Promise<void>;
   onTraitDelete: (id: string) => void;
-  onTopicSave: (topic: Topic) => void;
+  onTopicSave: (topic: Topic) => Promise<void>;
   onTopicDelete: (id: string) => void;
-  onPersonSave: (person: Person) => void;
+  onPersonSave: (person: Person) => Promise<void>;
   onPersonDelete: (id: string) => void;
   onQuoteSave?: (id: string, updates: Partial<Quote>) => void;
   onQuoteDelete?: (id: string) => void;
@@ -178,10 +178,10 @@ export const HumanEditor = ({
     setDirtyFactIds(prev => new Set(prev).add(id));
   };
 
-  const handleFactSave = (id: string) => {
+  const handleFactSave = async (id: string) => {
     const fact = localFacts.find(f => f.id === id);
     if (fact) {
-      onFactSave(fact);
+      await onFactSave(fact);
       setDirtyFactIds(prev => {
         const next = new Set(prev);
         next.delete(id);
@@ -221,10 +221,10 @@ export const HumanEditor = ({
     setDirtyTraitIds(prev => new Set(prev).add(id));
   };
 
-  const handleTraitSave = (id: string) => {
+  const handleTraitSave = async (id: string) => {
     const trait = localTraits.find(t => t.id === id);
     if (trait) {
-      onTraitSave(trait);
+      await onTraitSave(trait);
       setDirtyTraitIds(prev => {
         const next = new Set(prev);
         next.delete(id);
@@ -263,10 +263,10 @@ export const HumanEditor = ({
     setDirtyTopicIds(prev => new Set(prev).add(id));
   };
 
-  const handleTopicSave = (id: string) => {
+  const handleTopicSave = async (id: string) => {
     const topic = localTopics.find(t => t.id === id);
     if (topic) {
-      onTopicSave(topic);
+      await onTopicSave(topic);
       setDirtyTopicIds(prev => {
         const next = new Set(prev);
         next.delete(id);
@@ -306,10 +306,10 @@ export const HumanEditor = ({
     setDirtyPersonIds(prev => new Set(prev).add(id));
   };
 
-  const handlePersonSave = (id: string) => {
+  const handlePersonSave = async (id: string) => {
     const person = localPeople.find(p => p.id === id);
     if (person) {
-      onPersonSave(person);
+      await onPersonSave(person);
       setDirtyPersonIds(prev => {
         const next = new Set(prev);
         next.delete(id);

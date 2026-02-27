@@ -2,6 +2,8 @@ import type { ItemUpdatePromptData, PromptOutput } from "./types.js";
 import type { DataItemBase } from "../../core/types.js";
 import { formatMessagesAsPlaceholders } from "../message-utils.js";
 
+const DESCRIPTION_MAX_CHARS = 500;
+
 function formatExistingItem(item: DataItemBase): string {
   return JSON.stringify({
     name: item.name,
@@ -97,9 +99,28 @@ Examples: "Name Unknown" -> "Robert Jordan", "User was married in the Summer" ->
   `;
 
   const defaultDescriptionSection = `
-This free-text field should be used to capture interesting details or references that the Human or Persona use while discussing this data point. Personas should be able to show topical recall, make references to the topic or event, or in other ways "Remember" details about it.
+A concise, evergreen summary of what is currently known about this ${typeLabel}. Personas use this to recall context and make meaningful references.
 
-**ABSOLUTELY VITAL INSTRUCTION**: Do **NOT** embelish these details - each Persona will use their own voice during interactions with the User - we need to capture EXACTLY what was said and how, or referring back to it won't have meaning.
+## CRITICAL: Synthesize, don't accumulate
+
+Every update must **rewrite** the description as a current-state summary. Never append to it.
+
+**Good description**: "Active project to improve test coverage. Settled on Vitest + E2E harness. Currently focused on pipeline integration and extraction logic coverage."
+**Bad description**: "User asked Sisyphus to create a ticket... Later: pruned overengineered framework... Most recent session: added PR checks..."
+
+The description should:
+- Capture what is true NOW — the current state, decisions made, where things stand
+- Include details a persona would use to show genuine recall ("Oh right, you were working on the pipeline tests")
+- Be useful to a persona meeting this human for the first time
+- Read as a brief summary paragraph, not a session log
+
+The description should NOT:
+- Append "Most recent:", "Latest:", "Current session:", or any temporal marker
+- Accumulate a running history of every conversation that touched this ${typeLabel}
+- Reference specific ticket numbers, commit hashes, or PR numbers unless essential to meaning
+- Exceed 3-4 sentences under any circumstances
+
+**ABSOLUTELY VITAL**: Do **NOT** embellish — personas use their own voice. Capture what is true, not a log of how you got here.
   `;
 
   const descriptionSection =
@@ -331,4 +352,13 @@ ${jsonTemplateFields}
 If no changes are needed, respond with: \`{}\``;
 
   return { system, user };
+}
+
+/**
+ * Truncate a description to DESCRIPTION_MAX_CHARS for use in prompts.
+ * The stored value is unchanged — this only affects what goes into the LLM context.
+ */
+export function truncateDescription(description: string): string {
+  if (description.length <= DESCRIPTION_MAX_CHARS) return description;
+  return description.slice(0, DESCRIPTION_MAX_CHARS) + "…";
 }

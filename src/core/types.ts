@@ -188,6 +188,7 @@ export interface CeremonyConfig {
   last_ceremony?: string;  // ISO timestamp
   decay_rate?: number;  // Default: 0.1
   explore_threshold?: number;  // Default: 3
+  dedup_threshold?: number;  // Cosine similarity threshold for dedup candidates. Default: 0.85
 }
 
 export interface HumanSettings {

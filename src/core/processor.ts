@@ -1142,8 +1142,14 @@ export class Processor {
         }
       }
 
-      // Fallback: return all items (caller may apply its own limit)
-      return items;
+      // Fallback: return top items by recency — never return unbounded list
+      return [...items]
+        .sort((a, b) => {
+          const aTime = (a as { last_updated?: string }).last_updated ?? "";
+          const bTime = (b as { last_updated?: string }).last_updated ?? "";
+          return bTime.localeCompare(aTime);
+        })
+        .slice(0, limit);
     };
     const selectRelevantQuotes = async (quotes: Quote[]): Promise<Quote[]> => {
       if (quotes.length === 0) return [];
