@@ -202,6 +202,7 @@ export interface HumanSettings {
   sync?: SyncCredentials;
   opencode?: OpenCodeSettings;
   ceremony?: CeremonyConfig;
+  claudeCode?: import("../integrations/claude-code/types.js").ClaudeCodeSettings;
 }
 
 export interface HumanEntity {
