@@ -70,6 +70,7 @@ interface HumanEditorProps {
   onPersonDelete: (id: string) => void;
   onQuoteSave?: (id: string, updates: Partial<Quote>) => void;
   onQuoteDelete?: (id: string) => void;
+  resolvePersonaName?: (id: string) => string;
 }
 
 const tabs = [
@@ -94,6 +95,7 @@ export const HumanEditor = ({
   onPersonDelete,
   onQuoteSave,
   onQuoteDelete,
+  resolvePersonaName,
 }: HumanEditorProps) => {
   const [activeTab, setActiveTab] = useState('facts');
   const [localFacts, setLocalFacts] = useState<Fact[]>(human.facts || []);
@@ -372,6 +374,7 @@ export const HumanEditor = ({
             onDelete={handleFactDelete}
             onAdd={handleFactAdd}
             dirtyIds={dirtyFactIds}
+            resolvePersonaName={resolvePersonaName}
           />
         );
       case 'traits':
@@ -383,8 +386,8 @@ export const HumanEditor = ({
             onDelete={handleTraitDelete}
             onAdd={handleTraitAdd}
             dirtyIds={dirtyTraitIds}
+            resolvePersonaName={resolvePersonaName}
           />
-        );
       case 'topics':
         return (
           <HumanTopicsTab
@@ -394,6 +397,7 @@ export const HumanEditor = ({
             onDelete={handleTopicDelete}
             onAdd={handleTopicAdd}
             dirtyIds={dirtyTopicIds}
+            resolvePersonaName={resolvePersonaName}
           />
         );
        case 'people':
@@ -405,6 +409,7 @@ export const HumanEditor = ({
              onDelete={handlePersonDelete}
              onAdd={handlePersonAdd}
              dirtyIds={dirtyPersonIds}
+             resolvePersonaName={resolvePersonaName}
            />
          );
        case 'quotes':

@@ -26,7 +26,8 @@ type RenderCardFn<T extends DataItemBase> = (
   onSave: () => void,
   onDelete: () => void,
   isDirty: boolean,
-  sliders: SliderConfig[]
+  sliders: SliderConfig[],
+  resolvePersonaName?: (id: string) => string
 ) => ReactNode;
 
 interface GroupedCardListProps<T extends DataItemBase> {
@@ -41,6 +42,7 @@ interface GroupedCardListProps<T extends DataItemBase> {
   renderEmpty?: () => ReactNode;
   hideGroupHeaders?: boolean;
   renderCard?: RenderCardFn<T>;
+  resolvePersonaName?: (id: string) => string;
 }
 
 const defaultGroupBy = <T extends DataItemBase>(item: T): string => {
@@ -60,7 +62,8 @@ export const GroupedCardList = <T extends DataItemBase>({
   hideGroupHeaders = false,
   renderCard,
 }: GroupedCardListProps<T>) => {
-  const defaultRenderCard: RenderCardFn<T> = (item, onItemChange, onItemSave, onItemDelete, isDirty, itemSliders) => (
+  resolvePersonaName,
+  const defaultRenderCard: RenderCardFn<T> = (item, onItemChange, onItemSave, onItemDelete, isDirty, itemSliders, resolvePersonaName) => (
     <DataItemCard
       key={item.id}
       item={item}
@@ -69,6 +72,7 @@ export const GroupedCardList = <T extends DataItemBase>({
       onSave={onItemSave}
       onDelete={onItemDelete}
       isDirty={isDirty}
+      resolvePersonaName={resolvePersonaName}
     />
   );
 
@@ -118,7 +122,8 @@ export const GroupedCardList = <T extends DataItemBase>({
                 () => onSave(item.id),
                 () => onDelete(item.id),
                 dirtyIds.has(item.id),
-                sliders
+                sliders,
+                resolvePersonaName
               )}
             </div>
           ))}
@@ -161,7 +166,8 @@ export const GroupedCardList = <T extends DataItemBase>({
                     () => onSave(item.id),
                     () => onDelete(item.id),
                     dirtyIds.has(item.id),
-                    sliders
+                    sliders,
+                    resolvePersonaName
                   )}
                 </div>
               ))}

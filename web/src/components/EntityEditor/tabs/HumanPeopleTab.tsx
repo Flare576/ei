@@ -11,6 +11,7 @@ interface Person {
   exposure_desired: number;
   last_updated: string;
   learned_by?: string;
+  last_changed_by?: string;
   persona_groups?: string[];
 }
 
@@ -21,6 +22,7 @@ interface HumanPeopleTabProps {
   onDelete: (id: string) => void;
   onAdd: () => void;
   dirtyIds: Set<string>;
+  resolvePersonaName?: (id: string) => string;
 }
 
 const personSliders = [
@@ -35,7 +37,8 @@ const renderPersonCard = (
   onSave: () => void,
   onDelete: () => void,
   isDirty: boolean,
-  sliders: { field: string; label: string; min?: number; max?: number }[]
+  sliders: { field: string; label: string; min?: number; max?: number }[],
+  resolvePersonaName?: (id: string) => string
 ) => (
   <PersonCard
     person={person}
@@ -44,6 +47,7 @@ const renderPersonCard = (
     onSave={onSave}
     onDelete={onDelete}
     isDirty={isDirty}
+    resolvePersonaName={resolvePersonaName}
   />
 );
 
@@ -54,6 +58,7 @@ export const HumanPeopleTab = ({
   onDelete,
   onAdd,
   dirtyIds,
+  resolvePersonaName,
 }: HumanPeopleTabProps) => {
   return (
     <GroupedCardList
@@ -65,6 +70,7 @@ export const HumanPeopleTab = ({
       onAdd={onAdd}
       dirtyIds={dirtyIds}
       renderCard={renderPersonCard}
+      resolvePersonaName={resolvePersonaName}
     />
   );
 };
