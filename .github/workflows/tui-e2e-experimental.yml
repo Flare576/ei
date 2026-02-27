@@ -1,0 +1,71 @@
+name: "⚗️ TUI E2E (Experimental)"
+
+# Manual-only: this almost certainly won't work on GitHub runners — PTY support
+# is the main unknown. But hey, let's find out.
+on:
+  workflow_dispatch:
+    inputs:
+      test_file:
+        description: "Run a specific test file (e.g. basic-commands.test.ts). Leave blank to run all."
+        required: false
+        default: ""
+
+jobs:
+  tui-e2e:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # tui-test hard-requires Node 20 — native PTY bindings break on 22+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # Tests spawn `bun run dev` to start the TUI process
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # Core lib needs to be built before TUI can import it
+      - name: Install core dependencies
+        run: npm ci
+
+      - name: Build core
+        run: npm run build
+
+      # node-pty compiles native .node binaries at install time.
+      # After Bun installs them, we rebuild for the active Node 20 so npx can load them.
+      - name: Install TUI dependencies
+        working-directory: ./tui
+        run: npm ci
+
+      - name: Rebuild native modules for Node 20
+        working-directory: ./tui
+        run: npm rebuild node-pty
+
+      # Give the PTY something to attach to. Without TERM, tui-test may panic.
+      - name: Run TUI E2E tests
+        working-directory: ./tui
+        run: |
+          rm -rf .tui-test /tmp/ei-test-*
+          if [ -n "${{ github.event.inputs.test_file }}" ]; then
+            npx @microsoft/tui-test "tests/e2e/${{ github.event.inputs.test_file }}"
+          else
+            npx @microsoft/tui-test
+          fi
+        env:
+          TERM: xterm-256color
+          CI: true
+
+      # Traces are gold when things go sideways — always upload even on failure
+      - name: Upload TUI traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tui-traces
+          path: tui/tui-traces/
+          if-no-files-found: ignore
