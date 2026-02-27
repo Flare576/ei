@@ -17,9 +17,7 @@ export interface TraitScanPromptData extends BaseScanPromptData {}
 
 export interface TopicScanPromptData extends BaseScanPromptData {}
 
-export interface PersonScanPromptData extends BaseScanPromptData {
-  known_persona_names: string[];
-}
+export interface PersonScanPromptData extends BaseScanPromptData {}
 
 export interface FactScanCandidate {
   type_of_fact: string;

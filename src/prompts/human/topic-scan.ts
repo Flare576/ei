@@ -82,8 +82,8 @@ The JSON format is:
   "topics": [
     {
         "type_of_topic": "Interest|Goal|Dream|Conflict|Concern|etc.",
-        "value_of_topic": "woodworking|Become Millionaire|Visit Spain|etc.",
-        "reason": "User stated...|Assumed from..."
+        "type_of_topic": "Interest|Goal|Dream|Conflict|Concern|etc.",
+        "value_of_topic": "<actual topic from the conversation>",
     }
   ]
 }
@@ -124,7 +124,7 @@ Scan the "Most Recent Messages" for TOPICS of interest to the human user.
   "topics": [
     {
         "type_of_topic": "Interest|Goal|Dream|etc.",
-        "value_of_topic": "woodworking|Become Millionaire|etc.",
+        "value_of_topic": "<actual topic from the conversation>",
         "reason": "User stated..."
     }
   ]

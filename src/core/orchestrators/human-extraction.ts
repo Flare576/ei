@@ -59,7 +59,7 @@ export function queueFactScan(context: ExtractionContext, state: StateManager, o
 
     state.queue_enqueue({
       type: LLMRequestType.JSON,
-      priority: LLMPriority.Normal,
+      priority: LLMPriority.Low,
       system: prompt.system,
       user: prompt.user,
       next_step: LLMNextStep.HandleHumanFactScan,
@@ -91,7 +91,7 @@ export function queueTraitScan(context: ExtractionContext, state: StateManager, 
 
     state.queue_enqueue({
       type: LLMRequestType.JSON,
-      priority: LLMPriority.Normal,
+      priority: LLMPriority.Low,
       system: prompt.system,
       user: prompt.user,
       next_step: LLMNextStep.HandleHumanTraitScan,
@@ -146,20 +146,18 @@ export function queuePersonScan(context: ExtractionContext, state: StateManager,
   
   if (chunks.length === 0) return 0;
   
-  const personas = state.persona_getAll();
-  const knownPersonaNames = personas.flatMap(p => p.aliases ?? []);
+
 
   for (const chunk of chunks) {
     const prompt = buildHumanPersonScanPrompt({
       persona_name: chunk.personaDisplayName,
       messages_context: chunk.messages_context,
       messages_analyze: chunk.messages_analyze,
-      known_persona_names: knownPersonaNames,
     });
 
     state.queue_enqueue({
       type: LLMRequestType.JSON,
-      priority: LLMPriority.Normal,
+      priority: LLMPriority.Low,
       system: prompt.system,
       user: prompt.user,
       next_step: LLMNextStep.HandleHumanPersonScan,
@@ -216,7 +214,7 @@ export function queueDirectTopicUpdate(
 
     state.queue_enqueue({
       type: LLMRequestType.JSON,
-      priority: LLMPriority.Low,
+      priority: LLMPriority.Normal,
       system: prompt.system,
       user: prompt.user,
       next_step: LLMNextStep.HandleHumanItemUpdate,
@@ -373,7 +371,7 @@ export async function queueItemMatch(
 
   state.queue_enqueue({
     type: LLMRequestType.JSON,
-    priority: LLMPriority.Low,
+    priority: LLMPriority.Normal,
     system: prompt.system,
     user: prompt.user,
     next_step: LLMNextStep.HandleHumanItemMatch,
@@ -436,7 +434,7 @@ export function queueItemUpdate(
 
     state.queue_enqueue({
       type: LLMRequestType.JSON,
-      priority: LLMPriority.Low,
+      priority: LLMPriority.Normal,
       system: prompt.system,
       user: prompt.user,
       next_step: LLMNextStep.HandleHumanItemUpdate,

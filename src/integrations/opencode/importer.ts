@@ -131,15 +131,24 @@ export async function importOpenCodeSessions(
     (a, b) => a.time.updated - b.time.updated
   );
   let targetSession: OpenCodeSession | null = null;
+  const MIN_SESSION_AGE_MS = 20 * 60 * 1000; // 20 minutes
+  const now = Date.now();
+
   for (const session of sortedSessions) {
     const lastImported = processedSessions[session.id];
     if (!lastImported) {
-      targetSession = session;
-      break;
+      const ageMs = now - session.time.updated;
+      if (ageMs >= MIN_SESSION_AGE_MS) {
+        targetSession = session;
+        break;
+      }
     }
     if (session.time.updated > new Date(lastImported).getTime()) {
-      targetSession = session;
-      break;
+      const ageMs = now - session.time.updated;
+      if (ageMs >= MIN_SESSION_AGE_MS) {
+        targetSession = session;
+        break;
+      }
     }
   }
 

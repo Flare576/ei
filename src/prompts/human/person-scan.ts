@@ -7,9 +7,6 @@ export function buildHumanPersonScanPrompt(data: PersonScanPromptData): PromptOu
   }
 
   const personaName = data.persona_name;
-  const knownPersonasList = data.known_persona_names.length > 0
-    ? data.known_persona_names.map(name => `        + ${name}`).join('\n')
-    : '        + (none)';
 
   const taskFragment = `# Task
 
@@ -42,17 +39,14 @@ Your job is to quickly identify:
 * Lover / Love Interest
 * Fiance / Spouse
 * Coworker
+* AI Persona (use \`type_of_person: "Persona"\`)
 
 **A PERSON Is NOT**
 - Biographical data: Birthday, Location, Job, Marital Status, Gender, Eye Color, Hair Color
 - Other unchangeable Data: Wedding Day, Allergies
 - Trait: Personality patterns, communication style, behavioral tendencies
 - General Topic: Interests, Hobbies, General subjects
-- Personas: AI personas they discuss
-    * Known Personas:
-${knownPersonasList}
 - Characters: Fictitious entities from books, movies, stories, media, etc.`;
-
   const criticalFragment = `# CRITICAL INSTRUCTIONS
 
 ONLY ANALYZE the "Most Recent Messages" in the following conversation. The "Earlier Conversation" is provided for your context and has already been processed!
