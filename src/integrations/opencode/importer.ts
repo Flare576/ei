@@ -272,7 +272,8 @@ async function ensureSessionTopic(
   const existingTopic = human.topics.find((t) => t.id === session.id);
 
   const firstAgent = await reader.getFirstAgent(session.id);
-  const learnedBy = firstAgent ?? "build";
+  const firstPersona = firstAgent ? stateManager.persona_getByName(firstAgent) : null;
+  const learnedBy = firstPersona?.id ?? firstAgent ?? "build";
 
   if (existingTopic) {
     if (existingTopic.name !== session.title) {
