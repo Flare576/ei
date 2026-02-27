@@ -909,7 +909,8 @@ interface DataItemBase {
   description: string;
   sentiment: number;           // -1.0 to 1.0
   last_updated: string;
-  learned_by?: string;         // Which persona discovered this
+  learned_by?: string;         // Persona ID (UUID) that originally discovered this item
+  last_changed_by?: string;    // Persona ID (UUID) that most recently updated this item
   persona_groups?: string[];   // Visibility control
 }
 
