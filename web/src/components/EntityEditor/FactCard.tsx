@@ -19,6 +19,7 @@ interface FactCardProps {
   onDelete: () => void;
   isDirty?: boolean;
   showMeta?: boolean;
+  resolvePersonaName?: (id: string) => string;
 }
 
 const defaultFormat = (v: number) => v.toFixed(2);
@@ -31,6 +32,7 @@ export const FactCard = ({
   onDelete,
   isDirty = false,
   showMeta = true,
+  resolvePersonaName,
 }: FactCardProps): React.ReactElement => {
   const cardRef = React.useRef<HTMLDivElement>(null);
 
@@ -113,7 +115,7 @@ export const FactCard = ({
       <div className="ei-data-card__footer">
         {showMeta && (
           <div className="ei-data-card__meta">
-            {fact.learned_by && <span>Learned by: {fact.learned_by} • </span>}
+            {fact.learned_by && <span>Learned by: {resolvePersonaName ? resolvePersonaName(fact.learned_by) : fact.learned_by} • </span>}
             <span>Updated: {formatTimestamp(fact.last_updated)}</span>
           </div>
         )}

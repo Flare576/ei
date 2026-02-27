@@ -8,6 +8,7 @@ interface DataItemBase {
   sentiment: number;
   last_updated: string;
   learned_by?: string;
+  last_changed_by?: string;
   persona_groups?: string[];
 }
 
@@ -28,6 +29,7 @@ interface DataItemCardProps<T extends DataItemBase> {
   onDelete: () => void;
   isDirty?: boolean;
   showMeta?: boolean;
+  resolvePersonaName?: (id: string) => string;
   renderAfterHeader?: () => React.ReactNode;
 }
 
@@ -42,6 +44,7 @@ export const DataItemCard = <T extends DataItemBase>({
   isDirty = false,
   showMeta = true,
   renderAfterHeader,
+  resolvePersonaName,
 }: DataItemCardProps<T>): React.ReactElement => {
   const cardRef = React.useRef<HTMLDivElement>(null);
 
@@ -116,7 +119,7 @@ export const DataItemCard = <T extends DataItemBase>({
       <div className="ei-data-card__footer">
         {showMeta && (
           <div className="ei-data-card__meta">
-            {item.learned_by && <span>Learned by: {item.learned_by} • </span>}
+            {item.learned_by && <span>Learned by: {resolvePersonaName ? resolvePersonaName(item.learned_by) : item.learned_by} • </span>}
             <span>Updated: {formatTimestamp(item.last_updated)}</span>
           </div>
         )}
