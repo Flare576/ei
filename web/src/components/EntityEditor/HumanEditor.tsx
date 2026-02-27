@@ -388,6 +388,7 @@ export const HumanEditor = ({
             dirtyIds={dirtyTraitIds}
             resolvePersonaName={resolvePersonaName}
           />
+        );
       case 'topics':
         return (
           <HumanTopicsTab

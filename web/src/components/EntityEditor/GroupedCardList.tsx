@@ -61,8 +61,8 @@ export const GroupedCardList = <T extends DataItemBase>({
   renderEmpty,
   hideGroupHeaders = false,
   renderCard,
-}: GroupedCardListProps<T>) => {
   resolvePersonaName,
+  }: GroupedCardListProps<T>) => {
   const defaultRenderCard: RenderCardFn<T> = (item, onItemChange, onItemSave, onItemDelete, isDirty, itemSliders, resolvePersonaName) => (
     <DataItemCard
       key={item.id}
