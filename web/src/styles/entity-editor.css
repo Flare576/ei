@@ -858,6 +858,16 @@
   gap: var(--ei-spacing-sm);
 }
 
+.ei-creator-modal__field-with-assist--inline {
+  justify-content: flex-start;
+  margin-bottom: var(--ei-spacing-xs);
+}
+
+.ei-form-label--sm {
+  font-size: var(--ei-font-size-sm);
+  margin-bottom: 0;
+}
+
 .ei-creator-modal__sections {
   display: flex;
   flex-direction: column;
