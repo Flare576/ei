@@ -5,6 +5,7 @@
 
 import type { Trait, Quote, PersonaTopic } from "../../core/types.js";
 import type { ResponsePromptData } from "./types.js";
+import { truncateDescription } from "../human/item-update.js";
 
 // =============================================================================
 // IDENTITY SECTION
@@ -64,10 +65,10 @@ export function buildGuidelinesSection(personaName: string): string {
 export function buildTraitsSection(traits: Trait[], header: string): string {
   if (traits.length === 0) return "";
   
-  const sorted = [...traits].sort((a, b) => (b.strength ?? 0.5) - (a.strength ?? 0.5));
+  const sorted = [...traits].sort((a, b) => (b.strength ?? 0.5) - (a.strength ?? 0.5)).slice(0, 15);
   const formatted = sorted.map(t => {
     const strength = t.strength !== undefined ? ` (${Math.round(t.strength * 100)}%)` : "";
-    return `- **${t.name}**${strength}: ${t.description}`;
+    return `- **${t.name}**${strength}: ${truncateDescription(t.description)}`;
   }).join("\n");
   
   return `## ${header}
@@ -91,6 +92,8 @@ export function buildTopicsSection(topics: PersonaTopic[], header: string): stri
   
   const sorted = [...topics]
     .map(t => ({ topic: t, delta: t.exposure_desired - t.exposure_current }))
+    .sort((a, b) => b.delta - a.delta)
+    .slice(0, 15)
     .sort((a, b) => b.delta - a.delta)
     .map(x => x.topic);
   
@@ -137,7 +140,8 @@ export function buildHumanSection(human: ResponsePromptData["human"]): string {
   // Facts
   if (human.facts.length > 0) {
     const facts = human.facts
-      .map(f => `- ${f.name}: ${f.description}`)
+      .slice(0, 15)
+      .map(f => `- ${f.name}: ${truncateDescription(f.description)}`)
       .join("\n");
     if (facts) sections.push(`### Key Facts\n${facts}`);
   }
@@ -145,7 +149,8 @@ export function buildHumanSection(human: ResponsePromptData["human"]): string {
   // Traits
   if (human.traits.length > 0) {
     const traits = human.traits
-      .map(t => `- **${t.name}**: ${t.description}`)
+      .slice(0, 15)
+      .map(t => `- **${t.name}**: ${truncateDescription(t.description)}`)
       .join("\n");
     sections.push(`### Personality\n${traits}`);
   }
@@ -155,10 +160,10 @@ export function buildHumanSection(human: ResponsePromptData["human"]): string {
   if (activeTopics.length > 0) {
     const topics = activeTopics
       .sort((a, b) => b.exposure_current - a.exposure_current)
-      .slice(0, 10)
+      .slice(0, 15)
       .map(t => {
         const sentiment = t.sentiment > 0.3 ? "(enjoys)" : t.sentiment < -0.3 ? "(dislikes)" : "";
-        return `- **${t.name}** ${sentiment}: ${t.description}`;
+        return `- **${t.name}** ${sentiment}: ${truncateDescription(t.description)}`;
       })
       .join("\n");
     sections.push(`### Current Interests\n${topics}`);
@@ -168,8 +173,8 @@ export function buildHumanSection(human: ResponsePromptData["human"]): string {
   if (human.people.length > 0) {
     const people = human.people
       .sort((a, b) => b.exposure_current - a.exposure_current)
-      .slice(0, 10)
-      .map(p => `- **${p.name}** (${p.relationship}): ${p.description}`)
+      .slice(0, 15)
+      .map(p => `- **${p.name}** (${p.relationship}): ${truncateDescription(p.description)}`)
       .join("\n");
     sections.push(`### People in Their Life\n${people}`);
   }
