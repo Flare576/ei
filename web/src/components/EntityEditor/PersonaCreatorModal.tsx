@@ -52,6 +52,7 @@ export function PersonaCreatorModal({
   const [topics, setTopics] = useState<Partial<Topic>[]>([]);
   const [expandedSections, setExpandedSections] = useState<Set<ExpandableSection>>(new Set());
   const [aiLoadingField, setAiLoadingField] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<Record<string, { text: string; onAccept: (v: string) => void; systemPrompt: string; userPrompt: string }>>({});
   
   const modalRef = useRef<HTMLDivElement>(null);
   const previousActiveElement = useRef<Element | null>(null);
@@ -68,6 +69,7 @@ export function PersonaCreatorModal({
       setTopics([]);
       setExpandedSections(new Set());
       setAiLoadingField(null);
+      setSuggestions({});
     }
   }, [isOpen]);
 
@@ -140,18 +142,54 @@ export function PersonaCreatorModal({
     fieldKey: string,
     systemPrompt: string,
     userPrompt: string,
-    onResult: (result: string) => void
+    onAccept: (result: string) => void
   ) => {
     if (!onAiAssist) return;
     setAiLoadingField(fieldKey);
     try {
       const result = await onAiAssist(systemPrompt, userPrompt);
-      onResult(result);
+      setSuggestions(prev => ({
+        ...prev,
+        [fieldKey]: { text: result, onAccept, systemPrompt, userPrompt },
+      }));
     } catch (error) {
       console.error('AI assist failed:', error);
     } finally {
       setAiLoadingField(null);
     }
+  };
+
+  const renderSuggestion = (fieldKey: string) => {
+    const s = suggestions[fieldKey];
+    if (!s) return null;
+    return (
+      <div className="ei-ai-suggestion">
+        <div className="ei-ai-suggestion__text">{s.text}</div>
+        <div className="ei-ai-suggestion__actions">
+          <button className="ei-btn ei-btn--primary ei-btn--sm" onClick={() => acceptSuggestion(fieldKey)}>Accept</button>
+          <button className="ei-btn ei-btn--secondary ei-btn--sm" onClick={() => rerollSuggestion(fieldKey)}>Re-roll</button>
+          <button className="ei-btn ei-btn--ghost ei-btn--sm" onClick={() => dismissSuggestion(fieldKey)}>Dismiss</button>
+        </div>
+      </div>
+    );
+  };
+
+  const acceptSuggestion = (fieldKey: string) => {
+    const s = suggestions[fieldKey];
+    if (!s) return;
+    s.onAccept(s.text);
+    setSuggestions(prev => { const n = { ...prev }; delete n[fieldKey]; return n; });
+  };
+
+  const dismissSuggestion = (fieldKey: string) => {
+    setSuggestions(prev => { const n = { ...prev }; delete n[fieldKey]; return n; });
+  };
+
+  const rerollSuggestion = (fieldKey: string) => {
+    const s = suggestions[fieldKey];
+    if (!s) return;
+    const negativeClause = `\n\nThe user didn't like this previous version — avoid it:\n"${s.text}"`;
+    handleAiAssistClick(fieldKey, s.systemPrompt + negativeClause, s.userPrompt, s.onAccept);
   };
 
   const addTrait = () => {
@@ -295,6 +333,7 @@ export function PersonaCreatorModal({
                   </div>
                 )}
               </div>
+              {renderSuggestion('description')}
               <span className="ei-form-hint ei-creator-help-text">
                 In a hurry? We'll pre-fill based on description
               </span>
@@ -372,6 +411,7 @@ export function PersonaCreatorModal({
                             <div className="ei-field-loading-overlay__spinner" />
                           </div>
                         )}
+                        {renderSuggestion(`trait-${index}-description`)}
                       </div>
                       <button
                         className="ei-btn ei-btn--danger ei-btn--sm"
@@ -460,6 +500,7 @@ export function PersonaCreatorModal({
                                 <div className="ei-field-loading-overlay__spinner" />
                               </div>
                             )}
+                            {renderSuggestion(fieldKey)}
                           </div>
                         );
                       })}
