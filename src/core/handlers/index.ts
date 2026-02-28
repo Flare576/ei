@@ -302,7 +302,7 @@ function handlePersonaGeneration(response: LLMResponse, state: StateManager): vo
       sentiment: userTopic?.sentiment ?? t.sentiment,
       exposure_current: userTopic?.exposure_current ?? t.exposure_current,
       exposure_desired: userTopic?.exposure_desired ?? t.exposure_desired,
-    topics,
+      last_updated: now,
     };
   });
 
