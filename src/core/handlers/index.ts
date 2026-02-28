@@ -285,24 +285,53 @@ function handlePersonaGeneration(response: LLMResponse, state: StateManager): vo
     last_updated: now,
   }));
 
-  const topics: PersonaTopic[] = (result?.topics || []).map(t => ({
-    id: crypto.randomUUID(),
-    name: t.name,
-    perspective: t.perspective || "",
-    approach: t.approach || "",
-    personal_stake: t.personal_stake || "",
-    sentiment: t.sentiment,
-    exposure_current: t.exposure_current,
-    exposure_desired: t.exposure_desired,
-    last_updated: now,
-  }));
+  // Merge LLM topics into user-provided topics by name.
+  // User-provided fields win; LLM fills in what the user left blank.
+  const userTopicsByName = new Map(
+    (existingPartial.topics ?? []).filter(t => t.name?.trim()).map(t => [t.name!.toLowerCase().trim(), t])
+  );
+
+  const llmTopics: PersonaTopic[] = (result?.topics || []).map(t => {
+    const userTopic = userTopicsByName.get(t.name?.toLowerCase().trim() ?? '');
+    return {
+      id: (userTopic as PersonaTopic | undefined)?.id ?? crypto.randomUUID(),
+      name: t.name,
+      perspective: userTopic?.perspective?.trim() || t.perspective || '',
+      approach: userTopic?.approach?.trim() || t.approach || '',
+      personal_stake: userTopic?.personal_stake?.trim() || t.personal_stake || '',
+      sentiment: userTopic?.sentiment ?? t.sentiment,
+      exposure_current: userTopic?.exposure_current ?? t.exposure_current,
+      exposure_desired: userTopic?.exposure_desired ?? t.exposure_desired,
+    topics,
+    };
+  });
+
+  // Keep user-provided topics the LLM didn't return (not in its output list)
+  const llmTopicNames = new Set(llmTopics.map(t => t.name?.toLowerCase().trim()));
+  const preservedUserTopics: PersonaTopic[] = (existingPartial.topics ?? [])
+    .filter(t => t.name?.trim() && !llmTopicNames.has(t.name.toLowerCase().trim()))
+    .map(t => ({
+      id: (t as PersonaTopic).id ?? crypto.randomUUID(),
+      name: t.name!,
+      perspective: t.perspective || '',
+      approach: t.approach || '',
+      personal_stake: t.personal_stake || '',
+      sentiment: t.sentiment,
+      exposure_current: t.exposure_current,
+      exposure_desired: t.exposure_desired,
+      last_updated: now,
+    }));
+
+  const topics: PersonaTopic[] = llmTopics.length > 0
+    ? [...llmTopics, ...preservedUserTopics]
+    : (existingPartial.topics as PersonaTopic[] | undefined) ?? [];
 
   const updatedPartial: PartialPersona = {
     ...existingPartial,
     short_description: result?.short_description ?? existingPartial.short_description,
     long_description: existingPartial.long_description ?? result?.long_description,
     traits: traits.length > 0 ? traits : existingPartial.traits,
-    topics: topics.length > 0 ? topics : existingPartial.topics,
+    topics,
   };
 
   orchestratePersonaGeneration(updatedPartial, state);
