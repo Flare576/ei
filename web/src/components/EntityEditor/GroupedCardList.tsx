@@ -27,7 +27,9 @@ type RenderCardFn<T extends DataItemBase> = (
   onDelete: () => void,
   isDirty: boolean,
   sliders: SliderConfig[],
-  resolvePersonaName?: (id: string) => string
+  resolvePersonaName?: (id: string) => string,
+  onAiAssist?: (systemPrompt: string, userPrompt: string) => Promise<string>,
+  aiContext?: string
 ) => ReactNode;
 
 interface GroupedCardListProps<T extends DataItemBase> {
@@ -43,6 +45,8 @@ interface GroupedCardListProps<T extends DataItemBase> {
   hideGroupHeaders?: boolean;
   renderCard?: RenderCardFn<T>;
   resolvePersonaName?: (id: string) => string;
+  onAiAssist?: (systemPrompt: string, userPrompt: string) => Promise<string>;
+  aiContext?: string;
 }
 
 const defaultGroupBy = <T extends DataItemBase>(item: T): string => {
@@ -62,8 +66,10 @@ export const GroupedCardList = <T extends DataItemBase>({
   hideGroupHeaders = false,
   renderCard,
   resolvePersonaName,
+  onAiAssist,
+  aiContext,
   }: GroupedCardListProps<T>) => {
-  const defaultRenderCard: RenderCardFn<T> = (item, onItemChange, onItemSave, onItemDelete, isDirty, itemSliders, resolvePersonaName) => (
+  const defaultRenderCard: RenderCardFn<T> = (item, onItemChange, onItemSave, onItemDelete, isDirty, itemSliders, resolvePersonaName, onAiAssist, aiContext) => (
     <DataItemCard
       key={item.id}
       item={item}
@@ -73,6 +79,8 @@ export const GroupedCardList = <T extends DataItemBase>({
       onDelete={onItemDelete}
       isDirty={isDirty}
       resolvePersonaName={resolvePersonaName}
+      onAiAssist={onAiAssist}
+      aiContext={aiContext}
     />
   );
 
@@ -123,7 +131,9 @@ export const GroupedCardList = <T extends DataItemBase>({
                 () => onDelete(item.id),
                 dirtyIds.has(item.id),
                 sliders,
-                resolvePersonaName
+                resolvePersonaName,
+                onAiAssist,
+                aiContext
               )}
             </div>
           ))}
@@ -167,7 +177,9 @@ export const GroupedCardList = <T extends DataItemBase>({
                     () => onDelete(item.id),
                     dirtyIds.has(item.id),
                     sliders,
-                    resolvePersonaName
+                    resolvePersonaName,
+                    onAiAssist,
+                    aiContext
                   )}
                 </div>
               ))}

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { SliderControl } from './SliderControl';
 
 interface DataItemBase {
@@ -31,6 +31,8 @@ interface DataItemCardProps<T extends DataItemBase> {
   showMeta?: boolean;
   resolvePersonaName?: (id: string) => string;
   renderAfterHeader?: () => React.ReactNode;
+  onAiAssist?: (systemPrompt: string, userPrompt: string) => Promise<string>;
+  aiContext?: string;
 }
 
 const defaultFormat = (v: number) => v.toFixed(2);
@@ -45,8 +47,13 @@ export const DataItemCard = <T extends DataItemBase>({
   showMeta = true,
   renderAfterHeader,
   resolvePersonaName,
+  onAiAssist,
+  aiContext,
 }: DataItemCardProps<T>): React.ReactElement => {
   const cardRef = React.useRef<HTMLDivElement>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [suggestion, setSuggestion] = useState<string | null>(null);
+  const [prevSuggestion, setPrevSuggestion] = useState<string | null>(null);
 
   const handleBlur = (e: React.FocusEvent) => {
     if (isDirty && cardRef.current && !cardRef.current.contains(e.relatedTarget as Node)) {
@@ -64,6 +71,28 @@ export const DataItemCard = <T extends DataItemBase>({
 
   const handleSliderChange = (field: string, value: number) => {
     onChange(field as keyof T, value as T[keyof T]);
+  };
+
+  const handleWand = async () => {
+    if (!onAiAssist) return;
+    setAiLoading(true);
+    const negativeClause = prevSuggestion
+      ? `\n\nThe user didn't like this previous version — avoid it:\n"${prevSuggestion}"`
+      : '';
+    const systemPrompt = [
+      aiContext ? `You're helping define a persona. Their description is:\n\n${aiContext}\n\n` : '',
+      `You're improving the **Description** for a trait called **${item.name}**. Return only the improved description text, nothing else.`,
+      negativeClause,
+    ].join('');
+    try {
+      const result = await onAiAssist(systemPrompt, `Current description: ${item.description || '(empty)'}`);
+      setPrevSuggestion(suggestion);
+      setSuggestion(result);
+    } catch (err) {
+      console.error('AI assist failed:', err);
+    } finally {
+      setAiLoading(false);
+    }
   };
 
   const formatTimestamp = (timestamp: string) => {
@@ -93,12 +122,46 @@ export const DataItemCard = <T extends DataItemBase>({
       {renderAfterHeader?.()}
 
       <div className="ei-data-card__body">
-        <textarea
-          className="ei-data-card__description"
-          value={item.description}
-          onChange={handleDescriptionChange}
-          placeholder="Description"
-        />
+        <div style={{ position: 'relative' }}>
+          <div className="ei-creator-modal__field-with-assist ei-creator-modal__field-with-assist--inline">
+            <label className="ei-form-label ei-form-label--sm">Description</label>
+            {onAiAssist && (
+              <button
+                className="ei-ai-assist-btn ei-ai-assist-btn--sm"
+                onClick={handleWand}
+                disabled={aiLoading}
+                title="AI assist"
+              >
+                ✨
+              </button>
+            )}
+          </div>
+          <textarea
+            className="ei-data-card__description"
+            value={item.description}
+            onChange={handleDescriptionChange}
+            placeholder="Description"
+          />
+          {aiLoading && (
+            <div className="ei-field-loading-overlay">
+              <div className="ei-field-loading-overlay__spinner" />
+            </div>
+          )}
+        </div>
+        {suggestion && (
+          <div className="ei-ai-suggestion">
+            <div className="ei-ai-suggestion__text">{suggestion}</div>
+            <div className="ei-ai-suggestion__actions">
+              <button className="ei-btn ei-btn--primary ei-btn--sm" onClick={() => {
+                onChange('description' as keyof T, suggestion as T[keyof T]);
+                setPrevSuggestion(suggestion);
+                setSuggestion(null);
+              }}>Accept</button>
+              <button className="ei-btn ei-btn--secondary ei-btn--sm" onClick={handleWand}>Re-roll</button>
+              <button className="ei-btn ei-btn--ghost ei-btn--sm" onClick={() => setSuggestion(null)}>Dismiss</button>
+            </div>
+          </div>
+        )}
 
         <div className="ei-data-card__sliders">
           {sliders.map((slider) => (

@@ -285,6 +285,8 @@ export const PersonaIdentityTab = ({
           onAdd={onTraitAdd}
           dirtyIds={dirtyTraitIds}
           hideGroupHeaders
+          onAiAssist={onAiAssist}
+          aiContext={persona.long_description}
         />
       </div>
     </div>

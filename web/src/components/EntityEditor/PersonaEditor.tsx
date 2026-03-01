@@ -291,6 +291,8 @@ export function PersonaEditor({
           onDelete={handleTopicDelete}
           onAdd={handleTopicAdd}
           dirtyIds={dirtyTopicIds}
+          onAiAssist={onAiAssist}
+          aiContext={localPersona.long_description}
         />
       )}
 
