@@ -553,6 +553,11 @@ export class Processor {
     return human.settings?.default_model;
   }
 
+  private getOneshotModel(): string | undefined {
+    const human = this.stateManager.getHuman();
+    return human.settings?.oneshot_model || human.settings?.default_model;
+  }
+
   private fetchMessagesForLLM(personaId: string): import("./types.js").ChatMessage[] {
     const persona = this.stateManager.persona_getById(personaId);
     if (!persona) return [];
@@ -1600,7 +1605,7 @@ export class Processor {
       system: systemPrompt,
       user: userPrompt,
       next_step: LLMNextStep.HandleOneShot,
-      model: this.getModelForPersona(),
+      model: this.getOneshotModel(),
       data: { guid },
     });
   }

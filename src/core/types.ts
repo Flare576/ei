@@ -194,6 +194,7 @@ export interface CeremonyConfig {
 
 export interface HumanSettings {
   default_model?: string;
+  oneshot_model?: string;           // Model for AI-assist (wand) requests; falls back to default_model
   queue_paused?: boolean;
   skip_quote_delete_confirm?: boolean;
   name_display?: string;
