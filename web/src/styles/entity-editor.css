@@ -859,7 +859,6 @@
 }
 
 .ei-creator-modal__field-with-assist--inline {
-  justify-content: flex-start;
   margin-bottom: var(--ei-spacing-xs);
 }
 
