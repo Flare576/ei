@@ -82,6 +82,7 @@ export function clearLog(): void {
 
 export function interceptConsole(): void {
   if (isTestEnvironment()) return;
+  const originalLog = console.log.bind(console);
   const originalWarn = console.warn.bind(console);
   const originalError = console.error.bind(console);
   const originalDebug = console.debug.bind(console);
