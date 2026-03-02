@@ -259,7 +259,18 @@ export function parseJSONResponse(content: string): unknown {
 
 export function cleanResponseContent(content: string): string {
   return content
-    .replace(/<think>[\s\S]*?<\/think>/gi, "")
-    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, "")
+    // Complete paired blocks (space-tolerant, case-insensitive)
+    .replace(/<\s*think\s*>[\s\S]*?<\s*\/\s*think\s*>/gi, "")
+    .replace(/<\s*thinking\s*>[\s\S]*?<\s*\/\s*thinking\s*>/gi, "")
+    // Seed-OSS (ByteDance) namespaced thinking tags — always paired
+    .replace(/<seed:think>[\s\S]*?<\/seed:think>/gi, "")
+    // Seed-OSS budget reflection tokens (may appear outside stripped think block)
+    .replace(/<seed:cot_budget_reflect>[\s\S]*?<\/seed:cot_budget_reflect>/gi, "")
+    // Orphaned closing tag with content before it (MiniMax / streaming accumulation)
+    .replace(/^[\s\S]*?<\s*\/\s*think(?:ing)?\s*>/i, "")
+    // Remaining orphaned closing tags
+    .replace(/<\s*\/\s*think(?:ing)?\s*>/gi, "")
+    // Remaining orphaned opening tags
+    .replace(/<\s*think(?:ing)?\s*>/gi, "")
     .trim();
 }
