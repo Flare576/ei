@@ -44,11 +44,9 @@ jobs:
         run: npx vite build
 
       - name: Install Playwright browsers
-        working-directory: ./web
         run: npx playwright install --with-deps chromium
 
       - name: Run web E2E tests
-        working-directory: ./web
         run: npx playwright test
         env:
           CI: true
