@@ -28,7 +28,7 @@ jobs:
 
       - name: Install TUI dependencies
         working-directory: ./tui
-        run: npm ci
+        run: bun install --frozen-lockfile
 
       - name: Build core
         run: npm run build
