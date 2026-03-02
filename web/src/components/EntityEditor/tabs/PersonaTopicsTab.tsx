@@ -203,7 +203,7 @@ const PersonaTopicCard = ({
               <div className="ei-ai-suggestion__text">{suggestions['perspective'].text}</div>
               <div className="ei-ai-suggestion__actions">
                 <button className="ei-btn ei-btn--primary ei-btn--sm" onClick={() => acceptSuggestion('perspective')}>Accept</button>
-                <button className="ei-btn ei-btn--secondary ei-btn--sm" onClick={() => handleWand('perspective')}>Re-roll</button>
+                <button className="ei-btn ei-btn--secondary ei-btn--sm" onClick={() => handleWand('perspective')} disabled={aiLoadingField === 'perspective'}>Re-roll</button>
                 <button className="ei-btn ei-btn--ghost ei-btn--sm" onClick={() => dismissSuggestion('perspective')}>Dismiss</button>
               </div>
             </div>
@@ -243,7 +243,7 @@ const PersonaTopicCard = ({
               <div className="ei-ai-suggestion__text">{suggestions['approach'].text}</div>
               <div className="ei-ai-suggestion__actions">
                 <button className="ei-btn ei-btn--primary ei-btn--sm" onClick={() => acceptSuggestion('approach')}>Accept</button>
-                <button className="ei-btn ei-btn--secondary ei-btn--sm" onClick={() => handleWand('approach')}>Re-roll</button>
+                <button className="ei-btn ei-btn--secondary ei-btn--sm" onClick={() => handleWand('approach')} disabled={aiLoadingField === 'approach'}>Re-roll</button>
                 <button className="ei-btn ei-btn--ghost ei-btn--sm" onClick={() => dismissSuggestion('approach')}>Dismiss</button>
               </div>
             </div>
@@ -283,7 +283,7 @@ const PersonaTopicCard = ({
               <div className="ei-ai-suggestion__text">{suggestions['personal_stake'].text}</div>
               <div className="ei-ai-suggestion__actions">
                 <button className="ei-btn ei-btn--primary ei-btn--sm" onClick={() => acceptSuggestion('personal_stake')}>Accept</button>
-                <button className="ei-btn ei-btn--secondary ei-btn--sm" onClick={() => handleWand('personal_stake')}>Re-roll</button>
+                <button className="ei-btn ei-btn--secondary ei-btn--sm" onClick={() => handleWand('personal_stake')} disabled={aiLoadingField === 'personal_stake'}>Re-roll</button>
                 <button className="ei-btn ei-btn--ghost ei-btn--sm" onClick={() => dismissSuggestion('personal_stake')}>Dismiss</button>
               </div>
             </div>

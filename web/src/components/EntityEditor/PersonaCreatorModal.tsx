@@ -167,7 +167,7 @@ export function PersonaCreatorModal({
         <div className="ei-ai-suggestion__text">{s.text}</div>
         <div className="ei-ai-suggestion__actions">
           <button className="ei-btn ei-btn--primary ei-btn--sm" onClick={() => acceptSuggestion(fieldKey)}>Accept</button>
-          <button className="ei-btn ei-btn--secondary ei-btn--sm" onClick={() => rerollSuggestion(fieldKey)}>Re-roll</button>
+          <button className="ei-btn ei-btn--secondary ei-btn--sm" onClick={() => rerollSuggestion(fieldKey)} disabled={aiLoadingField === fieldKey}>Re-roll</button>
           <button className="ei-btn ei-btn--ghost ei-btn--sm" onClick={() => dismissSuggestion(fieldKey)}>Dismiss</button>
         </div>
       </div>

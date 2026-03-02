@@ -53,7 +53,6 @@ export const DataItemCard = <T extends DataItemBase>({
   const cardRef = React.useRef<HTMLDivElement>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [suggestion, setSuggestion] = useState<string | null>(null);
-  const [prevSuggestion, setPrevSuggestion] = useState<string | null>(null);
 
   const handleBlur = (e: React.FocusEvent) => {
     if (isDirty && cardRef.current && !cardRef.current.contains(e.relatedTarget as Node)) {
@@ -76,8 +75,8 @@ export const DataItemCard = <T extends DataItemBase>({
   const handleWand = async () => {
     if (!onAiAssist) return;
     setAiLoading(true);
-    const negativeClause = prevSuggestion
-      ? `\n\nThe user didn't like this previous version — avoid it:\n"${prevSuggestion}"`
+    const negativeClause = suggestion
+      ? `\n\nThe user didn't like this previous version — avoid it:\n"${suggestion}"`
       : '';
     const systemPrompt = [
       aiContext ? `You're helping define a persona. Their description is:\n\n${aiContext}\n\n` : '',
@@ -86,7 +85,6 @@ export const DataItemCard = <T extends DataItemBase>({
     ].join('');
     try {
       const result = await onAiAssist(systemPrompt, `Current description: ${item.description || '(empty)'}`);
-      setPrevSuggestion(suggestion);
       setSuggestion(result);
     } catch (err) {
       console.error('AI assist failed:', err);
@@ -154,10 +152,9 @@ export const DataItemCard = <T extends DataItemBase>({
             <div className="ei-ai-suggestion__actions">
               <button className="ei-btn ei-btn--primary ei-btn--sm" onClick={() => {
                 onChange('description' as keyof T, suggestion as T[keyof T]);
-                setPrevSuggestion(suggestion);
                 setSuggestion(null);
               }}>Accept</button>
-              <button className="ei-btn ei-btn--secondary ei-btn--sm" onClick={handleWand}>Re-roll</button>
+              <button className="ei-btn ei-btn--secondary ei-btn--sm" onClick={handleWand} disabled={aiLoading}>Re-roll</button>
               <button className="ei-btn ei-btn--ghost ei-btn--sm" onClick={() => setSuggestion(null)}>Dismiss</button>
             </div>
           </div>
