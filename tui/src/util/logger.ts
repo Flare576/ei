@@ -46,6 +46,8 @@ function formatMessage(level: LogLevel, message: string, data?: unknown): string
 
 function writeLogSync(level: LogLevel, message: string, data?: unknown): void {
   if (!shouldLog(level)) return;
+  // Don't write to disk during tests unless EI_DATA_PATH is explicitly set
+  if (Bun.env.BUN_TEST && !Bun.env.EI_DATA_PATH) return;
   
   const line = formatMessage(level, message, data);
   
