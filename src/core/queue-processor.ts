@@ -1,5 +1,5 @@
 import { LLMRequest, LLMResponse, LLMRequestType, ProviderAccount, ChatMessage, Message } from "./types.js";
-import { callLLMRaw, parseJSONResponse } from "./llm-client.js";
+import { callLLMRaw, parseJSONResponse, cleanResponseContent } from "./llm-client.js";
 import { hydratePromptPlaceholders } from "../prompts/message-utils.js";
 
 type QueueProcessorState = "idle" | "busy";
@@ -131,16 +131,17 @@ export class QueueProcessor {
     content: string,
     finishReason: string | null
   ): LLMResponse {
+    const cleanedContent = cleanResponseContent(content);
     switch (request.type) {
       case "json" as LLMRequestType:
       case "response" as LLMRequestType:
-        return this.handleJSONResponse(request, content, finishReason);
+        return this.handleJSONResponse(request, cleanedContent, finishReason);
       case "raw" as LLMRequestType:
       default:
         return {
           request,
           success: true,
-          content,
+          content: cleanedContent,
           finish_reason: finishReason ?? undefined,
         };
     }
