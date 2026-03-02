@@ -147,6 +147,13 @@ export const MIN_SESSION_AGE_MS = 20 * 60 * 1000;
 
 /**
  * Stored under human.settings.claudeCode
+ *
+ * ⚠️  ADDING A NEW FIELD HERE?
+ * If it's runtime-managed (not user-editable), you MUST also add it to the
+ * claudeCode reconstruction block in settingsFromYAML() in:
+ *   tui/src/util/yaml-serializers.ts
+ * Otherwise it will be silently wiped every time the user saves /settings.
+ * Same rule applies to any future integration settings (Cursor, etc.).
  */
 export interface ClaudeCodeSettings {
   integration?: boolean;

@@ -445,6 +445,7 @@ interface EditableSettingsData {
     time: string;
     decay_rate?: number | null;
     explore_threshold?: number | null;
+    dedup_threshold?: number | null;
   };
   opencode?: {
     integration?: boolean | null;
@@ -466,6 +467,7 @@ export function settingsToYAML(settings: HumanSettings | undefined): string {
       time: settings?.ceremony?.time ?? "09:00",
       decay_rate: settings?.ceremony?.decay_rate ?? null,
       explore_threshold: settings?.ceremony?.explore_threshold ?? null,
+      dedup_threshold: settings?.ceremony?.dedup_threshold ?? null,
     },
     opencode: {
       integration: settings?.opencode?.integration ?? false,
@@ -494,6 +496,7 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
       time: data.ceremony.time,
       decay_rate: nullToUndefined(data.ceremony.decay_rate),
       explore_threshold: nullToUndefined(data.ceremony.explore_threshold),
+      dedup_threshold: nullToUndefined(data.ceremony.dedup_threshold),
       last_ceremony: original?.ceremony?.last_ceremony,
     };
   }
@@ -505,6 +508,7 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
       polling_interval_ms: nullToUndefined(data.opencode.polling_interval_ms),
       last_sync: original?.opencode?.last_sync,
       extraction_point: original?.opencode?.extraction_point,
+      processed_sessions: original?.opencode?.processed_sessions,
     };
   }
 
@@ -514,6 +518,7 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
       integration: nullToUndefined(data.claudeCode.integration),
       polling_interval_ms: nullToUndefined(data.claudeCode.polling_interval_ms),
       last_sync: original?.claudeCode?.last_sync,
+      processed_sessions: original?.claudeCode?.processed_sessions,
     };
   }
   
