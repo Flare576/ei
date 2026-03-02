@@ -11,8 +11,12 @@ export const quitCommand: Command = {
     if (forceQuit) {
       ctx.showNotification("Force quitting...", "info");
       await ctx.stopProcessor();
-      ctx.renderer.setTerminalTitle("");
-      ctx.renderer.destroy();
+      try {
+        ctx.renderer.setTerminalTitle("");
+        ctx.renderer.destroy();
+      } catch {
+        // Terminal may already be gone; proceed to exit anyway
+      }
       process.exit(0);
     }
 

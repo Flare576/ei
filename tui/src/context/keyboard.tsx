@@ -61,8 +61,12 @@ export const KeyboardProvider: ParentComponent = (props) => {
       showNotification(`Sync failed: ${result.error}. Use /quit force to exit anyway.`, "error");
       return;
     }
-    renderer.setTerminalTitle("");
-    renderer.destroy();
+    try {
+      renderer.setTerminalTitle("");
+      renderer.destroy();
+    } catch {
+      // Terminal may already be gone (e.g. parent session closed); proceed to exit anyway
+    }
     process.exit(0);
   };
 
