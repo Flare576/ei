@@ -5,6 +5,7 @@ import type {
   HumanSettings,
   CeremonyConfig,
   OpenCodeSettings,
+  BackupConfig,
   Fact,
   Trait,
   Topic,
@@ -455,6 +456,11 @@ interface EditableSettingsData {
     integration?: boolean | null;
     polling_interval_ms?: number | null;
   };
+  backup?: {
+    enabled?: boolean | null;
+    max_backups?: number | null;
+    interval_ms?: number | null;
+  };
 }
 
 export function settingsToYAML(settings: HumanSettings | undefined): string {
@@ -476,6 +482,11 @@ export function settingsToYAML(settings: HumanSettings | undefined): string {
     claudeCode: {
       integration: settings?.claudeCode?.integration ?? false,
       polling_interval_ms: settings?.claudeCode?.polling_interval_ms ?? 1800000,
+    },
+    backup: {
+      enabled: settings?.backup?.enabled ?? false,
+      max_backups: settings?.backup?.max_backups ?? 24,
+      interval_ms: settings?.backup?.interval_ms ?? 3600000,
     },
   };
   
@@ -521,6 +532,16 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
       processed_sessions: original?.claudeCode?.processed_sessions,
     };
   }
+
+  let backup: BackupConfig | undefined;
+  if (data.backup) {
+    backup = {
+      enabled: nullToUndefined(data.backup.enabled),
+      max_backups: nullToUndefined(data.backup.max_backups),
+      interval_ms: nullToUndefined(data.backup.interval_ms),
+      last_backup: original?.backup?.last_backup,
+    };
+  }
   
   return {
     ...original,
@@ -530,6 +551,7 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
     ceremony,
     opencode,
     claudeCode,
+    backup,
   };
 }
 
