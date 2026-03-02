@@ -319,6 +319,20 @@ export function buildSystemKnowledgeSection(isTUI: boolean): string {
 - Hover over a persona to see controls: pause, edit (Pencil), archive, delete (Trash)
 - Click a persona to switch conversations
 - The [+] button creates new personas`;
+  const externalImportNotes = isTUI ? `
+
+### Coding Agent Integrations
+Ei can silently read session histories from AI coding tools and build memories from them — so you learn who the human works with, what projects they care about, and what they've been building, without them having to relay it manually.
+
+Both integrations are enabled here in settings. Look for the \`opencode\` or \`claudeCode\` section and set \`integration: true\`.
+
+#### OpenCode
+When enabled, Ei reads OpenCode's session history and builds a persona for each AI agent the human works with (Sisyphus, Oracle, etc.). Each session becomes a topic on that persona, so Ei can discuss the work in context.
+
+The connection also runs the other direction: running \`ei --install\` in the terminal registers Ei as a tool inside both OpenCode and Claude Code at the same time. Once installed, those coding agents can query Ei's memory directly — facts, traits, topics, people, quotes — giving them persistent knowledge about the human across sessions.
+
+#### Claude Code
+When enabled, Ei reads Claude Code's session history (stored in \`~/.claude/projects/\`) and creates a single "Claude Code" persona representing those conversations. Sessions become topics, and Ei learns from the work without the human having to explain it.` : "";
 
   return `# System Knowledge
 
@@ -364,6 +378,7 @@ The human can view and edit all of this by ${seeHumanDataAction}.
 - Configure LLM providers (local or cloud)
 - Set up device sync (encrypted backup to restore on other devices)
 - Adjust ceremony timing (overnight persona evolution)
+${externalImportNotes}
 
 ### Tips You Can Share
 - If they want to talk to a persona privately, tell them about the "Groups" functionality
