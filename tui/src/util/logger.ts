@@ -9,12 +9,6 @@ function getDataPath(): string {
   return join(xdgData, "ei");
 }
 
-/** True when running under any test runner and EI_DATA_PATH is not explicitly set. */
-function isTestEnvironment(): boolean {
-  if (Bun.env.EI_DATA_PATH) return false;  // Explicit path always wins
-  return !!(Bun.env.BUN_TEST || (process.env as any).VITEST);
-}
-
 function getLogPath(): string {
   return join(getDataPath(), "tui.log");
 }
@@ -52,11 +46,7 @@ function formatMessage(level: LogLevel, message: string, data?: unknown): string
 
 function writeLogSync(level: LogLevel, message: string, data?: unknown): void {
   if (!shouldLog(level)) return;
-  // Don't write to disk during tests unless EI_DATA_PATH is explicitly set
-  if (isTestEnvironment()) return;
-  
   const line = formatMessage(level, message, data);
-  
   try {
     appendFileSync(getLogPath(), line);
   } catch {}
@@ -70,7 +60,6 @@ export const logger = {
 };
 
 export function clearLog(): void {
-  if (isTestEnvironment()) return;
   try {
     const logPath = getLogPath();
     const dataDir = logPath.substring(0, logPath.lastIndexOf("/"));
@@ -81,7 +70,6 @@ export function clearLog(): void {
 }
 
 export function interceptConsole(): void {
-  if (isTestEnvironment()) return;
   const originalLog = console.log.bind(console);
   const originalWarn = console.warn.bind(console);
   const originalError = console.error.bind(console);

@@ -1,5 +1,13 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
+import { test, expect, describe, beforeEach, afterEach, mock } from "bun:test";
 import { spawnEditor, type EditorOptions } from "../../../src/util/editor";
+
+// Mock logger to prevent disk writes during unit tests
+mock.module("../../../src/util/logger", () => ({
+  logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
+  default: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
+  clearLog: () => {},
+  interceptConsole: () => {},
+}));
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
