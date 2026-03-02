@@ -1,4 +1,12 @@
-import { test, expect } from "bun:test";
+import { test, expect, mock } from "bun:test";
+
+// Mock logger to prevent disk writes during unit tests
+mock.module("../src/util/logger", () => ({
+  logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
+  default: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
+  clearLog: () => {},
+  interceptConsole: () => {},
+}));
 import { testRender } from "@opentui/solid";
 import { Layout } from "../src/components/Layout";
 import { Sidebar } from "../src/components/Sidebar";
