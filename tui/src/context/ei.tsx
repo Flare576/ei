@@ -124,6 +124,7 @@ export const EiProvider: ParentComponent = (props) => {
   const [quotesVersion, setQuotesVersion] = createSignal(0);
   const [showWelcomeOverlay, setShowWelcomeOverlay] = createSignal(false);
   const [conflictData, setConflictData] = createSignal<StateConflictData | null>(null);
+  const [fatalError, setFatalError] = createSignal<string | null>(null);
 
   let processor: Processor | null = null;
   let notificationTimer: Timer | null = null;
@@ -515,9 +516,9 @@ export const EiProvider: ParentComponent = (props) => {
       instanceLock = new InstanceLock(storage.getDataPath());
       const lockResult = await instanceLock.acquire();
       if (!lockResult.acquired) {
-        const msg = `Another Ei instance is already running (PID ${lockResult.pid}, started ${lockResult.started}). Close it first.`;
+        const msg = `Another Ei instance is already running (PID ${lockResult.pid}, started ${lockResult.started}).\n\nClose the other instance first, or delete ${storage.getDataPath()}/ei.lock if it is stale.`;
         logger.error(msg);
-        showNotification(msg, "error");
+        setFatalError(msg);
         instanceLock = null;
         return;
       }
@@ -648,6 +649,13 @@ export const EiProvider: ParentComponent = (props) => {
 
   return (
     <Switch>
+      <Match when={fatalError()}>
+        <box width="100%" height="100%" justifyContent="center" alignItems="center" flexDirection="column" gap={1}>
+          <text color="red">⚠ Ei cannot start</text>
+          <text>{fatalError()!}</text>
+          <text color="gray">Press Ctrl+C to exit.</text>
+        </box>
+      </Match>
       <Match when={conflictData()}>
         <ConflictOverlay
           localTimestamp={conflictData()!.localTimestamp}
