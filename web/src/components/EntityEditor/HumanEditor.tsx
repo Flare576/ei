@@ -43,6 +43,7 @@ interface Person {
   exposure_desired: number;
   last_updated: string;
   learned_by?: string;
+  last_changed_by?: string;
   persona_groups?: string[];
 }
 
