@@ -10,7 +10,7 @@ const LOCK_TIMEOUT_MS = 5000;
 const LOCK_RETRY_DELAY_MS = 50;
 
 export class FileStorage implements Storage {
-  private dataPath: string;
+  private readonly dataPath: string;
 
   constructor(dataPath?: string) {
     if (dataPath) {
@@ -21,6 +21,10 @@ export class FileStorage implements Storage {
       const xdgData = process.env.XDG_DATA_HOME || join(process.env.HOME || "~", ".local", "share");
       this.dataPath = join(xdgData, "ei");
     }
+  }
+
+  getDataPath(): string {
+    return this.dataPath;
   }
 
   async isAvailable(): Promise<boolean> {
