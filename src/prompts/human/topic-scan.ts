@@ -83,7 +83,7 @@ The JSON format is:
     {
         "type_of_topic": "The Topic Type from the list above",
         "value_of_topic": "<actual topic from the conversation>",
-        "reason": "The justifiction of including this specific topic"
+        "reason": "The justification of including this specific topic"
     }
   ]
 }
@@ -125,7 +125,7 @@ Scan the "Most Recent Messages" for TOPICS of interest to the human user.
     {
         "type_of_topic": "The Topic Type from the list above",
         "value_of_topic": "<actual topic from the conversation>",
-        "reason": "The justifiction of including this specific topic"
+        "reason": "The justification of including this specific topic"
     }
   ]
 }

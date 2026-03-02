@@ -65,7 +65,7 @@ The JSON format is:
     {
         "type_of_trait": "The type of trait from the list above",
         "value_of_trait": "A short description of the trait",
-        "reason": "The justification of includeing this specific trait"
+        "reason": "The justification of including this specific trait"
     }
   ]
 }
@@ -105,7 +105,7 @@ Scan the "Most Recent Messages" for TRAITS of the human user.
     {
         "type_of_trait": "The type of trait from the list above",
         "value_of_trait": "A short description of the trait",
-        "reason": "The justification of includeing this specific trait"
+        "reason": "The justification of including this specific trait"
     }
   ]
 }
