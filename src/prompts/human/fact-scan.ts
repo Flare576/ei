@@ -98,9 +98,9 @@ The JSON format is:
 {
   "facts": [
     {
-        "type_of_fact": "Birthday|User's Name|Location|see above",
-        "value_of_fact": "May 26th, 1984|Samwise|Seattle|etc.",
-        "reason": "User stated...|User implied...|User responded..."
+        "type_of_fact": "The Fact Type from above",
+        "value_of_fact": "The exact value of the fact",
+        "reason": "The justification of including this specific fact"
     }
   ]
 }
@@ -140,9 +140,9 @@ Scan the "Most Recent Messages" for FACTS about the human user.
 {
   "facts": [
     {
-        "type_of_fact": "Birthday|Name|etc.",
-        "value_of_fact": "May 26th, 1984|Samwise|etc.",
-        "reason": "User stated..."
+        "type_of_fact": "The Fact Type from above",
+        "value_of_fact": "The exact value of the fact",
+        "reason": "The justification of including this specific fact"
     }
   ]
 }

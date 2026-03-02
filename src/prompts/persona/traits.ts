@@ -76,8 +76,8 @@ ${formatTraitsForPrompt(data.current_traits)}
 \`\`\`json
 [
   {
-    "name": "Concise",
-    "description": "User asked me to keep responses shorter",
+    "name": "A one- or two-word Title for the trait",
+    "description": "A brief instruction on how the trait is exhibited",
     "sentiment": 0.3,
     "strength": 0.7
   }
