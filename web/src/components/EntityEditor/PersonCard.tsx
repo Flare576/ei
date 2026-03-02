@@ -72,6 +72,7 @@ export const PersonCard = ({
   onDelete,
   isDirty = false,
   showMeta = true,
+  resolvePersonaName,
 }: PersonCardProps): React.ReactElement => {
   const cardRef = React.useRef<HTMLDivElement>(null);
 

@@ -11,6 +11,8 @@ interface Trait {
 interface Topic {
   name: string;
   perspective: string;
+  approach?: string;
+  personal_stake?: string;
   exposure_current?: number;
   exposure_desired?: number;
 }
@@ -30,7 +32,7 @@ interface PersonaCreatorModalProps {
   isOpen: boolean;
   onClose: () => void;
   onCreate: (persona: NewPersonaData) => void;
-  onAiAssist?: (field: string, currentValue: string) => Promise<string>;
+  onAiAssist?: (systemPrompt: string, userPrompt: string) => Promise<string>;
 }
 
 type ExpandableSection = 'traits' | 'communication' | 'relationships' | 'topics' | 'model';
@@ -50,6 +52,7 @@ export function PersonaCreatorModal({
   const [topics, setTopics] = useState<Partial<Topic>[]>([]);
   const [expandedSections, setExpandedSections] = useState<Set<ExpandableSection>>(new Set());
   const [aiLoadingField, setAiLoadingField] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<Record<string, { text: string; onAccept: (v: string) => void; systemPrompt: string; userPrompt: string }>>({});
   
   const modalRef = useRef<HTMLDivElement>(null);
   const previousActiveElement = useRef<Element | null>(null);
@@ -66,6 +69,7 @@ export function PersonaCreatorModal({
       setTopics([]);
       setExpandedSections(new Set());
       setAiLoadingField(null);
+      setSuggestions({});
     }
   }, [isOpen]);
 
@@ -134,26 +138,58 @@ export function PersonaCreatorModal({
     setExpandedSections(newExpanded);
   };
 
-  const handleAiAssistClick = async (field: string, currentValue: string) => {
+  const handleAiAssistClick = async (
+    fieldKey: string,
+    systemPrompt: string,
+    userPrompt: string,
+    onAccept: (result: string) => void
+  ) => {
     if (!onAiAssist) return;
-    
-    setAiLoadingField(field);
+    setAiLoadingField(fieldKey);
     try {
-      const result = await onAiAssist(field, currentValue);
-      
-      // Apply result based on field
-      if (field === 'description') {
-        setDescription(result);
-      } else if (field === 'short_description') {
-        setShortDescription(result);
-      }
-      // Add more field handlers as needed
-      
+      const result = await onAiAssist(systemPrompt, userPrompt);
+      setSuggestions(prev => ({
+        ...prev,
+        [fieldKey]: { text: result, onAccept, systemPrompt, userPrompt },
+      }));
     } catch (error) {
       console.error('AI assist failed:', error);
     } finally {
       setAiLoadingField(null);
     }
+  };
+
+  const renderSuggestion = (fieldKey: string) => {
+    const s = suggestions[fieldKey];
+    if (!s) return null;
+    return (
+      <div className="ei-ai-suggestion">
+        <div className="ei-ai-suggestion__text">{s.text}</div>
+        <div className="ei-ai-suggestion__actions">
+          <button className="ei-btn ei-btn--primary ei-btn--sm" onClick={() => acceptSuggestion(fieldKey)}>Accept</button>
+          <button className="ei-btn ei-btn--secondary ei-btn--sm" onClick={() => rerollSuggestion(fieldKey)} disabled={aiLoadingField === fieldKey}>Re-roll</button>
+          <button className="ei-btn ei-btn--ghost ei-btn--sm" onClick={() => dismissSuggestion(fieldKey)}>Dismiss</button>
+        </div>
+      </div>
+    );
+  };
+
+  const acceptSuggestion = (fieldKey: string) => {
+    const s = suggestions[fieldKey];
+    if (!s) return;
+    s.onAccept(s.text);
+    setSuggestions(prev => { const n = { ...prev }; delete n[fieldKey]; return n; });
+  };
+
+  const dismissSuggestion = (fieldKey: string) => {
+    setSuggestions(prev => { const n = { ...prev }; delete n[fieldKey]; return n; });
+  };
+
+  const rerollSuggestion = (fieldKey: string) => {
+    const s = suggestions[fieldKey];
+    if (!s) return;
+    const negativeClause = `\n\nThe user didn't like this previous version — avoid it:\n"${s.text}"`;
+    handleAiAssistClick(fieldKey, s.systemPrompt + negativeClause, s.userPrompt, s.onAccept);
   };
 
   const addTrait = () => {
@@ -272,7 +308,11 @@ export function PersonaCreatorModal({
                 {onAiAssist && (
                   <button
                     className="ei-ai-assist-btn"
-                    onClick={() => handleAiAssistClick('description', description)}
+                    onClick={() => handleAiAssistClick('description',
+                      `You are helping craft a vivid, compelling persona description. Return only the improved description, nothing else.`,
+                      `Persona name: ${name}\n\nCurrent description: "${description}"\n\nImprove this description to make the persona feel alive and specific.`,
+                      setDescription
+                    )}
                     disabled={aiLoadingField === 'description'}
                   >
                     ✨ AI Assist
@@ -293,6 +333,7 @@ export function PersonaCreatorModal({
                   </div>
                 )}
               </div>
+              {renderSuggestion('description')}
               <span className="ei-form-hint ei-creator-help-text">
                 In a hurry? We'll pre-fill based on description
               </span>
@@ -317,27 +358,15 @@ export function PersonaCreatorModal({
           <div className="ei-creator-modal__sections">
             {/* Traits Section */}
             <div className={`ei-creator-section ${expandedSections.has('traits') ? 'ei-creator-section--expanded' : ''}`}>
-              <div 
+              <div
                 className="ei-creator-section-header"
                 onClick={() => toggleSection('traits')}
               >
                 <span className="ei-creator-section-header__text">
                   {expandedSections.has('traits') ? '▼' : '▶'} Add Personification
                 </span>
-                {onAiAssist && (
-                  <button
-                    className="ei-ai-assist-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleAiAssistClick('traits', description);
-                    }}
-                    disabled={aiLoadingField === 'traits'}
-                  >
-                    ✨
-                  </button>
-                )}
               </div>
-              
+
               {expandedSections.has('traits') && (
                 <div className="ei-creator-section-content">
                   <p className="ei-creator-help-text">
@@ -352,13 +381,38 @@ export function PersonaCreatorModal({
                         value={trait.name || ''}
                         onChange={(e) => updateTrait(index, 'name', e.target.value)}
                       />
-                      <textarea
-                        className="ei-textarea ei-textarea--sm"
-                        placeholder="Brief description..."
-                        rows={2}
-                        value={trait.description || ''}
-                        onChange={(e) => updateTrait(index, 'description', e.target.value)}
-                      />
+                      <div style={{ position: 'relative' }}>
+                        <div className="ei-creator-modal__field-with-assist ei-creator-modal__field-with-assist--inline">
+                          <label className="ei-form-label ei-form-label--sm">Description</label>
+                          {onAiAssist && (
+                            <button
+                              className="ei-ai-assist-btn ei-ai-assist-btn--sm"
+                              onClick={() => handleAiAssistClick(
+                                `trait-${index}-description`,
+                                `You're helping define a new AI Persona for the user to chat with! The Persona's core description is:\n\n${description}\n\nYou're helping generate a compelling **Description** for a Personality Trait called **${trait.name || 'this trait'}**. Return only the improved description text, nothing else.`,
+                                `Current description: ${trait.description || '(empty)'}`,
+                                (result) => updateTrait(index, 'description', result)
+                              )}
+                              disabled={aiLoadingField === `trait-${index}-description`}
+                            >
+                              ✨
+                            </button>
+                          )}
+                        </div>
+                        <textarea
+                          className="ei-textarea ei-textarea--sm"
+                          placeholder="Brief description..."
+                          rows={2}
+                          value={trait.description || ''}
+                          onChange={(e) => updateTrait(index, 'description', e.target.value)}
+                        />
+                        {aiLoadingField === `trait-${index}-description` && (
+                          <div className="ei-field-loading-overlay">
+                            <div className="ei-field-loading-overlay__spinner" />
+                          </div>
+                        )}
+                        {renderSuggestion(`trait-${index}-description`)}
+                      </div>
                       <button
                         className="ei-btn ei-btn--danger ei-btn--sm"
                         onClick={() => removeTrait(index)}
@@ -379,27 +433,15 @@ export function PersonaCreatorModal({
 
             {/* Topics Section */}
             <div className={`ei-creator-section ${expandedSections.has('topics') ? 'ei-creator-section--expanded' : ''}`}>
-              <div 
+              <div
                 className="ei-creator-section-header"
                 onClick={() => toggleSection('topics')}
               >
                 <span className="ei-creator-section-header__text">
                   {expandedSections.has('topics') ? '▼' : '▶'} Add Topics of Interest
                 </span>
-                {onAiAssist && (
-                  <button
-                    className="ei-ai-assist-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleAiAssistClick('topics', description);
-                    }}
-                    disabled={aiLoadingField === 'topics'}
-                  >
-                    ✨
-                  </button>
-                )}
               </div>
-              
+
               {expandedSections.has('topics') && (
                 <div className="ei-creator-section-content">
                   <p className="ei-creator-help-text">
@@ -414,13 +456,55 @@ export function PersonaCreatorModal({
                         value={topic.name || ''}
                         onChange={(e) => updateTopic(index, 'name', e.target.value)}
                       />
-                      <textarea
-                        className="ei-textarea ei-textarea--sm"
-                        placeholder="Their perspective on this topic..."
-                        rows={2}
-                        value={topic.perspective || ''}
-                        onChange={(e) => updateTopic(index, 'perspective', e.target.value)}
-                      />
+
+                      {(['perspective', 'approach', 'personal_stake'] as const).map((field) => {
+                        const labels: Record<string, string> = {
+                          perspective: 'Perspective',
+                          approach: 'Approach',
+                          personal_stake: 'Personal Stake',
+                        };
+                        const placeholders: Record<string, string> = {
+                          perspective: 'Their point of view on this topic...',
+                          approach: 'How they engage with this topic...',
+                          personal_stake: 'Why this topic matters to them personally...',
+                        };
+                        const fieldKey = `topic-${index}-${field}`;
+                        return (
+                          <div key={field} style={{ position: 'relative' }}>
+                            <div className="ei-creator-modal__field-with-assist ei-creator-modal__field-with-assist--inline">
+                              <label className="ei-form-label ei-form-label--sm">{labels[field]}</label>
+                              {onAiAssist && (
+                                <button
+                                  className="ei-ai-assist-btn ei-ai-assist-btn--sm"
+                                  onClick={() => handleAiAssistClick(
+                                    fieldKey,
+                                    `You're helping define a new AI Persona for the user to chat with! The Persona's core description is:\n\n${description}\n\nYou're helping generate a Persona's ideal **${labels[field]}** on a Topic called **${topic.name || 'this topic'}**. Attached is what the user has so far — see if you can improve it! Return only the improved text, nothing else.`,
+                                    `Current contents of [${labels[field]}]: ${topic[field] || '(empty)'}`,
+                                    (result) => updateTopic(index, field, result)
+                                  )}
+                                  disabled={aiLoadingField === fieldKey}
+                                >
+                                  ✨
+                                </button>
+                              )}
+                            </div>
+                            <textarea
+                              className="ei-textarea ei-textarea--sm"
+                              placeholder={placeholders[field]}
+                              rows={2}
+                              value={topic[field] || ''}
+                              onChange={(e) => updateTopic(index, field, e.target.value)}
+                            />
+                            {aiLoadingField === fieldKey && (
+                              <div className="ei-field-loading-overlay">
+                                <div className="ei-field-loading-overlay__spinner" />
+                              </div>
+                            )}
+                            {renderSuggestion(fieldKey)}
+                          </div>
+                        );
+                      })}
+
                       <button
                         className="ei-btn ei-btn--danger ei-btn--sm"
                         onClick={() => removeTopic(index)}

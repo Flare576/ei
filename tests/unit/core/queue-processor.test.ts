@@ -6,6 +6,7 @@ import type { LLMRequest, LLMResponse } from "../../../src/core/types.js";
 vi.mock("../../../src/core/llm-client.js", () => ({
   callLLMRaw: vi.fn(),
   parseJSONResponse: vi.fn((content: string) => JSON.parse(content)),
+  cleanResponseContent: vi.fn((content: string) => content),
 }));
 
 import * as llmClient from "../../../src/core/llm-client.js";
@@ -30,6 +31,8 @@ describe("QueueProcessor", () => {
   beforeEach(() => {
     processor = new QueueProcessor();
     vi.clearAllMocks();
+    vi.mocked(llmClient.parseJSONResponse).mockImplementation((content: string) => JSON.parse(content));
+    vi.mocked(llmClient.cleanResponseContent).mockImplementation((content: string) => content);
   });
 
   afterEach(() => {
@@ -229,9 +232,10 @@ describe("QueueProcessor", () => {
   describe("callback invocation", () => {
     it("invokes callback with response", async () => {
       vi.mocked(llmClient.callLLMRaw).mockResolvedValue({
-        content: "Test response",
+        content: '{"ok": true}',
         finishReason: "stop",
       });
+      vi.mocked(llmClient.parseJSONResponse).mockReturnValue({ ok: true });
       
       const callback = vi.fn().mockResolvedValue(undefined);
       processor.start(makeRequest(), callback);

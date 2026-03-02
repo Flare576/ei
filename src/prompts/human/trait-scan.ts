@@ -63,9 +63,9 @@ The JSON format is:
 {
   "traits": [
     {
-        "type_of_trait": "Personality Pattern|Communication Style|etc.",
-        "value_of_trait": "Introverted|Assertive|etc.",
-        "reason": "User stated...|Assumed from..."
+        "type_of_trait": "The type of trait from the list above",
+        "value_of_trait": "A short description of the trait",
+        "reason": "The justification of including this specific trait"
     }
   ]
 }
@@ -103,9 +103,9 @@ Scan the "Most Recent Messages" for TRAITS of the human user.
 {
   "traits": [
     {
-        "type_of_trait": "Personality Pattern|Communication Style|etc.",
-        "value_of_trait": "Introverted|Assertive|etc.",
-        "reason": "User stated..."
+        "type_of_trait": "The type of trait from the list above",
+        "value_of_trait": "A short description of the trait",
+        "reason": "The justification of including this specific trait"
     }
   ]
 }

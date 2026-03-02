@@ -10,7 +10,7 @@ export interface PersonaGenerationPromptData {
   long_description?: string;
   short_description?: string;
   existing_traits?: Array<{ name?: string; description?: string; sentiment?: number; strength?: number }>;
-  existing_topics?: Array<{ name?: string; description?: string; sentiment?: number; exposure_current?: number; exposure_desired?: number }>;
+  existing_topics?: Array<{ name?: string; perspective?: string; approach?: string; personal_stake?: string; sentiment?: number; exposure_current?: number; exposure_desired?: number }>;
 }
 
 export interface PersonaGenerationResult {

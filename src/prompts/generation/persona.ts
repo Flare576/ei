@@ -138,9 +138,11 @@ ${schemaFragment}`;
     userPrompt += `## User's Topics (PRESERVE EXACTLY, add more if fewer than 3)\n`;
     for (const topic of data.existing_topics ?? []) {
       if (topic.name?.trim()) {
-        userPrompt += `- ${topic.name}`;
-        if (topic.description) userPrompt += `: ${topic.description}`;
-        userPrompt += `\n`;
+        userPrompt += `- ${topic.name}\n`;
+        if (topic.perspective) userPrompt += `  perspective: ${topic.perspective}\n`;
+        if (topic.approach) userPrompt += `  approach: ${topic.approach}\n`;
+        if (topic.personal_stake) userPrompt += `  personal_stake: ${topic.personal_stake}\n`;
+        if (topic.sentiment !== undefined) userPrompt += `  sentiment: ${topic.sentiment}\n`;
       }
     }
     userPrompt += `\n`;

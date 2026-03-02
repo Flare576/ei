@@ -44,6 +44,7 @@ interface PersonaIdentityTabProps {
   onTraitDelete: (id: string) => void;
   onTraitAdd: () => void;
   dirtyTraitIds: Set<string>;
+  onAiAssist?: (systemPrompt: string, userPrompt: string) => Promise<string>;
 }
 
 const traitSliders = [
@@ -59,8 +60,43 @@ export const PersonaIdentityTab = ({
   onTraitDelete,
   onTraitAdd,
   dirtyTraitIds,
+  onAiAssist,
 }: PersonaIdentityTabProps) => {
   const [newAlias, setNewAlias] = useState('');
+  const [aiLoadingField, setAiLoadingField] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<Record<string, { text: string; prev?: string }>>({});
+
+  const handleAiAssist = async (field: string, systemPrompt: string, userPrompt: string) => {
+    if (!onAiAssist) return;
+    setAiLoadingField(field);
+    try {
+      const result = await onAiAssist(systemPrompt, userPrompt);
+      setSuggestions(prev => ({ ...prev, [field]: { text: result, prev: prev[field]?.text } }));
+    } catch (err) {
+      console.error('AI assist failed:', err);
+    } finally {
+      setAiLoadingField(null);
+    }
+  };
+
+  const acceptSuggestion = (field: 'short_description' | 'long_description') => {
+    const s = suggestions[field];
+    if (!s) return;
+    onChange(field, s.text);
+    setSuggestions(prev => { const n = { ...prev }; delete n[field]; return n; });
+  };
+
+  const dismissSuggestion = (field: string) => {
+    setSuggestions(prev => { const n = { ...prev }; delete n[field]; return n; });
+  };
+
+  const rerollSuggestion = (field: string, systemPrompt: string, userPrompt: string) => {
+    const s = suggestions[field];
+    const negativeClause = s?.text
+      ? `\n\nThe user didn't like this previous version — avoid it:\n"${s.text}"`
+      : '';
+    handleAiAssist(field, systemPrompt + negativeClause, userPrompt);
+  };
 
   const handleAddAlias = () => {
     const trimmed = newAlias.trim();
@@ -144,26 +180,94 @@ export const PersonaIdentityTab = ({
 
       {/* Short Description Section */}
       <div className="ei-form-group">
-        <label className="ei-form-label">Short Description</label>
-        <input
-          type="text"
-          className="ei-input"
-          placeholder="Brief one-line description..."
-          value={persona.short_description || ''}
-          onChange={(e) => onChange('short_description', e.target.value)}
-        />
+        <div className="ei-creator-modal__field-with-assist">
+          <label className="ei-form-label">Short Description</label>
+          {onAiAssist && (
+            <button
+              className="ei-ai-assist-btn"
+              onClick={() => handleAiAssist('short_description',
+                `You are helping improve a persona's short description. Return only the improved one-line description, nothing else.`,
+                `Current description: "${persona.short_description || ''}"\n\nPersona context: ${persona.long_description || 'No long description yet'}\n\nImprove this short description to be vivid and memorable in one sentence.`
+              )}
+              disabled={aiLoadingField === 'short_description'}
+            >
+              ✨
+            </button>
+          )}
+        </div>
+        <div style={{ position: 'relative' }}>
+          <input
+            type="text"
+            className="ei-input"
+            placeholder="Brief one-line description..."
+            value={persona.short_description || ''}
+            onChange={(e) => onChange('short_description', e.target.value)}
+          />
+          {aiLoadingField === 'short_description' && (
+            <div className="ei-field-loading-overlay">
+              <div className="ei-field-loading-overlay__spinner" />
+            </div>
+          )}
+        </div>
+        {suggestions['short_description'] && (
+          <div className="ei-ai-suggestion">
+            <div className="ei-ai-suggestion__text">{suggestions['short_description'].text}</div>
+            <div className="ei-ai-suggestion__actions">
+              <button className="ei-btn ei-btn--primary ei-btn--sm" onClick={() => acceptSuggestion('short_description')}>Accept</button>
+              <button className="ei-btn ei-btn--secondary ei-btn--sm" onClick={() => rerollSuggestion('short_description',
+                `You are helping improve a persona's short description. Return only the improved one-line description, nothing else.`,
+                `Current description: "${persona.short_description || ''}"\n\nPersona context: ${persona.long_description || 'No long description yet'}\n\nImprove this short description to be vivid and memorable in one sentence.`
+              )}>Re-roll</button>
+              <button className="ei-btn ei-btn--ghost ei-btn--sm" onClick={() => dismissSuggestion('short_description')}>Dismiss</button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Long Description Section */}
       <div className="ei-form-group">
-        <label className="ei-form-label">Long Description</label>
-        <textarea
-          className="ei-textarea"
-          placeholder="Detailed description of this persona..."
-          rows={6}
-          value={persona.long_description || ''}
-          onChange={(e) => onChange('long_description', e.target.value)}
-        />
+        <div className="ei-creator-modal__field-with-assist">
+          <label className="ei-form-label">Long Description</label>
+          {onAiAssist && (
+            <button
+              className="ei-ai-assist-btn"
+              onClick={() => handleAiAssist('long_description',
+                `You are helping improve a persona's long description. Return only the improved description, nothing else. Use vivid, specific language.`,
+                `Current description: "${persona.long_description || ''}"\n\nShort description: ${persona.short_description || 'None'}\n\nImprove or expand this description to bring the persona to life.`
+              )}
+              disabled={aiLoadingField === 'long_description'}
+            >
+              ✨
+            </button>
+          )}
+        </div>
+        <div style={{ position: 'relative' }}>
+          <textarea
+            className="ei-textarea"
+            placeholder="Detailed description of this persona..."
+            rows={6}
+            value={persona.long_description || ''}
+            onChange={(e) => onChange('long_description', e.target.value)}
+          />
+          {aiLoadingField === 'long_description' && (
+            <div className="ei-field-loading-overlay">
+              <div className="ei-field-loading-overlay__spinner" />
+            </div>
+          )}
+        </div>
+        {suggestions['long_description'] && (
+          <div className="ei-ai-suggestion">
+            <div className="ei-ai-suggestion__text">{suggestions['long_description'].text}</div>
+            <div className="ei-ai-suggestion__actions">
+              <button className="ei-btn ei-btn--primary ei-btn--sm" onClick={() => acceptSuggestion('long_description')}>Accept</button>
+              <button className="ei-btn ei-btn--secondary ei-btn--sm" onClick={() => rerollSuggestion('long_description',
+                `You are helping improve a persona's long description. Return only the improved description, nothing else. Use vivid, specific language.`,
+                `Current description: "${persona.long_description || ''}"\n\nShort description: ${persona.short_description || 'None'}\n\nImprove or expand this description to bring the persona to life.`
+              )}>Re-roll</button>
+              <button className="ei-btn ei-btn--ghost ei-btn--sm" onClick={() => dismissSuggestion('long_description')}>Dismiss</button>
+            </div>
+          </div>
+        )}
         <span className="ei-form-hint">
           Dual-mode markdown editor will be available in a future update
         </span>
@@ -181,6 +285,8 @@ export const PersonaIdentityTab = ({
           onAdd={onTraitAdd}
           dirtyIds={dirtyTraitIds}
           hideGroupHeaders
+          onAiAssist={onAiAssist}
+          aiContext={persona.long_description}
         />
       </div>
     </div>

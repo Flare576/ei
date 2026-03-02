@@ -70,6 +70,7 @@ function App() {
 
   const personaPanelRef = useRef<PersonaPanelHandle | null>(null);
   const chatPanelRef = useRef<ChatPanelHandle | null>(null);
+  const oneShotResolvers = useRef<Map<string, (result: string) => void>>(new Map());
 
   useKeyboardNavigation({
     onFocusPersonaPanel: () => personaPanelRef.current?.focusPanel(),
@@ -186,6 +187,13 @@ function App() {
       },
       onQuoteRemoved: () => {
         processorRef.current?.getQuotes().then(setQuotes);
+      },
+      onOneShotReturned: (guid, content) => {
+        const resolve = oneShotResolvers.current.get(guid);
+        if (resolve) {
+          oneShotResolvers.current.delete(guid);
+          resolve(content);
+        }
       },
     };
 
@@ -351,10 +359,11 @@ function App() {
 
   const handleHumanUpdate = useCallback(async (updates: Record<string, unknown>) => {
     if (!processor) return;
-    const { default_model, queue_paused, name_display, time_mode, accounts, sync, ceremony_time, ...rest } = updates;
+    const { default_model, oneshot_model, queue_paused, name_display, time_mode, accounts, sync, ceremony_time, ...rest } = updates;
     
     const settingsUpdates: Record<string, unknown> = {};
     if (default_model !== undefined) settingsUpdates.default_model = default_model;
+    if (oneshot_model !== undefined) settingsUpdates.oneshot_model = oneshot_model;
     if (queue_paused !== undefined) settingsUpdates.queue_paused = queue_paused;
     if (name_display !== undefined) settingsUpdates.name_display = name_display;
     if (time_mode !== undefined) settingsUpdates.time_mode = time_mode;
@@ -516,6 +525,18 @@ function App() {
     await processor.deleteMessages(editingPersonaId, [messageId]);
     processor.getMessages(editingPersonaId).then(setEditingPersonaMessages);
   }, [processor, editingPersonaId]);
+
+  const handleAiAssist = useCallback(async (systemPrompt: string, userPrompt: string): Promise<string> => {
+    if (!processorRef.current) throw new Error('Processor not ready');
+    const guid = crypto.randomUUID();
+    return new Promise<string>((resolve, reject) => {
+      oneShotResolvers.current.set(guid, resolve);
+      processorRef.current!.submitOneShot(guid, systemPrompt, userPrompt).catch((err) => {
+        oneShotResolvers.current.delete(guid);
+        reject(err);
+      });
+    });
+  }, []);
 
   const handlePersonaCreate = useCallback(async (data: {
     name: string;
@@ -750,6 +771,7 @@ function App() {
             time_mode: human.settings?.time_mode,
             ceremony_time: human.settings?.ceremony?.time ?? "09:00",
             default_model: human.settings?.default_model,
+            oneshot_model: human.settings?.oneshot_model,
             accounts: human.settings?.accounts,
             sync: human.settings?.sync,
           }}
@@ -809,6 +831,7 @@ function App() {
         onBulkContextStatusChange={handleBulkContextStatusChange}
         onContextBoundaryChange={handleContextBoundaryChange}
         onDeleteMessage={handleDeleteMessage}
+        onAiAssist={handleAiAssist}
       />
     )}
 
@@ -816,6 +839,7 @@ function App() {
       isOpen={showPersonaCreator}
       onClose={() => setShowPersonaCreator(false)}
       onCreate={handlePersonaCreate}
+      onAiAssist={handleAiAssist}
     />
 
     <ArchivedPersonasModal

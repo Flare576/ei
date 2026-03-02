@@ -1364,3 +1364,4 @@ Standard error codes for `onError` events:
 | 2026-02-27 | Fixed `LLMNextStep`: replaced `HandlePersonaTopicDetection`/`Exploration` with `HandlePersonaTopicScan`/`Match`/`Update`; removed `HandleCeremonyExposure`/`DecayComplete` |
 | 2026-02-27 | Added `LLMRequestState` type and `state`/`retry_after` fields to `LLMRequest` |
 | 2026-02-27 | Updated Error Codes: removed checkpoint codes, added `LLM_AUTH_ERROR`, `LLM_SERVER_ERROR`, `LLM_REQUEST_ERROR`, `HANDLER_NOT_FOUND`, `HANDLER_ERROR` |
+| 2026-03-01 | Added `oneshot_model` to `HumanSettings` for AI-assist wand model override |

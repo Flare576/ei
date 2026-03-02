@@ -57,9 +57,9 @@ The JSON format is:
 {
   "people": [
     {
-        "type_of_person": "Father|Friend|Love Interest|Unknown|etc.",
-        "name_of_person": "Bob|Alice|Charles|Name Unknown|etc.",
-        "reason": "User stated...|Assumed from..."
+        "type_of_person": "The relationship from the list above",
+        "name_of_person": "The person's name",
+        "reason": "The justification of including this specific person"
     }
   ]
 }
@@ -97,9 +97,9 @@ Scan the "Most Recent Messages" for PEOPLE mentioned by the human user.
 {
   "people": [
     {
-        "type_of_person": "Father|Friend|Love Interest|Unknown|etc.",
-        "name_of_person": "Bob|Alice|Charles|Name Unknown|etc.",
-        "reason": "User stated..."
+        "type_of_person": "The relationship from the list above",
+        "name_of_person": "The person's name",
+        "reason": "The justification of including this specific person"
     }
   ]
 }

@@ -7,6 +7,7 @@ interface SettingsData {
   time_mode?: "24h" | "12h" | "local" | "utc";
   ceremony_time: string;
   default_model?: string;
+  oneshot_model?: string;
   accounts?: ProviderAccount[];
   sync?: SyncCredentials;
 }
@@ -205,10 +206,10 @@ export const SettingsModal = ({
         return (
           <div className="ei-settings-form">
             <section className="ei-settings-section">
-              <h3 className="ei-settings-section__title">Default Model</h3>
+              <h3 className="ei-settings-section__title">Default Models</h3>
               
               <div className="ei-form-group">
-                <label htmlFor="default-model" className="ei-form-label">Model</label>
+                <label htmlFor="default-model" className="ei-form-label">Default Model</label>
                 <input
                   id="default-model"
                   type="text"
@@ -218,6 +219,19 @@ export const SettingsModal = ({
                   placeholder="e.g., openai:gpt-4o or local:qwen3-30b"
                 />
                 <small className="ei-form-hint">Format: provider:model (e.g., openai:gpt-4o, local:google/gemma-3-12b)</small>
+              </div>
+
+              <div className="ei-form-group">
+                <label htmlFor="oneshot-model" className="ei-form-label">🪄 Wand Model <span className="ei-form-optional">(optional)</span></label>
+                <input
+                  id="oneshot-model"
+                  type="text"
+                  className="ei-input"
+                  value={settings.oneshot_model || ""}
+                  onChange={(e) => handleChange("oneshot_model", e.target.value)}
+                  placeholder="Falls back to Default Model if not set"
+                />
+                <small className="ei-form-hint">Model used for AI-assist (✨) buttons. Use a smarter/larger model here if you want better suggestions.</small>
               </div>
             </section>
 
