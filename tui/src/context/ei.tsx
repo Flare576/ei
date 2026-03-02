@@ -13,7 +13,6 @@ import { Processor } from "../../../src/core/processor.js";
 import { FileStorage } from "../storage/file.js";
 import { remoteSync } from "../../../src/storage/remote.js";
 import { logger, clearLog, interceptConsole } from "../util/logger.js";
-import { InstanceLock } from "../util/instance-lock.js";
 import { ConflictOverlay } from "../components/ConflictOverlay.js";
 import type {
   Ei_Interface,
@@ -124,14 +123,12 @@ export const EiProvider: ParentComponent = (props) => {
   const [quotesVersion, setQuotesVersion] = createSignal(0);
   const [showWelcomeOverlay, setShowWelcomeOverlay] = createSignal(false);
   const [conflictData, setConflictData] = createSignal<StateConflictData | null>(null);
-  const [fatalError, setFatalError] = createSignal<string | null>(null);
 
   let processor: Processor | null = null;
   let notificationTimer: Timer | null = null;
   let readTimer: Timer | null = null;
   let dwelledPersona: string | null = null;
   let syncConfiguredFromEnv = false;
-  let instanceLock: InstanceLock | null = null;
 
   const showNotification = (message: string, level: "error" | "warn" | "info") => {
     if (notificationTimer) clearTimeout(notificationTimer);
@@ -512,16 +509,6 @@ export const EiProvider: ParentComponent = (props) => {
     logger.info("Ei TUI bootstrap starting");
     try {
       const storage = new FileStorage(Bun.env.EI_DATA_PATH);
-      // Acquire instance lock — prevent stale process from overwriting newer state
-      instanceLock = new InstanceLock(storage.getDataPath());
-      const lockResult = await instanceLock.acquire();
-      if (!lockResult.acquired) {
-        const msg = `Another Ei instance is already running (PID ${lockResult.pid}, started ${lockResult.started}).\n\nClose the other instance first, or delete ${storage.getDataPath()}/ei.lock if it is stale.`;
-        logger.error(msg);
-        setFatalError(msg);
-        instanceLock = null;
-        return;
-      }
       // Pre-configure remoteSync from env vars BEFORE processor.start()
       // so the processor's sync decision tree can detect remote state
       const syncUsername = Bun.env.EI_SYNC_USERNAME;
@@ -591,7 +578,6 @@ export const EiProvider: ParentComponent = (props) => {
 
   onCleanup(() => {
     if (readTimer) clearTimeout(readTimer);
-    void instanceLock?.release();
     processor?.stop();
   });
 
@@ -649,13 +635,6 @@ export const EiProvider: ParentComponent = (props) => {
 
   return (
     <Switch>
-      <Match when={fatalError()}>
-        <box width="100%" height="100%" justifyContent="center" alignItems="center" flexDirection="column" gap={1}>
-          <text color="red">⚠ Ei cannot start</text>
-          <text>{fatalError()!}</text>
-          <text color="gray">Press Ctrl+C to exit.</text>
-        </box>
-      </Match>
       <Match when={conflictData()}>
         <ConflictOverlay
           localTimestamp={conflictData()!.localTimestamp}
