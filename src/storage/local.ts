@@ -81,4 +81,9 @@ export class LocalStorage implements Storage {
       (e.name === "QuotaExceededError" || e.name === "NS_ERROR_DOM_QUOTA_REACHED")
     );
   }
+  /** No-op in browser — rolling backups are TUI-only (filesystem required). */
+  async saveRollingBackup(_state: StorageState, _maxBackups: number): Promise<void> {
+    // Intentional no-op: localStorage has no directory/file concept.
+    // The Processor gates this call with `this.isTUI` so it never runs in the browser.
+  }
 }

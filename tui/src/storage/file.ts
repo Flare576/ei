@@ -1,10 +1,11 @@
 import type { StorageState } from "../../../src/core/types";
 import type { Storage } from "../../../src/storage/interface";
 import { join } from "path";
-import { mkdir, rename, unlink } from "fs/promises";
+import { mkdir, rename, unlink, readdir } from "fs/promises";
 
 const STATE_FILE = "state.json";
 const BACKUP_FILE = "state.backup.json";
+const BACKUPS_DIR = "backups";
 const LOCK_TIMEOUT_MS = 5000;
 const LOCK_RETRY_DELAY_MS = 50;
 
@@ -100,6 +101,38 @@ export class FileStorage implements Storage {
     }
 
     return null;
+  }
+  async saveRollingBackup(state: StorageState, maxBackups: number): Promise<void> {
+    const backupsPath = join(this.dataPath, BACKUPS_DIR);
+    await mkdir(backupsPath, { recursive: true });
+
+    // Filename is local timestamp: YYYY-MM-DDTHH-MM-SS (colons replaced for FS compat)
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const name = [
+      now.getFullYear(),
+      "-", pad(now.getMonth() + 1),
+      "-", pad(now.getDate()),
+      "T", pad(now.getHours()),
+      "-", pad(now.getMinutes()),
+      "-", pad(now.getSeconds()),
+    ].join("") + ".json";
+
+    const destPath = join(backupsPath, name);
+    await this.atomicWrite(destPath, JSON.stringify(state, null, 2));
+
+    // Prune: keep only the newest maxBackups files
+    const entries = await readdir(backupsPath);
+    const jsonFiles = entries
+      .filter(f => f.endsWith(".json"))
+      .sort();  // ISO-like names sort chronologically
+
+    const excess = jsonFiles.length - maxBackups;
+    if (excess > 0) {
+      for (const old of jsonFiles.slice(0, excess)) {
+        await unlink(join(backupsPath, old));
+      }
+    }
   }
 
   private async ensureDataDir(): Promise<void> {

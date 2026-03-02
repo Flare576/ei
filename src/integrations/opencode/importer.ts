@@ -32,6 +32,7 @@ export interface OpenCodeImporterOptions {
   stateManager: StateManager;
   interface?: Ei_Interface;
   reader?: IOpenCodeReader;
+  signal?: AbortSignal;
 }
 
 // =============================================================================
@@ -94,7 +95,7 @@ function filterRelevantMessages(messages: OpenCodeMessage[]): OpenCodeMessage[] 
 export async function importOpenCodeSessions(
   options: OpenCodeImporterOptions
 ): Promise<ImportResult> {
-  const { stateManager, interface: eiInterface } = options;
+  const { stateManager, interface: eiInterface, signal } = options;
   const reader = options.reader ?? await createOpenCodeReader();
 
   const result: ImportResult = {
@@ -110,6 +111,8 @@ export async function importOpenCodeSessions(
   // Always runs (cheap), so session titles stay current regardless of
   // whether we process messages this cycle.
   const allSessions = await reader.getSessionsUpdatedSince(new Date(0));
+
+  if (signal?.aborted) return result;
   const primarySessions = allSessions.filter(s => !s.parentId);
 
   for (const session of primarySessions) {
@@ -156,6 +159,7 @@ export async function importOpenCodeSessions(
     // Nothing new to process — bump last_sync and return
     console.log(`[OpenCode] All sessions processed, nothing new since extraction_point`);
     return result;
+  if (signal?.aborted) return result;
   }
 
   console.log(
@@ -171,6 +175,7 @@ export async function importOpenCodeSessions(
     // Empty session — mark processed and advance
     updateExtractionState(stateManager, targetSession);
     return result;
+  if (signal?.aborted) return result;
   }
 
   // ─── Step 4: Resolve agents → personas, group by persona ID ────────
@@ -241,8 +246,10 @@ export async function importOpenCodeSessions(
         messages_analyze: toAnalyze,
       };
 
-      queueAllScans(context, stateManager);
-      result.extractionScansQueued += 4;
+      if (!signal?.aborted) {
+        queueAllScans(context, stateManager);
+        result.extractionScansQueued += 4;
+      }
     }
   }
 

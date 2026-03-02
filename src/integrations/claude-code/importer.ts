@@ -29,6 +29,7 @@ export interface ClaudeCodeImporterOptions {
   stateManager: StateManager;
   interface?: Ei_Interface;
   reader?: IClaudeCodeReader;
+  signal?: AbortSignal;
 }
 
 // =============================================================================
@@ -183,7 +184,7 @@ function updateProcessedState(
 export async function importClaudeCodeSessions(
   options: ClaudeCodeImporterOptions
 ): Promise<ClaudeCodeImportResult> {
-  const { stateManager, interface: eiInterface } = options;
+  const { stateManager, interface: eiInterface, signal } = options;
   const reader = options.reader ?? new ClaudeCodeReader();
 
   const result: ClaudeCodeImportResult = {
@@ -204,6 +205,7 @@ export async function importClaudeCodeSessions(
     else if (topicResult === "updated") result.topicsUpdated++;
   }
 
+  if (signal?.aborted) return result;
   if (result.topicsCreated > 0 || result.topicsUpdated > 0) {
     eiInterface?.onHumanUpdated?.();
   }
@@ -240,6 +242,8 @@ export async function importClaudeCodeSessions(
     return result;
   }
 
+  if (signal?.aborted) return result;
+
   console.log(
     `[ClaudeCode] Processing session: "${targetSession.title}" ` +
       `(last message: ${targetSession.lastMessageAt})`
@@ -252,6 +256,8 @@ export async function importClaudeCodeSessions(
     updateProcessedState(stateManager, targetSession);
     return result;
   }
+
+  if (signal?.aborted) return result;
 
   // ─── Step 4: Ensure persona, archive, clear, write messages ──────────
   const persona = ensureClaudeCodePersona(stateManager, eiInterface);
@@ -286,7 +292,7 @@ export async function importClaudeCodeSessions(
   eiInterface?.onMessageAdded?.(persona.id);
 
   // ─── Step 5: Queue extraction for new messages ────────────────────────
-  if (toAnalyze.length > 0) {
+  if (toAnalyze.length > 0 && !signal?.aborted) {
     const allInState = stateManager.messages_get(persona.id);
     const analyzeIds = new Set(toAnalyze.map((m) => m.id));
     const analyzeStartIndex = allInState.findIndex((m) => analyzeIds.has(m.id));

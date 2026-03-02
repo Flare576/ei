@@ -6,4 +6,6 @@ export interface Storage {
   load(): Promise<StorageState | null>;
   moveToBackup(): Promise<void>;
   loadBackup(): Promise<StorageState | null>;
+  /** Save a rolling backup of state with a local timestamp filename. Prunes oldest if over limit. */
+  saveRollingBackup(state: StorageState, maxBackups: number): Promise<void>;
 }

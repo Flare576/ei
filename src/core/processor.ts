@@ -131,6 +131,8 @@ export class Processor {
   private lastClaudeCodeSync = 0;
   private claudeCodeImportInProgress = false;
   private pendingConflict: StateConflictData | null = null;
+  private storage: Storage | null = null;
+  private importAbortController = new AbortController();
 
   constructor(ei: Ei_Interface) {
     this.interface = ei;
@@ -150,6 +152,7 @@ export class Processor {
 
   async start(storage: Storage): Promise<void> {
     console.log(`[Processor ${this.instanceId}] start() called`);
+    this.storage = storage;
     await this.stateManager.initialize(storage);
     if (this.stopped) {
       console.log(`[Processor ${this.instanceId}] stopped during init, not starting loop`);
@@ -258,6 +261,7 @@ export class Processor {
     }
 
     this.running = false;
+    this.importAbortController.abort();
     this.queueProcessor.abort();
     await this.stateManager.flush();
     console.log(`[Processor ${this.instanceId}] stopped`);
@@ -268,6 +272,7 @@ export class Processor {
     this.interface.onSaveAndExitStart?.();
 
     this.queueProcessor.abort();
+    this.importAbortController.abort();
     if (this.openCodeImportInProgress) {
       console.log(`[Processor ${this.instanceId}] Aborting OpenCode import in progress`);
       this.openCodeImportInProgress = false;
@@ -332,6 +337,7 @@ export class Processor {
     }
 
     this.pendingConflict = null;
+    this.importAbortController = new AbortController();
     this.running = true;
     this.runLoop();
     this.interface.onStateImported?.();
@@ -391,6 +397,9 @@ export class Processor {
       await this.checkAndSyncOpenCode(human, now);
     }
 
+    if (this.isTUI && human.settings?.backup?.enabled) {
+      await this.checkAndRunRollingBackup(human, now);
+    }
     if (this.isTUI && human.settings?.claudeCode?.integration && this.stateManager.queue_length() === 0) {
       await this.checkAndSyncClaudeCode(human, now);
     }
@@ -436,6 +445,33 @@ export class Processor {
     }
   }
 
+  private async checkAndRunRollingBackup(human: HumanEntity, now: number): Promise<void> {
+    if (!this.storage) return;
+    const cfg = human.settings!.backup!;
+    const intervalMs = cfg.interval_ms ?? 3_600_000;  // default: 1 hour
+    const maxBackups = cfg.max_backups ?? 24;
+    const lastBackup = cfg.last_backup ? new Date(cfg.last_backup).getTime() : 0;
+
+    if (now - lastBackup < intervalMs) return;
+
+    // Update timestamp BEFORE async work to prevent duplicate triggers
+    this.stateManager.setHuman({
+      ...this.stateManager.getHuman(),
+      settings: {
+        ...this.stateManager.getHuman().settings,
+        backup: { ...cfg, last_backup: new Date(now).toISOString() },
+      },
+    });
+
+    const state = this.stateManager.getStorageState();
+    try {
+      await this.storage.saveRollingBackup(state, maxBackups);
+      console.log(`[Processor] Rolling backup saved (max=${maxBackups})`);
+    } catch (err) {
+      console.warn(`[Processor] Rolling backup failed:`, err);
+    }
+  }
+
   private async checkAndSyncOpenCode(human: HumanEntity, now: number): Promise<void> {
     if (this.openCodeImportInProgress) {
       return;
@@ -471,6 +507,7 @@ export class Processor {
         importOpenCodeSessions({
           stateManager: this.stateManager,
           interface: this.interface,
+          signal: this.importAbortController.signal,
         })
       )
       .then((result) => {
@@ -525,6 +562,7 @@ export class Processor {
         importClaudeCodeSessions({
           stateManager: this.stateManager,
           interface: this.interface,
+          signal: this.importAbortController.signal,
         })
       )
       .then((result) => {

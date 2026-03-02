@@ -705,7 +705,11 @@ interface HumanSettings {
   
   // Nightly ceremony configuration
   ceremony?: CeremonyConfig;
+
+  // Rolling local backup (TUI only)
+  backup?: BackupConfig;
 }
+  ceremony?: CeremonyConfig;
 
 interface SyncCredentials {
   username: string;
@@ -755,6 +759,13 @@ interface CeremonyConfig {
   decay_rate?: number;            // Exposure decay rate (default: 0.1)
   explore_threshold?: number;     // Days before topic exploration triggers (default: 3)
   dedup_threshold?: number;       // Cosine similarity threshold for dedup candidates (default: 0.85)
+}
+
+interface BackupConfig {
+  enabled?: boolean;       // Default: false (opt-in). TUI only.
+  max_backups?: number;    // How many backups to keep (default: 24)
+  interval_ms?: number;   // How often to back up in ms (default: 3600000 = 1 hour)
+  last_backup?: string;   // ISO timestamp of last backup (managed automatically)
 }
 ```
 
@@ -1365,3 +1376,4 @@ Standard error codes for `onError` events:
 | 2026-02-27 | Added `LLMRequestState` type and `state`/`retry_after` fields to `LLMRequest` |
 | 2026-02-27 | Updated Error Codes: removed checkpoint codes, added `LLM_AUTH_ERROR`, `LLM_SERVER_ERROR`, `LLM_REQUEST_ERROR`, `HANDLER_NOT_FOUND`, `HANDLER_ERROR` |
 | 2026-03-01 | Added `oneshot_model` to `HumanSettings` for AI-assist wand model override |
+| 2026-03-02 | Added `BackupConfig` interface; added `backup?: BackupConfig` to `HumanSettings`; added `saveRollingBackup()` to Storage interface (TUI only) |

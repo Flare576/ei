@@ -192,6 +192,13 @@ export interface CeremonyConfig {
   dedup_threshold?: number;  // Cosine similarity threshold for dedup candidates. Default: 0.85
 }
 
+export interface BackupConfig {
+  enabled?: boolean;       // Default: false (opt-in)
+  max_backups?: number;    // Default: 24
+  interval_ms?: number;   // Default: 3600000 (1 hour)
+  last_backup?: string;   // ISO timestamp of last backup run
+}
+
 export interface HumanSettings {
   default_model?: string;
   oneshot_model?: string;           // Model for AI-assist (wand) requests; falls back to default_model
@@ -203,6 +210,7 @@ export interface HumanSettings {
   sync?: SyncCredentials;
   opencode?: OpenCodeSettings;
   ceremony?: CeremonyConfig;
+  backup?: BackupConfig;
   claudeCode?: import("../integrations/claude-code/types.js").ClaudeCodeSettings;
 }
 
