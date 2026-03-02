@@ -1,5 +1,7 @@
+import { join } from "path";
 import { render } from "@opentui/solid";
 import { App } from "./app";
+
 import { InstanceLock } from "./util/instance-lock";
 import { FileStorage } from "./storage/file";
 
@@ -12,7 +14,7 @@ if (!lockResult.acquired) {
     `\nEi cannot start: another instance is already running.\n` +
     `  PID:     ${lockResult.pid}\n` +
     `  Started: ${lockResult.started}\n` +
-    `  Lock:    ${storage.getDataPath()}/ei.lock\n\n` +
+    `  Lock:    ${join(storage.getDataPath(), "ei.lock")}\n\n` +
     `Close the other instance first, or delete the lock file if it is stale.\n\n`
   );
   process.exit(1);

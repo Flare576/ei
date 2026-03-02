@@ -13,10 +13,9 @@ export class FileStorage implements Storage {
   private readonly dataPath: string;
 
   constructor(dataPath?: string) {
-    if (dataPath) {
-      this.dataPath = dataPath;
-    } else if (process.env.EI_DATA_PATH) {
-      this.dataPath = process.env.EI_DATA_PATH;
+    const raw = dataPath ?? process.env.EI_DATA_PATH;
+    if (raw) {
+      this.dataPath = raw.replace(/\/+$/, "");
     } else {
       const xdgData = process.env.XDG_DATA_HOME || join(process.env.HOME || "~", ".local", "share");
       this.dataPath = join(xdgData, "ei");
