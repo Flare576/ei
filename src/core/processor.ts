@@ -765,6 +765,10 @@ export class Processor {
         message += ` (attempt ${response.request.attempts}, retrying in ${Math.round(result.retryDelay / 1000)}s)`;
       } else if (result.dropped) {
         message += " (permanent failure \u2014 request removed)";
+        if (response.request.next_step === LLMNextStep.HandleOneShot) {
+          const guid = response.request.data.guid as string;
+          this.interface.onOneShotReturned?.(guid, "");
+        }
       }
 
       this.interface.onError?.({ code, message });
