@@ -191,7 +191,7 @@ export const PersonaIdentityTab = ({
               )}
               disabled={aiLoadingField === 'short_description'}
             >
-              🪄
+              ✨
             </button>
           )}
         </div>
@@ -237,7 +237,7 @@ export const PersonaIdentityTab = ({
               )}
               disabled={aiLoadingField === 'long_description'}
             >
-              🪄
+              ✨
             </button>
           )}
         </div>
