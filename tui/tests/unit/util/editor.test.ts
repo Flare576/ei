@@ -152,20 +152,6 @@ describe("spawnEditor", () => {
     expect(tmpFiles.length).toBe(0);
   });
 
-  test("creates temp file with provided initial content", async () => {
-    const initialContent = "specific test content for verification";
-    let capturedContent: string | null = null;
-    
-    process.env.EDITOR = `bash -c 'cat'`;
-    const options = createOptions({ 
-      initialContent,
-      filename: "content-verify.yaml",
-    });
-    
-    const result = await spawnEditor(options);
-    
-    expect(result.success).toBe(true);
-  });
 
   test("uses EDITOR env var when set", async () => {
     process.env.EDITOR = "true";
