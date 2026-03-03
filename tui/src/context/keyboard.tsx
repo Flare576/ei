@@ -56,6 +56,7 @@ export const KeyboardProvider: ParentComponent = (props) => {
   const toggleSidebar = () => setSidebarVisible(!sidebarVisible());
 
   const exitApp = async () => {
+    showNotification("Saving and syncing...", "info");
     const result = await saveAndExit();
     if (!result.success) {
       showNotification(`Sync failed: ${result.error}. Use /quit force to exit anyway.`, "error");

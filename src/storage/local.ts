@@ -1,6 +1,7 @@
 import type { StorageState } from "../core/types.js";
 import type { Storage } from "./interface.js";
 import { compress, decompress, isCompressed } from "./compress.js";
+import { encodeAllEmbeddings, decodeAllEmbeddings } from "./embeddings.js";
 
 const STATE_KEY = "ei_state";
 const BACKUP_KEY = "ei_state_backup";
@@ -20,7 +21,7 @@ export class LocalStorage implements Storage {
   async save(state: StorageState): Promise<void> {
     state.timestamp = new Date().toISOString();
     try {
-      const json = JSON.stringify(state);
+      const json = JSON.stringify(encodeAllEmbeddings(state));
       const payload = await compress(json);
       globalThis.localStorage.setItem(STATE_KEY, payload);
     } catch (e) {
@@ -36,7 +37,7 @@ export class LocalStorage implements Storage {
     if (current) {
       try {
         const json = isCompressed(current) ? await decompress(current) : current;
-        return JSON.parse(json) as StorageState;
+        return decodeAllEmbeddings(JSON.parse(json) as StorageState);
       } catch {
         return null;
       }
@@ -52,8 +53,9 @@ export class LocalStorage implements Storage {
   async moveToBackup(): Promise<void> {
     const current = globalThis.localStorage?.getItem(STATE_KEY);
     if (current) {
-      globalThis.localStorage.setItem(BACKUP_KEY, current);
+      // Remove primary first so backup write doesn't double-count against quota.
       globalThis.localStorage.removeItem(STATE_KEY);
+      globalThis.localStorage.setItem(BACKUP_KEY, current);
     }
   }
 
@@ -67,7 +69,7 @@ export class LocalStorage implements Storage {
     if (backup) {
       try {
         const json = isCompressed(backup) ? await decompress(backup) : backup;
-        return JSON.parse(json) as StorageState;
+        return decodeAllEmbeddings(JSON.parse(json) as StorageState);
       } catch {
         return null;
       }

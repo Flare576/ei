@@ -67,6 +67,7 @@ function App() {
    const [showConflictModal, setShowConflictModal] = useState(false);
    const [conflictData, setConflictData] = useState<{ localTimestamp: Date; remoteTimestamp: Date } | null>(null);
    const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const personaPanelRef = useRef<PersonaPanelHandle | null>(null);
   const chatPanelRef = useRef<ChatPanelHandle | null>(null);
@@ -321,17 +322,20 @@ function App() {
 
   const handleSaveAndExit = useCallback(async () => {
     if (!processor) return;
-    
-    const result = await processor.saveAndExit();
-    if (!result.success) {
-      const proceed = window.confirm(`Remote backup failed: ${result.error}\n\nExit anyway?`);
-      if (!proceed) return;
-      await processor.stop();
+    setIsSaving(true);
+    try {
+      const result = await processor.saveAndExit();
+      if (!result.success) {
+        const proceed = window.confirm(`Remote backup failed: ${result.error}\n\nExit anyway?`);
+        if (!proceed) return;
+        await processor.stop();
+      }
+      setQueueStatus({ state: "idle", pending_count: 0, dlq_count: 0 });
+      setProcessingPersona(null);
+      setShowOnboarding(true);
+    } finally {
+      setIsSaving(false);
     }
-    
-    setQueueStatus({ state: "idle", pending_count: 0, dlq_count: 0 });
-    setProcessingPersona(null);
-    setShowOnboarding(true);
   }, [processor]);
 
   const handleEditPersona = useCallback(async (personaId: string) => {
@@ -716,6 +720,7 @@ function App() {
           onSettingsClick={handleSettingsClick}
           onHelpClick={handleHelpClick}
           onSyncAndExit={human?.settings?.sync ? handleSaveAndExit : undefined}
+          isSaving={isSaving}
         />
       }
       leftPanel={

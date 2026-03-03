@@ -9,6 +9,7 @@ export interface ControlAreaProps {
   onSettingsClick?: () => void;
   onHelpClick?: () => void;
   onSyncAndExit?: () => void;
+  isSaving?: boolean;
 }
 
 export function ControlArea({ 
@@ -18,12 +19,15 @@ export function ControlArea({
   onSettingsClick,
   onHelpClick,
   onSyncAndExit,
+  isSaving,
 }: ControlAreaProps) {
   const isPaused = queueStatus.state === "paused";
   const isBusy = queueStatus.state === "busy";
   const isWaiting = !isBusy && !isPaused && queueStatus.pending_count > 0;
   
-  const statusText = isPaused
+  const statusText = isSaving
+    ? "Saving..."
+    : isPaused
     ? "Paused"
     : isBusy
     ? `Processing... (${queueStatus.pending_count} pending)`
@@ -46,7 +50,7 @@ export function ControlArea({
     <div className="ei-control-area">
       <div className="ei-control-area__status">
         <span 
-          className={`ei-control-area__indicator ${isBusy ? "busy" : ""} ${isPaused ? "paused" : ""} ${isWaiting ? "waiting" : ""}`}
+          className={`ei-control-area__indicator ${isBusy ? "busy" : ""} ${isPaused ? "paused" : ""} ${isWaiting ? "waiting" : ""} ${isSaving ? "saving" : ""}`}
         />
         <span>{statusText}</span>
         {queueStatus.dlq_count > 0 && (
@@ -70,6 +74,7 @@ export function ControlArea({
             onSettingsClick={onSettingsClick || (() => {})}
             onHelpClick={onHelpClick || (() => {})}
             onSyncAndExit={onSyncAndExit}
+            isSaving={isSaving}
           />
         )}
       </div>

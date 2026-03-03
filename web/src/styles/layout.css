@@ -217,6 +217,11 @@ body {
   animation: pulse 1s ease-in-out infinite;
 }
 
+.ei-control-area__indicator.saving {
+  background: var(--ei-warning);
+  animation: pulse 1s ease-in-out infinite;
+}
+
 .ei-control-area__dlq {
   color: var(--ei-danger);
   font-size: var(--ei-font-size-sm);
@@ -1764,6 +1769,15 @@ body {
 .ei-hamburger-menu__item:focus {
   outline: none;
   background: var(--ei-bg-tertiary);
+}
+
+.ei-hamburger-menu__item:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ei-hamburger-menu__item:disabled:hover {
+  background: transparent;
 }
 
 .ei-hamburger-menu__icon {

@@ -1,5 +1,6 @@
 import type { StorageState } from "../../../src/core/types";
 import type { Storage } from "../../../src/storage/interface";
+import { encodeAllEmbeddings, decodeAllEmbeddings } from "../../../src/storage/embeddings";
 import { join } from "path";
 import { mkdir, rename, unlink, readdir } from "fs/promises";
 
@@ -45,7 +46,7 @@ export class FileStorage implements Storage {
 
     await this.withLock(filePath, async () => {
       try {
-        await this.atomicWrite(filePath, JSON.stringify(state, null, 2));
+        await this.atomicWrite(filePath, JSON.stringify(encodeAllEmbeddings(state), null, 2));
       } catch (e) {
         if (this.isQuotaError(e)) {
           throw new Error("STORAGE_SAVE_FAILED: Disk quota exceeded");
@@ -63,7 +64,7 @@ export class FileStorage implements Storage {
       try {
         const text = await file.text();
         if (text) {
-          return JSON.parse(text) as StorageState;
+          return decodeAllEmbeddings(JSON.parse(text) as StorageState);
         }
       } catch {
         return null;
@@ -96,7 +97,7 @@ export class FileStorage implements Storage {
       try {
         const text = await backupFile.text();
         if (text) {
-          return JSON.parse(text) as StorageState;
+          return decodeAllEmbeddings(JSON.parse(text) as StorageState);
         }
       } catch {
         return null;
@@ -122,7 +123,7 @@ export class FileStorage implements Storage {
     ].join("") + ".json";
 
     const destPath = join(backupsPath, name);
-    await this.atomicWrite(destPath, JSON.stringify(state, null, 2));
+    await this.atomicWrite(destPath, JSON.stringify(encodeAllEmbeddings(state), null, 2));
 
     // Prune: keep only the newest maxBackups files
     const entries = await readdir(backupsPath);

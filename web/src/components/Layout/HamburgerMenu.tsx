@@ -5,6 +5,7 @@ export interface HamburgerMenuProps {
   onSettingsClick: () => void;
   onHelpClick: () => void;
   onSyncAndExit?: () => void;
+  isSaving?: boolean;
 }
 
 export function HamburgerMenu({
@@ -12,6 +13,7 @@ export function HamburgerMenu({
   onSettingsClick,
   onHelpClick,
   onSyncAndExit,
+  isSaving,
 }: HamburgerMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -107,11 +109,12 @@ export function HamburgerMenu({
               <div className="ei-hamburger-menu__divider" />
               <button
                 className="ei-hamburger-menu__item"
-                onClick={() => handleMenuItemClick(onSyncAndExit)}
+                onClick={() => !isSaving && handleMenuItemClick(onSyncAndExit)}
                 role="menuitem"
+                disabled={isSaving}
               >
-                <span className="ei-hamburger-menu__icon">🚪</span>
-                <span>Sync & Exit</span>
+                <span className="ei-hamburger-menu__icon">{isSaving ? "⏳" : "🚪"}</span>
+                <span>{isSaving ? "Saving..." : "Sync & Exit"}</span>
               </button>
             </>
           )}
