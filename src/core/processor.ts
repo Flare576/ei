@@ -292,11 +292,14 @@ export class Processor {
       const result = await remoteSync.sync(state);
       
       if (!result.success) {
-        // Push failed — likely 412 etag mismatch or network error
-        // Do NOT moveToBackup — leave state.json intact
-        // Next boot will detect primary + remote → conflict resolution
+        // Sync failed (e.g. 429, network error, 412 etag mismatch).
+        // Do NOT stop() — leave the processor loop running so the user can
+        // keep using the TUI and retry /quit later.
+        // Do NOT moveToBackup — leave state.json intact so next boot can
+        // detect primary + remote → conflict resolution if needed.
         console.log(`[Processor ${this.instanceId}] Remote sync failed: ${result.error}`);
-        await this.stop();
+        // Reset the import abort controller so imports can resume normally.
+        this.importAbortController = new AbortController();
         this.interface.onSaveAndExitFinish?.();
         return { success: false, error: result.error };
       }
