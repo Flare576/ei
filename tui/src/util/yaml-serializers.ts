@@ -451,10 +451,13 @@ interface EditableSettingsData {
   opencode?: {
     integration?: boolean | null;
     polling_interval_ms?: number | null;
+    last_sync?: string | null;
+    extraction_point?: string | null;
   };
   claudeCode?: {
     integration?: boolean | null;
     polling_interval_ms?: number | null;
+    last_sync?: string | null;
   };
   backup?: {
     enabled?: boolean | null;
@@ -478,10 +481,13 @@ export function settingsToYAML(settings: HumanSettings | undefined): string {
     opencode: {
       integration: settings?.opencode?.integration ?? false,
       polling_interval_ms: settings?.opencode?.polling_interval_ms ?? 1800000,
+      last_sync: settings?.opencode?.last_sync ?? null,
+      extraction_point: settings?.opencode?.extraction_point ?? null,
     },
     claudeCode: {
       integration: settings?.claudeCode?.integration ?? false,
       polling_interval_ms: settings?.claudeCode?.polling_interval_ms ?? 1800000,
+      last_sync: settings?.claudeCode?.last_sync ?? null,
     },
     backup: {
       enabled: settings?.backup?.enabled ?? false,
@@ -492,9 +498,10 @@ export function settingsToYAML(settings: HumanSettings | undefined): string {
   
   return YAML.stringify(data, {
     lineWidth: 0,
-  });
+  })
+  .replace(/^(\s+)(last_sync: .+)$/mg, '$1# [read-only] $2')
+  .replace(/^(\s+)(extraction_point: .+)$/mg, '$1# [read-only] $2');
 }
-
 export function settingsFromYAML(yamlContent: string, original: HumanSettings | undefined): HumanSettings {
   const data = YAML.parse(yamlContent) as EditableSettingsData;
   
