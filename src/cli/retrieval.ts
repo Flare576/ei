@@ -1,4 +1,5 @@
 import type { StorageState, Quote, Fact, Trait, Person, Topic } from "../core/types";
+import { decodeAllEmbeddings } from "../storage/embeddings";
 import { crossFind } from "../core/utils/index.ts";
 import { join } from "path";
 import { readFile } from "fs/promises";
@@ -21,7 +22,7 @@ export async function loadLatestState(): Promise<StorageState | null> {
   for (const file of [STATE_FILE, BACKUP_FILE]) {
     try {
       const text = await readFile(join(dataPath, file), "utf-8");
-      if (text) return JSON.parse(text) as StorageState;
+      if (text) return decodeAllEmbeddings(JSON.parse(text) as StorageState);
     } catch {
       continue;
     }
