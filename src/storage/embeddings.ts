@@ -77,7 +77,7 @@ export function encodeAllEmbeddings(state: StorageState): StorageState {
     }
   }
 
-  return { ...state, human: encodedHuman as StorageState["human"] };
+  return { ...state, human: encodedHuman as unknown as StorageState["human"] };
 }
 
 /**
@@ -99,5 +99,5 @@ export function decodeAllEmbeddings(state: StorageState): StorageState {
     }
   }
 
-  return { ...state, human: decodedHuman as StorageState["human"] };
+  return { ...state, human: decodedHuman as unknown as StorageState["human"] };
 }
