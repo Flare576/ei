@@ -433,7 +433,13 @@ export class Processor {
         const timeSinceHeartbeat = now - lastHeartbeat;
 
         if (timeSinceHeartbeat >= heartbeatDelay) {
-          this.queueHeartbeatCheck(persona.id);
+          const history = this.stateManager.messages_get(persona.id);
+          const contextWindowHours = persona.context_window_hours ?? DEFAULT_CONTEXT_WINDOW_HOURS;
+          const contextHistory = filterMessagesForContext(history, persona.context_boundary, contextWindowHours);
+          const trailing = this.countTrailingPersonaMessages(contextHistory);
+          if (trailing < 3) {
+            this.queueHeartbeatCheck(persona.id);
+          }
         }
       }
     }
@@ -517,7 +523,7 @@ export class Processor {
         if (result.sessionsProcessed > 0) {
           console.log(
             `[Processor] OpenCode sync complete: ${result.sessionsProcessed} sessions, ` +
-            `${result.topicsCreated} topics created, ${result.messagesImported} messages imported, ` +
+            `${result.messagesImported} messages imported, ` +
             `${result.extractionScansQueued} extraction scans queued`
           );
         }
@@ -624,14 +630,32 @@ export class Processor {
       }, []);
   }
 
+  /**
+   * Count consecutive conversational messages the persona sent at the end of history
+   * without a human reply. Used to prevent heartbeat spam when the user is away.
+   */
+  private countTrailingPersonaMessages(history: Message[]): number {
+    let count = 0;
+    for (let i = history.length - 1; i >= 0; i--) {
+      const msg = history[i];
+      if (msg.role === 'human') break;
+      if (msg.role === 'system' && msg.verbal_response && msg.silence_reason === undefined) {
+        count++;
+      }
+    }
+    return count;
+  }
+
   private async queueHeartbeatCheck(personaId: string): Promise<void> {
     const persona = this.stateManager.persona_getById(personaId);
     if (!persona) return;
     this.stateManager.persona_update(personaId, { last_heartbeat: new Date().toISOString() });
     const human = this.stateManager.getHuman();
     const history = this.stateManager.messages_get(personaId);
+    const contextWindowHours = persona.context_window_hours ?? DEFAULT_CONTEXT_WINDOW_HOURS;
+    const contextHistory = filterMessagesForContext(history, persona.context_boundary, contextWindowHours);
     if (personaId === "ei") {
-      await this.queueEiHeartbeat(human, history);
+      await this.queueEiHeartbeat(human, contextHistory);
       return;
     }
 
@@ -651,7 +675,7 @@ export class Processor {
         topics: sortByEngagementGap(filteredHuman.topics).slice(0, 5),
         people: sortByEngagementGap(filteredHuman.people).slice(0, 5),
       },
-      recent_history: history.slice(-10),
+      recent_history: contextHistory.slice(-10),
       inactive_days: inactiveDays,
     };
 
