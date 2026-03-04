@@ -155,6 +155,7 @@ export async function importOpenCodeSessions(
 
   if (relevant.length === 0) {
     // Empty session — mark processed and advance
+    result.sessionsProcessed = 1;
     updateExtractionState(stateManager, targetSession);
     return result;
   }

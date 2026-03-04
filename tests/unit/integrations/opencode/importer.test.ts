@@ -141,95 +141,10 @@ describe("importOpenCodeSessions", () => {
     });
 
     expect(result.sessionsProcessed).toBe(0);
-    expect(result.topicsCreated).toBe(0);
     expect(result.messagesImported).toBe(0);
     expect(result.personasCreated).toEqual([]);
   });
 
-  it("creates topic for new session", async () => {
-    const session = makeSession({ id: "ses_test123", title: "Test Session" });
-
-    mockReader.getSessionsUpdatedSince = vi.fn().mockResolvedValue([session]);
-
-    const result = await importOpenCodeSessions({
-      stateManager: mockStateManager as StateManager,
-      interface: mockInterface as Ei_Interface,
-      reader: mockReader as IOpenCodeReader,
-    });
-
-    expect(result.topicsCreated).toBe(1);
-    expect(mockStateManager.human_topic_upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: "ses_test123",
-        name: "Test Session",
-        persona_groups: ["General", "Coding", "OpenCode"],
-        learned_by: "build",
-      })
-    );
-    expect(mockInterface.onHumanUpdated).toHaveBeenCalled();
-  });
-
-  it("updates topic when session title changes", async () => {
-    const existingTopic: Topic = {
-      id: "ses_test123",
-      name: "Old Title",
-      description: "",
-      sentiment: 0,
-      exposure_current: 0.5,
-      exposure_desired: 0.3,
-      persona_groups: ["General", "Coding", "OpenCode"],
-      learned_by: "build",
-      last_updated: "2026-01-01T00:00:00.000Z",
-    };
-    mockHuman.topics = [existingTopic];
-
-    const session = makeSession({ id: "ses_test123", title: "New Title" });
-
-    mockReader.getSessionsUpdatedSince = vi.fn().mockResolvedValue([session]);
-
-    const result = await importOpenCodeSessions({
-      stateManager: mockStateManager as StateManager,
-      interface: mockInterface as Ei_Interface,
-      reader: mockReader as IOpenCodeReader,
-    });
-
-    expect(result.topicsUpdated).toBe(1);
-    expect(result.topicsCreated).toBe(0);
-    expect(mockStateManager.human_topic_upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: "ses_test123",
-        name: "New Title",
-      })
-    );
-  });
-
-  it("does not update topic when title unchanged", async () => {
-    const existingTopic: Topic = {
-      id: "ses_test123",
-      name: "Same Title",
-      description: "",
-      sentiment: 0,
-      exposure_current: 0.5,
-      exposure_desired: 0.3,
-      persona_groups: ["General", "Coding", "OpenCode"],
-      learned_by: "build",
-      last_updated: "2026-01-01T00:00:00.000Z",
-    };
-    mockHuman.topics = [existingTopic];
-
-    const session = makeSession({ id: "ses_test123", title: "Same Title" });
-
-    mockReader.getSessionsUpdatedSince = vi.fn().mockResolvedValue([session]);
-
-    const result = await importOpenCodeSessions({
-      stateManager: mockStateManager as StateManager,
-      interface: mockInterface as Ei_Interface,
-      reader: mockReader as IOpenCodeReader,
-    });
-
-    expect(result.topicsUpdated).toBe(0);
-    expect(result.topicsCreated).toBe(0);
-  });
 
   it("creates persona for new agent", async () => {
     const session = makeSession({ id: "ses_test123" });
@@ -736,10 +651,9 @@ describe("importOpenCodeSessions", () => {
       reader: mockReader as IOpenCodeReader,
     });
 
-    expect(result.topicsCreated).toBe(1);
-    expect(mockStateManager.human_topic_upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "ses_parent" })
-    );
+    // Only the parent session should be processed (child is filtered)
+    expect(result.sessionsProcessed).toBe(1);
+    expect(mockStateManager.human_topic_upsert).not.toHaveBeenCalled();
   });
 
   it("queues extraction scans on fresh session", async () => {
@@ -871,41 +785,4 @@ describe("importOpenCodeSessions", () => {
     expect(stored).toHaveLength(2);
   });
 
-  it("uses first agent as learned_by for topic", async () => {
-    const session = makeSession({ id: "ses_test123" });
-
-    mockReader.getSessionsUpdatedSince = vi.fn().mockResolvedValue([session]);
-    mockReader.getFirstAgent = vi.fn().mockResolvedValue("sisyphus");
-
-    await importOpenCodeSessions({
-      stateManager: mockStateManager as StateManager,
-      interface: mockInterface as Ei_Interface,
-      reader: mockReader as IOpenCodeReader,
-    });
-
-    expect(mockStateManager.human_topic_upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        learned_by: "sisyphus",
-      })
-    );
-  });
-
-  it("defaults learned_by to build when no first agent", async () => {
-    const session = makeSession({ id: "ses_test123" });
-
-    mockReader.getSessionsUpdatedSince = vi.fn().mockResolvedValue([session]);
-    mockReader.getFirstAgent = vi.fn().mockResolvedValue(null);
-
-    await importOpenCodeSessions({
-      stateManager: mockStateManager as StateManager,
-      interface: mockInterface as Ei_Interface,
-      reader: mockReader as IOpenCodeReader,
-    });
-
-    expect(mockStateManager.human_topic_upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        learned_by: "build",
-      })
-    );
-  });
 });
