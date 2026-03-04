@@ -1,5 +1,5 @@
 import type { StateManager } from "../../core/state-manager.js";
-import type { Ei_Interface, Topic, Message, ContextStatus } from "../../core/types.js";
+import type { Ei_Interface, Message, ContextStatus } from "../../core/types.js";
 import type { IOpenCodeReader, OpenCodeSession, OpenCodeMessage } from "./types.js";
 import { UTILITY_AGENTS, AGENT_TO_AGENT_PREFIXES } from "./types.js";
 import { createOpenCodeReader } from "./reader-factory.js";
@@ -13,7 +13,6 @@ import {
 // Constants
 // =============================================================================
 
-const OPENCODE_TOPIC_GROUPS = ["General", "Coding", "OpenCode"];
 
 // =============================================================================
 // Export Types
@@ -21,8 +20,6 @@ const OPENCODE_TOPIC_GROUPS = ["General", "Coding", "OpenCode"];
 
 export interface ImportResult {
   sessionsProcessed: number;
-  topicsCreated: number;
-  topicsUpdated: number;
   messagesImported: number;
   personasCreated: string[];
   extractionScansQueued: number;
@@ -82,15 +79,17 @@ function filterRelevantMessages(messages: OpenCodeMessage[]): OpenCodeMessage[] 
  * Import one OpenCode session per call.
  *
  * Flow:
- * 1. Ensure topics exist for all primary sessions (always, cheaply).
- * 2. Find the next unprocessed session after extraction_point.
- * 3. Write all messages for that session to their persona(s) — archived,
+ * 1. Find the next unprocessed session after extraction_point.
+ * 2. Write all messages for that session to their persona(s) — archived,
  *    messages cleared first. Messages before last_imported are pre-marked
  *    [p,r,o,f]=true; newer messages are unmarked and queued for extraction.
- * 4. Advance extraction_point to session.time.updated.
+ * 3. Advance extraction_point to session.time.updated.
  *
  * The processor gate (queue_length() === 0) ensures we never pile onto a
  * backed-up queue.
+ *
+ * Session titles are intentionally NOT seeded as topics. The extraction
+ * pipeline generates richer, embedding-backed topics organically.
  */
 export async function importOpenCodeSessions(
   options: OpenCodeImporterOptions
@@ -100,32 +99,16 @@ export async function importOpenCodeSessions(
 
   const result: ImportResult = {
     sessionsProcessed: 0,
-    topicsCreated: 0,
-    topicsUpdated: 0,
     messagesImported: 0,
     personasCreated: [],
     extractionScansQueued: 0,
   };
 
-  // ─── Step 1: Ensure topics exist for ALL primary sessions ─────────────
-  // Always runs (cheap), so session titles stay current regardless of
-  // whether we process messages this cycle.
+  // ─── Step 1: Find next unprocessed session ──────────────────────────
   const allSessions = await reader.getSessionsUpdatedSince(new Date(0));
-
   if (signal?.aborted) return result;
   const primarySessions = allSessions.filter(s => !s.parentId);
 
-  for (const session of primarySessions) {
-    const topicResult = await ensureSessionTopic(session, reader, stateManager);
-    if (topicResult === "created") result.topicsCreated++;
-    else if (topicResult === "updated") result.topicsUpdated++;
-  }
-
-  if (result.topicsCreated > 0 || result.topicsUpdated > 0) {
-    eiInterface?.onHumanUpdated?.();
-  }
-
-  // ─── Step 2: Find next unprocessed session ────────────────────────────
   const human = stateManager.getHuman();
   const processedSessions = human.settings?.opencode?.processed_sessions ?? {};
 
@@ -159,7 +142,6 @@ export async function importOpenCodeSessions(
     // Nothing new to process — bump last_sync and return
     console.log(`[OpenCode] All sessions processed, nothing new since extraction_point`);
     return result;
-  if (signal?.aborted) return result;
   }
 
   console.log(
@@ -175,7 +157,6 @@ export async function importOpenCodeSessions(
     // Empty session — mark processed and advance
     updateExtractionState(stateManager, targetSession);
     return result;
-  if (signal?.aborted) return result;
   }
 
   // ─── Step 4: Resolve agents → personas, group by persona ID ────────
@@ -266,50 +247,6 @@ export async function importOpenCodeSessions(
   return result;
 }
 
-// =============================================================================
-// Topic Management
-// =============================================================================
-
-async function ensureSessionTopic(
-  session: OpenCodeSession,
-  reader: IOpenCodeReader,
-  stateManager: StateManager
-): Promise<"created" | "updated" | "unchanged"> {
-  const human = stateManager.getHuman();
-  const existingTopic = human.topics.find((t) => t.id === session.id);
-
-  const firstAgent = await reader.getFirstAgent(session.id);
-  const firstPersona = firstAgent ? stateManager.persona_getByName(firstAgent) : null;
-  const learnedBy = firstPersona?.id ?? firstAgent ?? "build";
-
-  if (existingTopic) {
-    if (existingTopic.name !== session.title) {
-      const updatedTopic: Topic = {
-        ...existingTopic,
-        name: session.title,
-        last_updated: new Date().toISOString(),
-      };
-      stateManager.human_topic_upsert(updatedTopic);
-      return "updated";
-    }
-    return "unchanged";
-  }
-
-  const newTopic: Topic = {
-    id: session.id,
-    name: session.title,
-    description: "",
-    sentiment: 0,
-    exposure_current: 0.5,
-    exposure_desired: 0.3,
-    persona_groups: OPENCODE_TOPIC_GROUPS,
-    learned_by: learnedBy,
-    last_updated: new Date().toISOString(),
-  };
-
-  stateManager.human_topic_upsert(newTopic);
-  return "created";
-}
 
 // =============================================================================
 // State Helpers
