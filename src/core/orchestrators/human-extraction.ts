@@ -281,11 +281,14 @@ export async function queueItemMatch(
       break;
   }
 
+  // Traits are personality patterns — they must only match against other traits.
+  // Non-trait candidates (facts, topics, people) must never absorb trait content,
+  // and trait candidates must never cross-match into facts/topics/people.
   const allItemsWithEmbeddings = [
-    ...human.facts.map(f => ({ ...f, data_type: "fact" as DataItemType })),
+    ...(dataType !== "trait" ? human.facts.map(f => ({ ...f, data_type: "fact" as DataItemType })) : []),
     ...human.traits.map(t => ({ ...t, data_type: "trait" as DataItemType })),
-    ...human.topics.map(t => ({ ...t, data_type: "topic" as DataItemType })),
-    ...human.people.map(p => ({ ...p, data_type: "person" as DataItemType })),
+    ...(dataType !== "trait" ? human.topics.map(t => ({ ...t, data_type: "topic" as DataItemType })) : []),
+    ...(dataType !== "trait" ? human.people.map(p => ({ ...p, data_type: "person" as DataItemType })) : []),
   ].filter(item => item.embedding && item.embedding.length > 0);
 
   let topKItems: Array<{
@@ -321,15 +324,18 @@ export async function queueItemMatch(
   }
 
   if (topKItems.length === 0) {
-    console.log(`[queueItemMatch] No embeddings available, using all ${human.facts.length + human.traits.length + human.topics.length + human.people.length} items`);
-    
-    for (const fact of human.facts) {
-      topKItems.push({
-        data_type: "fact",
-        data_id: fact.id,
-        data_name: fact.name,
-        data_description: dataType === "fact" ? fact.description : truncateDescription(fact.description),
-      });
+
+    console.log(`[queueItemMatch] No embeddings available, using filtered items (dataType=${dataType})`);
+
+    if (dataType !== "trait") {
+      for (const fact of human.facts) {
+        topKItems.push({
+          data_type: "fact",
+          data_id: fact.id,
+          data_name: fact.name,
+          data_description: dataType === "fact" ? fact.description : truncateDescription(fact.description),
+        });
+      }
     }
 
     for (const trait of human.traits) {
@@ -341,22 +347,24 @@ export async function queueItemMatch(
       });
     }
 
-    for (const topic of human.topics) {
-      topKItems.push({
-        data_type: "topic",
-        data_id: topic.id,
-        data_name: topic.name,
-        data_description: dataType === "topic" ? topic.description : truncateDescription(topic.description),
-      });
-    }
+    if (dataType !== "trait") {
+      for (const topic of human.topics) {
+        topKItems.push({
+          data_type: "topic",
+          data_id: topic.id,
+          data_name: topic.name,
+          data_description: dataType === "topic" ? topic.description : truncateDescription(topic.description),
+        });
+      }
 
-    for (const person of human.people) {
-      topKItems.push({
-        data_type: "person",
-        data_id: person.id,
-        data_name: person.name,
-        data_description: dataType === "person" ? person.description : truncateDescription(person.description),
-      });
+      for (const person of human.people) {
+        topKItems.push({
+          data_type: "person",
+          data_id: person.id,
+          data_name: person.name,
+          data_description: dataType === "person" ? person.description : truncateDescription(person.description),
+        });
+      }
     }
   }
 
