@@ -773,6 +773,8 @@ interface HumanEntity {
 
 interface HumanSettings {
   default_model?: string;          // Default: from EI_LLM_MODEL env
+  oneshot_model?: string;           // Model for AI-assist (wand) requests; falls back to default_model
+  rewrite_model?: string;           // Model for rewrite ceremony step; must be capable (Sonnet/Opus class). Unset = rewrite disabled.
   queue_paused?: boolean;          // Default: false
   skip_quote_delete_confirm?: boolean;  // Skip confirmation dialog when deleting quotes
   
@@ -1288,7 +1290,11 @@ enum LLMNextStep {
   // Tool calling synthesis (second LLM call after tool execution)
   // data.toolHistory: serialized LLMHistoryMessage[] (assistant + tool result messages)
   // data.originalNextStep: the next_step value from the originating request (e.g., HandlePersonaResponse)
-  HandleToolSynthesis = "handleToolSynthesis"
+  HandleToolSynthesis = "handleToolSynthesis",
+
+  // Rewrite ceremony (human data reorganization)
+  HandleRewriteScan = "handleRewriteScan",
+  HandleRewriteRewrite = "handleRewriteRewrite",
 }
 ```
 
@@ -1549,3 +1555,5 @@ Standard error codes for `onError` events:
 | 2026-03-04 | Added `ToolDefinition` interface and Tool Types section |
 | 2026-03-04 | Added `tools?: string[]` to `PersonaEntity` |
 | 2026-03-04 | Added `tools: ToolDefinition[]` to `StorageState` |
+| 2026-03-06 | Added `rewrite_model` to `HumanSettings` for ceremony rewrite phase model override |
+| 2026-03-06 | Added `HandleRewriteScan`, `HandleRewriteRewrite` to `LLMNextStep` for item reorganization ceremony |
