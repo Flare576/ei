@@ -501,6 +501,8 @@ export function humanFromYAML(yamlContent: string): HumanYAMLResult {
 
 interface EditableSettingsData {
   default_model?: string | null;
+  oneshot_model?: string | null;
+  rewrite_model?: string | null;
   time_mode?: "24h" | "12h" | "local" | "utc" | null;
   name_display?: string | null;
   ceremony?: {
@@ -531,6 +533,8 @@ export function settingsToYAML(settings: HumanSettings | undefined): string {
   // Always show all editable fields, using null for unset values so YAML displays them
   const data: EditableSettingsData = {
     default_model: settings?.default_model ?? null,
+    oneshot_model: settings?.oneshot_model ?? null,
+    rewrite_model: settings?.rewrite_model ?? null,
     time_mode: settings?.time_mode ?? null,
     name_display: settings?.name_display ?? null,
     ceremony: {
@@ -614,6 +618,8 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
   return {
     ...original,
     default_model: nullToUndefined(data.default_model),
+    oneshot_model: nullToUndefined(data.oneshot_model),
+    rewrite_model: nullToUndefined(data.rewrite_model),
     time_mode: nullToUndefined(data.time_mode),
     name_display: nullToUndefined(data.name_display),
     ceremony,
