@@ -75,6 +75,7 @@ All commands start with `/`. Append `!` to any command as a shorthand for `--for
 | `/me <type>` | | Edit one type: `facts`, `traits`, `topics`, or `people` |
 | `/settings` | `/set` | Edit your global settings in `$EDITOR` |
 | `/setsync <user> <pass>` | `/ss` | Set sync credentials (triggers restart) |
+| `/tools` | | Manage tool providers — enable/disable tools per persona |
 
 ### Editor
 

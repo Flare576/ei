@@ -101,6 +101,7 @@ tui/tests/e2e/
 ├── quotes-command.test.ts       # /quotes quote management and overlay (port 3106)
 ├── provider-command.test.ts     # /provider overlay, direct set, /model inference (port 3107)
 ├── provider-editor.test.ts      # /provider new via $EDITOR (port 3108)
+├── tools-command.test.ts        # /tools overlay, toolkit list (port 3115)
 ├── fixtures.ts                  # Shared test utilities and checkpoint factory
 ├── framework/
 │   └── mock-server.ts           # Re-export shim (see file for why)
