@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { StateManager } from "../../../src/core/state-manager.js";
 import { LLMRequestType, LLMPriority, LLMNextStep, ContextStatus, ValidationLevel } from "../../../src/core/types.js";
 import { createMockStorage, createDefaultTestState } from "../../helpers/mock-storage.js";
-import type { Fact, Trait, Topic, Person, PersonaEntity, Message } from "../../../src/core/types.js";
+import type { Fact, Trait, Topic, Person, PersonaEntity, Message, ToolProvider, ToolDefinition } from "../../../src/core/types.js";
 
 describe("StateManager", () => {
   let sm: StateManager;
@@ -236,6 +236,130 @@ describe("StateManager", () => {
       sm.queue_resume();
       expect(sm.queue_isPaused()).toBe(false);
       expect(sm.queue_claimHighest()).not.toBeNull();
+    });
+  });
+
+  describe("tools_getForPersona", () => {
+    const PROVIDER_ID = "provider-1";
+    const TOOL_ID_1 = "tool-1";
+    const TOOL_ID_2 = "tool-2";
+    const PERSONA_ID = "persona-1";
+
+    const makeProvider = (id: string, overrides: Partial<ToolProvider> = {}): ToolProvider => ({
+      id,
+      name: "test_provider",
+      display_name: "Test Provider",
+      builtin: false,
+      config: {},
+      enabled: true,
+      created_at: new Date().toISOString(),
+      ...overrides,
+    });
+
+    const makeTool = (id: string, providerId: string, overrides: Partial<ToolDefinition> = {}): ToolDefinition => ({
+      id,
+      provider_id: providerId,
+      name: "test_tool",
+      display_name: "Test Tool",
+      description: "A test tool",
+      input_schema: {},
+      runtime: "any",
+      builtin: false,
+      enabled: true,
+      created_at: new Date().toISOString(),
+      ...overrides,
+    });
+
+    const makePersona = (id: string, name: string, tools?: string[]): PersonaEntity => ({
+      id,
+      display_name: name,
+      entity: "system",
+      aliases: [name],
+      short_description: `${name} description`,
+      traits: [],
+      topics: [],
+      is_paused: false,
+      is_archived: false,
+      is_static: false,
+      last_updated: new Date().toISOString(),
+      last_activity: new Date().toISOString(),
+      ...(tools !== undefined ? { tools } : {}),
+    });
+
+    it("returns empty array when persona.tools is undefined", () => {
+      sm.persona_add(makePersona(PERSONA_ID, "TestBot"));
+      const result = sm.tools_getForPersona(PERSONA_ID, false);
+      expect(result).toEqual([]);
+    });
+
+    it("returns empty array when persona.tools is empty array", () => {
+      sm.persona_add(makePersona(PERSONA_ID, "TestBot", []));
+      const result = sm.tools_getForPersona(PERSONA_ID, false);
+      expect(result).toEqual([]);
+    });
+
+    it("filters out tools whose provider has enabled: false", () => {
+      sm.tools_addProvider(makeProvider(PROVIDER_ID, { enabled: false }));
+      sm.tools_add(makeTool(TOOL_ID_1, PROVIDER_ID));
+      sm.persona_add(makePersona(PERSONA_ID, "TestBot", [TOOL_ID_1]));
+      const result = sm.tools_getForPersona(PERSONA_ID, false);
+      expect(result).toEqual([]);
+    });
+
+    it("filters out tools where tool.enabled === false", () => {
+      sm.tools_addProvider(makeProvider(PROVIDER_ID));
+      sm.tools_add(makeTool(TOOL_ID_1, PROVIDER_ID, { enabled: false }));
+      sm.persona_add(makePersona(PERSONA_ID, "TestBot", [TOOL_ID_1]));
+      const result = sm.tools_getForPersona(PERSONA_ID, false);
+      expect(result).toEqual([]);
+    });
+
+    it("filters out runtime: 'node' tools when isTUI === false", () => {
+      sm.tools_addProvider(makeProvider(PROVIDER_ID));
+      sm.tools_add(makeTool(TOOL_ID_1, PROVIDER_ID, { runtime: "node" }));
+      sm.persona_add(makePersona(PERSONA_ID, "TestBot", [TOOL_ID_1]));
+      const result = sm.tools_getForPersona(PERSONA_ID, false);
+      expect(result).toEqual([]);
+    });
+
+    it("includes runtime: 'node' tools when isTUI === true", () => {
+      sm.tools_addProvider(makeProvider(PROVIDER_ID));
+      sm.tools_add(makeTool(TOOL_ID_1, PROVIDER_ID, { runtime: "node" }));
+      sm.persona_add(makePersona(PERSONA_ID, "TestBot", [TOOL_ID_1]));
+      const result = sm.tools_getForPersona(PERSONA_ID, true);
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe(TOOL_ID_1);
+    });
+
+    it("filters out stale tool IDs that no longer exist in the tools registry", () => {
+      sm.tools_addProvider(makeProvider(PROVIDER_ID));
+      sm.persona_add(makePersona(PERSONA_ID, "TestBot", ["stale-tool-id"]));
+      const result = sm.tools_getForPersona(PERSONA_ID, false);
+      expect(result).toEqual([]);
+    });
+
+    it("merges provider.config and tool.config with tool-level config winning on collision", () => {
+      sm.tools_addProvider(makeProvider(PROVIDER_ID, {
+        config: { apiKey: "provider-key", baseUrl: "https://provider.com" },
+      }));
+      sm.tools_add(makeTool(TOOL_ID_1, PROVIDER_ID, {
+        config: { apiKey: "tool-key" },
+      }));
+      sm.persona_add(makePersona(PERSONA_ID, "TestBot", [TOOL_ID_1]));
+      const result = sm.tools_getForPersona(PERSONA_ID, false);
+      expect(result).toHaveLength(1);
+      expect(result[0].config).toEqual({ apiKey: "tool-key", baseUrl: "https://provider.com" });
+    });
+
+    it("returns multiple tools when all filtering criteria pass", () => {
+      sm.tools_addProvider(makeProvider(PROVIDER_ID));
+      sm.tools_add(makeTool(TOOL_ID_1, PROVIDER_ID, { name: "tool_one" }));
+      sm.tools_add(makeTool(TOOL_ID_2, PROVIDER_ID, { name: "tool_two" }));
+      sm.persona_add(makePersona(PERSONA_ID, "TestBot", [TOOL_ID_1, TOOL_ID_2]));
+      const result = sm.tools_getForPersona(PERSONA_ID, false);
+      expect(result).toHaveLength(2);
+      expect(result.map(t => t.id)).toContain(TOOL_ID_1);
+      expect(result.map(t => t.id)).toContain(TOOL_ID_2);
     });
   });
 });

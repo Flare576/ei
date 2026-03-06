@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { QueueProcessor } from "../../../src/core/queue-processor.js";
+import type { LLMHistoryMessage } from "../../../src/core/queue-processor.js";
 import { LLMRequestType, LLMPriority, LLMNextStep } from "../../../src/core/types.js";
-import type { LLMRequest, LLMResponse } from "../../../src/core/types.js";
+import type { LLMRequest, LLMResponse, ToolDefinition } from "../../../src/core/types.js";
 
 vi.mock("../../../src/core/llm-client.js", () => ({
   callLLMRaw: vi.fn(),
@@ -9,7 +10,14 @@ vi.mock("../../../src/core/llm-client.js", () => ({
   cleanResponseContent: vi.fn((content: string) => content),
 }));
 
+vi.mock("../../../src/core/tools/index.js", () => ({
+  toOpenAITools: vi.fn(() => []),
+  executeToolCalls: vi.fn(),
+  parseToolCalls: vi.fn(() => []),
+}));
+
 import * as llmClient from "../../../src/core/llm-client.js";
+import * as toolsModule from "../../../src/core/tools/index.js";
 
 describe("QueueProcessor", () => {
   let processor: QueueProcessor;
@@ -290,6 +298,216 @@ describe("QueueProcessor", () => {
         expect.objectContaining({ signal: expect.any(AbortSignal) }),
         undefined
       );
+    });
+  });
+
+  describe("tool calling", () => {
+    const makeTool = (): ToolDefinition => ({
+      id: "tool-1",
+      provider_id: "provider-1",
+      name: "some_tool",
+      display_name: "Some Tool",
+      description: "A test tool",
+      input_schema: { type: "object", properties: {} },
+      runtime: "any",
+      builtin: true,
+      enabled: true,
+      created_at: new Date().toISOString(),
+    });
+
+    const rawToolCallsData: unknown[] = [
+      { id: "tc1", type: "function", function: { name: "some_tool", arguments: "{}" } },
+    ];
+
+    const assistantMsg: Record<string, unknown> = {
+      role: "assistant",
+      content: null,
+      tool_calls: rawToolCallsData,
+    };
+
+    beforeEach(() => {
+      vi.mocked(toolsModule.parseToolCalls).mockReturnValue([
+        { id: "tc1", name: "some_tool", arguments: {} },
+      ]);
+      vi.mocked(toolsModule.executeToolCalls).mockResolvedValue({
+        results: [{ tool_call_id: "tc1", name: "some_tool", result: '{"ok":true}', error: false }],
+        exhaustedToolNames: new Set<string>(),
+      });
+      vi.mocked(toolsModule.toOpenAITools).mockReturnValue([
+        { type: "function", function: { name: "some_tool" } },
+      ]);
+    });
+
+    describe("when finish_reason is tool_calls with rawToolCalls", () => {
+      beforeEach(() => {
+        vi.mocked(llmClient.callLLMRaw).mockResolvedValue({
+          content: null,
+          finishReason: "tool_calls",
+          rawToolCalls: rawToolCallsData,
+          assistantMessage: assistantMsg,
+        });
+      });
+
+      it("calls executeToolCalls", async () => {
+        const callback = vi.fn().mockResolvedValue(undefined);
+        processor.start(makeRequest(), callback, {
+          tools: [makeTool()],
+          onEnqueue: vi.fn().mockReturnValue("id"),
+        });
+
+        await vi.waitFor(() => expect(callback).toHaveBeenCalled());
+        expect(toolsModule.executeToolCalls).toHaveBeenCalled();
+      });
+
+      it("calls onEnqueue with next_step === HandleToolSynthesis", async () => {
+        const onEnqueue = vi.fn().mockReturnValue("id");
+        const callback = vi.fn().mockResolvedValue(undefined);
+        processor.start(makeRequest(), callback, {
+          tools: [makeTool()],
+          onEnqueue,
+        });
+
+        await vi.waitFor(() => expect(callback).toHaveBeenCalled());
+        expect(onEnqueue).toHaveBeenCalledWith(
+          expect.objectContaining({ next_step: LLMNextStep.HandleToolSynthesis })
+        );
+      });
+
+      it("passes data.toolHistory containing tool results to onEnqueue", async () => {
+        const onEnqueue = vi.fn().mockReturnValue("id");
+        const callback = vi.fn().mockResolvedValue(undefined);
+        processor.start(makeRequest(), callback, {
+          tools: [makeTool()],
+          onEnqueue,
+        });
+
+        await vi.waitFor(() => expect(callback).toHaveBeenCalled());
+        const enqueuedRequest = onEnqueue.mock.calls[0][0] as LLMRequest;
+        expect(enqueuedRequest.data.toolHistory).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ role: "tool", tool_call_id: "tc1", name: "some_tool" }),
+          ])
+        );
+      });
+
+      it("passes data.originalNextStep matching the original request's next_step to onEnqueue", async () => {
+        const onEnqueue = vi.fn().mockReturnValue("id");
+        const callback = vi.fn().mockResolvedValue(undefined);
+        const request = makeRequest();
+
+        processor.start(request, callback, {
+          tools: [makeTool()],
+          onEnqueue,
+        });
+
+        await vi.waitFor(() => expect(callback).toHaveBeenCalled());
+        const enqueuedRequest = onEnqueue.mock.calls[0][0] as LLMRequest;
+        expect(enqueuedRequest.data.originalNextStep).toBe(request.next_step);
+      });
+
+      it("returns LLMResponse with finish_reason: tool_calls_enqueued", async () => {
+        const callback = vi.fn().mockResolvedValue(undefined);
+        processor.start(makeRequest(), callback, {
+          tools: [makeTool()],
+          onEnqueue: vi.fn().mockReturnValue("id"),
+        });
+
+        await vi.waitFor(() => expect(callback).toHaveBeenCalled());
+        const response = callback.mock.calls[0][0] as LLMResponse;
+        expect(response.finish_reason).toBe("tool_calls_enqueued");
+      });
+
+      it("returns LLMResponse with success: true", async () => {
+        const callback = vi.fn().mockResolvedValue(undefined);
+        processor.start(makeRequest(), callback, {
+          tools: [makeTool()],
+          onEnqueue: vi.fn().mockReturnValue("id"),
+        });
+
+        await vi.waitFor(() => expect(callback).toHaveBeenCalled());
+        const response = callback.mock.calls[0][0] as LLMResponse;
+        expect(response.success).toBe(true);
+      });
+    });
+
+    describe("when finish_reason is tool_calls but onEnqueue is not provided", () => {
+      it("does not throw and returns finish_reason: tool_calls_enqueued", async () => {
+        vi.mocked(llmClient.callLLMRaw).mockResolvedValue({
+          content: null,
+          finishReason: "tool_calls",
+          rawToolCalls: rawToolCallsData,
+          assistantMessage: assistantMsg,
+        });
+
+        const callback = vi.fn().mockResolvedValue(undefined);
+        processor.start(makeRequest(), callback, { tools: [makeTool()] });
+
+        await vi.waitFor(() => expect(callback).toHaveBeenCalled());
+        const response = callback.mock.calls[0][0] as LLMResponse;
+        expect(response.finish_reason).toBe("tool_calls_enqueued");
+      });
+    });
+
+    describe("HandleToolSynthesis requests", () => {
+      const toolHistory: LLMHistoryMessage[] = [
+        { role: "assistant", content: null, tool_calls: [{ id: "tc1" }] },
+        { role: "tool", content: '{"ok":true}', tool_call_id: "tc1", name: "some_tool" },
+      ];
+
+      const makeSynthesisRequest = (): LLMRequest => ({
+        ...makeRequest(),
+        next_step: LLMNextStep.HandleToolSynthesis,
+        data: {
+          toolHistory,
+          originalNextStep: LLMNextStep.HandlePersonaResponse,
+        },
+      });
+
+      beforeEach(() => {
+        vi.mocked(llmClient.callLLMRaw).mockResolvedValue({
+          content: '{"should_respond": true, "verbal_response": "synthesis result"}',
+          finishReason: "stop",
+        });
+        vi.mocked(llmClient.parseJSONResponse).mockReturnValue({
+          should_respond: true,
+          verbal_response: "synthesis result",
+        });
+      });
+
+      it("injects toolHistory into messages before calling callLLMRaw", async () => {
+        const conversationMessages = [{ role: "user" as const, content: "History" }];
+        const messageFetcher = vi.fn().mockReturnValue(conversationMessages);
+
+        const synthesisRequest: LLMRequest = {
+          ...makeSynthesisRequest(),
+          data: {
+            ...makeSynthesisRequest().data,
+            personaId: "test-persona-id",
+          },
+        };
+
+        const callback = vi.fn().mockResolvedValue(undefined);
+        processor.start(synthesisRequest, callback, { messageFetcher });
+
+        await vi.waitFor(() => expect(callback).toHaveBeenCalled());
+        const callArgs = vi.mocked(llmClient.callLLMRaw).mock.calls[0];
+        const passedMessages = callArgs[2];
+        expect(passedMessages).toHaveLength(3);
+        expect(passedMessages[0]).toEqual(conversationMessages[0]);
+        expect(passedMessages[1]).toMatchObject({ role: "assistant", content: null });
+        expect(passedMessages[2]).toMatchObject({ role: "tool", tool_call_id: "tc1", name: "some_tool" });
+      });
+
+      it("does not pass tools to callLLMRaw and does not call toOpenAITools", async () => {
+        const callback = vi.fn().mockResolvedValue(undefined);
+        processor.start(makeSynthesisRequest(), callback, { tools: [makeTool()] });
+
+        await vi.waitFor(() => expect(callback).toHaveBeenCalled());
+        const callArgs = vi.mocked(llmClient.callLLMRaw).mock.calls[0];
+        const options = callArgs[4];
+        expect(options).not.toHaveProperty("tools");
+        expect(toolsModule.toOpenAITools).not.toHaveBeenCalled();
+      });
     });
   });
 });
