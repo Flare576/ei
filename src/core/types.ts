@@ -50,8 +50,11 @@ export enum LLMNextStep {
   HandlePersonaExpire = "handlePersonaExpire",
   HandlePersonaExplore = "handlePersonaExplore",
   HandleDescriptionCheck = "handleDescriptionCheck",
+  // Tool calling synthesis (second LLM call after tool execution)
+  // data.toolHistory: serialized LLMHistoryMessage[] (assistant + tool result messages)
+  // data.originalNextStep: the next_step value from the originating request
+  HandleToolSynthesis = "handleToolSynthesis",
 }
-
 // =============================================================================
 // DATA ITEMS
 // =============================================================================
@@ -129,6 +132,45 @@ export interface Quote {
 // =============================================================================
 // PROVIDER ACCOUNTS
 // =============================================================================
+
+// =============================================================================
+// TOOL TYPES
+// =============================================================================
+
+/**
+ * ToolProvider - Owns shared configuration (API keys, base URLs) for a group of tools.
+ * Every ToolDefinition must belong to exactly one ToolProvider.
+ * Config is merged at query time: { ...provider.config, ...tool.config } (tool overrides win).
+ */
+export interface ToolProvider {
+  id: string;                        // UUID (or "ei" for the built-in Ei provider)
+  name: string;                      // Machine name ("ei", "brave", "github")
+  display_name: string;              // Human label ("Ei Built-ins", "Brave Search")
+  description?: string;              // Short description shown in UI
+  builtin: boolean;                  // true = ships with Ei; false = user-registered
+  config: Record<string, string>;    // Shared API keys / base URLs (encrypted at rest)
+  enabled: boolean;                  // Kill-switch: disabled = all its tools unavailable
+  created_at: string;                // ISO timestamp
+}
+
+/**
+ * ToolDefinition - One callable LLM function. Must belong to a ToolProvider.
+ * Personas reference tools by ID via their `tools` array.
+ */
+export interface ToolDefinition {
+  id: string;                          // UUID
+  provider_id: string;                 // FK → ToolProvider.id (required)
+  name: string;                        // Snake_case machine name ("web_search", "read_memory")
+  display_name: string;                // Human label
+  description: string;                 // What the LLM reads to decide whether to call this tool
+  input_schema: Record<string, unknown>; // JSON Schema for parameters the LLM can pass
+  runtime: "any" | "node";             // "any" = Web + TUI; "node" = TUI only (silently excluded in browser)
+  builtin: boolean;                    // true = ships with Ei; false = user-registered
+  config?: Record<string, string>;     // Tool-level config overrides (merged on top of provider config)
+  enabled: boolean;
+  created_at: string;                  // ISO timestamp
+  max_calls_per_interaction?: number;  // Max times LLM may call this tool per response turn. Default: 3.
+}
 
 export enum ProviderType {
   LLM = "llm",
@@ -250,6 +292,7 @@ export interface PersonaEntity {
   last_activity: string;
   last_heartbeat?: string;
   last_extraction?: string;
+  tools?: string[];              // IDs of ToolDefinitions this persona can use. Empty/absent = no tool access.
 }
 
 export interface PersonaCreationInput {
@@ -262,6 +305,7 @@ export interface PersonaCreationInput {
   model?: string;
   group_primary?: string;
   groups_visible?: string[];
+  tools?: string[];              // IDs of ToolDefinitions to assign at creation time
 }
 
 // Message pruning thresholds (shared by ceremony and import)
@@ -402,6 +446,12 @@ export interface Ei_Interface {
   onSaveAndExitStart?: () => void;
   onSaveAndExitFinish?: () => void;
   onStateConflict?: (data: StateConflictData) => void;
+  onToolProviderAdded?: () => void;
+  onToolProviderUpdated?: (id: string) => void;
+  onToolProviderRemoved?: () => void;
+  onToolAdded?: () => void;
+  onToolUpdated?: (id: string) => void;
+  onToolRemoved?: () => void;
 }
 
 // =============================================================================
@@ -432,6 +482,8 @@ export interface StorageState {
     }
   >;
   queue: LLMRequest[];
+  providers: ToolProvider[];    // Tool provider registry (Ei, Brave, etc.)
+  tools: ToolDefinition[];      // Platform-level tool registry
 }
 
 

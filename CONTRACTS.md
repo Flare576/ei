@@ -172,6 +172,28 @@ interface Ei_Interface {
   
   /** State was imported from external source (importState or post-conflict resolution) */
   onStateImported?: () => void;
+
+  // === Tool Provider Events ===
+
+  /** A tool provider was added */
+  onToolProviderAdded?: () => void;
+
+  /** A tool provider's config or enabled state was updated */
+  onToolProviderUpdated?: (id: string) => void;
+
+  /** A tool provider was removed (and all its tools) */
+  onToolProviderRemoved?: () => void;
+
+  // === Tool Events ===
+
+  /** A tool was added to the platform registry */
+  onToolAdded?: () => void;
+
+  /** A tool's definition or config was updated */
+  onToolUpdated?: (id: string) => void;
+
+  /** A tool was removed from the platform registry */
+  onToolRemoved?: () => void;
 }
 ```
 
@@ -391,6 +413,46 @@ interface Processor {
    * Result returned via onOneShotReturned event with matching guid.
    */
   submitOneShot(guid: string, systemPrompt: string, userPrompt: string): Promise<void>;
+
+  // === Tool Provider Operations ===
+
+  /** Get all registered tool providers */
+  getToolProviderList(): ToolProvider[];
+
+  /** Get a single provider by ID */
+  getToolProvider(id: string): ToolProvider | null;
+
+  /** Register a new tool provider. Returns the new provider's ID. */
+  addToolProvider(provider: Omit<ToolProvider, 'id' | 'created_at'>): Promise<string>;
+
+  /** Update an existing provider's fields (name, config, enabled) */
+  updateToolProvider(id: string, updates: Partial<Omit<ToolProvider, 'id' | 'created_at'>>): Promise<boolean>;
+
+  /**
+   * Remove a tool provider.
+   * Also removes all tools belonging to this provider and unassigns them from personas.
+   */
+  removeToolProvider(id: string): Promise<boolean>;
+
+  // === Tool Operations ===
+
+  /** Get all registered tools */
+  getToolList(): ToolDefinition[];
+
+  /** Get a single tool by ID */
+  getTool(id: string): ToolDefinition | null;
+
+  /** Register a new tool. Returns the new tool's ID. */
+  addTool(tool: Omit<ToolDefinition, 'id' | 'created_at'>): Promise<string>;
+
+  /** Update an existing tool's fields */
+  updateTool(id: string, updates: Partial<Omit<ToolDefinition, 'id' | 'created_at'>>): Promise<boolean>;
+
+  /**
+   * Remove a tool from the registry.
+   * Also removes the tool from any persona's tools list.
+   */
+  removeTool(id: string): Promise<boolean>;
   
   // === Debug / DevTools Only ===
   // Not for production use. Accessible via browser devtools or TUI debug commands.
@@ -539,6 +601,29 @@ interface StateManager {
   /** Check if queue is paused */
   queue_isPaused(): boolean;
   
+  // === Tool Providers ===
+
+  tools_getProviders(): ToolProvider[];
+  tools_getProviderById(id: string): ToolProvider | null;
+  tools_addProvider(provider: ToolProvider): void;
+  tools_updateProvider(id: string, updates: Partial<ToolProvider>): boolean;
+  tools_removeProvider(id: string): boolean;
+
+  // === Tools ===
+
+  tools_getAll(): ToolDefinition[];
+  tools_getById(id: string): ToolDefinition | null;
+  tools_getByName(name: string): ToolDefinition | null;
+  tools_add(tool: ToolDefinition): void;
+  tools_update(id: string, updates: Partial<ToolDefinition>): boolean;
+  tools_remove(id: string): boolean;
+  /**
+   * Returns tools assigned to a persona, filtered by runtime availability.
+   * Config is merged: provider.config is base, tool.config overrides.
+   * Provider must be enabled for any of its tools to be returned.
+   */
+  tools_getForPersona(personaId: string, isTUI: boolean): ToolDefinition[];
+  
   // === State Export/Import ===
   
   /** Get current state for external use (remote sync, export) */
@@ -605,7 +690,8 @@ interface StorageState {
     messages: Message[];
   }>;
   queue: LLMRequest[];
-}
+  providers: ToolProvider[];    // Tool provider registry (Ei, Brave, etc.)
+  tools: ToolDefinition[];      // Platform-level tool registry
 ```
 
 ### Storage Implementations
@@ -793,6 +879,8 @@ interface PersonaCreationInput {
   model?: string;                  // LLM model override
   group_primary?: string;          // Group membership
   groups_visible?: string[];       // Additional group visibility
+  tools?: string[];                // IDs of ToolDefinitions to assign. Empty/absent = no tool access.
+}
 }
 ```
 
@@ -841,6 +929,7 @@ interface PersonaEntity {
   last_activity: string;           // Last message (human or system)
   last_heartbeat?: string;
   last_extraction?: string;
+  tools?: string[];              // IDs of ToolDefinitions this persona can use. Empty/absent = no tool access.
 }
 ```
 
@@ -1036,6 +1125,81 @@ groups_visible: ["General"]
 
 ---
 
+## Tool Types
+
+### ToolProvider
+
+Owns shared configuration (API keys, base URLs) for a group of related tools.
+Every `ToolDefinition` must belong to exactly one `ToolProvider`.
+Config is merged at query time: `{ ...provider.config, ...tool.config }` (tool overrides win).
+
+```typescript
+interface ToolProvider {
+  id: string;                        // UUID (or "ei" for the built-in Ei provider)
+  name: string;                      // Machine name ("ei", "brave", "github")
+  display_name: string;              // Human label ("Ei Built-ins", "Brave Search")
+  description?: string;              // Short description shown in UI
+  builtin: boolean;                  // true = ships with Ei; false = user-registered
+  config: Record<string, string>;    // Shared API keys / base URLs (encrypted at rest)
+  enabled: boolean;                  // Provider kill-switch. Disabled = all its tools unavailable.
+  created_at: string;                // ISO timestamp
+}
+```
+
+**Built-in providers** (seeded on every startup if absent):
+
+| ID | display_name | Default enabled | Notes |
+|----|--------------|-----------------|-------|
+| `ei` | Ei Built-ins | `true` | Holds `read_memory`, `file_read`. No config needed. |
+| `brave` | Brave Search | `false` | Holds `brave_web_search` etc. Requires `config.api_key`. |
+
+### ToolDefinition
+
+One callable LLM function. Must belong to a `ToolProvider`.
+
+```typescript
+interface ToolDefinition {
+  id: string;                          // UUID
+  provider_id: string;                 // FK → ToolProvider.id (required)
+  name: string;                        // Snake_case machine name ("web_search", "read_memory")
+  display_name: string;                // Human label ("Web Search", "Read Memory")
+  description: string;                 // What the LLM reads to decide whether to call this tool
+  input_schema: Record<string, unknown>; // JSON Schema for parameters the LLM can pass
+  runtime: "any" | "node";             // "any" = Web + TUI; "node" = TUI only (silently excluded in browser)
+  builtin: boolean;                    // true = ships with Ei; false = user-registered
+  config?: Record<string, string>;     // Tool-level config overrides (merged on top of provider config)
+  enabled: boolean;
+  created_at: string;                  // ISO timestamp
+  max_calls_per_interaction?: number;  // Max times LLM may call this tool per response turn. Default: 3.
+}
+```
+
+**Built-in tools** (seeded alongside their provider on startup):
+
+| Name | Provider | Runtime | Description |
+|------|----------|---------|-------------|
+| `read_memory` | `ei` | `any` | Queries `StateManager.searchHumanData()` — embedding search, no external call |
+| `file_read` | `ei` | `node` | Reads a file from the local filesystem (TUI only) |
+| `brave_web_search` | `brave` | `any` | Web search via Brave Search API |
+| `brave_news_search` | `brave` | `any` | News search via Brave Search API |
+| `brave_image_search` | `brave` | `any` | Image search via Brave Search API |
+
+**Tool calling applies to** (v1): `HandlePersonaResponse`, `HandleHeartbeatCheck`, `HandleEiHeartbeat`.
+
+**Tool calling does NOT apply to** (v1): extraction steps, ceremony phases.
+
+### Tool Failure Behavior
+
+| Failure | Behavior |
+|---------|----------|
+| Provider disabled | Tool excluded from persona's available tools silently |
+| Tool returns 5xx / network error | Inject error result, remove tool from payload for remainder of interaction |
+| `max_calls_per_interaction` reached | Omit tool from payload on next loop iteration |
+| Tool returns empty result | Inject `"No results found"`, continue loop normally |
+| LLM emits malformed tool call JSON | Log warning, treat as stop, return what we have |
+| All tools exhausted/failed | LLM synthesizes final response without tools — always responds |
+---
+
 ## LLM Types
 
 ### LLMRequest
@@ -1119,7 +1283,12 @@ enum LLMNextStep {
   // Ceremony System
   HandlePersonaExpire = "handlePersonaExpire",
   HandlePersonaExplore = "handlePersonaExplore",
-  HandleDescriptionCheck = "handleDescriptionCheck"
+  HandleDescriptionCheck = "handleDescriptionCheck",
+  
+  // Tool calling synthesis (second LLM call after tool execution)
+  // data.toolHistory: serialized LLMHistoryMessage[] (assistant + tool result messages)
+  // data.originalNextStep: the next_step value from the originating request (e.g., HandlePersonaResponse)
+  HandleToolSynthesis = "handleToolSynthesis"
 }
 ```
 
@@ -1377,3 +1546,6 @@ Standard error codes for `onError` events:
 | 2026-02-27 | Updated Error Codes: removed checkpoint codes, added `LLM_AUTH_ERROR`, `LLM_SERVER_ERROR`, `LLM_REQUEST_ERROR`, `HANDLER_NOT_FOUND`, `HANDLER_ERROR` |
 | 2026-03-01 | Added `oneshot_model` to `HumanSettings` for AI-assist wand model override |
 | 2026-03-02 | Added `BackupConfig` interface; added `backup?: BackupConfig` to `HumanSettings`; added `saveRollingBackup()` to Storage interface (TUI only) |
+| 2026-03-04 | Added `ToolDefinition` interface and Tool Types section |
+| 2026-03-04 | Added `tools?: string[]` to `PersonaEntity` |
+| 2026-03-04 | Added `tools: ToolDefinition[]` to `StorageState` |
