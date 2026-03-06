@@ -30,7 +30,9 @@ export interface NewPersonaEditorResult {
 export async function createPersonaViaEditor(options: NewPersonaEditorOptions): Promise<NewPersonaEditorResult> {
   const { personaName, ctx } = options;
   
-  let yamlContent = newPersonaToYAML(personaName);
+  const allTools = ctx.ei.getToolList();
+  const allProviders = ctx.ei.getToolProviderList();
+  let yamlContent = newPersonaToYAML(personaName, allTools, allProviders);
   
   while (true) {
     const result = await spawnEditor({
@@ -55,7 +57,7 @@ export async function createPersonaViaEditor(options: NewPersonaEditorOptions): 
     }
     
     try {
-      const parsed = newPersonaFromYAML(result.content);
+      const parsed = newPersonaFromYAML(result.content, allTools, allProviders);
       // Validate provider name in model (case-insensitive match + auto-correct)
       const human = await ctx.ei.getHuman();
       const llmAccounts = human.settings?.accounts?.filter(a => a.type === "llm") ?? [];
@@ -110,7 +112,9 @@ export async function createPersonaViaEditor(options: NewPersonaEditorOptions): 
 export async function openPersonaEditor(options: PersonaEditorOptions): Promise<PersonaEditorResult> {
   const { personaId, persona, ctx } = options;
   const allGroups = await ctx.ei.getGroupList();
-  let yamlContent = personaToYAML(persona, allGroups);
+  const allTools = ctx.ei.getToolList();
+  const allProviders = ctx.ei.getToolProviderList();
+  let yamlContent = personaToYAML(persona, allGroups, allTools, allProviders);
   
   while (true) {
     const result = await spawnEditor({
@@ -135,7 +139,7 @@ export async function openPersonaEditor(options: PersonaEditorOptions): Promise<
     }
     
     try {
-      const parsed = personaFromYAML(result.content, persona);
+      const parsed = personaFromYAML(result.content, persona, allTools, allProviders);
       // Validate provider name in model (case-insensitive match + auto-correct)
       const human = await ctx.ei.getHuman();
       const llmAccounts = human.settings?.accounts?.filter(a => a.type === "llm") ?? [];

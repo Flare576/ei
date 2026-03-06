@@ -34,6 +34,7 @@ import type {
   ContextStatus,
   LLMRequest,
 } from "../../../src/core/types.js";
+import type { ToolProvider, ToolDefinition } from "../../../src/core/types.js";
 
 interface EiStore {
   ready: boolean;
@@ -104,8 +105,11 @@ export interface EiContextValue {
   deleteMessages: (personaId: string, messageIds: string[]) => Promise<void>;
   setMessageContextStatus: (personaId: string, messageId: string, status: ContextStatus) => Promise<void>;
   recallPendingMessages: () => Promise<string>;
+  getToolProviderList: () => ToolProvider[];
+  getToolList: () => ToolDefinition[];
+  updateToolProvider: (id: string, updates: Partial<Omit<ToolProvider, 'id' | 'created_at'>>) => Promise<boolean>;
+  updateTool: (id: string, updates: Partial<Omit<ToolDefinition, 'id' | 'created_at'>>) => Promise<boolean>;
 }
-
 const EiContext = createContext<EiContextValue>();
 
 export const EiProvider: ParentComponent = (props) => {
@@ -412,6 +416,25 @@ export const EiProvider: ParentComponent = (props) => {
     return processor.recallPendingMessages(personaId);
   };
 
+  const getToolProviderList = (): ToolProvider[] => {
+    if (!processor) return [];
+    return processor.getToolProviderList();
+  };
+
+  const getToolList = (): ToolDefinition[] => {
+    if (!processor) return [];
+    return processor.getToolList();
+  };
+
+  const updateToolProvider = async (id: string, updates: Partial<Omit<ToolProvider, 'id' | 'created_at'>>): Promise<boolean> => {
+    if (!processor) return false;
+    return processor.updateToolProvider(id, updates);
+  };
+
+  const updateTool = async (id: string, updates: Partial<Omit<ToolDefinition, 'id' | 'created_at'>>): Promise<boolean> => {
+    if (!processor) return false;
+    return processor.updateTool(id, updates);
+  };
 
   const searchHumanData = async (
     query: string,
@@ -631,8 +654,11 @@ export const EiProvider: ParentComponent = (props) => {
     deleteMessages,
     setMessageContextStatus,
     recallPendingMessages,
+    getToolProviderList,
+    getToolList,
+    updateToolProvider,
+    updateTool,
   };
-
   return (
     <Switch>
       <Match when={conflictData()}>

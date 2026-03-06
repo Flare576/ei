@@ -18,6 +18,8 @@ import type {
   LLMRequest,
   LLMRequestState,
   LLMPriority,
+  ToolProvider,
+  ToolDefinition,
   } from "../../../src/core/types.js";
 import { ContextStatus } from "../../../src/core/types.js";
 import type { ClaudeCodeSettings } from "../../../src/integrations/claude-code/types.js";
@@ -52,11 +54,12 @@ interface EditablePersonaData {
   groups_visible?: Record<string, boolean>[];
   traits: YAMLTrait[];
   topics: YAMLPersonaTopic[];
-  heartbeat_delay_ms?: number;
+  heartbeat_delay_ms?: string | number;
   context_window_hours?: number;
   is_paused?: boolean;
   pause_until?: string;
   is_static?: boolean;
+  tools?: Record<string, Record<string, boolean>>;
 }
 
 interface EditableHumanData {
@@ -103,13 +106,64 @@ const PLACEHOLDER_TOPIC: YAMLPersonaTopic = {
 };
 
 // =============================================================================
+// TOOL MAP HELPERS (for persona YAML — human-readable grouped tool toggles)
+// =============================================================================
+
+/**
+ * Build the nested tools map for YAML: { providerDisplayName: { toolDisplayName: bool } }
+ * enabledToolIds = persona.tools (array of ToolDefinition IDs)
+ */
+function buildPersonaToolsMap(
+  enabledToolIds: string[],
+  allTools: ToolDefinition[],
+  allProviders: import('../../../src/core/types.js').ToolProvider[]
+): Record<string, Record<string, boolean>> | undefined {
+  if (allTools.length === 0) return undefined;
+  const enabledSet = new Set(enabledToolIds);
+  const result: Record<string, Record<string, boolean>> = {};
+  for (const provider of allProviders.filter(p => p.enabled)) {
+    const providerTools = allTools.filter(t => t.provider_id === provider.id);
+    if (providerTools.length === 0) continue;
+    result[provider.display_name] = Object.fromEntries(
+      providerTools.map(t => [t.display_name, enabledSet.has(t.id)])
+    );
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+/**
+ * Flatten the nested tools map back to an array of ToolDefinition IDs.
+ * toolsMap keys are provider display names; inner keys are tool display names.
+ */
+function resolvePersonaToolsFromMap(
+  toolsMap: Record<string, Record<string, boolean>> | undefined,
+  allTools: ToolDefinition[],
+  allProviders: import('../../../src/core/types.js').ToolProvider[]
+): string[] | undefined {
+  if (!toolsMap) return undefined;
+  const enabledIds: string[] = [];
+  for (const [providerDisplayName, toolToggles] of Object.entries(toolsMap)) {
+    const provider = allProviders.find(p => p.display_name === providerDisplayName);
+    if (!provider) continue;
+    for (const [toolDisplayName, enabled] of Object.entries(toolToggles)) {
+      if (!enabled) continue;
+      const tool = allTools.find(t => t.provider_id === provider.id && t.display_name === toolDisplayName);
+      if (tool) enabledIds.push(tool.id);
+    }
+  }
+  return enabledIds.length > 0 ? enabledIds : [];
+}
+
+// =============================================================================
 // PERSONA SERIALIZATION
 // =============================================================================
 
 /**
  * Generate YAML skeleton for a NEW persona (doesn't exist yet)
  */
-export function newPersonaToYAML(name: string): string {
+export function newPersonaToYAML(name: string, allTools?: ToolDefinition[], allProviders?: import('../../../src/core/types.js').ToolProvider[]): string {
+  const toolsMap = buildPersonaToolsMap([], allTools ?? [], allProviders ?? []);
+
   const data: EditablePersonaData = {
     display_name: name,
     long_description: PLACEHOLDER_LONG_DESC,
@@ -118,6 +172,7 @@ export function newPersonaToYAML(name: string): string {
     groups_visible: [{ General: true }],
     traits: [PLACEHOLDER_TRAIT],
     topics: [PLACEHOLDER_TOPIC],
+    tools: toolsMap,
   };
   
   return YAML.stringify(data, { 
@@ -128,7 +183,7 @@ export function newPersonaToYAML(name: string): string {
 /**
  * Parse YAML for a NEW persona (creates PersonaEntity from scratch)
  */
-export function newPersonaFromYAML(yamlContent: string): Partial<PersonaEntity> {
+export function newPersonaFromYAML(yamlContent: string, allTools?: ToolDefinition[], allProviders?: import('../../../src/core/types.js').ToolProvider[]): Partial<PersonaEntity> {
   const data = YAML.parse(yamlContent) as EditablePersonaData;
   
   const isTraitPlaceholder = (t: YAMLTrait) => 
@@ -195,10 +250,11 @@ export function newPersonaFromYAML(yamlContent: string): Partial<PersonaEntity> 
     topics,
     heartbeat_delay_ms: data.heartbeat_delay_ms,
     context_window_hours: data.context_window_hours,
+    tools: resolvePersonaToolsFromMap(data.tools, allTools ?? [], allProviders ?? []),
   };
 }
 
-export function personaToYAML(persona: PersonaEntity, allGroups?: string[]): string {
+export function personaToYAML(persona: PersonaEntity, allGroups?: string[], allTools?: ToolDefinition[], allProviders?: import('../../../src/core/types.js').ToolProvider[]): string {
   const useTraitPlaceholder = persona.traits.length === 0;
   const useTopicPlaceholder = persona.topics.length === 0;
   
@@ -208,6 +264,9 @@ export function personaToYAML(persona: PersonaEntity, allGroups?: string[]): str
   for (const groupName of groupsToShow) {
     groupsForYAML.push({ [groupName]: visibleSet.has(groupName) });
   }
+
+  // Build tools map: all known tools, true if persona has it enabled
+  const toolsMap = buildPersonaToolsMap(persona.tools ?? [], allTools ?? [], allProviders ?? []);
   
   const data: EditablePersonaData = {
     display_name: persona.display_name,
@@ -230,6 +289,7 @@ export function personaToYAML(persona: PersonaEntity, allGroups?: string[]): str
     is_paused: persona.is_paused || undefined,
     pause_until: persona.pause_until,
     is_static: persona.is_static || undefined,
+    tools: toolsMap,
   };
   
   return YAML.stringify(data, { 
@@ -243,7 +303,7 @@ export interface PersonaYAMLResult {
   deletedTopicIds: string[];
 }
 
-export function personaFromYAML(yamlContent: string, original: PersonaEntity): PersonaYAMLResult {
+export function personaFromYAML(yamlContent: string, original: PersonaEntity, allTools?: ToolDefinition[], allProviders?: import('../../../src/core/types.js').ToolProvider[]): PersonaYAMLResult {
   const data = YAML.parse(yamlContent) as EditablePersonaData;
   
   const deletedTraitIds: string[] = [];
@@ -327,11 +387,12 @@ export function personaFromYAML(yamlContent: string, original: PersonaEntity): P
     groups_visible: groupsVisible,
     traits,
     topics,
-    heartbeat_delay_ms: stripPlaceholder(data.heartbeat_delay_ms, 'default'),
+    heartbeat_delay_ms: stripPlaceholder(data.heartbeat_delay_ms as string | undefined, 'default'),
     context_window_hours: data.context_window_hours,
     is_paused: data.is_paused ?? false,
     pause_until: data.pause_until,
     is_static: data.is_static ?? false,
+    tools: resolvePersonaToolsFromMap(data.tools, allTools ?? [], allProviders ?? []),
     last_updated: new Date().toISOString(),
   };
   
@@ -883,4 +944,64 @@ export function queueItemsFromYAML(yamlContent: string): QueueItemUpdate[] {
       data: item.data,
     };
   });
+}
+
+// =============================================================================
+// TOOLKIT (ToolProvider) SERIALIZATION
+// =============================================================================
+
+interface EditableToolkitData {
+  display_name: string;
+  enabled: boolean;
+  config: Record<string, string>;
+  tools?: Record<string, boolean>;
+}
+
+/**
+ * Serialize a ToolProvider + its tools to YAML for editing.
+ * Shows config keys and per-tool enable toggles.
+ */
+export function toolkitToYAML(provider: ToolProvider, tools: ToolDefinition[]): string {
+  const toolsMap = tools.length > 0
+    ? Object.fromEntries(tools.map(t => [t.display_name, t.enabled]))
+    : undefined;
+  const data: EditableToolkitData = {
+    display_name: provider.display_name,
+    enabled: provider.enabled,
+    config: { ...provider.config },
+    tools: toolsMap,
+  };
+  return YAML.stringify(data, { lineWidth: 0 });
+}
+
+export interface ToolkitYAMLResult {
+  updates: Partial<Omit<ToolProvider, 'id' | 'created_at'>>;
+  toolUpdates: Array<{ id: string; enabled: boolean }>;
+}
+
+/**
+ * Parse edited YAML back into ToolProvider updates + per-tool enable changes.
+ */
+export function toolkitFromYAML(yamlContent: string, original: ToolProvider, tools: ToolDefinition[]): ToolkitYAMLResult {
+  const data = YAML.parse(yamlContent) as EditableToolkitData;
+
+  if (!data.display_name) {
+    throw new Error("display_name is required");
+  }
+
+  const updates: Partial<Omit<ToolProvider, 'id' | 'created_at'>> = {
+    display_name: data.display_name,
+    enabled: data.enabled ?? original.enabled,
+    config: data.config ?? {},
+  };
+
+  const toolUpdates: Array<{ id: string; enabled: boolean }> = [];
+  if (data.tools) {
+    for (const [displayName, enabled] of Object.entries(data.tools)) {
+      const tool = tools.find(t => t.display_name === displayName);
+      if (tool) toolUpdates.push({ id: tool.id, enabled: Boolean(enabled) });
+    }
+  }
+
+  return { updates, toolUpdates };
 }

@@ -23,6 +23,7 @@ import { providerCommand } from "../commands/provider";
 import { setSyncCommand } from "../commands/setsync";
 import { queueCommand } from "../commands/queue";
 import { dlqCommand } from "../commands/dlq";
+import { toolsCommand } from "../commands/tools";
 import { useOverlay } from "../context/overlay";
 import { CommandSuggest } from "./CommandSuggest";
 import { useKeyboard } from "@opentui/solid";
@@ -60,6 +61,7 @@ export function PromptInput() {
   registerCommand(deleteCommand);
   registerCommand(queueCommand);
   registerCommand(dlqCommand);
+  registerCommand(toolsCommand);
 
   let textareaRef: TextareaRenderable | undefined;
 
