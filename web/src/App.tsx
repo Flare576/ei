@@ -19,6 +19,8 @@ import type {
   ProviderAccount,
   StateConflictData,
   StateConflictResolution,
+  ToolProvider,
+  ToolDefinition,
 } from "../../src/core/types";
 import { Layout, PersonaPanel, ChatPanel, ControlArea, HelpModal, type PersonaPanelHandle, type ChatPanelHandle } from "./components/Layout";
 import { HumanEditor, PersonaEditor, PersonaCreatorModal, ArchivedPersonasModal } from "./components/EntityEditor";
@@ -61,6 +63,8 @@ function App() {
   const [availableGroups, setAvailableGroups] = useState<string[]>([]);
    const [activePersonaEntity, setActivePersonaEntity] = useState<PersonaEntity | null>(null);
    const [quotes, setQuotes] = useState<Quote[]>([]);
+   const [toolProviders, setToolProviders] = useState<ToolProvider[]>([]);
+   const [toolDefinitions, setToolDefinitions] = useState<ToolDefinition[]>([]);
    const [captureMessage, setCaptureMessage] = useState<Message | null>(null);
    const [editingQuote, setEditingQuote] = useState<Quote | null>(null);
    const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false);
@@ -196,6 +200,24 @@ function App() {
           resolve(content);
         }
       },
+      onToolProviderAdded: () => {
+        setToolProviders(processorRef.current?.getToolProviderList() ?? []);
+      },
+      onToolProviderUpdated: () => {
+        setToolProviders(processorRef.current?.getToolProviderList() ?? []);
+      },
+      onToolProviderRemoved: () => {
+        setToolProviders(processorRef.current?.getToolProviderList() ?? []);
+      },
+      onToolAdded: () => {
+        setToolDefinitions(processorRef.current?.getToolList() ?? []);
+      },
+      onToolUpdated: () => {
+        setToolDefinitions(processorRef.current?.getToolList() ?? []);
+      },
+      onToolRemoved: () => {
+        setToolDefinitions(processorRef.current?.getToolList() ?? []);
+      },
     };
 
     const p = new Processor(eiInterface);
@@ -215,6 +237,8 @@ function App() {
       p.getHuman().then(setHuman);
       p.getGroupList().then(setAvailableGroups);
       p.getQuotes().then(setQuotes);
+      setToolProviders(p.getToolProviderList());
+      setToolDefinitions(p.getToolList());
     });
 
     return () => {
@@ -551,6 +575,7 @@ function App() {
     topics?: Array<{ name?: string; description?: string; exposure_current?: number; exposure_desired?: number }>;
     model?: string;
     group_primary?: string;
+    tools?: string[];
   }) => {
     if (!processor) return;
     await processor.createPersona({
@@ -562,6 +587,7 @@ function App() {
       topics: data.topics,
       model: data.model,
       group_primary: data.group_primary,
+      tools: data.tools,
     });
     processor.getPersonaList().then(setPersonas);
     setShowPersonaCreator(false);
@@ -697,6 +723,24 @@ function App() {
     }
   }, []);
 
+  const handleToolProviderUpdate = useCallback(async (id: string, updates: Partial<Omit<ToolProvider, 'id' | 'created_at'>>) => {
+    if (!processor) return;
+    await processor.updateToolProvider(id, updates);
+    setToolProviders(processor.getToolProviderList());
+  }, [processor]);
+
+  const handleToolProviderRemove = useCallback(async (id: string) => {
+    if (!processor) return;
+    await processor.removeToolProvider(id);
+    setToolProviders(processor.getToolProviderList());
+  }, [processor]);
+
+  const handleToolUpdate = useCallback(async (id: string, updates: Partial<Omit<ToolDefinition, 'id' | 'created_at'>>) => {
+    if (!processor) return;
+    await processor.updateTool(id, updates);
+    setToolDefinitions(processor.getToolList());
+  }, [processor]);
+
   if (showOnboarding === null) {
     return (
       <div className="ei-loading">
@@ -783,6 +827,11 @@ function App() {
           onUpdate={handleHumanUpdate}
           onDownloadBackup={handleDownloadBackup}
           onUploadBackup={handleUploadBackup}
+          toolProviders={toolProviders}
+          toolDefinitions={toolDefinitions}
+          onToolProviderUpdate={handleToolProviderUpdate}
+          onToolProviderRemove={handleToolProviderRemove}
+          onToolUpdate={handleToolUpdate}
         />
 
         <HumanEditor
@@ -837,6 +886,8 @@ function App() {
         onContextBoundaryChange={handleContextBoundaryChange}
         onDeleteMessage={handleDeleteMessage}
         onAiAssist={handleAiAssist}
+        toolProviders={toolProviders}
+        toolDefinitions={toolDefinitions}
       />
     )}
 
@@ -845,6 +896,8 @@ function App() {
       onClose={() => setShowPersonaCreator(false)}
       onCreate={handlePersonaCreate}
       onAiAssist={handleAiAssist}
+      toolProviders={toolProviders}
+      toolDefinitions={toolDefinitions}
     />
 
     <ArchivedPersonasModal

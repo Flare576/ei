@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { ProviderList, ProviderEditor } from '../Settings';
-import type { ProviderAccount, SyncCredentials } from '../../../../src/core/types';
+import { ToolkitList } from './ToolkitList';
+import { ToolkitEditor } from './ToolkitEditor';
+import type { ProviderAccount, SyncCredentials, ToolProvider, ToolDefinition } from '../../../../src/core/types';
 
 interface SettingsData {
   name_display?: string;
@@ -19,11 +21,17 @@ interface SettingsModalProps {
   onUpdate: (updates: Partial<SettingsData>) => void;
   onDownloadBackup: () => void;
   onUploadBackup: (file: File) => void;
+  toolProviders: ToolProvider[];
+  toolDefinitions: ToolDefinition[];
+  onToolProviderUpdate: (id: string, updates: Partial<Omit<ToolProvider, 'id' | 'created_at'>>) => void;
+  onToolProviderRemove: (id: string) => void;
+  onToolUpdate: (id: string, updates: Partial<Omit<ToolDefinition, 'id' | 'created_at'>>) => void;
 }
 
 const tabs = [
   { id: 'general', label: 'General', icon: '⚙️' },
   { id: 'providers', label: 'Providers', icon: '🔌' },
+  { id: 'toolkits', label: 'Toolkits', icon: '🔧' },
   { id: 'data', label: 'Data', icon: '💾' },
 ];
 
@@ -34,6 +42,11 @@ export const SettingsModal = ({
   onUpdate,
   onDownloadBackup,
   onUploadBackup,
+  toolProviders,
+  toolDefinitions,
+  onToolProviderUpdate,
+  onToolProviderRemove,
+  onToolUpdate,
 }: SettingsModalProps) => {
   const [activeTab, setActiveTab] = useState('general');
   const modalRef = useRef<HTMLDivElement>(null);
@@ -42,6 +55,8 @@ export const SettingsModal = ({
   const [localAccounts, setLocalAccounts] = useState<ProviderAccount[]>(settings.accounts || []);
   const [accountEditorOpen, setAccountEditorOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<ProviderAccount | null>(null);
+  const [toolkitEditorOpen, setToolkitEditorOpen] = useState(false);
+  const [editingProvider, setEditingProvider] = useState<ToolProvider | null>(null);
   
   const [syncUsername, setSyncUsername] = useState(settings.sync?.username || "");
   const [syncPassphrase, setSyncPassphrase] = useState(settings.sync?.passphrase || "");
@@ -248,12 +263,49 @@ export const SettingsModal = ({
                 onToggle={handleAccountToggle}
               />
             </section>
+          </div>
+        );
 
-            <ProviderEditor
-              isOpen={accountEditorOpen}
-              account={editingAccount}
-              onSave={handleAccountSave}
-              onClose={handleAccountEditorClose}
+      case 'toolkits':
+        return (
+          <div className="ei-settings-form">
+            <section className="ei-settings-section">
+              <h3 className="ei-settings-section__title">Tool Kits</h3>
+              <p className="ei-settings-section__description">
+                Manage tool providers that personas can use during conversations.
+              </p>
+              <ToolkitList
+                providers={toolProviders}
+                tools={toolDefinitions}
+                onEdit={(provider) => {
+                  setEditingProvider(provider);
+                  setToolkitEditorOpen(true);
+                }}
+                onDelete={onToolProviderRemove}
+                onToggleProvider={(id, enabled) => onToolProviderUpdate(id, { enabled })}
+                onToggleTool={(id, enabled) => onToolUpdate(id, { enabled })}
+              />
+            </section>
+
+            <ToolkitEditor
+              isOpen={toolkitEditorOpen}
+              provider={editingProvider}
+              tools={toolDefinitions}
+              onToolUpdate={onToolUpdate}
+              onSave={(updated) => {
+                onToolProviderUpdate(updated.id, {
+                  display_name: updated.display_name,
+                  description: updated.description,
+                  enabled: updated.enabled,
+                  config: updated.config,
+                });
+                setToolkitEditorOpen(false);
+                setEditingProvider(null);
+              }}
+              onClose={() => {
+                setToolkitEditorOpen(false);
+                setEditingProvider(null);
+              }}
             />
           </div>
         );

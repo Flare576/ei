@@ -4,8 +4,9 @@ import { PersonaSettingsTab } from './tabs/PersonaSettingsTab';
 import { PersonaIdentityTab } from './tabs/PersonaIdentityTab';
 import { PersonaTopicsTab } from './tabs/PersonaTopicsTab';
 import { ContextWindowTab } from './tabs/ContextWindowTab';
+import { PersonaToolsTab } from './tabs/PersonaToolsTab';
 import { ContextStatus } from '../../../../src/core/types';
-import type { Message } from '../../../../src/core/types';
+import type { Message, ToolProvider, ToolDefinition } from '../../../../src/core/types';
 
 interface Trait {
   id: string;
@@ -55,6 +56,7 @@ interface PersonaEntity {
   last_heartbeat?: string;
   last_extraction?: string;
   last_inactivity_ping?: string;
+  tools?: string[];
 }
 
 type PersonaEntityForSettings = Omit<PersonaEntity, 'traits' | 'topics'> & {
@@ -83,6 +85,8 @@ interface PersonaEditorProps {
   onDeleteMessage: (messageId: string) => void;
   availableGroups?: string[];
   onAiAssist?: (systemPrompt: string, userPrompt: string) => Promise<string>;
+  toolProviders?: ToolProvider[];
+  toolDefinitions?: ToolDefinition[];
 }
 
 const tabs = [
@@ -90,6 +94,7 @@ const tabs = [
   { id: 'identity', label: 'Identity', icon: '🎭' },
   { id: 'topics', label: 'Topics', icon: '💬' },
   { id: 'context', label: 'Context', icon: '📜' },
+  { id: 'tools', label: 'Tools', icon: '🔧' },
 ];
 
 export function PersonaEditor({
@@ -109,6 +114,8 @@ export function PersonaEditor({
   onDeleteMessage,
   availableGroups = [],
   onAiAssist,
+  toolProviders = [],
+  toolDefinitions = [],
 }: PersonaEditorProps) {
   const [activeTab, setActiveTab] = useState('settings');
   const [localPersona, setLocalPersona] = useState<PersonaEntity>(persona);
@@ -306,6 +313,18 @@ export function PersonaEditor({
           onBulkContextStatusChange={onBulkContextStatusChange}
           onContextBoundaryChange={onContextBoundaryChange}
           onDeleteMessage={onDeleteMessage}
+        />
+      )}
+
+      {activeTab === 'tools' && (
+        <PersonaToolsTab
+          assignedToolIds={localPersona.tools ?? []}
+          providers={toolProviders}
+          tools={toolDefinitions}
+          onUpdate={(toolIds) => {
+            setLocalPersona((prev) => ({ ...prev, tools: toolIds }));
+            onUpdate({ tools: toolIds });
+          }}
         />
       )}
     </TabContainer>

@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { isReservedPersonaName, RESERVED_PERSONA_NAMES } from '../../../../src/core/types';
+import type { ToolProvider, ToolDefinition } from '../../../../src/core/types';
+import { PersonaToolsTab } from './tabs/PersonaToolsTab';
 
 interface Trait {
   name: string;
@@ -26,6 +28,7 @@ interface NewPersonaData {
   topics: Partial<Topic>[];
   model?: string;
   group_primary?: string;
+  tools?: string[];
 }
 
 interface PersonaCreatorModalProps {
@@ -33,15 +36,19 @@ interface PersonaCreatorModalProps {
   onClose: () => void;
   onCreate: (persona: NewPersonaData) => void;
   onAiAssist?: (systemPrompt: string, userPrompt: string) => Promise<string>;
+  toolProviders?: ToolProvider[];
+  toolDefinitions?: ToolDefinition[];
 }
 
-type ExpandableSection = 'traits' | 'communication' | 'relationships' | 'topics' | 'model';
+type ExpandableSection = 'traits' | 'communication' | 'relationships' | 'topics' | 'model' | 'tools';
 
 export function PersonaCreatorModal({
   isOpen,
   onClose,
   onCreate,
   onAiAssist,
+  toolProviders = [],
+  toolDefinitions = [],
 }: PersonaCreatorModalProps) {
   const [name, setName] = useState('');
   const [group, setGroup] = useState('');
@@ -50,6 +57,7 @@ export function PersonaCreatorModal({
   const [model, setModel] = useState('');
   const [traits, setTraits] = useState<Partial<Trait>[]>([]);
   const [topics, setTopics] = useState<Partial<Topic>[]>([]);
+  const [assignedToolIds, setAssignedToolIds] = useState<string[]>([]);
   const [expandedSections, setExpandedSections] = useState<Set<ExpandableSection>>(new Set());
   const [aiLoadingField, setAiLoadingField] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<Record<string, { text: string; onAccept: (v: string) => void; systemPrompt: string; userPrompt: string }>>({});
@@ -61,6 +69,13 @@ export function PersonaCreatorModal({
   useEffect(() => {
     if (isOpen) {
       setName('');
+      setGroup('');
+      setDescription('');
+      setShortDescription('');
+      setModel('');
+      setTraits([]);
+      setTopics([]);
+      setAssignedToolIds([]);
       setGroup('');
       setDescription('');
       setShortDescription('');
@@ -251,6 +266,7 @@ export function PersonaCreatorModal({
       topics,
       model: model || undefined,
       group_primary: group.trim() || undefined,
+      tools: assignedToolIds.length > 0 ? assignedToolIds : undefined,
     };
 
     onCreate(personaData);
@@ -555,6 +571,34 @@ export function PersonaCreatorModal({
                 </div>
               )}
             </div>
+
+            {/* Tools Section — only shown when there are enabled tools */}
+            {toolDefinitions.some(t => t.enabled && toolProviders.some(p => p.id === t.provider_id && p.enabled)) && (
+              <div className={`ei-creator-section ${expandedSections.has('tools') ? 'ei-creator-section--expanded' : ''}`}>
+                <div
+                  className="ei-creator-section-header"
+                  onClick={() => toggleSection('tools')}
+                >
+                  <span className="ei-creator-section-header__text">
+                    {expandedSections.has('tools') ? '▼' : '▶'} Assign Tools
+                    {assignedToolIds.length > 0 && (
+                      <span className="ei-creator-section-header__badge">{assignedToolIds.length}</span>
+                    )}
+                  </span>
+                </div>
+
+                {expandedSections.has('tools') && (
+                  <div className="ei-creator-section-content">
+                    <PersonaToolsTab
+                      assignedToolIds={assignedToolIds}
+                      providers={toolProviders}
+                      tools={toolDefinitions}
+                      onUpdate={setAssignedToolIds}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

@@ -2394,7 +2394,6 @@
 .ei-provider-card__url {
   font-size: var(--ei-font-size-sm);
   color: var(--ei-text-muted);
-  font-family: monospace;
 }
 
 .ei-provider-card__meta {
@@ -2460,6 +2459,167 @@
   display: flex;
   gap: var(--ei-spacing-sm);
   justify-content: center;
+}
+
+/* ============================================
+   TOOLKIT LIST & EDITOR
+   ============================================ */
+
+.ei-toolkit-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--ei-font-size-xs);
+  padding: 2px var(--ei-spacing-sm);
+  border-radius: var(--ei-radius-sm);
+  font-weight: 500;
+  margin-left: var(--ei-spacing-sm);
+}
+
+.ei-toolkit-badge--builtin {
+  background: var(--ei-bg-tertiary);
+  color: var(--ei-text-muted);
+}
+
+.ei-toolkit-badge--enabled {
+  background: var(--ei-success-muted, rgba(34, 197, 94, 0.15));
+  color: var(--ei-success, #22c55e);
+}
+
+.ei-toolkit-badge--disabled {
+  background: var(--ei-bg-tertiary);
+  color: var(--ei-text-muted);
+}
+
+.ei-toolkit-warning {
+  margin-top: var(--ei-spacing-xs);
+  font-size: var(--ei-font-size-sm);
+  color: var(--ei-warning, #f59e0b);
+}
+
+.ei-toolkit-tools {
+  margin: var(--ei-spacing-sm) 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ei-spacing-xs);
+}
+
+.ei-toolkit-tools__empty {
+  font-size: var(--ei-font-size-sm);
+  color: var(--ei-text-muted);
+  font-style: italic;
+  padding: var(--ei-spacing-xs) 0;
+}
+
+.ei-toolkit-tool {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--ei-spacing-xs) var(--ei-spacing-sm);
+  background: var(--ei-bg-tertiary);
+  border-radius: var(--ei-radius-sm);
+  border: 1px solid var(--ei-border);
+  gap: var(--ei-spacing-sm);
+  transition: opacity 0.15s;
+}
+
+.ei-toolkit-tool--disabled {
+  opacity: 0.5;
+}
+
+.ei-toolkit-tool__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.ei-toolkit-tool__name {
+  font-size: var(--ei-font-size-sm);
+  font-weight: 600;
+  color: var(--ei-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ei-toolkit-tool__description {
+  font-size: var(--ei-font-size-xs);
+  color: var(--ei-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ei-toolkit-tools-readonly {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ei-spacing-xs);
+}
+
+.ei-toolkit-tool-readonly {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--ei-spacing-xs) var(--ei-spacing-sm);
+  background: var(--ei-bg-tertiary);
+  border-radius: var(--ei-radius-sm);
+  border: 1px solid var(--ei-border);
+  gap: var(--ei-spacing-sm);
+}
+
+/* Persona Tools Tab — tool assignment UI */
+.ei-toolkit-group {
+  margin-bottom: var(--ei-spacing-md);
+}
+
+.ei-toolkit-group__header {
+  display: flex;
+  align-items: center;
+  gap: var(--ei-spacing-sm);
+  margin-bottom: var(--ei-spacing-xs);
+  padding-bottom: var(--ei-spacing-xs);
+  border-bottom: 1px solid var(--ei-border);
+}
+
+.ei-toolkit-group__name {
+  font-size: var(--ei-font-size-sm);
+  font-weight: 600;
+  color: var(--ei-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ei-toolkit-group__tools {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ei-spacing-xs);
+}
+
+.ei-toolkit-tool-checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--ei-spacing-sm);
+  padding: var(--ei-spacing-xs) var(--ei-spacing-sm);
+  border-radius: var(--ei-radius-sm);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.ei-toolkit-tool-checkbox:hover {
+  background: var(--ei-bg-tertiary);
+}
+
+.ei-toolkit-tool-checkbox--dim {
+  opacity: 0.5;
+}
+
+.ei-toolkit-tool-checkbox .ei-checkbox {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
 }
 
 /* ============================================
