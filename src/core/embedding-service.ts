@@ -201,8 +201,17 @@ function createBunService(): EmbeddingService {
     if (embedderPromise) return embedderPromise;
     
     embedderPromise = (async () => {
-      const mod = await import(/* @vite-ignore */ FASTEMBED_MODULE);
-      embedder = await mod.FlagEmbedding.init({ model: mod.EmbeddingModel.AllMiniLML6V2 });
+      const [mod, os, path] = await Promise.all([
+        import(/* @vite-ignore */ FASTEMBED_MODULE),
+        import('os'),
+        import('path'),
+      ]);
+      // Use EI_DATA_PATH if set, otherwise fall back to ~/.local/share/ei/embeddings.
+      // Must be absolute so the cache is stable regardless of cwd.
+      const cacheDir = process.env.EI_DATA_PATH
+        ? path.join(process.env.EI_DATA_PATH, 'embeddings')
+        : path.join(os.homedir(), '.local', 'share', 'ei', 'embeddings');
+      embedder = await mod.FlagEmbedding.init({ model: mod.EmbeddingModel.AllMiniLML6V2, cacheDir });
       return embedder;
     })();
     
