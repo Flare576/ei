@@ -25,6 +25,8 @@ import {
   type StorageState,
   type StateConflictResolution,
   type StateConflictData,
+  type ToolDefinition,
+  type ToolProvider,
 } from "./types.js";
 import type { Storage } from "../storage/interface.js";
 import { remoteSync } from "../storage/remote.js";
@@ -57,6 +59,8 @@ import { EI_WELCOME_MESSAGE, EI_PERSONA_DEFINITION } from "../templates/welcome.
 import { getEmbeddingService, findTopK, needsEmbeddingUpdate, needsQuoteEmbeddingUpdate, computeDataItemEmbedding, computeQuoteEmbedding } from "./embedding-service.js";
 import { ContextStatus as ContextStatusEnum } from "./types.js";
 import { buildChatMessageContent } from "../prompts/message-utils.js";
+import { registerReadMemoryExecutor, registerFileReadExecutor } from "./tools/index.js";
+import { createReadMemoryExecutor } from "./tools/builtin/read-memory.js";
 
 // =============================================================================
 // EMBEDDING STRIPPING - Remove embeddings from data items before returning to FE
@@ -208,6 +212,14 @@ export class Processor {
     if (!this.stateManager.hasExistingData() || this.stateManager.persona_getAll().length === 0) {
       await this.bootstrapFirstRun();
     }
+    // Seed built-in tool providers and tools if absent
+    this.bootstrapTools();
+    // Register read_memory executor (injected to avoid circular deps)
+    registerReadMemoryExecutor(createReadMemoryExecutor(this.searchHumanData.bind(this)));
+    // file_read is Node-only — dynamic import to keep node:fs/promises out of the web bundle
+    if (this.isTUI) {
+      registerFileReadExecutor();
+    }
     this.running = true;
     console.log(`[Processor ${this.instanceId}] initialized, starting loop`);
     this.runLoop();
@@ -249,6 +261,145 @@ export class Processor {
 
     this.interface.onPersonaAdded?.();
     this.interface.onMessageAdded?.(eiEntity.id);
+  }
+
+  /**
+   * Seed built-in tool providers and tools if they don't exist yet.
+   * Called on every startup (after state load/restore) — safe to call repeatedly.
+   * New builtins added in future releases will be seeded automatically.
+   */
+  private bootstrapTools(): void {
+    const now = new Date().toISOString();
+
+    // --- Ei built-in provider ---
+    if (!this.stateManager.tools_getProviderById("ei")) {
+      const eiProvider: ToolProvider = {
+        id: "ei",
+        name: "ei",
+        display_name: "Ei Built-ins",
+        description: "Built-in tools that ship with Ei. No external API needed.",
+        builtin: true,
+        config: {},
+        enabled: true,
+        created_at: now,
+      };
+      this.stateManager.tools_addProvider(eiProvider);
+    }
+
+    // read_memory tool
+    if (!this.stateManager.tools_getByName("read_memory")) {
+      this.stateManager.tools_add({
+        id: crypto.randomUUID(),
+        provider_id: "ei",
+        name: "read_memory",
+        display_name: "Read Memory",
+        description: "Search your personal memory for relevant facts, traits, topics, people, or quotes. Use this when you need information about the user that may not be in the current conversation.",
+        input_schema: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "What to search for in memory" },
+            types: {
+              type: "array",
+              items: { type: "string", enum: ["fact", "trait", "topic", "person", "quote"] },
+              description: "Limit search to specific memory types (default: all types)"
+            },
+            limit: { type: "number", description: "Max results to return (default: 10, max: 20)" },
+          },
+          required: ["query"],
+        },
+        runtime: "any",
+        builtin: true,
+        enabled: true,
+        created_at: now,
+        max_calls_per_interaction: 3,
+      });
+    }
+
+    // file_read tool (TUI only)
+    if (!this.stateManager.tools_getByName("file_read")) {
+      this.stateManager.tools_add({
+        id: crypto.randomUUID(),
+        provider_id: "ei",
+        name: "file_read",
+        display_name: "Read File",
+        description: "Read the contents of a file from the local filesystem. Only available in the TUI.",
+        input_schema: {
+          type: "object",
+          properties: {
+            path: { type: "string", description: "Absolute or relative path to the file" },
+          },
+          required: ["path"],
+        },
+        runtime: "node",
+        builtin: true,
+        enabled: true,
+        created_at: now,
+        max_calls_per_interaction: 5,
+      });
+    }
+
+    // --- Tavily Search provider ---
+    if (!this.stateManager.tools_getProviderById("tavily")) {
+      const tavilyProvider: ToolProvider = {
+        id: "tavily",
+        name: "tavily",
+        display_name: "Tavily Search",
+        description: "Browser-compatible web search. Requires a Tavily API key (free tier: 1000 requests/month).",
+        builtin: true,
+        config: { api_key: '' },  // user fills in their Tavily API key via Settings → Toolkits
+        enabled: false,  // disabled until user adds API key
+        created_at: now,
+      };
+      this.stateManager.tools_addProvider(tavilyProvider);
+    }
+
+    // tavily_web_search
+    if (!this.stateManager.tools_getByName("tavily_web_search")) {
+      this.stateManager.tools_add({
+        id: crypto.randomUUID(),
+        provider_id: "tavily",
+        name: "tavily_web_search",
+        display_name: "Web Search",
+        description: "Search the web using Tavily. Use for current events, fact verification, or any topic that benefits from up-to-date information.",
+        input_schema: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "Search query" },
+            max_results: { type: "number", description: "Number of results (default: 5, max: 10)" },
+          },
+          required: ["query"],
+        },
+        runtime: "any",
+        builtin: true,
+        enabled: true,
+        created_at: now,
+        max_calls_per_interaction: 3,
+      });
+    }
+
+    // tavily_news_search
+    if (!this.stateManager.tools_getByName("tavily_news_search")) {
+      this.stateManager.tools_add({
+        id: crypto.randomUUID(),
+        provider_id: "tavily",
+        name: "tavily_news_search",
+        display_name: "News Search",
+        description: "Search recent news articles using Tavily. Use for current events and recent developments.",
+        input_schema: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "News search query" },
+            max_results: { type: "number", description: "Number of results (default: 5, max: 10)" },
+          },
+          required: ["query"],
+        },
+        runtime: "any",
+        builtin: true,
+        enabled: true,
+        created_at: now,
+        max_calls_per_interaction: 3,
+      });
+    }
   }
 
   async stop(): Promise<void> {
@@ -368,6 +519,17 @@ export class Processor {
               this.interface.onMessageProcessing?.(personaId);
             }
 
+            const toolNextSteps = new Set([
+              LLMNextStep.HandlePersonaResponse,
+              LLMNextStep.HandleHeartbeatCheck,
+              LLMNextStep.HandleEiHeartbeat,
+            ]);
+            const toolPersonaId = personaId ?? (request.next_step === LLMNextStep.HandleEiHeartbeat ? "ei" : undefined);
+            const tools = (toolNextSteps.has(request.next_step) && toolPersonaId)
+              ? this.stateManager.tools_getForPersona(toolPersonaId, this.isTUI)
+              : [];
+            console.log(`[Tools] Dispatch for ${request.next_step} persona=${toolPersonaId ?? "none"}: ${tools.length} tool(s) attached`);
+
             this.queueProcessor.start(request, async (response) => {
               this.currentRequest = null;
               await this.handleResponse(response);
@@ -378,6 +540,8 @@ export class Processor {
               accounts: this.stateManager.getHuman().settings?.accounts,
               messageFetcher: (pName) => this.fetchMessagesForLLM(pName),
               rawMessageFetcher: (pName) => this.stateManager.messages_get(pName),
+              tools: tools.length > 0 ? tools : undefined,
+              onEnqueue: (req) => this.stateManager.queue_enqueue(req),
             });
 
             this.interface.onQueueStateChanged?.("busy");
@@ -840,6 +1004,14 @@ export class Processor {
       return;
     }
 
+    // Tool-phase complete: tools were executed and HandleToolSynthesis was enqueued.
+    // The persona message will arrive when synthesis completes — nothing to handle here.
+    if (response.finish_reason === "tool_calls_enqueued") {
+      console.log(`[Processor] tool_calls_enqueued for ${response.request.next_step} — awaiting HandleToolSynthesis`);
+      this.stateManager.queue_complete(response.request.id);
+      return;
+    }
+
     const handler = handlers[response.request.next_step as LLMNextStep];
     if (!handler) {
       const errorMsg = `No handler for ${response.request.next_step}`;
@@ -855,7 +1027,10 @@ export class Processor {
       await handler(response, this.stateManager);
       this.stateManager.queue_complete(response.request.id);
 
-      if (response.request.next_step === LLMNextStep.HandlePersonaResponse) {
+      if (
+        response.request.next_step === LLMNextStep.HandlePersonaResponse ||
+        response.request.next_step === LLMNextStep.HandleToolSynthesis
+      ) {
         // Always notify FE - even without content, user's message was "read" by the persona
         const personaId = response.request.data.personaId as string;
         if (personaId) {
@@ -983,6 +1158,7 @@ export class Processor {
       groups_visible: input.groups_visible ?? [DEFAULT_GROUP],
       traits: [],
       topics: [],
+      tools: input.tools && input.tools.length > 0 ? input.tools : undefined,
       is_paused: false,
       is_archived: false,
       is_static: false,
@@ -1677,6 +1853,94 @@ export class Processor {
       model: this.getOneshotModel(),
       data: { guid },
     });
+  }
+
+  // ============================================================================
+  // TOOL PROVIDER API
+  // ============================================================================
+
+  getToolProviderList(): ToolProvider[] {
+    return this.stateManager.tools_getProviders();
+  }
+
+  getToolProvider(id: string): ToolProvider | null {
+    return this.stateManager.tools_getProviderById(id);
+  }
+
+  async addToolProvider(provider: Omit<ToolProvider, 'id' | 'created_at'>): Promise<string> {
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const newProvider: ToolProvider = { ...provider, id, created_at: now };
+    this.stateManager.tools_addProvider(newProvider);
+    this.interface.onToolProviderAdded?.();
+    return id;
+  }
+
+  async updateToolProvider(id: string, updates: Partial<Omit<ToolProvider, 'id' | 'created_at'>>): Promise<boolean> {
+    const result = this.stateManager.tools_updateProvider(id, updates);
+    if (result) this.interface.onToolProviderUpdated?.(id);
+    return result;
+  }
+
+  async removeToolProvider(id: string): Promise<boolean> {
+    // Cascade: unassign all tools from this provider from all personas before removing
+    const providerTools = this.stateManager.tools_getAll().filter(t => t.provider_id === id);
+    const providerToolIds = new Set(providerTools.map(t => t.id));
+    if (providerToolIds.size > 0) {
+      const personas = this.stateManager.persona_getAll();
+      for (const persona of personas) {
+        if (persona.tools?.some(tid => providerToolIds.has(tid))) {
+          await this.stateManager.persona_update(persona.id, {
+            tools: persona.tools.filter(tid => !providerToolIds.has(tid)),
+          });
+        }
+      }
+    }
+    const result = this.stateManager.tools_removeProvider(id);
+    if (result) this.interface.onToolProviderRemoved?.();
+    return result;
+  }
+
+  // ============================================================================
+  // TOOL API
+  // ============================================================================
+
+  getToolList(): ToolDefinition[] {
+    return this.stateManager.tools_getAll();
+  }
+
+  getTool(id: string): ToolDefinition | null {
+    return this.stateManager.tools_getById(id);
+  }
+
+  async addTool(tool: Omit<ToolDefinition, 'id' | 'created_at'>): Promise<string> {
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const newTool: ToolDefinition = { ...tool, id, created_at: now };
+    this.stateManager.tools_add(newTool);
+    this.interface.onToolAdded?.();
+    return id;
+  }
+
+  async updateTool(id: string, updates: Partial<Omit<ToolDefinition, 'id' | 'created_at'>>): Promise<boolean> {
+    const result = this.stateManager.tools_update(id, updates);
+    if (result) this.interface.onToolUpdated?.(id);
+    return result;
+  }
+
+  async removeTool(id: string): Promise<boolean> {
+    // Remove this tool from all persona tool lists before deleting
+    const personas = this.stateManager.persona_getAll();
+    for (const persona of personas) {
+      if (persona.tools?.includes(id)) {
+        await this.stateManager.persona_update(persona.id, {
+          tools: persona.tools.filter(t => t !== id),
+        });
+      }
+    }
+    const result = this.stateManager.tools_remove(id);
+    if (result) this.interface.onToolRemoved?.();
+    return result;
   }
 
   // ============================================================================

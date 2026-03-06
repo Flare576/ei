@@ -1117,6 +1117,17 @@ function handlePersonaTopicUpdate(response: LLMResponse, state: StateManager): v
 
 
 
+/**
+ * handleToolSynthesis — second LLM call in the tool flow.
+ * The QueueProcessor already injected tool history into messages and got the
+ * final persona response. Parse and store it exactly like handlePersonaResponse.
+ */
+function handleToolSynthesis(response: LLMResponse, state: StateManager): void {
+  console.log(`[handleToolSynthesis] Routing to handlePersonaResponse`);
+  handlePersonaResponse(response, state);
+}
+
+
 export const handlers: Record<LLMNextStep, ResponseHandler> = {
   handlePersonaResponse,
   handlePersonaGeneration,
@@ -1137,4 +1148,5 @@ export const handlers: Record<LLMNextStep, ResponseHandler> = {
   handlePersonaExpire,
   handlePersonaExplore,
   handleDescriptionCheck,
+  handleToolSynthesis,
 };
