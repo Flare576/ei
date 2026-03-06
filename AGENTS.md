@@ -259,16 +259,16 @@ All 34 E2E tests failed. The tag pointed to a broken commit. Don't repeat this.
 2. `git branch --show-current` — must be `main`
 3. `git pull` — must be up to date with origin
 4. `npm test` — all unit tests must pass (runs core + TUI)
-5. `cd web && npx vite build` — **Vite build must succeed** (`tsc` alone is not sufficient; it misses bundler errors)
+5. `cd web && npx tsc --noEmit && npx vite build` — **Both must succeed**: `tsc --noEmit` catches `noUnusedLocals` and dead-code errors that Vite's lenient bundler misses; Vite catches bundler/JSX errors that `tsc` misses. This is what CI runs. (v0.1.9 incident = vite; v0.1.18 deploy failure = tsc)
 6. `npm run test:e2e` — all web E2E tests must pass
 
 If **any step fails**: STOP. Fix before tagging.
 
-### Why Vite Build Is Non-Negotiable
+### Why Both `tsc --noEmit` AND `vite build` Are Non-Negotiable
 
-`tsc` only checks types — it does not exercise the full Vite bundler pipeline.
-Vite can fail on valid TypeScript (e.g., circular imports, JSX transform issues, missing
-assets). The build step in CI will catch this, but so should you before tagging.
+`tsc --noEmit` catches type errors including `noUnusedLocals` dead-code violations that Vite's
+bundler silently ignores. `vite build` catches bundler/JSX/circular-import errors that `tsc` misses.
+Running only one gives you a false green. CI runs both — so should you.
 
 ### The `/release` slash command
 
