@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ProviderList, ProviderEditor } from '../Settings';
+import { ProviderList } from '../Settings';
 import { ToolkitList } from './ToolkitList';
 import { ToolkitEditor } from './ToolkitEditor';
 import type { ProviderAccount, SyncCredentials, ToolProvider, ToolDefinition } from '../../../../src/core/types';
@@ -10,6 +10,7 @@ interface SettingsData {
   ceremony_time: string;
   default_model?: string;
   oneshot_model?: string;
+  rewrite_model?: string;
   accounts?: ProviderAccount[];
   sync?: SyncCredentials;
 }
@@ -53,8 +54,6 @@ export const SettingsModal = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [localAccounts, setLocalAccounts] = useState<ProviderAccount[]>(settings.accounts || []);
-  const [accountEditorOpen, setAccountEditorOpen] = useState(false);
-  const [editingAccount, setEditingAccount] = useState<ProviderAccount | null>(null);
   const [toolkitEditorOpen, setToolkitEditorOpen] = useState(false);
   const [editingProvider, setEditingProvider] = useState<ToolProvider | null>(null);
   
@@ -96,15 +95,9 @@ export const SettingsModal = ({
     onUpdate({ [field]: value });
   }, [onUpdate]);
 
-  const handleAccountAdd = useCallback(() => {
-    setEditingAccount(null);
-    setAccountEditorOpen(true);
-  }, []);
-
-  const handleAccountEdit = useCallback((account: ProviderAccount) => {
-    setEditingAccount(account);
-    setAccountEditorOpen(true);
-  }, []);
+  // ProviderEditor was removed; Add/Edit are no-ops until it is restored
+  const handleAccountAdd = useCallback(() => {}, []);
+  const handleAccountEdit = useCallback((_account: ProviderAccount) => {}, []); // eslint-disable-line @typescript-eslint/no-unused-vars
 
   const handleAccountDelete = useCallback((id: string) => {
     const updated = localAccounts.filter(a => a.id !== id);
@@ -117,22 +110,6 @@ export const SettingsModal = ({
     setLocalAccounts(updated);
     onUpdate({ accounts: updated });
   }, [localAccounts, onUpdate]);
-
-  const handleAccountSave = useCallback((account: ProviderAccount) => {
-    const existing = localAccounts.find(a => a.id === account.id);
-    const updated = existing
-      ? localAccounts.map(a => a.id === account.id ? account : a)
-      : [...localAccounts, account];
-    setLocalAccounts(updated);
-    onUpdate({ accounts: updated });
-    setAccountEditorOpen(false);
-    setEditingAccount(null);
-  }, [localAccounts, onUpdate]);
-
-  const handleAccountEditorClose = useCallback(() => {
-    setAccountEditorOpen(false);
-    setEditingAccount(null);
-  }, []);
 
   const handleSyncSave = useCallback(() => {
     if (syncUsername.trim() && syncPassphrase.trim() && isCredentialsValid) {
@@ -247,6 +224,19 @@ export const SettingsModal = ({
                   placeholder="Falls back to Default Model if not set"
                 />
                 <small className="ei-form-hint">Model used for AI-assist (✨) buttons. Use a smarter/larger model here if you want better suggestions.</small>
+              </div>
+
+              <div className="ei-form-group">
+                <label htmlFor="rewrite-model" className="ei-form-label">🔄 Rewrite Model <span className="ei-form-optional">(optional)</span></label>
+                <input
+                  id="rewrite-model"
+                  type="text"
+                  className="ei-input"
+                  value={settings.rewrite_model || ""}
+                  onChange={(e) => handleChange("rewrite_model", e.target.value)}
+                  placeholder="Unset = rewrite disabled"
+                />
+                <small className="ei-form-hint">Model for the nightly Rewrite ceremony. Reorganizes bloated knowledge base items. Use a capable model (Sonnet/Opus class).</small>
               </div>
             </section>
 

@@ -387,11 +387,12 @@ function App() {
 
   const handleHumanUpdate = useCallback(async (updates: Record<string, unknown>) => {
     if (!processor) return;
-    const { default_model, oneshot_model, queue_paused, name_display, time_mode, accounts, sync, ceremony_time, ...rest } = updates;
+    const { default_model, oneshot_model, rewrite_model, queue_paused, name_display, time_mode, accounts, sync, ceremony_time, ...rest } = updates;
     
     const settingsUpdates: Record<string, unknown> = {};
     if (default_model !== undefined) settingsUpdates.default_model = default_model;
     if (oneshot_model !== undefined) settingsUpdates.oneshot_model = oneshot_model;
+    if (rewrite_model !== undefined) settingsUpdates.rewrite_model = rewrite_model;
     if (queue_paused !== undefined) settingsUpdates.queue_paused = queue_paused;
     if (name_display !== undefined) settingsUpdates.name_display = name_display;
     if (time_mode !== undefined) settingsUpdates.time_mode = time_mode;
@@ -821,6 +822,7 @@ function App() {
             ceremony_time: human.settings?.ceremony?.time ?? "09:00",
             default_model: human.settings?.default_model,
             oneshot_model: human.settings?.oneshot_model,
+            rewrite_model: human.settings?.rewrite_model,
             accounts: human.settings?.accounts,
             sync: human.settings?.sync,
           }}

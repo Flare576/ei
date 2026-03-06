@@ -33,7 +33,7 @@ import { remoteSync } from "../storage/remote.js";
 import { yoloMerge } from "../storage/merge.js";
 import { StateManager } from "./state-manager.js";
 import { QueueProcessor } from "./queue-processor.js";
-import { handlers } from "./handlers/index.js";
+import { handlers, registerSearchHumanData } from "./handlers/index.js";
 import {
   buildResponsePrompt,
   buildPersonaTraitExtractionPrompt,
@@ -216,6 +216,8 @@ export class Processor {
     this.bootstrapTools();
     // Register read_memory executor (injected to avoid circular deps)
     registerReadMemoryExecutor(createReadMemoryExecutor(this.searchHumanData.bind(this)));
+    // Inject searchHumanData for rewrite handlers (same pattern as read_memory)
+    registerSearchHumanData(this.searchHumanData.bind(this));
     // file_read is Node-only — dynamic import to keep node:fs/promises out of the web bundle
     if (this.isTUI) {
       registerFileReadExecutor();
@@ -1083,6 +1085,10 @@ export class Processor {
       if (response.request.next_step === LLMNextStep.HandleHumanItemUpdate) {
         this.interface.onHumanUpdated?.();
         this.interface.onQuoteAdded?.();
+      }
+
+      if (response.request.next_step === LLMNextStep.HandleRewriteRewrite) {
+        this.interface.onHumanUpdated?.();
       }
 
       if (response.request.data.ceremony_progress) {
