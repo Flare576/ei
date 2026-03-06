@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { 
   shouldStartCeremony, 
   isNewDay, 
@@ -187,6 +187,174 @@ describe("Decay Computation", () => {
       const { hoursSinceUpdate } = applyDecayToValue(0.5, hoursAgo, now);
       
       expect(hoursSinceUpdate).toBeCloseTo(12, 0);
+    });
+  });
+});
+
+// =============================================================================
+// Rewrite Phase Tests (queueRewritePhase)
+// =============================================================================
+
+import { queueRewritePhase } from "../../../src/core/orchestrators/ceremony.js";
+import { LLMNextStep, LLMRequestType, LLMPriority, ValidationLevel } from "../../../src/core/types.js";
+import type { HumanEntity, Fact, Trait, Topic, Person } from "../../../src/core/types.js";
+
+function createMockRewriteState(overrides: Partial<HumanEntity> = {}) {
+  const human: HumanEntity = {
+    entity: "human",
+    facts: [],
+    traits: [],
+    topics: [],
+    people: [],
+    quotes: [],
+    last_updated: new Date().toISOString(),
+    last_activity: new Date().toISOString(),
+    ...overrides,
+  };
+
+  return {
+    getHuman: vi.fn(() => human),
+    queue_enqueue: vi.fn(),
+    _human: human,
+  };
+}
+
+function makeFact(id: string, descLength: number): Fact {
+  return {
+    id,
+    name: `Fact ${id}`,
+    description: "X".repeat(descLength),
+    sentiment: 0.5,
+    validated: ValidationLevel.None,
+    last_updated: new Date().toISOString(),
+  };
+}
+
+function makeTrait(id: string, descLength: number): Trait {
+  return {
+    id,
+    name: `Trait ${id}`,
+    description: "X".repeat(descLength),
+    sentiment: 0.5,
+    strength: 0.5,
+    last_updated: new Date().toISOString(),
+  };
+}
+
+function makeTopic(id: string, descLength: number): Topic {
+  return {
+    id,
+    name: `Topic ${id}`,
+    description: "X".repeat(descLength),
+    sentiment: 0.5,
+    exposure_current: 0.5,
+    exposure_desired: 0.5,
+    last_updated: new Date().toISOString(),
+  };
+}
+
+function makePerson(id: string, descLength: number): Person {
+  return {
+    id,
+    name: `Person ${id}`,
+    description: "X".repeat(descLength),
+    sentiment: 0.5,
+    relationship: "friend",
+    exposure_current: 0.5,
+    exposure_desired: 0.5,
+    last_updated: new Date().toISOString(),
+  };
+}
+
+describe("Rewrite Phase", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe("queueRewritePhase", () => {
+    it("skips when rewrite_model not set", () => {
+      const state = createMockRewriteState({
+        settings: { ceremony: { time: "03:00" } },
+      });
+
+      queueRewritePhase(state as any);
+
+      expect(state.queue_enqueue).not.toHaveBeenCalled();
+    });
+
+    it("skips when no items above threshold (750 chars)", () => {
+      const state = createMockRewriteState({
+        settings: { rewrite_model: "TestProvider:model" },
+        facts: [makeFact("f1", 500)],
+        traits: [makeTrait("t1", 100)],
+      });
+
+      queueRewritePhase(state as any);
+
+      expect(state.queue_enqueue).not.toHaveBeenCalled();
+    });
+
+    it("queues Phase 1 scan for facts above threshold", () => {
+      const state = createMockRewriteState({
+        settings: { rewrite_model: "TestProvider:model" },
+        facts: [makeFact("f1", 800)],
+      });
+
+      queueRewritePhase(state as any);
+
+      expect(state.queue_enqueue).toHaveBeenCalledTimes(1);
+      expect(state.queue_enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: LLMRequestType.JSON,
+          priority: LLMPriority.Low,
+          next_step: LLMNextStep.HandleRewriteScan,
+          model: "TestProvider:model",
+          data: expect.objectContaining({
+            itemId: "f1",
+            itemType: "fact",
+            rewriteModel: "TestProvider:model",
+          }),
+        })
+      );
+    });
+
+    it("scans all data types (fact, trait, topic, person)", () => {
+      const state = createMockRewriteState({
+        settings: { rewrite_model: "TestProvider:model" },
+        facts: [makeFact("f1", 800)],
+        traits: [makeTrait("t1", 900)],
+        topics: [makeTopic("top1", 1000)],
+        people: [makePerson("p1", 751)],
+      });
+
+      queueRewritePhase(state as any);
+
+      expect(state.queue_enqueue).toHaveBeenCalledTimes(4);
+
+      const types = state.queue_enqueue.mock.calls.map(
+        (c: any[]) => c[0].data.itemType
+      );
+      expect(types).toEqual(["fact", "trait", "topic", "person"]);
+    });
+
+    it("only scans items above threshold, skips those below", () => {
+      const state = createMockRewriteState({
+        settings: { rewrite_model: "TestProvider:model" },
+        facts: [
+          makeFact("f-small", 200),
+          makeFact("f-big", 800),
+        ],
+        traits: [makeTrait("t-small", 750)],  // exactly 750 — NOT above
+      });
+
+      queueRewritePhase(state as any);
+
+      expect(state.queue_enqueue).toHaveBeenCalledTimes(1);
+      expect(state.queue_enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ itemId: "f-big" }),
+        })
+      );
     });
   });
 });

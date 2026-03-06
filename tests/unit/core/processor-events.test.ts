@@ -23,6 +23,7 @@ vi.mock("../../../src/core/handlers/index.js", () => ({
 
     handleOneShot: vi.fn(),
   },
+  registerSearchHumanData: vi.fn(),
 }));
 
 // Mock the orchestrator to prevent actual persona generation and extraction queueing
