@@ -579,6 +579,10 @@ test.describe("Session Bug Coverage (0112)", () => {
     };
 
     await loadCheckpoint(page, mockServerUrl, checkpoint);
+    // Block the HuggingFace CDN so computeDataItemEmbedding fails fast (returns undefined)
+    // instead of hanging on a network fetch, which would keep --dirty alive past the 5s timeout.
+    await page.route('**/jsdelivr.net/**', route => route.abort());
+    await page.route('**/huggingface.co/**', route => route.abort());
     await page.goto("/");
 
     await expect(page.locator(".ei-persona-pill").filter({ hasText: "Ei" })).toBeVisible({ timeout: 10000 });
