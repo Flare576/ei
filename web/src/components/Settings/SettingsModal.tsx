@@ -10,6 +10,7 @@ interface SettingsData {
   ceremony_time: string;
   default_model?: string;
   oneshot_model?: string;
+  rewrite_model?: string;
   accounts?: ProviderAccount[];
   sync?: SyncCredentials;
 }
@@ -247,6 +248,19 @@ export const SettingsModal = ({
                   placeholder="Falls back to Default Model if not set"
                 />
                 <small className="ei-form-hint">Model used for AI-assist (✨) buttons. Use a smarter/larger model here if you want better suggestions.</small>
+              </div>
+
+              <div className="ei-form-group">
+                <label htmlFor="rewrite-model" className="ei-form-label">🔄 Rewrite Model <span className="ei-form-optional">(optional)</span></label>
+                <input
+                  id="rewrite-model"
+                  type="text"
+                  className="ei-input"
+                  value={settings.rewrite_model || ""}
+                  onChange={(e) => handleChange("rewrite_model", e.target.value)}
+                  placeholder="Unset = rewrite disabled"
+                />
+                <small className="ei-form-hint">Model for the nightly Rewrite ceremony. Reorganizes bloated knowledge base items. Use a capable model (Sonnet/Opus class).</small>
               </div>
             </section>
 
