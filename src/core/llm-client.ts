@@ -17,11 +17,17 @@ export interface ResolvedModel {
 export interface LLMCallOptions {
   signal?: AbortSignal;
   temperature?: number;
+  /** OpenAI-compatible tools array. When present and non-empty, sent with tool_choice: "auto". */
+  tools?: Record<string, unknown>[];
 }
 
 export interface LLMRawResponse {
   content: string | null;
   finishReason: string | null;
+  /** Raw tool_calls array from the API response, present when finishReason is "tool_calls". */
+  rawToolCalls?: unknown[];
+  /** The full assistant message object (needed to inject into history for the tool loop). */
+  assistantMessage?: Record<string, unknown>;
 }
 
 let llmCallCount = 0;
@@ -170,14 +176,21 @@ export async function callLLMRaw(
     headers["anthropic-dangerous-direct-browser-access"] = "true";
   }
   
+  const requestBody: Record<string, unknown> = {
+    model,
+    messages: finalMessages,
+    temperature,
+  };
+
+  if (options.tools && options.tools.length > 0) {
+    requestBody.tools = options.tools;
+    requestBody.tool_choice = "auto";
+  }
+
   const response = await fetch(`${normalizedBaseURL}/chat/completions`, {
     method: "POST",
     headers,
-    body: JSON.stringify({
-      model,
-      messages: finalMessages,
-      temperature,
-    }),
+    body: JSON.stringify(requestBody),
     signal,
   });
   
@@ -189,9 +202,16 @@ export async function callLLMRaw(
   const data = await response.json();
   const choice = data.choices?.[0];
   
+  const assistantMessage = choice?.message as Record<string, unknown> | undefined;
+  const rawToolCalls = Array.isArray(choice?.message?.tool_calls)
+    ? (choice.message.tool_calls as unknown[])
+    : undefined;
+
   return {
-    content: choice?.message?.content ?? null,
+    content: (choice?.message?.content as string | null) ?? null,
     finishReason: choice?.finish_reason ?? null,
+    rawToolCalls,
+    assistantMessage,
   };
 }
 

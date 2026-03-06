@@ -11,6 +11,8 @@ import type {
   StorageState,
   ContextStatus,
   QueueFailResult,
+  ToolDefinition,
+  ToolProvider,
 } from "./types.js";
 import type { Storage } from "../storage/interface.js";
 import {
@@ -26,6 +28,8 @@ export class StateManager {
   private personaState = new PersonaState();
   private queueState = new QueueState();
   private persistenceState = new PersistenceState();
+  private providers: ToolProvider[] = [];
+  private tools: ToolDefinition[] = [];
 
   async initialize(storage: Storage): Promise<void> {
     this.persistenceState.setStorage(storage);
@@ -36,6 +40,8 @@ export class StateManager {
       this.humanState.load(state.human);
       this.personaState.load(state.personas);
       this.queueState.load(state.queue);
+      this.tools = state.tools ?? [];
+      this.providers = state.providers ?? [];
       this.migrateLearnedByToIds();
     } else {
       this.humanState.load(createDefaultHumanEntity());
@@ -97,6 +103,8 @@ export class StateManager {
       human: this.humanState.get(),
       personas: this.personaState.export(),
       queue: this.queueState.export(),
+      providers: this.providers,
+      tools: this.tools,
     };
   }
 
@@ -392,6 +400,117 @@ export class StateManager {
     return result;
   }
 
+  // === Tool Providers ===
+
+  tools_getProviders(): ToolProvider[] {
+    return this.providers;
+  }
+
+  tools_getProviderById(id: string): ToolProvider | null {
+    return this.providers.find(p => p.id === id) ?? null;
+  }
+
+  tools_addProvider(provider: ToolProvider): void {
+    this.providers.push(provider);
+    this.scheduleSave();
+  }
+
+  tools_updateProvider(id: string, updates: Partial<ToolProvider>): boolean {
+    const idx = this.providers.findIndex(p => p.id === id);
+    if (idx === -1) return false;
+    this.providers[idx] = { ...this.providers[idx], ...updates };
+    this.scheduleSave();
+    return true;
+  }
+
+  tools_removeProvider(id: string): boolean {
+    const before = this.providers.length;
+    this.providers = this.providers.filter(p => p.id !== id);
+    // Also remove all tools belonging to this provider
+    const toolsBefore = this.tools.length;
+    this.tools = this.tools.filter(t => t.provider_id !== id);
+    const changed = this.providers.length !== before || this.tools.length !== toolsBefore;
+    if (changed) this.scheduleSave();
+    return this.providers.length !== before;
+  }
+
+  // === Tools ===
+
+  tools_getAll(): ToolDefinition[] {
+    return this.tools;
+  }
+
+  tools_getById(id: string): ToolDefinition | null {
+    return this.tools.find(t => t.id === id) ?? null;
+  }
+
+  tools_getByName(name: string): ToolDefinition | null {
+    return this.tools.find(t => t.name === name) ?? null;
+  }
+
+  tools_add(tool: ToolDefinition): void {
+    this.tools.push(tool);
+    this.scheduleSave();
+  }
+
+  tools_update(id: string, updates: Partial<ToolDefinition>): boolean {
+    const idx = this.tools.findIndex(t => t.id === id);
+    if (idx === -1) return false;
+    this.tools[idx] = { ...this.tools[idx], ...updates };
+    this.scheduleSave();
+    return true;
+  }
+
+  tools_remove(id: string): boolean {
+    const before = this.tools.length;
+    this.tools = this.tools.filter(t => t.id !== id);
+    if (this.tools.length !== before) {
+      this.scheduleSave();
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Returns tools assigned to a persona, filtered by runtime and provider enabled state.
+   * Config is merged: { ...provider.config, ...tool.config } (tool overrides win).
+   */
+  tools_getForPersona(personaId: string, isTUI: boolean): ToolDefinition[] {
+    const persona = this.personaState.getById(personaId);
+    if (!persona?.tools?.length) {
+      console.log(`[Tools] tools_getForPersona(${personaId}): persona has no assigned tools`);
+      return [];
+    }
+    const assignedIds = new Set(persona.tools);
+    const enabledProviderIds = new Set(
+      this.providers.filter(p => p.enabled).map(p => p.id)
+    );
+    const result = this.tools.filter(t =>
+        assignedIds.has(t.id) &&
+        t.enabled &&
+        enabledProviderIds.has(t.provider_id) &&
+        (t.runtime === "any" || (t.runtime === "node" && isTUI))
+      )
+      .map(t => {
+        const provider = this.providers.find(p => p.id === t.provider_id);
+        if (!provider?.config || Object.keys(provider.config).length === 0) return t;
+        // Merge: provider config is base, tool config overrides
+        return { ...t, config: { ...provider.config, ...(t.config ?? {}) } };
+      });
+    // Diagnostic: log why any assigned tools were filtered out
+    if (result.length < assignedIds.size) {
+      for (const id of assignedIds) {
+        const tool = this.tools.find(t => t.id === id);
+        if (!tool) { console.log(`[Tools] tools_getForPersona: assigned tool id=${id} not found in registry`); continue; }
+        if (!tool.enabled) { console.log(`[Tools] tools_getForPersona: tool "${tool.name}" is disabled`); continue; }
+        if (!enabledProviderIds.has(tool.provider_id)) { console.log(`[Tools] tools_getForPersona: tool "${tool.name}" provider is disabled`); continue; }
+        if (!(tool.runtime === "any" || (tool.runtime === "node" && isTUI))) { console.log(`[Tools] tools_getForPersona: tool "${tool.name}" runtime "${tool.runtime}" not available (isTUI=${isTUI})`); continue; }
+      }
+    }
+    console.log(`[Tools] tools_getForPersona(${personaId}): resolved ${result.length}/${assignedIds.size} tools: [${result.map(t => t.name).join(", ")}]`);
+    return result;
+  }
+
   async flush(): Promise<void> {
     await this.persistenceState.flush();
   }
@@ -412,6 +531,8 @@ export class StateManager {
     this.humanState.load(state.human);
     this.personaState.load(state.personas);
     this.queueState.load(state.queue);
+    this.providers = state.providers ?? [];
+    this.tools = state.tools ?? [];
     this.persistenceState.markExistingData();
     this.scheduleSave();
   }
