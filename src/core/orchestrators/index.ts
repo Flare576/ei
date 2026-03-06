@@ -19,6 +19,7 @@ export {
   queueExplorePhase,
   queueDescriptionCheck,
   runHumanCeremony,
+  queueRewritePhase,
 } from "./ceremony.js";
 export {
   queuePersonaTopicScan,

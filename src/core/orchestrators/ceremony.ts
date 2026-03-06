@@ -10,7 +10,7 @@ import {
   type ExtractionOptions,
 } from "./human-extraction.js";
 import { queuePersonaTopicScan, type PersonaTopicContext } from "./persona-topics.js";
-import { buildPersonaExpirePrompt, buildPersonaExplorePrompt, buildDescriptionCheckPrompt } from "../../prompts/ceremony/index.js";
+import { buildPersonaExpirePrompt, buildPersonaExplorePrompt, buildDescriptionCheckPrompt, buildRewriteScanPrompt, type RewriteItemType } from "../../prompts/ceremony/index.js";
 
 export function isNewDay(lastCeremony: string | undefined, now: Date): boolean {
   if (!lastCeremony) return true;
@@ -227,6 +227,10 @@ export function handleCeremonyProgress(state: StateManager): void {
 
   // Dedup phase: log near-duplicate human entities (dry-run only, no mutations)
   runDedupPhase(state);
+
+  // Rewrite phase: fire-and-forget scans for bloated human data items
+  // No ceremony_progress gating — Expire/Explore only touch persona topics, zero overlap
+  queueRewritePhase(state);
   
   // Expire phase: queue LLM calls for each active persona
   // handlePersonaExpire already chains to Explore → DescriptionCheck
@@ -573,4 +577,79 @@ export function runDedupPhase(state: StateManager): void {
   }
 
   console.log(`[ceremony:dedup] Done. ${totalCandidates} total candidate pair(s) found.`);
+}
+
+// =============================================================================
+// REWRITE PHASE (fire-and-forget — queues Low-priority Phase 1 scans)
+// =============================================================================
+
+const REWRITE_DESCRIPTION_THRESHOLD = 750;
+
+/**
+ * Queue Phase 1 "scan" for every human data item whose description exceeds the
+ * threshold. Gated on rewrite_model being set in HumanSettings.
+ * 
+ * Fire-and-forget: no ceremony_progress, no blocking. Expire/Explore proceed
+ * immediately since they only touch persona topics (zero overlap with human data).
+ * Phase 2 items enqueue at Normal priority, naturally processing before more
+ * Low-priority Phase 1 scans.
+ */
+export function queueRewritePhase(state: StateManager): void {
+  const human = state.getHuman();
+  const rewriteModel = human.settings?.rewrite_model;
+
+  if (!rewriteModel) {
+    console.log("[ceremony:rewrite] rewrite_model not set — skipping rewrite phase");
+    return;
+  }
+
+  const itemsToScan: Array<{ item: DataItemBase; type: RewriteItemType }> = [];
+
+  for (const fact of human.facts) {
+    if ((fact.description?.length ?? 0) > REWRITE_DESCRIPTION_THRESHOLD) {
+      itemsToScan.push({ item: fact, type: "fact" });
+    }
+  }
+  for (const trait of human.traits) {
+    if ((trait.description?.length ?? 0) > REWRITE_DESCRIPTION_THRESHOLD) {
+      itemsToScan.push({ item: trait, type: "trait" });
+    }
+  }
+  for (const topic of human.topics) {
+    if ((topic.description?.length ?? 0) > REWRITE_DESCRIPTION_THRESHOLD) {
+      itemsToScan.push({ item: topic, type: "topic" });
+    }
+  }
+  for (const person of human.people) {
+    if ((person.description?.length ?? 0) > REWRITE_DESCRIPTION_THRESHOLD) {
+      itemsToScan.push({ item: person, type: "person" });
+    }
+  }
+
+  if (itemsToScan.length === 0) {
+    console.log("[ceremony:rewrite] No items above threshold — nothing to rewrite");
+    return;
+  }
+
+  console.log(`[ceremony:rewrite] Found ${itemsToScan.length} item(s) above ${REWRITE_DESCRIPTION_THRESHOLD} chars — queueing Phase 1 scans`);
+
+  for (const { item, type } of itemsToScan) {
+    const prompt = buildRewriteScanPrompt({ item, itemType: type });
+
+    state.queue_enqueue({
+      type: LLMRequestType.JSON,
+      priority: LLMPriority.Low,
+      system: prompt.system,
+      user: prompt.user,
+      next_step: LLMNextStep.HandleRewriteScan,
+      model: rewriteModel,
+      data: {
+        itemId: item.id,
+        itemType: type,
+        rewriteModel,  // pass through so Phase 1 handler can queue Phase 2 with the same model
+      },
+    });
+  }
+
+  console.log(`[ceremony:rewrite] Queued ${itemsToScan.length} Phase 1 scan(s) at Low priority`);
 }
