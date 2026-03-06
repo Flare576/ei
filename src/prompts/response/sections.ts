@@ -20,7 +20,7 @@ export function buildIdentitySection(persona: ResponsePromptData["persona"]): st
     || persona.short_description 
     || "a conversational companion";
   
-  return `You are ${persona.name}${aliasText}.
+  return `You are ${persona.name}${aliasText}. You always respond in JSON format.
 
 ${description}`;
 }
