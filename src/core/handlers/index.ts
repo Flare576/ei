@@ -2,7 +2,6 @@ import { LLMNextStep } from "../types.js";
 import type { ResponseHandler } from "./persona-response.js";
 
 export type { ResponseHandler } from "./persona-response.js";
-export { registerSearchHumanData } from "./rewrite.js";
 
 import { handlePersonaResponse, handleToolSynthesis, handleOneShot } from "./persona-response.js";
 import { handleHeartbeatCheck, handleEiHeartbeat } from "./heartbeat.js";

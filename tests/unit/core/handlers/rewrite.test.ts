@@ -30,7 +30,15 @@ vi.mock("../../../../src/core/embedding-service.js", () => ({
     `${name}: ${description}`,
 }));
 
-import { handlers, registerSearchHumanData } from "../../../../src/core/handlers/index.js";
+// Mock human-data-manager so searchHumanData can be controlled per-test
+vi.mock("../../../../src/core/human-data-manager.js", () => ({
+  searchHumanData: vi.fn().mockResolvedValue({
+    facts: [], traits: [], topics: [], people: [], quotes: [],
+  }),
+}));
+
+import { handlers } from "../../../../src/core/handlers/index.js";
+import { searchHumanData } from "../../../../src/core/human-data-manager.js";
 
 // ---------------------------------------------------------------------------
 // Helpers (mirroring extraction.test.ts patterns)
@@ -129,21 +137,17 @@ function seedBloatedTrait(state: ReturnType<typeof createMockStateManager>, id =
 
 describe("Rewrite Handlers - Phase 1 (Scan)", () => {
   let state: ReturnType<typeof createMockStateManager>;
-  let mockSearch: ReturnType<typeof vi.fn>;
-
   beforeEach(() => {
     state = createMockStateManager();
-    mockSearch = vi.fn().mockResolvedValue({
+    vi.mocked(searchHumanData).mockResolvedValue({
       facts: [], traits: [], topics: [], people: [], quotes: [],
     });
-    registerSearchHumanData(mockSearch);
     vi.clearAllMocks();
-    // Re-register after clearAllMocks since it clears the fn
-    mockSearch = vi.fn().mockResolvedValue({
+    // Re-register after clearAllMocks
+    vi.mocked(searchHumanData).mockResolvedValue({
       facts: [], traits: [], topics: [], people: [], quotes: [],
     });
-    registerSearchHumanData(mockSearch);
-  });
+  })
 
   describe("handleRewriteScan", () => {
     it("returns early when missing itemId", async () => {
@@ -177,7 +181,7 @@ describe("Rewrite Handlers - Phase 1 (Scan)", () => {
 
       await handlers.handleRewriteScan(response, state as any);
 
-      expect(mockSearch).not.toHaveBeenCalled();
+      expect(vi.mocked(searchHumanData)).not.toHaveBeenCalled();
       expect(state.queue_enqueue).not.toHaveBeenCalled();
     });
 
@@ -188,7 +192,7 @@ describe("Rewrite Handlers - Phase 1 (Scan)", () => {
 
       await handlers.handleRewriteScan(response, state as any);
 
-      expect(mockSearch).not.toHaveBeenCalled();
+      expect(vi.mocked(searchHumanData)).not.toHaveBeenCalled();
       expect(state.queue_enqueue).not.toHaveBeenCalled();
     });
 
@@ -210,12 +214,12 @@ describe("Rewrite Handlers - Phase 1 (Scan)", () => {
       await handlers.handleRewriteScan(response, state as any);
 
       // Should search for each subject
-      expect(mockSearch).toHaveBeenCalledTimes(2);
-      expect(mockSearch).toHaveBeenCalledWith("programming", expect.objectContaining({
+      expect(vi.mocked(searchHumanData)).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(searchHumanData)).toHaveBeenCalledWith(state, "programming", expect.objectContaining({
         types: ["fact", "trait", "topic", "person"],
         limit: 4,
       }));
-      expect(mockSearch).toHaveBeenCalledWith("databases", expect.objectContaining({
+      expect(vi.mocked(searchHumanData)).toHaveBeenCalledWith(state, "databases", expect.objectContaining({
         types: ["fact", "trait", "topic", "person"],
         limit: 4,
       }));
@@ -245,7 +249,7 @@ describe("Rewrite Handlers - Phase 1 (Scan)", () => {
         last_updated: new Date().toISOString(),
       };
 
-      mockSearch.mockResolvedValue({
+      vi.mocked(searchHumanData).mockResolvedValue({
         facts: [fact, otherFact],
         traits: [],
         topics: [],
@@ -270,7 +274,7 @@ describe("Rewrite Handlers - Phase 1 (Scan)", () => {
 
     it("handles search failure gracefully — still queues Phase 2", async () => {
       seedBloatedFact(state);
-      mockSearch.mockRejectedValue(new Error("Search unavailable"));
+      vi.mocked(searchHumanData).mockRejectedValue(new Error("Search unavailable"));
 
       const request = createMockRequest();
       const response = createMockResponse(request, ["programming"]);

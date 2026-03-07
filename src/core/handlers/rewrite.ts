@@ -8,7 +8,6 @@ import {
   type Trait,
   type Topic,
   type Person,
-  type Quote,
   type DataItemBase,
 } from "../types.js";
 import type { StateManager } from "../state-manager.js";
@@ -21,29 +20,7 @@ import type {
 import { buildRewritePrompt } from "../../prompts/ceremony/rewrite.js";
 import { getEmbeddingService, getItemEmbeddingText } from "../embedding-service.js";
 
-// =============================================================================
-// REWRITE HANDLER INJECTION
-// searchHumanData lives on Processor — inject it at startup to avoid circular deps.
-// Same pattern as registerReadMemoryExecutor in tools/index.ts.
-// =============================================================================
-
-type SearchHumanDataFn = (
-  query: string,
-  options?: { types?: Array<'fact' | 'trait' | 'topic' | 'person' | 'quote'>; limit?: number }
-) => Promise<{
-  facts: Fact[];
-  traits: Trait[];
-  topics: Topic[];
-  people: Person[];
-  quotes: Quote[];
-}>;
-
-let _searchHumanData: SearchHumanDataFn | null = null;
-
-/** Called by Processor at startup to inject searchHumanData for rewrite handlers. */
-export function registerSearchHumanData(fn: SearchHumanDataFn): void {
-  _searchHumanData = fn;
-}
+import { searchHumanData } from "../human-data-manager.js";
 
 /**
  * handleRewriteScan — Phase 1 of Rewrite.
@@ -66,10 +43,7 @@ export async function handleRewriteScan(response: LLMResponse, state: StateManag
     return;
   }
 
-  if (!_searchHumanData) {
-    console.error("[handleRewriteScan] searchHumanData not injected — cannot search for matches");
-    return;
-  }
+  // searchHumanData is now imported directly from human-data-manager.ts
 
   // Re-read the item from current state (it may have changed since scan was queued)
   const human = state.getHuman();
@@ -86,7 +60,7 @@ export async function handleRewriteScan(response: LLMResponse, state: StateManag
   const subjectMatches: RewriteSubjectMatch[] = [];
   for (const searchTerm of subjects) {
     try {
-      const results = await _searchHumanData(searchTerm, {
+      const results = await searchHumanData(state, searchTerm, {
         types: ["fact", "trait", "topic", "person"],
         limit: 4,  // fetch 4 so we can exclude original and still have 3
       });

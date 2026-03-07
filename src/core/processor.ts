@@ -1,10 +1,5 @@
 import {
-  LLMRequestType,
-  LLMPriority,
   LLMNextStep,
-  ValidationLevel,
-  RESERVED_PERSONA_NAMES,
-  isReservedPersonaName,
   type LLMRequest,
   type Ei_Interface,
   type PersonaSummary,
@@ -20,7 +15,6 @@ import {
   type Quote,
   type QueueStatus,
   type ContextStatus,
-  type DataItemBase,
   type LLMResponse,
   type StorageState,
   type StateConflictResolution,
@@ -33,60 +27,83 @@ import { remoteSync } from "../storage/remote.js";
 import { yoloMerge } from "../storage/merge.js";
 import { StateManager } from "./state-manager.js";
 import { QueueProcessor } from "./queue-processor.js";
-import { handlers, registerSearchHumanData } from "./handlers/index.js";
-import {
-  buildResponsePrompt,
-  buildPersonaTraitExtractionPrompt,
-  buildHeartbeatCheckPrompt,
-  buildEiHeartbeatPrompt,
-  type ResponsePromptData,
-  type PersonaTraitExtractionPromptData,
-  type HeartbeatCheckPromptData,
-  type EiHeartbeatPromptData,
-  type EiHeartbeatItem,
-} from "../prompts/index.js";
-import { 
-  orchestratePersonaGeneration,
-  queueFactScan,
-  queueTopicScan,
-  queuePersonScan,
-  shouldStartCeremony,
-  startCeremony,
-  handleCeremonyProgress,
-  type ExtractionContext,
-} from "./orchestrators/index.js";
-import { EI_WELCOME_MESSAGE, EI_PERSONA_DEFINITION } from "../templates/welcome.js";
-import { getEmbeddingService, findTopK, needsEmbeddingUpdate, needsQuoteEmbeddingUpdate, computeDataItemEmbedding, computeQuoteEmbedding } from "./embedding-service.js";
+import { handlers } from "./handlers/index.js";
 import { ContextStatus as ContextStatusEnum } from "./types.js";
-import { buildChatMessageContent } from "../prompts/message-utils.js";
 import { registerReadMemoryExecutor, registerFileReadExecutor } from "./tools/index.js";
 import { createReadMemoryExecutor } from "./tools/builtin/read-memory.js";
+import { EI_WELCOME_MESSAGE, EI_PERSONA_DEFINITION } from "../templates/welcome.js";
+import { shouldStartCeremony, startCeremony, handleCeremonyProgress } from "./orchestrators/index.js";
 
-// =============================================================================
-// EMBEDDING STRIPPING - Remove embeddings from data items before returning to FE
-// Embeddings are internal implementation details for similarity search.
-// =============================================================================
-
-function stripDataItemEmbedding<T extends DataItemBase>(item: T): T {
-  const { embedding, ...rest } = item;
-  return rest as T;
-}
-
-function stripQuoteEmbedding(quote: Quote): Quote {
-  const { embedding, ...rest } = quote;
-  return rest;
-}
-
-function stripHumanEmbeddings(human: HumanEntity): HumanEntity {
-  return {
-    ...human,
-    facts: (human.facts ?? []).map(stripDataItemEmbedding),
-    traits: (human.traits ?? []).map(stripDataItemEmbedding),
-    topics: (human.topics ?? []).map(stripDataItemEmbedding),
-    people: (human.people ?? []).map(stripDataItemEmbedding),
-    quotes: (human.quotes ?? []).map(stripQuoteEmbedding),
-  };
-}
+// Static module imports
+import {
+  filterMessagesForContext,
+} from "./context-utils.js";
+import {
+  getPersonaList,
+  resolvePersonaName,
+  getPersona,
+  createPersona,
+  archivePersona,
+  unarchivePersona,
+  deletePersona,
+  updatePersona,
+  getGroupList,
+} from "./persona-manager.js";
+import {
+  getMessages,
+  markMessageRead,
+  markAllMessagesRead,
+  recallPendingMessages,
+  sendMessage,
+  setContextBoundary,
+  setMessageContextStatus,
+  deleteMessages,
+  fetchMessagesForLLM,
+} from "./message-manager.js";
+import {
+  getModelForPersona,
+  getOneshotModel,
+  countTrailingPersonaMessages,
+  queueHeartbeatCheck,
+} from "./heartbeat-manager.js";
+import {
+  getHuman,
+  updateHuman,
+  upsertFact,
+  upsertTrait,
+  upsertTopic,
+  upsertPerson,
+  removeDataItem,
+  addQuote,
+  updateQuote,
+  removeQuote,
+  getQuotes,
+  getQuotesForMessage,
+  searchHumanData,
+} from "./human-data-manager.js";
+import {
+  getToolProviderList,
+  getToolProvider,
+  addToolProvider,
+  updateToolProvider,
+  removeToolProvider,
+  getToolList,
+  getTool,
+  addTool,
+  updateTool,
+  removeTool,
+} from "./tool-manager.js";
+import {
+  abortCurrentOperation,
+  resumeQueue,
+  getQueueStatus,
+  pauseQueue,
+  getQueueActiveItems,
+  getDLQItems,
+  updateQueueItem,
+  clearQueue,
+  submitOneShot,
+} from "./queue-manager.js";
 
 const DEFAULT_LOOP_INTERVAL_MS = 100;
 const DEFAULT_CONTEXT_WINDOW_HOURS = 8;
@@ -95,30 +112,8 @@ const DEFAULT_CLAUDE_CODE_POLLING_MS = 1800000;
 
 let processorInstanceCount = 0;
 
-export function filterMessagesForContext(
-  messages: Message[],
-  contextBoundary: string | undefined,
-  contextWindowHours: number
-): Message[] {
-  if (messages.length === 0) return [];
-
-  const now = Date.now();
-  const windowStartMs = now - contextWindowHours * 60 * 60 * 1000;
-  const boundaryMs = contextBoundary ? new Date(contextBoundary).getTime() : 0;
-
-  return messages.filter((msg) => {
-    if (msg.context_status === ContextStatusEnum.Always) return true;
-    if (msg.context_status === ContextStatusEnum.Never) return false;
-
-    const msgMs = new Date(msg.timestamp).getTime();
-
-    if (contextBoundary) {
-      return msgMs >= boundaryMs;
-    }
-
-    return msgMs >= windowStartMs;
-  });
-}
+// filterMessagesForContext is still exported for legacy imports in tests/orchestrators
+export { filterMessagesForContext };
 
 export class Processor {
   private stateManager = new StateManager();
@@ -144,13 +139,13 @@ export class Processor {
     console.log(`[Processor ${this.instanceId}] CREATED`);
     this.detectEnvironment();
   }
-  
+
   private detectEnvironment(): void {
     const hasProcess = typeof process !== "undefined" && typeof process.versions !== "undefined";
     const hasBun = hasProcess && typeof process.versions.bun !== "undefined";
     const hasNode = hasProcess && typeof process.versions.node !== "undefined";
     const hasDocument = typeof document !== "undefined";
-    
+
     this.isTUI = (hasBun || hasNode) && !hasDocument;
   }
 
@@ -169,56 +164,38 @@ export class Processor {
     const syncCreds = primary
       ? this.stateManager.getHuman().settings?.sync
       : backup?.human?.settings?.sync;
-    // Sync creds can come from state/backup OR from pre-configuration
-    // (TUI pre-configures from env vars, Web from onboarding form)
     const hasSyncCreds = !!(syncCreds?.username && syncCreds?.passphrase);
     if (hasSyncCreds || remoteSync.isConfigured()) {
-      // State/backup creds always win over env var pre-config
-      // (env vars bootstrap you; once creds are in state, state is source of truth)
       if (hasSyncCreds) {
         await remoteSync.configure(syncCreds);
       }
 
       try {
-        const remoteInfo = await remoteSync.checkRemote(); // also captures etag
+        const remoteInfo = await remoteSync.checkRemote();
         if (!primary && remoteInfo.exists) {
-          // CASE A: No primary state (clean exit or fresh install with env vars)
-          // → Silent pull, no questions asked
           console.log(`[Processor ${this.instanceId}] No primary state, remote exists — silent pull`);
-          const result = await remoteSync.fetch(); // captures etag
+          const result = await remoteSync.fetch();
           if (result.success && result.state) {
             this.stateManager.restoreFromState(result.state);
           }
-          // If fetch fails, fall through to bootstrapFirstRun below
         } else if (primary && remoteInfo.exists) {
-          // CASE B: Both primary AND remote exist
-          // This means: crash recovery, stale etag rejection, or multi-device conflict
-          // → ALWAYS ask user: [L]ocal / [S]erver / [Y]olo
           console.log(`[Processor ${this.instanceId}] Both primary and remote exist — conflict`);
           const localTimestamp = new Date(this.stateManager.getHuman().last_updated);
           const remoteTimestamp = remoteInfo.lastModified ?? new Date();
           this.pendingConflict = { localTimestamp, remoteTimestamp, hasLocalState: true };
           this.interface.onStateConflict?.(this.pendingConflict);
-          // Loop does NOT start — waits for resolveStateConflict()
           return;
         }
-        // primary exists, no remote → normal boot (first time syncing from this device)
-        // no primary, no remote → fall through to bootstrapFirstRun
       } catch (err) {
         console.warn(`[Processor ${this.instanceId}] Sync check failed, continuing without sync:`, err);
       }
     }
-    // If still no data after sync attempts, bootstrap
+
     if (!this.stateManager.hasExistingData() || this.stateManager.persona_getAll().length === 0) {
       await this.bootstrapFirstRun();
     }
-    // Seed built-in tool providers and tools if absent
     this.bootstrapTools();
-    // Register read_memory executor (injected to avoid circular deps)
     registerReadMemoryExecutor(createReadMemoryExecutor(this.searchHumanData.bind(this)));
-    // Inject searchHumanData for rewrite handlers (same pattern as read_memory)
-    registerSearchHumanData(this.searchHumanData.bind(this));
-    // file_read is Node-only — dynamic import to keep node:fs/promises out of the web bundle
     if (this.isTUI) {
       registerFileReadExecutor();
     }
@@ -295,7 +272,8 @@ export class Processor {
         provider_id: "ei",
         name: "read_memory",
         display_name: "Read Memory",
-        description: "Search your personal memory for relevant facts, traits, topics, people, or quotes. Use this when you need information about the user that may not be in the current conversation.",
+        description:
+          "Search your personal memory for relevant facts, traits, topics, people, or quotes. Use this when you need information about the user that may not be in the current conversation.",
         input_schema: {
           type: "object",
           properties: {
@@ -303,7 +281,7 @@ export class Processor {
             types: {
               type: "array",
               items: { type: "string", enum: ["fact", "trait", "topic", "person", "quote"] },
-              description: "Limit search to specific memory types (default: all types)"
+              description: "Limit search to specific memory types (default: all types)",
             },
             limit: { type: "number", description: "Max results to return (default: 10, max: 20)" },
           },
@@ -324,7 +302,8 @@ export class Processor {
         provider_id: "ei",
         name: "file_read",
         display_name: "Read File",
-        description: "Read the contents of a file from the local filesystem. Only available in the TUI.",
+        description:
+          "Read the contents of a file from the local filesystem. Only available in the TUI.",
         input_schema: {
           type: "object",
           properties: {
@@ -346,10 +325,11 @@ export class Processor {
         id: "tavily",
         name: "tavily",
         display_name: "Tavily Search",
-        description: "Browser-compatible web search. Requires a Tavily API key (free tier: 1000 requests/month).",
+        description:
+          "Browser-compatible web search. Requires a Tavily API key (free tier: 1000 requests/month).",
         builtin: true,
-        config: { api_key: '' },  // user fills in their Tavily API key via Settings → Toolkits
-        enabled: false,  // disabled until user adds API key
+        config: { api_key: "" },
+        enabled: false,
         created_at: now,
       };
       this.stateManager.tools_addProvider(tavilyProvider);
@@ -362,7 +342,8 @@ export class Processor {
         provider_id: "tavily",
         name: "tavily_web_search",
         display_name: "Web Search",
-        description: "Search the web using Tavily. Use for current events, fact verification, or any topic that benefits from up-to-date information.",
+        description:
+          "Search the web using Tavily. Use for current events, fact verification, or any topic that benefits from up-to-date information.",
         input_schema: {
           type: "object",
           properties: {
@@ -386,7 +367,8 @@ export class Processor {
         provider_id: "tavily",
         name: "tavily_news_search",
         display_name: "News Search",
-        description: "Search recent news articles using Tavily. Use for current events and recent developments.",
+        description:
+          "Search recent news articles using Tavily. Use for current events and recent developments.",
         input_schema: {
           type: "object",
           properties: {
@@ -405,7 +387,9 @@ export class Processor {
   }
 
   async stop(): Promise<void> {
-    console.log(`[Processor ${this.instanceId}] stop() called, running=${this.running}, stopped=${this.stopped}`);
+    console.log(
+      `[Processor ${this.instanceId}] stop() called, running=${this.running}, stopped=${this.stopped}`
+    );
     this.stopped = true;
 
     if (!this.running) {
@@ -438,20 +422,15 @@ export class Processor {
     await this.stateManager.flush();
 
     const human = this.stateManager.getHuman();
-    const hasSyncCreds = !!human.settings?.sync?.username && !!human.settings?.sync?.passphrase;
+    const hasSyncCreds =
+      !!human.settings?.sync?.username && !!human.settings?.sync?.passphrase;
 
     if (hasSyncCreds && remoteSync.isConfigured()) {
       const state = this.stateManager.getStorageState();
       const result = await remoteSync.sync(state);
-      
+
       if (!result.success) {
-        // Sync failed (e.g. 429, network error, 412 etag mismatch).
-        // Do NOT stop() — leave the processor loop running so the user can
-        // keep using the TUI and retry /quit later.
-        // Do NOT moveToBackup — leave state.json intact so next boot can
-        // detect primary + remote → conflict resolution if needed.
         console.log(`[Processor ${this.instanceId}] Remote sync failed: ${result.error}`);
-        // Reset the import abort controller so imports can resume normally.
         this.importAbortController = new AbortController();
         this.interface.onSaveAndExitFinish?.();
         return { success: false, error: result.error };
@@ -466,16 +445,14 @@ export class Processor {
     return { success: true };
   }
 
-
   async resolveStateConflict(resolution: StateConflictResolution): Promise<void> {
     if (!this.pendingConflict) return;
 
     switch (resolution) {
       case "local":
-        // Keep local, push to server on next exit
         break;
       case "server": {
-        const result = await remoteSync.fetch(); // gets fresh etag
+        const result = await remoteSync.fetch();
         if (result.success && result.state) {
           this.stateManager.restoreFromState(result.state);
         }
@@ -483,7 +460,7 @@ export class Processor {
       }
       case "yolo": {
         const localState = this.stateManager.getStorageState();
-        const remoteResult = await remoteSync.fetch(); // gets fresh etag
+        const remoteResult = await remoteSync.fetch();
         if (remoteResult.success && remoteResult.state) {
           const merged = yoloMerge(localState, remoteResult.state);
           this.stateManager.restoreFromState(merged);
@@ -514,7 +491,9 @@ export class Processor {
             const personaId = request.data.personaId as string | undefined;
             const personaDisplayName = request.data.personaDisplayName as string | undefined;
             const personaSuffix = personaDisplayName ? ` [${personaDisplayName}]` : "";
-            console.log(`[Processor ${this.instanceId}] processing request: ${request.next_step}${personaSuffix}`);
+            console.log(
+              `[Processor ${this.instanceId}] processing request: ${request.next_step}${personaSuffix}`
+            );
             this.currentRequest = request;
 
             if (personaId && request.next_step === LLMNextStep.HandlePersonaResponse) {
@@ -526,25 +505,33 @@ export class Processor {
               LLMNextStep.HandleHeartbeatCheck,
               LLMNextStep.HandleEiHeartbeat,
             ]);
-            const toolPersonaId = personaId ?? (request.next_step === LLMNextStep.HandleEiHeartbeat ? "ei" : undefined);
-            const tools = (toolNextSteps.has(request.next_step) && toolPersonaId)
-              ? this.stateManager.tools_getForPersona(toolPersonaId, this.isTUI)
-              : [];
-            console.log(`[Tools] Dispatch for ${request.next_step} persona=${toolPersonaId ?? "none"}: ${tools.length} tool(s) attached`);
+            const toolPersonaId =
+              personaId ??
+              (request.next_step === LLMNextStep.HandleEiHeartbeat ? "ei" : undefined);
+            const tools =
+              toolNextSteps.has(request.next_step) && toolPersonaId
+                ? this.stateManager.tools_getForPersona(toolPersonaId, this.isTUI)
+                : [];
+            console.log(
+              `[Tools] Dispatch for ${request.next_step} persona=${toolPersonaId ?? "none"}: ${tools.length} tool(s) attached`
+            );
 
-            this.queueProcessor.start(request, async (response) => {
-              this.currentRequest = null;
-              await this.handleResponse(response);
-              const nextState = this.stateManager.queue_isPaused() ? "paused" : "idle";
-              // the processor state is set in the caller, so this needs a bit of delay
-              setTimeout(() => this.interface.onQueueStateChanged?.(nextState), 0);
-            }, {
-              accounts: this.stateManager.getHuman().settings?.accounts,
-              messageFetcher: (pName) => this.fetchMessagesForLLM(pName),
-              rawMessageFetcher: (pName) => this.stateManager.messages_get(pName),
-              tools: tools.length > 0 ? tools : undefined,
-              onEnqueue: (req) => this.stateManager.queue_enqueue(req),
-            });
+            this.queueProcessor.start(
+              request,
+              async (response) => {
+                this.currentRequest = null;
+                await this.handleResponse(response);
+                const nextState = this.stateManager.queue_isPaused() ? "paused" : "idle";
+                setTimeout(() => this.interface.onQueueStateChanged?.(nextState), 0);
+              },
+              {
+                accounts: this.stateManager.getHuman().settings?.accounts,
+                messageFetcher: (pName) => fetchMessagesForLLM(this.stateManager, pName),
+                rawMessageFetcher: (pName) => this.stateManager.messages_get(pName),
+                tools: tools.length > 0 ? tools : undefined,
+                onEnqueue: (req) => this.stateManager.queue_enqueue(req),
+              }
+            );
 
             this.interface.onQueueStateChanged?.("busy");
           }
@@ -558,23 +545,30 @@ export class Processor {
 
   private async checkScheduledTasks(): Promise<void> {
     const now = Date.now();
-    const DEFAULT_HEARTBEAT_DELAY_MS = 1800000; //5 * 60 * 1000;//
+    const DEFAULT_HEARTBEAT_DELAY_MS = 1800000;
 
     const human = this.stateManager.getHuman();
-    
-    if (this.isTUI && human.settings?.opencode?.integration && this.stateManager.queue_length() === 0) {
+
+    if (
+      this.isTUI &&
+      human.settings?.opencode?.integration &&
+      this.stateManager.queue_length() === 0
+    ) {
       await this.checkAndSyncOpenCode(human, now);
     }
 
     if (this.isTUI && human.settings?.backup?.enabled) {
       await this.checkAndRunRollingBackup(human, now);
     }
-    if (this.isTUI && human.settings?.claudeCode?.integration && this.stateManager.queue_length() === 0) {
+    if (
+      this.isTUI &&
+      human.settings?.claudeCode?.integration &&
+      this.stateManager.queue_length() === 0
+    ) {
       await this.checkAndSyncClaudeCode(human, now);
     }
-    
+
     if (human.settings?.ceremony && shouldStartCeremony(human.settings.ceremony, this.stateManager)) {
-      // Auto-backup to remote before ceremony (if configured)
       if (human.settings?.sync && remoteSync.isConfigured()) {
         const state = this.stateManager.getStorageState();
         const result = await remoteSync.sync(state);
@@ -589,7 +583,9 @@ export class Processor {
       if (persona.is_paused || persona.is_archived) continue;
 
       const heartbeatDelay = persona.heartbeat_delay_ms ?? DEFAULT_HEARTBEAT_DELAY_MS;
-      const lastActivity = persona.last_activity ? new Date(persona.last_activity).getTime() : 0;
+      const lastActivity = persona.last_activity
+        ? new Date(persona.last_activity).getTime()
+        : 0;
       const timeSinceActivity = now - lastActivity;
 
       if (timeSinceActivity >= heartbeatDelay) {
@@ -600,15 +596,21 @@ export class Processor {
 
         if (timeSinceHeartbeat >= heartbeatDelay) {
           const history = this.stateManager.messages_get(persona.id);
-          const contextWindowHours = persona.context_window_hours ?? DEFAULT_CONTEXT_WINDOW_HOURS;
-          const contextHistory = filterMessagesForContext(history, persona.context_boundary, contextWindowHours);
-          const trailing = this.countTrailingPersonaMessages(contextHistory);
+          const contextWindowHours =
+            persona.context_window_hours ?? DEFAULT_CONTEXT_WINDOW_HOURS;
+          const contextHistory = filterMessagesForContext(
+            history,
+            persona.context_boundary,
+            contextWindowHours
+          );
+          const trailing = countTrailingPersonaMessages(contextHistory);
           if (trailing < 3) {
-            this.queueHeartbeatCheck(persona.id);
+            queueHeartbeatCheck(this.stateManager, persona.id, this.isTUI);
           }
         }
       }
     }
+
     // DLQ rolloff — once per day
     const MS_PER_DAY = 86_400_000;
     if (now - this.lastDLQTrim >= MS_PER_DAY) {
@@ -623,13 +625,12 @@ export class Processor {
   private async checkAndRunRollingBackup(human: HumanEntity, now: number): Promise<void> {
     if (!this.storage) return;
     const cfg = human.settings!.backup!;
-    const intervalMs = cfg.interval_ms ?? 3_600_000;  // default: 1 hour
+    const intervalMs = cfg.interval_ms ?? 3_600_000;
     const maxBackups = cfg.max_backups ?? 24;
     const lastBackup = cfg.last_backup ? new Date(cfg.last_backup).getTime() : 0;
 
     if (now - lastBackup < intervalMs) return;
 
-    // Update timestamp BEFORE async work to prevent duplicate triggers
     this.stateManager.setHuman({
       ...this.stateManager.getHuman(),
       settings: {
@@ -654,9 +655,7 @@ export class Processor {
 
     const opencode = human.settings?.opencode;
     const pollingInterval = opencode?.polling_interval_ms ?? DEFAULT_OPENCODE_POLLING_MS;
-    const lastSync = opencode?.last_sync
-      ? new Date(opencode.last_sync).getTime()
-      : 0;
+    const lastSync = opencode?.last_sync ? new Date(opencode.last_sync).getTime() : 0;
     const timeSinceSync = now - lastSync;
 
     if (timeSinceSync < pollingInterval && this.lastOpenCodeSync > 0) {
@@ -689,8 +688,8 @@ export class Processor {
         if (result.sessionsProcessed > 0) {
           console.log(
             `[Processor] OpenCode sync complete: ${result.sessionsProcessed} sessions, ` +
-            `${result.messagesImported} messages imported, ` +
-            `${result.extractionScansQueued} extraction scans queued`
+              `${result.messagesImported} messages imported, ` +
+              `${result.extractionScansQueued} extraction scans queued`
           );
         }
       })
@@ -709,9 +708,7 @@ export class Processor {
 
     const claudeCode = human.settings?.claudeCode;
     const pollingInterval = claudeCode?.polling_interval_ms ?? DEFAULT_CLAUDE_CODE_POLLING_MS;
-    const lastSync = claudeCode?.last_sync
-      ? new Date(claudeCode.last_sync).getTime()
-      : 0;
+    const lastSync = claudeCode?.last_sync ? new Date(claudeCode.last_sync).getTime() : 0;
     const timeSinceSync = now - lastSync;
 
     if (timeSinceSync < pollingInterval && this.lastClaudeCodeSync > 0) {
@@ -757,220 +754,6 @@ export class Processor {
       });
   }
 
-  private getModelForPersona(personaId?: string): string | undefined {
-    const human = this.stateManager.getHuman();
-    if (personaId) {
-      const persona = this.stateManager.persona_getById(personaId);
-      return persona?.model || human.settings?.default_model;
-    }
-    return human.settings?.default_model;
-  }
-
-  private getOneshotModel(): string | undefined {
-    const human = this.stateManager.getHuman();
-    return human.settings?.oneshot_model || human.settings?.default_model;
-  }
-
-  private fetchMessagesForLLM(personaId: string): import("./types.js").ChatMessage[] {
-    const persona = this.stateManager.persona_getById(personaId);
-    if (!persona) return [];
-
-    const history = this.stateManager.messages_get(personaId);
-    const contextWindowHours = persona.context_window_hours ?? DEFAULT_CONTEXT_WINDOW_HOURS;
-    const filteredHistory = filterMessagesForContext(
-      history,
-      persona.context_boundary,
-      contextWindowHours
-    );
-    
-    return filteredHistory
-      .reduce<import("./types.js").ChatMessage[]>((acc, m) => {
-        const content = buildChatMessageContent(m);
-        if (content.length > 0) {
-          acc.push({
-            role: m.role === "human" ? "user" : "assistant",
-            content,
-          });
-        }
-        return acc;
-      }, []);
-  }
-
-  /**
-   * Count consecutive conversational messages the persona sent at the end of history
-   * without a human reply. Used to prevent heartbeat spam when the user is away.
-   */
-  private countTrailingPersonaMessages(history: Message[]): number {
-    let count = 0;
-    for (let i = history.length - 1; i >= 0; i--) {
-      const msg = history[i];
-      if (msg.role === 'human') break;
-      if (msg.role === 'system' && msg.verbal_response && msg.silence_reason === undefined) {
-        count++;
-      }
-    }
-    return count;
-  }
-
-  private async queueHeartbeatCheck(personaId: string): Promise<void> {
-    const persona = this.stateManager.persona_getById(personaId);
-    if (!persona) return;
-    this.stateManager.persona_update(personaId, { last_heartbeat: new Date().toISOString() });
-    const human = this.stateManager.getHuman();
-    const history = this.stateManager.messages_get(personaId);
-    const contextWindowHours = persona.context_window_hours ?? DEFAULT_CONTEXT_WINDOW_HOURS;
-    const contextHistory = filterMessagesForContext(history, persona.context_boundary, contextWindowHours);
-    if (personaId === "ei") {
-      await this.queueEiHeartbeat(human, contextHistory);
-      return;
-    }
-
-    const filteredHuman = await this.filterHumanDataByVisibility(human, persona);
-    const inactiveDays = persona.last_activity
-      ? Math.floor((Date.now() - new Date(persona.last_activity).getTime()) / (1000 * 60 * 60 * 24))
-      : 0;
-    const sortByEngagementGap = <T extends { exposure_desired: number; exposure_current: number }>(items: T[]): T[] =>
-      [...items].sort((a, b) => (b.exposure_desired - b.exposure_current) - (a.exposure_desired - a.exposure_current));
-    const promptData: HeartbeatCheckPromptData = {
-      persona: {
-        name: persona.display_name,
-        traits: persona.traits,
-        topics: persona.topics,
-      },
-      human: {
-        topics: sortByEngagementGap(filteredHuman.topics).slice(0, 5),
-        people: sortByEngagementGap(filteredHuman.people).slice(0, 5),
-      },
-      recent_history: contextHistory.slice(-10),
-      inactive_days: inactiveDays,
-    };
-
-    const prompt = buildHeartbeatCheckPrompt(promptData);
-
-    this.stateManager.queue_enqueue({
-      type: LLMRequestType.JSON,
-      priority: LLMPriority.Low,
-      system: prompt.system,
-      user: prompt.user,
-      next_step: LLMNextStep.HandleHeartbeatCheck,
-      model: this.getModelForPersona(personaId),
-      data: { personaId, personaDisplayName: persona.display_name },
-    });
-  }
-
-  private async queueEiHeartbeat(human: HumanEntity, history: import("./types.js").Message[]): Promise<void> {
-    const now = Date.now();
-    const engagementGapThreshold = 0.2;
-    const cooldownMs = 7 * 24 * 60 * 60 * 1000;
-    const personas = this.stateManager.persona_getAll();
-    const items: EiHeartbeatItem[] = [];
-
-    const unverifiedFacts = human.facts
-      .filter(f => f.validated === ValidationLevel.None && f.learned_by !== "ei" && (f.last_changed_by === undefined || f.last_changed_by !== "ei"))
-      .slice(0, 5);
-    for (const fact of unverifiedFacts) {
-      const quote = human.quotes.find(q => q.data_item_ids.includes(fact.id));
-      items.push({
-        id: fact.id,
-        type: "Fact Check",
-        name: fact.name,
-        description: fact.description,
-        quote: quote?.text,
-      });
-    }
-
-    const underEngagedPeople = human.people
-      .filter(p =>
-        (p.exposure_desired - p.exposure_current) > engagementGapThreshold &&
-        (!p.last_ei_asked || now - new Date(p.last_ei_asked).getTime() > cooldownMs)
-      )
-      .sort((a, b) => (b.exposure_desired - b.exposure_current) - (a.exposure_desired - a.exposure_current))
-      .slice(0, 5);
-    for (const person of underEngagedPeople) {
-      const gap = Math.round((person.exposure_desired - person.exposure_current) * 100);
-      const quote = human.quotes.find(q => q.data_item_ids.includes(person.id));
-      items.push({
-        id: person.id,
-        type: "Low-Engagement Person",
-        engagement_delta: `${gap}%`,
-        relationship: person.relationship,
-        name: person.name,
-        description: person.description,
-        quote: quote?.text,
-      });
-    }
-
-    const underEngagedTopics = human.topics
-      .filter(t =>
-        (t.exposure_desired - t.exposure_current) > engagementGapThreshold &&
-        (!t.last_ei_asked || now - new Date(t.last_ei_asked).getTime() > cooldownMs)
-      )
-      .sort((a, b) => (b.exposure_desired - b.exposure_current) - (a.exposure_desired - a.exposure_current))
-      .slice(0, 5);
-    for (const topic of underEngagedTopics) {
-      const gap = Math.round((topic.exposure_desired - topic.exposure_current) * 100);
-      const quote = human.quotes.find(q => q.data_item_ids.includes(topic.id));
-      items.push({
-        id: topic.id,
-        type: "Low-Engagement Topic",
-        engagement_delta: `${gap}%`,
-        name: topic.name,
-        description: topic.description,
-        quote: quote?.text,
-      });
-    }
-
-    const activePersonas = personas
-      .filter(p => !p.is_archived && !p.is_paused && p.id !== "ei")
-      .map(p => {
-        const msgs = this.stateManager.messages_get(p.id);
-        const lastHuman = [...msgs].reverse().find(m => m.role === "human");
-        const lastTs = lastHuman?.timestamp ? new Date(lastHuman.timestamp).getTime() : 0;
-        return { persona: p, lastHumanTs: lastTs };
-      })
-      .filter(({ lastHumanTs }) => {
-        const daysSince = (now - lastHumanTs) / (1000 * 60 * 60 * 24);
-        return daysSince >= 3;
-      })
-      .sort((a, b) => a.lastHumanTs - b.lastHumanTs)
-      .slice(0, 3);
-    for (const { persona: p, lastHumanTs } of activePersonas) {
-      const daysSince = lastHumanTs > 0
-        ? Math.floor((now - lastHumanTs) / (1000 * 60 * 60 * 24))
-        : 999;
-      items.push({
-        id: p.id,
-        type: "Inactive Persona",
-        name: p.display_name,
-        short_description: p.short_description,
-        days_inactive: daysSince,
-      });
-    }
-
-    if (items.length === 0) {
-      console.log("[queueEiHeartbeat] No items to address, skipping");
-      return;
-    }
-
-    const promptData: EiHeartbeatPromptData = {
-      items,
-      recent_history: history.slice(-10),
-    };
-
-    const prompt = buildEiHeartbeatPrompt(promptData);
-
-    this.stateManager.queue_enqueue({
-      type: LLMRequestType.JSON,
-      priority: LLMPriority.Low,
-      system: prompt.system,
-      user: prompt.user,
-      next_step: LLMNextStep.HandleEiHeartbeat,
-      model: this.getModelForPersona("ei"),
-      data: { personaId: "ei", isTUI: this.isTUI },
-    });
-  }
-
-
   private classifyLLMError(error: string): string {
     const match = error.match(/\((\d{3})\)/);
     if (match) {
@@ -985,6 +768,7 @@ export class Processor {
     }
     return "LLM_ERROR";
   }
+
   private async handleResponse(response: LLMResponse): Promise<void> {
     if (!response.success) {
       const errorMsg = response.error ?? "Unknown LLM error";
@@ -1006,10 +790,10 @@ export class Processor {
       return;
     }
 
-    // Tool-phase complete: tools were executed and HandleToolSynthesis was enqueued.
-    // The persona message will arrive when synthesis completes — nothing to handle here.
     if (response.finish_reason === "tool_calls_enqueued") {
-      console.log(`[Processor] tool_calls_enqueued for ${response.request.next_step} — awaiting HandleToolSynthesis`);
+      console.log(
+        `[Processor] tool_calls_enqueued for ${response.request.next_step} — awaiting HandleToolSynthesis`
+      );
       this.stateManager.queue_complete(response.request.id);
       return;
     }
@@ -1033,7 +817,6 @@ export class Processor {
         response.request.next_step === LLMNextStep.HandlePersonaResponse ||
         response.request.next_step === LLMNextStep.HandleToolSynthesis
       ) {
-        // Always notify FE - even without content, user's message was "read" by the persona
         const personaId = response.request.data.personaId as string;
         if (personaId) {
           this.interface.onMessageAdded?.(personaId);
@@ -1072,15 +855,15 @@ export class Processor {
         }
       }
 
-      if (response.request.next_step === LLMNextStep.HandleHeartbeatCheck ||
-          response.request.next_step === LLMNextStep.HandleEiHeartbeat) {
-        const personaId = response.request.data.personaId as string ?? "ei";
+      if (
+        response.request.next_step === LLMNextStep.HandleHeartbeatCheck ||
+        response.request.next_step === LLMNextStep.HandleEiHeartbeat
+      ) {
+        const personaId = (response.request.data.personaId as string) ?? "ei";
         if (response.content) {
           this.interface.onMessageAdded?.(personaId);
         }
       }
-
-
 
       if (response.request.next_step === LLMNextStep.HandleHumanItemUpdate) {
         this.interface.onHumanUpdated?.();
@@ -1115,462 +898,100 @@ export class Processor {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  // ==========================================================================
+  // PERSONA API
+  // ==========================================================================
+
   async getPersonaList(): Promise<PersonaSummary[]> {
-    return this.stateManager.persona_getAll().map((entity) => {
-      return {
-        id: entity.id,
-        display_name: entity.display_name,
-        aliases: entity.aliases ?? [],
-        short_description: entity.short_description,
-        is_paused: entity.is_paused,
-        is_archived: entity.is_archived,
-        unread_count: this.stateManager.messages_countUnread(entity.id),
-        last_activity: entity.last_activity,
-        context_boundary: entity.context_boundary,
-      };
-    });
+    return getPersonaList(this.stateManager);
   }
 
-  /**
-   * Resolve a persona name or alias to its ID.
-   * Use this when the user types a name (e.g., "/persona Bob").
-   * Returns null if no matching persona is found.
-   */
   async resolvePersonaName(nameOrAlias: string): Promise<string | null> {
-    const persona = this.stateManager.persona_getByName(nameOrAlias);
-    return persona?.id ?? null;
+    return resolvePersonaName(this.stateManager, nameOrAlias);
   }
 
   async getPersona(personaId: string): Promise<PersonaEntity | null> {
-    return this.stateManager.persona_getById(personaId);
+    return getPersona(this.stateManager, personaId);
   }
 
   async createPersona(input: PersonaCreationInput): Promise<string> {
-    if (isReservedPersonaName(input.name)) {
-      throw new Error(`Cannot create persona with reserved name "${input.name}". Reserved names: ${RESERVED_PERSONA_NAMES.join(", ")}`);
-    }
-    const now = new Date().toISOString();
-    const DEFAULT_GROUP = "General";
-    const personaId = crypto.randomUUID();
-    const placeholder: PersonaEntity = {
-      id: personaId,
-      display_name: input.name,
-      entity: "system",
-      aliases: input.aliases ?? [input.name],
-      short_description: input.short_description,
-      long_description: input.long_description,
-      model: input.model,
-      group_primary: input.group_primary ?? DEFAULT_GROUP,
-      groups_visible: input.groups_visible ?? [DEFAULT_GROUP],
-      traits: [],
-      topics: [],
-      tools: input.tools && input.tools.length > 0 ? input.tools : undefined,
-      is_paused: false,
-      is_archived: false,
-      is_static: false,
-      last_updated: now,
-      last_activity: now,
-    };
-    this.stateManager.persona_add(placeholder);
-    this.interface.onPersonaAdded?.();
-
-    orchestratePersonaGeneration(
-      { ...input, id: personaId },
+    const id = await createPersona(
       this.stateManager,
-      () => this.interface.onPersonaUpdated?.(placeholder.display_name)
+      input,
+      (name) => this.interface.onPersonaUpdated?.(name)
     );
-
-    return personaId;
+    this.interface.onPersonaAdded?.();
+    return id;
   }
 
   async archivePersona(personaId: string): Promise<void> {
-    const persona = this.stateManager.persona_getById(personaId);
-    if (!persona) return;
-    this.stateManager.persona_archive(personaId);
-    this.interface.onPersonaRemoved?.();
+    const ok = await archivePersona(this.stateManager, personaId);
+    if (ok) this.interface.onPersonaRemoved?.();
   }
 
   async unarchivePersona(personaId: string): Promise<void> {
-    const persona = this.stateManager.persona_getById(personaId);
-    if (!persona) return;
-    this.stateManager.persona_unarchive(personaId);
-    this.interface.onPersonaAdded?.();
+    const ok = await unarchivePersona(this.stateManager, personaId);
+    if (ok) this.interface.onPersonaAdded?.();
   }
 
   async deletePersona(personaId: string, _deleteHumanData: boolean): Promise<void> {
-    const persona = this.stateManager.persona_getById(personaId);
-    if (!persona) return;
-    this.stateManager.persona_delete(personaId);
-    this.interface.onPersonaRemoved?.();
+    const ok = await deletePersona(this.stateManager, personaId, _deleteHumanData);
+    if (ok) this.interface.onPersonaRemoved?.();
   }
 
   async updatePersona(personaId: string, updates: Partial<PersonaEntity>): Promise<void> {
-    const persona = this.stateManager.persona_getById(personaId);
-    if (!persona) return;
-    this.stateManager.persona_update(personaId, updates);
-    this.interface.onPersonaUpdated?.(personaId);
+    const ok = await updatePersona(this.stateManager, personaId, updates);
+    if (ok) this.interface.onPersonaUpdated?.(personaId);
   }
 
   async getGroupList(): Promise<string[]> {
-    const personas = this.stateManager.persona_getAll();
-    const groups = new Set<string>();
-    for (const p of personas) {
-      if (p.group_primary) groups.add(p.group_primary);
-      for (const g of p.groups_visible || []) groups.add(g);
-    }
-    return [...groups].sort();
+    return getGroupList(this.stateManager);
   }
 
+  // ==========================================================================
+  // MESSAGE API
+  // ==========================================================================
+
   async getMessages(personaId: string, _options?: MessageQueryOptions): Promise<Message[]> {
-    const persona = this.stateManager.persona_getById(personaId);
-    if (!persona) return [];
-    return this.stateManager.messages_get(personaId);
+    return getMessages(this.stateManager, personaId, _options);
   }
 
   async markMessageRead(personaId: string, messageId: string): Promise<boolean> {
-    const persona = this.stateManager.persona_getById(personaId);
-    if (!persona) return false;
-    return this.stateManager.messages_markRead(personaId, messageId);
+    return markMessageRead(this.stateManager, personaId, messageId);
   }
 
   async markAllMessagesRead(personaId: string): Promise<number> {
-    const persona = this.stateManager.persona_getById(personaId);
-    if (!persona) return 0;
-    return this.stateManager.messages_markAllRead(personaId);
-  }
-
-  private clearPendingRequestsFor(personaId: string): boolean {
-    const responsesToClear = [
-      LLMNextStep.HandlePersonaResponse,
-      LLMNextStep.HandlePersonaTraitExtraction,
-      LLMNextStep.HandleHeartbeatCheck,  // clear stale heartbeat when user is active
-      LLMNextStep.HandleEiHeartbeat,     // clear stale Ei heartbeat when user is active
-      // Note: TopicScan/Match/Update are ceremony-only — never clear them here
-    ];
-
-    let removedAny = false;
-    for (const nextStep of responsesToClear) {
-      const removedIds = this.stateManager.queue_clearPersonaResponses(personaId, nextStep);
-      if (removedIds.length > 0) removedAny = true;
-    }
-
-    const currentMatchesPersona = this.currentRequest &&
-      responsesToClear.includes(this.currentRequest.next_step as LLMNextStep) &&
-      this.currentRequest.data.personaId === personaId;
-
-    if (currentMatchesPersona) {
-      this.queueProcessor.abort();
-      return true;
-    }
-
-    return removedAny;
+    return markAllMessagesRead(this.stateManager, personaId);
   }
 
   async recallPendingMessages(personaId: string): Promise<string> {
-    const persona = this.stateManager.persona_getById(personaId);
-    if (!persona) return "";
-    this.clearPendingRequestsFor(personaId);
-    const messages = this.stateManager.messages_get(personaId);
-    const pendingIds = messages
-      .filter(m => m.role === "human" && !m.read)
-      .map(m => m.id);
-    if (pendingIds.length === 0) return "";
-    const removed = this.stateManager.messages_remove(personaId, pendingIds);
-    const recalledContent = removed.map(m => m.verbal_response ?? '').join("\n\n");
-    this.interface.onMessageAdded?.(personaId);
-    this.interface.onMessageRecalled?.(personaId, recalledContent);
-    return recalledContent;
+    return recallPendingMessages(
+      this.stateManager,
+      this.queueProcessor,
+      this.currentRequest,
+      personaId,
+      (id) => this.interface.onMessageAdded?.(id),
+      (id, content) => this.interface.onMessageRecalled?.(id, content)
+    );
   }
 
   async sendMessage(personaId: string, content: string): Promise<void> {
-    const persona = this.stateManager.persona_getById(personaId);
-    if (!persona) {
-      this.interface.onError?.({
-        code: "PERSONA_NOT_FOUND",
-        message: `Persona with ID "${personaId}" not found`,
-      });
-      return;
-    }
-
-    this.clearPendingRequestsFor(personaId);
-
-    const message: Message = {
-      id: crypto.randomUUID(),
-      role: "human",
-      verbal_response: content,
-      timestamp: new Date().toISOString(),
-      read: false,
-      context_status: "default" as ContextStatus,
-    };
-    this.stateManager.messages_append(persona.id, message);
-    this.interface.onMessageAdded?.(persona.id);
-
-    const promptData = await this.buildResponsePromptData(persona, content);
-    const prompt = buildResponsePrompt(promptData);
-
-    this.stateManager.queue_enqueue({
-      type: LLMRequestType.Response,
-      priority: LLMPriority.High,
-      system: prompt.system,
-      user: prompt.user,
-      next_step: LLMNextStep.HandlePersonaResponse,
-      model: this.getModelForPersona(persona.id),
-      data: { personaId: persona.id, personaDisplayName: persona.display_name },
-    });
-    this.interface.onMessageQueued?.(persona.id);
-
-    const history = this.stateManager.messages_get(persona.id);
-    
-    const traitExtractionData: PersonaTraitExtractionPromptData = {
-      persona_name: persona.display_name,
-      current_traits: persona.traits,
-      messages_context: history.slice(0, -1),
-      messages_analyze: [message],
-    };
-    const traitPrompt = buildPersonaTraitExtractionPrompt(traitExtractionData);
-
-    this.stateManager.queue_enqueue({
-      type: LLMRequestType.JSON,
-      priority: LLMPriority.Low,
-      system: traitPrompt.system,
-      user: traitPrompt.user,
-      next_step: LLMNextStep.HandlePersonaTraitExtraction,
-      model: this.getModelForPersona(persona.id),
-      data: { personaId: persona.id, personaDisplayName: persona.display_name },
-    });
-
-    this.checkAndQueueHumanExtraction(persona.id, persona.display_name, history);
-  }
-
-  /**
-   * Flare Note: I've gone back and forth on this several times, and want to leave a note for myself here:
-   * ***This is fine.***
-   * The effect here is that, if a person has 5 facts already, starts a new persona and says:
-   *   "My name is Inigo Montoya"
-   * Then switches away, we won't process that message or the persona response for facts (or quotes about facts) until
-   * the Ceremony.
-   * And that's ***OK***
-   * The ONLY reason you need the facts on the Human record is so other Personas know _some_ information about the
-   * Human - the persona you just told it to will have it in it's context for their conversation, and we already know 5
-   * things **in that category** about them.
-   * 
-   * TRAIT EXTRACTION NOTE: Traits are intentionally NOT extracted here. They're stable personality patterns that:
-   * 1. Don't change from message to message
-   * 2. Need more conversational data to identify accurately
-   * 3. Were causing massive queue bloat with cascading updates
-   * Trait extraction happens during Ceremony only, where we have a full day's context.
-   */
-  private checkAndQueueHumanExtraction(personaId: string, personaDisplayName: string, history: Message[]): void {
-    const human = this.stateManager.getHuman();
-    
-    const unextractedFacts = this.stateManager.messages_getUnextracted(personaId, "f");
-    if (human.facts.length < unextractedFacts.length) {
-      const context: ExtractionContext = {
-        personaId,
-        personaDisplayName,
-        messages_context: history.filter(m => m.f === true),
-        messages_analyze: unextractedFacts,
-        extraction_flag: "f",
-      };
-      queueFactScan(context, this.stateManager);
-      console.log(`[Processor] Human Seed extraction: facts (${human.facts.length} < ${unextractedFacts.length} unextracted)`);
-    }
-
-    const unextractedTopics = this.stateManager.messages_getUnextracted(personaId, "p");
-    if (human.topics.length < unextractedTopics.length) {
-      const context: ExtractionContext = {
-        personaId,
-        personaDisplayName,
-        messages_context: history.filter(m => m.p === true),
-        messages_analyze: unextractedTopics,
-        extraction_flag: "p",
-      };
-      queueTopicScan(context, this.stateManager);
-      console.log(`[Processor] Human Seed extraction: topics (${human.topics.length} < ${unextractedTopics.length} unextracted)`);
-    }
-
-    const unextractedPeople = this.stateManager.messages_getUnextracted(personaId, "o");
-    if (human.people.length < unextractedPeople.length) {
-      const context: ExtractionContext = {
-        personaId,
-        personaDisplayName,
-        messages_context: history.filter(m => m.o === true),
-        messages_analyze: unextractedPeople,
-        extraction_flag: "o",
-      };
-      queuePersonScan(context, this.stateManager);
-      console.log(`[Processor] Human Seed extraction: people (${human.people.length} < ${unextractedPeople.length} unextracted)`);
-    }
-  }
-
-  private async buildResponsePromptData(persona: PersonaEntity, currentMessage?: string): Promise<ResponsePromptData> {
-    const human = this.stateManager.getHuman();
-    const filteredHuman = await this.filterHumanDataByVisibility(human, persona, currentMessage);
-    const visiblePersonas = this.getVisiblePersonas(persona);
-    const messages = this.stateManager.messages_get(persona.id);
-    const previousMessage = messages.length >= 2 ? messages[messages.length - 2] : null;
-    const delayMs = previousMessage
-      ? Date.now() - new Date(previousMessage.timestamp).getTime()
-      : 0;
-
-    return {
-      persona: {
-        name: persona.display_name,
-        aliases: persona.aliases ?? [],
-        short_description: persona.short_description,
-        long_description: persona.long_description,
-        traits: persona.traits,
-        topics: persona.topics,
-      },
-      human: filteredHuman,
-      visible_personas: visiblePersonas,
-      delay_ms: delayMs,
-      isTUI: this.isTUI,
-    };
-  }
-
-  private async filterHumanDataByVisibility(
-    human: HumanEntity,
-    persona: PersonaEntity,
-    currentMessage?: string
-  ): Promise<ResponsePromptData["human"]> {
-    const DEFAULT_GROUP = "General";
-    const QUOTE_LIMIT = 10;
-    const DATA_ITEM_LIMIT = 15;
-    const SIMILARITY_THRESHOLD = 0.3;
-    // Generic relevance selector for embedding-capable items.
-    // Falls back to returning all items when no message/embeddings are available.
-    const selectRelevantItems = async <T extends { id: string; embedding?: number[] }>(
-      items: T[],
-      limit: number
-    ): Promise<T[]> => {
-      if (items.length === 0) return [];
-
-      const withEmbeddings = items.filter(i => i.embedding?.length);
-
-      if (currentMessage && withEmbeddings.length > 0) {
-        try {
-          const embeddingService = getEmbeddingService();
-          const queryVector = await embeddingService.embed(currentMessage);
-          const results = findTopK(queryVector, withEmbeddings, limit);
-          const relevant = results
-            .filter(({ similarity }) => similarity >= SIMILARITY_THRESHOLD)
-            .map(({ item }) => item);
-
-          if (relevant.length > 0) return relevant;
-        } catch (err) {
-          console.warn("[filterHumanDataByVisibility] Embedding search failed:", err);
-        }
-      }
-
-      // Fallback: return top items by recency — never return unbounded list
-      return [...items]
-        .sort((a, b) => {
-          const aTime = (a as { last_updated?: string }).last_updated ?? "";
-          const bTime = (b as { last_updated?: string }).last_updated ?? "";
-          return bTime.localeCompare(aTime);
-        })
-        .slice(0, limit);
-    };
-    const selectRelevantQuotes = async (quotes: Quote[]): Promise<Quote[]> => {
-      if (quotes.length === 0) return [];
-      const withEmbeddings = quotes.filter(q => q.embedding?.length);
-
-      if (currentMessage && withEmbeddings.length > 0) {
-        try {
-          const embeddingService = getEmbeddingService();
-          const queryVector = await embeddingService.embed(currentMessage);
-          const results = findTopK(queryVector, withEmbeddings, QUOTE_LIMIT);
-          const relevant = results
-            .filter(({ similarity }) => similarity >= SIMILARITY_THRESHOLD)
-            .map(({ item }) => item);
-
-          if (relevant.length > 0) return relevant;
-        } catch (err) {
-          console.warn("[filterHumanDataByVisibility] Embedding search failed:", err);
-        }
-      }
-      return [...quotes]
-        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-        .slice(0, QUOTE_LIMIT);
-    };
-    if (persona.id === "ei") {
-      const [facts, traits, topics, people, quotes] = await Promise.all([
-        selectRelevantItems(human.facts, DATA_ITEM_LIMIT),
-        selectRelevantItems(human.traits, DATA_ITEM_LIMIT),
-        selectRelevantItems(human.topics, DATA_ITEM_LIMIT),
-        selectRelevantItems(human.people, DATA_ITEM_LIMIT),
-        selectRelevantQuotes(human.quotes ?? []),
-      ]);
-      return { facts, traits, topics, people, quotes };
-    }
-    const visibleGroups = new Set<string>();
-    if (persona.group_primary) {
-      visibleGroups.add(persona.group_primary);
-    }
-    (persona.groups_visible ?? []).forEach((g) => visibleGroups.add(g));
-    const filterByGroup = <T extends DataItemBase>(items: T[]): T[] => {
-      return items.filter((item) => {
-        const itemGroups = item.persona_groups ?? [];
-        const effectiveGroups = itemGroups.length === 0 ? [DEFAULT_GROUP] : itemGroups;
-        return effectiveGroups.some((g) => visibleGroups.has(g));
-      });
-    };
-    const groupFilteredQuotes = (human.quotes ?? []).filter((q) => {
-      const effectiveGroups = q.persona_groups.length === 0 ? [DEFAULT_GROUP] : q.persona_groups;
-      return effectiveGroups.some((g) => visibleGroups.has(g));
-    });
-
-    const [facts, traits, topics, people, quotes] = await Promise.all([
-      selectRelevantItems(filterByGroup(human.facts), DATA_ITEM_LIMIT),
-      selectRelevantItems(filterByGroup(human.traits), DATA_ITEM_LIMIT),
-      selectRelevantItems(filterByGroup(human.topics), DATA_ITEM_LIMIT),
-      selectRelevantItems(filterByGroup(human.people), DATA_ITEM_LIMIT),
-      selectRelevantQuotes(groupFilteredQuotes),
-    ]);
-
-    return { facts, traits, topics, people, quotes };
-  }
-
-  private getVisiblePersonas(
-    currentPersona: PersonaEntity
-  ): Array<{ name: string; short_description?: string }> {
-    const allPersonas = this.stateManager.persona_getAll();
-
-    if (currentPersona.id === "ei") {
-      return allPersonas
-        .filter((p) => p.id !== "ei" && !p.is_archived)
-        .map((p) => ({
-          name: p.display_name,
-          short_description: p.short_description,
-        }));
-    }
-
-    const visibleGroups = new Set<string>();
-    if (currentPersona.group_primary) {
-      visibleGroups.add(currentPersona.group_primary);
-    }
-    (currentPersona.groups_visible ?? []).forEach((g) => visibleGroups.add(g));
-
-    if (visibleGroups.size === 0) {
-      return [];
-    }
-
-    return allPersonas
-      .filter((p) => {
-        if (p.id === currentPersona.id || p.id === "ei" || p.is_archived) {
-          return false;
-        }
-        return p.group_primary && visibleGroups.has(p.group_primary);
-      })
-      .map((p) => ({
-        name: p.display_name,
-        short_description: p.short_description,
-      }));
+    return sendMessage(
+      this.stateManager,
+      this.queueProcessor,
+      this.currentRequest,
+      personaId,
+      content,
+      this.isTUI,
+      (id) => getModelForPersona(this.stateManager, id),
+      (err) => this.interface.onError?.(err),
+      (id) => this.interface.onMessageAdded?.(id),
+      (id) => this.interface.onMessageQueued?.(id)
+    );
   }
 
   async setContextBoundary(personaId: string, timestamp: string | null): Promise<void> {
-    this.stateManager.persona_setContextBoundary(personaId, timestamp);
+    await setContextBoundary(this.stateManager, personaId, timestamp);
     this.interface.onContextBoundaryChanged?.(personaId);
   }
 
@@ -1579,218 +1000,95 @@ export class Processor {
     messageId: string,
     status: ContextStatus
   ): Promise<void> {
-    this.stateManager.messages_setContextStatus(personaId, messageId, status);
+    return setMessageContextStatus(this.stateManager, personaId, messageId, status);
   }
 
   async deleteMessages(personaId: string, messageIds: string[]): Promise<Message[]> {
-    const removed = this.stateManager.messages_remove(personaId, messageIds);
+    const removed = await deleteMessages(this.stateManager, personaId, messageIds);
     this.interface.onMessageAdded?.(personaId);
     return removed;
   }
 
+  // ==========================================================================
+  // HUMAN DATA API
+  // ==========================================================================
+
   async getHuman(): Promise<HumanEntity> {
-    return stripHumanEmbeddings(this.stateManager.getHuman());
+    return getHuman(this.stateManager);
   }
 
   async updateHuman(updates: Partial<HumanEntity>): Promise<void> {
-    const current = this.stateManager.getHuman();
-    this.stateManager.setHuman({ ...current, ...updates });
+    await updateHuman(this.stateManager, updates);
     this.interface.onHumanUpdated?.();
   }
 
-  async getStorageState(): Promise<StorageState> {
-    return this.stateManager.getStorageState();
-  }
-
-  async restoreFromState(state: StorageState): Promise<void> {
-    return this.stateManager.restoreFromState(state);
-  }
-
   async upsertFact(fact: Fact): Promise<void> {
-    const human = this.stateManager.getHuman();
-    const existing = human.facts.find(f => f.id === fact.id);
-    
-    if (needsEmbeddingUpdate(existing, fact)) {
-      fact.embedding = await computeDataItemEmbedding(fact);
-    } else if (existing?.embedding) {
-      fact.embedding = existing.embedding;
-    }
-    
-    this.stateManager.human_fact_upsert(fact);
+    await upsertFact(this.stateManager, fact);
     this.interface.onHumanUpdated?.();
   }
 
   async upsertTrait(trait: Trait): Promise<void> {
-    const human = this.stateManager.getHuman();
-    const existing = human.traits.find(t => t.id === trait.id);
-    
-    if (needsEmbeddingUpdate(existing, trait)) {
-      trait.embedding = await computeDataItemEmbedding(trait);
-    } else if (existing?.embedding) {
-      trait.embedding = existing.embedding;
-    }
-    
-    this.stateManager.human_trait_upsert(trait);
+    await upsertTrait(this.stateManager, trait);
     this.interface.onHumanUpdated?.();
   }
 
   async upsertTopic(topic: Topic): Promise<void> {
-    const human = this.stateManager.getHuman();
-    const existing = human.topics.find(t => t.id === topic.id);
-    
-    if (needsEmbeddingUpdate(existing, topic)) {
-      topic.embedding = await computeDataItemEmbedding(topic);
-    } else if (existing?.embedding) {
-      topic.embedding = existing.embedding;
-    }
-    
-    this.stateManager.human_topic_upsert(topic);
+    await upsertTopic(this.stateManager, topic);
     this.interface.onHumanUpdated?.();
   }
 
   async upsertPerson(person: Person): Promise<void> {
-    const human = this.stateManager.getHuman();
-    const existing = human.people.find(p => p.id === person.id);
-    
-    if (needsEmbeddingUpdate(existing, person)) {
-      person.embedding = await computeDataItemEmbedding(person);
-    } else if (existing?.embedding) {
-      person.embedding = existing.embedding;
-    }
-    
-    this.stateManager.human_person_upsert(person);
+    await upsertPerson(this.stateManager, person);
     this.interface.onHumanUpdated?.();
   }
 
-   async removeDataItem(type: "fact" | "trait" | "topic" | "person", id: string): Promise<void> {
-     switch (type) {
-       case "fact":
-         this.stateManager.human_fact_remove(id);
-         break;
-       case "trait":
-         this.stateManager.human_trait_remove(id);
-         break;
-       case "topic":
-         this.stateManager.human_topic_remove(id);
-         break;
-       case "person":
-         this.stateManager.human_person_remove(id);
-         break;
-     }
-     this.interface.onHumanUpdated?.();
-   }
+  async removeDataItem(
+    type: "fact" | "trait" | "topic" | "person",
+    id: string
+  ): Promise<void> {
+    await removeDataItem(this.stateManager, type, id);
+    this.interface.onHumanUpdated?.();
+  }
 
-   async addQuote(quote: Quote): Promise<void> {
-     if (!quote.embedding) {
-       quote.embedding = await computeQuoteEmbedding(quote.text);
-     }
-     this.stateManager.human_quote_add(quote);
-     this.interface.onQuoteAdded?.();
-   }
+  async addQuote(quote: Quote): Promise<void> {
+    await addQuote(this.stateManager, quote);
+    this.interface.onQuoteAdded?.();
+  }
 
-   async updateQuote(id: string, updates: Partial<Quote>): Promise<void> {
-     if (updates.text !== undefined) {
-       const human = this.stateManager.getHuman();
-       const existing = human.quotes.find(q => q.id === id);
-       
-       if (needsQuoteEmbeddingUpdate(existing, { text: updates.text })) {
-         updates.embedding = await computeQuoteEmbedding(updates.text);
-       }
-     }
-     this.stateManager.human_quote_update(id, updates);
-     this.interface.onQuoteUpdated?.();
-   }
+  async updateQuote(id: string, updates: Partial<Quote>): Promise<void> {
+    await updateQuote(this.stateManager, id, updates);
+    this.interface.onQuoteUpdated?.();
+  }
 
-   async removeQuote(id: string): Promise<void> {
-     this.stateManager.human_quote_remove(id);
-     this.interface.onQuoteRemoved?.();
-   }
+  async removeQuote(id: string): Promise<void> {
+    await removeQuote(this.stateManager, id);
+    this.interface.onQuoteRemoved?.();
+  }
 
-   async getQuotes(filter?: { message_id?: string; data_item_id?: string }): Promise<Quote[]> {
-     const human = this.stateManager.getHuman();
-     let quotes: Quote[];
-     if (!filter) {
-       quotes = human.quotes;
-     } else if (filter.message_id) {
-       quotes = this.stateManager.human_quote_getForMessage(filter.message_id);
-     } else if (filter.data_item_id) {
-       quotes = this.stateManager.human_quote_getForDataItem(filter.data_item_id);
-     } else {
-       quotes = human.quotes;
-     }
-     return quotes.map(stripQuoteEmbedding);
-   }
+  async getQuotes(filter?: { message_id?: string; data_item_id?: string }): Promise<Quote[]> {
+    return getQuotes(this.stateManager, filter);
+  }
 
-   async getQuotesForMessage(messageId: string): Promise<Quote[]> {
-     return this.stateManager.human_quote_getForMessage(messageId).map(stripQuoteEmbedding);
-   }
+  async getQuotesForMessage(messageId: string): Promise<Quote[]> {
+    return getQuotesForMessage(this.stateManager, messageId);
+  }
 
-   async searchHumanData(
-     query: string,
-     options: { types?: Array<"fact" | "trait" | "topic" | "person" | "quote">; limit?: number } = {}
-   ): Promise<{
-     facts: Fact[];
-     traits: Trait[];
-     topics: Topic[];
-     people: Person[];
-     quotes: Quote[];
-   }> {
-     const { types = ["fact", "trait", "topic", "person", "quote"], limit = 10 } = options;
-     const human = this.stateManager.getHuman();
-     const SIMILARITY_THRESHOLD = 0.3;
+  async searchHumanData(
+    query: string,
+    options: { types?: Array<"fact" | "trait" | "topic" | "person" | "quote">; limit?: number } = {}
+  ): Promise<{
+    facts: Fact[];
+    traits: Trait[];
+    topics: Topic[];
+    people: Person[];
+    quotes: Quote[];
+  }> {
+    return searchHumanData(this.stateManager, query, options);
+  }
 
-     const result = {
-       facts: [] as Fact[],
-       traits: [] as Trait[],
-       topics: [] as Topic[],
-       people: [] as Person[],
-       quotes: [] as Quote[],
-     };
-
-     let queryVector: number[] | null = null;
-     try {
-       const embeddingService = getEmbeddingService();
-       queryVector = await embeddingService.embed(query);
-     } catch (err) {
-       console.warn("[searchHumanData] Failed to generate query embedding:", err);
-     }
-
-     const searchItems = <T extends { id: string; embedding?: number[] }>(
-       items: T[],
-       textExtractor: (item: T) => string
-     ): T[] => {
-       const withEmbeddings = items.filter(i => i.embedding?.length);
-       
-       if (queryVector && withEmbeddings.length > 0) {
-         return findTopK(queryVector, withEmbeddings, limit)
-           .filter(({ similarity }) => similarity >= SIMILARITY_THRESHOLD)
-           .map(({ item }) => item);
-       }
-       
-       const lowerQuery = query.toLowerCase();
-       return items
-         .filter(i => textExtractor(i).toLowerCase().includes(lowerQuery))
-         .slice(0, limit);
-     };
-
-     if (types.includes("fact")) {
-       result.facts = searchItems(human.facts, f => `${f.name} ${f.description || ""}`).map(stripDataItemEmbedding);
-     }
-     if (types.includes("trait")) {
-       result.traits = searchItems(human.traits, t => `${t.name} ${t.description || ""}`).map(stripDataItemEmbedding);
-     }
-     if (types.includes("topic")) {
-       result.topics = searchItems(human.topics, t => `${t.name} ${t.description || ""}`).map(stripDataItemEmbedding);
-     }
-     if (types.includes("person")) {
-       result.people = searchItems(human.people, p => `${p.name} ${p.description || ""} ${p.relationship}`).map(stripDataItemEmbedding);
-     }
-     if (types.includes("quote")) {
-       result.quotes = searchItems(human.quotes, q => q.text).map(stripQuoteEmbedding);
-     }
-
-     return result;
-   }
+  // ==========================================================================
+  // STATE IMPORT / EXPORT
+  // ==========================================================================
 
   async exportState(): Promise<string> {
     const state = this.stateManager.getStorageState();
@@ -1806,172 +1104,131 @@ export class Processor {
     this.interface.onStateImported?.();
   }
 
+  async getStorageState(): Promise<StorageState> {
+    return this.stateManager.getStorageState();
+  }
+
+  async restoreFromState(state: StorageState): Promise<void> {
+    return this.stateManager.restoreFromState(state);
+  }
+
+  // ==========================================================================
+  // QUEUE API
+  // ==========================================================================
+
   async abortCurrentOperation(): Promise<void> {
-    this.stateManager.queue_pause();
-    this.queueProcessor.abort();
+    return abortCurrentOperation(this.stateManager, this.queueProcessor);
   }
 
   async resumeQueue(): Promise<void> {
-    this.stateManager.queue_resume();
+    return resumeQueue(this.stateManager);
   }
 
   async getQueueStatus(): Promise<QueueStatus> {
-    return {
-      state: this.stateManager.queue_isPaused()
-        ? "paused"
-        : this.stateManager.queue_hasProcessingItem()
-          ? "busy"
-          : "idle",
-      pending_count: this.stateManager.queue_length(),
-      dlq_count: this.stateManager.queue_dlqLength(),
-    };
+    return getQueueStatus(this.stateManager);
   }
 
   pauseQueue(): void {
-    this.stateManager.queue_pause();
-    this.queueProcessor.abort();
+    pauseQueue(this.stateManager, this.queueProcessor);
   }
 
   getQueueActiveItems(): LLMRequest[] {
-    return this.stateManager.queue_getAllActiveItems();
+    return getQueueActiveItems(this.stateManager);
   }
 
   getDLQItems(): LLMRequest[] {
-    return this.stateManager.queue_getDLQItems();
+    return getDLQItems(this.stateManager);
   }
 
   updateQueueItem(id: string, updates: Partial<LLMRequest>): boolean {
-    return this.stateManager.queue_updateItem(id, updates);
+    return updateQueueItem(this.stateManager, id, updates);
   }
 
   async clearQueue(): Promise<number> {
-    this.queueProcessor.abort();
-    return this.stateManager.queue_clear();
+    return clearQueue(this.stateManager, this.queueProcessor);
   }
 
   async submitOneShot(guid: string, systemPrompt: string, userPrompt: string): Promise<void> {
-    this.stateManager.queue_enqueue({
-      type: LLMRequestType.Raw,
-      priority: LLMPriority.High,
-      system: systemPrompt,
-      user: userPrompt,
-      next_step: LLMNextStep.HandleOneShot,
-      model: this.getOneshotModel(),
-      data: { guid },
-    });
+    return submitOneShot(
+      this.stateManager,
+      () => getOneshotModel(this.stateManager),
+      guid,
+      systemPrompt,
+      userPrompt
+    );
   }
 
-  // ============================================================================
-  // TOOL PROVIDER API
-  // ============================================================================
+  // ==========================================================================
+  // TOOL API
+  // ==========================================================================
 
   getToolProviderList(): ToolProvider[] {
-    return this.stateManager.tools_getProviders();
+    return getToolProviderList(this.stateManager);
   }
 
   getToolProvider(id: string): ToolProvider | null {
-    return this.stateManager.tools_getProviderById(id);
+    return getToolProvider(this.stateManager, id);
   }
 
-  async addToolProvider(provider: Omit<ToolProvider, 'id' | 'created_at'>): Promise<string> {
-    const id = crypto.randomUUID();
-    const now = new Date().toISOString();
-    const newProvider: ToolProvider = { ...provider, id, created_at: now };
-    this.stateManager.tools_addProvider(newProvider);
+  async addToolProvider(provider: Omit<ToolProvider, "id" | "created_at">): Promise<string> {
+    const id = await addToolProvider(this.stateManager, provider);
     this.interface.onToolProviderAdded?.();
     return id;
   }
 
-  async updateToolProvider(id: string, updates: Partial<Omit<ToolProvider, 'id' | 'created_at'>>): Promise<boolean> {
-    const result = this.stateManager.tools_updateProvider(id, updates);
+  async updateToolProvider(
+    id: string,
+    updates: Partial<Omit<ToolProvider, "id" | "created_at">>
+  ): Promise<boolean> {
+    const result = await updateToolProvider(this.stateManager, id, updates);
     if (result) this.interface.onToolProviderUpdated?.(id);
     return result;
   }
 
   async removeToolProvider(id: string): Promise<boolean> {
-    // Cascade: unassign all tools from this provider from all personas before removing
-    const providerTools = this.stateManager.tools_getAll().filter(t => t.provider_id === id);
-    const providerToolIds = new Set(providerTools.map(t => t.id));
-    if (providerToolIds.size > 0) {
-      const personas = this.stateManager.persona_getAll();
-      for (const persona of personas) {
-        if (persona.tools?.some(tid => providerToolIds.has(tid))) {
-          await this.stateManager.persona_update(persona.id, {
-            tools: persona.tools.filter(tid => !providerToolIds.has(tid)),
-          });
-        }
-      }
-    }
-    const result = this.stateManager.tools_removeProvider(id);
+    const result = await removeToolProvider(this.stateManager, id);
     if (result) this.interface.onToolProviderRemoved?.();
     return result;
   }
 
-  // ============================================================================
-  // TOOL API
-  // ============================================================================
-
   getToolList(): ToolDefinition[] {
-    return this.stateManager.tools_getAll();
+    return getToolList(this.stateManager);
   }
 
   getTool(id: string): ToolDefinition | null {
-    return this.stateManager.tools_getById(id);
+    return getTool(this.stateManager, id);
   }
 
-  async addTool(tool: Omit<ToolDefinition, 'id' | 'created_at'>): Promise<string> {
-    const id = crypto.randomUUID();
-    const now = new Date().toISOString();
-    const newTool: ToolDefinition = { ...tool, id, created_at: now };
-    this.stateManager.tools_add(newTool);
+  async addTool(tool: Omit<ToolDefinition, "id" | "created_at">): Promise<string> {
+    const id = await addTool(this.stateManager, tool);
     this.interface.onToolAdded?.();
     return id;
   }
 
-  async updateTool(id: string, updates: Partial<Omit<ToolDefinition, 'id' | 'created_at'>>): Promise<boolean> {
-    const result = this.stateManager.tools_update(id, updates);
+  async updateTool(
+    id: string,
+    updates: Partial<Omit<ToolDefinition, "id" | "created_at">>
+  ): Promise<boolean> {
+    const result = await updateTool(this.stateManager, id, updates);
     if (result) this.interface.onToolUpdated?.(id);
     return result;
   }
 
   async removeTool(id: string): Promise<boolean> {
-    // Remove this tool from all persona tool lists before deleting
-    const personas = this.stateManager.persona_getAll();
-    for (const persona of personas) {
-      if (persona.tools?.includes(id)) {
-        await this.stateManager.persona_update(persona.id, {
-          tools: persona.tools.filter(t => t !== id),
-        });
-      }
-    }
-    const result = this.stateManager.tools_remove(id);
+    const result = await removeTool(this.stateManager, id);
     if (result) this.interface.onToolRemoved?.();
     return result;
   }
 
-  // ============================================================================
+  // ==========================================================================
   // DEBUG / TESTING UTILITIES
-  // ============================================================================
-  // These methods are for development and testing. In browser devtools:
-  //   1. Set a breakpoint in App.tsx or similar
-  //   2. When it hits, access: processor.triggerCeremonyNow()
-  //   3. Watch console for ceremony phase logs
-  // ============================================================================
+  // ==========================================================================
 
   /**
    * Manually trigger ceremony execution, bypassing time checks.
-   * 
+   *
    * USE FROM BROWSER DEVTOOLS:
    *   processor.triggerCeremonyNow()
-   * 
-   * This will:
-   *   - Run ceremony for all active personas with recent activity
-   *   - Apply decay to all persona topics
-   *   - Queue Expire → Explore → DescCheck phases (LLM calls)
-   *   - Run Human ceremony (decay human topics/people)
-   *   - Update last_ceremony timestamp
-   * 
-   * Watch console for detailed phase logging.
    */
   triggerCeremonyNow(): void {
     console.log("[Processor] Manual ceremony trigger requested");
@@ -1980,14 +1237,14 @@ export class Processor {
 
   /**
    * Get ceremony status for debugging.
-   * 
+   *
    * USE FROM BROWSER DEVTOOLS:
    *   processor.getCeremonyStatus()
    */
   getCeremonyStatus(): { lastRun: string | null; nextRunTime: string } {
     const human = this.stateManager.getHuman();
     const config = human.settings?.ceremony;
-    
+
     return {
       lastRun: config?.last_ceremony ?? null,
       nextRunTime: `Today at ${config?.time ?? "09:00"}`,
