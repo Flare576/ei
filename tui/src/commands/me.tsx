@@ -35,7 +35,8 @@ export const meCommand: Command = {
       people: filterType === "people" ? human.people : [],
     } : human;
     
-    let yamlContent = humanToYAML(filteredHuman);
+    const personaLookup = new Map(ctx.ei.personas().map(p => [p.id, p.display_name]));
+    let yamlContent = humanToYAML(filteredHuman, personaLookup);
     let editorIteration = 0;
     
     while (true) {

@@ -359,7 +359,7 @@ describe("QueueProcessor", () => {
         expect(toolsModule.executeToolCalls).toHaveBeenCalled();
       });
 
-      it("calls onEnqueue with next_step === HandleToolSynthesis", async () => {
+      it("calls onEnqueue with next_step === HandleToolContinuation", async () => {
         const onEnqueue = vi.fn().mockReturnValue("id");
         const callback = vi.fn().mockResolvedValue(undefined);
         processor.start(makeRequest(), callback, {
@@ -369,7 +369,7 @@ describe("QueueProcessor", () => {
 
         await vi.waitFor(() => expect(callback).toHaveBeenCalled());
         expect(onEnqueue).toHaveBeenCalledWith(
-          expect.objectContaining({ next_step: LLMNextStep.HandleToolSynthesis })
+          expect.objectContaining({ next_step: LLMNextStep.HandleToolContinuation })
         );
       });
 
@@ -448,15 +448,15 @@ describe("QueueProcessor", () => {
       });
     });
 
-    describe("HandleToolSynthesis requests", () => {
+    describe("HandleToolContinuation requests", () => {
       const toolHistory: LLMHistoryMessage[] = [
         { role: "assistant", content: null, tool_calls: [{ id: "tc1" }] },
         { role: "tool", content: '{"ok":true}', tool_call_id: "tc1", name: "some_tool" },
       ];
 
-      const makeSynthesisRequest = (): LLMRequest => ({
+      const makeContinuationRequest = (): LLMRequest => ({
         ...makeRequest(),
-        next_step: LLMNextStep.HandleToolSynthesis,
+        next_step: LLMNextStep.HandleToolContinuation,
         data: {
           toolHistory,
           originalNextStep: LLMNextStep.HandlePersonaResponse,
@@ -478,16 +478,16 @@ describe("QueueProcessor", () => {
         const conversationMessages = [{ role: "user" as const, content: "History" }];
         const messageFetcher = vi.fn().mockReturnValue(conversationMessages);
 
-        const synthesisRequest: LLMRequest = {
-          ...makeSynthesisRequest(),
+        const continuationRequest: LLMRequest = {
+          ...makeContinuationRequest(),
           data: {
-            ...makeSynthesisRequest().data,
+            ...makeContinuationRequest().data,
             personaId: "test-persona-id",
           },
         };
 
         const callback = vi.fn().mockResolvedValue(undefined);
-        processor.start(synthesisRequest, callback, { messageFetcher });
+        processor.start(continuationRequest, callback, { messageFetcher });
 
         await vi.waitFor(() => expect(callback).toHaveBeenCalled());
         const callArgs = vi.mocked(llmClient.callLLMRaw).mock.calls[0];
@@ -498,15 +498,64 @@ describe("QueueProcessor", () => {
         expect(passedMessages[2]).toMatchObject({ role: "tool", tool_call_id: "tc1", name: "some_tool" });
       });
 
-      it("does not pass tools to callLLMRaw and does not call toOpenAITools", async () => {
+      it("passes tools to callLLMRaw (continuation calls CAN trigger more tool calls)", async () => {
         const callback = vi.fn().mockResolvedValue(undefined);
-        processor.start(makeSynthesisRequest(), callback, { tools: [makeTool()] });
+        processor.start(makeContinuationRequest(), callback, { tools: [makeTool()] });
 
         await vi.waitFor(() => expect(callback).toHaveBeenCalled());
         const callArgs = vi.mocked(llmClient.callLLMRaw).mock.calls[0];
         const options = callArgs[4];
-        expect(options).not.toHaveProperty("tools");
-        expect(toolsModule.toOpenAITools).not.toHaveBeenCalled();
+        expect(options).toHaveProperty("tools");
+        expect(toolsModule.toOpenAITools).toHaveBeenCalled();
+      });
+
+      it("re-enqueues HandleToolContinuation when LLM calls more tools during continuation", async () => {
+        // First continuation call: LLM asks for more tools
+        vi.mocked(llmClient.callLLMRaw).mockResolvedValueOnce({
+          content: null,
+          finishReason: "tool_calls",
+          rawToolCalls: rawToolCallsData,
+          assistantMessage: assistantMsg,
+        });
+        vi.mocked(toolsModule.parseToolCalls).mockReturnValue([{ id: "tc2", name: "some_tool", arguments: {} }]);
+        vi.mocked(toolsModule.executeToolCalls).mockResolvedValue({
+          results: [{ tool_call_id: "tc2", name: "some_tool", result: '{"ok":true}', error: false }],
+          exhaustedToolNames: new Set<string>(),
+        });
+
+        const onEnqueue = vi.fn().mockReturnValue("id2");
+        const callback = vi.fn().mockResolvedValue(undefined);
+        processor.start(makeContinuationRequest(), callback, { tools: [makeTool()], onEnqueue });
+
+        await vi.waitFor(() => expect(callback).toHaveBeenCalled());
+        expect(onEnqueue).toHaveBeenCalledWith(
+          expect.objectContaining({ next_step: LLMNextStep.HandleToolContinuation })
+        );
+        const response = callback.mock.calls[0][0] as LLMResponse;
+        expect(response.finish_reason).toBe("tool_calls_enqueued");
+      });
+
+      it("carries toolCallCounts forward when re-enqueueing", async () => {
+        vi.mocked(llmClient.callLLMRaw).mockResolvedValueOnce({
+          content: null,
+          finishReason: "tool_calls",
+          rawToolCalls: rawToolCallsData,
+          assistantMessage: assistantMsg,
+        });
+        vi.mocked(toolsModule.parseToolCalls).mockReturnValue([{ id: "tc2", name: "some_tool", arguments: {} }]);
+        vi.mocked(toolsModule.executeToolCalls).mockResolvedValue({
+          results: [{ tool_call_id: "tc2", name: "some_tool", result: '{"ok":true}', error: false }],
+          exhaustedToolNames: new Set<string>(),
+        });
+
+        const onEnqueue = vi.fn().mockReturnValue("id2");
+        const callback = vi.fn().mockResolvedValue(undefined);
+        processor.start(makeContinuationRequest(), callback, { tools: [makeTool()], onEnqueue });
+
+        await vi.waitFor(() => expect(callback).toHaveBeenCalled());
+        const enqueuedRequest = onEnqueue.mock.calls[0][0] as LLMRequest;
+        expect(enqueuedRequest.data).toHaveProperty("toolCallCounts");
+        expect(enqueuedRequest.data).toHaveProperty("totalCallCount");
       });
     });
   });

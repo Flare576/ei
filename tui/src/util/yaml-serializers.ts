@@ -403,7 +403,7 @@ export function personaFromYAML(yamlContent: string, original: PersonaEntity, al
 // HUMAN SERIALIZATION
 // =============================================================================
 
-export function humanToYAML(human: HumanEntity): string {
+export function humanToYAML(human: HumanEntity, personaLookup?: Map<string, string>): string {
   const data: EditableHumanData = {
     facts: human.facts.map(f => ({ ...f, _delete: false })),
     traits: human.traits.map(t => ({ ...t, _delete: false })),
@@ -415,7 +415,11 @@ export function humanToYAML(human: HumanEntity): string {
     lineWidth: 0,
   })
   .replace(/^(\s+validated:\s+\S+)$/mg, '$1 # none | ei | human')
-  .replace(/^(\s+)(learned_by: .+)$/mg, '$1# [read-only] $2')
+  .replace(/^(\s+)(learned_by: )(.+)$/mg, (_, indent, key, val) => {
+    const trimmed = val.trim();
+    const displayName = personaLookup?.get(trimmed) ?? trimmed;
+    return `${indent}# [read-only] ${key}${displayName}`;
+  })
   .replace(/^(\s+)(last_changed_by: .+)$/mg, '$1# [read-only] $2');
 }
 

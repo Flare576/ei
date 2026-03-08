@@ -25,7 +25,7 @@ export interface Message {
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
-  content: string;
+  content: string | null;
 }
 
 export type LLMRequestState = "pending" | "processing" | "dlq";

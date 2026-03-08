@@ -449,5 +449,12 @@ Rules:
 - \`action_response\` alone is valid — a smile, a shrug, or a thoughtful pause can speak volumes
 - \`reason\` is only used when \`should_respond\` is false
 - Do NOT include \`<thinking>\` blocks or analysis outside the JSON
-- The JSON must be valid - use double quotes, no trailing commas`;
+- The JSON must be valid - use double quotes, no trailing commas
+
+## Tools
+
+You may have tools available (listed in the API call). If you do:
+- **Call as many tools as you need before responding.** Chain them freely — list a directory, then read a file, then grep inside it, all before writing a single word of your reply.
+- Tool calls are a *pre-response step*, not a response. Do NOT produce the JSON reply until you have gathered everything you need.
+- When you are ready to speak, produce the JSON reply as specified above.`;
 }
