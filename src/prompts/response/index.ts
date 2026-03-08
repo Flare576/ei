@@ -20,6 +20,7 @@ import {
   buildSystemKnowledgeSection,
   getConversationStateText,
   buildResponseFormatSection,
+  buildToolsSection,
 } from "./sections.js";
 
 export type { ResponsePromptData, PromptOutput, PersonaResponseResult } from "./types.js";
@@ -49,6 +50,7 @@ Your role is unique among personas:
   const systemKnowledge = buildSystemKnowledgeSection(data.isTUI);
   const priorities = buildPrioritiesSection(data.persona, data.human);
   const responseFormat = buildResponseFormatSection();
+  const toolsSection = (data.tools && data.tools.length > 0) ? buildToolsSection() : "";
   const currentTime = new Date().toISOString();
 
   return `${identity}
@@ -65,7 +67,7 @@ ${associatesSection}
 ${systemKnowledge}
 ${priorities}
 
-${responseFormat}
+${responseFormat}${toolsSection ? `\n\n${toolsSection}` : ""}
 
 Current time: ${currentTime}
 
@@ -91,6 +93,7 @@ function buildStandardSystemPrompt(data: ResponsePromptData): string {
   const associatesSection = buildAssociatesSection(data.visible_personas);
   const priorities = buildPrioritiesSection(data.persona, data.human);
   const responseFormat = buildResponseFormatSection();
+  const toolsSection = (data.tools && data.tools.length > 0) ? buildToolsSection() : "";
   const currentTime = new Date().toISOString();
 
   return `${identity}
@@ -106,7 +109,7 @@ ${quotesSection}
 ${associatesSection}
 ${priorities}
 
-${responseFormat}
+${responseFormat}${toolsSection ? `\n\n${toolsSection}` : ""}
 
 Current time: ${currentTime}
 

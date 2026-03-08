@@ -46,10 +46,11 @@ export enum LLMNextStep {
   HandlePersonaExpire = "handlePersonaExpire",
   HandlePersonaExplore = "handlePersonaExplore",
   HandleDescriptionCheck = "handleDescriptionCheck",
-  // Tool calling synthesis (second LLM call after tool execution)
+  // Tool calling continuation (second LLM call after tool execution, may loop for more tool calls).
   // data.toolHistory: serialized LLMHistoryMessage[] (assistant + tool result messages)
+  // data.toolCallCounts: serialized Map entries [[name, count], ...] carrying per-tool call counts
   // data.originalNextStep: the next_step value from the originating request
-  HandleToolSynthesis = "handleToolSynthesis",
+  HandleToolContinuation = "handleToolContinuation",
   HandleRewriteScan = "handleRewriteScan",
   HandleRewriteRewrite = "handleRewriteRewrite",
 }

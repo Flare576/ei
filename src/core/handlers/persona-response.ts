@@ -85,12 +85,12 @@ export function handlePersonaResponse(response: LLMResponse, state: StateManager
 }
 
 /**
- * handleToolSynthesis — second LLM call in the tool flow.
+ * handleToolContinuation — second LLM call in the tool flow (may loop if LLM calls more tools).
  * The QueueProcessor already injected tool history into messages and got the
  * final persona response. Parse and store it exactly like handlePersonaResponse.
  */
-export function handleToolSynthesis(response: LLMResponse, state: StateManager): void {
-  console.log(`[handleToolSynthesis] Routing to handlePersonaResponse`);
+export function handleToolContinuation(response: LLMResponse, state: StateManager): void {
+  console.log(`[handleToolContinuation] Routing to handlePersonaResponse`);
   handlePersonaResponse(response, state);
 }
 

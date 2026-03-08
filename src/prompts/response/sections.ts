@@ -451,3 +451,21 @@ Rules:
 - Do NOT include \`<thinking>\` blocks or analysis outside the JSON
 - The JSON must be valid - use double quotes, no trailing commas`;
 }
+
+// =============================================================================
+// TOOLS SECTION
+// =============================================================================
+
+/**
+ * Only included in the system prompt when the persona has tools available.
+ * Keeping it separate prevents weak local models from hallucinating tool calls
+ * when no tools exist in the API request.
+ */
+export function buildToolsSection(): string {
+  return `## Tool Use
+
+You have tools available (listed in the API call). Use them freely:
+- **Chain as many as you need before responding.** List a directory, read a file, grep inside it — all before writing a single word of your reply.
+- Tool calls are a *pre-response step*, not a response. Do NOT produce the JSON reply until you have gathered everything you need.
+- When you are ready to speak, produce the JSON reply as specified above.`;
+}

@@ -31,7 +31,7 @@ export interface QueueProcessorStartOptions {
   /** Tools available for this specific request (pre-filtered by runtime and persona assignment). */
   tools?: ToolDefinition[];
   /**
-   * Called when the QueueProcessor needs to enqueue a follow-up request (e.g. HandleToolSynthesis).
+   * Called when the QueueProcessor needs to enqueue a follow-up request (e.g. HandleToolContinuation).
    * Injected by Processor pointing to stateManager.queue_enqueue.
    */
   onEnqueue?: EnqueueCallback;
@@ -106,9 +106,9 @@ export class QueueProcessor {
     let messages: ChatMessage[] = [];
 
     const isResponseType = request.type === "response" as LLMRequestType;
-    const isToolSynthesis = request.next_step === LLMNextStep.HandleToolSynthesis;
+    const isToolContinuation = request.next_step === LLMNextStep.HandleToolContinuation;
 
-    if (isResponseType || isToolSynthesis) {
+    if (isResponseType || isToolContinuation) {
       const personaId = request.data.personaId as string | undefined;
       if (personaId && this.currentMessageFetcher) {
         messages = this.currentMessageFetcher(personaId);
@@ -141,27 +141,98 @@ export class QueueProcessor {
     }
 
     // =========================================================================
-    // For HandleToolSynthesis: inject stored tool history into messages.
-    // This is the second LLM call — no tools offered, just synthesize.
+    // For HandleToolContinuation: inject stored tool history and allow another
+    // round of tool calls. Loops until LLM stops requesting tools or we hit the
+    // hard cap (enforced by executeToolCalls via the shared callCounts/totalCalls).
     // =========================================================================
-    if (isToolSynthesis) {
+    if (isToolContinuation) {
       const rawHistory = request.data.toolHistory as LLMHistoryMessage[] | undefined;
       if (rawHistory && rawHistory.length > 0) {
         messages = [...messages, ...rawHistory] as ChatMessage[];
-        console.log(`[QueueProcessor] HandleToolSynthesis: injecting ${rawHistory.length} tool history messages`);
+        console.log(`[QueueProcessor] HandleToolContinuation: injecting ${rawHistory.length} tool history messages`);
       }
 
-      const { content, finishReason } = await callLLMRaw(
+      // Restore per-tool call counts carried over from the previous iteration.
+      const callCounts = new Map<string, number>(
+        (request.data.toolCallCounts as [string, number][] | undefined) ?? []
+      );
+      const totalCalls = { count: (request.data.totalCallCount as number | undefined) ?? 0 };
+
+      const activeTools = this.currentTools ?? [];
+      const openAITools = activeTools.length > 0 ? toOpenAITools(activeTools) : [];
+
+      const { content, finishReason, rawToolCalls, assistantMessage, thinking } = await callLLMRaw(
         hydratedSystem,
         hydratedUser,
         messages,
         request.model,
-        { signal: this.abortController?.signal },
+        { signal: this.abortController?.signal, tools: openAITools },
         this.currentAccounts
       );
 
-      console.log(`[QueueProcessor] HandleToolSynthesis LLM call complete, finish_reason="${finishReason}"`);
-      return this.handleResponseType(request, content ?? "", finishReason);
+      console.log(`[QueueProcessor] HandleToolContinuation LLM call complete, finish_reason="${finishReason}"${thinking ? ` (thinking: ${thinking.length} chars)` : ""}`);
+      // TODO(#13): Surface thinking to TUI as 'Beta is thinking...' when streaming is available.
+
+      // If the LLM wants to call more tools, accumulate history and re-enqueue.
+      if (finishReason === "tool_calls" && rawToolCalls?.length) {
+        const toolCalls = parseToolCalls(rawToolCalls);
+        if (toolCalls.length > 0) {
+          const appendedHistory: LLMHistoryMessage[] = [];
+          if (assistantMessage) {
+            appendedHistory.push(assistantMessage as unknown as LLMHistoryMessage);
+          }
+
+          const { results } = await executeToolCalls(toolCalls, activeTools, callCounts, totalCalls);
+          for (const result of results) {
+            appendedHistory.push({
+              role: "tool",
+              content: result.result,
+              tool_call_id: result.tool_call_id,
+              name: result.name,
+            });
+          }
+
+          const newHistory = [...(rawHistory ?? []), ...appendedHistory];
+          console.log(`[QueueProcessor] HandleToolContinuation: ${results.length} more tool result(s). Re-enqueueing.`);
+
+          if (this.currentOnEnqueue) {
+            this.currentOnEnqueue({
+              type: request.type,
+              priority: request.priority,
+              system: request.system,
+              user: request.user,
+              next_step: LLMNextStep.HandleToolContinuation,
+              model: request.model,
+              data: {
+                ...request.data,
+                toolHistory: newHistory,
+                toolCallCounts: [...callCounts.entries()],
+                totalCallCount: totalCalls.count,
+              },
+            });
+          } else {
+            console.warn("[QueueProcessor] No onEnqueue callback — continuation tool results lost!");
+          }
+
+          return {
+            request,
+            success: true,
+            content: null,
+            finish_reason: "tool_calls_enqueued",
+          };
+        }
+      }
+
+      // LLM stopped — parse and return.
+      // If JSON parse fails, attempt a single reformat pass: treat the prose as
+      // a tool result and ask the same model to convert it to the required JSON shape.
+      const firstAttempt = this.handleResponseType(request, content ?? "", finishReason);
+      if (!firstAttempt.success && content) {
+        console.log(`[QueueProcessor] HandleToolContinuation: JSON parse failed — attempting reformat pass`);
+        const reformatResult = await this.attemptReformat(request, messages, content);
+        if (reformatResult) return reformatResult;
+      }
+      return firstAttempt;
     }
 
     // =========================================================================
@@ -171,7 +242,7 @@ export class QueueProcessor {
     const openAITools = activeTools.length > 0 ? toOpenAITools(activeTools) : [];
     console.log(`[QueueProcessor] LLM call for ${request.next_step}, tools=${openAITools.length}`);
 
-    const { content, finishReason, rawToolCalls, assistantMessage } = await callLLMRaw(
+    const { content, finishReason, rawToolCalls, assistantMessage, thinking } = await callLLMRaw(
       hydratedSystem,
       hydratedUser,
       messages,
@@ -179,12 +250,15 @@ export class QueueProcessor {
       { signal: this.abortController?.signal, tools: openAITools },
       this.currentAccounts
     );
+    if (thinking) {
+      console.log(`[QueueProcessor] Extended thinking on ${request.next_step} (${thinking.length} chars) — TODO(#13): stream to TUI`);
+    }
 
     // =========================================================================
-    // Tool call path: execute tools, enqueue HandleToolSynthesis, done.
+    // Tool call path: execute tools, enqueue HandleToolContinuation, done.
     // =========================================================================
     if (finishReason === "tool_calls" && rawToolCalls?.length) {
-      console.log(`[QueueProcessor] finish_reason=tool_calls — executing tools, will enqueue HandleToolSynthesis`);
+      console.log(`[QueueProcessor] finish_reason=tool_calls — executing tools, will enqueue HandleToolContinuation`);
 
       const toolCalls = parseToolCalls(rawToolCalls);
       if (toolCalls.length === 0) {
@@ -212,7 +286,7 @@ export class QueueProcessor {
         });
       }
 
-      console.log(`[QueueProcessor] Tool execution complete: ${results.length} result(s). Enqueueing HandleToolSynthesis.`);
+      console.log(`[QueueProcessor] Tool execution complete: ${results.length} result(s). Enqueueing HandleToolContinuation.`);
 
       if (this.currentOnEnqueue) {
         this.currentOnEnqueue({
@@ -220,11 +294,13 @@ export class QueueProcessor {
           priority: request.priority,
           system: request.system,
           user: request.user,
-          next_step: LLMNextStep.HandleToolSynthesis,
+          next_step: LLMNextStep.HandleToolContinuation,
           model: request.model,
           data: {
             ...request.data,
             toolHistory,
+            toolCallCounts: [...callCounts.entries()],
+            totalCallCount: totalCalls.count,
             originalNextStep: request.next_step,
           },
         });
@@ -233,7 +309,7 @@ export class QueueProcessor {
       }
 
       // Return a "pending" success that signals the tool phase is done.
-      // The actual persona message will arrive when HandleToolSynthesis completes.
+      // The actual persona message will arrive when HandleToolContinuation completes.
       return {
         request,
         success: true,
@@ -308,6 +384,63 @@ export class QueueProcessor {
         error: `JSON parse failed: ${error instanceof Error ? error.message : String(error)}`,
         finish_reason: finishReason ?? undefined,
       };
+    }
+  }
+
+  /**
+   * When HandleToolContinuation gets valid-looking prose instead of JSON, attempt a
+   * single synchronous reformat pass rather than falling into the backoff retry loop.
+   *
+   * Strategy: treat the prose as a synthetic tool result and ask the same model to
+   * convert it to the required JSON response format. This avoids the 'yell louder'
+   * arms race — we’re not repeating the same failed instruction, we’re giving the model
+   * a concrete reformatting task with the actual content it already produced.
+   *
+   * Returns null if the reformat attempt also fails — caller falls through to normal
+   * failure path (backoff retry).
+   */
+  private async attemptReformat(
+    request: LLMRequest,
+    messages: ChatMessage[],
+    proseContent: string
+  ): Promise<LLMResponse | null> {
+    const reformatUserPrompt =
+      `An earlier version of you responded with the following content, but not in the ` +
+      `required JSON format. Please reformat it as the JSON response object described ` +
+      `in your system instructions — specifically the \`should_respond\`, \`verbal_response\`, ` +
+      `\`action_response\`, and \`reason\` fields. Respond with ONLY the JSON object.\n\n` +
+      `---\n${proseContent}\n---`;
+
+    try {
+      const { content: reformatContent, finishReason: reformatReason } = await callLLMRaw(
+        request.system,
+        reformatUserPrompt,
+        messages, // existing tool history — gives full context without duplicating the ask
+        request.model,
+        { signal: this.abortController?.signal },
+        this.currentAccounts
+      );
+
+      if (!reformatContent) return null;
+
+      const cleaned = cleanResponseContent(reformatContent);
+      try {
+        const parsed = parseJSONResponse(cleaned);
+        console.log(`[QueueProcessor] Reformat pass succeeded for handleToolContinuation`);
+        return {
+          request,
+          success: true,
+          content: cleaned,
+          parsed,
+          finish_reason: reformatReason ?? undefined,
+        };
+      } catch {
+        console.warn(`[QueueProcessor] Reformat pass also failed to produce JSON — falling through to retry`);
+        return null;
+      }
+    } catch (err) {
+      console.warn(`[QueueProcessor] Reformat pass LLM call failed: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
     }
   }
 

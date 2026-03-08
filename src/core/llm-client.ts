@@ -28,6 +28,15 @@ export interface LLMRawResponse {
   rawToolCalls?: unknown[];
   /** The full assistant message object (needed to inject into history for the tool loop). */
   assistantMessage?: Record<string, unknown>;
+  /**
+   * Extracted thinking/reasoning content, present when the model emits extended thinking.
+   * Normalized from three possible API shapes:
+   *   1. Separate field: message.reasoning_content (DeepSeek R1, Qwen)
+   *   2. Content block array with type='thinking' (Anthropic native API)
+   *   3. Inline XML tags: <thinking>...</thinking> — captured before cleanResponseContent strips them
+   * Foundation for future 'Beta is thinking...' display in TUI.
+   */
+  thinking?: string;
 }
 
 let llmCallCount = 0;
@@ -159,7 +168,7 @@ export async function callLLMRaw(
     console.log(`[LLM] Injected user-first placeholder (${chatMessages.length} → ${finalMessages.length} messages)`);
   }
   
-  const totalChars = finalMessages.reduce((sum, m) => sum + m.content.length, 0);
+  const totalChars = finalMessages.reduce((sum, m) => sum + (m.content?.length ?? 0), 0);
   const estimatedTokens = Math.ceil(totalChars / 4);
   console.log(`[LLM] Call #${llmCallCount} - ~${estimatedTokens} tokens (${totalChars} chars)`);
   
@@ -207,11 +216,51 @@ export async function callLLMRaw(
     ? (choice.message.tool_calls as unknown[])
     : undefined;
 
+  // =========================================================================
+  // Extract thinking content — normalize across all three API shapes.
+  // =========================================================================
+  let thinking: string | undefined;
+  let textContent: string | null = (choice?.message?.content as string | null) ?? null;
+
+  // Shape 1: Separate reasoning_content field (DeepSeek R1, Alibaba Qwen)
+  const reasoningField = (choice?.message as Record<string, unknown> | undefined)?.reasoning_content;
+  if (typeof reasoningField === "string" && reasoningField.trim()) {
+    thinking = reasoningField.trim();
+  }
+
+  // Shape 2: Content block array with type='thinking' (Anthropic native API)
+  if (Array.isArray(choice?.message?.content)) {
+    const blocks = choice.message.content as Array<Record<string, unknown>>;
+    const thinkingBlocks = blocks
+      .filter((b) => b.type === "thinking" && typeof b.thinking === "string")
+      .map((b) => b.thinking as string);
+    const textBlocks = blocks
+      .filter((b) => b.type === "text" && typeof b.text === "string")
+      .map((b) => b.text as string);
+    if (thinkingBlocks.length > 0) {
+      thinking = (thinking ? thinking + "\n" : "") + thinkingBlocks.join("\n");
+    }
+    textContent = textBlocks.join("\n") || null;
+  }
+
+  // Shape 3: Inline XML tags — capture before cleanResponseContent strips them downstream.
+  if (!thinking && typeof textContent === "string") {
+    const inlineMatch = textContent.match(/<\s*think(?:ing)?\s*>([\s\S]*?)<\s*\/\s*think(?:ing)?\s*>/i);
+    if (inlineMatch) {
+      thinking = inlineMatch[1].trim();
+    }
+  }
+
+  if (thinking) {
+    console.log(`[LLM] Extended thinking detected (${thinking.length} chars)`);
+  }
+
   return {
-    content: (choice?.message?.content as string | null) ?? null,
+    content: textContent,
     finishReason: choice?.finish_reason ?? null,
     rawToolCalls,
     assistantMessage,
+    ...(thinking ? { thinking } : {}),
   };
 }
 
@@ -268,12 +317,28 @@ export function repairJSON(jsonStr: string): string {
 export function parseJSONResponse(content: string): unknown {
   const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
   const jsonStr = jsonMatch ? jsonMatch[1].trim() : content.trim();
-  
+
   try {
     return JSON.parse(jsonStr);
   } catch {
-    const repaired = repairJSON(jsonStr);
-    return JSON.parse(repaired);
+    try {
+      const repaired = repairJSON(jsonStr);
+      return JSON.parse(repaired);
+    } catch {
+      // Last resort: extract the outermost {...} block from mixed prose/JSON content.
+      // Handles 'thinking prose...\n{...json...}' responses from extended-thinking models.
+      const outerMatch = jsonStr.match(/\{[\s\S]*\}/);
+      if (outerMatch) {
+        const extracted = outerMatch[0];
+        try {
+          return JSON.parse(extracted);
+        } catch {
+          return JSON.parse(repairJSON(extracted));
+        }
+      }
+      // Nothing worked — re-throw so the caller gets a proper failure.
+      throw new Error(`No parseable JSON found in response (${jsonStr.length} chars)`);
+    }
   }
 }
 

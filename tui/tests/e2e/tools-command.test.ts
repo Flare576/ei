@@ -117,7 +117,71 @@ function createCheckpointWithToolkit(mockServerUrl: string) {
         created_at: timestamp,
         max_calls_per_interaction: 5,
       },
-    ],
+      {
+        id: "tool-list-directory",
+        provider_id: "ei",
+        name: "list_directory",
+        display_name: "List Directory",
+        description: "List directory contents.",
+        input_schema: { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
+        runtime: "node",
+        builtin: true,
+        enabled: true,
+        created_at: timestamp,
+        max_calls_per_interaction: 5,
+      },
+      {
+        id: "tool-directory-tree",
+        provider_id: "ei",
+        name: "directory_tree",
+        display_name: "Directory Tree",
+        description: "Show directory tree.",
+        input_schema: { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
+        runtime: "node",
+        builtin: true,
+        enabled: true,
+        created_at: timestamp,
+        max_calls_per_interaction: 3,
+      },
+      {
+        id: "tool-search-files",
+        provider_id: "ei",
+        name: "search_files",
+        display_name: "Search Files",
+        description: "Search files by name pattern.",
+        input_schema: { type: "object", properties: { path: { type: "string" }, pattern: { type: "string" } }, required: ["path", "pattern"] },
+        runtime: "node",
+        builtin: true,
+        enabled: true,
+        created_at: timestamp,
+        max_calls_per_interaction: 3,
+      },
+      {
+        id: "tool-grep",
+        provider_id: "ei",
+        name: "grep",
+        display_name: "Grep",
+        description: "Search file contents.",
+        input_schema: { type: "object", properties: { pattern: { type: "string" }, path: { type: "string" } }, required: ["pattern", "path"] },
+        runtime: "node",
+        builtin: true,
+        enabled: true,
+        created_at: timestamp,
+        max_calls_per_interaction: 5,
+      },
+      {
+        id: "tool-get-file-info",
+        provider_id: "ei",
+        name: "get_file_info",
+        display_name: "Get File Info",
+        description: "Get file metadata.",
+        input_schema: { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
+        runtime: "node",
+        builtin: true,
+        enabled: true,
+        created_at: timestamp,
+        max_calls_per_interaction: 5,
+      },
   };
 }
 
@@ -177,7 +241,7 @@ test.describe("/tools command", () => {
     terminal.submit();
 
     await expect(terminal.getByText("Toolkits")).toBeVisible({ timeout: 5000 });
-    await expect(terminal.getByText(/Ei Built-ins \(2 tools\)/g)).toBeVisible({ timeout: 3000 });
+    await expect(terminal.getByText(/Ei Built-ins \(7 tools\)/g)).toBeVisible({ timeout: 3000 });
 
     terminal.keyEscape();
     await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 5000 });

@@ -75,6 +75,7 @@ export function clearPendingRequestsFor(
     LLMNextStep.HandlePersonaTraitExtraction,
     LLMNextStep.HandleHeartbeatCheck,
     LLMNextStep.HandleEiHeartbeat,
+    LLMNextStep.HandleToolContinuation,
   ];
 
   let removedAny = false;
@@ -157,7 +158,8 @@ export async function sendMessage(
   sm.messages_append(persona.id, message);
   onMessageAdded(persona.id);
 
-  const promptData = await buildResponsePromptData(sm, persona, isTUI, content);
+  const tools = sm.tools_getForPersona(persona.id, isTUI);
+  const promptData = await buildResponsePromptData(sm, persona, isTUI, content, tools);
   const prompt = buildResponsePrompt(promptData);
 
   sm.queue_enqueue({
@@ -199,9 +201,13 @@ export async function sendMessage(
 // =============================================================================
 
 /**
- * Queue fact/topic/person extraction scans when the human has fewer items than
- * unextracted messages warrant. See note in processor.ts for design rationale.
+ * Queue fact/topic/person extraction scans using a tapering threshold.
+ * Threshold = MIN(10, current item count) — fires on every message when
+ * bootstrapping (0 items), then tapers to once every 10 messages as data grows.
+ * Always extracts ALL unextracted messages when triggered (no artificial batching).
  */
+const EXTRACTION_TAPER_CAP = 10;
+
 export function checkAndQueueHumanExtraction(
   sm: StateManager,
   personaId: string,
@@ -211,7 +217,8 @@ export function checkAndQueueHumanExtraction(
   const human = sm.getHuman();
 
   const unextractedFacts = sm.messages_getUnextracted(personaId, "f");
-  if (human.facts.length < unextractedFacts.length) {
+  const factsThreshold = Math.min(EXTRACTION_TAPER_CAP, human.facts.length);
+  if (unextractedFacts.length > 0 && unextractedFacts.length >= factsThreshold) {
     const context: ExtractionContext = {
       personaId,
       personaDisplayName,
@@ -221,12 +228,13 @@ export function checkAndQueueHumanExtraction(
     };
     queueFactScan(context, sm);
     console.log(
-      `[Processor] Human Seed extraction: facts (${human.facts.length} < ${unextractedFacts.length} unextracted)`
+      `[Processor] Human Seed extraction: facts (threshold: ${factsThreshold}, unextracted: ${unextractedFacts.length})`
     );
   }
 
   const unextractedTopics = sm.messages_getUnextracted(personaId, "p");
-  if (human.topics.length < unextractedTopics.length) {
+  const topicsThreshold = Math.min(EXTRACTION_TAPER_CAP, human.topics.length);
+  if (unextractedTopics.length > 0 && unextractedTopics.length >= topicsThreshold) {
     const context: ExtractionContext = {
       personaId,
       personaDisplayName,
@@ -236,12 +244,13 @@ export function checkAndQueueHumanExtraction(
     };
     queueTopicScan(context, sm);
     console.log(
-      `[Processor] Human Seed extraction: topics (${human.topics.length} < ${unextractedTopics.length} unextracted)`
+      `[Processor] Human Seed extraction: topics (threshold: ${topicsThreshold}, unextracted: ${unextractedTopics.length})`
     );
   }
 
   const unextractedPeople = sm.messages_getUnextracted(personaId, "o");
-  if (human.people.length < unextractedPeople.length) {
+  const peopleThreshold = Math.min(EXTRACTION_TAPER_CAP, human.people.length);
+  if (unextractedPeople.length > 0 && unextractedPeople.length >= peopleThreshold) {
     const context: ExtractionContext = {
       personaId,
       personaDisplayName,
@@ -251,7 +260,7 @@ export function checkAndQueueHumanExtraction(
     };
     queuePersonScan(context, sm);
     console.log(
-      `[Processor] Human Seed extraction: people (${human.people.length} < ${unextractedPeople.length} unextracted)`
+      `[Processor] Human Seed extraction: people (threshold: ${peopleThreshold}, unextracted: ${unextractedPeople.length})`
     );
   }
 }

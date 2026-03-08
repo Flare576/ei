@@ -197,7 +197,7 @@ export class Processor {
     this.bootstrapTools();
     registerReadMemoryExecutor(createReadMemoryExecutor(this.searchHumanData.bind(this)));
     if (this.isTUI) {
-      registerFileReadExecutor();
+      await registerFileReadExecutor();
     }
     this.running = true;
     console.log(`[Processor ${this.instanceId}] initialized, starting loop`);
@@ -303,11 +303,136 @@ export class Processor {
         name: "file_read",
         display_name: "Read File",
         description:
-          "Read the contents of a file from the local filesystem. Only available in the TUI.",
+          "Read the contents of a file from the local filesystem. Use list_directory first to explore folder structure. Only available in the TUI.",
         input_schema: {
           type: "object",
           properties: {
             path: { type: "string", description: "Absolute or relative path to the file" },
+          },
+          required: ["path"],
+        },
+        runtime: "node",
+        builtin: true,
+        enabled: true,
+        created_at: now,
+        max_calls_per_interaction: 5,
+      });
+    }
+
+    // list_directory tool (TUI only)
+    if (!this.stateManager.tools_getByName("list_directory")) {
+      this.stateManager.tools_add({
+        id: crypto.randomUUID(),
+        provider_id: "ei",
+        name: "list_directory",
+        display_name: "List Directory",
+        description:
+          "List the contents of a directory on the local filesystem. Returns filenames prefixed with [FILE] or [DIR]. Use this to explore folder structure before reading files. Only available in the TUI.",
+        input_schema: {
+          type: "object",
+          properties: {
+            path: { type: "string", description: "Absolute or relative path to the directory (e.g. ~/Projects/myapp or /home/user/docs)" },
+          },
+          required: ["path"],
+        },
+        runtime: "node",
+        builtin: true,
+        enabled: true,
+        created_at: now,
+        max_calls_per_interaction: 5,
+      });
+    }
+
+    // directory_tree tool (TUI only)
+    if (!this.stateManager.tools_getByName("directory_tree")) {
+      this.stateManager.tools_add({
+        id: crypto.randomUUID(),
+        provider_id: "ei",
+        name: "directory_tree",
+        display_name: "Directory Tree",
+        description:
+          "Show a recursive tree of a directory up to a configurable depth. Returns a JSON tree with name, type, and children fields. Default max_depth is 3, maximum is 8. Only available in the TUI.",
+        input_schema: {
+          type: "object",
+          properties: {
+            path: { type: "string", description: "Absolute or relative path to the directory" },
+            max_depth: { type: "number", description: "Maximum depth to recurse (1-8, default 3)" },
+          },
+          required: ["path"],
+        },
+        runtime: "node",
+        builtin: true,
+        enabled: true,
+        created_at: now,
+        max_calls_per_interaction: 3,
+      });
+    }
+
+    // search_files tool (TUI only)
+    if (!this.stateManager.tools_getByName("search_files")) {
+      this.stateManager.tools_add({
+        id: crypto.randomUUID(),
+        provider_id: "ei",
+        name: "search_files",
+        display_name: "Search Files",
+        description:
+          "Recursively search for files by name pattern within a directory. Supports * wildcards. Returns matching absolute paths. Skips node_modules, .git, dist. Only available in the TUI.",
+        input_schema: {
+          type: "object",
+          properties: {
+            path: { type: "string", description: "Root directory to search from" },
+            pattern: { type: "string", description: "Filename glob pattern, e.g. \"*.ts\" or \"README*\"" },
+          },
+          required: ["path", "pattern"],
+        },
+        runtime: "node",
+        builtin: true,
+        enabled: true,
+        created_at: now,
+        max_calls_per_interaction: 3,
+      });
+    }
+
+    // grep tool (TUI only)
+    if (!this.stateManager.tools_getByName("grep")) {
+      this.stateManager.tools_add({
+        id: crypto.randomUUID(),
+        provider_id: "ei",
+        name: "grep",
+        display_name: "Grep",
+        description:
+          "Search file contents for lines matching a regex pattern. Recursively searches a directory (or a single file). Skips binary files and node_modules. Returns matching file, line number, and text. Only available in the TUI.",
+        input_schema: {
+          type: "object",
+          properties: {
+            pattern: { type: "string", description: "Regex pattern to search for" },
+            path: { type: "string", description: "File or directory to search" },
+            include: { type: "string", description: "Optional glob to filter filenames, e.g. \"*.ts\"" },
+            case_insensitive: { type: "boolean", description: "Case-insensitive match (default false)" },
+          },
+          required: ["pattern", "path"],
+        },
+        runtime: "node",
+        builtin: true,
+        enabled: true,
+        created_at: now,
+        max_calls_per_interaction: 5,
+      });
+    }
+
+    // get_file_info tool (TUI only)
+    if (!this.stateManager.tools_getByName("get_file_info")) {
+      this.stateManager.tools_add({
+        id: crypto.randomUUID(),
+        provider_id: "ei",
+        name: "get_file_info",
+        display_name: "Get File Info",
+        description:
+          "Get metadata about a file or directory: type, size, permissions, created/modified/accessed timestamps. Only available in the TUI.",
+        input_schema: {
+          type: "object",
+          properties: {
+            path: { type: "string", description: "Absolute or relative path to the file or directory" },
           },
           required: ["path"],
         },
@@ -471,6 +596,11 @@ export class Processor {
 
     this.pendingConflict = null;
     this.importAbortController = new AbortController();
+    this.bootstrapTools();
+    registerReadMemoryExecutor(createReadMemoryExecutor(this.searchHumanData.bind(this)));
+    if (this.isTUI) {
+      await registerFileReadExecutor();
+    }
     this.running = true;
     this.runLoop();
     this.interface.onStateImported?.();
@@ -500,11 +630,12 @@ export class Processor {
               this.interface.onMessageProcessing?.(personaId);
             }
 
-            const toolNextSteps = new Set([
-              LLMNextStep.HandlePersonaResponse,
-              LLMNextStep.HandleHeartbeatCheck,
-              LLMNextStep.HandleEiHeartbeat,
-            ]);
+const toolNextSteps = new Set([
+  LLMNextStep.HandlePersonaResponse,
+  LLMNextStep.HandleHeartbeatCheck,
+  LLMNextStep.HandleEiHeartbeat,
+  LLMNextStep.HandleToolContinuation,
+]);
             const toolPersonaId =
               personaId ??
               (request.next_step === LLMNextStep.HandleEiHeartbeat ? "ei" : undefined);
@@ -792,7 +923,7 @@ export class Processor {
 
     if (response.finish_reason === "tool_calls_enqueued") {
       console.log(
-        `[Processor] tool_calls_enqueued for ${response.request.next_step} — awaiting HandleToolSynthesis`
+        `[Processor] tool_calls_enqueued for ${response.request.next_step} — awaiting HandleToolContinuation`
       );
       this.stateManager.queue_complete(response.request.id);
       return;
@@ -815,7 +946,7 @@ export class Processor {
 
       if (
         response.request.next_step === LLMNextStep.HandlePersonaResponse ||
-        response.request.next_step === LLMNextStep.HandleToolSynthesis
+        response.request.next_step === LLMNextStep.HandleToolContinuation
       ) {
         const personaId = response.request.data.personaId as string;
         if (personaId) {

@@ -9,7 +9,7 @@
 import type { ToolDefinition } from "../types.js";
 import type { ToolCall, ToolResult, ToolExecutor } from "./types.js";
 import { tavilyWebSearchExecutor, tavilyNewsSearchExecutor } from "./builtin/web-search.js";
-// file-read is Node-only — imported lazily via registerFileReadExecutor() to avoid
+// file-read and list-directory are Node-only — imported lazily via registerFileReadExecutor() to avoid
 
 /** Hard upper limit on total tool calls per interaction, regardless of individual limits. */
 export const HARD_TOOL_CALL_LIMIT = 10;
@@ -32,7 +32,7 @@ export function registerExecutor(executor: ToolExecutor): void {
 // because it requires Processor.searchHumanData injection.
 registerExecutor(tavilyWebSearchExecutor);
 registerExecutor(tavilyNewsSearchExecutor);
-// file_read is registered lazily via registerFileReadExecutor() — Node/TUI only.
+// file_read and list_directory are registered lazily via registerFileReadExecutor() — Node/TUI only.
 
 /**
  * Register the read_memory executor — called by Processor after it's initialized,
@@ -43,12 +43,23 @@ export function registerReadMemoryExecutor(executor: ToolExecutor): void {
 }
 
 /**
- * Register the file_read executor — called by Processor on TUI/Node only.
+ * Register the file_read, list_directory, directory_tree, search_files, grep, and get_file_info
+ * executors — called by Processor on TUI/Node only.
  * Dynamic import prevents node:fs/promises from being bundled in the web build.
  */
 export async function registerFileReadExecutor(): Promise<void> {
   const { fileReadExecutor } = await import("./builtin/file-read.js");
+  const { listDirectoryExecutor } = await import("./builtin/list-directory.js");
+  const { directoryTreeExecutor } = await import("./builtin/directory-tree.js");
+  const { searchFilesExecutor } = await import("./builtin/search-files.js");
+  const { grepExecutor } = await import("./builtin/grep.js");
+  const { getFileInfoExecutor } = await import("./builtin/get-file-info.js");
   executorRegistry.set(fileReadExecutor.name, fileReadExecutor);
+  executorRegistry.set(listDirectoryExecutor.name, listDirectoryExecutor);
+  executorRegistry.set(directoryTreeExecutor.name, directoryTreeExecutor);
+  executorRegistry.set(searchFilesExecutor.name, searchFilesExecutor);
+  executorRegistry.set(grepExecutor.name, grepExecutor);
+  executorRegistry.set(getFileInfoExecutor.name, getFileInfoExecutor);
 }
 
 // =============================================================================
