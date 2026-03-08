@@ -4,6 +4,7 @@
  */
 
 import type { Fact, Trait, Topic, Person, Quote, PersonaTopic } from "../../core/types.js";
+import type { ToolDefinition } from "../../core/types.js";
 
 /**
  * Data contract for buildResponsePrompt (from CONTRACTS.md)
@@ -27,6 +28,8 @@ export interface ResponsePromptData {
   visible_personas: Array<{ name: string; short_description?: string }>;
   delay_ms: number;
   isTUI: boolean;
+  /** Tools assigned to this persona and available in the current runtime. Used to conditionally include tool-use instructions in the system prompt. */
+  tools?: ToolDefinition[];
 }
 
 /**

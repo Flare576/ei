@@ -170,7 +170,8 @@ export async function buildResponsePromptData(
   sm: StateManager,
   persona: PersonaEntity,
   isTUI: boolean,
-  currentMessage?: string
+  currentMessage?: string,
+  tools?: import("./types.js").ToolDefinition[]
 ): Promise<ResponsePromptData> {
   const human = sm.getHuman();
   const filteredHuman = await filterHumanDataByVisibility(human, persona, currentMessage);
@@ -194,5 +195,6 @@ export async function buildResponsePromptData(
     visible_personas: visiblePersonas,
     delay_ms: delayMs,
     isTUI,
+    tools,
   };
 }

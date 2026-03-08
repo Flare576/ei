@@ -158,7 +158,8 @@ export async function sendMessage(
   sm.messages_append(persona.id, message);
   onMessageAdded(persona.id);
 
-  const promptData = await buildResponsePromptData(sm, persona, isTUI, content);
+  const tools = sm.tools_getForPersona(persona.id, isTUI);
+  const promptData = await buildResponsePromptData(sm, persona, isTUI, content, tools);
   const prompt = buildResponsePrompt(promptData);
 
   sm.queue_enqueue({

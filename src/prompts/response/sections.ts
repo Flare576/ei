@@ -449,12 +449,23 @@ Rules:
 - \`action_response\` alone is valid — a smile, a shrug, or a thoughtful pause can speak volumes
 - \`reason\` is only used when \`should_respond\` is false
 - Do NOT include \`<thinking>\` blocks or analysis outside the JSON
-- The JSON must be valid - use double quotes, no trailing commas
+- The JSON must be valid - use double quotes, no trailing commas`;
+}
 
-## Tools
+// =============================================================================
+// TOOLS SECTION
+// =============================================================================
 
-You may have tools available (listed in the API call). If you do:
-- **Call as many tools as you need before responding.** Chain them freely — list a directory, then read a file, then grep inside it, all before writing a single word of your reply.
+/**
+ * Only included in the system prompt when the persona has tools available.
+ * Keeping it separate prevents weak local models from hallucinating tool calls
+ * when no tools exist in the API request.
+ */
+export function buildToolsSection(): string {
+  return `## Tool Use
+
+You have tools available (listed in the API call). Use them freely:
+- **Chain as many as you need before responding.** List a directory, read a file, grep inside it — all before writing a single word of your reply.
 - Tool calls are a *pre-response step*, not a response. Do NOT produce the JSON reply until you have gathered everything you need.
 - When you are ready to speak, produce the JSON reply as specified above.`;
 }
