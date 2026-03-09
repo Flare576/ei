@@ -9,6 +9,9 @@
 import type { ToolDefinition } from "../types.js";
 import type { ToolCall, ToolResult, ToolExecutor } from "./types.js";
 import { tavilyWebSearchExecutor, tavilyNewsSearchExecutor } from "./builtin/web-search.js";
+import { currentlyPlayingExecutor } from "./builtin/currently-playing.js";
+import { likedSongsExecutor } from "./builtin/spotify-liked-songs.js";
+// file-read and list-directory are Node-only — imported lazily via registerFileReadExecutor() to avoid
 // file-read and list-directory are Node-only — imported lazily via registerFileReadExecutor() to avoid
 
 /** Hard upper limit on total tool calls per interaction, regardless of individual limits. */
@@ -32,6 +35,8 @@ export function registerExecutor(executor: ToolExecutor): void {
 // because it requires Processor.searchHumanData injection.
 registerExecutor(tavilyWebSearchExecutor);
 registerExecutor(tavilyNewsSearchExecutor);
+registerExecutor(currentlyPlayingExecutor);
+registerExecutor(likedSongsExecutor);
 // file_read and list_directory are registered lazily via registerFileReadExecutor() — Node/TUI only.
 
 /**
@@ -92,7 +97,8 @@ export async function executeToolCalls(
   calls: ToolCall[],
   tools: ToolDefinition[],
   callCounts: Map<string, number>,
-  totalCalls: { count: number }
+  totalCalls: { count: number },
+  onProviderConfigUpdate?: (providerId: string, updates: Record<string, string>) => void
 ): Promise<{ results: ToolResult[]; exhaustedToolNames: Set<string> }> {
   const results: ToolResult[] = [];
   const exhaustedToolNames = new Set<string>();
@@ -154,7 +160,10 @@ export async function executeToolCalls(
 
     try {
       console.log(`[Tools] Executing ${call.name} (call ${newCount}/${maxCalls})`);
-      const result = await executor.execute(call.arguments, definition.config);
+      const onConfigUpdate = onProviderConfigUpdate && definition.provider_id
+        ? (updates: Record<string, string>) => onProviderConfigUpdate(definition.provider_id, updates)
+        : undefined;
+      const result = await executor.execute(call.arguments, definition.config, onConfigUpdate);
       results.push({
         tool_call_id: call.id,
         name: call.name,

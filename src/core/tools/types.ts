@@ -23,5 +23,9 @@ export interface ToolExecutor {
   /** Tool machine name — must match ToolDefinition.name exactly. */
   name: string;
   /** Execute the tool. Returns a result string (JSON or plain text). Throws on unrecoverable error. */
-  execute(args: Record<string, unknown>, config?: Record<string, string>): Promise<string>;
+  execute(
+    args: Record<string, unknown>,
+    config?: Record<string, string>,
+    onConfigUpdate?: (updates: Record<string, string>) => void
+  ): Promise<string>;
 }
