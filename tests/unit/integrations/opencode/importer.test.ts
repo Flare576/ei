@@ -113,6 +113,7 @@ describe("importOpenCodeSessions", () => {
         return removed;
       }),
       messages_sort: vi.fn(),
+      messages_markExtracted: vi.fn(),
       human_topic_upsert: vi.fn(),
       queue_enqueue: vi.fn(),
     };
