@@ -90,6 +90,7 @@ function createMockStateManager() {
     getHuman: vi.fn(() => human),
     persona_getAll: vi.fn(() => personas),
     queue_enqueue: vi.fn(),
+    messages_markExtracted: vi.fn(),
     _human: human,
     _personas: personas,
   };

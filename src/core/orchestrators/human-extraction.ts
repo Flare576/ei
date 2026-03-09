@@ -49,7 +49,13 @@ export function queueFactScan(context: ExtractionContext, state: StateManager, o
   const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state));
   
   if (chunks.length === 0) return 0;
-  
+
+  // Pre-mark messages before enqueuing — prevents duplicate scans if the
+  // queue check fires again during LLM latency (100ms loop × 5s call = 50 dupes)
+  for (const chunk of chunks) {
+    state.messages_markExtracted(chunk.personaId, chunk.messages_analyze.map(m => m.id), "f");
+  }
+
   for (const chunk of chunks) {
     const prompt = buildHumanFactScanPrompt({
       persona_name: chunk.personaDisplayName,
@@ -73,7 +79,7 @@ export function queueFactScan(context: ExtractionContext, state: StateManager, o
       },
     });
   }
-  
+
   return chunks.length;
 }
 
@@ -113,7 +119,13 @@ export function queueTopicScan(context: ExtractionContext, state: StateManager, 
   const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state));
   
   if (chunks.length === 0) return 0;
-  
+
+  // Pre-mark messages before enqueuing — prevents duplicate scans if the
+  // queue check fires again during LLM latency (100ms loop × 5s call = 50 dupes)
+  for (const chunk of chunks) {
+    state.messages_markExtracted(chunk.personaId, chunk.messages_analyze.map(m => m.id), "p");
+  }
+
   for (const chunk of chunks) {
     const prompt = buildHumanTopicScanPrompt({
       persona_name: chunk.personaDisplayName,
@@ -137,7 +149,7 @@ export function queueTopicScan(context: ExtractionContext, state: StateManager, 
       },
     });
   }
-  
+
   return chunks.length;
 }
 
@@ -145,8 +157,12 @@ export function queuePersonScan(context: ExtractionContext, state: StateManager,
   const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state));
   
   if (chunks.length === 0) return 0;
-  
 
+  // Pre-mark messages before enqueuing — prevents duplicate scans if the
+  // queue check fires again during LLM latency (100ms loop × 5s call = 50 dupes)
+  for (const chunk of chunks) {
+    state.messages_markExtracted(chunk.personaId, chunk.messages_analyze.map(m => m.id), "o");
+  }
 
   for (const chunk of chunks) {
     const prompt = buildHumanPersonScanPrompt({
@@ -171,7 +187,7 @@ export function queuePersonScan(context: ExtractionContext, state: StateManager,
       },
     });
   }
-  
+
   return chunks.length;
 }
 
