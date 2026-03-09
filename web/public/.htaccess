@@ -1,0 +1,9 @@
+RewriteEngine On
+RewriteBase /
+
+# Don't rewrite real files or directories
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+
+# Send everything else to index.html (SPA catch-all)
+RewriteRule ^ index.html [L]

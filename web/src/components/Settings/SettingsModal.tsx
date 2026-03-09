@@ -26,6 +26,7 @@ interface SettingsModalProps {
   toolDefinitions: ToolDefinition[];
   onToolProviderUpdate: (id: string, updates: Partial<Omit<ToolProvider, 'id' | 'created_at'>>) => void;
   onToolProviderRemove: (id: string) => void;
+  onSpotifyConfigChange?: (refreshToken: string) => void;
   onToolUpdate: (id: string, updates: Partial<Omit<ToolDefinition, 'id' | 'created_at'>>) => void;
 }
 
@@ -48,6 +49,7 @@ export const SettingsModal = ({
   onToolProviderUpdate,
   onToolProviderRemove,
   onToolUpdate,
+  onSpotifyConfigChange,
 }: SettingsModalProps) => {
   const [activeTab, setActiveTab] = useState('general');
   const modalRef = useRef<HTMLDivElement>(null);
@@ -278,6 +280,7 @@ export const SettingsModal = ({
             </section>
 
             <ToolkitEditor
+              onSpotifyConfigChange={onSpotifyConfigChange}
               isOpen={toolkitEditorOpen}
               provider={editingProvider}
               tools={toolDefinitions}
