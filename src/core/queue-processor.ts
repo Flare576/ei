@@ -226,7 +226,7 @@ export class QueueProcessor {
       // LLM stopped — parse and return.
       // If JSON parse fails, attempt a single reformat pass: treat the prose as
       // a tool result and ask the same model to convert it to the required JSON shape.
-      const firstAttempt = this.handleResponseType(request, content ?? "", finishReason);
+      const firstAttempt = await this.handleResponseType(request, content ?? "", finishReason);
       if (!firstAttempt.success && content) {
         console.log(`[QueueProcessor] HandleToolContinuation: JSON parse failed — attempting reformat pass`);
         const reformatResult = await this.attemptReformat(request, messages, content);
@@ -338,11 +338,11 @@ export class QueueProcessor {
     return this.handleResponseType(request, content ?? "", finishReason);
   }
 
-  private handleResponseType(
+  private async handleResponseType(
     request: LLMRequest,
     content: string,
     finishReason: string | null
-  ): LLMResponse {
+  ): Promise<LLMResponse> {
     const cleanedContent = cleanResponseContent(content);
     switch (request.type) {
       case "json" as LLMRequestType:
@@ -359,11 +359,11 @@ export class QueueProcessor {
     }
   }
 
-  private handleJSONResponse(
+  private async handleJSONResponse(
     request: LLMRequest,
     content: string,
     finishReason: string | null
-  ): LLMResponse {
+  ): Promise<LLMResponse> {
     try {
       const parsed = parseJSONResponse(content);
       return {
@@ -377,6 +377,8 @@ export class QueueProcessor {
       console.warn(
         `[QueueProcessor] JSON parse failed for ${request.next_step}. Payload:\n${content}`
       );
+      const reformatResult = await this.attemptJSONReformat(request, content);
+      if (reformatResult) return reformatResult;
       return {
         request,
         success: false,
@@ -440,6 +442,61 @@ export class QueueProcessor {
       }
     } catch (err) {
       console.warn(`[QueueProcessor] Reformat pass LLM call failed: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    }
+  }
+
+  /**
+   * When any JSON request gets back content that won't parse, attempt a single
+   * synchronous reformat pass before falling into the backoff retry loop.
+   *
+   * The system prompt already contains the full JSON schema for this request type
+   * (field names, type-specific extras like `category`, `relationship`, `strength`,
+   * etc.), so we don't need to repeat any of that here — just hand the model its
+   * own output and ask it to clean it up.
+   *
+   * Returns null if the reformat attempt also fails — caller falls through to normal
+   * failure path (backoff retry).
+   */
+  private async attemptJSONReformat(
+    request: LLMRequest,
+    malformedContent: string
+  ): Promise<LLMResponse | null> {
+    const reformatUserPrompt =
+      `An earlier version of you responded with the following content, but it could not ` +
+      `be parsed as valid JSON. Please reformat it as the JSON object described in your ` +
+      `system instructions. Respond with ONLY the JSON object, or \`{}\` if no changes ` +
+      `are needed.\n\n---\n${malformedContent}\n---`;
+
+    try {
+      const { content: reformatContent, finishReason: reformatReason } = await callLLMRaw(
+        request.system,
+        reformatUserPrompt,
+        [], // no message history needed — schema is already in the system prompt
+        request.model,
+        { signal: this.abortController?.signal },
+        this.currentAccounts
+      );
+
+      if (!reformatContent) return null;
+
+      const cleaned = cleanResponseContent(reformatContent);
+      try {
+        const parsed = parseJSONResponse(cleaned);
+        console.log(`[QueueProcessor] JSON reformat pass succeeded for ${request.next_step} — saved a retry`);
+        return {
+          request,
+          success: true,
+          content: cleaned,
+          parsed,
+          finish_reason: reformatReason ?? undefined,
+        };
+      } catch {
+        console.warn(`[QueueProcessor] JSON reformat pass also failed for ${request.next_step} — falling through to retry`);
+        return null;
+      }
+    } catch (err) {
+      console.warn(`[QueueProcessor] JSON reformat LLM call failed for ${request.next_step}: ${err instanceof Error ? err.message : String(err)}`);
       return null;
     }
   }
