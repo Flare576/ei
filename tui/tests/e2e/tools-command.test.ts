@@ -182,6 +182,7 @@ function createCheckpointWithToolkit(mockServerUrl: string) {
         created_at: timestamp,
         max_calls_per_interaction: 5,
       },
+    ],
   };
 }
 
