@@ -93,7 +93,8 @@ jobs:
           server: ${{ secrets.SFTP_HOST }}
           username: ${{ secrets.SFTP_USERNAME }}
           password: ${{ secrets.SFTP_PASSWORD }}
-          local_path: ./web/dist/*
+          # Use directory path so dotfiles (e.g. .htaccess for SPA/Spotify callback) are included
+          local_path: ./web/dist/
           remote_path: /
           sftpArgs: '-o ConnectTimeout=5'
           sftp_only: true
