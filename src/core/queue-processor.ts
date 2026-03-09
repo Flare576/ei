@@ -35,6 +35,11 @@ export interface QueueProcessorStartOptions {
    * Injected by Processor pointing to stateManager.queue_enqueue.
    */
   onEnqueue?: EnqueueCallback;
+  /**
+   * Called when a tool executor updates its provider config (e.g. Spotify refresh token rotation).
+   * Injected by Processor to persist the updated config back to storage.
+   */
+  onProviderConfigUpdate?: (providerId: string, updates: Record<string, string>) => void;
 }
 
 export class QueueProcessor {
@@ -46,6 +51,7 @@ export class QueueProcessor {
   private currentRawMessageFetcher: RawMessageFetcher | undefined;
   private currentTools: ToolDefinition[] | undefined;
   private currentOnEnqueue: EnqueueCallback | undefined;
+  private currentOnProviderConfigUpdate: ((providerId: string, updates: Record<string, string>) => void) | undefined;
 
   getState(): QueueProcessorState {
     return this.state;
@@ -63,6 +69,7 @@ export class QueueProcessor {
     this.currentRawMessageFetcher = options?.rawMessageFetcher;
     this.currentTools = options?.tools;
     this.currentOnEnqueue = options?.onEnqueue;
+    this.currentOnProviderConfigUpdate = options?.onProviderConfigUpdate;
     this.abortController = new AbortController();
 
     this.processRequest(request)
@@ -95,6 +102,7 @@ export class QueueProcessor {
       this.currentRawMessageFetcher = undefined;
       this.currentTools = undefined;
       this.currentOnEnqueue = undefined;
+      this.currentOnProviderConfigUpdate = undefined;
       this.abortController = null;
     });
   }
@@ -182,7 +190,7 @@ export class QueueProcessor {
             appendedHistory.push(assistantMessage as unknown as LLMHistoryMessage);
           }
 
-          const { results } = await executeToolCalls(toolCalls, activeTools, callCounts, totalCalls);
+          const { results } = await executeToolCalls(toolCalls, activeTools, callCounts, totalCalls, this.currentOnProviderConfigUpdate);
           for (const result of results) {
             appendedHistory.push({
               role: "tool",
@@ -275,7 +283,7 @@ export class QueueProcessor {
 
       const callCounts = new Map<string, number>();
       const totalCalls = { count: 0 };
-      const { results } = await executeToolCalls(toolCalls, activeTools, callCounts, totalCalls);
+      const { results } = await executeToolCalls(toolCalls, activeTools, callCounts, totalCalls, this.currentOnProviderConfigUpdate);
 
       for (const result of results) {
         toolHistory.push({

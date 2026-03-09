@@ -28,7 +28,11 @@ describe("Ceremony Trigger Logic", () => {
     it("returns false when last ceremony was today", () => {
       const now = new Date();
       const earlierToday = new Date(now);
-      earlierToday.setHours(now.getHours() - 1);
+      earlierToday.setMinutes(now.getMinutes() - 1, 0, 0);
+      // If we're at exactly minute 0, roll back a full day instead
+      if (earlierToday.toDateString() !== now.toDateString()) {
+        earlierToday.setTime(now.getTime() - 60_000);
+      }
       expect(isNewDay(earlierToday.toISOString(), now)).toBe(false);
     });
 

@@ -29,6 +29,9 @@ import { SettingsModal } from "./components/Settings";
 import { ConflictResolutionModal } from "./components/Sync/ConflictResolutionModal";
 import { Onboarding } from "./components/Onboarding";
 import { useKeyboardNavigation } from "./hooks/useKeyboardNavigation";
+import { exchangeCode } from '../../src/core/tools/builtin/pkce.js';
+import { SPOTIFY_CLIENT_ID, SPOTIFY_WEB_REDIRECT_URI, clearTokenCache } from '../../src/core/tools/builtin/spotify-auth.js';
+import { clearLikedSongsCache } from '../../src/core/tools/builtin/spotify-liked-songs.js';
 
 import "./styles/layout.css";
 import "./styles/entity-editor.css";
@@ -72,6 +75,7 @@ function App() {
    const [conflictData, setConflictData] = useState<{ localTimestamp: Date; remoteTimestamp: Date } | null>(null);
    const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [spotifyAuthError, setSpotifyAuthError] = useState<string | null>(null);
 
   const personaPanelRef = useRef<PersonaPanelHandle | null>(null);
   const chatPanelRef = useRef<ChatPanelHandle | null>(null);
@@ -245,6 +249,61 @@ function App() {
       p.stop();
     };
   }, [showOnboarding]);
+
+  // Detect OAuth callbacks via /callback/:provider path
+  useEffect(() => {
+    const path = window.location.pathname;
+    const providerMatch = path.match(/^\/callback\/([^/]+)/);
+    if (!providerMatch) return;
+
+    const provider = providerMatch[1];
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    if (!code) return;
+
+    if (provider === 'spotify') {
+      const verifier = sessionStorage.getItem('spotify_pkce_verifier');
+      if (!verifier) {
+        window.history.replaceState({}, '', '/');
+        setSpotifyAuthError('Spotify auth failed: session expired or opened in a new tab. Please try connecting again.');
+        return;
+      }
+      sessionStorage.removeItem('spotify_pkce_verifier');
+
+      exchangeCode({
+        code,
+        verifier,
+        redirectUri: SPOTIFY_WEB_REDIRECT_URI,
+        clientId: SPOTIFY_CLIENT_ID,
+      }).then((tokens) => {
+        // MED-1: clean URL only after successful token exchange
+        window.history.replaceState({}, '', '/');
+        clearTokenCache();
+        clearLikedSongsCache();
+        let elapsed = 0;
+        const MAX_WAIT_MS = 10_000;
+        const checkReady = setInterval(() => {
+          elapsed += 100;
+          if (processorRef.current) {
+            clearInterval(checkReady);
+            processorRef.current.updateToolProvider('spotify', {
+              config: { spotify_refresh_token: tokens.refresh_token },
+              enabled: true,
+            });
+          } else if (elapsed >= MAX_WAIT_MS) {
+            clearInterval(checkReady);
+            console.error('[Spotify] Processor never initialized; token not stored.');
+          }
+        }, 100);
+      }).catch((err) => {
+        window.history.replaceState({}, '', '/');
+        console.error('[Spotify] Token exchange failed:', err);
+        setSpotifyAuthError(`Spotify auth failed: ${err instanceof Error ? err.message : String(err)}`);
+      });
+    }
+    // Future providers: add `else if (provider === 'github') { ... }` here
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     if (processor && activePersonaId) {
@@ -742,6 +801,25 @@ function App() {
     setToolDefinitions(processor.getToolList());
   }, [processor]);
 
+  const handleSpotifyConfigChange = useCallback(async (refreshToken: string) => {
+    if (!processor) return;
+    clearTokenCache();
+    clearLikedSongsCache();
+    if (refreshToken) {
+      await processor.updateToolProvider('spotify', {
+        config: { spotify_refresh_token: refreshToken },
+        enabled: true,
+      });
+    } else {
+      // Disconnect: clear the refresh token
+      await processor.updateToolProvider('spotify', {
+        config: {},
+        enabled: false,
+      });
+    }
+    setToolProviders(processor.getToolProviderList());
+  }, [processor]);
+
   if (showOnboarding === null) {
     return (
       <div className="ei-loading">
@@ -756,6 +834,12 @@ function App() {
 
   return (
     <>
+    {spotifyAuthError && (
+      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999, background: '#b91c1c', color: '#fff', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>{spotifyAuthError}</span>
+        <button onClick={() => setSpotifyAuthError(null)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: '1.2em', lineHeight: 1 }}>×</button>
+      </div>
+    )}
     <Layout
       controlArea={
         <ControlArea 
@@ -834,6 +918,7 @@ function App() {
           onToolProviderUpdate={handleToolProviderUpdate}
           onToolProviderRemove={handleToolProviderRemove}
           onToolUpdate={handleToolUpdate}
+          onSpotifyConfigChange={handleSpotifyConfigChange}
         />
 
         <HumanEditor

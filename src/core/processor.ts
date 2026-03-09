@@ -509,6 +509,66 @@ export class Processor {
         max_calls_per_interaction: 3,
       });
     }
+
+    // --- Spotify provider ---
+    if (!this.stateManager.tools_getProviderById("spotify")) {
+      const spotifyProvider: ToolProvider = {
+        id: "spotify",
+        name: "spotify",
+        display_name: "Spotify",
+        description:
+          "Access your Spotify playback and music library. Connect via Settings → Tool Kits → Spotify.",
+        builtin: true,
+        config: { spotify_refresh_token: "" },
+        enabled: false,
+        created_at: now,
+      };
+      this.stateManager.tools_addProvider(spotifyProvider);
+    }
+
+    // get_currently_playing
+    if (!this.stateManager.tools_getByName("get_currently_playing")) {
+      this.stateManager.tools_add({
+        id: crypto.randomUUID(),
+        provider_id: "spotify",
+        name: "get_currently_playing",
+        display_name: "Currently Playing",
+        description:
+          "Get the song currently playing on the user's Spotify. Returns artist, title, album, playback state, and progress. Returns nothing_playing if nothing is active.",
+        input_schema: {
+          type: "object",
+          properties: {},
+          required: [],
+        },
+        runtime: "any",
+        builtin: true,
+        enabled: true,
+        created_at: now,
+        max_calls_per_interaction: 3,
+      });
+    }
+
+    // get_liked_songs
+    if (!this.stateManager.tools_getByName("get_liked_songs")) {
+      this.stateManager.tools_add({
+        id: crypto.randomUUID(),
+        provider_id: "spotify",
+        name: "get_liked_songs",
+        display_name: "Liked Songs",
+        description:
+          "Get the user's full Spotify liked songs library. Returns an array of { artist, title, added_at }. Results are cached for 30 minutes. Ask the user before calling — it may return thousands of tracks.",
+        input_schema: {
+          type: "object",
+          properties: {},
+          required: [],
+        },
+        runtime: "any",
+        builtin: true,
+        enabled: true,
+        created_at: now,
+        max_calls_per_interaction: 1,
+      });
+    }
   }
 
   async stop(): Promise<void> {
@@ -661,6 +721,14 @@ const toolNextSteps = new Set([
                 rawMessageFetcher: (pName) => this.stateManager.messages_get(pName),
                 tools: tools.length > 0 ? tools : undefined,
                 onEnqueue: (req) => this.stateManager.queue_enqueue(req),
+                onProviderConfigUpdate: (providerId, updates) => {
+                  const provider = this.stateManager.tools_getProviderById(providerId);
+                  if (provider) {
+                    this.stateManager.tools_updateProvider(providerId, {
+                      config: { ...provider.config, ...updates },
+                    });
+                  }
+                },
               }
             );
 

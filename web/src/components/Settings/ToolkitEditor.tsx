@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { ToolProvider, ToolDefinition } from '../../../../src/core/types.js';
+import { SpotifyAuthButton } from './SpotifyAuthButton.js';
 
 interface ToolkitEditorProps {
   isOpen: boolean;
@@ -8,6 +9,8 @@ interface ToolkitEditorProps {
   onSave: (provider: ToolProvider) => void;
   onToolUpdate: (id: string, updates: Partial<Omit<ToolDefinition, 'id' | 'created_at'>>) => void;
   onClose: () => void;
+  /** Called when Spotify refresh token changes (connect or disconnect) */
+  onSpotifyConfigChange?: (refreshToken: string) => void;
 }
 
 export const ToolkitEditor: React.FC<ToolkitEditorProps> = ({
@@ -17,6 +20,7 @@ export const ToolkitEditor: React.FC<ToolkitEditorProps> = ({
   onSave,
   onToolUpdate,
   onClose,
+  onSpotifyConfigChange,
 }) => {
   const [displayName, setDisplayName] = useState('');
   const [description, setDescription] = useState('');
@@ -192,7 +196,20 @@ export const ToolkitEditor: React.FC<ToolkitEditorProps> = ({
             />
           </div>
 
-          {configRows.length > 0 && (
+          {/* Spotify: show OAuth button instead of raw config rows */}
+          {provider.name === 'spotify' && (
+            <div className="ei-form-group">
+              <label className="ei-form-label">Authorization</label>
+              <SpotifyAuthButton
+                isConnected={!!provider.config.spotify_refresh_token}
+                onConnected={(refreshToken) => onSpotifyConfigChange?.(refreshToken)}
+                onDisconnect={() => onSpotifyConfigChange?.('')}
+              />
+            </div>
+          )}
+
+          {/* Other providers: show raw key/value config rows */}
+          {provider.name !== 'spotify' && configRows.length > 0 && (
             <div className="ei-form-group">
               <label className="ei-form-label">Configuration</label>
               <div className="ei-provider-editor__headers">
