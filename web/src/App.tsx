@@ -991,7 +991,7 @@ function App() {
         if (processorRef.current) {
           clearInterval(checkProcessor);
           const h = await processorRef.current.getHuman();
-          const firstEnabled = accounts.find(a => a.enabled);
+          const firstEnabled = accounts.find(a => a.enabled && a.type === 'llm');
           const defaultModel = firstEnabled?.name;
           const newSettings = { ...h.settings };
           if (accounts.length > 0) {
