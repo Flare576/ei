@@ -158,6 +158,59 @@ export class MockLLMServerImpl implements MockLLMServer {
       this.clearRequestHistory();
       res.json({ cleared: true });
     });
+
+    // ComfyUI mock endpoints
+    this.app.get("/system_stats", (_req: Request, res: Response) => {
+      res.json({ status: "ok", system: { ram_used: 1024, ram_total: 16384 } });
+    });
+
+    this.app.post("/prompt", (req: Request, res: Response) => {
+      const promptId = `mock-prompt-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      if (this.config.enableLogging) {
+        console.log(`Mock ComfyUI: POST /prompt → prompt_id=${promptId}`);
+      }
+      res.json({ prompt_id: promptId });
+    });
+
+    this.app.get("/history/:promptId", (req: Request, res: Response) => {
+      const { promptId } = req.params;
+      if (this.config.enableLogging) {
+        console.log(`Mock ComfyUI: GET /history/${promptId}`);
+      }
+      // Return completed workflow with mock image filename
+      const mockFilename = `mock_image_${promptId}.png`;
+      res.json({
+        [promptId]: {
+          outputs: {
+            "9": {
+              images: [
+                {
+                  filename: mockFilename,
+                  subfolder: "",
+                  type: "output",
+                },
+              ],
+            },
+          },
+          status: {
+            completed: true,
+            status_str: "success",
+          },
+        },
+      });
+    });
+
+    this.app.get("/view", (req: Request, res: Response) => {
+      const filename = req.query.filename as string;
+      if (this.config.enableLogging) {
+        console.log(`Mock ComfyUI: GET /view?filename=${filename}`);
+      }
+      // Return a minimal 1x1 PNG (89 bytes)
+      const pngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+      const pngBuffer = Buffer.from(pngBase64, "base64");
+      res.set("Content-Type", "image/png");
+      res.send(pngBuffer);
+    });
   }
 
   private async handleChatCompletions(req: Request, res: Response): Promise<void> {
@@ -216,7 +269,7 @@ export class MockLLMServerImpl implements MockLLMServer {
 
   private detectRequestType(
     messages: Array<{ role: string; content: string }>
-  ): "response" | "system-concepts" | "human-concepts" | "description" | "persona-generation" | "persona-trait" | "trait-extraction" | "fact-extraction" | "topic-extraction" | "person-extraction" | "unknown" {
+  ): "response" | "system-concepts" | "human-concepts" | "description" | "persona-generation" | "persona-trait" | "trait-extraction" | "fact-extraction" | "topic-extraction" | "person-extraction" | "image-synthesis" | "unknown" {
     if (!messages || messages.length === 0) {
       return "unknown";
     }
@@ -227,6 +280,10 @@ export class MockLLMServerImpl implements MockLLMServer {
     }
 
     const content = systemMessage.content.toLowerCase();
+
+    if (content.includes("building an image generation prompt")) {
+      return "image-synthesis";
+    }
 
     if (content.includes("you are helping create a new ai persona named")) {
       return "persona-generation";
@@ -359,6 +416,15 @@ export class MockLLMServerImpl implements MockLLMServer {
           statusCode: 200,
         };
 
+
+      case "image-synthesis":
+        return {
+          type: "fixed",
+          content: JSON.stringify({
+            image_prompt: "A test synthesis prompt from mock server"
+          }),
+          statusCode: 200,
+        };
       case "response":
       default:
         return {

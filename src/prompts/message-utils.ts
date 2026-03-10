@@ -31,7 +31,13 @@ export function getMessageDisplayText(message: Message): string | null {
 export function buildChatMessageContent(message: Message): string {
   const parts: string[] = [];
   if (message.action_response) parts.push(`_${message.action_response}_`);
-  if (message.verbal_response) parts.push(message.verbal_response);
+  
+  // Synthesis messages: wrap with context for LLM, but stored value is clean prompt
+  if (message._synthesis && message.verbal_response) {
+    parts.push(`[The user used your conversation to generate an image. The full prompt was: "${message.verbal_response}"]`);
+  } else if (message.verbal_response) {
+    parts.push(message.verbal_response);
+  }
   if (message.silence_reason) {
     parts.push(`You chose not to respond because: ${message.silence_reason}`);
   }

@@ -589,6 +589,10 @@ export class Processor {
     console.log(`[Processor ${this.instanceId}] stopped`);
   }
 
+  getStateManager(): StateManager {
+    return this.stateManager;
+  }
+
   async saveAndExit(): Promise<{ success: boolean; error?: string }> {
     console.log(`[Processor ${this.instanceId}] saveAndExit() called`);
     this.interface.onSaveAndExitStart?.();
@@ -1206,6 +1210,16 @@ const toolNextSteps = new Set([
     const removed = await deleteMessages(this.stateManager, personaId, messageIds);
     this.interface.onMessageAdded?.(personaId);
     return removed;
+  }
+
+  async addMessageOnly(personaId: string, message: Message): Promise<void> {
+    this.stateManager.messages_append(personaId, message);
+    this.interface.onMessageAdded?.(personaId);
+  }
+
+  async updateMessage(personaId: string, messageId: string, updates: Partial<Message>): Promise<void> {
+    this.stateManager.messages_update(personaId, messageId, updates);
+    this.interface.onMessageAdded?.(personaId);
   }
 
   // ==========================================================================

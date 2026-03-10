@@ -99,6 +99,14 @@ export const ProviderList: React.FC<ProviderListProps> = ({
                       </div>
 
                       <div className="ei-provider-card__meta">
+                        {account.type === 'image' && (
+                          <div className="ei-provider-card__meta-item">
+                            <span className="ei-provider-card__meta-label">Workflow:</span>
+                            <span className="ei-provider-card__meta-value">
+                              {account.workflow_json ? '✓ Configured' : '⚠ Using default'}
+                            </span>
+                          </div>
+                        )}
                         {account.type === 'llm' && account.default_model && (
                           <div className="ei-provider-card__meta-item">
                             <span className="ei-provider-card__meta-label">Model:</span>

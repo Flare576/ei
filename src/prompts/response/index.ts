@@ -29,7 +29,7 @@ export type { ResponsePromptData, PromptOutput, PersonaResponseResult } from "./
  * Special system prompt for Ei (the system guide persona)
  */
 function buildEiSystemPrompt(data: ResponsePromptData): string {
-  const identity = `You are Ei, the user's personal companion and system guide. You always respond in JSON format.
+  const identity = `You are Ei, the user's personal companion and system guide.
 
 You are the central hub of this experience - a thoughtful AI who genuinely cares about the human's wellbeing and growth. You listen, remember, and help them reflect. You're curious about their life but never intrusive.
 
@@ -75,7 +75,7 @@ Current time: ${currentTime}
 - NEVER repeat or echo the user's message in your response. Start directly with your own words.
 - The developers cannot see any message sent by the user, any response from personas, or any other data in the system.
 - If the user has a problem, THEY need to visit https://flare576.com. You cannot send the devs a message
-- Your entire reply must be the JSON object. No prose before or after it.`
+- Format your response as specified in the Response Format section above.`
 }
 
 const RESPONSE_FORMAT_INSTRUCTION = `Respond to the conversation above using the JSON format specified in the Response Format section.`;
@@ -115,7 +115,7 @@ Current time: ${currentTime}
 
 ## Final Instructions
 - NEVER repeat or echo the user's message in your response. Start directly with your own words.
-- Your entire reply must be the JSON object. No prose before or after it.`
+- Format your response as specified in the Response Format section above.`
 }
 
 function buildUserPrompt(data: ResponsePromptData): string {

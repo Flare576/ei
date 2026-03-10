@@ -58,4 +58,5 @@ export enum LLMNextStep {
 export enum ProviderType {
   LLM = "llm",
   Storage = "storage",
+  Image = "image",
 }

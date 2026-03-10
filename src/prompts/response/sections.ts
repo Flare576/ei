@@ -20,7 +20,7 @@ export function buildIdentitySection(persona: ResponsePromptData["persona"]): st
     || persona.short_description 
     || "a conversational companion";
   
-  return `You are ${persona.name}${aliasText}. You always respond in JSON format.
+  return `You are ${persona.name}${aliasText}.
 
 ${description}`;
 }
@@ -449,7 +449,8 @@ Rules:
 - \`action_response\` alone is valid — a smile, a shrug, or a thoughtful pause can speak volumes
 - \`reason\` is only used when \`should_respond\` is false
 - Do NOT include \`<thinking>\` blocks or analysis outside the JSON
-- The JSON must be valid - use double quotes, no trailing commas`;
+- The JSON must be valid - use double quotes, no trailing commas
+- **Your entire reply should be the JSON object** — no prose, no preamble, no closing commentary`
 }
 
 // =============================================================================

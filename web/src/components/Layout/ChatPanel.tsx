@@ -1,5 +1,6 @@
 import { useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
 import type { Message, Quote } from "../../../../src/core/types";
+import type { GenerationResult } from "../../comfyui";
 import { MarkdownContent } from "../Chat";
 
 function buildMessageDisplayText(message: Message): string {
@@ -72,6 +73,12 @@ interface ChatPanelProps {
   onSetContextBoundary?: (timestamp: string | null) => void;
   onQuoteClick?: (quote: Quote) => void;
   onScissorsClick?: (message: Message) => void;
+  onImageGenerate?: (message: Message) => void;
+  messageImages?: Record<string, {blobUrl: string, result: GenerationResult}>;
+  generatingImageFor?: string | null;
+  imageErrors?: Record<string, string>;
+  onImageClick?: (messageId: string) => void;
+  onImagePromptClick?: () => void;
 }
 
 export interface ChatPanelHandle {
@@ -94,6 +101,12 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
   onSetContextBoundary,
   onQuoteClick,
   onScissorsClick,
+  onImageGenerate,
+  messageImages = {},
+  generatingImageFor,
+  imageErrors = {},
+  onImageClick,
+  onImagePromptClick,
 }, ref) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -249,6 +262,9 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
     if (msg.role === "system" && !msg.read) {
       classes.push("unread");
     }
+    if (msg._synthesis) {
+      classes.push("silence-reason");
+    }
     return classes.join(" ");
   };
 
@@ -293,6 +309,43 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
               </button>
             );
             
+            const getImageButtonIcon = (messageId: string) => {
+              if (generatingImageFor === messageId) return "⏳";
+              if (imageErrors[messageId]) return "❗";
+              if (messageImages[messageId]) return "🎨";
+              return "🖼️";
+            };
+            
+            const getImageButtonTitle = (messageId: string) => {
+              if (generatingImageFor === messageId) return "Generating image...";
+              if (imageErrors[messageId]) return `Error: ${imageErrors[messageId]}`;
+              if (messageImages[messageId]) return "View or regenerate image";
+              return "Generate image from this message";
+            };
+            
+            const imageButton = onImageGenerate && (
+              <button 
+                className="ei-message__image"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (imageErrors[msg.id]) {
+                    // Clicking error icon opens modal with error
+                    onImageClick?.(msg.id);
+                  } else if (messageImages[msg.id]) {
+                    // Clicking 🎨 opens image in modal
+                    onImageClick?.(msg.id);
+                  } else if (!generatingImageFor) {
+                    // Only generate if not already generating
+                    onImageGenerate(msg);
+                  }
+                }}
+                title={getImageButtonTitle(msg.id)}
+                disabled={generatingImageFor === msg.id}
+              >
+                {getImageButtonIcon(msg.id)}
+              </button>
+            );
+            
             return (
               <div key={msg.id} className={`ei-message-wrapper ${msg.role}`}>
                 {showDivider && (
@@ -306,11 +359,51 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
                   onClick={() => handleMessageClick(msg)}
                   style={{ cursor: isClickable(msg) ? "pointer" : undefined }}
                 >
-                  {msg.role === "human" && scissorsButton}
+                  {msg.role === "human" && (
+                    <>
+                      {scissorsButton}
+                      {imageButton}
+                    </>
+                  )}
                   <div className="ei-message__bubble" onClick={handleBubbleClick}>
-                    {renderMessageContent(msg, quotes, activePersonaDisplayName)}
+                    {msg._synthesis ? (
+                      <div 
+                        className="silence-reason" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onImageClick?.(msg.id);
+                        }}
+                        style={{ cursor: 'pointer' }}
+                        title="Click to edit and regenerate"
+                      >
+                        {msg.verbal_response}
+                      </div>
+                    ) : (
+                      renderMessageContent(msg, quotes, activePersonaDisplayName)
+                    )}
                   </div>
-                  {msg.role === "system" && scissorsButton}
+                  {messageImages[msg.id] && (
+                    <div 
+                      className="ei-message__inline-image" 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onImageClick?.(msg.id);
+                      }}
+                      title="Click to view full size"
+                    >
+                      <img 
+                        src={messageImages[msg.id]?.blobUrl}
+                        alt="Generated from message"
+                        className="ei-message__inline-image-img"
+                      />
+                    </div>
+                  )}
+                  {msg.role === "system" && (
+                    <>
+                      {scissorsButton}
+                      {imageButton}
+                    </>
+                  )}
                   <div className="ei-message__time">
                     {formatTime(msg.timestamp)}
                     {msg.role === "human" && !msg.read && (
@@ -332,13 +425,24 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
 
       <div className="ei-input-area">
         {activePersonaId && onSetContextBoundary && (
-          <button 
-            className="ei-boundary-btn"
-            onClick={handleBoundaryToggle}
-            title={boundaryIsActive ? "Resume previous conversation context" : "Start new conversation context"}
-          >
-            {boundaryIsActive ? "↩" : "✦"}
-          </button>
+          <div className="ei-input-area__controls">
+            <button 
+              className="ei-boundary-btn"
+              onClick={handleBoundaryToggle}
+              title={boundaryIsActive ? "Resume previous conversation context" : "Start new conversation context"}
+            >
+              {boundaryIsActive ? "↩" : "✦"}
+            </button>
+            {onImagePromptClick && (
+              <button
+                className="ei-boundary-btn ei-image-prompt-btn"
+                onClick={onImagePromptClick}
+                title="Generate image from selected messages"
+              >
+                🖼️
+              </button>
+            )}
+          </div>
         )}
         <textarea
           ref={textareaRef}

@@ -1,5 +1,6 @@
 import {
   ContextStatus,
+  LLMNextStep,
   ValidationLevel,
   type LLMResponse,
   type Message,
@@ -24,6 +25,7 @@ export function handleHeartbeatCheck(response: LLMResponse, state: StateManager)
 
   const now = new Date().toISOString();
   state.persona_update(personaId, { last_heartbeat: now });
+  state.queue_clearPersonaResponses(personaId, LLMNextStep.HandleHeartbeatCheck);
 
   if (!result.should_respond) {
     console.log(`[handleHeartbeatCheck] ${personaDisplayName} chose not to reach out`);
@@ -52,6 +54,7 @@ export function handleEiHeartbeat(response: LLMResponse, state: StateManager): v
   }
   const now = new Date().toISOString();
   state.persona_update("ei", { last_heartbeat: now });
+  state.queue_clearPersonaResponses("ei", LLMNextStep.HandleEiHeartbeat);
   if (!result.should_respond || !result.id) {
     console.log("[handleEiHeartbeat] Ei chose not to reach out");
     return;
