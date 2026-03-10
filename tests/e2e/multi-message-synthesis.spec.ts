@@ -102,7 +102,7 @@ test.describe("Multi-Message Image Synthesis", () => {
     await page.waitForTimeout(500); // Wait for auto-save to complete
 
     // Close modal
-    const closeButton = imageModal.locator('button:has-text("Close")');
+    const closeButton = imageModal.locator('button.ei-image-preview__close');
     await closeButton.click();
     await expect(imageModal).not.toBeVisible({ timeout: 3000 });
 
