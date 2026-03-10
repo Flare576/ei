@@ -82,16 +82,16 @@ export function MessageSelectorModal({
         onClick={(e) => e.stopPropagation()}
         tabIndex={-1}
       >
-        <div className="ei-modal-header">
+        <div className="ei-message-selector__header">
           <h2>Generate Image from Conversation</h2>
-          <button 
-            className="ei-modal-close" 
-            onClick={onClose}
-            aria-label="Close"
-          >
-            ×
-          </button>
         </div>
+        <button 
+          className="ei-message-selector__close" 
+          onClick={onClose}
+          aria-label="Close"
+        >
+          ✕
+        </button>
 
         <div className="ei-modal-body">
           <p className="ei-message-selector__hint">
@@ -139,7 +139,7 @@ export function MessageSelectorModal({
           </div>
         </div>
 
-        <div className="ei-modal-footer">
+        <div className="ei-message-selector__footer">
           <button 
             className="ei-btn ei-btn-secondary" 
             onClick={onClose}

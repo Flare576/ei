@@ -1862,37 +1862,62 @@ body {
   max-width: 90vw;
   max-height: 90vh;
   width: auto;
-  overflow: hidden;
+  overflow: auto; /* Allow modal body to scroll */
   display: flex;
   flex-direction: column;
   box-shadow: var(--ei-shadow-lg);
   animation: modal-in 0.2s ease;
 }
 
-.ei-image-preview-modal__header {
+.ei-image-preview__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--ei-spacing-md) var(--ei-spacing-lg);
-  border-bottom: 1px solid var(--ei-border);
-}
-
-.ei-image-preview-modal__header h2 {
-  margin: 0;
-  font-size: var(--ei-font-size-lg);
-  font-weight: 600;
-}
-
-.ei-modal__body {
-  flex: 1;
-  overflow: auto;
   padding: var(--ei-spacing-lg);
+  border-bottom: 1px solid var(--ei-border);
+  position: relative;
+}
+
+.ei-image-preview__header h2 {
+  margin: 0;
+  font-size: var(--ei-font-size-xl);
+  font-weight: 600;
+  color: var(--ei-text-primary);
+}
+
+.ei-image-preview__close {
+  position: absolute;
+  top: var(--ei-spacing-md);
+  right: var(--ei-spacing-md);
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--ei-radius-md);
+  cursor: pointer;
+  color: var(--ei-text-secondary);
+  font-size: 24px;
+  line-height: 1;
+  transition: color 0.15s, background 0.15s;
+  z-index: 10; /* Ensure it stays above all content */
+
+.ei-image-preview__close:hover {
+  color: var(--ei-text-primary);
+  background: var(--ei-bg-secondary);
+}
+
+.ei-image-preview__body {
+  flex: 1;
+  overflow: auto; /* Single scroll container */
+  padding: var(--ei-spacing-xl);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--ei-spacing-md);
-  min-height: 0; /* Critical for flex scroll */
-}
+  gap: var(--ei-spacing-lg);
+  min-height: 0; /* Allow flex shrinking */
 
 .ei-image-preview__container {
   display: flex;
@@ -1900,14 +1925,15 @@ body {
   align-items: center;
   min-height: 300px;
   width: 100%;
+  padding: var(--ei-spacing-md);
 }
 
 .ei-image-preview__image {
   max-width: 100%;
-  max-height: 70vh;
+  max-height: 60vh; /* Use reasonable vh for image */
+  height: auto;
   border-radius: var(--ei-radius-md);
   box-shadow: var(--ei-shadow-md);
-}
 
 .ei-image-preview__loading {
   display: flex;
@@ -1945,34 +1971,55 @@ body {
 
 .ei-image-preview__metadata {
   width: 100%;
+  max-width: 600px; /* Constrain width to prevent fat divs */
   padding: var(--ei-spacing-md);
   background: var(--ei-bg-secondary);
   border-radius: var(--ei-radius-md);
   font-size: var(--ei-font-size-sm);
   color: var(--ei-text-secondary);
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+/* Inline Metadata for Edit Mode */
+.ei-image-preview__inline-metadata {
+  width: 100%;
+  max-width: 600px; /* Constrain width */
+  padding: var(--ei-spacing-sm) var(--ei-spacing-md);
+  font-size: var(--ei-font-size-sm);
+  color: var(--ei-text-secondary);
+  text-align: center;
+  border-top: 1px solid var(--ei-border);
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 /* Editable Prompt Container */
 .ei-editable-prompt-container {
   width: 100%;
+  max-width: 600px; /* Constrain width */
   display: flex;
   flex-direction: column;
-  gap: var(--ei-spacing-xs);
+  gap: var(--ei-spacing-sm);
+  padding: var(--ei-spacing-md);
+  background: var(--ei-bg-secondary);
+  border-radius: var(--ei-radius-md);
+  border: 1px solid var(--ei-border);
 }
 
 .ei-editable-prompt {
   width: 100%;
   max-height: 200px;
   min-height: 120px;
-  padding: var(--ei-spacing-sm);
+  padding: var(--ei-spacing-md);
   border: 1px solid var(--ei-border);
   border-radius: var(--ei-radius-md);
-  background: var(--ei-bg-secondary);
+  background: var(--ei-bg-primary);
   color: var(--ei-text-primary);
   font-family: inherit;
   font-size: var(--ei-font-size-sm);
+  line-height: 1.5;
   resize: vertical;
-  overflow-y: auto;
+  overflow-y: auto; /* Textarea manages its own scroll */
 }
 
 .ei-editable-prompt:focus {
@@ -1983,6 +2030,7 @@ body {
 /* Metadata Section (Collapsible) */
 .ei-image-preview__metadata-section {
   width: 100%;
+  max-width: 600px; /* Constrain width - no fat divs */
 }
 
 .ei-metadata-toggle {
@@ -2023,17 +2071,18 @@ body {
   color: var(--ei-text-primary);
 }
 
-.ei-image-preview-modal__footer {
+.ei-image-preview__footer {
   display: flex;
-  gap: var(--ei-spacing-sm);
-  justify-content: flex-end;
-  padding: var(--ei-spacing-md) var(--ei-spacing-lg);
+  gap: var(--ei-spacing-md);
+  justify-content: space-between; /* Space between left (Remove) and right (Download/Regenerate) */
+  padding: var(--ei-spacing-lg);
   border-top: 1px solid var(--ei-border);
   background: var(--ei-bg-secondary);
 }
 
 /* Message Selector Modal */
 .ei-message-selector-modal {
+  position: relative; /* For absolute positioning of close button */
   background: var(--ei-bg-primary);
   padding: var(--ei-spacing-lg);
   border-radius: var(--ei-radius-lg);
@@ -2041,6 +2090,47 @@ body {
   max-height: 80vh;
   box-shadow: var(--ei-shadow-lg);
   animation: modal-in 0.2s ease;
+}
+
+.ei-message-selector__header {
+  margin-bottom: var(--ei-spacing-md);
+}
+
+.ei-message-selector__header h2 {
+  margin: 0;
+  font-size: var(--ei-font-size-lg);
+  font-weight: 600;
+  color: var(--ei-text-primary);
+  padding-right: var(--ei-spacing-xl); /* Space for close button */
+}
+
+.ei-message-selector__close {
+  position: absolute;
+  top: var(--ei-spacing-lg);
+  right: var(--ei-spacing-lg);
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: var(--ei-text-muted);
+  cursor: pointer;
+  padding: var(--ei-spacing-xs);
+  border-radius: var(--ei-radius-sm);
+  line-height: 1;
+  transition: color 0.15s, background 0.15s;
+}
+
+.ei-message-selector__close:hover {
+  color: var(--ei-text-primary);
+  background: var(--ei-bg-secondary);
+}
+
+.ei-message-selector__footer {
+  display: flex;
+  gap: var(--ei-spacing-md);
+  justify-content: flex-end;
+  padding: var(--ei-spacing-md) var(--ei-spacing-lg);
+  border-top: 1px solid var(--ei-border);
+  background: var(--ei-bg-secondary);
 }
 
 .ei-message-selector__hint {

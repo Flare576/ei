@@ -496,6 +496,33 @@ function App() {
     setCurrentViewingMessageId(null);
   }, []);
   
+  const handleImageRemove = useCallback(() => {
+    if (!currentViewingMessageId) return;
+    
+    // Revoke the blob URL to free memory
+    const imageData = messageImages[currentViewingMessageId];
+    if (imageData?.blobUrl) {
+      URL.revokeObjectURL(imageData.blobUrl);
+    }
+    
+    // Remove from messageImages state
+    setMessageImages(prev => {
+      const newImages = { ...prev };
+      delete newImages[currentViewingMessageId];
+      return newImages;
+    });
+    
+    // Clear any error for this message
+    setImageErrors(prev => {
+      const newErrors = { ...prev };
+      delete newErrors[currentViewingMessageId];
+      return newErrors;
+    });
+    
+    // Close the modal
+    handleImagePreviewClose();
+  }, [currentViewingMessageId, messageImages, handleImagePreviewClose]);
+  
   const handleImageClick = useCallback((messageId: string) => {
     const message = messages.find(m => m.id === messageId);
     const imageData = messageImages[messageId];
@@ -1280,6 +1307,7 @@ function App() {
           onPromptUpdate={handlePromptUpdate}
           onRegenerate={handleImageRegenerate}
           onClose={handleImagePreviewClose}
+          onRemove={handleImageRemove}
           error={imageGenerationError}
         />
       );

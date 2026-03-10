@@ -76,30 +76,12 @@ export function ImagePreviewModal({
   return (
     <div className="ei-modal-overlay" onClick={onClose}>
       <div className="ei-modal ei-image-preview-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="ei-modal__header">
+        <div className="ei-image-preview__header">
           <h2>Generated Image</h2>
-          <button className="ei-modal__close" onClick={onClose}>×</button>
+          <button className="ei-image-preview__close" onClick={onClose}>×</button>
         </div>
         
-        <div className="ei-modal__body">
-          {/* Synthesis messages always show editable prompt, even with errors */}
-          {isSynthesis && (
-            <div className="ei-editable-prompt-container">
-              <label htmlFor="prompt-edit">
-                <strong>Prompt:</strong>
-              </label>
-              <textarea
-                ref={textareaRef}
-                id="prompt-edit"
-                className="ei-editable-prompt"
-                value={localPrompt}
-                onChange={(e) => setLocalPrompt(e.target.value)}
-                onBlur={handlePromptBlur}
-                rows={6}
-              />
-            </div>
-          )}
-
+        <div className="ei-image-preview__body">
           {error ? (
             <div className="ei-image-preview__error">
               <p>❌ {error}</p>
@@ -122,55 +104,88 @@ export function ImagePreviewModal({
                 )}
               </div>
               
-              {/* Metadata section - always collapsible */}
-              {generationResult && (
-                <div className="ei-image-preview__metadata-section">
-                  <button
-                    className="ei-metadata-toggle"
-                    onClick={() => setMetadataCollapsed(!metadataCollapsed)}
-                    aria-expanded={!metadataCollapsed}
-                  >
-                    <span className={`ei-metadata-toggle__icon ${metadataCollapsed ? '' : 'expanded'}`}>
-                      ▶
-                    </span>
-                    <strong>Metadata</strong>
-                  </button>
-                  {!metadataCollapsed && (
-                    <div className="ei-image-preview__metadata">
-                      <p><strong>Prompt:</strong> {generationResult.prompt}</p>
-                      <p>
-                        <strong>Size:</strong> {generationResult.width}×{generationResult.height} | 
-                        <strong> Seed:</strong> {generationResult.seed}
-                      </p>
+              {/* EDIT MODE: Editable textarea + inline size/seed */}
+              {isSynthesis ? (
+                <>
+                  <div className="ei-editable-prompt-container">
+                    <label htmlFor="prompt-edit">
+                      <strong>Prompt:</strong>
+                    </label>
+                    <textarea
+                      ref={textareaRef}
+                      id="prompt-edit"
+                      className="ei-editable-prompt"
+                      value={localPrompt}
+                      onChange={(e) => setLocalPrompt(e.target.value)}
+                      onBlur={handlePromptBlur}
+                      rows={6}
+                    />
+                  </div>
+                  
+                  {/* Inline size/seed for edit mode - NO collapsible */}
+                  {generationResult && (
+                    <div className="ei-image-preview__inline-metadata">
+                      <strong>Size:</strong> {generationResult.width}×{generationResult.height} | 
+                      <strong>Seed:</strong> {generationResult.seed}
                     </div>
                   )}
-                </div>
+                </>
+              ) : (
+                /* VIEW-ONLY MODE: Collapsible metadata with prompt/size/seed */
+                generationResult && (
+                  <div className="ei-image-preview__metadata-section">
+                    <button
+                      className="ei-metadata-toggle"
+                      onClick={() => setMetadataCollapsed(!metadataCollapsed)}
+                      aria-expanded={!metadataCollapsed}
+                    >
+                      <span className={`ei-metadata-toggle__icon ${metadataCollapsed ? '' : 'expanded'}`}>
+                        ▶
+                      </span>
+                      <strong>Metadata</strong>
+                    </button>
+                    {!metadataCollapsed && (
+                      <div className="ei-image-preview__metadata">
+                        <p><strong>Prompt:</strong> {generationResult.prompt}</p>
+                        <p>
+                          <strong>Size:</strong> {generationResult.width}×{generationResult.height} | 
+                          <strong>Seed:</strong> {generationResult.seed}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )
               )}
             </>
           )}
         </div>
         
-        <div className="ei-modal__footer">
+        <div className="ei-image-preview__footer">
+          {/* Remove button on LEFT, styled destructively */}
           <button 
-            className="ei-button ei-button--secondary"
-            onClick={handleDownload}
-            disabled={isGenerating || !imageUrl}
-          >
-            💾 Download
-          </button>
-          <button 
-            className="ei-button ei-button--primary"
-            onClick={handleRegenerateClick}
-            disabled={isGenerating}
-          >
-            🔄 Regenerate
-          </button>
-          <button 
-            className="ei-button ei-button--tertiary"
+            className="ei-btn ei-btn--danger"
             onClick={onRemove || onClose}
           >
-            {onRemove ? '🗑️ Remove Image' : 'Close'}
+            🗑️ Remove
           </button>
+          
+          {/* Download and Regenerate on RIGHT */}
+          <div style={{ display: 'flex', gap: 'var(--ei-spacing-md)' }}>
+            <button 
+              className="ei-btn ei-btn--secondary"
+              onClick={handleDownload}
+              disabled={isGenerating || !imageUrl}
+            >
+              💾 Download
+            </button>
+            <button 
+              className="ei-btn ei-btn--primary"
+              onClick={handleRegenerateClick}
+              disabled={isGenerating}
+            >
+              🔄 Regenerate
+            </button>
+          </div>
         </div>
       </div>
     </div>
