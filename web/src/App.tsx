@@ -14,21 +14,23 @@ import type {
   Topic,
   PersonaTopic,
   Person,
-  ContextStatus,
   Quote,
   ProviderAccount,
   StateConflictData,
   StateConflictResolution,
   ToolProvider,
   ToolDefinition,
-} from "../../src/core/types";
-import { Layout, PersonaPanel, ChatPanel, ControlArea, HelpModal, type PersonaPanelHandle, type ChatPanelHandle } from "./components/Layout";
+  } from "../../src/core/types";
+import { ContextStatus } from "../../src/core/types";
+import { Layout, PersonaPanel, ChatPanel, ControlArea, HelpModal, ImagePreviewModal, type PersonaPanelHandle, type ChatPanelHandle } from "./components/Layout";
 import { HumanEditor, PersonaEditor, PersonaCreatorModal, ArchivedPersonasModal } from "./components/EntityEditor";
 import { QuoteCaptureModal, QuoteManagementModal } from "./components/Quote";
 import { SettingsModal } from "./components/Settings";
+import { MessageSelectorModal } from "./components/Modals/MessageSelectorModal";
 import { ConflictResolutionModal } from "./components/Sync/ConflictResolutionModal";
 import { Onboarding } from "./components/Onboarding";
 import { useKeyboardNavigation } from "./hooks/useKeyboardNavigation";
+import { generateImage, type GenerationResult } from "./comfyui";
 import { exchangeCode } from '../../src/core/tools/builtin/pkce.js';
 import { SPOTIFY_CLIENT_ID, SPOTIFY_WEB_REDIRECT_URI, clearTokenCache } from '../../src/core/tools/builtin/spotify-auth.js';
 import { clearLikedSongsCache } from '../../src/core/tools/builtin/spotify-liked-songs.js';
@@ -36,6 +38,21 @@ import { clearLikedSongsCache } from '../../src/core/tools/builtin/spotify-liked
 import "./styles/layout.css";
 import "./styles/entity-editor.css";
 import "./styles/onboarding.css";
+
+// System prompt for multi-message image synthesis
+const SYNTHESIS_SYSTEM_PROMPT = `You are building an image generation prompt from the user's conversation.
+
+Return a JSON object with these fields:
+{
+  "image_prompt": "The actual prompt for the image generator (concise, descriptive)",
+  "explanation": "Why you made these creative choices (this is for the user, not the generator)",
+  "negative_prompt": "What to avoid in the generation (optional)"
+}
+
+IMPORTANT: The "explanation" field is your outlet for creative reasoning. Put ALL narrative there, keep image_prompt concise.
+
+Focus on visual elements: subjects, setting, style, lighting, mood. Skip abstract concepts unless they translate to concrete visuals.
+`;
 
 function App() {
   const [processor, setProcessor] = useState<Processor | null>(null);
@@ -76,6 +93,14 @@ function App() {
    const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [spotifyAuthError, setSpotifyAuthError] = useState<string | null>(null);
+  const [showImagePreview, setShowImagePreview] = useState(false);
+  const [currentImageResult, setCurrentImageResult] = useState<GenerationResult | null>(null);
+  const [imageGenerationError, setImageGenerationError] = useState<string | null>(null);
+  const [messageImages, setMessageImages] = useState<Record<string, {blobUrl: string, result: GenerationResult}>>({});
+  const [generatingImageFor, setGeneratingImageFor] = useState<string | null>(null);
+  const [imageErrors, setImageErrors] = useState<Record<string, string>>({});
+  const [currentViewingMessageId, setCurrentViewingMessageId] = useState<string | null>(null);
+  const [showMessageSelector, setShowMessageSelector] = useState(false);
 
   const personaPanelRef = useRef<PersonaPanelHandle | null>(null);
   const chatPanelRef = useRef<ChatPanelHandle | null>(null);
@@ -86,6 +111,13 @@ function App() {
     onFocusInput: () => chatPanelRef.current?.focusInput(),
     onScrollChat: (dir) => chatPanelRef.current?.scrollChat(dir),
   });
+
+  // Cleanup Blob URLs when component unmounts
+  useEffect(() => {
+    return () => {
+      Object.values(messageImages).forEach(imageData => URL.revokeObjectURL(imageData.blobUrl));
+    };
+  }, [messageImages]);
 
   // Check for first-run on mount (before Processor starts)
   useEffect(() => {
@@ -230,6 +262,10 @@ function App() {
     p.start(storage).then(() => {
       processorRef.current = p;
       setProcessor(p);
+      // Expose processor for E2E testing
+      if (import.meta.env.MODE === 'test' || import.meta.env.DEV) {
+        (window as any).__processor = p;
+      }
       p.getPersonaList().then((list) => {
         setPersonas(list);
         if (list.length > 0) {
@@ -391,6 +427,128 @@ function App() {
     }
   }, [processor, activePersonaId]);
 
+
+  const handleImageGenerate = useCallback(async (message: Message) => {
+    // Extract prompt from message
+    const prompt = message.verbal_response || message.action_response || "";
+    
+    if (!prompt.trim()) {
+      alert("No prompt text found in this message");
+      return;
+    }
+    
+    setGeneratingImageFor(message.id);
+    setImageErrors(prev => {
+      const updated = { ...prev };
+      delete updated[message.id];
+      return updated;
+    });
+    
+    // If modal is open for this message, clear modal error state
+    if (currentViewingMessageId === message.id) {
+      setImageGenerationError(null);
+    }
+    
+    try {
+      const result = await generateImage(prompt, processorRef.current?.getStateManager());
+      const blobUrl = URL.createObjectURL(result.image);
+      setMessageImages(prev => ({ ...prev, [message.id]: { blobUrl, result } }));
+      
+      // If modal is open for this message, update modal result state
+      if (currentViewingMessageId === message.id) {
+        setCurrentImageResult(result);
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      setImageErrors(prev => ({ ...prev, [message.id]: errorMessage }));
+      
+      // If modal is open for this message, update modal error state
+      if (currentViewingMessageId === message.id) {
+        setImageGenerationError(errorMessage);
+      }
+      console.error("Image generation failed:", error);
+    } finally {
+      setGeneratingImageFor(null);
+    }
+  }, [currentViewingMessageId]);
+  
+  const handleImageRegenerate = useCallback(async () => {
+    if (!currentViewingMessageId) return;
+    
+    // Find the message being viewed
+    const message = messages.find(m => m.id === currentViewingMessageId);
+    if (!message) return;
+    
+    // Revoke old Blob URL before regenerating
+    const oldImageData = messageImages[currentViewingMessageId];
+    if (oldImageData) {
+      URL.revokeObjectURL(oldImageData.blobUrl);
+    }
+    
+    // Regenerate using the same flow as initial generation
+    await handleImageGenerate(message);
+  }, [currentViewingMessageId, messages, messageImages, handleImageGenerate]);
+  
+  const handleImagePreviewClose = useCallback(() => {
+    setShowImagePreview(false);
+    setCurrentImageResult(null);
+    setImageGenerationError(null);
+    setCurrentViewingMessageId(null);
+  }, []);
+  
+  const handleImageClick = useCallback((messageId: string) => {
+    const message = messages.find(m => m.id === messageId);
+    const imageData = messageImages[messageId];
+    
+    // For synthesis messages, always open modal (they have editable prompts)
+    if (message?._synthesis) {
+      setImageGenerationError(null);
+      setCurrentViewingMessageId(messageId);
+      setShowImagePreview(true);
+      // Set result if available (for synthesis messages with generated images)
+      if (imageData) {
+        setCurrentImageResult(imageData.result);
+      }
+      return;
+    }
+    
+    if (!imageData) {
+      // If no image, might be error - show error in modal
+      const error = imageErrors[messageId];
+      if (error) {
+        setImageGenerationError(error);
+        setCurrentViewingMessageId(messageId);
+        setShowImagePreview(true);
+      }
+      return;
+    }
+    
+    // Open modal with generation result for normal messages
+    setImageGenerationError(null);
+    setCurrentImageResult(imageData.result);
+    setCurrentViewingMessageId(messageId);
+    setShowImagePreview(true);
+  }, [messageImages, imageErrors, messages]);
+
+  const handlePromptUpdate = useCallback((newPrompt: string) => {
+    if (!currentViewingMessageId || !activePersonaId) return;
+    
+    processor?.updateMessage(activePersonaId, currentViewingMessageId, {
+      verbal_response: newPrompt
+    });
+    
+    // Update local messages state to reflect change immediately
+    setMessages(prev => prev.map(msg => 
+      msg.id === currentViewingMessageId 
+        ? { ...msg, verbal_response: newPrompt }
+        : msg
+    ));
+  }, [currentViewingMessageId, activePersonaId, processor]);
+
+
+  const handleImagePromptClick = useCallback(() => {
+    setShowMessageSelector(true);
+  }, []);
   const handleHelpClick = useCallback(() => {
     setShowHelp(true);
   }, []);
@@ -625,6 +783,71 @@ function App() {
       });
     });
   }, []);
+
+  const handleSynthesisRequest = useCallback(async (selectedMessageIds: string[], instructions: string) => {
+    if (!processor || !activePersonaId) return;
+    
+    try {
+      // Build conversation text from selected messages
+      const selectedMessages = messages.filter(m => selectedMessageIds.includes(m.id));
+      const conversationText = selectedMessages
+        .map(m => {
+          const content = m.verbal_response || m.action_response || '';
+          return `${m.role}: ${content}`;
+        })
+        .join('\n\n');
+      
+      const userPrompt = instructions
+        ? `${conversationText}\n\nUser instructions: ${instructions}`
+        : conversationText;
+      
+      // Call OneShot for synthesis
+      const result = await handleAiAssist(SYNTHESIS_SYSTEM_PROMPT, userPrompt);
+      
+      // Parse JSON response
+      let parsed: { image_prompt: string; explanation?: string; negative_prompt?: string };
+      try {
+        parsed = JSON.parse(result);
+      } catch (e) {
+        console.error('Failed to parse synthesis JSON:', result);
+        alert('Failed to generate image prompt. Please try again.');
+        return;
+      }
+      
+      if (!parsed.image_prompt) {
+        console.error('No image_prompt in synthesis result:', parsed);
+        alert('Failed to generate image prompt. Please try again.');
+        return;
+      }
+      
+      // Create synthesis message
+      const synthesisMessage: Message = {
+        id: crypto.randomUUID(),
+        role: 'human',
+        verbal_response: parsed.image_prompt,
+        _synthesis: true,
+        timestamp: new Date().toISOString(),
+        read: true,
+        context_status: ContextStatus.Always,
+      };
+      
+      // Add to conversation
+      await processor.addMessageOnly(activePersonaId, synthesisMessage);
+      
+      // Refresh messages
+      const updatedMessages = await processor.getMessages(activePersonaId);
+      setMessages(updatedMessages);
+      
+      // Auto-trigger image generation
+      setGeneratingImageFor(synthesisMessage.id);
+      handleImageGenerate(synthesisMessage);
+      
+    } catch (error) {
+      console.error('Synthesis request failed:', error);
+      alert('Failed to generate image prompt. Please try again.');
+    }
+  }, [processor, activePersonaId, messages, handleAiAssist, handleImageGenerate]);
+
 
   const handlePersonaCreate = useCallback(async (data: {
     name: string;
@@ -890,6 +1113,12 @@ function App() {
              setShowPersonaEditor(false);
              setCaptureMessage(message);
            }}
+           onImageGenerate={handleImageGenerate}
+           messageImages={messageImages}
+           generatingImageFor={generatingImageFor}
+           imageErrors={imageErrors}
+           onImageClick={handleImageClick}
+           onImagePromptClick={handleImagePromptClick}
         />
       }
     />
@@ -1037,8 +1266,40 @@ function App() {
          onYoloMerge={() => handleConflictResolve("yolo")}
        />
      )}
+
+    {showImagePreview && currentViewingMessageId && (() => {
+      const currentMessage = messages.find(m => m.id === currentViewingMessageId);
+      if (!currentMessage) return null;
+      
+      return (
+        <ImagePreviewModal
+          message={currentMessage}
+          imageUrl={messageImages[currentViewingMessageId]?.blobUrl || null}
+          generationResult={currentImageResult}
+          isGenerating={generatingImageFor === currentViewingMessageId}
+          onPromptUpdate={handlePromptUpdate}
+          onRegenerate={handleImageRegenerate}
+          onClose={handleImagePreviewClose}
+          error={imageGenerationError}
+        />
+      );
+    })()}
+
+    {showMessageSelector && activePersonaId && (
+      <MessageSelectorModal
+        isOpen={showMessageSelector}
+        messages={messages}
+        personaName={personas.find(p => p.id === activePersonaId)?.display_name || 'Persona'}
+        onClose={() => setShowMessageSelector(false)}
+        onSubmit={async (selectedMessageIds, instructions) => {
+          setShowMessageSelector(false);
+          await handleSynthesisRequest(selectedMessageIds, instructions);
+        }}
+      />
+    )}
     </>
     );
 }
 
 export default App;
+

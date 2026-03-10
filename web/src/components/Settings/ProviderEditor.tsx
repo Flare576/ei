@@ -21,8 +21,10 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
   const [defaultModel, setDefaultModel] = useState('');
   const [tokenLimit, setTokenLimit] = useState('');
   const [extraHeaders, setExtraHeaders] = useState<Array<{ key: string; value: string }>>([]);
+  const [workflowJson, setWorkflowJson] = useState<string>('');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [jsonError, setJsonError] = useState<string>('');
 
   const modalRef = useRef<HTMLDivElement>(null);
   const previousActiveElement = useRef<Element | null>(null);
@@ -39,12 +41,12 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
         setApiKey(account.api_key || '');
         setDefaultModel(account.default_model || '');
         setTokenLimit(account.token_limit ? String(account.token_limit) : '');
+        setWorkflowJson(account.workflow_json ? JSON.stringify(account.workflow_json, null, 2) : '');
         setExtraHeaders(
           account.extra_headers
             ? Object.entries(account.extra_headers).map(([key, value]) => ({ key, value }))
             : []
         );
-        setShowAdvanced(!!account.extra_headers && Object.keys(account.extra_headers).length > 0);
       } else {
         setName('');
         setType(ProviderType.LLM);
@@ -52,10 +54,12 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
         setApiKey('');
         setDefaultModel('');
         setTokenLimit('');
+        setWorkflowJson('');
         setExtraHeaders([]);
         setShowAdvanced(false);
       }
       setErrors({});
+      setJsonError('');
     }
   }, [isOpen, account]);
 
@@ -105,6 +109,19 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
     }
 
     setErrors(newErrors);
+    
+    // Validate workflow JSON for image providers
+    if (type === ProviderType.Image && workflowJson.trim()) {
+      try {
+        JSON.parse(workflowJson);
+        setJsonError('');
+      } catch {
+        setJsonError('Invalid JSON format');
+        return false;
+      }
+    }
+    
+    return Object.keys(newErrors).length === 0;
     return Object.keys(newErrors).length === 0;
   };
 
@@ -126,6 +143,7 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
       api_key: apiKey.trim() || undefined,
       default_model: type === ProviderType.LLM && defaultModel.trim() ? defaultModel.trim() : undefined,
       token_limit: type === ProviderType.LLM && tokenLimit.trim() ? parseInt(tokenLimit.trim(), 10) || undefined : undefined,
+      workflow_json: type === ProviderType.Image && workflowJson.trim() ? JSON.parse(workflowJson.trim()) : undefined,
       extra_headers: Object.keys(extraHeadersObj).length > 0 ? extraHeadersObj : undefined,
       enabled: account?.enabled ?? true,
       created_at: account?.created_at || new Date().toISOString(),
@@ -194,10 +212,6 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
             {errors.name && <span className="ei-form-error">{errors.name}</span>}
           </div>
 
-          {/* Type selector hidden for V1 - only LLM providers supported
-              Storage providers will be added in V3 (requires OAuth flows, etc.)
-              Keeping the field in the schema for future use */}
-          {false && (
           <div className="ei-form-group">
             <label htmlFor="provider-type" className="ei-form-label">
               Type <span className="ei-form-required">*</span>
@@ -210,9 +224,9 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
             >
               <option value={ProviderType.LLM}>LLM Provider</option>
               <option value={ProviderType.Storage}>Storage Provider</option>
+              <option value={ProviderType.Image}>Image Provider</option>
             </select>
           </div>
-          )}
 
           <div className="ei-form-group">
             <label htmlFor="provider-url" className="ei-form-label">
@@ -228,6 +242,31 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
             />
             {errors.url && <span className="ei-form-error">{errors.url}</span>}
           </div>
+
+          {type === ProviderType.Image && (
+            <div className="ei-form-group">
+              <label htmlFor="provider-workflow-json" className="ei-form-label">
+                Workflow JSON <span className="ei-form-optional">(optional)</span>
+              </label>
+              <textarea
+                id="provider-workflow-json"
+                className={`ei-input ${jsonError ? 'ei-input--error' : ''}`}
+                style={{ fontFamily: 'monospace', fontSize: '0.875rem' }}
+                value={workflowJson}
+                onChange={(e) => {
+                  setWorkflowJson(e.target.value);
+                  // Clear error on edit
+                  if (jsonError) setJsonError('');
+                }}
+                placeholder='{"9":{"inputs":{...}}}'
+                rows={10}
+              />
+              {jsonError && <span className="ei-form-error">{jsonError}</span>}
+              <small className="ei-form-hint">
+                ComfyUI workflow template. Leave blank to use default workflow.
+              </small>
+            </div>
+          )}
 
           <div className="ei-form-group">
             <label htmlFor="provider-api-key" className="ei-form-label">
@@ -353,3 +392,4 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
     </div>
   );
 };
+
