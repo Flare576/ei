@@ -223,7 +223,6 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
               onChange={(e) => setType(e.target.value as ProviderType)}
             >
               <option value={ProviderType.LLM}>LLM Provider</option>
-              <option value={ProviderType.Storage}>Storage Provider</option>
               <option value={ProviderType.Image}>Image Provider</option>
             </select>
           </div>
