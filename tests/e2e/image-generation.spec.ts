@@ -1,4 +1,4 @@
-import { test, expect, seedCheckpoint } from "./fixtures.js";
+import { test, expect, seedCheckpoint, createMinimalCheckpoint } from "./fixtures.js";
 
 test.describe("Image Generation and Removal", () => {
   test.beforeEach(async ({ mockServer }) => {
@@ -335,3 +335,100 @@ test.describe("Image Generation and Removal", () => {
     await expect(modal.locator("img.ei-image-preview__image")).toBeVisible({ timeout: 10000 });
   });
 });
+
+  test("introspection finds prompt node dynamically via /object_info", async ({ page, mockServer, mockServerUrl, imageProviderUrl }) => {
+    // Setup normal response mock
+    mockServer.setResponseForType("response", {
+      type: "fixed",
+      content: JSON.stringify({
+        should_respond: true,
+        verbal_response: "A majestic eagle in flight",
+        reason: "testing"
+      }),
+      statusCode: 200,
+    });
+
+    await seedCheckpoint(page, mockServerUrl, undefined, imageProviderUrl);
+    await page.goto("/");
+
+    // Wait for Ei persona
+    await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
+    await page.locator(".ei-persona-pill").first().click();
+
+    // Send message
+    const input = page.locator("textarea");
+    await input.fill("Show me an eagle");
+    await input.press("Enter");
+
+    // Wait for response
+    await expect(page.locator("text=Show me an eagle")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator("text=A majestic eagle in flight")).toBeVisible({ timeout: 5000 });
+
+    // Clear request history to track only image generation requests
+    mockServer.clearRequestHistory();
+
+    // Click image button to trigger introspection
+    const messageImageButton = page.locator('.ei-message__image').last();
+    await expect(messageImageButton).toBeVisible({ timeout: 5000 });
+    await messageImageButton.click();
+
+    // Wait for generation to complete
+    await expect(messageImageButton).toContainText('🎨', { timeout: 10000 });
+
+    // Verify /object_info was called during generation
+    const requests = mockServer.getRequestHistory();
+    const objectInfoRequests = requests.filter(req => req.endpoint === '/object_info');
+    
+    expect(objectInfoRequests.length).toBeGreaterThan(0);
+    expect(objectInfoRequests[0].method).toBe('GET');
+
+    // Verify image generation still worked (introspection found node)
+    await messageImageButton.click();
+    const modal = page.locator(".ei-image-preview-modal");
+    await expect(modal).toBeVisible({ timeout: 3000 });
+    await expect(modal.locator("img.ei-image-preview__image")).toBeVisible();
+  });
+
+  test("handles missing prompt node gracefully", async ({ page, mockServer, mockServerUrl }) => {
+    // Setup response mock
+    mockServer.setResponseForType("response", {
+      type: "fixed",
+      content: JSON.stringify({
+        should_respond: true,
+        verbal_response: "Test response",
+        reason: "testing"
+      }),
+      statusCode: 200,
+    });
+
+    // Create image provider with EMPTY workflow (no nodes)
+    await seedCheckpoint(page, {
+      mockServerUrl,
+      imageProviderUrl: mockServerUrl,
+      imageWorkflow: {}, // Empty workflow - introspection should fail
+    });
+
+    await page.goto("/");
+
+    // Wait for persona
+    await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
+    await page.locator(".ei-persona-pill").first().click();
+
+    // Send message
+    const input = page.locator("textarea");
+    await input.fill("Generate image");
+    await input.press("Enter");
+    await expect(page.locator("text=Generate image")).toBeVisible({ timeout: 5000 });
+
+    // Try to generate - should fail gracefully
+    const messageImageButton = page.locator('.ei-message__image').last();
+    await expect(messageImageButton).toBeVisible({ timeout: 5000 });
+    await messageImageButton.click();
+
+    // Button should revert to initial state (generation failed)
+    await expect(messageImageButton).toContainText('🖼️', { timeout: 5000 });
+
+    // No modal should appear (generation failed)
+    const modal = page.locator(".ei-image-preview-modal");
+    await expect(modal).not.toBeVisible();
+  });

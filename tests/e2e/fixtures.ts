@@ -171,11 +171,33 @@ export interface MinimalCheckpoint {
   settings: Record<string, never>;
 }
 
+export interface MinimalCheckpointOptions {
+  mockServerUrl: string;
+  messages?: Array<{ role: string; verbal_response: string }>;
+  imageProviderUrl?: string;
+  imageWorkflow?: any;
+}
+
 export function createMinimalCheckpoint(
-  mockServerUrl: string,
+  optionsOrUrl: MinimalCheckpointOptions | string,
   messages: Array<{ role: string; verbal_response: string }> = [{ role: "assistant", verbal_response: DEFAULT_WELCOME_MESSAGE }],
   imageProviderUrl?: string
 ): MinimalCheckpoint {
+  // Handle both old signature (url, messages, imageProviderUrl) and new object signature
+  let mockServerUrl: string;
+  let workflow = COMFY_PROMPT_TEMPLATE;
+  
+  if (typeof optionsOrUrl === "string") {
+    // Old signature: (mockServerUrl, messages, imageProviderUrl)
+    mockServerUrl = optionsOrUrl;
+  } else {
+    // New signature: ({ mockServerUrl, messages?, imageProviderUrl?, imageWorkflow? })
+    mockServerUrl = optionsOrUrl.mockServerUrl;
+    messages = optionsOrUrl.messages || messages;
+    imageProviderUrl = optionsOrUrl.imageProviderUrl;
+    workflow = optionsOrUrl.imageWorkflow ?? COMFY_PROMPT_TEMPLATE;
+  }
+  
   const timestamp = new Date().toISOString();
   return {
     version: 1,
@@ -206,7 +228,7 @@ export function createMinimalCheckpoint(
           name: "Test Image Provider",
           type: "image",
           url: imageProviderUrl,
-          workflow_json: COMFY_PROMPT_TEMPLATE,
+          workflow_json: workflow,
           enabled: true,
           created_at: timestamp,
         }] : [])],
@@ -249,11 +271,11 @@ export function createMinimalCheckpoint(
  */
 export async function seedCheckpoint(
   page: import("@playwright/test").Page,
-  mockServerUrl: string,
+  optionsOrUrl: MinimalCheckpointOptions | string,
   messages: Array<{ role: string; verbal_response: string }> = [{ role: "assistant", verbal_response: DEFAULT_WELCOME_MESSAGE }],
   imageProviderUrl?: string
 ) {
-  const state = createMinimalCheckpoint(mockServerUrl, messages, imageProviderUrl);
+  const state = createMinimalCheckpoint(optionsOrUrl, messages, imageProviderUrl);
   await page.addInitScript(
     ({ key, data }) => {
       localStorage.clear();

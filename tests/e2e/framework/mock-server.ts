@@ -160,23 +160,73 @@ export class MockLLMServerImpl implements MockLLMServer {
     });
 
     // ComfyUI mock endpoints
-    this.app.get("/system_stats", (_req: Request, res: Response) => {
+    this.app.get("/system_stats", (req: Request, res: Response) => {
+      this.recordComfyRequest(req, "/system_stats");
       res.json({ status: "ok", system: { ram_used: 1024, ram_total: 16384 } });
     });
 
+    this.app.get("/object_info", (req: Request, res: Response) => {
+      this.recordComfyRequest(req, "/object_info");
+      res.json({
+        CLIPTextEncode: {
+          input: {
+            required: {
+              text: ["STRING", { multiline: true }],
+              clip: ["CLIP"]
+            }
+          },
+          output: ["CONDITIONING"],
+          output_name: ["CONDITIONING"]
+        },
+        KSampler: {
+          input: {
+            required: {
+              seed: ["INT", { default: 0, min: 0, max: 0xffffffffffffffff }],
+              steps: ["INT", { default: 20, min: 1, max: 10000 }],
+              cfg: ["FLOAT", { default: 8.0, min: 0.0, max: 100.0 }],
+              sampler_name: [["euler", "euler_ancestral", "heun", "dpm_2"]],
+              scheduler: [["normal", "karras", "exponential"]],
+              denoise: ["FLOAT", { default: 1.0, min: 0.0, max: 1.0 }],
+              model: ["MODEL"],
+              positive: ["CONDITIONING"],
+              negative: ["CONDITIONING"],
+              latent_image: ["LATENT"]
+            }
+          },
+          output: ["LATENT"],
+          output_name: ["LATENT"]
+        },
+        EmptyLatentImage: {
+          input: {
+            required: {
+              width: ["INT", { default: 512, min: 64, max: 8192, step: 64 }],
+              height: ["INT", { default: 512, min: 64, max: 8192, step: 64 }],
+              batch_size: ["INT", { default: 1, min: 1, max: 64 }]
+            }
+          },
+          output: ["LATENT"],
+          output_name: ["LATENT"]
+        },
+        SaveImage: {
+          input: {
+            required: {
+              images: ["IMAGE"],
+              filename_prefix: ["STRING", { default: "ComfyUI" }]
+            }
+          },
+          output: [],
+          output_name: []
+        }
+      });
+    });
     this.app.post("/prompt", (req: Request, res: Response) => {
-      const promptId = `mock-prompt-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-      if (this.config.enableLogging) {
-        console.log(`Mock ComfyUI: POST /prompt → prompt_id=${promptId}`);
-      }
+      this.recordComfyRequest(req, "/prompt");
+      const promptId = `mock-prompt-${Date.now()}`;
       res.json({ prompt_id: promptId });
     });
-
     this.app.get("/history/:promptId", (req: Request, res: Response) => {
       const { promptId } = req.params;
-      if (this.config.enableLogging) {
-        console.log(`Mock ComfyUI: GET /history/${promptId}`);
-      }
+      this.recordComfyRequest(req, `/history/${promptId}`);
       // Return completed workflow with mock image filename
       const mockFilename = `mock_image_${promptId}.png`;
       res.json({
@@ -202,6 +252,7 @@ export class MockLLMServerImpl implements MockLLMServer {
 
     this.app.get("/view", (req: Request, res: Response) => {
       const filename = req.query.filename as string;
+      this.recordComfyRequest(req, `/view?filename=${filename}`);
       if (this.config.enableLogging) {
         console.log(`Mock ComfyUI: GET /view?filename=${filename}`);
       }
@@ -211,6 +262,21 @@ export class MockLLMServerImpl implements MockLLMServer {
       res.set("Content-Type", "image/png");
       res.send(pngBuffer);
     });
+  }
+
+  private recordComfyRequest(req: Request, path: string): void {
+    const mockRequest: MockRequest = {
+      endpoint: path,
+      method: req.method,
+      headers: req.headers as Record<string, string>,
+      body: req.body,
+      timestamp: Date.now(),
+    };
+    this.requestHistory.push(mockRequest);
+    
+    if (this.requestHistory.length > 100) {
+      this.requestHistory = this.requestHistory.slice(-50);
+    }
   }
 
   private async handleChatCompletions(req: Request, res: Response): Promise<void> {

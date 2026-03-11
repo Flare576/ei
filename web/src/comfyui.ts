@@ -85,6 +85,55 @@ export async function isComfyUIAvailable(): Promise<boolean> {
 }
 
 /**
+ * Introspect workflow to find prompt input node
+ * 
+ * Fetches /object_info schema from ComfyUI to find nodes with STRING inputs.
+ * Returns the first node in the workflow that has a text/string input field.
+ * 
+ * @param url - ComfyUI base URL
+ * @param workflow - Workflow JSON to search
+ * @returns {nodeId, fieldName} for prompt injection, or null if none found
+ */
+async function introspectWorkflow(url: string, workflow: any): Promise<{ nodeId: string; fieldName: string } | null> {
+  try {
+    const response = await fetch(`${url}/object_info`, {
+      method: "GET",
+      signal: AbortSignal.timeout(5000),
+    });
+    
+    if (!response.ok) {
+      console.error(`Failed to fetch /object_info: ${response.status}`);
+      return null;
+    }
+    
+    const objectInfo = await response.json();
+    
+    // Search workflow nodes for STRING inputs
+    for (const [nodeId, nodeData] of Object.entries(workflow)) {
+      if (typeof nodeData !== "object" || !nodeData || !nodeData.class_type) continue;
+      
+      const classType = nodeData.class_type;
+      const nodeSchema = objectInfo[classType];
+      
+      if (!nodeSchema?.input?.required) continue;
+      
+      // Find first STRING input
+      for (const [fieldName, fieldSchema] of Object.entries(nodeSchema.input.required)) {
+        const schema = fieldSchema as any;
+        if (Array.isArray(schema) && schema[0] === "STRING") {
+          return { nodeId, fieldName };
+        }
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.error("Introspection failed:", error);
+    return null;
+  }
+}
+
+/**
  * Generate an image using ComfyUI
  * 
  * @param prompt - Text prompt for image generation
@@ -102,14 +151,21 @@ export async function generateImage(
   const baseUrl = provider?.url || "http://localhost:8000";
   const workflowTemplate = provider?.workflow || COMFY_PROMPT_TEMPLATE;
   
-  // 1. Clone workflow template and inject parameters
+  // 1. Clone workflow template and introspect for prompt node
   const workflow = structuredClone(workflowTemplate);
   
-  // Inject prompt (node "57:27")
-  if (!workflow["57:27"]?.inputs) {
-    throw new Error("Invalid workflow template: missing prompt node");
+  // Introspect to find prompt node dynamically
+  const promptNode = await introspectWorkflow(baseUrl, workflow);
+  
+  if (!promptNode) {
+    throw new Error("No prompt input found in workflow. Cannot inject prompt.");
   }
-  workflow["57:27"].inputs.text = prompt;
+  
+  // Inject prompt into detected node
+  if (!workflow[promptNode.nodeId]?.inputs) {
+    throw new Error(`Invalid workflow: node ${promptNode.nodeId} missing inputs`);
+  }
+  workflow[promptNode.nodeId].inputs[promptNode.fieldName] = prompt;
   
   // Inject dimensions (node "57:13")
   if (options.width && workflow["57:13"]?.inputs) {
