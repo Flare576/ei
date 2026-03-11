@@ -19,6 +19,11 @@ const COMFYUI_BASE_URL = "http://localhost:8000";
 const POLL_INTERVAL_MS = 500; // Check every 500ms
 const TIMEOUT_MS = 600000; // 10 minute timeout (ComfyUI cold start can take 400s)
 
+interface WorkflowNode {
+  class_type?: string;
+  inputs?: Record<string, any>;
+  [key: string]: any;
+}
 export interface GenerationOptions {
   width?: number;
   height?: number;
@@ -48,7 +53,7 @@ function getImageProvider(stateManager?: StateManager): { url: string; workflow:
   if (!provider) return null;
   return {
     url: provider.url,
-    workflow: provider.workflow_json || COMFY_PROMPT_TEMPLATE
+    workflow: provider.workflow_json ?? COMFY_PROMPT_TEMPLATE
   };
 }
 interface HistoryResponse {
@@ -110,12 +115,12 @@ async function introspectWorkflow(url: string, workflow: any): Promise<{ nodeId:
     
     // Priority 1: Look for CLIPTextEncode nodes (the correct prompt node)
     for (const [nodeId, nodeData] of Object.entries(workflow)) {
-      if (typeof nodeData !== "object" || !nodeData || !nodeData.class_type) continue;
+      const node = nodeData as WorkflowNode;
+      if (typeof node !== "object" || !node || !node.class_type) continue;
       
-      if (nodeData.class_type === "CLIPTextEncode") {
-        const nodeSchema = objectInfo[nodeData.class_type];
+      if (node.class_type === "CLIPTextEncode") {
+        const nodeSchema = objectInfo[node.class_type];
         if (!nodeSchema?.input?.required) continue;
-        
         for (const [fieldName, fieldSchema] of Object.entries(nodeSchema.input.required)) {
           const schema = fieldSchema as any;
           if (Array.isArray(schema) && schema[0] === "STRING") {
@@ -127,14 +132,14 @@ async function introspectWorkflow(url: string, workflow: any): Promise<{ nodeId:
     
     // Priority 2: Fall back to any other STRING input (excluding SaveImage)
     for (const [nodeId, nodeData] of Object.entries(workflow)) {
-      if (typeof nodeData !== "object" || !nodeData || !nodeData.class_type) continue;
+      const node = nodeData as WorkflowNode;
+      if (typeof node !== "object" || !node || !node.class_type) continue;
       
       // SKIP SaveImage nodes - they have STRING inputs but shouldn't receive prompts
-      if (nodeData.class_type === "SaveImage") continue;
+      if (node.class_type === "SaveImage") continue;
       
-      const classType = nodeData.class_type;
+      const classType = node.class_type;
       const nodeSchema = objectInfo[classType];
-      
       if (!nodeSchema?.input?.required) continue;
       
       for (const [fieldName, fieldSchema] of Object.entries(nodeSchema.input.required)) {
@@ -178,7 +183,7 @@ export async function generateImage(
   // Get provider configuration or use defaults
   const provider = getImageProvider(stateManager);
   const baseUrl = provider?.url || "http://localhost:8000";
-  const workflowTemplate = provider?.workflow || COMFY_PROMPT_TEMPLATE;
+  const workflowTemplate = provider?.workflow ?? COMFY_PROMPT_TEMPLATE;
   
   // 1. Clone workflow template and introspect for prompt node
   const workflow = structuredClone(workflowTemplate);
@@ -197,14 +202,14 @@ export async function generateImage(
   workflow[promptNode.nodeId].inputs[promptNode.fieldName] = prompt;
   
   // Set sanitized filename_prefix on SaveImage node (prevents >400 char filenames)
-  for (const [nodeId, nodeData] of Object.entries(workflow)) {
-    if (typeof nodeData === "object" && nodeData && nodeData.class_type === "SaveImage") {
-      if (nodeData.inputs) {
-        nodeData.inputs.filename_prefix = sanitizeFilename(prompt);
+  for (const [_nodeId, nodeData] of Object.entries(workflow)) {
+    const node = nodeData as WorkflowNode;
+    if (typeof node === "object" && node && node.class_type === "SaveImage") {
+      if (node.inputs) {
+        node.inputs.filename_prefix = sanitizeFilename(prompt);
       }
     }
   }
-  
   // Inject dimensions (node "57:13")
   if (options.width && workflow["57:13"]?.inputs) {
     workflow["57:13"].inputs.width = options.width;

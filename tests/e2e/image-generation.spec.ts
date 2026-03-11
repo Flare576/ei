@@ -419,14 +419,18 @@ test.describe("Image Generation and Removal", () => {
     await input.fill("Generate image");
     await input.press("Enter");
     await expect(page.locator("text=Generate image")).toBeVisible({ timeout: 5000 });
-
-    // Try to generate - should fail gracefully
-    const messageImageButton = page.locator('.ei-message__image').last();
+    
+    // Wait for LLM response to arrive (creates new message)
+    await page.waitForTimeout(500);
+    
+    // Find button on the USER's message specifically (not the response)
+    const userMessage = page.locator('.ei-message').filter({ hasText: 'Generate image' });
+    const messageImageButton = userMessage.locator('.ei-message__image');
     await expect(messageImageButton).toBeVisible({ timeout: 5000 });
     await messageImageButton.click();
 
-    // Button should revert to initial state (generation failed)
-    await expect(messageImageButton).toContainText('🖼️', { timeout: 5000 });
+    // Button should show error icon (generation failed)
+    await expect(messageImageButton).toContainText('❗', { timeout: 5000 });
 
     // No modal should appear (generation failed)
     const modal = page.locator(".ei-image-preview-modal");

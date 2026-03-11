@@ -134,6 +134,10 @@ test.describe("Onboarding Flow", () => {
   });
 
   test("ProviderSetup step requires at least one provider to continue", async ({ page }) => {
+    // Block ComfyUI auto-detection (if running locally on :8000)
+    await page.route('http://127.0.0.1:8000/**', route => route.abort());
+    await page.route('http://localhost:8000/**', route => route.abort());
+    
     await page.goto("/");
 
     await expect(page.locator("text=Welcome to Ei")).toBeVisible({ timeout: 10000 });
