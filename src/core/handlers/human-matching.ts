@@ -212,6 +212,12 @@ export async function handleHumanItemUpdate(response: LLMResponse, state: StateM
   console.log(`[handleHumanItemUpdate] ${isNewItem ? "Created" : "Updated"} ${candidateType} "${result.name}"`);
 }
 
+function normalizeQuotes(text: string): string {
+  return text
+    .replace(/[\u201C\u201D]/g, '"')  // Curly double quotes to straight
+    .replace(/[\u2018\u2019]/g, "'"); // Curly single quotes to straight
+}
+
 async function validateAndStoreQuotes(
   candidates: Array<{ text: string; reason: string }> | undefined,
   messages: Message[],
@@ -226,7 +232,9 @@ async function validateAndStoreQuotes(
     let found = false;
     for (const message of messages) {
       const msgText = getMessageText(message);
-      const start = msgText.indexOf(candidate.text);
+      const normalizedMsg = normalizeQuotes(msgText);
+      const normalizedQuote = normalizeQuotes(candidate.text);
+      const start = normalizedMsg.indexOf(normalizedQuote);
       if (start !== -1) {
         const end = start + candidate.text.length;
         
