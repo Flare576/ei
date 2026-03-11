@@ -35,7 +35,7 @@ import { exchangeCode } from '../../src/core/tools/builtin/pkce.js';
 import { SPOTIFY_CLIENT_ID, SPOTIFY_WEB_REDIRECT_URI, clearTokenCache } from '../../src/core/tools/builtin/spotify-auth.js';
 import { clearLikedSongsCache } from '../../src/core/tools/builtin/spotify-liked-songs.js';
 
-import "./styles/layout.css";
+import "./styles/index.css";
 import "./styles/entity-editor.css";
 import "./styles/onboarding.css";
 

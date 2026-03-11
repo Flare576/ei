@@ -1,0 +1,105 @@
+/* ============================================
+   BUTTONS
+   ============================================ */
+
+.ei-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ei-spacing-xs);
+  padding: var(--ei-spacing-sm) var(--ei-spacing-md);
+  border: none;
+  border-radius: var(--ei-radius-md);
+  font-family: var(--ei-font-family);
+  font-size: var(--ei-font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--ei-transition-fast);
+}
+
+.ei-btn--primary {
+  background: var(--ei-accent);
+  color: white;
+}
+
+.ei-btn--primary:hover {
+  background: var(--ei-accent-hover);
+}
+
+.ei-btn--secondary {
+  background: var(--ei-bg-tertiary);
+  color: var(--ei-text-primary);
+}
+
+.ei-btn--secondary:hover {
+  background: var(--ei-border);
+}
+
+.ei-btn--ghost {
+  background: transparent;
+  color: var(--ei-text-secondary);
+  border: 1px solid transparent;
+}
+
+.ei-btn--ghost:hover {
+  background: var(--ei-bg-tertiary);
+  color: var(--ei-text-primary);
+}
+
+.ei-btn--icon {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 13px;
+}
+
+.ei-ai-suggestion {
+  margin-top: var(--ei-spacing-sm);
+  padding: var(--ei-spacing-sm) var(--ei-spacing-md);
+  background: var(--ei-bg-secondary);
+  border: 1px solid var(--ei-accent);
+  border-left: 3px solid var(--ei-accent);
+  border-radius: var(--ei-radius-sm);
+}
+
+.ei-ai-suggestion__text {
+  font-size: var(--ei-font-size-sm);
+  color: var(--ei-text-primary);
+  white-space: pre-wrap;
+  margin-bottom: var(--ei-spacing-sm);
+}
+
+.ei-ai-suggestion__actions {
+  display: flex;
+  gap: var(--ei-spacing-xs);
+  flex-wrap: wrap;
+}
+.ei-btn--archive:hover {
+  background: linear-gradient(135deg, #fde8c8 0%, #fcd9a8 100%);
+  border: 1px solid #d4923a;
+  box-shadow: 0 2px 8px rgba(232, 168, 76, 0.25);
+}
+
+.ei-btn--danger {
+  background: var(--ei-danger);
+  color: white;
+}
+
+.ei-pause-btn.paused {
+  background: var(--ei-danger);
+  color: white;
+  animation: pause-pulse 1s ease-in-out infinite;
+}
+
+@keyframes pause-pulse {
+  0%, 100% { 
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% { 
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+}
+
+

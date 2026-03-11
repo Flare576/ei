@@ -1,0 +1,138 @@
+/* ============================================
+   MARKDOWN CONTENT
+   ============================================ */
+
+.ei-markdown {
+  line-height: 1.6;
+  word-wrap: break-word;
+}
+
+.ei-markdown p {
+  margin: 0 0 0.5em 0;
+}
+
+.ei-markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.ei-markdown strong {
+  font-weight: 600;
+}
+
+.ei-markdown em {
+  font-style: italic;
+}
+
+.ei-markdown u {
+  text-decoration: underline;
+}
+
+.ei-markdown del {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.ei-markdown a {
+  color: var(--ei-accent);
+  text-decoration: none;
+}
+
+.ei-markdown a:hover {
+  text-decoration: underline;
+}
+
+.ei-message.human .ei-markdown a {
+  color: rgba(255, 255, 255, 0.9);
+  text-decoration: underline;
+}
+
+.ei-markdown ul,
+.ei-markdown ol {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+
+.ei-markdown li {
+  margin: 0.25em 0;
+}
+
+.ei-code-inline {
+  background: var(--ei-bg-tertiary);
+  padding: 0.1em 0.4em;
+  border-radius: var(--ei-radius-sm);
+  font-family: var(--ei-font-mono);
+  font-size: 0.9em;
+}
+
+.ei-message.human .ei-code-inline {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.ei-pre {
+  margin: 0.5em 0;
+  padding: var(--ei-spacing-sm);
+  background: var(--ei-bg-tertiary);
+  border-radius: var(--ei-radius-md);
+  overflow-x: auto;
+}
+
+.ei-message.human .ei-pre {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.ei-code-block {
+  display: block;
+  font-family: var(--ei-font-mono);
+  font-size: 0.875em;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+.ei-markdown blockquote {
+  margin: 0.5em 0;
+  padding-left: var(--ei-spacing-md);
+  border-left: 3px solid var(--ei-border);
+  color: var(--ei-text-secondary);
+}
+
+.ei-message.human .ei-markdown blockquote {
+  border-left-color: rgba(255, 255, 255, 0.5);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.ei-markdown hr {
+  border: none;
+  border-top: 1px solid var(--ei-border);
+  margin: 1em 0;
+}
+
+.ei-markdown table {
+  border-collapse: collapse;
+  margin: 0.5em 0;
+  width: 100%;
+}
+
+.ei-markdown th,
+.ei-markdown td {
+  border: 1px solid var(--ei-border);
+  padding: var(--ei-spacing-xs) var(--ei-spacing-sm);
+  text-align: left;
+}
+
+.ei-markdown th {
+  background: var(--ei-bg-tertiary);
+  font-weight: 600;
+  color: var(--ei-text-primary);
+}
+
+.ei-message.human .ei-markdown th,
+.ei-message.human .ei-markdown td {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.ei-message.human .ei-markdown th {
+  background: rgba(0, 0, 0, 0.2);
+  color: white;
+}
+
+

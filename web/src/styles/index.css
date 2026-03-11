@@ -1,0 +1,30 @@
+/* Ei Web Styles - Component-based CSS split from monolithic layout.css */
+
+/* Base styles and variables (must be first) */
+@import './base.css';
+
+/* Main layout structure */
+@import './main.css';
+
+/* Component panels */
+@import './persona-panel.css';
+@import './chat-panel.css';
+@import './control-area.css';
+@import './input-area.css';
+
+/* UI elements */
+@import './buttons.css';
+@import './scrollbar.css';
+@import './markdown.css';
+
+/* Modals */
+@import './help-modal.css';
+@import './save-load-modal.css';
+@import './conflict-resolution-modal.css';
+@import './hamburger-menu.css';
+
+/* Features */
+@import './image-gen.css';
+
+/* Responsive (must be last to override) */
+@import './responsive.css';

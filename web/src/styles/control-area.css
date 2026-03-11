@@ -1,0 +1,70 @@
+/* ============================================
+   CONTROL AREA (Top-Right of Viewport)
+   ============================================ */
+
+.ei-control-area {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ei-spacing-sm);
+  padding: 0 var(--ei-spacing-md);
+  height: var(--ei-control-height);
+  background: var(--ei-bg-primary);
+  z-index: 100;
+}
+
+.ei-control-area__status {
+  display: flex;
+  align-items: center;
+  gap: var(--ei-spacing-sm);
+  font-size: var(--ei-font-size-sm);
+  color: var(--ei-text-secondary);
+}
+
+.ei-control-area__indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--ei-radius-full);
+  background: var(--ei-status-ready);
+}
+
+.ei-control-area__indicator.busy {
+  background: var(--ei-status-thinking);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.ei-control-area__indicator.paused {
+  background: var(--ei-danger);
+  animation: pulse 0.5s ease-in-out infinite;
+}
+
+.ei-control-area__indicator.waiting {
+  background: var(--ei-status-thinking);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.ei-control-area__indicator.saving {
+  background: var(--ei-warning);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.ei-control-area__dlq {
+  color: var(--ei-danger);
+  font-size: var(--ei-font-size-sm);
+  font-weight: 600;
+  margin-left: var(--ei-spacing-xs);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.ei-control-area__buttons {
+  display: flex;
+  gap: var(--ei-spacing-xs);
+}
+
