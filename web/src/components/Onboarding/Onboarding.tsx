@@ -95,7 +95,13 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
           enabled: true,
           created_at: new Date().toISOString(),
         };
-        setAccounts([localAccount]);
+        setAccounts(prev => {
+          // Deduplication check
+          if (prev.some(a => a.url === localAccount.url && a.type === localAccount.type)) {
+            return prev;
+          }
+          return [...prev, localAccount];
+        });
       } else {
         setLocalCheckResult('failed');
       }
@@ -107,7 +113,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
   }, [localUrl]);
 
   const checkComfyUI = useCallback(async () => {
-    setComfyCheckResult('pending');
+    // Removed setComfyCheckResult('pending') - was causing infinite re-triggers
 
     try {
       await fetch(comfyUrl, { mode: 'no-cors', cache: 'no-store' });
@@ -132,7 +138,13 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
           enabled: true,
           created_at: new Date().toISOString(),
         };
-        setAccounts(prev => [...prev, comfyAccount]);
+        setAccounts(prev => {
+          // Deduplication check
+          if (prev.some(a => a.url === comfyAccount.url && a.type === comfyAccount.type)) {
+            return prev;
+          }
+          return [...prev, comfyAccount];
+        });
       } else {
         setComfyCheckResult('failed');
       }
