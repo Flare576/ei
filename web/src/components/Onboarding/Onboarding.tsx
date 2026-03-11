@@ -32,6 +32,9 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
   const [isCheckingLocal, setIsCheckingLocal] = useState(false);
   const [localCheckResult, setLocalCheckResult] = useState<'pending' | 'success' | 'cors' | 'failed'>('pending');
 
+  const [comfyUrl] = useState('http://127.0.0.1:8000');
+  const [comfyCheckResult, setComfyCheckResult] = useState<'pending' | 'success' | 'cors' | 'failed'>('pending');
+
   const goToStep = (newStep: OnboardingStep) => {
     setStep(newStep);
   };
@@ -103,6 +106,41 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
     }
   }, [localUrl]);
 
+  const checkComfyUI = useCallback(async () => {
+    setComfyCheckResult('pending');
+
+    try {
+      await fetch(comfyUrl, { mode: 'no-cors', cache: 'no-store' });
+    } catch {
+      setComfyCheckResult('failed');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${comfyUrl}/system_stats`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (response.ok) {
+        setComfyCheckResult('success');
+        const comfyAccount: ProviderAccount = {
+          id: crypto.randomUUID(),
+          name: 'Local ComfyUI',
+          type: ProviderType.Image,
+          url: comfyUrl,
+          enabled: true,
+          created_at: new Date().toISOString(),
+        };
+        setAccounts(prev => [...prev, comfyAccount]);
+      } else {
+        setComfyCheckResult('failed');
+      }
+    } catch {
+      setComfyCheckResult('cors');
+    }
+  }, [comfyUrl]);
+
   const handleProviderSave = useCallback((account: ProviderAccount) => {
     setAccounts(prev => {
       const existing = prev.findIndex(a => a.id === account.id);
@@ -135,7 +173,10 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
     if (step === OnboardingStep.LocalLLMCheck && localCheckResult === 'pending') {
       checkLocalLLM();
     }
-  }, [step, localCheckResult, checkLocalLLM]);
+    if (step === OnboardingStep.LocalLLMCheck && comfyCheckResult === 'pending') {
+      checkComfyUI();
+    }
+  }, [step, localCheckResult, comfyCheckResult, checkLocalLLM, checkComfyUI]);
 
   const renderHero = () => (
     <>
@@ -347,6 +388,41 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
             </button>
           </div>
         </div>
+
+        {comfyCheckResult === 'success' && (
+          <div className="ei-onboarding__status ei-onboarding__status--success">
+            <div className="ei-onboarding__status-icon">✅</div>
+            <div>
+              <strong>Local Image Generator found!</strong>
+              <p>Wow! We detected a local AI image generator! You're all set to use Ei's image capabilities privately with your own hardware.</p>
+            </div>
+          </div>
+        )}
+
+        {comfyCheckResult === 'cors' && (
+          <div className="ei-onboarding__status ei-onboarding__status--warning">
+            <div className="ei-onboarding__status-icon">⚠️</div>
+            <div>
+              <strong>CORS Issue Detected</strong>
+              <p>
+                We found ComfyUI at that address, but browser security is blocking the connection.
+                Go to ComfyUI settings and enable CORS (*), then click Check again.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {comfyCheckResult === 'failed' && (
+          <div className="ei-onboarding__status ei-onboarding__status--info">
+            <div className="ei-onboarding__status-icon">ℹ️</div>
+            <div>
+              <strong>No local image generator detected</strong>
+              <p>
+                That's okay! You can set up ComfyUI later. Or skip image generation entirely.
+              </p>
+            </div>
+          </div>
+        )}
 
       </div>
 
