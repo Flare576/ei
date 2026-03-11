@@ -86,9 +86,6 @@ test.describe("Multi-Message Image Synthesis", () => {
     const imageModal = page.locator(".ei-image-preview-modal");
     await expect(imageModal).toBeVisible({ timeout: 5000 });
     
-    // Debug: Check if the modal received a synthesis message
-    const modalHTML = await imageModal.innerHTML();
-    console.log('Modal HTML:', modalHTML.slice(0, 500));
     
     const textarea = imageModal.locator("textarea");
     await expect(textarea).toBeVisible({ timeout: 3000 });
