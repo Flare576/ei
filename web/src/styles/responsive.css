@@ -1,0 +1,74 @@
+/* ============================================
+   RESPONSIVE - Mobile/Narrow Viewport
+   ============================================ */
+
+@media (max-width: 767px) {
+  .ei-app {
+    flex-direction: column;
+  }
+
+  .ei-control-area {
+    position: static;
+    order: -2;
+    width: 100%;
+    border-bottom: 1px solid var(--ei-border);
+  }
+
+  .ei-layout {
+    flex-direction: column;
+    order: -1;
+  }
+  
+  .ei-panel-left {
+    width: 100% !important;
+    max-width: none !important;
+    min-width: auto !important;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--ei-border);
+  }
+  
+  .ei-divider {
+    display: none;
+  }
+
+  .ei-chat-panel__header {
+    padding-right: var(--ei-spacing-md);
+  }
+  
+  /* Persona panel becomes dropdown */
+  .ei-persona-panel__list {
+    display: none;
+  }
+  
+  .ei-persona-panel.expanded .ei-persona-panel__list {
+    display: block;
+    max-height: 40vh;
+  }
+  
+  /* Show dropdown toggle */
+  .ei-persona-dropdown {
+    display: block;
+    padding: var(--ei-spacing-md);
+  }
+  
+  .ei-persona-dropdown__toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--ei-spacing-sm) var(--ei-spacing-md);
+    background: var(--ei-bg-primary);
+    border: 1px solid var(--ei-border);
+    border-radius: var(--ei-radius-md);
+    cursor: pointer;
+  }
+}
+
+@media (min-width: 768px) {
+  .ei-persona-dropdown {
+    display: none;
+  }
+}
+
+

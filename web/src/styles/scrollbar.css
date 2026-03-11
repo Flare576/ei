@@ -1,0 +1,26 @@
+/* ============================================
+   SCROLLBAR STYLING
+   ============================================ */
+
+.ei-chat-panel__messages::-webkit-scrollbar,
+.ei-persona-panel__list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.ei-chat-panel__messages::-webkit-scrollbar-track,
+.ei-persona-panel__list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ei-chat-panel__messages::-webkit-scrollbar-thumb,
+.ei-persona-panel__list::-webkit-scrollbar-thumb {
+  background: var(--ei-border);
+  border-radius: var(--ei-radius-full);
+}
+
+.ei-chat-panel__messages::-webkit-scrollbar-thumb:hover,
+.ei-persona-panel__list::-webkit-scrollbar-thumb:hover {
+  background: var(--ei-text-muted);
+}
+
+

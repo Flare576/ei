@@ -60,7 +60,7 @@ export function resolveModel(modelSpec?: string, accounts?: ProviderAccount[]): 
   if (accounts) {
     const searchName = provider || modelSpec; // If no ":", the whole spec might be an account name
     const matchingAccount = accounts.find(
-      (acc) => acc.name.toLowerCase() === searchName.toLowerCase() && acc.enabled
+      (acc) => acc.name.toLowerCase() === searchName.toLowerCase() && acc.enabled && acc.type === "llm"
     );
     if (matchingAccount) {
       // If bare account name was used, get model from account's default_model

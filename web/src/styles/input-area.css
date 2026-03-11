@@ -1,0 +1,86 @@
+/* ============================================
+   INPUT AREA
+   ============================================ */
+
+.ei-input-area {
+  position: relative;
+  display: flex;
+  gap: var(--ei-spacing-sm);
+  padding: var(--ei-spacing-md);
+  background: var(--ei-bg-primary);
+  border-top: 1px solid var(--ei-border);
+}
+
+.ei-input-area__controls {
+  position: absolute;
+  top: -12px;
+  right: 12px;
+  display: flex;
+  gap: var(--ei-spacing-xs);
+  z-index: 1;
+}
+
+.ei-boundary-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--ei-border);
+  border-radius: var(--ei-radius-sm);
+  background: var(--ei-bg-secondary);
+  color: var(--ei-text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all var(--ei-transition-fast);
+}
+
+.ei-boundary-btn:hover {
+  background: var(--ei-bg-tertiary);
+  color: var(--ei-text-primary);
+  border-color: var(--ei-accent);
+}
+
+.ei-input-area__textarea {
+  flex: 1;
+  min-height: var(--ei-input-min-height);
+  max-height: var(--ei-input-max-height);
+  padding: var(--ei-spacing-sm) var(--ei-spacing-md);
+  border: 1px solid var(--ei-border);
+  border-radius: var(--ei-radius-md);
+  font-family: var(--ei-font-family);
+  font-size: var(--ei-font-size-base);
+  resize: none;
+  outline: none;
+  transition: border-color var(--ei-transition-fast);
+}
+
+.ei-input-area__textarea:focus {
+  border-color: var(--ei-accent);
+}
+
+.ei-input-area__textarea:disabled {
+  background: var(--ei-bg-tertiary);
+  cursor: not-allowed;
+}
+
+.ei-input-area__send {
+  padding: var(--ei-spacing-sm) var(--ei-spacing-lg);
+  background: var(--ei-accent);
+  color: white;
+  border: none;
+  border-radius: var(--ei-radius-md);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--ei-transition-fast);
+  align-self: flex-end;
+}
+
+.ei-input-area__send:hover:not(:disabled) {
+  background: var(--ei-accent-hover);
+}
+
+.ei-input-area__send:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+

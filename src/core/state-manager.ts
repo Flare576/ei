@@ -247,6 +247,12 @@ export class StateManager {
     this.scheduleSave();
   }
 
+  messages_update(personaId: string, messageId: string, updates: Partial<Message>): boolean {
+    const result = this.personaState.messages_update(personaId, messageId, updates);
+    this.scheduleSave();
+    return result;
+  }
+
   messages_sort(personaId: string): void {
     this.personaState.messages_sort(personaId);
     this.scheduleSave();

@@ -121,6 +121,7 @@ The mock server detects request types by checking the system message content. Se
 | `persona-generation` | "helping create" + "persona" |
 | `response` | "you are ei" + "companion" |
 | `trait-extraction` | "analyzing a conversation to detect explicit requests" |
+| `image-synthesis` | "building an image generation prompt" |
 
 If your mock response isn't being used, the request type probably isn't matching. Check the actual prompt content against the detection patterns.
 
@@ -130,3 +131,142 @@ If your mock response isn't being used, the request type probably isn't matching
 2. **Set mock responses before navigation** (`loadCheckpoint` then `page.goto`)
 3. **Wait for specific elements**, not arbitrary timeouts
 4. **Clear mock state in beforeEach**: `mockServer.clearRequestHistory()`, `clearResponseOverrides()`, `clearResponseQueue()`
+
+## Multi-Message Synthesis Patterns
+
+The multi-message synthesis feature allows users to select multiple messages and generate an image from a synthesized prompt. This involves several specialized patterns:
+
+### Mock Server Setup for Image Synthesis
+
+Image synthesis requires BOTH LLM and ComfyUI mock responses:
+
+```typescript
+// 1. Set up LLM mock to return synthesis prompt
+mockServer.setResponseForType("image-synthesis", {
+  type: "fixed",
+  content: JSON.stringify({
+    image_prompt: "Dramatic mountain sunset with vibrant purple and orange sky"
+  })
+});
+
+// 2. ComfyUI endpoints are auto-mocked by mock-server.ts (lines 162-213)
+// - POST /prompt → returns {prompt_id: "uuid"}
+// - GET /history/:promptId → returns completion status
+// - GET /view?filename=X → returns 1x1 PNG
+```
+
+**Important**: Image synthesis prompts return ONLY `{image_prompt: "..."}`, NOT the standard `{should_respond, verbal_response, reason}` format.
+
+### Seeding Image Provider in Fixtures
+
+E2E tests need a configured image provider to generate images:
+
+```typescript
+await createMinimalCheckpoint(page, {
+  imageProviderUrl: mockServerUrl  // Points to mock server's ComfyUI endpoints
+});
+```
+
+This creates a mock image provider with:
+- `type: "image"`
+- `url: mockServerUrl` (e.g., `http://localhost:3001`)
+- `workflow_json`: Mock ComfyUI workflow
+- `enabled: true`
+
+### Synthesis Message Selectors
+
+Synthesis messages have special DOM structure:
+
+```typescript
+// ✅ CORRECT - Synthesis messages have .silence-reason on outer card
+const synthesisMessage = page.locator(".silence-reason").last();
+await expect(synthesisMessage).toBeVisible();
+await expect(synthesisMessage).toContainText("mountain sunset");
+
+// ✅ CORRECT - Normal messages DON'T have .silence-reason
+const normalMessages = page.locator(".ei-message:not(.silence-reason)");
+await expect(normalMessages).toHaveCount(2);
+```
+
+The `.silence-reason` class is applied to the outer `.ei-message` card (via `getMessageClasses()` in ChatPanel.tsx) when `msg._synthesis === true`.
+
+### Modal Variants
+
+Different modals have different selectors:
+
+```typescript
+// ❌ WRONG - Generic .ei-modal won't find specific modals
+await expect(page.locator(".ei-modal")).toBeVisible();
+
+// ✅ CORRECT - Use variant-specific classes
+await expect(page.locator(".ei-message-selector-modal")).toBeVisible();  // Message selector
+await expect(page.locator(".ei-image-preview-modal")).toBeVisible();     // Image preview
+```
+
+### Image Preview Modal Differences
+
+The modal shows different content for synthesis vs normal messages:
+
+**Synthesis messages** (editable prompt):
+```typescript
+const modal = page.locator(".ei-image-preview-modal");
+const textarea = modal.locator("textarea#prompt-edit");
+await expect(textarea).toBeVisible();
+await textarea.fill("Updated prompt");
+await textarea.blur();  // Triggers auto-save
+```
+
+**Normal messages** (read-only metadata):
+```typescript
+const modal = page.locator(".ei-image-preview-modal");
+
+// No textarea for normal messages
+await expect(modal.locator("textarea")).not.toBeVisible();
+
+// Metadata is in collapsible section
+await modal.locator(".ei-metadata-toggle").click();
+const metadata = modal.locator(".ei-image-preview__metadata");
+await expect(metadata).toContainText("Prompt:");
+```
+
+### Request Type Detection Debugging
+
+If synthesis messages aren't being created:
+
+1. **Check mock server recognizes request**:
+   ```typescript
+   const requests = mockServer.getRequestHistory();
+   console.log(`Received ${requests.length} requests`);
+   
+   // Check if any were detected as "image-synthesis"
+   for (const req of requests) {
+     const body = req.body as { messages?: Array<{content: string}> };
+     const systemMsg = body?.messages?.[0]?.content;
+     console.log(`System msg: ${systemMsg?.slice(0, 100)}...`);
+   }
+   ```
+
+2. **Verify detection pattern** in `mock-server.ts` line 283-286:
+   - Must contain: "building an image generation prompt"
+   - Detection is case-sensitive
+
+3. **Check response format**:
+   - Must be: `{image_prompt: "..."}`
+   - NOT: `{should_respond, verbal_response, reason}`
+
+### MessageImages State Structure
+
+After a bug fix in this implementation, `messageImages` stores both blob URL and generation metadata:
+
+```typescript
+// Current structure (after fix)
+messageImages: Record<string, {
+  blobUrl: string;
+  result: GenerationResult;  // Contains prompt, width, height, seed
+}>;
+
+// This allows metadata section to display in ImagePreviewModal
+// for both synthesis and normal messages
+```
+
+Tests should verify metadata persists across modal open/close cycles.

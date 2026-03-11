@@ -16,7 +16,7 @@ test.describe("Context Boundary", () => {
 
     await expect(page.locator("text=Hello! I'm Ei")).toBeVisible({ timeout: 10000 });
 
-    const boundaryBtn = page.locator(".ei-boundary-btn");
+    const boundaryBtn = page.locator(".ei-boundary-btn:not(.ei-image-prompt-btn)");
     await expect(boundaryBtn).toBeVisible();
     await expect(boundaryBtn).toHaveText("✦");
 
@@ -52,7 +52,7 @@ test.describe("Context Boundary", () => {
 
     await expect(page.locator("text=Hello! I'm Ei")).toBeVisible({ timeout: 10000 });
 
-    const boundaryBtn = page.locator(".ei-boundary-btn");
+    const boundaryBtn = page.locator(".ei-boundary-btn:not(.ei-image-prompt-btn)");
     await boundaryBtn.click();
     await expect(boundaryBtn).toHaveText("↩");
 

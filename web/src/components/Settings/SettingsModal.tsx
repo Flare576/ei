@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ProviderList } from '../Settings';
+import { ProviderList, ProviderEditor } from '../Settings';
 import { ToolkitList } from './ToolkitList';
 import { ToolkitEditor } from './ToolkitEditor';
 import type { ProviderAccount, SyncCredentials, ToolProvider, ToolDefinition } from '../../../../src/core/types';
@@ -56,6 +56,8 @@ export const SettingsModal = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [localAccounts, setLocalAccounts] = useState<ProviderAccount[]>(settings.accounts || []);
+  const [accountEditorOpen, setAccountEditorOpen] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<ProviderAccount | null>(null);
   const [toolkitEditorOpen, setToolkitEditorOpen] = useState(false);
   const [editingProvider, setEditingProvider] = useState<ToolProvider | null>(null);
   
@@ -97,9 +99,15 @@ export const SettingsModal = ({
     onUpdate({ [field]: value });
   }, [onUpdate]);
 
-  // ProviderEditor was removed; Add/Edit are no-ops until it is restored
-  const handleAccountAdd = useCallback(() => {}, []);
-  const handleAccountEdit = useCallback((_account: ProviderAccount) => {}, []); // eslint-disable-line @typescript-eslint/no-unused-vars
+  const handleAccountAdd = useCallback(() => {
+    setEditingAccount(null);
+    setAccountEditorOpen(true);
+  }, []);
+
+  const handleAccountEdit = useCallback((account: ProviderAccount) => {
+    setEditingAccount(account);
+    setAccountEditorOpen(true);
+  }, []);
 
   const handleAccountDelete = useCallback((id: string) => {
     const updated = localAccounts.filter(a => a.id !== id);
@@ -112,6 +120,22 @@ export const SettingsModal = ({
     setLocalAccounts(updated);
     onUpdate({ accounts: updated });
   }, [localAccounts, onUpdate]);
+
+  const handleAccountSave = useCallback((account: ProviderAccount) => {
+    const existing = localAccounts.find(a => a.id === account.id);
+    const updated = existing
+      ? localAccounts.map(a => a.id === account.id ? account : a)
+      : [...localAccounts, account];
+    setLocalAccounts(updated);
+    onUpdate({ accounts: updated });
+    setAccountEditorOpen(false);
+    setEditingAccount(null);
+  }, [localAccounts, onUpdate]);
+
+  const handleAccountEditorClose = useCallback(() => {
+    setAccountEditorOpen(false);
+    setEditingAccount(null);
+  }, []);
 
   const handleSyncSave = useCallback(() => {
     if (syncUsername.trim() && syncPassphrase.trim() && isCredentialsValid) {
@@ -255,6 +279,13 @@ export const SettingsModal = ({
                 onToggle={handleAccountToggle}
               />
             </section>
+
+            <ProviderEditor
+              isOpen={accountEditorOpen}
+              account={editingAccount}
+              onSave={handleAccountSave}
+              onClose={handleAccountEditorClose}
+            />
           </div>
         );
 

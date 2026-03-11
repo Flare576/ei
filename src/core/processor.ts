@@ -589,22 +589,42 @@ export class Processor {
     console.log(`[Processor ${this.instanceId}] stopped`);
   }
 
+  getStateManager(): StateManager {
+    return this.stateManager;
+  }
+
+  async pause(): Promise<void> {
+    console.log(`[Processor ${this.instanceId}] pause() called`);
+    this.running = false;
+    this.queueProcessor.abort();
+    this.importAbortController.abort();
+    if (this.openCodeImportInProgress) {
+      console.log(`[Processor ${this.instanceId}] Clearing openCodeImportInProgress flag`);
+      this.openCodeImportInProgress = false;
+    }
+    if (this.claudeCodeImportInProgress) {
+      console.log(`[Processor ${this.instanceId}] Clearing claudeCodeImportInProgress flag`);
+      this.claudeCodeImportInProgress = false;
+    }
+    await this.stateManager.flush();
+    console.log(`[Processor ${this.instanceId}] pause() complete (main loop stopped, state flushed)`);
+  }
+
+  async resume(): Promise<void> {
+    console.log(`[Processor ${this.instanceId}] resume() called`);
+    if (this.stopped) {
+      throw new Error(`Cannot resume a stopped processor (instanceId: ${this.instanceId})`);
+    }
+    this.importAbortController = new AbortController();
+    this.running = true;
+    this.runLoop();
+    console.log(`[Processor ${this.instanceId}] resume() complete (main loop restarted)`);
+  }
   async saveAndExit(): Promise<{ success: boolean; error?: string }> {
     console.log(`[Processor ${this.instanceId}] saveAndExit() called`);
     this.interface.onSaveAndExitStart?.();
 
-    this.queueProcessor.abort();
-    this.importAbortController.abort();
-    if (this.openCodeImportInProgress) {
-      console.log(`[Processor ${this.instanceId}] Aborting OpenCode import in progress`);
-      this.openCodeImportInProgress = false;
-    }
-    if (this.claudeCodeImportInProgress) {
-      console.log(`[Processor ${this.instanceId}] Aborting Claude Code import in progress`);
-      this.claudeCodeImportInProgress = false;
-    }
-
-    await this.stateManager.flush();
+    await this.pause();
 
     const human = this.stateManager.getHuman();
     const hasSyncCreds =
@@ -616,7 +636,7 @@ export class Processor {
 
       if (!result.success) {
         console.log(`[Processor ${this.instanceId}] Remote sync failed: ${result.error}`);
-        this.importAbortController = new AbortController();
+        await this.resume();
         this.interface.onSaveAndExitFinish?.();
         return { success: false, error: result.error };
       }
@@ -1206,6 +1226,16 @@ const toolNextSteps = new Set([
     const removed = await deleteMessages(this.stateManager, personaId, messageIds);
     this.interface.onMessageAdded?.(personaId);
     return removed;
+  }
+
+  async addMessageOnly(personaId: string, message: Message): Promise<void> {
+    this.stateManager.messages_append(personaId, message);
+    this.interface.onMessageAdded?.(personaId);
+  }
+
+  async updateMessage(personaId: string, messageId: string, updates: Partial<Message>): Promise<void> {
+    this.stateManager.messages_update(personaId, messageId, updates);
+    this.interface.onMessageAdded?.(personaId);
   }
 
   // ==========================================================================

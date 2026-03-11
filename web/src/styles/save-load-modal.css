@@ -1,0 +1,47 @@
+/* ============================================
+   SAVE/LOAD MODAL
+   ============================================ */
+
+.ei-save-modal {
+  background: var(--ei-bg-primary);
+  border-radius: var(--ei-radius-lg);
+  max-width: 400px;
+  width: 90%;
+  max-height: 85vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--ei-shadow-lg);
+  animation: modal-in 0.2s ease;
+}
+
+.ei-save-modal.disabled {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.ei-save-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--ei-spacing-md) var(--ei-spacing-lg);
+  border-bottom: 1px solid var(--ei-border);
+}
+
+.ei-save-modal__header h2 {
+  margin: 0;
+  font-size: var(--ei-font-size-lg);
+  font-weight: 600;
+}
+
+.ei-save-modal__content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--ei-spacing-lg);
+}
+
+.ei-modal-overlay--nested {
+  z-index: 1001;
+}
+
+

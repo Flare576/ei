@@ -21,6 +21,9 @@ export interface Message {
   r?: boolean;                 // tRait extraction completed
   p?: boolean;                 // Person extraction completed
   o?: boolean;                 // tOpic extraction completed
+  // Image generation fields (web-only, ephemeral)
+  _synthesis?: boolean;         // True if message was created by multi-message synthesis
+
 }
 
 export interface ChatMessage {

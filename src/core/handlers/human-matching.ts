@@ -27,9 +27,27 @@ export function handleHumanItemMatch(response: LLMResponse, state: StateManager)
   const candidateType = response.request.data.candidateType as DataItemType;
   const personaId = response.request.data.personaId as string;
   const personaDisplayName = response.request.data.personaDisplayName as string;
-  const analyzeFrom = response.request.data.analyze_from_timestamp as string | null;
+  const messageIdsToMark = response.request.data.message_ids_to_mark as string[] | undefined;
   const allMessages = state.messages_get(personaId);
-  const { messages_context, messages_analyze } = splitMessagesByTimestamp(allMessages, analyzeFrom);
+
+  let messages_context: Message[];
+  let messages_analyze: Message[];
+
+  if (messageIdsToMark && messageIdsToMark.length > 0) {
+    const messageIdSet = new Set(messageIdsToMark);
+    messages_analyze = allMessages.filter(m => messageIdSet.has(m.id));
+    const analyzeStartTime = messages_analyze[0]?.timestamp ?? '9999';
+    messages_context = allMessages.filter(m => 
+      !messageIdSet.has(m.id) && new Date(m.timestamp).getTime() < new Date(analyzeStartTime).getTime()
+    );
+  } else {
+    // Fallback to existing behavior
+    const analyzeFrom = response.request.data.analyze_from_timestamp as string | null;
+    const split = splitMessagesByTimestamp(allMessages, analyzeFrom);
+    messages_context = split.messages_context;
+    messages_analyze = split.messages_analyze;
+  }
+
   const context: ExtractionContext & { itemName: string; itemValue: string; itemCategory?: string } = {
     personaId,
     personaDisplayName,
@@ -212,6 +230,12 @@ export async function handleHumanItemUpdate(response: LLMResponse, state: StateM
   console.log(`[handleHumanItemUpdate] ${isNewItem ? "Created" : "Updated"} ${candidateType} "${result.name}"`);
 }
 
+function normalizeQuotes(text: string): string {
+  return text
+    .replace(/[\u201C\u201D]/g, '"')  // Curly double quotes to straight
+    .replace(/[\u2018\u2019]/g, "'"); // Curly single quotes to straight
+}
+
 async function validateAndStoreQuotes(
   candidates: Array<{ text: string; reason: string }> | undefined,
   messages: Message[],
@@ -226,7 +250,9 @@ async function validateAndStoreQuotes(
     let found = false;
     for (const message of messages) {
       const msgText = getMessageText(message);
-      const start = msgText.indexOf(candidate.text);
+      const normalizedMsg = normalizeQuotes(msgText);
+      const normalizedQuote = normalizeQuotes(candidate.text);
+      const start = normalizedMsg.indexOf(normalizedQuote);
       if (start !== -1) {
         const end = start + candidate.text.length;
         

@@ -1,0 +1,74 @@
+/* ============================================
+   MAIN LAYOUT
+   ============================================ */
+
+.ei-app {
+  position: relative;
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.ei-layout {
+  display: flex;
+  flex: 1;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Left Panel (Persona + Controls) */
+.ei-panel-left {
+  display: flex;
+  flex-direction: column;
+  width: var(--ei-panel-left-width);
+  min-width: var(--ei-panel-left-min);
+  max-width: var(--ei-panel-left-max);
+  height: 100%;
+  background: var(--ei-bg-secondary);
+  border-right: 1px solid var(--ei-border);
+  overflow-x: visible;
+  overflow-y: hidden;
+}
+
+/* Panel Divider (Resize Handle) */
+.ei-divider {
+  width: var(--ei-divider-width);
+  background: var(--ei-border);
+  cursor: col-resize;
+  flex-shrink: 0;
+  transition: background var(--ei-transition-fast);
+  position: relative;
+}
+
+.ei-divider:hover,
+.ei-divider.dragging {
+  background: var(--ei-accent);
+}
+
+.ei-divider::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+  height: 30px;
+  background: var(--ei-text-muted);
+  border-radius: var(--ei-radius-full);
+  opacity: 0;
+  transition: opacity var(--ei-transition-fast);
+}
+
+.ei-divider:hover::after {
+  opacity: 1;
+}
+
+/* Center Panel (Chat) */
+.ei-panel-center {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 300px;
+  height: 100%;
+  overflow: hidden;
+}

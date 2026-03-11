@@ -1,0 +1,137 @@
+/* ============================================
+   HELP MODAL
+   ============================================ */
+
+.ei-help-modal {
+  background: var(--ei-bg-primary);
+  border-radius: var(--ei-radius-lg);
+  max-width: 560px;
+  width: 90%;
+  max-height: 85vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--ei-shadow-lg);
+  animation: modal-in 0.2s ease;
+}
+
+.ei-help-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--ei-spacing-md) var(--ei-spacing-lg);
+  border-bottom: 1px solid var(--ei-border);
+}
+
+.ei-help-modal__header h2 {
+  margin: 0;
+  font-size: var(--ei-font-size-lg);
+  font-weight: 600;
+}
+
+.ei-help-modal__content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--ei-spacing-lg);
+}
+
+.ei-help-modal__footer {
+  display: flex;
+  gap: var(--ei-spacing-sm);
+  justify-content: flex-end;
+  padding: var(--ei-spacing-md) var(--ei-spacing-lg);
+  border-top: 1px solid var(--ei-border);
+  background: var(--ei-bg-secondary);
+}
+
+.ei-help-section {
+  margin-bottom: var(--ei-spacing-lg);
+}
+
+.ei-help-section:last-child {
+  margin-bottom: 0;
+}
+
+.ei-help-section h3 {
+  margin: 0 0 var(--ei-spacing-sm) 0;
+  font-size: var(--ei-font-size-base);
+  font-weight: 600;
+  color: var(--ei-text-primary);
+}
+
+/* Keyboard shortcuts */
+.ei-shortcut-list {
+  margin: 0;
+  padding: 0;
+}
+
+.ei-shortcut {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--ei-spacing-xs) 0;
+  border-bottom: 1px solid var(--ei-border-light);
+}
+
+.ei-shortcut:last-child {
+  border-bottom: none;
+}
+
+.ei-shortcut dt {
+  display: flex;
+  gap: var(--ei-spacing-xs);
+  align-items: center;
+}
+
+.ei-shortcut dd {
+  margin: 0;
+  color: var(--ei-text-secondary);
+  font-size: var(--ei-font-size-sm);
+}
+
+.ei-help-modal kbd {
+  display: inline-block;
+  padding: 2px 6px;
+  background: var(--ei-bg-tertiary);
+  border: 1px solid var(--ei-border);
+  border-radius: var(--ei-radius-sm);
+  font-family: var(--ei-font-mono);
+  font-size: 0.8em;
+  box-shadow: 0 1px 0 var(--ei-border);
+}
+
+/* Concepts list */
+.ei-concept-list {
+  margin: 0;
+  padding: 0;
+}
+
+.ei-concept-list dt {
+  font-weight: 600;
+  margin-top: var(--ei-spacing-sm);
+  color: var(--ei-text-primary);
+}
+
+.ei-concept-list dt:first-child {
+  margin-top: 0;
+}
+
+.ei-concept-list dd {
+  margin: var(--ei-spacing-xs) 0 0 0;
+  color: var(--ei-text-secondary);
+  font-size: var(--ei-font-size-sm);
+}
+
+/* Tips list */
+.ei-tips-list {
+  margin: 0;
+  padding-left: var(--ei-spacing-lg);
+}
+
+.ei-tips-list li {
+  margin: var(--ei-spacing-xs) 0;
+  color: var(--ei-text-secondary);
+  font-size: var(--ei-font-size-sm);
+}
+
+

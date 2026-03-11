@@ -312,6 +312,12 @@ interface Processor {
    * Human messages start as read=false and become read=true when the AI responds.
    */
   recallPendingMessages(personaId: string): Promise<string>;
+
+  /**
+   * Add a message to persona history without queueing response.
+   * Used for synthesis messages and other cases where no LLM response is needed.
+   */
+  addMessageOnly(personaId: string, message: Message): Promise<void>;
   
   // === Human Entity Operations ===
   

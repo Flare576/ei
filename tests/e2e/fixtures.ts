@@ -1,5 +1,6 @@
 import { test as base, expect, type TestInfo } from "@playwright/test";
 import { MockLLMServerImpl } from "./framework/mock-server.js";
+import { COMFY_PROMPT_TEMPLATE } from "../../src/core/types/entities.js";
 
 /** Base port - each worker gets BASE + parallelIndex */
 const BASE_PORT = 3001;
@@ -7,6 +8,7 @@ const BASE_PORT = 3001;
 export interface TestFixtures {
   mockServer: MockLLMServerImpl;
   mockServerUrl: string;
+  imageProviderUrl: string;
 }
 
 /** Get the port for a given parallel worker */
@@ -17,6 +19,11 @@ export function getPortForWorker(testInfo: TestInfo): number {
 /** Get the mock server URL for a given parallel worker */
 export function getUrlForWorker(testInfo: TestInfo): string {
   return `http://localhost:${getPortForWorker(testInfo)}/v1`;
+}
+
+/** Get the image provider URL for a given parallel worker (ComfyUI endpoints are at root, not /v1) */
+export function getImageProviderUrlForWorker(testInfo: TestInfo): string {
+  return `http://localhost:${getPortForWorker(testInfo)}`;
 }
 
 /**
@@ -52,6 +59,9 @@ export const test = base.extend<TestFixtures>({
   },
   mockServerUrl: async ({}, use, testInfo) => {
     await use(getUrlForWorker(testInfo));
+  },
+  imageProviderUrl: async ({}, use, testInfo) => {
+    await use(getImageProviderUrlForWorker(testInfo));
   },
 });
 
@@ -161,10 +171,33 @@ export interface MinimalCheckpoint {
   settings: Record<string, never>;
 }
 
+export interface MinimalCheckpointOptions {
+  mockServerUrl: string;
+  messages?: Array<{ role: string; verbal_response: string }>;
+  imageProviderUrl?: string;
+  imageWorkflow?: any;
+}
+
 export function createMinimalCheckpoint(
-  mockServerUrl: string,
-  messages: Array<{ role: string; verbal_response: string }> = [{ role: "assistant", verbal_response: DEFAULT_WELCOME_MESSAGE }]
+  optionsOrUrl: MinimalCheckpointOptions | string,
+  messages: Array<{ role: string; verbal_response: string }> = [{ role: "assistant", verbal_response: DEFAULT_WELCOME_MESSAGE }],
+  imageProviderUrl?: string
 ): MinimalCheckpoint {
+  // Handle both old signature (url, messages, imageProviderUrl) and new object signature
+  let mockServerUrl: string;
+  let workflow = COMFY_PROMPT_TEMPLATE;
+  
+  if (typeof optionsOrUrl === "string") {
+    // Old signature: (mockServerUrl, messages, imageProviderUrl)
+    mockServerUrl = optionsOrUrl;
+  } else {
+    // New signature: ({ mockServerUrl, messages?, imageProviderUrl?, imageWorkflow? })
+    mockServerUrl = optionsOrUrl.mockServerUrl;
+    messages = optionsOrUrl.messages || messages;
+    imageProviderUrl = optionsOrUrl.imageProviderUrl;
+    workflow = optionsOrUrl.imageWorkflow ?? COMFY_PROMPT_TEMPLATE;
+  }
+  
   const timestamp = new Date().toISOString();
   return {
     version: 1,
@@ -190,7 +223,15 @@ export function createMinimalCheckpoint(
           default_model: "mock-model",
           enabled: true,
           created_at: timestamp,
-        }],
+        }, ...(imageProviderUrl ? [{
+          id: "mock-image-account",
+          name: "Test Image Provider",
+          type: "image",
+          url: imageProviderUrl,
+          workflow_json: workflow,
+          enabled: true,
+          created_at: timestamp,
+        }] : [])],
       },
     },
     personas: {
@@ -230,10 +271,11 @@ export function createMinimalCheckpoint(
  */
 export async function seedCheckpoint(
   page: import("@playwright/test").Page,
-  mockServerUrl: string,
-  messages: Array<{ role: string; verbal_response: string }> = [{ role: "assistant", verbal_response: DEFAULT_WELCOME_MESSAGE }]
+  optionsOrUrl: MinimalCheckpointOptions | string,
+  messages: Array<{ role: string; verbal_response: string }> = [{ role: "assistant", verbal_response: DEFAULT_WELCOME_MESSAGE }],
+  imageProviderUrl?: string
 ) {
-  const state = createMinimalCheckpoint(mockServerUrl, messages);
+  const state = createMinimalCheckpoint(optionsOrUrl, messages, imageProviderUrl);
   await page.addInitScript(
     ({ key, data }) => {
       localStorage.clear();

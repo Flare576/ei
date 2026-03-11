@@ -126,6 +126,16 @@ export class PersonaState {
     data.entity.last_updated = new Date().toISOString();
   }
 
+  messages_update(personaId: string, messageId: string, updates: Partial<Message>): boolean {
+    const data = this.personas.get(personaId);
+    if (!data) return false;
+    const msg = data.messages.find((m) => m.id === messageId);
+    if (!msg) return false;
+    Object.assign(msg, updates);
+    data.entity.last_updated = new Date().toISOString();
+    return true;
+  }
+
   messages_sort(personaId: string): void {
     const data = this.personas.get(personaId);
     if (!data) return;

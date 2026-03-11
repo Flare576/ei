@@ -1,0 +1,96 @@
+/* EI Layout System
+ * 3-panel layout: Persona (left), Chat (center), with Controls at top of left panel
+ * Responsive: collapses to single column with dropdown on narrow viewports
+ */
+
+:root {
+  /* Colors - Light theme */
+  --ei-bg-primary: #ffffff;
+  --ei-bg-secondary: #f8f9fa;
+  --ei-bg-tertiary: #e9ecef;
+  --ei-text-primary: #212529;
+  --ei-text-secondary: #6c757d;
+  --ei-text-muted: #adb5bd;
+  --ei-border: #dee2e6;
+  --ei-border-light: #e9ecef;
+  
+  /* Accent colors */
+  --ei-accent: #007bff;
+  --ei-accent-hover: #0056b3;
+  --ei-success: #28a745;
+  --ei-warning: #ffc107;
+  --ei-danger: #dc3545;
+  
+  /* Status colors */
+  --ei-status-thinking: #ffc107;
+  --ei-status-ready: #28a745;
+  --ei-status-unread: #dc3545;
+  --ei-status-paused: #6c757d;
+  
+  /* Layout dimensions */
+  --ei-panel-left-width: 280px;
+  --ei-panel-left-min: 200px;
+  --ei-panel-left-max: 400px;
+  --ei-control-height: 60px;
+  --ei-input-min-height: 44px;
+  --ei-input-max-height: 33vh;
+  --ei-divider-width: 4px;
+  
+  /* Spacing */
+  --ei-spacing-xs: 4px;
+  --ei-spacing-sm: 8px;
+  --ei-spacing-md: 16px;
+  --ei-spacing-lg: 24px;
+  --ei-spacing-xl: 32px;
+  
+  /* Typography */
+  --ei-font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji";
+  --ei-font-mono: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  --ei-font-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Android Emoji", "EmojiSymbols", sans-serif;
+  --ei-font-size-sm: 0.875rem;
+  --ei-font-size-base: 1rem;
+  --ei-font-size-lg: 1.125rem;
+  
+  /* Borders */
+  --ei-radius-sm: 4px;
+  --ei-radius-md: 8px;
+  --ei-radius-lg: 12px;
+  --ei-radius-full: 9999px;
+  
+  /* Shadows */
+  --ei-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --ei-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+  --ei-shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+  
+  /* Transitions */
+  --ei-transition-fast: 150ms ease;
+  --ei-transition-normal: 250ms ease;
+}
+
+/* Dark theme - ready for future use */
+[data-theme="dark"] {
+  --ei-bg-primary: #1a1a1a;
+  --ei-bg-secondary: #2d2d2d;
+  --ei-bg-tertiary: #3d3d3d;
+  --ei-text-primary: #e9ecef;
+  --ei-text-secondary: #adb5bd;
+  --ei-text-muted: #6c757d;
+  --ei-border: #404040;
+  --ei-border-light: #333333;
+}
+
+/* Reset & Base */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--ei-font-family);
+  font-size: var(--ei-font-size-base);
+  color: var(--ei-text-primary);
+  background: var(--ei-bg-primary);
+  line-height: 1.5;
+}
+
