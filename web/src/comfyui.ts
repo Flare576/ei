@@ -108,16 +108,35 @@ async function introspectWorkflow(url: string, workflow: any): Promise<{ nodeId:
     
     const objectInfo = await response.json();
     
-    // Search workflow nodes for STRING inputs
+    // Priority 1: Look for CLIPTextEncode nodes (the correct prompt node)
     for (const [nodeId, nodeData] of Object.entries(workflow)) {
       if (typeof nodeData !== "object" || !nodeData || !nodeData.class_type) continue;
+      
+      if (nodeData.class_type === "CLIPTextEncode") {
+        const nodeSchema = objectInfo[nodeData.class_type];
+        if (!nodeSchema?.input?.required) continue;
+        
+        for (const [fieldName, fieldSchema] of Object.entries(nodeSchema.input.required)) {
+          const schema = fieldSchema as any;
+          if (Array.isArray(schema) && schema[0] === "STRING") {
+            return { nodeId, fieldName };
+          }
+        }
+      }
+    }
+    
+    // Priority 2: Fall back to any other STRING input (excluding SaveImage)
+    for (const [nodeId, nodeData] of Object.entries(workflow)) {
+      if (typeof nodeData !== "object" || !nodeData || !nodeData.class_type) continue;
+      
+      // SKIP SaveImage nodes - they have STRING inputs but shouldn't receive prompts
+      if (nodeData.class_type === "SaveImage") continue;
       
       const classType = nodeData.class_type;
       const nodeSchema = objectInfo[classType];
       
       if (!nodeSchema?.input?.required) continue;
       
-      // Find first STRING input
       for (const [fieldName, fieldSchema] of Object.entries(nodeSchema.input.required)) {
         const schema = fieldSchema as any;
         if (Array.isArray(schema) && schema[0] === "STRING") {
@@ -125,7 +144,6 @@ async function introspectWorkflow(url: string, workflow: any): Promise<{ nodeId:
         }
       }
     }
-    
     return null;
   } catch (error) {
     console.error("Introspection failed:", error);
@@ -133,6 +151,17 @@ async function introspectWorkflow(url: string, workflow: any): Promise<{ nodeId:
   }
 }
 
+/**
+ * Sanitize prompt text for use as filename prefix
+ * Truncates to 50 chars, replaces non-alphanumeric with underscore, prefixes with 'ei_'
+ */
+function sanitizeFilename(prompt: string): string {
+  return 'ei_' + prompt
+    .slice(0, 50)
+    .replace(/[^a-z0-9_-]/gi, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '');
+}
 /**
  * Generate an image using ComfyUI
  * 
@@ -166,6 +195,15 @@ export async function generateImage(
     throw new Error(`Invalid workflow: node ${promptNode.nodeId} missing inputs`);
   }
   workflow[promptNode.nodeId].inputs[promptNode.fieldName] = prompt;
+  
+  // Set sanitized filename_prefix on SaveImage node (prevents >400 char filenames)
+  for (const [nodeId, nodeData] of Object.entries(workflow)) {
+    if (typeof nodeData === "object" && nodeData && nodeData.class_type === "SaveImage") {
+      if (nodeData.inputs) {
+        nodeData.inputs.filename_prefix = sanitizeFilename(prompt);
+      }
+    }
+  }
   
   // Inject dimensions (node "57:13")
   if (options.width && workflow["57:13"]?.inputs) {
