@@ -189,6 +189,7 @@ export async function callLLMRaw(
     model,
     messages: finalMessages,
     temperature,
+    max_tokens: 64000,  // Opus 4: 128K max output, 200K total context. Local models clamp to their config. Prevents runaway generation.
   };
 
   if (options.tools && options.tools.length > 0) {
