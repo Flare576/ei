@@ -10,6 +10,7 @@ import {
   type ExtractionOptions,
 } from "./human-extraction.js";
 import { queuePersonaTopicScan, type PersonaTopicContext } from "./persona-topics.js";
+import { queueDedupPhase } from "./dedup-phase.js";
 import { buildPersonaExpirePrompt, buildPersonaExplorePrompt, buildDescriptionCheckPrompt, buildRewriteScanPrompt, type RewriteItemType } from "../../prompts/ceremony/index.js";
 
 export function isNewDay(lastCeremony: string | undefined, now: Date): boolean {
@@ -69,40 +70,19 @@ export function startCeremony(state: StateManager): void {
     },
   });
   
-  const personas = state.persona_getAll();
-  const activePersonas = personas.filter(p => 
-    !p.is_paused && 
-    !p.is_archived && 
-    !p.is_static
-  );
+  // PHASE 1: Deduplication (runs BEFORE Expose)
+  console.log("[ceremony] Starting Phase 1: Deduplication");
+  queueDedupPhase(state);
   
-  const lastCeremony = human.settings?.ceremony?.last_ceremony 
-    ? new Date(human.settings.ceremony.last_ceremony).getTime() 
-    : 0;
-  
-  const personasWithActivity = activePersonas.filter(p => {
-    const lastActivity = p.last_activity ? new Date(p.last_activity).getTime() : 0;
-    return lastActivity > lastCeremony;
-  });
-  
-  console.log(`[ceremony] Processing ${personasWithActivity.length} personas with activity (of ${activePersonas.length} active)`);
-  
-  const options: ExtractionOptions = { ceremony_progress: true };
-  
-  for (let i = 0; i < personasWithActivity.length; i++) {
-    const persona = personasWithActivity[i];
-    const isLast = i === personasWithActivity.length - 1;
-    
-    console.log(`[ceremony] Queuing exposure for ${persona.display_name} (${i + 1}/${personasWithActivity.length})${isLast ? " (last)" : ""}`);
-    queueExposurePhase(persona.id, state, options);
+  // Check if dedup work was queued
+  if (!state.queue_hasPendingCeremonies()) {
+    // No dedup work found → immediately advance to Expose phase
+    console.log("[ceremony] No dedup work, advancing to Expose phase");
+    handleCeremonyProgress(state, 1);
   }
   
   const duration = Date.now() - startTime;
-  console.log(`[ceremony] Exposure phase queued in ${duration}ms`);
-  
-  // Check immediately — if zero messages were queued (no unextracted messages for any persona),
-  // this will see an empty queue and proceed directly to Decay → Expire.
-  handleCeremonyProgress(state);
+  console.log(`[ceremony] Dedup phase queued in ${duration}ms`);
 }
 
 /**
@@ -193,11 +173,40 @@ function queueExposurePhase(personaId: string, state: StateManager, options?: Ex
  * If any ceremony_progress items remain in the queue, does nothing — more work pending.
  * If the queue is clear of ceremony items, advances to Decay → Prune → Expire.
  */
-export function handleCeremonyProgress(state: StateManager): void {
+export function handleCeremonyProgress(state: StateManager, lastPhase: number): void {
   if (state.queue_hasPendingCeremonies()) {
-    return; // Still processing exposure scans
+    return; // Still processing ceremony items
   }
   
+  if (lastPhase === 1) {
+    // Dedup phase complete → start Expose phase
+    console.log("[ceremony:progress] Dedup complete, starting Expose phase");
+    
+    const human = state.getHuman();
+    const personas = state.persona_getAll();
+    const activePersonas = personas.filter(p => 
+      !p.is_paused && 
+      !p.is_archived && 
+      !p.is_static
+    );
+    
+    const lastCeremony = human.settings?.ceremony?.last_ceremony 
+      ? new Date(human.settings.ceremony.last_ceremony).getTime() 
+      : 0;
+    
+    const personasWithActivity = activePersonas.filter(p => {
+      const lastActivity = p.last_activity ? new Date(p.last_activity).getTime() : 0;
+      return lastActivity > lastCeremony;
+    });
+    
+    const options: ExtractionOptions = { ceremony_progress: 2 };
+    for (const persona of personasWithActivity) {
+      queueExposurePhase(persona.id, state, options);
+    }
+    return;
+  }
+  
+  // Phase 2 (Expose) complete → advance to Decay/Prune/Expire/Explore
   console.log("[ceremony:progress] All exposure scans complete, advancing to Decay");
   
   const personas = state.persona_getAll();
@@ -215,7 +224,6 @@ export function handleCeremonyProgress(state: StateManager): void {
   if (eiIndex > -1) {
     activePersonas.splice(eiIndex, 1);
   }
-  
   // Decay phase: apply decay + prune for ALL active personas
   for (const persona of activePersonas) {
     applyDecayPhase(persona.id, state);

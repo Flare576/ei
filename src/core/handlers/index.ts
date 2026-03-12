@@ -17,6 +17,7 @@ import {
 import { handleHumanFactScan, handleHumanTraitScan, handleHumanTopicScan, handleHumanPersonScan } from "./human-extraction.js";
 import { handleHumanItemMatch, handleHumanItemUpdate } from "./human-matching.js";
 import { handleRewriteScan, handleRewriteRewrite } from "./rewrite.js";
+import { handleDedupCurate } from "./dedup.js";
 
 export const handlers: Record<LLMNextStep, ResponseHandler> = {
   handlePersonaResponse,
@@ -41,4 +42,5 @@ export const handlers: Record<LLMNextStep, ResponseHandler> = {
   handleToolContinuation,
   handleRewriteScan,
   handleRewriteRewrite,
+  handleDedupCurate,
 };

@@ -53,6 +53,7 @@ export enum LLMNextStep {
   HandleToolContinuation = "handleToolContinuation",
   HandleRewriteScan = "handleRewriteScan",
   HandleRewriteRewrite = "handleRewriteRewrite",
+  HandleDedupCurate = "handleDedupCurate",
 }
 
 export enum ProviderType {

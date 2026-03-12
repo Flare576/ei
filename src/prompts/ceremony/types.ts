@@ -95,3 +95,48 @@ export interface RewriteResult {
     category?: string;
   }>;
 }
+
+// =============================================================================
+// DEDUP (Duplicate Entity Merge)
+// =============================================================================
+
+/** Input: cluster of potentially duplicate entities to curate. */
+export interface DedupPromptData {
+  cluster: DataItemBase[];  // 2+ items with 0.90+ cosine similarity
+  itemType: RewriteItemType;
+  similarityRange: { min: number; max: number };  // e.g., { min: 0.90, max: 0.98 }
+}
+
+/** Output: merge decisions (update/remove/add). */
+export interface DedupResult {
+  update: Array<{
+    id: string;
+    type: RewriteItemType;
+    name: string;
+    description: string;
+    sentiment?: number;
+    strength?: number;
+    confidence?: number;
+    exposure_current?: number;
+    exposure_desired?: number;
+    relationship?: string;
+    category?: string;
+    last_updated?: string;
+  }>;
+  remove: Array<{
+    to_be_removed: string;  // UUID of duplicate
+    replaced_by: string;    // UUID of canonical record
+  }>;
+  add: Array<{
+    type: RewriteItemType;
+    name: string;
+    description: string;
+    sentiment?: number;
+    strength?: number;
+    confidence?: number;
+    exposure_current?: number;
+    exposure_desired?: number;
+    relationship?: string;
+    category?: string;
+  }>;
+}

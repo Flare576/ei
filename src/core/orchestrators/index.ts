@@ -19,8 +19,8 @@ export {
   queueExplorePhase,
   queueDescriptionCheck,
   runHumanCeremony,
-  queueRewritePhase,
-} from "./ceremony.js";
+  } from "./ceremony.js";
+export { queueDedupPhase } from "./dedup-phase.js";
 export {
   queuePersonaTopicScan,
   queuePersonaTopicMatch,
