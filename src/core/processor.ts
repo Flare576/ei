@@ -715,14 +715,23 @@ const toolNextSteps = new Set([
   LLMNextStep.HandleHeartbeatCheck,
   LLMNextStep.HandleEiHeartbeat,
   LLMNextStep.HandleToolContinuation,
+  LLMNextStep.HandleDedupCurate,
 ]);
             const toolPersonaId =
               personaId ??
               (request.next_step === LLMNextStep.HandleEiHeartbeat ? "ei" : undefined);
-            const tools =
-              toolNextSteps.has(request.next_step) && toolPersonaId
-                ? this.stateManager.tools_getForPersona(toolPersonaId, this.isTUI)
-                : [];
+            
+            // Dedup operates on Human data, not persona data - provide read_memory directly
+            let tools: ToolDefinition[] = [];
+            if (request.next_step === LLMNextStep.HandleDedupCurate) {
+              const readMemory = this.stateManager.tools_getByName("read_memory");
+              if (readMemory?.enabled) {
+                tools = [readMemory];
+              }
+            } else if (toolNextSteps.has(request.next_step) && toolPersonaId) {
+              tools = this.stateManager.tools_getForPersona(toolPersonaId, this.isTUI);
+            }
+            
             console.log(
               `[Tools] Dispatch for ${request.next_step} persona=${toolPersonaId ?? "none"}: ${tools.length} tool(s) attached`
             );
