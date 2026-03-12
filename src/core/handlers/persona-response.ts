@@ -1,10 +1,12 @@
 import {
   ContextStatus,
+  LLMNextStep,
   type LLMResponse,
   type Message,
 } from "../types.js";
 import type { StateManager } from "../state-manager.js";
 import type { PersonaResponseResult } from "../../prompts/response/index.js";
+import { handlers } from "./index.js";
 
 export type ResponseHandler = (response: LLMResponse, state: StateManager) => void | Promise<void>;
 
@@ -87,11 +89,35 @@ export function handlePersonaResponse(response: LLMResponse, state: StateManager
 /**
  * handleToolContinuation — second LLM call in the tool flow (may loop if LLM calls more tools).
  * The QueueProcessor already injected tool history into messages and got the
- * final persona response. Parse and store it exactly like handlePersonaResponse.
+ * final persona response. Route to the original handler based on originalNextStep in data.
  */
 export function handleToolContinuation(response: LLMResponse, state: StateManager): void {
-  console.log(`[handleToolContinuation] Routing to handlePersonaResponse`);
-  handlePersonaResponse(response, state);
+  const originalStep = response.request.data.originalNextStep as LLMNextStep | undefined;
+  
+  if (!originalStep) {
+    console.error(`[handleToolContinuation] No originalNextStep in data, falling back to handlePersonaResponse`);
+    handlePersonaResponse(response, state);
+    return;
+  }
+  
+  console.log(`[handleToolContinuation] Original request was ${originalStep}, routing accordingly`);
+  
+  const handler = handlers[originalStep];
+  
+  if (!handler) {
+    console.error(`[handleToolContinuation] No handler found for ${originalStep}, falling back to handlePersonaResponse`);
+    handlePersonaResponse(response, state);
+    return;
+  }
+  
+  // Avoid infinite loop - if original was already HandleToolContinuation, go to PersonaResponse
+  if (originalStep === "handleToolContinuation") {
+    console.log(`[handleToolContinuation] Original was tool continuation, routing to handlePersonaResponse`);
+    handlePersonaResponse(response, state);
+    return;
+  }
+  
+  handler(response, state);
 }
 
 export function handleOneShot(_response: LLMResponse, _state: StateManager): void {
