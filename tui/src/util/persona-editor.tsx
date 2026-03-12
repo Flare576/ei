@@ -80,12 +80,12 @@ export async function createPersonaViaEditor(options: NewPersonaEditorOptions): 
       logger.debug("[persona-editor] YAML parse error in new persona", { error: errorMsg });
       
       const shouldReEdit = await new Promise<boolean>((resolve) => {
-        ctx.showOverlay((hideOverlay) => (
+        ctx.showOverlay((hideOverlay, hideForEditor) => (
           <ConfirmOverlay
             message={`YAML parse error:\n${errorMsg}\n\nRe-edit?`}
             onConfirm={() => {
               logger.debug("[persona-editor] user confirmed re-edit (new)");
-              hideOverlay();
+              hideForEditor();
               resolve(true);
             }}
             onCancel={() => {
@@ -94,12 +94,11 @@ export async function createPersonaViaEditor(options: NewPersonaEditorOptions): 
               resolve(false);
             }}
           />
-        ));
+        ), ctx.renderer);
       });
       
       if (shouldReEdit) {
         yamlContent = result.content;
-        await new Promise(r => setTimeout(r, 50));
         continue;
       } else {
         ctx.showNotification("Creation cancelled", "info");
@@ -155,12 +154,12 @@ export async function openPersonaEditor(options: PersonaEditorOptions): Promise<
       logger.debug("[persona-editor] YAML parse error", { error: errorMsg });
       
       const shouldReEdit = await new Promise<boolean>((resolve) => {
-        ctx.showOverlay((hideOverlay) => (
+        ctx.showOverlay((hideOverlay, hideForEditor) => (
           <ConfirmOverlay
             message={`YAML parse error:\n${errorMsg}\n\nRe-edit?`}
             onConfirm={() => {
               logger.debug("[persona-editor] user confirmed re-edit");
-              hideOverlay();
+              hideForEditor();
               resolve(true);
             }}
             onCancel={() => {
@@ -169,12 +168,11 @@ export async function openPersonaEditor(options: PersonaEditorOptions): Promise<
               resolve(false);
             }}
           />
-        ));
+        ), ctx.renderer);
       });
       
       if (shouldReEdit) {
         yamlContent = result.content;
-        await new Promise(r => setTimeout(r, 50));
         continue;
       } else {
         ctx.showNotification("Changes discarded", "info");

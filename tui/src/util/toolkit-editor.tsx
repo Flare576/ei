@@ -55,11 +55,11 @@ export async function openToolkitEditor(
       logger.debug("[toolkit-editor] YAML parse error", { error: errorMsg });
 
       const shouldReEdit = await new Promise<boolean>((resolve) => {
-        ctx.showOverlay((hideOverlay) => (
+        ctx.showOverlay((hideOverlay, hideForEditor) => (
           <ConfirmOverlay
             message={`YAML parse error:\n${errorMsg}\n\nRe-edit?`}
             onConfirm={() => {
-              hideOverlay();
+              hideForEditor();
               resolve(true);
             }}
             onCancel={() => {
@@ -67,12 +67,11 @@ export async function openToolkitEditor(
               resolve(false);
             }}
           />
-        ));
+        ), ctx.renderer);
       });
 
       if (shouldReEdit) {
         yamlContent = result.content;
-        await new Promise(r => setTimeout(r, 50));
         continue;
       } else {
         ctx.showNotification("Changes discarded", "info");
