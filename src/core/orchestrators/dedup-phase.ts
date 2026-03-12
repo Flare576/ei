@@ -127,6 +127,13 @@ function filterClusters(clusters: Cluster[]): Cluster[] {
 
 export function queueDedupPhase(state: StateManager): void {
   const human = state.getHuman();
+  const rewriteModel = human.settings?.rewrite_model;
+  
+  if (!rewriteModel) {
+    console.log("[Dedup] rewrite_model not set — skipping dedup phase");
+    return;
+  }
+  
   const threshold = human.settings?.ceremony?.dedup_threshold ?? DEDUP_DEFAULT_THRESHOLD;
   
   console.log(`[Dedup] Starting deduplication phase (threshold: ${threshold})`);
@@ -183,13 +190,13 @@ export function queueDedupPhase(state: StateManager): void {
         system: prompt.system,
         user: prompt.user,
         next_step: LLMNextStep.HandleDedupCurate,
+        model: rewriteModel,
         data: {
           entity_type: type,
-          entity_ids: cluster.ids,  // Lightweight stub (IDs only)
-          ceremony_progress: 1  // Phase 1 (Dedup)
+          entity_ids: cluster.ids,
+          ceremony_progress: 1
         }
       });
-      
       totalClusters++;
     }
   }
