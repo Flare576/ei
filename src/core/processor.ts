@@ -1093,8 +1093,8 @@ const toolNextSteps = new Set([
         this.interface.onHumanUpdated?.();
       }
 
-      if (response.request.data.ceremony_progress) {
-        handleCeremonyProgress(this.stateManager);
+      if (typeof response.request.data.ceremony_progress === "number") {
+        handleCeremonyProgress(this.stateManager, response.request.data.ceremony_progress);
       }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);

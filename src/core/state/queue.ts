@@ -190,7 +190,7 @@ export class QueueState {
   }
 
   hasPendingCeremonies(): boolean {
-    return this.queue.some(r => r.state !== "dlq" && r.data.ceremony_progress === true);
+    return this.queue.some(r => r.state !== "dlq" && typeof r.data.ceremony_progress === "number" && r.data.ceremony_progress > 0);
   }
 
   clear(): number {

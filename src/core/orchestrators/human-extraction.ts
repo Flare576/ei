@@ -28,7 +28,8 @@ export interface ExtractionContext {
 }
 
 export interface ExtractionOptions {
-  ceremony_progress?: boolean;
+  /** Ceremony phase number (1=Dedup, 2=Expose) */
+  ceremony_progress?: number;
 }
 
 function getAnalyzeFromTimestamp(context: ExtractionContext): string | null {

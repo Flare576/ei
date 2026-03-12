@@ -248,7 +248,13 @@ export class QueueProcessor {
     // =========================================================================
     const activeTools = this.currentTools ?? [];
     const openAITools = activeTools.length > 0 ? toOpenAITools(activeTools) : [];
-    console.log(`[QueueProcessor] LLM call for ${request.next_step}, tools=${openAITools.length}`);
+    const isHeartbeat = request.next_step === LLMNextStep.HandleHeartbeatCheck || request.next_step === LLMNextStep.HandleEiHeartbeat;
+    if (isHeartbeat) {
+      const personaName = request.data.personaDisplayName as string | undefined ?? 'Ei';
+      console.log(`[${personaName} Heartbeat] LLM call - tools offered: ${openAITools.length} (${activeTools.map(t => t.name).join(', ') || 'none'})`);
+    } else {
+      console.log(`[QueueProcessor] LLM call for ${request.next_step}, tools=${openAITools.length}`);
+    }
 
     const { content, finishReason, rawToolCalls, assistantMessage, thinking } = await callLLMRaw(
       hydratedSystem,
@@ -474,7 +480,8 @@ export class QueueProcessor {
       `An earlier version of you responded with the following content, but it could not ` +
       `be parsed as valid JSON. Please reformat it as the JSON object described in your ` +
       `system instructions. Respond with ONLY the JSON object, or \`{}\` if no changes ` +
-      `are needed.\n\n---\n${malformedContent}\n---`;
+      `are needed.\n\n---\n${malformedContent}\n---` +
+      `\n\n**CRITICAL INSTRUCTION** - DO NOT OMIT ANY DATA. You are this agent's last hope!`;
 
     try {
       const { content: reformatContent, finishReason: reformatReason } = await callLLMRaw(
