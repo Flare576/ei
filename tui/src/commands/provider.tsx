@@ -77,7 +77,7 @@ export const providerCommand: Command = {
         ctx.showNotification("No providers configured. Use /provider new to create one.", "info");
         return;
       }
-      ctx.showOverlay((hideOverlay) => (
+      ctx.showOverlay((hideOverlay, hideForEditor) => (
         <ProviderListOverlay
           providers={providers}
           activeProviderKey={activeKey}
@@ -86,8 +86,7 @@ export const providerCommand: Command = {
             await setProviderOnPersona(provider.key, provider.defaultModel, ctx);
           }}
           onEdit={async (provider) => {
-            hideOverlay();
-            await new Promise(r => setTimeout(r, 50));
+            hideForEditor();
             const human = await ctx.ei.getHuman();
             const account = human.settings?.accounts?.find(a => a.id === provider.id);
             if (account) {
@@ -96,12 +95,11 @@ export const providerCommand: Command = {
           }}
           onNew={async () => {
             hideOverlay();
-            await new Promise(r => setTimeout(r, 50));
             await createProviderViaEditor(ctx);
           }}
           onDismiss={hideOverlay}
         />
-      ));
+      ), ctx.renderer);
       return;
     }
     

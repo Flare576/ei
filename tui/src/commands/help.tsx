@@ -7,6 +7,6 @@ export const helpCommand: Command = {
   description: "Show help screen",
   usage: "/help or /h",
   execute: async (_args, ctx) => {
-    ctx.showOverlay((hideOverlay) => <HelpOverlay onDismiss={hideOverlay} />);
+    ctx.showOverlay((_hideOverlay, _hideForEditor) => <HelpOverlay onDismiss={_hideOverlay} />, ctx.renderer);
   },
 };

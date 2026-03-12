@@ -52,18 +52,17 @@ export const dlqCommand: Command = {
         const errorMsg = parseError instanceof Error ? parseError.message : String(parseError);
 
         const shouldReEdit = await new Promise<boolean>((resolve) => {
-          ctx.showOverlay((hideOverlay) =>
+          ctx.showOverlay((hideOverlay, hideForEditor) =>
             ConfirmOverlay({
               message: `YAML error:\n${errorMsg}\n\nRe-edit?`,
-              onConfirm: () => { hideOverlay(); resolve(true); },
+              onConfirm: () => { hideForEditor(); resolve(true); },
               onCancel: () => { hideOverlay(); resolve(false); },
             })
-          );
+          , ctx.renderer);
         });
 
         if (shouldReEdit) {
           yamlContent = result.content;
-          await new Promise(r => setTimeout(r, 50));
           continue;
         }
 

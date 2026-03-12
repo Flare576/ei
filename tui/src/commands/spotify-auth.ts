@@ -45,7 +45,6 @@ export async function runSpotifyAuth(ctx: CommandContext): Promise<void> {
   const codePromise = waitForAuthCode(ctx);
 
   // Give the server a tick to bind its port before opening the browser
-  await new Promise<void>((r) => setTimeout(r, 50));
   logger.info("[spotify-auth] Server should be up — opening browser now");
 
   // Open the authorization URL in the user's default browser

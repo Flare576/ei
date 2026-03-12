@@ -25,20 +25,19 @@ export const toolsCommand: Command = {
       toolCount: allTools.filter(t => t.provider_id === p.id).length,
     }));
 
-    ctx.showOverlay((hideOverlay) => (
+    ctx.showOverlay((hideOverlay, hideForEditor) => (
       <ToolkitListOverlay
         toolkits={toolkits}
         onEdit={async (toolkit) => {
-          hideOverlay();
-          await new Promise(r => setTimeout(r, 50));
+          hideForEditor();
           const provider = providers.find(p => p.id === toolkit.id);
           if (provider) {
-            const providerTools = allTools.filter(t => t.provider_id === provider.id);
+            const providerTools = allTools.filter(t => t.provider_id === toolkit.id);
             await openToolkitEditor(provider, providerTools, ctx);
           }
         }}
         onDismiss={hideOverlay}
       />
-    ));
+    ), ctx.renderer);
   },
 };

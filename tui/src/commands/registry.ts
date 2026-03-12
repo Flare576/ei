@@ -11,7 +11,7 @@ export interface Command {
 }
 
 export interface CommandContext {
-  showOverlay: (renderer: OverlayRenderer) => void;
+  showOverlay: (renderer: OverlayRenderer, cliRenderer?: CliRenderer) => void;
   hideOverlay: () => void;
   showNotification: (msg: string, level: "error" | "warn" | "info") => void;
   exitApp: () => Promise<void>;
