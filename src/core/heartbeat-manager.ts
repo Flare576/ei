@@ -188,6 +188,8 @@ export async function queueHeartbeatCheck(sm: StateManager, personaId: string, i
   const persona = sm.persona_getById(personaId);
   if (!persona) return;
   sm.persona_update(personaId, { last_heartbeat: new Date().toISOString() });
+  const model = getModelForPersona(sm, personaId);
+  console.log(`[HeartbeatCheck ${persona.display_name}] Queueing heartbeat check (model: ${model})`);
   const human = sm.getHuman();
   const history = sm.messages_get(personaId);
   const contextWindowHours = persona.context_window_hours ?? DEFAULT_CONTEXT_WINDOW_HOURS;
@@ -228,6 +230,7 @@ export async function queueHeartbeatCheck(sm: StateManager, personaId: string, i
   };
 
   const prompt = buildHeartbeatCheckPrompt(promptData);
+  console.log(`[HeartbeatCheck ${persona.display_name}] Prompt data - topics: ${promptData.human.topics.length}, people: ${promptData.human.people.length}, inactive_days: ${inactiveDays}`);
 
   sm.queue_enqueue({
     type: LLMRequestType.JSON,
@@ -238,4 +241,5 @@ export async function queueHeartbeatCheck(sm: StateManager, personaId: string, i
     model: getModelForPersona(sm, personaId),
     data: { personaId, personaDisplayName: persona.display_name },
   });
+  console.log(`[HeartbeatCheck ${persona.display_name}] Request queued`);
 }

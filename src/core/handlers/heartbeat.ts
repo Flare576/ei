@@ -19,16 +19,17 @@ export function handleHeartbeatCheck(response: LLMResponse, state: StateManager)
 
   const result = response.parsed as HeartbeatCheckResult | undefined;
   if (!result) {
-    console.error("[handleHeartbeatCheck] No parsed result");
+    console.error(`[HeartbeatCheck ${personaDisplayName}] No parsed result`);
     return;
   }
+  console.log(`[HeartbeatCheck ${personaDisplayName}] Parsed result - should_respond: ${result.should_respond}, topic: ${result.topic ?? '(none)'}, message: ${result.message ? '(present)' : '(none)'}`);
 
   const now = new Date().toISOString();
   state.persona_update(personaId, { last_heartbeat: now });
   state.queue_clearPersonaResponses(personaId, LLMNextStep.HandleHeartbeatCheck);
 
   if (!result.should_respond) {
-    console.log(`[handleHeartbeatCheck] ${personaDisplayName} chose not to reach out`);
+    console.log(`[HeartbeatCheck ${personaDisplayName}] Chose not to reach out (should_respond=false)`);
     return;
   }
 
@@ -42,21 +43,24 @@ export function handleHeartbeatCheck(response: LLMResponse, state: StateManager)
       context_status: ContextStatus.Default,
     };
     state.messages_append(personaId, message);
-    console.log(`[handleHeartbeatCheck] ${personaDisplayName} proactively messaged about: ${result.topic ?? "general"}`);
+    console.log(`[HeartbeatCheck ${personaDisplayName}] Added proactive message - topic: ${result.topic ?? 'general'}, message: "${result.message.substring(0, 100)}${result.message.length > 100 ? '...' : ''}"`);
+  } else {
+    console.log(`[HeartbeatCheck ${personaDisplayName}] should_respond=true but no message provided`);
   }
 }
 
 export function handleEiHeartbeat(response: LLMResponse, state: StateManager): void {
   const result = response.parsed as EiHeartbeatResult | undefined;
   if (!result) {
-    console.error("[handleEiHeartbeat] No parsed result");
+    console.error("[EiHeartbeat] No parsed result");
     return;
   }
+  console.log(`[EiHeartbeat] Parsed result - should_respond: ${result.should_respond}, id: ${result.id ?? '(none)'}, my_response: ${result.my_response ? '(present)' : '(none)'}`);
   const now = new Date().toISOString();
   state.persona_update("ei", { last_heartbeat: now });
   state.queue_clearPersonaResponses("ei", LLMNextStep.HandleEiHeartbeat);
   if (!result.should_respond || !result.id) {
-    console.log("[handleEiHeartbeat] Ei chose not to reach out");
+    console.log("[EiHeartbeat] Chose not to reach out (should_respond=false or no id)");
     return;
   }
   const isTUI = response.request.data.isTUI as boolean;
@@ -84,7 +88,10 @@ export function handleEiHeartbeat(response: LLMResponse, state: StateManager): v
     return;
   }
 
-  if (result.my_response) sendMessage(result.my_response);
+  if (result.my_response) {
+    console.log(`[EiHeartbeat] Sending message: "${result.my_response.substring(0, 100)}${result.my_response.length > 100 ? '...' : ''}"`);
+    sendMessage(result.my_response);
+  }
 
   switch (found.type) {
     case "person":
