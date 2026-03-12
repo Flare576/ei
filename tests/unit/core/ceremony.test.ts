@@ -406,7 +406,7 @@ function createMockProgressState(pendingCeremonies: boolean = false, hasActivity
     getHuman: vi.fn(() => human),
     persona_getAll: vi.fn(() => [activePersona]),
     persona_getById: vi.fn((id: string) => id === "test-persona" ? activePersona : null),
-    messages_get: vi.fn(() => []),
+    messages_get: vi.fn(() => hasActivity ? [{ id: "msg1", role: "human" as const, verbal_response: "test", timestamp: now.toISOString(), read: true, context_status: 0, f: false, r: false, p: false, o: false }] : []),
     messages_getUnextracted: vi.fn(() => {
       return [{ id: "msg1", role: "user", content: "test", created_at: now.toISOString(), f: false, r: false, p: false, o: false }];
     }),

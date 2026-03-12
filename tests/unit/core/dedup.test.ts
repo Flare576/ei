@@ -46,6 +46,9 @@ function createMockStateManager(): StateManager & { _human: HumanEntity } {
     quotes: [],
     last_updated: new Date().toISOString(),
     last_activity: new Date().toISOString(),
+    settings: {
+      rewrite_model: "test-provider:test-model",
+    },
   };
 
   return {
