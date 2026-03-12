@@ -6,24 +6,35 @@ import {
   type JSX,
   type Accessor,
 } from "solid-js";
+import { type CliRenderer } from "@opentui/core";
 import { logger } from "../util/logger";
 
-export type OverlayRenderer = (hideOverlay: () => void) => JSX.Element;
+export type OverlayRenderer = (hideOverlay: () => void, hideForEditor: () => void) => JSX.Element;
 
 interface OverlayContextValue {
-  overlayRenderer: Accessor<OverlayRenderer | null>;
-  showOverlay: (renderer: OverlayRenderer) => void;
+  overlayRenderer: Accessor<(() => JSX.Element) | null>;
+  showOverlay: (renderer: OverlayRenderer, cliRenderer?: CliRenderer) => void;
   hideOverlay: () => void;
 }
 
 const OverlayContext = createContext<OverlayContextValue>();
 
 export const OverlayProvider: ParentComponent = (props) => {
-  const [overlayRenderer, setOverlayRenderer] = createSignal<OverlayRenderer | null>(null);
+  const [overlayRenderer, setOverlayRenderer] = createSignal<(() => JSX.Element) | null>(null);
 
-  const showOverlay = (renderer: OverlayRenderer) => {
+  const showOverlay = (renderer: OverlayRenderer, cliRenderer?: CliRenderer) => {
     logger.debug("[overlay] showOverlay called");
-    setOverlayRenderer(() => renderer);
+    const hideForEditor = () => {
+      if (cliRenderer) {
+        cliRenderer.currentRenderBuffer.clear();
+      }
+      setOverlayRenderer(null);
+    };
+    const hideOverlay = () => {
+      logger.debug("[overlay] hideOverlay called");
+      setOverlayRenderer(null);
+    };
+    setOverlayRenderer(() => () => renderer(hideOverlay, hideForEditor));
   };
 
   const hideOverlay = () => {

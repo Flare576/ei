@@ -3,6 +3,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import type { CliRenderer } from "@opentui/core";
+import { RendererControlState } from "@opentui/core";
 import { logger } from "./logger";
 
 export interface EditorOptions {
@@ -103,22 +104,29 @@ export async function spawnEditor(options: EditorOptions): Promise<EditorResult>
   const safeName = filename.replace(/\s+/g, "-");
   const tmpFile = path.join(tmpDir, `ei-${Date.now()}-${safeName}`);
   
-  logger.debug("[editor] spawnEditor called", { filename, editor });
+  logger.debug("[editor] spawnEditor called - START", { filename, editor });
+  
+  // CRITICAL: 50ms delay to let SolidJS reactive updates settle before suspending
+  // This prevents ghost frames when transitioning from overlays to editor
+  await new Promise(resolve => setTimeout(resolve, 50));
   
   fs.writeFileSync(tmpFile, initialContent, "utf-8");
   const originalContent = initialContent;
   
   return new Promise((resolve) => {
-    logger.debug("[editor] calling renderer.suspend()");
-    renderer.suspend();
-    logger.debug("[editor] calling renderer.currentRenderBuffer.clear()");
-    renderer.currentRenderBuffer.clear();
+    const wasAlreadySuspended = renderer.controlState === RendererControlState.EXPLICIT_SUSPENDED;
+    logger.debug("[editor] renderer state", { controlState: renderer.controlState, wasAlreadySuspended });
     
-    logger.debug("[editor] spawning editor process");
+    if (!wasAlreadySuspended) {
+      renderer.suspend();
+    }
+    
+    renderer.currentRenderBuffer.clear();
     const child = spawn(editor, [tmpFile], {
       stdio: "inherit",
       shell: true,
     });
+    
     
     child.on("error", () => {
       logger.error("[editor] editor process error");
@@ -135,13 +143,16 @@ export async function spawnEditor(options: EditorOptions): Promise<EditorResult>
     
     child.on("exit", (code) => {
       logger.debug("[editor] editor process exited", { code });
-      logger.debug("[editor] calling renderer.currentRenderBuffer.clear()");
       renderer.currentRenderBuffer.clear();
-      logger.debug("[editor] calling renderer.resume()");
-      renderer.resume();
-      logger.debug("[editor] queueMicrotask for requestRender");
+      
+      if (!wasAlreadySuspended) {
+        logger.debug("[editor] calling renderer.resume()");
+        renderer.resume();
+      } else {
+        logger.debug("[editor] already suspended before spawn, skipping resume");
+      }
+      
       queueMicrotask(() => {
-        logger.debug("[editor] calling renderer.requestRender()");
         renderer.requestRender();
       });
       
