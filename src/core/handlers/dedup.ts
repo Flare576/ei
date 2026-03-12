@@ -23,6 +23,12 @@ export async function handleDedupCurate(
   const entity_ids = response.request.data.entity_ids as string[];
   const state = stateManager.getHuman();
   
+  // Validate entity_type
+  if (!entity_type || !['fact', 'trait', 'topic', 'person'].includes(entity_type)) {
+    console.error(`[Dedup] Invalid entity_type: "${entity_type}" (from request data)`, response.request.data);
+    return;
+  }
+  
   // Parse Opus response
   let decisions: DedupResult;
   try {
@@ -43,8 +49,28 @@ export async function handleDedupCurate(
   
   console.log(`[Dedup] Processing cluster: ${decisions.update.length} updates, ${decisions.remove.length} removals, ${decisions.add.length} additions`);
   
-  // HYDRATION: Fetch entities by ID (graceful degradation for missing)
-  const entityList = state[`${entity_type}s` as 'facts' | 'traits' | 'topics' | 'people'];
+  // Map entity_type to pluralized state property name
+  const pluralMap: Record<DataItemType, 'facts' | 'traits' | 'topics' | 'people'> = {
+    fact: 'facts',
+    trait: 'traits',
+    topic: 'topics',
+    person: 'people'
+  };
+  const entityList = state[pluralMap[entity_type]];
+  
+  // Validate entityList exists
+  if (!entityList || !Array.isArray(entityList)) {
+    console.error(`[Dedup] entityList is ${entityList === undefined ? 'undefined' : 'not an array'} for entity_type="${entity_type}" (looking for state.${entity_type}s)`, {
+      entity_type,
+      entity_ids,
+      stateKeys: Object.keys(state),
+      factsExists: !!state.facts,
+      traitsExists: !!state.traits,
+      topicsExists: !!state.topics,
+      peopleExists: !!state.people
+    });
+    return;
+  }
   const entities = entity_ids
     .map((id: string) => entityList.find((e: Fact | Trait | Topic | Person) => e.id === id))
     .filter((e: Fact | Trait | Topic | Person | undefined): e is (Fact | Trait | Topic | Person) => e !== undefined);
