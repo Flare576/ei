@@ -16,7 +16,7 @@ export const archiveCommand: Command = {
         ctx.showNotification("No archived personas", "info");
         return;
       }
-      ctx.showOverlay((hideOverlay) => (
+      ctx.showOverlay((hideOverlay, _hideForEditor) => (
         <PersonaListOverlay
           personas={archived}
           activePersonaId={null}
@@ -30,7 +30,7 @@ export const archiveCommand: Command = {
           }}
           onDismiss={hideOverlay}
         />
-      ));
+      ), ctx.renderer);
       return;
     }
     

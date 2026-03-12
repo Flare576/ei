@@ -54,11 +54,11 @@ export const settingsCommand: Command = {
         logger.debug("[settings] YAML parse error, prompting for re-edit", { iteration: editorIteration, error: errorMsg });
         
         const shouldReEdit = await new Promise<boolean>((resolve) => {
-          ctx.showOverlay((hideOverlay) => (
+          ctx.showOverlay((hideOverlay, hideForEditor) => (
             <ConfirmOverlay
               message={`YAML parse error:\n${errorMsg}\n\nRe-edit?`}
               onConfirm={() => {
-                hideOverlay();
+                hideForEditor();
                 resolve(true);
               }}
               onCancel={() => {
@@ -66,12 +66,11 @@ export const settingsCommand: Command = {
                 resolve(false);
               }}
             />
-          ));
+          ), ctx.renderer);
         });
         
         if (shouldReEdit) {
           yamlContent = result.content;
-          await new Promise(r => setTimeout(r, 50));
           continue;
         } else {
           ctx.showNotification("Changes discarded", "info");

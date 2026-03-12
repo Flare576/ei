@@ -112,12 +112,12 @@ export const meCommand: Command = {
         logger.debug("[me] YAML parse error, prompting for re-edit", { iteration: editorIteration, error: errorMsg });
         
         const shouldReEdit = await new Promise<boolean>((resolve) => {
-          ctx.showOverlay((hideOverlay) => (
+          ctx.showOverlay((hideOverlay, hideForEditor) => (
             <ConfirmOverlay
               message={`YAML parse error:\n${errorMsg}\n\nRe-edit?`}
               onConfirm={() => {
                 logger.debug("[me] user confirmed re-edit");
-                hideOverlay();
+                hideForEditor();
                 resolve(true);
               }}
               onCancel={() => {
@@ -126,7 +126,7 @@ export const meCommand: Command = {
                 resolve(false);
               }}
             />
-          ));
+          ), ctx.renderer);
         });
         
         logger.debug("[me] shouldReEdit", { shouldReEdit, iteration: editorIteration });
@@ -134,7 +134,6 @@ export const meCommand: Command = {
         if (shouldReEdit) {
           yamlContent = result.content;
           logger.debug("[me] continuing to next iteration");
-          await new Promise(r => setTimeout(r, 50));
           continue;
         } else {
           ctx.showNotification("Changes discarded", "info");

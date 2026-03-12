@@ -75,12 +75,12 @@ async function openQuotesInEditor(
       });
 
       const shouldReEdit = await new Promise<boolean>((resolve) => {
-        ctx.showOverlay((hideOverlay) => (
+        ctx.showOverlay((hideOverlay, hideForEditor) => (
           <ConfirmOverlay
             message={`YAML parse error:\n${errorMsg}\n\nRe-edit?`}
             onConfirm={() => {
               logger.debug("[quotes] user confirmed re-edit");
-              hideOverlay();
+              hideForEditor();
               resolve(true);
             }}
             onCancel={() => {
@@ -89,7 +89,7 @@ async function openQuotesInEditor(
               resolve(false);
             }}
           />
-        ));
+        ), ctx.renderer);
       });
 
       logger.debug("[quotes] shouldReEdit", { shouldReEdit, iteration: editorIteration });
@@ -97,7 +97,6 @@ async function openQuotesInEditor(
       if (shouldReEdit) {
         yamlContent = result.content;
         logger.debug("[quotes] continuing to next iteration");
-        await new Promise((r) => setTimeout(r, 50));
         continue;
       } else {
         ctx.showNotification("Changes discarded", "info");
@@ -146,14 +145,13 @@ export const quotesCommand: Command = {
       const allQuotes = await ctx.ei.getQuotes();
       const messageQuotes = allQuotes.filter(q => q.message_id === targetMessage.id);
 
-      ctx.showOverlay((hide) => (
+      ctx.showOverlay((hide, hideForEditor) => (
         <QuotesOverlay
           quotes={messageQuotes}
           messageIndex={index}
           onClose={hide}
           onEdit={async () => {
-            hide();
-            await new Promise((r) => setTimeout(r, 50));
+            hideForEditor();
             await openQuotesInEditor(ctx, messageQuotes, `quotes from message [${index}]`);
           }}
           onDelete={async (quoteId) => {
@@ -161,7 +159,7 @@ export const quotesCommand: Command = {
             ctx.showNotification("Quote deleted", "info");
           }}
         />
-      ));
+      ), ctx.renderer);
       return;
     }
 

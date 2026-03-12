@@ -13,7 +13,7 @@ export const personaCommand: Command = {
     const unarchived = ctx.ei.personas().filter(p => !p.is_archived);
     
     if (args.length === 0) {
-      ctx.showOverlay((hideOverlay) => (
+      ctx.showOverlay((hideOverlay, _hideForEditor) => (
         <PersonaListOverlay
           personas={unarchived}
           activePersonaId={ctx.ei.activePersonaId()}
@@ -25,7 +25,7 @@ export const personaCommand: Command = {
           }}
           onDismiss={hideOverlay}
         />
-      ));
+      ), ctx.renderer);
       return;
     }
     

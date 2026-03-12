@@ -14,13 +14,13 @@ export const deleteCommand: Command = {
     
     const confirmAndDelete = async (personaId: string, displayName: string) => {
       const confirmed = await new Promise<boolean>((resolve) => {
-        ctx.showOverlay((hideOverlay) => (
+        ctx.showOverlay((hideOverlay, _hideForEditor) => (
           <ConfirmOverlay
             message={`Delete "${displayName}"?\nThis cannot be undone.`}
             onConfirm={() => { hideOverlay(); resolve(true); }}
             onCancel={() => { hideOverlay(); resolve(false); }}
           />
-        ));
+        ), ctx.renderer);
       });
       
       if (confirmed) {
@@ -36,7 +36,7 @@ export const deleteCommand: Command = {
         ctx.showNotification("No personas available to delete", "info");
         return;
       }
-      ctx.showOverlay((hideOverlay) => (
+      ctx.showOverlay((hideOverlay, _hideForEditor) => (
         <PersonaListOverlay
           personas={deletable}
           activePersonaId={null}
@@ -48,7 +48,7 @@ export const deleteCommand: Command = {
           }}
           onDismiss={hideOverlay}
         />
-      ));
+      ), ctx.renderer);
       return;
     }
     

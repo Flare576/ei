@@ -16,7 +16,7 @@ export const setSyncCommand: Command = {
     const [username, passphrase] = args;
 
     const confirmed = await new Promise<boolean>((resolve) => {
-      ctx.showOverlay((hideOverlay) => (
+      ctx.showOverlay((hideOverlay, _hideForEditor) => (
         <ConfirmOverlay
           message={`Set sync credentials for "${username}"?\n\nThis requires a restart. Just re-run ei once it closes!`}
           onConfirm={() => {
@@ -28,7 +28,7 @@ export const setSyncCommand: Command = {
             resolve(false);
           }}
         />
-      ));
+      ), ctx.renderer);
     });
 
     if (!confirmed) {

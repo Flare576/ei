@@ -90,12 +90,12 @@ export const contextCommand: Command = {
         });
 
         const shouldReEdit = await new Promise<boolean>((resolve) => {
-          ctx.showOverlay((hideOverlay) => (
+          ctx.showOverlay((hideOverlay, hideForEditor) => (
             <ConfirmOverlay
               message={`YAML parse error:\n${errorMsg}\n\nRe-edit?`}
               onConfirm={() => {
                 logger.debug("[context] user confirmed re-edit");
-                hideOverlay();
+                hideForEditor();
                 resolve(true);
               }}
               onCancel={() => {
@@ -104,7 +104,7 @@ export const contextCommand: Command = {
                 resolve(false);
               }}
             />
-          ));
+          ), ctx.renderer);
         });
 
         logger.debug("[context] shouldReEdit", { shouldReEdit, iteration: editorIteration });
@@ -112,7 +112,6 @@ export const contextCommand: Command = {
         if (shouldReEdit) {
           yamlContent = result.content;
           logger.debug("[context] continuing to next iteration");
-          await new Promise((r) => setTimeout(r, 50));
           continue;
         } else {
           ctx.showNotification("Changes discarded", "info");
