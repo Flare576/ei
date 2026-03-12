@@ -182,7 +182,6 @@ export function handleCeremonyProgress(state: StateManager, lastPhase: number): 
     // Dedup phase complete → start Expose phase
     console.log("[ceremony:progress] Dedup complete, starting Expose phase");
     
-    const human = state.getHuman();
     const personas = state.persona_getAll();
     const activePersonas = personas.filter(p => 
       !p.is_paused && 
@@ -190,17 +189,21 @@ export function handleCeremonyProgress(state: StateManager, lastPhase: number): 
       !p.is_static
     );
     
-    const lastCeremony = human.settings?.ceremony?.last_ceremony 
-      ? new Date(human.settings.ceremony.last_ceremony).getTime() 
-      : 0;
-    
-    const personasWithActivity = activePersonas.filter(p => {
-      const lastActivity = p.last_activity ? new Date(p.last_activity).getTime() : 0;
-      return lastActivity > lastCeremony;
+    // Find personas with unprocessed messages (any message with p/r/o/f = false)
+    const personasWithUnprocessed = activePersonas.filter(p => {
+      const messages = state.messages_get(p.id);
+      return messages.some(msg => 
+        !msg.p || 
+        !msg.r || 
+        !msg.o || 
+        !msg.f
+      );
     });
     
+    console.log(`[ceremony:expose] Found ${activePersonas.length} active personas, ${personasWithUnprocessed.length} with unprocessed messages`);
+    
     const options: ExtractionOptions = { ceremony_progress: 2 };
-    for (const persona of personasWithActivity) {
+    for (const persona of personasWithUnprocessed) {
       queueExposurePhase(persona.id, state, options);
     }
     return;
