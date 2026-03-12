@@ -49,6 +49,22 @@ Priority queue for LLM requests:
 
 **Async model**: Handlers queue work, don't await results inline.
 
+### llm-client.ts
+
+Multi-provider LLM abstraction layer:
+- Handles requests to Anthropic, OpenAI, Bedrock, local models
+- **Sets `max_tokens: 64000`** for all requests
+- Prevents unbounded generation (test showed timeout after 2min without limit)
+- Local models silently clamp to their configured maximums
+- Anthropic Opus 4 accepts 64K (200K total context - 64K output = 136K input budget)
+
+**JSON Response Parsing** (`parseJSONResponse()`):
+- **Strategy 1**: Extract from markdown code blocks (```json)
+- **Strategy 2**: Auto-repair malformed JSON (trailing commas, etc.)
+- **Strategy 3**: Extract outermost `{...}` from mixed prose/JSON (handles LLM preamble)
+
+No prompt changes needed for JSON-only output—parser handles natural language gracefully.
+
 ### handlers/index.ts (1000+ lines)
 
 All `LLMNextStep` handlers in one file. Each handler:
