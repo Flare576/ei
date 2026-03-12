@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { QueueState } from "../../../src/core/state/queue.js";
 import { 
   shouldStartCeremony, 
   isNewDay, 
@@ -199,7 +200,8 @@ describe("Decay Computation", () => {
 // Rewrite Phase Tests (queueRewritePhase)
 // =============================================================================
 
-import { queueRewritePhase } from "../../../src/core/orchestrators/ceremony.js";
+import { queueRewritePhase, handleCeremonyProgress } from "../../../src/core/orchestrators/ceremony.js";
+import { LLMNextStep, LLMRequestType, LLMPriority, ValidationLevel } from "../../../src/core/types.js";
 import { LLMNextStep, LLMRequestType, LLMPriority, ValidationLevel } from "../../../src/core/types.js";
 import type { HumanEntity, Fact, Trait, Topic, Person } from "../../../src/core/types.js";
 
@@ -360,5 +362,189 @@ describe("Rewrite Phase", () => {
         })
       );
     });
+  });
+});
+
+// =============================================================================
+// handleCeremonyProgress Tests (Multi-Phase Support)
+// =============================================================================
+
+function createMockProgressState(pendingCeremonies: boolean = false, hasActivity: boolean = true) {
+  const now = new Date();
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  
+  const human: HumanEntity = {
+    entity: "human",
+    facts: [],
+    traits: [],
+    topics: [],
+    people: [],
+    quotes: [],
+    last_updated: now.toISOString(),
+    last_activity: now.toISOString(),
+    settings: {
+      ceremony: {
+        time: "03:00",
+        last_ceremony: yesterday.toISOString(),
+      },
+    },
+  };
+
+  const activePersona = {
+    id: "test-persona",
+    display_name: "Test Persona",
+    is_paused: false,
+    is_archived: false,
+    is_static: false,
+    last_activity: hasActivity ? now.toISOString() : yesterday.toISOString(),
+    topics: [],
+    traits: [],
+  };
+
+  return {
+    queue_hasPendingCeremonies: vi.fn(() => pendingCeremonies),
+    getHuman: vi.fn(() => human),
+    persona_getAll: vi.fn(() => [activePersona]),
+    persona_getById: vi.fn((id: string) => id === "test-persona" ? activePersona : null),
+    messages_get: vi.fn(() => []),
+    messages_getUnextracted: vi.fn(() => {
+      return [{ id: "msg1", role: "user", content: "test", created_at: now.toISOString(), f: false, r: false, p: false, o: false }];
+    }),
+    messages_markExtracted: vi.fn(),
+    messages_sort: vi.fn(),
+    setHuman: vi.fn(),
+    queue_enqueue: vi.fn(),
+    _human: human,
+  };
+}
+
+describe("handleCeremonyProgress Multi-Phase Support", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("waits when queue has pending ceremonies", () => {
+    const state = createMockProgressState(true);
+    
+    handleCeremonyProgress(state as any, 2);
+    
+    expect(state.queue_enqueue).not.toHaveBeenCalled();
+  });
+
+  it("Phase 1 complete → queues Expose phase with ceremony_progress: 2", () => {
+    const state = createMockProgressState(false, true);
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    
+    handleCeremonyProgress(state as any, 1);
+    
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Dedup complete, starting Expose phase")
+    );
+    expect(state.queue_enqueue).toHaveBeenCalled();
+    
+    consoleSpy.mockRestore();
+  });
+
+  it("Phase 2 complete → advances to Decay/Expire/Explore", () => {
+    const state = createMockProgressState(false, true);
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    
+    handleCeremonyProgress(state as any, 2);
+    
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining("All exposure scans complete, advancing to Decay")
+    );
+    
+    consoleSpy.mockRestore();
+  });
+
+  it("filters out paused/archived/static personas", () => {
+    const state = createMockProgressState(false, true);
+    state.persona_getAll.mockReturnValue([
+      { id: "active", display_name: "Active", is_paused: false, is_archived: false, is_static: false, last_activity: new Date().toISOString() },
+      { id: "paused", display_name: "Paused", is_paused: true, is_archived: false, is_static: false, last_activity: new Date().toISOString() },
+      { id: "archived", display_name: "Archived", is_paused: false, is_archived: true, is_static: false, last_activity: new Date().toISOString() },
+      { id: "static", display_name: "Static", is_paused: false, is_archived: false, is_static: true, last_activity: new Date().toISOString() },
+    ]);
+    
+    handleCeremonyProgress(state as any, 1);
+    
+    // Should only process "active" persona
+    expect(state.persona_getById).toHaveBeenCalledWith("active");
+    expect(state.persona_getById).not.toHaveBeenCalledWith("paused");
+    expect(state.persona_getById).not.toHaveBeenCalledWith("archived");
+    expect(state.persona_getById).not.toHaveBeenCalledWith("static");
+  });
+});
+
+// =============================================================================
+// Queue Ceremony Filter Tests
+// =============================================================================
+
+
+
+describe("Queue hasPendingCeremonies with Number Support", () => {
+  it("returns true for ceremony_progress: 1", () => {
+    const queue = new QueueState();
+    queue.enqueue({
+      id: "test-1",
+      type: LLMRequestType.JSON,
+      priority: LLMPriority.Normal,
+      next_step: LLMNextStep.HandleFactScan,
+      model: "test:model",
+      system: "test",
+      user: "test",
+      data: { ceremony_progress: 1 },
+    });
+    
+    expect(queue.hasPendingCeremonies()).toBe(true);
+  });
+
+  it("returns true for ceremony_progress: 2", () => {
+    const queue = new QueueState();
+    queue.enqueue({
+      id: "test-2",
+      type: LLMRequestType.JSON,
+      priority: LLMPriority.Normal,
+      next_step: LLMNextStep.HandleTopicScan,
+      model: "test:model",
+      system: "test",
+      user: "test",
+      data: { ceremony_progress: 2 },
+    });
+    
+    expect(queue.hasPendingCeremonies()).toBe(true);
+  });
+
+  it("returns false for ceremony_progress: 0", () => {
+    const queue = new QueueState();
+    queue.enqueue({
+      id: "test-0",
+      type: LLMRequestType.JSON,
+      priority: LLMPriority.Normal,
+      next_step: LLMNextStep.HandleFactScan,
+      model: "test:model",
+      system: "test",
+      user: "test",
+      data: { ceremony_progress: 0 },
+    });
+    
+    expect(queue.hasPendingCeremonies()).toBe(false);
+  });
+
+  it("returns false when no ceremony_progress field", () => {
+    const queue = new QueueState();
+    queue.enqueue({
+      id: "test-none",
+      type: LLMRequestType.JSON,
+      priority: LLMPriority.Normal,
+      next_step: LLMNextStep.HandleResponse,
+      model: "test:model",
+      system: "test",
+      user: "test",
+      data: {},
+    });
+    
+    expect(queue.hasPendingCeremonies()).toBe(false);
   });
 });
