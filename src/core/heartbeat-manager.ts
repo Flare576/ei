@@ -2,7 +2,6 @@ import {
   LLMRequestType,
   LLMPriority,
   LLMNextStep,
-  ValidationLevel,
   type HumanEntity,
   type Message,
 } from "./types.js";
@@ -72,7 +71,7 @@ export async function queueEiHeartbeat(
   const unverifiedFacts = human.facts
     .filter(
       (f) =>
-        f.validated === ValidationLevel.None &&
+        f.validated_date === '' &&
         f.learned_by !== "ei" &&
         (f.last_changed_by === undefined || f.last_changed_by !== "ei")
     )

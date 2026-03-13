@@ -1,5 +1,4 @@
 import {
-  ValidationLevel,
   type LLMResponse,
   type Message,
   type Trait,
@@ -67,9 +66,6 @@ export function handleHumanItemMatch(response: LLMResponse, state: StateManager)
     if (!found) {
       console.warn(`[handleHumanItemMatch] matched_guid "${matched_guid}" not found in human data — treating as new item`);
       matched_guid = null;
-    } else if (found.type === "fact" && found.validated === ValidationLevel.Human) {
-      console.log(`[handleHumanItemMatch] Skipping locked fact "${found.name}" (human-validated)`);
-      return;
     } else if (!(found.type === "fact" || found.type === "trait" || found.type === "topic" || found.type === "person")) {
       console.warn(`[handleHumanItemMatch] matched_guid "${matched_guid}" resolved to non-human type "${found.type}" - Ignoring`);
       return;
@@ -155,7 +151,6 @@ export async function handleHumanItemUpdate(response: LLMResponse, state: StateM
         name: result.name,
         description: result.description,
         sentiment: result.sentiment,
-        validated: ValidationLevel.None,
         validated_date: now,
         last_updated: now,
         learned_by: isNewItem ? personaId : existingItem?.learned_by,

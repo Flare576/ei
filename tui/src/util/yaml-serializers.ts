@@ -23,6 +23,7 @@ import type {
   } from "../../../src/core/types.js";
 import { ContextStatus } from "../../../src/core/types.js";
 import type { ClaudeCodeSettings } from "../../../src/integrations/claude-code/types.js";
+import { BUILT_IN_FACT_NAMES } from "../../../src/core/constants/built-in-facts.js";
 
 // =============================================================================
 // TYPES FOR YAML EDITING
@@ -414,7 +415,6 @@ export function humanToYAML(human: HumanEntity, personaLookup?: Map<string, stri
   return YAML.stringify(data, {
     lineWidth: 0,
   })
-  .replace(/^(\s+validated:\s+\S+)$/mg, '$1 # none | ei | human')
   .replace(/^(\s+)(learned_by: )(.+)$/mg, (_, indent, key, val) => {
     const trimmed = val.trim();
     const displayName = personaLookup?.get(trimmed) ?? trimmed;
@@ -449,10 +449,13 @@ export function humanFromYAML(yamlContent: string): HumanYAMLResult {
   
   const facts: Fact[] = [];
   for (const f of data.facts ?? []) {
-    if (f._delete) {
+    if (f._delete && !BUILT_IN_FACT_NAMES.has(f.name)) {
       deletedFactIds.push(f.id);
     } else {
       const { _delete, ...fact } = f;
+      if (fact.description && !fact.validated_date) {
+        fact.validated_date = new Date().toISOString();
+      }
       facts.push(fact);
     }
   }

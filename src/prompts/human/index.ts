@@ -1,4 +1,5 @@
 export { buildHumanFactScanPrompt } from "./fact-scan.js";
+export { buildFactFindPrompt } from "./fact-find.js";
 export { buildHumanTraitScanPrompt } from "./trait-scan.js";
 export { buildHumanTopicScanPrompt } from "./topic-scan.js";
 export { buildHumanPersonScanPrompt } from "./person-scan.js";
@@ -11,11 +12,13 @@ export type {
   TraitScanPromptData,
   TopicScanPromptData,
   PersonScanPromptData,
+  FactFindPromptData,
   FactScanCandidate,
   TraitScanCandidate,
   TopicScanCandidate,
   PersonScanCandidate,
   FactScanResult,
+  FactFindResult,
   TraitScanResult,
   TopicScanResult,
   PersonScanResult,

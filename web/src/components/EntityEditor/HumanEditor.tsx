@@ -6,7 +6,6 @@ import { HumanTopicsTab } from './tabs/HumanTopicsTab';
 import { HumanPeopleTab } from './tabs/HumanPeopleTab';
 import { HumanQuotesTab } from './tabs/HumanQuotesTab';
 import { QuoteManagementModal } from '../Quote/QuoteManagementModal';
-import { ValidationLevel } from '../../../../src/core/types';
 import type { Fact, Quote } from '../../../../src/core/types';
 
 interface Trait {
@@ -209,8 +208,7 @@ export const HumanEditor = ({
       name: '',
       description: '',
       sentiment: 0,
-      validated: ValidationLevel.None,
-      validated_date: new Date().toISOString(),
+      validated_date: "",
       last_updated: new Date().toISOString(),
     };
     setLocalFacts(prev => [...prev, newFact]);

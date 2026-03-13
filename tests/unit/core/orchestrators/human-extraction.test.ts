@@ -3,13 +3,12 @@ import {
   LLMNextStep,
   LLMRequestType,
   LLMPriority,
-  ValidationLevel,
   type Message,
   type HumanEntity,
   type PersonaEntity,
 } from "../../../../src/core/types.js";
 import {
-  queueFactScan,
+  queueFactFind,
   queueTraitScan,
   queueTopicScan,
   queuePersonScan,
@@ -20,7 +19,7 @@ import {
 } from "../../../../src/core/orchestrators/human-extraction.js";
 
 vi.mock("../../../../src/prompts/human/index.js", () => ({
-  buildHumanFactScanPrompt: vi.fn().mockReturnValue({ system: "fact-sys", user: "fact-usr" }),
+  buildFactFindPrompt: vi.fn().mockReturnValue({ system: "fact-find-sys", user: "fact-find-usr" }),
   buildHumanTraitScanPrompt: vi.fn().mockReturnValue({ system: "trait-sys", user: "trait-usr" }),
   buildHumanTopicScanPrompt: vi.fn().mockReturnValue({ system: "topic-sys", user: "topic-usr" }),
   buildHumanPersonScanPrompt: vi.fn().mockReturnValue({ system: "person-sys", user: "person-usr" }),
@@ -29,7 +28,7 @@ vi.mock("../../../../src/prompts/human/index.js", () => ({
 }));
 
 import {
-  buildHumanFactScanPrompt,
+  buildFactFindPrompt,
   buildHumanTraitScanPrompt,
   buildHumanTopicScanPrompt,
   buildHumanPersonScanPrompt,
@@ -41,7 +40,8 @@ function createMockStateManager() {
   const human: HumanEntity = {
     entity: "human",
     facts: [
-      { id: "f1", name: "Birthday", description: "January 15th", sentiment: 0.5, validated: ValidationLevel.None, validated_date: "", last_updated: "" },
+      { id: "f1", name: "Birthday", description: "January 15th", sentiment: 0.5, validated_date: "", last_updated: "" },
+      { id: "f2", name: "Full Name", description: "", sentiment: 0, validated_date: "", last_updated: "" },
     ],
     traits: [
       { id: "t1", name: "Curiosity", description: "Loves learning", sentiment: 0.7, last_updated: "" },
@@ -122,12 +122,13 @@ describe("Scan Orchestrators (Step 1)", () => {
     vi.clearAllMocks();
   });
 
-  describe("queueFactScan", () => {
-    it("enqueues fact scan request with correct data", () => {
-      queueFactScan(context, state as any);
+  describe("queueFactFind", () => {
+    it("enqueues fact find request with missing fact names", () => {
+      queueFactFind(context, state as any);
 
-      expect(buildHumanFactScanPrompt).toHaveBeenCalledWith({
+      expect(buildFactFindPrompt).toHaveBeenCalledWith({
         persona_name: "Ei",
+        missing_fact_names: ["Full Name"],
         messages_context: context.messages_context,
         messages_analyze: context.messages_analyze,
       });
@@ -135,9 +136,9 @@ describe("Scan Orchestrators (Step 1)", () => {
       expect(state.queue_enqueue).toHaveBeenCalledWith({
         type: LLMRequestType.JSON,
         priority: LLMPriority.Low,
-        system: "fact-sys",
-        user: "fact-usr",
-        next_step: LLMNextStep.HandleHumanFactScan,
+        system: "fact-find-sys",
+        user: "fact-find-usr",
+        next_step: LLMNextStep.HandleFactFind,
         data: {
           personaId: "ei",
           personaDisplayName: "Ei",
@@ -146,6 +147,16 @@ describe("Scan Orchestrators (Step 1)", () => {
           message_ids_to_mark: ["2"],
         },
       });
+    });
+
+    it("returns 0 when all facts have descriptions", () => {
+      // Set all facts to have descriptions
+      state._human.facts.forEach((f: any) => { f.description = "some value"; });
+
+      const result = queueFactFind(context, state as any);
+
+      expect(result).toBe(0);
+      expect(state.queue_enqueue).not.toHaveBeenCalled();
     });
   });
 
@@ -210,7 +221,7 @@ describe("Scan Orchestrators (Step 1)", () => {
       expect(state.queue_enqueue).toHaveBeenCalledTimes(4);
 
       const nextSteps = state.queue_enqueue.mock.calls.map((c: any) => c[0].next_step);
-      expect(nextSteps).toContain(LLMNextStep.HandleHumanFactScan);
+      expect(nextSteps).toContain(LLMNextStep.HandleFactFind);
       expect(nextSteps).toContain(LLMNextStep.HandleHumanTraitScan);
       expect(nextSteps).toContain(LLMNextStep.HandleHumanTopicScan);
       expect(nextSteps).toContain(LLMNextStep.HandleHumanPersonScan);
@@ -519,7 +530,7 @@ describe("Extraction Pipeline Integration", () => {
     };
     context.analyze_from_timestamp = context.messages_analyze[0].timestamp;
 
-    queueFactScan(context, state as any);
+    queueFactFind(context, state as any);
 
     const scanCall = state.queue_enqueue.mock.calls[0][0];
     expect(scanCall.data.analyze_from_timestamp).toBe(context.messages_analyze[0].timestamp);

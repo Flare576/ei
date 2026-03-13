@@ -1,7 +1,7 @@
 import { LLMRequestType, LLMPriority, LLMNextStep, type Message, type DataItemType, type Fact, type Trait, type Topic, type Person } from "../types.js";
 import type { StateManager } from "../state-manager.js";
 import {
-  buildHumanFactScanPrompt,
+  buildFactFindPrompt,
   buildHumanTraitScanPrompt,
   buildHumanTopicScanPrompt,
   buildHumanPersonScanPrompt,
@@ -16,6 +16,7 @@ import {
 import { chunkExtractionContext } from "./extraction-chunker.js";
 import { getEmbeddingService, findTopK } from "../embedding-service.js";
 import { resolveTokenLimit } from "../llm-client.js";
+import { BUILT_IN_FACT_NAMES } from "../constants/built-in-facts.js";
 
 type ScanCandidate = FactScanCandidate | TraitScanCandidate | TopicScanCandidate | PersonScanCandidate;
 
@@ -46,10 +47,16 @@ function getExtractionMaxTokens(state: StateManager): number {
   return Math.max(MIN_EXTRACTION_TOKENS, Math.floor(tokenLimit * EXTRACTION_BUDGET_RATIO));
 }
 
-export function queueFactScan(context: ExtractionContext, state: StateManager, options?: ExtractionOptions): number {
+export function queueFactFind(context: ExtractionContext, state: StateManager, options?: ExtractionOptions): number {
+  const human = state.getHuman();
+  const missing_fact_names = human.facts
+    .filter(f => !f.description || f.description === "")
+    .map(f => f.name)
+    .filter(name => BUILT_IN_FACT_NAMES.has(name));
+
+  if (missing_fact_names.length === 0) return 0;
+
   const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state));
-  
-  if (chunks.length === 0) return 0;
 
   // Pre-mark messages before enqueuing — prevents duplicate scans if the
   // queue check fires again during LLM latency (100ms loop × 5s call = 50 dupes)
@@ -58,8 +65,9 @@ export function queueFactScan(context: ExtractionContext, state: StateManager, o
   }
 
   for (const chunk of chunks) {
-    const prompt = buildHumanFactScanPrompt({
+    const prompt = buildFactFindPrompt({
       persona_name: chunk.personaDisplayName,
+      missing_fact_names,
       messages_context: chunk.messages_context,
       messages_analyze: chunk.messages_analyze,
     });
@@ -69,7 +77,7 @@ export function queueFactScan(context: ExtractionContext, state: StateManager, o
       priority: LLMPriority.Low,
       system: prompt.system,
       user: prompt.user,
-      next_step: LLMNextStep.HandleHumanFactScan,
+      next_step: LLMNextStep.HandleFactFind,
       data: {
         ...options,
         personaId: chunk.personaId,
@@ -193,7 +201,7 @@ export function queuePersonScan(context: ExtractionContext, state: StateManager,
 }
 
 export function queueAllScans(context: ExtractionContext, state: StateManager, options?: ExtractionOptions): void {
-  queueFactScan(context, state, options);
+  queueFactFind(context, state, options);
   queueTraitScan(context, state, options);
   queuePersonScan(context, state, options);
   queueTopicScan(context, state, options);

@@ -33,6 +33,7 @@ import { registerReadMemoryExecutor, registerFileReadExecutor } from "./tools/in
 import { createReadMemoryExecutor } from "./tools/builtin/read-memory.js";
 import { EI_WELCOME_MESSAGE, EI_PERSONA_DEFINITION } from "../templates/welcome.js";
 import { shouldStartCeremony, startCeremony, handleCeremonyProgress } from "./orchestrators/index.js";
+import { BUILT_IN_FACTS } from "./constants/built-in-facts.js";
 
 // Static module imports
 import {
@@ -195,6 +196,7 @@ export class Processor {
       await this.bootstrapFirstRun();
     }
     this.bootstrapTools();
+    this.seedBuiltinFacts();
     registerReadMemoryExecutor(createReadMemoryExecutor(this.searchHumanData.bind(this)));
     if (this.isTUI) {
       await registerFileReadExecutor();
@@ -568,6 +570,40 @@ export class Processor {
         created_at: now,
         max_calls_per_interaction: 1,
       });
+    }
+  }
+
+  /**
+   * Seed 25 built-in facts if they don't exist yet.
+   * Called on every startup — safe to call repeatedly.
+   * New facts are created with empty descriptions and validated_date.
+   */
+  private seedBuiltinFacts(): void {
+    const human = this.stateManager.getHuman();
+    const existingFactNames = new Set(human.facts.map(f => f.name));
+    
+    // BUILT_IN_FACTS imported at top of file
+    const now = new Date().toISOString();
+    let seededCount = 0;
+
+    for (const builtInFact of BUILT_IN_FACTS) {
+      if (existingFactNames.has(builtInFact.name)) continue;
+
+      const newFact: Fact = {
+        id: crypto.randomUUID(),
+        name: builtInFact.name,
+        description: '',
+        sentiment: 0,
+        validated_date: '',
+        last_updated: now,
+      };
+      human.facts.push(newFact);
+      seededCount++;
+    }
+
+    if (seededCount > 0) {
+      this.stateManager.setHuman(human);
+      console.log(`[Processor] Seeded ${seededCount} built-in facts`);
     }
   }
 
@@ -1099,6 +1135,10 @@ const toolNextSteps = new Set([
       }
 
       if (response.request.next_step === LLMNextStep.HandleRewriteRewrite) {
+        this.interface.onHumanUpdated?.();
+      }
+
+      if (response.request.next_step === LLMNextStep.HandleFactFind) {
         this.interface.onHumanUpdated?.();
       }
 

@@ -19,6 +19,13 @@ export interface TopicScanPromptData extends BaseScanPromptData {}
 
 export interface PersonScanPromptData extends BaseScanPromptData {}
 
+export interface FactFindPromptData {
+  persona_name: string;
+  missing_fact_names: string[];  // Built-in facts with no description
+  messages_context: Message[];   // Earlier conversation (already processed)
+  messages_analyze: Message[];   // Recent messages to scan
+}
+
 export interface FactScanCandidate {
   type_of_fact: string;
   value_of_fact: string;
@@ -57,6 +64,14 @@ export interface TopicScanResult {
 
 export interface PersonScanResult {
   people: PersonScanCandidate[];
+}
+
+export interface FactFindResult {
+  facts: Array<{
+    name: string;       // Must match a name from missing_fact_names
+    value: string;      // The extracted value
+    evidence: string;   // Direct quote/reference (NOT stored, limits hallucination)
+  }>;
 }
 
 export interface ItemMatchPromptData {

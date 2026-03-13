@@ -3,7 +3,6 @@ import {
   LLMNextStep,
   LLMRequestType,
   LLMPriority,
-  ValidationLevel,
 
   type LLMResponse,
   type LLMRequest,
@@ -24,6 +23,14 @@ vi.mock("../../../../src/core/orchestrators/index.js", () => ({
   orchestratePersonaGeneration: vi.fn(),
   queueItemMatch: vi.fn().mockResolvedValue(1),
   queueItemUpdate: vi.fn(),
+}));
+
+vi.mock("../../../../src/core/embedding-service.js", () => ({
+  getEmbeddingService: () => ({
+    embed: vi.fn().mockResolvedValue(new Array(384).fill(0.1)),
+  }),
+  getItemEmbeddingText: ({ name, description }: { name: string; description?: string }) =>
+    `${name}: ${description ?? ""}`,
 }));
 
 
@@ -77,7 +84,7 @@ function createMockRequest(overrides: Partial<LLMRequest> = {}): LLMRequest {
     priority: LLMPriority.Low,
     system: "system",
     user: "user",
-    next_step: LLMNextStep.HandleHumanFactScan,
+    next_step: LLMNextStep.HandleFactFind,
     data: {
       personaId: "ei",
         personaDisplayName: "Ei",
@@ -110,61 +117,125 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
     vi.clearAllMocks();
   });
 
-  describe("handleHumanFactScan", () => {
-    it("queues item match for each detected fact", async () => {
+  describe("handleFactFind", () => {
+    it("upserts fact with empty description", async () => {
+      // Pre-seed human with a built-in fact that has empty description
+      state._human.facts.push({
+        id: "fact-1",
+        name: "Full Name",
+        description: "",
+        sentiment: 0,
+        validated_date: "",
+        last_updated: "",
+      });
+
       const request = createMockRequest({
-        next_step: LLMNextStep.HandleHumanFactScan,
+        next_step: LLMNextStep.HandleFactFind,
         data: {
           personaId: "ei",
-        personaDisplayName: "Ei",
-          messages_context: [{ id: "1", role: "human", content: "context", timestamp: "", read: true, context_status: "default" }],
-          messages_analyze: [{ id: "2", role: "human", content: "analyze", timestamp: "", read: true, context_status: "default" }],
+          personaDisplayName: "Ei",
+          messages_context: [],
+          messages_analyze: [{ id: "2", role: "human", content: "My name is Jeremy Scherer", timestamp: "", read: true, context_status: "default" }],
         },
       });
 
       const response = createMockResponse(request, {
-        facts: [
-          { type_of_fact: "Birthday", value_of_fact: "January 15th", reason: "User stated their birthday" },
-          { type_of_fact: "Location", value_of_fact: "San Francisco", reason: "User mentioned living there" },
-        ],
+        facts: [{ name: "Full Name", value: "Jeremy Scherer", evidence: "User said 'My name is Jeremy Scherer'" }],
       });
 
-      await handlers.handleHumanFactScan(response, state as any);
+      await handlers[LLMNextStep.HandleFactFind](response, state as any);
 
-      expect(queueItemMatch).toHaveBeenCalledTimes(2);
-      expect(queueItemMatch).toHaveBeenCalledWith(
-        "fact",
-        expect.objectContaining({ type_of_fact: "Birthday" }),
-        expect.objectContaining({ personaId: "ei",
-        personaDisplayName: "Ei" }),
-        state
-      );
+      expect(state.human_fact_upsert).toHaveBeenCalledTimes(1);
+      const upsertedFact = (state.human_fact_upsert as any).mock.calls[0][0];
+      expect(upsertedFact.description).toBe("Jeremy Scherer");
+      expect(upsertedFact.last_changed_by).toBe("ei");
+      // Evidence is NOT stored in the fact
+      expect(upsertedFact.evidence).toBeUndefined();
     });
 
-    it("does nothing when no facts detected", async () => {
-      const request = createMockRequest({
-        next_step: LLMNextStep.HandleHumanFactScan,
+    it("skips fact with existing description", async () => {
+      state._human.facts.push({
+        id: "fact-1",
+        name: "Full Name",
+        description: "John Doe",
+        sentiment: 0,
+        validated_date: "",
+        last_updated: "",
       });
 
-      const response = createMockResponse(request, { facts: [] });
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleFactFind,
+        data: { personaId: "ei", personaDisplayName: "Ei", messages_context: [], messages_analyze: [] },
+      });
 
-      await handlers.handleHumanFactScan(response, state as any);
+      const response = createMockResponse(request, {
+        facts: [{ name: "Full Name", value: "Jeremy Scherer", evidence: "..." }],
+      });
 
-      expect(queueItemMatch).not.toHaveBeenCalled();
+      await handlers[LLMNextStep.HandleFactFind](response, state as any);
+
+      expect(state.human_fact_upsert).not.toHaveBeenCalled();
     });
 
     it("handles missing facts array gracefully", async () => {
       const request = createMockRequest({
-        next_step: LLMNextStep.HandleHumanFactScan,
+        next_step: LLMNextStep.HandleFactFind,
       });
 
       const response = createMockResponse(request, {});
 
-      await handlers.handleHumanFactScan(response, state as any);
+      await handlers[LLMNextStep.HandleFactFind](response, state as any);
 
-      expect(queueItemMatch).not.toHaveBeenCalled();
+      expect(state.human_fact_upsert).not.toHaveBeenCalled();
     });
   });
+
+    it("skips fact with non-built-in name (BUILT_IN_FACT_NAMES validation)", async () => {
+      // The human has a built-in fact BUT the LLM returns a fabricated name
+      state._human.facts.push({
+        id: "fact-1",
+        name: "Full Name",
+        description: "",
+        sentiment: 0,
+        validated_date: "",
+        last_updated: "",
+      });
+
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleFactFind,
+        data: { personaId: "ei", personaDisplayName: "Ei", messages_context: [], messages_analyze: [] },
+      });
+
+      const response = createMockResponse(request, {
+        // LLM hallucinated a fact name not in BUILT_IN_FACT_NAMES
+        facts: [{ name: "Favorite Color", value: "Blue", evidence: "User mentioned blue" }],
+      });
+
+      await handlers[LLMNextStep.HandleFactFind](response, state as any);
+
+      // 'Favorite Color' is NOT a built-in fact → skip
+      expect(state.human_fact_upsert).not.toHaveBeenCalled();
+    });
+
+    it("skips fact not present in human state (existingFact lookup returns undefined)", async () => {
+      // Human has NO facts at all — even if name is valid built-in, nothing to upsert
+      // (human.facts.find() returns undefined)
+      expect(state._human.facts).toHaveLength(0);
+
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleFactFind,
+        data: { personaId: "ei", personaDisplayName: "Ei", messages_context: [], messages_analyze: [] },
+      });
+
+      const response = createMockResponse(request, {
+        facts: [{ name: "Birthday", value: "March 3rd", evidence: "User mentioned their birthday" }],
+      });
+
+      await handlers[LLMNextStep.HandleFactFind](response, state as any);
+
+      // existingFact is undefined → skip (seeding should have added it first)
+      expect(state.human_fact_upsert).not.toHaveBeenCalled();
+    });
 
   describe("handleHumanTraitScan", () => {
     it("queues item match for each detected trait", async () => {
@@ -419,7 +490,6 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
           name: "Birthday",
           description: "User's birthday is January 15th",
           sentiment: 0.8,
-          validated: ValidationLevel.None,
           learned_by: "ei",
         })
       );
@@ -432,7 +502,6 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
         name: "Birthday",
         description: "Old description",
         sentiment: 0.5,
-          validated: ValidationLevel.None,
           validated_date: new Date().toISOString(),
         last_updated: new Date().toISOString(),
       });

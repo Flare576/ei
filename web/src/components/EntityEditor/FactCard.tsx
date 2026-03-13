@@ -1,6 +1,5 @@
 import React from 'react';
 import { SliderControl } from './SliderControl';
-import { ValidationLevel } from '../../../../src/core/types';
 import type { Fact } from '../../../../src/core/types';
 
 interface SliderConfig {
@@ -20,6 +19,7 @@ interface FactCardProps {
   isDirty?: boolean;
   showMeta?: boolean;
   resolvePersonaName?: (id: string) => string;
+  isBuiltIn?: boolean;
 }
 
 const defaultFormat = (v: number) => v.toFixed(2);
@@ -33,6 +33,7 @@ export const FactCard = ({
   isDirty = false,
   showMeta = true,
   resolvePersonaName,
+  isBuiltIn = false,
 }: FactCardProps): React.ReactElement => {
   const cardRef = React.useRef<HTMLDivElement>(null);
 
@@ -48,18 +49,13 @@ export const FactCard = ({
 
   const handleDescriptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     onChange('description', e.target.value);
+    onChange('validated_date', new Date().toISOString());
   };
 
   const handleSliderChange = (field: string, value: number) => {
     onChange(field as keyof Fact, value as Fact[keyof Fact]);
   };
 
-  const handleValidationChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newLevel = e.target.checked ? ValidationLevel.Human : ValidationLevel.None;
-    onChange('validated', newLevel);
-    onChange('validated_date', new Date().toISOString());
-    setTimeout(() => onSave(), 0);
-  };
 
   const formatTimestamp = (timestamp: string) => {
     try {
@@ -69,14 +65,11 @@ export const FactCard = ({
     }
   };
 
-  const validationClass = fact.validated 
-    ? `ei-data-card--validated-${fact.validated}` 
-    : '';
 
   return (
     <div 
       ref={cardRef}
-      className={`ei-data-card ${isDirty ? 'ei-data-card--dirty' : ''} ${validationClass}`}
+      className={`ei-data-card ${isDirty ? 'ei-data-card--dirty' : ''}`}
       onBlur={handleBlur}
     >
       <div className="ei-data-card__header">
@@ -120,24 +113,15 @@ export const FactCard = ({
           </div>
         )}
         <div className="ei-data-card__actions">
-          <label 
-            className="ei-validation-checkbox" 
-            title="Validated facts won't be changed automatically. Uncheck to allow updates."
-          >
-            <input
-              type="checkbox"
-              checked={fact.validated === ValidationLevel.Human}
-              onChange={handleValidationChange}
-            />
-            <span className="ei-validation-checkbox__label">Correct</span>
-          </label>
-          <button 
-            className="ei-control-btn ei-control-btn--danger" 
-            onClick={onDelete}
-            title="Delete"
-          >
-            🗑️
-          </button>
+          {!isBuiltIn && (
+            <button
+              className="ei-control-btn ei-control-btn--danger"
+              onClick={onDelete}
+              title="Delete"
+            >
+              🗑️
+            </button>
+          )}
         </div>
       </div>
     </div>

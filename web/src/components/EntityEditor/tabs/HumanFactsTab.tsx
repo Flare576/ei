@@ -1,6 +1,7 @@
 import type { Fact } from '../../../../../src/core/types';
 import { GroupedCardList } from '../GroupedCardList';
 import { FactCard } from '../FactCard';
+import { BUILT_IN_FACT_NAMES } from '../../../../../src/core/constants/built-in-facts';
 
 interface SliderConfig {
   field: string;
@@ -53,6 +54,7 @@ export const HumanFactsTab = ({
       onDelete={onItemDelete}
       isDirty={isDirty}
       resolvePersonaName={resolvePersonaName}
+      isBuiltIn={BUILT_IN_FACT_NAMES.has(item.name)}
     />
   );
 

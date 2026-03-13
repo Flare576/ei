@@ -3,7 +3,6 @@ import {
   LLMNextStep,
   LLMRequestType,
   LLMPriority,
-  ValidationLevel,
   type LLMResponse,
   type LLMRequest,
   type HumanEntity,
@@ -148,7 +147,6 @@ function createFactWithEmbedding(
     name,
     description,
     sentiment: 0.5,
-    validated: ValidationLevel.None,
     validated_date: new Date().toISOString(),
     last_updated: new Date().toISOString(),
     persona_groups: [],
@@ -370,7 +368,6 @@ describe("Dedup Phase - Clustering", () => {
       name: "No Embedding",
       description: "This fact has no embedding",
       sentiment: 0.5,
-      validated: ValidationLevel.None,
       validated_date: new Date().toISOString(),
       last_updated: new Date().toISOString(),
       persona_groups: [],
@@ -541,7 +538,6 @@ describe("Dedup Handler - handleDedupCurate", () => {
           name: "Merged Fact",
           description: "Combined from fact-1 and fact-2",
           sentiment: 0.7,
-          validated: ValidationLevel.Ei,
           persona_groups: ["group-a"],
         },
       ],
@@ -689,7 +685,6 @@ describe("Dedup Handler - handleDedupCurate", () => {
       name: "Original Name",
       description: "Original description",
       sentiment: 0.8,
-      validated: ValidationLevel.Human,
       validated_date: "2026-01-01T00:00:00Z",
       last_updated: "2026-01-01T00:00:00Z",
       persona_groups: ["group-a", "group-b"],
@@ -722,7 +717,6 @@ describe("Dedup Handler - handleDedupCurate", () => {
         name: "Original Name", // Preserved
         description: "Updated description",
         sentiment: 0.8, // Preserved
-        validated: ValidationLevel.Human, // Preserved
         persona_groups: ["group-a", "group-b"], // Preserved
       })
     );

@@ -3,7 +3,6 @@
  * Source of truth: CONTRACTS.md
  */
 
-import type { ValidationLevel } from "./enums.js";
 
 export interface DataItemBase {
   id: string;
@@ -18,7 +17,6 @@ export interface DataItemBase {
 }
 
 export interface Fact extends DataItemBase {
-  validated: ValidationLevel;
   validated_date: string;
 }
 

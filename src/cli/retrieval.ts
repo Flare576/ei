@@ -67,7 +67,6 @@ export interface FactResult {
   name: string;
   description: string;
   sentiment: number;
-  validated: string;
 }
 
 export interface TraitResult {
@@ -144,7 +143,6 @@ function mapFact(fact: Fact): FactResult {
     name: fact.name,
     description: fact.description,
     sentiment: fact.sentiment,
-    validated: fact.validated,
   };
 }
 

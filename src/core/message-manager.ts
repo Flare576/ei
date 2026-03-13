@@ -16,7 +16,7 @@ import {
 } from "../prompts/index.js";
 import { buildResponsePromptData } from "./prompt-context-builder.js";
 import {
-  queueFactScan,
+  queueFactFind,
   queueTopicScan,
   queuePersonScan,
   type ExtractionContext,
@@ -217,7 +217,7 @@ export function checkAndQueueHumanExtraction(
   const human = sm.getHuman();
 
   const unextractedFacts = sm.messages_getUnextracted(personaId, "f");
-  const factsThreshold = Math.min(EXTRACTION_TAPER_CAP, human.facts.length);
+  const factsThreshold = Math.min(EXTRACTION_TAPER_CAP, human.facts.filter(f => f.description && f.description !== "").length);
   if (unextractedFacts.length > 0 && unextractedFacts.length >= factsThreshold) {
     const context: ExtractionContext = {
       personaId,
@@ -226,7 +226,7 @@ export function checkAndQueueHumanExtraction(
       messages_analyze: unextractedFacts,
       extraction_flag: "f",
     };
-    queueFactScan(context, sm);
+    queueFactFind(context, sm);
     console.log(
       `[Processor] Human Seed extraction: facts (threshold: ${factsThreshold}, unextracted: ${unextractedFacts.length})`
     );

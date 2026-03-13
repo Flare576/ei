@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { StateManager } from "../../../src/core/state-manager.js";
-import { LLMRequestType, LLMPriority, LLMNextStep, ContextStatus, ValidationLevel } from "../../../src/core/types.js";
+import { LLMRequestType, LLMPriority, LLMNextStep, ContextStatus } from "../../../src/core/types.js";
 import { createMockStorage, createDefaultTestState } from "../../helpers/mock-storage.js";
 import type { Fact, Trait, Topic, Person, PersonaEntity, Message, ToolProvider, ToolDefinition } from "../../../src/core/types.js";
 
@@ -23,7 +23,6 @@ describe("StateManager", () => {
         description: "", 
         sentiment: 0, 
         last_updated: "",
-        validated: ValidationLevel.None,
         validated_date: ""
       }];
       
@@ -49,7 +48,7 @@ describe("StateManager", () => {
 
   describe("human entity operations", () => {
     const makeFact = (id: string, name: string): Fact => ({
-      id, name, description: "", sentiment: 0, last_updated: "", validated: ValidationLevel.None, validated_date: ""
+      id, name, description: "", sentiment: 0, last_updated: "", validated_date: ""
     });
 
     const makeTrait = (id: string, name: string): Trait => ({

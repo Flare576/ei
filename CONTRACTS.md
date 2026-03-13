@@ -44,7 +44,7 @@ These field names have **specific meanings** and should be used consistently:
 | `exposure_desired` | 0.0-1.0 | How much the entity wants to discuss this |
 | `sentiment` | -1.0 to 1.0 | Emotional valence (negative to positive) |
 | `strength` | 0.0-1.0 | How strongly a trait manifests |
-| `validated` | ValidationLevel | Whether/how this fact was validated (`None`, `Ei`, `Human`) |
+| `validated_date` | ISO string | When this fact was acknowledged (empty string = unacknowledged; ISO timestamp = acknowledged by Ei mention OR user edit) |
 | `last_ei_asked` | ISO string \| null | When Ei last proactively asked about this Person/Topic |
 | `last_updated` | ISO string | When this record was last modified |
 | `last_activity` | ISO string | When the user last interacted with this entity |
@@ -995,13 +995,7 @@ interface DataItemBase {
 }
 
 interface Fact extends DataItemBase {
-  validated: ValidationLevel;
-}
-
-enum ValidationLevel {
-  None = "none",               // Fresh data, never acknowledged
-  Ei = "ei",                   // Ei mentioned it to user (don't mention again)
-  Human = "human"              // User explicitly confirmed (locked
+  validated_date: string;  // Empty string = unacknowledged; ISO timestamp = acknowledged by Ei mention OR user edit
 }
 
 interface Trait extends DataItemBase {

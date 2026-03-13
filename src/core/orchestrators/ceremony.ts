@@ -2,7 +2,7 @@ import { LLMRequestType, LLMPriority, LLMNextStep, MESSAGE_MIN_COUNT, MESSAGE_MA
 import type { StateManager } from "../state-manager.js";
 import { applyDecayToValue } from "../utils/index.js";
 import {
-  queueFactScan,
+  queueFactFind,
   queueTraitScan,
   queueTopicScan,
   queuePersonScan,
@@ -109,7 +109,7 @@ function queueExposurePhase(personaId: string, state: StateManager, options?: Ex
       messages_analyze: unextractedFacts,
       extraction_flag: "f",
     };
-    queueFactScan(context, state, options);
+    queueFactFind(context, state, options);
   }
   
   const unextractedTraits = state.messages_getUnextracted(personaId, "r");

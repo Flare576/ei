@@ -3,7 +3,6 @@ import {
   LLMNextStep,
   LLMRequestType,
   LLMPriority,
-  ValidationLevel,
 
   type LLMResponse,
   type LLMRequest,
@@ -108,7 +107,6 @@ function seedBloatedFact(state: ReturnType<typeof createMockStateManager>, id = 
     name: "Coding Background",
     description: "A".repeat(800), // over 750 threshold
     sentiment: 0.7,
-    validated: ValidationLevel.None,
     validated_date: new Date().toISOString(),
     last_updated: new Date().toISOString(),
     persona_groups: ["group-a"],
@@ -245,7 +243,6 @@ describe("Rewrite Handlers - Phase 1 (Scan)", () => {
         name: "Other",
         description: "Other fact",
         sentiment: 0.5,
-        validated: ValidationLevel.None,
         last_updated: new Date().toISOString(),
       };
 
@@ -512,7 +509,6 @@ describe("Rewrite Handlers - Phase 2 (Rewrite)", () => {
           name: "New Extracted Fact",
           description: "A new fact extracted from the bloated item",
           sentiment: 0.5,
-          validated: ValidationLevel.None,
           learned_by: "ei",
         })
       );

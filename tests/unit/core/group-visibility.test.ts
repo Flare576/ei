@@ -3,7 +3,6 @@ import {
   LLMNextStep,
   LLMRequestType,
   LLMPriority,
-  ValidationLevel,
 
   type LLMResponse,
   type LLMRequest,
@@ -252,7 +251,6 @@ describe("Group Visibility", () => {
         name: "Name",
         description: "User's name is Jeremy",
         sentiment: 0.5,
-        validated: ValidationLevel.None,
         validated_date: new Date().toISOString(),
         last_updated: new Date().toISOString(),
         persona_groups: ["Fellowship"],

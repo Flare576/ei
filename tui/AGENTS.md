@@ -115,6 +115,50 @@ npm run test:e2e:tui
 
 E2E tests require pre-seeded checkpoint data. See `tests/e2e/README.md` for patterns.
 
+### E2E Test Efficiency Pattern
+
+**CRITICAL: E2E tests are SLOW (30s-2min). Run ONCE, analyze output from file.**
+
+**❌ WRONG (wasteful):**
+```bash
+# Running test suite multiple times to check results
+npm run test:e2e  # Run 1
+# Read streaming output...
+npm run test:e2e  # Run 2 because uncertain
+# Read streaming output again...
+npm run test:e2e  # Run 3 "just to be sure"
+```
+
+**✅ CORRECT (efficient):**
+```bash
+# Run ONCE, save output to evidence file
+npm run test:e2e > ../.sisyphus/evidence/e2e-tui-results.txt 2>&1
+
+# THEN analyze the saved file (instant, repeatable)
+grep -E "(PASS|FAIL|✓|✗)" ../.sisyphus/evidence/e2e-tui-results.txt
+grep "tests passing" ../.sisyphus/evidence/e2e-tui-results.txt
+
+# Or read specific sections
+head -50 ../.sisyphus/evidence/e2e-tui-results.txt  # First 50 lines
+tail -30 ../.sisyphus/evidence/e2e-tui-results.txt  # Summary
+```
+
+**Why this matters:**
+- E2E tests spawn actual terminal processes, seed data, verify UI state
+- One full run = 1-2 minutes of wall time
+- Streaming output to LLM context = expensive token cost
+- Running 6 times (seen in practice) = 6-12 minutes wasted
+
+**File output benefits:**
+- Run once, analyze many times (grep, head, tail, read specific lines)
+- Repeatable verification without re-running tests
+- Evidence persists for debugging and verification
+- Clear separation: execution (slow) vs analysis (instant)
+
+**When to re-run:**
+- After fixing a test failure (code changed)
+- After modifying test setup/fixtures
+- Never re-run just to "double-check" the same output
 ## File Structure
 
 ```

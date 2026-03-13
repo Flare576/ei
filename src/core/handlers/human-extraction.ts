@@ -1,32 +1,78 @@
-import type { LLMResponse } from "../types.js";
+import type { LLMResponse, Fact } from "../types.js";
 import type { StateManager } from "../state-manager.js";
 import type {
-  FactScanResult,
+  FactFindResult,
   TraitScanResult,
   TopicScanResult,
   PersonScanResult,
 } from "../../prompts/human/types.js";
 import { queueItemMatch, type ExtractionContext } from "../orchestrators/index.js";
 import { markMessagesExtracted } from "./utils.js";
+import { BUILT_IN_FACT_NAMES } from "../constants/built-in-facts.js";
+import { getEmbeddingService, getItemEmbeddingText } from "../embedding-service.js";
 
-export async function handleHumanFactScan(response: LLMResponse, state: StateManager): Promise<void> {
-  const result = response.parsed as FactScanResult | undefined;
+export async function handleFactFind(response: LLMResponse, state: StateManager): Promise<void> {
+  const result = response.parsed as FactFindResult | undefined;
   
   // Mark messages as scanned regardless of whether facts were found
   markMessagesExtracted(response, state, "f");
   
   if (!result?.facts || !Array.isArray(result.facts)) {
-    console.log("[handleHumanFactScan] No facts detected or invalid result");
+    console.log("[handleFactFind] No facts detected or invalid result");
     return;
   }
 
   const context = response.request.data as unknown as ExtractionContext;
   if (!context?.personaId) return;
 
-  for (const candidate of result.facts) {
-    await queueItemMatch("fact", candidate, context, state);
+  const human = state.getHuman();
+  const now = new Date().toISOString();
+  let upsertCount = 0;
+
+  for (const factResult of result.facts) {
+    // Only upsert facts that match a built-in name
+    if (!BUILT_IN_FACT_NAMES.has(factResult.name)) {
+      console.log(`[handleFactFind] Skipping non-built-in fact: "${factResult.name}"`);
+      continue;
+    }
+
+    // Find the existing fact in state
+    const existingFact = human.facts.find(f => f.name === factResult.name);
+    if (!existingFact) {
+      console.log(`[handleFactFind] Skipping unknown fact: "${factResult.name}"`);
+      continue;
+    }
+
+    // Skip facts that already have descriptions (only fill empty ones)
+    if (existingFact.description && existingFact.description !== "") {
+      console.log(`[handleFactFind] Skipping fact with existing description: "${factResult.name}"`);
+      continue;
+    }
+
+    // Compute embedding for the updated fact
+    let embedding: number[] | undefined;
+    try {
+      const embeddingService = getEmbeddingService();
+      const text = getItemEmbeddingText({ name: factResult.name, description: factResult.value });
+      embedding = await embeddingService.embed(text);
+    } catch (err) {
+      console.warn(`[handleFactFind] Failed to compute embedding for fact "${factResult.name}":`, err);
+    }
+
+    const updatedFact: Fact = {
+      ...existingFact,
+      description: factResult.value,
+      last_updated: now,
+      learned_by: existingFact.learned_by ?? context.personaId,
+      last_changed_by: context.personaId,
+      embedding,
+    };
+
+    state.human_fact_upsert(updatedFact);
+    upsertCount++;
   }
-  console.log(`[handleHumanFactScan] Queued ${result.facts.length} fact(s) for matching`);
+
+  console.log(`[handleFactFind] Upserted ${upsertCount} fact(s)`);
 }
 
 export async function handleHumanTraitScan(response: LLMResponse, state: StateManager): Promise<void> {
@@ -85,3 +131,4 @@ export async function handleHumanPersonScan(response: LLMResponse, state: StateM
   }
   console.log(`[handleHumanPersonScan] Queued ${result.people.length} person(s) for matching`);
 }
+

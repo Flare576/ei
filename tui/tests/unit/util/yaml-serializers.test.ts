@@ -8,7 +8,7 @@ import {
   contextFromYAML,
 } from "../../../src/util/yaml-serializers";
 import type { PersonaEntity, HumanEntity, Message } from "../../../../src/core/types";
-import { ValidationLevel, ContextStatus } from "../../../../src/core/types";
+import { ContextStatus } from "../../../../src/core/types";
 
 describe("personaToYAML", () => {
   const timestamp = "2024-01-01T00:00:00.000Z";
@@ -337,7 +337,7 @@ describe("humanToYAML", () => {
     const human: HumanEntity = {
       ...minimalHuman,
       facts: [
-        { id: "fact-1", name: "location", description: "Lives in NYC", sentiment: 0, last_updated: timestamp, validated: ValidationLevel.None, validated_date: timestamp },
+        { id: "fact-1", name: "location", description: "Lives in NYC", sentiment: 0, last_updated: timestamp, validated_date: "" },
       ],
       traits: [
         { id: "trait-1", name: "curious", description: "always learning", strength: 0.8, sentiment: 0.5, last_updated: timestamp },
@@ -362,7 +362,7 @@ describe("humanToYAML", () => {
   test("adds _delete: false to all items", () => {
     const human: HumanEntity = {
       ...minimalHuman,
-      facts: [{ id: "f1", name: "test", description: "test desc", sentiment: 0, last_updated: timestamp, validated: ValidationLevel.None, validated_date: timestamp }],
+      facts: [{ id: "f1", name: "test", description: "test desc", sentiment: 0, last_updated: timestamp, validated_date: "" }],
       traits: [{ id: "t1", name: "test", description: "test desc", strength: 1, sentiment: 0, last_updated: timestamp }],
       topics: [{ id: "top1", name: "test", description: "test desc", exposure_current: 0.5, exposure_desired: 0.5, sentiment: 0, last_updated: timestamp }],
       people: [{ id: "p1", name: "Test", description: "test desc", relationship: "test", sentiment: 0, exposure_current: 0.5, exposure_desired: 0.5, last_updated: timestamp }],
@@ -623,7 +623,7 @@ describe("round-trip serialization", () => {
     const original: HumanEntity = {
       entity: "human",
       facts: [
-        { id: "f1", name: "coffee", description: "Loves coffee", sentiment: 0.8, last_updated: timestamp, validated: ValidationLevel.None, validated_date: timestamp },
+        { id: "f1", name: "coffee", description: "Loves coffee", sentiment: 0.8, last_updated: timestamp, validated_date: "" },
       ],
       traits: [
         { id: "t1", name: "introverted", description: "prefers quiet time", strength: 0.7, sentiment: 0, last_updated: timestamp },

@@ -211,7 +211,6 @@ export async function handleDedupCurate(
       ...(entity_type === 'trait' && { strength: addition.strength ?? 0.5 }),
       ...(entity_type === 'fact' && { 
         confidence: addition.confidence ?? 0.5,
-        validated: 'unknown' as import("../types/enums.js").ValidationLevel,
         validated_date: ''
       }),
       ...((entity_type === 'topic' || entity_type === 'person') && {

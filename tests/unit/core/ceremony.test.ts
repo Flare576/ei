@@ -201,8 +201,7 @@ describe("Decay Computation", () => {
 // =============================================================================
 
 import { queueRewritePhase, handleCeremonyProgress } from "../../../src/core/orchestrators/ceremony.js";
-import { LLMNextStep, LLMRequestType, LLMPriority, ValidationLevel } from "../../../src/core/types.js";
-import { LLMNextStep, LLMRequestType, LLMPriority, ValidationLevel } from "../../../src/core/types.js";
+import { LLMNextStep, LLMRequestType, LLMPriority } from "../../../src/core/types.js";
 import type { HumanEntity, Fact, Trait, Topic, Person } from "../../../src/core/types.js";
 
 function createMockRewriteState(overrides: Partial<HumanEntity> = {}) {
@@ -231,7 +230,6 @@ function makeFact(id: string, descLength: number): Fact {
     name: `Fact ${id}`,
     description: "X".repeat(descLength),
     sentiment: 0.5,
-    validated: ValidationLevel.None,
     last_updated: new Date().toISOString(),
   };
 }

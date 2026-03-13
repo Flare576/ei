@@ -44,32 +44,7 @@ A meaningful subject or concept relevant to the HUMAN USER. It is:
 
   const doNotCaptureFragment = `# **IMPORTANT** The Following Are NOT TOPICS
 
-# The system tracks FACTS, TRAITS, and PEOPLE as separate types. Do NOT capture:
-
-## FACTS - Tracked Separately
-- **Biographical Data (Do NOT Capture):** Name, Nickname, Birthday, Location, Job, Marital Status, Gender, Eye Color, Hair Color.
-  > **CRITICAL:** The HUMAN USER's name itself, or a collection of their basic biographical facts, is NEVER a TOPIC. Even if multiple biographical facts are mentioned together (e.g., "My name is John, I live in NYC, and I'm a software engineer"), do not summarize them as a 'topic' about the user's identity.
-- Other Important Dates: Wedding Anniversary, Job Anniversary
-- Health & Well-being: Allergies, Medical Conditions, Dietary Restrictions
-
-> NOTE: Many FACTS have stories/topics around them.
-> "My birthday is May 26th" is a FACT. "A goat jumped out of my birthday cake" is a TOPIC.
-
-## TRAITS - Tracked Separately
-* Personality Patterns, Communication style, Behavioral tendencies
-* Cognitive Style, Emotional Traits, Work Ethic, Social Orientation
-
-> NOTE: Many TRAITS have stories/topics around them.
-> "I'm a visual learner" is a TRAIT. "I saw a picture of an atom and I FINALLY GET IT" is a TOPIC.
-
-## PEOPLE / Relationships - Tracked Separately
-- Immediate family, Extended family, Friends, Coworkers, etc.
-
-> NOTE: Many PEOPLE have stories/topics around them.
-> "Sarah is my dream girl" is a PERSON. "I hope Sarah and I get married on the moon" is a TOPIC.
-
-## AI PERSONAS - Tracked Separately
-- Do NOT record any stories or details about PERSONAS as TOPICS`;
+Do NOT extract biographical facts (birthday, job title, location) or personality traits — those are Facts/Traits, not Topics. Do NOT extract people (family, friends, coworkers) — those are People. Do NOT extract AI Persona details — those are tracked separately.`;
 
   const criticalFragment = `# CRITICAL INSTRUCTIONS
 

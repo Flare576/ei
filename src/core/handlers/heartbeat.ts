@@ -1,7 +1,6 @@
 import {
   ContextStatus,
   LLMNextStep,
-  ValidationLevel,
   type LLMResponse,
   type Message,
 } from "../types.js";
@@ -83,7 +82,7 @@ export function handleEiHeartbeat(response: LLMResponse, state: StateManager): v
   if (found.type === "fact") {
     const factsNav = isTUI ? "using /me facts" : "using \u2630 \u2192 My Data";
     sendMessage(`Another persona updated a fact called "${found.name}" to "${found.description}". If that's right, you can lock it from further changes by ${factsNav}.`);
-    state.human_fact_upsert({ ...found, validated: ValidationLevel.Ei, validated_date: now });
+    state.human_fact_upsert({ ...found, validated_date: now });
     console.log(`[handleEiHeartbeat] Notified about fact "${found.name}"`);
     return;
   }

@@ -9,11 +9,6 @@ export enum ContextStatus {
   Never = "never",
 }
 
-export enum ValidationLevel {
-  None = "none",     // Fresh data, never acknowledged
-  Ei = "ei",         // Ei mentioned it to user (don't mention again)
-  Human = "human",   // User explicitly confirmed (locked)
-}
 export enum LLMRequestType {
   Response = "response",
   JSON = "json",
@@ -30,7 +25,7 @@ export enum LLMNextStep {
   HandlePersonaResponse = "handlePersonaResponse",
   HandlePersonaGeneration = "handlePersonaGeneration",
   HandlePersonaDescriptions = "handlePersonaDescriptions",
-  HandleHumanFactScan = "handleHumanFactScan",
+  HandleFactFind = "handleFactFind",
   HandleHumanTraitScan = "handleHumanTraitScan",
   HandleHumanTopicScan = "handleHumanTopicScan",
   HandleHumanPersonScan = "handleHumanPersonScan",

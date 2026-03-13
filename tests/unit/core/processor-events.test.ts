@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { Processor } from "../../../src/core/processor.js";
-import { ValidationLevel } from "../../../src/core/types.js";
 import type { Ei_Interface, PersonaEntity } from "../../../src/core/types.js";
 
 // Mock the handlers module to intercept handler calls
@@ -9,7 +8,7 @@ vi.mock("../../../src/core/handlers/index.js", () => ({
     handlePersonaResponse: vi.fn(),
     handlePersonaGeneration: vi.fn(),
     handlePersonaDescriptions: vi.fn(),
-    handleHumanFactScan: vi.fn(),
+    handleFactFind: vi.fn(),
     handleHumanTraitScan: vi.fn(),
     handleHumanTopicScan: vi.fn(),
     handleHumanPersonScan: vi.fn(),
@@ -29,7 +28,7 @@ vi.mock("../../../src/core/handlers/index.js", () => ({
 // Mock the orchestrator to prevent actual persona generation and extraction queueing
 vi.mock("../../../src/core/orchestrators/index.js", () => ({
   orchestratePersonaGeneration: vi.fn(),
-  queueFactScan: vi.fn(),
+  queueFactFind: vi.fn(),
   queueTraitScan: vi.fn(),
   queueTopicScan: vi.fn(),
   queuePersonScan: vi.fn(),
@@ -152,7 +151,6 @@ describe("Processor Event System", () => {
       description: "A test fact",
       sentiment: 0,
       last_updated: new Date().toISOString(),
-      validated: ValidationLevel.None,
       validated_date: new Date().toISOString(),
     });
     expect(mock.calls).toContain("onHumanUpdated");
@@ -176,7 +174,6 @@ describe("Processor Event System", () => {
       description: "A test fact",
       sentiment: 0,
       last_updated: new Date().toISOString(),
-      validated: ValidationLevel.None,
       validated_date: new Date().toISOString(),
     });
     mock.calls.length = 0;

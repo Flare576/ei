@@ -15,7 +15,6 @@ vi.mock("../../../src/core/embedding-service.js", async (importOriginal) => {
 });
 
 import { retrieve, retrieveBalanced, resolveLinkedItems, lookupById } from "../../../src/cli/retrieval.js";
-import { ValidationLevel } from "../../../src/core/types.js";
 
 const EMBEDDING = new Array(384).fill(1);
 const NOW = "2026-01-01T00:00:00Z";
@@ -58,7 +57,7 @@ function createTestState(counts: {
     timestamp: NOW,
     human: {
       entity: "human",
-      facts: makeDataItems("fact", counts.facts ?? 0, { validated: ValidationLevel.None, validated_date: NOW }),
+      facts: makeDataItems("fact", counts.facts ?? 0, { validated_date: NOW }),
       traits: makeDataItems("trait", counts.traits ?? 0, { strength: 0.5 }),
       people: makeDataItems("person", counts.people ?? 0, { relationship: "friend", exposure_current: 0.5, exposure_desired: 0.5 }),
       topics: makeDataItems("topic", counts.topics ?? 0, { category: "Interest", exposure_current: 0.5, exposure_desired: 0.5 }),
@@ -104,18 +103,18 @@ describe("retrieve (sub-commands)", () => {
   });
 
   it("returns [] for empty query", async () => {
-    const items = makeDataItems("fact", 3, { validated: ValidationLevel.None, validated_date: NOW });
+    const items = makeDataItems("fact", 3, { validated_date: NOW });
     expect(await retrieve(items, "")).toEqual([]);
   });
 
   it("respects limit", async () => {
-    const items = makeDataItems("fact", 10, { validated: ValidationLevel.None, validated_date: NOW });
+    const items = makeDataItems("fact", 10, { validated_date: NOW });
     const result = await retrieve(items, "test", 3);
     expect(result).toHaveLength(3);
   });
 
   it("returns all when fewer than limit", async () => {
-    const items = makeDataItems("fact", 2, { validated: ValidationLevel.None, validated_date: NOW });
+    const items = makeDataItems("fact", 2, { validated_date: NOW });
     const result = await retrieve(items, "test", 10);
     expect(result).toHaveLength(2);
   });

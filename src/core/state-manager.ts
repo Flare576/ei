@@ -14,6 +14,7 @@ import type {
   ToolDefinition,
   ToolProvider,
 } from "./types.js";
+import { BUILT_IN_FACT_NAMES } from './constants/built-in-facts.js';
 import type { Storage } from "../storage/interface.js";
 import {
   HumanState,
@@ -43,6 +44,7 @@ export class StateManager {
       this.tools = state.tools ?? [];
       this.providers = state.providers ?? [];
       this.migrateLearnedByToIds();
+      this.migrateFactValidation();
     } else {
       this.humanState.load(createDefaultHumanEntity());
     }
@@ -84,6 +86,73 @@ export class StateManager {
     if (dirty) {
       this.humanState.set(human);
       console.log("[StateManager] Migrated learned_by fields from display names to persona IDs");
+    }
+  }
+
+  /**
+   * Migration: Facts used to have a 'validated' field (now removed).
+   * Now, only 25 built-in facts remain; others are converted to Topics with category='Fact'.
+   * - Facts with 'validated' field whose name is NOT in BUILT_IN_FACT_NAMES → move to Topics
+   * - Facts with 'validated' field whose name IS in BUILT_IN_FACT_NAMES → strip 'validated'
+   * No-op for already-migrated data (no 'validated' field present).
+   */
+  private migrateFactValidation(): void {
+    const human = this.humanState.get();
+    
+    // Check if any fact has 'validated' property (old format detection)
+    const hasOldFormat = human.facts.some((f) => 'validated' in f);
+    if (!hasOldFormat) return;
+
+    let dirty = false;
+    const newFacts: Fact[] = [];
+    let movedCount = 0;
+    let strippedCount = 0;
+    // Define legacy fact interface for type-safe migration
+    interface LegacyFact extends Fact {
+      validated?: boolean;
+    }
+
+    for (const fact of human.facts) {
+      if (!('validated' in fact)) {
+        // Already migrated fact, keep as-is
+        newFacts.push(fact);
+        continue;
+      }
+      
+      if (BUILT_IN_FACT_NAMES.has(fact.name)) {
+        // Matching built-in: strip 'validated' field, preserve description
+        const { validated, ...cleanedFact } = fact as LegacyFact;
+        newFacts.push(cleanedFact);
+        strippedCount++;
+        dirty = true;
+      } else {
+        // Non-matching: move to Topics
+        const newTopic: Topic = {
+          id: crypto.randomUUID(),
+          name: fact.name,
+          description: fact.description,
+          category: 'Fact',
+          sentiment: fact.sentiment,
+          exposure_current: 0.3,
+          exposure_desired: 0.3,
+          last_updated: fact.last_updated,
+          learned_by: fact.learned_by,
+          last_changed_by: fact.last_changed_by,
+          persona_groups: fact.persona_groups,
+          embedding: fact.embedding,
+        };
+        human.topics.push(newTopic);
+        movedCount++;
+        dirty = true;
+      }
+    }
+
+    if (dirty) {
+      human.facts = newFacts;
+      this.humanState.set(human);
+      console.log(
+        `[StateManager] Migrated fact validation: moved ${movedCount} non-matching facts to Topics, stripped 'validated' from ${strippedCount} built-in facts`
+      );
     }
   }
 

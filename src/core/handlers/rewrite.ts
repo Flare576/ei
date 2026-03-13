@@ -2,7 +2,6 @@ import {
   LLMRequestType,
   LLMPriority,
   LLMNextStep,
-  ValidationLevel,
   type LLMResponse,
   type Fact,
   type Trait,
@@ -247,7 +246,6 @@ export async function handleRewriteRewrite(response: LLMResponse, state: StateMa
       case "fact": {
         const fact: Fact = {
           ...baseFields,
-          validated: ValidationLevel.None,
           validated_date: now,
         };
         state.human_fact_upsert(fact);

@@ -1,6 +1,6 @@
 export { orchestratePersonaGeneration, type PartialPersona } from "./persona-generation.js";
 export {
-  queueFactScan,
+  queueFactFind,
   queueTraitScan,
   queueTopicScan,
   queuePersonScan,

@@ -42,11 +42,9 @@ Your job is to quickly identify:
 * AI Persona (use \`type_of_person: "Persona"\`)
 
 **A PERSON Is NOT**
-- Biographical data: Birthday, Location, Job, Marital Status, Gender, Eye Color, Hair Color
-- Other unchangeable Data: Wedding Day, Allergies
-- Trait: Personality patterns, communication style, behavioral tendencies
-- General Topic: Interests, Hobbies, General subjects
-- Characters: Fictitious entities from books, movies, stories, media, etc.`;
+- Do NOT extract the user's own biographical facts (birthday, job title, location) or personality traits - those are Facts/Traits, not People.
+- Do NOT extract general topics, interests, or hobbies - those are Topics.
+- Do NOT extract fictitious characters from books, movies, or media.`;
   const criticalFragment = `# CRITICAL INSTRUCTIONS
 
 ONLY ANALYZE the "Most Recent Messages" in the following conversation. The "Earlier Conversation" is provided for your context and has already been processed!
