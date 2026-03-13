@@ -20,7 +20,7 @@ interface Cluster {
 // DEDUP CANDIDATE FINDING (copied from ceremony.ts)
 // =============================================================================
 
-const DEDUP_DEFAULT_THRESHOLD = 0.95;
+const DEDUP_DEFAULT_THRESHOLD = 0.85;  // Lowered from 0.95 based on experimental analysis: 0.95 only catches 3.9% of duplicate name groups, 0.85 catches 46.7%
 
 function findDedupCandidates<T extends DedupableItem>(
   items: T[],
