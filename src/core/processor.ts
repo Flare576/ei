@@ -291,7 +291,7 @@ export class Processor {
         builtin: true,
         enabled: true,
         created_at: now,
-        max_calls_per_interaction: 3,
+        max_calls_per_interaction: 6,  // Dedup needs to verify relationships before irreversible merges. Typical cluster (3-8 items) requires: parent concept lookup + 2 relationship verifications + context validation. Still under HARD_TOOL_CALL_LIMIT (10).
       });
     }
 
