@@ -15,22 +15,56 @@ import type { DedupPromptData } from "./types.js";
 export function buildDedupPrompt(data: DedupPromptData): { system: string; user: string } {
   const typeLabel = data.itemType.charAt(0).toUpperCase() + data.itemType.slice(1);
   
-  const system = `You are acting as the curator for a user's internal database. You have been given a cluster of ${typeLabel} records that our system believes may be duplicates (based on semantic similarity >= 0.90).
+  const system = `## HARD RULES (Non-Negotiable — Override All Other Instructions)
+
+You are working with Opus 4.6 constraints. These rules prevent overthinking and ensure decisive action:
+
+### 1. TOOL BUDGET
+- You have **6 \`read_memory\` calls** for this cluster
+- Prioritize: verify ambiguous relationships > check parent concepts > validate new entities
+- After 6 calls, make decisions with available information
+- Do NOT waste calls re-checking pairs you already examined
+
+### 2. SATISFICING MODE (Good Enough > Perfect)
+- If two items share **85%+ semantic similarity** on core meaning → merge them
+- Do NOT re-examine after deciding to merge
+- Do NOT explore alternative groupings
+- First valid match wins — stop searching for "better" options
+
+### 3. FORBIDDEN PATTERNS (Signs of Overthinking)
+If you find yourself writing these phrases, **STOP IMMEDIATELY**:
+- ❌ "On the other hand..." / "However, there's another angle..."
+- ❌ "Let me reconsider..." / "But what if..."
+- ❌ "This could be interpreted as..."
+- ❌ Re-analyzing the same pair after making a decision
+
+Output format when you catch overthinking:
+\`\`\`
+[OVERTHINKING DETECTED]
+Decision: [Yes/No to merge]
+Reason: [1 sentence]
+\`\`\`
+
+---
+
+## YOUR TASK
+
+You are acting as the curator for a user's internal database. You have been given a cluster of ${typeLabel} records that our system believes may be duplicates (based on semantic similarity >= 0.90).
 
 **YOUR PRIME DIRECTIVE IS TO LOSE _NO_ DATA.**
 
 Your secondary directive is to ORGANIZE IT into small, non-repetitive components. The user NEEDS the data, but the data is used by AI agents, so duplication limits usefulness—agents waste tokens re-reading the same information under different names.
 
-You have access to a tool called \`read_memory\` which will query the user's internal system for additional context if needed. Use it to verify relationships, check for related records, or gather more information before making merge decisions.
+You have access to a tool called \`read_memory\` (6 calls max — see HARD RULES above). Use it strategically to verify relationships, check for related records, or gather context before making merge decisions.
 
-Your task:
-1. **Identify true duplicates**: Examine each record. Are these genuinely the same thing with different wording, or are they distinct but related concepts?
+### Decision Process:
+1. **Identify true duplicates**: Examine each record. Are these genuinely the same thing with different wording (85%+ core meaning overlap), or are they distinct but related concepts?
 2. **Merge where appropriate**: For TRUE duplicates, consolidate all unique information into ONE canonical record. Pick the best "name" (most descriptive, most commonly used). Merge all descriptions—every unique detail must be preserved.
 3. **Keep distinct concepts separate**: Similar ≠ duplicate. "Software Engineering" and "Software Architecture" may be related but are NOT the same. "Job at Company X" and "Profession: Software Engineer" are related but distinct. Do NOT merge these.
 4. **Track what was merged**: For removed records, indicate which record absorbed their data (via "replaced_by" field).
 5. **Add new records if needed**: If consolidating reveals a MISSING intermediate concept (e.g., merging "Python Developer" and "Backend Engineer" reveals we're missing "Software Engineering" as a parent topic), create it.
 
-The format of your final output should be:
+### Output Format:
 {
   "update": [
     /* Full ${typeLabel} record payloads with all fields preserved */
@@ -53,14 +87,14 @@ Record format for "${typeLabel}" (based on type):
 
 ${buildRecordFormatExamples(data.itemType)}
 
-Rules:
+### Rules:
 - Do NOT invent information. Only redistribute what exists in the cluster.
 - Descriptions should be concise—ideally under 300 characters, never over 500.
 - Preserve all numeric values (sentiment, strength, confidence, exposure, etc.) from source records. When merging, take the HIGHER value for strength/confidence, AVERAGE for sentiment.
 - Every removed record MUST have "replaced_by" pointing to the canonical record that absorbed its data.
 - The "update" array should contain AT LEAST ONE record (the canonical/merged one), even if all others are removed.
 - If records are NOT duplicates (just similar), return them ALL in "update" unchanged, with empty "remove" and "add" arrays.
-- Use \`read_memory\` to check for related records or gather context before making irreversible merge decisions.`;
+- Use \`read_memory\` strategically (6 calls max) to check for related records or gather context before making irreversible merge decisions.`;
 
   const user = JSON.stringify({
     cluster: data.cluster.map(stripEmbedding),
