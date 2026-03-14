@@ -502,11 +502,15 @@ interface EditableSettingsData {
     polling_interval_ms?: number | null;
     last_sync?: string | null;
     extraction_point?: string | null;
+    extraction_model?: string | null;
+    extraction_token_limit?: string | number | null;
   };
   claudeCode?: {
     integration?: boolean | null;
     polling_interval_ms?: number | null;
     last_sync?: string | null;
+    extraction_model?: string | null;
+    extraction_token_limit?: string | number | null;
   };
   backup?: {
     enabled?: boolean | null;
@@ -534,11 +538,15 @@ export function settingsToYAML(settings: HumanSettings | undefined): string {
       polling_interval_ms: settings?.opencode?.polling_interval_ms ?? 1800000,
       last_sync: settings?.opencode?.last_sync ?? null,
       extraction_point: settings?.opencode?.extraction_point ?? null,
+      extraction_model: settings?.opencode?.extraction_model ?? 'default',
+      extraction_token_limit: settings?.opencode?.extraction_token_limit ?? 'default',
     },
     claudeCode: {
       integration: settings?.claudeCode?.integration ?? false,
       polling_interval_ms: settings?.claudeCode?.polling_interval_ms ?? 1800000,
       last_sync: settings?.claudeCode?.last_sync ?? null,
+      extraction_model: settings?.claudeCode?.extraction_model ?? 'default',
+      extraction_token_limit: settings?.claudeCode?.extraction_token_limit ?? 'default',
     },
     backup: {
       enabled: settings?.backup?.enabled ?? false,
@@ -551,7 +559,9 @@ export function settingsToYAML(settings: HumanSettings | undefined): string {
     lineWidth: 0,
   })
   .replace(/^(\s+)(last_sync: .+)$/mg, '$1# [read-only] $2')
-  .replace(/^(\s+)(extraction_point: .+)$/mg, '$1# [read-only] $2');
+  .replace(/^(\s+)(extraction_point: .+)$/mg, '$1# [read-only] $2')
+  .replace(/^(\s+)(extraction_model: .+)$/mg, '$1$2 # e.g. Anthropic:claude-haiku-4-5')
+  .replace(/^(\s+)(extraction_token_limit: .+)$/mg, '$1$2 # e.g. 100000 for Haiku');
 }
 export function settingsFromYAML(yamlContent: string, original: HumanSettings | undefined): HumanSettings {
   const data = YAML.parse(yamlContent) as EditableSettingsData;
@@ -578,6 +588,12 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
       last_sync: original?.opencode?.last_sync,
       extraction_point: original?.opencode?.extraction_point,
       processed_sessions: original?.opencode?.processed_sessions,
+      extraction_model: (data.opencode.extraction_model != null && data.opencode.extraction_model !== 'default')
+        ? data.opencode.extraction_model
+        : undefined,
+      extraction_token_limit: (data.opencode.extraction_token_limit != null && data.opencode.extraction_token_limit !== 'default')
+        ? Number(data.opencode.extraction_token_limit)
+        : undefined,
     };
   }
 
@@ -588,6 +604,12 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
       polling_interval_ms: nullToUndefined(data.claudeCode.polling_interval_ms),
       last_sync: original?.claudeCode?.last_sync,
       processed_sessions: original?.claudeCode?.processed_sessions,
+      extraction_model: (data.claudeCode.extraction_model != null && data.claudeCode.extraction_model !== 'default')
+        ? data.claudeCode.extraction_model
+        : undefined,
+      extraction_token_limit: (data.claudeCode.extraction_token_limit != null && data.claudeCode.extraction_token_limit !== 'default')
+        ? Number(data.claudeCode.extraction_token_limit)
+        : undefined,
     };
   }
 
