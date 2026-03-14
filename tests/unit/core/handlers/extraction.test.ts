@@ -41,7 +41,6 @@ function createMockStateManager() {
   const human: HumanEntity = {
     entity: "human",
     facts: [],
-    traits: [],
     topics: [],
     people: [],
     quotes: [],
@@ -56,7 +55,6 @@ function createMockStateManager() {
     getHuman: vi.fn(() => human),
     setHuman: vi.fn((h: HumanEntity) => Object.assign(human, h)),
     human_fact_upsert: vi.fn((fact: Fact) => human.facts.push(fact)),
-    human_trait_upsert: vi.fn((trait: Trait) => human.traits.push(trait)),
     human_topic_upsert: vi.fn((topic: Topic) => human.topics.push(topic)),
     human_person_upsert: vi.fn((person: Person) => human.people.push(person)),
     persona_getById: vi.fn((id: string) => Object.values(personas).find(p => p.id === id) ?? null),

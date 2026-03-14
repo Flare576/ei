@@ -202,13 +202,12 @@ describe("Decay Computation", () => {
 
 import { queueRewritePhase, handleCeremonyProgress } from "../../../src/core/orchestrators/ceremony.js";
 import { LLMNextStep, LLMRequestType, LLMPriority } from "../../../src/core/types.js";
-import type { HumanEntity, Fact, Trait, Topic, Person } from "../../../src/core/types.js";
+import type { HumanEntity, Fact, Topic, Person } from "../../../src/core/types.js";
 
 function createMockRewriteState(overrides: Partial<HumanEntity> = {}) {
   const human: HumanEntity = {
     entity: "human",
     facts: [],
-    traits: [],
     topics: [],
     people: [],
     quotes: [],
@@ -230,17 +229,6 @@ function makeFact(id: string, descLength: number): Fact {
     name: `Fact ${id}`,
     description: "X".repeat(descLength),
     sentiment: 0.5,
-    last_updated: new Date().toISOString(),
-  };
-}
-
-function makeTrait(id: string, descLength: number): Trait {
-  return {
-    id,
-    name: `Trait ${id}`,
-    description: "X".repeat(descLength),
-    sentiment: 0.5,
-    strength: 0.5,
     last_updated: new Date().toISOString(),
   };
 }
@@ -290,7 +278,6 @@ describe("Rewrite Phase", () => {
       const state = createMockRewriteState({
         settings: { rewrite_model: "TestProvider:model" },
         facts: [makeFact("f1", 500)],
-        traits: [makeTrait("t1", 100)],
       });
 
       queueRewritePhase(state as any);
@@ -347,7 +334,6 @@ describe("Rewrite Phase", () => {
           makeFact("f-small", 200),
           makeFact("f-big", 800),
         ],
-        traits: [makeTrait("t-small", 750)],  // exactly 750 — NOT above
       });
 
       queueRewritePhase(state as any);
@@ -373,7 +359,6 @@ function createMockProgressState(pendingCeremonies: boolean = false, hasActivity
   const human: HumanEntity = {
     entity: "human",
     facts: [],
-    traits: [],
     topics: [],
     people: [],
     quotes: [],

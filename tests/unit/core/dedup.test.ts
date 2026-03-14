@@ -7,7 +7,6 @@ import {
   type LLMRequest,
   type HumanEntity,
   type Fact,
-  type Trait,
   type Topic,
   type Person,
   type Quote,
@@ -39,7 +38,6 @@ function createMockStateManager(): StateManager & { _human: HumanEntity } {
   const human: HumanEntity = {
     entity: "human",
     facts: [],
-    traits: [],
     topics: [],
     people: [],
     quotes: [],
@@ -58,11 +56,6 @@ function createMockStateManager(): StateManager & { _human: HumanEntity } {
       if (idx >= 0) human.facts[idx] = fact;
       else human.facts.push(fact);
     }),
-    human_trait_upsert: vi.fn((trait: Trait) => {
-      const idx = human.traits.findIndex(t => t.id === trait.id);
-      if (idx >= 0) human.traits[idx] = trait;
-      else human.traits.push(trait);
-    }),
     human_topic_upsert: vi.fn((topic: Topic) => {
       const idx = human.topics.findIndex(t => t.id === topic.id);
       if (idx >= 0) human.topics[idx] = topic;
@@ -76,10 +69,6 @@ function createMockStateManager(): StateManager & { _human: HumanEntity } {
     human_fact_remove: vi.fn((id: string) => {
       const idx = human.facts.findIndex(f => f.id === id);
       if (idx >= 0) human.facts.splice(idx, 1);
-    }),
-    human_trait_remove: vi.fn((id: string) => {
-      const idx = human.traits.findIndex(t => t.id === id);
-      if (idx >= 0) human.traits.splice(idx, 1);
     }),
     human_topic_remove: vi.fn((id: string) => {
       const idx = human.topics.findIndex(t => t.id === id);
@@ -353,7 +342,6 @@ describe("Dedup Phase - Clustering", () => {
 
   it("handles empty entity list gracefully", async () => {
     state._human.facts = [];
-    state._human.traits = [];
     state._human.topics = [];
     state._human.people = [];
 

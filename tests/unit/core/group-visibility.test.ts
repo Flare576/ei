@@ -34,7 +34,6 @@ function createMockStateManager(options: {
   const human: HumanEntity = {
     entity: "human",
     facts: [],
-    traits: [],
     topics: [],
     people: [],
     quotes: [],
@@ -70,11 +69,6 @@ function createMockStateManager(options: {
       const idx = human.facts.findIndex(f => f.id === fact.id);
       if (idx >= 0) human.facts[idx] = fact;
       else human.facts.push(fact);
-    }),
-    human_trait_upsert: vi.fn((trait: Trait) => {
-      const idx = human.traits.findIndex(t => t.id === trait.id);
-      if (idx >= 0) human.traits[idx] = trait;
-      else human.traits.push(trait);
     }),
     human_topic_upsert: vi.fn((topic: Topic) => {
       const idx = human.topics.findIndex(t => t.id === topic.id);
@@ -254,7 +248,6 @@ describe("Group Visibility", () => {
 
       await handlers[LLMNextStep.HandleHumanItemUpdate](response, state as any);
 
-      expect(state.human_trait_upsert).not.toHaveBeenCalled();
     });
   });
 });

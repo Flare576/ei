@@ -8,7 +8,6 @@ import {
   type LLMRequest,
   type HumanEntity,
   type Fact,
-  type Trait,
   type Topic,
   type Person,
 } from "../../../../src/core/types.js";
@@ -32,7 +31,7 @@ vi.mock("../../../../src/core/embedding-service.js", () => ({
 // Mock human-data-manager so searchHumanData can be controlled per-test
 vi.mock("../../../../src/core/human-data-manager.js", () => ({
   searchHumanData: vi.fn().mockResolvedValue({
-    facts: [], traits: [], topics: [], people: [], quotes: [],
+    facts: [], topics: [], people: [], quotes: [],
   }),
 }));
 
@@ -47,7 +46,6 @@ function createMockStateManager() {
   const human: HumanEntity = {
     entity: "human",
     facts: [],
-    traits: [],
     topics: [],
     people: [],
     quotes: [],
@@ -59,7 +57,6 @@ function createMockStateManager() {
     getHuman: vi.fn(() => human),
     setHuman: vi.fn((h: HumanEntity) => Object.assign(human, h)),
     human_fact_upsert: vi.fn((fact: Fact) => human.facts.push(fact)),
-    human_trait_upsert: vi.fn((trait: Trait) => human.traits.push(trait)),
     human_topic_upsert: vi.fn((topic: Topic) => human.topics.push(topic)),
     human_person_upsert: vi.fn((person: Person) => human.people.push(person)),
     queue_enqueue: vi.fn(),
@@ -115,20 +112,6 @@ function seedBloatedFact(state: ReturnType<typeof createMockStateManager>, id = 
   return fact;
 }
 
-function seedBloatedTrait(state: ReturnType<typeof createMockStateManager>, id = "bloated-trait-1"): Trait {
-  const trait: Trait = {
-    id,
-    name: "Curiosity",
-    description: "B".repeat(800),
-    sentiment: 0.6,
-    strength: 0.8,
-    last_updated: new Date().toISOString(),
-    persona_groups: ["group-a"],
-  };
-  state._human.traits.push(trait);
-  return trait;
-}
-
 // ---------------------------------------------------------------------------
 // Phase 1 — handleRewriteScan
 // ---------------------------------------------------------------------------
@@ -138,12 +121,12 @@ describe("Rewrite Handlers - Phase 1 (Scan)", () => {
   beforeEach(() => {
     state = createMockStateManager();
     vi.mocked(searchHumanData).mockResolvedValue({
-      facts: [], traits: [], topics: [], people: [], quotes: [],
+      facts: [], topics: [], people: [], quotes: [],
     });
     vi.clearAllMocks();
     // Re-register after clearAllMocks
     vi.mocked(searchHumanData).mockResolvedValue({
-      facts: [], traits: [], topics: [], people: [], quotes: [],
+      facts: [], topics: [], people: [], quotes: [],
     });
   })
 
@@ -248,7 +231,6 @@ describe("Rewrite Handlers - Phase 1 (Scan)", () => {
 
       vi.mocked(searchHumanData).mockResolvedValue({
         facts: [fact, otherFact],
-        traits: [],
         topics: [],
         people: [],
         quotes: [],
@@ -411,9 +393,8 @@ describe("Rewrite Handlers - Phase 2 (Rewrite)", () => {
 
       await handlers.handleRewriteRewrite(response, state as any);
 
-      // Should call fact_upsert, not trait_upsert, because the item is actually a fact
+      // Should call fact_upsert because the item is actually a fact
       expect(state.human_fact_upsert).toHaveBeenCalledTimes(1);
-      expect(state.human_trait_upsert).not.toHaveBeenCalled();
     });
 
     it("skips existing item when id not found in human data", async () => {
@@ -564,7 +545,6 @@ describe("Rewrite Handlers - Phase 2 (Rewrite)", () => {
       await handlers.handleRewriteRewrite(response, state as any);
 
       expect(state.human_fact_upsert).not.toHaveBeenCalled();
-      expect(state.human_trait_upsert).not.toHaveBeenCalled();
       expect(state.human_topic_upsert).not.toHaveBeenCalled();
       expect(state.human_person_upsert).not.toHaveBeenCalled();
     });
@@ -587,7 +567,6 @@ describe("Rewrite Handlers - Phase 2 (Rewrite)", () => {
       await handlers.handleRewriteRewrite(response, state as any);
 
       expect(state.human_fact_upsert).not.toHaveBeenCalled();
-      expect(state.human_trait_upsert).not.toHaveBeenCalled();
       expect(state.human_topic_upsert).not.toHaveBeenCalled();
       expect(state.human_person_upsert).not.toHaveBeenCalled();
     });

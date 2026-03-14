@@ -75,8 +75,6 @@ Your job is to quickly identify:
 > They are details OF facts (e.g., { "type_of_fact": "Birthday", "value_of_fact": "August 15th" }).
 
 **FACTS ARE NOT**
-- Trait: Personality patterns, communication style, behavioral tendencies
-  - These are tracked separately
 - General Topic: Interests, hobbies, general subjects
   - These are tracked separately
 - Relationships: Wife, Husband, Daughter, Son, etc.

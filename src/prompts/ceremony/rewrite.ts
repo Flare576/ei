@@ -59,10 +59,9 @@ Rules:
 - The original record (id: "${data.item.id}") MUST appear in "existing", slimmed down.
 - Descriptions should be concise — ideally under 300 characters, never over 500.
 - Preserve sentiment, strength, confidence, and other numeric values from the source record where applicable.
-- "type" must be one of: "fact", "trait", "topic", "person".
+- "type" must be one of: "fact", "topic", "person".
 - Topics MUST include "category" — one of: Interest, Goal, Dream, Conflict, Concern, Fear, Hope, Plan, Project.
 - People MUST include "relationship" — a short label like "coworker", "friend", "mentor", etc.
-- Traits MUST include "strength" (0.0-1.0).
 - Do NOT invent information. Only redistribute what exists in the original record.`;
 
   const subjects = data.subjects.map(s => ({
@@ -100,15 +99,6 @@ function buildExistingExamples(): string {
   "description": "Updated description with incorporated data"
 }
 
-Trait:
-{
-  "id": "existing-uuid",
-  "type": "trait",
-  "name": "Trait Name",
-  "description": "Updated trait description",
-  "strength": 0.7
-}
-
 Topic:
 {
   "id": "existing-uuid",
@@ -135,15 +125,6 @@ function buildNewExamples(): string {
   "name": "New Subject Name",
   "description": "Concise description of this subject",
   "sentiment": 0.0
-}
-
-Trait:
-{
-  "type": "trait",
-  "name": "New Trait Name",
-  "description": "Concise trait description",
-  "sentiment": 0.0,
-  "strength": 0.5
 }
 
 Topic:

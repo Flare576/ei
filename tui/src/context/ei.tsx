@@ -23,7 +23,6 @@ import type {
   HumanEntity,
   HumanSettings,
   Fact,
-  Trait,
   Topic,
   Person,
   Quote,
@@ -80,7 +79,7 @@ export interface EiContextValue {
   upsertFact: (fact: Fact) => Promise<void>;
   upsertTopic: (topic: Topic) => Promise<void>;
   upsertPerson: (person: Person) => Promise<void>;
-  removeDataItem: (type: "fact" | "trait" | "topic" | "person", id: string) => Promise<void>;
+  removeDataItem: (type: "fact" | "topic" | "person", id: string) => Promise<void>;
   syncStatus: () => { configured: boolean; envBased: boolean };
   triggerSync: () => Promise<{ success: boolean; error?: string }>;
   getGroupList: () => Promise<string[]>;
@@ -91,10 +90,9 @@ export interface EiContextValue {
   quotesVersion: () => number;
   searchHumanData: (
     query: string,
-    options?: { types?: Array<"fact" | "trait" | "topic" | "person" | "quote">; limit?: number }
+    options?: { types?: Array<"fact" | "topic" | "person" | "quote">; limit?: number }
   ) => Promise<{
     facts: Fact[];
-    traits: Trait[];
     topics: Topic[];
     people: Person[];
     quotes: Quote[];
@@ -338,7 +336,7 @@ export const EiProvider: ParentComponent = (props) => {
     await processor.upsertPerson(person);
   };
 
-  const removeDataItem = async (type: "fact" | "trait" | "topic" | "person", id: string) => {
+  const removeDataItem = async (type: "fact" | "topic" | "person", id: string) => {
     if (!processor) return;
     await processor.removeDataItem(type, id);
   };
@@ -444,9 +442,9 @@ export const EiProvider: ParentComponent = (props) => {
 
   const searchHumanData = async (
     query: string,
-    options?: { types?: Array<"fact" | "trait" | "topic" | "person" | "quote">; limit?: number }
+    options?: { types?: Array<"fact" | "topic" | "person" | "quote">; limit?: number }
   ) => {
-    if (!processor) return { facts: [], traits: [], topics: [], people: [], quotes: [] };
+    if (!processor) return { facts: [], topics: [], people: [], quotes: [] };
     return processor.searchHumanData(query, options);
   };
 

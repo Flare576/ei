@@ -159,14 +159,6 @@ test.describe("Message Flow - Comprehensive", () => {
       }),
       statusCode: 200,
     });
-    mockServer.setResponseForType("trait-extraction", {
-      type: "fixed",
-      content: JSON.stringify([
-        { name: "Test Trait", description: "A detected trait", sentiment: 0.5, strength: 0.6 }
-      ]),
-      statusCode: 200,
-    });
-
     await setupPageWithMockServer(page, mockServerUrl);
 
     await sendMessage(page, "I really enjoy hiking in the mountains");
