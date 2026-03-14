@@ -3,7 +3,6 @@ import type {
   PersonaEntity,
   Message,
   Fact,
-  Trait,
   Topic,
   Person,
   Quote,
@@ -82,7 +81,7 @@ export class StateManager {
         dirty = true;
       }
     };
-    [...human.facts, ...human.traits, ...human.topics, ...human.people].forEach(migrateItem);
+    [...human.facts, ...human.topics, ...human.people].forEach(migrateItem);
     if (dirty) {
       this.humanState.set(human);
       console.log("[StateManager] Migrated learned_by fields from display names to persona IDs");
@@ -201,16 +200,6 @@ export class StateManager {
     return result;
   }
 
-  human_trait_upsert(trait: Trait): void {
-    this.humanState.trait_upsert(trait);
-    this.scheduleSave();
-  }
-
-  human_trait_remove(id: string): boolean {
-    const result = this.humanState.trait_remove(id);
-    this.scheduleSave();
-    return result;
-  }
 
   human_topic_upsert(topic: Topic): void {
     this.humanState.topic_upsert(topic);

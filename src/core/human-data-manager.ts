@@ -24,7 +24,7 @@ export async function updateHuman(sm: StateManager, updates: Partial<HumanEntity
 }
 
 // =============================================================================
-// FACTS / TRAITS / TOPICS / PEOPLE UPSERT
+// FACTS / TOPICS / PEOPLE UPSERT
 // =============================================================================
 
 export async function upsertFact(sm: StateManager, fact: Fact): Promise<void> {
@@ -40,18 +40,6 @@ export async function upsertFact(sm: StateManager, fact: Fact): Promise<void> {
   sm.human_fact_upsert(fact);
 }
 
-export async function upsertTrait(sm: StateManager, trait: Trait): Promise<void> {
-  const human = sm.getHuman();
-  const existing = human.traits.find((t) => t.id === trait.id);
-
-  if (needsEmbeddingUpdate(existing, trait)) {
-    trait.embedding = await computeDataItemEmbedding(trait);
-  } else if (existing?.embedding) {
-    trait.embedding = existing.embedding;
-  }
-
-  sm.human_trait_upsert(trait);
-}
 
 export async function upsertTopic(sm: StateManager, topic: Topic): Promise<void> {
   const human = sm.getHuman();
@@ -81,15 +69,12 @@ export async function upsertPerson(sm: StateManager, person: Person): Promise<vo
 
 export async function removeDataItem(
   sm: StateManager,
-  type: "fact" | "trait" | "topic" | "person",
+  type: "fact" | "topic" | "person",
   id: string
 ): Promise<void> {
   switch (type) {
     case "fact":
       sm.human_fact_remove(id);
-      break;
-    case "trait":
-      sm.human_trait_remove(id);
       break;
     case "topic":
       sm.human_topic_remove(id);
@@ -160,7 +145,7 @@ export async function getQuotesForMessage(sm: StateManager, messageId: string): 
 export async function searchHumanData(
   sm: StateManager,
   query: string,
-  options: { types?: Array<"fact" | "trait" | "topic" | "person" | "quote">; limit?: number } = {}
+  options: { types?: Array<"fact" | "topic" | "person" | "quote">; limit?: number } = {}
 ): Promise<{
   facts: Fact[];
   traits: Trait[];
@@ -168,7 +153,7 @@ export async function searchHumanData(
   people: Person[];
   quotes: Quote[];
 }> {
-  const { types = ["fact", "trait", "topic", "person", "quote"], limit = 10 } = options;
+  const { types = ["fact", "topic", "person", "quote"], limit = 10 } = options;
   const human = sm.getHuman();
   const SIMILARITY_THRESHOLD = 0.3;
 
@@ -208,11 +193,6 @@ export async function searchHumanData(
 
   if (types.includes("fact")) {
     result.facts = searchItems(human.facts, (f) => `${f.name} ${f.description || ""}`).map(
-      stripDataItemEmbedding
-    );
-  }
-  if (types.includes("trait")) {
-    result.traits = searchItems(human.traits, (t) => `${t.name} ${t.description || ""}`).map(
       stripDataItemEmbedding
     );
   }

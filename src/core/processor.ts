@@ -71,7 +71,6 @@ import {
   getHuman,
   updateHuman,
   upsertFact,
-  upsertTrait,
   upsertTopic,
   upsertPerson,
   removeDataItem,
@@ -1305,10 +1304,6 @@ const toolNextSteps = new Set([
     this.interface.onHumanUpdated?.();
   }
 
-  async upsertTrait(trait: Trait): Promise<void> {
-    await upsertTrait(this.stateManager, trait);
-    this.interface.onHumanUpdated?.();
-  }
 
   async upsertTopic(topic: Topic): Promise<void> {
     await upsertTopic(this.stateManager, topic);
@@ -1321,7 +1316,7 @@ const toolNextSteps = new Set([
   }
 
   async removeDataItem(
-    type: "fact" | "trait" | "topic" | "person",
+    type: "fact" | "topic" | "person",
     id: string
   ): Promise<void> {
     await removeDataItem(this.stateManager, type, id);
@@ -1353,7 +1348,7 @@ const toolNextSteps = new Set([
 
   async searchHumanData(
     query: string,
-    options: { types?: Array<"fact" | "trait" | "topic" | "person" | "quote">; limit?: number } = {}
+    options: { types?: Array<"fact" | "topic" | "person" | "quote">; limit?: number } = {}
   ): Promise<{
     facts: Fact[];
     traits: Trait[];
