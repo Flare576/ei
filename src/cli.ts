@@ -20,8 +20,6 @@ const TYPE_ALIASES: Record<string, string> = {
   quotes: "quotes",
   fact: "facts",
   facts: "facts",
-  trait: "traits",
-  traits: "traits",
   person: "people",
   people: "people",
   topic: "topics",
@@ -44,7 +42,6 @@ Usage:
 Types:
   quote / quotes    Quotes from conversation history
   fact / facts      Facts about the user
-  trait / traits    Personality traits
   person / people   People from the user's life
   topic / topics    Topics of interest
 
@@ -58,7 +55,6 @@ Examples:
   ei "debugging"                         # Search everything
   ei -n 5 "API design"                   # Top 5 across all types
   ei quote "you guessed it"              # Search quotes only
-  ei trait -n 3 "problem solving"        # Top 3 matching traits
   ei --id abc-123                          # Look up entity by ID
   ei "memory leak" | jq .[0].id | ei --id  # Pipe ID from search
 `);
@@ -71,7 +67,7 @@ function buildOpenCodeToolContent(): string {
     'export default tool({',
     '  description: [',
     '    "Search the user\'s Ei knowledge base \u2014 a persistent memory store built from conversations.",',
-    '    "Returns facts, personality traits, people, topics of interest, and quotes.",',
+    '    "Returns facts, people, topics of interest, and quotes.",',
     '    "Use this to recall anything about the user: preferences, relationships, or past discussions.",',
     '    "Results include entity IDs that can be passed back with lookup=true to get full detail.",',
     '  ].join(" "),',
@@ -80,10 +76,10 @@ function buildOpenCodeToolContent(): string {
     '      "Search text, or an entity ID when lookup=true. Supports natural language."',
     '    ),',
     '    type: tool.schema',
-    '      .enum(["facts", "traits", "people", "topics", "quotes"])',
+    '      .enum(["facts", "people", "topics", "quotes"])',
     '      .optional()',
     '      .describe(',
-    '        "Filter to a specific data type. Omit to search all types (balanced across all 5)."',
+    '        "Filter to a specific data type. Omit to search all types (balanced across all 4).",',
     '      ),',
     '    limit: tool.schema',
     '      .number()',

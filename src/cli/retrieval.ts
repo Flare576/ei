@@ -1,4 +1,4 @@
-import type { StorageState, Quote, Fact, Trait, Person, Topic } from "../core/types";
+import type { StorageState, Quote, Fact, Person, Topic } from "../core/types";
 import { decodeAllEmbeddings } from "../storage/embeddings";
 import { crossFind } from "../core/utils/index.ts";
 import { join } from "path";
@@ -69,14 +69,6 @@ export interface FactResult {
   sentiment: number;
 }
 
-export interface TraitResult {
-  id: string;
-  name: string;
-  description: string;
-  strength: number;
-  sentiment: number;
-}
-
 export interface PersonResult {
   id: string;
   name: string;
@@ -96,17 +88,16 @@ export interface TopicResult {
 export type BalancedResult =
   | ({ type: "quote" } & QuoteResult)
   | ({ type: "fact" } & FactResult)
-  | ({ type: "trait" } & TraitResult)
   | ({ type: "person" } & PersonResult)
   | ({ type: "topic" } & TopicResult);
 
-const DATA_TYPES = ["quote", "fact", "trait", "person", "topic"] as const;
+const DATA_TYPES = ["quote", "fact", "person", "topic"] as const;
 type DataType = typeof DATA_TYPES[number];
 
 interface ScoredEntry {
   type: DataType;
   similarity: number;
-  mapped: QuoteResult | FactResult | TraitResult | PersonResult | TopicResult;
+  mapped: QuoteResult | FactResult | PersonResult | TopicResult;
   itemId: string;
 }
 
@@ -116,7 +107,6 @@ export function resolveLinkedItems(dataItemIds: string[], state: StorageState): 
     { type: "topic", source: state.human.topics },
     { type: "person", source: state.human.people },
     { type: "fact", source: state.human.facts },
-    { type: "trait", source: state.human.traits },
   ];
   for (const { type, source } of collections) {
     for (const entity of source) {
@@ -146,15 +136,6 @@ function mapFact(fact: Fact): FactResult {
   };
 }
 
-function mapTrait(trait: Trait): TraitResult {
-  return {
-    id: trait.id,
-    name: trait.name,
-    description: trait.description,
-    strength: trait.strength ?? 0.5,
-    sentiment: trait.sentiment,
-  };
-}
 
 function mapPerson(person: Person): PersonResult {
   return {
@@ -198,7 +179,6 @@ export async function retrieveBalanced(
   }> = [
     { type: "quote", items: state.human.quotes, mapper: (q: Quote) => mapQuote(q, state) },
     { type: "fact", items: state.human.facts, mapper: mapFact },
-    { type: "trait", items: state.human.traits, mapper: mapTrait },
     { type: "person", items: state.human.people, mapper: mapPerson },
     { type: "topic", items: state.human.topics, mapper: mapTopic },
   ];

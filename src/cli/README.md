@@ -6,7 +6,6 @@ ei                             # Start the TUI
 ei "query string"              # Return up to 10 results across all types
 ei -n 5 "query string"         # Return up to 5 results
 ei facts -n 5 "query string"   # Return up to 5 facts
-ei traits -n 5 "query string"  # Return up to 5 traits
 ei people -n 5 "query string"  # Return up to 5 people
 ei topics -n 5 "query string"  # Return up to 5 topics
 ei quotes -n 5 "query string"  # Return up to 5 quotes
@@ -15,7 +14,7 @@ echo <id> | ei --id            # Look up entity by ID from stdin
 ei --install                   # Install the Ei tool for OpenCode
 ```
 
-Type aliases: `fact`, `trait`, `person`, `topic`, `quote` all work (singular or plural).
+Type aliases: `fact`, `person`, `topic`, `quote` all work (singular or plural).
 
 # An Agentic Tool
 
@@ -37,12 +36,12 @@ This writes `~/.config/opencode/tools/ei.ts` with a complete tool definition. Re
 
 ## What the Tool Provides
 
-The installed tool gives OpenCode agents access to all five data types with proper Zod-validated args:
+The installed tool gives OpenCode agents access to all four data types with proper Zod-validated args:
 
 | Arg | Type | Description |
 |-----|------|-------------|
 | `query` | string (required) | Search text, or entity ID when `lookup=true` |
-| `type` | enum (optional) | `facts` \| `traits` \| `people` \| `topics` \| `quotes` — omit for balanced results |
+| `type` | enum (optional) | `facts` \| `people` \| `topics` \| `quotes` — omit for balanced results |
 | `limit` | number (optional) | Max results, default 10 |
 | `lookup` | boolean (optional) | If true, fetch single entity by ID |
 
@@ -50,7 +49,7 @@ The installed tool gives OpenCode agents access to all five data types with prop
 
 All search commands return arrays. Each result includes a `type` field.
 
-**Fact / Trait / Person / Topic**: `{ type, id, name, description, sentiment, ...type-specific fields }`
+**Fact / Person / Topic**: `{ type, id, name, description, sentiment, ...type-specific fields }`
 
 **Quote**: `{ type, id, text, speaker, timestamp, linked_items[] }`
 

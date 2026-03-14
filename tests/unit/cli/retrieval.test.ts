@@ -134,7 +134,7 @@ describe("retrieveBalanced (global search)", () => {
   it("includes type field on every result", async () => {
     writeTestState(createTestState({ facts: 2, traits: 2, quotes: 2 }));
     const result = await retrieveBalanced("test");
-    const validTypes = ["quote", "fact", "trait", "person", "topic"];
+    const validTypes = ["quote", "fact", "person", "topic"];
     for (const r of result) {
       expect(r).toHaveProperty("type");
       expect(validTypes).toContain(r.type);
@@ -148,15 +148,14 @@ describe("retrieveBalanced (global search)", () => {
     const types = new Set(result.map(r => r.type));
     expect(types).toContain("quote");
     expect(types).toContain("fact");
-    expect(types).toContain("trait");
     expect(types).toContain("person");
     expect(types).toContain("topic");
   });
 
-  it("returns all 9 items when fewer than limit", async () => {
+  it("returns all 7 items when fewer than limit (traits excluded)", async () => {
     writeTestState(createTestState({ facts: 2, traits: 2, people: 2, topics: 2, quotes: 1 }));
     const result = await retrieveBalanced("test", 10);
-    expect(result).toHaveLength(9);
+    expect(result).toHaveLength(7);
   });
 
   it("respects -n limit", async () => {
@@ -167,14 +166,13 @@ describe("retrieveBalanced (global search)", () => {
 });
 
 describe("resolveLinkedItems", () => {
-  it("resolves items across all 4 collection types", () => {
+  it("resolves items across fact, person, and topic collection types", () => {
     const state = createTestState({ facts: 2, traits: 2, people: 2, topics: 2 });
-    const ids = ["fact_0", "trait_1", "person_0", "topic_1"];
+    const ids = ["fact_0", "person_0", "topic_1"];
     const result = resolveLinkedItems(ids, state as any);
-    expect(result).toHaveLength(4);
+    expect(result).toHaveLength(3);
     expect(result).toEqual(expect.arrayContaining([
       { id: "fact_0", name: "Test fact 0", type: "fact" },
-      { id: "trait_1", name: "Test trait 1", type: "trait" },
       { id: "person_0", name: "Test person 0", type: "person" },
       { id: "topic_1", name: "Test topic 1", type: "topic" },
     ]));
