@@ -29,6 +29,10 @@ export interface ExtractionContext {
 export interface ExtractionOptions {
   /** Ceremony phase number (1=Dedup, 2=Expose) */
   ceremony_progress?: number;
+  /** Override model for extraction LLM calls */
+  extraction_model?: string;
+  /** Override token budget for chunking */
+  extraction_token_limit?: number;
 }
 
 function getAnalyzeFromTimestamp(context: ExtractionContext): string | null {
@@ -39,14 +43,19 @@ function getAnalyzeFromTimestamp(context: ExtractionContext): string | null {
 const EXTRACTION_BUDGET_RATIO = 0.75;
 const MIN_EXTRACTION_TOKENS = 10000;
 
-function getExtractionMaxTokens(state: StateManager): number {
+function getExtractionMaxTokens(state: StateManager, options?: ExtractionOptions): number {
+  if (options?.extraction_token_limit) {
+    return Math.max(MIN_EXTRACTION_TOKENS, Math.floor(options.extraction_token_limit * EXTRACTION_BUDGET_RATIO));
+  }
   const human = state.getHuman();
-  const tokenLimit = resolveTokenLimit(human.settings?.default_model, human.settings?.accounts);
+  const modelForTokenLimit = options?.extraction_model ?? human.settings?.default_model;
+  const tokenLimit = resolveTokenLimit(modelForTokenLimit, human.settings?.accounts);
   return Math.max(MIN_EXTRACTION_TOKENS, Math.floor(tokenLimit * EXTRACTION_BUDGET_RATIO));
 }
 
 export function queueFactFind(context: ExtractionContext, state: StateManager, options?: ExtractionOptions): number {
   const human = state.getHuman();
+  const extractionModel = options?.extraction_model;
   const missing_fact_names = human.facts
     .filter(f => !f.description || f.description === "")
     .map(f => f.name)
@@ -54,7 +63,7 @@ export function queueFactFind(context: ExtractionContext, state: StateManager, o
 
   if (missing_fact_names.length === 0) return 0;
 
-  const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state));
+  const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state, options));
 
   // Pre-mark messages before enqueuing — prevents duplicate scans if the
   // queue check fires again during LLM latency (100ms loop × 5s call = 50 dupes)
@@ -73,6 +82,7 @@ export function queueFactFind(context: ExtractionContext, state: StateManager, o
     state.queue_enqueue({
       type: LLMRequestType.JSON,
       priority: LLMPriority.Low,
+      model: extractionModel,
       system: prompt.system,
       user: prompt.user,
       next_step: LLMNextStep.HandleFactFind,
@@ -91,7 +101,8 @@ export function queueFactFind(context: ExtractionContext, state: StateManager, o
 }
 
 export function queueTopicScan(context: ExtractionContext, state: StateManager, options?: ExtractionOptions): number {
-  const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state));
+  const extractionModel = options?.extraction_model;
+  const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state, options));
   
   if (chunks.length === 0) return 0;
 
@@ -111,6 +122,7 @@ export function queueTopicScan(context: ExtractionContext, state: StateManager, 
     state.queue_enqueue({
       type: LLMRequestType.JSON,
       priority: LLMPriority.Low,
+      model: extractionModel,
       system: prompt.system,
       user: prompt.user,
       next_step: LLMNextStep.HandleHumanTopicScan,
@@ -129,7 +141,8 @@ export function queueTopicScan(context: ExtractionContext, state: StateManager, 
 }
 
 export function queuePersonScan(context: ExtractionContext, state: StateManager, options?: ExtractionOptions): number {
-  const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state));
+  const extractionModel = options?.extraction_model;
+  const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state, options));
   
   if (chunks.length === 0) return 0;
 
@@ -149,6 +162,7 @@ export function queuePersonScan(context: ExtractionContext, state: StateManager,
     state.queue_enqueue({
       type: LLMRequestType.JSON,
       priority: LLMPriority.Low,
+      model: extractionModel,
       system: prompt.system,
       user: prompt.user,
       next_step: LLMNextStep.HandleHumanPersonScan,
@@ -205,6 +219,7 @@ export function queueDirectTopicUpdate(
     state.queue_enqueue({
       type: LLMRequestType.JSON,
       priority: LLMPriority.Normal,
+      model: undefined,
       system: prompt.system,
       user: prompt.user,
       next_step: LLMNextStep.HandleHumanItemUpdate,
@@ -352,6 +367,7 @@ export async function queueItemMatch(
   state.queue_enqueue({
     type: LLMRequestType.JSON,
     priority: LLMPriority.Normal,
+    model: undefined,
     system: prompt.system,
     user: prompt.user,
     next_step: LLMNextStep.HandleHumanItemMatch,
@@ -411,6 +427,7 @@ export function queueItemUpdate(
     state.queue_enqueue({
       type: LLMRequestType.JSON,
       priority: LLMPriority.Normal,
+      model: undefined,
       system: prompt.system,
       user: prompt.user,
       next_step: LLMNextStep.HandleHumanItemUpdate,
