@@ -14,7 +14,6 @@ describe("HumanState", () => {
       const human = state.get();
       expect(human.entity).toBe("human");
       expect(human.facts).toEqual([]);
-      expect(human.traits).toEqual([]);
       expect(human.topics).toEqual([]);
       expect(human.people).toEqual([]);
     });

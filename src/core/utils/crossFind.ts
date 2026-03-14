@@ -1,13 +1,12 @@
-import type { HumanEntity, PersonaEntity, Fact, Trait, Topic, Person, Quote, PersonaTopic } from "../types.ts";
+import type { HumanEntity, PersonaEntity, Fact, PersonaTrait, Topic, Person, Quote, PersonaTopic } from "../types.ts";
 export type CrossFindResult =
   | { type: "fact"        } & Fact
-  | { type: "trait"       } & Trait
   | { type: "topic"       } & Topic
   | { type: "person"      } & Person
   | { type: "quote"       } & Quote
   | { type: "persona"     } & PersonaEntity
   | { type: "personaTopic"; personaId: string } & PersonaTopic
-  | { type: "personaTrait"; personaId: string } & Trait;
+  | { type: "personaTrait"; personaId: string } & PersonaTrait;
 
 export function crossFind(
   id: string,

@@ -3,7 +3,7 @@
  * Source of truth: CONTRACTS.md
  */
 
-import type { Fact, Trait, Topic, Person, Quote, PersonaTopic } from "./data-items.js";
+import type { Fact, PersonaTrait, Topic, Person, Quote, PersonaTopic } from "./data-items.js";
 import type { ProviderType } from "./enums.js";
 
 export interface SyncCredentials {
@@ -88,7 +88,6 @@ export interface HumanSettings {
 export interface HumanEntity {
   entity: "human";
   facts: Fact[];
-  traits: Trait[];
   topics: Topic[];
   people: Person[];
   quotes: Quote[];
@@ -107,7 +106,7 @@ export interface PersonaEntity {
   model?: string;
   group_primary?: string | null;
   groups_visible?: string[];
-  traits: Trait[];
+  traits: PersonaTrait[];
   topics: PersonaTopic[];
   is_paused: boolean;
   pause_until?: string;
@@ -129,7 +128,7 @@ export interface PersonaCreationInput {
   aliases?: string[];
   long_description?: string;
   short_description?: string;
-  traits?: Partial<Trait>[];
+  traits?: Partial<PersonaTrait>[];
   topics?: Partial<PersonaTopic>[];
   model?: string;
   group_primary?: string;

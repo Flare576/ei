@@ -32,7 +32,6 @@ export function yoloMerge(local: StorageState, remote: StorageState): StorageSta
   const merged = structuredClone(local);
   
   merged.human.facts = mergeDataItems(merged.human.facts, remote.human.facts);
-  merged.human.traits = mergeDataItems(merged.human.traits, remote.human.traits);
   merged.human.topics = mergeDataItems(merged.human.topics, remote.human.topics);
   merged.human.people = mergeDataItems(merged.human.people, remote.human.people);
   merged.human.quotes = mergeQuotes(merged.human.quotes || [], remote.human.quotes || []);

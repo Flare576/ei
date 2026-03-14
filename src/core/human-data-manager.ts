@@ -1,4 +1,4 @@
-import type { HumanEntity, Fact, Trait, Topic, Person, Quote } from "./types.js";
+import type { HumanEntity, Fact, Topic, Person, Quote } from "./types.js";
 import { StateManager } from "./state-manager.js";
 import {
   getEmbeddingService,
@@ -148,7 +148,6 @@ export async function searchHumanData(
   options: { types?: Array<"fact" | "topic" | "person" | "quote">; limit?: number } = {}
 ): Promise<{
   facts: Fact[];
-  traits: Trait[];
   topics: Topic[];
   people: Person[];
   quotes: Quote[];
@@ -159,7 +158,6 @@ export async function searchHumanData(
 
   const result = {
     facts: [] as Fact[],
-    traits: [] as Trait[],
     topics: [] as Topic[],
     people: [] as Person[],
     quotes: [] as Quote[],

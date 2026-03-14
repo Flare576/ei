@@ -9,7 +9,6 @@ import {
   type MessageQueryOptions,
   type HumanEntity,
   type Fact,
-  type Trait,
   type Topic,
   type Person,
   type Quote,
@@ -1351,7 +1350,6 @@ const toolNextSteps = new Set([
     options: { types?: Array<"fact" | "topic" | "person" | "quote">; limit?: number } = {}
   ): Promise<{
     facts: Fact[];
-    traits: Trait[];
     topics: Topic[];
     people: Person[];
     quotes: Quote[];

@@ -86,7 +86,7 @@ export async function filterHumanDataByVisibility(
       selectRelevantItems(human.people, DATA_ITEM_LIMIT, currentMessage),
       selectRelevantQuotes(human.quotes ?? [], currentMessage),
     ]);
-    return { facts, traits: [], topics, people, quotes };
+    return { facts, topics, people, quotes };
   }
 
   const visibleGroups = new Set<string>();
@@ -115,7 +115,7 @@ export async function filterHumanDataByVisibility(
     selectRelevantQuotes(groupFilteredQuotes, currentMessage),
   ]);
 
-  return { facts, traits: [], topics, people, quotes };
+  return { facts, topics, people, quotes };
 }
 
 // =============================================================================

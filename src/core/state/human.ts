@@ -4,7 +4,6 @@ export function createDefaultHumanEntity(): HumanEntity {
   return {
     entity: "human",
     facts: [],
-    traits: [],
     topics: [],
     people: [],
     quotes: [],

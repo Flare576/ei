@@ -65,7 +65,7 @@ export function handleHumanItemMatch(response: LLMResponse, state: StateManager)
     if (!found) {
       console.warn(`[handleHumanItemMatch] matched_guid "${matched_guid}" not found in human data — treating as new item`);
       matched_guid = null;
-    } else if (!(found.type === "fact" || found.type === "trait" || found.type === "topic" || found.type === "person")) {
+    } else if (!(found.type === "fact" || found.type === "topic" || found.type === "person")) {
       console.warn(`[handleHumanItemMatch] matched_guid "${matched_guid}" resolved to non-human type "${found.type}" - Ignoring`);
       return;
     } else {

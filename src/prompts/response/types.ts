@@ -3,7 +3,7 @@
  * Based on CONTRACTS.md ResponsePromptData specification
  */
 
-import type { Fact, Trait, Topic, Person, Quote, PersonaTopic } from "../../core/types.js";
+import type { Fact, PersonaTrait, Topic, Person, Quote, PersonaTopic } from "../../core/types.js";
 import type { ToolDefinition } from "../../core/types.js";
 
 /**
@@ -15,12 +15,11 @@ export interface ResponsePromptData {
     aliases: string[];
     short_description?: string;
     long_description?: string;
-    traits: Trait[];
+    traits: PersonaTrait[];
     topics: PersonaTopic[];
   };
   human: {
     facts: Fact[];
-    traits: Trait[];
     topics: Topic[];
     people: Person[];
     quotes: Quote[];
