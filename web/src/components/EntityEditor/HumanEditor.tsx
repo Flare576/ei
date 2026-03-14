@@ -1,23 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { TabContainer } from './TabContainer';
 import { HumanFactsTab } from './tabs/HumanFactsTab';
-import { HumanTraitsTab } from './tabs/HumanTraitsTab';
 import { HumanTopicsTab } from './tabs/HumanTopicsTab';
 import { HumanPeopleTab } from './tabs/HumanPeopleTab';
 import { HumanQuotesTab } from './tabs/HumanQuotesTab';
 import { QuoteManagementModal } from '../Quote/QuoteManagementModal';
 import type { Fact, Quote } from '../../../../src/core/types';
-
-interface Trait {
-  id: string;
-  name: string;
-  description: string;
-  sentiment: number;
-  strength?: number;
-  last_updated: string;
-  learned_by?: string;
-  persona_groups?: string[];
-}
 
 interface Topic {
   id: string;
@@ -50,7 +38,6 @@ interface HumanEntity {
   id: string;
   name_display?: string;
   facts?: Fact[];
-  traits?: Trait[];
   topics?: Topic[];
   people?: Person[];
   quotes?: Quote[];
@@ -62,8 +49,6 @@ interface HumanEditorProps {
   human: HumanEntity;
   onFactSave: (fact: Fact) => Promise<void>;
   onFactDelete: (id: string) => void;
-  onTraitSave: (trait: Trait) => Promise<void>;
-  onTraitDelete: (id: string) => void;
   onTopicSave: (topic: Topic) => Promise<void>;
   onTopicDelete: (id: string) => void;
   onPersonSave: (person: Person) => Promise<void>;
@@ -75,7 +60,6 @@ interface HumanEditorProps {
 
 const tabs = [
   { id: 'facts', label: 'Facts', icon: '📋' },
-  { id: 'traits', label: 'Traits', icon: '🎭' },
   { id: 'people', label: 'People', icon: '👥' },
   { id: 'topics', label: 'Topics', icon: '💬' },
   { id: 'quotes', label: 'Quotes', icon: '✂️' },
@@ -87,8 +71,6 @@ export const HumanEditor = ({
   human,
   onFactSave,
   onFactDelete,
-  onTraitSave,
-  onTraitDelete,
   onTopicSave,
   onTopicDelete,
   onPersonSave,
@@ -99,14 +81,12 @@ export const HumanEditor = ({
 }: HumanEditorProps) => {
   const [activeTab, setActiveTab] = useState('facts');
   const [localFacts, setLocalFacts] = useState<Fact[]>(human.facts || []);
-  const [localTraits, setLocalTraits] = useState<Trait[]>(human.traits || []);
   const [localTopics, setLocalTopics] = useState<Topic[]>(human.topics || []);
   const [localPeople, setLocalPeople] = useState<Person[]>(human.people || []);
   const [localQuotes, setLocalQuotes] = useState<Quote[]>(human.quotes || []);
   const [editingQuote, setEditingQuote] = useState<Quote | null>(null);
   
   const [dirtyFactIds, setDirtyFactIds] = useState<Set<string>>(new Set());
-  const [dirtyTraitIds, setDirtyTraitIds] = useState<Set<string>>(new Set());
   const [dirtyTopicIds, setDirtyTopicIds] = useState<Set<string>>(new Set());
   const [dirtyPersonIds, setDirtyPersonIds] = useState<Set<string>>(new Set());
 
@@ -144,12 +124,10 @@ export const HumanEditor = ({
   useEffect(() => {
     if (isOpen && !wasOpenRef.current) {
       setLocalFacts(human.facts || []);
-      setLocalTraits(human.traits || []);
       setLocalTopics(human.topics || []);
       setLocalPeople(human.people || []);
       setLocalQuotes(human.quotes || []);
       setDirtyFactIds(new Set());
-      setDirtyTraitIds(new Set());
       setDirtyTopicIds(new Set());
       setDirtyPersonIds(new Set());
       setEditingQuote(null);
@@ -161,7 +139,6 @@ export const HumanEditor = ({
     if (!isOpen) return;
 
     setLocalFacts(prev => smartMergeList(prev, human.facts || [], dirtyFactIds));
-    setLocalTraits(prev => smartMergeList(prev, human.traits || [], dirtyTraitIds));
     setLocalTopics(prev => smartMergeList(prev, human.topics || [], dirtyTopicIds));
     setLocalPeople(prev => smartMergeList(prev, human.people || [], dirtyPersonIds));
     setLocalQuotes(human.quotes || []);
@@ -169,7 +146,6 @@ export const HumanEditor = ({
 
   const isDirty = 
     dirtyFactIds.size > 0 || 
-    dirtyTraitIds.size > 0 || 
     dirtyTopicIds.size > 0 || 
     dirtyPersonIds.size > 0;
 
@@ -215,47 +191,6 @@ export const HumanEditor = ({
     setDirtyFactIds(prev => new Set(prev).add(newFact.id));
   };
 
-  const handleTraitChange = (id: string, field: keyof Trait, value: Trait[keyof Trait]) => {
-    setLocalTraits(prev => prev.map(trait => 
-      trait.id === id ? { ...trait, [field]: value } : trait
-    ));
-    setDirtyTraitIds(prev => new Set(prev).add(id));
-  };
-
-  const handleTraitSave = async (id: string) => {
-    const trait = localTraits.find(t => t.id === id);
-    if (trait) {
-      await onTraitSave(trait);
-      setDirtyTraitIds(prev => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-    }
-  };
-
-  const handleTraitDelete = (id: string) => {
-    onTraitDelete(id);
-    setLocalTraits(prev => prev.filter(t => t.id !== id));
-    setDirtyTraitIds(prev => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-  };
-
-  const handleTraitAdd = () => {
-    const newTrait: Trait = {
-      id: `temp-trait-${Date.now()}`,
-      name: '',
-      description: '',
-      sentiment: 0,
-      strength: 0.5,
-      last_updated: new Date().toISOString(),
-    };
-    setLocalTraits(prev => [...prev, newTrait]);
-    setDirtyTraitIds(prev => new Set(prev).add(newTrait.id));
-  };
 
   const handleTopicChange = (id: string, field: keyof Topic, value: Topic[keyof Topic]) => {
     setLocalTopics(prev => prev.map(topic => 
@@ -376,18 +311,6 @@ export const HumanEditor = ({
             resolvePersonaName={resolvePersonaName}
           />
         );
-      case 'traits':
-        return (
-          <HumanTraitsTab
-            traits={localTraits}
-            onChange={handleTraitChange}
-            onSave={handleTraitSave}
-            onDelete={handleTraitDelete}
-            onAdd={handleTraitAdd}
-            dirtyIds={dirtyTraitIds}
-            resolvePersonaName={resolvePersonaName}
-          />
-        );
       case 'topics':
         return (
           <HumanTopicsTab
@@ -419,7 +342,6 @@ export const HumanEditor = ({
              dataItems={[
                ...(human.topics || []).map(i => ({ id: i.id, name: i.name, type: 'Topic' })),
                ...(human.people || []).map(i => ({ id: i.id, name: i.name, type: 'Person' })),
-               ...(human.traits || []).map(i => ({ id: i.id, name: i.name, type: 'Trait' })),
                ...(human.facts || []).map(i => ({ id: i.id, name: i.name, type: 'Fact' })),
              ]}
              humanDisplayName={human.name_display}
@@ -454,7 +376,6 @@ export const HumanEditor = ({
           dataItems={[
             ...(human.topics || []).map(i => ({ id: i.id, name: i.name, type: 'Topic' })),
             ...(human.people || []).map(i => ({ id: i.id, name: i.name, type: 'Person' })),
-            ...(human.traits || []).map(i => ({ id: i.id, name: i.name, type: 'Trait' })),
             ...(human.facts || []).map(i => ({ id: i.id, name: i.name, type: 'Fact' })),
           ]}
           skipDeleteConfirm={false}

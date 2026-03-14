@@ -251,7 +251,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
         <h2>How It Works</h2>
         <p>
           Ei runs entirely in your browser. It connects to LLM providers (local or cloud) to power conversations,
-          but all your personal data - facts about you, your personality traits, the topics you care about, 
+          but all your personal data - facts about you, the topics you care about,
           the people in your life - stays on your device.
         </p>
         <p>

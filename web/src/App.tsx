@@ -682,17 +682,6 @@ function App() {
     processor.getHuman().then(setHuman);
   }, [processor]);
 
-  const handleTraitSave = useCallback(async (trait: Trait) => {
-    if (!processor) return;
-    await processor.upsertTrait(trait);
-    processor.getHuman().then(setHuman);
-  }, [processor]);
-
-  const handleTraitDelete = useCallback(async (id: string) => {
-    if (!processor) return;
-    await processor.removeDataItem("trait", id);
-    processor.getHuman().then(setHuman);
-  }, [processor]);
 
   const handleTopicSave = useCallback(async (topic: Topic) => {
     if (!processor) return;
@@ -938,7 +927,6 @@ function App() {
     const allItems = [
       ...(human?.topics || []).filter(i => isVisible(i.persona_groups)).map(i => ({ id: i.id, name: i.name, type: 'Topic' })),
       ...(human?.people || []).filter(i => isVisible(i.persona_groups)).map(i => ({ id: i.id, name: i.name, type: 'Person' })),
-      ...(human?.traits || []).filter(i => isVisible(i.persona_groups)).map(i => ({ id: i.id, name: i.name, type: 'Trait' })),
       ...(human?.facts || []).filter(i => isVisible(i.persona_groups)).map(i => ({ id: i.id, name: i.name, type: 'Fact' })),
     ];
 
@@ -1184,15 +1172,12 @@ function App() {
             id: "human",
             name_display: human.settings?.name_display,
             facts: human.facts,
-            traits: human.traits,
             topics: human.topics,
             people: human.people,
             quotes: quotes,
           }}
           onFactSave={handleFactSave}
           onFactDelete={handleFactDelete}
-          onTraitSave={handleTraitSave}
-          onTraitDelete={handleTraitDelete}
           onTopicSave={handleTopicSave}
           onTopicDelete={handleTopicDelete}
           onPersonSave={handlePersonSave}

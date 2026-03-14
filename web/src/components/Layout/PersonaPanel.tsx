@@ -263,7 +263,7 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
                 checked={deleteWithData}
                 onChange={(e) => setDeleteWithData(e.target.checked)}
               />
-              Also delete traits this persona learned about you
+              Also delete facts, topics, and people this persona learned about you
             </label>
             <div className="ei-delete-confirm__actions">
               <button 
