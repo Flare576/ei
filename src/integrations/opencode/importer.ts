@@ -228,7 +228,11 @@ export async function importOpenCodeSessions(
       };
 
       if (!signal?.aborted) {
-        queueAllScans(context, stateManager);
+        const openCodeSettings = stateManager.getHuman().settings?.opencode;
+        queueAllScans(context, stateManager, {
+          extraction_model: openCodeSettings?.extraction_model,
+          extraction_token_limit: openCodeSettings?.extraction_token_limit,
+        });
         result.extractionScansQueued += 4;
       }
     }

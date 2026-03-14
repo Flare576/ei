@@ -304,7 +304,11 @@ export async function importClaudeCodeSessions(
       messages_analyze: toAnalyze,
     };
 
-    queueAllScans(context, stateManager);
+    const ccSettings = stateManager.getHuman().settings?.claudeCode;
+    queueAllScans(context, stateManager, {
+      extraction_model: ccSettings?.extraction_model,
+      extraction_token_limit: ccSettings?.extraction_token_limit,
+    });
     result.extractionScansQueued += 4;
   }
 
