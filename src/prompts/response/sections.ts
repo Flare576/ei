@@ -146,14 +146,6 @@ export function buildHumanSection(human: ResponsePromptData["human"]): string {
     if (facts) sections.push(`### Key Facts\n${facts}`);
   }
   
-  // Traits
-  if (human.traits.length > 0) {
-    const traits = human.traits
-      .slice(0, 15)
-      .map(t => `- **${t.name}**: ${truncateDescription(t.description)}`)
-      .join("\n");
-    sections.push(`### Personality\n${traits}`);
-  }
   
   // Active topics (exposure_current > 0.3)
   const activeTopics = human.topics.filter(t => t.exposure_current > 0.3);
@@ -275,7 +267,6 @@ export function buildQuotesSection(quotes: Quote[], human: ResponsePromptData["h
   
   const allDataItems = [
     ...human.facts.map(f => ({ id: f.id, name: f.name })),
-    ...human.traits.map(t => ({ id: t.id, name: t.name })),
     ...human.topics.map(t => ({ id: t.id, name: t.name })),
     ...human.people.map(p => ({ id: p.id, name: p.name })),
   ];

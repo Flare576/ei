@@ -56,7 +56,7 @@ function decodeEmbedding(value: unknown): number[] | undefined {
 // Walk the entire StorageState and encode/decode all embedding fields
 // ---------------------------------------------------------------------------
 
-const HUMAN_ITEM_KEYS = ["facts", "traits", "topics", "people", "quotes"] as const;
+const HUMAN_ITEM_KEYS = ["facts", "topics", "people", "quotes"] as const;
 
 /**
  * Returns a new StorageState with embeddings encoded as base64 strings.

@@ -80,14 +80,13 @@ export async function filterHumanDataByVisibility(
   const DEFAULT_GROUP = "General";
 
   if (persona.id === "ei") {
-    const [facts, traits, topics, people, quotes] = await Promise.all([
+    const [facts, topics, people, quotes] = await Promise.all([
       selectRelevantItems(human.facts, DATA_ITEM_LIMIT, currentMessage),
-      selectRelevantItems(human.traits, DATA_ITEM_LIMIT, currentMessage),
       selectRelevantItems(human.topics, DATA_ITEM_LIMIT, currentMessage),
       selectRelevantItems(human.people, DATA_ITEM_LIMIT, currentMessage),
       selectRelevantQuotes(human.quotes ?? [], currentMessage),
     ]);
-    return { facts, traits, topics, people, quotes };
+    return { facts, traits: [], topics, people, quotes };
   }
 
   const visibleGroups = new Set<string>();
@@ -109,15 +108,14 @@ export async function filterHumanDataByVisibility(
     return effectiveGroups.some((g) => visibleGroups.has(g));
   });
 
-  const [facts, traits, topics, people, quotes] = await Promise.all([
+  const [facts, topics, people, quotes] = await Promise.all([
     selectRelevantItems(filterByGroup(human.facts), DATA_ITEM_LIMIT, currentMessage),
-    selectRelevantItems(filterByGroup(human.traits), DATA_ITEM_LIMIT, currentMessage),
     selectRelevantItems(filterByGroup(human.topics), DATA_ITEM_LIMIT, currentMessage),
     selectRelevantItems(filterByGroup(human.people), DATA_ITEM_LIMIT, currentMessage),
     selectRelevantQuotes(groupFilteredQuotes, currentMessage),
   ]);
 
-  return { facts, traits, topics, people, quotes };
+  return { facts, traits: [], topics, people, quotes };
 }
 
 // =============================================================================

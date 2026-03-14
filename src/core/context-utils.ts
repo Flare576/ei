@@ -49,7 +49,7 @@ export function stripHumanEmbeddings(human: HumanEntity): HumanEntity {
   return {
     ...human,
     facts: (human.facts ?? []).map(stripDataItemEmbedding),
-    traits: (human.traits ?? []).map(stripDataItemEmbedding),
+    traits: [],
     topics: (human.topics ?? []).map(stripDataItemEmbedding),
     people: (human.people ?? []).map(stripDataItemEmbedding),
     quotes: (human.quotes ?? []).map(stripQuoteEmbedding),

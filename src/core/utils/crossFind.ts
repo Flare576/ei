@@ -18,8 +18,6 @@ export function crossFind(
   const fact  = human.facts.find(f => f.id === id);
   if (fact)  return { type: "fact",   ...fact };
 
-  const trait = human.traits.find(t => t.id === id);
-  if (trait) return { type: "trait",  ...trait };
 
   const person = human.people.find(p => p.id === id);
   if (person) return { type: "person", ...person };

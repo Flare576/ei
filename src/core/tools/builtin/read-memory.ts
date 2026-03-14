@@ -5,12 +5,12 @@
  * The searchHumanData function is injected at construction to avoid circular deps.
  */
 import type { ToolExecutor } from "../types.js";
-import type { Fact, Trait, Topic, Person, Quote } from "../../types.js";
+import type { Fact, Topic, Person, Quote } from "../../types.js";
 
 type SearchHumanData = (
   query: string,
-  options?: { types?: Array<"fact" | "trait" | "topic" | "person" | "quote">; limit?: number }
-) => Promise<{ facts: Fact[]; traits: Trait[]; topics: Topic[]; people: Person[]; quotes: Quote[] }>;
+  options?: { types?: Array<"fact" | "topic" | "person" | "quote">; limit?: number }
+) => Promise<{ facts: Fact[]; topics: Topic[]; people: Person[]; quotes: Quote[] }>;
 
 export function createReadMemoryExecutor(searchHumanData: SearchHumanData): ToolExecutor {
   return {
