@@ -29,6 +29,18 @@ Ei is a local-first AI companion with persistent personas. Three frontends share
 
 > **CRITICAL**: If code contradicts something defined in CONTRACTS.md, **STOP and ASK**. CONTRACTS.md wins.
 
+## Design Priority
+
+When making design or architecture decisions, prioritize in this order:
+
+1. **Everyone else** — Random user who found Ei on GitHub and wants to try it
+2. **Everyone *else* else** — Power users, contributors, people with weird setups
+3. ~8.5 billion other humans~
+4. **Flare** — The author uses Ei daily but his preferences come last
+
+Ei is an open-source project. Decisions should optimize for the widest possible audience,
+not the author's specific workflow. If a design choice benefits Flare but makes Ei harder
+for a new user to set up, the new user wins.
 
 ## Code Conventions
 

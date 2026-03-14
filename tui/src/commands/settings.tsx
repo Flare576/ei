@@ -45,6 +45,21 @@ export const settingsCommand: Command = {
         // Validate provider name in default_model (case-insensitive match + auto-correct)
         const llmAccounts = human.settings?.accounts?.filter(a => a.type === "llm") ?? [];
         newSettings.default_model = validateModelProvider(newSettings.default_model, llmAccounts);
+
+        if (newSettings.opencode?.extraction_model) {
+          newSettings.opencode.extraction_model = validateModelProvider(
+            newSettings.opencode.extraction_model,
+            llmAccounts
+          );
+        }
+
+        if (newSettings.claudeCode?.extraction_model) {
+          newSettings.claudeCode.extraction_model = validateModelProvider(
+            newSettings.claudeCode.extraction_model,
+            llmAccounts
+          );
+        }
+
         await ctx.ei.updateSettings(newSettings);
         ctx.showNotification("Settings updated", "info");
         return;
