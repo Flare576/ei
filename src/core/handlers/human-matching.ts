@@ -46,7 +46,7 @@ export function handleHumanItemMatch(response: LLMResponse, state: StateManager)
     messages_analyze = split.messages_analyze;
   }
 
-  const context: ExtractionContext & { itemName: string; itemValue: string; itemCategory?: string } = {
+  const context: ExtractionContext & { itemName: string; itemValue: string; itemCategory?: string; extraction_model?: string } = {
     personaId,
     personaDisplayName,
     messages_context,
@@ -54,6 +54,7 @@ export function handleHumanItemMatch(response: LLMResponse, state: StateManager)
     itemName: response.request.data.itemName as string,
     itemValue: response.request.data.itemValue as string,
     itemCategory: response.request.data.itemCategory as string | undefined,
+    extraction_model: response.request.data.extraction_model as string | undefined,
   };
 
   let resolvedType: DataItemType = candidateType;

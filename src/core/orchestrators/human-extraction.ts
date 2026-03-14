@@ -260,7 +260,8 @@ export async function queueItemMatch(
   dataType: DataItemType,
   candidate: ScanCandidate,
   context: ExtractionContext,
-  state: StateManager
+  state: StateManager,
+  extractionModel?: string
 ): Promise<void> {
   const human = state.getHuman();
   
@@ -367,7 +368,7 @@ export async function queueItemMatch(
   state.queue_enqueue({
     type: LLMRequestType.JSON,
     priority: LLMPriority.Normal,
-    model: undefined,
+    model: extractionModel,
     system: prompt.system,
     user: prompt.user,
     next_step: LLMNextStep.HandleHumanItemMatch,
@@ -376,6 +377,7 @@ export async function queueItemMatch(
       candidateType: dataType,
       itemName,
       itemValue,
+      extraction_model: extractionModel,
     },
   });
 }
@@ -383,7 +385,7 @@ export async function queueItemMatch(
 export function queueItemUpdate(
   candidateType: DataItemType,
   matchResult: ItemMatchResult,
-  context: ExtractionContext & { itemName: string; itemValue: string; itemCategory?: string },
+  context: ExtractionContext & { itemName: string; itemValue: string; itemCategory?: string; extraction_model?: string },
   state: StateManager
 ): number {
   const human = state.getHuman();

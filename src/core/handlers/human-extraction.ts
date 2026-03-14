@@ -88,8 +88,9 @@ export async function handleHumanTopicScan(response: LLMResponse, state: StateMa
   const context = response.request.data as unknown as ExtractionContext;
   if (!context?.personaId) return;
 
+  const extractionModel = (response.request.data as Record<string, unknown>).extraction_model as string | undefined;
   for (const candidate of result.topics) {
-    await queueItemMatch("topic", candidate, context, state);
+    await queueItemMatch("topic", candidate, context, state, extractionModel);
   }
   console.log(`[handleHumanTopicScan] Queued ${result.topics.length} topic(s) for matching`);
 }
@@ -107,8 +108,9 @@ export async function handleHumanPersonScan(response: LLMResponse, state: StateM
   const context = response.request.data as unknown as ExtractionContext;
   if (!context?.personaId) return;
 
+  const extractionModel = (response.request.data as Record<string, unknown>).extraction_model as string | undefined;
   for (const candidate of result.people) {
-    await queueItemMatch("person", candidate, context, state);
+    await queueItemMatch("person", candidate, context, state, extractionModel);
   }
   console.log(`[handleHumanPersonScan] Queued ${result.people.length} person(s) for matching`);
 }

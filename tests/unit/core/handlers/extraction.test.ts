@@ -261,7 +261,8 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
         "topic",
         expect.objectContaining({ type_of_topic: "Technology" }),
         expect.any(Object),
-        state
+        state,
+        undefined
       );
     });
   });
@@ -291,7 +292,8 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
         "person",
         expect.objectContaining({ name_of_person: "Alice" }),
         expect.any(Object),
-        state
+        state,
+        undefined
       );
     });
   });
