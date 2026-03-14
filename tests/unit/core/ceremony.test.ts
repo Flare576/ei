@@ -322,23 +322,22 @@ describe("Rewrite Phase", () => {
       );
     });
 
-    it("scans all data types (fact, trait, topic, person)", () => {
+    it("scans all data types (fact, topic, person)", () => {
       const state = createMockRewriteState({
         settings: { rewrite_model: "TestProvider:model" },
         facts: [makeFact("f1", 800)],
-        traits: [makeTrait("t1", 900)],
         topics: [makeTopic("top1", 1000)],
         people: [makePerson("p1", 751)],
       });
 
       queueRewritePhase(state as any);
 
-      expect(state.queue_enqueue).toHaveBeenCalledTimes(4);
+      expect(state.queue_enqueue).toHaveBeenCalledTimes(3);
 
       const types = state.queue_enqueue.mock.calls.map(
         (c: any[]) => c[0].data.itemType
       );
-      expect(types).toEqual(["fact", "trait", "topic", "person"]);
+      expect(types).toEqual(["fact", "topic", "person"]);
     });
 
     it("only scans items above threshold, skips those below", () => {

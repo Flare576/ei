@@ -140,7 +140,6 @@ export function queueDedupPhase(state: StateManager): void {
   
   const entityTypes: Array<{ type: DataItemType; items: DedupableItem[] }> = [
     { type: "fact", items: human.facts },
-    { type: "trait", items: human.traits },
     { type: "topic", items: human.topics },
     { type: "person", items: human.people },
   ];

@@ -1,14 +1,12 @@
-import { LLMRequestType, LLMPriority, LLMNextStep, type Message, type DataItemType, type Fact, type Trait, type Topic, type Person } from "../types.js";
+import { LLMRequestType, LLMPriority, LLMNextStep, type Message, type DataItemType, type Fact, type Topic, type Person } from "../types.js";
 import type { StateManager } from "../state-manager.js";
 import {
   buildFactFindPrompt,
-  buildHumanTraitScanPrompt,
   buildHumanTopicScanPrompt,
   buildHumanPersonScanPrompt,
   buildHumanItemMatchPrompt,
   buildHumanItemUpdatePrompt,
   type FactScanCandidate,
-  type TraitScanCandidate,
   type TopicScanCandidate,
   type PersonScanCandidate,
   type ItemMatchResult,
@@ -18,7 +16,7 @@ import { getEmbeddingService, findTopK } from "../embedding-service.js";
 import { resolveTokenLimit } from "../llm-client.js";
 import { BUILT_IN_FACT_NAMES } from "../constants/built-in-facts.js";
 
-type ScanCandidate = FactScanCandidate | TraitScanCandidate | TopicScanCandidate | PersonScanCandidate;
+type ScanCandidate = FactScanCandidate | TopicScanCandidate | PersonScanCandidate;
 
 export interface ExtractionContext {
   personaId: string;
@@ -89,38 +87,6 @@ export function queueFactFind(context: ExtractionContext, state: StateManager, o
     });
   }
 
-  return chunks.length;
-}
-
-export function queueTraitScan(context: ExtractionContext, state: StateManager, options?: ExtractionOptions): number {
-  const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state));
-  
-  if (chunks.length === 0) return 0;
-  
-  for (const chunk of chunks) {
-    const prompt = buildHumanTraitScanPrompt({
-      persona_name: chunk.personaDisplayName,
-      messages_context: chunk.messages_context,
-      messages_analyze: chunk.messages_analyze,
-    });
-
-    state.queue_enqueue({
-      type: LLMRequestType.JSON,
-      priority: LLMPriority.Low,
-      system: prompt.system,
-      user: prompt.user,
-      next_step: LLMNextStep.HandleHumanTraitScan,
-      data: {
-        ...options,
-        personaId: chunk.personaId,
-        personaDisplayName: chunk.personaDisplayName,
-        analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
-        extraction_flag: context.extraction_flag,
-        message_ids_to_mark: chunk.messages_analyze.map(m => m.id),
-      },
-    });
-  }
-  
   return chunks.length;
 }
 
@@ -291,10 +257,7 @@ export async function queueItemMatch(
       itemName = (candidate as FactScanCandidate).type_of_fact;
       itemValue = (candidate as FactScanCandidate).value_of_fact;
       break;
-    case "trait":
-      itemName = (candidate as TraitScanCandidate).type_of_trait;
-      itemValue = (candidate as TraitScanCandidate).value_of_trait;
-      break;
+
     case "topic":
       itemName = (candidate as TopicScanCandidate).value_of_topic;
       itemValue = (candidate as TopicScanCandidate).type_of_topic;
@@ -303,16 +266,14 @@ export async function queueItemMatch(
       itemName = (candidate as PersonScanCandidate).name_of_person;
       itemValue = (candidate as PersonScanCandidate).type_of_person;
       break;
+    default:
+      throw new Error(`[queueItemMatch] Unsupported dataType: ${dataType}`);
   }
 
-  // Traits are personality patterns — they must only match against other traits.
-  // Non-trait candidates (facts, topics, people) must never absorb trait content,
-  // and trait candidates must never cross-match into facts/topics/people.
   const allItemsWithEmbeddings = [
-    ...(dataType !== "trait" ? human.facts.map(f => ({ ...f, data_type: "fact" as DataItemType })) : []),
-    ...human.traits.map(t => ({ ...t, data_type: "trait" as DataItemType })),
-    ...(dataType !== "trait" ? human.topics.map(t => ({ ...t, data_type: "topic" as DataItemType })) : []),
-    ...(dataType !== "trait" ? human.people.map(p => ({ ...p, data_type: "person" as DataItemType })) : []),
+    ...human.facts.map(f => ({ ...f, data_type: "fact" as DataItemType })),
+    ...human.topics.map(t => ({ ...t, data_type: "topic" as DataItemType })),
+    ...human.people.map(p => ({ ...p, data_type: "person" as DataItemType })),
   ].filter(item => item.embedding && item.embedding.length > 0);
 
   let topKItems: Array<{
@@ -351,44 +312,31 @@ export async function queueItemMatch(
 
     console.log(`[queueItemMatch] No embeddings available, using filtered items (dataType=${dataType})`);
 
-    if (dataType !== "trait") {
-      for (const fact of human.facts) {
-        topKItems.push({
-          data_type: "fact",
-          data_id: fact.id,
-          data_name: fact.name,
-          data_description: dataType === "fact" ? fact.description : truncateDescription(fact.description),
-        });
-      }
-    }
-
-    for (const trait of human.traits) {
+    for (const fact of human.facts) {
       topKItems.push({
-        data_type: "trait",
-        data_id: trait.id,
-        data_name: trait.name,
-        data_description: dataType === "trait" ? trait.description : truncateDescription(trait.description),
+        data_type: "fact",
+        data_id: fact.id,
+        data_name: fact.name,
+        data_description: dataType === "fact" ? fact.description : truncateDescription(fact.description),
       });
     }
 
-    if (dataType !== "trait") {
-      for (const topic of human.topics) {
-        topKItems.push({
-          data_type: "topic",
-          data_id: topic.id,
-          data_name: topic.name,
-          data_description: dataType === "topic" ? topic.description : truncateDescription(topic.description),
-        });
-      }
+    for (const topic of human.topics) {
+      topKItems.push({
+        data_type: "topic",
+        data_id: topic.id,
+        data_name: topic.name,
+        data_description: dataType === "topic" ? topic.description : truncateDescription(topic.description),
+      });
+    }
 
-      for (const person of human.people) {
-        topKItems.push({
-          data_type: "person",
-          data_id: person.id,
-          data_name: person.name,
-          data_description: dataType === "person" ? person.description : truncateDescription(person.description),
-        });
-      }
+    for (const person of human.people) {
+      topKItems.push({
+        data_type: "person",
+        data_id: person.id,
+        data_name: person.name,
+        data_description: dataType === "person" ? person.description : truncateDescription(person.description),
+      });
     }
   }
 
@@ -426,17 +374,13 @@ export function queueItemUpdate(
   const matchedGuid = matchResult.matched_guid;
   const isNewItem = matchedGuid === null;
 
-  let existingItem: Fact | Trait | Topic | Person | null = null;
+  let existingItem: Fact | Topic | Person | null = null;
   let matchedType: DataItemType | null = null;
 
   if (!isNewItem) {
     existingItem = human.facts.find(f => f.id === matchedGuid) ?? null;
     if (existingItem) matchedType = "fact";
 
-    if (!existingItem) {
-      existingItem = human.traits.find(t => t.id === matchedGuid) ?? null;
-      if (existingItem) matchedType = "trait";
-    }
 
     if (!existingItem) {
       existingItem = human.topics.find(t => t.id === matchedGuid) ?? null;

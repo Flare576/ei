@@ -19,7 +19,6 @@ import {
 
 vi.mock("../../../../src/prompts/human/index.js", () => ({
   buildFactFindPrompt: vi.fn().mockReturnValue({ system: "fact-find-sys", user: "fact-find-usr" }),
-  buildHumanTraitScanPrompt: vi.fn().mockReturnValue({ system: "trait-sys", user: "trait-usr" }),
   buildHumanTopicScanPrompt: vi.fn().mockReturnValue({ system: "topic-sys", user: "topic-usr" }),
   buildHumanPersonScanPrompt: vi.fn().mockReturnValue({ system: "person-sys", user: "person-usr" }),
   buildHumanItemMatchPrompt: vi.fn().mockReturnValue({ system: "match-sys", user: "match-usr" }),
@@ -28,7 +27,6 @@ vi.mock("../../../../src/prompts/human/index.js", () => ({
 
 import {
   buildFactFindPrompt,
-  buildHumanTraitScanPrompt,
   buildHumanTopicScanPrompt,
   buildHumanPersonScanPrompt,
   buildHumanItemMatchPrompt,
@@ -241,7 +239,6 @@ describe("queueItemMatch (Step 2)", () => {
       candidate_value: "San Francisco",
       all_items: expect.arrayContaining([
         expect.objectContaining({ data_type: "fact", data_id: "f1", data_name: "Birthday" }),
-        expect.objectContaining({ data_type: "trait", data_id: "t1", data_name: "Curiosity" }),
         expect.objectContaining({ data_type: "topic", data_id: "top1", data_name: "AI" }),
         expect.objectContaining({ data_type: "person", data_id: "p1", data_name: "Alice" }),
       ]),
@@ -259,23 +256,6 @@ describe("queueItemMatch (Step 2)", () => {
     );
   });
 
-  it("queues trait match with all items", () => {
-    const candidate = {
-      type_of_trait: "Introversion",
-      value_of_trait: "Prefers quiet time",
-      reason: "Mentioned preference",
-    };
-
-    queueItemMatch("trait", candidate, context, state as any);
-
-    expect(buildHumanItemMatchPrompt).toHaveBeenCalledWith(
-      expect.objectContaining({
-        candidate_type: "trait",
-        candidate_name: "Introversion",
-        candidate_value: "Prefers quiet time",
-      })
-    );
-  });
 
   it("queues topic match with all items", () => {
     const candidate = {
@@ -412,26 +392,6 @@ describe("queueItemUpdate (Step 3)", () => {
     );
   });
 
-  it("queues update for existing trait match by GUID", () => {
-    const matchResult = { matched_guid: "t1" };
-    const context = {
-      personaId: "ei",
-      personaDisplayName: "Ei",
-      messages_context: [],
-      messages_analyze: [createMessage("1", "analyze")],
-      itemName: "Curiosity",
-      itemValue: "Updated value",
-    };
-
-    queueItemUpdate("trait", matchResult, context, state as any);
-
-    expect(buildHumanItemUpdatePrompt).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data_type: "trait",
-        existing_item: expect.objectContaining({ id: "t1", name: "Curiosity" }),
-      })
-    );
-  });
 
   it("queues update for existing topic match by GUID", () => {
     const matchResult = { matched_guid: "top1" };

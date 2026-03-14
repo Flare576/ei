@@ -549,7 +549,6 @@ export function runDedupPhase(state: StateManager): void {
 
   const types: Array<{ label: string; items: DedupableItem[] }> = [
     { label: "facts",  items: human.facts },
-    { label: "traits", items: human.traits },
     { label: "topics", items: human.topics },
     { label: "people", items: human.people },
   ];
@@ -608,11 +607,7 @@ export function queueRewritePhase(state: StateManager): void {
       itemsToScan.push({ item: fact, type: "fact" });
     }
   }
-  for (const trait of human.traits) {
-    if ((trait.description?.length ?? 0) > REWRITE_DESCRIPTION_THRESHOLD) {
-      itemsToScan.push({ item: trait, type: "trait" });
-    }
-  }
+
   for (const topic of human.topics) {
     if ((topic.description?.length ?? 0) > REWRITE_DESCRIPTION_THRESHOLD) {
       itemsToScan.push({ item: topic, type: "topic" });
