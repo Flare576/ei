@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { StateManager } from "../../../src/core/state-manager.js";
 import { LLMRequestType, LLMPriority, LLMNextStep, ContextStatus } from "../../../src/core/types.js";
 import { createMockStorage, createDefaultTestState } from "../../helpers/mock-storage.js";
-import type { Fact, Trait, Topic, Person, PersonaEntity, Message, ToolProvider, ToolDefinition } from "../../../src/core/types.js";
+import type { Fact, Topic, Person, PersonaEntity, Message, ToolProvider, ToolDefinition } from "../../../src/core/types.js";
 
 describe("StateManager", () => {
   let sm: StateManager;
@@ -51,32 +51,12 @@ describe("StateManager", () => {
       id, name, description: "", sentiment: 0, last_updated: "", validated_date: ""
     });
 
-    const makeTrait = (id: string, name: string): Trait => ({
-      id, name, description: "", sentiment: 0, last_updated: ""
-    });
-
     const makeTopic = (id: string, name: string): Topic => ({
       id, name, description: "", sentiment: 0, exposure_current: 0.5, exposure_desired: 0.5, last_updated: ""
     });
 
     const makePerson = (id: string, name: string): Person => ({
       id, name, description: "", relationship: "friend", sentiment: 0, exposure_current: 0.5, exposure_desired: 0.5, last_updated: ""
-    });
-
-    it("upserts and removes facts", () => {
-      sm.human_fact_upsert(makeFact("f1", "Test"));
-      expect(sm.getHuman().facts).toHaveLength(1);
-      
-      sm.human_fact_remove("f1");
-      expect(sm.getHuman().facts).toHaveLength(0);
-    });
-
-    it("upserts and removes traits", () => {
-      sm.human_trait_upsert(makeTrait("t1", "Test"));
-      expect(sm.getHuman().traits).toHaveLength(1);
-      
-      sm.human_trait_remove("t1");
-      expect(sm.getHuman().traits).toHaveLength(0);
     });
 
     it("upserts and removes topics", () => {

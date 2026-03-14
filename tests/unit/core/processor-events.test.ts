@@ -154,16 +154,6 @@ describe("Processor Event System", () => {
     expect(mock.calls).toContain("onHumanUpdated");
   });
 
-  it("fires onHumanUpdated when upserting traits", async () => {
-    await processor.upsertTrait({
-      id: "trait-1",
-      name: "Test Trait",
-      description: "A test trait",
-      sentiment: 0,
-      last_updated: new Date().toISOString(),
-    });
-    expect(mock.calls).toContain("onHumanUpdated");
-  });
 
   it("fires onHumanUpdated when removing data items", async () => {
     await processor.upsertFact({

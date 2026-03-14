@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { HumanState, createDefaultHumanEntity } from "../../../../src/core/state/index.js";
-import type { Fact, Trait, Topic, Person } from "../../../../src/core/types.js";
+import type { Fact, Topic, Person } from "../../../../src/core/types.js";
 
 describe("HumanState", () => {
   let state: HumanState;
@@ -86,39 +86,6 @@ describe("HumanState", () => {
     });
   });
 
-  describe("traits CRUD", () => {
-    const makeTrait = (id: string, name: string): Trait => ({
-      id,
-      name,
-      description: `${name} description`,
-      sentiment: 0.5,
-      strength: 0.7,
-      last_updated: new Date().toISOString(),
-    });
-
-    it("adds new trait via upsert", () => {
-      state.trait_upsert(makeTrait("t1", "Curious"));
-      
-      expect(state.get().traits).toHaveLength(1);
-      expect(state.get().traits[0].name).toBe("Curious");
-    });
-
-    it("updates existing trait via upsert", () => {
-      state.trait_upsert(makeTrait("t1", "Original"));
-      state.trait_upsert(makeTrait("t1", "Updated"));
-      
-      expect(state.get().traits).toHaveLength(1);
-      expect(state.get().traits[0].name).toBe("Updated");
-    });
-
-    it("removes trait by id", () => {
-      state.trait_upsert(makeTrait("t1", "ToRemove"));
-      const removed = state.trait_remove("t1");
-      
-      expect(removed).toBe(true);
-      expect(state.get().traits).toHaveLength(0);
-    });
-  });
 
   describe("topics CRUD", () => {
     const makeTopic = (id: string, name: string): Topic => ({

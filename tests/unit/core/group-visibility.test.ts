@@ -10,7 +10,6 @@ import {
   type HumanEntity,
   type PersonaEntity,
   type Fact,
-  type Trait,
   type Topic,
   type Person,
   type Quote,
@@ -136,114 +135,6 @@ function createItemUpdateResponse(options: {
 
 describe("Group Visibility", () => {
   describe("handleHumanItemUpdate - group merging", () => {
-    it("new item gets persona's group_primary", async () => {
-      const state = createMockStateManager({
-        personas: {
-          Frodo: { group_primary: "Fellowship", groups_visible: ["General"] },
-        },
-      });
-
-      const response = createItemUpdateResponse({
-        personaId: "frodo-id",
-    personaDisplayName: "Frodo",
-        candidateType: "trait",
-        isNewItem: true,
-        result: {
-          name: "Brave",
-          description: "Shows courage",
-          sentiment: 0.8,
-          strength: 0.7,
-        },
-      });
-
-      await handlers[LLMNextStep.HandleHumanItemUpdate](response, state as any);
-
-      expect(state.human_trait_upsert).toHaveBeenCalled();
-      const trait = state.human_trait_upsert.mock.calls[0][0];
-      expect(trait.persona_groups).toEqual(["Fellowship"]);
-      expect(trait.learned_by).toBe("frodo-id");
-    });
-
-    it("existing item gets persona's group added to existing groups", async () => {
-      const existingTrait: Trait = {
-        id: "trait-1",
-        name: "Curious",
-        description: "Asks questions",
-        sentiment: 0.5,
-        strength: 0.6,
-        last_updated: new Date().toISOString(),
-        learned_by: "Frodo",
-        persona_groups: ["Fellowship"],
-      };
-
-      const state = createMockStateManager({
-        human: { traits: [existingTrait] },
-        personas: {
-          Hermit: { group_primary: "Hermit", groups_visible: [] },
-        },
-      });
-
-      const response = createItemUpdateResponse({
-        personaId: "hermit-id",
-        personaDisplayName: "Hermit",
-        candidateType: "trait",
-        isNewItem: false,
-        existingItemId: "trait-1",
-        result: {
-          name: "Curious",
-          description: "Asks deep questions about existence",
-          sentiment: 0.6,
-          strength: 0.7,
-        },
-      });
-
-      await handlers[LLMNextStep.HandleHumanItemUpdate](response, state as any);
-
-      expect(state.human_trait_upsert).toHaveBeenCalled();
-      const trait = state.human_trait_upsert.mock.calls[0][0];
-      expect(trait.persona_groups).toContain("Fellowship");
-      expect(trait.persona_groups).toContain("Hermit");
-      expect(trait.persona_groups).toHaveLength(2);
-      expect(trait.learned_by).toBe("Frodo");
-    });
-
-    it("does not duplicate groups when persona's group already exists", async () => {
-      const existingTrait: Trait = {
-        id: "trait-1",
-        name: "Wise",
-        description: "Shows wisdom",
-        sentiment: 0.7,
-        strength: 0.8,
-        last_updated: new Date().toISOString(),
-        persona_groups: ["Fellowship", "General"],
-      };
-
-      const state = createMockStateManager({
-        human: { traits: [existingTrait] },
-        personas: {
-          Frodo: { group_primary: "Fellowship", groups_visible: ["General"] },
-        },
-      });
-
-      const response = createItemUpdateResponse({
-        personaId: "frodo-id",
-        personaDisplayName: "Frodo",
-        candidateType: "trait",
-        isNewItem: false,
-        existingItemId: "trait-1",
-        result: {
-          name: "Wise",
-          description: "Shows great wisdom in difficult times",
-          sentiment: 0.8,
-          strength: 0.9,
-        },
-      });
-
-      await handlers[LLMNextStep.HandleHumanItemUpdate](response, state as any);
-
-      const trait = state.human_trait_upsert.mock.calls[0][0];
-      expect(trait.persona_groups).toEqual(["Fellowship", "General"]);
-    });
 
     it("Ei updates preserve existing groups (Ei has no primary group effect)", async () => {
       const existingFact: Fact = {
