@@ -48,6 +48,12 @@ export async function handleFactFind(response: LLMResponse, state: StateManager)
       continue;
     }
 
+    // Skip if the LLM returned a null/empty value — don't store null descriptions
+    if (!factResult.value) {
+      console.log(`[handleFactFind] Skipping fact with null/empty value: "${factResult.name}"`);
+      continue;
+    }
+
     // Compute embedding for the updated fact
     let embedding: number[] | undefined;
     try {
