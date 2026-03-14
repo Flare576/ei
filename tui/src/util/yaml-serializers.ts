@@ -7,7 +7,7 @@ import type {
   OpenCodeSettings,
   BackupConfig,
   Fact,
-  Trait,
+  PersonaTrait,
   Topic,
   Person,
   PersonaTopic,
@@ -186,7 +186,7 @@ export function newPersonaFromYAML(yamlContent: string, allTools?: ToolDefinitio
     t.name === PLACEHOLDER_TRAIT.name && 
     t.description === PLACEHOLDER_TRAIT.description;
 
-  const traits: Trait[] = [];
+  const traits: PersonaTrait[] = [];
   for (const t of data.traits ?? []) {
     if (isTraitPlaceholder(t)) {
       continue;
@@ -309,7 +309,7 @@ export function personaFromYAML(yamlContent: string, original: PersonaEntity, al
     t.name === PLACEHOLDER_TRAIT.name && 
     t.description === PLACEHOLDER_TRAIT.description;
 
-  const traits: Trait[] = [];
+  const traits: PersonaTrait[] = [];
   for (const t of data.traits ?? []) {
     if (isTraitPlaceholder(t)) {
       continue;
@@ -536,17 +536,17 @@ export function settingsToYAML(settings: HumanSettings | undefined): string {
     opencode: {
       integration: settings?.opencode?.integration ?? false,
       polling_interval_ms: settings?.opencode?.polling_interval_ms ?? 1800000,
-      last_sync: settings?.opencode?.last_sync ?? null,
-      extraction_point: settings?.opencode?.extraction_point ?? null,
       extraction_model: settings?.opencode?.extraction_model ?? 'default',
       extraction_token_limit: settings?.opencode?.extraction_token_limit ?? 'default',
+      last_sync: settings?.opencode?.last_sync ?? null,
+      extraction_point: settings?.opencode?.extraction_point ?? null,
     },
     claudeCode: {
       integration: settings?.claudeCode?.integration ?? false,
       polling_interval_ms: settings?.claudeCode?.polling_interval_ms ?? 1800000,
-      last_sync: settings?.claudeCode?.last_sync ?? null,
       extraction_model: settings?.claudeCode?.extraction_model ?? 'default',
       extraction_token_limit: settings?.claudeCode?.extraction_token_limit ?? 'default',
+      last_sync: settings?.claudeCode?.last_sync ?? null,
     },
     backup: {
       enabled: settings?.backup?.enabled ?? false,
