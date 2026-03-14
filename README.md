@@ -116,6 +116,48 @@ Opencode saves all of its sessions locally, either in a JSON structure or, if yo
 
 Then, Opencode can call into Ei and pull those details back out. That's why you always have a side-project or two going. See [TUI Readme](tui/README.md)
 
+## Built-in Tool Integrations
+
+Personas can use tools. Not just read-from-memory tools — *actual* tools. Web search. Your music. Your filesystem. Here's what ships with Ei out of the box:
+
+### Ei Built-ins (always available, no setup)
+
+| Tool | What it does |
+|------|-------------|
+| `read_memory` | Semantic search of your personal memory — facts, traits, topics, people, quotes. Personas call this automatically when the conversation touches something they might know about you. |
+| `file_read` | Read a file from your local filesystem *(TUI only)* |
+| `list_directory` | Explore folder structure *(TUI only)* |
+| `directory_tree` | Recursive directory tree *(TUI only)* |
+| `search_files` | Find files by name pattern *(TUI only)* |
+| `grep` | Search file contents by regex *(TUI only)* |
+| `get_file_info` | File/directory metadata *(TUI only)* |
+
+The filesystem tools make Ei a legitimate coding assistant in the TUI. Ask a persona to review a file, understand a project structure, or track down where something is defined — it can actually look.
+
+### Tavily Web Search (requires free API key)
+
+| Tool | What it does |
+|------|-------------|
+| `tavily_web_search` | Real-time web search — current events, fact-checking, anything that needs up-to-date information |
+| `tavily_news_search` | Recent news articles |
+
+Get a free key at [tavily.com](https://tavily.com) (1,000 requests/month free tier). Add it in **Settings → Tool Kits → Tavily Search**.
+
+### Spotify (requires OAuth connection)
+
+| Tool | What it does |
+|------|-------------|
+| `get_currently_playing` | What's playing right now — artist, title, album, progress |
+| `get_liked_songs` | Your full liked songs library |
+
+Connect in **Settings → Tool Kits → Spotify**. Once connected, personas can ask what you're listening to and actually know. Music-aware conversations.
+
+### Assigning Tools to Personas
+
+Tools aren't global — you choose which personas get access. Edit a persona and toggle the tools it can use. A focused work persona might only have filesystem tools. A general-purpose companion might have everything.
+
+---
+
 ## Technical Details
 
 This project is separated into five (5) logical parts:
