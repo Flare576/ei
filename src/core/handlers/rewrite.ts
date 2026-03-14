@@ -4,7 +4,6 @@ import {
   LLMNextStep,
   type LLMResponse,
   type Fact,
-  type Trait,
   type Topic,
   type Person,
   type DataItemBase,
@@ -47,7 +46,7 @@ export async function handleRewriteScan(response: LLMResponse, state: StateManag
   // Re-read the item from current state (it may have changed since scan was queued)
   const human = state.getHuman();
   const allItems: DataItemBase[] = [
-    ...human.facts, ...human.traits, ...human.topics, ...human.people,
+    ...human.facts, ...human.topics, ...human.people,
   ];
   const currentItem = allItems.find(i => i.id === itemId);
   if (!currentItem) {
@@ -60,11 +59,11 @@ export async function handleRewriteScan(response: LLMResponse, state: StateManag
   for (const searchTerm of subjects) {
     try {
       const results = await searchHumanData(state, searchTerm, {
-        types: ["fact", "trait", "topic", "person"],
+        types: ["fact", "topic", "person"],
         limit: 4,  // fetch 4 so we can exclude original and still have 3
       });
       const allMatches: DataItemBase[] = [
-        ...results.facts, ...results.traits, ...results.topics, ...results.people,
+        ...results.facts, ...results.topics, ...results.people,
       ].filter(m => m.id !== itemId);  // exclude original
       subjectMatches.push({ searchTerm, matches: allMatches.slice(0, 3) });
     } catch (err) {
@@ -121,7 +120,7 @@ export async function handleRewriteRewrite(response: LLMResponse, state: StateMa
 
   // Look up the original item to inherit persona_groups
   const allItems: DataItemBase[] = [
-    ...human.facts, ...human.traits, ...human.topics, ...human.people,
+    ...human.facts, ...human.topics, ...human.people,
   ];
   const originalItem = allItems.find(i => i.id === itemId);
   const inheritedGroups = originalItem?.persona_groups;
@@ -129,7 +128,6 @@ export async function handleRewriteRewrite(response: LLMResponse, state: StateMa
   // Helper: resolve actual type from existing records (don't trust LLM's type field)
   const resolveExistingType = (id: string): RewriteItemType | null => {
     if (human.facts.find(f => f.id === id)) return "fact";
-    if (human.traits.find(t => t.id === id)) return "trait";
     if (human.topics.find(t => t.id === id)) return "topic";
     if (human.people.find(p => p.id === id)) return "person";
     return null;
@@ -169,19 +167,6 @@ export async function handleRewriteRewrite(response: LLMResponse, state: StateMa
           name: item.name,
           description: item.description,
           sentiment: item.sentiment ?? existing.sentiment,
-          last_updated: now,
-          embedding,
-        });
-        break;
-      }
-      case "trait": {
-        const existing = human.traits.find(t => t.id === item.id)!;
-        state.human_trait_upsert({
-          ...existing,
-          name: item.name,
-          description: item.description,
-          sentiment: item.sentiment ?? existing.sentiment,
-          strength: item.strength ?? existing.strength,
           last_updated: now,
           embedding,
         });
@@ -249,14 +234,6 @@ export async function handleRewriteRewrite(response: LLMResponse, state: StateMa
           validated_date: now,
         };
         state.human_fact_upsert(fact);
-        break;
-      }
-      case "trait": {
-        const trait: Trait = {
-          ...baseFields,
-          strength: item.strength ?? 0.5,
-        };
-        state.human_trait_upsert(trait);
         break;
       }
       case "topic": {

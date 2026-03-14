@@ -26,7 +26,6 @@ export enum LLMNextStep {
   HandlePersonaGeneration = "handlePersonaGeneration",
   HandlePersonaDescriptions = "handlePersonaDescriptions",
   HandleFactFind = "handleFactFind",
-  HandleHumanTraitScan = "handleHumanTraitScan",
   HandleHumanTopicScan = "handleHumanTopicScan",
   HandleHumanPersonScan = "handleHumanPersonScan",
   HandleHumanItemMatch = "handleHumanItemMatch",

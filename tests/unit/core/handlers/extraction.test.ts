@@ -10,7 +10,6 @@ import {
   type HumanEntity,
   type PersonaEntity,
   type Fact,
-  type Trait,
   type Topic,
   type Person,
 } from "../../../../src/core/types.js";
@@ -489,33 +488,6 @@ describe("Extraction Handlers - Step 3 (Update)", () => {
       expect(calledWith.learned_by).toBeUndefined();
     });
 
-    it("creates new trait with strength", async () => {
-      const request = createMockRequest({
-        next_step: LLMNextStep.HandleHumanItemUpdate,
-        data: {
-          personaId: "ei",
-        personaDisplayName: "Ei",
-          candidateType: "trait",
-          isNewItem: true,
-        },
-      });
-
-      const response = createMockResponse(request, {
-        name: "Curiosity",
-        description: "Always eager to learn",
-        sentiment: 0.7,
-        strength: 0.8,
-      });
-
-      await handlers.handleHumanItemUpdate(response, state as any);
-
-      expect(state.human_trait_upsert).toHaveBeenCalledWith(
-        expect.objectContaining({
-          name: "Curiosity",
-          strength: 0.8,
-        })
-      );
-    });
 
     it("creates new topic with exposure_impact calculation", async () => {
       const request = createMockRequest({

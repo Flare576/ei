@@ -2,7 +2,6 @@ import type { LLMResponse, Fact } from "../types.js";
 import type { StateManager } from "../state-manager.js";
 import type {
   FactFindResult,
-  TraitScanResult,
   TopicScanResult,
   PersonScanResult,
 } from "../../prompts/human/types.js";
@@ -75,24 +74,6 @@ export async function handleFactFind(response: LLMResponse, state: StateManager)
   console.log(`[handleFactFind] Upserted ${upsertCount} fact(s)`);
 }
 
-export async function handleHumanTraitScan(response: LLMResponse, state: StateManager): Promise<void> {
-  const result = response.parsed as TraitScanResult | undefined;
-  
-  markMessagesExtracted(response, state, "r");
-  
-  if (!result?.traits || !Array.isArray(result.traits)) {
-    console.log("[handleHumanTraitScan] No traits detected or invalid result");
-    return;
-  }
-
-  const context = response.request.data as unknown as ExtractionContext;
-  if (!context?.personaId) return;
-
-  for (const candidate of result.traits) {
-    await queueItemMatch("trait", candidate, context, state);
-  }
-  console.log(`[handleHumanTraitScan] Queued ${result.traits.length} trait(s) for matching`);
-}
 
 export async function handleHumanTopicScan(response: LLMResponse, state: StateManager): Promise<void> {
   const result = response.parsed as TopicScanResult | undefined;

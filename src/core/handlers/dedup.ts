@@ -1,7 +1,7 @@
 import { StateManager } from "../state-manager.js";
 import { LLMResponse } from "../types.js";
 import type { DedupResult } from "../../prompts/ceremony/types.js";
-import type { DataItemType, Fact, Trait, Topic, Person, Quote } from "../types/data-items.js";
+import type { DataItemType, Fact, Topic, Person, Quote } from "../types/data-items.js";
 import { getEmbeddingService } from "../embedding-service.js";
 
 /**
@@ -24,7 +24,7 @@ export async function handleDedupCurate(
   const state = stateManager.getHuman();
   
   // Validate entity_type
-  if (!entity_type || !['fact', 'trait', 'topic', 'person'].includes(entity_type)) {
+  if (!entity_type || !['fact', 'topic', 'person'].includes(entity_type)) {
     console.error(`[Dedup] Invalid entity_type: "${entity_type}" (from request data)`, response.request.data);
     return;
   }
@@ -50,9 +50,8 @@ export async function handleDedupCurate(
   console.log(`[Dedup] Processing cluster: ${decisions.update.length} updates, ${decisions.remove.length} removals, ${decisions.add.length} additions`);
   
   // Map entity_type to pluralized state property name
-  const pluralMap: Record<DataItemType, 'facts' | 'traits' | 'topics' | 'people'> = {
+  const pluralMap: Record<string, 'facts' | 'topics' | 'people'> = {
     fact: 'facts',
-    trait: 'traits',
     topic: 'topics',
     person: 'people'
   };
@@ -65,15 +64,14 @@ export async function handleDedupCurate(
       entity_ids,
       stateKeys: Object.keys(state),
       factsExists: !!state.facts,
-      traitsExists: !!state.traits,
       topicsExists: !!state.topics,
       peopleExists: !!state.people
     });
     return;
   }
   const entities = entity_ids
-    .map((id: string) => entityList.find((e: Fact | Trait | Topic | Person) => e.id === id))
-    .filter((e: Fact | Trait | Topic | Person | undefined): e is (Fact | Trait | Topic | Person) => e !== undefined);
+    .map((id: string) => entityList.find((e: Fact | Topic | Person) => e.id === id))
+    .filter((e: Fact | Topic | Person | undefined): e is (Fact | Topic | Person) => e !== undefined);
   
   if (entities.length === 0) {
     console.warn(`[Dedup] No entities found for cluster (already merged?)`);
@@ -109,7 +107,7 @@ export async function handleDedupCurate(
   // =========================================================================
   
   for (const update of decisions.update) {
-    const entity = entityList.find((e: Fact | Trait | Topic | Person) => e.id === update.id);
+    const entity = entityList.find((e: Fact | Topic | Person) => e.id === update.id);
     
     if (!entity) {
       console.warn(`[Dedup] Entity ${update.id} not found (already merged?)`);
@@ -148,8 +146,6 @@ export async function handleDedupCurate(
     // Type-safe cast based on entity_type
     if (entity_type === 'fact') {
       stateManager.human_fact_upsert(updatedEntity as Fact);
-    } else if (entity_type === 'trait') {
-      stateManager.human_trait_upsert(updatedEntity as Trait);
     } else if (entity_type === 'topic') {
       stateManager.human_topic_upsert(updatedEntity as Topic);
     } else if (entity_type === 'person') {
@@ -163,7 +159,7 @@ export async function handleDedupCurate(
   // =========================================================================
   
   for (const removal of decisions.remove) {
-    const entity = entityList.find((e: Fact | Trait | Topic | Person) => e.id === removal.to_be_removed);
+    const entity = entityList.find((e: Fact | Topic | Person) => e.id === removal.to_be_removed);
     
     if (!entity) {
       console.warn(`[Dedup] Entity ${removal.to_be_removed} already deleted`);
@@ -172,7 +168,7 @@ export async function handleDedupCurate(
     
     // Remove via StateManager (also cleans up quote references)
     const removeMethod = `human_${entity_type}_remove` as 
-      'human_fact_remove' | 'human_trait_remove' | 'human_topic_remove' | 'human_person_remove';
+      'human_fact_remove' | 'human_topic_remove' | 'human_person_remove';
     
     const removed = stateManager[removeMethod](removal.to_be_removed);
     if (removed) {
@@ -208,7 +204,6 @@ export async function handleDedupCurate(
       last_updated: new Date().toISOString(),
       embedding,
       // Type-specific fields with defaults
-      ...(entity_type === 'trait' && { strength: addition.strength ?? 0.5 }),
       ...(entity_type === 'fact' && { 
         confidence: addition.confidence ?? 0.5,
         validated_date: ''
@@ -225,8 +220,6 @@ export async function handleDedupCurate(
     // Type-safe cast based on entity_type
     if (entity_type === 'fact') {
       stateManager.human_fact_upsert(newEntity as Fact);
-    } else if (entity_type === 'trait') {
-      stateManager.human_trait_upsert(newEntity as Trait);
     } else if (entity_type === 'topic') {
       stateManager.human_topic_upsert(newEntity as Topic);
     } else if (entity_type === 'person') {

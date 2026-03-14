@@ -214,11 +214,11 @@ describe("Rewrite Handlers - Phase 1 (Scan)", () => {
       // Should search for each subject
       expect(vi.mocked(searchHumanData)).toHaveBeenCalledTimes(2);
       expect(vi.mocked(searchHumanData)).toHaveBeenCalledWith(state, "programming", expect.objectContaining({
-        types: ["fact", "trait", "topic", "person"],
+        types: ["fact", "topic", "person"],
         limit: 4,
       }));
       expect(vi.mocked(searchHumanData)).toHaveBeenCalledWith(state, "databases", expect.objectContaining({
-        types: ["fact", "trait", "topic", "person"],
+        types: ["fact", "topic", "person"],
         limit: 4,
       }));
 
@@ -391,31 +391,6 @@ describe("Rewrite Handlers - Phase 2 (Rewrite)", () => {
       );
     });
 
-    it("updates existing trait preserving strength from original when LLM omits it", async () => {
-      seedBloatedTrait(state);
-      const request = createMockRequest({
-        next_step: LLMNextStep.HandleRewriteRewrite,
-        data: { itemId: "bloated-trait-1", itemType: "trait" },
-      });
-      const response = createMockResponse(request, {
-        existing: [{
-          id: "bloated-trait-1",
-          type: "trait",
-          name: "Curiosity (Refined)",
-          description: "Refined curiosity description",
-          // No sentiment or strength — should fall back to existing values
-        }],
-        new: [],
-      });
-
-      await handlers.handleRewriteRewrite(response, state as any);
-
-      expect(state.human_trait_upsert).toHaveBeenCalledTimes(1);
-      const calledWith = state.human_trait_upsert.mock.calls[0][0];
-      expect(calledWith.name).toBe("Curiosity (Refined)");
-      expect(calledWith.strength).toBe(0.8); // preserved from original
-      expect(calledWith.sentiment).toBe(0.6); // preserved from original
-    });
 
     it("resolves type from existing records, not from LLM response", async () => {
       // Seed a fact, but LLM says it's a "trait" — handler should resolve to "fact"
@@ -518,29 +493,6 @@ describe("Rewrite Handlers - Phase 2 (Rewrite)", () => {
       expect(typeof created.id).toBe("string");
     });
 
-    it("creates new trait with default strength when LLM omits it", async () => {
-      seedBloatedFact(state);
-      const request = createMockRequest({
-        next_step: LLMNextStep.HandleRewriteRewrite,
-        data: { itemId: "bloated-fact-1", itemType: "fact" },
-      });
-      const response = createMockResponse(request, {
-        existing: [],
-        new: [{
-          type: "trait",
-          name: "New Trait",
-          description: "A new trait",
-          sentiment: 0.3,
-          // no strength — should default to 0.5
-        }],
-      });
-
-      await handlers.handleRewriteRewrite(response, state as any);
-
-      expect(state.human_trait_upsert).toHaveBeenCalledTimes(1);
-      const created = state.human_trait_upsert.mock.calls[0][0];
-      expect(created.strength).toBe(0.5);
-    });
 
     it("creates new topic with hard default exposure and category fallback", async () => {
       seedBloatedFact(state);

@@ -1,7 +1,6 @@
 import {
   type LLMResponse,
   type Message,
-  type Trait,
   type Topic,
   type Fact,
   type Person,
@@ -104,7 +103,7 @@ export async function handleHumanItemUpdate(response: LLMResponse, state: StateM
   const resolveItemId = (): string => {
     if (isNewItem || !existingItemId) return crypto.randomUUID();
     const h = state.getHuman();
-    const arr = candidateType === "fact" ? h.facts : candidateType === "trait" ? h.traits : candidateType === "topic" ? h.topics : h.people;
+    const arr = candidateType === "fact" ? h.facts : candidateType === "topic" ? h.topics : h.people;
     // Guard: if existingItemId isn't in the correct type array, treat as new
     // (prevents cross-type ID reuse when LLM matches against a different type's UUID)
     return arr.find((x: DataItemBase) => x.id === existingItemId) ? existingItemId : crypto.randomUUID();
@@ -120,9 +119,9 @@ export async function handleHumanItemUpdate(response: LLMResponse, state: StateM
     if (isNewItem) return undefined;
     switch (candidateType) {
       case "fact": return human.facts.find(f => f.id === existingItemId);
-      case "trait": return human.traits.find(t => t.id === existingItemId);
       case "topic": return human.topics.find(t => t.id === existingItemId);
       case "person": return human.people.find(p => p.id === existingItemId);
+      default: return undefined;
     }
   };
   const existingItem = getExistingItem();
@@ -159,22 +158,6 @@ export async function handleHumanItemUpdate(response: LLMResponse, state: StateM
         embedding,
       };
       applyOrValidate(state, "fact", fact, personaDisplayName, isEi, personaGroup);
-      break;
-    }
-    case "trait": {
-      const trait: Trait = {
-        id: itemId,
-        name: result.name,
-        description: result.description,
-        sentiment: result.sentiment,
-        strength: (result as any).strength ?? 0.5,
-        last_updated: now,
-        learned_by: isNewItem ? personaId : existingItem?.learned_by,
-        last_changed_by: personaId,
-        persona_groups: mergeGroups(existingItem?.persona_groups),
-        embedding,
-      };
-      applyOrValidate(state, "trait", trait, personaDisplayName, isEi, personaGroup);
       break;
     }
     case "topic": {
@@ -344,14 +327,13 @@ function calculateExposureCurrent(impact: ExposureImpact | undefined): number {
 function applyOrValidate(
   state: StateManager,
   dataType: DataItemType,
-  item: Fact | Trait | Topic | Person,
+  item: Fact | Topic | Person,
   _personaName: string,
   _isEi: boolean,
   _personaGroup: string | null
 ): void {
   switch (dataType) {
     case "fact": state.human_fact_upsert(item as Fact); break;
-    case "trait": state.human_trait_upsert(item as Trait); break;
     case "topic": state.human_topic_upsert(item as Topic); break;
     case "person": state.human_person_upsert(item as Person); break;
   }

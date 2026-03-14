@@ -558,46 +558,6 @@ describe("Dedup Handler - handleDedupCurate", () => {
     );
   });
 
-  it("handles all four entity types (fact, trait, topic, person)", async () => {
-    const trait1: Trait = {
-      id: "trait-1",
-      name: "Trait 1",
-      description: "Original trait",
-      sentiment: 0.5,
-      strength: 0.8,
-      last_updated: new Date().toISOString(),
-      persona_groups: [],
-      embedding: new Array(384).fill(0.1),
-    };
-
-    state._human.traits = [trait1];
-
-    const request = createMockRequest({
-      data: {
-        entity_type: "trait",
-        entity_ids: ["trait-1"],
-        ceremony_progress: 1,
-      },
-    });
-
-    const dedupResult = {
-      update: [{ id: "trait-1", name: "Original Trait Name", description: "Updated trait" }],
-      remove: [],
-      add: [],
-    };
-
-    const response = createMockResponse(request, dedupResult);
-
-    await handlers[LLMNextStep.HandleDedupCurate](response, state as unknown as StateManager);
-
-    expect(state.human_trait_upsert).toHaveBeenCalledTimes(1);
-    expect(state.human_trait_upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: "trait-1",
-        description: "Updated trait",
-      })
-    );
-  });
 
   it("deduplicates multiple quotes pointing to same removed entity", async () => {
     const fact1 = createFactWithEmbedding("fact-1", "Keep", "Primary", []);
