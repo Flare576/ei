@@ -4,6 +4,7 @@ import {
   LLMRequestType,
   LLMPriority,
 
+  type LLMRequestState,
   type LLMResponse,
   type LLMRequest,
   type Message,
@@ -77,6 +78,7 @@ function createMockRequest(overrides: Partial<LLMRequest> = {}): LLMRequest {
     id: "test-id",
     created_at: new Date().toISOString(),
     attempts: 0,
+    state: "pending" as LLMRequestState,
     type: LLMRequestType.JSON,
     priority: LLMPriority.Low,
     system: "system",

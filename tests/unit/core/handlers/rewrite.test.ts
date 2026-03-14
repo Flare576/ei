@@ -4,6 +4,7 @@ import {
   LLMRequestType,
   LLMPriority,
 
+  type LLMRequestState,
   type LLMResponse,
   type LLMRequest,
   type HumanEntity,
@@ -69,6 +70,7 @@ function createMockRequest(overrides: Partial<LLMRequest> = {}): LLMRequest {
     id: "test-id",
     created_at: new Date().toISOString(),
     attempts: 0,
+    state: "pending" as LLMRequestState,
     type: LLMRequestType.JSON,
     priority: LLMPriority.Low,
     system: "system",
@@ -227,6 +229,7 @@ describe("Rewrite Handlers - Phase 1 (Scan)", () => {
         description: "Other fact",
         sentiment: 0.5,
         last_updated: new Date().toISOString(),
+        validated_date: new Date().toISOString(),
       };
 
       vi.mocked(searchHumanData).mockResolvedValue({

@@ -4,6 +4,7 @@ import {
   LLMRequestType,
   LLMPriority,
 
+  type LLMRequestState,
   type LLMResponse,
   type LLMRequest,
   type Message,
@@ -111,6 +112,7 @@ function createItemUpdateResponse(options: {
       id: "req-1",
       created_at: new Date().toISOString(),
       attempts: 1,
+      state: "pending" as LLMRequestState,
       type: LLMRequestType.JSON,
       priority: LLMPriority.Normal,
       system: "",

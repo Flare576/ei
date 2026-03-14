@@ -230,6 +230,7 @@ function makeFact(id: string, descLength: number): Fact {
     description: "X".repeat(descLength),
     sentiment: 0.5,
     last_updated: new Date().toISOString(),
+    validated_date: new Date().toISOString(),
   };
 }
 
@@ -443,10 +444,10 @@ describe("handleCeremonyProgress Multi-Phase Support", () => {
   it("filters out paused/archived/static personas", () => {
     const state = createMockProgressState(false, true);
     state.persona_getAll.mockReturnValue([
-      { id: "active", display_name: "Active", is_paused: false, is_archived: false, is_static: false, last_activity: new Date().toISOString() },
-      { id: "paused", display_name: "Paused", is_paused: true, is_archived: false, is_static: false, last_activity: new Date().toISOString() },
-      { id: "archived", display_name: "Archived", is_paused: false, is_archived: true, is_static: false, last_activity: new Date().toISOString() },
-      { id: "static", display_name: "Static", is_paused: false, is_archived: false, is_static: true, last_activity: new Date().toISOString() },
+      { id: "active", display_name: "Active", is_paused: false, is_archived: false, is_static: false, last_activity: new Date().toISOString(), topics: [], traits: [] },
+      { id: "paused", display_name: "Paused", is_paused: true, is_archived: false, is_static: false, last_activity: new Date().toISOString(), topics: [], traits: [] },
+      { id: "archived", display_name: "Archived", is_paused: false, is_archived: true, is_static: false, last_activity: new Date().toISOString(), topics: [], traits: [] },
+      { id: "static", display_name: "Static", is_paused: false, is_archived: false, is_static: true, last_activity: new Date().toISOString(), topics: [], traits: [] },
     ]);
     
     handleCeremonyProgress(state as any, 1);
@@ -469,10 +470,9 @@ describe("Queue hasPendingCeremonies with Number Support", () => {
   it("returns true for ceremony_progress: 1", () => {
     const queue = new QueueState();
     queue.enqueue({
-      id: "test-1",
       type: LLMRequestType.JSON,
       priority: LLMPriority.Normal,
-      next_step: LLMNextStep.HandleFactScan,
+      next_step: LLMNextStep.HandleFactFind,
       model: "test:model",
       system: "test",
       user: "test",
@@ -485,10 +485,9 @@ describe("Queue hasPendingCeremonies with Number Support", () => {
   it("returns true for ceremony_progress: 2", () => {
     const queue = new QueueState();
     queue.enqueue({
-      id: "test-2",
       type: LLMRequestType.JSON,
       priority: LLMPriority.Normal,
-      next_step: LLMNextStep.HandleTopicScan,
+      next_step: LLMNextStep.HandleHumanTopicScan,
       model: "test:model",
       system: "test",
       user: "test",
@@ -501,10 +500,9 @@ describe("Queue hasPendingCeremonies with Number Support", () => {
   it("returns false for ceremony_progress: 0", () => {
     const queue = new QueueState();
     queue.enqueue({
-      id: "test-0",
       type: LLMRequestType.JSON,
       priority: LLMPriority.Normal,
-      next_step: LLMNextStep.HandleFactScan,
+      next_step: LLMNextStep.HandleFactFind,
       model: "test:model",
       system: "test",
       user: "test",
@@ -517,10 +515,9 @@ describe("Queue hasPendingCeremonies with Number Support", () => {
   it("returns false when no ceremony_progress field", () => {
     const queue = new QueueState();
     queue.enqueue({
-      id: "test-none",
       type: LLMRequestType.JSON,
       priority: LLMPriority.Normal,
-      next_step: LLMNextStep.HandleResponse,
+      next_step: LLMNextStep.HandlePersonaResponse,
       model: "test:model",
       system: "test",
       user: "test",
