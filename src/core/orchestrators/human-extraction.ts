@@ -201,9 +201,11 @@ export function queueAllScans(context: ExtractionContext, state: StateManager, o
 export function queueDirectTopicUpdate(
   topic: import("../types.js").Topic,
   context: ExtractionContext,
-  state: StateManager
+  state: StateManager,
+  options?: ExtractionOptions
 ): number {
-  const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state));
+  const extractionModel = options?.extraction_model;
+  const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state, options));
 
   if (chunks.length === 0) return 0;
 
@@ -219,7 +221,7 @@ export function queueDirectTopicUpdate(
     state.queue_enqueue({
       type: LLMRequestType.JSON,
       priority: LLMPriority.Normal,
-      model: undefined,
+      model: extractionModel,
       system: prompt.system,
       user: prompt.user,
       next_step: LLMNextStep.HandleHumanItemUpdate,
@@ -411,7 +413,8 @@ export function queueItemUpdate(
     }
   }
 
-  const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state));
+  const extractionOptions: ExtractionOptions = { extraction_model: context.extraction_model };
+  const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state, extractionOptions));
 
   if (chunks.length === 0) return 0;
 
@@ -429,7 +432,7 @@ export function queueItemUpdate(
     state.queue_enqueue({
       type: LLMRequestType.JSON,
       priority: LLMPriority.Normal,
-      model: undefined,
+      model: context.extraction_model,
       system: prompt.system,
       user: prompt.user,
       next_step: LLMNextStep.HandleHumanItemUpdate,
