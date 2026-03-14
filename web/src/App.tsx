@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Processor } from "../../src/core/processor";
 import { LocalStorage } from "../../src/storage/local";
+import { IndexedDBStorage } from "../../src/storage/indexed";
+import type { Storage } from "../../src/storage/interface";
 import { remoteSync } from "../../src/storage/remote";
 import type { 
   PersonaSummary, 
@@ -54,6 +56,43 @@ IMPORTANT: The "explanation" field is your outlet for creative reasoning. Put AL
 Focus on visual elements: subjects, setting, style, lighting, mood. Skip abstract concepts unless they translate to concrete visuals.
 `;
 
+async function initializeStorage(): Promise<Storage> {
+  const indexedStorage = new IndexedDBStorage();
+
+  if (await indexedStorage.isAvailable()) {
+    const existingState = await indexedStorage.load();
+
+    if (!existingState) {
+      // No IDB data — check localStorage for data to migrate
+      const legacyStorage = new LocalStorage();
+      if (await legacyStorage.isAvailable()) {
+        const legacyState = await legacyStorage.load();
+        if (legacyState) {
+          console.log("[Storage] Migrating from localStorage → IndexedDB");
+          await indexedStorage.save(legacyState);
+          const legacyBackup = await legacyStorage.loadBackup();
+          if (legacyBackup) {
+            // Migrate backup: save to IDB backup key directly via moveToBackup pattern.
+            // Save backup as primary then move it, to reuse the moveToBackup flow.
+            // Simpler: just save primary (already done), backup is nice-to-have.
+            // Store the raw compressed backup string if possible; just save the state.
+            const backupStorage = new IndexedDBStorage();
+            await backupStorage.save(legacyBackup);
+            await backupStorage.moveToBackup();
+            // Restore primary from migration
+            await indexedStorage.save(legacyState);
+          }
+        }
+      }
+    }
+
+    return indexedStorage;
+  }
+
+  console.warn("[Storage] IndexedDB unavailable, falling back to localStorage");
+  return new LocalStorage();
+}
+
 function App() {
   const [processor, setProcessor] = useState<Processor | null>(null);
   const processorRef = useRef<Processor | null>(null);
@@ -105,6 +144,7 @@ function App() {
   const personaPanelRef = useRef<PersonaPanelHandle | null>(null);
   const chatPanelRef = useRef<ChatPanelHandle | null>(null);
   const oneShotResolvers = useRef<Map<string, (result: string) => void>>(new Map());
+  const storageRef = useRef<Storage | null>(null);
 
   useKeyboardNavigation({
     onFocusPersonaPanel: () => personaPanelRef.current?.focusPanel(),
@@ -121,8 +161,9 @@ function App() {
 
   // Check for first-run on mount (before Processor starts)
   useEffect(() => {
-    const storage = new LocalStorage();
-    storage.load().then(async (existingState) => {
+    initializeStorage().then(async (storage) => {
+      storageRef.current = storage;
+      const existingState = await storage.load();
       if (existingState !== null) {
         // Primary state exists — skip onboarding
         setShowOnboarding(false);
@@ -257,28 +298,33 @@ function App() {
     };
 
     const p = new Processor(eiInterface);
-    const storage = new LocalStorage();
+    const getStorage = storageRef.current
+      ? Promise.resolve(storageRef.current)
+      : initializeStorage();
 
-    p.start(storage).then(() => {
-      processorRef.current = p;
-      setProcessor(p);
-      // Expose processor for E2E testing
-      if (import.meta.env.MODE === 'test' || import.meta.env.DEV) {
-        (window as any).__processor = p;
-      }
-      p.getPersonaList().then((list) => {
-        setPersonas(list);
-        if (list.length > 0) {
-          setActivePersonaId(list[0].id);
-          p.getMessages(list[0].id).then(setMessages);
+    getStorage.then((storage) => {
+      storageRef.current = storage;
+      p.start(storage).then(() => {
+        processorRef.current = p;
+        setProcessor(p);
+        // Expose processor for E2E testing
+        if (import.meta.env.MODE === 'test' || import.meta.env.DEV) {
+          (window as any).__processor = p;
         }
+        p.getPersonaList().then((list) => {
+          setPersonas(list);
+          if (list.length > 0) {
+            setActivePersonaId(list[0].id);
+            p.getMessages(list[0].id).then(setMessages);
+          }
+        });
+        p.getQueueStatus().then(setQueueStatus);
+        p.getHuman().then(setHuman);
+        p.getGroupList().then(setAvailableGroups);
+        p.getQuotes().then(setQuotes);
+        setToolProviders(p.getToolProviderList());
+        setToolDefinitions(p.getToolList());
       });
-      p.getQueueStatus().then(setQueueStatus);
-      p.getHuman().then(setHuman);
-      p.getGroupList().then(setAvailableGroups);
-      p.getQuotes().then(setQuotes);
-      setToolProviders(p.getToolProviderList());
-      setToolDefinitions(p.getToolList());
     });
 
     return () => {
