@@ -328,7 +328,6 @@ describe("humanToYAML", () => {
   test("serializes minimal human data", () => {
     const yaml = humanToYAML(minimalHuman);
     expect(yaml).toContain("facts: []");
-    expect(yaml).toContain("traits: []");
     expect(yaml).toContain("topics: []");
     expect(yaml).toContain("people: []");
   });
@@ -338,9 +337,6 @@ describe("humanToYAML", () => {
       ...minimalHuman,
       facts: [
         { id: "fact-1", name: "location", description: "Lives in NYC", sentiment: 0, last_updated: timestamp, validated_date: "" },
-      ],
-      traits: [
-        { id: "trait-1", name: "curious", description: "always learning", strength: 0.8, sentiment: 0.5, last_updated: timestamp },
       ],
       topics: [
         { id: "topic-1", name: "programming", description: "loves to code", exposure_current: 0.7, exposure_desired: 0.5, sentiment: 0.8, last_updated: timestamp },
@@ -353,7 +349,6 @@ describe("humanToYAML", () => {
     const yaml = humanToYAML(human);
     expect(yaml).toContain("name: location");
     expect(yaml).toContain("description: Lives in NYC");
-    expect(yaml).toContain("name: curious");
     expect(yaml).toContain("name: programming");
     expect(yaml).toContain("name: Alice");
     expect(yaml).toContain("relationship: friend");
@@ -363,14 +358,13 @@ describe("humanToYAML", () => {
     const human: HumanEntity = {
       ...minimalHuman,
       facts: [{ id: "f1", name: "test", description: "test desc", sentiment: 0, last_updated: timestamp, validated_date: "" }],
-      traits: [{ id: "t1", name: "test", description: "test desc", strength: 1, sentiment: 0, last_updated: timestamp }],
       topics: [{ id: "top1", name: "test", description: "test desc", exposure_current: 0.5, exposure_desired: 0.5, sentiment: 0, last_updated: timestamp }],
       people: [{ id: "p1", name: "Test", description: "test desc", relationship: "test", sentiment: 0, exposure_current: 0.5, exposure_desired: 0.5, last_updated: timestamp }],
     };
     
     const yaml = humanToYAML(human);
     const deleteCount = (yaml.match(/_delete: false/g) || []).length;
-    expect(deleteCount).toBe(4);
+    expect(deleteCount).toBe(3);
   });
 });
 
@@ -378,17 +372,14 @@ describe("humanFromYAML", () => {
   test("parses minimal YAML", () => {
     const yaml = `
 facts: []
-traits: []
 topics: []
 people: []
 `;
     const result = humanFromYAML(yaml);
     expect(result.facts).toEqual([]);
-    expect(result.traits).toEqual([]);
     expect(result.topics).toEqual([]);
     expect(result.people).toEqual([]);
     expect(result.deletedFactIds).toEqual([]);
-    expect(result.deletedTraitIds).toEqual([]);
     expect(result.deletedTopicIds).toEqual([]);
     expect(result.deletedPersonIds).toEqual([]);
   });
@@ -412,7 +403,6 @@ facts:
     validated: none
     validated_date: 2024-01-01T00:00:00.000Z
     _delete: true
-traits: []
 topics: []
 people: []
 `;
@@ -423,37 +413,10 @@ people: []
     expect(result.deletedFactIds).toEqual(["fact-2"]);
   });
 
-  test("parses traits and detects deletions", () => {
-    const yaml = `
-facts: []
-traits:
-  - id: trait-1
-    name: keep
-    description: staying
-    strength: 0.8
-    sentiment: 0
-    last_updated: 2024-01-01T00:00:00.000Z
-    _delete: false
-  - id: trait-2
-    name: delete
-    description: going
-    strength: 0.5
-    sentiment: 0
-    last_updated: 2024-01-01T00:00:00.000Z
-    _delete: true
-topics: []
-people: []
-`;
-    const result = humanFromYAML(yaml);
-    expect(result.traits).toHaveLength(1);
-    expect(result.traits[0].id).toBe("trait-1");
-    expect(result.deletedTraitIds).toEqual(["trait-2"]);
-  });
 
   test("parses topics and detects deletions", () => {
     const yaml = `
 facts: []
-traits: []
 topics:
   - id: topic-1
     name: keep
@@ -482,7 +445,6 @@ people: []
   test("parses people and detects deletions", () => {
     const yaml = `
 facts: []
-traits: []
 topics: []
 people:
   - id: person-1
@@ -514,13 +476,11 @@ people:
   test("handles null/undefined arrays", () => {
     const yaml = `
 facts: null
-traits: null
 topics: null
 people: null
 `;
     const result = humanFromYAML(yaml);
     expect(result.facts).toEqual([]);
-    expect(result.traits).toEqual([]);
     expect(result.topics).toEqual([]);
     expect(result.people).toEqual([]);
   });
@@ -535,14 +495,6 @@ facts:
     last_updated: 2024-01-01T00:00:00.000Z
     validated: none
     validated_date: 2024-01-01T00:00:00.000Z
-    _delete: false
-traits:
-  - id: trait-1
-    name: test
-    description: test
-    strength: 0.8
-    sentiment: 0
-    last_updated: 2024-01-01T00:00:00.000Z
     _delete: false
 topics:
   - id: topic-1
@@ -566,7 +518,6 @@ people:
 `;
     const result = humanFromYAML(yaml);
     expect(result.facts[0]).not.toHaveProperty("_delete");
-    expect(result.traits[0]).not.toHaveProperty("_delete");
     expect(result.topics[0]).not.toHaveProperty("_delete");
     expect(result.people[0]).not.toHaveProperty("_delete");
   });
@@ -625,9 +576,6 @@ describe("round-trip serialization", () => {
       facts: [
         { id: "f1", name: "coffee", description: "Loves coffee", sentiment: 0.8, last_updated: timestamp, validated_date: "" },
       ],
-      traits: [
-        { id: "t1", name: "introverted", description: "prefers quiet time", strength: 0.7, sentiment: 0, last_updated: timestamp },
-      ],
       topics: [
         { id: "top1", name: "technology", description: "fascinated by tech", exposure_current: 0.9, exposure_desired: 0.6, sentiment: 0.7, last_updated: timestamp },
       ],
@@ -645,14 +593,11 @@ describe("round-trip serialization", () => {
 
     expect(result.facts).toHaveLength(1);
     expect(result.facts[0].description).toBe("Loves coffee");
-    expect(result.traits).toHaveLength(1);
-    expect(result.traits[0].name).toBe("introverted");
     expect(result.topics).toHaveLength(1);
     expect(result.topics[0].name).toBe("technology");
     expect(result.people).toHaveLength(1);
     expect(result.people[0].name).toBe("Jane");
     expect(result.deletedFactIds).toEqual([]);
-    expect(result.deletedTraitIds).toEqual([]);
     expect(result.deletedTopicIds).toEqual([]);
     expect(result.deletedPersonIds).toEqual([]);
   });

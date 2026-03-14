@@ -29,10 +29,6 @@ import { BUILT_IN_FACT_NAMES } from "../../../src/core/constants/built-in-facts.
 // TYPES FOR YAML EDITING
 // =============================================================================
 
-interface EditableTrait extends Trait {
-  _delete?: boolean;
-}
-
 interface EditableTopic extends Topic {
   _delete?: boolean;
 }
@@ -65,7 +61,6 @@ interface EditablePersonaData {
 
 interface EditableHumanData {
   facts: EditableFact[];
-  traits: EditableTrait[];
   topics: EditableTopic[];
   people: EditablePerson[];
 }
@@ -407,7 +402,6 @@ export function personaFromYAML(yamlContent: string, original: PersonaEntity, al
 export function humanToYAML(human: HumanEntity, personaLookup?: Map<string, string>): string {
   const data: EditableHumanData = {
     facts: human.facts.map(f => ({ ...f, _delete: false })),
-    traits: human.traits.map(t => ({ ...t, _delete: false })),
     topics: human.topics.map(t => ({ ...t, _delete: false })),
     people: human.people.map(p => ({ ...p, _delete: false })),
   };
@@ -425,11 +419,9 @@ export function humanToYAML(human: HumanEntity, personaLookup?: Map<string, stri
 
 export interface HumanYAMLResult {
   facts: Fact[];
-  traits: Trait[];
   topics: Topic[];
   people: Person[];
   deletedFactIds: string[];
-  deletedTraitIds: string[];
   deletedTopicIds: string[];
   deletedPersonIds: string[];
 }
@@ -443,7 +435,6 @@ export function humanFromYAML(yamlContent: string): HumanYAMLResult {
   const data = YAML.parse(stripped) as EditableHumanData;
   
   const deletedFactIds: string[] = [];
-  const deletedTraitIds: string[] = [];
   const deletedTopicIds: string[] = [];
   const deletedPersonIds: string[] = [];
   
@@ -457,16 +448,6 @@ export function humanFromYAML(yamlContent: string): HumanYAMLResult {
         fact.validated_date = new Date().toISOString();
       }
       facts.push(fact);
-    }
-  }
-  
-  const traits: Trait[] = [];
-  for (const t of data.traits ?? []) {
-    if (t._delete) {
-      deletedTraitIds.push(t.id);
-    } else {
-      const { _delete, ...trait } = t;
-      traits.push(trait);
     }
   }
   
@@ -492,11 +473,9 @@ export function humanFromYAML(yamlContent: string): HumanYAMLResult {
   
   return {
     facts,
-    traits,
     topics,
     people,
     deletedFactIds,
-    deletedTraitIds,
     deletedTopicIds,
     deletedPersonIds,
   };

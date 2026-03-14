@@ -78,7 +78,6 @@ export interface EiContextValue {
   updateHuman: (updates: Partial<HumanEntity>) => Promise<void>;
   updateSettings: (updates: Partial<HumanSettings>) => Promise<void>;
   upsertFact: (fact: Fact) => Promise<void>;
-  upsertTrait: (trait: Trait) => Promise<void>;
   upsertTopic: (topic: Topic) => Promise<void>;
   upsertPerson: (person: Person) => Promise<void>;
   removeDataItem: (type: "fact" | "trait" | "topic" | "person", id: string) => Promise<void>;
@@ -327,11 +326,6 @@ export const EiProvider: ParentComponent = (props) => {
   const upsertFact = async (fact: Fact) => {
     if (!processor) return;
     await processor.upsertFact(fact);
-  };
-
-  const upsertTrait = async (trait: Trait) => {
-    if (!processor) return;
-    await processor.upsertTrait(trait);
   };
 
   const upsertTopic = async (topic: Topic) => {
@@ -648,7 +642,6 @@ export const EiProvider: ParentComponent = (props) => {
     updateHuman,
     updateSettings,
     upsertFact,
-    upsertTrait,
     upsertTopic,
     upsertPerson,
     removeDataItem,

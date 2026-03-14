@@ -4,15 +4,15 @@ import { humanToYAML, humanFromYAML } from "../util/yaml-serializers.js";
 import { logger } from "../util/logger.js";
 import { ConfirmOverlay } from "../components/ConfirmOverlay.js";
 
-type DataType = "facts" | "traits" | "topics" | "people";
+type DataType = "facts" | "topics" | "people";
 
-const VALID_TYPES: DataType[] = ["facts", "traits", "topics", "people"];
+const VALID_TYPES: DataType[] = ["facts", "topics", "people"];
 
 export const meCommand: Command = {
   name: "me",
   aliases: [],
   description: "Edit your data in $EDITOR",
-  usage: "/me [facts|traits|topics|people]",
+  usage: "/me [facts|topics|people]",
   
   async execute(args, ctx) {
     const human = await ctx.ei.getHuman();
@@ -23,14 +23,13 @@ export const meCommand: Command = {
       : null;
     
     if (filterArg && !filterType) {
-      ctx.showNotification(`Invalid type: ${filterArg}. Use: facts, traits, topics, people`, "error");
+      ctx.showNotification(`Invalid type: ${filterArg}. Use: facts, topics, people`, "error");
       return;
     }
     
     const filteredHuman = filterType ? {
       ...human,
       facts: filterType === "facts" ? human.facts : [],
-      traits: filterType === "traits" ? human.traits : [],
       topics: filterType === "topics" ? human.topics : [],
       people: filterType === "people" ? human.people : [],
     } : human;
@@ -72,9 +71,6 @@ export const meCommand: Command = {
         for (const id of parsed.deletedFactIds) {
           await ctx.ei.removeDataItem("fact", id);
         }
-        for (const id of parsed.deletedTraitIds) {
-          await ctx.ei.removeDataItem("trait", id);
-        }
         for (const id of parsed.deletedTopicIds) {
           await ctx.ei.removeDataItem("topic", id);
         }
@@ -85,9 +81,6 @@ export const meCommand: Command = {
         for (const fact of parsed.facts) {
           await ctx.ei.upsertFact(fact);
         }
-        for (const trait of parsed.traits) {
-          await ctx.ei.upsertTrait(trait);
-        }
         for (const topic of parsed.topics) {
           await ctx.ei.upsertTopic(topic);
         }
@@ -96,11 +89,9 @@ export const meCommand: Command = {
         }
         
         const deleteCount = parsed.deletedFactIds.length + 
-                           parsed.deletedTraitIds.length + 
                            parsed.deletedTopicIds.length + 
                            parsed.deletedPersonIds.length;
         const updateCount = parsed.facts.length + 
-                           parsed.traits.length + 
                            parsed.topics.length + 
                            parsed.people.length;
         
