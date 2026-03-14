@@ -9,7 +9,6 @@ vi.mock("../../../src/core/handlers/index.js", () => ({
     handlePersonaGeneration: vi.fn(),
     handlePersonaDescriptions: vi.fn(),
     handleFactFind: vi.fn(),
-    handleHumanTraitScan: vi.fn(),
     handleHumanTopicScan: vi.fn(),
     handleHumanPersonScan: vi.fn(),
     handleHumanItemMatch: vi.fn(),
@@ -29,7 +28,6 @@ vi.mock("../../../src/core/handlers/index.js", () => ({
 vi.mock("../../../src/core/orchestrators/index.js", () => ({
   orchestratePersonaGeneration: vi.fn(),
   queueFactFind: vi.fn(),
-  queueTraitScan: vi.fn(),
   queueTopicScan: vi.fn(),
   queuePersonScan: vi.fn(),
   queueAllScans: vi.fn(),

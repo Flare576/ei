@@ -3,7 +3,6 @@ import type { StateManager } from "../state-manager.js";
 import { applyDecayToValue } from "../utils/index.js";
 import {
   queueFactFind,
-  queueTraitScan,
   queueTopicScan,
   queuePersonScan,
   type ExtractionContext,
@@ -112,17 +111,6 @@ function queueExposurePhase(personaId: string, state: StateManager, options?: Ex
     queueFactFind(context, state, options);
   }
   
-  const unextractedTraits = state.messages_getUnextracted(personaId, "r");
-  if (unextractedTraits.length > 0) {
-    const context: ExtractionContext = {
-      personaId,
-      personaDisplayName: persona.display_name,
-      messages_context: allMessages.filter(m => m.r === true),
-      messages_analyze: unextractedTraits,
-      extraction_flag: "r",
-    };
-    queueTraitScan(context, state, options);
-  }
   
   const unextractedTopics = state.messages_getUnextracted(personaId, "p");
   if (unextractedTopics.length > 0) {
@@ -148,9 +136,9 @@ function queueExposurePhase(personaId: string, state: StateManager, options?: Ex
     queuePersonScan(context, state, options);
   }
   
-  const totalUnextracted = unextractedFacts.length + unextractedTraits.length + unextractedTopics.length + unextractedPeople.length;
+  const totalUnextracted = unextractedFacts.length + unextractedTopics.length + unextractedPeople.length;
   if (totalUnextracted > 0) {
-    console.log(`[ceremony:exposure] Queued human extraction scans (f:${unextractedFacts.length}, r:${unextractedTraits.length}, p:${unextractedTopics.length}, o:${unextractedPeople.length})`);
+    console.log(`[ceremony:exposure] Queued human extraction scans (f:${unextractedFacts.length}, p:${unextractedTopics.length}, o:${unextractedPeople.length})`);
   }
 
   const unextractedForPersonaTopics = state.messages_getUnextracted(personaId, "p");
@@ -194,7 +182,6 @@ export function handleCeremonyProgress(state: StateManager, lastPhase: number): 
       const messages = state.messages_get(p.id);
       return messages.some(msg => 
         !msg.p || 
-        !msg.r || 
         !msg.o || 
         !msg.f
       );
@@ -320,7 +307,7 @@ export function prunePersonaMessages(personaId: string, state: StateManager): vo
     const msgMs = new Date(m.timestamp).getTime();
     if (msgMs >= cutoffMs) break; // Sorted by time, no more old ones
     
-    const fullyExtracted = m.p && m.r && m.o && m.f;
+    const fullyExtracted = m.p && m.o && m.f; // r intentionally excluded — trait extraction deprecated
     if (fullyExtracted) {
       toRemove.push(m.id);
     }

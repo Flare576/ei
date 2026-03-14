@@ -202,7 +202,6 @@ export function queuePersonScan(context: ExtractionContext, state: StateManager,
 
 export function queueAllScans(context: ExtractionContext, state: StateManager, options?: ExtractionOptions): void {
   queueFactFind(context, state, options);
-  queueTraitScan(context, state, options);
   queuePersonScan(context, state, options);
   queueTopicScan(context, state, options);
 }

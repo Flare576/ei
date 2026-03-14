@@ -9,7 +9,6 @@ import {
 } from "../../../../src/core/types.js";
 import {
   queueFactFind,
-  queueTraitScan,
   queueTopicScan,
   queuePersonScan,
   queueAllScans,
@@ -160,23 +159,6 @@ describe("Scan Orchestrators (Step 1)", () => {
     });
   });
 
-  describe("queueTraitScan", () => {
-    it("enqueues trait scan request with correct data", () => {
-      queueTraitScan(context, state as any);
-
-      expect(buildHumanTraitScanPrompt).toHaveBeenCalledWith({
-        persona_name: "Ei",
-        messages_context: context.messages_context,
-        messages_analyze: context.messages_analyze,
-      });
-
-      expect(state.queue_enqueue).toHaveBeenCalledWith(
-        expect.objectContaining({
-          next_step: LLMNextStep.HandleHumanTraitScan,
-        })
-      );
-    });
-  });
 
   describe("queueTopicScan", () => {
     it("enqueues topic scan request with correct data", () => {
@@ -215,14 +197,13 @@ describe("Scan Orchestrators (Step 1)", () => {
   });
 
   describe("queueAllScans", () => {
-    it("enqueues all four scan types", () => {
+    it("enqueues all three scan types", () => {
       queueAllScans(context, state as any);
 
-      expect(state.queue_enqueue).toHaveBeenCalledTimes(4);
+      expect(state.queue_enqueue).toHaveBeenCalledTimes(3);
 
       const nextSteps = state.queue_enqueue.mock.calls.map((c: any) => c[0].next_step);
       expect(nextSteps).toContain(LLMNextStep.HandleFactFind);
-      expect(nextSteps).toContain(LLMNextStep.HandleHumanTraitScan);
       expect(nextSteps).toContain(LLMNextStep.HandleHumanTopicScan);
       expect(nextSteps).toContain(LLMNextStep.HandleHumanPersonScan);
     });

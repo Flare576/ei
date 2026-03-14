@@ -236,55 +236,6 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
       // existingFact is undefined → skip (seeding should have added it first)
       expect(state.human_fact_upsert).not.toHaveBeenCalled();
     });
-
-  describe("handleHumanTraitScan", () => {
-    it("queues item match for each detected trait", async () => {
-      const request = createMockRequest({
-        next_step: LLMNextStep.HandleHumanTraitScan,
-        data: {
-          personaId: "ei",
-        personaDisplayName: "Ei",
-          messages_context: [],
-          messages_analyze: [{ id: "1", role: "human", content: "test", timestamp: "", read: true, context_status: "default" }],
-        },
-      });
-
-      const response = createMockResponse(request, {
-        traits: [
-          { type_of_trait: "Introversion", value_of_trait: "Prefers quiet time", reason: "User mentioned" },
-        ],
-      });
-
-      await handlers.handleHumanTraitScan(response, state as any);
-
-      expect(queueItemMatch).toHaveBeenCalledTimes(1);
-      expect(queueItemMatch).toHaveBeenCalledWith(
-        "trait",
-        expect.objectContaining({ type_of_trait: "Introversion" }),
-        expect.any(Object),
-        state
-      );
-    });
-
-    it("does nothing when no traits detected", async () => {
-      const request = createMockRequest({
-        next_step: LLMNextStep.HandleHumanTraitScan,
-        data: {
-          personaId: "ei",
-        personaDisplayName: "Ei",
-          messages_context: [],
-          messages_analyze: [],
-        },
-      });
-
-      const response = createMockResponse(request, { traits: [] });
-
-      await handlers.handleHumanTraitScan(response, state as any);
-
-      expect(queueItemMatch).not.toHaveBeenCalled();
-    });
-  });
-
   describe("handleHumanTopicScan", () => {
     it("queues item match for each detected topic", async () => {
       const request = createMockRequest({
