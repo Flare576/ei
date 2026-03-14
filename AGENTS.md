@@ -23,7 +23,7 @@ Ei is a local-first AI companion with persistent personas. Three frontends share
 
 | Document | Purpose |
 |----------|---------|
-| `CONTRACTS.md` | **THE** source of truth for interfaces, types, and naming |
+| `CONTRACTS.md` | **THE** source of truth for naming conventions, event contracts, security model, and design rationale. TypeScript interfaces live in `src/core/types/*.ts`. |
 | `v1.md` | Design philosophy and background context |
 | GitHub Issues | Active feature requests and bugs |
 
@@ -115,7 +115,7 @@ npm start        # Run the app
 
 ### When Implementing Features
 
-1. Check CONTRACTS.md for interface definitions
+1. Check CONTRACTS.md for naming conventions, event contracts, and design decisions. Check `src/core/types/*.ts` for TypeScript interface definitions.
 2. Check GitHub Issues for context on the feature being built
 
 ### When Confused
@@ -297,3 +297,72 @@ Both `publish.yml` (tag-triggered) and `deploy.yml` (push-to-main) run:
 
 Tags that push to npm will be blocked if CI fails. But CI is the last line of defense —
 the pre-flight checklist is your first.
+
+---
+
+## Tool Policy
+
+### Failure Behavior
+
+Tool calling can fail in several ways. Here's how each is handled:
+
+| Failure | Behavior |
+|---------|----------|
+| Provider disabled | Tool excluded from persona's available tools silently |
+| Tool returns 5xx / network error | Inject error result, remove tool from payload for remainder of interaction |
+| `max_calls_per_interaction` reached | Omit tool from subsequent LLM calls in this interaction |
+| Hard interaction limit (10 total calls) reached | All remaining tool calls skipped silently |
+| Tool returns empty result | Inject `"No results found"`, continue loop normally |
+| LLM emits malformed tool call JSON | Log warning, treat as stop, return what we have |
+| No executor registered for tool name | Inject error result, mark tool exhausted |
+| All tools exhausted or failed | LLM synthesizes final response without tools — always responds |
+
+**Rule**: Tool failures are never fatal. They inject an error result into the LLM's tool history and continue. The LLM is responsible for synthesizing a response with whatever information it has.
+
+**Tool calling applies to** (v1): `HandlePersonaResponse`, `HandleHeartbeatCheck`, `HandleEiHeartbeat`.
+
+**Tool calling does NOT apply to** (v1): extraction steps, ceremony phases, one-shot requests.
+
+### Built-in Tool Registry
+
+Seeded on every startup via `Processor.bootstrapTools()`. Safe to call repeatedly — only adds if absent.
+
+**Provider: `ei`** (Ei Built-ins, always enabled, no config needed)
+
+| Tool name | Runtime | Description |
+|-----------|---------|-------------|
+| `read_memory` | `any` | Semantic embedding search of `StateManager.searchHumanData()` — no external call |
+| `file_read` | `node` | Read a file from local filesystem (TUI only) |
+| `list_directory` | `node` | List directory contents (TUI only) |
+| `directory_tree` | `node` | Recursive directory tree up to configurable depth (TUI only) |
+| `search_files` | `node` | Find files by name glob pattern (TUI only) |
+| `grep` | `node` | Search file contents by regex (TUI only) |
+| `get_file_info` | `node` | File/directory metadata (TUI only) |
+
+**Provider: `tavily`** (Tavily Search, disabled by default, requires `config.api_key`)
+
+| Tool name | Runtime | Description |
+|-----------|---------|-------------|
+| `tavily_web_search` | `any` | Web search via Tavily API |
+| `tavily_news_search` | `any` | News search via Tavily API |
+
+**Provider: `spotify`** (Spotify, disabled by default, requires OAuth `config.spotify_refresh_token`)
+
+| Tool name | Runtime | Description |
+|-----------|---------|-------------|
+| `get_currently_playing` | `any` | Currently playing Spotify track |
+| `get_liked_songs` | `any` | User's full liked songs library (cached 30 min) |
+
+### Runtime Field
+
+`runtime: "any"` — available in both Web and TUI.
+
+`runtime: "node"` — TUI only. The executor is registered lazily via `registerFileReadExecutor()` to prevent `node:fs` from being bundled in the web build. In the browser, these tools exist in the registry but no executor is registered — they return an error result if called.
+
+### Adding a New Built-in Tool
+
+1. Create executor in `src/core/tools/builtin/[name].ts` — implement `ToolExecutor` interface
+2. Register executor in `src/core/tools/index.ts` (or `registerFileReadExecutor()` if Node-only)
+3. Add seed block in `Processor.bootstrapTools()` using `tools_getByName` guard
+4. If it needs a new provider, add provider seed block before the tool seed block
+5. Update the Built-in Tool Registry table above

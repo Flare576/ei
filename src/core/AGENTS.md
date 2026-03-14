@@ -10,7 +10,7 @@ core/
 ├── state-manager.ts    # In-memory state + persistence
 ├── queue-processor.ts  # LLM request queue with priorities
 ├── llm-client.ts       # Multi-provider LLM abstraction
-├── types.ts            # All core types (source: CONTRACTS.md)
+├── types.ts            # All core types (canonical source — CONTRACTS.md defers to these)
 ├── handlers/           # LLM response handlers
 ├── orchestrators/      # Multi-step workflows
 ├── personas/           # Persona loading logic
