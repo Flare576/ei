@@ -190,11 +190,16 @@ export class Processor {
       }
     }
 
+    await this.completeInitialization();
+  }
+
+  private async completeInitialization(): Promise<void> {
     if (!this.stateManager.hasExistingData() || this.stateManager.persona_getAll().length === 0) {
       await this.bootstrapFirstRun();
     }
     this.bootstrapTools();
     this.seedBuiltinFacts();
+    this.seedSettings();
     registerReadMemoryExecutor(createReadMemoryExecutor(this.searchHumanData.bind(this)));
     if (this.isTUI) {
       await registerFileReadExecutor();
@@ -605,6 +610,53 @@ export class Processor {
     }
   }
 
+  private seedSettings(): void {
+    const human = this.stateManager.getHuman();
+    let modified = false;
+
+    if (!human.settings) {
+      human.settings = {};
+      modified = true;
+    }
+
+    if (!human.settings.opencode) {
+      human.settings.opencode = {
+        integration: false,
+        polling_interval_ms: 1800000,
+      };
+      modified = true;
+    }
+
+    if (!human.settings.claudeCode) {
+      human.settings.claudeCode = {
+        integration: false,
+        polling_interval_ms: 1800000,
+      };
+      modified = true;
+    }
+
+    if (!human.settings.ceremony) {
+      human.settings.ceremony = {
+        time: "09:00",
+      };
+      modified = true;
+    }
+
+    if (!human.settings.backup) {
+      human.settings.backup = {
+        enabled: false,
+        max_backups: 24,
+        interval_ms: 3600000,
+      };
+      modified = true;
+    }
+
+    if (modified) {
+      this.stateManager.setHuman(human);
+      console.log(`[Processor] Seeded missing settings`);
+    }
+  }
+
   async stop(): Promise<void> {
     console.log(
       `[Processor ${this.instanceId}] stop() called, running=${this.running}, stopped=${this.stopped}`
@@ -710,13 +762,7 @@ export class Processor {
 
     this.pendingConflict = null;
     this.importAbortController = new AbortController();
-    this.bootstrapTools();
-    registerReadMemoryExecutor(createReadMemoryExecutor(this.searchHumanData.bind(this)));
-    if (this.isTUI) {
-      await registerFileReadExecutor();
-    }
-    this.running = true;
-    this.runLoop();
+    await this.completeInitialization();
     this.interface.onStateImported?.();
   }
 
