@@ -18,9 +18,8 @@ export interface Message {
   // Extraction completion flags (omit when false to save space)
   // Single-letter names minimize storage overhead for large message histories
   f?: boolean;                 // Fact extraction completed
-  r?: boolean;                 // tRait extraction completed
+  t?: boolean;                 // Topic extraction completed
   p?: boolean;                 // Person extraction completed
-  o?: boolean;                 // tOpic extraction completed
   // Image generation fields (web-only, ephemeral)
   _synthesis?: boolean;         // True if message was created by multi-message synthesis
 

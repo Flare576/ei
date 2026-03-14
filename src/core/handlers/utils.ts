@@ -1,7 +1,7 @@
 import type { Message, LLMResponse } from "../types.js";
 import type { StateManager } from "../state-manager.js";
 
-export type ExtractionFlag = "f" | "r" | "p" | "o";
+export type ExtractionFlag = "f" | "t" | "p";
 
 export function splitMessagesByTimestamp(
   messages: Message[], 

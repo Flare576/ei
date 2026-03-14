@@ -97,7 +97,7 @@ export async function handleHumanTopicScan(response: LLMResponse, state: StateMa
 export async function handleHumanPersonScan(response: LLMResponse, state: StateManager): Promise<void> {
   const result = response.parsed as PersonScanResult | undefined;
   
-  markMessagesExtracted(response, state, "o");
+  markMessagesExtracted(response, state, "p");
   
   if (!result?.people || !Array.isArray(result.people)) {
     console.log("[handleHumanPersonScan] No people detected or invalid result");

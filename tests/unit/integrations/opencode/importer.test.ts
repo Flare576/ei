@@ -378,7 +378,7 @@ describe("importOpenCodeSessions", () => {
     const oldMsg = stored.find(m => m.id === "msg_old");
     const newMsg = stored.find(m => m.id === "msg_new");
 
-    expect(oldMsg).toMatchObject({ f: true, r: true, p: true, o: true });
+    expect(oldMsg).toMatchObject({ f: true, t: true, p: true });
     expect(newMsg?.f).toBeFalsy();
     expect(newMsg?.r).toBeFalsy();
   });

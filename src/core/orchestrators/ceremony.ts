@@ -112,41 +112,41 @@ function queueExposurePhase(personaId: string, state: StateManager, options?: Ex
   }
   
   
-  const unextractedTopics = state.messages_getUnextracted(personaId, "p");
+  const unextractedTopics = state.messages_getUnextracted(personaId, "t");
   if (unextractedTopics.length > 0) {
     const context: ExtractionContext = {
       personaId,
       personaDisplayName: persona.display_name,
-      messages_context: allMessages.filter(m => m.p === true),
+      messages_context: allMessages.filter(m => m.t === true),
       messages_analyze: unextractedTopics,
-      extraction_flag: "p",
+      extraction_flag: "t",
     };
     queueTopicScan(context, state, options);
   }
   
-  const unextractedPeople = state.messages_getUnextracted(personaId, "o");
+  const unextractedPeople = state.messages_getUnextracted(personaId, "p");
   if (unextractedPeople.length > 0) {
     const context: ExtractionContext = {
       personaId,
       personaDisplayName: persona.display_name,
-      messages_context: allMessages.filter(m => m.o === true),
+      messages_context: allMessages.filter(m => m.p === true),
       messages_analyze: unextractedPeople,
-      extraction_flag: "o",
+      extraction_flag: "p",
     };
     queuePersonScan(context, state, options);
   }
   
   const totalUnextracted = unextractedFacts.length + unextractedTopics.length + unextractedPeople.length;
   if (totalUnextracted > 0) {
-    console.log(`[ceremony:exposure] Queued human extraction scans (f:${unextractedFacts.length}, p:${unextractedTopics.length}, o:${unextractedPeople.length})`);
+    console.log(`[ceremony:exposure] Queued human extraction scans (f:${unextractedFacts.length}, t:${unextractedTopics.length}, p:${unextractedPeople.length})`);
   }
 
-  const unextractedForPersonaTopics = state.messages_getUnextracted(personaId, "p");
+  const unextractedForPersonaTopics = state.messages_getUnextracted(personaId, "t");
   if (unextractedForPersonaTopics.length > 0) {
     const personaTopicContext: PersonaTopicContext = {
       personaId,
       personaDisplayName: persona.display_name,
-      messages_context: allMessages.filter(m => m.p === true),
+      messages_context: allMessages.filter(m => m.t === true),
       messages_analyze: unextractedForPersonaTopics,
     };
     queuePersonaTopicScan(personaTopicContext, state);
@@ -181,8 +181,8 @@ export function handleCeremonyProgress(state: StateManager, lastPhase: number): 
     const personasWithUnprocessed = activePersonas.filter(p => {
       const messages = state.messages_get(p.id);
       return messages.some(msg => 
+        !msg.t || 
         !msg.p || 
-        !msg.o || 
         !msg.f
       );
     });
@@ -307,7 +307,7 @@ export function prunePersonaMessages(personaId: string, state: StateManager): vo
     const msgMs = new Date(m.timestamp).getTime();
     if (msgMs >= cutoffMs) break; // Sorted by time, no more old ones
     
-    const fullyExtracted = m.p && m.o && m.f; // r intentionally excluded — trait extraction deprecated
+    const fullyExtracted = m.t && m.p && m.f; // r intentionally excluded — trait extraction deprecated
     if (fullyExtracted) {
       toRemove.push(m.id);
     }

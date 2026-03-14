@@ -23,7 +23,7 @@ export interface ExtractionContext {
   personaDisplayName: string;
   messages_context: Message[];
   messages_analyze: Message[];
-  extraction_flag?: "f" | "r" | "p" | "o";
+  extraction_flag?: "f" | "t" | "p";
 }
 
 export interface ExtractionOptions {
@@ -98,7 +98,7 @@ export function queueTopicScan(context: ExtractionContext, state: StateManager, 
   // Pre-mark messages before enqueuing — prevents duplicate scans if the
   // queue check fires again during LLM latency (100ms loop × 5s call = 50 dupes)
   for (const chunk of chunks) {
-    state.messages_markExtracted(chunk.personaId, chunk.messages_analyze.map(m => m.id), "p");
+    state.messages_markExtracted(chunk.personaId, chunk.messages_analyze.map(m => m.id), "t");
   }
 
   for (const chunk of chunks) {
@@ -136,7 +136,7 @@ export function queuePersonScan(context: ExtractionContext, state: StateManager,
   // Pre-mark messages before enqueuing — prevents duplicate scans if the
   // queue check fires again during LLM latency (100ms loop × 5s call = 50 dupes)
   for (const chunk of chunks) {
-    state.messages_markExtracted(chunk.personaId, chunk.messages_analyze.map(m => m.id), "o");
+    state.messages_markExtracted(chunk.personaId, chunk.messages_analyze.map(m => m.id), "p");
   }
 
   for (const chunk of chunks) {

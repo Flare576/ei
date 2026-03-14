@@ -213,7 +213,7 @@ export class PersonaState {
     return removed;
   }
 
-  messages_getUnextracted(personaId: string, flag: "f" | "r" | "p" | "o", limit?: number): Message[] {
+  messages_getUnextracted(personaId: string, flag: "f" | "t" | "p", limit?: number): Message[] {
     const data = this.personas.get(personaId);
     if (!data) return [];
     const unextracted = data.messages.filter(m => m[flag] !== true);
@@ -223,7 +223,7 @@ export class PersonaState {
     return unextracted.map(m => ({ ...m }));
   }
 
-  messages_markExtracted(personaId: string, messageIds: string[], flag: "f" | "r" | "p" | "o"): number {
+  messages_markExtracted(personaId: string, messageIds: string[], flag: "f" | "t" | "p"): number {
     const data = this.personas.get(personaId);
     if (!data) return 0;
     const idsSet = new Set(messageIds);

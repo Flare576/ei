@@ -232,15 +232,15 @@ export function checkAndQueueHumanExtraction(
     );
   }
 
-  const unextractedTopics = sm.messages_getUnextracted(personaId, "p");
+  const unextractedTopics = sm.messages_getUnextracted(personaId, "t");
   const topicsThreshold = Math.min(EXTRACTION_TAPER_CAP, human.topics.length);
   if (unextractedTopics.length > 0 && unextractedTopics.length >= topicsThreshold) {
     const context: ExtractionContext = {
       personaId,
       personaDisplayName,
-      messages_context: history.filter((m) => m.p === true),
+      messages_context: history.filter((m) => m.t === true),
       messages_analyze: unextractedTopics,
-      extraction_flag: "p",
+      extraction_flag: "t",
     };
     queueTopicScan(context, sm);
     console.log(
@@ -248,15 +248,15 @@ export function checkAndQueueHumanExtraction(
     );
   }
 
-  const unextractedPeople = sm.messages_getUnextracted(personaId, "o");
+  const unextractedPeople = sm.messages_getUnextracted(personaId, "p");
   const peopleThreshold = Math.min(EXTRACTION_TAPER_CAP, human.people.length);
   if (unextractedPeople.length > 0 && unextractedPeople.length >= peopleThreshold) {
     const context: ExtractionContext = {
       personaId,
       personaDisplayName,
-      messages_context: history.filter((m) => m.o === true),
+      messages_context: history.filter((m) => m.p === true),
       messages_analyze: unextractedPeople,
-      extraction_flag: "o",
+      extraction_flag: "p",
     };
     queuePersonScan(context, sm);
     console.log(

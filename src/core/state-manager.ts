@@ -43,7 +43,9 @@ export class StateManager {
       this.tools = state.tools ?? [];
       this.providers = state.providers ?? [];
       this.migrateLearnedByToIds();
+      this.migrateLearnedByToIds();
       this.migrateFactValidation();
+      this.migrateMessageFlags();
     } else {
       this.humanState.load(createDefaultHumanEntity());
     }
@@ -152,6 +154,40 @@ export class StateManager {
       console.log(
         `[StateManager] Migrated fact validation: moved ${movedCount} non-matching facts to Topics, stripped 'validated' from ${strippedCount} built-in facts`
       );
+    }
+  }
+
+  /**
+   * Migration: Message extraction flags were incorrectly named.
+   * Old: p=Topics, o=People, r=Traits (dead)
+   * New: t=Topics, p=People (r and o removed)
+   * Detects old format by presence of 'o' flag on any message.
+   */
+  private migrateMessageFlags(): void {
+    const personas = this.personaState.getAll();
+    let migratedCount = 0;
+
+    for (const persona of personas) {
+      // Access raw message objects to detect and remap old flags
+      const rawMessages = (this.personaState as unknown as { personas: Map<string, { messages: Array<Record<string, unknown>> }> }).personas.get(persona.id)?.messages ?? [];
+      const hasOldFormat = rawMessages.some(m => 'o' in m || 'r' in m);
+      if (!hasOldFormat) continue;
+
+      for (const msg of rawMessages) {
+        // Remap: old p (topics) → new t; old o (people) → new p
+        const oldP = msg['p'];  // was topics
+        const oldO = msg['o'];  // was people
+        msg['t'] = oldP;        // topics: old p → new t
+        msg['p'] = oldO;        // people: old o → new p
+        delete msg['r'];        // trait flag dead
+        delete msg['o'];        // old people flag dead
+        migratedCount++;
+      }
+    }
+
+    if (migratedCount > 0) {
+      this.scheduleSave();
+      console.log(`[StateManager] Migrated message flags (p→t, o→p, removed r/o) for ${migratedCount} messages`);
     }
   }
 
@@ -361,11 +397,11 @@ export class StateManager {
     return result;
   }
 
-  messages_getUnextracted(personaId: string, flag: "f" | "r" | "p" | "o", limit?: number): Message[] {
+  messages_getUnextracted(personaId: string, flag: "f" | "t" | "p", limit?: number): Message[] {
     return this.personaState.messages_getUnextracted(personaId, flag, limit);
   }
 
-  messages_markExtracted(personaId: string, messageIds: string[], flag: "f" | "r" | "p" | "o"): number {
+  messages_markExtracted(personaId: string, messageIds: string[], flag: "f" | "t" | "p"): number {
     const result = this.personaState.messages_markExtracted(personaId, messageIds, flag);
     this.scheduleSave();
     return result;

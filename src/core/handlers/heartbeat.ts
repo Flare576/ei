@@ -76,7 +76,7 @@ export function handleEiHeartbeat(response: LLMResponse, state: StateManager): v
     timestamp: now,
     read: false,
     context_status: ContextStatus.Default,
-    f: true, r: true, p: true, o: true,
+    f: true, t: true, p: true,
   });
 
   if (found.type === "fact") {
