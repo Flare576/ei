@@ -3,7 +3,7 @@
  * Based on CONTRACTS.md specifications
  */
 
-import type { Trait, Topic, Person, Message, PersonaTopic } from "../../core/types.js";
+import type { PersonaTrait, Topic, Person, Message, PersonaTopic } from "../../core/types.js";
 
 /**
  * Common prompt output structure
@@ -19,7 +19,7 @@ export interface PromptOutput {
 export interface HeartbeatCheckPromptData {
   persona: {
     name: string;
-    traits: Trait[];
+    traits: PersonaTrait[];
     topics: PersonaTopic[];
   };
   human: {

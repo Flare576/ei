@@ -1,4 +1,4 @@
-import type { Trait, PersonaTopic, DataItemBase } from "../../core/types.js";
+import type { PersonaTrait, PersonaTopic, DataItemBase } from "../../core/types.js";
 
 export interface PersonaExpirePromptData {
   persona_name: string;
@@ -11,7 +11,7 @@ export interface PersonaExpireResult {
 
 export interface PersonaExplorePromptData {
   persona_name: string;
-  traits: Trait[];
+  traits: PersonaTrait[];
   remaining_topics: PersonaTopic[];
   recent_conversation_themes: string[];
 }
@@ -32,7 +32,7 @@ export interface DescriptionCheckPromptData {
   persona_name: string;
   current_short_description?: string;
   current_long_description?: string;
-  traits: Trait[];
+  traits: PersonaTrait[];
   topics: PersonaTopic[];
 }
 

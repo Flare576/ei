@@ -20,7 +20,7 @@ export interface Fact extends DataItemBase {
   validated_date: string;
 }
 
-export interface Trait extends DataItemBase {
+export interface PersonaTrait extends DataItemBase {
   strength?: number;
 }
 
@@ -75,4 +75,4 @@ export interface Quote {
 
 export type DataItemType = "fact" | "trait" | "topic" | "person";
 
-export type DataItem = Fact | Trait | Topic | Person;
+export type DataItem = Fact | PersonaTrait | Topic | Person;

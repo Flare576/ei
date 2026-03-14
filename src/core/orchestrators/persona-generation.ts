@@ -1,4 +1,4 @@
-import { LLMRequestType, LLMPriority, LLMNextStep, type Trait, type PersonaTopic } from "../types.js";
+import { LLMRequestType, LLMPriority, LLMNextStep, type PersonaTrait, type PersonaTopic } from "../types.js";
 import type { StateManager } from "../state-manager.js";
 import { buildPersonaGenerationPrompt } from "../../prompts/index.js";
 
@@ -11,7 +11,7 @@ export interface PartialPersona {
   description?: string;
   short_description?: string;
   long_description?: string;
-  traits?: Partial<Trait>[];
+  traits?: Partial<PersonaTrait>[];
   topics?: Partial<PersonaTopic>[];
   model?: string;
   group_primary?: string;
@@ -66,7 +66,7 @@ export function orchestratePersonaGeneration(
   stateManager.persona_update(partial.id, {
     short_description: partial.short_description,
     long_description: partial.long_description,
-    traits: partial.traits as Trait[],
+    traits: partial.traits as PersonaTrait[],
     topics: partial.topics as PersonaTopic[],
     last_updated: now,
   });

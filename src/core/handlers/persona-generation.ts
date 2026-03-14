@@ -1,6 +1,6 @@
 import {
   type LLMResponse,
-  type Trait,
+  type PersonaTrait,
   type PersonaTopic,
 } from "../types.js";
 import type { StateManager } from "../state-manager.js";
@@ -27,10 +27,10 @@ export function handlePersonaGeneration(response: LLMResponse, state: StateManag
     (existingPartial.traits ?? []).filter(t => t.name?.trim()).map(t => [t.name!.toLowerCase().trim(), t])
   );
 
-  const mergedLlmTraits: Trait[] = (result?.traits || []).map(t => {
+  const mergedLlmTraits: PersonaTrait[] = (result?.traits || []).map(t => {
     const userTrait = userTraitsByName.get(t.name?.toLowerCase().trim() ?? '');
     return {
-      id: (userTrait as Trait | undefined)?.id ?? crypto.randomUUID(),
+      id: (userTrait as PersonaTrait | undefined)?.id ?? crypto.randomUUID(),
       name: t.name,
       description: userTrait?.description?.trim() || t.description,
       sentiment: userTrait?.sentiment ?? t.sentiment ?? 0,
@@ -41,10 +41,10 @@ export function handlePersonaGeneration(response: LLMResponse, state: StateManag
 
   // Keep user-provided traits the LLM didn't return
   const llmTraitNames = new Set(mergedLlmTraits.map(t => t.name?.toLowerCase().trim()));
-  const preservedUserTraits: Trait[] = (existingPartial.traits ?? [])
+  const preservedUserTraits: PersonaTrait[] = (existingPartial.traits ?? [])
     .filter(t => t.name?.trim() && !llmTraitNames.has(t.name.toLowerCase().trim()))
     .map(t => ({
-      id: (t as Trait).id ?? crypto.randomUUID(),
+      id: (t as PersonaTrait).id ?? crypto.randomUUID(),
       name: t.name!,
       description: t.description || '',
       sentiment: t.sentiment ?? 0,
@@ -52,9 +52,9 @@ export function handlePersonaGeneration(response: LLMResponse, state: StateManag
       last_updated: now,
     }));
 
-  const mergedTraits: Trait[] = mergedLlmTraits.length > 0
+  const mergedTraits: PersonaTrait[] = mergedLlmTraits.length > 0
     ? [...mergedLlmTraits, ...preservedUserTraits]
-    : (existingPartial.traits as Trait[] | undefined) ?? [];
+    : (existingPartial.traits as PersonaTrait[] | undefined) ?? [];
 
   // Merge LLM topics into user-provided topics by name.
   // User-provided fields win; LLM fills in what the user left blank.
@@ -151,7 +151,7 @@ export function handlePersonaTraitExtraction(response: LLMResponse, state: State
   }
 
   const now = new Date().toISOString();
-  const traits: Trait[] = result.map(t => ({
+  const traits: PersonaTrait[] = result.map(t => ({
     id: crypto.randomUUID(),
     name: t.name,
     description: t.description,

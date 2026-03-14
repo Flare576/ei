@@ -10,7 +10,7 @@ import type {
   HumanEntity,
   PersonaEntity,
   Fact,
-  Trait,
+  PersonaTrait,
   Topic,
   PersonaTopic,
   Person,
@@ -715,7 +715,7 @@ function App() {
     processor.getPersonaList().then(setPersonas);
   }, [processor, editingPersonaId]);
 
-  const handlePersonaTraitSave = useCallback(async (trait: Trait) => {
+  const handlePersonaTraitSave = useCallback(async (trait: PersonaTrait) => {
     if (!processor || !editingPersonaId) return;
     const persona = await processor.getPersona(editingPersonaId);
     if (!persona) return;

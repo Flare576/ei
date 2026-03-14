@@ -1,4 +1,4 @@
-import type { Trait, Message, PersonaTopic } from "../../core/types.js";
+import type { PersonaTrait, Message, PersonaTopic } from "../../core/types.js";
 
 export interface PromptOutput {
   system: string;
@@ -7,7 +7,7 @@ export interface PromptOutput {
 
 export interface PersonaTraitExtractionPromptData {
   persona_name: string;
-  current_traits: Trait[];
+  current_traits: PersonaTrait[];
   messages_context: Message[];
   messages_analyze: Message[];
 }
@@ -56,7 +56,7 @@ export interface PersonaTopicUpdatePromptData {
   persona_name: string;
   short_description?: string;
   long_description?: string;
-  traits: Trait[];
+  traits: PersonaTrait[];
   existing_topic?: PersonaTopic; // If updating existing
   candidate: PersonaTopicScanCandidate;
   messages_context: Message[];

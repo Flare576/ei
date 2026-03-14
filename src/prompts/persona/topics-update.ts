@@ -1,8 +1,8 @@
 import type { PersonaTopicUpdatePromptData, PromptOutput } from "./types.js";
-import type { PersonaTopic, Trait } from "../../core/types.js";
+import type { PersonaTopic, PersonaTrait } from "../../core/types.js";
 import { formatMessagesAsPlaceholders } from "../message-utils.js";
 
-function formatTraitsForPrompt(traits: Trait[]): string {
+function formatTraitsForPrompt(traits: PersonaTrait[]): string {
   if (traits.length === 0) return "(No traits defined)";
   return traits.map(t => `- ${t.name}: ${t.description}`).join('\n');
 }

@@ -1,7 +1,7 @@
 import type { PersonaDescriptionsPromptData, PromptOutput } from "./types.js";
-import type { Trait, PersonaTopic } from "../../core/types.js";
+import type { PersonaTrait, PersonaTopic } from "../../core/types.js";
 
-function formatTraitsForPrompt(traits: Trait[]): string {
+function formatTraitsForPrompt(traits: PersonaTrait[]): string {
   if (traits.length === 0) return "(No traits defined)";
   
   return traits.map(t => {

@@ -3,7 +3,7 @@
  * Building blocks for constructing response prompts
  */
 
-import type { Trait, Quote, PersonaTopic } from "../../core/types.js";
+import type { PersonaTrait, Quote, PersonaTopic } from "../../core/types.js";
 import type { ResponsePromptData } from "./types.js";
 import { truncateDescription } from "../human/item-update.js";
 
@@ -62,7 +62,7 @@ export function buildGuidelinesSection(personaName: string): string {
 // TRAITS SECTION
 // =============================================================================
 
-export function buildTraitsSection(traits: Trait[], header: string): string {
+export function buildTraitsSection(traits: PersonaTrait[], header: string): string {
   if (traits.length === 0) return "";
   
   const sorted = [...traits].sort((a, b) => (b.strength ?? 0.5) - (a.strength ?? 0.5)).slice(0, 15);

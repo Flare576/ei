@@ -1,8 +1,8 @@
 import type { PersonaTraitExtractionPromptData, PromptOutput } from "./types.js";
-import type { Trait } from "../../core/types.js";
+import type { PersonaTrait } from "../../core/types.js";
 import { formatMessagesAsPlaceholders } from "../message-utils.js";
 
-function formatTraitsForPrompt(traits: Trait[]): string {
+function formatTraitsForPrompt(traits: PersonaTrait[]): string {
   if (traits.length === 0) return "(No traits yet)";
   
   return JSON.stringify(traits.map(t => ({
