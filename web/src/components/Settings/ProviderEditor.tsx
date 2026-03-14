@@ -122,7 +122,6 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
     }
     
     return Object.keys(newErrors).length === 0;
-    return Object.keys(newErrors).length === 0;
   };
 
   const handleSave = () => {
