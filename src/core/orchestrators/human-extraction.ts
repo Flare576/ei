@@ -8,6 +8,7 @@ import {
   buildTopicUpdatePrompt,
   buildPersonMatchPrompt,
   buildPersonUpdatePrompt,
+  buildEventScanPrompt,
   type TopicScanCandidate,
   type PersonScanCandidate,
   type ItemMatchResult,
@@ -16,13 +17,14 @@ import { chunkExtractionContext } from "./extraction-chunker.js";
 import { getEmbeddingService, findTopK, getTopicEmbeddingText, getPersonEmbeddingText } from "../embedding-service.js";
 import { resolveTokenLimit } from "../llm-client.js";
 import { BUILT_IN_FACT_NAMES } from "../constants/built-in-facts.js";
+import { buildEventWindows } from "../utils/event-windows.js";
 
 export interface ExtractionContext {
   personaId: string;
   personaDisplayName: string;
   messages_context: Message[];
   messages_analyze: Message[];
-  extraction_flag?: "f" | "t" | "p";
+  extraction_flag?: "f" | "t" | "p" | "e";
 }
 
 export interface ExtractionOptions {
@@ -443,6 +445,86 @@ export function queueTopicUpdate(
   }
 
   return chunks.length;
+}
+
+export function queueEventSummary(
+  personaId: string,
+  state: StateManager,
+  options?: ExtractionOptions
+): number {
+  const persona = state.persona_getById(personaId);
+  if (!persona) {
+    console.error(`[queueEventSummary] Persona not found: ${personaId}`);
+    return 0;
+  }
+
+  const unextractedMessages = state.messages_getUnextracted(personaId, "e");
+  if (unextractedMessages.length === 0) {
+    console.log(`[queueEventSummary] No unprocessed messages for ${persona.display_name}`);
+    return 0;
+  }
+
+  const human = state.getHuman();
+  const gapHours = human.settings?.ceremony?.event_window_hours ?? 8;
+
+  const sorted = [...unextractedMessages].sort(
+    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+  );
+
+  const windows = buildEventWindows(sorted, gapHours);
+
+  const allMessages = state.messages_get(personaId);
+  const extractionModel = options?.extraction_model;
+  let totalChunks = 0;
+
+  state.messages_markExtracted(personaId, sorted.map(m => m.id), "e");
+
+  for (const windowMessages of windows) {
+    if (windowMessages.length === 0) continue;
+
+    const windowStartTime = new Date(windowMessages[0].timestamp).getTime();
+    const messages_context = allMessages.filter(
+      m => m.e === true && new Date(m.timestamp).getTime() < windowStartTime
+    );
+
+    const context: ExtractionContext = {
+      personaId,
+      personaDisplayName: persona.display_name,
+      messages_context,
+      messages_analyze: windowMessages,
+      extraction_flag: "e",
+    };
+
+    const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state, options));
+
+    for (const chunk of chunks) {
+      const prompt = buildEventScanPrompt({
+        persona_name: chunk.personaDisplayName,
+        messages_context: chunk.messages_context,
+        messages_analyze: chunk.messages_analyze,
+      });
+
+      state.queue_enqueue({
+        type: LLMRequestType.JSON,
+        priority: LLMPriority.Low,
+        model: extractionModel,
+        system: prompt.system,
+        user: prompt.user,
+        next_step: LLMNextStep.HandleEventScan,
+        data: {
+          ...options,
+          personaId: chunk.personaId,
+          personaDisplayName: chunk.personaDisplayName,
+          extraction_flag: "e",
+          message_ids_to_mark: chunk.messages_analyze.map(m => m.id),
+        },
+      });
+      totalChunks++;
+    }
+  }
+
+  console.log(`[queueEventSummary] Queued ${totalChunks} event scan chunk(s) for ${persona.display_name} (${windows.length} window(s))`);
+  return totalChunks;
 }
 
 export function queuePersonUpdate(

@@ -25,6 +25,10 @@ function createCheckpointWithProvider() {
       settings: {
         auto_save_interval_ms: 999999999,
         default_model: "TestProvider",
+        ceremony: {
+          time: "09:00",
+          last_ceremony: timestamp,
+        },
         accounts: [
           {
             id: "test-provider-id",
@@ -90,6 +94,10 @@ function createCheckpointWithoutProvider() {
       last_activity: timestamp,
       settings: {
         auto_save_interval_ms: 999999999,
+        ceremony: {
+          time: "09:00",
+          last_ceremony: timestamp,
+        },
       },
     },
     personas: {

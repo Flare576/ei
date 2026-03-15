@@ -397,11 +397,11 @@ export class StateManager {
     return result;
   }
 
-  messages_getUnextracted(personaId: string, flag: "f" | "t" | "p", limit?: number): Message[] {
+  messages_getUnextracted(personaId: string, flag: "f" | "t" | "p" | "e", limit?: number): Message[] {
     return this.personaState.messages_getUnextracted(personaId, flag, limit);
   }
 
-  messages_markExtracted(personaId: string, messageIds: string[], flag: "f" | "t" | "p"): number {
+  messages_markExtracted(personaId: string, messageIds: string[], flag: "f" | "t" | "p" | "e"): number {
     const result = this.personaState.messages_markExtracted(personaId, messageIds, flag);
     this.scheduleSave();
     return result;

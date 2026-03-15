@@ -127,3 +127,13 @@ export type ItemUpdateResult =
   | TopicUpdateResult 
   | PersonUpdateResult 
   | Record<string, never>;
+
+export interface EventScanCandidate {
+  name: string;
+  description: string;
+  reason: string;
+}
+
+export interface EventScanResult {
+  events: EventScanCandidate[];
+}

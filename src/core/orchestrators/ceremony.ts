@@ -5,6 +5,7 @@ import {
   queueFactFind,
   queueTopicScan,
   queuePersonScan,
+  queueEventSummary,
   type ExtractionContext,
   type ExtractionOptions,
 } from "./human-extraction.js";
@@ -159,7 +160,7 @@ function queueExposurePhase(personaId: string, state: StateManager, options?: Ex
  * AND at the end of startCeremony (for the zero-messages edge case).
  * 
  * If any ceremony_progress items remain in the queue, does nothing — more work pending.
- * If the queue is clear of ceremony items, advances to Decay → Prune → Expire.
+ * Phase 1: Dedup → Phase 2: Expose → Phase 3: EventSummary → Decay → Expire
  */
 export function handleCeremonyProgress(state: StateManager, lastPhase: number): void {
   if (state.queue_hasPendingCeremonies()) {
@@ -195,9 +196,22 @@ export function handleCeremonyProgress(state: StateManager, lastPhase: number): 
     }
     return;
   }
+
+  if (lastPhase === 2) {
+    console.log("[ceremony:progress] Expose complete, starting EventSummary phase");
+    const options: ExtractionOptions = { ceremony_progress: 3 };
+    queueEventSummaryForAll(state, options);
+
+    // Zero-work guard: same pattern as DeDupe phase
+    if (!state.queue_hasPendingCeremonies()) {
+      console.log("[ceremony:progress] No event summary work, advancing to Decay");
+      handleCeremonyProgress(state, 3);
+    }
+    return;
+  }
   
-  // Phase 2 (Expose) complete → advance to Decay/Prune/Expire/Explore
-  console.log("[ceremony:progress] All exposure scans complete, advancing to Decay");
+  // Phase 3 (EventSummary) complete → advance to Decay/Prune/Expire/Explore
+  console.log("[ceremony:progress] EventSummary complete, advancing to Decay");
   
   const personas = state.persona_getAll();
   const activePersonas = personas.filter(p => 
@@ -645,4 +659,19 @@ export function queueRewritePhase(state: StateManager): void {
   }
 
   console.log(`[ceremony:rewrite] Queued ${itemsToScan.length} Phase 1 scan(s) at Low priority`);
+}
+
+function queueEventSummaryForAll(state: StateManager, options?: ExtractionOptions): void {
+  const personas = state.persona_getAll();
+  const activePersonas = personas.filter(p =>
+    !p.is_paused &&
+    !p.is_archived &&
+    !p.is_static
+  );
+
+  let totalQueued = 0;
+  for (const persona of activePersonas) {
+    totalQueued += queueEventSummary(persona.id, state, options);
+  }
+  console.log(`[ceremony:event] Queued event summary scans for ${activePersonas.length} personas (${totalQueued} total chunks)`);
 }

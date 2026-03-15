@@ -305,7 +305,93 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
     });
   });
 
+  describe("handleEventScan", () => {
+    it("queues topic match for each detected event with category forced to 'Event'", async () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleEventScan,
+        data: {
+          personaId: "ei",
+          personaDisplayName: "Ei",
+          messages_context: [],
+          messages_analyze: [{ id: "1", role: "human", verbal_response: "test", timestamp: "", read: true, context_status: "default" }],
+        },
+      });
+
+      const response = createMockResponse(request, {
+        events: [
+          { name: "The Night We Debugged Beta", description: "We fixed a gnarly CPU issue", reason: "3 hours of debugging" },
+        ],
+      });
+
+      await handlers[LLMNextStep.HandleEventScan](response, state as any);
+
+      expect(queueTopicMatch).toHaveBeenCalledTimes(1);
+      expect(queueTopicMatch).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "The Night We Debugged Beta", category: "Event" }),
+        expect.any(Object),
+        state,
+        undefined
+      );
+    });
+
+    it("calls markMessagesExtracted with flag 'e'", async () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleEventScan,
+        data: {
+          personaId: "ei",
+          personaDisplayName: "Ei",
+          messages_context: [],
+          messages_analyze: [],
+          message_ids_to_mark: ["msg-1"],
+        },
+      });
+
+      const response = createMockResponse(request, { events: [] });
+
+      await handlers[LLMNextStep.HandleEventScan](response, state as any);
+
+      expect(state.messages_markExtracted).toHaveBeenCalledWith("ei", ["msg-1"], "e");
+    });
+
+    it("handles empty events array gracefully", async () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleEventScan,
+        data: {
+          personaId: "ei",
+          personaDisplayName: "Ei",
+          messages_context: [],
+          messages_analyze: [],
+        },
+      });
+
+      const response = createMockResponse(request, { events: [] });
+
+      await handlers[LLMNextStep.HandleEventScan](response, state as any);
+
+      expect(queueTopicMatch).not.toHaveBeenCalled();
+    });
+  });
+
   describe("handleHumanPersonScan", () => {
+    it("calls markMessagesExtracted with flag 'p'", async () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleHumanPersonScan,
+        data: {
+          personaId: "ei",
+          personaDisplayName: "Ei",
+          messages_context: [],
+          messages_analyze: [],
+          message_ids_to_mark: ["msg-1"],
+        },
+      });
+
+      const response = createMockResponse(request, { people: [] });
+
+      await handlers.handleHumanPersonScan(response, state as any);
+
+      expect(state.messages_markExtracted).toHaveBeenCalledWith("ei", ["msg-1"], "p");
+    });
+
     it("queues item match for each detected person", async () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanPersonScan,

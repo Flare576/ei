@@ -23,7 +23,7 @@ export function resolveMessageWindow(
   return splitMessagesByTimestamp(allMessages, analyzeFrom);
 }
 
-export type ExtractionFlag = "f" | "t" | "p";
+export type ExtractionFlag = "f" | "t" | "p" | "e";
 
 export function splitMessagesByTimestamp(
   messages: Message[], 

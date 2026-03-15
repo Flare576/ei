@@ -105,6 +105,10 @@ export function createTestSettings(mockServerUrl: string) {
   return {
     auto_save_interval_ms: 999999999,
     default_model: "Mock LLM:mock-model",
+    ceremony: {
+      time: "09:00",
+      last_ceremony: new Date().toISOString(),
+    },
     accounts: [{
       id: "mock-llm-account",
       name: "Mock LLM",

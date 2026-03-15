@@ -6,6 +6,8 @@ export { buildTopicMatchPrompt } from "./topic-match.js";
 export { buildTopicUpdatePrompt } from "./topic-update.js";
 export { buildPersonMatchPrompt } from "./person-match.js";
 export { buildPersonUpdatePrompt } from "./person-update.js";
+export { buildEventScanPrompt } from "./event-scan.js";
+export type { EventScanPromptData } from "./event-scan.js";
 
 export type { TopicMatchPromptData } from "./topic-match.js";
 export type { TopicUpdatePromptData } from "./topic-update.js";
@@ -25,6 +27,8 @@ export type {
   FactFindResult,
   TopicScanResult,
   PersonScanResult,
+  EventScanCandidate,
+  EventScanResult,
   ItemMatchResult,
   ExposureImpact,
   ItemUpdateResultBase,

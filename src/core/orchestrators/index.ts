@@ -8,6 +8,7 @@ export {
   queueTopicUpdate,
   queuePersonMatch,
   queuePersonUpdate,
+  queueEventSummary,
   type ExtractionContext,
   type ExtractionOptions,
 } from "./human-extraction.js";

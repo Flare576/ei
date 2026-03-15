@@ -24,6 +24,10 @@ function createMinimalCheckpoint() {
       last_activity: timestamp,
       settings: {
         auto_save_interval_ms: 999999999,
+        ceremony: {
+          time: "09:00",
+          last_ceremony: timestamp,
+        },
       },
     },
     personas: {
@@ -79,6 +83,10 @@ function createCheckpointWithExistingProvider() {
       last_activity: timestamp,
       settings: {
         auto_save_interval_ms: 999999999,
+        ceremony: {
+          time: "09:00",
+          last_ceremony: timestamp,
+        },
         accounts: [
           {
             id: "existing-provider-id",

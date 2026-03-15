@@ -428,14 +428,27 @@ describe("handleCeremonyProgress Multi-Phase Support", () => {
     consoleSpy.mockRestore();
   });
 
-  it("Phase 2 complete → advances to Decay/Expire/Explore", () => {
+  it("Phase 2 complete → queues EventSummary phase with ceremony_progress: 3", () => {
     const state = createMockProgressState(false, true);
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     
     handleCeremonyProgress(state as any, 2);
     
     expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining("All exposure scans complete, advancing to Decay")
+      expect.stringContaining("Expose complete, starting EventSummary phase")
+    );
+    
+    consoleSpy.mockRestore();
+  });
+
+  it("Phase 3 complete → advances to Decay/Expire/Explore", () => {
+    const state = createMockProgressState(false, true);
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    
+    handleCeremonyProgress(state as any, 3);
+    
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining("EventSummary complete, advancing to Decay")
     );
     
     consoleSpy.mockRestore();

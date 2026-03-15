@@ -27,6 +27,7 @@ export interface CeremonyConfig {
   decay_rate?: number;  // Default: 0.1
   explore_threshold?: number;  // Default: 3
   dedup_threshold?: number;  // Cosine similarity threshold for dedup candidates. Default: 0.85
+  event_window_hours?: number;  // Gap threshold for conversation window detection. Default: 8
 }
 
 export interface BackupConfig {

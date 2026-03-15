@@ -48,7 +48,9 @@ export {
   buildHumanFactScanPrompt,
   buildHumanTopicScanPrompt,
   buildHumanPersonScanPrompt,
+  buildEventScanPrompt,
 } from "./human/index.js";
+export type { EventScanPromptData } from "./human/event-scan.js";
 export type {
   FactScanPromptData,
   TopicScanPromptData,
@@ -56,6 +58,8 @@ export type {
   FactScanCandidate,
   TopicScanCandidate,
   PersonScanCandidate,
+  EventScanCandidate,
+  EventScanResult,
   FactScanResult,
   TopicScanResult,
   PersonScanResult,

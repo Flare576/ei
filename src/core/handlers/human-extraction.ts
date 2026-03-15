@@ -4,6 +4,7 @@ import type {
   FactFindResult,
   TopicScanResult,
   PersonScanResult,
+  TopicScanCandidate,
 } from "../../prompts/human/types.js";
 import { queueTopicMatch, queuePersonMatch, type ExtractionContext } from "../orchestrators/index.js";
 import { markMessagesExtracted } from "./utils.js";
@@ -119,5 +120,33 @@ export async function handleHumanPersonScan(response: LLMResponse, state: StateM
     await queuePersonMatch(candidate, context, state, extractionModel);
   }
   console.log(`[handleHumanPersonScan] Queued ${result.people.length} person(s) for matching`);
+}
+
+export async function handleEventScan(response: LLMResponse, state: StateManager): Promise<void> {
+  markMessagesExtracted(response, state, "e");
+
+  const result = response.parsed as { events?: Array<{ name: string; description: string; reason: string }> } | undefined;
+
+  if (!result?.events || !Array.isArray(result.events) || result.events.length === 0) {
+    console.log("[handleEventScan] No epic events detected");
+    return;
+  }
+
+  const context = response.request.data as unknown as ExtractionContext;
+  if (!context?.personaId) return;
+
+  const extractionModel = (response.request.data as Record<string, unknown>).extraction_model as string | undefined;
+
+  for (const event of result.events) {
+    const candidate: TopicScanCandidate = {
+      name: event.name,
+      description: event.description,
+      category: "Event",
+      reason: event.reason,
+    };
+    await queueTopicMatch(candidate, context, state, extractionModel);
+  }
+
+  console.log(`[handleEventScan] Queued ${result.events.length} event(s) for matching`);
 }
 

@@ -20,6 +20,7 @@ export interface Message {
   f?: boolean;                 // Fact extraction completed
   t?: boolean;                 // Topic extraction completed
   p?: boolean;                 // Person extraction completed
+  e?: boolean;                 // Event (epic) extraction completed
   // Image generation fields (web-only, ephemeral)
   _synthesis?: boolean;         // True if message was created by multi-message synthesis
 
