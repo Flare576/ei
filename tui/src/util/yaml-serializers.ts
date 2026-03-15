@@ -900,7 +900,8 @@ export function contextFromYAML(yamlContent: string): ContextYAMLResult {
     if (m._delete) {
       deletedMessageIds.push(m.id);
     } else {
-      messages.push({ id: m.id, context_status: m.context_status });
+      const normalized = (m.context_status ?? 'default').toString().toLowerCase() as ContextStatus;
+      messages.push({ id: m.id, context_status: normalized });
     }
   }
 
