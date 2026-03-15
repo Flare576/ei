@@ -6,6 +6,10 @@ export {
   queueAllScans,
   queueItemMatch,
   queueItemUpdate,
+  queueTopicMatch,
+  queueTopicUpdate,
+  queuePersonMatch,
+  queuePersonUpdate,
   type ExtractionContext,
   type ExtractionOptions,
 } from "./human-extraction.js";

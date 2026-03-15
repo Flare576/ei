@@ -6,13 +6,17 @@ import {
   buildHumanPersonScanPrompt,
   buildHumanItemMatchPrompt,
   buildHumanItemUpdatePrompt,
+  buildTopicMatchPrompt,
+  buildTopicUpdatePrompt,
+  buildPersonMatchPrompt,
+  buildPersonUpdatePrompt,
   type FactScanCandidate,
   type TopicScanCandidate,
   type PersonScanCandidate,
   type ItemMatchResult,
 } from "../../prompts/human/index.js";
 import { chunkExtractionContext } from "./extraction-chunker.js";
-import { getEmbeddingService, findTopK } from "../embedding-service.js";
+import { getEmbeddingService, findTopK, getTopicEmbeddingText, getPersonEmbeddingText } from "../embedding-service.js";
 import { resolveTokenLimit } from "../llm-client.js";
 import { BUILT_IN_FACT_NAMES } from "../constants/built-in-facts.js";
 
@@ -278,12 +282,12 @@ export async function queueItemMatch(
       break;
 
     case "topic":
-      itemName = (candidate as TopicScanCandidate).value_of_topic;
-      itemValue = (candidate as TopicScanCandidate).type_of_topic;
+      itemName = (candidate as TopicScanCandidate).name;
+      itemValue = (candidate as TopicScanCandidate).description;
       break;
     case "person":
-      itemName = (candidate as PersonScanCandidate).name_of_person;
-      itemValue = (candidate as PersonScanCandidate).type_of_person;
+      itemName = (candidate as PersonScanCandidate).name;
+      itemValue = (candidate as PersonScanCandidate).description;
       break;
     default:
       throw new Error(`[queueItemMatch] Unsupported dataType: ${dataType}`);
@@ -383,6 +387,268 @@ export async function queueItemMatch(
       extraction_model: extractionModel,
     },
   });
+}
+
+/**
+ * Queue a topic match request using embedding-based similarity (topics only).
+ */
+export async function queueTopicMatch(
+  candidate: TopicScanCandidate,
+  context: ExtractionContext,
+  state: StateManager,
+  extractionModel?: string
+): Promise<void> {
+  const human = state.getHuman();
+
+  const topicsWithEmbeddings = human.topics.filter(t => t.embedding && t.embedding.length > 0);
+
+  let topKItems: Array<{ id: string; name: string; description: string; category?: string }> = [];
+
+  if (topicsWithEmbeddings.length > 0) {
+    try {
+      const embeddingService = getEmbeddingService();
+      const candidateText = getTopicEmbeddingText({
+        name: candidate.name,
+        category: candidate.category,
+        description: candidate.description,
+      });
+      const candidateVector = await embeddingService.embed(candidateText);
+
+      const topK = findTopK(candidateVector, topicsWithEmbeddings, EMBEDDING_TOP_K);
+      topKItems = topK
+        .filter(({ similarity }) => similarity >= EMBEDDING_MIN_SIMILARITY)
+        .map(({ item }) => ({
+          id: item.id,
+          name: item.name,
+          description: item.description,
+          category: item.category,
+        }));
+
+      console.log(`[queueTopicMatch] Embedding search: ${topicsWithEmbeddings.length} topics → ${topKItems.length} candidates`);
+    } catch (err) {
+      console.error(`[queueTopicMatch] Embedding search failed, falling back to all topics:`, err);
+    }
+  }
+
+  if (topKItems.length === 0) {
+    console.log(`[queueTopicMatch] No embeddings available, using all topics`);
+    topKItems = human.topics.map(t => ({
+      id: t.id,
+      name: t.name,
+      description: t.description,
+      category: t.category,
+    }));
+  }
+
+  const prompt = buildTopicMatchPrompt({
+    candidate_name: candidate.name,
+    candidate_description: candidate.description,
+    candidate_category: candidate.category,
+    existing_topics: topKItems,
+  });
+
+  state.queue_enqueue({
+    type: LLMRequestType.JSON,
+    priority: LLMPriority.Normal,
+    model: extractionModel,
+    system: prompt.system,
+    user: prompt.user,
+    next_step: LLMNextStep.HandleTopicMatch,
+    data: {
+      ...context,
+      candidateName: candidate.name,
+      candidateDescription: candidate.description,
+      candidateCategory: candidate.category,
+      extraction_model: extractionModel,
+    },
+  });
+}
+
+/**
+ * Queue a person match request using embedding-based similarity (people only).
+ */
+export async function queuePersonMatch(
+  candidate: PersonScanCandidate,
+  context: ExtractionContext,
+  state: StateManager,
+  extractionModel?: string
+): Promise<void> {
+  const human = state.getHuman();
+
+  const peopleWithEmbeddings = human.people.filter(p => p.embedding && p.embedding.length > 0);
+
+  let topKItems: Array<{ id: string; name: string; description: string; relationship?: string }> = [];
+
+  if (peopleWithEmbeddings.length > 0) {
+    try {
+      const embeddingService = getEmbeddingService();
+      const candidateText = getPersonEmbeddingText({
+        name: candidate.name,
+        relationship: candidate.relationship,
+        description: candidate.description,
+      });
+      const candidateVector = await embeddingService.embed(candidateText);
+
+      const topK = findTopK(candidateVector, peopleWithEmbeddings, EMBEDDING_TOP_K);
+      topKItems = topK
+        .filter(({ similarity }) => similarity >= EMBEDDING_MIN_SIMILARITY)
+        .map(({ item }) => ({
+          id: item.id,
+          name: item.name,
+          description: item.description,
+          relationship: item.relationship,
+        }));
+
+      console.log(`[queuePersonMatch] Embedding search: ${peopleWithEmbeddings.length} people → ${topKItems.length} candidates`);
+    } catch (err) {
+      console.error(`[queuePersonMatch] Embedding search failed, falling back to all people:`, err);
+    }
+  }
+
+  if (topKItems.length === 0) {
+    console.log(`[queuePersonMatch] No embeddings available, using all people`);
+    topKItems = human.people.map(p => ({
+      id: p.id,
+      name: p.name,
+      description: p.description,
+      relationship: p.relationship,
+    }));
+  }
+
+  const prompt = buildPersonMatchPrompt({
+    candidate_name: candidate.name,
+    candidate_description: candidate.description,
+    candidate_relationship: candidate.relationship,
+    existing_people: topKItems,
+  });
+
+  state.queue_enqueue({
+    type: LLMRequestType.JSON,
+    priority: LLMPriority.Normal,
+    model: extractionModel,
+    system: prompt.system,
+    user: prompt.user,
+    next_step: LLMNextStep.HandlePersonMatch,
+    data: {
+      ...context,
+      candidateName: candidate.name,
+      candidateDescription: candidate.description,
+      candidateRelationship: candidate.relationship,
+      extraction_model: extractionModel,
+    },
+  });
+}
+
+export function queueTopicUpdate(
+  matchResult: ItemMatchResult,
+  context: ExtractionContext & {
+    candidateName: string;
+    candidateDescription: string;
+    candidateCategory: string;
+    extraction_model?: string;
+  },
+  state: StateManager
+): number {
+  const human = state.getHuman();
+  const matchedGuid = matchResult.matched_guid;
+  const isNewItem = matchedGuid === null;
+
+  let existingItem: Topic | null = null;
+  if (!isNewItem && matchedGuid) {
+    existingItem = human.topics.find(t => t.id === matchedGuid) ?? null;
+  }
+
+  const extractionOptions: ExtractionOptions = { extraction_model: context.extraction_model };
+  const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state, extractionOptions));
+
+  if (chunks.length === 0) return 0;
+
+  for (const chunk of chunks) {
+    const prompt = buildTopicUpdatePrompt({
+      existing_item: existingItem,
+      new_topic_name: isNewItem ? context.candidateName : undefined,
+      new_topic_description: isNewItem ? context.candidateDescription : undefined,
+      new_topic_category: isNewItem ? context.candidateCategory : undefined,
+      messages_context: chunk.messages_context,
+      messages_analyze: chunk.messages_analyze,
+      persona_name: chunk.personaDisplayName,
+    });
+
+    state.queue_enqueue({
+      type: LLMRequestType.JSON,
+      priority: LLMPriority.Normal,
+      model: context.extraction_model,
+      system: prompt.system,
+      user: prompt.user,
+      next_step: LLMNextStep.HandleTopicUpdate,
+      data: {
+        personaId: context.personaId,
+        personaDisplayName: context.personaDisplayName,
+        isNewItem,
+        existingItemId: existingItem?.id,
+        candidateCategory: context.candidateCategory,
+        analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
+      },
+    });
+  }
+
+  return chunks.length;
+}
+
+export function queuePersonUpdate(
+  matchResult: ItemMatchResult,
+  context: ExtractionContext & {
+    candidateName: string;
+    candidateDescription: string;
+    candidateRelationship: string;
+    extraction_model?: string;
+  },
+  state: StateManager
+): number {
+  const human = state.getHuman();
+  const matchedGuid = matchResult.matched_guid;
+  const isNewItem = matchedGuid === null;
+
+  let existingItem: Person | null = null;
+  if (!isNewItem && matchedGuid) {
+    existingItem = human.people.find(p => p.id === matchedGuid) ?? null;
+  }
+
+  const extractionOptions: ExtractionOptions = { extraction_model: context.extraction_model };
+  const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state, extractionOptions));
+
+  if (chunks.length === 0) return 0;
+
+  for (const chunk of chunks) {
+    const prompt = buildPersonUpdatePrompt({
+      existing_item: existingItem,
+      new_person_name: isNewItem ? context.candidateName : undefined,
+      new_person_description: isNewItem ? context.candidateDescription : undefined,
+      new_person_relationship: isNewItem ? context.candidateRelationship : undefined,
+      messages_context: chunk.messages_context,
+      messages_analyze: chunk.messages_analyze,
+      persona_name: chunk.personaDisplayName,
+    });
+
+    state.queue_enqueue({
+      type: LLMRequestType.JSON,
+      priority: LLMPriority.Normal,
+      model: context.extraction_model,
+      system: prompt.system,
+      user: prompt.user,
+      next_step: LLMNextStep.HandlePersonUpdate,
+      data: {
+        personaId: context.personaId,
+        personaDisplayName: context.personaDisplayName,
+        isNewItem,
+        existingItemId: existingItem?.id,
+        candidateRelationship: context.candidateRelationship,
+        analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
+      },
+    });
+  }
+
+  return chunks.length;
 }
 
 export function queueItemUpdate(
