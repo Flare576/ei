@@ -114,6 +114,7 @@ describe("importOpenCodeSessions", () => {
       }),
       messages_sort: vi.fn(),
       messages_markExtracted: vi.fn(),
+      messages_getUnextracted: vi.fn().mockReturnValue([]),
       human_topic_upsert: vi.fn(),
       queue_enqueue: vi.fn(),
     };

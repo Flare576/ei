@@ -19,6 +19,7 @@ vi.mock("../../../../src/prompts/human/index.js", () => ({
   buildFactFindPrompt: vi.fn().mockReturnValue({ system: "fact-find-sys", user: "fact-find-usr" }),
   buildHumanTopicScanPrompt: vi.fn().mockReturnValue({ system: "topic-sys", user: "topic-usr" }),
   buildHumanPersonScanPrompt: vi.fn().mockReturnValue({ system: "person-sys", user: "person-usr" }),
+  buildEventScanPrompt: vi.fn().mockReturnValue({ system: "event-sys", user: "event-usr" }),
 }));
 
 import {
@@ -80,8 +81,13 @@ function createMockStateManager() {
   return {
     getHuman: vi.fn(() => human),
     persona_getAll: vi.fn(() => personas),
+    persona_getById: vi.fn((id: string) => personas.find(p => p.id === id) ?? null),
     queue_enqueue: vi.fn(),
     messages_markExtracted: vi.fn(),
+    messages_getUnextracted: vi.fn().mockReturnValue([
+      { id: "unextracted-1", role: "human", verbal_response: "test", timestamp: new Date().toISOString(), read: true, context_status: "default" },
+    ]),
+    messages_get: vi.fn().mockReturnValue([]),
     _human: human,
     _personas: personas,
   };
@@ -156,11 +162,13 @@ describe("Scan Orchestrators (Step 1)", () => {
     it("enqueues topic scan request with correct data", () => {
       queueTopicScan(context, state as any);
 
-      expect(buildHumanTopicScanPrompt).toHaveBeenCalledWith({
-        persona_name: "Ei",
-        messages_context: context.messages_context,
-        messages_analyze: context.messages_analyze,
-      });
+      expect(buildHumanTopicScanPrompt).toHaveBeenCalledWith(
+        expect.objectContaining({
+          persona_name: "Ei",
+          messages_context: context.messages_context,
+          messages_analyze: context.messages_analyze,
+        })
+      );
 
       expect(state.queue_enqueue).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -189,15 +197,16 @@ describe("Scan Orchestrators (Step 1)", () => {
   });
 
   describe("queueAllScans", () => {
-    it("enqueues all three scan types", () => {
+    it("enqueues all four scan types", () => {
       queueAllScans(context, state as any);
 
-      expect(state.queue_enqueue).toHaveBeenCalledTimes(3);
+      expect(state.queue_enqueue).toHaveBeenCalledTimes(4);
 
       const nextSteps = state.queue_enqueue.mock.calls.map((c: any) => c[0].next_step);
       expect(nextSteps).toContain(LLMNextStep.HandleFactFind);
       expect(nextSteps).toContain(LLMNextStep.HandleHumanTopicScan);
       expect(nextSteps).toContain(LLMNextStep.HandleHumanPersonScan);
+      expect(nextSteps).toContain(LLMNextStep.HandleEventScan);
     });
   });
 });

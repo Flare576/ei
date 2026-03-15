@@ -12,12 +12,45 @@ import {
   type TopicScanCandidate,
   type PersonScanCandidate,
   type ItemMatchResult,
+  type ParticipantContext,
 } from "../../prompts/human/index.js";
 import { chunkExtractionContext } from "./extraction-chunker.js";
 import { getEmbeddingService, findTopK, getTopicEmbeddingText, getPersonEmbeddingText } from "../embedding-service.js";
 import { resolveTokenLimit } from "../llm-client.js";
 import { BUILT_IN_FACT_NAMES } from "../constants/built-in-facts.js";
 import { buildEventWindows } from "../utils/event-windows.js";
+
+function buildParticipantContext(personaId: string, state: StateManager): ParticipantContext {
+  const persona = state.persona_getById(personaId);
+  const human = state.getHuman();
+
+  const persona_description = persona?.long_description || undefined;
+
+  const fullNameFact = human.facts.find(f => f.name === "Full Name");
+  const nicknameFact = human.facts.find(f => f.name === "Nickname/Preferred Name");
+  const fullName = fullNameFact?.description || "";
+  const nickname = nicknameFact?.description || "";
+  let human_name: string | undefined;
+  if (fullName && nickname) human_name = `${fullName} (${nickname})`;
+  else if (fullName) human_name = fullName;
+  else if (nickname) human_name = nickname;
+
+  let human_age: number | undefined;
+  const birthdayFact = human.facts.find(f => f.name === "Birthday");
+  if (birthdayFact?.description) {
+    const birth = new Date(birthdayFact.description);
+    if (!isNaN(birth.getTime())) {
+      human_age = Math.floor((Date.now() - birth.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+    }
+  }
+
+  return {
+    persona_name: persona?.display_name ?? personaId,
+    persona_description,
+    human_name,
+    human_age,
+  };
+}
 
 export interface ExtractionContext {
   personaId: string;
@@ -118,6 +151,7 @@ export function queueTopicScan(context: ExtractionContext, state: StateManager, 
       persona_name: chunk.personaDisplayName,
       messages_context: chunk.messages_context,
       messages_analyze: chunk.messages_analyze,
+      participant_context: buildParticipantContext(context.personaId, state),
     });
 
     state.queue_enqueue({
@@ -185,6 +219,7 @@ export function queueAllScans(context: ExtractionContext, state: StateManager, o
   queueFactFind(context, state, options);
   queuePersonScan(context, state, options);
   queueTopicScan(context, state, options);
+  queueEventSummary(context.personaId, state, options);
 }
 
 /**
@@ -216,6 +251,7 @@ export function queueDirectTopicUpdate(
       messages_context: chunk.messages_context,
       messages_analyze: chunk.messages_analyze,
       persona_name: chunk.personaDisplayName,
+      participant_context: buildParticipantContext(context.personaId, state),
     });
 
     state.queue_enqueue({
@@ -424,6 +460,7 @@ export function queueTopicUpdate(
       messages_context: chunk.messages_context,
       messages_analyze: chunk.messages_analyze,
       persona_name: chunk.personaDisplayName,
+      participant_context: buildParticipantContext(context.personaId, state),
     });
 
     state.queue_enqueue({
@@ -502,6 +539,7 @@ export function queueEventSummary(
         persona_name: chunk.personaDisplayName,
         messages_context: chunk.messages_context,
         messages_analyze: chunk.messages_analyze,
+        participant_context: buildParticipantContext(personaId, state),
       });
 
       state.queue_enqueue({

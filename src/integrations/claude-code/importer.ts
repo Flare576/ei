@@ -56,6 +56,7 @@ function convertToPreMarkedEiMessage(msg: ClaudeCodeMessage): Message {
     f: true,
     t: true,
     p: true,
+    e: true,
   };
 }
 

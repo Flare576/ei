@@ -59,6 +59,7 @@ function convertToPreMarkedEiMessage(ocMsg: OpenCodeMessage): Message {
     f: true,
     t: true,
     p: true,
+    e: true,
   };
 }
 
