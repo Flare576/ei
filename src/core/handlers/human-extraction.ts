@@ -84,7 +84,7 @@ export async function handleFactFind(response: LLMResponse, state: StateManager)
 export async function handleHumanTopicScan(response: LLMResponse, state: StateManager): Promise<void> {
   const result = response.parsed as TopicScanResult | undefined;
   
-  markMessagesExtracted(response, state, "p");
+  markMessagesExtracted(response, state, "t");
   
   if (!result?.topics || !Array.isArray(result.topics)) {
     console.log("[handleHumanTopicScan] No topics detected or invalid result");

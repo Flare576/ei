@@ -65,6 +65,7 @@ function createMockStateManager() {
     messages_get: vi.fn((id: string) => messages[id] ?? []),
     messages_append: vi.fn(),
     messages_markPendingAsRead: vi.fn(),
+    messages_markExtracted: vi.fn().mockReturnValue(1),
     queue_enqueue: vi.fn(),
 
     _human: human,
@@ -187,6 +188,25 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
 
       expect(state.human_fact_upsert).not.toHaveBeenCalled();
     });
+
+    it("calls markMessagesExtracted with flag 'f'", async () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleFactFind,
+        data: {
+          personaId: "ei",
+          personaDisplayName: "Ei",
+          messages_context: [],
+          messages_analyze: [],
+          message_ids_to_mark: ["msg-1"],
+        },
+      });
+
+      const response = createMockResponse(request, { facts: [] });
+
+      await handlers[LLMNextStep.HandleFactFind](response, state as any);
+
+      expect(state.messages_markExtracted).toHaveBeenCalledWith("ei", ["msg-1"], "f");
+    });
   });
 
     it("skips fact with non-built-in name (BUILT_IN_FACT_NAMES validation)", async () => {
@@ -236,6 +256,25 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
       expect(state.human_fact_upsert).not.toHaveBeenCalled();
     });
   describe("handleHumanTopicScan", () => {
+    it("calls markMessagesExtracted with flag 't'", async () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleHumanTopicScan,
+        data: {
+          personaId: "ei",
+          personaDisplayName: "Ei",
+          messages_context: [],
+          messages_analyze: [],
+          message_ids_to_mark: ["msg-1"],
+        },
+      });
+
+      const response = createMockResponse(request, { topics: [] });
+
+      await handlers.handleHumanTopicScan(response, state as any);
+
+      expect(state.messages_markExtracted).toHaveBeenCalledWith("ei", ["msg-1"], "t");
+    });
+
     it("queues item match for each detected topic", async () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleHumanTopicScan,
