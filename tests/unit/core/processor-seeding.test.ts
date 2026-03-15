@@ -156,10 +156,10 @@ describe("Processor.seedBuiltinFacts()", () => {
     expect(birthday.description).toBe("March 3rd");
 
     // Newly seeded facts have empty descriptions
-    const age = human.facts.find(f => f.name === "Age")!;
-    expect(age).toBeDefined();
-    expect(age.description).toBe("");
-    expect(age.validated_date).toBe("");
+    const birthplace = human.facts.find(f => f.name === "Birthplace")!;
+    expect(birthplace).toBeDefined();
+    expect(birthplace.description).toBe("");
+    expect(birthplace.validated_date).toBe("");
   });
 
   it("scenario 3: complete state — all 25 facts already present, no duplicates added", async () => {

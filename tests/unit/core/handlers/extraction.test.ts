@@ -23,6 +23,8 @@ vi.mock("../../../../src/core/orchestrators/index.js", () => ({
   orchestratePersonaGeneration: vi.fn(),
   queueItemMatch: vi.fn().mockResolvedValue(1),
   queueItemUpdate: vi.fn(),
+  queueTopicMatch: vi.fn().mockResolvedValue(undefined),
+  queuePersonMatch: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../../../../src/core/embedding-service.js", () => ({
@@ -36,7 +38,7 @@ vi.mock("../../../../src/core/embedding-service.js", () => ({
 
 
 import { handlers } from "../../../../src/core/handlers/index.js";
-import { queueItemMatch, queueItemUpdate } from "../../../../src/core/orchestrators/index.js";
+import { queueItemUpdate, queueTopicMatch, queuePersonMatch } from "../../../../src/core/orchestrators/index.js";
 
 function createMockStateManager() {
   const human: HumanEntity = {
@@ -249,17 +251,16 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
 
       const response = createMockResponse(request, {
         topics: [
-          { type_of_topic: "Technology", value_of_topic: "AI research" },
-          { type_of_topic: "Hobbies", value_of_topic: "Photography" },
+          { name: "AI research", description: "Artificial intelligence", category: "Interest", reason: "User mentioned AI" },
+          { name: "Photography", description: "Taking photos", category: "Interest", reason: "User mentioned photography" },
         ],
       });
 
       await handlers.handleHumanTopicScan(response, state as any);
 
-      expect(queueItemMatch).toHaveBeenCalledTimes(2);
-      expect(queueItemMatch).toHaveBeenCalledWith(
-        "topic",
-        expect.objectContaining({ type_of_topic: "Technology" }),
+      expect(queueTopicMatch).toHaveBeenCalledTimes(2);
+      expect(queueTopicMatch).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "AI research" }),
         expect.any(Object),
         state,
         undefined
@@ -281,16 +282,15 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
 
       const response = createMockResponse(request, {
         people: [
-          { name_of_person: "Alice", type_of_person: "friend" },
+          { name: "Alice", description: "A friend", relationship: "friend", reason: "User mentioned Alice" },
         ],
       });
 
       await handlers.handleHumanPersonScan(response, state as any);
 
-      expect(queueItemMatch).toHaveBeenCalledTimes(1);
-      expect(queueItemMatch).toHaveBeenCalledWith(
-        "person",
-        expect.objectContaining({ name_of_person: "Alice" }),
+      expect(queuePersonMatch).toHaveBeenCalledTimes(1);
+      expect(queuePersonMatch).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "Alice" }),
         expect.any(Object),
         state,
         undefined

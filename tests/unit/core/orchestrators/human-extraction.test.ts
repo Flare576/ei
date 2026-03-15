@@ -259,8 +259,9 @@ describe("queueItemMatch (Step 2)", () => {
 
   it("queues topic match with all items", () => {
     const candidate = {
-      type_of_topic: "Interest",
-      value_of_topic: "Neural networks",
+      name: "Neural networks",
+      description: "Machine learning and AI research",
+      category: "Interest",
       reason: "User asked about ML",
     };
 
@@ -270,15 +271,16 @@ describe("queueItemMatch (Step 2)", () => {
       expect.objectContaining({
         candidate_type: "topic",
         candidate_name: "Neural networks",
-        candidate_value: "Interest",
+        candidate_value: "Machine learning and AI research",
       })
     );
   });
 
   it("queues person match with all items", () => {
     const candidate = {
-      name_of_person: "Bob",
-      type_of_person: "coworker",
+      name: "Bob",
+      description: "Coworker from the office",
+      relationship: "coworker",
       reason: "Mentioned Bob from work",
     };
 
@@ -288,7 +290,7 @@ describe("queueItemMatch (Step 2)", () => {
       expect.objectContaining({
         candidate_type: "person",
         candidate_name: "Bob",
-        candidate_value: "coworker",
+        candidate_value: "Coworker from the office",
       })
     );
   });
