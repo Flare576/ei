@@ -48,8 +48,6 @@ export {
   buildHumanFactScanPrompt,
   buildHumanTopicScanPrompt,
   buildHumanPersonScanPrompt,
-  buildHumanItemMatchPrompt,
-  buildHumanItemUpdatePrompt,
 } from "./human/index.js";
 export type {
   FactScanPromptData,
@@ -61,9 +59,7 @@ export type {
   FactScanResult,
   TopicScanResult,
   PersonScanResult,
-  ItemMatchPromptData,
   ItemMatchResult,
-  ItemUpdatePromptData,
   ExposureImpact,
   ItemUpdateResult,
 } from "./human/types.js";

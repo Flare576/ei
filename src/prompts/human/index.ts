@@ -2,8 +2,6 @@ export { buildHumanFactScanPrompt } from "./fact-scan.js";
 export { buildFactFindPrompt } from "./fact-find.js";
 export { buildHumanTopicScanPrompt } from "./topic-scan.js";
 export { buildHumanPersonScanPrompt } from "./person-scan.js";
-export { buildHumanItemMatchPrompt } from "./item-match.js";
-export { buildHumanItemUpdatePrompt } from "./item-update.js";
 export { buildTopicMatchPrompt } from "./topic-match.js";
 export { buildTopicUpdatePrompt } from "./topic-update.js";
 export { buildPersonMatchPrompt } from "./person-match.js";
@@ -27,9 +25,7 @@ export type {
   FactFindResult,
   TopicScanResult,
   PersonScanResult,
-  ItemMatchPromptData,
   ItemMatchResult,
-  ItemUpdatePromptData,
   ExposureImpact,
   ItemUpdateResultBase,
   FactUpdateResult,

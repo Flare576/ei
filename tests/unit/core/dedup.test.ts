@@ -13,9 +13,7 @@ import {
 } from "../../../src/core/types.js";
 
 // Mock orchestrators
-vi.mock("../../../src/core/orchestrators/index.js", () => ({
-  queueItemMatch: vi.fn().mockResolvedValue(1),
-}));
+vi.mock("../../../src/core/orchestrators/index.js", () => ({}));
 
 // Mock embedding service
 vi.mock("../../../src/core/embedding-service.js", () => ({

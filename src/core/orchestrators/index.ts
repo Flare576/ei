@@ -4,8 +4,6 @@ export {
   queueTopicScan,
   queuePersonScan,
   queueAllScans,
-  queueItemMatch,
-  queueItemUpdate,
   queueTopicMatch,
   queueTopicUpdate,
   queuePersonMatch,

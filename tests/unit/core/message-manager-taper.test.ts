@@ -22,8 +22,6 @@ vi.mock("../../../src/core/orchestrators/index.js", () => ({
   queueTopicScan: vi.fn().mockReturnValue(1),
   queuePersonScan: vi.fn().mockReturnValue(1),
   queueAllScans: vi.fn(),
-  queueItemMatch: vi.fn(),
-  queueItemUpdate: vi.fn(),
   orchestratePersonaGeneration: vi.fn(),
   isNewDay: vi.fn(),
   isPastCeremonyTime: vi.fn(),

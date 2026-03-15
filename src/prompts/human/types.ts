@@ -1,4 +1,4 @@
-import type { Message, DataItemBase, DataItemType } from "../../core/types.js";
+import type { Message } from "../../core/types.js";
 
 export interface PromptOutput {
   system: string;
@@ -29,12 +29,6 @@ export interface FactFindPromptData {
 export interface FactScanCandidate {
   type_of_fact: string;
   value_of_fact: string;
-  reason: string;
-}
-
-export interface TraitScanCandidate {
-  type_of_trait: string;
-  value_of_trait: string;
   reason: string;
 }
 
@@ -80,10 +74,6 @@ export interface FactScanResult {
   facts: FactScanCandidate[];
 }
 
-export interface TraitScanResult {
-  traits: TraitScanCandidate[];
-}
-
 export interface TopicScanResult {
   topics: TopicScanCandidate[];
 }
@@ -100,30 +90,8 @@ export interface FactFindResult {
   }>;
 }
 
-export interface ItemMatchPromptData {
-  candidate_type: DataItemType;
-  candidate_name: string;
-  candidate_value: string;
-  all_items: Array<{
-    data_type: DataItemType;
-    data_id: string;
-    data_name: string;
-    data_description: string;
-  }>;
-}
-
 export interface ItemMatchResult {
   matched_guid: string | null;
-}
-
-export interface ItemUpdatePromptData {
-  data_type: DataItemType;
-  existing_item: DataItemBase | null;
-  messages_context: Message[];
-  messages_analyze: Message[];
-  persona_name: string;
-  new_item_name?: string;
-  new_item_value?: string;
 }
 
 export type ExposureImpact = "high" | "medium" | "low" | "none";
@@ -142,10 +110,6 @@ export interface ItemUpdateResultBase {
 
 export interface FactUpdateResult extends ItemUpdateResultBase {}
 
-export interface TraitUpdateResult extends ItemUpdateResultBase {
-  strength?: number;
-}
-
 export interface TopicUpdateResult extends ItemUpdateResultBase {
   category?: string;
   exposure_desired?: number;
@@ -160,7 +124,6 @@ export interface PersonUpdateResult extends ItemUpdateResultBase {
 
 export type ItemUpdateResult = 
   | FactUpdateResult 
-  | TraitUpdateResult 
   | TopicUpdateResult 
   | PersonUpdateResult 
   | Record<string, never>;

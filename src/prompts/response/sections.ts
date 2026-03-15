@@ -5,7 +5,13 @@
 
 import type { PersonaTrait, Quote, PersonaTopic } from "../../core/types.js";
 import type { ResponsePromptData } from "./types.js";
-import { truncateDescription } from "../human/item-update.js";
+
+const DESCRIPTION_MAX_CHARS = 500;
+
+function truncateDescription(description: string): string {
+  if (description.length <= DESCRIPTION_MAX_CHARS) return description;
+  return description.slice(0, DESCRIPTION_MAX_CHARS) + "…";
+}
 
 // =============================================================================
 // IDENTITY SECTION

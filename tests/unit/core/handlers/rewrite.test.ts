@@ -16,8 +16,6 @@ import {
 // Mock orchestrators (same shape as extraction.test.ts)
 vi.mock("../../../../src/core/orchestrators/index.js", () => ({
   orchestratePersonaGeneration: vi.fn(),
-  queueItemMatch: vi.fn().mockResolvedValue(1),
-  queueItemUpdate: vi.fn(),
 }));
 
 // Mock embedding service so handleRewriteRewrite can compute embeddings

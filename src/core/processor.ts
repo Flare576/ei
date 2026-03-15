@@ -1173,7 +1173,10 @@ const toolNextSteps = new Set([
         }
       }
 
-      if (response.request.next_step === LLMNextStep.HandleHumanItemUpdate) {
+      if (
+        response.request.next_step === LLMNextStep.HandleTopicUpdate ||
+        response.request.next_step === LLMNextStep.HandlePersonUpdate
+      ) {
         this.interface.onHumanUpdated?.();
         this.interface.onQuoteAdded?.();
       }

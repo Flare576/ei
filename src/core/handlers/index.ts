@@ -15,7 +15,7 @@ import {
   handlePersonaTopicUpdate,
 } from "./persona-topics.js";
 import { handleFactFind, handleHumanTopicScan, handleHumanPersonScan } from "./human-extraction.js";
-import { handleHumanItemMatch, handleHumanItemUpdate, handleTopicMatch, handleTopicUpdate, handlePersonMatch, handlePersonUpdate } from "./human-matching.js";
+import { handleTopicMatch, handleTopicUpdate, handlePersonMatch, handlePersonUpdate } from "./human-matching.js";
 import { handleRewriteScan, handleRewriteRewrite } from "./rewrite.js";
 import { handleDedupCurate } from "./dedup.js";
 
@@ -26,8 +26,6 @@ export const handlers: Record<LLMNextStep, ResponseHandler> = {
   handleFactFind,
   handleHumanTopicScan,
   handleHumanPersonScan,
-  handleHumanItemMatch,
-  handleHumanItemUpdate,
   handleTopicMatch,
   handleTopicUpdate,
   handlePersonMatch,
