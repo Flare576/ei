@@ -9,11 +9,19 @@ import {
   type DataItemBase,
 } from "../types.js";
 import type { StateManager } from "../state-manager.js";
-import type { ItemMatchResult, ItemUpdateResult, ExposureImpact } from "../../prompts/human/types.js";
-import { queueItemUpdate, type ExtractionContext } from "../orchestrators/index.js";
-import { getEmbeddingService, getItemEmbeddingText } from "../embedding-service.js";
+import type { ItemMatchResult, ItemUpdateResult, ExposureImpact, TopicUpdateResult, PersonUpdateResult } from "../../prompts/human/types.js";
+import { queueItemUpdate, queueTopicUpdate, queuePersonUpdate, type ExtractionContext } from "../orchestrators/index.js";
+import { getEmbeddingService, getItemEmbeddingText, getTopicEmbeddingText, getPersonEmbeddingText } from "../embedding-service.js";
+
+function mergeGroups(personaGroup: string | null, isNewItem: boolean, existing: string[] | undefined): string[] | undefined {
+  if (!personaGroup) return existing;
+  if (isNewItem) return [personaGroup];
+  const groups = new Set(existing ?? []);
+  groups.add(personaGroup);
+  return Array.from(groups);
+}
 import { crossFind } from "../utils/index.js";
-import { splitMessagesByTimestamp, getMessageText } from "./utils.js";
+import { splitMessagesByTimestamp, resolveMessageWindow, getMessageText } from "./utils.js";
 
 export function handleHumanItemMatch(response: LLMResponse, state: StateManager): void {
   const result = response.parsed as ItemMatchResult | undefined;
@@ -209,10 +217,294 @@ export async function handleHumanItemUpdate(response: LLMResponse, state: StateM
   console.log(`[handleHumanItemUpdate] ${isNewItem ? "Created" : "Updated"} ${candidateType} "${result.name}"`);
 }
 
-function normalizeQuotes(text: string): string {
+export function handleTopicMatch(response: LLMResponse, state: StateManager): void {
+  const result = response.parsed as ItemMatchResult | undefined;
+  if (!result) {
+    console.error("[handleTopicMatch] No parsed result");
+    return;
+  }
+
+  const personaId = response.request.data.personaId as string;
+  const personaDisplayName = response.request.data.personaDisplayName as string;
+  const { messages_context, messages_analyze } = resolveMessageWindow(response, state);
+
+  let matched_guid = result.matched_guid;
+  if (matched_guid === "new") {
+    matched_guid = null;
+  } else if (matched_guid) {
+    const human = state.getHuman();
+    const found = human.topics.find(t => t.id === matched_guid);
+    if (!found) {
+      console.warn(`[handleTopicMatch] matched_guid "${matched_guid}" not found in topics — treating as new`);
+      matched_guid = null;
+    }
+  }
+  result.matched_guid = matched_guid;
+
+  const context: ExtractionContext & {
+    candidateName: string;
+    candidateDescription: string;
+    candidateCategory: string;
+    extraction_model?: string;
+  } = {
+    personaId,
+    personaDisplayName,
+    messages_context,
+    messages_analyze,
+    candidateName: response.request.data.candidateName as string,
+    candidateDescription: response.request.data.candidateDescription as string,
+    candidateCategory: response.request.data.candidateCategory as string,
+    extraction_model: response.request.data.extraction_model as string | undefined,
+  };
+
+  queueTopicUpdate(result, context, state);
+  const matched = matched_guid ? `matched GUID "${matched_guid}"` : "no match (new topic)";
+  console.log(`[handleTopicMatch] topic "${context.candidateName}": ${matched}`);
+}
+
+export function handlePersonMatch(response: LLMResponse, state: StateManager): void {
+  const result = response.parsed as ItemMatchResult | undefined;
+  if (!result) {
+    console.error("[handlePersonMatch] No parsed result");
+    return;
+  }
+
+  const personaId = response.request.data.personaId as string;
+  const personaDisplayName = response.request.data.personaDisplayName as string;
+  const { messages_context, messages_analyze } = resolveMessageWindow(response, state);
+
+  let matched_guid = result.matched_guid;
+  if (matched_guid === "new") {
+    matched_guid = null;
+  } else if (matched_guid) {
+    const human = state.getHuman();
+    const found = human.people.find(p => p.id === matched_guid);
+    if (!found) {
+      console.warn(`[handlePersonMatch] matched_guid "${matched_guid}" not found in people — treating as new`);
+      matched_guid = null;
+    }
+  }
+  result.matched_guid = matched_guid;
+
+  const context: ExtractionContext & {
+    candidateName: string;
+    candidateDescription: string;
+    candidateRelationship: string;
+    extraction_model?: string;
+  } = {
+    personaId,
+    personaDisplayName,
+    messages_context,
+    messages_analyze,
+    candidateName: response.request.data.candidateName as string,
+    candidateDescription: response.request.data.candidateDescription as string,
+    candidateRelationship: response.request.data.candidateRelationship as string,
+    extraction_model: response.request.data.extraction_model as string | undefined,
+  };
+
+  queuePersonUpdate(result, context, state);
+  const matched = matched_guid ? `matched GUID "${matched_guid}"` : "no match (new person)";
+  console.log(`[handlePersonMatch] person "${context.candidateName}": ${matched}`);
+}
+
+export async function handleTopicUpdate(response: LLMResponse, state: StateManager): Promise<void> {
+  const result = response.parsed as (TopicUpdateResult & { quotes?: Array<{ text: string; reason: string }> }) | undefined;
+
+  if (!result || Object.keys(result).length === 0) {
+    console.log("[handleTopicUpdate] No changes needed (empty result)");
+    return;
+  }
+
+  const isNewItem = response.request.data.isNewItem as boolean;
+  const existingItemId = response.request.data.existingItemId as string | undefined;
+  const personaId = response.request.data.personaId as string;
+  const personaDisplayName = response.request.data.personaDisplayName as string;
+  const candidateCategory = response.request.data.candidateCategory as string | undefined;
+
+  if (!result.name || !result.description || result.sentiment === undefined) {
+    console.error("[handleTopicUpdate] Missing required fields in result");
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const human = state.getHuman();
+
+  const resolveItemId = (): string => {
+    if (isNewItem || !existingItemId) return crypto.randomUUID();
+    return human.topics.find(t => t.id === existingItemId) ? existingItemId : crypto.randomUUID();
+  };
+  const itemId = resolveItemId();
+
+  const persona = state.persona_getById(personaId);
+  const personaGroup = persona?.group_primary ?? null;
+
+  const existingTopic = isNewItem ? undefined : human.topics.find(t => t.id === existingItemId);
+
+  let embedding: number[] | undefined;
+  try {
+    const embeddingService = getEmbeddingService();
+    const category = result.category ?? candidateCategory ?? existingTopic?.category;
+    const text = getTopicEmbeddingText({ name: result.name, category, description: result.description });
+    embedding = await embeddingService.embed(text);
+  } catch (err) {
+    console.warn(`[handleTopicUpdate] Failed to compute embedding for topic "${result.name}":`, err);
+  }
+
+  const exposureImpact = result.exposure_impact as ExposureImpact | undefined;
+  const topic: Topic = {
+    id: itemId,
+    name: result.name,
+    description: result.description,
+    sentiment: result.sentiment,
+    category: result.category ?? candidateCategory ?? existingTopic?.category,
+    exposure_current: calculateExposureCurrent(exposureImpact),
+    exposure_desired: result.exposure_desired ?? 0.5,
+    last_updated: now,
+    learned_by: isNewItem ? personaId : existingTopic?.learned_by,
+    last_changed_by: personaId,
+    persona_groups: mergeGroups(personaGroup, isNewItem, existingTopic?.persona_groups),
+    embedding,
+  };
+  state.human_topic_upsert(topic);
+
+  const allMessages = state.messages_get(personaId);
+  await validateAndStoreQuotes(result.quotes, allMessages, itemId, personaDisplayName, personaGroup, state);
+
+  console.log(`[handleTopicUpdate] ${isNewItem ? "Created" : "Updated"} topic "${result.name}"`);
+}
+
+export async function handlePersonUpdate(response: LLMResponse, state: StateManager): Promise<void> {
+  const result = response.parsed as (PersonUpdateResult & { quotes?: Array<{ text: string; reason: string }> }) | undefined;
+
+  if (!result || Object.keys(result).length === 0) {
+    console.log("[handlePersonUpdate] No changes needed (empty result)");
+    return;
+  }
+
+  const isNewItem = response.request.data.isNewItem as boolean;
+  const existingItemId = response.request.data.existingItemId as string | undefined;
+  const personaId = response.request.data.personaId as string;
+  const personaDisplayName = response.request.data.personaDisplayName as string;
+  const candidateRelationship = response.request.data.candidateRelationship as string | undefined;
+
+  if (!result.name || !result.description || result.sentiment === undefined) {
+    console.error("[handlePersonUpdate] Missing required fields in result");
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const human = state.getHuman();
+
+  const resolveItemId = (): string => {
+    if (isNewItem || !existingItemId) return crypto.randomUUID();
+    return human.people.find(p => p.id === existingItemId) ? existingItemId : crypto.randomUUID();
+  };
+  const itemId = resolveItemId();
+
+  const persona = state.persona_getById(personaId);
+  const personaGroup = persona?.group_primary ?? null;
+
+  const existingPerson = isNewItem ? undefined : human.people.find(p => p.id === existingItemId);
+
+  let embedding: number[] | undefined;
+  try {
+    const embeddingService = getEmbeddingService();
+    const relationship = result.relationship ?? candidateRelationship ?? existingPerson?.relationship;
+    const text = getPersonEmbeddingText({ name: result.name, relationship, description: result.description });
+    embedding = await embeddingService.embed(text);
+  } catch (err) {
+    console.warn(`[handlePersonUpdate] Failed to compute embedding for person "${result.name}":`, err);
+  }
+
+  const exposureImpact = result.exposure_impact as ExposureImpact | undefined;
+  const person: Person = {
+    id: itemId,
+    name: result.name,
+    description: result.description,
+    sentiment: result.sentiment,
+    relationship: result.relationship ?? candidateRelationship ?? existingPerson?.relationship ?? "Unknown",
+    exposure_current: calculateExposureCurrent(exposureImpact),
+    exposure_desired: result.exposure_desired ?? 0.5,
+    last_updated: now,
+    learned_by: isNewItem ? personaId : existingPerson?.learned_by,
+    last_changed_by: personaId,
+    persona_groups: mergeGroups(personaGroup, isNewItem, existingPerson?.persona_groups),
+    embedding,
+  };
+  state.human_person_upsert(person);
+
+  const allMessages = state.messages_get(personaId);
+  await validateAndStoreQuotes(result.quotes, allMessages, itemId, personaDisplayName, personaGroup, state);
+
+  console.log(`[handlePersonUpdate] ${isNewItem ? "Created" : "Updated"} person "${result.name}"`);
+}
+
+function normalizeText(text: string): string {
   return text
-    .replace(/[\u201C\u201D]/g, '"')  // Curly double quotes to straight
-    .replace(/[\u2018\u2019]/g, "'"); // Curly single quotes to straight
+    .replace(/[\u201C\u201D]/g, '"')              // curly double quotes
+    .replace(/[\u2018\u2019\u0060\u00B4]/g, "'")  // curly single, backtick, acute accent
+    .replace(/[\u2014\u2013\u2012]/g, '-')         // em-dash, en-dash, figure dash
+    .replace(/\u00A0/g, ' ')                       // non-breaking space
+    .replace(/[\u2000-\u200F]/g, ' ')              // unicode space variants
+    .replace(/\u2026|\.\.\./g, '\u2026');           // normalize both ellipsis forms → unicode ellipsis (1:1)
+}
+
+function stripPunctuation(text: string): string {
+  // Remove characters LLMs commonly mangle, keep spaces and alphanumeric
+  // Strip: punctuation, unicode punctuation variants, curly quotes, dashes, etc.
+  // Keep: letters, digits, spaces
+  return text
+    .replace(/[^\w\s]/gu, ' ')   // replace non-word, non-space with space
+    .replace(/\s+/g, ' ')        // collapse multiple spaces
+    .trim()
+    .toLowerCase();
+}
+
+interface WordBoundaryMatch {
+  start: number;
+  end: number;
+  text: string;
+}
+
+function findQuoteByWords(quoteText: string, msgText: string): WordBoundaryMatch | null {
+  const strippedQuote = stripPunctuation(quoteText);
+  const quoteWords = strippedQuote.split(' ').filter(w => w.length > 0);
+
+  if (quoteWords.length < 3) return null;  // Too short to trust — require at least 3 words
+
+  // Build word token list from original message with original positions
+  const wordTokens: Array<{ word: string; start: number; end: number }> = [];
+  const wordRegex = /\S+/g;
+  let match: RegExpExecArray | null;
+  while ((match = wordRegex.exec(msgText)) !== null) {
+    wordTokens.push({
+      word: stripPunctuation(match[0]),
+      start: match.index,
+      end: match.index + match[0].length,
+    });
+  }
+
+  // Find contiguous sequence of words matching the quote words
+  for (let i = 0; i <= wordTokens.length - quoteWords.length; i++) {
+    let allMatch = true;
+    for (let j = 0; j < quoteWords.length; j++) {
+      if (wordTokens[i + j].word !== quoteWords[j]) {
+        allMatch = false;
+        break;
+      }
+    }
+    if (allMatch) {
+      const startToken = wordTokens[i];
+      const endToken = wordTokens[i + quoteWords.length - 1];
+      return {
+        start: startToken.start,
+        end: endToken.end,
+        text: msgText.slice(startToken.start, endToken.end),
+      };
+    }
+  }
+
+  return null;
 }
 
 async function validateAndStoreQuotes(
@@ -229,88 +521,107 @@ async function validateAndStoreQuotes(
     let found = false;
     for (const message of messages) {
       const msgText = getMessageText(message);
-      const normalizedMsg = normalizeQuotes(msgText);
-      const normalizedQuote = normalizeQuotes(candidate.text);
+
+      // Level 1: normalized exact match
+      const normalizedMsg = normalizeText(msgText);
+      const normalizedQuote = normalizeText(candidate.text);
       const start = normalizedMsg.indexOf(normalizedQuote);
+
+      let matchStart: number;
+      let matchEnd: number;
+      let matchText: string;
+      let matchLevel: string;
+
       if (start !== -1) {
-        const end = start + candidate.text.length;
-        
-        // Check for ANY overlapping quote in this message (not just exact match)
-        const existing = state.human_quote_getForMessage(message.id);
-        const overlapping = existing.find(q =>
-          q.start !== null && q.end !== null &&
-          start < q.end && end > q.start  // ranges overlap
-        );
-        
-        if (overlapping) {
-          // Merge: expand to the union of both ranges
-          const mergedStart = Math.min(start, overlapping.start!);
-          const mergedEnd = Math.max(end, overlapping.end!);
-          const mergedText = msgText.slice(mergedStart, mergedEnd);
-          
-          // Merge data_item_ids and persona_groups (deduplicated)
-          const mergedDataItemIds = overlapping.data_item_ids.includes(dataItemId)
-            ? overlapping.data_item_ids
-            : [...overlapping.data_item_ids, dataItemId];
-          const group = personaGroup || "General";
-          const mergedGroups = overlapping.persona_groups.includes(group)
-            ? overlapping.persona_groups
-            : [...overlapping.persona_groups, group];
-          
-          // Only recompute embedding if the text actually changed
-          let embedding = overlapping.embedding;
-          if (mergedText !== overlapping.text) {
-            try {
-              const embeddingService = getEmbeddingService();
-              embedding = await embeddingService.embed(mergedText);
-            } catch (err) {
-              console.warn(`[extraction] Failed to recompute embedding for merged quote: "${mergedText.slice(0, 30)}..."`, err);
-            }
+        matchStart = start;
+        matchEnd = start + candidate.text.length;
+        matchText = candidate.text;
+        matchLevel = "exact";
+      } else {
+        // Level 2: word-boundary fallback
+        const wordMatch = findQuoteByWords(candidate.text, msgText);
+        if (!wordMatch) continue;
+        matchStart = wordMatch.start;
+        matchEnd = wordMatch.end;
+        matchText = wordMatch.text;
+        matchLevel = "word-boundary";
+      }
+
+      const existing = state.human_quote_getForMessage(message.id);
+      const overlapping = existing.find(q =>
+        q.start !== null && q.end !== null &&
+        matchStart < q.end && matchEnd > q.start
+      );
+
+      if (overlapping) {
+        const mergedStart = Math.min(matchStart, overlapping.start!);
+        const mergedEnd = Math.max(matchEnd, overlapping.end!);
+        const mergedText = msgText.slice(mergedStart, mergedEnd);
+
+        const mergedDataItemIds = overlapping.data_item_ids.includes(dataItemId)
+          ? overlapping.data_item_ids
+          : [...overlapping.data_item_ids, dataItemId];
+        const group = personaGroup || "General";
+        const mergedGroups = overlapping.persona_groups.includes(group)
+          ? overlapping.persona_groups
+          : [...overlapping.persona_groups, group];
+
+        let embedding = overlapping.embedding;
+        if (mergedText !== overlapping.text) {
+          try {
+            const embeddingService = getEmbeddingService();
+            embedding = await embeddingService.embed(mergedText);
+          } catch (err) {
+            console.warn(`[extraction] Failed to recompute embedding for merged quote: "${mergedText.slice(0, 30)}..."`, err);
           }
-          
-          state.human_quote_update(overlapping.id, {
-            start: mergedStart,
-            end: mergedEnd,
-            text: mergedText,
-            data_item_ids: mergedDataItemIds,
-            persona_groups: mergedGroups,
-            embedding,
-          });
-          console.log(`[extraction] Merged overlapping quote: "${mergedText.slice(0, 50)}..." (${mergedStart}-${mergedEnd})`);
-          found = true;
-          break;
         }
-        
-        let embedding: number[] | undefined;
-        try {
-          const embeddingService = getEmbeddingService();
-          embedding = await embeddingService.embed(candidate.text);
-        } catch (err) {
-          console.warn(`[extraction] Failed to compute embedding for quote: "${candidate.text.slice(0, 30)}..."`, err);
-        }
-        
-        const quote: Quote = {
-          id: crypto.randomUUID(),
-          message_id: message.id,
-          data_item_ids: [dataItemId],
-          persona_groups: [personaGroup || "General"],
-          text: candidate.text,
-          speaker: message.role === "human" ? "human" : personaName,
-          timestamp: message.timestamp,
-          start: start,
-          end: end,
-          created_at: new Date().toISOString(),
-          created_by: "extraction",
+
+        state.human_quote_update(overlapping.id, {
+          start: mergedStart,
+          end: mergedEnd,
+          text: mergedText,
+          data_item_ids: mergedDataItemIds,
+          persona_groups: mergedGroups,
           embedding,
-        };
-        state.human_quote_add(quote);
-        console.log(`[extraction] Captured quote: "${candidate.text.slice(0, 50)}..."`);
+        });
+        console.log(`[extraction] Merged overlapping quote: "${mergedText.slice(0, 50)}..." (${mergedStart}-${mergedEnd})`);
         found = true;
         break;
       }
+
+      let embedding: number[] | undefined;
+      try {
+        const embeddingService = getEmbeddingService();
+        embedding = await embeddingService.embed(matchText);
+      } catch (err) {
+        console.warn(`[extraction] Failed to compute embedding for quote: "${matchText.slice(0, 30)}..."`, err);
+      }
+
+      const quote: Quote = {
+        id: crypto.randomUUID(),
+        message_id: message.id,
+        data_item_ids: [dataItemId],
+        persona_groups: [personaGroup || "General"],
+        text: matchText,
+        speaker: message.role === "human" ? "human" : personaName,
+        timestamp: message.timestamp,
+        start: matchStart,
+        end: matchEnd,
+        created_at: new Date().toISOString(),
+        created_by: "extraction",
+        embedding,
+      };
+      state.human_quote_add(quote);
+      if (matchLevel === "word-boundary") {
+        console.log(`[extraction] Captured quote (word-boundary match): "${matchText.slice(0, 50)}..."`);
+      } else {
+        console.log(`[extraction] Captured quote: "${matchText.slice(0, 50)}..."`);
+      }
+      found = true;
+      break;
     }
     if (!found) {
-      console.log(`[extraction] Quote not found in messages, skipping: "${candidate.text?.slice(0, 50)}..."`);
+      console.warn(`[extraction] Quote not found in messages (both levels), skipping: "${candidate.text?.slice(0, 50)}..."`);
     }
   }
 }

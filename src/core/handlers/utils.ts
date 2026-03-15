@@ -1,6 +1,28 @@
 import type { Message, LLMResponse } from "../types.js";
 import type { StateManager } from "../state-manager.js";
 
+export function resolveMessageWindow(
+  response: LLMResponse,
+  state: StateManager
+): { messages_context: Message[]; messages_analyze: Message[] } {
+  const personaId = response.request.data.personaId as string;
+  const messageIdsToMark = response.request.data.message_ids_to_mark as string[] | undefined;
+  const allMessages = state.messages_get(personaId);
+
+  if (messageIdsToMark && messageIdsToMark.length > 0) {
+    const messageIdSet = new Set(messageIdsToMark);
+    const messages_analyze = allMessages.filter(m => messageIdSet.has(m.id));
+    const analyzeStartTime = messages_analyze[0]?.timestamp ?? '9999';
+    const messages_context = allMessages.filter(m =>
+      !messageIdSet.has(m.id) && new Date(m.timestamp).getTime() < new Date(analyzeStartTime).getTime()
+    );
+    return { messages_context, messages_analyze };
+  }
+
+  const analyzeFrom = response.request.data.analyze_from_timestamp as string | null;
+  return splitMessagesByTimestamp(allMessages, analyzeFrom);
+}
+
 export type ExtractionFlag = "f" | "t" | "p";
 
 export function splitMessagesByTimestamp(

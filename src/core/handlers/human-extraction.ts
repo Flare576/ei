@@ -5,7 +5,7 @@ import type {
   TopicScanResult,
   PersonScanResult,
 } from "../../prompts/human/types.js";
-import { queueItemMatch, type ExtractionContext } from "../orchestrators/index.js";
+import { queueTopicMatch, queuePersonMatch, type ExtractionContext } from "../orchestrators/index.js";
 import { markMessagesExtracted } from "./utils.js";
 import { BUILT_IN_FACT_NAMES } from "../constants/built-in-facts.js";
 import { getEmbeddingService, getItemEmbeddingText } from "../embedding-service.js";
@@ -96,7 +96,7 @@ export async function handleHumanTopicScan(response: LLMResponse, state: StateMa
 
   const extractionModel = (response.request.data as Record<string, unknown>).extraction_model as string | undefined;
   for (const candidate of result.topics) {
-    await queueItemMatch("topic", candidate, context, state, extractionModel);
+    await queueTopicMatch(candidate, context, state, extractionModel);
   }
   console.log(`[handleHumanTopicScan] Queued ${result.topics.length} topic(s) for matching`);
 }
@@ -116,7 +116,7 @@ export async function handleHumanPersonScan(response: LLMResponse, state: StateM
 
   const extractionModel = (response.request.data as Record<string, unknown>).extraction_model as string | undefined;
   for (const candidate of result.people) {
-    await queueItemMatch("person", candidate, context, state, extractionModel);
+    await queuePersonMatch(candidate, context, state, extractionModel);
   }
   console.log(`[handleHumanPersonScan] Queued ${result.people.length} person(s) for matching`);
 }
