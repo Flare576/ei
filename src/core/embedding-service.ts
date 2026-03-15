@@ -54,6 +54,14 @@ export function getItemEmbeddingText(item: { name: string; description?: string 
   return item.name;
 }
 
+export function getTopicEmbeddingText(topic: { name: string; category?: string; description?: string }): string {
+  return [topic.name, topic.category, topic.description].filter(Boolean).join(' - ');
+}
+
+export function getPersonEmbeddingText(person: { name: string; relationship?: string; description?: string }): string {
+  return [person.name, person.relationship, person.description].filter(Boolean).join(' - ');
+}
+
 export function needsEmbeddingUpdate(
   existing: { name: string; description?: string } | undefined,
   incoming: { name: string; description?: string }
