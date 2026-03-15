@@ -1,6 +1,5 @@
 /**
  * Built-in biographical fact categories that Ei tracks.
- * These represent the 25 known-category facts for the structured fact model.
  *
  * BUILT_IN_FACTS: Array of fact objects (name field only) for iteration/display.
  * BUILT_IN_FACT_NAMES: Set<string> for O(1) lookup (is this fact built-in?).
@@ -11,7 +10,6 @@ export const BUILT_IN_FACTS: { name: string }[] = [
   { name: "Full Name" },
   { name: "Nickname/Preferred Name" },
   { name: "Birthday" },
-  { name: "Age" },
   { name: "Birthplace" },
   { name: "Hometown" },
   { name: "Current Location" },
@@ -24,12 +22,17 @@ export const BUILT_IN_FACTS: { name: string }[] = [
 
   // Personal
   { name: "Marital Status" },
+  { name: "Spouse Name" },
+  { name: "Spouse Birthday" },
+  { name: "Date of Marriage" },
   { name: "Children" },
+  { name: "Parents" },
   { name: "Gender" },
   { name: "Pronouns" },
   { name: "Eye Color" },
   { name: "Hair Color" },
   { name: "Height" },
+  { name: "Weight" },
 
   // Background
   { name: "Nationality/Citizenship" },
