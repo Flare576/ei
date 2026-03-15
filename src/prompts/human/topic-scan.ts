@@ -8,73 +8,62 @@ export function buildHumanTopicScanPrompt(data: TopicScanPromptData): PromptOutp
 
   const personaName = data.persona_name;
 
-  const taskFragment = `# Task
+  const system = `# Task
 
-You are scanning a conversation to quickly identify TOPICS of interest TO the HUMAN USER. Your ONLY job is to spot mentions of TOPICS. Do NOT analyze them deeply. Just detect and flag.`;
+You are scanning a conversation to quickly identify TOPICS of interest to the HUMAN USER.
 
-  const specificNeedsFragment = `## Specific Needs
+Detect and flag. Do NOT analyze deeply — that happens later.
 
-Your job is to quickly identify:
-1. Which TOPICS were mentioned or relevant
-    a. Only flag TOPICS that were actually discussed, not just tangentially related
-    b. Be CONSERVATIVE - only suggest genuinely important, long-term relevant TOPICS
-    c. Be CLEAR - state your \`reason\` for including this TOPIC with any evidence you used
+## What to Capture
 
-The goal of the system is to remember important TOPICS to the HUMAN USER in order to ask about them in the future.`;
+Flag a TOPIC when it was meaningfully discussed — not just mentioned in passing.
 
-  const guidelinesFragment = `## Guidelines
+Be **conservative**: only flag topics that are genuinely relevant to the human user long-term. Noise is worse than gaps.
 
-# A TOPIC Is:
+## What a TOPIC Is
 
-A meaningful subject or concept relevant to the HUMAN USER. It is:
+A meaningful subject in the human user's life: something they care about, work on, worry over, or experience. It has context and weight — not just a passing reference.
 
-- **Specific and Contextual:** Not a broad category or just a list of isolated facts. It must have narrative or direct relevance in the conversation.
+**NOT a TOPIC:**
+- Biographical facts (birthday, job title, location) — those are Facts
+- People (family, friends, coworkers, AI personas) — those are People
+- One-off mentions, small talk, or jokes with no deeper relevance
 
-1. **Primary Focus** - Capture the main idea of the conversation, not minute details
-2. **Participation** - Things the HUMAN USER does or wants to do
-3. **Interests** - Hobbies or concepts they spend time on BY CHOICE
-4. **Responsibilities** - Tasks or requirements that occupy their time BY NECESSITY
-5. **Knowledge** - Ideas they are exploring or learning about, or are expert in
-6. **Dreams** - Wild ideas, hopes for the future, or vision of an ideal state
-7. **Conflicts** - Things they have difficulty with or are frustrated with
-8. **Concerns** - Ideas they express worry over
-9. **Stories and Characters** - Extended narratives they share (more than a sentence or two)
-10. **Location** - Favorite places, travel destinations
-11. **Preferences** - "I like {thing}" or "I hate {thing}" statements`;
+## Category
 
-  const doNotCaptureFragment = `# **IMPORTANT** The Following Are NOT TOPICS
+Assign each TOPIC one category. Pick the closest fit:
 
-Do NOT extract biographical facts (birthday, job title, location) or personality traits — those are Facts/Traits, not Topics. Do NOT extract people (family, friends, coworkers) — those are People. Do NOT extract AI Persona details — those are tracked separately.`;
+- **Interest** — hobbies, activities, ongoing fascinations
+- **Goal** — things they want to achieve
+- **Dream** — aspirational, maybe unrealistic desires
+- **Conflict** — internal or external struggles, dilemmas
+- **Concern** — worries, anxieties about something real
+- **Fear** — things that scare them
+- **Hope** — positive expectations for the future
+- **Plan** — concrete intentions with steps in mind
+- **Project** — active undertakings with real progress
+- **Event** — a specific, significant moment that either party might reference later ("remember when...")
 
-  const criticalFragment = `# CRITICAL INSTRUCTIONS
+When in doubt, pick the closest match. The update step will refine it.
 
-ONLY ANALYZE the "Most Recent Messages" in the following conversation. The "Earlier Conversation" is provided for your context and has already been processed!
-
-The JSON format is:
+## Output Format
 
 \`\`\`json
 {
   "topics": [
     {
-        "type_of_topic": "The Topic Type from the list above",
-        "value_of_topic": "<actual topic from the conversation>",
-        "reason": "The justification of including this specific topic"
+      "name": "Short label for the topic (10-75 characters)",
+      "description": "1-2 sentences: what this topic is and why it matters to the user",
+      "category": "One of the categories above",
+      "reason": "Evidence from the conversation that justified flagging this topic"
     }
   ]
 }
 \`\`\`
 
-**Return JSON only.**`;
+**Return JSON only.**
 
-  const system = `${taskFragment}
-
-${specificNeedsFragment}
-
-${guidelinesFragment}
-
-${doNotCaptureFragment}
-
-${criticalFragment}`;
+ONLY ANALYZE the "Most Recent Messages". The "Earlier Conversation" is provided for context only — it has already been processed.`;
 
   const earlierSection = data.messages_context.length > 0
     ? `## Earlier Conversation
@@ -98,9 +87,10 @@ Scan the "Most Recent Messages" for TOPICS of interest to the human user.
 {
   "topics": [
     {
-        "type_of_topic": "The Topic Type from the list above",
-        "value_of_topic": "<actual topic from the conversation>",
-        "reason": "The justification of including this specific topic"
+      "name": "Short label for the topic (10-75 characters)",
+      "description": "1-2 sentences: what this topic is and why it matters to the user",
+      "category": "Interest|Goal|Dream|Conflict|Concern|Fear|Hope|Plan|Project|Event",
+      "reason": "Evidence from the conversation that justified flagging this topic"
     }
   ]
 }

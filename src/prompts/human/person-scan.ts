@@ -8,70 +8,64 @@ export function buildHumanPersonScanPrompt(data: PersonScanPromptData): PromptOu
 
   const personaName = data.persona_name;
 
-  const taskFragment = `# Task
+  const system = `# Task
 
-You are scanning a conversation to quickly identify PEOPLE of interest TO the HUMAN USER. Your ONLY job is to spot mentions of PEOPLE. Do NOT analyze them deeply. Just detect and flag.`;
+You are scanning a conversation to quickly identify PEOPLE in the HUMAN USER's life.
 
-  const specificNeedsFragment = `## Specific Needs
+Detect and flag. Do NOT analyze deeply — that happens later.
 
-Your job is to quickly identify:
-1. Which PEOPLE were mentioned or relevant
-    a. Only flag PEOPLE that were actually discussed, not just tangentially related
-    b. Be CONSERVATIVE - only suggest genuinely important, long-term relevant PEOPLE
-        i. Ignore: greetings, small talk, one-off mentions, jokes
-    c. Be CLEAR - state your \`reason\` for including this PERSON with any evidence you used`;
+## What to Capture
 
-  const guidelinesFragment = `## Guidelines
+Flag a PERSON when they were meaningfully discussed — not just mentioned in passing.
 
-1. **Unknown Types and Names of PEOPLE**
-    a. In some conversations, it may be impossible to identify which "Brother" or which "Bob" the user is referring to.
-        - Use "Unknown" for the missing field and explain in the \`reason\`
-        - This will trigger a later validation step to get more information!
-    b. If you're adding a NEW PERSON, be as specific as you can, for example:
-        - { "type_of_person": "Unknown", "name_of_person": "Alice from work", "reason": "Mentioned but relationship unclear" }
-        - { "type_of_person": "Sibling", "name_of_person": "Name Unknown", "reason": "Mentioned a sibling, name not given" }
+Be **conservative**: ignore one-off mentions, greetings, small talk, or jokes. Only flag people who matter to the human user's life.
 
-**A PERSON Is**
-* Immediate Family: Father, Husband, Son, Brother, Mother, Wife, Daughter, Sister (and step/in-law variants)
-* Extended Family: Grandfather, Grandmother, Aunt, Uncle, Cousin, Niece, Nephew
-* Close Acquaintance
-* Friend
-* Lover / Love Interest
-* Fiance / Spouse
-* Coworker
-* AI Persona (use \`type_of_person: "Persona"\`)
+## What a PERSON Is
 
-**A PERSON Is NOT**
-- Do NOT extract the user's own biographical facts (birthday, job title, location) or personality traits - those are Facts/Traits, not People.
-- Do NOT extract general topics, interests, or hobbies - those are Topics.
-- Do NOT extract fictitious characters from books, movies, or media.`;
-  const criticalFragment = `# CRITICAL INSTRUCTIONS
+Someone in the human user's world. Use the relationship as the primary classifier:
 
-ONLY ANALYZE the "Most Recent Messages" in the following conversation. The "Earlier Conversation" is provided for your context and has already been processed!
+**Immediate Family**: Father, Mother, Son, Daughter, Brother, Sister, Husband, Wife, Partner (and step/in-law variants)
 
-The JSON format is:
+**Extended Family**: Grandfather, Grandmother, Aunt, Uncle, Cousin, Niece, Nephew
+
+**Social**: Friend, Close Acquaintance, Lover, Love Interest, Fiance, Spouse
+
+**Professional**: Coworker, Manager, Report, Mentor, Client
+
+**AI**: Persona (use \`relationship: "AI Persona"\` for AI companions and assistants)
+
+**NOT a PERSON:**
+- The user themselves
+- Biographical facts, topics, or hobbies
+- Fictional characters from books, movies, or media
+- Public figures only mentioned in passing (celebrities, politicians) — unless the user has a real relationship with them
+
+## When Identity Is Unclear
+
+If you can't identify which "Bob" or which "Brother" the user means, use "Unknown" and explain in the reason field. This triggers a later step to resolve ambiguity.
+
+Examples:
+- name: "Alice from work", relationship: "Coworker", description: "Mentioned but not described further", reason: "User referenced a work colleague named Alice"
+- name: "Unknown", relationship: "Sibling", description: "User mentioned a sibling but did not give a name", reason: "User said 'my brother' without further context"
+
+## Output Format
 
 \`\`\`json
 {
   "people": [
     {
-        "type_of_person": "The relationship from the list above",
-        "name_of_person": "The person's name",
-        "reason": "The justification of including this specific person"
+      "name": "The person's name, or 'Unknown' if not given",
+      "description": "1-2 sentences: who this person is and their role in the user's life",
+      "relationship": "Relationship type from the list above",
+      "reason": "Evidence from the conversation that justified flagging this person"
     }
   ]
 }
 \`\`\`
 
-**Return JSON only.**`;
+**Return JSON only.**
 
-  const system = `${taskFragment}
-
-${specificNeedsFragment}
-
-${guidelinesFragment}
-
-${criticalFragment}`;
+ONLY ANALYZE the "Most Recent Messages". The "Earlier Conversation" is provided for context only — it has already been processed.`;
 
   const earlierSection = data.messages_context.length > 0
     ? `## Earlier Conversation
@@ -88,16 +82,17 @@ ${earlierSection}${recentSection}
 
 ---
 
-Scan the "Most Recent Messages" for PEOPLE mentioned by the human user.
+Scan the "Most Recent Messages" for PEOPLE in the human user's life.
 
 **Return JSON:**
 \`\`\`json
 {
   "people": [
     {
-        "type_of_person": "The relationship from the list above",
-        "name_of_person": "The person's name",
-        "reason": "The justification of including this specific person"
+      "name": "The person's name, or 'Unknown' if not given",
+      "description": "1-2 sentences: who this person is and their role in the user's life",
+      "relationship": "Relationship type from the list above",
+      "reason": "Evidence from the conversation that justified flagging this person"
     }
   ]
 }
