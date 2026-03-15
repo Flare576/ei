@@ -1,6 +1,19 @@
-import type { PromptOutput } from "./types.js";
+import type { PromptOutput, ParticipantContext } from "./types.js";
 import type { Topic, Message } from "../../core/types.js";
 import { formatMessagesAsPlaceholders } from "../message-utils.js";
+
+function participantContextSection(ctx: ParticipantContext | undefined): string {
+  if (!ctx) return "";
+  const lines: string[] = ["# Participant Context", "The following may help you understand what themes and moments are meaningful in this conversation.", ""];
+  lines.push(`## Persona: ${ctx.persona_name}`);
+  if (ctx.persona_description) lines.push(ctx.persona_description);
+  lines.push("");
+  lines.push("## Human");
+  if (ctx.human_name) lines.push(`Name: ${ctx.human_name}`);
+  if (ctx.human_age !== undefined) lines.push(`Age: ${ctx.human_age}`);
+  lines.push("");
+  return lines.join("\n");
+}
 
 export interface TopicUpdatePromptData {
   existing_item: Topic | null;
@@ -10,6 +23,7 @@ export interface TopicUpdatePromptData {
   messages_context: Message[];
   messages_analyze: Message[];
   persona_name: string;
+  participant_context?: ParticipantContext;
 }
 
 function formatExistingTopic(topic: Topic): string {
@@ -247,7 +261,8 @@ An empty object is the MOST COMMON expected response.
 # Current Details of TOPIC
 
 ${currentDetailsSection}
-`;
+
+${participantContextSection(data.participant_context)}`;
 
   const earlierSection =
     data.messages_context.length > 0

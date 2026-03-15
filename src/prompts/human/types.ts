@@ -5,6 +5,13 @@ export interface PromptOutput {
   user: string;
 }
 
+export interface ParticipantContext {
+  persona_name: string;
+  persona_description?: string;  // long_description, omitted if empty
+  human_name?: string;           // e.g. "Jeremy (Flare)" — omitted if no facts
+  human_age?: number;            // calculated from Birthday fact — omitted if not set
+}
+
 interface BaseScanPromptData {
   messages_context: Message[];
   messages_analyze: Message[];
@@ -15,7 +22,9 @@ export interface FactScanPromptData extends BaseScanPromptData {}
 
 export interface TraitScanPromptData extends BaseScanPromptData {}
 
-export interface TopicScanPromptData extends BaseScanPromptData {}
+export interface TopicScanPromptData extends BaseScanPromptData {
+  participant_context?: ParticipantContext;
+}
 
 export interface PersonScanPromptData extends BaseScanPromptData {}
 
