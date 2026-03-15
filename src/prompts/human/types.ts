@@ -39,15 +39,41 @@ export interface TraitScanCandidate {
 }
 
 export interface TopicScanCandidate {
-  type_of_topic: string;
-  value_of_topic: string;
+  name: string;
+  description: string;
+  category: string;
   reason: string;
 }
 
 export interface PersonScanCandidate {
-  type_of_person: string;
-  name_of_person: string;
+  name: string;
+  description: string;
+  relationship: string;
   reason: string;
+}
+
+export interface TopicMatchPromptData {
+  candidate_name: string;
+  candidate_description: string;
+  candidate_category: string;
+  existing_topics: Array<{
+    id: string;
+    name: string;
+    description: string;
+    category?: string;
+  }>;
+}
+
+export interface PersonMatchPromptData {
+  candidate_name: string;
+  candidate_description: string;
+  candidate_relationship: string;
+  existing_people: Array<{
+    id: string;
+    name: string;
+    description: string;
+    relationship?: string;
+  }>;
 }
 
 export interface FactScanResult {
