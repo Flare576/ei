@@ -49,7 +49,7 @@ test.describe("Basic Chat Flow", () => {
     ).toBeVisible({ timeout: 10000 });
   });
 
-  test("sending message triggers trait extraction", async ({ page, mockServer, mockServerUrl }) => {
+  test("sending message triggers topic extraction", async ({ page, mockServer, mockServerUrl }) => {
     mockServer.setResponseForType("response", {
       type: "fixed",
       content: JSON.stringify({
@@ -57,13 +57,6 @@ test.describe("Basic Chat Flow", () => {
         verbal_response: "Ahoy! Nice to meet ye, matey!",
         reason: "greeting"
       }),
-      statusCode: 200,
-    });
-    mockServer.setResponseForType("trait-extraction", {
-      type: "fixed",
-      content: JSON.stringify([
-        { name: "Pirate Speech", description: "Talks like a pirate", sentiment: 0.7, strength: 0.8 }
-      ]),
       statusCode: 200,
     });
 
@@ -81,12 +74,12 @@ test.describe("Basic Chat Flow", () => {
     await page.waitForTimeout(2000);
 
     const requests = mockServer.getRequestHistory();
-    const traitRequest = requests.find(r => {
+    const topicRequest = requests.find(r => {
       const body = r.body as { messages?: Array<{ role: string; content: string }> };
       const systemMsg = body?.messages?.find(m => m.role === "system");
       const content = systemMsg?.content?.toLowerCase() || "";
-      return content.includes("scanning a conversation to quickly identify") && content.includes("traits");
+      return content.includes("scanning a conversation to quickly identify") && content.includes("topics");
     });
-    expect(traitRequest).toBeDefined();
+    expect(topicRequest).toBeDefined();
   });
 });
