@@ -71,9 +71,8 @@ export async function queueEiHeartbeat(
   const unverifiedFacts = human.facts
     .filter(
       (f) =>
-        f.validated_date === '' &&
-        f.learned_by !== "ei" &&
-        (f.last_changed_by === undefined || f.last_changed_by !== "ei")
+        f.description !== '' &&
+        f.validated_date === ''
     )
     .slice(0, 5);
   for (const fact of unverifiedFacts) {
