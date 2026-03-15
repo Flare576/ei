@@ -60,7 +60,7 @@ Rules:
 - Descriptions should be concise — ideally under 300 characters, never over 500.
 - Preserve sentiment, strength, confidence, and other numeric values from the source record where applicable.
 - "type" must be one of: "fact", "topic", "person".
-- Topics MUST include "category" — one of: Interest, Goal, Dream, Conflict, Concern, Fear, Hope, Plan, Project.
+- Topics MUST include "category" — one of: Interest, Goal, Dream, Conflict, Concern, Fear, Hope, Plan, Project, Event. For Event topics, the description should be a narrative account of a specific moment, not a general summary.
 - People MUST include "relationship" — a short label like "coworker", "friend", "mentor", etc.
 - Do NOT invent information. Only redistribute what exists in the original record.`;
 
@@ -133,7 +133,7 @@ Topic:
   "name": "New Topic Name",
   "description": "Concise topic description",
   "sentiment": 0.0,
-  "category": "Interest"
+  "category": "Interest|Goal|Dream|Conflict|Concern|Fear|Hope|Plan|Project|Event"
 }
 
 Person:
