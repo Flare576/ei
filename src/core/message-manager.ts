@@ -178,7 +178,7 @@ export async function sendMessage(
   const traitExtractionData: PersonaTraitExtractionPromptData = {
     persona_name: persona.display_name,
     current_traits: persona.traits,
-    messages_context: history.slice(0, -1),
+    messages_context: history.slice(-11, -1),
     messages_analyze: [message],
   };
   const traitPrompt = buildPersonaTraitExtractionPrompt(traitExtractionData);
