@@ -278,19 +278,20 @@ export class Processor {
         name: "read_memory",
         display_name: "Read Memory",
         description:
-          "Search your personal memory for relevant facts, traits, topics, people, or quotes. Use this when you need information about the user that may not be in the current conversation.",
+          "Search your personal memory for relevant facts, topics, people, or quotes. Use this when you need information about the user that may not be in the current conversation. Use `recent: true` to retrieve what's been discussed recently.",
         input_schema: {
           type: "object",
           properties: {
             query: { type: "string", description: "What to search for in memory" },
             types: {
               type: "array",
-              items: { type: "string", enum: ["fact", "trait", "topic", "person", "quote"] },
+              items: { type: "string", enum: ["fact", "topic", "person", "quote"] },
               description: "Limit search to specific memory types (default: all types)",
             },
             limit: { type: "number", description: "Max results to return (default: 10, max: 20)" },
+            recent: { type: "boolean", description: "If true, return recently-mentioned results sorted by last_mentioned date instead of relevance. Combine with a query to filter recent results by topic." },
           },
-          required: ["query"],
+          required: [],
         },
         runtime: "any",
         builtin: true,
@@ -1396,7 +1397,7 @@ const toolNextSteps = new Set([
 
   async searchHumanData(
     query: string,
-    options: { types?: Array<"fact" | "topic" | "person" | "quote">; limit?: number } = {}
+    options: { types?: Array<"fact" | "topic" | "person" | "quote">; limit?: number; recent?: boolean } = {}
   ): Promise<{
     facts: Fact[];
     topics: Topic[];

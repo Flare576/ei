@@ -1,15 +1,9 @@
-/**
- * read_memory builtin tool
- *
- * Delegates to Processor.searchHumanData() — no external call, runtime: "any".
- * The searchHumanData function is injected at construction to avoid circular deps.
- */
 import type { ToolExecutor } from "../types.js";
 import type { Fact, Topic, Person, Quote } from "../../types.js";
 
 type SearchHumanData = (
   query: string,
-  options?: { types?: Array<"fact" | "topic" | "person" | "quote">; limit?: number }
+  options?: { types?: Array<"fact" | "topic" | "person" | "quote">; limit?: number; recent?: boolean }
 ) => Promise<{ facts: Fact[]; topics: Topic[]; people: Person[]; quotes: Quote[] }>;
 
 export function createReadMemoryExecutor(searchHumanData: SearchHumanData): ToolExecutor {
@@ -18,10 +12,12 @@ export function createReadMemoryExecutor(searchHumanData: SearchHumanData): Tool
 
     async execute(args: Record<string, unknown>): Promise<string> {
       const query = typeof args.query === "string" ? args.query.trim() : "";
-      console.log(`[read_memory] called with query="${query}", types=${JSON.stringify(args.types ?? null)}, limit=${args.limit ?? 10}`);
-      if (!query) {
+      const recent = args.recent === true;
+      console.log(`[read_memory] called with query="${query}", types=${JSON.stringify(args.types ?? null)}, limit=${args.limit ?? 10}, recent=${recent}`);
+
+      if (!query && !recent) {
         console.warn("[read_memory] missing query argument");
-        return JSON.stringify({ error: "Missing required argument: query" });
+        return JSON.stringify({ error: "Missing required argument: query (or use recent: true)" });
       }
 
       const types = Array.isArray(args.types)
@@ -32,7 +28,7 @@ export function createReadMemoryExecutor(searchHumanData: SearchHumanData): Tool
 
       const limit = typeof args.limit === "number" && args.limit > 0 ? Math.min(args.limit, 20) : 10;
 
-      const results = await searchHumanData(query, { types, limit });
+      const results = await searchHumanData(query, { types, limit, recent });
 
       const total = results.facts.length + results.topics.length + results.people.length + results.quotes.length;
       console.log(`[read_memory] query="${query}" => ${total} results (facts=${results.facts.length}, topics=${results.topics.length}, people=${results.people.length}, quotes=${results.quotes.length})`);
