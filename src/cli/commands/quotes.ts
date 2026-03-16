@@ -1,7 +1,7 @@
 import { loadLatestState, retrieve, mapQuote } from "../retrieval";
 import type { QuoteResult } from "../retrieval";
 
-export async function execute(query: string, limit: number): Promise<QuoteResult[]> {
+export async function execute(query: string, limit: number, options: { recent?: boolean } = {}): Promise<QuoteResult[]> {
   const state = await loadLatestState();
   if (!state) {
     console.error("No saved state found. Is EI_DATA_PATH set correctly?");
@@ -13,7 +13,7 @@ export async function execute(query: string, limit: number): Promise<QuoteResult
     return [];
   }
 
-  const results = await retrieve(quotes, query, limit);
+  const results = await retrieve(quotes, query, limit, options);
 
   return results.map(quote => mapQuote(quote, state));
 }

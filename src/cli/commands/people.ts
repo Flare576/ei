@@ -1,7 +1,7 @@
 import { loadLatestState, retrieve } from "../retrieval";
 import type { PersonResult } from "../retrieval";
 
-export async function execute(query: string, limit: number): Promise<PersonResult[]> {
+export async function execute(query: string, limit: number, options: { recent?: boolean } = {}): Promise<PersonResult[]> {
   const state = await loadLatestState();
   if (!state) {
     console.error("No saved state found. Is EI_DATA_PATH set correctly?");
@@ -13,7 +13,7 @@ export async function execute(query: string, limit: number): Promise<PersonResul
     return [];
   }
 
-  const results = await retrieve(people, query, limit);
+  const results = await retrieve(people, query, limit, options);
   
   return results.map(person => ({
     id: person.id,

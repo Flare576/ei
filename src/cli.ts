@@ -36,6 +36,9 @@ Usage:
   ei -n 5 "search text"         Limit results
   ei <type> "search text"       Search a specific data type
   ei <type> -n 5 "search text"  Type-specific with limit
+  ei --recent                   Return most recently mentioned items
+  ei --recent "query"           Filter recent items by query
+  ei <type> --recent "query"    Type-specific recent search
   ei --id <id>                  Look up a specific entity by ID
   echo <id> | ei --id           Look up entity by ID from stdin
 
@@ -47,6 +50,7 @@ Types:
 
 Options:
   --number, -n     Maximum number of results (default: 10)
+  --recent, -r     Sort by last_mentioned date (most recent first)
   --id             Look up entity by ID (accepts value or stdin)
   --install        Write the Ei tool file to ~/.config/opencode/tools/
   --help, -h       Show this help message
@@ -55,7 +59,9 @@ Examples:
   ei "debugging"                         # Search everything
   ei -n 5 "API design"                   # Top 5 across all types
   ei quote "you guessed it"              # Search quotes only
-  ei --id abc-123                          # Look up entity by ID
+  ei --recent                            # Most recently mentioned items
+  ei topics --recent "work"              # Recent work-related topics
+  ei --id abc-123                        # Look up entity by ID
   ei "memory leak" | jq .[0].id | ei --id  # Pipe ID from search
 `);
 }
@@ -250,6 +256,7 @@ async function main(): Promise<void> {
       args: parseableArgs,
       options: {
         number: { type: "string", short: "n" },
+        recent: { type: "boolean", short: "r" },
         help: { type: "boolean", short: "h" },
       },
       allowPositionals: true,
@@ -267,8 +274,9 @@ async function main(): Promise<void> {
 
   const query = parsed.positionals.join(" ").trim();
   const limit = parsed.values.number ? parseInt(parsed.values.number, 10) : 10;
+  const recent = parsed.values.recent === true;
 
-  if (!query) {
+  if (!query && !recent) {
     if (targetType) {
       console.error(`Search text required. Usage: ei ${targetType} "search text"`);
     } else {
@@ -282,12 +290,14 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  const options = { recent };
+
   let result;
   if (targetType) {
     const module = await import(`./cli/commands/${targetType}.js`);
-    result = await module.execute(query, limit);
+    result = await module.execute(query, limit, options);
   } else {
-    result = await retrieveBalanced(query, limit);
+    result = await retrieveBalanced(query, limit, options);
   }
 
   console.log(JSON.stringify(result, null, 2));

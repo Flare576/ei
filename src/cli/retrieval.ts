@@ -30,17 +30,42 @@ export async function loadLatestState(): Promise<StorageState | null> {
     return null;
 }
 
-export async function retrieve<T extends { id: string; embedding?: number[] }>(
+export async function retrieve<T extends { id: string; embedding?: number[]; last_updated?: string; last_mentioned?: string }>(
   items: T[],
   query: string,
-  limit: number = 10
+  limit: number = 10,
+  options: { recent?: boolean } = {}
 ): Promise<T[]> {
-  if (items.length === 0 || !query) {
+  if (items.length === 0) {
+    return [];
+  }
+
+  const { recent } = options;
+
+  const sortByRecent = (a: T, b: T): number => {
+    const aDate = a.last_mentioned ?? (a as Record<string, unknown>).last_updated as string ?? "";
+    const bDate = b.last_mentioned ?? (b as Record<string, unknown>).last_updated as string ?? "";
+    return bDate.localeCompare(aDate);
+  };
+
+  if (recent && !query) {
+    return [...items].sort(sortByRecent).slice(0, limit);
+  }
+
+  if (!query) {
     return [];
   }
 
   const embeddingService = getEmbeddingService();
   const queryVector = await embeddingService.embed(query);
+
+  if (recent) {
+    const topK = Math.max(limit * 5, 50);
+    const results = findTopK(queryVector, items, topK)
+      .filter(({ similarity }) => similarity >= EMBEDDING_MIN_SIMILARITY)
+      .map(({ item }) => item);
+    return results.sort(sortByRecent).slice(0, limit);
+  }
 
   const results = findTopK(queryVector, items, limit);
 
@@ -159,12 +184,31 @@ function mapTopic(topic: Topic): TopicResult {
 
 export async function retrieveBalanced(
   query: string,
-  limit: number = 10
+  limit: number = 10,
+  options: { recent?: boolean } = {}
 ): Promise<BalancedResult[]> {
   const state = await loadLatestState();
   if (!state) {
     console.error("No saved state found. Is EI_DATA_PATH set correctly?");
     return [];
+  }
+
+  const { recent } = options;
+
+  type AnyItem = { id: string; embedding?: number[]; last_updated?: string; last_mentioned?: string };
+  const recentDate = (item: AnyItem): string => item.last_mentioned ?? item.last_updated ?? "";
+
+  if (recent && !query) {
+    const allItems: Array<{ type: DataType; item: AnyItem; mapped: QuoteResult | FactResult | PersonResult | TopicResult }> = [
+      ...state.human.quotes.map(q => ({ type: "quote" as DataType, item: q as AnyItem, mapped: mapQuote(q, state) })),
+      ...state.human.facts.map(f => ({ type: "fact" as DataType, item: f as AnyItem, mapped: mapFact(f) })),
+      ...state.human.people.map(p => ({ type: "person" as DataType, item: p as AnyItem, mapped: mapPerson(p) })),
+      ...state.human.topics.map(t => ({ type: "topic" as DataType, item: t as AnyItem, mapped: mapTopic(t) })),
+    ];
+    return allItems
+      .sort((a, b) => recentDate(b.item).localeCompare(recentDate(a.item)))
+      .slice(0, limit)
+      .map(({ type, mapped }) => ({ type, ...mapped }) as BalancedResult);
   }
 
   const embeddingService = getEmbeddingService();
@@ -183,6 +227,22 @@ export async function retrieveBalanced(
     { type: "topic", items: state.human.topics, mapper: mapTopic },
   ];
 
+  if (recent) {
+    for (const { type, items, mapper } of typeConfigs) {
+      const topK = Math.max(limit * 5, 50);
+      const scored = findTopK(queryVector, items, topK);
+      for (const { item, similarity } of scored) {
+        if (similarity >= EMBEDDING_MIN_SIMILARITY) {
+          allScored.push({ type, similarity, mapped: mapper(item), itemId: item.id });
+        }
+      }
+    }
+    return allScored
+      .sort((a, b) => recentDate(b.mapped as AnyItem).localeCompare(recentDate(a.mapped as AnyItem)))
+      .slice(0, limit)
+      .map(({ type, mapped }) => ({ type, ...mapped }) as BalancedResult);
+  }
+
   for (const { type, items, mapper } of typeConfigs) {
     const scored = findTopK(queryVector, items, items.length);
     for (const { item, similarity } of scored) {
@@ -195,7 +255,6 @@ export async function retrieveBalanced(
   const result: ScoredEntry[] = [];
   const used = new Set<string>();
 
-  // Floor: at least 1 result per type (if available and meets threshold)
   for (const type of DATA_TYPES) {
     if (result.length >= limit) break;
     const best = allScored
@@ -207,7 +266,6 @@ export async function retrieveBalanced(
     }
   }
 
-  // Fill remaining slots with highest-similarity results across all types
   const remaining = allScored
     .filter(r => !used.has(r.itemId))
     .sort((a, b) => b.similarity - a.similarity);
