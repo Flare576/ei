@@ -121,8 +121,6 @@ function buildRecordFormatExamples(itemType: string): string {
   // When merging: HIGHER strength/confidence, AVERAGE sentiment, MAX exposure_desired.
   
   switch (itemType) {
-    case "fact":
-      return buildFactExamples();
     case "trait":
       return buildTraitExamples();
     case "topic":
@@ -132,37 +130,6 @@ function buildRecordFormatExamples(itemType: string): string {
     default:
       return "/* Unknown type */";
   }
-}
-
-function buildFactExamples(): string {
-  return `EXISTING FACT (being updated/merged):
-{
-  "id": "uuid-of-canonical-record",  // REQUIRED for updates
-  "type": "fact",                     // REQUIRED
-  "name": "Owns a 2019 Toyota Camry", // REQUIRED - descriptive, concise
-  "description": "Silver sedan, purchased in March 2019. Primary commute vehicle. Has 45k miles as of Jan 2024.", // REQUIRED - ALL unique details from duplicates
-  "sentiment": 0.2,                    // -1.0 to 1.0, emotional valence (average when merging)
-  "validated": "by_human",            // "unknown" | "by_ei" | "by_human" | "ai_generated" (keep highest trust level)
-  "validated_date": "2024-01-15T10:30:00Z", // ISO timestamp (most recent)
-  "last_updated": "2024-03-11T12:00:00Z",   // ISO timestamp (set to now)
-  "learned_by": "persona-uuid-123",  // OPTIONAL - UUID of persona that learned this (preserve from source)
-  "last_changed_by": "persona-uuid-456", // OPTIONAL - UUID of persona that last updated (your current context)
-  "persona_groups": ["group1", "group2"] // OPTIONAL - visibility groups (union of all sources)
-}
-
-NEW FACT (creating missing concept):
-{
-  "type": "fact",                     // REQUIRED (NO "id" field for new records)
-  "name": "Lives in Seattle",         // REQUIRED
-  "description": "Resides in the Capitol Hill neighborhood. Has lived there since 2018.", // REQUIRED - concise (<300 chars ideal)
-  "sentiment": 0.0,                    // -1.0 to 1.0 (neutral default for facts)
-  "validated": "unknown",             // Default for new records
-  "validated_date": ""                // Empty string for unvalidated
-}
-
-GOOD vs BAD descriptions:
-✅ GOOD: "Works as a Senior Software Engineer at Microsoft. Started in 2020. Team focuses on Azure infrastructure."
-❌ BAD: "The user has indicated through various conversations that they are employed..." (too verbose, meta-commentary)`;
 }
 
 function buildTraitExamples(): string {

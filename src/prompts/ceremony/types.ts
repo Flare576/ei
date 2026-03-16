@@ -45,7 +45,7 @@ export interface DescriptionCheckResult {
 // REWRITE (Item Reorganization)
 // =============================================================================
 
-export type RewriteItemType = "fact" | "trait" | "topic" | "person";
+export type RewriteItemType = "trait" | "topic" | "person";
 
 /** Phase 1 input: the bloated item to scan for extra subjects. */
 export interface RewriteScanPromptData {

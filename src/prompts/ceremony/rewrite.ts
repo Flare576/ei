@@ -19,7 +19,7 @@ Rules:
 
 Return a raw JSON array of strings. No markdown fencing, no commentary, no explanation. Just the array.
 
-Example — a Fact named "Job" whose description also discusses vim keybindings, git conventions, and AI tooling:
+Example — a Topic named "Software Engineering" whose description also discusses vim keybindings, git conventions, and AI tooling:
 ["vim keybindings and editor configuration", "git and GitHub workflow conventions", "AI coding assistant preferences"]`;
 
   const user = JSON.stringify(stripEmbedding(data.item), null, 2);
@@ -59,7 +59,7 @@ Rules:
 - The original record (id: "${data.item.id}") MUST appear in "existing", slimmed down.
 - Descriptions should be concise — ideally under 300 characters, never over 500.
 - Preserve sentiment, strength, confidence, and other numeric values from the source record where applicable.
-- "type" must be one of: "fact", "topic", "person".
+- "type" must be one of: "topic", "person".
 - Topics MUST include "category" — one of: Interest, Goal, Dream, Conflict, Concern, Fear, Hope, Plan, Project, Event. For Event topics, the description should be a narrative account of a specific moment, not a general summary.
 - People MUST include "relationship" — a short label like "coworker", "friend", "mentor", etc.
 - Do NOT invent information. Only redistribute what exists in the original record.`;
@@ -91,15 +91,7 @@ function stripEmbedding<T extends { embedding?: unknown }>(item: T): Omit<T, "em
 }
 
 function buildExistingExamples(): string {
-  return `Fact:
-{
-  "id": "existing-uuid",
-  "type": "fact",
-  "name": "Record Name",
-  "description": "Updated description with incorporated data"
-}
-
-Topic:
+  return `Topic:
 {
   "id": "existing-uuid",
   "type": "topic",
@@ -119,15 +111,7 @@ Person:
 }
 
 function buildNewExamples(): string {
-  return `Fact:
-{
-  "type": "fact",
-  "name": "New Subject Name",
-  "description": "Concise description of this subject",
-  "sentiment": 0.0
-}
-
-Topic:
+  return `Topic:
 {
   "type": "topic",
   "name": "New Topic Name",
