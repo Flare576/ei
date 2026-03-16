@@ -20,6 +20,8 @@ This document is the **Source of Truth** for naming conventions, interface contr
 | Entity fields | snake_case | `last_updated`, `exposure_current` |
 | Constants | SCREAMING_SNAKE | `MAX_RETRIES`, `DEFAULT_HEARTBEAT_MS` |
 
+> **Note**: "Interfaces" means TypeScript type/interface *names* (e.g. `Topic`, `PersonaEntity`). All *fields within* those types use `snake_case`. The common name field on all entity types (Topic, Person, Fact) is `name` — NOT `label`.
+
 > **Note**: AGENTS.md shorthand uses `on + PascalCase` for event handler names (e.g., `onPersonaAdded`). The canonical form here — PascalCase past tense — is the event name. The `on` prefix is the handler naming convention.
 
 ### Semantic Field Names

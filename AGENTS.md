@@ -54,6 +54,8 @@ for a new user to set up, the new user wins.
 | Entity fields | snake_case | `last_updated`, `exposure_current` |
 | Constants | SCREAMING_SNAKE | `MAX_RETRIES` |
 
+> **Note**: "Interfaces" means TypeScript type/interface *names* (e.g. `Topic`, `PersonaEntity`). All *fields within* those types use `snake_case`. The common name field on all entity types (Topic, Person, Fact) is `name` — NOT `label`.
+
 ### Semantic Fields
 
 These have specific meanings—don't invent synonyms:
@@ -63,7 +65,6 @@ These have specific meanings—don't invent synonyms:
 | `exposure_current` | How recently/frequently discussed (0-1) |
 | `exposure_desired` | How much entity wants to discuss (0-1) |
 | `sentiment` | Emotional valence (-1 to 1) |
-| `strength` | How strongly a trait manifests (0-1) |
 | `confidence` | How certain a fact is accurate (0-1) |
 
 ### Prompts

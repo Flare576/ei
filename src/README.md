@@ -10,7 +10,7 @@ There are two distinct types of data: Human and Persona.
 
 ## Human
 
-Human data is sort of the "Global" data - Each Persona can read and write elements to the humans Facts, Traits, People, and Topics. In addition, there are "Quotes" that can tie to those four types of data.
+Human data is sort of the "Global" data - Each Persona can read and write elements to the humans Facts, People, and Topics. In addition, there are "Quotes" that can tie to those three types of data.
 
 As the user uses the system, it tries to keep track of several data points for these elements:
 
@@ -24,12 +24,9 @@ As the user uses the system, it tries to keep track of several data points for t
     * Current: How much the user has talked or heard about a subject, where:
         + 0.0: Obi-Wan Kenobi ...now that's a name I've not heard in a long time
         + 1.0: The user just spent 4 hours talking about Star Wars
-- Strength: The system will try to gauge how strongly you exhibit a Trait
-    * 1.0 on "Visual Learner" would mean that you've said or shown that it is the absolute best way for you to learn
-    * 0.0 on "Public Speaker" would mean you've said or shown that you have no desire, aptitude, or willingness to present
-- Validated: "Facts" have proven almost as hard to get right as Traits, so I added a way for Ei and you to mark the ones that are true as "Validated"
+- Validated: "Facts" have proven tricky, so I added a way for Ei and you to mark the ones that are true as "Validated"
 
-Each of those types represents a piece of what the system "knows" about the person, and all but "Traits" are kept up-to-date as the person chats with Personas, but not on always on every message. On each message to a Persona, a check is made:
+Each of those types represents a piece of what the system "knows" about the person, and they're kept up-to-date as the person chats with Personas, but not always on every message. On each message to a Persona, a check is made:
 
 ```
 if(Person.newMessages > count_of_human_[type]) {
@@ -37,9 +34,7 @@ if(Person.newMessages > count_of_human_[type]) {
 }
 ```
 
-Again, except for Traits<sup>1</sup>, this is to extract quotes, description updates, title updates, etc. for the conversations the user is having, and keep them feeling alive.
-
-> <sup>1</sup> Traits are unique because, after trying to extract them in the same way as the other pieces of data, I realized that it's sorta hard to understand a core aspect of someone in one message, or even 10. Even doing this analysis over a full 24 hours hasn't proven to be particularly effective, but it's the best we have so far.
+This extracts quotes, description updates, title updates, etc. for the conversations the user is having, and keeps them feeling alive.
 
 ## Persona
 
@@ -71,8 +66,6 @@ I also frequently refer to this as "Extract," but this is the first step where w
 ### Detail Extraction
 
 Since we also pull out details during normal discourse (see above), this is the less-important step at this point, but still vital for catching up with the last few messages, or Personas that only received a few messages during the day and may not have hit the current limit for natural extraction.
-
-Additionally, this is the ONLY time when Human Traits are created or updated - after (hopefully) enough messages have been exchanged for an agent to analyze it and say "Yup, Flare is _definitely_ verbose."
 
 ### Exposure Adjustment
 
