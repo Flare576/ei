@@ -10,6 +10,7 @@ export interface DataItemBase {
   description: string;
   sentiment: number;
   last_updated: string;
+  last_mentioned?: string;        // Set by extraction only, never ceremony. Used for --recent sorting.
   learned_by?: string;           // Persona ID that originally learned this item (stable UUID)
   last_changed_by?: string;      // Persona ID that most recently updated this item (stable UUID)
   persona_groups?: string[];

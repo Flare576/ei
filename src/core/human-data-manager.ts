@@ -145,14 +145,14 @@ export async function getQuotesForMessage(sm: StateManager, messageId: string): 
 export async function searchHumanData(
   sm: StateManager,
   query: string,
-  options: { types?: Array<"fact" | "topic" | "person" | "quote">; limit?: number } = {}
+  options: { types?: Array<"fact" | "topic" | "person" | "quote">; limit?: number; recent?: boolean } = {}
 ): Promise<{
   facts: Fact[];
   topics: Topic[];
   people: Person[];
   quotes: Quote[];
 }> {
-  const { types = ["fact", "topic", "person", "quote"], limit = 10 } = options;
+  const { types = ["fact", "topic", "person", "quote"], limit = 10, recent } = options;
   const human = sm.getHuman();
   const SIMILARITY_THRESHOLD = 0.3;
 
@@ -163,30 +163,54 @@ export async function searchHumanData(
     quotes: [] as Quote[],
   };
 
+  const recentSort = <T extends { last_updated?: string; last_mentioned?: string }>(items: T[]): T[] =>
+    [...items].sort((a, b) => {
+      const aDate = a.last_mentioned ?? a.last_updated ?? "";
+      const bDate = b.last_mentioned ?? b.last_updated ?? "";
+      return bDate.localeCompare(aDate);
+    });
+
   let queryVector: number[] | null = null;
-  try {
-    const embeddingService = getEmbeddingService();
-    queryVector = await embeddingService.embed(query);
-  } catch (err) {
-    console.warn("[searchHumanData] Failed to generate query embedding:", err);
+  if (query) {
+    try {
+      const embeddingService = getEmbeddingService();
+      queryVector = await embeddingService.embed(query);
+    } catch (err) {
+      console.warn("[searchHumanData] Failed to generate query embedding:", err);
+    }
   }
 
-  const searchItems = <T extends { id: string; embedding?: number[] }>(
+  const searchItems = <T extends { id: string; embedding?: number[]; last_updated?: string; last_mentioned?: string }>(
     items: T[],
     textExtractor: (item: T) => string
   ): T[] => {
+    if (recent && !query) {
+      return recentSort(items).slice(0, limit);
+    }
+
     const withEmbeddings = items.filter((i) => i.embedding?.length);
 
     if (queryVector && withEmbeddings.length > 0) {
-      return findTopK(queryVector, withEmbeddings, limit)
+      const topK = recent ? Math.max(limit * 5, 50) : limit;
+      const found = findTopK(queryVector, withEmbeddings, topK)
         .filter(({ similarity }) => similarity >= SIMILARITY_THRESHOLD)
         .map(({ item }) => item);
+      if (recent) {
+        return recentSort(found).slice(0, limit);
+      }
+      return found;
     }
 
+    if (!query) return [];
+
     const lowerQuery = query.toLowerCase();
-    return items
+    const found = items
       .filter((i) => textExtractor(i).toLowerCase().includes(lowerQuery))
-      .slice(0, limit);
+      .slice(0, recent ? Math.max(limit * 5, 50) : limit);
+    if (recent) {
+      return recentSort(found).slice(0, limit);
+    }
+    return found;
   };
 
   if (types.includes("fact")) {

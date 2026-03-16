@@ -69,6 +69,7 @@ export async function handleFactFind(response: LLMResponse, state: StateManager)
       ...existingFact,
       description: factResult.value,
       last_updated: now,
+      last_mentioned: now,
       learned_by: existingFact.learned_by ?? context.personaId,
       last_changed_by: context.personaId,
       embedding,
