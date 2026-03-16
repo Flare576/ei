@@ -3,7 +3,6 @@ import {
   LLMPriority,
   LLMNextStep,
   type LLMResponse,
-  type Fact,
   type Topic,
   type Person,
   type DataItemBase,
@@ -46,7 +45,7 @@ export async function handleRewriteScan(response: LLMResponse, state: StateManag
   // Re-read the item from current state (it may have changed since scan was queued)
   const human = state.getHuman();
   const allItems: DataItemBase[] = [
-    ...human.facts, ...human.topics, ...human.people,
+    ...human.topics, ...human.people,
   ];
   const currentItem = allItems.find(i => i.id === itemId);
   if (!currentItem) {
@@ -59,7 +58,7 @@ export async function handleRewriteScan(response: LLMResponse, state: StateManag
   for (const searchTerm of subjects) {
     try {
       const results = await searchHumanData(state, searchTerm, {
-        types: ["fact", "topic", "person"],
+        types: ["topic", "person"],
         limit: 4,  // fetch 4 so we can exclude original and still have 3
       });
       const allMatches: DataItemBase[] = [
@@ -120,14 +119,13 @@ export async function handleRewriteRewrite(response: LLMResponse, state: StateMa
 
   // Look up the original item to inherit persona_groups
   const allItems: DataItemBase[] = [
-    ...human.facts, ...human.topics, ...human.people,
+    ...human.topics, ...human.people,
   ];
   const originalItem = allItems.find(i => i.id === itemId);
   const inheritedGroups = originalItem?.persona_groups;
 
   // Helper: resolve actual type from existing records (don't trust LLM's type field)
   const resolveExistingType = (id: string): RewriteItemType | null => {
-    if (human.facts.find(f => f.id === id)) return "fact";
     if (human.topics.find(t => t.id === id)) return "topic";
     if (human.people.find(p => p.id === id)) return "person";
     return null;
@@ -160,18 +158,6 @@ export async function handleRewriteRewrite(response: LLMResponse, state: StateMa
     }
 
     switch (resolvedType) {
-      case "fact": {
-        const existing = human.facts.find(f => f.id === item.id)!;
-        state.human_fact_upsert({
-          ...existing,
-          name: item.name,
-          description: item.description,
-          sentiment: item.sentiment ?? existing.sentiment,
-          last_updated: now,
-          embedding,
-        });
-        break;
-      }
       case "topic": {
         const existing = human.topics.find(t => t.id === item.id)!;
         state.human_topic_upsert({
@@ -228,14 +214,6 @@ export async function handleRewriteRewrite(response: LLMResponse, state: StateMa
     };
 
     switch (item.type) {
-      case "fact": {
-        const fact: Fact = {
-          ...baseFields,
-          validated_date: now,
-        };
-        state.human_fact_upsert(fact);
-        break;
-      }
       case "topic": {
         if (!item.category) {
           console.warn(`[handleRewriteRewrite] New topic "${item.name}" missing category — defaulting to "Interest"`);

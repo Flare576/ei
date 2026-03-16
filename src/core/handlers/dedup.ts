@@ -24,7 +24,7 @@ export async function handleDedupCurate(
   const state = stateManager.getHuman();
   
   // Validate entity_type
-  if (!entity_type || !['fact', 'topic', 'person'].includes(entity_type)) {
+  if (!entity_type || !['topic', 'person'].includes(entity_type)) {
     console.error(`[Dedup] Invalid entity_type: "${entity_type}" (from request data)`, response.request.data);
     return;
   }
@@ -206,10 +206,6 @@ export async function handleDedupCurate(
       last_changed_by: "ei",
       embedding,
       // Type-specific fields with defaults
-      ...(entity_type === 'fact' && { 
-        confidence: addition.confidence ?? 0.5,
-        validated_date: ''
-      }),
       ...((entity_type === 'topic' || entity_type === 'person') && {
         exposure_current: addition.exposure_current ?? 0.0,
         exposure_desired: addition.exposure_desired ?? 0.5,
@@ -220,9 +216,7 @@ export async function handleDedupCurate(
     };
     
     // Type-safe cast based on entity_type
-    if (entity_type === 'fact') {
-      stateManager.human_fact_upsert(newEntity as Fact);
-    } else if (entity_type === 'topic') {
+    if (entity_type === 'topic') {
       stateManager.human_topic_upsert(newEntity as Topic);
     } else if (entity_type === 'person') {
       stateManager.human_person_upsert(newEntity as Person);
