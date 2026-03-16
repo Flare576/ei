@@ -130,7 +130,7 @@ function ensureSessionTopic(
     exposure_current: 0.5,
     exposure_desired: 0.3,
     persona_groups: CLAUDE_CODE_TOPIC_GROUPS,
-    learned_by: CLAUDE_CODE_PERSONA_NAME,
+    learned_by: stateManager.persona_getByName(CLAUDE_CODE_PERSONA_NAME)?.id ?? undefined,
     last_updated: new Date().toISOString(),
   };
 
