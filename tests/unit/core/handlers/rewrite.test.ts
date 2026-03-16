@@ -75,12 +75,28 @@ function createMockRequest(overrides: Partial<LLMRequest> = {}): LLMRequest {
     user: "user",
     next_step: LLMNextStep.HandleRewriteScan,
     data: {
-      itemId: "bloated-fact-1",
-      itemType: "fact",
+      itemId: "bloated-topic-1",
+      itemType: "topic",
       rewriteModel: "TestProvider:test-model",
     },
     ...overrides,
   };
+}
+
+function seedBloatedTopic(state: ReturnType<typeof createMockStateManager>, id = "bloated-topic-1"): Topic {
+  const topic: Topic = {
+    id,
+    name: "Software Engineering",
+    description: "A".repeat(800), // over 750 threshold
+    sentiment: 0.7,
+    category: "Interest",
+    exposure_current: 0.5,
+    exposure_desired: 0.5,
+    last_updated: new Date().toISOString(),
+    persona_groups: ["group-a"],
+  };
+  state._human.topics.push(topic);
+  return topic;
 }
 
 function createMockResponse(
@@ -97,12 +113,11 @@ function createMockResponse(
   };
 }
 
-/** Seed a bloated fact into the state manager's human data. */
 function seedBloatedFact(state: ReturnType<typeof createMockStateManager>, id = "bloated-fact-1"): Fact {
   const fact: Fact = {
     id,
     name: "Coding Background",
-    description: "A".repeat(800), // over 750 threshold
+    description: "A".repeat(800),
     sentiment: 0.7,
     validated_date: new Date().toISOString(),
     last_updated: new Date().toISOString(),
@@ -188,24 +203,22 @@ describe("Rewrite Handlers - Phase 1 (Scan)", () => {
     });
 
     it("searches each subject and queues Phase 2", async () => {
-      const fact = seedBloatedFact(state);
+      seedBloatedTopic(state);
       const request = createMockRequest();
       const response = createMockResponse(request, ["programming", "databases"]);
 
       await handlers.handleRewriteScan(response, state as any);
 
-      // Should search for each subject
       expect(vi.mocked(searchHumanData)).toHaveBeenCalledTimes(2);
       expect(vi.mocked(searchHumanData)).toHaveBeenCalledWith(state, "programming", expect.objectContaining({
-        types: ["fact", "topic", "person"],
+        types: ["topic", "person"],
         limit: 4,
       }));
       expect(vi.mocked(searchHumanData)).toHaveBeenCalledWith(state, "databases", expect.objectContaining({
-        types: ["fact", "topic", "person"],
+        types: ["topic", "person"],
         limit: 4,
       }));
 
-      // Should queue Phase 2
       expect(state.queue_enqueue).toHaveBeenCalledTimes(1);
       expect(state.queue_enqueue).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -213,26 +226,27 @@ describe("Rewrite Handlers - Phase 1 (Scan)", () => {
           priority: LLMPriority.Normal,
           next_step: LLMNextStep.HandleRewriteRewrite,
           model: "TestProvider:test-model",
-          data: { itemId: "bloated-fact-1", itemType: "fact" },
+          data: { itemId: "bloated-topic-1", itemType: "topic" },
         })
       );
     });
 
     it("excludes original item from search results passed to Phase 2", async () => {
-      const fact = seedBloatedFact(state);
-      // Search returns the original item plus others
-      const otherFact: Fact = {
-        id: "other-fact",
+      const topic = seedBloatedTopic(state);
+      const otherTopic: Topic = {
+        id: "other-topic",
         name: "Other",
-        description: "Other fact",
+        description: "Other topic",
         sentiment: 0.5,
+        category: "Interest",
+        exposure_current: 0.3,
+        exposure_desired: 0.5,
         last_updated: new Date().toISOString(),
-        validated_date: new Date().toISOString(),
       };
 
       vi.mocked(searchHumanData).mockResolvedValue({
-        facts: [fact, otherFact],
-        topics: [],
+        facts: [],
+        topics: [topic, otherTopic],
         people: [],
         quotes: [],
       });
@@ -242,18 +256,14 @@ describe("Rewrite Handlers - Phase 1 (Scan)", () => {
 
       await handlers.handleRewriteScan(response, state as any);
 
-      // Phase 2 should be queued — the prompt builder receives subject matches
-      // The handler filters out the original item, so it won't be in the prompt
       expect(state.queue_enqueue).toHaveBeenCalledTimes(1);
       const enqueued = state.queue_enqueue.mock.calls[0][0];
-      // The prompt is built from subjectMatches which exclude the original.
-      // We can verify the prompt was generated (system and user are strings).
       expect(enqueued.system).toBeDefined();
       expect(enqueued.user).toBeDefined();
     });
 
     it("handles search failure gracefully — still queues Phase 2", async () => {
-      seedBloatedFact(state);
+      seedBloatedTopic(state);
       vi.mocked(searchHumanData).mockRejectedValue(new Error("Search unavailable"));
 
       const request = createMockRequest();
@@ -261,16 +271,15 @@ describe("Rewrite Handlers - Phase 1 (Scan)", () => {
 
       await handlers.handleRewriteScan(response, state as any);
 
-      // Should still queue Phase 2, just with empty matches
       expect(state.queue_enqueue).toHaveBeenCalledTimes(1);
     });
 
     it("passes rewriteModel through to Phase 2 queue item", async () => {
-      seedBloatedFact(state);
+      seedBloatedTopic(state);
       const request = createMockRequest({
         data: {
-          itemId: "bloated-fact-1",
-          itemType: "fact",
+          itemId: "bloated-topic-1",
+          itemType: "topic",
           rewriteModel: "MyProvider:big-model",
         },
       });
@@ -283,6 +292,18 @@ describe("Rewrite Handlers - Phase 1 (Scan)", () => {
           model: "MyProvider:big-model",
         })
       );
+    });
+
+    it("skips facts — facts are read-only and never rewritten", async () => {
+      seedBloatedFact(state);
+      const request = createMockRequest({
+        data: { itemId: "bloated-fact-1", itemType: "fact", rewriteModel: "TestProvider:test-model" },
+      });
+      const response = createMockResponse(request, ["subject"]);
+
+      await handlers.handleRewriteScan(response, state as any);
+
+      expect(state.queue_enqueue).not.toHaveBeenCalled();
     });
   });
 });
@@ -344,60 +365,6 @@ describe("Rewrite Handlers - Phase 2 (Rewrite)", () => {
 
     // --- Existing item updates ---
 
-    it("updates existing fact with new name and description", async () => {
-      const fact = seedBloatedFact(state);
-      const request = createMockRequest({
-        next_step: LLMNextStep.HandleRewriteRewrite,
-        data: { itemId: "bloated-fact-1", itemType: "fact" },
-      });
-      const response = createMockResponse(request, {
-        existing: [{
-          id: "bloated-fact-1",
-          type: "fact",
-          name: "Coding Background (Focused)",
-          description: "Focused description of coding background",
-          sentiment: 0.8,
-        }],
-        new: [],
-      });
-
-      await handlers.handleRewriteRewrite(response, state as any);
-
-      expect(state.human_fact_upsert).toHaveBeenCalledTimes(1);
-      expect(state.human_fact_upsert).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: "bloated-fact-1",
-          name: "Coding Background (Focused)",
-          description: "Focused description of coding background",
-          sentiment: 0.8,
-        })
-      );
-    });
-
-
-    it("resolves type from existing records, not from LLM response", async () => {
-      // Seed a fact, but LLM says it's a "trait" — handler should resolve to "fact"
-      seedBloatedFact(state);
-      const request = createMockRequest({
-        next_step: LLMNextStep.HandleRewriteRewrite,
-        data: { itemId: "bloated-fact-1", itemType: "fact" },
-      });
-      const response = createMockResponse(request, {
-        existing: [{
-          id: "bloated-fact-1",
-          type: "trait", // LLM lies about type
-          name: "Updated Name",
-          description: "Updated desc",
-        }],
-        new: [],
-      });
-
-      await handlers.handleRewriteRewrite(response, state as any);
-
-      // Should call fact_upsert because the item is actually a fact
-      expect(state.human_fact_upsert).toHaveBeenCalledTimes(1);
-    });
-
     it("skips existing item when id not found in human data", async () => {
       seedBloatedFact(state);
       const request = createMockRequest({
@@ -441,40 +408,6 @@ describe("Rewrite Handlers - Phase 2 (Rewrite)", () => {
     });
 
     // --- New item creation ---
-
-    it("creates new fact with correct fields", async () => {
-      seedBloatedFact(state);
-      const request = createMockRequest({
-        next_step: LLMNextStep.HandleRewriteRewrite,
-        data: { itemId: "bloated-fact-1", itemType: "fact" },
-      });
-      const response = createMockResponse(request, {
-        existing: [],
-        new: [{
-          type: "fact",
-          name: "New Extracted Fact",
-          description: "A new fact extracted from the bloated item",
-          sentiment: 0.5,
-        }],
-      });
-
-      await handlers.handleRewriteRewrite(response, state as any);
-
-      expect(state.human_fact_upsert).toHaveBeenCalledTimes(1);
-      expect(state.human_fact_upsert).toHaveBeenCalledWith(
-        expect.objectContaining({
-          name: "New Extracted Fact",
-          description: "A new fact extracted from the bloated item",
-          sentiment: 0.5,
-          learned_by: "ei",
-        })
-      );
-      // Should have an auto-generated id
-      const created = state.human_fact_upsert.mock.calls[0][0];
-      expect(created.id).toBeDefined();
-      expect(typeof created.id).toBe("string");
-    });
-
 
     it("creates new topic with hard default exposure and category fallback", async () => {
       seedBloatedFact(state);
@@ -572,9 +505,45 @@ describe("Rewrite Handlers - Phase 2 (Rewrite)", () => {
       expect(state.human_person_upsert).not.toHaveBeenCalled();
     });
 
-    it("inherits persona_groups from original item", async () => {
-      const fact = seedBloatedFact(state);
-      // fact.persona_groups is ["group-a"] from seedBloatedFact
+    it("inherits persona_groups from original topic item", async () => {
+      const topic: Topic = {
+        id: "bloated-topic-1",
+        name: "Software Engineering",
+        description: "A".repeat(800),
+        sentiment: 0.7,
+        last_updated: new Date().toISOString(),
+        category: "Interest",
+        exposure_current: 0.5,
+        exposure_desired: 0.5,
+        persona_groups: ["group-a"],
+      };
+      state._human.topics.push(topic);
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleRewriteRewrite,
+        data: { itemId: "bloated-topic-1", itemType: "topic" },
+      });
+      const response = createMockResponse(request, {
+        existing: [],
+        new: [{
+          type: "topic",
+          name: "Extracted Topic",
+          description: "Extracted from bloated topic",
+          sentiment: 0.5,
+          category: "Interest",
+        }],
+      });
+
+      await handlers.handleRewriteRewrite(response, state as any);
+
+      expect(state.human_topic_upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          persona_groups: ["group-a"],
+        })
+      );
+    });
+
+    it("skips new item of type 'fact' — facts are read-only, created only by FactFinder", async () => {
+      seedBloatedFact(state);
       const request = createMockRequest({
         next_step: LLMNextStep.HandleRewriteRewrite,
         data: { itemId: "bloated-fact-1", itemType: "fact" },
@@ -583,55 +552,64 @@ describe("Rewrite Handlers - Phase 2 (Rewrite)", () => {
         existing: [],
         new: [{
           type: "fact",
-          name: "Extracted Fact",
-          description: "Extracted from bloated item",
+          name: "Would-be New Fact",
+          description: "Facts are read-only; this should be skipped",
           sentiment: 0.5,
         }],
       });
 
       await handlers.handleRewriteRewrite(response, state as any);
 
-      expect(state.human_fact_upsert).toHaveBeenCalledWith(
-        expect.objectContaining({
-          persona_groups: ["group-a"],
-        })
-      );
+      expect(state.human_fact_upsert).not.toHaveBeenCalled();
+      expect(state.human_topic_upsert).not.toHaveBeenCalled();
+      expect(state.human_person_upsert).not.toHaveBeenCalled();
     });
 
     it("processes both existing and new items in one response", async () => {
-      seedBloatedFact(state);
+      const topic: Topic = {
+        id: "bloated-topic-1",
+        name: "Software Engineering",
+        description: "A".repeat(800),
+        sentiment: 0.7,
+        last_updated: new Date().toISOString(),
+        category: "Interest",
+        exposure_current: 0.5,
+        exposure_desired: 0.5,
+      };
+      state._human.topics.push(topic);
       const request = createMockRequest({
         next_step: LLMNextStep.HandleRewriteRewrite,
-        data: { itemId: "bloated-fact-1", itemType: "fact" },
+        data: { itemId: "bloated-topic-1", itemType: "topic" },
       });
       const response = createMockResponse(request, {
         existing: [{
-          id: "bloated-fact-1",
-          type: "fact",
-          name: "Focused Original",
+          id: "bloated-topic-1",
+          type: "topic",
+          name: "Software Engineering (Focused)",
           description: "Focused description",
           sentiment: 0.7,
+          category: "Interest",
         }],
         new: [{
-          type: "topic",
-          name: "New Topic From Rewrite",
-          description: "Spun off from bloated fact",
+          type: "person",
+          name: "New Person From Rewrite",
+          description: "Person mentioned in the topic",
           sentiment: 0.4,
-          category: "Skill",
+          relationship: "coworker",
         }],
       });
 
       await handlers.handleRewriteRewrite(response, state as any);
 
-      expect(state.human_fact_upsert).toHaveBeenCalledTimes(1);
       expect(state.human_topic_upsert).toHaveBeenCalledTimes(1);
+      expect(state.human_person_upsert).toHaveBeenCalledTimes(1);
 
-      const updatedFact = state.human_fact_upsert.mock.calls[0][0];
-      expect(updatedFact.name).toBe("Focused Original");
+      const updatedTopic = state.human_topic_upsert.mock.calls[0][0];
+      expect(updatedTopic.name).toBe("Software Engineering (Focused)");
 
-      const newTopic = state.human_topic_upsert.mock.calls[0][0];
-      expect(newTopic.name).toBe("New Topic From Rewrite");
-      expect(newTopic.category).toBe("Skill");
+      const newPerson = state.human_person_upsert.mock.calls[0][0];
+      expect(newPerson.name).toBe("New Person From Rewrite");
+      expect(newPerson.relationship).toBe("coworker");
     });
   });
 });

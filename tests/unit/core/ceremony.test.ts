@@ -286,54 +286,40 @@ describe("Rewrite Phase", () => {
       expect(state.queue_enqueue).not.toHaveBeenCalled();
     });
 
-    it("queues Phase 1 scan for facts above threshold", () => {
+    it("scans topics and people above threshold", () => {
       const state = createMockRewriteState({
         settings: { rewrite_model: "TestProvider:model" },
-        facts: [makeFact("f1", 800)],
-      });
-
-      queueRewritePhase(state as any);
-
-      expect(state.queue_enqueue).toHaveBeenCalledTimes(1);
-      expect(state.queue_enqueue).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: LLMRequestType.JSON,
-          priority: LLMPriority.Low,
-          next_step: LLMNextStep.HandleRewriteScan,
-          model: "TestProvider:model",
-          data: expect.objectContaining({
-            itemId: "f1",
-            itemType: "fact",
-            rewriteModel: "TestProvider:model",
-          }),
-        })
-      );
-    });
-
-    it("scans all data types (fact, topic, person)", () => {
-      const state = createMockRewriteState({
-        settings: { rewrite_model: "TestProvider:model" },
-        facts: [makeFact("f1", 800)],
         topics: [makeTopic("top1", 1000)],
         people: [makePerson("p1", 751)],
       });
 
       queueRewritePhase(state as any);
 
-      expect(state.queue_enqueue).toHaveBeenCalledTimes(3);
+      expect(state.queue_enqueue).toHaveBeenCalledTimes(2);
 
       const types = state.queue_enqueue.mock.calls.map(
         (c: any[]) => c[0].data.itemType
       );
-      expect(types).toEqual(["fact", "topic", "person"]);
+      expect(types).toEqual(["topic", "person"]);
+    });
+
+    it("never scans facts — facts are read-only", () => {
+      const state = createMockRewriteState({
+        settings: { rewrite_model: "TestProvider:model" },
+        facts: [makeFact("f1", 800)],
+      });
+
+      queueRewritePhase(state as any);
+
+      expect(state.queue_enqueue).not.toHaveBeenCalled();
     });
 
     it("only scans items above threshold, skips those below", () => {
       const state = createMockRewriteState({
         settings: { rewrite_model: "TestProvider:model" },
-        facts: [
-          makeFact("f-small", 200),
-          makeFact("f-big", 800),
+        topics: [
+          makeTopic("t-small", 200),
+          makeTopic("t-big", 800),
         ],
       });
 
@@ -342,7 +328,7 @@ describe("Rewrite Phase", () => {
       expect(state.queue_enqueue).toHaveBeenCalledTimes(1);
       expect(state.queue_enqueue).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ itemId: "f-big" }),
+          data: expect.objectContaining({ itemId: "t-big" }),
         })
       );
     });

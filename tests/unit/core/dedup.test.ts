@@ -141,6 +141,27 @@ function createFactWithEmbedding(
   };
 }
 
+function createTopicWithEmbedding(
+  id: string,
+  name: string,
+  description: string,
+  embedding: number[],
+  category = "Interest"
+): Topic {
+  return {
+    id,
+    name,
+    description,
+    sentiment: 0.5,
+    category,
+    exposure_current: 0.5,
+    exposure_desired: 0.5,
+    last_updated: new Date().toISOString(),
+    persona_groups: [],
+    embedding,
+  };
+}
+
 /** Create a person with embedding for similarity tests */
 function createPersonWithEmbedding(
   id: string,
@@ -198,22 +219,21 @@ describe("Dedup Phase - Clustering", () => {
   });
 
   it("finds duplicates when threshold met", async () => {
-    // Create two facts with high similarity (nearly identical vectors)
     const baseVector = new Array(384).fill(0.5);
-    const fact1 = createFactWithEmbedding(
-      "fact-1",
+    const topic1 = createTopicWithEmbedding(
+      "topic-1",
       "Python Developer",
       "I am a Python developer",
       baseVector
     );
-    const fact2 = createFactWithEmbedding(
-      "fact-2",
+    const topic2 = createTopicWithEmbedding(
+      "topic-2",
       "Python Coder",
       "I code in Python professionally",
-      baseVector.map(v => v * 0.99) // 99% similar
+      baseVector.map(v => v * 0.99)
     );
 
-    state._human.facts = [fact1, fact2];
+    state._human.topics = [topic1, topic2];
 
     await queueDedupPhase(state as unknown as StateManager);
 
@@ -228,47 +248,42 @@ describe("Dedup Phase - Clustering", () => {
   });
 
   it("clusters transitive duplicates (A→B, B→C forms one cluster)", async () => {
-    // Three facts: A similar to B, B similar to C, but A not similar to C
     const vecA = new Array(384).fill(0.5);
-    const vecB = vecA.map(v => v * 0.98); // 98% similar to A
-    const vecC = vecB.map(v => v * 0.98); // 98% similar to B, ~96% to A
+    const vecB = vecA.map(v => v * 0.98);
+    const vecC = vecB.map(v => v * 0.98);
 
-    const factA = createFactWithEmbedding("fact-a", "A", "Item A", vecA);
-    const factB = createFactWithEmbedding("fact-b", "B", "Item B", vecB);
-    const factC = createFactWithEmbedding("fact-c", "C", "Item C", vecC);
+    const topicA = createTopicWithEmbedding("topic-a", "A", "Item A", vecA);
+    const topicB = createTopicWithEmbedding("topic-b", "B", "Item B", vecB);
+    const topicC = createTopicWithEmbedding("topic-c", "C", "Item C", vecC);
 
-    state._human.facts = [factA, factB, factC];
+    state._human.topics = [topicA, topicB, topicC];
 
     await queueDedupPhase(state as unknown as StateManager);
 
-    // Should create ONE cluster with all three IDs
     expect(state.queue_enqueue).toHaveBeenCalledTimes(1);
     const request = vi.mocked(state.queue_enqueue).mock.calls[0][0];
     expect(request.data.entity_ids).toHaveLength(3);
-    expect(request.data.entity_ids).toContain("fact-a");
-    expect(request.data.entity_ids).toContain("fact-b");
-    expect(request.data.entity_ids).toContain("fact-c");
+    expect(request.data.entity_ids).toContain("topic-a");
+    expect(request.data.entity_ids).toContain("topic-b");
+    expect(request.data.entity_ids).toContain("topic-c");
   });
 
   it("creates separate clusters for disjoint groups", async () => {
-    // Group 1: A ↔ B (high similarity)
     const vecA = new Array(384).fill(0.5);
     const vecB = vecA.map(v => v * 0.99);
 
-    // Group 2: X ↔ Y (high similarity, but unrelated to A/B)
-    const vecX = new Array(384).fill(-0.5); // Negative values, orthogonal to A/B
+    const vecX = new Array(384).fill(-0.5);
     const vecY = vecX.map(v => v * 0.99);
 
-    const factA = createFactWithEmbedding("fact-a", "A", "Group 1 A", vecA);
-    const factB = createFactWithEmbedding("fact-b", "B", "Group 1 B", vecB);
-    const factX = createFactWithEmbedding("fact-x", "X", "Group 2 X", vecX);
-    const factY = createFactWithEmbedding("fact-y", "Y", "Group 2 Y", vecY);
+    const topicA = createTopicWithEmbedding("topic-a", "A", "Group 1 A", vecA);
+    const topicB = createTopicWithEmbedding("topic-b", "B", "Group 1 B", vecB);
+    const topicX = createTopicWithEmbedding("topic-x", "X", "Group 2 X", vecX);
+    const topicY = createTopicWithEmbedding("topic-y", "Y", "Group 2 Y", vecY);
 
-    state._human.facts = [factA, factB, factX, factY];
+    state._human.topics = [topicA, topicB, topicX, topicY];
 
     await queueDedupPhase(state as unknown as StateManager);
 
-    // Should create TWO clusters
     expect(state.queue_enqueue).toHaveBeenCalledTimes(2);
   });
 
@@ -406,19 +421,19 @@ describe("Dedup Handler - handleDedupCurate", () => {
   });
 
   it("updates entity descriptions with embedding recalculation", async () => {
-    const fact1 = createFactWithEmbedding(
-      "fact-1",
+    const topic1 = createTopicWithEmbedding(
+      "topic-1",
       "Original Name",
       "Original description",
       new Array(384).fill(0.1)
     );
 
-    state._human.facts = [fact1];
+    state._human.topics = [topic1];
 
     const request = createMockRequest({
       data: {
-        entity_type: "fact",
-        entity_ids: ["fact-1"],
+        entity_type: "topic",
+        entity_ids: ["topic-1"],
         ceremony_progress: 1,
       },
     });
@@ -426,7 +441,7 @@ describe("Dedup Handler - handleDedupCurate", () => {
     const dedupResult = {
       update: [
         {
-          id: "fact-1",
+          id: "topic-1",
           description: "Updated description after merge",
         },
       ],
@@ -438,24 +453,24 @@ describe("Dedup Handler - handleDedupCurate", () => {
 
     await handlers[LLMNextStep.HandleDedupCurate](response, state as unknown as StateManager);
 
-    expect(state.human_fact_upsert).toHaveBeenCalledTimes(1);
-    expect(state.human_fact_upsert).toHaveBeenCalledWith(
+    expect(state.human_topic_upsert).toHaveBeenCalledTimes(1);
+    expect(state.human_topic_upsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: "fact-1",
-        name: "Original Name", // Name preserved
+        id: "topic-1",
+        name: "Original Name",
         description: "Updated description after merge",
       })
     );
   });
 
   it("removes entities after updating quote foreign keys", async () => {
-    const fact1 = createFactWithEmbedding("fact-1", "Keep", "Primary fact", []);
-    const fact2 = createFactWithEmbedding("fact-2", "Remove", "Duplicate fact", []);
+    const topic1 = createTopicWithEmbedding("topic-1", "Keep", "Primary topic", []);
+    const topic2 = createTopicWithEmbedding("topic-2", "Remove", "Duplicate topic", []);
 
     const quote1: Quote = {
       id: "quote-1",
       message_id: null,
-      data_item_ids: ["fact-2"], // Points to fact being removed
+      data_item_ids: ["topic-2"],
       persona_groups: [],
       text: "Test quote",
       speaker: "human",
@@ -466,20 +481,20 @@ describe("Dedup Handler - handleDedupCurate", () => {
       created_by: "human",
     };
 
-    state._human.facts = [fact1, fact2];
+    state._human.topics = [topic1, topic2];
     state._human.quotes = [quote1];
 
     const request = createMockRequest({
       data: {
-        entity_type: "fact",
-        entity_ids: ["fact-1", "fact-2"],
+        entity_type: "topic",
+        entity_ids: ["topic-1", "topic-2"],
         ceremony_progress: 1,
       },
     });
 
     const dedupResult = {
       update: [],
-      remove: [{ to_be_removed: "fact-2", replaced_by: "fact-1" }],
+      remove: [{ to_be_removed: "topic-2", replaced_by: "topic-1" }],
       add: [],
     };
 
@@ -487,44 +502,42 @@ describe("Dedup Handler - handleDedupCurate", () => {
 
     await handlers[LLMNextStep.HandleDedupCurate](response, state as unknown as StateManager);
 
-    // Quote should have been updated to point to remaining entity
     expect(state.human_quote_update).toHaveBeenCalledWith(
       "quote-1",
       expect.objectContaining({
-        data_item_ids: ["fact-1"], // Updated to survivor
+        data_item_ids: ["topic-1"],
       })
     );
 
-    // Fact should have been removed
-    expect(state.human_fact_remove).toHaveBeenCalledWith("fact-2");
+    expect(state.human_topic_remove).toHaveBeenCalledWith("topic-2");
   });
 
-  it("adds new merged entities with embeddings", async () => {
+  it("adds new merged entities with embeddings (topics)", async () => {
     const request = createMockRequest({
       data: {
-        entity_type: "fact",
-        entity_ids: ["fact-1", "fact-2"],
+        entity_type: "topic",
+        entity_ids: ["topic-1", "topic-2"],
         ceremony_progress: 1,
       },
     });
 
-    const fact1 = createFactWithEmbedding("fact-1", "Fact 1", "First fact", []);
-    const fact2 = createFactWithEmbedding("fact-2", "Fact 2", "Second fact", []);
+    const topic1 = createTopicWithEmbedding("topic-1", "Topic 1", "First topic", []);
+    const topic2 = createTopicWithEmbedding("topic-2", "Topic 2", "Second topic", []);
 
-    state._human.facts = [fact1, fact2]; // Add entities for hydration
+    state._human.topics = [topic1, topic2];
 
     const dedupResult = {
       update: [],
       remove: [
-        { to_be_removed: "fact-1", replaced_by: "" },
-        { to_be_removed: "fact-2", replaced_by: "" }
+        { to_be_removed: "topic-1", replaced_by: "" },
+        { to_be_removed: "topic-2", replaced_by: "" },
       ],
       add: [
         {
-          name: "Merged Fact",
-          description: "Combined from fact-1 and fact-2",
+          name: "Merged Topic",
+          description: "Combined from topic-1 and topic-2",
           sentiment: 0.7,
-          persona_groups: ["group-a"],
+          category: "Interest",
         },
       ],
     };
@@ -533,26 +546,25 @@ describe("Dedup Handler - handleDedupCurate", () => {
 
     await handlers[LLMNextStep.HandleDedupCurate](response, state as unknown as StateManager);
 
-    expect(state.human_fact_upsert).toHaveBeenCalledTimes(1);
-    expect(state.human_fact_upsert).toHaveBeenCalledWith(
+    expect(state.human_topic_upsert).toHaveBeenCalledTimes(1);
+    expect(state.human_topic_upsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: "Merged Fact",
-        description: "Combined from fact-1 and fact-2",
-        id: expect.any(String), // Generated ID
-        embedding: expect.any(Array), // Computed embedding
+        name: "Merged Topic",
+        description: "Combined from topic-1 and topic-2",
+        id: expect.any(String),
+        embedding: expect.any(Array),
       })
     );
   });
 
-
   it("deduplicates multiple quotes pointing to same removed entity", async () => {
-    const fact1 = createFactWithEmbedding("fact-1", "Keep", "Primary", []);
-    const fact2 = createFactWithEmbedding("fact-2", "Remove", "Duplicate", []);
+    const topic1 = createTopicWithEmbedding("topic-1", "Keep", "Primary", []);
+    const topic2 = createTopicWithEmbedding("topic-2", "Remove", "Duplicate", []);
 
     const quote1: Quote = {
       id: "quote-1",
       message_id: null,
-      data_item_ids: ["fact-2"],
+      data_item_ids: ["topic-2"],
       persona_groups: [],
       text: "Quote 1",
       speaker: "human",
@@ -566,9 +578,9 @@ describe("Dedup Handler - handleDedupCurate", () => {
     const quote2: Quote = {
       id: "quote-2",
       message_id: null,
-      data_item_ids: ["fact-2"],
+      data_item_ids: ["topic-2"],
       persona_groups: [],
-      text: "Quote 1", // Same text as quote1
+      text: "Quote 2",
       speaker: "human",
       timestamp: new Date().toISOString(),
       start: null,
@@ -577,20 +589,20 @@ describe("Dedup Handler - handleDedupCurate", () => {
       created_by: "human",
     };
 
-    state._human.facts = [fact1, fact2];
+    state._human.topics = [topic1, topic2];
     state._human.quotes = [quote1, quote2];
 
     const request = createMockRequest({
       data: {
-        entity_type: "fact",
-        entity_ids: ["fact-1", "fact-2"],
+        entity_type: "topic",
+        entity_ids: ["topic-1", "topic-2"],
         ceremony_progress: 1,
       },
     });
 
     const dedupResult = {
       update: [],
-      remove: [{ to_be_removed: "fact-2", replaced_by: "fact-1" }],
+      remove: [{ to_be_removed: "topic-2", replaced_by: "topic-1" }],
       add: [],
     };
 
@@ -598,7 +610,6 @@ describe("Dedup Handler - handleDedupCurate", () => {
 
     await handlers[LLMNextStep.HandleDedupCurate](response, state as unknown as StateManager);
 
-    // Both quotes should be updated (no deduplication in handler)
     expect(state.human_quote_update).toHaveBeenCalledTimes(2);
   });
 
@@ -626,29 +637,31 @@ describe("Dedup Handler - handleDedupCurate", () => {
   });
 
   it("preserves unchanged fields during updates", async () => {
-    const fact1: Fact = {
-      id: "fact-1",
+    const topic1: Topic = {
+      id: "topic-1",
       name: "Original Name",
       description: "Original description",
       sentiment: 0.8,
-      validated_date: "2026-01-01T00:00:00Z",
+      category: "Interest",
+      exposure_current: 0.6,
+      exposure_desired: 0.7,
       last_updated: "2026-01-01T00:00:00Z",
       persona_groups: ["group-a", "group-b"],
       embedding: new Array(384).fill(0.1),
     };
 
-    state._human.facts = [fact1];
+    state._human.topics = [topic1];
 
     const request = createMockRequest({
       data: {
-        entity_type: "fact",
-        entity_ids: ["fact-1"],
+        entity_type: "topic",
+        entity_ids: ["topic-1"],
         ceremony_progress: 1,
       },
     });
 
     const dedupResult = {
-      update: [{ id: "fact-1", description: "Updated description" }],
+      update: [{ id: "topic-1", description: "Updated description" }],
       remove: [],
       add: [],
     };
@@ -657,13 +670,13 @@ describe("Dedup Handler - handleDedupCurate", () => {
 
     await handlers[LLMNextStep.HandleDedupCurate](response, state as unknown as StateManager);
 
-    expect(state.human_fact_upsert).toHaveBeenCalledWith(
+    expect(state.human_topic_upsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: "fact-1",
-        name: "Original Name", // Preserved
+        id: "topic-1",
+        name: "Original Name",
         description: "Updated description",
-        sentiment: 0.8, // Preserved
-        persona_groups: ["group-a", "group-b"], // Preserved
+        sentiment: 0.8,
+        persona_groups: ["group-a", "group-b"],
       })
     );
   });
