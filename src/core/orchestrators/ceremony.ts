@@ -237,7 +237,7 @@ export function handleCeremonyProgress(state: StateManager, lastPhase: number): 
   // Human ceremony: decay topics + people
   runHumanCeremony(state);
 
-  // Dedup phase: log near-duplicate human entities (dry-run only, no mutations)
+  // Dedup phase: log near-duplicate human entity candidates for visibility
   runDedupPhase(state);
 
   // Rewrite phase: fire-and-forget scans for bloated human data items
@@ -519,7 +519,7 @@ export function runHumanCeremony(state: StateManager): void {
 }
 
 // =============================================================================
-// DEDUP PHASE (synchronous, dry-run — logs candidates, no mutations)
+// DEDUP PHASE (synchronous, logging only — candidates are queued for curation by dedup-phase.ts)
 // =============================================================================
 
 const DEDUP_DEFAULT_THRESHOLD = 0.85;
@@ -559,7 +559,7 @@ export function runDedupPhase(state: StateManager): void {
   const human = state.getHuman();
   const threshold = human.settings?.ceremony?.dedup_threshold ?? DEDUP_DEFAULT_THRESHOLD;
 
-  console.log(`[ceremony:dedup] Running dry-run dedup (threshold: ${threshold})`);
+  console.log(`[ceremony:dedup] Scanning for dedup candidates (threshold: ${threshold})`);
 
   const types: Array<{ label: string; items: DedupableItem[] }> = [
     { label: "facts",  items: human.facts },
