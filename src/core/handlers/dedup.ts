@@ -202,6 +202,8 @@ export async function handleDedupCurate(
       description: addition.description,
       sentiment: addition.sentiment ?? 0.0,
       last_updated: new Date().toISOString(),
+      learned_by: "ei",
+      last_changed_by: "ei",
       embedding,
       // Type-specific fields with defaults
       ...(entity_type === 'fact' && { 
