@@ -43,7 +43,6 @@ export class StateManager {
       this.tools = state.tools ?? [];
       this.providers = state.providers ?? [];
       this.migrateLearnedByToIds();
-      this.migrateLearnedByToIds();
       this.migrateFactValidation();
       this.migrateMessageFlags();
     } else {
