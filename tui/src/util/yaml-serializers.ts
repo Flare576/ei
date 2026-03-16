@@ -414,7 +414,11 @@ export function humanToYAML(human: HumanEntity, personaLookup?: Map<string, stri
     const displayName = personaLookup?.get(trimmed) ?? trimmed;
     return `${indent}# [read-only] ${key}${displayName}`;
   })
-  .replace(/^(\s+)(last_changed_by: .+)$/mg, '$1# [read-only] $2');
+  .replace(/^(\s+)(last_changed_by: )(.+)$/mg, (_, indent, key, val) => {
+    const trimmed = val.trim();
+    const displayName = personaLookup?.get(trimmed) ?? trimmed;
+    return `${indent}# [read-only] ${key}${displayName}`;
+  });
 }
 
 export interface HumanYAMLResult {
@@ -426,7 +430,7 @@ export interface HumanYAMLResult {
   deletedPersonIds: string[];
 }
 
-export function humanFromYAML(yamlContent: string): HumanYAMLResult {
+export function humanFromYAML(yamlContent: string, original?: HumanEntity): HumanYAMLResult {
   // Strip read-only comment lines before parsing so users can't accidentally corrupt them
   const stripped = yamlContent
     .split('\n')
@@ -443,7 +447,9 @@ export function humanFromYAML(yamlContent: string): HumanYAMLResult {
     if (f._delete && !BUILT_IN_FACT_NAMES.has(f.name)) {
       deletedFactIds.push(f.id);
     } else {
-      const { _delete, ...fact } = f;
+      const { _delete, ...parsed } = f;
+      const originalFact = original?.facts.find(of => of.id === parsed.id);
+      const fact = originalFact ? { ...originalFact, ...parsed } : parsed;
       if (fact.description && !fact.validated_date) {
         fact.validated_date = new Date().toISOString();
       }
@@ -456,7 +462,9 @@ export function humanFromYAML(yamlContent: string): HumanYAMLResult {
     if (t._delete) {
       deletedTopicIds.push(t.id);
     } else {
-      const { _delete, ...topic } = t;
+      const { _delete, ...parsed } = t;
+      const originalTopic = original?.topics.find(ot => ot.id === parsed.id);
+      const topic = originalTopic ? { ...originalTopic, ...parsed } : parsed;
       topics.push(topic);
     }
   }
@@ -466,7 +474,9 @@ export function humanFromYAML(yamlContent: string): HumanYAMLResult {
     if (p._delete) {
       deletedPersonIds.push(p.id);
     } else {
-      const { _delete, ...person } = p;
+      const { _delete, ...parsed } = p;
+      const originalPerson = original?.people.find(op => op.id === parsed.id);
+      const person = originalPerson ? { ...originalPerson, ...parsed } : parsed;
       people.push(person);
     }
   }

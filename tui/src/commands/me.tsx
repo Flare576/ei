@@ -66,7 +66,7 @@ export const meCommand: Command = {
       }
       
       try {
-        const parsed = humanFromYAML(result.content);
+        const parsed = humanFromYAML(result.content, filteredHuman);
         
         for (const id of parsed.deletedFactIds) {
           await ctx.ei.removeDataItem("fact", id);
