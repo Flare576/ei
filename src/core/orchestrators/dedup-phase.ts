@@ -139,7 +139,6 @@ export function queueDedupPhase(state: StateManager): void {
   console.log(`[Dedup] Starting deduplication phase (threshold: ${threshold})`);
   
   const entityTypes: Array<{ type: DataItemType; items: DedupableItem[] }> = [
-    { type: "fact", items: human.facts },
     { type: "topic", items: human.topics },
     { type: "person", items: human.people },
   ];
@@ -178,7 +177,7 @@ export function queueDedupPhase(state: StateManager): void {
       // Build prompt
       const prompt = buildDedupPrompt({
         cluster: clusterEntities,
-        itemType: type,
+        itemType: type as "topic" | "person",
         similarityRange: { min: cluster.minSim, max: cluster.maxSim }
       });
       

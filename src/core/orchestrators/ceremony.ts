@@ -616,12 +616,6 @@ export function queueRewritePhase(state: StateManager): void {
 
   const itemsToScan: Array<{ item: DataItemBase; type: RewriteItemType }> = [];
 
-  for (const fact of human.facts) {
-    if ((fact.description?.length ?? 0) > REWRITE_DESCRIPTION_THRESHOLD) {
-      itemsToScan.push({ item: fact, type: "fact" });
-    }
-  }
-
   for (const topic of human.topics) {
     if ((topic.description?.length ?? 0) > REWRITE_DESCRIPTION_THRESHOLD) {
       itemsToScan.push({ item: topic, type: "topic" });
