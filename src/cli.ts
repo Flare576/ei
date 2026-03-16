@@ -41,6 +41,7 @@ Usage:
   ei <type> --recent "query"    Type-specific recent search
   ei --id <id>                  Look up a specific entity by ID
   echo <id> | ei --id           Look up entity by ID from stdin
+  ei mcp                        Start the Ei MCP stdio server (for Cursor/Claude Desktop)
 
 Types:
   quote / quotes    Quotes from conversation history
@@ -52,7 +53,7 @@ Options:
   --number, -n     Maximum number of results (default: 10)
   --recent, -r     Sort by last_mentioned date (most recent first)
   --id             Look up entity by ID (accepts value or stdin)
-  --install        Write the Ei tool file to ~/.config/opencode/tools/
+  --install        Register Ei with OpenCode, Claude Code, and Cursor
   --help, -h       Show this help message
 
 Examples:
@@ -128,7 +129,7 @@ async function installOpenCodeTool(): Promise<void> {
   console.log(`  Restart OpenCode to activate.`);
 }
 
-async function installClaudeCodeMcp(): Promise<void> {
+async function installClaudeCode(): Promise<void> {
   const home = process.env.HOME || "~";
   const claudeJsonPath = join(home, ".claude.json");
 
@@ -138,7 +139,7 @@ async function installClaudeCodeMcp(): Promise<void> {
     const which = Bun.spawnSync(["which", "claude"], { stdout: "pipe", stderr: "pipe" });
     if (which.exitCode === 0) {
       const result = Bun.spawnSync(
-        ["claude", "mcp", "add", "--scope", "user", "--transport", "stdio", "ei", "--", "ei"],
+        ["claude", "mcp", "add", "--scope", "user", "--transport", "stdio", "ei", "--", "ei", "mcp"],
         { stdout: "pipe", stderr: "pipe" }
       );
       if (result.exitCode === 0) {
@@ -161,17 +162,11 @@ async function installClaudeCodeMcp(): Promise<void> {
     // File doesn't exist or isn't valid JSON — start fresh
   }
 
-  // Resolve the ei binary: if running as compiled binary, argv[1] is our path;
-  // if running as 'bun src/cli.ts', fall back to 'ei' (assumed on PATH after npm install -g)
-  const isBunScript = process.argv[1]?.endsWith("/cli.ts") || process.argv[1]?.endsWith("/cli.js");
-  const command = isBunScript ? "ei" : (process.argv[1] ?? "ei");
-
   const mcpServers = (config.mcpServers ?? {}) as Record<string, unknown>;
   mcpServers["ei"] = {
     type: "stdio",
-    command,
-    args: [],
-    env: {},
+    command: "ei",
+    args: ["mcp"],
   };
   config.mcpServers = mcpServers;
 
@@ -183,6 +178,41 @@ async function installClaudeCodeMcp(): Promise<void> {
 
   console.log(`✓ Installed Ei MCP server to ${claudeJsonPath}`);
   console.log(`  Restart Claude Code to activate.`);
+}
+
+async function installCursor(): Promise<void> {
+  const home = process.env.HOME || "~";
+  const cursorJsonPath = join(home, ".cursor", "mcp.json");
+
+  let config: Record<string, unknown> = {};
+  try {
+    const text = await Bun.file(cursorJsonPath).text();
+    config = JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    // File doesn't exist or isn't valid JSON — start fresh
+  }
+
+  const mcpServers = (config.mcpServers ?? {}) as Record<string, unknown>;
+  mcpServers["ei"] = {
+    type: "stdio",
+    command: "ei",
+    args: ["mcp"],
+  };
+  config.mcpServers = mcpServers;
+
+  await Bun.$`mkdir -p ${join(home, ".cursor")}`;
+  const tmpPath = `${cursorJsonPath}.ei-install.tmp`;
+  await Bun.write(tmpPath, JSON.stringify(config, null, 2) + "\n");
+  const { rename } = await import(/* @vite-ignore */ "fs/promises");
+  await rename(tmpPath, cursorJsonPath);
+
+  console.log(`✓ Installed Ei MCP server to ${cursorJsonPath}`);
+  console.log(`  Restart Cursor to activate.`);
+}
+
+async function installMcpClients(): Promise<void> {
+  await installClaudeCode();
+  await installCursor();
 }
 
 async function main(): Promise<void> {
@@ -207,10 +237,15 @@ async function main(): Promise<void> {
 
   if (args[0] === "--install") {
     await installOpenCodeTool();
-    await installClaudeCodeMcp();
+    await installMcpClients();
     process.exit(0);
   }
 
+  if (args[0] === "mcp") {
+    const { handleMcpCommand } = await import("./cli/mcp.js");
+    await handleMcpCommand(args.slice(1));
+    process.exit(0);
+  }
 
   // Handle --id flag: look up entity by ID
   const idFlagIndex = args.indexOf("--id");

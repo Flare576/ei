@@ -11,7 +11,8 @@ ei topics -n 5 "query string"  # Return up to 5 topics
 ei quotes -n 5 "query string"  # Return up to 5 quotes
 ei --id <id>                   # Look up a specific entity by ID
 echo <id> | ei --id            # Look up entity by ID from stdin
-ei --install                   # Install the Ei tool for OpenCode
+ei --install                   # Register Ei with OpenCode, Claude Code, and Cursor
+ei mcp                         # Start the Ei MCP stdio server (for Cursor/Claude Desktop)
 ```
 
 Type aliases: `fact`, `person`, `topic`, `quote` all work (singular or plural).
@@ -32,7 +33,21 @@ ei "memory leak" | jq '.[0].id' | ei --id
 ei --install
 ```
 
-This writes `~/.config/opencode/tools/ei.ts` with a complete tool definition. Restart OpenCode to activate.
+This registers Ei with every supported agent environment it detects:
+
+- **OpenCode**: writes `~/.config/opencode/tools/ei.ts`
+- **Claude Code**: runs `claude mcp add` (or writes `~/.claude.json` as fallback)
+- **Cursor**: writes `~/.cursor/mcp.json`
+
+Restart your agent tool after running to activate.
+
+### MCP Server
+
+Claude Code and Cursor call `ei mcp` to start the MCP stdio server. You can run it directly to test:
+
+```sh
+ei mcp
+```
 
 ## What the Tool Provides
 
