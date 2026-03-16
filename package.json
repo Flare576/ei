@@ -58,6 +58,7 @@
   },
   "type": "module",
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "@opentui/core": "^0.1.79",
     "@opentui/solid": "^0.1.79",
     "fastembed": "^2.1.0",
