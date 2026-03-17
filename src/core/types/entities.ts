@@ -86,6 +86,7 @@ export interface HumanSettings {
   ceremony?: CeremonyConfig;
   backup?: BackupConfig;
   claudeCode?: import("../../integrations/claude-code/types.js").ClaudeCodeSettings;
+  cursor?: import("../../integrations/cursor/types.js").CursorSettings;
 }
 
 export interface HumanEntity {

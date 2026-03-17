@@ -108,6 +108,7 @@ const DEFAULT_LOOP_INTERVAL_MS = 100;
 const DEFAULT_CONTEXT_WINDOW_HOURS = 8;
 const DEFAULT_OPENCODE_POLLING_MS = 1800000;
 const DEFAULT_CLAUDE_CODE_POLLING_MS = 1800000;
+const DEFAULT_CURSOR_POLLING_MS = 1800000;
 
 let processorInstanceCount = 0;
 
@@ -128,6 +129,8 @@ export class Processor {
   private openCodeImportInProgress = false;
   private lastClaudeCodeSync = 0;
   private claudeCodeImportInProgress = false;
+  private lastCursorSync = 0;
+  private cursorImportInProgress = false;
   private pendingConflict: StateConflictData | null = null;
   private storage: Storage | null = null;
   private importAbortController = new AbortController();
@@ -877,6 +880,14 @@ const toolNextSteps = new Set([
       await this.checkAndSyncClaudeCode(human, now);
     }
 
+    if (
+      this.isTUI &&
+      human.settings?.cursor?.integration &&
+      this.stateManager.queue_length() === 0
+    ) {
+      await this.checkAndSyncCursor(human, now);
+    }
+
     if (human.settings?.ceremony && shouldStartCeremony(human.settings.ceremony, this.stateManager)) {
       if (human.settings?.sync && remoteSync.isConfigured()) {
         const state = this.stateManager.getStorageState();
@@ -1060,6 +1071,59 @@ const toolNextSteps = new Set([
       })
       .finally(() => {
         this.claudeCodeImportInProgress = false;
+      });
+  }
+
+  private async checkAndSyncCursor(human: HumanEntity, now: number): Promise<void> {
+    if (this.cursorImportInProgress) {
+      return;
+    }
+
+    const cursor = human.settings?.cursor;
+    const pollingInterval = cursor?.polling_interval_ms ?? DEFAULT_CURSOR_POLLING_MS;
+    const lastSync = cursor?.last_sync ? new Date(cursor.last_sync).getTime() : 0;
+    const timeSinceSync = now - lastSync;
+
+    if (timeSinceSync < pollingInterval && this.lastCursorSync > 0) {
+      return;
+    }
+
+    this.lastCursorSync = now;
+    const syncTimestamp = new Date().toISOString();
+    this.stateManager.setHuman({
+      ...this.stateManager.getHuman(),
+      settings: {
+        ...this.stateManager.getHuman().settings,
+        cursor: {
+          ...cursor,
+          last_sync: syncTimestamp,
+        },
+      },
+    });
+
+    this.cursorImportInProgress = true;
+    import("../integrations/cursor/importer.js")
+      .then(({ importCursorSessions }) =>
+        importCursorSessions({
+          stateManager: this.stateManager,
+          interface: this.interface,
+          signal: this.importAbortController.signal,
+        })
+      )
+      .then((result) => {
+        if (result.sessionsProcessed > 0) {
+          console.log(
+            `[Processor] Cursor sync complete: ${result.sessionsProcessed} sessions, ` +
+              `${result.topicsCreated} topics created, ${result.messagesImported} messages imported, ` +
+              `${result.extractionScansQueued} extraction scans queued`
+          );
+        }
+      })
+      .catch((err) => {
+        console.warn(`[Processor] Cursor sync failed:`, err);
+      })
+      .finally(() => {
+        this.cursorImportInProgress = false;
       });
   }
 

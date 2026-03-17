@@ -23,6 +23,7 @@ import type {
   } from "../../../src/core/types.js";
 import { ContextStatus } from "../../../src/core/types.js";
 import type { ClaudeCodeSettings } from "../../../src/integrations/claude-code/types.js";
+import type { CursorSettings } from "../../../src/integrations/cursor/types.js";
 import { BUILT_IN_FACT_NAMES } from "../../../src/core/constants/built-in-facts.js";
 
 // =============================================================================
@@ -519,8 +520,15 @@ interface EditableSettingsData {
     integration?: boolean | null;
     polling_interval_ms?: number | null;
     last_sync?: string | null;
+    extraction_point?: string | null;
     extraction_model?: string | null;
     extraction_token_limit?: string | number | null;
+  };
+  cursor?: {
+    integration?: boolean | null;
+    polling_interval_ms?: number | null;
+    last_sync?: string | null;
+    extraction_point?: string | null;
   };
   backup?: {
     enabled?: boolean | null;
@@ -557,6 +565,13 @@ export function settingsToYAML(settings: HumanSettings | undefined): string {
       extraction_model: settings?.claudeCode?.extraction_model ?? 'default',
       extraction_token_limit: settings?.claudeCode?.extraction_token_limit ?? 'default',
       last_sync: settings?.claudeCode?.last_sync ?? null,
+      extraction_point: settings?.claudeCode?.extraction_point ?? null,
+    },
+    cursor: {
+      integration: settings?.cursor?.integration ?? false,
+      polling_interval_ms: settings?.cursor?.polling_interval_ms ?? 1800000,
+      last_sync: settings?.cursor?.last_sync ?? null,
+      extraction_point: settings?.cursor?.extraction_point ?? null,
     },
     backup: {
       enabled: settings?.backup?.enabled ?? false,
@@ -613,6 +628,7 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
       integration: nullToUndefined(data.claudeCode.integration),
       polling_interval_ms: nullToUndefined(data.claudeCode.polling_interval_ms),
       last_sync: original?.claudeCode?.last_sync,
+      extraction_point: original?.claudeCode?.extraction_point,
       processed_sessions: original?.claudeCode?.processed_sessions,
       extraction_model: (data.claudeCode.extraction_model != null && data.claudeCode.extraction_model !== 'default')
         ? data.claudeCode.extraction_model
@@ -620,6 +636,17 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
       extraction_token_limit: (data.claudeCode.extraction_token_limit != null && data.claudeCode.extraction_token_limit !== 'default')
         ? Number(data.claudeCode.extraction_token_limit)
         : undefined,
+    };
+  }
+
+  let cursor: CursorSettings | undefined;
+  if (data.cursor) {
+    cursor = {
+      integration: nullToUndefined(data.cursor.integration),
+      polling_interval_ms: nullToUndefined(data.cursor.polling_interval_ms),
+      last_sync: original?.cursor?.last_sync,
+      extraction_point: original?.cursor?.extraction_point,
+      processed_sessions: original?.cursor?.processed_sessions,
     };
   }
 
@@ -643,6 +670,7 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
     ceremony,
     opencode,
     claudeCode,
+    cursor,
     backup,
   };
 }
