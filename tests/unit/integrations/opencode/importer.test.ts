@@ -639,6 +639,42 @@ describe("importOpenCodeSessions", () => {
     );
   });
 
+  it("floor-skips sessions below extraction_point that are already in processed_sessions", async () => {
+    const extractionPointMs = 2000;
+    mockHuman.settings = {
+      opencode: {
+        extraction_point: new Date(extractionPointMs).toISOString(),
+        processed_sessions: { "ses_below_floor": new Date().toISOString() },
+      },
+    };
+
+    const sessions: OpenCodeSession[] = [
+      makeSession({ id: "ses_below_floor", time: { created: 500, updated: 1000 } }),
+      makeSession({ id: "ses_above_floor", time: { created: 2500, updated: 3000 } }),
+    ];
+
+    const message: OpenCodeMessage = {
+      id: "msg_above",
+      sessionId: "ses_above_floor",
+      role: "assistant",
+      agent: "build",
+      content: "From above-floor session",
+      timestamp: "2026-02-01T00:00:00.000Z",
+    };
+
+    mockReader.getSessionsUpdatedSince = vi.fn().mockResolvedValue(sessions);
+    mockReader.getMessagesForSession = vi.fn().mockResolvedValue([message]);
+
+    const result = await importOpenCodeSessions({
+      stateManager: mockStateManager as StateManager,
+      interface: mockInterface as Ei_Interface,
+      reader: mockReader as IOpenCodeReader,
+    });
+
+    expect(result.sessionsProcessed).toBe(1);
+    expect(mockHuman.settings?.opencode?.processed_sessions?.["ses_above_floor"]).toBeDefined();
+  });
+
   it("skips child sessions (parentId set)", async () => {
     const sessions: OpenCodeSession[] = [
       makeSession({ id: "ses_parent", title: "Parent" }),

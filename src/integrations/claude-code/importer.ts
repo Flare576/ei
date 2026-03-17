@@ -158,6 +158,10 @@ function updateProcessedState(
       ...human.settings,
       claudeCode: {
         ...human.settings?.claudeCode,
+        // extraction_point is a progress indicator for user visibility only —
+        // it does NOT gate imports. processed_sessions is the sole source of
+        // truth for which sessions have been seen and when.
+        extraction_point: session.lastMessageAt,
         processed_sessions: processedSessions,
       },
     },
@@ -212,7 +216,8 @@ export async function importClaudeCodeSessions(
 
   // ─── Step 2: Find next unprocessed session ────────────────────────────
   const human = stateManager.getHuman();
-  const processedSessions = human.settings?.claudeCode?.processed_sessions ?? {};
+  const settings = human.settings?.claudeCode;
+  const processedSessions = settings?.processed_sessions ?? {};
   const now = Date.now();
 
   let targetSession: ClaudeCodeSession | null = null;

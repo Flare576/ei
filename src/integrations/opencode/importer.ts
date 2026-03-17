@@ -79,11 +79,17 @@ function filterRelevantMessages(messages: OpenCodeMessage[]): OpenCodeMessage[] 
  * Import one OpenCode session per call.
  *
  * Flow:
- * 1. Find the next unprocessed session after extraction_point.
+ * 1. Find the next unprocessed or updated session (oldest-first).
  * 2. Write all messages for that session to their persona(s) — archived,
  *    messages cleared first. Messages before last_imported are pre-marked
  *    [p,r,o,f]=true; newer messages are unmarked and queued for extraction.
  * 3. Advance extraction_point to session.time.updated.
+ *
+ * NOTE: extraction_point is a progress indicator for user visibility only.
+ * It does NOT gate which sessions are imported. processed_sessions (per-session
+ * timestamps) is the sole source of truth for "have we seen this session and
+ * is it up to date." Sessions absent from processed_sessions are always
+ * candidates regardless of their timestamp vs extraction_point.
  *
  * The processor gate (queue_length() === 0) ensures we never pile onto a
  * backed-up queue.
