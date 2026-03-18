@@ -617,12 +617,12 @@ export function queueRewritePhase(state: StateManager): void {
   const itemsToScan: Array<{ item: DataItemBase; type: RewriteItemType }> = [];
 
   for (const topic of human.topics) {
-    if ((topic.description?.length ?? 0) > REWRITE_DESCRIPTION_THRESHOLD) {
+    if ((topic.description?.length ?? 0) > REWRITE_DESCRIPTION_THRESHOLD && !topic.rewrite_checked) {
       itemsToScan.push({ item: topic, type: "topic" });
     }
   }
   for (const person of human.people) {
-    if ((person.description?.length ?? 0) > REWRITE_DESCRIPTION_THRESHOLD) {
+    if ((person.description?.length ?? 0) > REWRITE_DESCRIPTION_THRESHOLD && !person.rewrite_checked) {
       itemsToScan.push({ item: person, type: "person" });
     }
   }

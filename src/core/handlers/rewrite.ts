@@ -36,7 +36,15 @@ export async function handleRewriteScan(response: LLMResponse, state: StateManag
 
   const subjects = response.parsed as RewriteScanResult | undefined;
   if (!subjects || !Array.isArray(subjects) || subjects.length === 0) {
-    console.log(`[handleRewriteScan] No extra subjects found for ${itemType} "${itemId}" — item is cohesive`);
+    console.log(`[handleRewriteScan] No extra subjects found for ${itemType} "${itemId}" — marking rewrite_checked`);
+    const human = state.getHuman();
+    if (itemType === "topic") {
+      const topic = human.topics.find(t => t.id === itemId);
+      if (topic) state.human_topic_upsert({ ...topic, rewrite_checked: true });
+    } else if (itemType === "person") {
+      const person = human.people.find(p => p.id === itemId);
+      if (person) state.human_person_upsert({ ...person, rewrite_checked: true });
+    }
     return;
   }
 
@@ -244,6 +252,15 @@ export async function handleRewriteRewrite(response: LLMResponse, state: StateMa
         console.warn(`[handleRewriteRewrite] Unknown type "${item.type}" for new item "${item.name}" — skipping`);
     }
     newCount++;
+  }
+
+  const updatedHuman = state.getHuman();
+  if (itemType === "topic") {
+    const original = updatedHuman.topics.find(t => t.id === itemId);
+    if (original) state.human_topic_upsert({ ...original, rewrite_checked: true });
+  } else if (itemType === "person") {
+    const original = updatedHuman.people.find(p => p.id === itemId);
+    if (original) state.human_person_upsert({ ...original, rewrite_checked: true });
   }
 
   console.log(`[handleRewriteRewrite] Complete for ${itemType} "${itemId}": ${existingCount} existing updated, ${newCount} new created`);
