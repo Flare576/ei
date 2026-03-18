@@ -56,16 +56,14 @@ export function ControlArea({
         {queueStatus.dlq_count > 0 && (
           <span className="ei-control-area__dlq">[DLQ:{queueStatus.dlq_count}]</span>
         )}
-        {isPaused && (
-          <button
-            className="ei-btn ei-btn--icon ei-play-btn"
-            onClick={onPauseToggle}
-            title="Resume (Escape)"
-            aria-label="Resume"
-          >
-            ▶
-          </button>
-        )}
+        <button
+          className={`ei-btn ei-btn--icon ${isPaused ? "ei-play-btn" : "ei-pause-btn"}`}
+          onClick={onPauseToggle}
+          title={isPaused ? "Resume (Escape)" : "Pause (Escape)"}
+          aria-label={isPaused ? "Resume" : "Pause"}
+        >
+          {isPaused ? "▶" : "⏸"}
+        </button>
       </div>
       <div className="ei-control-area__buttons">
         {(onMyDataClick || onSettingsClick || onHelpClick || onSyncAndExit) && (

@@ -51,7 +51,12 @@ Your role is unique among personas:
   const priorities = buildPrioritiesSection(data.persona, data.human);
   const responseFormat = buildResponseFormatSection();
   const toolsSection = (data.tools && data.tools.length > 0) ? buildToolsSection() : "";
-  const currentTime = new Date().toISOString();
+  const currentTime = new Date().toLocaleString('en-US', {
+    weekday: 'long', year: 'numeric', month: 'long',
+    day: 'numeric', hour: 'numeric', minute: '2-digit',
+    timeZoneName: 'short',
+  });
+  const conversationState = getConversationStateText(data.delay_ms);
 
   return `${identity}
 
@@ -70,6 +75,7 @@ ${priorities}
 ${responseFormat}${toolsSection ? `\n\n${toolsSection}` : ""}
 
 Current time: ${currentTime}
+${conversationState}
 
 ## Final Instructions
 - NEVER repeat or echo the user's message in your response. Start directly with your own words.
@@ -94,7 +100,12 @@ function buildStandardSystemPrompt(data: ResponsePromptData): string {
   const priorities = buildPrioritiesSection(data.persona, data.human);
   const responseFormat = buildResponseFormatSection();
   const toolsSection = (data.tools && data.tools.length > 0) ? buildToolsSection() : "";
-  const currentTime = new Date().toISOString();
+  const currentTime = new Date().toLocaleString('en-US', {
+    weekday: 'long', year: 'numeric', month: 'long',
+    day: 'numeric', hour: 'numeric', minute: '2-digit',
+    timeZoneName: 'short',
+  });
+  const conversationState = getConversationStateText(data.delay_ms);
 
   return `${identity}
 
@@ -112,18 +123,15 @@ ${priorities}
 ${responseFormat}${toolsSection ? `\n\n${toolsSection}` : ""}
 
 Current time: ${currentTime}
+${conversationState}
 
 ## Final Instructions
 - NEVER repeat or echo the user's message in your response. Start directly with your own words.
 - Format your response as specified in the Response Format section above.`
 }
 
-function buildUserPrompt(data: ResponsePromptData): string {
-  const conversationState = getConversationStateText(data.delay_ms);
-  
-  return `${conversationState}
-
-${RESPONSE_FORMAT_INSTRUCTION}`;
+function buildUserPrompt(): string {
+  return RESPONSE_FORMAT_INSTRUCTION;
 }
 
 /**
@@ -151,7 +159,7 @@ export function buildResponsePrompt(data: ResponsePromptData): PromptOutput {
     ? buildEiSystemPrompt(data)
     : buildStandardSystemPrompt(data);
   
-  const user = buildUserPrompt(data);
+  const user = buildUserPrompt();
 
   return { system, user };
 }
