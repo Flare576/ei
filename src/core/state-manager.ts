@@ -46,6 +46,7 @@ export class StateManager {
       this.migrateLearnedByToIds();
       this.migrateFactValidation();
       this.migrateMessageFlags();
+      this.migrateInterestedPersonas();
     } else {
       this.humanState.load(createDefaultHumanEntity());
     }
@@ -188,6 +189,29 @@ export class StateManager {
     if (migratedCount > 0) {
       this.scheduleSave();
       console.log(`[StateManager] Migrated message flags (p→t, o→p, removed r/o) for ${migratedCount} messages`);
+    }
+  }
+
+  /**
+   * Migration: interested_personas was added to DataItemBase.
+   * On load, backfill from learned_by + last_changed_by for any item missing the field.
+   */
+  private migrateInterestedPersonas(): void {
+    const human = this.humanState.get();
+    let dirty = false;
+
+    const migrateItem = (item: { learned_by?: string; last_changed_by?: string; interested_personas?: string[] }) => {
+      if (item.interested_personas === undefined || item.interested_personas === null) {
+        item.interested_personas = [...new Set([item.learned_by, item.last_changed_by].filter(Boolean) as string[])];
+        dirty = true;
+      }
+    };
+
+    [...human.facts, ...human.topics, ...human.people].forEach(migrateItem);
+
+    if (dirty) {
+      this.humanState.set(human);
+      console.log("[StateManager] Migrated interested_personas fields from learned_by + last_changed_by");
     }
   }
 

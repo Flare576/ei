@@ -165,6 +165,9 @@ export async function handleTopicUpdate(response: LLMResponse, state: StateManag
     last_mentioned: now,
     learned_by: isNewItem ? personaId : existingTopic?.learned_by,
     last_changed_by: personaId,
+    interested_personas: isNewItem
+      ? [personaId]
+      : [...new Set([...(existingTopic?.interested_personas ?? []), personaId])],
     persona_groups: mergeGroups(personaGroup, isNewItem, existingTopic?.persona_groups),
     embedding,
   };
@@ -232,6 +235,9 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
     last_mentioned: now,
     learned_by: isNewItem ? personaId : existingPerson?.learned_by,
     last_changed_by: personaId,
+    interested_personas: isNewItem
+      ? [personaId]
+      : [...new Set([...(existingPerson?.interested_personas ?? []), personaId])],
     persona_groups: mergeGroups(personaGroup, isNewItem, existingPerson?.persona_groups),
     embedding,
   };

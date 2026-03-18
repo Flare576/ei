@@ -72,6 +72,7 @@ export async function handleFactFind(response: LLMResponse, state: StateManager)
       last_mentioned: now,
       learned_by: existingFact.learned_by ?? context.personaId,
       last_changed_by: context.personaId,
+      interested_personas: [...new Set([...(existingFact.interested_personas ?? []), context.personaId])],
       embedding,
     };
 
