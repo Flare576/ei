@@ -7,7 +7,7 @@
  * ```
  */
 
-export const BUN_PATH = process.env.BUN_PATH || "/Users/flare576/.bun/bin/bun";
+export const BUN_PATH = process.env.BUN_PATH || `${process.env.HOME}/.bun/bin/bun`;
 export const TAB = "\t";
 
 /**

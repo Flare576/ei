@@ -1,1 +1,1 @@
-/Users/flare576/Projects/Personal/ei/tests/e2e/framework/mock-server.ts
+../../../../tests/e2e/framework/mock-server.ts
