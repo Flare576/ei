@@ -339,6 +339,7 @@ Seeded on every startup via `Processor.bootstrapTools()`. Safe to call repeatedl
 | `search_files` | `node` | Find files by name glob pattern (TUI only) |
 | `grep` | `node` | Search file contents by regex (TUI only) |
 | `get_file_info` | `node` | File/directory metadata (TUI only) |
+| `web_fetch` | `node` | Fetch URL content as text (HTML stripped; TUI only — web blocked by CORS) |
 
 **Provider: `tavily`** (Tavily Search, disabled by default, requires `config.api_key`)
 

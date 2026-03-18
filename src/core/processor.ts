@@ -453,6 +453,30 @@ export class Processor {
       });
     }
 
+    // web_fetch tool
+    if (!this.stateManager.tools_getByName("web_fetch")) {
+      this.stateManager.tools_add({
+        id: crypto.randomUUID(),
+        provider_id: "ei",
+        name: "web_fetch",
+        display_name: "Web Fetch",
+        description:
+          "Fetch content from a URL and return the text. Useful for reading web pages, documentation, or public APIs. HTML is stripped to plain text. Only available in the TUI.",
+        input_schema: {
+          type: "object",
+          properties: {
+            url: { type: "string", description: "The URL to fetch (http or https only)" },
+          },
+          required: ["url"],
+        },
+        runtime: "node",
+        builtin: true,
+        enabled: true,
+        created_at: now,
+        max_calls_per_interaction: 3,
+      });
+    }
+
     // --- Tavily Search provider ---
     if (!this.stateManager.tools_getProviderById("tavily")) {
       const tavilyProvider: ToolProvider = {

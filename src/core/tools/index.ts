@@ -11,6 +11,7 @@ import type { ToolCall, ToolResult, ToolExecutor } from "./types.js";
 import { tavilyWebSearchExecutor, tavilyNewsSearchExecutor } from "./builtin/web-search.js";
 import { currentlyPlayingExecutor } from "./builtin/currently-playing.js";
 import { likedSongsExecutor } from "./builtin/spotify-liked-songs.js";
+import { webFetchExecutor } from "./builtin/web-fetch.js";
 // file-read and list-directory are Node-only — imported lazily via registerFileReadExecutor() to avoid
 // file-read and list-directory are Node-only — imported lazily via registerFileReadExecutor() to avoid
 
@@ -37,6 +38,7 @@ registerExecutor(tavilyWebSearchExecutor);
 registerExecutor(tavilyNewsSearchExecutor);
 registerExecutor(currentlyPlayingExecutor);
 registerExecutor(likedSongsExecutor);
+registerExecutor(webFetchExecutor);
 // file_read and list_directory are registered lazily via registerFileReadExecutor() — Node/TUI only.
 
 /**
