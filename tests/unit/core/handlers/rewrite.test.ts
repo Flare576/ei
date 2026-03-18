@@ -170,7 +170,7 @@ describe("Rewrite Handlers - Phase 1 (Scan)", () => {
       expect(state.queue_enqueue).not.toHaveBeenCalled();
     });
 
-    it("returns early when no subjects found (empty array)", async () => {
+    it("returns early when no subjects found (empty array) and item not in state", async () => {
       seedBloatedFact(state);
       const request = createMockRequest();
       const response = createMockResponse(request, []);
@@ -178,6 +178,46 @@ describe("Rewrite Handlers - Phase 1 (Scan)", () => {
       await handlers.handleRewriteScan(response, state as any);
 
       expect(vi.mocked(searchHumanData)).not.toHaveBeenCalled();
+      expect(state.queue_enqueue).not.toHaveBeenCalled();
+    });
+
+    it("marks rewrite_checked=true on topic when no subjects found", async () => {
+      seedBloatedTopic(state);
+      const request = createMockRequest();
+      const response = createMockResponse(request, []);
+
+      await handlers.handleRewriteScan(response, state as any);
+
+      expect(state.human_topic_upsert).toHaveBeenCalledTimes(1);
+      expect(state.human_topic_upsert).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "bloated-topic-1", rewrite_checked: true })
+      );
+      expect(state.queue_enqueue).not.toHaveBeenCalled();
+    });
+
+    it("marks rewrite_checked=true on person when no subjects found", async () => {
+      const person: Person = {
+        id: "bloated-person-1",
+        name: "Alice",
+        description: "A".repeat(800),
+        sentiment: 0.5,
+        relationship: "Friend",
+        exposure_current: 0.5,
+        exposure_desired: 0.5,
+        last_updated: new Date().toISOString(),
+      };
+      state._human.people.push(person);
+      const request = createMockRequest({
+        data: { itemId: "bloated-person-1", itemType: "person", rewriteModel: "TestProvider:test-model" },
+      });
+      const response = createMockResponse(request, []);
+
+      await handlers.handleRewriteScan(response, state as any);
+
+      expect(state.human_person_upsert).toHaveBeenCalledTimes(1);
+      expect(state.human_person_upsert).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "bloated-person-1", rewrite_checked: true })
+      );
       expect(state.queue_enqueue).not.toHaveBeenCalled();
     });
 
@@ -601,15 +641,78 @@ describe("Rewrite Handlers - Phase 2 (Rewrite)", () => {
 
       await handlers.handleRewriteRewrite(response, state as any);
 
-      expect(state.human_topic_upsert).toHaveBeenCalledTimes(1);
+      expect(state.human_topic_upsert).toHaveBeenCalledTimes(2);
       expect(state.human_person_upsert).toHaveBeenCalledTimes(1);
 
       const updatedTopic = state.human_topic_upsert.mock.calls[0][0];
       expect(updatedTopic.name).toBe("Software Engineering (Focused)");
 
+      const markingCall = state.human_topic_upsert.mock.calls[1][0];
+      expect(markingCall.rewrite_checked).toBe(true);
+
       const newPerson = state.human_person_upsert.mock.calls[0][0];
       expect(newPerson.name).toBe("New Person From Rewrite");
       expect(newPerson.relationship).toBe("coworker");
+    });
+
+    it("marks rewrite_checked=true on original topic after processing completes", async () => {
+      seedBloatedTopic(state);
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleRewriteRewrite,
+        data: { itemId: "bloated-topic-1", itemType: "topic" },
+      });
+      const response = createMockResponse(request, {
+        existing: [],
+        new: [{
+          type: "topic",
+          name: "Split Topic",
+          description: "Content split out of original",
+          sentiment: 0.5,
+          category: "Interest",
+        }],
+      });
+
+      await handlers.handleRewriteRewrite(response, state as any);
+
+      const markingCall = state.human_topic_upsert.mock.calls.find(
+        ([t]: [Topic]) => t.id === "bloated-topic-1" && t.rewrite_checked === true
+      );
+      expect(markingCall).toBeDefined();
+    });
+
+    it("marks rewrite_checked=true on original person after processing completes", async () => {
+      const person: Person = {
+        id: "bloated-person-1",
+        name: "Alice",
+        description: "A".repeat(800),
+        sentiment: 0.5,
+        relationship: "Friend",
+        exposure_current: 0.5,
+        exposure_desired: 0.5,
+        last_updated: new Date().toISOString(),
+      };
+      state._human.people.push(person);
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleRewriteRewrite,
+        data: { itemId: "bloated-person-1", itemType: "person" },
+      });
+      const response = createMockResponse(request, {
+        existing: [],
+        new: [{
+          type: "topic",
+          name: "Topic from person",
+          description: "Content split out",
+          sentiment: 0.5,
+          category: "Interest",
+        }],
+      });
+
+      await handlers.handleRewriteRewrite(response, state as any);
+
+      const markingCall = state.human_person_upsert.mock.calls.find(
+        ([p]: [Person]) => p.id === "bloated-person-1" && p.rewrite_checked === true
+      );
+      expect(markingCall).toBeDefined();
     });
   });
 });
