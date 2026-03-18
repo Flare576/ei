@@ -15,6 +15,7 @@ export interface DataItemBase {
   last_changed_by?: string;      // Persona ID that most recently updated this item (stable UUID)
   persona_groups?: string[];
   embedding?: number[];
+  rewrite_checked?: boolean;     // True after rewrite scan finds no changes. Cleared automatically when extraction upserts a fresh item.
 }
 
 export interface Fact extends DataItemBase {
