@@ -33,7 +33,7 @@ export const KeyboardProvider: ParentComponent = (props) => {
   const [focusedPanel, setFocusedPanel] = createSignal<Panel>("input");
   const [sidebarVisible, setSidebarVisible] = createSignal(true);
   const renderer = useRenderer();
-  const { queueStatus, abortCurrentOperation, resumeQueue, personas, activePersonaId, selectPersona, saveAndExit, showNotification, messages, recallPendingMessages, cleanupTimers } = useEi();
+  const { queueStatus, abortCurrentOperation, resumeQueue, pauseQueue, personas, activePersonaId, selectPersona, saveAndExit, showNotification, messages, recallPendingMessages, cleanupTimers } = useEi();
   
   let messageScrollRef: ScrollBoxRenderable | null = null;
   let textareaRef: TextareaRenderable | null = null;
@@ -129,6 +129,9 @@ export const KeyboardProvider: ParentComponent = (props) => {
       } else if (status.state === "paused") {
         logger.info("Escape pressed - resuming queue");
         void resumeQueue();
+      } else {
+        logger.info("Escape pressed - pausing queue");
+        pauseQueue();
       }
       return;
     }
