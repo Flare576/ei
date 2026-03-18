@@ -276,6 +276,7 @@
   background: var(--ei-bg-primary);
   padding: var(--ei-spacing-lg);
   border-radius: var(--ei-radius-lg);
+  width: 90%;
   max-width: 600px;
   max-height: 80vh;
   box-shadow: var(--ei-shadow-lg);
