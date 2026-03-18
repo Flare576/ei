@@ -182,6 +182,19 @@ function createCheckpointWithToolkit(mockServerUrl: string) {
         created_at: timestamp,
         max_calls_per_interaction: 5,
       },
+      {
+        id: "tool-web-fetch",
+        provider_id: "ei",
+        name: "web_fetch",
+        display_name: "Web Fetch",
+        description: "Fetch content from a URL.",
+        input_schema: { type: "object", properties: { url: { type: "string" } }, required: ["url"] },
+        runtime: "node",
+        builtin: true,
+        enabled: true,
+        created_at: timestamp,
+        max_calls_per_interaction: 3,
+      },
     ],
   };
 }
@@ -242,7 +255,7 @@ test.describe("/tools command", () => {
     terminal.submit();
 
     await expect(terminal.getByText("Toolkits")).toBeVisible({ timeout: 5000 });
-    await expect(terminal.getByText(/Ei Built-ins \(7 tools\)/g)).toBeVisible({ timeout: 3000 });
+    await expect(terminal.getByText(/Ei Built-ins \(8 tools\)/g)).toBeVisible({ timeout: 3000 });
 
     terminal.keyEscape();
     await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 5000 });
