@@ -313,19 +313,26 @@ export async function queueTopicMatch(
         }));
 
       console.log(`[queueTopicMatch] Embedding search: ${topicsWithEmbeddings.length} topics → ${topKItems.length} candidates`);
+      if (topKItems.length > 0) state.embedding_setWarning(false);
     } catch (err) {
-      console.error(`[queueTopicMatch] Embedding search failed, falling back to all topics:`, err);
+      console.error(`[queueTopicMatch] Embedding search failed, falling back to recent topics:`, err);
+      state.embedding_setWarning(true);
     }
   }
 
   if (topKItems.length === 0) {
-    console.log(`[queueTopicMatch] No embeddings available, using all topics`);
-    topKItems = human.topics.map(t => ({
+    const sorted = [...human.topics].sort((a, b) => {
+      const aDate = a.last_mentioned ?? a.last_updated;
+      const bDate = b.last_mentioned ?? b.last_updated;
+      return bDate.localeCompare(aDate);
+    });
+    topKItems = sorted.slice(0, EMBEDDING_TOP_K).map(t => ({
       id: t.id,
       name: t.name,
       description: t.description,
       category: t.category,
     }));
+    console.log(`[queueTopicMatch] No embedding matches, using ${topKItems.length} most-recent topics`);
   }
 
   const prompt = buildTopicMatchPrompt({
@@ -388,19 +395,26 @@ export async function queuePersonMatch(
         }));
 
       console.log(`[queuePersonMatch] Embedding search: ${peopleWithEmbeddings.length} people → ${topKItems.length} candidates`);
+      if (topKItems.length > 0) state.embedding_setWarning(false);
     } catch (err) {
-      console.error(`[queuePersonMatch] Embedding search failed, falling back to all people:`, err);
+      console.error(`[queuePersonMatch] Embedding search failed, falling back to recent people:`, err);
+      state.embedding_setWarning(true);
     }
   }
 
   if (topKItems.length === 0) {
-    console.log(`[queuePersonMatch] No embeddings available, using all people`);
-    topKItems = human.people.map(p => ({
+    const sorted = [...human.people].sort((a, b) => {
+      const aDate = a.last_mentioned ?? a.last_updated;
+      const bDate = b.last_mentioned ?? b.last_updated;
+      return bDate.localeCompare(aDate);
+    });
+    topKItems = sorted.slice(0, EMBEDDING_TOP_K).map(p => ({
       id: p.id,
       name: p.name,
       description: p.description,
       relationship: p.relationship,
     }));
+    console.log(`[queuePersonMatch] No embedding matches, using ${topKItems.length} most-recent people`);
   }
 
   const prompt = buildPersonMatchPrompt({
