@@ -56,6 +56,9 @@ export function ControlArea({
         {queueStatus.dlq_count > 0 && (
           <span className="ei-control-area__dlq">[DLQ:{queueStatus.dlq_count}]</span>
         )}
+        {queueStatus.embedding_warning && (
+          <span className="ei-control-area__dlq" title="Embedding service unavailable — topic/person matching using recent items">⚠ embed</span>
+        )}
         <button
           className={`ei-btn ei-btn--icon ${isPaused ? "ei-play-btn" : "ei-pause-btn"}`}
           onClick={onPauseToggle}

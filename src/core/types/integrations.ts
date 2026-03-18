@@ -69,6 +69,8 @@ export interface QueueStatus {
   pending_count: number;
   dlq_count: number;
   current_operation?: string;
+  /** True when the embedding service failed and topic/person matching fell back to recent items. */
+  embedding_warning?: boolean;
 }
 
 export interface EiError {

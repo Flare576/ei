@@ -30,6 +30,7 @@ export class StateManager {
   private persistenceState = new PersistenceState();
   private providers: ToolProvider[] = [];
   private tools: ToolDefinition[] = [];
+  private embeddingWarning = false;
 
   async initialize(storage: Storage): Promise<void> {
     this.persistenceState.setStorage(storage);
@@ -477,6 +478,14 @@ export class StateManager {
 
   queue_dlqLength(): number {
     return this.queueState.dlqLength();
+  }
+
+  embedding_setWarning(warned: boolean): void {
+    this.embeddingWarning = warned;
+  }
+
+  embedding_getWarning(): boolean {
+    return this.embeddingWarning;
   }
 
   queue_getDLQItems(): LLMRequest[] {

@@ -26,6 +26,7 @@ export async function getQueueStatus(sm: StateManager): Promise<QueueStatus> {
       : "idle",
     pending_count: sm.queue_length(),
     dlq_count: sm.queue_dlqLength(),
+    embedding_warning: sm.embedding_getWarning() || undefined,
   };
 }
 
