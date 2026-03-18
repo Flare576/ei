@@ -9,6 +9,7 @@ ei facts -n 5 "query string"   # Return up to 5 facts
 ei people -n 5 "query string"  # Return up to 5 people
 ei topics -n 5 "query string"  # Return up to 5 topics
 ei quotes -n 5 "query string"  # Return up to 5 quotes
+ei --persona "Beta" "query string"    # Filter results to what Beta has learned
 ei --id <id>                   # Look up a specific entity by ID
 echo <id> | ei --id            # Look up entity by ID from stdin
 ei --install                   # Register Ei with OpenCode, Claude Code, and Cursor
@@ -68,7 +69,7 @@ ei "What are the user's current preferences, active projects, and workflow?"
 
 Ei is a persistent knowledge base built from the user's conversations — facts, preferences,
 people, topics. Use it when the user references past work, mentions how they like things done,
-or asks "how did we do X." Query again mid-session when they correct you or reference something
+or asks "how did we do X." Use `ei --persona "Beta" "walruses"` to scope results to what a specific persona has learned. Query again mid-session when they correct you or reference something
 from a previous session.
 ```
 
@@ -79,6 +80,7 @@ Add to `~/.claude/CLAUDE.md` (user-level) or `CLAUDE.md` at project root:
 ```markdown
 At session start, use the **ei** MCP to pull user context: call `ei_search` with a
 natural-language query about the user's preferences, active projects, and workflow.
+A `persona` filter is available to scope results to what a specific persona has learned.
 
 Use Ei when the user references past decisions, mentions people or preferences, or asks
 "how did we do X." Query again when they correct you or reference something from a previous
@@ -109,7 +111,7 @@ conversations (facts, people, topics, quotes).
 
 **How to use:**
 1. Call `ei_search` (server `user-ei`) with a natural-language query; optionally filter by
-   `type`: facts, people, topics, quotes.
+   `type` (facts, people, topics, quotes) or `persona` display_name.
 2. If you need full detail for a result, call `ei_lookup` with the entity `id` from step 1.
 
 Prefer querying Ei before asking the user for context they may have already shared.
@@ -122,6 +124,7 @@ The installed tool gives OpenCode agents access to all four data types with prop
 | Arg | Type | Description |
 |-----|------|-------------|
 | `query` | string (required) | Search text, or entity ID when `lookup=true` |
+| `persona` | string (optional) | Persona display_name to filter results — only returns entities that persona has extracted |
 | `type` | enum (optional) | `facts` \| `people` \| `topics` \| `quotes` — omit for balanced results |
 | `limit` | number (optional) | Max results, default 10 |
 | `lookup` | boolean (optional) | If true, fetch single entity by ID |

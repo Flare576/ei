@@ -124,7 +124,7 @@ Personas can use tools. Not just read-from-memory tools — *actual* tools. Web 
 
 | Tool | What it does |
 |------|-------------|
-| `read_memory` | Semantic search of your personal memory — facts, traits, topics, people, quotes. Personas call this automatically when the conversation touches something they might know about you. |
+| `read_memory` | Semantic search of your personal memory — facts, traits, topics, people, quotes. Personas call this automatically when the conversation touches something they might know about you. Supports the `persona` filter to scope results to what a specific persona has learned. |
 | `file_read` | Read a file from your local filesystem *(TUI only)* |
 | `list_directory` | Explore folder structure *(TUI only)* |
 | `directory_tree` | Recursive directory tree *(TUI only)* |
@@ -188,11 +188,21 @@ Without this setting, browser security policies will block API calls.
 
 ## Development
 
+To run the full test suite on a new machine:
+
 ```bash
+nvm install 20
+nvm use 20
 npm install
-npm run dev      # Watch mode
-npm run build    # Compile TypeScript
-npm run test     # Run tests
+cd web && npm install && npx playwright install && cd ..
+cd tui
+bun install
+npm install
+npm rebuild   # compile native PTY module for Node 20 (one-time, new machine only)
+cd ..
+nvm use default
+npm install
+npm run test:all
 ```
 
 ## Releases

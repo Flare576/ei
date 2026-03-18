@@ -332,7 +332,7 @@ Seeded on every startup via `Processor.bootstrapTools()`. Safe to call repeatedl
 
 | Tool name | Runtime | Description |
 |-----------|---------|-------------|
-| `read_memory` | `any` | Semantic embedding search of `StateManager.searchHumanData()` — no external call |
+| `read_memory` | `any` | Semantic embedding search of `StateManager.searchHumanData()` — no external call. Supports optional `persona` filter for scoping to a specific persona's learned data. |
 | `file_read` | `node` | Read a file from local filesystem (TUI only) |
 | `list_directory` | `node` | List directory contents (TUI only) |
 | `directory_tree` | `node` | Recursive directory tree up to configurable depth (TUI only) |
