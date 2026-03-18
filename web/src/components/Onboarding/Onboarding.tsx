@@ -386,7 +386,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
               value={localUrl}
               onChange={(e) => {
                 setLocalUrl(e.target.value);
-                setLocalCheckResult('pending');
+                setLocalCheckResult('failed');
               }}
               placeholder="http://127.0.0.1:1234/v1"
               disabled={isCheckingLocal}
