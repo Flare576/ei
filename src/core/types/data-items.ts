@@ -13,6 +13,7 @@ export interface DataItemBase {
   last_mentioned?: string;        // Set by extraction only, never ceremony. Used for --recent sorting.
   learned_by?: string;           // Persona ID that originally learned this item (stable UUID)
   last_changed_by?: string;      // Persona ID that most recently updated this item (stable UUID)
+  interested_personas?: string[]; // Persona IDs that have extracted/touched this item (accumulated)
   persona_groups?: string[];
   embedding?: number[];
   rewrite_checked?: boolean;     // True after rewrite scan finds no changes. Cleared automatically when extraction upserts a fresh item.
