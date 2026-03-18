@@ -13,7 +13,9 @@
 
 import { parseArgs } from "util";
 import { join } from "path";
-import { retrieveBalanced, lookupById } from "./cli/retrieval";
+import { retrieveBalanced, lookupById, loadLatestState } from "./cli/retrieval";
+import type { StorageState } from "./core/types";
+import { resolvePersonaId, filterByPersona, filterTypeSpecificByPersona } from "./cli/persona-filter.js";
 
 const TYPE_ALIASES: Record<string, string> = {
   quote: "quotes",
@@ -39,6 +41,7 @@ Usage:
   ei --recent                   Return most recently mentioned items
   ei --recent "query"           Filter recent items by query
   ei <type> --recent "query"    Type-specific recent search
+  ei --persona "Name" "query"   Filter results to what a persona has learned
   ei --id <id>                  Look up a specific entity by ID
   echo <id> | ei --id           Look up entity by ID from stdin
   ei mcp                        Start the Ei MCP stdio server (for Cursor/Claude Desktop)
@@ -52,6 +55,7 @@ Types:
 Options:
   --number, -n     Maximum number of results (default: 10)
   --recent, -r     Sort by last_mentioned date (most recent first)
+  --persona, -p    Filter to entities a specific persona has learned about
   --id             Look up entity by ID (accepts value or stdin)
   --install        Register Ei with OpenCode, Claude Code, and Cursor
   --help, -h       Show this help message
@@ -62,6 +66,7 @@ Examples:
   ei quote "you guessed it"              # Search quotes only
   ei --recent                            # Most recently mentioned items
   ei topics --recent "work"              # Recent work-related topics
+  ei --persona "Architect" "work stuff"  # What Architect knows about work
   ei --id abc-123                        # Look up entity by ID
   ei "memory leak" | jq .[0].id | ei --id  # Pipe ID from search
 `);
@@ -88,6 +93,12 @@ function buildOpenCodeToolContent(): string {
     '      .describe(',
     '        "Filter to a specific data type. Omit to search all types (balanced across all 4).",',
     '      ),',
+    '    persona: tool.schema',
+    '      .string()',
+    '      .optional()',
+    '      .describe(',
+    '        "Filter to entities a specific persona has learned about. Use the persona display name.",',
+    '      ),',
     '    limit: tool.schema',
     '      .number()',
     '      .int()',
@@ -108,6 +119,7 @@ function buildOpenCodeToolContent(): string {
     '      cmd.push("--id", args.query);',
     '    } else {',
     '      if (args.type) cmd.push(args.type);',
+    '      if (args.persona) cmd.push("--persona", args.persona);',
     '      if (args.limit && args.limit !== 10) cmd.push("-n", String(args.limit));',
     '      cmd.push(args.query);',
     '    }',
@@ -292,6 +304,7 @@ async function main(): Promise<void> {
       options: {
         number: { type: "string", short: "n" },
         recent: { type: "boolean", short: "r" },
+        persona: { type: "string", short: "p" },
         help: { type: "boolean", short: "h" },
       },
       allowPositionals: true,
@@ -310,6 +323,7 @@ async function main(): Promise<void> {
   const query = parsed.positionals.join(" ").trim();
   const limit = parsed.values.number ? parseInt(parsed.values.number, 10) : 10;
   const recent = parsed.values.recent === true;
+  const personaName = parsed.values.persona?.trim();
 
   if (!query && !recent) {
     if (targetType) {
@@ -325,14 +339,35 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  let state: StorageState | null = null;
+  let personaId: string | undefined;
+  if (personaName) {
+    state = await loadLatestState();
+    if (!state) {
+      console.error("No saved state found. Is EI_DATA_PATH set correctly?");
+      process.exit(1);
+    }
+    personaId = resolvePersonaId(state, personaName) ?? undefined;
+    if (!personaId) {
+      console.error(`Persona "${personaName}" not found.`);
+      process.exit(1);
+    }
+  }
+
   const options = { recent };
 
   let result;
   if (targetType) {
     const module = await import(`./cli/commands/${targetType}.js`);
     result = await module.execute(query, limit, options);
+    if (personaId && state) {
+      result = filterTypeSpecificByPersona(result, state, personaId, targetType);
+    }
   } else {
     result = await retrieveBalanced(query, limit, options);
+    if (personaId && state) {
+      result = filterByPersona(result, state, personaId);
+    }
   }
 
   console.log(JSON.stringify(result, null, 2));

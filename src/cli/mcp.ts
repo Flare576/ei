@@ -1,7 +1,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { retrieveBalanced, lookupById } from "./retrieval.js";
+import { retrieveBalanced, lookupById, loadLatestState, type BalancedResult } from "./retrieval.js";
+import type { StorageState } from "../core/types/index.js";
+import { resolvePersonaId, filterByPersona, filterTypeSpecificByPersona } from "./persona-filter.js";
 
 // Exported so tests can inject their own transport
 export function createMcpServer(): McpServer {
@@ -23,6 +25,12 @@ export function createMcpServer(): McpServer {
           .describe(
             "Filter to a specific data type. Omit to search all types (balanced across all 4)."
           ),
+        persona: z
+          .string()
+          .optional()
+          .describe(
+            "Filter to entities a specific persona has learned about. Use the persona display name."
+          ),
         limit: z
           .number()
           .optional()
@@ -34,16 +42,36 @@ export function createMcpServer(): McpServer {
           .describe("If true, sort by most recently mentioned."),
       },
     },
-    async ({ query, type, limit, recent }) => {
+    async ({ query, type, persona, limit, recent }) => {
       const options = { recent: recent ?? false };
       const effectiveLimit = limit ?? 10;
+
+      let state: StorageState | null = null;
+      let personaId: string | undefined;
+      if (persona) {
+        state = await loadLatestState();
+        if (state) {
+          personaId = resolvePersonaId(state, persona) ?? undefined;
+          if (!personaId) {
+            return {
+              content: [{ type: "text" as const, text: `Persona "${persona}" not found.` }],
+            };
+          }
+        }
+      }
 
       let result: unknown;
       if (type) {
         const module = await import(`./commands/${type}.js`);
         result = await (module.execute as (q: string, l: number, o: { recent: boolean }) => Promise<unknown>)(query, effectiveLimit, options);
+        if (personaId && state) {
+          result = filterTypeSpecificByPersona(result as { id: string }[], state, personaId, type);
+        }
       } else {
         result = await retrieveBalanced(query, effectiveLimit, options);
+        if (personaId && state) {
+          result = filterByPersona(result as BalancedResult[], state, personaId);
+        }
       }
 
       return {
