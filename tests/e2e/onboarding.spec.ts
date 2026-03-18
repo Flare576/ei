@@ -177,18 +177,10 @@ test.describe("Onboarding Flow", () => {
     // Wait for LocalLLMCheck step
     await expect(page.locator("text=Step 2 of 4")).toBeVisible({ timeout: 5000 });
     
-    // Wait for ComfyUI check to complete - should show one of three possible results
-    // (In test environment, will likely show 'failed' since no real ComfyUI at :8000)
-    const comfyFoundLocator = page.locator("text=Local Image Generator found!");
-    const comfyCorsLocator = page.locator("text=CORS Issue Detected").last();
-    const comfyFailedLocator = page.locator("text=No local image generator detected");
-    
-    // Wait for any of the three possible results to appear
-    await expect(comfyFoundLocator.or(comfyCorsLocator).or(comfyFailedLocator)).toBeVisible({ timeout: 10000 });
-    
-    // Verify that at least one ComfyUI status banner is visible (success, cors, or failed)
+    // Wait for both LLM and ComfyUI checks to resolve. Both checks fire simultaneously
+    // but checkLocalLLM resets to 'pending' on start, so ComfyUI can finish first.
+    // Waiting for count=2 handles any resolution order without caring which finishes first.
     const statusBanners = page.locator(".ei-onboarding__status");
-    const bannerCount = await statusBanners.count();
-    expect(bannerCount).toBeGreaterThanOrEqual(2);  // At least LLM + ComfyUI banners
+    await expect(statusBanners).toHaveCount(2, { timeout: 10000 });
   });
 });
