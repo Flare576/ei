@@ -85,6 +85,7 @@ export function QuoteCaptureModal({
   };
 
   const handleSave = () => {
+    const actionPrefix = message.action_response ? `_${message.action_response}_\n\n` : '';
     const quote: Omit<Quote, 'id' | 'created_at'> = {
       message_id: message.id,
       data_item_ids: selectedDataItems,
@@ -92,8 +93,8 @@ export function QuoteCaptureModal({
       text: quoteText,
       speaker: message.role === 'human' ? 'human' : personaName,
       timestamp: message.timestamp,
-      start: startPos,
-      end: endPos,
+      start: startPos + actionPrefix.length,
+      end: endPos + actionPrefix.length,
       created_by: 'human',
     };
     onSave(quote);
