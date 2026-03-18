@@ -13,6 +13,7 @@ import {
   type Fact,
   type Topic,
   type Person,
+  type Quote,
 } from "../../../../src/core/types.js";
 
 // We need to test handlers in isolation, so we import them directly
@@ -30,6 +31,10 @@ vi.mock("../../../../src/core/embedding-service.js", () => ({
     embed: vi.fn().mockResolvedValue(new Array(384).fill(0.1)),
   }),
   getItemEmbeddingText: ({ name, description }: { name: string; description?: string }) =>
+    `${name}: ${description ?? ""}`,
+  getTopicEmbeddingText: ({ name, description }: { name: string; description?: string }) =>
+    `${name}: ${description ?? ""}`,
+  getPersonEmbeddingText: ({ name, description }: { name: string; description?: string }) =>
     `${name}: ${description ?? ""}`,
 }));
 
@@ -55,9 +60,24 @@ function createMockStateManager() {
   return {
     getHuman: vi.fn(() => human),
     setHuman: vi.fn((h: HumanEntity) => Object.assign(human, h)),
-    human_fact_upsert: vi.fn((fact: Fact) => human.facts.push(fact)),
-    human_topic_upsert: vi.fn((topic: Topic) => human.topics.push(topic)),
-    human_person_upsert: vi.fn((person: Person) => human.people.push(person)),
+    human_fact_upsert: vi.fn((fact: Fact) => {
+      const idx = human.facts.findIndex(f => f.id === fact.id);
+      if (idx >= 0) human.facts[idx] = fact;
+      else human.facts.push(fact);
+    }),
+    human_topic_upsert: vi.fn((topic: Topic) => {
+      const idx = human.topics.findIndex(t => t.id === topic.id);
+      if (idx >= 0) human.topics[idx] = topic;
+      else human.topics.push(topic);
+    }),
+    human_person_upsert: vi.fn((person: Person) => {
+      const idx = human.people.findIndex(p => p.id === person.id);
+      if (idx >= 0) human.people[idx] = person;
+      else human.people.push(person);
+    }),
+    human_quote_add: vi.fn((quote: Quote) => human.quotes.push(quote)),
+    human_quote_update: vi.fn(),
+    human_quote_getForMessage: vi.fn(() => []),
     persona_getById: vi.fn((id: string) => Object.values(personas).find(p => p.id === id) ?? null),
     persona_getByName: vi.fn((name: string) => Object.values(personas).find(p => p.display_name === name || p.aliases?.includes(name)) ?? null),
     persona_add: vi.fn((entity: PersonaEntity) => { personas[entity.id] = entity; }),
@@ -422,5 +442,258 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
   });
 });
 
+describe("Extraction Handlers - Step 3 (Update) - interested_personas", () => {
+  let state: ReturnType<typeof createMockStateManager>;
 
+  beforeEach(() => {
+    state = createMockStateManager();
+    vi.clearAllMocks();
+  });
 
+  describe("handleTopicUpdate", () => {
+    it("sets interested_personas to [personaId] for new topics", async () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleTopicUpdate,
+        data: {
+          personaId: "persona-1",
+          personaDisplayName: "TestPersona",
+          isNewItem: true,
+          existingItemId: undefined,
+          candidateCategory: "Interest",
+          messages_context: [],
+          messages_analyze: [],
+        },
+      });
+
+      const response = createMockResponse(request, {
+        name: "New Topic",
+        description: "A brand new topic",
+        sentiment: 0.5,
+        exposure_desired: 0.5,
+        exposure_impact: "medium",
+      });
+
+      await handlers[LLMNextStep.HandleTopicUpdate](response, state as any);
+
+      expect(state.human_topic_upsert).toHaveBeenCalledTimes(1);
+      const upsertedTopic = (state.human_topic_upsert as any).mock.calls[0][0];
+      expect(upsertedTopic.interested_personas).toEqual(["persona-1"]);
+    });
+
+    it("merges personaId into existing interested_personas (unique)", async () => {
+      state._human.topics.push({
+        id: "existing-topic",
+        name: "Existing Topic",
+        description: "Already exists",
+        sentiment: 0.3,
+        exposure_current: 0.5,
+        exposure_desired: 0.5,
+        last_updated: "",
+        interested_personas: ["persona-2", "persona-3"],
+      });
+
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleTopicUpdate,
+        data: {
+          personaId: "persona-1",
+          personaDisplayName: "TestPersona",
+          isNewItem: false,
+          existingItemId: "existing-topic",
+          candidateCategory: "Interest",
+          messages_context: [],
+          messages_analyze: [],
+        },
+      });
+
+      const response = createMockResponse(request, {
+        name: "Existing Topic",
+        description: "Updated description",
+        sentiment: 0.5,
+      });
+
+      await handlers[LLMNextStep.HandleTopicUpdate](response, state as any);
+
+      expect(state.human_topic_upsert).toHaveBeenCalledTimes(1);
+      const upsertedTopic = (state.human_topic_upsert as any).mock.calls[0][0];
+      expect(upsertedTopic.interested_personas).toContain("persona-1");
+      expect(upsertedTopic.interested_personas).toContain("persona-2");
+      expect(upsertedTopic.interested_personas).toContain("persona-3");
+      expect(upsertedTopic.interested_personas).toHaveLength(3);
+    });
+
+    it("does not duplicate personaId if already in interested_personas", async () => {
+      state._human.topics.push({
+        id: "existing-topic",
+        name: "Existing Topic",
+        description: "Already exists",
+        sentiment: 0.3,
+        exposure_current: 0.5,
+        exposure_desired: 0.5,
+        last_updated: "",
+        interested_personas: ["persona-1", "persona-2"],
+      });
+
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleTopicUpdate,
+        data: {
+          personaId: "persona-1",
+          personaDisplayName: "TestPersona",
+          isNewItem: false,
+          existingItemId: "existing-topic",
+          candidateCategory: "Interest",
+          messages_context: [],
+          messages_analyze: [],
+        },
+      });
+
+      const response = createMockResponse(request, {
+        name: "Existing Topic",
+        description: "Updated",
+        sentiment: 0.5,
+      });
+
+      await handlers[LLMNextStep.HandleTopicUpdate](response, state as any);
+
+      const upsertedTopic = (state.human_topic_upsert as any).mock.calls[0][0];
+      expect(upsertedTopic.interested_personas).toEqual(["persona-1", "persona-2"]);
+    });
+  });
+
+  describe("handlePersonUpdate", () => {
+    it("sets interested_personas to [personaId] for new people", async () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandlePersonUpdate,
+        data: {
+          personaId: "persona-1",
+          personaDisplayName: "TestPersona",
+          isNewItem: true,
+          existingItemId: undefined,
+          candidateRelationship: "friend",
+          messages_context: [],
+          messages_analyze: [],
+        },
+      });
+
+      const response = createMockResponse(request, {
+        name: "New Person",
+        description: "A new person in user's life",
+        sentiment: 0.7,
+        relationship: "friend",
+        exposure_desired: 0.5,
+        exposure_impact: "medium",
+      });
+
+      await handlers[LLMNextStep.HandlePersonUpdate](response, state as any);
+
+      expect(state.human_person_upsert).toHaveBeenCalledTimes(1);
+      const upsertedPerson = (state.human_person_upsert as any).mock.calls[0][0];
+      expect(upsertedPerson.interested_personas).toEqual(["persona-1"]);
+    });
+
+    it("merges personaId into existing interested_personas (unique)", async () => {
+      state._human.people.push({
+        id: "existing-person",
+        name: "Existing Person",
+        description: "Already known",
+        relationship: "colleague",
+        sentiment: 0.5,
+        exposure_current: 0.4,
+        exposure_desired: 0.4,
+        last_updated: "",
+        interested_personas: ["persona-2"],
+      });
+
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandlePersonUpdate,
+        data: {
+          personaId: "persona-1",
+          personaDisplayName: "TestPersona",
+          isNewItem: false,
+          existingItemId: "existing-person",
+          candidateRelationship: "colleague",
+          messages_context: [],
+          messages_analyze: [],
+        },
+      });
+
+      const response = createMockResponse(request, {
+        name: "Existing Person",
+        description: "Updated description",
+        sentiment: 0.6,
+      });
+
+      await handlers[LLMNextStep.HandlePersonUpdate](response, state as any);
+
+      const upsertedPerson = (state.human_person_upsert as any).mock.calls[0][0];
+      expect(upsertedPerson.interested_personas).toContain("persona-1");
+      expect(upsertedPerson.interested_personas).toContain("persona-2");
+      expect(upsertedPerson.interested_personas).toHaveLength(2);
+    });
+  });
+
+  describe("handleFactFind - interested_personas", () => {
+    it("merges personaId into existing fact's interested_personas", async () => {
+      state._human.facts.push({
+        id: "fact-1",
+        name: "Full Name",
+        description: "",
+        sentiment: 0,
+        validated_date: "",
+        last_updated: "",
+        interested_personas: ["persona-2"],
+      });
+
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleFactFind,
+        data: {
+          personaId: "persona-1",
+          personaDisplayName: "TestPersona",
+          messages_context: [],
+          messages_analyze: [],
+        },
+      });
+
+      const response = createMockResponse(request, {
+        facts: [{ name: "Full Name", value: "Test User", evidence: "..." }],
+      });
+
+      await handlers[LLMNextStep.HandleFactFind](response, state as any);
+
+      expect(state.human_fact_upsert).toHaveBeenCalledTimes(1);
+      const upsertedFact = (state.human_fact_upsert as any).mock.calls[0][0];
+      expect(upsertedFact.interested_personas).toContain("persona-1");
+      expect(upsertedFact.interested_personas).toContain("persona-2");
+    });
+
+    it("creates interested_personas array if existing fact has none", async () => {
+      state._human.facts.push({
+        id: "fact-1",
+        name: "Full Name",
+        description: "",
+        sentiment: 0,
+        validated_date: "",
+        last_updated: "",
+        interested_personas: undefined,
+      });
+
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleFactFind,
+        data: {
+          personaId: "persona-1",
+          personaDisplayName: "TestPersona",
+          messages_context: [],
+          messages_analyze: [],
+        },
+      });
+
+      const response = createMockResponse(request, {
+        facts: [{ name: "Full Name", value: "Test User", evidence: "..." }],
+      });
+
+      await handlers[LLMNextStep.HandleFactFind](response, state as any);
+
+      const upsertedFact = (state.human_fact_upsert as any).mock.calls[0][0];
+      expect(upsertedFact.interested_personas).toEqual(["persona-1"]);
+    });
+  });
+});

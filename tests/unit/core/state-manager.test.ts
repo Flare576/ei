@@ -218,6 +218,166 @@ describe("StateManager", () => {
     });
   });
 
+  describe("migrateInterestedPersonas", () => {
+    // This migration runs on initialize(), backfilling interested_personas from learned_by + last_changed_by
+
+    const makeTopic = (id: string, name: string, overrides: Partial<Topic> = {}): Topic => ({
+      id,
+      name,
+      description: "",
+      sentiment: 0,
+      exposure_current: 0.5,
+      exposure_desired: 0.5,
+      last_updated: "",
+      ...overrides,
+    });
+
+    const makeFact = (id: string, name: string, overrides: Partial<Fact> = {}): Fact => ({
+      id,
+      name,
+      description: "",
+      sentiment: 0,
+      last_updated: "",
+      validated_date: "",
+      ...overrides,
+    });
+
+    const makePerson = (id: string, name: string, overrides: Partial<Person> = {}): Person => ({
+      id,
+      name,
+      description: "",
+      relationship: "friend",
+      sentiment: 0,
+      exposure_current: 0.5,
+      exposure_desired: 0.5,
+      last_updated: "",
+      ...overrides,
+    });
+
+    it("backfills from both learned_by and last_changed_by (deduped)", async () => {
+      // Use UUID-format IDs because migrateLearnedByToIds() clears non-UUID IDs before this migration runs
+      const testState = createDefaultTestState();
+      testState.human.topics = [
+        makeTopic("t1", "Test Topic", {
+          learned_by: "11111111-1111-1111-1111-111111111111",
+          last_changed_by: "22222222-2222-2222-2222-222222222222",
+          interested_personas: undefined,
+        }),
+      ];
+
+      const newSm = new StateManager();
+      const testStorage = createMockStorage();
+      (testStorage.load as any).mockResolvedValue(testState);
+      await newSm.initialize(testStorage);
+
+      const topic = newSm.getHuman().topics[0];
+      expect(topic.interested_personas).toEqual(["11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"]);
+    });
+
+    it("backfills from learned_by only when last_changed_by is null", async () => {
+      // Use UUID-format IDs because migrateLearnedByToIds() clears non-UUID IDs before this migration runs
+      const testState = createDefaultTestState();
+      testState.human.facts = [
+        makeFact("f1", "Test Fact", {
+          learned_by: "11111111-1111-1111-1111-111111111111",
+          last_changed_by: undefined,
+          interested_personas: undefined,
+        }),
+      ];
+
+      const newSm = new StateManager();
+      const testStorage = createMockStorage();
+      (testStorage.load as any).mockResolvedValue(testState);
+      await newSm.initialize(testStorage);
+
+      const fact = newSm.getHuman().facts[0];
+      expect(fact.interested_personas).toEqual(["11111111-1111-1111-1111-111111111111"]);
+    });
+
+    it("sets empty array when neither learned_by nor last_changed_by exists", async () => {
+      const testState = createDefaultTestState();
+      testState.human.people = [
+        makePerson("p1", "Test Person", {
+          learned_by: undefined,
+          last_changed_by: undefined,
+          interested_personas: undefined,
+        }),
+      ];
+
+      const newSm = new StateManager();
+      const testStorage = createMockStorage();
+      (testStorage.load as any).mockResolvedValue(testState);
+      await newSm.initialize(testStorage);
+
+      const person = newSm.getHuman().people[0];
+      expect(person.interested_personas).toEqual([]);
+    });
+
+    it("deduplicates when learned_by and last_changed_by are the same persona", async () => {
+      // Use UUID-format IDs because migrateLearnedByToIds() clears non-UUID IDs before this migration runs
+      const testState = createDefaultTestState();
+      testState.human.topics = [
+        makeTopic("t1", "Same Persona", {
+          learned_by: "11111111-1111-1111-1111-111111111111",
+          last_changed_by: "11111111-1111-1111-1111-111111111111",
+          interested_personas: undefined,
+        }),
+      ];
+
+      const newSm = new StateManager();
+      const testStorage = createMockStorage();
+      (testStorage.load as any).mockResolvedValue(testState);
+      await newSm.initialize(testStorage);
+
+      const topic = newSm.getHuman().topics[0];
+      expect(topic.interested_personas).toEqual(["11111111-1111-1111-1111-111111111111"]);
+    });
+
+    it("does NOT touch entities that already have interested_personas set", async () => {
+      const testState = createDefaultTestState();
+      testState.human.topics = [
+        makeTopic("t1", "Already Set", {
+          learned_by: "persona-1",
+          last_changed_by: "persona-2",
+          interested_personas: ["persona-3", "persona-4"],
+        }),
+      ];
+
+      const newSm = new StateManager();
+      const testStorage = createMockStorage();
+      (testStorage.load as any).mockResolvedValue(testState);
+      await newSm.initialize(testStorage);
+
+      const topic = newSm.getHuman().topics[0];
+      // Should remain unchanged - not backfilled from learned_by/last_changed_by
+      expect(topic.interested_personas).toEqual(["persona-3", "persona-4"]);
+    });
+
+    it("handles mixed entities - some need migration, some don't", async () => {
+      // Use UUID-format IDs because migrateLearnedByToIds() clears non-UUID IDs before this migration runs
+      const testState = createDefaultTestState();
+      testState.human.topics = [
+        makeTopic("t1", "Needs Migration", {
+          learned_by: "11111111-1111-1111-1111-111111111111",
+          interested_personas: undefined,
+        }),
+        makeTopic("t2", "Already Migrated", {
+          learned_by: "22222222-2222-2222-2222-222222222222",
+          interested_personas: ["33333333-3333-3333-3333-333333333333"],
+        }),
+      ];
+
+      const newSm = new StateManager();
+      const testStorage = createMockStorage();
+      (testStorage.load as any).mockResolvedValue(testState);
+      await newSm.initialize(testStorage);
+
+      const topics = newSm.getHuman().topics;
+      expect(topics[0].interested_personas).toEqual(["11111111-1111-1111-1111-111111111111"]);
+      expect(topics[1].interested_personas).toEqual(["33333333-3333-3333-3333-333333333333"]);
+    });
+  });
+
   describe("tools_getForPersona", () => {
     const PROVIDER_ID = "provider-1";
     const TOOL_ID_1 = "tool-1";
