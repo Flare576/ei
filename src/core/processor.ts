@@ -203,7 +203,7 @@ export class Processor {
     this.bootstrapTools();
     this.seedBuiltinFacts();
     this.seedSettings();
-    registerReadMemoryExecutor(createReadMemoryExecutor(this.searchHumanData.bind(this)));
+    registerReadMemoryExecutor(createReadMemoryExecutor(this.searchHumanData.bind(this), this.getPersonaList.bind(this)));
     if (this.isTUI) {
       await registerFileReadExecutor();
     }
@@ -1485,7 +1485,7 @@ const toolNextSteps = new Set([
 
   async searchHumanData(
     query: string,
-    options: { types?: Array<"fact" | "topic" | "person" | "quote">; limit?: number; recent?: boolean } = {}
+    options: { types?: Array<"fact" | "topic" | "person" | "quote">; limit?: number; recent?: boolean; persona_filter?: string } = {}
   ): Promise<{
     facts: Fact[];
     topics: Topic[];

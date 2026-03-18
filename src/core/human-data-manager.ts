@@ -145,14 +145,14 @@ export async function getQuotesForMessage(sm: StateManager, messageId: string): 
 export async function searchHumanData(
   sm: StateManager,
   query: string,
-  options: { types?: Array<"fact" | "topic" | "person" | "quote">; limit?: number; recent?: boolean } = {}
+  options: { types?: Array<"fact" | "topic" | "person" | "quote">; limit?: number; recent?: boolean; persona_filter?: string } = {}
 ): Promise<{
   facts: Fact[];
   topics: Topic[];
   people: Person[];
   quotes: Quote[];
 }> {
-  const { types = ["fact", "topic", "person", "quote"], limit = 10, recent } = options;
+  const { types = ["fact", "topic", "person", "quote"], limit = 10, recent, persona_filter } = options;
   const human = sm.getHuman();
   const SIMILARITY_THRESHOLD = 0.3;
 
@@ -214,18 +214,30 @@ export async function searchHumanData(
   };
 
   if (types.includes("fact")) {
-    result.facts = searchItems(human.facts, (f) => `${f.name} ${f.description || ""}`).map(
+    let facts = human.facts;
+    if (persona_filter) {
+      facts = facts.filter(f => f.interested_personas?.includes(persona_filter));
+    }
+    result.facts = searchItems(facts, (f) => `${f.name} ${f.description || ""}`).map(
       stripDataItemEmbedding
     );
   }
   if (types.includes("topic")) {
-    result.topics = searchItems(human.topics, (t) => `${t.name} ${t.description || ""}`).map(
+    let topics = human.topics;
+    if (persona_filter) {
+      topics = topics.filter(t => t.interested_personas?.includes(persona_filter));
+    }
+    result.topics = searchItems(topics, (t) => `${t.name} ${t.description || ""}`).map(
       stripDataItemEmbedding
     );
   }
   if (types.includes("person")) {
+    let people = human.people;
+    if (persona_filter) {
+      people = people.filter(p => p.interested_personas?.includes(persona_filter));
+    }
     result.people = searchItems(
-      human.people,
+      people,
       (p) => `${p.name} ${p.description || ""} ${p.relationship}`
     ).map(stripDataItemEmbedding);
   }

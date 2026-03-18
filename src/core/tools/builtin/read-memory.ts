@@ -1,19 +1,27 @@
 import type { ToolExecutor } from "../types.js";
 import type { Fact, Topic, Person, Quote } from "../../types.js";
 
+interface PersonaSummary {
+  id: string;
+  display_name: string;
+}
+
 type SearchHumanData = (
   query: string,
-  options?: { types?: Array<"fact" | "topic" | "person" | "quote">; limit?: number; recent?: boolean }
+  options?: { types?: Array<"fact" | "topic" | "person" | "quote">; limit?: number; recent?: boolean; persona_filter?: string }
 ) => Promise<{ facts: Fact[]; topics: Topic[]; people: Person[]; quotes: Quote[] }>;
 
-export function createReadMemoryExecutor(searchHumanData: SearchHumanData): ToolExecutor {
+type GetPersonaList = () => Promise<PersonaSummary[]>;
+
+export function createReadMemoryExecutor(searchHumanData: SearchHumanData, getPersonaList?: GetPersonaList): ToolExecutor {
   return {
     name: "read_memory",
 
     async execute(args: Record<string, unknown>): Promise<string> {
       const query = typeof args.query === "string" ? args.query.trim() : "";
       const recent = args.recent === true;
-      console.log(`[read_memory] called with query="${query}", types=${JSON.stringify(args.types ?? null)}, limit=${args.limit ?? 10}, recent=${recent}`);
+      const personaArg = typeof args.persona === "string" ? args.persona.trim() : "";
+      console.log(`[read_memory] called with query="${query}", types=${JSON.stringify(args.types ?? null)}, limit=${args.limit ?? 10}, recent=${recent}, persona="${personaArg}"`);
 
       if (!query && !recent) {
         console.warn("[read_memory] missing query argument");
@@ -28,7 +36,20 @@ export function createReadMemoryExecutor(searchHumanData: SearchHumanData): Tool
 
       const limit = typeof args.limit === "number" && args.limit > 0 ? Math.min(args.limit, 20) : 10;
 
-      const results = await searchHumanData(query, { types, limit, recent });
+      // Resolve persona display_name to ID
+      let persona_filter: string | undefined;
+      if (personaArg && getPersonaList) {
+        const personas = await getPersonaList();
+        const match = personas.find(p => p.display_name.toLowerCase() === personaArg.toLowerCase());
+        if (match) {
+          persona_filter = match.id;
+          console.log(`[read_memory] resolved persona "${personaArg}" to ID "${persona_filter}"`);
+        } else {
+          console.warn(`[read_memory] persona "${personaArg}" not found, proceeding without filter`);
+        }
+      }
+
+      const results = await searchHumanData(query, { types, limit, recent, persona_filter });
 
       const total = results.facts.length + results.topics.length + results.people.length + results.quotes.length;
       console.log(`[read_memory] query="${query}" => ${total} results (facts=${results.facts.length}, topics=${results.topics.length}, people=${results.people.length}, quotes=${results.quotes.length})`);
