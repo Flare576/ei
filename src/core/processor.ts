@@ -105,7 +105,6 @@ import {
 } from "./queue-manager.js";
 
 const DEFAULT_LOOP_INTERVAL_MS = 100;
-const DEFAULT_CONTEXT_WINDOW_HOURS = 8;
 const DEFAULT_OPENCODE_POLLING_MS = 1800000;
 const DEFAULT_CLAUDE_CODE_POLLING_MS = 1800000;
 const DEFAULT_CURSOR_POLLING_MS = 1800000;
@@ -881,7 +880,6 @@ const toolNextSteps = new Set([
 
   private async checkScheduledTasks(): Promise<void> {
     const now = Date.now();
-    const DEFAULT_HEARTBEAT_DELAY_MS = 1800000;
 
     const human = this.stateManager.getHuman();
 
@@ -926,7 +924,8 @@ const toolNextSteps = new Set([
     for (const persona of this.stateManager.persona_getAll()) {
       if (persona.is_paused || persona.is_archived) continue;
 
-      const heartbeatDelay = persona.heartbeat_delay_ms ?? DEFAULT_HEARTBEAT_DELAY_MS;
+      const defaultHeartbeatMs = this.stateManager.getHuman().settings?.default_heartbeat_ms ?? 1800000;
+      const heartbeatDelay = persona.heartbeat_delay_ms ?? defaultHeartbeatMs;
       const lastActivity = persona.last_activity
         ? new Date(persona.last_activity).getTime()
         : 0;
@@ -939,9 +938,11 @@ const toolNextSteps = new Set([
         const timeSinceHeartbeat = now - lastHeartbeat;
 
         if (timeSinceHeartbeat >= heartbeatDelay) {
-          const history = this.stateManager.messages_get(persona.id);
-          const contextWindowHours =
-            persona.context_window_hours ?? DEFAULT_CONTEXT_WINDOW_HOURS;
+           const history = this.stateManager.messages_get(persona.id);
+           const contextWindowHours =
+             persona.context_window_hours 
+             ?? this.stateManager.getHuman().settings?.default_context_window_hours 
+             ?? 8;
           const contextHistory = filterMessagesForContext(
             history,
             persona.context_boundary,
