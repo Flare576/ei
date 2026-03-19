@@ -1,4 +1,4 @@
-import { LLMRequestType, LLMPriority, LLMNextStep, MESSAGE_MIN_COUNT, MESSAGE_MAX_AGE_DAYS, type CeremonyConfig, type PersonaTopic, type Topic, type Message, type DataItemBase } from "../types.js";
+import { LLMRequestType, LLMPriority, LLMNextStep, type CeremonyConfig, type PersonaTopic, type Topic, type Message, type DataItemBase } from "../types.js";
 import type { StateManager } from "../state-manager.js";
 import { applyDecayToValue } from "../utils/index.js";
 import {
@@ -310,8 +310,8 @@ export function prunePersonaMessages(personaId: string, state: StateManager): vo
   state.messages_sort(personaId);
   const messages = state.messages_get(personaId);
   const human = state.getHuman();
-  const minCount = human.settings?.message_min_count ?? MESSAGE_MIN_COUNT;
-  const maxAgeDays = human.settings?.message_max_age_days ?? MESSAGE_MAX_AGE_DAYS;
+  const minCount = human.settings?.message_min_count ?? 200;
+  const maxAgeDays = human.settings?.message_max_age_days ?? 14;
   if (messages.length <= minCount) return;
   
   const cutoffMs = Date.now() - (maxAgeDays * 24 * 60 * 60 * 1000);
