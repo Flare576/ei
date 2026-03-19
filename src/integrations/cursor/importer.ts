@@ -7,6 +7,7 @@ import {
   MIN_SESSION_AGE_MS,
 } from "./types.js";
 import { CursorReader } from "./reader.js";
+import { isProcessRunning } from "../process-check.js";
 import {
   queueAllScans,
   type ExtractionContext,
@@ -184,6 +185,7 @@ export async function importCursorSessions(
   const human = stateManager.getHuman();
   const processedSessions = human.settings?.cursor?.processed_sessions ?? {};
   const now = Date.now();
+  const toolRunning = await isProcessRunning("Cursor");
 
   let targetSession: CursorSession | null = null;
 
@@ -191,7 +193,7 @@ export async function importCursorSessions(
     const sessionLastMs = new Date(session.lastMessageAt).getTime();
     const ageMs = now - sessionLastMs;
 
-    if (ageMs < MIN_SESSION_AGE_MS) continue;
+    if (ageMs < MIN_SESSION_AGE_MS && toolRunning) continue;
 
     const lastImported = processedSessions[session.id];
     if (lastImported && sessionLastMs <= new Date(lastImported).getTime()) continue;

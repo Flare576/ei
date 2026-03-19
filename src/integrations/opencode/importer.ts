@@ -8,6 +8,7 @@ import {
   queueAllScans,
   type ExtractionContext,
 } from "../../core/orchestrators/human-extraction.js";
+import { isProcessRunning } from "../process-check.js";
 
 // =============================================================================
 // Constants
@@ -125,19 +126,20 @@ export async function importOpenCodeSessions(
   let targetSession: OpenCodeSession | null = null;
   const MIN_SESSION_AGE_MS = 20 * 60 * 1000; // 20 minutes
   const now = Date.now();
+  const toolRunning = await isProcessRunning("opencode");
 
   for (const session of sortedSessions) {
     const lastImported = processedSessions[session.id];
     if (!lastImported) {
       const ageMs = now - session.time.updated;
-      if (ageMs >= MIN_SESSION_AGE_MS) {
+      if (ageMs >= MIN_SESSION_AGE_MS || !toolRunning) {
         targetSession = session;
         break;
       }
     }
     if (session.time.updated > new Date(lastImported).getTime()) {
       const ageMs = now - session.time.updated;
-      if (ageMs >= MIN_SESSION_AGE_MS) {
+      if (ageMs >= MIN_SESSION_AGE_MS || !toolRunning) {
         targetSession = session;
         break;
       }

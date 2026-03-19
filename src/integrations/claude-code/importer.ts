@@ -11,6 +11,7 @@ import {
   queueAllScans,
   type ExtractionContext,
 } from "../../core/orchestrators/human-extraction.js";
+import { isProcessRunning } from "../process-check.js";
 
 // =============================================================================
 // Export Types
@@ -219,6 +220,7 @@ export async function importClaudeCodeSessions(
   const settings = human.settings?.claudeCode;
   const processedSessions = settings?.processed_sessions ?? {};
   const now = Date.now();
+  const toolRunning = await isProcessRunning("claude");
 
   let targetSession: ClaudeCodeSession | null = null;
 
@@ -228,7 +230,7 @@ export async function importClaudeCodeSessions(
     const sessionLastMs = new Date(session.lastMessageAt).getTime();
     const ageMs = now - sessionLastMs;
 
-    if (ageMs < MIN_SESSION_AGE_MS) continue; // too fresh
+    if (ageMs < MIN_SESSION_AGE_MS && toolRunning) continue;
 
     if (!lastImported) {
       targetSession = session;
