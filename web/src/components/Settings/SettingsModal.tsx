@@ -13,6 +13,11 @@ interface SettingsData {
   rewrite_model?: string;
   accounts?: ProviderAccount[];
   sync?: SyncCredentials;
+  default_heartbeat_ms?: number;
+  default_context_window_hours?: number;
+  message_min_count?: number;
+  message_max_age_days?: number;
+  event_window_hours?: number;
 }
 
 interface SettingsModalProps {
@@ -202,6 +207,66 @@ export const SettingsModal = ({
             </section>
 
             <section className="ei-settings-section">
+              <h3 className="ei-settings-section__title">Persona Defaults</h3>
+              
+              <div className="ei-form-group">
+                <label htmlFor="default-heartbeat" className="ei-form-label">Default Heartbeat (minutes)</label>
+                <input
+                  id="default-heartbeat"
+                  type="number"
+                  className="ei-input"
+                  min="1"
+                  value={settings.default_heartbeat_ms != null ? Math.round(settings.default_heartbeat_ms / 60000) : 30}
+                  onChange={(e) => onUpdate({ default_heartbeat_ms: Number(e.target.value) * 60000 })}
+                />
+                <small className="ei-form-hint">Default heartbeat interval for new personas</small>
+              </div>
+
+              <div className="ei-form-group">
+                <label htmlFor="default-context-window" className="ei-form-label">Default Context Window (hours)</label>
+                <input
+                  id="default-context-window"
+                  type="number"
+                  className="ei-input"
+                  min="1"
+                  value={settings.default_context_window_hours ?? 8}
+                  onChange={(e) => onUpdate({ default_context_window_hours: Number(e.target.value) })}
+                />
+                <small className="ei-form-hint">How far back to include conversation history</small>
+              </div>
+            </section>
+
+            <section className="ei-settings-section">
+              <h3 className="ei-settings-section__title">Message Lifecycle</h3>
+              
+              <div className="ei-form-group">
+                <label htmlFor="message-min-count" className="ei-form-label">Min Messages to Keep</label>
+                <input
+                  id="message-min-count"
+                  type="number"
+                  className="ei-input"
+                  min="1"
+                  value={settings.message_min_count ?? 200}
+                  onChange={(e) => onUpdate({ message_min_count: Number(e.target.value) })}
+                />
+                <small className="ei-form-hint">Minimum messages preserved per persona during cleanup</small>
+              </div>
+
+              <div className="ei-form-group">
+                <label htmlFor="message-max-age" className="ei-form-label">Message Rolloff Age (days)</label>
+                <input
+                  id="message-max-age"
+                  type="number"
+                  className="ei-input"
+                  min="1"
+                  value={settings.message_max_age_days ?? 14}
+                  onChange={(e) => onUpdate({ message_max_age_days: Number(e.target.value) })}
+                />
+                <small className="ei-form-hint">Messages older than this may be cleaned up</small>
+              </div>
+            </section>
+
+            <section className="ei-settings-section">
               <h3 className="ei-settings-section__title">Ceremony</h3>
               
               <div className="ei-form-group">
@@ -215,6 +280,19 @@ export const SettingsModal = ({
                   required
                 />
                 <small className="ei-form-hint">When personas reflect on conversations and evolve their knowledge</small>
+              </div>
+
+              <div className="ei-form-group">
+                <label htmlFor="event-window-hours" className="ei-form-label">Event Window (hours)</label>
+                <input
+                  id="event-window-hours"
+                  type="number"
+                  className="ei-input"
+                  min="1"
+                  value={settings.event_window_hours ?? ""}
+                  onChange={(e) => onUpdate({ event_window_hours: e.target.value ? Number(e.target.value) : undefined })}
+                />
+                <small className="ei-form-hint">Treat gaps of this duration or more as separate events</small>
               </div>
             </section>
           </div>
