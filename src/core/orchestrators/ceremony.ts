@@ -309,14 +309,17 @@ export function prunePersonaMessages(personaId: string, state: StateManager): vo
   // Sort first — injected messages (session update, archive scan) may be out of order.
   state.messages_sort(personaId);
   const messages = state.messages_get(personaId);
-  if (messages.length <= MESSAGE_MIN_COUNT) return;
+  const human = state.getHuman();
+  const minCount = human.settings?.message_min_count ?? MESSAGE_MIN_COUNT;
+  const maxAgeDays = human.settings?.message_max_age_days ?? MESSAGE_MAX_AGE_DAYS;
+  if (messages.length <= minCount) return;
   
-  const cutoffMs = Date.now() - (MESSAGE_MAX_AGE_DAYS * 24 * 60 * 60 * 1000);
+  const cutoffMs = Date.now() - (maxAgeDays * 24 * 60 * 60 * 1000);
   
   // Messages are sorted by timestamp (oldest first from messages_sort)
   const toRemove: string[] = [];
   for (const m of messages) {
-    if (messages.length - toRemove.length <= MESSAGE_MIN_COUNT) break;
+    if (messages.length - toRemove.length <= minCount) break;
     
     const msgMs = new Date(m.timestamp).getTime();
     if (msgMs >= cutoffMs) break; // Sorted by time, no more old ones
