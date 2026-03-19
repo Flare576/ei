@@ -621,14 +621,14 @@ describe("round-trip serialization", () => {
     expect(result.ceremony?.event_window_hours).toBe(2);
   });
 
-  test("returns undefined for new fields when not set", () => {
+  test("returns defaults for new fields when not set", () => {
     const settings: HumanSettings = {};
     const yaml = settingsToYAML(settings);
     const result = settingsFromYAML(yaml, settings);
-    expect(result.default_heartbeat_ms).toBeUndefined();
-    expect(result.default_context_window_hours).toBeUndefined();
-    expect(result.message_min_count).toBeUndefined();
-    expect(result.message_max_age_days).toBeUndefined();
+    expect(result.default_heartbeat_ms).toBe(1800000);
+    expect(result.default_context_window_hours).toBe(8);
+    expect(result.message_min_count).toBe(200);
+    expect(result.message_max_age_days).toBe(14);
     expect(result.ceremony?.event_window_hours).toBeUndefined();
   });
 });

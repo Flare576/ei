@@ -678,6 +678,26 @@ export class Processor {
       modified = true;
     }
 
+    if (human.settings.default_heartbeat_ms == null) {
+      human.settings.default_heartbeat_ms = 1800000;
+      modified = true;
+    }
+
+    if (human.settings.default_context_window_hours == null) {
+      human.settings.default_context_window_hours = 8;
+      modified = true;
+    }
+
+    if (human.settings.message_min_count == null) {
+      human.settings.message_min_count = 200;
+      modified = true;
+    }
+
+    if (human.settings.message_max_age_days == null) {
+      human.settings.message_max_age_days = 14;
+      modified = true;
+    }
+
     if (modified) {
       this.stateManager.setHuman(human);
       console.log(`[Processor] Seeded missing settings`);
