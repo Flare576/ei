@@ -80,6 +80,10 @@ export interface HumanSettings {
   skip_quote_delete_confirm?: boolean;
   name_display?: string;
   time_mode?: "24h" | "12h" | "local" | "utc";
+  default_heartbeat_ms?: number;
+  default_context_window_hours?: number;
+  message_min_count?: number;
+  message_max_age_days?: number;
   accounts?: ProviderAccount[];
   sync?: SyncCredentials;
   opencode?: OpenCodeSettings;
