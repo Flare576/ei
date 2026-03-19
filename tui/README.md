@@ -2,7 +2,21 @@
 
 Ei TUI is built with OpenTUI and SolidJS.
 
-OpenCode integration: import via `/settings` (`opencode.integration: true`) · export via [CLI](../src/cli/README.md)
+Coding tool integrations (OpenCode, Claude Code, Cursor): enable via `/settings` · export data via [CLI](../src/cli/README.md)
+
+## Coding Tool Integrations
+
+Enable any or all three in `/settings`. They work independently and feed into the same knowledge base.
+
+| Tool | Settings key | Session data location |
+|------|-------------|----------------------|
+| OpenCode | `opencode.integration: true` | OpenCode's local SQLite / JSON session store |
+| Claude Code | `claudeCode.integration: true` | `~/.claude/projects/` (JSONL files) |
+| Cursor | `cursor.integration: true` | `~/Library/Application Support/Cursor/User/` (macOS)<br>`%APPDATA%\Cursor\User\` (Windows)<br>`~/.config/Cursor/User/` (Linux) |
+
+Sessions are processed oldest-first, one per queue cycle. On first run Ei works through your backlog gradually — it won't flood your LLM provider.
+
+OpenCode also supports reading Ei's extracted knowledge back out via the [CLI tool](../src/cli/README.md), giving it persistent memory across sessions.
 
 # Installation
 

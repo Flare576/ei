@@ -1,12 +1,12 @@
 # Ei
 
-A local-first AI companion system with persistent personas and Opencode Integration.
+A local-first AI companion system with persistent personas and coding tool integrations (OpenCode, Claude Code, Cursor).
 
 You can access the Web version at [ei.flare576.com](https://ei.flare576.com).
 
 You can install the local version via `npm install -g ei-tui` (see [### TUI](#tui) for details).
 
-If you're here to give Opencode perpetual memory (yes), jump over to [TUI README.md](./tui/README.md) to learn how to get information _into_ Ei, and [CLI README.md](./src/cli/README.md) to get it back _out_.
+If you're here to give your coding tools (OpenCode, Claude Code, Cursor) persistent memory, jump over to [TUI README.md](./tui/README.md) to learn how to get information _into_ Ei, and [CLI README.md](./src/cli/README.md) to get it back _out_.
 
 ## What Does "Local First" Mean?
 
@@ -108,13 +108,49 @@ Regardless, Running `ei` pops open the TUI interface and, just like on the web, 
 
 More information (including commands) can be found in the [TUI Readme](tui/README.md)
 
-### Opencode
+### Coding Tool Integrations
 
-Ei gives OpenCode a persistent memory. Yes, this is a dynamic, perpetual RAG — I didn't plan it that way, but here we are.
+Ei can import sessions from your coding tools and extract what you've been working on — pulling out facts, topics, and context that persist across sessions. Enable any combination; they work independently and feed into the same knowledge base.
 
-Opencode saves all of its sessions locally, either in a JSON structure or, if you're running the latest version, in a SQLite DB. If you enable the integration, Ei will pull all of the conversational parts of those sessions and summarize them, pulling out details, quotes, and keeping the summaries up-to-date.
+All three integrations are enabled via `/settings` in the TUI.
 
-Then, Opencode can call into Ei and pull those details back out. That's why you always have a side-project or two going. See [TUI Readme](tui/README.md)
+#### OpenCode
+
+```yaml
+opencode:
+  integration: true
+```
+
+OpenCode saves sessions as JSON or SQLite (depending on version). Ei reads them, extracts context per-agent (each agent like Sisyphus gets its own persona), and keeps everything current as sessions accumulate.
+
+OpenCode can also *read* Ei's knowledge back out via the [CLI tool](src/cli/README.md) — making it a dynamic, perpetual RAG. That's why it always has context from your other projects.
+
+#### Claude Code
+
+```yaml
+claudeCode:
+  integration: true
+```
+
+Reads from `~/.claude/projects/` (JSONL session files). All sessions map to a single "Claude Code" persona. Tool calls, thinking blocks, and internal plumbing are stripped — only the conversational content is imported.
+
+#### Cursor
+
+```yaml
+cursor:
+  integration: true
+```
+
+Reads from Cursor's SQLite databases:
+- **macOS**: `~/Library/Application Support/Cursor/User/`
+- **Windows**: `%APPDATA%\Cursor\User\`
+- **Linux**: `~/.config/Cursor/User/`
+
+All sessions map to a single "Cursor" persona.
+
+---
+
+Sessions are processed oldest-first, one per queue cycle, so Ei won't overwhelm your LLM provider on first run. See [TUI Readme](tui/README.md)
 
 ## Built-in Tool Integrations
 
