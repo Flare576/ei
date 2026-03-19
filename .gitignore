@@ -22,8 +22,12 @@ test-results/
 *.swo
 *~
 .DS_Store
-.opencode
-.sisyphus/
+.sisyphus
+.opencode/*
+
+# But do allow the utilities
+!/.opencode/skills
+!/.opencode/commands
 
 # Logs
 *.log
