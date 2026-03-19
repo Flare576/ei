@@ -13,6 +13,7 @@ export interface PersonaTraitExtractionPromptData {
 }
 
 export interface TraitResult {
+  id: string;       // Existing trait GUID to update, or "new" to create
   name: string;
   description: string;
   sentiment: number;

@@ -150,16 +150,44 @@ export function handlePersonaTraitExtraction(response: LLMResponse, state: State
     return;
   }
 
+  if (result.length === 0) {
+    return;
+  }
+
+  const persona = state.persona_getById(personaId);
+  if (!persona) {
+    console.error(`[handlePersonaTraitExtraction] Persona ${personaId} not found`);
+    return;
+  }
+
   const now = new Date().toISOString();
-  const traits: PersonaTrait[] = result.map(t => ({
-    id: crypto.randomUUID(),
-    name: t.name,
-    description: t.description,
-    sentiment: t.sentiment,
-    strength: t.strength,
-    last_updated: now,
-  }));
+  const updatedIds = new Set<string>();
+  const patchedTraits: PersonaTrait[] = result.map(delta => {
+    if (delta.id === "new") {
+      return {
+        id: crypto.randomUUID(),
+        name: delta.name,
+        description: delta.description,
+        sentiment: delta.sentiment,
+        strength: delta.strength,
+        last_updated: now,
+      };
+    }
+    updatedIds.add(delta.id);
+    return {
+      id: delta.id,
+      name: delta.name,
+      description: delta.description,
+      sentiment: delta.sentiment,
+      strength: delta.strength,
+      last_updated: now,
+    };
+  });
+
+  const preservedTraits = persona.traits.filter(t => !updatedIds.has(t.id));
+
+  const traits: PersonaTrait[] = [...preservedTraits, ...patchedTraits];
 
   state.persona_update(personaId, { traits, last_updated: now });
-  console.log(`[handlePersonaTraitExtraction] Updated ${traits.length} traits for ${personaDisplayName}`);
+  console.log(`[handlePersonaTraitExtraction] Applied ${result.length} delta(s) to ${personaDisplayName}, total traits: ${traits.length}`);
 }
