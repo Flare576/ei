@@ -4,6 +4,11 @@ import type { StateManager } from "../../../../src/core/state-manager.js";
 import type { Ei_Interface, HumanEntity, Message, ContextStatus } from "../../../../src/core/types.js";
 import type { IClaudeCodeReader, ClaudeCodeSession, ClaudeCodeMessage } from "../../../../src/integrations/claude-code/types.js";
 import { CLAUDE_CODE_PERSONA_NAME } from "../../../../src/integrations/claude-code/types.js";
+import { isProcessRunning } from "../../../../src/integrations/process-check.js";
+
+vi.mock("../../../../src/integrations/process-check.js", () => ({
+  isProcessRunning: vi.fn().mockResolvedValue(true),
+}));
 
 const OLD_TIMESTAMP = "2020-01-01T00:00:00.000Z";
 const FLOOR_TIMESTAMP = "2020-06-01T00:00:00.000Z";
@@ -261,5 +266,47 @@ describe("importClaudeCodeSessions", () => {
 
     expect(mockHuman.settings?.claudeCode?.processed_sessions?.["ses_older"]).toBeDefined();
     expect(mockHuman.settings?.claudeCode?.processed_sessions?.["ses_newer"]).toBeUndefined();
+  });
+
+  it("skips sessions too fresh (< 20 min old)", async () => {
+    vi.mocked(isProcessRunning).mockResolvedValue(true);
+
+    const freshSession = makeSession({
+      id: "ses_fresh",
+      lastMessageAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+    });
+    const msg = makeMsg("msg_1", "ses_fresh", freshSession.lastMessageAt);
+
+    mockReader.getSessions = vi.fn().mockResolvedValue([freshSession]);
+    mockReader.getMessagesForSession = vi.fn().mockResolvedValue([msg]);
+
+    const result = await importClaudeCodeSessions({
+      stateManager: mockStateManager as StateManager,
+      interface: mockInterface as Ei_Interface,
+      reader: mockReader as IClaudeCodeReader,
+    });
+
+    expect(result.sessionsProcessed).toBe(0);
+  });
+
+  it("imports fresh session when tool is not running", async () => {
+    vi.mocked(isProcessRunning).mockResolvedValue(false);
+
+    const freshSession = makeSession({
+      id: "ses_fresh",
+      lastMessageAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+    });
+    const msg = makeMsg("msg_1", "ses_fresh", freshSession.lastMessageAt);
+
+    mockReader.getSessions = vi.fn().mockResolvedValue([freshSession]);
+    mockReader.getMessagesForSession = vi.fn().mockResolvedValue([msg]);
+
+    const result = await importClaudeCodeSessions({
+      stateManager: mockStateManager as StateManager,
+      interface: mockInterface as Ei_Interface,
+      reader: mockReader as IClaudeCodeReader,
+    });
+
+    expect(result.sessionsProcessed).toBe(1);
   });
 });

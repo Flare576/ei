@@ -3,6 +3,11 @@ import { importCursorSessions } from "../../../../src/integrations/cursor/import
 import type { StateManager } from "../../../../src/core/state-manager.js";
 import type { Ei_Interface, HumanEntity, Message, ContextStatus } from "../../../../src/core/types.js";
 import type { ICursorReader, CursorSession } from "../../../../src/integrations/cursor/types.js";
+import { isProcessRunning } from "../../../../src/integrations/process-check.js";
+
+vi.mock("../../../../src/integrations/process-check.js", () => ({
+  isProcessRunning: vi.fn().mockResolvedValue(true),
+}));
 
 function makeSession(overrides: Partial<CursorSession> & { id: string }): CursorSession {
   return {
@@ -135,6 +140,8 @@ describe("importCursorSessions", () => {
   });
 
   it("skips sessions too fresh (< 20 min old)", async () => {
+    vi.mocked(isProcessRunning).mockResolvedValue(true);
+
     const freshSession = makeSession({
       id: "session-fresh",
       lastMessageAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
@@ -149,6 +156,25 @@ describe("importCursorSessions", () => {
     });
 
     expect(result.sessionsProcessed).toBe(0);
+  });
+
+  it("imports fresh session when tool is not running", async () => {
+    vi.mocked(isProcessRunning).mockResolvedValue(false);
+
+    const freshSession = makeSession({
+      id: "session-fresh",
+      lastMessageAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+    });
+
+    mockReader.getSessions = vi.fn().mockResolvedValue([freshSession]);
+
+    const result = await importCursorSessions({
+      stateManager: mockStateManager as StateManager,
+      interface: mockInterface as Ei_Interface,
+      reader: mockReader as ICursorReader,
+    });
+
+    expect(result.sessionsProcessed).toBe(1);
   });
 
   it("imports a session with messages", async () => {

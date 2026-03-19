@@ -4,6 +4,11 @@ import type { StateManager } from "../../../../src/core/state-manager.js";
 import type { Ei_Interface, HumanEntity, Topic, Message, ContextStatus } from "../../../../src/core/types.js";
 import type { IOpenCodeReader, OpenCodeSession, OpenCodeMessage } from "../../../../src/integrations/opencode/types.js";
 import { AGENT_ALIASES } from "../../../../src/integrations/opencode/types.js";
+import { isProcessRunning } from "../../../../src/integrations/process-check.js";
+
+vi.mock("../../../../src/integrations/process-check.js", () => ({
+  isProcessRunning: vi.fn().mockResolvedValue(true),
+}));
 
 function makeMessage(overrides: Partial<Message> & { id: string; timestamp: string }): Message {
   return {
@@ -821,6 +826,64 @@ describe("importOpenCodeSessions", () => {
     const sisyphusPersona = createdPersonas.get("Sisyphus");
     const stored = messageStore.get(sisyphusPersona!.id) ?? [];
     expect(stored).toHaveLength(2);
+  });
+
+  it("skips sessions too fresh (< 20 min old)", async () => {
+    vi.mocked(isProcessRunning).mockResolvedValue(true);
+
+    const freshUpdated = Date.now() - 5 * 60 * 1000;
+    const freshSession = makeSession({
+      id: "ses_fresh",
+      time: { created: freshUpdated - 1000, updated: freshUpdated },
+    });
+    const message: OpenCodeMessage = {
+      id: "msg_1",
+      sessionId: "ses_fresh",
+      role: "assistant",
+      agent: "build",
+      content: "Hello",
+      timestamp: new Date(freshUpdated).toISOString(),
+    };
+
+    mockReader.getSessionsUpdatedSince = vi.fn().mockResolvedValue([freshSession]);
+    mockReader.getMessagesForSession = vi.fn().mockResolvedValue([message]);
+
+    const result = await importOpenCodeSessions({
+      stateManager: mockStateManager as StateManager,
+      interface: mockInterface as Ei_Interface,
+      reader: mockReader as IOpenCodeReader,
+    });
+
+    expect(result.sessionsProcessed).toBe(0);
+  });
+
+  it("imports fresh session when tool is not running", async () => {
+    vi.mocked(isProcessRunning).mockResolvedValue(false);
+
+    const freshUpdated = Date.now() - 5 * 60 * 1000;
+    const freshSession = makeSession({
+      id: "ses_fresh",
+      time: { created: freshUpdated - 1000, updated: freshUpdated },
+    });
+    const message: OpenCodeMessage = {
+      id: "msg_1",
+      sessionId: "ses_fresh",
+      role: "assistant",
+      agent: "build",
+      content: "Hello",
+      timestamp: new Date(freshUpdated).toISOString(),
+    };
+
+    mockReader.getSessionsUpdatedSince = vi.fn().mockResolvedValue([freshSession]);
+    mockReader.getMessagesForSession = vi.fn().mockResolvedValue([message]);
+
+    const result = await importOpenCodeSessions({
+      stateManager: mockStateManager as StateManager,
+      interface: mockInterface as Ei_Interface,
+      reader: mockReader as IOpenCodeReader,
+    });
+
+    expect(result.sessionsProcessed).toBe(1);
   });
 
 });
