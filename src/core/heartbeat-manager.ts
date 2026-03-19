@@ -16,8 +16,6 @@ import {
 import { filterMessagesForContext } from "./context-utils.js";
 import { filterHumanDataByVisibility } from "./prompt-context-builder.js";
 
-const DEFAULT_CONTEXT_WINDOW_HOURS = 8;
-
 // =============================================================================
 // MODEL HELPERS
 // =============================================================================
@@ -189,9 +187,9 @@ export async function queueHeartbeatCheck(sm: StateManager, personaId: string, i
   const model = getModelForPersona(sm, personaId);
   console.log(`[HeartbeatCheck ${persona.display_name}] Queueing heartbeat check (model: ${model})`);
   const human = sm.getHuman();
-  const history = sm.messages_get(personaId);
-  const contextWindowHours = persona.context_window_hours ?? DEFAULT_CONTEXT_WINDOW_HOURS;
-  const contextHistory = filterMessagesForContext(history, persona.context_boundary, contextWindowHours);
+   const history = sm.messages_get(personaId);
+   const contextWindowHours = persona.context_window_hours ?? human.settings?.default_context_window_hours ?? 8;
+   const contextHistory = filterMessagesForContext(history, persona.context_boundary, contextWindowHours);
 
   if (personaId === "ei") {
     await queueEiHeartbeat(sm, human, contextHistory, isTUI);

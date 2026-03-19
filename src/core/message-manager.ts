@@ -24,8 +24,6 @@ import {
 import { buildChatMessageContent } from "../prompts/message-utils.js";
 import { filterMessagesForContext } from "./context-utils.js";
 
-const DEFAULT_CONTEXT_WINDOW_HOURS = 8;
-
 // =============================================================================
 // MESSAGE QUERIES
 // =============================================================================
@@ -270,15 +268,16 @@ export function checkAndQueueHumanExtraction(
 // =============================================================================
 
 export function fetchMessagesForLLM(
-  sm: StateManager,
-  personaId: string
-): import("./types.js").ChatMessage[] {
-  const persona = sm.persona_getById(personaId);
-  if (!persona) return [];
-
-  const history = sm.messages_get(personaId);
-  const contextWindowHours = persona.context_window_hours ?? DEFAULT_CONTEXT_WINDOW_HOURS;
-  const filteredHistory = filterMessagesForContext(history, persona.context_boundary, contextWindowHours);
+   sm: StateManager,
+   personaId: string
+ ): import("./types.js").ChatMessage[] {
+   const persona = sm.persona_getById(personaId);
+   if (!persona) return [];
+ 
+   const human = sm.getHuman();
+   const history = sm.messages_get(personaId);
+   const contextWindowHours = persona.context_window_hours ?? human.settings?.default_context_window_hours ?? 8;
+   const filteredHistory = filterMessagesForContext(history, persona.context_boundary, contextWindowHours);
 
   return filteredHistory.reduce<import("./types.js").ChatMessage[]>((acc, m) => {
     const content = buildChatMessageContent(m);
