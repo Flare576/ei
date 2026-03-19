@@ -6,8 +6,10 @@ import {
   humanFromYAML,
   contextToYAML,
   contextFromYAML,
+  settingsToYAML,
+  settingsFromYAML,
 } from "../../../src/util/yaml-serializers";
-import type { PersonaEntity, HumanEntity, Message } from "../../../../src/core/types";
+import type { PersonaEntity, HumanEntity, Message, HumanSettings } from "../../../../src/core/types";
 import { ContextStatus } from "../../../../src/core/types";
 
 describe("personaToYAML", () => {
@@ -600,5 +602,33 @@ describe("round-trip serialization", () => {
     expect(result.deletedFactIds).toEqual([]);
     expect(result.deletedTopicIds).toEqual([]);
     expect(result.deletedPersonIds).toEqual([]);
+  });
+
+  test("round-trips all new configurable settings fields", () => {
+    const settings: HumanSettings = {
+      default_heartbeat_ms: 120000,
+      default_context_window_hours: 4,
+      message_min_count: 100,
+      message_max_age_days: 7,
+      ceremony: { time: "09:00", event_window_hours: 2 },
+    };
+    const yaml = settingsToYAML(settings);
+    const result = settingsFromYAML(yaml, settings);
+    expect(result.default_heartbeat_ms).toBe(120000);
+    expect(result.default_context_window_hours).toBe(4);
+    expect(result.message_min_count).toBe(100);
+    expect(result.message_max_age_days).toBe(7);
+    expect(result.ceremony?.event_window_hours).toBe(2);
+  });
+
+  test("returns undefined for new fields when not set", () => {
+    const settings: HumanSettings = {};
+    const yaml = settingsToYAML(settings);
+    const result = settingsFromYAML(yaml, settings);
+    expect(result.default_heartbeat_ms).toBeUndefined();
+    expect(result.default_context_window_hours).toBeUndefined();
+    expect(result.message_min_count).toBeUndefined();
+    expect(result.message_max_age_days).toBeUndefined();
+    expect(result.ceremony?.event_window_hours).toBeUndefined();
   });
 });

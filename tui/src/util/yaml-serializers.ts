@@ -504,11 +504,16 @@ interface EditableSettingsData {
   rewrite_model?: string | null;
   time_mode?: "24h" | "12h" | "local" | "utc" | null;
   name_display?: string | null;
+  default_heartbeat_ms?: number | null;
+  default_context_window_hours?: number | null;
+  message_min_count?: number | null;
+  message_max_age_days?: number | null;
   ceremony?: {
     time: string;
     decay_rate?: number | null;
     explore_threshold?: number | null;
     dedup_threshold?: number | null;
+    event_window_hours?: number | null;
   };
   opencode?: {
     integration?: boolean | null;
@@ -547,11 +552,16 @@ export function settingsToYAML(settings: HumanSettings | undefined): string {
     rewrite_model: settings?.rewrite_model ?? null,
     time_mode: settings?.time_mode ?? null,
     name_display: settings?.name_display ?? null,
+    default_heartbeat_ms: settings?.default_heartbeat_ms ?? null,
+    default_context_window_hours: settings?.default_context_window_hours ?? null,
+    message_min_count: settings?.message_min_count ?? null,
+    message_max_age_days: settings?.message_max_age_days ?? null,
     ceremony: {
       time: settings?.ceremony?.time ?? "09:00",
       decay_rate: settings?.ceremony?.decay_rate ?? null,
       explore_threshold: settings?.ceremony?.explore_threshold ?? null,
       dedup_threshold: settings?.ceremony?.dedup_threshold ?? null,
+      event_window_hours: settings?.ceremony?.event_window_hours ?? null,
     },
     opencode: {
       integration: settings?.opencode?.integration ?? false,
@@ -603,6 +613,7 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
       decay_rate: nullToUndefined(data.ceremony.decay_rate),
       explore_threshold: nullToUndefined(data.ceremony.explore_threshold),
       dedup_threshold: nullToUndefined(data.ceremony.dedup_threshold),
+      event_window_hours: nullToUndefined(data.ceremony.event_window_hours),
       last_ceremony: original?.ceremony?.last_ceremony,
     };
   }
@@ -669,6 +680,10 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
     rewrite_model: nullToUndefined(data.rewrite_model),
     time_mode: nullToUndefined(data.time_mode),
     name_display: nullToUndefined(data.name_display),
+    default_heartbeat_ms: nullToUndefined(data.default_heartbeat_ms),
+    default_context_window_hours: nullToUndefined(data.default_context_window_hours),
+    message_min_count: nullToUndefined(data.message_min_count),
+    message_max_age_days: nullToUndefined(data.message_max_age_days),
     ceremony,
     opencode,
     claudeCode,
