@@ -74,6 +74,7 @@ function createMockStorage() {
     save: vi.fn().mockResolvedValue(undefined),
     moveToBackup: vi.fn().mockResolvedValue(undefined),
     loadBackup: vi.fn().mockResolvedValue(null),
+    saveRollingBackup: vi.fn().mockResolvedValue(undefined),
   };
 }
 
