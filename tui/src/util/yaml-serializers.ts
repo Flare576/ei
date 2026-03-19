@@ -76,6 +76,7 @@ const PLACEHOLDER_LONG_DESC = "Detailed description of this persona's personalit
 interface YAMLTrait {
   name: string;
   description: string;
+  sentiment: number;
   strength: number;
 }
 
@@ -91,6 +92,7 @@ interface YAMLPersonaTopic {
 const PLACEHOLDER_TRAIT: YAMLTrait = {
   name: "Example Trait",
   description: "Delete this placeholder or modify it to define a real trait",
+  sentiment: 0,
   strength: 0.5,
 };
 const PLACEHOLDER_TOPIC: YAMLPersonaTopic = {
@@ -196,8 +198,8 @@ export function newPersonaFromYAML(yamlContent: string, allTools?: ToolDefinitio
       id: crypto.randomUUID(),
       name: t.name,
       description: t.description,
+      sentiment: t.sentiment ?? 0,
       strength: t.strength,
-      sentiment: 0,
       last_updated: new Date().toISOString(),
     });
   }
@@ -275,7 +277,7 @@ export function personaToYAML(persona: PersonaEntity, allGroups?: string[], allT
     groups_visible: groupsForYAML,
     traits: useTraitPlaceholder 
       ? [PLACEHOLDER_TRAIT]
-      : persona.traits.map(({ name, description, strength }) => ({ name, description, strength: strength ?? 0.5 })),
+      : persona.traits.map(({ name, description, sentiment, strength }) => ({ name, description, sentiment: sentiment ?? 0, strength: strength ?? 0.5 })),
     topics: useTopicPlaceholder
       ? [PLACEHOLDER_TOPIC]
       : persona.topics.map(({ name, perspective, approach, personal_stake, exposure_current, exposure_desired }) => ({ 
@@ -320,8 +322,8 @@ export function personaFromYAML(yamlContent: string, original: PersonaEntity, al
       id: existing?.id ?? crypto.randomUUID(),
       name: t.name,
       description: t.description,
+      sentiment: t.sentiment ?? existing?.sentiment ?? 0,
       strength: t.strength,
-      sentiment: existing?.sentiment ?? 0,
       last_updated: new Date().toISOString(),
     });
   }

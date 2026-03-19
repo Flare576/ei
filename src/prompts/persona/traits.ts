@@ -6,6 +6,7 @@ function formatTraitsForPrompt(traits: PersonaTrait[]): string {
   if (traits.length === 0) return "(No traits yet)";
   
   return JSON.stringify(traits.map(t => ({
+    id: t.id,
     name: t.name,
     description: t.description,
     sentiment: t.sentiment,
@@ -44,7 +45,8 @@ You are analyzing a conversation to detect EXPLICIT requests for ${personaName} 
 - Add traits the user didn't explicitly request
 - Infer traits from general conversation
 - Remove traits without explicit feedback
-- Confuse topics/interests with communication traits`;
+- Confuse topics/interests with communication traits
+- Return traits that don't need to change`;
 
   const fieldsFragment = `# Fields
 
@@ -70,16 +72,28 @@ ${formatTraitsForPrompt(data.current_traits)}
 
 1. ONLY analyze "Most Recent Messages" - earlier messages are context only
 2. ONLY detect EXPLICIT behavior change requests
-3. Return the COMPLETE trait list (existing + any additions/modifications)
+3. Return ONLY traits that need to change or be added — omit unchanged traits
+4. If nothing changed, return an empty array \`[]\`
+
+**To update an existing trait:** use its \`id\` from the Current TRAITS list above.
+**To add a new trait:** use \`"id": "new"\`.
 
 **Return JSON:**
 \`\`\`json
 [
   {
-    "name": "A one- or two-word Title for the trait",
-    "description": "A brief instruction on how the trait is exhibited",
+    "id": "existing-guid-from-current-traits",
+    "name": "Existing Trait Name",
+    "description": "Updated instruction",
     "sentiment": 0.3,
     "strength": 0.7
+  },
+  {
+    "id": "new",
+    "name": "Brand New Trait",
+    "description": "A brief instruction on how the trait is exhibited",
+    "sentiment": 0.0,
+    "strength": 0.5
   }
 ]
 \`\`\``;
@@ -111,7 +125,7 @@ ${earlierSection}${recentSection}
 
 Analyze the "Most Recent Messages" for EXPLICIT requests to change ${personaName}'s communication style.
 
-Return the complete trait list as JSON.`;
+Return ONLY the traits that need to change or be added. Return \`[]\` if nothing changed.`;
 
   return { system, user };
 }
