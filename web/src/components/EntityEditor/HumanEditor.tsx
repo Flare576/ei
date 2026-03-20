@@ -46,7 +46,7 @@ interface HumanEntity {
 interface HumanEditorProps {
   isOpen: boolean;
   onClose: () => void;
-  human: HumanEntity;
+  human: HumanEntity & { settings?: { rewrite_model?: string } };
   onFactSave: (fact: Fact) => Promise<void>;
   onFactDelete: (id: string) => void;
   onTopicSave: (topic: Topic) => Promise<void>;
@@ -55,6 +55,7 @@ interface HumanEditorProps {
   onPersonDelete: (id: string) => void;
   onQuoteSave?: (id: string, updates: Partial<Quote>) => void;
   onQuoteDelete?: (id: string) => void;
+  onQueueDedupe: (type: 'topic' | 'person', ids: string[]) => Promise<void>;
   resolvePersonaName?: (id: string) => string;
 }
 
@@ -77,6 +78,7 @@ export const HumanEditor = ({
   onPersonDelete,
   onQuoteSave,
   onQuoteDelete,
+  onQueueDedupe,
   resolvePersonaName,
 }: HumanEditorProps) => {
   const [activeTab, setActiveTab] = useState('facts');
@@ -90,7 +92,24 @@ export const HumanEditor = ({
   const [dirtyTopicIds, setDirtyTopicIds] = useState<Set<string>>(new Set());
   const [dirtyPersonIds, setDirtyPersonIds] = useState<Set<string>>(new Set());
 
+  const [isDedupeMode, setIsDedupeMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [toast, setToast] = useState<string | null>(null);
+
   const wasOpenRef = useRef(false);
+
+  useEffect(() => {
+    if (isOpen && !wasOpenRef.current) {
+      setIsDedupeMode(false);
+      setSelectedIds(new Set());
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   function smartMergeList<T extends { id: string }>(
     localItems: T[],
@@ -279,6 +298,42 @@ export const HumanEditor = ({
     setDirtyPersonIds(prev => new Set(prev).add(newPerson.id));
   };
 
+  const handleToggleDedupeMode = () => {
+    // Trigger blur on the currently focused element to save any dirty cards
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    setIsDedupeMode(prev => !prev);
+    setSelectedIds(new Set());
+  };
+
+  const handleSelectionChange = (id: string) => {
+    if (id === '__deselect_all__') {
+      setSelectedIds(new Set());
+      return;
+    }
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleMerge = async () => {
+    if (selectedIds.size < 2) return;
+    const type = activeTab === 'topics' ? 'topic' : 'person';
+    const ids = Array.from(selectedIds);
+    await onQueueDedupe(type, ids);
+    setIsDedupeMode(false);
+    setSelectedIds(new Set());
+    setToast(`Merging ${ids.length} ${type}s — Opus is on it`);
+  };
+
+
   const handleQuoteEdit = (quote: Quote) => {
     setEditingQuote(quote);
   };
@@ -313,16 +368,22 @@ export const HumanEditor = ({
         );
       case 'topics':
         return (
-          <HumanTopicsTab
-            topics={localTopics}
-            onChange={handleTopicChange}
-            onSave={handleTopicSave}
-            onDelete={handleTopicDelete}
-            onAdd={handleTopicAdd}
-            dirtyIds={dirtyTopicIds}
-            resolvePersonaName={resolvePersonaName}
-          />
-        );
+            <HumanTopicsTab
+              topics={localTopics}
+              onChange={handleTopicChange}
+              onSave={handleTopicSave}
+              onDelete={handleTopicDelete}
+              onAdd={handleTopicAdd}
+              dirtyIds={dirtyTopicIds}
+              resolvePersonaName={resolvePersonaName}
+              rewriteModelSet={!!human.settings?.rewrite_model}
+              isDedupeMode={isDedupeMode}
+              selectedIds={Array.from(selectedIds)}
+              onToggleDedupeMode={handleToggleDedupeMode}
+              onSelectionChange={handleSelectionChange}
+              onMerge={handleMerge}
+            />
+          );
        case 'people':
          return (
            <HumanPeopleTab
@@ -333,6 +394,12 @@ export const HumanEditor = ({
              onAdd={handlePersonAdd}
              dirtyIds={dirtyPersonIds}
              resolvePersonaName={resolvePersonaName}
+             rewriteModelSet={!!human.settings?.rewrite_model}
+             isDedupeMode={isDedupeMode}
+             selectedIds={Array.from(selectedIds)}
+             onToggleDedupeMode={handleToggleDedupeMode}
+             onSelectionChange={handleSelectionChange}
+             onMerge={handleMerge}
            />
          );
        case 'quotes':
@@ -367,6 +434,8 @@ export const HumanEditor = ({
         {renderTabContent()}
       </TabContainer>
       
+      {toast && <div className="ei-toast">{toast}</div>}
+
       {editingQuote && (
         <QuoteManagementModal
           isOpen={editingQuote !== null}
