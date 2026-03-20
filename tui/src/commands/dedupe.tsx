@@ -82,6 +82,12 @@ export const dedupeCommand: Command = {
     }
 
     const human = await ctx.ei.getHuman();
+
+    if (!human.settings?.rewrite_model) {
+      ctx.showNotification(`/dedupe requires a Default Rewrite Model — set one in /settings`, "error");
+      return;
+    }
+
     const pool: Array<Topic | Person> = type === "topic" ? human.topics : human.people;
 
     const seen = new Set<string>();
