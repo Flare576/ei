@@ -133,7 +133,7 @@ export const MIN_SESSION_AGE_MS = 20 * 60 * 1000;
  */
 export interface CursorSettings {
   integration?: boolean;
-  polling_interval_ms?: number;   // Default: 1800000 (30 min)
+  polling_interval_ms?: number;   // Default: 60000 (1 min)
   last_sync?: string;             // ISO timestamp
   extraction_point?: string;      // ISO timestamp — floor for session filtering
   processed_sessions?: Record<string, string>; // sessionId → ISO timestamp of last import

@@ -13,7 +13,7 @@ export interface SyncCredentials {
 
 export interface OpenCodeSettings {
   integration?: boolean;
-  polling_interval_ms?: number;  // Default: 1800000 (30 min)
+  polling_interval_ms?: number;  // Default: 60000 (1 min)
   extraction_model?: string;         // "Provider:model" for extraction. Unset = uses default_model.
   extraction_token_limit?: number;   // Token budget for extraction chunking. Unset = resolved from model.
   last_sync?: string;  // ISO timestamp

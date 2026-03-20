@@ -15,7 +15,7 @@ export function createDefaultHumanEntity(): HumanEntity {
       },
       opencode: {
         integration: false,
-        polling_interval_ms: 1800000,
+        polling_interval_ms: 60000,
       },
     },
   };
