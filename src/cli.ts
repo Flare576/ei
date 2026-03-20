@@ -145,27 +145,17 @@ async function installClaudeCode(): Promise<void> {
   const home = process.env.HOME || "~";
   const claudeJsonPath = join(home, ".claude.json");
 
-  // Prefer shelling out to `claude mcp add` — lets Claude Code manage its own config
-  // and avoids race conditions with a live state file.
-  try {
-    const which = Bun.spawnSync(["which", "claude"], { stdout: "pipe", stderr: "pipe" });
-    if (which.exitCode === 0) {
-      const result = Bun.spawnSync(
-        ["claude", "mcp", "add", "--scope", "user", "--transport", "stdio", "ei", "--", "ei", "mcp"],
-        { stdout: "pipe", stderr: "pipe" }
-      );
-      if (result.exitCode === 0) {
-        console.log(`✓ Registered Ei as Claude Code MCP server (user scope)`);
-        console.log(`  Restart Claude Code to activate.`);
-        return;
-      }
-      console.warn(`  claude mcp add failed (exit ${result.exitCode}), falling back to direct write`);
-    }
-  } catch {
-    // claude binary not found — fall through to direct write
-  }
+  // Claude Code supports ${VAR} substitution in env values, resolved from its
+  // own environment at spawn time — so the value stays fresh if EI_DATA_PATH changes.
+  const mcpEntry: Record<string, unknown> = {
+    type: "stdio",
+    command: "bunx",
+    args: ["ei-tui", "mcp"],
+    env: { EI_DATA_PATH: "${EI_DATA_PATH}" },
+  };
 
-  // Fallback: direct atomic write to ~/.claude.json
+  // Direct atomic write — we need full control over the config structure to
+  // write the env field. `claude mcp add` doesn't support env vars.
   let config: Record<string, unknown> = {};
   try {
     const text = await Bun.file(claudeJsonPath).text();
@@ -175,11 +165,7 @@ async function installClaudeCode(): Promise<void> {
   }
 
   const mcpServers = (config.mcpServers ?? {}) as Record<string, unknown>;
-  mcpServers["ei"] = {
-    type: "stdio",
-    command: "ei",
-    args: ["mcp"],
-  };
+  mcpServers["ei"] = mcpEntry;
   config.mcpServers = mcpServers;
 
   // Atomic write: write to temp file then rename to avoid partial writes
@@ -196,6 +182,14 @@ async function installCursor(): Promise<void> {
   const home = process.env.HOME || "~";
   const cursorJsonPath = join(home, ".cursor", "mcp.json");
 
+  // Cursor does not support ${VAR} substitution in mcp.json — literal values only.
+  const mcpEntry: Record<string, unknown> = {
+    type: "stdio",
+    command: "bunx",
+    args: ["ei-tui", "mcp"],
+    env: { EI_DATA_PATH: process.env.EI_DATA_PATH ?? "" },
+  };
+
   let config: Record<string, unknown> = {};
   try {
     const text = await Bun.file(cursorJsonPath).text();
@@ -205,11 +199,7 @@ async function installCursor(): Promise<void> {
   }
 
   const mcpServers = (config.mcpServers ?? {}) as Record<string, unknown>;
-  mcpServers["ei"] = {
-    type: "stdio",
-    command: "ei",
-    args: ["mcp"],
-  };
+  mcpServers["ei"] = mcpEntry;
   config.mcpServers = mcpServers;
 
   await Bun.$`mkdir -p ${join(home, ".cursor")}`;
