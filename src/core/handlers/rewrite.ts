@@ -125,12 +125,14 @@ export async function handleRewriteRewrite(response: LLMResponse, state: StateMa
   const human = state.getHuman();
   const now = new Date().toISOString();
 
-  // Look up the original item to inherit persona_groups
   const allItems: DataItemBase[] = [
     ...human.topics, ...human.people,
   ];
-  const originalItem = allItems.find(i => i.id === itemId);
-  const inheritedGroups = originalItem?.persona_groups;
+
+  const existingIds = new Set([itemId, ...(result.existing?.map(i => i.id) ?? [])]);
+  const involvedItems = allItems.filter(i => existingIds.has(i.id));
+  const unionGroups = [...new Set(involvedItems.flatMap(i => i.persona_groups ?? []))];
+  const unionPersonas = [...new Set(involvedItems.flatMap(i => i.interested_personas ?? []))];
 
   // Helper: resolve actual type from existing records (don't trust LLM's type field)
   const resolveExistingType = (id: string): RewriteItemType | null => {
@@ -217,7 +219,8 @@ export async function handleRewriteRewrite(response: LLMResponse, state: StateMa
       sentiment: item.sentiment ?? 0,
       last_updated: now,
       learned_by: "ei",
-      persona_groups: inheritedGroups,
+      persona_groups: unionGroups,
+      interested_personas: unionPersonas,
       embedding,
     };
 

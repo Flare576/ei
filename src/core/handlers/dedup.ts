@@ -48,7 +48,11 @@ export async function handleDedupCurate(
   }
   
   console.log(`[Dedup] Processing cluster: ${decisions.update.length} updates, ${decisions.remove.length} removals, ${decisions.add.length} additions`);
-  
+
+  // Pre-compute: for each survivor (replaced_by), union the removed entity's groups.
+  // Must happen before any phase mutates state so we read the original values.
+  const groupsToMerge = new Map<string, { persona_groups: string[]; interested_personas: string[] }>();
+
   // Map entity_type to pluralized state property name
   const pluralMap: Record<string, 'facts' | 'topics' | 'people'> = {
     fact: 'facts',
@@ -77,7 +81,20 @@ export async function handleDedupCurate(
     console.warn(`[Dedup] No entities found for cluster (already merged?)`);
     return;
   }
-  
+
+  for (const removal of decisions.remove) {
+    const removed = entities.find(e => e.id === removal.to_be_removed);
+    if (!removed) continue;
+    const acc = groupsToMerge.get(removal.replaced_by) ?? { persona_groups: [], interested_personas: [] };
+    groupsToMerge.set(removal.replaced_by, {
+      persona_groups: [...new Set([...acc.persona_groups, ...(removed.persona_groups ?? [])])],
+      interested_personas: [...new Set([...acc.interested_personas, ...(removed.interested_personas ?? [])])],
+    });
+  }
+
+  const clusterGroups = [...new Set(entities.flatMap(e => e.persona_groups ?? []))];
+  const clusterPersonas = [...new Set(entities.flatMap(e => e.interested_personas ?? []))];
+
   // =========================================================================
   // PHASE 1: Update Quote foreign keys FIRST (before deletions)
   // =========================================================================
@@ -126,15 +143,20 @@ export async function handleDedupCurate(
       }
     }
     
-    // Build complete entity with updates (preserve original fields if LLM omits them)
-      const updatedEntity = {
+    const mergedFromRemoved = groupsToMerge.get(update.id);
+    const updatedEntity = {
       ...entity,
       name: update.name ?? entity.name,
       description: update.description ?? entity.description,
       sentiment: update.sentiment ?? entity.sentiment,
       last_updated: new Date().toISOString(),
       embedding,
-      // Type-specific fields
+      persona_groups: mergedFromRemoved
+        ? [...new Set([...(entity.persona_groups ?? []), ...mergedFromRemoved.persona_groups])]
+        : entity.persona_groups,
+      interested_personas: mergedFromRemoved
+        ? [...new Set([...(entity.interested_personas ?? []), ...mergedFromRemoved.interested_personas])]
+        : entity.interested_personas,
       ...(update.strength !== undefined && { strength: update.strength }),
       ...(update.confidence !== undefined && { confidence: update.confidence }),
       ...(update.exposure_current !== undefined && { exposure_current: update.exposure_current }),
@@ -194,7 +216,6 @@ export async function handleDedupCurate(
     // Generate ID for new entity
     const id = crypto.randomUUID();
     
-    // Build complete entity
     const newEntity = {
       id,
       type: entity_type,
@@ -205,7 +226,8 @@ export async function handleDedupCurate(
       learned_by: "ei",
       last_changed_by: "ei",
       embedding,
-      // Type-specific fields with defaults
+      persona_groups: clusterGroups,
+      interested_personas: clusterPersonas,
       ...((entity_type === 'topic' || entity_type === 'person') && {
         exposure_current: addition.exposure_current ?? 0.0,
         exposure_desired: addition.exposure_desired ?? 0.5,
