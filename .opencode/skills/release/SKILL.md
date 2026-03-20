@@ -109,6 +109,61 @@ GitHub Actions picks up the tag and publishes to npm via OIDC (no stored secrets
 
 ---
 
+## Release Notes (write while CI runs — don't wait for green)
+
+### 1. Collect the commits
+
+```bash
+git log $(git describe --tags --abbrev=0 HEAD^)..HEAD --oneline
+```
+
+Skip: merge commits, `chore: bump to v*` commits.
+
+### 2. Check if this is the first GitHub Release
+
+```bash
+gh release list --limit 1
+```
+
+### 3. Draft the body
+
+**If no prior GitHub Releases exist**, open with:
+
+> 👋 Ohai, didn't see you there! Ei has been shipping quietly since v0.1.0 — check the [README](../README.md) for background on what it is and how to get started. These notes cover what's new in *this* release specifically.
+
+**For all releases**, group into sections — write for a human reader, not a git log. Use the flare-voice skill for tone: direct, punchy, occasionally self-deprecating. Skip anything that's purely internal scaffolding.
+
+```markdown
+## What's New
+<!-- feat commits — describe the user-facing change, not the implementation -->
+
+## Fixed
+<!-- fix commits — say what was wrong and what it felt like, briefly -->
+
+## Under the Hood
+<!-- refactor/test/chore — one short line each, or just skip entirely if boring -->
+```
+
+### 4. Create the release
+
+Write the body to a temp file, then:
+
+```bash
+gh release create v{VERSION} \
+  --title "v{VERSION}" \
+  --notes-file /tmp/ei-release-notes.md
+```
+
+### 5. Confirm CI goes green
+
+```bash
+gh run list --limit 3
+```
+
+The publish job gates on CI — if tests fail, npm doesn't get updated even though the tag exists.
+
+---
+
 ## Hard Rules
 
 - Never skip a preflight check, even if "we just ran tests"
