@@ -1233,6 +1233,7 @@ function App() {
             topics: human.topics,
             people: human.people,
             quotes: quotes,
+            settings: { rewrite_model: human.settings?.rewrite_model },
           }}
           onFactSave={handleFactSave}
           onFactDelete={handleFactDelete}
@@ -1242,6 +1243,10 @@ function App() {
           onPersonDelete={handlePersonDelete}
           onQuoteSave={handleQuoteUpdate}
           onQuoteDelete={handleQuoteDelete}
+          onQueueDedupe={async (type, ids) => {
+            if (!processor) return;
+            await processor.queueUserDedup(type, ids);
+          }}
           resolvePersonaName={(id) => {
             if (id === 'ei') return 'Ei';
             return personas.find(p => p.id === id)?.display_name ?? id;
