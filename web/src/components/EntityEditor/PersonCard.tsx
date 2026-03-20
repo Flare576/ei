@@ -32,6 +32,9 @@ interface PersonCardProps {
   isDirty?: boolean;
   showMeta?: boolean;
   resolvePersonaName?: (id: string) => string;
+  selectionMode?: boolean;
+  isSelected?: boolean;
+  onSelectionChange?: () => void;
 }
 
 const defaultFormat = (v: number) => v.toFixed(2);
@@ -73,6 +76,9 @@ export const PersonCard = ({
   isDirty = false,
   showMeta = true,
   resolvePersonaName,
+  selectionMode = false,
+  isSelected = false,
+  onSelectionChange,
 }: PersonCardProps): React.ReactElement => {
   const cardRef = React.useRef<HTMLDivElement>(null);
 
@@ -108,77 +114,103 @@ export const PersonCard = ({
 
   const gapInfo = getEngagementGapInfo(person.exposure_current, person.exposure_desired);
 
+  const cardClassName = [
+    'ei-data-card',
+    isDirty ? 'ei-data-card--dirty' : '',
+    selectionMode ? 'ei-data-card--selection-mode' : '',
+    isSelected ? 'ei-data-card--selected' : '',
+  ].filter(Boolean).join(' ');
+
   return (
     <div 
       ref={cardRef}
-      className={`ei-data-card ${isDirty ? 'ei-data-card--dirty' : ''}`} 
+      className={cardClassName}
       style={{ position: 'relative' }}
       onBlur={handleBlur}
+      onClick={selectionMode ? onSelectionChange : undefined}
     >
-      <div
-        className={`ei-engagement-gap ${gapInfo.className}`}
-        style={{ position: 'absolute', top: '12px', right: '12px' }}
-        title={gapInfo.description}
-      >
-        {gapInfo.label}
-      </div>
-      <div className="ei-data-card__header">
-        <input
-          type="text"
-          className="ei-data-card__name"
-          value={person.name}
-          onChange={handleNameChange}
-          placeholder="Name"
-        />
-      </div>
-
-      <div className="ei-data-card__body">
-        <input
-          type="text"
-          className="ei-data-card__relationship"
-          value={person.relationship}
-          onChange={handleRelationshipChange}
-          placeholder="Relationship (e.g., friend, coworker, family)"
-        />
-
-        <textarea
-          className="ei-data-card__description"
-          value={person.description}
-          onChange={handleDescriptionChange}
-          placeholder="Description"
-        />
-
-        <div className="ei-data-card__sliders">
-          {sliders.map((slider) => (
-            <SliderControl
-              key={slider.field}
-              label={slider.label}
-              value={person[slider.field as keyof Person] as number}
-              min={slider.min}
-              max={slider.max}
-              onChange={(value) => handleSliderChange(slider.field, value)}
-              formatValue={slider.formatValue || defaultFormat}
-            />
-          ))}
+      {selectionMode && (
+        <div className="ei-data-card__checkbox">
+          <input type="checkbox" checked={isSelected} readOnly />
         </div>
-      </div>
+      )}
+      {!selectionMode && (
+        <div
+          className={`ei-engagement-gap ${gapInfo.className}`}
+          style={{ position: 'absolute', top: '12px', right: '12px' }}
+          title={gapInfo.description}
+        >
+          {gapInfo.label}
+        </div>
+      )}
+      <div className="ei-data-card__content">
+        <div className="ei-data-card__header">
+          <input
+            type="text"
+            className="ei-data-card__name"
+            value={person.name}
+            onChange={handleNameChange}
+            placeholder="Name"
+            readOnly={selectionMode}
+          />
+        </div>
 
-      <div className="ei-data-card__footer">
-        {showMeta && (
-          <div className="ei-data-card__meta">
-            {person.learned_by && <span>Learned by: {resolvePersonaName ? resolvePersonaName(person.learned_by) : person.learned_by} • </span>}
-            <span>Updated: {formatTimestamp(person.last_updated)}</span>
+        <div className="ei-data-card__body">
+          {!selectionMode && (
+            <input
+              type="text"
+              className="ei-data-card__relationship"
+              value={person.relationship}
+              onChange={handleRelationshipChange}
+              placeholder="Relationship (e.g., friend, coworker, family)"
+            />
+          )}
+
+          <textarea
+            className="ei-data-card__description"
+            value={person.description}
+            onChange={handleDescriptionChange}
+            placeholder="Description"
+            rows={selectionMode ? 2 : undefined}
+            readOnly={selectionMode}
+          />
+
+          {!selectionMode && (
+            <div className="ei-data-card__sliders">
+              {sliders.map((slider) => (
+                <SliderControl
+                  key={slider.field}
+                  label={slider.label}
+                  value={person[slider.field as keyof Person] as number}
+                  min={slider.min}
+                  max={slider.max}
+                  onChange={(value) => handleSliderChange(slider.field, value)}
+                  formatValue={slider.formatValue || defaultFormat}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {!selectionMode && (
+          <div className="ei-data-card__footer">
+            {showMeta && (
+              <div className="ei-data-card__meta">
+                {person.learned_by && <span>Learned by: {resolvePersonaName ? resolvePersonaName(person.learned_by) : person.learned_by} • </span>}
+                <span>Updated: {formatTimestamp(person.last_updated)}</span>
+              </div>
+            )}
+            <div className="ei-data-card__actions">
+              <button 
+                className="ei-control-btn ei-control-btn--danger" 
+                onClick={onDelete}
+                title="Delete"
+              >
+                🗑️
+              </button>
+            </div>
           </div>
         )}
-        <div className="ei-data-card__actions">
-          <button 
-            className="ei-control-btn ei-control-btn--danger" 
-            onClick={onDelete}
-            title="Delete"
-          >
-            🗑️
-          </button>
-        </div>
       </div>
     </div>
   );

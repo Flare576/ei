@@ -33,6 +33,9 @@ interface DataItemCardProps<T extends DataItemBase> {
   renderAfterHeader?: () => React.ReactNode;
   onAiAssist?: (systemPrompt: string, userPrompt: string) => Promise<string>;
   aiContext?: string;
+  selectionMode?: boolean;
+  isSelected?: boolean;
+  onSelectionChange?: () => void;
 }
 
 const defaultFormat = (v: number) => v.toFixed(2);
@@ -49,6 +52,9 @@ export const DataItemCard = <T extends DataItemBase>({
   resolvePersonaName,
   onAiAssist,
   aiContext,
+  selectionMode = false,
+  isSelected = false,
+  onSelectionChange,
 }: DataItemCardProps<T>): React.ReactElement => {
   const cardRef = React.useRef<HTMLDivElement>(null);
   const [aiLoading, setAiLoading] = useState(false);
@@ -101,106 +107,128 @@ export const DataItemCard = <T extends DataItemBase>({
     }
   };
 
+  const cardClassName = [
+    'ei-data-card',
+    isDirty ? 'ei-data-card--dirty' : '',
+    selectionMode ? 'ei-data-card--selection-mode' : '',
+    isSelected ? 'ei-data-card--selected' : '',
+  ].filter(Boolean).join(' ');
+
   return (
     <div 
       ref={cardRef}
-      className={`ei-data-card ${isDirty ? 'ei-data-card--dirty' : ''}`}
+      className={cardClassName}
       onBlur={handleBlur}
+      onClick={selectionMode ? onSelectionChange : undefined}
     >
-      <div className="ei-data-card__header">
-        <input
-          type="text"
-          className="ei-data-card__name"
-          value={item.name}
-          onChange={handleNameChange}
-          placeholder="Name"
-        />
-      </div>
+      {selectionMode && (
+        <div className="ei-data-card__checkbox">
+          <input type="checkbox" checked={isSelected} readOnly />
+        </div>
+      )}
+      <div className="ei-data-card__content">
+        <div className="ei-data-card__header">
+          <input
+            type="text"
+            className="ei-data-card__name"
+            value={item.name}
+            onChange={handleNameChange}
+            placeholder="Name"
+            readOnly={selectionMode}
+          />
+        </div>
 
-      {renderAfterHeader?.()}
+        {renderAfterHeader && !selectionMode && renderAfterHeader()}
 
-      <div className="ei-data-card__body">
-        <div style={{ position: 'relative' }}>
-          <div className="ei-creator-modal__field-with-assist ei-creator-modal__field-with-assist--inline">
-            <label className="ei-form-label ei-form-label--sm">Description</label>
-            {onAiAssist && (
-              <button
-                className="ei-ai-assist-btn ei-ai-assist-btn--sm"
-                onClick={handleWand}
-                disabled={aiLoading}
-                title="AI assist"
-              >
-                ✨
-              </button>
+        <div className="ei-data-card__body">
+          <div style={{ position: 'relative' }}>
+            {!selectionMode && onAiAssist && (
+              <div className="ei-creator-modal__field-with-assist ei-creator-modal__field-with-assist--inline">
+                <label className="ei-form-label ei-form-label--sm">Description</label>
+                <button
+                  className="ei-ai-assist-btn ei-ai-assist-btn--sm"
+                  onClick={handleWand}
+                  disabled={aiLoading}
+                  title="AI assist"
+                >
+                  ✨
+                </button>
+              </div>
+            )}
+            <textarea
+              className="ei-data-card__description"
+              value={item.description}
+              onChange={handleDescriptionChange}
+              placeholder="Description"
+              rows={selectionMode ? 2 : undefined}
+              readOnly={selectionMode}
+            />
+            {aiLoading && (
+              <div className="ei-field-loading-overlay">
+                <div className="ei-field-loading-overlay__spinner" />
+              </div>
             )}
           </div>
-          <textarea
-            className="ei-data-card__description"
-            value={item.description}
-            onChange={handleDescriptionChange}
-            placeholder="Description"
-          />
-          {aiLoading && (
-            <div className="ei-field-loading-overlay">
-              <div className="ei-field-loading-overlay__spinner" />
+          {suggestion && !selectionMode && (
+            <div className="ei-ai-suggestion">
+              <div className="ei-ai-suggestion__text">{suggestion}</div>
+              <div className="ei-ai-suggestion__actions">
+                <button className="ei-btn ei-btn--primary ei-btn--sm" onClick={() => {
+                  onChange('description' as keyof T, suggestion as T[keyof T]);
+                  setSuggestion(null);
+                }}>Accept</button>
+                <button className="ei-btn ei-btn--secondary ei-btn--sm" onClick={handleWand} disabled={aiLoading}>Re-roll</button>
+                <button className="ei-btn ei-btn--ghost ei-btn--sm" onClick={() => setSuggestion(null)}>Dismiss</button>
+              </div>
+            </div>
+          )}
+
+          {!selectionMode && (
+            <div className="ei-data-card__sliders">
+              {sliders.map((slider) => (
+                <SliderControl
+                  key={slider.field}
+                  label={slider.label}
+                  value={item[slider.field as keyof T] as number}
+                  min={slider.min}
+                  max={slider.max}
+                  onChange={(value) => handleSliderChange(slider.field, value)}
+                  formatValue={slider.formatValue || defaultFormat}
+                  tooltip={slider.tooltip}
+                />
+              ))}
             </div>
           )}
         </div>
-        {suggestion && (
-          <div className="ei-ai-suggestion">
-            <div className="ei-ai-suggestion__text">{suggestion}</div>
-            <div className="ei-ai-suggestion__actions">
-              <button className="ei-btn ei-btn--primary ei-btn--sm" onClick={() => {
-                onChange('description' as keyof T, suggestion as T[keyof T]);
-                setSuggestion(null);
-              }}>Accept</button>
-              <button className="ei-btn ei-btn--secondary ei-btn--sm" onClick={handleWand} disabled={aiLoading}>Re-roll</button>
-              <button className="ei-btn ei-btn--ghost ei-btn--sm" onClick={() => setSuggestion(null)}>Dismiss</button>
+
+        {!selectionMode && (
+          <div className="ei-data-card__footer">
+            {showMeta && (
+              <div className="ei-data-card__meta">
+                {item.learned_by && <span>Learned by: {resolvePersonaName ? resolvePersonaName(item.learned_by) : item.learned_by} • </span>}
+                <span>Updated: {formatTimestamp(item.last_updated)}</span>
+              </div>
+            )}
+            {item.persona_groups && item.persona_groups.length > 0 && (
+              <div className="ei-data-card__groups">
+                {item.persona_groups.map((group, idx) => (
+                  <span key={group} className={`ei-data-card__group-badge ${idx === 0 ? 'ei-data-card__group-badge--primary' : ''}`}>
+                    {group}
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="ei-data-card__actions">
+              <button 
+                className="ei-control-btn ei-control-btn--danger" 
+                onClick={onDelete}
+                title="Delete"
+              >
+                🗑️
+              </button>
             </div>
           </div>
         )}
-
-        <div className="ei-data-card__sliders">
-          {sliders.map((slider) => (
-            <SliderControl
-              key={slider.field}
-              label={slider.label}
-              value={item[slider.field as keyof T] as number}
-              min={slider.min}
-              max={slider.max}
-              onChange={(value) => handleSliderChange(slider.field, value)}
-              formatValue={slider.formatValue || defaultFormat}
-              tooltip={slider.tooltip}
-            />
-          ))}
-        </div>
-      </div>
-
-      <div className="ei-data-card__footer">
-        {showMeta && (
-          <div className="ei-data-card__meta">
-            {item.learned_by && <span>Learned by: {resolvePersonaName ? resolvePersonaName(item.learned_by) : item.learned_by} • </span>}
-            <span>Updated: {formatTimestamp(item.last_updated)}</span>
-          </div>
-        )}
-        {item.persona_groups && item.persona_groups.length > 0 && (
-          <div className="ei-data-card__groups">
-            {item.persona_groups.map((group, idx) => (
-              <span key={group} className={`ei-data-card__group-badge ${idx === 0 ? 'ei-data-card__group-badge--primary' : ''}`}>
-                {group}
-              </span>
-            ))}
-          </div>
-        )}
-        <div className="ei-data-card__actions">
-          <button 
-            className="ei-control-btn ei-control-btn--danger" 
-            onClick={onDelete}
-            title="Delete"
-          >
-            🗑️
-          </button>
-        </div>
       </div>
     </div>
   );

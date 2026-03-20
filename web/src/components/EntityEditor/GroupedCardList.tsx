@@ -47,6 +47,9 @@ interface GroupedCardListProps<T extends DataItemBase> {
   resolvePersonaName?: (id: string) => string;
   onAiAssist?: (systemPrompt: string, userPrompt: string) => Promise<string>;
   aiContext?: string;
+  selectionMode?: boolean;
+  selectedIds?: string[];
+  onSelectionChange?: (id: string) => void;
 }
 
 const defaultGroupBy = <T extends DataItemBase>(item: T): string => {
@@ -68,6 +71,9 @@ export const GroupedCardList = <T extends DataItemBase>({
   resolvePersonaName,
   onAiAssist,
   aiContext,
+  selectionMode = false,
+  selectedIds = [],
+  onSelectionChange,
   }: GroupedCardListProps<T>) => {
   const defaultRenderCard: RenderCardFn<T> = (item, onItemChange, onItemSave, onItemDelete, isDirty, itemSliders, resolvePersonaName, onAiAssist, aiContext) => (
     <DataItemCard
@@ -81,6 +87,9 @@ export const GroupedCardList = <T extends DataItemBase>({
       resolvePersonaName={resolvePersonaName}
       onAiAssist={onAiAssist}
       aiContext={aiContext}
+      selectionMode={selectionMode}
+      isSelected={selectedIds.includes(item.id)}
+      onSelectionChange={onSelectionChange ? () => onSelectionChange(item.id) : undefined}
     />
   );
 
@@ -107,6 +116,7 @@ export const GroupedCardList = <T extends DataItemBase>({
   });
 
   const toggleGroup = (groupName: string) => {
+    if (selectionMode) return;
     setCollapsedGroups((prev) => {
       const next = new Set(prev);
       if (next.has(groupName)) {
@@ -118,29 +128,49 @@ export const GroupedCardList = <T extends DataItemBase>({
     });
   };
 
-  if (hideGroupHeaders) {
+  if (hideGroupHeaders || selectionMode) {
     return (
       <div className="ei-grouped-list">
         <div className="ei-grouped-list__flat">
-          {items.map((item) => (
-            <div key={item.id}>
-              {render(
-                item,
-                (field, value) => onChange(item.id, field, value),
-                () => onSave(item.id),
-                () => onDelete(item.id),
-                dirtyIds.has(item.id),
-                sliders,
-                resolvePersonaName,
-                onAiAssist,
-                aiContext
+          {items.map((item) => {
+            const isSelected = selectedIds.includes(item.id);
+            return (
+            <div
+              key={item.id}
+              className={`ei-selection-wrapper${isSelected ? ' ei-selection-wrapper--selected' : ''}`}
+              onClick={selectionMode && onSelectionChange ? () => onSelectionChange(item.id) : undefined}
+            >
+              {selectionMode && (
+                <input
+                  type="checkbox"
+                  className="ei-selection-checkbox"
+                  checked={isSelected}
+                  onChange={() => onSelectionChange?.(item.id)}
+                  onClick={e => e.stopPropagation()}
+                />
               )}
+              <div className={selectionMode ? 'ei-selection-card-body' : ''}>
+                {render(
+                  item,
+                  (field, value) => onChange(item.id, field, value),
+                  () => onSave(item.id),
+                  () => onDelete(item.id),
+                  dirtyIds.has(item.id),
+                  sliders,
+                  resolvePersonaName,
+                  onAiAssist,
+                  aiContext
+                )}
+              </div>
             </div>
-          ))}
+            );
+          })}
         </div>
-        <button className="ei-grouped-list__add-btn" onClick={onAdd}>
-          + Add New
-        </button>
+        {!selectionMode && (
+          <button className="ei-grouped-list__add-btn" onClick={onAdd}>
+            + Add New
+          </button>
+        )}
       </div>
     );
   }
@@ -149,7 +179,7 @@ export const GroupedCardList = <T extends DataItemBase>({
     <div className="ei-grouped-list">
       {groupNames.map((groupName) => {
         const groupItems = grouped[groupName];
-        const isCollapsed = collapsedGroups.has(groupName);
+        const isCollapsed = collapsedGroups.has(groupName) && !selectionMode;
 
         return (
           <div
@@ -161,6 +191,7 @@ export const GroupedCardList = <T extends DataItemBase>({
             <div
               className="ei-grouped-list__group-header"
               onClick={() => toggleGroup(groupName)}
+              style={{ cursor: selectionMode ? 'default' : 'pointer' }}
             >
               <h3 className="ei-grouped-list__group-title">
                 {groupName} ({groupItems.length})
@@ -188,9 +219,11 @@ export const GroupedCardList = <T extends DataItemBase>({
         );
       })}
 
-      <button className="ei-grouped-list__add-btn" onClick={onAdd}>
-        + Add New
-      </button>
+      {!selectionMode && (
+        <button className="ei-grouped-list__add-btn" onClick={onAdd}>
+          + Add New
+        </button>
+      )}
     </div>
   );
 };
