@@ -87,6 +87,7 @@ All commands start with `/`. Append `!` to any command as a shorthand for `--for
 |---------|---------|-------------|
 | `/me` | | Edit all your data (facts, traits, topics, people) in `$EDITOR` |
 | `/me <type>` | | Edit one type: `facts`, `traits`, `topics`, or `people` |
+| `/dedupe <person\|topic> "<query>"` | | Fuzzy-search and merge duplicate people or topics in `$EDITOR` |
 | `/settings` | `/set` | Edit your global settings in `$EDITOR` |
 | `/setsync <user> <pass>` | `/ss` | Set sync credentials (triggers restart) |
 | `/tools` | | Manage tool providers — enable/disable tools per persona |

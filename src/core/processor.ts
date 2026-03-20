@@ -31,7 +31,7 @@ import { ContextStatus as ContextStatusEnum } from "./types.js";
 import { registerReadMemoryExecutor, registerFileReadExecutor } from "./tools/index.js";
 import { createReadMemoryExecutor } from "./tools/builtin/read-memory.js";
 import { EI_WELCOME_MESSAGE, EI_PERSONA_DEFINITION } from "../templates/welcome.js";
-import { shouldStartCeremony, startCeremony, handleCeremonyProgress } from "./orchestrators/index.js";
+import { shouldStartCeremony, startCeremony, handleCeremonyProgress, queueUserDedupRequest } from "./orchestrators/index.js";
 import { BUILT_IN_FACTS } from "./constants/built-in-facts.js";
 
 // Static module imports
@@ -1576,6 +1576,10 @@ const toolNextSteps = new Set([
 
   async clearQueue(): Promise<number> {
     return clearQueue(this.stateManager, this.queueProcessor);
+  }
+
+  queueUserDedup(itemType: "topic" | "person", entityIds: string[]): void {
+    queueUserDedupRequest(this.stateManager, itemType, entityIds);
   }
 
   async submitOneShot(guid: string, systemPrompt: string, userPrompt: string): Promise<void> {
