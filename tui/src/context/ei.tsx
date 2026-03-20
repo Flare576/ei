@@ -106,6 +106,7 @@ export interface EiContextValue {
   getToolList: () => ToolDefinition[];
   updateToolProvider: (id: string, updates: Partial<Omit<ToolProvider, 'id' | 'created_at'>>) => Promise<boolean>;
   updateTool: (id: string, updates: Partial<Omit<ToolDefinition, 'id' | 'created_at'>>) => Promise<boolean>;
+  queueUserDedup: (itemType: "topic" | "person", entityIds: string[]) => void;
   cleanupTimers: () => void;
 }
 const EiContext = createContext<EiContextValue>();
@@ -139,6 +140,11 @@ export const EiProvider: ParentComponent = (props) => {
       setStore("notification", null);
       notificationTimer = null;
     }, 5000);
+  };
+
+  const queueUserDedup = (itemType: "topic" | "person", entityIds: string[]): void => {
+    if (!processor) return;
+    processor.queueUserDedup(itemType, entityIds);
   };
 
   const cleanupTimers = () => {
@@ -661,6 +667,7 @@ export const EiProvider: ParentComponent = (props) => {
     getToolList,
     updateToolProvider,
     updateTool,
+    queueUserDedup,
     cleanupTimers,
   };
   return (

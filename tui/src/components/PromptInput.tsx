@@ -25,6 +25,7 @@ import { queueCommand } from "../commands/queue";
 import { dlqCommand } from "../commands/dlq";
 import { toolsCommand } from "../commands/tools";
 import { authCommand } from '../commands/auth';
+import { dedupeCommand } from "../commands/dedupe";
 import { useOverlay } from "../context/overlay";
 import { CommandSuggest } from "./CommandSuggest";
 import { useKeyboard } from "@opentui/solid";
@@ -64,6 +65,7 @@ export function PromptInput() {
   registerCommand(dlqCommand);
   registerCommand(toolsCommand);
   registerCommand(authCommand);
+  registerCommand(dedupeCommand);
 
   let textareaRef: TextareaRenderable | undefined;
 
@@ -163,7 +165,8 @@ export function PromptInput() {
                                  text.startsWith("/context") ||
                                  text.startsWith("/messages") ||
                                  text === "/queue" ||
-                                 text === "/dlq";
+                                 text === "/dlq" ||
+                                 text.startsWith("/dedupe");
 
       if (!isEditorCmd && !opensEditorForData) {
         textareaRef?.clear();
