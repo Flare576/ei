@@ -67,9 +67,9 @@ describe("ensureAgentPersona", () => {
     expect(mockStateManager.persona_add).toHaveBeenCalledWith(
       expect.objectContaining({
         id: expect.any(String),
-        display_name: "build",
+        display_name: "Build",
         entity: "system",
-        aliases: ["build"],
+        aliases: ["build", "Build"],
         short_description: "The main coding agent",
         long_description: "An OpenCode agent that assists with coding tasks.",
         group_primary: "OpenCode",
@@ -168,14 +168,83 @@ describe("ensureAgentPersona", () => {
   });
 
   it("sets alias to agent name for unknown agents", async () => {
+    const result = await ensureAgentPersona("some-unknown-agent", {
+      stateManager: mockStateManager as StateManager,
+      interface: mockInterface as Ei_Interface,
+      reader: mockReader as IOpenCodeReader,
+    });
+
+    expect(result.aliases).toEqual(["some-unknown-agent"]);
+    expect(result.display_name).toBe("Some Unknown Agent");
+  });
+
+  it("resolves known alias 'atlas (plan executor)' to canonical 'Atlas'", async () => {
+    const result = await ensureAgentPersona("atlas (plan executor)", {
+      stateManager: mockStateManager as StateManager,
+      interface: mockInterface as Ei_Interface,
+      reader: mockReader as IOpenCodeReader,
+    });
+
+    expect(result.display_name).toBe("Atlas");
+    expect(result.aliases).toContain("atlas (plan executor)");
+    expect(result.aliases).toContain("Atlas");
+  });
+
+  it("resolves known alias 'build' to canonical 'Build'", async () => {
     const result = await ensureAgentPersona("build", {
       stateManager: mockStateManager as StateManager,
       interface: mockInterface as Ei_Interface,
       reader: mockReader as IOpenCodeReader,
     });
 
-    expect(result.aliases).toEqual(["build"]);
-    expect(result.display_name).toBe("build");
+    expect(result.display_name).toBe("Build");
+    expect(result.aliases).toEqual(["build", "Build"]);
+  });
+
+  it("resolves 'ai-sdlc-frontend-engineer' to canonical 'Frontend Engineer'", async () => {
+    const result = await ensureAgentPersona("ai-sdlc-frontend-engineer", {
+      stateManager: mockStateManager as StateManager,
+      interface: mockInterface as Ei_Interface,
+      reader: mockReader as IOpenCodeReader,
+    });
+
+    expect(result.display_name).toBe("Frontend Engineer");
+    expect(result.aliases).toContain("ai-sdlc-frontend-engineer");
+  });
+
+  it("fallback: 'ai-sdlc-some-new-agent' derives canonical 'Some New Agent'", async () => {
+    const result = await ensureAgentPersona("ai-sdlc-some-new-agent", {
+      stateManager: mockStateManager as StateManager,
+      interface: mockInterface as Ei_Interface,
+      reader: mockReader as IOpenCodeReader,
+    });
+
+    expect(result.display_name).toBe("Some New Agent");
+    expect(result.aliases).toEqual(["ai-sdlc-some-new-agent"]);
+  });
+
+  it("fallback: 'my-custom-agent (beta)' derives canonical 'My Custom Agent'", async () => {
+    const result = await ensureAgentPersona("my-custom-agent (beta)", {
+      stateManager: mockStateManager as StateManager,
+      interface: mockInterface as Ei_Interface,
+      reader: mockReader as IOpenCodeReader,
+    });
+
+    expect(result.display_name).toBe("My Custom Agent");
+    expect(result.aliases).toEqual(["my-custom-agent (beta)"]);
+  });
+
+  it("resolves 'hephaestus (deep agent)' via ALIASES (not fallback) to 'Hephaestus'", async () => {
+    const result = await ensureAgentPersona("hephaestus (deep agent)", {
+      stateManager: mockStateManager as StateManager,
+      interface: mockInterface as Ei_Interface,
+      reader: mockReader as IOpenCodeReader,
+    });
+
+    expect(result.display_name).toBe("Hephaestus");
+    expect(result.aliases).toContain("hephaestus (deep agent)");
+    expect(result.aliases).toContain("Hephaestus");
+    expect(result.aliases).toContain("hephaestus");
   });
 
   it("creates persona with empty traits and topics", async () => {
@@ -245,7 +314,7 @@ describe("ensureAllAgentPersonas", () => {
     };
 
     mockStateManager.persona_getByName = vi.fn().mockImplementation((name: string) =>
-      name === "build" ? existingPersona : name === "Sisyphus" ? null : null
+      name === "Build" ? existingPersona : name === "Sisyphus" ? null : null
     );
 
     const result = await ensureAllAgentPersonas(

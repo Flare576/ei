@@ -19,7 +19,14 @@ function resolveCanonicalAgent(agentName: string): { canonical: string; aliases:
       return { canonical, aliases: variants };
     }
   }
-  return { canonical: agentName, aliases: [agentName] };
+
+  let name = agentName;
+  name = name.replace(/^ai-sdlc[:-]/, "");
+  name = name.replace(/\s*\([^)]+\)\s*$/, "").trim();
+  name = name.replace(/-/g, " ");
+  const canonical = name.replace(/\b\w/g, (c) => c.toUpperCase());
+
+  return { canonical, aliases: [agentName] };
 }
 
 export async function ensureAgentPersona(
