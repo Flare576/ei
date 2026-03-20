@@ -412,11 +412,13 @@ export const EiProvider: ParentComponent = (props) => {
   const deleteMessages = async (personaId: string, messageIds: string[]): Promise<void> => {
     if (!processor) return;
     await processor.deleteMessages(personaId, messageIds);
+    setStore("messages", store.messages.filter(m => !messageIds.includes(m.id)));
   };
 
   const setMessageContextStatus = async (personaId: string, messageId: string, status: ContextStatus): Promise<void> => {
     if (!processor) return;
     await processor.setMessageContextStatus(personaId, messageId, status);
+    setStore("messages", store.messages.map(m => m.id === messageId ? { ...m, context_status: status } : m));
   };
 
   const recallPendingMessages = async (): Promise<string> => {
