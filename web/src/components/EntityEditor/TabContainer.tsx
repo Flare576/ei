@@ -23,7 +23,7 @@ export function TabContainer({
   onTabChange,
   onClose,
   isDirty = false,
-  children
+  children,
 }: TabContainerProps) {
   const modalRef = useRef<HTMLDivElement>(null);
   const previousActiveElement = useRef<Element | null>(null);
@@ -104,19 +104,22 @@ export function TabContainer({
         </div>
 
         <div className="ei-tab-container__tabs" role="tablist">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              className={`ei-tab-container__tab ${activeTab === tab.id ? 'ei-tab-container__tab--active' : ''}`}
-              onClick={() => onTabChange(tab.id)}
-              role="tab"
-              aria-selected={activeTab === tab.id}
-              aria-controls={`tabpanel-${tab.id}`}
-            >
-              {tab.icon && <span className="ei-tab-container__tab-icon">{tab.icon}</span>}
-              {tab.label}
-            </button>
-          ))}
+          <div className="ei-tab-container__tabs-list">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                className={`ei-tab-container__tab ${activeTab === tab.id ? 'ei-tab-container__tab--active' : ''}`}
+                onClick={() => onTabChange(tab.id)}
+                role="tab"
+                aria-selected={activeTab === tab.id}
+                aria-controls={`tabpanel-${tab.id}`}
+              >
+                {tab.icon && <span className="ei-tab-container__tab-icon">{tab.icon}</span>}
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
         </div>
 
         <div 

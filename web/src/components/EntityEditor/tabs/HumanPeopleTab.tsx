@@ -1,3 +1,4 @@
+import React from 'react';
 import { GroupedCardList } from '../GroupedCardList';
 import { PersonCard } from '../PersonCard';
 
@@ -23,6 +24,15 @@ interface HumanPeopleTabProps {
   onAdd: () => void;
   dirtyIds: Set<string>;
   resolvePersonaName?: (id: string) => string;
+  rewriteModelSet: boolean;
+
+  // Dedupe selection mode props
+  isDedupeMode: boolean;
+  selectedIds: string[];
+  dedupingIds: string[];
+  onToggleDedupeMode: () => void;
+  onSelectionChange: (id: string) => void;
+  onMerge: () => Promise<void>;
 }
 
 const personSliders = [
@@ -59,18 +69,90 @@ export const HumanPeopleTab = ({
   onAdd,
   dirtyIds,
   resolvePersonaName,
-}: HumanPeopleTabProps) => {
+  rewriteModelSet,
+  isDedupeMode,
+  selectedIds,
+  onToggleDedupeMode,
+  onSelectionChange,
+  onMerge,
+}: Omit<HumanPeopleTabProps, 'dedupingIds'>) => {
+  const [filterQuery, setFilterQuery] = React.useState('');
+
+  const handleMerge = async () => {
+    if (selectedIds.length < 2) return;
+    await onMerge();
+    setFilterQuery('');
+  };
+
+  const handleToggle = () => {
+    setFilterQuery('');
+    onToggleDedupeMode();
+  };
+
+  const filteredPeople = isDedupeMode
+    ? filterQuery.trim()
+      ? people.filter(p =>
+          p.name.toLowerCase().includes(filterQuery.toLowerCase())
+        )
+      : []
+    : people;
+
   return (
-    <GroupedCardList
-      items={people}
-      sliders={personSliders}
-      onChange={onChange}
-      onSave={onSave}
-      onDelete={onDelete}
-      onAdd={onAdd}
-      dirtyIds={dirtyIds}
-      renderCard={renderPersonCard}
-      resolvePersonaName={resolvePersonaName}
-    />
+    <>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '0 8px 8px' }}>
+        <button
+          onClick={handleToggle}
+          disabled={!rewriteModelSet}
+          title={!rewriteModelSet ? 'Set a Default Rewrite Model in Settings first' : undefined}
+          className={isDedupeMode ? 'ei-btn ei-btn--ghost' : 'ei-btn ei-btn--secondary'}
+        >
+          {isDedupeMode ? 'Cancel' : 'Merge Duplicates'}
+        </button>
+      </div>
+
+      {isDedupeMode && (
+        <div style={{ padding: '0 8px 8px' }}>
+          <input
+            type="text"
+            autoFocus
+            placeholder='Search to find duplicates — e.g. "Bob"'
+            value={filterQuery}
+            onChange={e => setFilterQuery(e.target.value)}
+            className="ei-search-input"
+          />
+        </div>
+      )}
+
+      {isDedupeMode && !filterQuery.trim() && (
+        <p className="ei-dedupe-empty-hint">Search for a name to find duplicates — then check the ones to merge.</p>
+      )}
+
+      <GroupedCardList
+        items={filteredPeople}
+        sliders={personSliders}
+        onChange={onChange}
+        onSave={onSave}
+        onDelete={isDedupeMode ? () => {} : onDelete}
+        onAdd={isDedupeMode ? () => {} : onAdd}
+        dirtyIds={dirtyIds}
+        renderCard={renderPersonCard}
+        resolvePersonaName={resolvePersonaName}
+        selectionMode={isDedupeMode}
+        selectedIds={selectedIds}
+        onSelectionChange={onSelectionChange}
+      />
+
+      {isDedupeMode && selectedIds.length >= 2 && (
+        <div className="ei-sticky-footer">
+          <span className="ei-sticky-footer__info">{selectedIds.length} selected</span>
+          <button className="ei-btn ei-btn--ghost" onClick={() => onSelectionChange('__deselect_all__')}>
+            Deselect All
+          </button>
+          <button className="ei-btn ei-btn--primary" onClick={handleMerge}>
+            Merge {selectedIds.length} into one
+          </button>
+        </div>
+      )}
+    </>
   );
 };
