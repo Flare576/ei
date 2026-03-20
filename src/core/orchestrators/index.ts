@@ -22,7 +22,7 @@ export {
   queueDescriptionCheck,
   runHumanCeremony,
   } from "./ceremony.js";
-export { queueDedupPhase } from "./dedup-phase.js";
+export { queueDedupPhase, queueUserDedupRequest } from "./dedup-phase.js";
 export {
   queuePersonaTopicScan,
   queuePersonaTopicMatch,

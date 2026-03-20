@@ -3,6 +3,7 @@ export { buildPersonaExplorePrompt } from "./explore.js";
 export { buildDescriptionCheckPrompt } from "./description-check.js";
 export { buildRewriteScanPrompt, buildRewritePrompt } from "./rewrite.js";
 export { buildDedupPrompt } from "./dedup.js";
+export { buildUserDedupPrompt } from "./user-dedup.js";
 export type {
   PersonaExpirePromptData,
   PersonaExpireResult,
