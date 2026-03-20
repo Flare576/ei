@@ -175,6 +175,7 @@ export const AGENT_TO_AGENT_PREFIXES = [
  * Value = array of variants that should resolve to this persona
  */
 export const AGENT_ALIASES: Record<string, string[]> = {
+  // ── OhMyOpenCode primary agents ──────────────────────────────────────────
   Sisyphus: [
     "sisyphus",
     "Sisyphus",
@@ -182,6 +183,44 @@ export const AGENT_ALIASES: Record<string, string[]> = {
     "Planner-Sisyphus",
     "planner-sisyphus",
   ],
+  Build: ["build", "Build"],
+  Plan: ["plan", "Plan"],
+  Atlas: [
+    "atlas",
+    "Atlas",
+    "atlas (plan executor)",
+    "Atlas (plan executor)",
+  ],
+  Prometheus: [
+    "prometheus",
+    "Prometheus",
+    "prometheus (plan builder)",
+    "Prometheus (plan builder)",
+  ],
+  Hephaestus: [
+    "hephaestus",
+    "Hephaestus",
+    "hephaestus (deep agent)",
+    "Hephaestus (deep agent)",
+  ],
+
+  // ── ai-sdlc agents (RobotsAndPencils/ai-sdlc-claude-code-template) ───────
+  // Installed via scripts/install-opencode.sh as "ai-sdlc-{name}" in OpenCode.
+  // Bare names included for direct/custom installs.
+  Architect: ["ai-sdlc-architect", "architect"],
+  "Frontend Engineer": ["ai-sdlc-frontend-engineer", "frontend-engineer"],
+  "Backend Engineer": ["ai-sdlc-backend-engineer", "backend-engineer"],
+  "Code Reviewer": ["ai-sdlc-code-reviewer", "code-reviewer"],
+  "Database Engineer": ["ai-sdlc-database-engineer", "database-engineer"],
+  Debugger: ["ai-sdlc-debugger", "debugger"],
+  "DevOps Engineer": ["ai-sdlc-devops-engineer", "devops-engineer"],
+  "Mobile Engineer": ["ai-sdlc-mobile-engineer", "mobile-engineer"],
+  "QA Engineer": ["ai-sdlc-qa-engineer", "qa-engineer"],
+  "Security Reviewer": ["ai-sdlc-security-reviewer", "security-reviewer"],
+  "Spec Validator": ["ai-sdlc-spec-validator", "spec-validator"],
+  "Technical Writer": ["ai-sdlc-technical-writer", "technical-writer"],
+  "Test Writer": ["ai-sdlc-test-writer", "test-writer"],
+  "AI Engineer": ["ai-sdlc-ai-engineer", "ai-engineer"],
 };
 
 /**

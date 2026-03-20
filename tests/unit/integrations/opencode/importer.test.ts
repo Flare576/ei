@@ -223,7 +223,7 @@ describe("importOpenCodeSessions", () => {
       reader: mockReader as IOpenCodeReader,
     });
 
-    const buildPersona = createdPersonas.get("build");
+    const buildPersona = createdPersonas.get("Build");
     expect(mockStateManager.persona_archive).toHaveBeenCalledWith(buildPersona!.id);
   });
 
@@ -294,7 +294,7 @@ describe("importOpenCodeSessions", () => {
 
     expect(result.messagesImported).toBe(2);
 
-    const buildPersona = createdPersonas.get("build");
+    const buildPersona = createdPersonas.get("Build");
     expect(buildPersona).toBeDefined();
 
     const stored = messageStore.get(buildPersona!.id) ?? [];
@@ -334,7 +334,7 @@ describe("importOpenCodeSessions", () => {
       reader: mockReader as IOpenCodeReader,
     });
 
-    const buildPersona = createdPersonas.get("build");
+    const buildPersona = createdPersonas.get("Build");
     const stored = messageStore.get(buildPersona!.id) ?? [];
     expect(stored[0].role).toBe("human");
     expect(stored[1].role).toBe("system");
@@ -608,7 +608,7 @@ describe("importOpenCodeSessions", () => {
       reader: mockReader as IOpenCodeReader,
     });
 
-    const buildPersona = createdPersonas.get("build");
+    const buildPersona = createdPersonas.get("Build");
     const sisyphusPersona = createdPersonas.get("Sisyphus");
 
     expect(mockInterface.onMessageAdded).toHaveBeenCalledWith(buildPersona!.id);
@@ -635,7 +635,7 @@ describe("importOpenCodeSessions", () => {
       reader: mockReader as IOpenCodeReader,
     });
 
-    const buildPersona = createdPersonas.get("build");
+    const buildPersona = createdPersonas.get("Build");
     expect(mockStateManager.persona_update).toHaveBeenCalledWith(
       buildPersona!.id,
       expect.objectContaining({
