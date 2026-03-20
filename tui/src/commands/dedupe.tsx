@@ -5,9 +5,11 @@ import type { Topic, Person } from "../../../src/core/types.js";
 const VALID_TYPES = ["person", "topic"] as const;
 type DedupeType = typeof VALID_TYPES[number];
 
-function buildDedupeYAML(type: DedupeType, query: string, entities: Array<Topic | Person>): string {
+function buildDedupeYAML(type: DedupeType, terms: string[], entities: Array<Topic | Person>): string {
+  const termDisplay = terms.map(t => t.includes(" ") ? `"${t}"` : t).join(" | ");
   const header = [
-    `# /dedupe ${type} "${query}"`,
+    `# /dedupe ${type} ${terms.map(t => t.includes(" ") ? `"${t}"` : t).join(" ")}`,
+    `# Terms: ${termDisplay}`,
     `# Found ${entities.length} match${entities.length === 1 ? "" : "es"}. DELETE blocks for entries to EXCLUDE from the merge.`,
     `# Keep at least 2. Save to confirm, :q to cancel (Vim tip: :cq quits with error — same effect, but now you know it exists).`,
     ``,
@@ -60,40 +62,50 @@ export const dedupeCommand: Command = {
   name: "dedupe",
   aliases: [],
   description: "Merge duplicate people or topics",
-  usage: '/dedupe <person|topic> "<query>"',
+  usage: '/dedupe <person|topic> <term> ["term 2" ...]',
 
   async execute(args, ctx) {
     const type = args[0]?.toLowerCase() as DedupeType | undefined;
 
     if (!type || !VALID_TYPES.includes(type)) {
       ctx.showNotification(
-        `Usage: /dedupe <person|topic> "<query>". Got: ${args[0] ?? "(none)"}`,
+        `Usage: /dedupe <person|topic> <term> ["term 2" ...]. Got: ${args[0] ?? "(none)"}`,
         "error"
       );
       return;
     }
 
-    const query = args.slice(1).join(" ").trim();
-    if (!query) {
-      ctx.showNotification(`Usage: /dedupe ${type} "<query>" — query is required`, "error");
+    const terms = args.slice(1);
+    if (terms.length === 0) {
+      ctx.showNotification(`Usage: /dedupe ${type} <term> ["term 2" ...] — at least one term required`, "error");
       return;
     }
 
     const human = await ctx.ei.getHuman();
     const pool: Array<Topic | Person> = type === "topic" ? human.topics : human.people;
-    const matches = fuzzySearch(pool, query);
+
+    const seen = new Set<string>();
+    const matches: Array<Topic | Person> = [];
+    for (const term of terms) {
+      for (const entity of fuzzySearch(pool, term)) {
+        if (!seen.has(entity.id)) {
+          seen.add(entity.id);
+          matches.push(entity);
+        }
+      }
+    }
 
     if (matches.length === 0) {
-      ctx.showNotification(`No ${type}s matching "${query}"`, "info");
+      ctx.showNotification(`No ${type}s matching ${terms.map(t => `"${t}"`).join(" | ")}`, "info");
       return;
     }
 
     if (matches.length === 1) {
-      ctx.showNotification(`Only 1 ${type} matches "${query}" — need at least 2 to merge`, "info");
+      ctx.showNotification(`Only 1 ${type} matched — need at least 2 to merge`, "info");
       return;
     }
 
-    const yamlContent = buildDedupeYAML(type, query, matches);
+    const yamlContent = buildDedupeYAML(type, terms, matches);
 
     const result = await spawnEditor({
       initialContent: yamlContent,
