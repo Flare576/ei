@@ -105,9 +105,9 @@ import {
 } from "./queue-manager.js";
 
 const DEFAULT_LOOP_INTERVAL_MS = 100;
-const DEFAULT_OPENCODE_POLLING_MS = 1800000;
-const DEFAULT_CLAUDE_CODE_POLLING_MS = 1800000;
-const DEFAULT_CURSOR_POLLING_MS = 1800000;
+const DEFAULT_OPENCODE_POLLING_MS = 60000;
+const DEFAULT_CLAUDE_CODE_POLLING_MS = 60000;
+const DEFAULT_CURSOR_POLLING_MS = 60000;
 
 let processorInstanceCount = 0;
 
@@ -649,7 +649,7 @@ export class Processor {
     if (!human.settings.opencode) {
       human.settings.opencode = {
         integration: false,
-        polling_interval_ms: 1800000,
+        polling_interval_ms: 60000,
       };
       modified = true;
     }
@@ -657,7 +657,7 @@ export class Processor {
     if (!human.settings.claudeCode) {
       human.settings.claudeCode = {
         integration: false,
-        polling_interval_ms: 1800000,
+        polling_interval_ms: 60000,
       };
       modified = true;
     }

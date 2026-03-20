@@ -565,7 +565,7 @@ export function settingsToYAML(settings: HumanSettings | undefined): string {
     },
     opencode: {
       integration: settings?.opencode?.integration ?? false,
-      polling_interval_ms: settings?.opencode?.polling_interval_ms ?? 1800000,
+      polling_interval_ms: settings?.opencode?.polling_interval_ms ?? 60000,
       extraction_model: settings?.opencode?.extraction_model ?? 'default',
       extraction_token_limit: settings?.opencode?.extraction_token_limit ?? 'default',
       last_sync: settings?.opencode?.last_sync ?? null,
@@ -573,7 +573,7 @@ export function settingsToYAML(settings: HumanSettings | undefined): string {
     },
     claudeCode: {
       integration: settings?.claudeCode?.integration ?? false,
-      polling_interval_ms: settings?.claudeCode?.polling_interval_ms ?? 1800000,
+      polling_interval_ms: settings?.claudeCode?.polling_interval_ms ?? 60000,
       extraction_model: settings?.claudeCode?.extraction_model ?? 'default',
       extraction_token_limit: settings?.claudeCode?.extraction_token_limit ?? 'default',
       last_sync: settings?.claudeCode?.last_sync ?? null,
@@ -581,7 +581,7 @@ export function settingsToYAML(settings: HumanSettings | undefined): string {
     },
     cursor: {
       integration: settings?.cursor?.integration ?? false,
-      polling_interval_ms: settings?.cursor?.polling_interval_ms ?? 1800000,
+      polling_interval_ms: settings?.cursor?.polling_interval_ms ?? 60000,
       last_sync: settings?.cursor?.last_sync ?? null,
       extraction_point: settings?.cursor?.extraction_point ?? null,
     },
