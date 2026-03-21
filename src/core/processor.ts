@@ -848,9 +848,17 @@ const toolNextSteps = new Set([
               personaId ??
               (request.next_step === LLMNextStep.HandleEiHeartbeat ? "ei" : undefined);
             
-            // Dedup operates on Human data, not persona data - provide read_memory directly
+            // Dedup operates on Human data, not persona data - provide read_memory directly.
+            // Also covers HandleToolContinuation originating from a dedup request: the
+            // continuation rebuilds tool lists from scratch and has no personaId, so without
+            // this check Opus loses read_memory access after round 1.
+            const isDedupRequest =
+              request.next_step === LLMNextStep.HandleDedupCurate ||
+              (request.next_step === LLMNextStep.HandleToolContinuation &&
+                request.data.originalNextStep === LLMNextStep.HandleDedupCurate);
+
             let tools: ToolDefinition[] = [];
-            if (request.next_step === LLMNextStep.HandleDedupCurate) {
+            if (isDedupRequest) {
               const readMemory = this.stateManager.tools_getByName("read_memory");
               if (readMemory?.enabled) {
                 tools = [readMemory];
