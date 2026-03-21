@@ -84,8 +84,8 @@ function buildOpenCodeToolContent(): string {
     '    "Results include entity IDs that can be passed back with lookup=true to get full detail.",',
     '  ].join(" "),',
     '  args: {',
-    '    query: tool.schema.string().describe(',
-    '      "Search text, or an entity ID when lookup=true. Supports natural language."',
+    '    query: tool.schema.string().optional().describe(',
+    '      "Search text, or an entity ID when lookup=true. Supports natural language. Omit to browse by recency."',
     '    ),',
     '    type: tool.schema',
     '      .enum(["facts", "people", "topics", "quotes"])',
@@ -112,16 +112,23 @@ function buildOpenCodeToolContent(): string {
     '      .describe(',
     '        "If true, treat query as an entity ID and return that single entity in full detail."',
     '      ),',
+    '    recent: tool.schema',
+    '      .boolean()',
+    '      .optional()',
+    '      .describe(',
+    '        "If true, sort by most recently mentioned. Can be combined with persona or query."',
+    '      ),',
     '  },',
     '  async execute(args) {',
     '    const cmd: string[] = ["ei"];',
     '    if (args.lookup) {',
-    '      cmd.push("--id", args.query);',
+    '      cmd.push("--id", args.query ?? "");',
     '    } else {',
     '      if (args.type) cmd.push(args.type);',
     '      if (args.persona) cmd.push("--persona", args.persona);',
+    '      if (args.recent) cmd.push("--recent");',
     '      if (args.limit && args.limit !== 10) cmd.push("-n", String(args.limit));',
-    '      cmd.push(args.query);',
+    '      if (args.query) cmd.push(args.query);',
     '    }',
     '    return Bun.$`${cmd}`.text();',
     '  },',
@@ -312,17 +319,9 @@ async function main(): Promise<void> {
 
   const query = parsed.positionals.join(" ").trim();
   const limit = parsed.values.number ? parseInt(parsed.values.number, 10) : 10;
-  const recent = parsed.values.recent === true;
+  // Default to recent mode when no query — allows `ei --persona Foo` and `ei` with no args
+  const recent = parsed.values.recent === true || !query;
   const personaName = parsed.values.persona?.trim();
-
-  if (!query && !recent) {
-    if (targetType) {
-      console.error(`Search text required. Usage: ei ${targetType} "search text"`);
-    } else {
-      console.error(`Search text required. Usage: ei "search text"`);
-    }
-    process.exit(1);
-  }
 
   if (isNaN(limit) || limit < 1) {
     console.error("--number must be a positive integer");

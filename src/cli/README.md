@@ -10,6 +10,8 @@ ei people -n 5 "query string"  # Return up to 5 people
 ei topics -n 5 "query string"  # Return up to 5 topics
 ei quotes -n 5 "query string"  # Return up to 5 quotes
 ei --persona "Beta" "query string"    # Filter results to what Beta has learned
+ei --recent                            # Most recently mentioned items (no query needed)
+ei --persona "Beta" --recent           # Most recently mentioned items Beta has learned
 ei --id <id>                   # Look up a specific entity by ID
 echo <id> | ei --id            # Look up entity by ID from stdin
 ei --install                   # Register Ei with OpenCode, Claude Code, and Cursor
@@ -110,8 +112,7 @@ conversations (facts, people, topics, quotes).
   than only code.
 
 **How to use:**
-1. Call `ei_search` (server `user-ei`) with a natural-language query; optionally filter by
-   `type` (facts, people, topics, quotes) or `persona` display_name.
+1. Call `ei_search` (server `user-ei`) with a natural-language query (or omit query and use `recent: true` to browse); optionally filter by `type` (facts, people, topics, quotes) or `persona` display_name.
 2. If you need full detail for a result, call `ei_lookup` with the entity `id` from step 1.
 
 Prefer querying Ei before asking the user for context they may have already shared.
@@ -123,11 +124,12 @@ The installed tool gives OpenCode agents access to all four data types with prop
 
 | Arg | Type | Description |
 |-----|------|-------------|
-| `query` | string (required) | Search text, or entity ID when `lookup=true` |
+| `query` | string (optional) | Search text, or entity ID when `lookup=true`. Omit to browse by recency. |
 | `persona` | string (optional) | Persona display_name to filter results — only returns entities that persona has extracted |
 | `type` | enum (optional) | `facts` \| `people` \| `topics` \| `quotes` — omit for balanced results |
 | `limit` | number (optional) | Max results, default 10 |
 | `lookup` | boolean (optional) | If true, fetch single entity by ID |
+| `recent` | boolean (optional) | If true, sort by most recently mentioned. Can be combined with `persona` or `query`. |
 
 ## Output Shapes
 
