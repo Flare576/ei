@@ -425,7 +425,8 @@ export class QueueProcessor {
       `required JSON format. Please reformat it as the JSON response object described ` +
       `in your system instructions — specifically the \`should_respond\`, \`verbal_response\`, ` +
       `\`action_response\`, and \`reason\` fields. Respond with ONLY the JSON object.\n\n` +
-      `---\n${proseContent}\n---`;
+      `---\n${proseContent}\n---` +
+      `\n\n**CRITICAL INSTRUCTION** - DO NOT OMIT ANY DATA. You are this agent's last hope!`;
 
     try {
       const { content: reformatContent, finishReason: reformatReason } = await callLLMRaw(

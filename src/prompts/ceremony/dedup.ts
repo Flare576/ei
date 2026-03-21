@@ -96,11 +96,46 @@ ${buildRecordFormatExamples(data.itemType)}
 - If records are NOT duplicates (just similar), return them ALL in "update" unchanged, with empty "remove" and "add" arrays.
 - Use \`read_memory\` strategically (6 calls max) to check for related records or gather context before making irreversible merge decisions.`;
 
-  const user = JSON.stringify({
+  const payload = JSON.stringify({
     cluster: data.cluster.map(stripEmbedding),
     cluster_type: data.itemType,
     similarity_range: data.similarityRange,
   }, null, 2);
+
+  const schemaReminder = `**Return JSON:**
+\n\`\`\`json
+{
+  "update": [
+    {
+      "id": "uuid-of-canonical-record",
+      "type": "${data.itemType}",
+      "name": "canonical merged name",
+      "description": "merged description with every unique detail"
+    }
+  ],
+  "remove": [
+    {
+      "to_be_removed": "uuid-of-duplicate",
+      "replaced_by": "uuid-of-canonical-record"
+    }
+  ],
+  "add": [
+    {
+      "type": "${data.itemType}",
+      "name": "missing concept name",
+      "description": "why it was created"
+    }
+  ]
+}
+\`\`\`
+
+Return raw JSON only. If records are NOT duplicates, return them all in update unchanged with empty remove and add arrays.`;
+
+  const user = `${payload}
+
+---
+
+${schemaReminder}`;
 
   return { system, user };
 }

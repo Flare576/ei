@@ -131,7 +131,18 @@ ${unansweredWarning}
 
 Based on all the context above, decide: Should you reach out to your human friend right now? If so, which item above is most worth addressing?
 
-Remember: You're their thoughtful companion, not their productivity assistant.`;
+Remember: You're their thoughtful companion, not their productivity assistant.
+
+**Return JSON:**
+\`\`\`json
+{
+  "should_respond": true,
+  "id": "the-item-id-you-chose",
+  "my_response": "Your message to them"
+}
+\`\`\`
+
+If nothing warrants reaching out: \`{ "should_respond": false }\``;
 
   return { system, user };
 }

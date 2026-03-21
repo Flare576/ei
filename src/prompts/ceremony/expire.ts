@@ -24,7 +24,14 @@ Return empty array if no topics should be removed.`;
 Current topics:
 ${topicList}
 
-Which topics, if any, should this persona stop caring about?`;
+Which topics, if any, should this persona stop caring about?
+
+**Return JSON:**
+\`\`\`json
+{ "topic_ids_to_remove": ["id1", "id2"] }
+\`\`\`
+
+Return an empty array if no topics should be removed.`;
 
   return { system, user };
 }

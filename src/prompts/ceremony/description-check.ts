@@ -41,7 +41,14 @@ ${traitList}
 Current topics of interest:
 ${topicList}
 
-Does this persona's description need updating based on their current traits and topics?`;
+Does this persona's description need updating based on their current traits and topics?
+
+**Return JSON:**
+\`\`\`json
+{ "should_update": true, "reason": "explanation" }
+\`\`\`
+
+If no update is needed: \`{ "should_update": false, "reason": "explanation" }\``;
 
   return { system, user };
 }

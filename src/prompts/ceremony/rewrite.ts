@@ -22,7 +22,24 @@ Return a raw JSON array of strings. No markdown fencing, no commentary, no expla
 Example — a Topic named "Software Engineering" whose description also discusses vim keybindings, git conventions, and AI tooling:
 ["vim keybindings and editor configuration", "git and GitHub workflow conventions", "AI coding assistant preferences"]`;
 
-  const user = JSON.stringify(stripEmbedding(data.item), null, 2);
+  const payload = JSON.stringify(stripEmbedding(data.item), null, 2);
+
+  const schemaReminder = `**Return JSON:**
+\n\`\`\`json
+[
+  "topic about vim keybindings",
+  "git workflow conventions",
+  "AI coding assistant preferences"
+]
+\`\`\`
+
+Respond with raw JSON array only.`;
+
+  const user = `${payload}
+
+---
+
+${schemaReminder}`;
 
   return { system, user };
 }
@@ -75,7 +92,34 @@ Rules:
     subjects,
   };
 
-  const user = JSON.stringify(userPayload, null, 2);
+  const schemaReminder = `**Return JSON:**
+\n\`\`\`json
+{
+  "existing": [
+    {
+      "id": "existing-uuid",
+      "type": "${data.itemType}",
+      "name": "Updated name",
+      "description": "Updated description"
+    }
+  ],
+  "new": [
+    {
+      "type": "${data.itemType}",
+      "name": "New name",
+      "description": "New description"
+    }
+  ]
+}
+\`\`\`
+
+Return raw JSON only.`;
+
+  const user = `${JSON.stringify(userPayload, null, 2)}
+
+---
+
+${schemaReminder}`;
 
   return { system, user };
 }

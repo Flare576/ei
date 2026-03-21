@@ -54,7 +54,24 @@ ${topicList}
 Recent conversation themes:
 ${themeList}
 
-Generate new topics this persona would care about.`;
+Generate new topics this persona would care about.
+
+**Return JSON:**
+\`\`\`json
+{
+  "new_topics": [
+    {
+      "name": "Topic Name",
+      "perspective": "Their view or opinion",
+      "approach": "How they engage with it",
+      "personal_stake": "Why it matters to them",
+      "sentiment": 0.5,
+      "exposure_current": 0.2,
+      "exposure_desired": 0.6
+    }
+  ]
+}
+\`\`\``;
 
   return { system, user };
 }

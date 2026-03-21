@@ -44,11 +44,40 @@ Return raw JSON only. No markdown, no commentary.
 
 ${buildRecordFormatHint(data.itemType)}`;
 
-  const user = JSON.stringify({
+  const payload = JSON.stringify({
     cluster: data.cluster.map(stripEmbedding),
     cluster_type: data.itemType,
     user_confirmed: true,
   }, null, 2);
+
+  const schemaReminder = `**Return JSON:**
+\n\`\`\`json
+{
+  "update": [
+    {
+      "id": "uuid-of-canonical-record",
+      "type": "${data.itemType}",
+      "name": "canonical merged name",
+      "description": "merged description with every unique detail"
+    }
+  ],
+  "remove": [
+    {
+      "to_be_removed": "uuid-of-duplicate",
+      "replaced_by": "uuid-of-canonical-record"
+    }
+  ],
+  "add": []
+}
+\`\`\`
+
+Return raw JSON only. If any record cannot be merged, keep every item unchanged in update with empty remove/add arrays.`;
+
+  const user = `${payload}
+
+---
+
+${schemaReminder}`;
 
   return { system, user };
 }

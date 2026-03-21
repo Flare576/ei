@@ -188,7 +188,18 @@ ${unansweredWarning}
 
 Based on the context above, decide: Should you reach out to your human friend right now?
 
-Remember: Only reach out if you have something genuine and specific to say.`;
+Remember: Only reach out if you have something genuine and specific to say.
+
+**Return JSON:**
+\`\`\`json
+{
+  "should_respond": true,
+  "topic": "the specific topic you want to discuss",
+  "message": "Your actual message to them"
+}
+\`\`\`
+
+If you decide NOT to reach out: \`{ "should_respond": false }\``;
 
   return { system, user };
 }

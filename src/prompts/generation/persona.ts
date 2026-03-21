@@ -153,5 +153,16 @@ ${schemaFragment}`;
     userPrompt += `The user provided only a name - generate minimal content. The seed traits above are included by default.\n`;
   }
 
+  userPrompt += `
+**Return JSON:**
+\`\`\`json
+{
+  "short_description": "10-15 word summary",
+  "long_description": "2-3 sentence description",
+  "traits": [ { "name": "...", "description": "...", "sentiment": 0.0, "strength": 0.5 } ],
+  "topics": [ { "name": "...", "perspective": "...", "approach": "...", "personal_stake": "...", "sentiment": 0.5, "exposure_current": 0.5, "exposure_desired": 0.6 } ]
+}
+\`\`\``;
+
   return { system, user: userPrompt };
 }

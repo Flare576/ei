@@ -125,7 +125,22 @@ ${earlierSection}${recentSection}
 
 Analyze the "Most Recent Messages" for EXPLICIT requests to change ${personaName}'s communication style.
 
-Return ONLY the traits that need to change or be added. Return \`[]\` if nothing changed.`;
+Return ONLY the traits that need to change or be added.
+
+**Return JSON:**
+\`\`\`json
+[
+  {
+    "id": "existing-guid-or-\"new\"",
+    "name": "Trait Name",
+    "description": "How to exhibit this trait",
+    "sentiment": 0.0,
+    "strength": 0.5
+  }
+]
+\`\`\`
+
+Return \`[]\` if nothing changed.`;
 
   return { system, user };
 }
