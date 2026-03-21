@@ -16,9 +16,9 @@ export function createMcpServer(): McpServer {
     "ei_search",
     {
       description:
-        "Search the user's Ei knowledge base — a persistent memory store built from conversations. Returns facts, people, topics of interest, and quotes. Results include entity IDs that can be passed back to ei_lookup for full detail.",
+        "Search the user's Ei knowledge base — a persistent memory store built from conversations. Returns facts, people, topics of interest, and quotes. Results include entity IDs that can be passed back to ei_lookup for full detail. Omit query to browse by recency (use with recent=true or persona filter).",
       inputSchema: {
-        query: z.string().describe("Search text. Supports natural language."),
+        query: z.string().optional().describe("Search text. Supports natural language. Omit to browse without semantic filtering — useful with recent=true or persona filter."),
         type: z
           .enum(["facts", "people", "topics", "quotes"])
           .optional()
@@ -42,7 +42,8 @@ export function createMcpServer(): McpServer {
           .describe("If true, sort by most recently mentioned."),
       },
     },
-    async ({ query, type, persona, limit, recent }) => {
+    async ({ query: rawQuery, type, persona, limit, recent }) => {
+      const query = rawQuery ?? "";
       const options = { recent: recent ?? false };
       const effectiveLimit = limit ?? 10;
 
