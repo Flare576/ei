@@ -137,7 +137,7 @@ export const GroupedCardList = <T extends DataItemBase>({
             return (
             <div
               key={item.id}
-              className={`ei-selection-wrapper${isSelected ? ' ei-selection-wrapper--selected' : ''}`}
+              className={selectionMode ? `ei-selection-wrapper${isSelected ? ' ei-selection-wrapper--selected' : ''}` : undefined}
               onClick={selectionMode && onSelectionChange ? () => onSelectionChange(item.id) : undefined}
             >
               {selectionMode && (
