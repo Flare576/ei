@@ -8,6 +8,7 @@
  */
 
 import type { ResponsePromptData, PromptOutput } from "./types.js";
+import { formatCurrentTime } from "../../core/format-utils.js";
 import {
   buildIdentitySection,
   buildGuidelinesSection,
@@ -51,11 +52,7 @@ Your role is unique among personas:
   const priorities = buildPrioritiesSection(data.persona, data.human);
   const responseFormat = buildResponseFormatSection();
   const toolsSection = (data.tools && data.tools.length > 0) ? buildToolsSection() : "";
-  const currentTime = new Date().toLocaleString('en-US', {
-    weekday: 'long', year: 'numeric', month: 'long',
-    day: 'numeric', hour: 'numeric', minute: '2-digit',
-    timeZoneName: 'short',
-  });
+  const currentTime = formatCurrentTime();
   const conversationState = getConversationStateText(data.delay_ms);
 
   return `${identity}
@@ -100,11 +97,7 @@ function buildStandardSystemPrompt(data: ResponsePromptData): string {
   const priorities = buildPrioritiesSection(data.persona, data.human);
   const responseFormat = buildResponseFormatSection();
   const toolsSection = (data.tools && data.tools.length > 0) ? buildToolsSection() : "";
-  const currentTime = new Date().toLocaleString('en-US', {
-    weekday: 'long', year: 'numeric', month: 'long',
-    day: 'numeric', hour: 'numeric', minute: '2-digit',
-    timeZoneName: 'short',
-  });
+  const currentTime = formatCurrentTime();
   const conversationState = getConversationStateText(data.delay_ms);
 
   return `${identity}

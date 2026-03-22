@@ -7,6 +7,7 @@ import {
   type ContextStatus,
   type LLMRequest,
 } from "./types.js";
+import { formatTimestamp } from "./format-utils.js";
 import { StateManager } from "./state-manager.js";
 import { QueueProcessor } from "./queue-processor.js";
 import {
@@ -282,9 +283,10 @@ export function fetchMessagesForLLM(
   return filteredHistory.reduce<import("./types.js").ChatMessage[]>((acc, m) => {
     const content = buildChatMessageContent(m);
     if (content.length > 0) {
+      const finalContent = persona.include_message_timestamps ? `[${formatTimestamp(m.timestamp)}] ${content}` : content;
       acc.push({
         role: m.role === "human" ? "user" : "assistant",
-        content,
+        content: finalContent,
       });
     }
     return acc;
