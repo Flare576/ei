@@ -57,6 +57,7 @@ interface EditablePersonaData {
   is_paused?: boolean;
   pause_until?: string;
   is_static?: boolean;
+  include_message_timestamps?: boolean;
   tools?: Record<string, Record<string, boolean>>;
 }
 
@@ -288,6 +289,7 @@ export function personaToYAML(persona: PersonaEntity, allGroups?: string[], allT
     is_paused: persona.is_paused || undefined,
     pause_until: persona.pause_until,
     is_static: persona.is_static || undefined,
+    include_message_timestamps: persona.include_message_timestamps || undefined,
     tools: toolsMap,
   };
   
@@ -391,6 +393,7 @@ export function personaFromYAML(yamlContent: string, original: PersonaEntity, al
     is_paused: data.is_paused ?? false,
     pause_until: data.pause_until,
     is_static: data.is_static ?? false,
+    include_message_timestamps: data.include_message_timestamps ?? false,
     tools: resolvePersonaToolsFromMap(data.tools, allTools ?? [], allProviders ?? []),
     last_updated: new Date().toISOString(),
   };
