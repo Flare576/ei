@@ -17,6 +17,7 @@ interface PersonaEntity {
   is_static: boolean;
   heartbeat_delay_ms?: number;
   context_window_hours?: number;
+  include_message_timestamps?: boolean;
   context_boundary?: string;
   last_updated: string;
   last_activity: string;
@@ -83,6 +84,10 @@ export const PersonaSettingsTab: React.FC<PersonaSettingsTabProps> = ({
     onChange("is_static", e.target.checked);
   };
 
+  const handleTimestampsToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
+    onChange("include_message_timestamps", e.target.checked);
+  };
+
   const handleGroupVisibilityToggle = (group: string) => {
     const current = persona.groups_visible || [];
     const updated = current.includes(group)
@@ -137,6 +142,19 @@ export const PersonaSettingsTab: React.FC<PersonaSettingsTabProps> = ({
             <span>Static Persona</span>
           </label>
           <small className="ei-form-hint">Static personas skip all Ceremony phases (exposure decay, exploration, etc.)</small>
+        </div>
+
+        <div className="ei-form-group">
+          <label className="ei-checkbox-label">
+            <input
+              type="checkbox"
+              className="ei-checkbox"
+              checked={persona.include_message_timestamps ?? false}
+              onChange={handleTimestampsToggle}
+            />
+            <span>Show Timestamps to Persona</span>
+          </label>
+          <small className="ei-form-hint">Prepend date/time to each message so the persona can recognize patterns and time gaps</small>
         </div>
       </section>
 

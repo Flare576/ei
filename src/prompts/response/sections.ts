@@ -5,6 +5,7 @@
 
 import type { PersonaTrait, Quote, PersonaTopic } from "../../core/types.js";
 import type { ResponsePromptData } from "./types.js";
+import { formatTimestamp } from "../../core/format-utils.js";
 
 const DESCRIPTION_MAX_CHARS = 500;
 
@@ -264,8 +265,7 @@ export function getConversationStateText(delayMs: number): string {
 // =============================================================================
 
 function formatDate(isoString: string): string {
-  const date = new Date(isoString);
-  return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+  return formatTimestamp(isoString);
 }
 
 export function buildQuotesSection(quotes: Quote[], human: ResponsePromptData["human"]): string {

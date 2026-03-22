@@ -123,6 +123,7 @@ export interface PersonaEntity {
   is_static: boolean;
   heartbeat_delay_ms?: number;
   context_window_hours?: number;
+  include_message_timestamps?: boolean; // Prepend ISO timestamp to each message sent to the LLM
   context_boundary?: string;  // ISO timestamp - messages before this excluded from LLM context
   last_updated: string;
   last_activity: string;
