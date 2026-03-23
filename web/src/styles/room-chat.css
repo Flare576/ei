@@ -1,0 +1,208 @@
+/* ============================================
+   ROOM CHAT PANEL — Group chat view
+   ============================================ */
+
+.ei-room-chat-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+.ei-room-chat-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--ei-spacing-md);
+  padding-right: 320px;
+  border-bottom: 1px solid var(--ei-border);
+  background: var(--ei-bg-primary);
+  min-height: var(--ei-control-height);
+}
+
+.ei-room-chat-panel__title {
+  margin: 0;
+  font-size: var(--ei-font-size-lg);
+  font-weight: 600;
+}
+
+.ei-room-chat-panel__mode {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: var(--ei-radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-left: var(--ei-spacing-sm);
+  vertical-align: middle;
+}
+
+.ei-room-chat-panel__mode--cyp {
+  background: rgba(0, 123, 255, 0.15);
+  color: #0056b3;
+}
+
+.ei-room-chat-panel__mode--ffa {
+  background: rgba(40, 167, 69, 0.15);
+  color: #1a7a35;
+}
+
+.ei-room-chat-panel__mode--map {
+  background: rgba(111, 66, 193, 0.15);
+  color: #6f42c1;
+}
+
+.ei-room-chat-panel__messages {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--ei-spacing-md);
+  background: var(--ei-bg-secondary);
+}
+
+.ei-room-chat-panel__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--ei-text-muted);
+  text-align: center;
+  padding: var(--ei-spacing-xl);
+}
+
+/* Room Message Wrapper */
+.ei-room-message-wrapper {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: var(--ei-spacing-md);
+  max-width: 85%;
+}
+
+.ei-room-message-wrapper.human {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.ei-room-message-wrapper.persona {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+
+/* Speaker attribution */
+.ei-room-message__speaker-row {
+  display: flex;
+  align-items: center;
+  gap: var(--ei-spacing-xs);
+  margin-bottom: 4px;
+}
+
+.ei-room-message__avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--ei-radius-full);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.65rem;
+  flex-shrink: 0;
+}
+
+.ei-room-message__speaker-name {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ei-text-secondary);
+}
+
+/* Message row (avatar + bubble side by side) */
+.ei-room-message {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ei-spacing-xs);
+}
+
+.ei-room-message-wrapper.human .ei-room-message {
+  flex-direction: row-reverse;
+}
+
+/* Bubble */
+.ei-room-message__bubble {
+  padding: var(--ei-spacing-sm) var(--ei-spacing-md);
+  border-radius: var(--ei-radius-lg);
+  word-wrap: break-word;
+  max-width: 100%;
+}
+
+.ei-room-message-wrapper.human .ei-room-message__bubble {
+  background: var(--ei-accent);
+  color: white;
+  border-bottom-right-radius: var(--ei-radius-sm);
+}
+
+.ei-room-message-wrapper.persona .ei-room-message__bubble {
+  background: var(--ei-bg-primary);
+  color: var(--ei-text-primary);
+  border-bottom-left-radius: var(--ei-radius-sm);
+  box-shadow: var(--ei-shadow-sm);
+}
+
+.ei-room-message__time {
+  font-size: 0.7rem;
+  color: var(--ei-text-muted);
+  margin-top: 4px;
+  padding: 0 var(--ei-spacing-xs);
+}
+
+/* Silence reason */
+.ei-room-message__silence {
+  font-style: italic;
+  color: var(--ei-text-muted);
+  opacity: 0.7;
+  font-size: var(--ei-font-size-sm);
+}
+
+/* Thinking indicators */
+.ei-room-thinking {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ei-spacing-xs);
+  padding: var(--ei-spacing-sm) 0;
+}
+
+.ei-room-thinking__item {
+  display: flex;
+  align-items: center;
+  gap: var(--ei-spacing-sm);
+  color: var(--ei-text-secondary);
+  font-size: var(--ei-font-size-sm);
+  font-style: italic;
+}
+
+.ei-room-thinking__spinner {
+  display: inline-block;
+  animation: ei-spin 1s linear infinite;
+}
+
+@keyframes ei-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* CYP indicator */
+.ei-cyp-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ei-spacing-sm);
+  padding: var(--ei-spacing-md);
+  margin: var(--ei-spacing-sm) 0;
+  background: rgba(0, 123, 255, 0.06);
+  border: 1px dashed rgba(0, 123, 255, 0.3);
+  border-radius: var(--ei-radius-md);
+  color: #0056b3;
+  font-size: var(--ei-font-size-sm);
+  font-style: italic;
+}

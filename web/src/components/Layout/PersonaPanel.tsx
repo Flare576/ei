@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle, useCallback } from "react";
-import type { PersonaSummary } from "../../../../src/core/types";
+import type { PersonaSummary, RoomSummary } from "../../../../src/core/types";
+import { RoomMode } from "../../../../src/core/types";
 
 interface PersonaPanelProps {
   personas: PersonaSummary[];
@@ -12,11 +13,28 @@ interface PersonaPanelProps {
   onDeletePersona?: (personaId: string, deleteData: boolean) => void;
   onEditPersona?: (personaId: string) => void;
   onShowArchived?: () => void;
+  rooms?: RoomSummary[];
+  activeRoomId?: string | null;
+  onSelectRoom?: (roomId: string) => void;
+  onCreateRoom?: () => void;
+  onArchiveRoom?: (roomId: string) => void;
 }
 
 export interface PersonaPanelHandle {
   focusPanel: () => void;
 }
+
+const MODE_BADGE_LABEL: Record<RoomMode, string> = {
+  [RoomMode.ChooseYourPath]: "CYP",
+  [RoomMode.FreeForAll]: "FFA",
+  [RoomMode.MessagesAgainstPersona]: "MAP",
+};
+
+const MODE_BADGE_CLASS: Record<RoomMode, string> = {
+  [RoomMode.ChooseYourPath]: "ei-room-pill__mode-badge--cyp",
+  [RoomMode.FreeForAll]: "ei-room-pill__mode-badge--ffa",
+  [RoomMode.MessagesAgainstPersona]: "ei-room-pill__mode-badge--map",
+};
 
 export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(function PersonaPanel({
   personas,
@@ -29,9 +47,16 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
   onDeletePersona,
   onEditPersona,
   onShowArchived,
+  rooms = [],
+  activeRoomId = null,
+  onSelectRoom,
+  onCreateRoom,
+  onArchiveRoom,
 }, ref) {
+  const [activeTab, setActiveTab] = useState<"personas" | "rooms">("personas");
   const [expanded, setExpanded] = useState(false);
   const [hoveredPersonaId, setHoveredPersonaId] = useState<string | null>(null);
+  const [hoveredRoomId, setHoveredRoomId] = useState<string | null>(null);
   const [showPauseOptions, setShowPauseOptions] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [deleteWithData, setDeleteWithData] = useState(false);
@@ -140,115 +165,190 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
   return (
     <div className={`ei-persona-panel ${expanded ? "expanded" : ""}`}>
       <div className="ei-persona-panel__header">
-        <h2 className="ei-persona-panel__title">Personas</h2>
+        <div className="ei-panel-tabs">
+          <button
+            className={`ei-panel-tab ${activeTab === "personas" ? "ei-panel-tab--active" : ""}`}
+            onClick={() => setActiveTab("personas")}
+          >
+            Personas
+          </button>
+          <button
+            className={`ei-panel-tab ${activeTab === "rooms" ? "ei-panel-tab--active" : ""}`}
+            onClick={() => setActiveTab("rooms")}
+          >
+            Rooms
+          </button>
+        </div>
         <div className="ei-persona-panel__actions">
-          {onShowArchived && (
-            <button className="ei-btn ei-btn--icon ei-btn--archive" onClick={onShowArchived} title="View Archived">
-              📦
+          {activeTab === "personas" ? (
+            <>
+              {onShowArchived && (
+                <button className="ei-btn ei-btn--icon ei-btn--archive" onClick={onShowArchived} title="View Archived">
+                  📦
+                </button>
+              )}
+              <button className="ei-btn ei-btn--primary" onClick={onCreatePersona}>
+                + New
+              </button>
+            </>
+          ) : (
+            <button className="ei-btn ei-btn--primary" onClick={onCreateRoom}>
+              + New Room
             </button>
           )}
-          <button className="ei-btn ei-btn--primary" onClick={onCreatePersona}>
-            + New
-          </button>
         </div>
       </div>
 
-      <div className="ei-persona-dropdown">
-        <button 
-          className="ei-persona-dropdown__toggle"
-          onClick={() => setExpanded(!expanded)}
-        >
-          <span>{getActiveDisplayName()}</span>
-          <span>{expanded ? "▲" : "▼"}</span>
-        </button>
-      </div>
+      {activeTab === "personas" && (
+        <div className="ei-persona-dropdown">
+          <button 
+            className="ei-persona-dropdown__toggle"
+            onClick={() => setExpanded(!expanded)}
+          >
+            <span>{getActiveDisplayName()}</span>
+            <span>{expanded ? "▲" : "▼"}</span>
+          </button>
+        </div>
+      )}
 
       <div className="ei-persona-panel__list" ref={listRef}>
-        {personas.length === 0 ? (
-          <div className="ei-persona-panel__empty">
-            No personas yet. Create one to get started!
-          </div>
-        ) : (
-          personas.map((persona, index) => (
-            <div
-              key={persona.id}
-              className={`ei-persona-pill ${persona.id === activePersonaId ? "active" : ""} ${index === focusedIndex ? "focused" : ""}`}
-              onClick={() => {
-                onSelectPersona(persona.id);
-                setExpanded(false);
-              }}
-              onMouseEnter={() => setHoveredPersonaId(persona.id)}
-              onMouseLeave={() => {
-                setHoveredPersonaId(null);
-                setShowPauseOptions(null);
-              }}
-              onKeyDown={(e) => handlePillKeyDown(e, index)}
-              tabIndex={0}
-              role="button"
-            >
-              <div className={`ei-persona-pill__avatar ${persona.is_paused ? "paused" : ""}`}>
-                {getInitials(persona.display_name)}
-                <span className={`ei-persona-pill__status ${getStatusClass(persona)}`} />
-              </div>
-              <div className="ei-persona-pill__info">
-                <div className="ei-persona-pill__name">{persona.display_name}</div>
-                {persona.short_description && (
-                  <div className="ei-persona-pill__desc">{persona.short_description}</div>
+        {activeTab === "personas" ? (
+          personas.length === 0 ? (
+            <div className="ei-persona-panel__empty">
+              No personas yet. Create one to get started!
+            </div>
+          ) : (
+            personas.map((persona, index) => (
+              <div
+                key={persona.id}
+                className={`ei-persona-pill ${persona.id === activePersonaId ? "active" : ""} ${index === focusedIndex ? "focused" : ""}`}
+                onClick={() => {
+                  onSelectPersona(persona.id);
+                  setExpanded(false);
+                }}
+                onMouseEnter={() => setHoveredPersonaId(persona.id)}
+                onMouseLeave={() => {
+                  setHoveredPersonaId(null);
+                  setShowPauseOptions(null);
+                }}
+                onKeyDown={(e) => handlePillKeyDown(e, index)}
+                tabIndex={0}
+                role="button"
+              >
+                <div className={`ei-persona-pill__avatar ${persona.is_paused ? "paused" : ""}`}>
+                  {getInitials(persona.display_name)}
+                  <span className={`ei-persona-pill__status ${getStatusClass(persona)}`} />
+                </div>
+                <div className="ei-persona-pill__info">
+                  <div className="ei-persona-pill__name">{persona.display_name}</div>
+                  {persona.short_description && (
+                    <div className="ei-persona-pill__desc">{persona.short_description}</div>
+                  )}
+                </div>
+                {persona.unread_count > 0 && !persona.is_paused && (
+                  <span className="ei-persona-pill__badge">{persona.unread_count}</span>
+                )}
+                
+                {hoveredPersonaId === persona.id && (
+                  <div className="ei-persona-pill__controls" onClick={handleControlClick}>
+                    <button
+                      className={`ei-control-btn ${persona.is_paused ? "active" : ""}`}
+                      onClick={() => persona.is_paused 
+                        ? handlePause(persona.id) 
+                        : setShowPauseOptions(persona.id)
+                      }
+                      title={persona.is_paused ? "Resume" : "Pause"}
+                    >
+                      {persona.is_paused ? "▶" : "⏸"}
+                    </button>
+                    
+                    {showPauseOptions === persona.id && (
+                      <div className="ei-pause-options" ref={pauseOptionsRef}>
+                        <button onClick={() => handlePause(persona.id, 1)}>1 hour</button>
+                        <button onClick={() => handlePause(persona.id, 8)}>8 hours</button>
+                        <button onClick={() => handlePause(persona.id, 24)}>24 hours</button>
+                        <button onClick={() => handlePause(persona.id)}>Forever</button>
+                      </div>
+                    )}
+                    
+                    <button
+                      className="ei-control-btn"
+                      onClick={() => onEditPersona?.(persona.id)}
+                      title="Edit"
+                    >
+                      ✏️
+                    </button>
+                    
+                    <button
+                      className="ei-control-btn ei-control-btn--archive"
+                      onClick={() => handleArchive(persona.id, persona.display_name)}
+                      title="Archive"
+                    >
+                      📦
+                    </button>
+                    
+                    <button
+                      className="ei-control-btn ei-control-btn--danger"
+                      onClick={() => setShowDeleteConfirm(persona.id)}
+                      title="Delete"
+                    >
+                      🗑️
+                    </button>
+                  </div>
                 )}
               </div>
-              {persona.unread_count > 0 && !persona.is_paused && (
-                <span className="ei-persona-pill__badge">{persona.unread_count}</span>
-              )}
-              
-              {hoveredPersonaId === persona.id && (
-                <div className="ei-persona-pill__controls" onClick={handleControlClick}>
-                  <button
-                    className={`ei-control-btn ${persona.is_paused ? "active" : ""}`}
-                    onClick={() => persona.is_paused 
-                      ? handlePause(persona.id) 
-                      : setShowPauseOptions(persona.id)
-                    }
-                    title={persona.is_paused ? "Resume" : "Pause"}
-                  >
-                    {persona.is_paused ? "▶" : "⏸"}
-                  </button>
-                  
-                  {showPauseOptions === persona.id && (
-                    <div className="ei-pause-options" ref={pauseOptionsRef}>
-                      <button onClick={() => handlePause(persona.id, 1)}>1 hour</button>
-                      <button onClick={() => handlePause(persona.id, 8)}>8 hours</button>
-                      <button onClick={() => handlePause(persona.id, 24)}>24 hours</button>
-                      <button onClick={() => handlePause(persona.id)}>Forever</button>
-                    </div>
-                  )}
-                  
-                  <button
-                    className="ei-control-btn"
-                    onClick={() => onEditPersona?.(persona.id)}
-                    title="Edit"
-                  >
-                    ✏️
-                  </button>
-                  
-                  <button
-                    className="ei-control-btn ei-control-btn--archive"
-                    onClick={() => handleArchive(persona.id, persona.display_name)}
-                    title="Archive"
-                  >
-                    📦
-                  </button>
-                  
-                  <button
-                    className="ei-control-btn ei-control-btn--danger"
-                    onClick={() => setShowDeleteConfirm(persona.id)}
-                    title="Delete"
-                  >
-                    🗑️
-                  </button>
-                </div>
-              )}
+            ))
+          )
+        ) : (
+          rooms.length === 0 ? (
+            <div className="ei-room-panel__empty">
+              No rooms yet. Create one to start a group chat!
             </div>
-          ))
+          ) : (
+            rooms.map((room) => (
+              <div
+                key={room.id}
+                className={`ei-room-pill ${room.id === activeRoomId ? "active" : ""}`}
+                onClick={() => onSelectRoom?.(room.id)}
+                onMouseEnter={() => setHoveredRoomId(room.id)}
+                onMouseLeave={() => setHoveredRoomId(null)}
+                tabIndex={0}
+                role="button"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onSelectRoom?.(room.id);
+                  }
+                }}
+              >
+                <div className="ei-room-pill__avatar">
+                  {getInitials(room.display_name)}
+                </div>
+                <div className="ei-room-pill__info">
+                  <div className="ei-room-pill__name">{room.display_name}</div>
+                  <div className="ei-room-pill__meta">
+                    <span className={`ei-room-pill__mode-badge ${MODE_BADGE_CLASS[room.mode]}`}>
+                      {MODE_BADGE_LABEL[room.mode]}
+                    </span>
+                  </div>
+                </div>
+                {room.unread_count > 0 && (
+                  <span className="ei-room-pill__badge">{room.unread_count}</span>
+                )}
+                {hoveredRoomId === room.id && onArchiveRoom && (
+                  <div className="ei-room-pill__controls" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      className="ei-control-btn ei-control-btn--archive"
+                      onClick={() => onArchiveRoom(room.id)}
+                      title="Archive Room"
+                    >
+                      📦
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))
+          )
         )}
       </div>
 

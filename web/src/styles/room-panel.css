@@ -1,0 +1,153 @@
+/* ============================================
+   ROOM PANEL — Tab bar + Room pills
+   ============================================ */
+
+/* Panel tab bar */
+.ei-panel-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--ei-border-light);
+  padding: 0 var(--ei-spacing-sm);
+}
+
+.ei-panel-tab {
+  flex: 1;
+  padding: var(--ei-spacing-sm) var(--ei-spacing-md);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-size: var(--ei-font-size-sm);
+  font-weight: 500;
+  color: var(--ei-text-secondary);
+  transition: color var(--ei-transition-fast), border-color var(--ei-transition-fast);
+  margin-bottom: -1px;
+}
+
+.ei-panel-tab:hover {
+  color: var(--ei-text-primary);
+}
+
+.ei-panel-tab--active {
+  color: var(--ei-accent);
+  border-bottom-color: var(--ei-accent);
+}
+
+/* Room Pill */
+.ei-room-pill {
+  display: flex;
+  align-items: center;
+  gap: var(--ei-spacing-sm);
+  padding: var(--ei-spacing-sm) var(--ei-spacing-md);
+  margin-bottom: var(--ei-spacing-xs);
+  background: transparent;
+  border: none;
+  border-radius: var(--ei-radius-md);
+  cursor: pointer;
+  transition: background var(--ei-transition-fast);
+  width: 100%;
+  text-align: left;
+}
+
+.ei-room-pill:hover {
+  background: var(--ei-bg-tertiary);
+}
+
+.ei-room-pill.active {
+  background: var(--ei-bg-primary);
+  box-shadow: var(--ei-shadow-sm);
+}
+
+.ei-room-pill:focus {
+  outline: 2px solid var(--ei-accent);
+  outline-offset: 2px;
+}
+
+/* Room Avatar */
+.ei-room-pill__avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--ei-radius-md);
+  background: var(--ei-text-secondary);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: var(--ei-font-size-sm);
+  flex-shrink: 0;
+}
+
+/* Room Info */
+.ei-room-pill__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.ei-room-pill__name {
+  font-weight: 500;
+  color: var(--ei-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: var(--ei-font-size-sm);
+}
+
+.ei-room-pill__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--ei-spacing-xs);
+  margin-top: 2px;
+}
+
+/* Mode Badge */
+.ei-room-pill__mode-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: var(--ei-radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ei-room-pill__mode-badge--cyp {
+  background: rgba(0, 123, 255, 0.15);
+  color: #0056b3;
+}
+
+.ei-room-pill__mode-badge--ffa {
+  background: rgba(40, 167, 69, 0.15);
+  color: #1a7a35;
+}
+
+.ei-room-pill__mode-badge--map {
+  background: rgba(111, 66, 193, 0.15);
+  color: #6f42c1;
+}
+
+/* Unread Badge */
+.ei-room-pill__badge {
+  background: var(--ei-danger);
+  color: white;
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  border-radius: var(--ei-radius-full);
+  min-width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* Hover Controls */
+.ei-room-pill__controls {
+  display: flex;
+  gap: var(--ei-spacing-xs);
+  margin-left: auto;
+}
+
+/* Empty state for rooms */
+.ei-room-panel__empty {
+  padding: var(--ei-spacing-lg);
+  text-align: center;
+  color: var(--ei-text-muted);
+  font-size: var(--ei-font-size-sm);
+}

@@ -22,10 +22,14 @@ import type {
   StateConflictResolution,
   ToolProvider,
   ToolDefinition,
+  RoomSummary,
+  RoomEntity,
+  RoomMessage,
+  RoomCreationInput,
   } from "../../src/core/types";
 import { ContextStatus } from "../../src/core/types";
-import { Layout, PersonaPanel, ChatPanel, ControlArea, HelpModal, ImagePreviewModal, type PersonaPanelHandle, type ChatPanelHandle } from "./components/Layout";
-import { HumanEditor, PersonaEditor, PersonaCreatorModal, ArchivedPersonasModal } from "./components/EntityEditor";
+import { Layout, PersonaPanel, ChatPanel, RoomChatPanel, ControlArea, HelpModal, ImagePreviewModal, type PersonaPanelHandle, type ChatPanelHandle } from "./components/Layout";
+import { HumanEditor, PersonaEditor, PersonaCreatorModal, RoomCreatorModal, ArchivedPersonasModal } from "./components/EntityEditor";
 import { QuoteCaptureModal, QuoteManagementModal } from "./components/Quote";
 import { SettingsModal } from "./components/Settings";
 import { MessageSelectorModal } from "./components/Modals/MessageSelectorModal";
@@ -140,9 +144,18 @@ function App() {
   const [imageErrors, setImageErrors] = useState<Record<string, string>>({});
   const [currentViewingMessageId, setCurrentViewingMessageId] = useState<string | null>(null);
   const [showMessageSelector, setShowMessageSelector] = useState(false);
+  const [rooms, setRooms] = useState<RoomSummary[]>([]);
+  const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
+  const [activeRoom, setActiveRoom] = useState<RoomEntity | null>(null);
+  const [roomMessages, setRoomMessages] = useState<RoomMessage[]>([]);
+  const [activeRoomPath, setActiveRoomPath] = useState<RoomMessage[]>([]);
+  const [processingRoomId, setProcessingRoomId] = useState<string | null>(null);
+  const [showRoomCreator, setShowRoomCreator] = useState(false);
+  const [roomInputValue, setRoomInputValue] = useState("");
 
   const personaPanelRef = useRef<PersonaPanelHandle | null>(null);
   const chatPanelRef = useRef<ChatPanelHandle | null>(null);
+  const activeRoomIdRef = useRef<string | null>(null);
   const oneShotResolvers = useRef<Map<string, (result: string) => void>>(new Map());
   const storageRef = useRef<Storage | null>(null);
 
@@ -190,6 +203,10 @@ function App() {
   }, [editingPersonaId]);
 
   useEffect(() => {
+    activeRoomIdRef.current = activeRoomId;
+  }, [activeRoomId]);
+
+  useEffect(() => {
     if (showOnboarding !== false) return;
     
     const eiInterface: Ei_Interface = {
@@ -227,6 +244,7 @@ function App() {
       onQueueStateChanged: (state) => {
         if (state === "idle") {
           setProcessingPersona(null);
+          setProcessingRoomId(null);
         }
         processorRef.current?.getQueueStatus().then(setQueueStatus);
       },
@@ -295,6 +313,46 @@ function App() {
       onToolRemoved: () => {
         setToolDefinitions(processorRef.current?.getToolList() ?? []);
       },
+      onRoomAdded: () => {
+        setRooms(processorRef.current?.getRoomList() ?? []);
+      },
+      onRoomRemoved: () => {
+        setRooms(processorRef.current?.getRoomList() ?? []);
+        if (activeRoomIdRef.current) {
+          const exists = processorRef.current?.getRoom(activeRoomIdRef.current);
+          if (!exists) {
+            setActiveRoomId(null);
+            setActiveRoom(null);
+            setRoomMessages([]);
+            setActiveRoomPath([]);
+          }
+        }
+      },
+      onRoomUpdated: (roomId) => {
+        setRooms(processorRef.current?.getRoomList() ?? []);
+        if (roomId === activeRoomIdRef.current) {
+          const room = processorRef.current?.getRoom(roomId);
+          setActiveRoom(room ?? null);
+          setRoomMessages(processorRef.current?.getRoomMessages(roomId) ?? []);
+          setActiveRoomPath(processorRef.current?.getRoomActivePath(roomId) ?? []);
+        }
+      },
+      onRoomMessageAdded: (roomId) => {
+        setRooms(processorRef.current?.getRoomList() ?? []);
+        if (roomId === activeRoomIdRef.current) {
+          setRoomMessages(processorRef.current?.getRoomMessages(roomId) ?? []);
+          setActiveRoomPath(processorRef.current?.getRoomActivePath(roomId) ?? []);
+          processorRef.current?.markAllRoomMessagesRead(roomId).then(() => {
+            setRooms(processorRef.current?.getRoomList() ?? []);
+          });
+        }
+      },
+      onRoomMessageQueued: () => {
+        processorRef.current?.getQueueStatus().then(setQueueStatus);
+      },
+      onRoomMessageProcessing: (roomId) => {
+        setProcessingRoomId(roomId);
+      },
     };
 
     const p = new Processor(eiInterface);
@@ -324,6 +382,7 @@ function App() {
         p.getQuotes().then(setQuotes);
         setToolProviders(p.getToolProviderList());
         setToolDefinitions(p.getToolList());
+        setRooms(p.getRoomList());
       });
     });
 
@@ -411,6 +470,7 @@ function App() {
       processor.getPersonaList().then(setPersonas);
     }
     setActivePersonaId(personaId);
+    setActiveRoomId(null);
     chatPanelRef.current?.focusInput();
   }, [processor, activePersonaId]);
 
@@ -674,6 +734,54 @@ function App() {
     setArchivedPersonas(allPersonas.filter(p => p.is_archived));
     setShowArchivedPersonas(true);
   }, [processor]);
+
+  const handleSelectRoom = useCallback(async (roomId: string) => {
+    if (processor && activeRoomId && activeRoomId !== roomId) {
+      await processor.markAllRoomMessagesRead(activeRoomId);
+    }
+    setActivePersonaId(null);
+    setActiveRoomId(roomId);
+    if (processor) {
+      const room = processor.getRoom(roomId);
+      setActiveRoom(room ?? null);
+      setRoomMessages(processor.getRoomMessages(roomId));
+      setActiveRoomPath(processor.getRoomActivePath(roomId));
+      processor.markAllRoomMessagesRead(roomId).then(() => {
+        setRooms(processor.getRoomList());
+      });
+    }
+  }, [processor, activeRoomId]);
+
+  const handleCreateRoom = useCallback(async (input: RoomCreationInput) => {
+    if (!processor) return;
+    const roomId = await processor.createRoom(input);
+    setRooms(processor.getRoomList());
+    setShowRoomCreator(false);
+    const room = processor.getRoom(roomId);
+    setActiveRoom(room ?? null);
+    setActivePersonaId(null);
+    setActiveRoomId(roomId);
+    setRoomMessages(processor.getRoomMessages(roomId));
+    setActiveRoomPath(processor.getRoomActivePath(roomId));
+  }, [processor]);
+
+  const handleArchiveRoom = useCallback(async (roomId: string) => {
+    if (!processor) return;
+    await processor.archiveRoom(roomId);
+    setRooms(processor.getRoomList());
+    if (activeRoomId === roomId) {
+      setActiveRoomId(null);
+      setActiveRoom(null);
+      setRoomMessages([]);
+      setActiveRoomPath([]);
+    }
+  }, [processor, activeRoomId]);
+
+  const handleSendRoomMessage = useCallback(async () => {
+    if (!processor || !activeRoomId || !roomInputValue.trim()) return;
+    await processor.activateRoom(activeRoomId, roomInputValue.trim());
+    setRoomInputValue("");
+  }, [processor, activeRoomId, roomInputValue]);
 
   const handleHumanUpdate = useCallback(async (updates: Record<string, unknown>) => {
     if (!processor) return;
@@ -1156,38 +1264,57 @@ function App() {
           onDeletePersona={handleDeletePersona}
           onEditPersona={handleEditPersona}
           onShowArchived={handleShowArchivedPersonas}
+          rooms={rooms}
+          activeRoomId={activeRoomId}
+          onSelectRoom={handleSelectRoom}
+          onCreateRoom={() => setShowRoomCreator(true)}
+          onArchiveRoom={handleArchiveRoom}
         />
       }
       centerPanel={
-        <ChatPanel
-          ref={chatPanelRef}
-          activePersonaId={activePersonaId}
-          activePersonaDisplayName={personas.find(p => p.id === activePersonaId)?.display_name ?? null}
-          messages={messages}
-          inputValue={inputValue}
-          isProcessing={processingPersona !== null}
-          contextBoundary={activePersonaEntity?.context_boundary}
-          quotes={quotes}
-          onInputChange={setInputValue}
-          onSendMessage={handleSendMessage}
-          onMarkMessageRead={handleMarkMessageRead}
-          onRecallPending={handleRecallPending}
-          onSetContextBoundary={handleContextBoundaryChange}
-           onQuoteClick={(quote) => {
-             setShowPersonaEditor(false);
-             setEditingQuote(quote);
-           }}
-           onScissorsClick={(message) => {
-             setShowPersonaEditor(false);
-             setCaptureMessage(message);
-           }}
-           onImageGenerate={handleImageGenerate}
-           messageImages={messageImages}
-           generatingImageFor={generatingImageFor}
-           imageErrors={imageErrors}
-           onImageClick={handleImageClick}
-           onImagePromptClick={handleImagePromptClick}
-        />
+        activeRoomId ? (
+          <RoomChatPanel
+            activeRoomId={activeRoomId}
+            room={activeRoom}
+            messages={roomMessages}
+            activePath={activeRoomPath}
+            personas={personas}
+            inputValue={roomInputValue}
+            onInputChange={setRoomInputValue}
+            onSendMessage={handleSendRoomMessage}
+            isProcessing={processingRoomId === activeRoomId}
+          />
+        ) : (
+          <ChatPanel
+            ref={chatPanelRef}
+            activePersonaId={activePersonaId}
+            activePersonaDisplayName={personas.find(p => p.id === activePersonaId)?.display_name ?? null}
+            messages={messages}
+            inputValue={inputValue}
+            isProcessing={processingPersona !== null}
+            contextBoundary={activePersonaEntity?.context_boundary}
+            quotes={quotes}
+            onInputChange={setInputValue}
+            onSendMessage={handleSendMessage}
+            onMarkMessageRead={handleMarkMessageRead}
+            onRecallPending={handleRecallPending}
+            onSetContextBoundary={handleContextBoundaryChange}
+             onQuoteClick={(quote) => {
+               setShowPersonaEditor(false);
+               setEditingQuote(quote);
+             }}
+             onScissorsClick={(message) => {
+               setShowPersonaEditor(false);
+               setCaptureMessage(message);
+             }}
+             onImageGenerate={handleImageGenerate}
+             messageImages={messageImages}
+             generatingImageFor={generatingImageFor}
+             imageErrors={imageErrors}
+             onImageClick={handleImageClick}
+             onImagePromptClick={handleImagePromptClick}
+          />
+        )
       }
     />
     <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
@@ -1373,6 +1500,13 @@ function App() {
         }}
       />
     )}
+
+    <RoomCreatorModal
+      isOpen={showRoomCreator}
+      onClose={() => setShowRoomCreator(false)}
+      onCreate={handleCreateRoom}
+      personas={personas.filter(p => !p.is_archived)}
+    />
     </>
     );
 }

@@ -5,6 +5,7 @@ export { GroupedCardList } from './GroupedCardList';
 export { HumanEditor } from './HumanEditor';
 export { PersonaEditor } from './PersonaEditor';
 export { PersonaCreatorModal } from './PersonaCreatorModal';
+export { RoomCreatorModal } from './RoomCreatorModal';
 export { ArchivedPersonasModal } from './ArchivedPersonasModal';
 export { ContextStatus } from '../../../../src/core/types';
 export type { Message } from '../../../../src/core/types';
