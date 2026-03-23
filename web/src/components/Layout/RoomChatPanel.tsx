@@ -419,13 +419,12 @@ export function RoomChatPanel({
             <div className="ei-room-send-dropdown">
               <button
                 onClick={() => {
-                  setIsSilentMode(true);
-                  onInputChange("");
+                  setIsSilentMode(v => !v);
                   setShowSendDropdown(false);
                   textareaRef.current?.focus();
                 }}
               >
-                Silent Response
+                {isSilentMode ? "Normal Response" : "Silent Response"}
               </button>
             </div>
           )}
