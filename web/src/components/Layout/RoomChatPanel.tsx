@@ -157,6 +157,11 @@ export function RoomChatPanel({
   }, [inputValue]);
 
   useEffect(() => {
+    setShowCYPPicker(false);
+    setExpandedCards(new Set());
+  }, [room?.id]);
+
+  useEffect(() => {
     if (!showSendDropdown) return;
     const handleClick = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -184,16 +189,23 @@ export function RoomChatPanel({
     }
   }, [isCYP, onActivateRoom]);
 
-  const sendDisabled = !activeRoomId || !inputValue.trim() || humanHasSubmitted || isProcessing;
-  const activateDisabled = !showActivateButton || isGathering;
+  const canSend = !humanHasSubmitted && (inputValue.trim().length > 0 || isSilentMode);
+  const canActivate = humanHasSubmitted && allPersonasDone;
+  const isWaiting = humanHasSubmitted && !allPersonasDone;
+
+  const buttonLabel = humanHasSubmitted
+    ? (allPersonasDone ? "Activate \u25b6" : "Waiting\u2026")
+    : "Send";
+  const buttonDisabled = !activeRoomId || isWaiting || (!canSend && !canActivate);
+  const buttonOnClick = canActivate ? handleActivate : handleSend;
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (showActivateButton && !activateDisabled) {
-        handleActivate();
-      } else if (!sendDisabled) {
+      if (!humanHasSubmitted && inputValue.trim()) {
         handleSend();
+      } else if (humanHasSubmitted && allPersonasDone) {
+        handleActivate();
       }
       return;
     }
@@ -384,21 +396,21 @@ export function RoomChatPanel({
               ? "Silence reason (optional)\u2026"
               : "Type a message\u2026 (Enter to send, Shift+Enter for newline)"
           }
-          disabled={!activeRoomId || humanHasSubmitted}
+          disabled={!activeRoomId}
           rows={1}
         />
         <div className="ei-room-send-group" ref={dropdownRef}>
           <button
             className="ei-room-send-group__main"
-            onClick={showActivateButton ? handleActivate : handleSend}
-            disabled={showActivateButton ? activateDisabled : sendDisabled}
+            onClick={buttonOnClick}
+            disabled={buttonDisabled}
           >
-            {showActivateButton ? "Activate" : "Send"}
+            {buttonLabel}
           </button>
           <button
             className="ei-room-send-group__dropdown-toggle"
             onClick={() => setShowSendDropdown(v => !v)}
-            disabled={!activeRoomId || humanHasSubmitted || isProcessing}
+            disabled={!activeRoomId || humanHasSubmitted}
             aria-label="More send options"
           >
             ▼
