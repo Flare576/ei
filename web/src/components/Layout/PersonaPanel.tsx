@@ -18,6 +18,7 @@ interface PersonaPanelProps {
   onSelectRoom?: (roomId: string) => void;
   onCreateRoom?: () => void;
   onArchiveRoom?: (roomId: string) => void;
+  onShowArchivedRooms?: () => void;
 }
 
 export interface PersonaPanelHandle {
@@ -52,6 +53,7 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
   onSelectRoom,
   onCreateRoom,
   onArchiveRoom,
+  onShowArchivedRooms,
 }, ref) {
   const [activeTab, setActiveTab] = useState<"personas" | "rooms">("personas");
   const [expanded, setExpanded] = useState(false);
@@ -192,9 +194,16 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
               </button>
             </>
           ) : (
-            <button className="ei-btn ei-btn--primary" onClick={onCreateRoom}>
-              + New Room
-            </button>
+            <>
+              {onShowArchivedRooms && (
+                <button className="ei-btn ei-btn--icon ei-btn--archive" onClick={onShowArchivedRooms} title="View Archived Rooms">
+                  📦
+                </button>
+              )}
+              <button className="ei-btn ei-btn--primary" onClick={onCreateRoom}>
+                + New
+              </button>
+            </>
           )}
         </div>
       </div>

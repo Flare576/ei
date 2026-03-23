@@ -35,6 +35,7 @@ async function queueRoomPersonaResponses(
   for (const personaId of room.persona_ids) {
     const persona = sm.persona_getById(personaId);
     if (!persona || persona.is_archived || persona.is_paused) continue;
+    if (room.mode === RoomMode.MessagesAgainstPersona && room.judge_persona_id === personaId) continue;
 
     const promptOutput = await buildRoomResponsePromptData(sm, room, persona, isTUI);
     const model = persona.model ?? sm.getHuman().settings?.default_model ?? "";

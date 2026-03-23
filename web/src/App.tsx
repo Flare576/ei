@@ -783,6 +783,25 @@ function App() {
     setRoomInputValue("");
   }, [processor, activeRoomId, roomInputValue]);
 
+  const handleActivateRoom = useCallback(async (humanContent: string | null) => {
+    if (!activeRoomId || !processorRef.current) return;
+    await processorRef.current.activateRoom(activeRoomId, humanContent);
+    setRoomInputValue("");
+    const updatedRoom = processorRef.current.getRoom(activeRoomId);
+    if (updatedRoom) setActiveRoom(updatedRoom);
+    setRoomMessages(processorRef.current.getRoomMessages(activeRoomId));
+    setActiveRoomPath(processorRef.current.getRoomActivePath(activeRoomId));
+  }, [activeRoomId]);
+
+  const handleSelectCYPBranch = useCallback(async (messageId: string) => {
+    if (!activeRoomId || !processorRef.current) return;
+    await processorRef.current.selectCYPBranch(activeRoomId, messageId);
+    const updatedRoom = processorRef.current.getRoom(activeRoomId);
+    if (updatedRoom) setActiveRoom(updatedRoom);
+    setRoomMessages(processorRef.current.getRoomMessages(activeRoomId));
+    setActiveRoomPath(processorRef.current.getRoomActivePath(activeRoomId));
+  }, [activeRoomId]);
+
   const handleHumanUpdate = useCallback(async (updates: Record<string, unknown>) => {
     if (!processor) return;
     const { default_model, oneshot_model, rewrite_model, queue_paused, name_display, time_mode, accounts, sync, ceremony_time, default_heartbeat_ms, default_context_window_hours, message_min_count, message_max_age_days, event_window_hours, ...rest } = updates;
@@ -1276,12 +1295,14 @@ function App() {
           <RoomChatPanel
             activeRoomId={activeRoomId}
             room={activeRoom}
-            messages={roomMessages}
-            activePath={activeRoomPath}
+            activeRoomPath={activeRoomPath}
+            allRoomMessages={roomMessages}
             personas={personas}
             inputValue={roomInputValue}
             onInputChange={setRoomInputValue}
             onSendMessage={handleSendRoomMessage}
+            onActivateRoom={handleActivateRoom}
+            onSelectCYPBranch={handleSelectCYPBranch}
             isProcessing={processingRoomId === activeRoomId}
           />
         ) : (
