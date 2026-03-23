@@ -795,9 +795,17 @@ function App() {
 
   const handleRecallHumanRoomMessage = useCallback(() => {
     if (!activeRoomId || !processorRef.current) return;
-    processorRef.current.recallHumanRoomMessage(activeRoomId);
-    setRoomMessages(processorRef.current.getRoomMessages(activeRoomId));
-  }, [activeRoomId]);
+    const allMsgs = processorRef.current.getRoomMessages(activeRoomId);
+    const humanMsg = allMsgs.find(
+      m => m.role === "human" && m.parent_id === activeRoom?.active_node_id
+    );
+    const recalledText = humanMsg?.verbal_response ?? humanMsg?.silence_reason ?? "";
+    const ok = processorRef.current.recallHumanRoomMessage(activeRoomId);
+    if (ok) {
+      setRoomInputValue(recalledText);
+      setRoomMessages(processorRef.current.getRoomMessages(activeRoomId));
+    }
+  }, [activeRoomId, activeRoom]);
 
   const handleSelectCYPBranch = useCallback(async (messageId: string) => {
     if (!activeRoomId || !processorRef.current) return;
