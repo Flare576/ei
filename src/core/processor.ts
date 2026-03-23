@@ -103,6 +103,20 @@ import {
   clearQueue,
   submitOneShot,
 } from "./queue-manager.js";
+import {
+  getRoomList,
+  getRoom,
+  getRoomMessages,
+  getRoomActivePath,
+  resolveRoomName,
+  createRoom,
+  activateRoom,
+  selectCYPBranch,
+  archiveRoom,
+  deleteRoom,
+  markAllRoomMessagesRead,
+} from "./room-manager.js";
+import type { RoomCreationInput, RoomEntity, RoomMessage, RoomSummary } from "./types.js";
 
 const DEFAULT_LOOP_INTERVAL_MS = 100;
 const DEFAULT_OPENCODE_POLLING_MS = 60000;
@@ -837,6 +851,11 @@ export class Processor {
               this.interface.onMessageProcessing?.(personaId);
             }
 
+            const roomId = request.data.roomId as string | undefined;
+            if (roomId && request.next_step === LLMNextStep.HandleRoomResponse) {
+              this.interface.onRoomMessageProcessing?.(roomId);
+            }
+
 const toolNextSteps = new Set([
   LLMNextStep.HandlePersonaResponse,
   LLMNextStep.HandleHeartbeatCheck,
@@ -1307,6 +1326,16 @@ const toolNextSteps = new Set([
         this.interface.onHumanUpdated?.();
       }
 
+      if (response.request.next_step === LLMNextStep.HandleRoomResponse) {
+        const roomId = response.request.data.roomId as string;
+        if (roomId) this.interface.onRoomMessageAdded?.(roomId);
+      }
+
+      if (response.request.next_step === LLMNextStep.HandleRoomJudge) {
+        const roomId = response.request.data.roomId as string;
+        if (roomId) this.interface.onRoomUpdated?.(roomId);
+      }
+
       if (typeof response.request.data.ceremony_progress === "number") {
         handleCeremonyProgress(this.stateManager, response.request.data.ceremony_progress);
       }
@@ -1660,6 +1689,87 @@ const toolNextSteps = new Set([
     const result = await removeTool(this.stateManager, id);
     if (result) this.interface.onToolRemoved?.();
     return result;
+  }
+
+  // ==========================================================================
+  // ROOM API
+  // ==========================================================================
+
+  getRoomList(includeArchived = false): RoomSummary[] {
+    return getRoomList(this.stateManager, includeArchived);
+  }
+
+  getRoom(roomId: string): RoomEntity | null {
+    return getRoom(this.stateManager, roomId);
+  }
+
+  getRoomMessages(roomId: string): RoomMessage[] {
+    return getRoomMessages(this.stateManager, roomId);
+  }
+
+  getRoomActivePath(roomId: string): RoomMessage[] {
+    return getRoomActivePath(this.stateManager, roomId);
+  }
+
+  resolveRoomName(nameOrAlias: string): string | null {
+    return resolveRoomName(this.stateManager, nameOrAlias);
+  }
+
+  async createRoom(input: RoomCreationInput): Promise<string> {
+    const id = await createRoom(
+      this.stateManager,
+      input,
+      this.isTUI,
+      (err) => this.interface.onError?.(err),
+      (id) => this.interface.onRoomMessageAdded?.(id),
+      (id) => this.interface.onRoomMessageQueued?.(id)
+    );
+    if (id) this.interface.onRoomAdded?.();
+    return id;
+  }
+
+  async activateRoom(
+    roomId: string,
+    humanContent: string | null,
+    silenceReason?: string
+  ): Promise<void> {
+    return activateRoom(
+      this.stateManager,
+      roomId,
+      humanContent,
+      silenceReason,
+      this.isTUI,
+      (err) => this.interface.onError?.(err),
+      (id) => this.interface.onRoomUpdated?.(id),
+      (id) => this.interface.onRoomMessageAdded?.(id),
+      (id) => this.interface.onRoomMessageQueued?.(id)
+    );
+  }
+
+  async selectCYPBranch(roomId: string, messageId: string): Promise<void> {
+    return selectCYPBranch(
+      this.stateManager,
+      roomId,
+      messageId,
+      this.isTUI,
+      (err) => this.interface.onError?.(err),
+      (id) => this.interface.onRoomUpdated?.(id),
+      (id) => this.interface.onRoomMessageQueued?.(id)
+    );
+  }
+
+  async archiveRoom(roomId: string): Promise<void> {
+    const ok = archiveRoom(this.stateManager, roomId);
+    if (ok) this.interface.onRoomRemoved?.();
+  }
+
+  async deleteRoom(roomId: string): Promise<void> {
+    const ok = deleteRoom(this.stateManager, roomId);
+    if (ok) this.interface.onRoomRemoved?.();
+  }
+
+  async markAllRoomMessagesRead(roomId: string): Promise<number> {
+    return markAllRoomMessagesRead(this.stateManager, roomId);
   }
 
   // ==========================================================================

@@ -53,6 +53,8 @@ export enum LLMNextStep {
   HandleRewriteRewrite = "handleRewriteRewrite",
   HandleDedupCurate = "handleDedupCurate",
   HandleEventScan = "handleEventScan",
+  HandleRoomResponse = "handleRoomResponse",
+  HandleRoomJudge = "handleRoomJudge",
 }
 
 export enum ProviderType {

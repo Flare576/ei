@@ -108,6 +108,12 @@ export interface Ei_Interface {
   onToolAdded?: () => void;
   onToolUpdated?: (id: string) => void;
   onToolRemoved?: () => void;
+  onRoomAdded?: () => void;
+  onRoomRemoved?: () => void;
+  onRoomUpdated?: (roomId: string) => void;
+  onRoomMessageAdded?: (roomId: string) => void;
+  onRoomMessageQueued?: (roomId: string) => void;
+  onRoomMessageProcessing?: (roomId: string) => void;
 }
 
 // =============================================================================

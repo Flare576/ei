@@ -1,7 +1,9 @@
-import type { PersonaEntity, HumanEntity, DataItemBase, Quote } from "./types.js";
+import type { PersonaEntity, HumanEntity, DataItemBase, Quote, RoomEntity } from "./types.js";
 import { StateManager } from "./state-manager.js";
 import { getEmbeddingService, findTopK } from "./embedding-service.js";
-import type { ResponsePromptData } from "../prompts/index.js";
+import type { ResponsePromptData, PromptOutput } from "../prompts/index.js";
+import { buildRoomResponsePrompt } from "../prompts/room/index.js";
+import type { RoomParticipantIdentity, RoomHistoryMessage } from "../prompts/room/types.js";
 
 const QUOTE_LIMIT = 10;
 const DATA_ITEM_LIMIT = 15;
@@ -185,7 +187,7 @@ export async function buildResponsePromptData(
       name: persona.display_name,
       aliases: persona.aliases ?? [],
       short_description: persona.short_description,
-      long_description: persona.long_description,
+       long_description: persona.long_description,
       traits: persona.traits,
       topics: persona.topics,
     },
@@ -195,4 +197,67 @@ export async function buildResponsePromptData(
     isTUI,
     tools,
   };
+}
+
+export async function buildRoomResponsePromptData(
+  sm: StateManager,
+  room: RoomEntity,
+  respondingPersona: PersonaEntity,
+  isTUI: boolean
+): Promise<PromptOutput> {
+  const human = sm.getHuman();
+  const activePath = sm.getRoomActivePath(room.id);
+  const lastMessage = activePath[activePath.length - 1];
+  const currentMessage = lastMessage?.verbal_response;
+
+  const filteredHuman = await filterHumanDataByVisibility(human, respondingPersona, currentMessage);
+
+  const history: RoomHistoryMessage[] = activePath.map(m => ({
+    speaker_name: m.role === "human"
+      ? (human.settings?.name_display ?? "Human")
+      : (sm.persona_getById(m.persona_id ?? "")?.display_name ?? m.persona_id ?? "Unknown"),
+    speaker_id: m.role === "human" ? "human" : (m.persona_id ?? ""),
+    verbal_response: m.verbal_response,
+    action_response: m.action_response,
+    silence_reason: m.silence_reason,
+  }));
+
+  const otherParticipants: RoomParticipantIdentity[] = [];
+  for (const pid of room.persona_ids) {
+    if (pid === respondingPersona.id) continue;
+    const p = sm.persona_getById(pid);
+    if (p) {
+      otherParticipants.push({
+        id: p.id,
+        name: p.display_name,
+        short_description: p.short_description,
+        long_description: p.long_description,
+        traits: p.traits,
+        is_human: false,
+      });
+    }
+  }
+  otherParticipants.push({
+    id: "human",
+    name: human.settings?.name_display ?? "Human",
+    traits: [],
+    is_human: true,
+  });
+
+  return buildRoomResponsePrompt({
+    room: { display_name: room.display_name, mode: room.mode },
+    responding_persona: {
+      id: respondingPersona.id,
+      name: respondingPersona.display_name,
+      aliases: respondingPersona.aliases ?? [],
+      short_description: respondingPersona.short_description,
+      long_description: respondingPersona.long_description,
+      traits: respondingPersona.traits,
+      topics: respondingPersona.topics,
+    },
+    other_participants: otherParticipants,
+    human: filteredHuman,
+    history,
+    isTUI,
+  });
 }
