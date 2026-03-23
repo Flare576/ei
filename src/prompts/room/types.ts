@@ -1,0 +1,89 @@
+/**
+ * Room Prompt Types
+ */
+
+import type { Fact, PersonaTrait, Topic, Person, Quote, PersonaTopic, ToolDefinition } from "../../core/types.js";
+import type { RoomMode } from "../../core/types.js";
+
+export interface RoomParticipantIdentity {
+  id: string;
+  name: string;
+  short_description?: string;
+  long_description?: string;
+  traits: PersonaTrait[];
+  is_human: boolean;
+}
+
+export interface RoomHistoryMessage {
+  speaker_name: string;
+  speaker_id: string;
+  verbal_response?: string;
+  action_response?: string;
+  silence_reason?: string;
+}
+
+export interface RoomResponsePromptData {
+  room: {
+    display_name: string;
+    mode: RoomMode;
+  };
+  responding_persona: {
+    id: string;
+    name: string;
+    aliases: string[];
+    short_description?: string;
+    long_description?: string;
+    traits: PersonaTrait[];
+    topics: PersonaTopic[];
+  };
+  other_participants: RoomParticipantIdentity[];
+  human: {
+    facts: Fact[];
+    topics: Topic[];
+    people: Person[];
+    quotes: Quote[];
+  };
+  history: RoomHistoryMessage[];
+  isTUI: boolean;
+  tools?: ToolDefinition[];
+}
+
+export interface RoomJudgeCandidate {
+  message_id: string;
+  speaker_name: string;
+  speaker_id: string;
+  verbal_response?: string;
+  action_response?: string;
+  silence_reason?: string;
+}
+
+export interface RoomJudgePromptData {
+  room: {
+    display_name: string;
+  };
+  judge_persona: {
+    name: string;
+    short_description?: string;
+    long_description?: string;
+    traits: PersonaTrait[];
+  };
+  context: RoomHistoryMessage[];
+  candidates: RoomJudgeCandidate[];
+}
+
+export interface RoomJudgeResult {
+  winner_message_id: string;
+  reason?: string;
+}
+
+export interface PersonaResponseResult {
+  should_respond: boolean;
+  verbal_response?: string;
+  action_response?: string;
+  reason?: string;
+}
+
+export interface PromptOutput {
+  system: string;
+  user: string;
+}

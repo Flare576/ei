@@ -81,3 +81,16 @@ export type {
   DescriptionCheckPromptData,
   DescriptionCheckResult,
 } from "./ceremony/types.js";
+
+export {
+  buildRoomResponsePrompt,
+  buildRoomJudgePrompt,
+} from "./room/index.js";
+export type {
+  RoomResponsePromptData,
+  RoomJudgePromptData,
+  RoomJudgeResult,
+  RoomParticipantIdentity,
+  RoomHistoryMessage,
+  RoomJudgeCandidate,
+} from "./room/types.js";
