@@ -777,20 +777,26 @@ function App() {
     }
   }, [processor, activeRoomId]);
 
-  const handleSendRoomMessage = useCallback(async () => {
-    if (!processor || !activeRoomId || !roomInputValue.trim()) return;
-    await processor.activateRoom(activeRoomId, roomInputValue.trim());
-    setRoomInputValue("");
-  }, [processor, activeRoomId, roomInputValue]);
-
-  const handleActivateRoom = useCallback(async (humanContent: string | null) => {
+  const handleSubmitHumanRoomMessage = useCallback((content: string | null, silenceReason?: string) => {
     if (!activeRoomId || !processorRef.current) return;
-    await processorRef.current.activateRoom(activeRoomId, humanContent);
+    processorRef.current.submitHumanRoomMessage(activeRoomId, content, silenceReason);
     setRoomInputValue("");
+    setRoomMessages(processorRef.current.getRoomMessages(activeRoomId));
+  }, [activeRoomId]);
+
+  const handleActivateRoom = useCallback(async () => {
+    if (!activeRoomId || !processorRef.current) return;
+    await processorRef.current.activateRoom(activeRoomId);
     const updatedRoom = processorRef.current.getRoom(activeRoomId);
     if (updatedRoom) setActiveRoom(updatedRoom);
     setRoomMessages(processorRef.current.getRoomMessages(activeRoomId));
     setActiveRoomPath(processorRef.current.getRoomActivePath(activeRoomId));
+  }, [activeRoomId]);
+
+  const handleRecallHumanRoomMessage = useCallback(() => {
+    if (!activeRoomId || !processorRef.current) return;
+    processorRef.current.recallHumanRoomMessage(activeRoomId);
+    setRoomMessages(processorRef.current.getRoomMessages(activeRoomId));
   }, [activeRoomId]);
 
   const handleSelectCYPBranch = useCallback(async (messageId: string) => {
@@ -1300,9 +1306,10 @@ function App() {
             personas={personas}
             inputValue={roomInputValue}
             onInputChange={setRoomInputValue}
-            onSendMessage={handleSendRoomMessage}
+            onSubmitHumanMessage={handleSubmitHumanRoomMessage}
             onActivateRoom={handleActivateRoom}
             onSelectCYPBranch={handleSelectCYPBranch}
+            onRecallMessage={handleRecallHumanRoomMessage}
             isProcessing={processingRoomId === activeRoomId}
           />
         ) : (

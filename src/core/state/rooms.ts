@@ -122,6 +122,14 @@ export class RoomState {
     return true;
   }
 
+  messages_remove(roomId: string, messageIds: string[]): void {
+    const room = this.rooms.get(roomId);
+    if (!room) return;
+    const idsSet = new Set(messageIds);
+    room.messages = room.messages.filter(m => !idsSet.has(m.id));
+    room.last_updated = new Date().toISOString();
+  }
+
   messages_setActiveNode(roomId: string, messageId: string): boolean {
     const room = this.rooms.get(roomId);
     if (!room) return false;

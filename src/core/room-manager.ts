@@ -82,15 +82,72 @@ export async function createRoom(
   return room.id;
 }
 
+export function submitHumanRoomMessage(
+  sm: StateManager,
+  roomId: string,
+  content: string | null,
+  silenceReason: string | undefined,
+  onError: (err: EiError) => void,
+  onRoomMessageAdded: (roomId: string) => void
+): string | null {
+  const room = sm.getRoom(roomId);
+  if (!room) {
+    onError({ code: "ROOM_NOT_FOUND", message: `Room ${roomId} not found.` });
+    return null;
+  }
+
+  const now = new Date().toISOString();
+  const existing = sm.getRoomMessages(roomId).find(
+    m => m.role === "human" && m.parent_id === room.active_node_id
+  );
+
+  if (existing) {
+    sm.updateRoomMessage(roomId, existing.id, {
+      verbal_response: content ?? undefined,
+      silence_reason: content ? undefined : (silenceReason ?? "passed"),
+      timestamp: now,
+    });
+    onRoomMessageAdded(roomId);
+    return existing.id;
+  }
+
+  const msg: RoomMessage = {
+    id: crypto.randomUUID(),
+    parent_id: room.active_node_id,
+    role: "human",
+    verbal_response: content ?? undefined,
+    silence_reason: content ? undefined : (silenceReason ?? "passed"),
+    timestamp: now,
+    read: true,
+    context_status: ContextStatus.Default,
+  };
+  sm.appendRoomMessage(roomId, msg);
+  onRoomMessageAdded(roomId);
+  return msg.id;
+}
+
+export function recallHumanRoomMessage(
+  sm: StateManager,
+  roomId: string,
+  onRoomUpdated: (roomId: string) => void
+): boolean {
+  const room = sm.getRoom(roomId);
+  if (!room) return false;
+  const humanMsg = sm.getRoomMessages(roomId).find(
+    m => m.role === "human" && m.parent_id === room.active_node_id
+  );
+  if (!humanMsg) return false;
+  sm.removeRoomMessages(roomId, [humanMsg.id]);
+  onRoomUpdated(roomId);
+  return true;
+}
+
 export async function activateRoom(
   sm: StateManager,
   roomId: string,
-  humanContent: string | null,
-  silenceReason: string | undefined,
   isTUI: boolean,
   onError: (err: EiError) => void,
   onRoomUpdated: (roomId: string) => void,
-  onRoomMessageAdded: (roomId: string) => void,
   onRoomMessageQueued: (roomId: string) => void
 ): Promise<void> {
   const room = sm.getRoom(roomId);
@@ -99,21 +156,16 @@ export async function activateRoom(
     return;
   }
 
-  const now = new Date().toISOString();
-  const human = sm.getHuman();
+  const allMessages = sm.getRoomMessages(roomId);
+  const humanMsg = allMessages.find(
+    m => m.role === "human" && m.parent_id === room.active_node_id
+  );
+  if (!humanMsg) {
+    onError({ code: "ROOM_NO_HUMAN_MESSAGE", message: "Submit a response first before activating." });
+    return;
+  }
 
-  const humanMsg: RoomMessage = {
-    id: crypto.randomUUID(),
-    parent_id: room.active_node_id,
-    role: "human",
-    verbal_response: humanContent ?? undefined,
-    silence_reason: humanContent ? undefined : (silenceReason ?? "passed"),
-    timestamp: now,
-    read: true,
-    context_status: ContextStatus.Default,
-  };
-  sm.appendRoomMessage(roomId, humanMsg);
-  onRoomMessageAdded(roomId);
+  const human = sm.getHuman();
 
   if (room.mode === RoomMode.FreeForAll) {
     sm.setRoomActiveNode(roomId, humanMsg.id);
@@ -131,7 +183,6 @@ export async function activateRoom(
       return;
     }
 
-    const allMessages = sm.getRoomMessages(roomId);
     const currentRound = allMessages.filter(m => m.parent_id === room.active_node_id);
 
     const context: RoomHistoryMessage[] = sm.getRoomActivePath(roomId).map(m => ({
@@ -144,7 +195,7 @@ export async function activateRoom(
       silence_reason: m.silence_reason,
     }));
 
-    const candidates: RoomJudgeCandidate[] = [...currentRound, humanMsg].map(m => ({
+    const candidates: RoomJudgeCandidate[] = currentRound.map(m => ({
       message_id: m.id,
       speaker_name: m.role === "human"
         ? (human.settings?.name_display ?? "Human")

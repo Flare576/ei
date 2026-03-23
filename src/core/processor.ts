@@ -110,6 +110,8 @@ import {
   getRoomActivePath,
   resolveRoomName,
   createRoom,
+  submitHumanRoomMessage,
+  recallHumanRoomMessage,
   activateRoom,
   selectCYPBranch,
   archiveRoom,
@@ -1728,20 +1730,36 @@ const toolNextSteps = new Set([
     return id;
   }
 
-  async activateRoom(
+  submitHumanRoomMessage(
     roomId: string,
-    humanContent: string | null,
+    content: string | null,
     silenceReason?: string
-  ): Promise<void> {
+  ): string | null {
+    return submitHumanRoomMessage(
+      this.stateManager,
+      roomId,
+      content,
+      silenceReason,
+      (err) => this.interface.onError?.(err),
+      (id) => this.interface.onRoomMessageAdded?.(id)
+    );
+  }
+
+  recallHumanRoomMessage(roomId: string): boolean {
+    return recallHumanRoomMessage(
+      this.stateManager,
+      roomId,
+      (id) => this.interface.onRoomUpdated?.(id)
+    );
+  }
+
+  async activateRoom(roomId: string): Promise<void> {
     return activateRoom(
       this.stateManager,
       roomId,
-      humanContent,
-      silenceReason,
       this.isTUI,
       (err) => this.interface.onError?.(err),
       (id) => this.interface.onRoomUpdated?.(id),
-      (id) => this.interface.onRoomMessageAdded?.(id),
       (id) => this.interface.onRoomMessageQueued?.(id)
     );
   }

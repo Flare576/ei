@@ -335,6 +335,12 @@ export class StateManager {
     return ok;
   }
 
+  removeRoomMessages(roomId: string, messageIds: string[]): void {
+    if (messageIds.length === 0) return;
+    this.roomState.messages_remove(roomId, messageIds);
+    this.scheduleSave();
+  }
+
   markAllRoomMessagesRead(roomId: string): number {
     const count = this.roomState.messages_markAllRead(roomId);
     if (count > 0) this.scheduleSave();

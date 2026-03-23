@@ -385,6 +385,25 @@
   font-size: var(--ei-font-size-sm);
   color: var(--ei-text-primary);
   line-height: 1.4;
-  max-height: 4.2em;
-  overflow: hidden;
+}
+
+.ei-cyp-card__expand {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: var(--ei-text-muted);
+  padding: 0;
+  text-align: left;
+  transition: color var(--ei-transition-fast);
+}
+
+.ei-cyp-card__expand:hover {
+  color: var(--ei-accent);
+}
+
+.ei-input-area__textarea--silent {
+  border-color: var(--ei-text-muted);
+  color: var(--ei-text-muted);
+  font-style: italic;
 }

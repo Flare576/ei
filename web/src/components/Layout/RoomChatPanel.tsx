@@ -11,9 +11,10 @@ interface RoomChatPanelProps {
   personas: PersonaSummary[];
   inputValue: string;
   onInputChange: (value: string) => void;
-  onSendMessage: () => void;
-  onActivateRoom: (humanContent: string | null) => void;
+  onSubmitHumanMessage: (content: string | null, silenceReason?: string) => void;
+  onActivateRoom: () => void;
   onSelectCYPBranch: (messageId: string) => void;
+  onRecallMessage?: () => void;
   isProcessing: boolean;
 }
 
@@ -34,6 +35,8 @@ const AVATAR_COLORS = [
   "#3498db", "#9b59b6", "#e91e63", "#00bcd4", "#8bc34a",
 ];
 
+const EXPAND_THRESHOLD = 200;
+
 function getAvatarColor(id: string): string {
   let hash = 0;
   for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0;
@@ -41,12 +44,7 @@ function getAvatarColor(id: string): string {
 }
 
 function getInitials(name: string): string {
-  return name
-    .split(/\s+/)
-    .map(w => w[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
+  return name.split(/\s+/).map(w => w[0]).join("").toUpperCase().slice(0, 2);
 }
 
 function formatTime(timestamp: string): string {
@@ -68,9 +66,10 @@ export function RoomChatPanel({
   personas,
   inputValue,
   onInputChange,
-  onSendMessage,
+  onSubmitHumanMessage,
   onActivateRoom,
   onSelectCYPBranch,
+  onRecallMessage,
   isProcessing,
 }: RoomChatPanelProps) {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -78,6 +77,8 @@ export function RoomChatPanel({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [showCYPPicker, setShowCYPPicker] = useState(false);
   const [showSendDropdown, setShowSendDropdown] = useState(false);
+  const [isSilentMode, setIsSilentMode] = useState(false);
+  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
 
   const personaMap = new Map(personas.map(p => [p.id, p]));
 
@@ -87,6 +88,11 @@ export function RoomChatPanel({
   const currentRoundMessages = room
     ? allRoomMessages.filter(m => m.parent_id === room.active_node_id)
     : [];
+
+  const humanSubmittedMessage = currentRoundMessages.find(
+    m => m.role === "human"
+  ) ?? null;
+  const humanHasSubmitted = !!humanSubmittedMessage;
 
   const expectedPersonaIds = room
     ? room.persona_ids.filter(
@@ -104,13 +110,12 @@ export function RoomChatPanel({
   const isGathering = isProcessing || pendingPersonaCount > 0;
   const hasRoundMessages = currentRoundMessages.length > 0;
   const allPersonasDone = !isGathering && hasRoundMessages;
-  const humanHasTyped = inputValue.trim().length > 0;
-  const needsActivation = !isFFA && allPersonasDone;
+  const needsActivation = allPersonasDone && humanHasSubmitted;
 
   const statusText: string | null = (() => {
     if (!room || isFFA) return null;
     if (isGathering) {
-      if (pendingPersonaCount > 0 && !humanHasTyped) {
+      if (pendingPersonaCount > 0 && !humanHasSubmitted) {
         const n = pendingPersonaCount;
         return `Waiting for Your Response + ${n} Persona response${n === 1 ? "" : "s"}`;
       }
@@ -120,11 +125,15 @@ export function RoomChatPanel({
       }
       return "Processing\u2026";
     }
-    if (needsActivation && !humanHasTyped) return "Waiting for Your Response";
+    if (!humanHasSubmitted) return "Waiting for Your Response";
     return null;
   })();
 
-  const showActivateButton = needsActivation && humanHasTyped && !isGathering;
+  const showActivateButton = needsActivation && !isGathering;
+
+  const displayMessages = isCYP
+    ? activeRoomPath
+    : allRoomMessages.filter(m => m.parent_id !== room?.active_node_id);
 
   const scrollToBottom = useCallback(() => {
     const container = messagesContainerRef.current;
@@ -134,9 +143,7 @@ export function RoomChatPanel({
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
-    const observer = new MutationObserver(() => {
-      container.scrollTop = container.scrollHeight;
-    });
+    const observer = new MutationObserver(() => { container.scrollTop = container.scrollHeight; });
     observer.observe(container, { childList: true, subtree: true });
     scrollToBottom();
     return () => observer.disconnect();
@@ -146,8 +153,7 @@ export function RoomChatPanel({
     const textarea = textareaRef.current;
     if (!textarea) return;
     textarea.style.height = "auto";
-    const maxHeight = window.innerHeight * 0.33;
-    textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`;
+    textarea.style.height = `${Math.min(textarea.scrollHeight, window.innerHeight * 0.33)}px`;
   }, [inputValue]);
 
   useEffect(() => {
@@ -161,41 +167,137 @@ export function RoomChatPanel({
     return () => document.removeEventListener("mousedown", handleClick);
   }, [showSendDropdown]);
 
+  const handleSend = useCallback(() => {
+    if (isSilentMode) {
+      onSubmitHumanMessage(null, inputValue.trim() || undefined);
+      setIsSilentMode(false);
+    } else {
+      onSubmitHumanMessage(inputValue.trim() || null);
+    }
+  }, [isSilentMode, inputValue, onSubmitHumanMessage]);
+
   const handleActivate = useCallback(() => {
     if (isCYP) {
       setShowCYPPicker(true);
     } else {
-      onActivateRoom(inputValue.trim() || null);
-      onInputChange("");
+      onActivateRoom();
     }
-  }, [isCYP, inputValue, onActivateRoom, onInputChange]);
+  }, [isCYP, onActivateRoom]);
 
-  const handleMainSend = useCallback(() => {
-    if (isFFA) {
-      onSendMessage();
-    } else {
-      handleActivate();
-    }
-  }, [isFFA, onSendMessage, handleActivate]);
-
-  const mainSendDisabled = !activeRoomId || (
-    isFFA
-      ? !inputValue.trim() || isProcessing
-      : isGathering || !humanHasTyped || !needsActivation
-  );
+  const sendDisabled = !activeRoomId || !inputValue.trim() || humanHasSubmitted || isProcessing;
+  const activateDisabled = !showActivateButton || isGathering;
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (!mainSendDisabled) handleMainSend();
+      if (showActivateButton && !activateDisabled) {
+        handleActivate();
+      } else if (!sendDisabled) {
+        handleSend();
+      }
+      return;
     }
     if (e.key === "c" && e.ctrlKey) {
       e.preventDefault();
       onInputChange("");
+      setIsSilentMode(false);
+      return;
+    }
+    if (e.key === "ArrowUp" && onRecallMessage && humanHasSubmitted) {
+      const textarea = textareaRef.current;
+      if (textarea && textarea.selectionStart === 0 && textarea.selectionEnd === 0) {
+        e.preventDefault();
+        onRecallMessage();
+      }
     }
   };
 
+  const toggleCardExpand = (id: string) => {
+    setExpandedCards(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
   const currentRoundPersonaMessages = currentRoundMessages.filter(m => m.role === "persona");
+
+  const renderMessage = (msg: RoomMessage) => {
+    const persona = msg.persona_id ? personaMap.get(msg.persona_id) : null;
+    const speakerName = persona?.display_name ?? (msg.role === "human" ? "You" : "Persona");
+    const avatarColor = msg.persona_id ? getAvatarColor(msg.persona_id) : "#007bff";
+
+    return (
+      <div key={msg.id} className={`ei-room-message-wrapper ${msg.role}`}>
+        {msg.role === "persona" && (
+          <div className="ei-room-message__speaker-row">
+            <div className="ei-room-message__avatar" style={{ background: avatarColor }}>
+              {getInitials(speakerName)}
+            </div>
+            <span className="ei-room-message__speaker-name">{speakerName}</span>
+          </div>
+        )}
+        <div className="ei-room-message">
+          <div className="ei-room-message__bubble">
+            {msg.silence_reason !== undefined ? (
+              <span className="ei-room-message__silence">
+                [{speakerName} chose not to respond: {msg.silence_reason}]
+              </span>
+            ) : (
+              <MarkdownContent content={buildRoomMessageText(msg)} />
+            )}
+          </div>
+        </div>
+        <div className="ei-room-message__time">{formatTime(msg.timestamp)}</div>
+      </div>
+    );
+  };
+
+  const renderCYPCard = (msg: RoomMessage, isHuman = false) => {
+    const persona = msg.persona_id ? personaMap.get(msg.persona_id) : null;
+    const name = isHuman ? "You" : (persona?.display_name ?? "Persona");
+    const color = isHuman ? "#007bff" : (msg.persona_id ? getAvatarColor(msg.persona_id) : "#6c757d");
+    const text = isHuman ? inputValue : buildRoomMessageText(msg);
+    const isLong = text.length > EXPAND_THRESHOLD;
+    const isExpanded = expandedCards.has(msg.id);
+    const preview = isExpanded ? text : text.slice(0, EXPAND_THRESHOLD);
+
+    return (
+      <div key={msg.id} className={`ei-cyp-card${isHuman ? " ei-cyp-card--human" : ""}`}>
+        <div className="ei-cyp-card__header">
+          <div className="ei-cyp-card__avatar" style={{ background: color }}>
+            {getInitials(name)}
+          </div>
+          <span className="ei-cyp-card__name">{name}</span>
+        </div>
+        <div className="ei-cyp-card__preview">
+          {preview}{!isExpanded && isLong ? "…" : ""}
+        </div>
+        {isLong && (
+          <button
+            className="ei-cyp-card__expand"
+            onClick={() => toggleCardExpand(msg.id)}
+          >
+            {isExpanded ? "▲ Show less" : "▼ Show more"}
+          </button>
+        )}
+        <button
+          className={`ei-btn ei-btn--sm ${isHuman ? "ei-btn--secondary" : "ei-btn--primary"}`}
+          onClick={() => {
+            if (isHuman) {
+              onActivateRoom();
+              setShowCYPPicker(false);
+            } else {
+              onSelectCYPBranch(msg.id);
+              setShowCYPPicker(false);
+            }
+          }}
+        >
+          Choose
+        </button>
+      </div>
+    );
+  };
 
   return (
     <div className="ei-room-chat-panel">
@@ -215,41 +317,12 @@ export function RoomChatPanel({
       </div>
 
       <div className="ei-room-chat-panel__messages" ref={messagesContainerRef}>
-        {activeRoomPath.length === 0 ? (
+        {displayMessages.length === 0 ? (
           <div className="ei-room-chat-panel__empty">
-            {activeRoomId ? "No messages yet. The room is waiting…" : "Select a room to start chatting"}
+            {activeRoomId ? "No messages yet. The room is waiting\u2026" : "Select a room to start chatting"}
           </div>
         ) : (
-          activeRoomPath.map((msg) => {
-            const persona = msg.persona_id ? personaMap.get(msg.persona_id) : null;
-            const speakerName = persona?.display_name ?? (msg.role === "human" ? "You" : "Persona");
-            const avatarColor = msg.persona_id ? getAvatarColor(msg.persona_id) : "#007bff";
-
-            return (
-              <div key={msg.id} className={`ei-room-message-wrapper ${msg.role}`}>
-                {msg.role === "persona" && (
-                  <div className="ei-room-message__speaker-row">
-                    <div className="ei-room-message__avatar" style={{ background: avatarColor }}>
-                      {getInitials(speakerName)}
-                    </div>
-                    <span className="ei-room-message__speaker-name">{speakerName}</span>
-                  </div>
-                )}
-                <div className="ei-room-message">
-                  <div className="ei-room-message__bubble">
-                    {msg.silence_reason !== undefined ? (
-                      <span className="ei-room-message__silence">
-                        [{speakerName} chose not to respond: {msg.silence_reason}]
-                      </span>
-                    ) : (
-                      <MarkdownContent content={buildRoomMessageText(msg)} />
-                    )}
-                  </div>
-                </div>
-                <div className="ei-room-message__time">{formatTime(msg.timestamp)}</div>
-              </div>
-            );
-          })
+          displayMessages.map(renderMessage)
         )}
 
         {isProcessing && pendingPersonaCount > 0 && (
@@ -262,7 +335,7 @@ export function RoomChatPanel({
                 return (
                   <div key={id} className="ei-room-thinking__item">
                     <span className="ei-room-thinking__spinner">⟳</span>
-                    {name} is thinking…
+                    {name} is thinking\u2026
                   </div>
                 );
               })}
@@ -271,9 +344,7 @@ export function RoomChatPanel({
 
         {room && !isFFA && (statusText || showActivateButton) && (
           <div className="ei-room-status">
-            {statusText && (
-              <span className="ei-room-status__text">{statusText}</span>
-            )}
+            {statusText && <span className="ei-room-status__text">{statusText}</span>}
             {showActivateButton && (
               <button className="ei-room-status__activate" onClick={handleActivate}>
                 ▶ Activate
@@ -285,58 +356,8 @@ export function RoomChatPanel({
         {showCYPPicker && (
           <div className="ei-cyp-picker">
             <div className="ei-cyp-picker__title">Choose a branch to continue:</div>
-            {currentRoundPersonaMessages.map(msg => {
-              const persona = msg.persona_id ? personaMap.get(msg.persona_id) : null;
-              const name = persona?.display_name ?? "Persona";
-              const color = msg.persona_id ? getAvatarColor(msg.persona_id) : "#6c757d";
-              const text = buildRoomMessageText(msg);
-              const preview = text.slice(0, 140);
-              return (
-                <div key={msg.id} className="ei-cyp-card">
-                  <div className="ei-cyp-card__header">
-                    <div className="ei-cyp-card__avatar" style={{ background: color }}>
-                      {getInitials(name)}
-                    </div>
-                    <span className="ei-cyp-card__name">{name}</span>
-                  </div>
-                  <div className="ei-cyp-card__preview">
-                    {preview}{preview.length < text.length ? "…" : ""}
-                  </div>
-                  <button
-                    className="ei-btn ei-btn--primary ei-btn--sm"
-                    onClick={() => {
-                      onSelectCYPBranch(msg.id);
-                      setShowCYPPicker(false);
-                    }}
-                  >
-                    Choose
-                  </button>
-                </div>
-              );
-            })}
-            {humanHasTyped && (
-              <div className="ei-cyp-card ei-cyp-card--human">
-                <div className="ei-cyp-card__header">
-                  <div className="ei-cyp-card__avatar" style={{ background: "#007bff" }}>
-                    {getInitials("You")}
-                  </div>
-                  <span className="ei-cyp-card__name">You</span>
-                </div>
-                <div className="ei-cyp-card__preview">
-                  {inputValue.slice(0, 140)}{inputValue.length > 140 ? "…" : ""}
-                </div>
-                <button
-                  className="ei-btn ei-btn--secondary ei-btn--sm"
-                  onClick={() => {
-                    onActivateRoom(inputValue.trim());
-                    onInputChange("");
-                    setShowCYPPicker(false);
-                  }}
-                >
-                  Choose
-                </button>
-              </div>
-            )}
+            {currentRoundPersonaMessages.map(msg => renderCYPCard(msg))}
+            {humanSubmittedMessage && renderCYPCard(humanSubmittedMessage, true)}
             <button
               className="ei-btn ei-btn--ghost ei-btn--sm ei-cyp-picker__cancel"
               onClick={() => setShowCYPPicker(false)}
@@ -350,32 +371,34 @@ export function RoomChatPanel({
       <div className="ei-input-area">
         <textarea
           ref={textareaRef}
-          className="ei-input-area__textarea"
+          className={`ei-input-area__textarea${isSilentMode ? " ei-input-area__textarea--silent" : ""}`}
           value={inputValue}
           onChange={(e) => onInputChange(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={
-            activeRoomId
-              ? isFFA
-                ? "Type a message… (Enter to send, Shift+Enter for newline)"
-                : "Type your response… (Enter to activate, Shift+Enter for newline)"
-              : "Select a room first"
+            !activeRoomId
+              ? "Select a room first"
+              : humanHasSubmitted
+              ? `Response submitted\u2014press \u2191 to recall`
+              : isSilentMode
+              ? "Silence reason (optional)\u2026"
+              : "Type a message\u2026 (Enter to send, Shift+Enter for newline)"
           }
-          disabled={!activeRoomId}
+          disabled={!activeRoomId || humanHasSubmitted}
           rows={1}
         />
         <div className="ei-room-send-group" ref={dropdownRef}>
           <button
             className="ei-room-send-group__main"
-            onClick={handleMainSend}
-            disabled={mainSendDisabled}
+            onClick={showActivateButton ? handleActivate : handleSend}
+            disabled={showActivateButton ? activateDisabled : sendDisabled}
           >
-            Send
+            {showActivateButton ? "Activate" : "Send"}
           </button>
           <button
             className="ei-room-send-group__dropdown-toggle"
             onClick={() => setShowSendDropdown(v => !v)}
-            disabled={!activeRoomId || isProcessing}
+            disabled={!activeRoomId || humanHasSubmitted || isProcessing}
             aria-label="More send options"
           >
             ▼
@@ -384,9 +407,10 @@ export function RoomChatPanel({
             <div className="ei-room-send-dropdown">
               <button
                 onClick={() => {
-                  onActivateRoom(null);
+                  setIsSilentMode(true);
                   onInputChange("");
                   setShowSendDropdown(false);
+                  textareaRef.current?.focus();
                 }}
               >
                 Silent Response

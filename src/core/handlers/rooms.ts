@@ -107,6 +107,13 @@ export async function handleRoomJudge(response: LLMResponse, state: StateManager
     return;
   }
 
+  const allMessages = state.getRoomMessages(roomId);
+  const winner = allMessages.find(m => m.id === result.winner_message_id);
+  if (!winner) {
+    console.error(`[handleRoomJudge] Winner message ${result.winner_message_id} not found in room ${roomId}`);
+    return;
+  }
+
   const ok = state.setRoomActiveNode(roomId, result.winner_message_id);
   if (!ok) {
     console.error(`[handleRoomJudge] Could not set active node ${result.winner_message_id} in room ${roomId}`);
@@ -115,6 +122,14 @@ export async function handleRoomJudge(response: LLMResponse, state: StateManager
 
   if (result.reason) {
     console.log(`[handleRoomJudge] ${judgeDisplayName} chose ${result.winner_message_id}: ${result.reason}`);
+  }
+
+  const losers = allMessages
+    .filter(m => m.parent_id === winner.parent_id && m.id !== winner.id)
+    .map(m => m.id);
+  if (losers.length > 0) {
+    state.removeRoomMessages(roomId, losers);
+    console.log(`[handleRoomJudge] Removed ${losers.length} non-winning candidate(s) from room ${roomId}`);
   }
 
   const room = state.getRoom(roomId);
