@@ -17,6 +17,8 @@ export enum LLMRequestType {
 
 export enum LLMPriority {
   High = "high",
+  Judge = "judge",
+  Room = "room",
   Normal = "normal",
   Low = "low",
 }
