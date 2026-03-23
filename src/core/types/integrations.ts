@@ -137,7 +137,8 @@ export interface StorageState {
       messages: Message[];
     }
   >;
+  rooms?: Record<string, import("./rooms.js").RoomEntity>;
   queue: LLMRequest[];
-  providers: ToolProvider[];    // Tool provider registry (Ei, Brave, etc.)
-  tools: ToolDefinition[];      // Platform-level tool registry
+  providers: ToolProvider[];
+  tools: ToolDefinition[];
 }

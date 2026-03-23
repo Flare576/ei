@@ -60,3 +60,9 @@ export enum ProviderType {
   Storage = "storage",
   Image = "image",
 }
+
+export enum RoomMode {
+  ChooseYourPath = "choose_your_path",
+  FreeForAll = "free_for_all",
+  MessagesAgainstPersona = "messages_against_persona",
+}
