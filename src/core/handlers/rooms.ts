@@ -107,6 +107,8 @@ export async function handleRoomJudge(response: LLMResponse, state: StateManager
     return;
   }
 
+  const judgePersonaId = response.request.data.judgePersonaId as string;
+
   const allMessages = state.getRoomMessages(roomId);
   const winner = allMessages.find(m => m.id === result.winner_message_id);
   if (!winner) {
@@ -114,22 +116,34 @@ export async function handleRoomJudge(response: LLMResponse, state: StateManager
     return;
   }
 
+  const verdictParentId = winner.parent_id;
+
   const ok = state.setRoomActiveNode(roomId, result.winner_message_id);
   if (!ok) {
     console.error(`[handleRoomJudge] Could not set active node ${result.winner_message_id} in room ${roomId}`);
     return;
   }
 
-  if (result.reason) {
-    console.log(`[handleRoomJudge] ${judgeDisplayName} chose ${result.winner_message_id}: ${result.reason}`);
-  }
-
   const losers = allMessages
-    .filter(m => m.parent_id === winner.parent_id && m.id !== winner.id)
+    .filter(m => m.parent_id === verdictParentId && m.id !== winner.id)
     .map(m => m.id);
   if (losers.length > 0) {
     state.removeRoomMessages(roomId, losers);
-    console.log(`[handleRoomJudge] Removed ${losers.length} non-winning candidate(s) from room ${roomId}`);
+  }
+
+  if (result.reason) {
+    console.log(`[handleRoomJudge] ${judgeDisplayName} verdict: ${result.reason}`);
+    const verdictMsg = {
+      id: crypto.randomUUID(),
+      parent_id: verdictParentId,
+      role: "persona" as const,
+      persona_id: judgePersonaId,
+      silence_reason: result.reason,
+      timestamp: new Date().toISOString(),
+      read: false,
+      context_status: "default" as import("../types.js").ContextStatus,
+    };
+    state.appendRoomMessage(roomId, verdictMsg);
   }
 
   const room = state.getRoom(roomId);
