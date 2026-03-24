@@ -53,6 +53,7 @@ function formatTime(timestamp: string): string {
 }
 
 function buildRoomMessageText(msg: RoomMessage): string {
+  if (msg.silence_reason) return `_[chose not to respond: ${msg.silence_reason}]_`;
   const parts: string[] = [];
   if (msg.action_response) parts.push(`_${msg.action_response}_`);
   if (msg.verbal_response) parts.push(msg.verbal_response);
