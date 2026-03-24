@@ -101,7 +101,8 @@ function queueRoomTopicScan(
       next_step: LLMNextStep.HandleHumanTopicScan,
       data: {
         roomId,
-        roomDisplayName,
+        personaId: (state.getRoom(roomId)?.persona_ids ?? []).join("|"),
+        personaDisplayName: roomDisplayName,
         message_ids_to_mark: chunk.messages_analyze.map(m => m.id),
       },
     });
@@ -141,7 +142,8 @@ function queueRoomPersonScan(
       next_step: LLMNextStep.HandleHumanPersonScan,
       data: {
         roomId,
-        roomDisplayName,
+        personaId: (state.getRoom(roomId)?.persona_ids ?? []).join("|"),
+        personaDisplayName: roomDisplayName,
         message_ids_to_mark: chunk.messages_analyze.map(m => m.id),
       },
     });
@@ -194,7 +196,8 @@ function queueRoomEventScan(
         next_step: LLMNextStep.HandleEventScan,
         data: {
           roomId,
-          roomDisplayName,
+          personaId: (state.getRoom(roomId)?.persona_ids ?? []).join("|"),
+          personaDisplayName: roomDisplayName,
           message_ids_to_mark: chunk.messages_analyze.map(m => m.id),
         },
       });
