@@ -83,6 +83,7 @@ export function RoomChatPanel({
   const [isSilentMode, setIsSilentMode] = useState(false);
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
   const [navPickerMessageId, setNavPickerMessageId] = useState<string | null>(null);
+  const [showScrollButton, setShowScrollButton] = useState(false);
 
   const personaMap = new Map(personas.map(p => [p.id, p]));
 
@@ -145,19 +146,31 @@ export function RoomChatPanel({
       ? [...allRoomMessages].sort((a, b) => a.timestamp.localeCompare(b.timestamp))
       : allRoomMessages.filter(m => m.parent_id !== room?.active_node_id);
 
+  const SCROLL_THRESHOLD = 150;
+
   const scrollToBottom = useCallback(() => {
     const container = messagesContainerRef.current;
     if (container) container.scrollTop = container.scrollHeight;
   }, []);
 
+  const isNearBottom = useCallback(() => {
+    const c = messagesContainerRef.current;
+    if (!c) return true;
+    return c.scrollHeight - c.scrollTop - c.clientHeight <= SCROLL_THRESHOLD;
+  }, []);
+
+  const handleContainerScroll = useCallback(() => {
+    setShowScrollButton(!isNearBottom());
+  }, [isNearBottom]);
+
+  const prevMessageCount = useRef(0);
   useEffect(() => {
-    const container = messagesContainerRef.current;
-    if (!container) return;
-    const observer = new MutationObserver(() => { container.scrollTop = container.scrollHeight; });
-    observer.observe(container, { childList: true, subtree: true });
-    scrollToBottom();
-    return () => observer.disconnect();
-  }, [scrollToBottom]);
+    const count = displayMessages.length;
+    if (count !== prevMessageCount.current) {
+      if (isNearBottom()) scrollToBottom();
+      prevMessageCount.current = count;
+    }
+  }, [displayMessages.length, isNearBottom, scrollToBottom]);
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -170,7 +183,9 @@ export function RoomChatPanel({
     setShowCYPPicker(false);
     setExpandedCards(new Set());
     setNavPickerMessageId(null);
-  }, [room?.id]);
+    setShowScrollButton(false);
+    scrollToBottom();
+  }, [room?.id, scrollToBottom]);
 
   useEffect(() => {
     if (!showSendDropdown) return;
@@ -402,7 +417,8 @@ export function RoomChatPanel({
         </h2>
       </div>
 
-      <div className="ei-room-chat-panel__messages" ref={messagesContainerRef}>
+      <div style={{ position: "relative", flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <div className="ei-room-chat-panel__messages" ref={messagesContainerRef} onScroll={handleContainerScroll}>
         {displayMessages.length === 0 ? (
           <div className="ei-room-chat-panel__empty">
             {activeRoomId ? "No messages yet. The room is waiting\u2026" : "Select a room to start chatting"}
@@ -460,6 +476,15 @@ export function RoomChatPanel({
             </button>
           </div>
         )}
+      </div>
+      {showScrollButton && (
+        <button
+          className="ei-scroll-to-bottom"
+          onClick={() => { scrollToBottom(); setShowScrollButton(false); }}
+        >
+          ↓ Latest
+        </button>
+      )}
       </div>
 
       <div className="ei-input-area">

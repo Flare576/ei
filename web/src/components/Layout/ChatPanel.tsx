@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
+import { useRef, useEffect, useCallback, useState, forwardRef, useImperativeHandle } from "react";
 import type { Message, Quote } from "../../../../src/core/types";
 import type { GenerationResult } from "../../comfyui";
 import { MarkdownContent } from "../Chat";
@@ -143,26 +143,38 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
     },
   }));
 
+  const SCROLL_THRESHOLD = 150;
+
   const scrollToBottom = useCallback(() => {
     const container = messagesContainerRef.current;
-    if (container) {
-      container.scrollTop = container.scrollHeight;
-    }
+    if (container) container.scrollTop = container.scrollHeight;
   }, []);
 
+  const isNearBottom = useCallback(() => {
+    const c = messagesContainerRef.current;
+    if (!c) return true;
+    return c.scrollHeight - c.scrollTop - c.clientHeight <= SCROLL_THRESHOLD;
+  }, []);
+
+  const [showScrollButton, setShowScrollButton] = useState(false);
+
+  const handleContainerScroll = useCallback(() => {
+    setShowScrollButton(!isNearBottom());
+  }, [isNearBottom]);
+
+  const prevMessageCount = useRef(0);
   useEffect(() => {
-    const container = messagesContainerRef.current;
-    if (!container) return;
+    const count = messages.length;
+    if (count !== prevMessageCount.current) {
+      if (isNearBottom()) scrollToBottom();
+      prevMessageCount.current = count;
+    }
+  }, [messages.length, isNearBottom, scrollToBottom]);
 
-    const observer = new MutationObserver(() => {
-      container.scrollTop = container.scrollHeight;
-    });
-
-    observer.observe(container, { childList: true, subtree: true });
+  useEffect(() => {
+    setShowScrollButton(false);
     scrollToBottom();
-
-    return () => observer.disconnect();
-  }, [scrollToBottom]);
+  }, [activePersonaId, scrollToBottom]);
 
   useEffect(() => {
     if (!onMarkMessageRead || !messagesContainerRef.current) return;
@@ -282,7 +294,8 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
         </h2>
       </div>
 
-      <div className="ei-chat-panel__messages" ref={messagesContainerRef}>
+      <div style={{ position: "relative", flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <div className="ei-chat-panel__messages" ref={messagesContainerRef} onScroll={handleContainerScroll}>
         {messages.length === 0 ? (
           <div className="ei-chat-panel__empty">
             {activePersonaId 
@@ -421,6 +434,15 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
           </div>
         )}
         <div ref={messagesEndRef} />
+      </div>
+      {showScrollButton && (
+        <button
+          className="ei-scroll-to-bottom"
+          onClick={() => { scrollToBottom(); setShowScrollButton(false); }}
+        >
+          ↓ Latest
+        </button>
+      )}
       </div>
 
       <div className="ei-input-area">

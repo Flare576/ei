@@ -191,4 +191,22 @@
   border-top: 1px solid var(--ei-border);
 }
 
+.ei-scroll-to-bottom {
+  position: absolute;
+  bottom: 12px;
+  right: 16px;
+  background: var(--ei-accent);
+  color: white;
+  border: none;
+  border-radius: 16px;
+  padding: 6px 14px;
+  font-size: 0.82em;
+  cursor: pointer;
+  z-index: 20;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  pointer-events: all;
+}
 
+.ei-scroll-to-bottom:hover {
+  opacity: 0.9;
+}
