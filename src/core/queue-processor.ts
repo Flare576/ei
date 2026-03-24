@@ -128,15 +128,17 @@ export class QueueProcessor {
 
     if (this.currentRawMessageFetcher) {
       const personaId = request.data.personaId as string | undefined;
-      if (personaId) {
-        const rawMessages = this.currentRawMessageFetcher(personaId);
+      const roomId = request.data.roomId as string | undefined;
+      const fetchId = personaId ?? (roomId ? `room:${roomId}` : undefined);
+      if (fetchId) {
+        const rawMessages = this.currentRawMessageFetcher(fetchId);
         const messageMap = new Map<string, Message>();
         for (const msg of rawMessages) {
           messageMap.set(msg.id, msg);
         }
 
         const placeholderCount = (request.user.match(/\[mid:[^\]]+\]/g) || []).length;
-        console.log(`[QueueProcessor] Hydrating ${placeholderCount} placeholders with ${messageMap.size} messages for ${personaId}`);
+        console.log(`[QueueProcessor] Hydrating ${placeholderCount} placeholders with ${messageMap.size} messages for ${fetchId}`);
 
         hydratedSystem = hydratePromptPlaceholders(request.system, messageMap);
         hydratedUser = hydratePromptPlaceholders(request.user, messageMap);

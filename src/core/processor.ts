@@ -27,6 +27,7 @@ import { yoloMerge } from "../storage/merge.js";
 import { StateManager } from "./state-manager.js";
 import { QueueProcessor } from "./queue-processor.js";
 import { handlers } from "./handlers/index.js";
+import { normalizeRoomMessages } from "./handlers/utils.js";
 import { ContextStatus as ContextStatusEnum } from "./types.js";
 import { registerReadMemoryExecutor, registerFileReadExecutor } from "./tools/index.js";
 import { createReadMemoryExecutor } from "./tools/builtin/read-memory.js";
@@ -905,7 +906,13 @@ const toolNextSteps = new Set([
               {
                 accounts: this.stateManager.getHuman().settings?.accounts,
                 messageFetcher: (pName) => fetchMessagesForLLM(this.stateManager, pName),
-                rawMessageFetcher: (pName) => this.stateManager.messages_get(pName),
+                rawMessageFetcher: (id) => {
+                  if (id.startsWith("room:")) {
+                    const roomId = id.slice(5);
+                    return normalizeRoomMessages(this.stateManager.getRoomMessages(roomId), this.stateManager);
+                  }
+                  return this.stateManager.messages_get(id);
+                },
                 tools: tools.length > 0 ? tools : undefined,
                 onEnqueue: (req) => this.stateManager.queue_enqueue(req),
                 onProviderConfigUpdate: (providerId, updates) => {
