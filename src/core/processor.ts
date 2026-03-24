@@ -112,6 +112,7 @@ import {
   createRoom,
   submitHumanRoomMessage,
   recallHumanRoomMessage,
+  sendFfaMessage,
   activateRoom,
   selectCYPBranch,
   archiveRoom,
@@ -1760,6 +1761,24 @@ const toolNextSteps = new Set([
       this.isTUI,
       (err) => this.interface.onError?.(err),
       (id) => this.interface.onRoomUpdated?.(id),
+      (id) => this.interface.onRoomMessageQueued?.(id)
+    );
+  }
+
+  async sendFfaMessage(
+    roomId: string,
+    content: string | null,
+    silenceReason?: string
+  ): Promise<void> {
+    return sendFfaMessage(
+      this.stateManager,
+      roomId,
+      content,
+      silenceReason,
+      this.isTUI,
+      (err) => this.interface.onError?.(err),
+      (id) => this.interface.onRoomUpdated?.(id),
+      (id) => this.interface.onRoomMessageAdded?.(id),
       (id) => this.interface.onRoomMessageQueued?.(id)
     );
   }

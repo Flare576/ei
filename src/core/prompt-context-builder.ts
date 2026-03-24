@@ -203,16 +203,20 @@ export async function buildRoomResponsePromptData(
   sm: StateManager,
   room: RoomEntity,
   respondingPersona: PersonaEntity,
-  isTUI: boolean
+  isTUI: boolean,
+  useAllMessages = false
 ): Promise<PromptOutput> {
   const human = sm.getHuman();
   const activePath = sm.getRoomActivePath(room.id);
-  const lastMessage = activePath[activePath.length - 1];
+  const sourceMessages = useAllMessages
+    ? [...sm.getRoomMessages(room.id)].sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+    : activePath;
+  const lastMessage = sourceMessages[sourceMessages.length - 1];
   const currentMessage = lastMessage?.verbal_response;
 
   const filteredHuman = await filterHumanDataByVisibility(human, respondingPersona, currentMessage);
 
-  const history: RoomHistoryMessage[] = activePath.map(m => ({
+  const history: RoomHistoryMessage[] = sourceMessages.map(m => ({
     speaker_name: m.role === "human"
       ? (human.settings?.name_display ?? "Human")
       : (sm.persona_getById(m.persona_id ?? "")?.display_name ?? m.persona_id ?? "Unknown"),

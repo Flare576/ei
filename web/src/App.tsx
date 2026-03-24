@@ -27,7 +27,7 @@ import type {
   RoomMessage,
   RoomCreationInput,
   } from "../../src/core/types";
-import { ContextStatus, LLMNextStep } from "../../src/core/types";
+import { ContextStatus, LLMNextStep, RoomMode } from "../../src/core/types";
 import { Layout, PersonaPanel, ChatPanel, RoomChatPanel, ControlArea, HelpModal, ImagePreviewModal, type PersonaPanelHandle, type ChatPanelHandle } from "./components/Layout";
 import { HumanEditor, PersonaEditor, PersonaCreatorModal, RoomCreatorModal, ArchivedPersonasModal } from "./components/EntityEditor";
 import { QuoteCaptureModal, QuoteManagementModal } from "./components/Quote";
@@ -788,11 +788,20 @@ function App() {
     }
   }, [processor, activeRoomId]);
 
-  const handleSubmitHumanRoomMessage = useCallback((content: string | null, silenceReason?: string) => {
+  const handleSubmitHumanRoomMessage = useCallback(async (content: string | null, silenceReason?: string) => {
     if (!activeRoomId || !processorRef.current) return;
-    processorRef.current.submitHumanRoomMessage(activeRoomId, content, silenceReason);
+    const currentRoom = processorRef.current.getRoom(activeRoomId);
+    if (!currentRoom) return;
+    if (currentRoom.mode === RoomMode.FreeForAll) {
+      await processorRef.current.sendFfaMessage(activeRoomId, content, silenceReason);
+    } else {
+      processorRef.current.submitHumanRoomMessage(activeRoomId, content, silenceReason);
+    }
     setRoomInputValue("");
     setRoomMessages(processorRef.current.getRoomMessages(activeRoomId));
+    const updatedRoom = processorRef.current.getRoom(activeRoomId);
+    if (updatedRoom) setActiveRoom(updatedRoom);
+    setActiveRoomPath(processorRef.current.getRoomActivePath(activeRoomId));
   }, [activeRoomId]);
 
   const handleActivateRoom = useCallback(async () => {

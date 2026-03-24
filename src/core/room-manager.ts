@@ -126,6 +126,92 @@ export function submitHumanRoomMessage(
   return msg.id;
 }
 
+export async function sendFfaMessage(
+  sm: StateManager,
+  roomId: string,
+  content: string | null,
+  silenceReason: string | undefined,
+  isTUI: boolean,
+  onError: (err: EiError) => void,
+  onRoomUpdated: (roomId: string) => void,
+  onRoomMessageAdded: (roomId: string) => void,
+  onRoomMessageQueued: (roomId: string) => void
+): Promise<void> {
+  const room = sm.getRoom(roomId);
+  if (!room) {
+    onError({ code: "ROOM_NOT_FOUND", message: `Room ${roomId} not found.` });
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const existing = sm.getRoomMessages(roomId).find(
+    m => m.role === "human" && m.parent_id === room.active_node_id
+  );
+
+  let humanMsgId: string;
+  if (existing) {
+    sm.updateRoomMessage(roomId, existing.id, {
+      verbal_response: content ?? undefined,
+      silence_reason: content ? undefined : (silenceReason ?? "passed"),
+      timestamp: now,
+    });
+    humanMsgId = existing.id;
+  } else {
+    const msg: RoomMessage = {
+      id: crypto.randomUUID(),
+      parent_id: room.active_node_id,
+      role: "human",
+      verbal_response: content ?? undefined,
+      silence_reason: content ? undefined : (silenceReason ?? "passed"),
+      timestamp: now,
+      read: true,
+      context_status: ContextStatus.Default,
+    };
+    sm.appendRoomMessage(roomId, msg);
+    humanMsgId = msg.id;
+  }
+  onRoomMessageAdded(roomId);
+
+  sm.setRoomActiveNode(roomId, humanMsgId);
+  onRoomUpdated(roomId);
+
+  const updatedRoom = sm.getRoom(roomId)!;
+  const alreadyQueued = new Set(
+    sm.queue_getAllActiveItems()
+      .filter(q =>
+        q.next_step === LLMNextStep.HandleRoomResponse &&
+        (q.data.roomId as string) === roomId &&
+        (q.state === "pending" || q.state === "processing")
+      )
+      .map(q => q.data.personaId as string)
+  );
+
+  for (const personaId of updatedRoom.persona_ids) {
+    if (alreadyQueued.has(personaId)) continue;
+    const persona = sm.persona_getById(personaId);
+    if (!persona || persona.is_archived || persona.is_paused) continue;
+
+    const promptOutput = await buildRoomResponsePromptData(sm, updatedRoom, persona, isTUI, true);
+    const model = persona.model ?? sm.getHuman().settings?.default_model ?? "";
+
+    sm.queue_enqueue({
+      type: LLMRequestType.JSON,
+      priority: LLMPriority.Room,
+      system: promptOutput.system,
+      user: promptOutput.user,
+      next_step: LLMNextStep.HandleRoomResponse,
+      model,
+      data: {
+        roomId,
+        personaId,
+        personaDisplayName: persona.display_name,
+        parentMessageId: humanMsgId,
+      },
+    });
+    onRoomMessageQueued(roomId);
+  }
+}
+
 export function recallHumanRoomMessage(
   sm: StateManager,
   roomId: string,

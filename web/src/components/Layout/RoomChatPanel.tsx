@@ -134,9 +134,15 @@ export function RoomChatPanel({
 
   const showActivateButton = needsActivation && !isGathering;
 
+  const ffaPendingCount = isFFA
+    ? expectedPersonaIds.filter(id => !respondedPersonaIds.has(id)).length
+    : 0;
+
   const displayMessages = isCYP
     ? activeRoomPath
-    : allRoomMessages.filter(m => m.parent_id !== room?.active_node_id);
+    : isFFA
+      ? [...allRoomMessages].sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+      : allRoomMessages.filter(m => m.parent_id !== room?.active_node_id);
 
   const scrollToBottom = useCallback(() => {
     const container = messagesContainerRef.current;
@@ -192,18 +198,26 @@ export function RoomChatPanel({
     }
   }, [isCYP, onActivateRoom]);
 
-  const canSend = !humanHasSubmitted && (inputValue.trim().length > 0 || isSilentMode);
-  const canActivate = humanHasSubmitted && allPersonasDone && !isActivating;
-  const isWaiting = humanHasSubmitted && (!allPersonasDone || isActivating);
+  const canSend = isFFA
+    ? (inputValue.trim().length > 0 || isSilentMode)
+    : (!humanHasSubmitted && (inputValue.trim().length > 0 || isSilentMode));
+  const canActivate = !isFFA && humanHasSubmitted && allPersonasDone && !isActivating;
+  const isWaiting = !isFFA && humanHasSubmitted && (!allPersonasDone || isActivating);
 
-  const buttonLabel = humanHasSubmitted
-    ? (isActivating ? "Queued\u2026" : allPersonasDone ? "Activate \u25b6" : "Waiting\u2026")
-    : "Send";
-  const buttonDisabled = !activeRoomId || isWaiting || (!canSend && !canActivate);
+  const buttonLabel = isFFA
+    ? "Send"
+    : humanHasSubmitted
+      ? (isActivating ? "Queued\u2026" : allPersonasDone ? "Activate \u25b6" : "Waiting\u2026")
+      : "Send";
+  const buttonDisabled = !activeRoomId || (isFFA ? !canSend : (isWaiting || (!canSend && !canActivate)));
   const buttonOnClick = canActivate ? handleActivate : handleSend;
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
+      if (isFFA) {
+        if (canSend) { e.preventDefault(); handleSend(); }
+        return;
+      }
       e.preventDefault();
       if (!humanHasSubmitted && inputValue.trim()) {
         handleSend();
@@ -352,6 +366,14 @@ export function RoomChatPanel({
           </div>
         )}
 
+        {isFFA && ffaPendingCount > 0 && (
+          <div className="ei-room-status ei-room-status--ffa">
+            <span className="ei-room-status__text">
+              {ffaPendingCount} persona{ffaPendingCount !== 1 ? "s" : ""} responding\u2026
+            </span>
+          </div>
+        )}
+
         {room && !isFFA && (statusText || showActivateButton) && (
           <div className="ei-room-status">
             {statusText && <span className="ei-room-status__text">{statusText}</span>}
@@ -363,7 +385,7 @@ export function RoomChatPanel({
           </div>
         )}
 
-        {showCYPPicker && (
+        {isCYP && showCYPPicker && (
           <div className="ei-cyp-picker">
             <div className="ei-cyp-picker__title">Choose a branch to continue:</div>
             {currentRoundPersonaMessages.map(msg => renderCYPCard(msg))}

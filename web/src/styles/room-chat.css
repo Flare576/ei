@@ -239,6 +239,13 @@
   background: var(--ei-accent-hover);
 }
 
+.ei-room-status--ffa {
+  opacity: 0.7;
+  font-style: italic;
+  font-size: 0.85em;
+  padding: 4px 12px;
+}
+
 .ei-room-send-group {
   position: relative;
   display: flex;
