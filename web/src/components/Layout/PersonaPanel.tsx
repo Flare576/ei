@@ -358,7 +358,7 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
               No rooms yet. Create one to start a group chat!
             </div>
           ) : (
-            rooms.map((room) => (
+            rooms.map((room, index) => (
               <div
                 key={room.id}
                 className={`ei-room-pill ${room.id === activeRoomId ? "active" : ""}`}
