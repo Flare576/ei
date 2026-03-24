@@ -129,7 +129,7 @@ export class QueueProcessor {
     if (this.currentRawMessageFetcher) {
       const personaId = request.data.personaId as string | undefined;
       const roomId = request.data.roomId as string | undefined;
-      const fetchId = personaId ?? (roomId ? `room:${roomId}` : undefined);
+      const fetchId = roomId ? `room:${roomId}` : personaId;
       if (fetchId) {
         const rawMessages = this.currentRawMessageFetcher(fetchId);
         const messageMap = new Map<string, Message>();
