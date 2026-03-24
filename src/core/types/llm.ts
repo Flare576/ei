@@ -23,6 +23,7 @@ export interface Message {
   e?: boolean;                 // Event (epic) extraction completed
   // Image generation fields (web-only, ephemeral)
   _synthesis?: boolean;         // True if message was created by multi-message synthesis
+  speaker_name?: string;       // Display name of actual speaker; set on room messages for clean hydration
 
 }
 

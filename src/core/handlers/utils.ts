@@ -8,17 +8,13 @@ export function normalizeRoomMessages(messages: RoomMessage[], state: StateManag
     const speakerName = m.role === "human"
       ? humanName
       : (state.persona_getById(m.persona_id ?? "")?.display_name ?? "Participant");
-    const verbal = m.verbal_response
-      ? `[${speakerName}]: ${m.verbal_response}`
-      : m.silence_reason
-        ? `[${speakerName}]: *chose not to respond: ${m.silence_reason}*`
-        : undefined;
-    const action = m.action_response ? `[${speakerName}]: *${m.action_response}*` : undefined;
     return {
       id: m.id,
       role: m.role === "human" ? "human" as const : "system" as const,
-      verbal_response: verbal,
-      action_response: action,
+      speaker_name: speakerName,
+      verbal_response: m.verbal_response,
+      action_response: m.action_response,
+      silence_reason: m.silence_reason,
       timestamp: m.timestamp,
       read: m.read,
       context_status: m.context_status,
