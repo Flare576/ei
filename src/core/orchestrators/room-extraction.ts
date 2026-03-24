@@ -205,6 +205,41 @@ function queueRoomEventScan(
   }
 }
 
+export function checkAndQueueRoomExtraction(state: StateManager, roomId: string): void {
+  const room = state.getRoom(roomId);
+  if (!room || room.mode === RoomMode.ChooseYourPath) return;
+
+  const N = room.persona_ids.length + 1;
+  const threshold = room.mode === RoomMode.FreeForAll ? 5 * N : 10;
+
+  const allVisible = getRoomVisibleMessages(state, roomId);
+  const unextractedT = allVisible.filter(m => !m.t);
+  const unextractedP = allVisible.filter(m => !m.p);
+
+  if (unextractedT.length < threshold && unextractedP.length < threshold) return;
+
+  const participantContext = buildRoomParticipantContext(roomId, state);
+  const roomDisplayName = room.display_name;
+
+  if (unextractedT.length >= threshold) {
+    const analyzeStart = unextractedT[0].timestamp;
+    const messages_contextT = allVisible.filter(
+      m => m.t === true && new Date(m.timestamp).getTime() < new Date(analyzeStart).getTime()
+    );
+    queueRoomTopicScan(roomId, roomDisplayName, messages_contextT, unextractedT, state, participantContext);
+  }
+
+  if (unextractedP.length >= threshold) {
+    const analyzeStart = unextractedP[0].timestamp;
+    const messages_contextP = allVisible.filter(
+      m => m.p === true && new Date(m.timestamp).getTime() < new Date(analyzeStart).getTime()
+    );
+    queueRoomPersonScan(roomId, roomDisplayName, messages_contextP, unextractedP, state);
+  }
+
+  console.log(`[checkAndQueueRoomExtraction] Auto-triggered extraction for room ${roomDisplayName} (threshold: ${threshold})`);
+}
+
 export function queueRoomCapture(state: StateManager, roomId: string): void {
   const room = state.getRoom(roomId);
   if (!room) return;
