@@ -136,8 +136,9 @@ export async function handleRoomJudge(response: LLMResponse, state: StateManager
   if (!room) return;
 
   for (const personaId of room.persona_ids) {
+    if (room.judge_persona_id === personaId) continue;
     const persona = state.persona_getById(personaId);
-    if (!persona) continue;
+    if (!persona || persona.is_archived || persona.is_paused) continue;
 
     const isTUI = false;
     const promptData = await buildRoomResponsePromptData(state, room, persona, isTUI);

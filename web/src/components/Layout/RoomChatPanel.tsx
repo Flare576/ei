@@ -16,6 +16,7 @@ interface RoomChatPanelProps {
   onSelectCYPBranch: (messageId: string) => void;
   onRecallMessage?: () => void;
   isProcessing: boolean;
+  isActivating?: boolean;
 }
 
 const MODE_LABEL: Record<RoomMode, string> = {
@@ -71,6 +72,7 @@ export function RoomChatPanel({
   onSelectCYPBranch,
   onRecallMessage,
   isProcessing,
+  isActivating = false,
 }: RoomChatPanelProps) {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -190,11 +192,11 @@ export function RoomChatPanel({
   }, [isCYP, onActivateRoom]);
 
   const canSend = !humanHasSubmitted && (inputValue.trim().length > 0 || isSilentMode);
-  const canActivate = humanHasSubmitted && allPersonasDone;
-  const isWaiting = humanHasSubmitted && !allPersonasDone;
+  const canActivate = humanHasSubmitted && allPersonasDone && !isActivating;
+  const isWaiting = humanHasSubmitted && (!allPersonasDone || isActivating);
 
   const buttonLabel = humanHasSubmitted
-    ? (allPersonasDone ? "Activate \u25b6" : "Waiting\u2026")
+    ? (isActivating ? "Queued\u2026" : allPersonasDone ? "Activate \u25b6" : "Waiting\u2026")
     : "Send";
   const buttonDisabled = !activeRoomId || isWaiting || (!canSend && !canActivate);
   const buttonOnClick = canActivate ? handleActivate : handleSend;
@@ -294,7 +296,7 @@ export function RoomChatPanel({
           </button>
         )}
         <button
-          className={`ei-btn ei-btn--sm ${isHuman ? "ei-btn--secondary" : "ei-btn--primary"}`}
+          className="ei-btn ei-btn--sm ei-btn--primary"
           onClick={() => {
             onSelectCYPBranch(msg.id);
             setShowCYPPicker(false);

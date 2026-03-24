@@ -151,6 +151,7 @@ function App() {
   const [roomMessages, setRoomMessages] = useState<RoomMessage[]>([]);
   const [activeRoomPath, setActiveRoomPath] = useState<RoomMessage[]>([]);
   const [processingRoomId, setProcessingRoomId] = useState<string | null>(null);
+  const [roomActivating, setRoomActivating] = useState(false);
   const [showRoomCreator, setShowRoomCreator] = useState(false);
   const [roomInputValue, setRoomInputValue] = useState("");
 
@@ -332,6 +333,7 @@ function App() {
       onRoomUpdated: (roomId) => {
         setRooms(processorRef.current?.getRoomList() ?? []);
         if (roomId === activeRoomIdRef.current) {
+          setRoomActivating(false);
           const room = processorRef.current?.getRoom(roomId);
           setActiveRoom(room ?? null);
           setRoomMessages(processorRef.current?.getRoomMessages(roomId) ?? []);
@@ -741,6 +743,7 @@ function App() {
       await processor.markAllRoomMessagesRead(activeRoomId);
     }
     setActivePersonaId(null);
+    setRoomActivating(false);
     setActiveRoomId(roomId);
     if (processor) {
       const room = processor.getRoom(roomId);
@@ -787,6 +790,7 @@ function App() {
 
   const handleActivateRoom = useCallback(async () => {
     if (!activeRoomId || !processorRef.current) return;
+    setRoomActivating(true);
     await processorRef.current.activateRoom(activeRoomId);
     const updatedRoom = processorRef.current.getRoom(activeRoomId);
     if (updatedRoom) setActiveRoom(updatedRoom);
@@ -1321,6 +1325,7 @@ function App() {
             onSelectCYPBranch={handleSelectCYPBranch}
             onRecallMessage={handleRecallHumanRoomMessage}
             isProcessing={processingRoomId === activeRoomId}
+            isActivating={roomActivating}
           />
         ) : (
           <ChatPanel
