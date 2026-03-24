@@ -29,3 +29,4 @@ export {
   queuePersonaTopicUpdate,
   type PersonaTopicContext,
 } from "./persona-topics.js";
+export { queueRoomCapture, queuePersonaCapture } from "./room-extraction.js";

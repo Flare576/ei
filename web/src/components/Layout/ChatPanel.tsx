@@ -79,6 +79,7 @@ interface ChatPanelProps {
   imageErrors?: Record<string, string>;
   onImageClick?: (messageId: string) => void;
   onImagePromptClick?: () => void;
+  onCapture?: () => void;
 }
 
 export interface ChatPanelHandle {
@@ -107,6 +108,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
   imageErrors = {},
   onImageClick,
   onImagePromptClick,
+  onCapture,
 }, ref) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -466,6 +468,15 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
                 title="Generate image from selected messages"
               >
                 🖼️
+              </button>
+            )}
+            {onCapture && (
+              <button
+                className="ei-boundary-btn"
+                onClick={onCapture}
+                title="Extract data from current conversation"
+              >
+                💡
               </button>
             )}
           </div>

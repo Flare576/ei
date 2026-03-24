@@ -22,6 +22,7 @@ interface RoomChatPanelProps {
   onRecallMessage?: () => void;
   isProcessing: boolean;
   isActivating?: boolean;
+  onCapture?: () => void;
 }
 
 const MODE_LABEL: Record<RoomMode, string> = {
@@ -84,6 +85,7 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
   onRecallMessage,
   isProcessing,
   isActivating = false,
+  onCapture,
 }: RoomChatPanelProps, ref) {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -537,6 +539,17 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
       </div>
 
       <div className="ei-input-area">
+        {onCapture && (
+          <div className="ei-input-area__controls">
+            <button
+              className="ei-boundary-btn"
+              onClick={onCapture}
+              title="Extract data from current conversation"
+            >
+              💡
+            </button>
+          </div>
+        )}
         <textarea
           ref={textareaRef}
           className={`ei-input-area__textarea${isSilentMode ? " ei-input-area__textarea--silent" : ""}`}

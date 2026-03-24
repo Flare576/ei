@@ -1359,9 +1359,10 @@ function App() {
             onSubmitHumanMessage={handleSubmitHumanRoomMessage}
             onActivateRoom={handleActivateRoom}
             onSelectCYPBranch={handleSelectCYPBranch}
-            onRecallMessage={handleRecallHumanRoomMessage}
-            isProcessing={processingRoomId === activeRoomId}
-            isActivating={roomActivating}
+             onRecallMessage={handleRecallHumanRoomMessage}
+             isProcessing={processingRoomId === activeRoomId}
+             isActivating={roomActivating}
+             onCapture={activeRoomId ? () => processorRef.current?.captureRoom(activeRoomId) : undefined}
           />
         ) : (
           <ChatPanel
@@ -1392,6 +1393,7 @@ function App() {
              imageErrors={imageErrors}
              onImageClick={handleImageClick}
              onImagePromptClick={handleImagePromptClick}
+              onCapture={activePersonaId ? () => processorRef.current?.capturePersona(activePersonaId) : undefined}
           />
         )
       }

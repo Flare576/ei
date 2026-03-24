@@ -31,7 +31,7 @@ import { ContextStatus as ContextStatusEnum } from "./types.js";
 import { registerReadMemoryExecutor, registerFileReadExecutor } from "./tools/index.js";
 import { createReadMemoryExecutor } from "./tools/builtin/read-memory.js";
 import { EI_WELCOME_MESSAGE, EI_PERSONA_DEFINITION } from "../templates/welcome.js";
-import { shouldStartCeremony, startCeremony, handleCeremonyProgress, queueUserDedupRequest } from "./orchestrators/index.js";
+import { shouldStartCeremony, startCeremony, handleCeremonyProgress, queueUserDedupRequest, queueRoomCapture, queuePersonaCapture } from "./orchestrators/index.js";
 import { BUILT_IN_FACTS } from "./constants/built-in-facts.js";
 
 // Static module imports
@@ -1621,6 +1621,14 @@ const toolNextSteps = new Set([
 
   queueUserDedup(itemType: "topic" | "person", entityIds: string[]): void {
     queueUserDedupRequest(this.stateManager, itemType, entityIds);
+  }
+
+  capturePersona(personaId: string): void {
+    queuePersonaCapture(this.stateManager, personaId);
+  }
+
+  captureRoom(roomId: string): void {
+    queueRoomCapture(this.stateManager, roomId);
   }
 
   async submitOneShot(guid: string, systemPrompt: string, userPrompt: string): Promise<void> {
