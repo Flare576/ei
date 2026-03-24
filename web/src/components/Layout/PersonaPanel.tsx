@@ -157,11 +157,20 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
       const pills = listRef.current?.querySelectorAll(".ei-room-pill");
       (pills?.[newIndex] as HTMLElement)?.focus();
     }
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      setActiveTab("personas");
+      setTimeout(() => {
+        const destIndex = Math.max(0, personas.findIndex(p => p.id === activePersonaId));
+        const pills = listRef.current?.querySelectorAll(".ei-persona-pill");
+        (pills?.[destIndex] as HTMLElement)?.focus();
+      }, 0);
+    }
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       onSelectRoom?.(rooms[index].id);
     }
-  }, [rooms, onSelectRoom]);
+  }, [rooms, onSelectRoom, personas, activePersonaId, setActiveTab]);
 
   const handlePillKeyDown = useCallback((e: React.KeyboardEvent, index: number) => {
     if (e.key === "ArrowDown") {
@@ -178,12 +187,21 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
       const pills = listRef.current?.querySelectorAll(".ei-persona-pill");
       (pills?.[newIndex] as HTMLElement)?.focus();
     }
+    if (e.key === "ArrowRight") {
+      e.preventDefault();
+      setActiveTab("rooms");
+      setTimeout(() => {
+        const destIndex = Math.max(0, rooms.findIndex(r => r.id === activeRoomId));
+        const pills = listRef.current?.querySelectorAll(".ei-room-pill");
+        (pills?.[destIndex] as HTMLElement)?.focus();
+      }, 0);
+    }
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       onSelectPersona(personas[index].id);
       setExpanded(false);
     }
-  }, [personas, onSelectPersona]);
+  }, [personas, onSelectPersona, rooms, activeRoomId, setActiveTab]);
 
   const getActiveDisplayName = () => {
     const activePersona = personas.find(p => p.id === activePersonaId);
