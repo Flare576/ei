@@ -82,6 +82,7 @@ export function RoomChatPanel({
   const [showSendDropdown, setShowSendDropdown] = useState(false);
   const [isSilentMode, setIsSilentMode] = useState(false);
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+  const [navPickerMessageId, setNavPickerMessageId] = useState<string | null>(null);
 
   const personaMap = new Map(personas.map(p => [p.id, p]));
 
@@ -168,6 +169,7 @@ export function RoomChatPanel({
   useEffect(() => {
     setShowCYPPicker(false);
     setExpandedCards(new Set());
+    setNavPickerMessageId(null);
   }, [room?.id]);
 
   useEffect(() => {
@@ -256,6 +258,12 @@ export function RoomChatPanel({
     const speakerName = persona?.display_name ?? (msg.role === "human" ? "You" : "Persona");
     const avatarColor = msg.persona_id ? getAvatarColor(msg.persona_id) : "#007bff";
 
+    const siblings = isCYP && msg.parent_id !== null
+      ? allRoomMessages.filter(m => m.parent_id === msg.parent_id)
+      : [];
+    const hasBranches = siblings.length > 1;
+    const navOpen = navPickerMessageId === msg.id;
+
     return (
       <div key={msg.id} className={`ei-room-message-wrapper ${msg.role}`}>
         {msg.role === "persona" && (
@@ -277,7 +285,61 @@ export function RoomChatPanel({
             )}
           </div>
         </div>
-        <div className="ei-room-message__time">{formatTime(msg.timestamp)}</div>
+        <div className="ei-room-message__time">
+          {formatTime(msg.timestamp)}
+          {hasBranches && (
+            <span
+              className="ei-cyp-branch-badge"
+              onClick={() => setNavPickerMessageId(navOpen ? null : msg.id)}
+            >
+              ↕ {siblings.length} paths
+            </span>
+          )}
+        </div>
+        {navOpen && (
+          <div className="ei-cyp-nav-picker">
+            <div className="ei-cyp-nav-picker__title">Alternative paths from here:</div>
+            {siblings.map(sibling => {
+              const isCurrent = sibling.id === msg.id;
+              const sibPersona = sibling.persona_id ? personaMap.get(sibling.persona_id) : null;
+              const sibName = sibPersona?.display_name ?? (sibling.role === "human" ? "You" : "Persona");
+              const sibColor = sibling.persona_id ? getAvatarColor(sibling.persona_id) : "#007bff";
+              const sibText = buildRoomMessageText(sibling);
+              const preview = sibText.slice(0, EXPAND_THRESHOLD);
+              return (
+                <div key={sibling.id} className={`ei-cyp-card${isCurrent ? " ei-cyp-card--current" : ""}`}>
+                  <div className="ei-cyp-card__header">
+                    <div className="ei-cyp-card__avatar" style={{ background: sibColor }}>
+                      {getInitials(sibName)}
+                    </div>
+                    <span className="ei-cyp-card__name">{sibName}</span>
+                  </div>
+                  <div className="ei-cyp-card__preview">
+                    {preview}{preview.length < sibText.length ? "\u2026" : ""}
+                  </div>
+                  <button
+                    disabled={isCurrent}
+                    className={`ei-btn ei-btn--sm ${isCurrent ? "ei-btn--secondary" : "ei-btn--primary"}`}
+                    onClick={() => {
+                      if (!isCurrent) {
+                        onSelectCYPBranch(sibling.id);
+                        setNavPickerMessageId(null);
+                      }
+                    }}
+                  >
+                    {isCurrent ? "Current path" : "Choose this path"}
+                  </button>
+                </div>
+              );
+            })}
+            <button
+              className="ei-btn ei-btn--sm ei-btn--ghost"
+              onClick={() => setNavPickerMessageId(null)}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
       </div>
     );
   };
