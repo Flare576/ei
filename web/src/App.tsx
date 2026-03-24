@@ -28,7 +28,7 @@ import type {
   RoomCreationInput,
   } from "../../src/core/types";
 import { ContextStatus, LLMNextStep, RoomMode } from "../../src/core/types";
-import { Layout, PersonaPanel, ChatPanel, RoomChatPanel, ControlArea, HelpModal, ImagePreviewModal, type PersonaPanelHandle, type ChatPanelHandle } from "./components/Layout";
+import { Layout, PersonaPanel, ChatPanel, RoomChatPanel, ControlArea, HelpModal, ImagePreviewModal, type PersonaPanelHandle, type ChatPanelHandle, type RoomChatPanelHandle } from "./components/Layout";
 import { HumanEditor, PersonaEditor, PersonaCreatorModal, RoomCreatorModal, ArchivedPersonasModal } from "./components/EntityEditor";
 import { QuoteCaptureModal, QuoteManagementModal } from "./components/Quote";
 import { SettingsModal } from "./components/Settings";
@@ -164,14 +164,21 @@ function App() {
 
   const personaPanelRef = useRef<PersonaPanelHandle | null>(null);
   const chatPanelRef = useRef<ChatPanelHandle | null>(null);
+  const roomChatPanelRef = useRef<RoomChatPanelHandle | null>(null);
   const activeRoomIdRef = useRef<string | null>(null);
   const oneShotResolvers = useRef<Map<string, (result: string) => void>>(new Map());
   const storageRef = useRef<Storage | null>(null);
 
   useKeyboardNavigation({
     onFocusPersonaPanel: () => personaPanelRef.current?.focusPanel(),
-    onFocusInput: () => chatPanelRef.current?.focusInput(),
-    onScrollChat: (dir) => chatPanelRef.current?.scrollChat(dir),
+    onFocusInput: () => {
+      if (activeRoomId) roomChatPanelRef.current?.focusInput();
+      else chatPanelRef.current?.focusInput();
+    },
+    onScrollChat: (dir) => {
+      if (activeRoomId) roomChatPanelRef.current?.scrollChat(dir);
+      else chatPanelRef.current?.scrollChat(dir);
+    },
   });
 
   // Cleanup Blob URLs when component unmounts
@@ -469,8 +476,8 @@ function App() {
     if (!processor || !activePersonaId || !inputValue.trim()) return;
     await processor.sendMessage(activePersonaId, inputValue.trim());
     setInputValue("");
-    chatPanelRef.current?.focusInput();
-  }, [processor, activePersonaId, inputValue]);
+    if (!activeRoomId) chatPanelRef.current?.focusInput();
+  }, [processor, activePersonaId, inputValue, activeRoomId]);
 
   
 
@@ -481,8 +488,8 @@ function App() {
     }
     setActivePersonaId(personaId);
     setActiveRoomId(null);
-    chatPanelRef.current?.focusInput();
-  }, [processor, activePersonaId]);
+    if (!activeRoomId) chatPanelRef.current?.focusInput();
+  }, [processor, activePersonaId, activeRoomId]);
 
   const handleMarkMessageRead = useCallback(async (messageId: string) => {
     if (!processor || !activePersonaId) return;
@@ -1329,6 +1336,7 @@ function App() {
       centerPanel={
         activeRoomId ? (
           <RoomChatPanel
+            ref={roomChatPanelRef}
             activeRoomId={activeRoomId}
             room={activeRoom}
             activeRoomPath={activeRoomPath}

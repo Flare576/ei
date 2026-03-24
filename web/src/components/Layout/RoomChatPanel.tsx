@@ -1,7 +1,12 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
 import type { RoomEntity, RoomMessage, PersonaSummary } from "../../../../src/core/types";
 import { RoomMode } from "../../../../src/core/types";
 import { MarkdownContent } from "../Chat";
+
+export interface RoomChatPanelHandle {
+  focusInput: () => void;
+  scrollChat: (direction: "up" | "down") => void;
+}
 
 interface RoomChatPanelProps {
   activeRoomId: string | null;
@@ -60,7 +65,7 @@ function buildRoomMessageText(msg: RoomMessage): string {
   return parts.join("\n\n");
 }
 
-export function RoomChatPanel({
+export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>(function RoomChatPanel({
   activeRoomId,
   room,
   activeRoomPath,
@@ -74,10 +79,20 @@ export function RoomChatPanel({
   onRecallMessage,
   isProcessing,
   isActivating = false,
-}: RoomChatPanelProps) {
+}: RoomChatPanelProps, ref) {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useImperativeHandle(ref, () => ({
+    focusInput: () => textareaRef.current?.focus(),
+    scrollChat: (direction) => {
+      const container = messagesContainerRef.current;
+      if (!container) return;
+      const amount = container.clientHeight * 0.8;
+      container.scrollBy({ top: direction === "up" ? -amount : amount, behavior: "smooth" });
+    },
+  }));
   const [showCYPPicker, setShowCYPPicker] = useState(false);
   const [showSendDropdown, setShowSendDropdown] = useState(false);
   const [isSilentMode, setIsSilentMode] = useState(false);
@@ -564,4 +579,4 @@ export function RoomChatPanel({
       </div>
     </div>
   );
-}
+});
