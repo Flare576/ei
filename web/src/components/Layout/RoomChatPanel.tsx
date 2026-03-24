@@ -380,7 +380,7 @@ export function RoomChatPanel({
     const isLong = text.length > EXPAND_THRESHOLD;
     const isExpanded = expandedCards.has(msg.id);
     const preview = isExpanded ? text : text.slice(0, EXPAND_THRESHOLD);
-    const isExplored = !isHuman && allRoomMessages.some(m => m.parent_id === msg.id);
+    const isExplored = allRoomMessages.some(m => m.parent_id === msg.id);
 
     return (
       <div key={msg.id} className={`ei-cyp-card${isHuman ? " ei-cyp-card--human" : ""}`}>
