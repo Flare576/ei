@@ -498,7 +498,7 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
         {isFFA && ffaPendingCount > 0 && (
           <div className="ei-room-status ei-room-status--ffa">
             <span className="ei-room-status__text">
-              {ffaPendingCount} persona{ffaPendingCount !== 1 ? "s" : ""} responding\u2026
+              {ffaPendingCount} persona{ffaPendingCount !== 1 ? "s" : ""} responding…
             </span>
           </div>
         )}

@@ -127,6 +127,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
       onSetContextBoundary(null);
     } else {
       onSetContextBoundary(new Date().toISOString());
+      setTimeout(() => scrollToBottom(), 50);
     }
   };
 
@@ -472,7 +473,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
             )}
             {onCapture && (
               <button
-                className="ei-boundary-btn"
+                className="ei-boundary-btn ei-capture-btn"
                 onClick={onCapture}
                 title="Extract data from current conversation"
               >
