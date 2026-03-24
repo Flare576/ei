@@ -193,6 +193,12 @@ export function RoomChatPanel({
   }, [room?.id, scrollToBottom]);
 
   useEffect(() => {
+    if (!room?.active_node_id) return;
+    wasAtBottomRef.current = true;
+    setTimeout(() => scrollToBottom(), 50);
+  }, [room?.active_node_id, scrollToBottom]);
+
+  useEffect(() => {
     if (!showSendDropdown) return;
     const handleClick = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
