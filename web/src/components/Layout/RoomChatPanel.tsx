@@ -379,6 +379,7 @@ export function RoomChatPanel({
     const isLong = text.length > EXPAND_THRESHOLD;
     const isExpanded = expandedCards.has(msg.id);
     const preview = isExpanded ? text : text.slice(0, EXPAND_THRESHOLD);
+    const isExplored = !isHuman && allRoomMessages.some(m => m.parent_id === msg.id);
 
     return (
       <div key={msg.id} className={`ei-cyp-card${isHuman ? " ei-cyp-card--human" : ""}`}>
@@ -387,6 +388,11 @@ export function RoomChatPanel({
             {getInitials(name)}
           </div>
           <span className="ei-cyp-card__name">{name}</span>
+          {!isHuman && (
+            <span className={`ei-cyp-explored-badge ${isExplored ? "ei-cyp-explored-badge--yes" : "ei-cyp-explored-badge--no"}`}>
+              {isExplored ? "\u2713 explored" : "\u25cb unexplored"}
+            </span>
+          )}
         </div>
         <div className="ei-cyp-card__preview">
           {preview}{!isExpanded && isLong ? "…" : ""}
@@ -406,7 +412,7 @@ export function RoomChatPanel({
             setShowCYPPicker(false);
           }}
         >
-          Choose
+          {isExplored ? "Resume path" : "Choose"}
         </button>
       </div>
     );
