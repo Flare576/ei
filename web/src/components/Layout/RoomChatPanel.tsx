@@ -218,7 +218,8 @@ export function RoomChatPanel({
     } else {
       onActivateRoom();
     }
-  }, [isCYP, onActivateRoom]);
+    setTimeout(() => scrollToBottom(), 0);
+  }, [isCYP, onActivateRoom, scrollToBottom]);
 
   const canSend = isFFA
     ? (inputValue.trim().length > 0 || isSilentMode)
