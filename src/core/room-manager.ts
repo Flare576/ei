@@ -341,7 +341,54 @@ export async function selectCYPBranch(
   }
   onRoomUpdated(roomId);
   const room = sm.getRoom(roomId)!;
-  await queueRoomPersonaResponses(sm, room, isTUI, (id) => onRoomMessageQueued(id));
+  const allMessages = sm.getRoomMessages(roomId);
+
+  const alreadyAnswered = new Set(
+    allMessages
+      .filter(m => m.parent_id === messageId && m.role === "persona" && m.persona_id)
+      .map(m => m.persona_id!)
+  );
+
+  const alreadyQueued = new Set(
+    sm.queue_getAllActiveItems()
+      .filter(q =>
+        q.next_step === LLMNextStep.HandleRoomResponse &&
+        (q.data.roomId as string) === roomId &&
+        (q.data.parentMessageId as string) === messageId &&
+        (q.state === "pending" || q.state === "processing")
+      )
+      .map(q => q.data.personaId as string)
+  );
+
+  const needsQueue = room.persona_ids.filter(id =>
+    !alreadyAnswered.has(id) && !alreadyQueued.has(id)
+  );
+
+  if (needsQueue.length === 0) return;
+
+  for (const personaId of needsQueue) {
+    const persona = sm.persona_getById(personaId);
+    if (!persona || persona.is_archived || persona.is_paused) continue;
+
+    const promptOutput = await buildRoomResponsePromptData(sm, room, persona, isTUI);
+    const model = persona.model ?? sm.getHuman().settings?.default_model ?? "";
+
+    sm.queue_enqueue({
+      type: LLMRequestType.JSON,
+      priority: LLMPriority.Room,
+      system: promptOutput.system,
+      user: promptOutput.user,
+      next_step: LLMNextStep.HandleRoomResponse,
+      model,
+      data: {
+        roomId,
+        personaId,
+        personaDisplayName: persona.display_name,
+        parentMessageId: messageId,
+      },
+    });
+    onRoomMessageQueued(roomId);
+  }
 }
 
 export function archiveRoom(sm: StateManager, roomId: string): boolean {

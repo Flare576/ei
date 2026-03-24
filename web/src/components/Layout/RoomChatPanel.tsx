@@ -283,6 +283,9 @@ export function RoomChatPanel({
       : [];
     const hasBranches = siblings.length > 1;
     const navOpen = navPickerMessageId === msg.id;
+    const unexploredSiblingCount = siblings.filter(s =>
+      s.id !== msg.id && !allRoomMessages.some(m => m.parent_id === s.id)
+    ).length;
 
     return (
       <div key={msg.id} className={`ei-room-message-wrapper ${msg.role}`}>
@@ -312,7 +315,7 @@ export function RoomChatPanel({
               className="ei-cyp-branch-badge"
               onClick={() => setNavPickerMessageId(navOpen ? null : msg.id)}
             >
-              ↕ {siblings.length} paths
+              {unexploredSiblingCount > 0 ? `↕ ${unexploredSiblingCount} unexplored` : "↕ all explored"}
             </span>
           )}
         </div>
@@ -326,6 +329,7 @@ export function RoomChatPanel({
               const sibColor = sibling.persona_id ? getAvatarColor(sibling.persona_id) : "#007bff";
               const sibText = buildRoomMessageText(sibling);
               const preview = sibText.slice(0, EXPAND_THRESHOLD);
+              const siblingIsExplored = allRoomMessages.some(m => m.parent_id === sibling.id);
               return (
                 <div key={sibling.id} className={`ei-cyp-card${isCurrent ? " ei-cyp-card--current" : ""}`}>
                   <div className="ei-cyp-card__header">
@@ -333,6 +337,9 @@ export function RoomChatPanel({
                       {getInitials(sibName)}
                     </div>
                     <span className="ei-cyp-card__name">{sibName}</span>
+                    <span className={`ei-cyp-explored-badge ${siblingIsExplored ? "ei-cyp-explored-badge--yes" : "ei-cyp-explored-badge--no"}`}>
+                      {siblingIsExplored ? "\u2713 explored" : "\u25cb unexplored"}
+                    </span>
                   </div>
                   <div className="ei-cyp-card__preview">
                     {preview}{preview.length < sibText.length ? "\u2026" : ""}
@@ -347,7 +354,7 @@ export function RoomChatPanel({
                       }
                     }}
                   >
-                    {isCurrent ? "Current path" : "Choose this path"}
+                    {isCurrent ? "Current path" : siblingIsExplored ? "Return to this path" : "Choose this path"}
                   </button>
                 </div>
               );

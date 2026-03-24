@@ -394,6 +394,20 @@
   line-height: 1.4;
 }
 
+.ei-cyp-explored-badge {
+  font-size: 0.72em;
+  margin-left: 6px;
+  opacity: 0.7;
+}
+
+.ei-cyp-explored-badge--yes {
+  color: #28a745;
+}
+
+.ei-cyp-explored-badge--no {
+  color: #6c757d;
+}
+
 .ei-cyp-branch-badge {
   font-size: 0.75em;
   opacity: 0.6;
