@@ -783,6 +783,7 @@ export class StateManager {
   restoreFromState(state: StorageState): void {
     this.humanState.load(state.human);
     this.personaState.load(state.personas);
+    this.roomState.load(state.rooms);
     this.queueState.load(state.queue);
     this.providers = state.providers ?? [];
     this.tools = state.tools ?? [];
