@@ -863,6 +863,7 @@ export class Processor {
 
 const toolNextSteps = new Set([
   LLMNextStep.HandlePersonaResponse,
+  LLMNextStep.HandleRoomResponse,
   LLMNextStep.HandleHeartbeatCheck,
   LLMNextStep.HandleEiHeartbeat,
   LLMNextStep.HandleToolContinuation,
