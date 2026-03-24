@@ -157,22 +157,26 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
   }, []);
 
   const [showScrollButton, setShowScrollButton] = useState(false);
+  const wasAtBottomRef = useRef(true);
 
   const handleContainerScroll = useCallback(() => {
-    setShowScrollButton(!isNearBottom());
+    const near = isNearBottom();
+    wasAtBottomRef.current = near;
+    setShowScrollButton(!near);
   }, [isNearBottom]);
 
   const prevMessageCount = useRef(0);
   useEffect(() => {
     const count = messages.length;
     if (count !== prevMessageCount.current) {
-      if (isNearBottom()) scrollToBottom();
+      if (wasAtBottomRef.current) scrollToBottom();
       prevMessageCount.current = count;
     }
-  }, [messages.length, isNearBottom, scrollToBottom]);
+  }, [messages.length, scrollToBottom]);
 
   useEffect(() => {
     setShowScrollButton(false);
+    wasAtBottomRef.current = true;
     scrollToBottom();
   }, [activePersonaId, scrollToBottom]);
 

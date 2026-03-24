@@ -159,18 +159,22 @@ export function RoomChatPanel({
     return c.scrollHeight - c.scrollTop - c.clientHeight <= SCROLL_THRESHOLD;
   }, []);
 
+  const wasAtBottomRef = useRef(true);
+
   const handleContainerScroll = useCallback(() => {
-    setShowScrollButton(!isNearBottom());
+    const near = isNearBottom();
+    wasAtBottomRef.current = near;
+    setShowScrollButton(!near);
   }, [isNearBottom]);
 
   const prevMessageCount = useRef(0);
   useEffect(() => {
     const count = displayMessages.length;
     if (count !== prevMessageCount.current) {
-      if (isNearBottom()) scrollToBottom();
+      if (wasAtBottomRef.current) scrollToBottom();
       prevMessageCount.current = count;
     }
-  }, [displayMessages.length, isNearBottom, scrollToBottom]);
+  }, [displayMessages.length, scrollToBottom]);
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -184,6 +188,7 @@ export function RoomChatPanel({
     setExpandedCards(new Set());
     setNavPickerMessageId(null);
     setShowScrollButton(false);
+    wasAtBottomRef.current = true;
     scrollToBottom();
   }, [room?.id, scrollToBottom]);
 
