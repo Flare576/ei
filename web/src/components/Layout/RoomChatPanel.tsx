@@ -389,7 +389,7 @@ export function RoomChatPanel({
             {getInitials(name)}
           </div>
           <span className="ei-cyp-card__name">{name}</span>
-          {!isHuman && (
+          {(
             <span className={`ei-cyp-explored-badge ${isExplored ? "ei-cyp-explored-badge--yes" : "ei-cyp-explored-badge--no"}`}>
               {isExplored ? "\u2713 explored" : "\u25cb unexplored"}
             </span>
