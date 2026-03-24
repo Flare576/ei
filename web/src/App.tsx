@@ -118,6 +118,7 @@ function App() {
   const [showPersonaEditor, setShowPersonaEditor] = useState(false);
   const [showPersonaCreator, setShowPersonaCreator] = useState(false);
   const [showArchivedPersonas, setShowArchivedPersonas] = useState(false);
+  const [showArchivedRooms, setShowArchivedRooms] = useState(false);
   const [editingPersonaId, setEditingPersonaId] = useState<string | null>(null);
   const [human, setHuman] = useState<HumanEntity | null>(null);
   const [editingPersona, setEditingPersona] = useState<PersonaEntity | null>(null);
@@ -1302,6 +1303,7 @@ function App() {
           onSelectRoom={handleSelectRoom}
           onCreateRoom={() => setShowRoomCreator(true)}
           onArchiveRoom={handleArchiveRoom}
+          onShowArchivedRooms={() => setShowArchivedRooms(true)}
         />
       }
       centerPanel={
@@ -1453,6 +1455,16 @@ function App() {
       toolProviders={toolProviders}
       toolDefinitions={toolDefinitions}
     />
+
+    {showArchivedRooms && (
+      <div className="ei-modal-overlay" onClick={() => setShowArchivedRooms(false)}>
+        <div className="ei-modal" onClick={e => e.stopPropagation()}>
+          <h3>Archived Rooms</h3>
+          <p>No archived rooms yet.</p>
+          <button className="ei-btn ei-btn--secondary" onClick={() => setShowArchivedRooms(false)}>Close</button>
+        </div>
+      </div>
+    )}
 
     <ArchivedPersonasModal
        isOpen={showArchivedPersonas}

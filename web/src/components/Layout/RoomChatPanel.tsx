@@ -269,7 +269,7 @@ export function RoomChatPanel({
     const persona = msg.persona_id ? personaMap.get(msg.persona_id) : null;
     const name = isHuman ? "You" : (persona?.display_name ?? "Persona");
     const color = isHuman ? "#007bff" : (msg.persona_id ? getAvatarColor(msg.persona_id) : "#6c757d");
-    const text = isHuman ? inputValue : buildRoomMessageText(msg);
+    const text = buildRoomMessageText(msg);
     const isLong = text.length > EXPAND_THRESHOLD;
     const isExpanded = expandedCards.has(msg.id);
     const preview = isExpanded ? text : text.slice(0, EXPAND_THRESHOLD);
@@ -296,13 +296,8 @@ export function RoomChatPanel({
         <button
           className={`ei-btn ei-btn--sm ${isHuman ? "ei-btn--secondary" : "ei-btn--primary"}`}
           onClick={() => {
-            if (isHuman) {
-              onActivateRoom();
-              setShowCYPPicker(false);
-            } else {
-              onSelectCYPBranch(msg.id);
-              setShowCYPPicker(false);
-            }
+            onSelectCYPBranch(msg.id);
+            setShowCYPPicker(false);
           }}
         >
           Choose
@@ -347,7 +342,7 @@ export function RoomChatPanel({
                 return (
                   <div key={id} className="ei-room-thinking__item">
                     <span className="ei-room-thinking__spinner">⟳</span>
-                    {name} is thinking\u2026
+                    {name} is thinking…
                   </div>
                 );
               })}
