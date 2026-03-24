@@ -69,14 +69,21 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
 
   useImperativeHandle(ref, () => ({
     focusPanel: () => {
-      const currentIndex = personas.findIndex(p => p.id === activePersonaId);
-      const index = currentIndex >= 0 ? currentIndex : 0;
-      setFocusedIndex(index);
-      const pills = listRef.current?.querySelectorAll(".ei-persona-pill");
-      const pill = pills?.[index] as HTMLElement | undefined;
-      pill?.focus();
+      if (activeTab === "rooms") {
+        const pills = listRef.current?.querySelectorAll(".ei-room-pill");
+        const index = Math.max(0, rooms.findIndex(r => r.id === activeRoomId));
+        const pill = pills?.[index] as HTMLElement | undefined;
+        pill?.focus();
+      } else {
+        const currentIndex = personas.findIndex(p => p.id === activePersonaId);
+        const index = currentIndex >= 0 ? currentIndex : 0;
+        setFocusedIndex(index);
+        const pills = listRef.current?.querySelectorAll(".ei-persona-pill");
+        const pill = pills?.[index] as HTMLElement | undefined;
+        pill?.focus();
+      }
     },
-  }));
+  }), [activeTab, rooms, activeRoomId, personas, activePersonaId]);
 
   useEffect(() => {
     if (toast) {

@@ -205,6 +205,7 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
     setShowScrollButton(false);
     wasAtBottomRef.current = true;
     scrollToBottom();
+    textareaRef.current?.focus();
   }, [room?.id, scrollToBottom]);
 
   useEffect(() => {
