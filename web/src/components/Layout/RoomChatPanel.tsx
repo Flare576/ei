@@ -57,8 +57,13 @@ function formatTime(timestamp: string): string {
   return new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-function buildRoomMessageText(msg: RoomMessage): string {
-  if (msg.silence_reason) return `_[chose not to respond: ${msg.silence_reason}]_`;
+function buildRoomMessageText(msg: RoomMessage, judgePersonaId?: string): string {
+  if (msg.silence_reason) {
+    const label = judgePersonaId && msg.persona_id === judgePersonaId
+      ? "verdict:"
+      : "chose not to respond:";
+    return `_[${label} ${msg.silence_reason}]_`;
+  }
   const parts: string[] = [];
   if (msg.action_response) parts.push(`_${msg.action_response}_`);
   if (msg.verbal_response) parts.push(msg.verbal_response);
@@ -324,10 +329,12 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
           <div className="ei-room-message__bubble">
             {msg.silence_reason !== undefined ? (
               <span className="ei-room-message__silence">
-                [{speakerName} chose not to respond: {msg.silence_reason}]
+                {msg.persona_id && msg.persona_id === room?.judge_persona_id
+                  ? `[${speakerName}'s verdict: ${msg.silence_reason}]`
+                  : `[${speakerName} chose not to respond: ${msg.silence_reason}]`}
               </span>
             ) : (
-              <MarkdownContent content={buildRoomMessageText(msg)} />
+              <MarkdownContent content={buildRoomMessageText(msg, room?.judge_persona_id)} />
             )}
           </div>
         </div>
@@ -350,7 +357,7 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
               const sibPersona = sibling.persona_id ? personaMap.get(sibling.persona_id) : null;
               const sibName = sibPersona?.display_name ?? (sibling.role === "human" ? "You" : "Persona");
               const sibColor = sibling.persona_id ? getAvatarColor(sibling.persona_id) : "#007bff";
-              const sibText = buildRoomMessageText(sibling);
+              const sibText = buildRoomMessageText(sibling, room?.judge_persona_id);
               const preview = sibText.slice(0, EXPAND_THRESHOLD);
               const siblingIsExplored = allRoomMessages.some(m => m.parent_id === sibling.id);
               return (
@@ -398,7 +405,7 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
     const persona = msg.persona_id ? personaMap.get(msg.persona_id) : null;
     const name = isHuman ? "You" : (persona?.display_name ?? "Persona");
     const color = isHuman ? "#007bff" : (msg.persona_id ? getAvatarColor(msg.persona_id) : "#6c757d");
-    const text = buildRoomMessageText(msg);
+    const text = buildRoomMessageText(msg, room?.judge_persona_id);
     const isLong = text.length > EXPAND_THRESHOLD;
     const isExpanded = expandedCards.has(msg.id);
     const preview = isExpanded ? text : text.slice(0, EXPAND_THRESHOLD);
