@@ -375,10 +375,11 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
                     {preview}{preview.length < sibText.length ? "\u2026" : ""}
                   </div>
                   <button
-                    disabled={isCurrent}
                     className={`ei-btn ei-btn--sm ${isCurrent ? "ei-btn--secondary" : "ei-btn--primary"}`}
                     onClick={() => {
-                      if (!isCurrent) {
+                      if (isCurrent) {
+                        setNavPickerMessageId(null);
+                      } else {
                         onSelectCYPBranch(sibling.id);
                         setNavPickerMessageId(null);
                       }
