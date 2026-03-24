@@ -144,6 +144,25 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
     e.stopPropagation();
   };
 
+  const handleRoomPillKeyDown = useCallback((e: React.KeyboardEvent, index: number) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const newIndex = Math.min(index + 1, rooms.length - 1);
+      const pills = listRef.current?.querySelectorAll(".ei-room-pill");
+      (pills?.[newIndex] as HTMLElement)?.focus();
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const newIndex = Math.max(index - 1, 0);
+      const pills = listRef.current?.querySelectorAll(".ei-room-pill");
+      (pills?.[newIndex] as HTMLElement)?.focus();
+    }
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onSelectRoom?.(rooms[index].id);
+    }
+  }, [rooms, onSelectRoom]);
+
   const handlePillKeyDown = useCallback((e: React.KeyboardEvent, index: number) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -330,12 +349,7 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
                 onMouseLeave={() => setHoveredRoomId(null)}
                 tabIndex={0}
                 role="button"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    onSelectRoom?.(room.id);
-                  }
-                }}
+                 onKeyDown={(e) => handleRoomPillKeyDown(e, index)}
               >
                 <div className="ei-room-pill__avatar">
                   {getInitials(room.display_name)}
