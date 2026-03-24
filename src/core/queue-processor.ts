@@ -168,7 +168,12 @@ export class QueueProcessor {
       );
       const totalCalls = { count: (request.data.totalCallCount as number | undefined) ?? 0 };
 
-      const activeTools = this.currentTools ?? [];
+      // Restore exhausted tool names from previous iterations and filter them out
+      // so the LLM doesn't keep calling tools that have hit their per-interaction limit.
+      const priorExhausted = new Set<string>(
+        (request.data.exhaustedToolNames as string[] | undefined) ?? []
+      );
+      const activeTools = (this.currentTools ?? []).filter(t => !priorExhausted.has(t.name));
       const openAITools = activeTools.length > 0 ? toOpenAITools(activeTools) : [];
 
       const { content, finishReason, rawToolCalls, assistantMessage, thinking } = await callLLMRaw(
@@ -192,7 +197,7 @@ export class QueueProcessor {
             appendedHistory.push(assistantMessage as unknown as LLMHistoryMessage);
           }
 
-          const { results } = await executeToolCalls(toolCalls, activeTools, callCounts, totalCalls, this.currentOnProviderConfigUpdate);
+          const { results, exhaustedToolNames } = await executeToolCalls(toolCalls, activeTools, callCounts, totalCalls, this.currentOnProviderConfigUpdate);
           for (const result of results) {
             appendedHistory.push({
               role: "tool",
@@ -202,6 +207,7 @@ export class QueueProcessor {
             });
           }
 
+          const mergedExhausted = new Set([...priorExhausted, ...exhaustedToolNames]);
           const newHistory = [...(rawHistory ?? []), ...appendedHistory];
           console.log(`[QueueProcessor] HandleToolContinuation: ${results.length} more tool result(s). Re-enqueueing.`);
 
@@ -218,6 +224,7 @@ export class QueueProcessor {
                 toolHistory: newHistory,
                 toolCallCounts: [...callCounts.entries()],
                 totalCallCount: totalCalls.count,
+                exhaustedToolNames: [...mergedExhausted],
               },
             });
           } else {
