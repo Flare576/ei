@@ -27,7 +27,7 @@ import type {
   RoomMessage,
   RoomCreationInput,
   } from "../../src/core/types";
-import { ContextStatus } from "../../src/core/types";
+import { ContextStatus, LLMNextStep } from "../../src/core/types";
 import { Layout, PersonaPanel, ChatPanel, RoomChatPanel, ControlArea, HelpModal, ImagePreviewModal, type PersonaPanelHandle, type ChatPanelHandle } from "./components/Layout";
 import { HumanEditor, PersonaEditor, PersonaCreatorModal, RoomCreatorModal, ArchivedPersonasModal } from "./components/EntityEditor";
 import { QuoteCaptureModal, QuoteManagementModal } from "./components/Quote";
@@ -152,6 +152,13 @@ function App() {
   const [activeRoomPath, setActiveRoomPath] = useState<RoomMessage[]>([]);
   const [processingRoomId, setProcessingRoomId] = useState<string | null>(null);
   const [roomActivating, setRoomActivating] = useState(false);
+  const refreshRoomActivating = useCallback((roomId: string) => {
+    const pending = processorRef.current?.getQueueActiveItems().some(
+      item => item.next_step === LLMNextStep.HandleRoomJudge &&
+              (item.data.roomId as string) === roomId
+    ) ?? false;
+    setRoomActivating(pending);
+  }, []);
   const [showRoomCreator, setShowRoomCreator] = useState(false);
   const [roomInputValue, setRoomInputValue] = useState("");
 
@@ -249,6 +256,7 @@ function App() {
           setProcessingRoomId(null);
         }
         processorRef.current?.getQueueStatus().then(setQueueStatus);
+        if (activeRoomIdRef.current) refreshRoomActivating(activeRoomIdRef.current);
       },
       onError: (error) => {
         console.error(`[EI Error] ${error.code}: ${error.message}`);
@@ -333,7 +341,6 @@ function App() {
       onRoomUpdated: (roomId) => {
         setRooms(processorRef.current?.getRoomList() ?? []);
         if (roomId === activeRoomIdRef.current) {
-          setRoomActivating(false);
           const room = processorRef.current?.getRoom(roomId);
           setActiveRoom(room ?? null);
           setRoomMessages(processorRef.current?.getRoomMessages(roomId) ?? []);
@@ -743,8 +750,8 @@ function App() {
       await processor.markAllRoomMessagesRead(activeRoomId);
     }
     setActivePersonaId(null);
-    setRoomActivating(false);
     setActiveRoomId(roomId);
+    refreshRoomActivating(roomId);
     if (processor) {
       const room = processor.getRoom(roomId);
       setActiveRoom(room ?? null);
@@ -790,8 +797,8 @@ function App() {
 
   const handleActivateRoom = useCallback(async () => {
     if (!activeRoomId || !processorRef.current) return;
-    setRoomActivating(true);
     await processorRef.current.activateRoom(activeRoomId);
+    refreshRoomActivating(activeRoomId);
     const updatedRoom = processorRef.current.getRoom(activeRoomId);
     if (updatedRoom) setActiveRoom(updatedRoom);
     setRoomMessages(processorRef.current.getRoomMessages(activeRoomId));
