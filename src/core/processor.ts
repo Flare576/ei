@@ -116,6 +116,7 @@ import {
   activateRoom,
   selectCYPBranch,
   archiveRoom,
+  unarchiveRoom,
   deleteRoom,
   markAllRoomMessagesRead,
 } from "./room-manager.js";
@@ -1798,6 +1799,11 @@ const toolNextSteps = new Set([
   async archiveRoom(roomId: string): Promise<void> {
     const ok = archiveRoom(this.stateManager, roomId);
     if (ok) this.interface.onRoomRemoved?.();
+  }
+
+  async unarchiveRoom(roomId: string): Promise<void> {
+    const ok = unarchiveRoom(this.stateManager, roomId);
+    if (ok) this.interface.onRoomAdded?.();
   }
 
   async deleteRoom(roomId: string): Promise<void> {

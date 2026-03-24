@@ -29,7 +29,7 @@ import type {
   } from "../../src/core/types";
 import { ContextStatus, LLMNextStep, RoomMode } from "../../src/core/types";
 import { Layout, PersonaPanel, ChatPanel, RoomChatPanel, ControlArea, HelpModal, ImagePreviewModal, type PersonaPanelHandle, type ChatPanelHandle, type RoomChatPanelHandle } from "./components/Layout";
-import { HumanEditor, PersonaEditor, PersonaCreatorModal, RoomCreatorModal, ArchivedPersonasModal } from "./components/EntityEditor";
+import { HumanEditor, PersonaEditor, PersonaCreatorModal, RoomCreatorModal, ArchivedPersonasModal, ArchivedRoomsModal } from "./components/EntityEditor";
 import { QuoteCaptureModal, QuoteManagementModal } from "./components/Quote";
 import { SettingsModal } from "./components/Settings";
 import { MessageSelectorModal } from "./components/Modals/MessageSelectorModal";
@@ -795,6 +795,18 @@ function App() {
     }
   }, [processor, activeRoomId]);
 
+  const handleUnarchiveRoom = useCallback(async (roomId: string) => {
+    if (!processor) return;
+    await processor.unarchiveRoom(roomId);
+    setRooms(processor.getRoomList());
+  }, [processor]);
+
+  const handleDeleteArchivedRoom = useCallback(async (roomId: string) => {
+    if (!processor) return;
+    await processor.deleteRoom(roomId);
+    setRooms(processor.getRoomList());
+  }, [processor]);
+
   const handleSubmitHumanRoomMessage = useCallback(async (content: string | null, silenceReason?: string) => {
     if (!activeRoomId || !processorRef.current) return;
     const currentRoom = processorRef.current.getRoom(activeRoomId);
@@ -1485,15 +1497,14 @@ function App() {
       toolDefinitions={toolDefinitions}
     />
 
-    {showArchivedRooms && (
-      <div className="ei-modal-overlay" onClick={() => setShowArchivedRooms(false)}>
-        <div className="ei-modal" onClick={e => e.stopPropagation()}>
-          <h3>Archived Rooms</h3>
-          <p>No archived rooms yet.</p>
-          <button className="ei-btn ei-btn--secondary" onClick={() => setShowArchivedRooms(false)}>Close</button>
-        </div>
-      </div>
-    )}
+    <ArchivedRoomsModal
+      isOpen={showArchivedRooms}
+      onClose={() => setShowArchivedRooms(false)}
+      archivedRooms={processor ? processor.getRoomList(true).filter(r => r.is_archived) : []}
+      personas={personas}
+      onUnarchive={handleUnarchiveRoom}
+      onDelete={handleDeleteArchivedRoom}
+    />
 
     <ArchivedPersonasModal
        isOpen={showArchivedPersonas}

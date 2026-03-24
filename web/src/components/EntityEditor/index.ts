@@ -7,5 +7,6 @@ export { PersonaEditor } from './PersonaEditor';
 export { PersonaCreatorModal } from './PersonaCreatorModal';
 export { RoomCreatorModal } from './RoomCreatorModal';
 export { ArchivedPersonasModal } from './ArchivedPersonasModal';
+export { ArchivedRoomsModal } from './ArchivedRoomsModal';
 export { ContextStatus } from '../../../../src/core/types';
 export type { Message } from '../../../../src/core/types';

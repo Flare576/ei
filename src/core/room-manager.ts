@@ -395,6 +395,10 @@ export function archiveRoom(sm: StateManager, roomId: string): boolean {
   return sm.archiveRoom(roomId);
 }
 
+export function unarchiveRoom(sm: StateManager, roomId: string): boolean {
+  return sm.updateRoom(roomId, { is_archived: false });
+}
+
 export function deleteRoom(sm: StateManager, roomId: string): boolean {
   return sm.deleteRoom(roomId);
 }
