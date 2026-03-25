@@ -1614,6 +1614,11 @@ const toolNextSteps = new Set([
     if (ok) this.interface.onPersonaUpdated?.(personaId);
   }
 
+  async updateRoom(roomId: string, updates: Partial<RoomEntity>): Promise<void> {
+    const ok = this.stateManager.updateRoom(roomId, updates);
+    if (ok) this.interface.onRoomUpdated?.(roomId);
+  }
+
   async getGroupList(): Promise<string[]> {
     return getGroupList(this.stateManager);
   }
@@ -1645,7 +1650,7 @@ const toolNextSteps = new Set([
     );
   }
 
-  async sendMessage(personaId: string, content: string): Promise<void> {
+  async sendMessage(personaId: string, content: string | null, silenceReason?: string): Promise<void> {
     return sendMessage(
       this.stateManager,
       this.queueProcessor,
@@ -1656,7 +1661,8 @@ const toolNextSteps = new Set([
       (id) => getModelForPersona(this.stateManager, id),
       (err) => this.interface.onError?.(err),
       (id) => this.interface.onMessageAdded?.(id),
-      (id) => this.interface.onMessageQueued?.(id)
+      (id) => this.interface.onMessageQueued?.(id),
+      silenceReason
     );
   }
 
