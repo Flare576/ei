@@ -153,7 +153,7 @@ export const KeyboardProvider: ParentComponent = (props) => {
     }
 
 
-    if (event.name === "up" && !overlayActive() && !event.ctrl && !event.shift && !event.meta) {
+    if (event.name === "up" && !overlayActive() && !activeRoomId() && !event.ctrl && !event.shift && !event.meta) {
       if (!textareaRef) return;
       const cursor = textareaRef.logicalCursor;
       // Only intercept when cursor is at the very beginning (row 0, col 0)
@@ -190,7 +190,7 @@ export const KeyboardProvider: ParentComponent = (props) => {
       return;
     }
 
-    if (event.name === "down" && !overlayActive() && !event.ctrl && !event.shift && !event.meta) {
+    if (event.name === "down" && !overlayActive() && !activeRoomId() && !event.ctrl && !event.shift && !event.meta) {
       if (!textareaRef || historyIndex === -1) return;
       // Only intercept when cursor is at the very end
       if (textareaRef.cursorOffset !== textareaRef.plainText.length) return;
