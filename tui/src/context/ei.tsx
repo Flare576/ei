@@ -6,6 +6,7 @@ import {
   Match,
   Switch,
   createSignal,
+  createMemo,
   type ParentComponent,
 } from "solid-js";
 import { createStore } from "solid-js/store";
@@ -34,6 +35,7 @@ import type {
   LLMRequest,
 } from "../../../src/core/types.js";
 import type { ToolProvider, ToolDefinition } from "../../../src/core/types.js";
+import type { RoomSummary, RoomEntity, RoomMessage, RoomCreationInput } from "../../../src/core/types.js";
 
 interface EiStore {
   ready: boolean;
@@ -43,6 +45,11 @@ interface EiStore {
   messages: Message[];
   queueStatus: QueueStatus;
   notification: { message: string; level: "error" | "warn" | "info" } | null;
+  rooms: RoomSummary[];
+  activeRoomId: string | null;
+  roomMessages: RoomMessage[];
+  roomActivePath: RoomMessage[];
+  isRoomProcessing: boolean;
 }
 
 export interface EiContextValue {
@@ -108,6 +115,28 @@ export interface EiContextValue {
   updateTool: (id: string, updates: Partial<Omit<ToolDefinition, 'id' | 'created_at'>>) => Promise<boolean>;
   queueUserDedup: (itemType: "topic" | "person", entityIds: string[]) => void;
   cleanupTimers: () => void;
+  rooms: () => RoomSummary[];
+  activeRoomId: () => string | null;
+  roomMessages: () => RoomMessage[];
+  roomActivePath: () => RoomMessage[];
+  isRoomProcessing: () => boolean;
+  selectRoom: (roomId: string) => void;
+  resolveRoomName: (nameOrAlias: string) => string | null;
+  getRoom: (roomId: string) => RoomEntity | null;
+  createRoom: (input: RoomCreationInput) => Promise<string>;
+  updateRoom: (roomId: string, updates: Partial<RoomEntity>) => Promise<void>;
+  archiveRoom: (roomId: string) => Promise<void>;
+  deleteRoom: (roomId: string) => Promise<void>;
+  sendFfaMessage: (content: string | null, silenceReason?: string) => Promise<void>;
+  submitHumanRoomMessage: (content: string | null, silenceReason?: string) => string | null;
+  recallHumanRoomMessage: () => boolean;
+  activateRoom: () => Promise<void>;
+  selectCYPBranch: (messageId: string) => Promise<void>;
+  markAllRoomMessagesRead: () => Promise<number>;
+  captureRoom: () => void;
+  capturePersona: () => void;
+  sendSilenceMessage: (silenceReason?: string) => Promise<void>;
+  humanRoomMessagePending: () => boolean;
 }
 const EiContext = createContext<EiContextValue>();
 
@@ -120,6 +149,11 @@ export const EiProvider: ParentComponent = (props) => {
     messages: [],
     queueStatus: { state: "idle", pending_count: 0, dlq_count: 0 },
     notification: null,
+    rooms: [],
+    activeRoomId: null,
+    roomMessages: [],
+    roomActivePath: [],
+    isRoomProcessing: false,
   });
 
   const [contextBoundarySignal, setContextBoundarySignal] = createSignal<string | undefined>(undefined);
@@ -173,6 +207,7 @@ export const EiProvider: ParentComponent = (props) => {
   };
 
   const selectPersona = (personaId: string) => {
+    setStore("activeRoomId", null);
     // Mark previous persona as read ONLY if we dwelled there 5+ seconds
     const previousId = store.activePersonaId;
     if (previousId && previousId === dwelledPersona && processor) {
@@ -456,7 +491,163 @@ export const EiProvider: ParentComponent = (props) => {
     return processor.searchHumanData(query, options);
   };
 
-  // Post-start initialization: refresh UI state, select first persona, detect LLM
+  const refreshRooms = async () => {
+    if (!processor) return;
+    const list = processor.getRoomList();
+    setStore("rooms", list);
+  };
+
+  const refreshRoomMessages = async () => {
+    if (!processor) return;
+    const currentRoomId = store.activeRoomId;
+    if (!currentRoomId) return;
+    const msgs = processor.getRoomMessages(currentRoomId);
+    setStore("roomMessages", [...msgs]);
+  };
+
+  const refreshRoomActivePath = () => {
+    if (!processor) return;
+    const roomId = store.activeRoomId;
+    if (!roomId) return;
+    const path = processor.getRoomActivePath(roomId);
+    setStore("roomActivePath", [...path]);
+  };
+
+  const selectRoom = (roomId: string) => {
+    setStore("activeRoomId", roomId);
+    setStore("roomMessages", []);
+    setStore("roomActivePath", []);
+    setStore("isRoomProcessing", false);
+    if (processor) {
+      const msgs = processor.getRoomMessages(roomId);
+      setStore("roomMessages", [...msgs]);
+      refreshRoomActivePath();
+      if (readTimer) clearTimeout(readTimer);
+      readTimer = setTimeout(async () => {
+        if (store.activeRoomId === roomId && processor) {
+          await processor.markAllRoomMessagesRead(roomId);
+          await refreshRooms();
+        }
+        readTimer = null;
+      }, 5000);
+    }
+  };
+
+  const sendFfaMessage = async (content: string | null, silenceReason?: string) => {
+    const roomId = store.activeRoomId;
+    if (!roomId || !processor) return;
+    await processor.sendFfaMessage(roomId, content, silenceReason);
+    await refreshRooms();
+  };
+
+  const submitHumanRoomMessage = (content: string | null, silenceReason?: string): string | null => {
+    const roomId = store.activeRoomId;
+    if (!roomId || !processor) return null;
+    const msgId = processor.submitHumanRoomMessage(roomId, content, silenceReason);
+    void refreshRoomMessages();
+    return msgId;
+  };
+
+  const recallHumanRoomMessage = (): boolean => {
+    const roomId = store.activeRoomId;
+    if (!roomId || !processor) return false;
+    const recalled = processor.recallHumanRoomMessage(roomId);
+    void refreshRoomMessages();
+    return recalled;
+  };
+
+  const activateRoom = async () => {
+    const roomId = store.activeRoomId;
+    if (!roomId || !processor) return;
+    await processor.activateRoom(roomId);
+    void refreshRoomMessages();
+    refreshRoomActivePath();
+    void refreshRooms();
+  };
+
+  const selectCYPBranch = async (messageId: string) => {
+    const roomId = store.activeRoomId;
+    if (!roomId || !processor) return;
+    await processor.selectCYPBranch(roomId, messageId);
+    void refreshRoomMessages();
+    refreshRoomActivePath();
+    void refreshRooms();
+  };
+
+  const createRoom = async (input: RoomCreationInput): Promise<string> => {
+    if (!processor) return "";
+    const roomId = await processor.createRoom(input);
+    await refreshRooms();
+    selectRoom(roomId);
+    return roomId;
+  };
+
+  const updateRoom = async (roomId: string, updates: Partial<RoomEntity>) => {
+    if (!processor) return;
+    await processor.updateRoom(roomId, updates);
+    await refreshRooms();
+    if (roomId === store.activeRoomId) await refreshRoomMessages();
+  };
+
+  const archiveRoom = async (roomId: string) => {
+    if (!processor) return;
+    await processor.archiveRoom(roomId);
+    if (store.activeRoomId === roomId) setStore("activeRoomId", null);
+    await refreshRooms();
+  };
+
+  const deleteRoom = async (roomId: string) => {
+    if (!processor) return;
+    await processor.deleteRoom(roomId);
+    if (store.activeRoomId === roomId) setStore("activeRoomId", null);
+    await refreshRooms();
+  };
+
+  const markAllRoomMessagesRead = async (): Promise<number> => {
+    const roomId = store.activeRoomId;
+    if (!roomId || !processor) return 0;
+    const count = await processor.markAllRoomMessagesRead(roomId);
+    await refreshRooms();
+    return count;
+  };
+
+  const captureRoom = () => {
+    const roomId = store.activeRoomId;
+    if (!roomId || !processor) return;
+    processor.captureRoom(roomId);
+  };
+
+  const capturePersona = () => {
+    const personaId = store.activePersonaId;
+    if (!personaId || !processor) return;
+    processor.capturePersona(personaId);
+  };
+
+  const resolveRoomName = (nameOrAlias: string): string | null => {
+    if (!processor) return null;
+    return processor.resolveRoomName(nameOrAlias);
+  };
+
+  const getRoom = (roomId: string): RoomEntity | null => {
+    if (!processor) return null;
+    return processor.getRoom(roomId);
+  };
+
+  const humanRoomMessagePending = createMemo(() => {
+    const roomId = store.activeRoomId;
+    if (!roomId) return false;
+    const roomSummary = store.rooms.find(r => r.id === roomId);
+    if (!roomSummary?.active_node_id) return false;
+    return store.roomMessages.some(m => m.parent_id === roomSummary.active_node_id && m.role === "human");
+  });
+
+  const sendSilenceMessage = async (silenceReason?: string) => {
+    const currentId = store.activePersonaId;
+    if (!currentId || !processor) return;
+    await processor.sendMessage(currentId, null, silenceReason);
+    await refreshPersonas();
+  };
+
   async function finishBootstrap() {
     if (!processor) return;
 
@@ -474,6 +665,7 @@ export const EiProvider: ParentComponent = (props) => {
       }
     }
     await refreshPersonas();
+    await refreshRooms();
     logger.debug(`refreshPersonas done, count: ${store.personas.length}`);
     const status = await processor.getQueueStatus();
     logger.debug("Initial getQueueStatus:", status);
@@ -589,6 +781,29 @@ export const EiProvider: ParentComponent = (props) => {
           logger.info("State conflict detected, waiting for user resolution");
           setConflictData(data);
         },
+        onRoomAdded: () => void refreshRooms(),
+        onRoomRemoved: () => void refreshRooms(),
+        onRoomUpdated: (roomId) => {
+          void refreshRooms();
+          if (roomId === store.activeRoomId) {
+            void refreshRoomMessages();
+            refreshRoomActivePath();
+          }
+        },
+        onRoomMessageAdded: (roomId) => {
+          void refreshRooms();
+          if (roomId === store.activeRoomId) {
+            void refreshRoomMessages();
+            refreshRoomActivePath();
+            setStore("isRoomProcessing", false);
+          }
+        },
+        onRoomMessageQueued: () => {
+          void refreshRooms();
+        },
+        onRoomMessageProcessing: (roomId) => {
+          if (roomId === store.activeRoomId) setStore("isRoomProcessing", true);
+        },
       };
       processor = new Processor(eiInterface);
       logger.debug("Processor created, calling start()");
@@ -671,6 +886,28 @@ export const EiProvider: ParentComponent = (props) => {
     updateTool,
     queueUserDedup,
     cleanupTimers,
+    rooms: () => store.rooms,
+    activeRoomId: () => store.activeRoomId,
+    roomMessages: () => store.roomMessages,
+    roomActivePath: () => store.roomActivePath,
+    isRoomProcessing: () => store.isRoomProcessing,
+    selectRoom,
+    resolveRoomName,
+    getRoom,
+    createRoom,
+    updateRoom,
+    archiveRoom,
+    deleteRoom,
+    sendFfaMessage,
+    submitHumanRoomMessage,
+    recallHumanRoomMessage,
+    activateRoom,
+    selectCYPBranch,
+    markAllRoomMessagesRead,
+    captureRoom,
+    capturePersona,
+    sendSilenceMessage,
+    humanRoomMessagePending,
   };
   return (
     <Switch>
