@@ -51,6 +51,11 @@ export function RoomMessageList() {
     if (activeRoom()?.mode === RoomMode.ChooseYourPath) {
       return roomActivePath();
     }
+    if (activeRoom()?.mode === RoomMode.MessagesAgainstPersona) {
+      const activeNodeId = activeRoom()?.active_node_id;
+      if (!activeNodeId) return roomMessages();
+      return roomMessages().filter(m => m.parent_id !== activeNodeId);
+    }
     return roomMessages();
   });
 
@@ -102,8 +107,12 @@ export function RoomMessageList() {
                 : "";
               const header = `${speakerName} (${formatTime(msg.timestamp)}) [${idx}]${branchIndicator}:`;
               const isSilence = msg.silence_reason !== undefined && !msg.verbal_response;
+              const isJudge = activeRoom()?.judge_persona_id !== undefined
+                && msg.persona_id === activeRoom()?.judge_persona_id;
               const silenceText = isSilence
-                ? `[${speakerName} chose not to respond: ${msg.silence_reason}]`
+                ? isJudge
+                  ? `[${speakerName}'s verdict: ${msg.silence_reason ?? ""}]`
+                  : `[${speakerName} chose not to respond: ${msg.silence_reason ?? ""}]`
                 : "";
               const contentParts: string[] = [];
               if (msg.action_response) contentParts.push(`_${msg.action_response}_`);
