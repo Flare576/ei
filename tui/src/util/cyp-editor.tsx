@@ -20,13 +20,23 @@ function buildCYPEditorYAML(
 
 `;
 
+  const isExplored = (msgId: string) => messages.some((x) => x.parent_id === msgId);
+
   const blocks = children.map((m) => {
     let speaker = "You";
     if (m.role === "persona" && m.persona_id) {
       speaker = personas.find((p) => p.id === m.persona_id)?.display_name ?? m.persona_id;
     }
 
-    const content = (m.verbal_response ?? "(no response)").trimEnd();
+    let content: string;
+    if (m.silence_reason !== undefined) {
+      content = `[chose not to respond: ${m.silence_reason}]`;
+    } else {
+      const parts: string[] = [];
+      if (m.action_response) parts.push(`_${m.action_response}_`);
+      if (m.verbal_response) parts.push(m.verbal_response);
+      content = parts.join('\n\n') || "(no response)";
+    }
     const indentedContent = content
       .split("\n")
       .map((line) => `    ${line}`)
@@ -34,6 +44,7 @@ function buildCYPEditorYAML(
 
     return `- id: "${m.id}"
   speaker: "${speaker}"
+  explored: ${isExplored(m.id)}
   _chosen: false
   content: |
 ${indentedContent}`;
