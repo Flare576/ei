@@ -187,12 +187,12 @@ function RoomListOverlay(props: RoomListOverlayProps) {
   );
 }
 
-function buildRoomYAMLTemplate(personas: PersonaSummary[]): string {
+function buildRoomYAMLTemplate(personas: PersonaSummary[], initialName = ""): string {
   const activePersonas = personas.filter((p) => !p.is_archived);
   const personaLines = activePersonas.map((p) => `  ${p.display_name}: false`).join("\n");
   return `# Room configuration
 # mode: choose_your_path | free_for_all | messages_against_persona
-display_name: ""
+display_name: "${initialName}"
 mode: free_for_all
 persona_ids:
 ${personaLines}
@@ -321,8 +321,9 @@ export const roomCommand: Command = {
 
     if (args[0].toLowerCase() === "new") {
       const personas = ctx.ei.personas();
+      const rawName = args.slice(1).join(" ").replace(/^["']|["']$/g, "");
       const result = await spawnEditor({
-        initialContent: buildRoomYAMLTemplate(personas),
+        initialContent: buildRoomYAMLTemplate(personas, rawName),
         filename: "new-room.yaml",
         renderer: ctx.renderer,
       });

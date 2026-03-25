@@ -80,6 +80,30 @@ export const deleteCommand: Command = {
     const personaId = await ctx.ei.resolvePersonaName(nameOrAlias);
     
     if (!personaId) {
+      const roomId = ctx.ei.resolveRoomName(nameOrAlias);
+      if (roomId) {
+        const room = ctx.ei.getRoom(roomId);
+        const displayName = room?.display_name ?? roomId;
+
+        const confirmed = await new Promise<boolean>((resolve) => {
+          ctx.showOverlay((hideOverlay, _hideForEditor) => (
+            <ConfirmOverlay
+              message={`Archive room "${displayName}"?\nThe room will be archived and removed from the list.`}
+              onConfirm={() => { hideOverlay(); resolve(true); }}
+              onCancel={() => { hideOverlay(); resolve(false); }}
+            />
+          ), ctx.renderer);
+        });
+
+        if (confirmed) {
+          await ctx.ei.archiveRoom(roomId);
+          ctx.showNotification(`Room "${displayName}" archived`, "info");
+        } else {
+          ctx.showNotification("Cancelled", "info");
+        }
+        return;
+      }
+
       ctx.showNotification(`Persona '${nameOrAlias}' not found`, "error");
       return;
     }
