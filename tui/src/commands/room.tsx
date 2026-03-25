@@ -1,10 +1,11 @@
-import { For, createSignal, createMemo } from "solid-js";
+import { For, createSignal, createMemo, onMount, onCleanup } from "solid-js";
 import { useKeyboard } from "@opentui/solid";
 import type { KeyEvent } from "@opentui/core";
 import type { Command } from "./registry";
 import { spawnEditor } from "../util/editor.js";
 import { RoomMode } from "../../../src/core/types/enums.js";
 import type { RoomSummary, RoomCreationInput, PersonaSummary } from "../../../src/core/types.js";
+import { useKeyboardNav } from "../context/keyboard.js";
 
 function modeBadge(mode: RoomMode): string {
   switch (mode) {
@@ -23,9 +24,13 @@ interface RoomListOverlayProps {
 }
 
 function RoomListOverlay(props: RoomListOverlayProps) {
+  const { setOverlayActive } = useKeyboardNav();
   const [selectedIndex, setSelectedIndex] = createSignal(0);
   const [filterText, setFilterText] = createSignal("");
   const [filterMode, setFilterMode] = createSignal(false);
+
+  onMount(() => setOverlayActive(true));
+  onCleanup(() => setOverlayActive(false));
 
   const filteredRooms = createMemo(() => {
     const filter = filterText().toLowerCase();

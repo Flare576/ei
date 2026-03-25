@@ -25,6 +25,8 @@ interface KeyboardContextValue {
   exitApp: () => Promise<void>;
   renderer: CliRenderer;
   resetHistoryIndex: () => void;
+  overlayActive: () => boolean;
+  setOverlayActive: (active: boolean) => void;
 }
 
 const KeyboardContext = createContext<KeyboardContextValue>();
@@ -32,6 +34,7 @@ const KeyboardContext = createContext<KeyboardContextValue>();
 export const KeyboardProvider: ParentComponent = (props) => {
   const [focusedPanel, setFocusedPanel] = createSignal<Panel>("input");
   const [sidebarVisible, setSidebarVisible] = createSignal(true);
+  const [overlayActive, setOverlayActive] = createSignal(false);
   const renderer = useRenderer();
   const { queueStatus, abortCurrentOperation, resumeQueue, pauseQueue, personas, activePersonaId, selectPersona, saveAndExit, showNotification, messages, recallPendingMessages, cleanupTimers, rooms, activeRoomId, selectRoom } = useEi();
   
@@ -150,7 +153,7 @@ export const KeyboardProvider: ParentComponent = (props) => {
     }
 
 
-    if (event.name === "up" && !event.ctrl && !event.shift && !event.meta) {
+    if (event.name === "up" && !overlayActive() && !event.ctrl && !event.shift && !event.meta) {
       if (!textareaRef) return;
       const cursor = textareaRef.logicalCursor;
       // Only intercept when cursor is at the very beginning (row 0, col 0)
@@ -187,7 +190,7 @@ export const KeyboardProvider: ParentComponent = (props) => {
       return;
     }
 
-    if (event.name === "down" && !event.ctrl && !event.shift && !event.meta) {
+    if (event.name === "down" && !overlayActive() && !event.ctrl && !event.shift && !event.meta) {
       if (!textareaRef || historyIndex === -1) return;
       // Only intercept when cursor is at the very end
       if (textareaRef.cursorOffset !== textareaRef.plainText.length) return;
@@ -256,6 +259,8 @@ export const KeyboardProvider: ParentComponent = (props) => {
     exitApp,
     renderer,
     resetHistoryIndex,
+    overlayActive,
+    setOverlayActive,
   };
 
   return (
