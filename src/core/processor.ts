@@ -1531,7 +1531,11 @@ const toolNextSteps = new Set([
         this.interface.onHumanUpdated?.();
       }
 
-      if (response.request.next_step === LLMNextStep.HandleRoomResponse) {
+      const isRoomResponse =
+        response.request.next_step === LLMNextStep.HandleRoomResponse ||
+        (response.request.next_step === LLMNextStep.HandleToolContinuation &&
+          response.request.data.originalNextStep === LLMNextStep.HandleRoomResponse);
+      if (isRoomResponse) {
         const roomId = response.request.data.roomId as string;
         if (roomId) {
           this.interface.onRoomMessageAdded?.(roomId);
