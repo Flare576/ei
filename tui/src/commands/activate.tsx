@@ -1,4 +1,6 @@
 import type { Command } from "./registry";
+import { RoomMode } from "../../../src/core/types/enums.js";
+import { openCYPEditor } from "../util/cyp-editor.js";
 
 export const activateCommand: Command = {
   name: "activate",
@@ -14,6 +16,39 @@ export const activateCommand: Command = {
     }
 
     if (args.length === 0) {
+      const room = ctx.ei.getRoom(roomId);
+      if (room?.mode === RoomMode.ChooseYourPath) {
+        const activeNodeId = room.active_node_id;
+        if (!activeNodeId) {
+          ctx.showNotification("No active node in room", "error");
+          return;
+        }
+        const allMessages = ctx.ei.roomMessages();
+        const children = allMessages.filter((m) => m.parent_id === activeNodeId);
+        const respondedIds = new Set(
+          children
+            .filter((m) => m.role === "persona" && m.persona_id)
+            .map((m) => m.persona_id!)
+        );
+        const isComplete = room.persona_ids.every(
+          (id) => id === room.judge_persona_id || respondedIds.has(id)
+        );
+        if (!isComplete) {
+          ctx.showNotification("Waiting for responses...", "info");
+          return;
+        }
+        await openCYPEditor({
+          roomId,
+          activeNodeId,
+          messages: allMessages,
+          activePath: ctx.ei.roomActivePath(),
+          personas: ctx.ei.personas(),
+          selectBranch: ctx.ei.selectCYPBranch,
+          showNotification: ctx.showNotification,
+          renderer: ctx.renderer,
+        });
+        return;
+      }
       await ctx.ei.activateRoom();
       return;
     }

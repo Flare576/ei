@@ -30,6 +30,7 @@ import { roomCommand } from "../commands/room.js";
 import { activateCommand } from "../commands/activate.js";
 import { silenceCommand } from "../commands/silence.js";
 import { captureCommand } from "../commands/capture.js";
+import { openCYPEditor } from "../util/cyp-editor.js";
 import { useOverlay } from "../context/overlay";
 import { CommandSuggest } from "./CommandSuggest";
 import { useKeyboard } from "@opentui/solid";
@@ -52,10 +53,13 @@ export function PromptInput() {
     activeRoomId,
     getRoom,
     roomMessages,
+    roomActivePath,
+    personas,
     sendFfaMessage,
     submitHumanRoomMessage,
     recallHumanRoomMessage,
     activateRoom,
+    selectCYPBranch,
     humanRoomMessagePending,
   } = ei;
   const { registerTextarea, registerEditorHandler, exitApp, renderer, resetHistoryIndex } = useKeyboardNav();
@@ -221,6 +225,30 @@ export function PromptInput() {
   });
 
   const handleSubmit = async () => {
+    if (activeRoomId()) {
+      const room = getRoom(activeRoomId()!);
+      if (room?.mode !== RoomMode.FreeForAll && humanSubmitted() && humanRoomMessagePending() && allPersonasResponded()) {
+        if (room && room.mode === RoomMode.ChooseYourPath) {
+          if (room.active_node_id) {
+            await openCYPEditor({
+              roomId: activeRoomId()!,
+              activeNodeId: room.active_node_id,
+              messages: roomMessages(),
+              activePath: roomActivePath(),
+              personas: personas(),
+              selectBranch: selectCYPBranch,
+              showNotification,
+              renderer,
+            });
+          }
+        } else {
+          await activateRoom();
+        }
+        setHumanSubmitted(false);
+        return;
+      }
+    }
+
     const text = textareaRef?.plainText?.trim();
     if (!text) return;
 
