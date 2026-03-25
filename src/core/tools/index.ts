@@ -81,8 +81,23 @@ export function toOpenAITools(tools: ToolDefinition[]): Record<string, unknown>[
       name: t.name,
       description: t.description,
       parameters: t.input_schema,
+      ...(t.is_submit ? { strict: true } : {}),
     },
   }));
+}
+
+/**
+ * Returns the first tool call in the batch that maps to an is_submit tool, or undefined.
+ * When a submit tool is called, its arguments ARE the structured response — no execution needed.
+ */
+export function findSubmitToolCall(
+  toolCalls: ToolCall[],
+  activeTools: ToolDefinition[]
+): ToolCall | undefined {
+  const submitNames = new Set(
+    activeTools.filter(t => t.is_submit).map(t => t.name)
+  );
+  return toolCalls.find(call => submitNames.has(call.name));
 }
 
 // =============================================================================
