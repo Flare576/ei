@@ -137,6 +137,7 @@ export interface EiContextValue {
   capturePersona: () => void;
   sendSilenceMessage: (silenceReason?: string) => Promise<void>;
   humanRoomMessagePending: () => boolean;
+  getArchivedRooms: () => RoomSummary[];
 }
 const EiContext = createContext<EiContextValue>();
 
@@ -628,6 +629,11 @@ export const EiProvider: ParentComponent = (props) => {
     return processor.resolveRoomName(nameOrAlias);
   };
 
+  const getArchivedRooms = (): RoomSummary[] => {
+    if (!processor) return [];
+    return processor.getRoomList(true).filter(r => r.is_archived);
+  };
+
   const getRoom = (roomId: string): RoomEntity | null => {
     if (!processor) return null;
     return processor.getRoom(roomId);
@@ -908,6 +914,7 @@ export const EiProvider: ParentComponent = (props) => {
     capturePersona,
     sendSilenceMessage,
     humanRoomMessagePending,
+    getArchivedRooms,
   };
   return (
     <Switch>
