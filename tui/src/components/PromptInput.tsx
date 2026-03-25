@@ -97,7 +97,6 @@ export function PromptInput() {
 
   const [inputText, setInputText] = createSignal("");
   const [suggestIndex, setSuggestIndex] = createSignal(0);
-  const [humanSubmitted, setHumanSubmitted] = createSignal(false);
 
   const allPersonasResponded = createMemo(() => {
     const roomId = activeRoomId();
@@ -138,18 +137,7 @@ export function PromptInput() {
   });
 
   createEffect(() => {
-    activeRoomId();
-    setHumanSubmitted(false);
-  });
-
-  createEffect(() => {
     if (activeRoomId() && !humanRoomMessagePending()) {
-      setHumanSubmitted(false);
-    }
-  });
-
-  createEffect(() => {
-    if (activeRoomId() && !humanSubmitted()) {
       const room = getRoom(activeRoomId()!);
       if (room?.mode !== RoomMode.FreeForAll && allPersonasResponded() && !humanRoomMessagePending()) {
         showNotification("Use /silence to pass", "info");
@@ -158,15 +146,26 @@ export function PromptInput() {
   });
 
   useKeyboard((event: KeyEvent) => {
-    if (event.name === "up" && activeRoomId() && humanSubmitted()) {
+    if (event.name === "up" && activeRoomId() && humanRoomMessagePending()) {
       const room = getRoom(activeRoomId()!);
       if (room?.mode !== RoomMode.FreeForAll) {
-        const pendingMsg = roomMessages().find(
+        // Lock check: if any child of active_node has children, the node is explored — don't allow recall
+        const activeNodeId = room?.active_node_id;
+        const allMessages = roomMessages();
+        const childrenOfActiveNode = allMessages.filter(m => m.parent_id === activeNodeId);
+        const isLocked = childrenOfActiveNode.some(child =>
+          allMessages.some(m => m.parent_id === child.id)
+        );
+        if (isLocked) {
+          showNotification("Cannot recall — this path has already been explored", "warn");
+          event.preventDefault();
+          return;
+        }
+        const pendingMsg = allMessages.find(
           m => m.parent_id === room?.active_node_id && m.role === "human"
         );
         const recalled = recallHumanRoomMessage();
         if (recalled) {
-          setHumanSubmitted(false);
           const content = pendingMsg?.verbal_response ?? "";
           textareaRef?.setText(content);
           setInputText(content);
@@ -227,7 +226,24 @@ export function PromptInput() {
   const handleSubmit = async () => {
     if (activeRoomId()) {
       const room = getRoom(activeRoomId()!);
-      if (room?.mode !== RoomMode.FreeForAll && humanSubmitted() && humanRoomMessagePending() && allPersonasResponded()) {
+
+      if (room?.mode === RoomMode.ChooseYourPath && allPersonasResponded() && !humanRoomMessagePending()) {
+        if (room.active_node_id) {
+          await openCYPEditor({
+            roomId: activeRoomId()!,
+            activeNodeId: room.active_node_id,
+            messages: roomMessages(),
+            activePath: roomActivePath(),
+            personas: personas(),
+            selectBranch: selectCYPBranch,
+            showNotification,
+            renderer,
+          });
+        }
+        return;
+      }
+
+      if (room?.mode !== RoomMode.FreeForAll && humanRoomMessagePending() && allPersonasResponded()) {
         if (room && room.mode === RoomMode.ChooseYourPath) {
           if (room.active_node_id) {
             await openCYPEditor({
@@ -244,7 +260,6 @@ export function PromptInput() {
         } else {
           await activateRoom();
         }
-        setHumanSubmitted(false);
         return;
       }
     }
@@ -295,10 +310,9 @@ export function PromptInput() {
         return;
       }
 
-      if (!humanSubmitted()) {
+      if (!humanRoomMessagePending()) {
         const msgId = submitHumanRoomMessage(text, undefined);
         if (msgId !== null) {
-          setHumanSubmitted(true);
           textareaRef?.clear();
           setInputText("");
         }
@@ -307,7 +321,6 @@ export function PromptInput() {
 
       if (humanRoomMessagePending() && allPersonasResponded()) {
         await activateRoom();
-        setHumanSubmitted(false);
         return;
       }
 
@@ -330,7 +343,7 @@ export function PromptInput() {
   registerEditorHandler(handleEditor);
 
   const getPlaceholder = () => {
-    if (activeRoomId() && humanSubmitted()) return "Response Submitted - Press [Up] to recall";
+    if (activeRoomId() && humanRoomMessagePending()) return "Response Submitted - Press [Up] to recall";
     if (!activePersonaId()) return "Select a persona...";
     return "Type your message... (Enter to send, Ctrl+E for editor)";
   };
