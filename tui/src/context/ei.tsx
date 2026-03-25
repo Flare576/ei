@@ -570,8 +570,8 @@ export const EiProvider: ParentComponent = (props) => {
     const roomId = store.activeRoomId;
     if (!roomId || !processor) return;
     await processor.selectCYPBranch(roomId, messageId);
-    void refreshRoomMessages();
-    refreshRoomActivePath();
+    await refreshRoomMessages();
+    await refreshRoomActivePath();
     void refreshRooms();
   };
 

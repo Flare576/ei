@@ -28,26 +28,27 @@ function buildCYPEditorYAML(
       speaker = personas.find((p) => p.id === m.persona_id)?.display_name ?? m.persona_id;
     }
 
-    let content: string;
-    if (m.silence_reason !== undefined) {
-      content = `[chose not to respond: ${m.silence_reason}]`;
-    } else {
-      const parts: string[] = [];
-      if (m.action_response) parts.push(`_${m.action_response}_`);
-      if (m.verbal_response) parts.push(m.verbal_response);
-      content = parts.join('\n\n') || "(no response)";
+    const contentLines: string[] = [];
+    if (m.verbal_response !== undefined) {
+      const indented = m.verbal_response.split("\n").map((l) => `    ${l}`).join("\n");
+      contentLines.push(`  verbal_response: |\n${indented}`);
     }
-    const indentedContent = content
-      .split("\n")
-      .map((line) => `    ${line}`)
-      .join("\n");
+    if (m.action_response !== undefined) {
+      const indented = m.action_response.split("\n").map((l) => `    ${l}`).join("\n");
+      contentLines.push(`  action_response: |\n${indented}`);
+    }
+    if (m.silence_reason !== undefined && m.verbal_response === undefined) {
+      contentLines.push(`  silence_reason: "${m.silence_reason}"`);
+    }
+    if (contentLines.length === 0) {
+      contentLines.push(`  # (no content)`);
+    }
 
     return `- id: "${m.id}"
   speaker: "${speaker}"
   explored: ${isExplored(m.id)}
   _chosen: false
-  content: |
-${indentedContent}`;
+${contentLines.join("\n")}`;
   });
 
   return header + blocks.join("\n\n");

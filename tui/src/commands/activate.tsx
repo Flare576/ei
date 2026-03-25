@@ -67,5 +67,32 @@ export const activateCommand: Command = {
     }
 
     await ctx.ei.selectCYPBranch(target.id);
+
+    const freshRoom = ctx.ei.getRoom(roomId);
+    const newActiveNodeId = freshRoom?.active_node_id;
+    if (newActiveNodeId) {
+      const freshMessages = ctx.ei.roomMessages();
+      const children = freshMessages.filter(m => m.parent_id === newActiveNodeId);
+      const respondedIds = new Set(
+        children.filter(m => m.role === "persona" && m.persona_id).map(m => m.persona_id!)
+      );
+      const nonJudgePersonas = (freshRoom?.persona_ids ?? []).filter(
+        id => id !== freshRoom?.judge_persona_id
+      );
+      const isComplete = nonJudgePersonas.length > 0 && nonJudgePersonas.every(id => respondedIds.has(id));
+
+      if (isComplete) {
+        await openCYPEditor({
+          roomId,
+          activeNodeId: newActiveNodeId,
+          messages: freshMessages,
+          activePath: ctx.ei.roomActivePath(),
+          personas: ctx.ei.personas(),
+          selectBranch: (msgId) => ctx.ei.selectCYPBranch(msgId),
+          showNotification: ctx.showNotification,
+          renderer: ctx.renderer,
+        });
+      }
+    }
   },
 };
