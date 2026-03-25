@@ -140,7 +140,7 @@ export function StatusBar() {
               </Show>
             </text>
           }>
-            <Show when={allPersonasResponded()} fallback={
+            <Show when={allPersonasResponded() && humanRoomMessagePending()} fallback={
               <text fg="#586e75">
                 {getRoomWaitingText()}
               </text>
