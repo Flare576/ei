@@ -43,7 +43,18 @@ export const archiveCommand: Command = {
     const personaId = await ctx.ei.resolvePersonaName(nameOrAlias);
     
     if (!personaId) {
-      ctx.showNotification(`Persona '${nameOrAlias}' not found`, "error");
+      const roomId = ctx.ei.resolveRoomName(nameOrAlias);
+      if (roomId) {
+        const room = ctx.ei.getRoom(roomId);
+        if (room?.is_archived) {
+          ctx.showNotification(`Room "${room.display_name}" is already archived`, "warn");
+          return;
+        }
+        await ctx.ei.archiveRoom(roomId);
+        ctx.showNotification(`Room "${room?.display_name ?? nameOrAlias}" archived`, "info");
+        return;
+      }
+      ctx.showNotification(`Persona or room '${nameOrAlias}' not found`, "error");
       return;
     }
     
