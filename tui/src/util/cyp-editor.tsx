@@ -7,7 +7,7 @@ interface ParsedBlock {
   chosen: boolean;
 }
 
-function buildCYPEditorYAML(
+export function buildCYPEditorYAML(
   activeNodeId: string,
   messages: RoomMessage[],
   personas: PersonaSummary[]
@@ -54,7 +54,7 @@ ${contentLines.join("\n")}`;
   return header + blocks.join("\n\n");
 }
 
-function parseCYPEditorYAML(content: string): ParsedBlock[] {
+export function parseCYPEditorYAML(content: string): ParsedBlock[] {
   const blocks: ParsedBlock[] = [];
   let currentId: string | null = null;
   let currentChosen = false;
