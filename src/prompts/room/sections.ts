@@ -84,7 +84,7 @@ export function buildRoomTopicsSection(topics: PersonaTopic[]): string {
 export function buildRoomResponseFormatSection(): string {
   return `## Response Format
 
-Respond with JSON. Silence reasons are visible to everyone in the room, so be honest.
+When you are ready to respond, call the \`submit_response\` tool. Silence reasons are visible to everyone in the room, so be honest.
 
 **Words:**
 \`\`\`json
@@ -109,7 +109,7 @@ Respond with JSON. Silence reasons are visible to everyone in the room, so be ho
 Rules:
 - At least one of verbal_response or action_response must be present when should_respond is true
 - reason is only used when should_respond is false
-- Your entire reply must be the JSON object — no prose, no preamble`;
+- If the \`submit_response\` tool is unavailable, return the JSON object directly as your entire reply — no prose, no preamble`;
 }
 
 export function buildJudgeCandidatesSection(candidates: RoomJudgeCandidate[]): string {

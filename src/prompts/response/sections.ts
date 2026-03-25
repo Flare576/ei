@@ -419,7 +419,7 @@ export function buildResponseFormatSection(): string {
 
   return `## Response Format
 
-Always respond with JSON. You have four valid forms:
+When you are ready to respond, call the \`submit_response\` tool with one of these forms:
 
 **Words only** (most common):
 \`\`\`json
@@ -447,7 +447,7 @@ Rules:
 - \`reason\` is only used when \`should_respond\` is false
 - Do NOT include \`<thinking>\` blocks or analysis outside the JSON
 - The JSON must be valid - use double quotes, no trailing commas
-- **Your entire reply should be the JSON object** — no prose, no preamble, no closing commentary`
+- If the \`submit_response\` tool is unavailable, return the JSON object directly as your entire reply — no prose, no preamble`
 }
 
 // =============================================================================

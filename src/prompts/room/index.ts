@@ -65,7 +65,7 @@ export function buildRoomResponsePrompt(data: RoomResponsePromptData): PromptOut
   ].filter(Boolean).join("\n\n");
 
   const user = buildRoomHistorySection(history) +
-    `\n\nRespond to the conversation above as ${name}.`;
+    `\n\nRespond to the conversation above as ${name}. Call the \`submit_response\` tool with your response. If the tool is unavailable, use the JSON format in the Response Format section.`;
 
   return { system, user };
 }
