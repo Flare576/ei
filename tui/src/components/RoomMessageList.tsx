@@ -4,6 +4,7 @@ import { useEi } from "../context/ei.js";
 import { useKeyboardNav } from "../context/keyboard.js";
 import { solarizedDarkSyntax } from "../util/syntax.js";
 import type { RoomMessage } from "../../../src/core/types.js";
+import { RoomMode } from "../../../src/core/types/enums.js";
 
 function formatTime(timestamp: string): string {
   const date = new Date(timestamp);
@@ -13,7 +14,7 @@ function formatTime(timestamp: string): string {
 }
 
 export function RoomMessageList() {
-  const { roomMessages, roomActivePath, personas } = useEi();
+  const { roomMessages, roomActivePath, personas, activeRoomId, getRoom } = useEi();
   const { registerMessageScroll } = useKeyboardNav();
 
   const personaNameMap = createMemo(() => {
@@ -41,6 +42,18 @@ export function RoomMessageList() {
     return countMap;
   });
 
+  const activeRoom = createMemo(() => {
+    const id = activeRoomId();
+    return id ? getRoom(id) : null;
+  });
+
+  const displayMessages = createMemo(() => {
+    if (activeRoom()?.mode === RoomMode.ChooseYourPath) {
+      return roomActivePath();
+    }
+    return roomMessages();
+  });
+
   const getSpeakerName = (msg: RoomMessage): string => {
     if (msg.role === "human") return "Human";
     if (msg.persona_id) return personaNameMap().get(msg.persona_id) ?? msg.persona_id;
@@ -63,7 +76,7 @@ export function RoomMessageList() {
   return (
     <box flexGrow={1}>
       <Show
-        when={roomActivePath().length > 0}
+        when={displayMessages().length > 0}
         fallback={
           <box flexGrow={1} padding={1} backgroundColor="#0f1419" justifyContent="center" alignItems="center">
             <text fg="#586e75" content="No messages yet." />
@@ -78,13 +91,15 @@ export function RoomMessageList() {
           stickyScroll={true}
           stickyStart="bottom"
         >
-          <For each={roomActivePath()}>
+          <For each={displayMessages()}>
             {(msg) => {
               const speakerName = getSpeakerName(msg);
               const speakerColor = getSpeakerColor(msg);
               const idx = messageIndices().get(msg.id) ?? "?";
               const siblingCount = siblingCounts().get(msg.id) ?? 0;
-              const branchIndicator = siblingCount > 0 ? ` ⑂${siblingCount}` : "";
+              const branchIndicator = (siblingCount > 0 && activeRoom()?.mode === RoomMode.ChooseYourPath)
+                ? ` ⑂${siblingCount}`
+                : "";
               const header = `${speakerName} (${formatTime(msg.timestamp)}) [${idx}]${branchIndicator}:`;
               const isSilence = msg.silence_reason !== undefined && !msg.verbal_response;
               const silenceText = isSilence
