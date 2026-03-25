@@ -30,6 +30,7 @@ export function RoomCreatorModal({ isOpen, onClose, onCreate, personas }: RoomCr
   const [selectedPersonaIds, setSelectedPersonaIds] = useState<string[]>([]);
   const [judgePersonaId, setJudgePersonaId] = useState<string>('');
   const [initialMessage, setInitialMessage] = useState('');
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
   const modalRef = useRef<HTMLDivElement>(null);
   const previousActiveElement = useRef<Element | null>(null);
@@ -84,7 +85,8 @@ export function RoomCreatorModal({ isOpen, onClose, onCreate, personas }: RoomCr
 
   const handleClose = () => {
     if (name || selectedPersonaIds.length > 0 || initialMessage) {
-      if (!confirm('Discard room creation?')) return;
+      setShowDiscardConfirm(true);
+      return;
     }
     onClose();
   };
@@ -252,12 +254,34 @@ export function RoomCreatorModal({ isOpen, onClose, onCreate, personas }: RoomCr
         </div>
 
         <div className="ei-creator-modal__footer">
-          <button className="ei-btn ei-btn--secondary" onClick={handleClose}>
-            Cancel
-          </button>
-          <button className="ei-btn ei-btn--primary" onClick={handleSubmit}>
-            Create Room
-          </button>
+          {showDiscardConfirm ? (
+            <>
+              <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary, #888)', marginRight: 'auto' }}>
+                Discard room creation?
+              </span>
+              <button
+                className="ei-btn ei-btn--secondary"
+                onClick={() => setShowDiscardConfirm(false)}
+              >
+                Keep Editing
+              </button>
+              <button
+                className="ei-btn ei-btn--primary"
+                onClick={() => { setShowDiscardConfirm(false); onClose(); }}
+              >
+                Discard
+              </button>
+            </>
+          ) : (
+            <>
+              <button className="ei-btn ei-btn--secondary" onClick={handleClose}>
+                Cancel
+              </button>
+              <button className="ei-btn ei-btn--primary" onClick={handleSubmit}>
+                Create Room
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
