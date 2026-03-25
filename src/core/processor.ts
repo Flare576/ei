@@ -620,6 +620,180 @@ export class Processor {
         max_calls_per_interaction: 1,
       });
     }
+
+    // submit_response tool — auto-injected for HandlePersonaResponse and HandleRoomResponse.
+    // Not user-configurable; invisible in the tools UI. Terminates the tool loop immediately
+    // when called; its arguments become response.parsed.
+    if (!this.stateManager.tools_getByName("submit_response")) {
+      this.stateManager.tools_add({
+        id: crypto.randomUUID(),
+        provider_id: "ei",
+        name: "submit_response",
+        display_name: "Submit Response",
+        description: "Submit your response to the conversation. Call this when you are ready to respond — after any research or tool use is complete.",
+        input_schema: {
+          type: "object",
+          properties: {
+            should_respond: {
+              type: "boolean",
+              description: "Whether you are responding (true) or staying silent (false)",
+            },
+            verbal_response: {
+              type: "string",
+              description: "What you say out loud. Required when should_respond is true (unless action_response is provided).",
+            },
+            action_response: {
+              type: "string",
+              description: "What you do — rendered as italics stage directions. Optional alongside verbal_response.",
+            },
+            reason: {
+              type: "string",
+              description: "Why you are staying silent. Only used when should_respond is false.",
+            },
+          },
+          required: ["should_respond"],
+          additionalProperties: false,
+        },
+        runtime: "any",
+        builtin: true,
+        enabled: true,
+        is_submit: true,
+        max_calls_per_interaction: 1,
+        created_at: now,
+      });
+    }
+
+    if (!this.stateManager.tools_getByName("submit_heartbeat_check")) {
+      this.stateManager.tools_add({
+        id: crypto.randomUUID(),
+        provider_id: "ei",
+        name: "submit_heartbeat_check",
+        display_name: "Submit Heartbeat Decision",
+        description: "Submit your decision on whether to reach out with a message. Call this when you have decided.",
+        input_schema: {
+          type: "object",
+          properties: {
+            should_respond: { type: "boolean", description: "Whether you want to initiate a message" },
+            topic: { type: "string", description: "The specific topic you want to discuss (when should_respond is true)" },
+            message: { type: "string", description: "Your actual message to them (when should_respond is true)" },
+          },
+          required: ["should_respond"],
+          additionalProperties: false,
+        },
+        runtime: "any",
+        builtin: true,
+        enabled: true,
+        is_submit: true,
+        max_calls_per_interaction: 1,
+        created_at: now,
+      });
+    }
+
+    if (!this.stateManager.tools_getByName("submit_ei_heartbeat")) {
+      this.stateManager.tools_add({
+        id: crypto.randomUUID(),
+        provider_id: "ei",
+        name: "submit_ei_heartbeat",
+        display_name: "Submit Ei Heartbeat Decision",
+        description: "Submit your choice of item to follow up on, or indicate nothing warrants reaching out.",
+        input_schema: {
+          type: "object",
+          properties: {
+            should_respond: { type: "boolean", description: "Whether Ei wants to check in about an item" },
+            id: { type: "string", description: "ID of the item you chose (when should_respond is true)" },
+            my_response: { type: "string", description: "The check-in message (for Person/Topic/Persona items)" },
+          },
+          required: ["should_respond"],
+          additionalProperties: false,
+        },
+        runtime: "any",
+        builtin: true,
+        enabled: true,
+        is_submit: true,
+        max_calls_per_interaction: 1,
+        created_at: now,
+      });
+    }
+
+    if (!this.stateManager.tools_getByName("submit_dedup_decisions")) {
+      this.stateManager.tools_add({
+        id: crypto.randomUUID(),
+        provider_id: "ei",
+        name: "submit_dedup_decisions",
+        display_name: "Submit Dedup Decisions",
+        description: "Submit your merge, remove, and add decisions for this cluster of records.",
+        input_schema: {
+          type: "object",
+          properties: {
+            update: {
+              type: "array",
+              description: "Records to update with merged data. Must include at least one (the canonical record).",
+              items: {
+                type: "object",
+                properties: {
+                  id: { type: "string" },
+                  type: { type: "string", enum: ["topic", "person", "trait"] },
+                  name: { type: "string" },
+                  description: { type: "string" },
+                  sentiment: { type: "number" },
+                  strength: { type: "number" },
+                  confidence: { type: "number" },
+                  exposure_current: { type: "number" },
+                  exposure_desired: { type: "number" },
+                  relationship: { type: "string" },
+                  category: { type: "string" },
+                  last_updated: { type: "string" },
+                },
+                required: ["id", "type", "name", "description"],
+                additionalProperties: false,
+              },
+            },
+            remove: {
+              type: "array",
+              description: "Duplicates to remove. Each must reference its canonical record via replaced_by.",
+              items: {
+                type: "object",
+                properties: {
+                  to_be_removed: { type: "string" },
+                  replaced_by: { type: "string" },
+                },
+                required: ["to_be_removed", "replaced_by"],
+                additionalProperties: false,
+              },
+            },
+            add: {
+              type: "array",
+              description: "New records to create. Only when merging reveals a missing concept.",
+              items: {
+                type: "object",
+                properties: {
+                  type: { type: "string", enum: ["topic", "person", "trait"] },
+                  name: { type: "string" },
+                  description: { type: "string" },
+                  sentiment: { type: "number" },
+                  strength: { type: "number" },
+                  confidence: { type: "number" },
+                  exposure_current: { type: "number" },
+                  exposure_desired: { type: "number" },
+                  relationship: { type: "string" },
+                  category: { type: "string" },
+                },
+                required: ["type", "name", "description"],
+                additionalProperties: false,
+              },
+            },
+          },
+          required: ["update", "remove", "add"],
+          additionalProperties: false,
+        },
+        runtime: "any",
+        builtin: true,
+        enabled: true,
+        is_submit: true,
+        max_calls_per_interaction: 1,
+        created_at: now,
+      });
+    }
   }
 
   /**
@@ -890,6 +1064,25 @@ const toolNextSteps = new Set([
               }
             } else if (toolNextSteps.has(request.next_step) && toolPersonaId) {
               tools = this.stateManager.tools_getForPersona(toolPersonaId, this.isTUI);
+            }
+
+            // Auto-inject each handler's dedicated submit tool — infrastructure, not user-visible.
+            const submitToolByStep: Partial<Record<string, string>> = {
+              [LLMNextStep.HandlePersonaResponse]:  "submit_response",
+              [LLMNextStep.HandleRoomResponse]:     "submit_response",
+              [LLMNextStep.HandleHeartbeatCheck]:   "submit_heartbeat_check",
+              [LLMNextStep.HandleEiHeartbeat]:      "submit_ei_heartbeat",
+              [LLMNextStep.HandleDedupCurate]:      "submit_dedup_decisions",
+            };
+            const effectiveStep = request.next_step === LLMNextStep.HandleToolContinuation
+              ? (request.data.originalNextStep as string | undefined)
+              : request.next_step;
+            const submitToolName = effectiveStep ? submitToolByStep[effectiveStep] : undefined;
+            if (submitToolName) {
+              const submitTool = this.stateManager.tools_getByName(submitToolName);
+              if (submitTool?.enabled && !tools.find(t => t.name === submitToolName)) {
+                tools = [...tools, submitTool];
+              }
             }
             
             console.log(
