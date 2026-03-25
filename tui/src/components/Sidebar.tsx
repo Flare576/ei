@@ -1,16 +1,35 @@
 import { For, createSignal, createEffect, createMemo, onCleanup } from "solid-js";
 import { useEi } from "../context/ei";
 import { useKeyboardNav } from "../context/keyboard";
+import { RoomMode } from "../../../src/core/types/enums.js";
+import type { RoomSummary } from "../../../src/core/types.js";
+
+const modeBadge = (mode: RoomMode): string => {
+  switch (mode) {
+    case RoomMode.ChooseYourPath: return "[CYP]";
+    case RoomMode.FreeForAll: return "[FFA]";
+    case RoomMode.MessagesAgainstPersona: return "[MAP]";
+    default: return "";
+  }
+};
 
 export function Sidebar() {
-  const { personas, activePersonaId } = useEi();
+  const { personas, activePersonaId, rooms, activeRoomId } = useEi();
   const { focusedPanel } = useKeyboardNav();
 
   const isFocused = () => focusedPanel() === "sidebar";
+  const isRoomMode = () => activeRoomId() !== null;
 
   // Memoize visible (non-archived) personas for proper reactivity
   const visiblePersonas = createMemo(() => 
     personas().filter(p => !p.is_archived)
+  );
+
+  // Memoize visible (non-archived) rooms sorted by last_activity desc
+  const visibleRooms = createMemo(() =>
+    rooms()
+      .filter((r: RoomSummary) => !r.is_archived)
+      .sort((a: RoomSummary, b: RoomSummary) => b.last_activity.localeCompare(a.last_activity))
   );
 
   const [highlightedPersona, setHighlightedPersona] = createSignal<string | null>(null);
@@ -45,7 +64,9 @@ export function Sidebar() {
     >
       <box flexDirection="column">
         <text fg={isFocused() ? "#268bd2" : "#93a1a1"} marginBottom={1}>
-          {`Personas ${isFocused() ? "[*]" : ""}`}
+          {isRoomMode()
+            ? `Rooms ${isFocused() ? "[*]" : ""}`
+            : `Personas ${isFocused() ? "[*]" : ""}`}
         </text>
         
         <scrollbox height="100%">
@@ -71,6 +92,7 @@ export function Sidebar() {
 
               return (
                 <box
+                  visible={!isRoomMode()}
                   flexDirection="column"
                   backgroundColor={
                     isActive() && highlightedPersona() === persona.id 
@@ -87,6 +109,38 @@ export function Sidebar() {
                   </text>
                   <text fg="#586e75" wrapMode="word" height={2} visible={!!persona.short_description}>
                     {persona.short_description ?? ""}
+                  </text>
+                </box>
+              );
+            }}
+          </For>
+          <For each={visibleRooms()}>
+            {(room) => {
+              const isActive = () => activeRoomId() === room.id;
+
+              const getLabel = () => {
+                const prefix = isActive() ? "* " : "  ";
+                const name = room.display_name;
+                const badge = modeBadge(room.mode);
+                const unread = room.unread_count > 0 ? ` (${room.unread_count} new)` : "";
+                return `${prefix}${name} ${badge}${unread}`;
+              };
+
+              const textColor = () => {
+                if (isActive()) return "#eee8d5";
+                return "#839496";
+              };
+
+              return (
+                <box
+                  visible={isRoomMode()}
+                  flexDirection="column"
+                  backgroundColor={isActive() ? "#2d3748" : "transparent"}
+                  paddingX={1}
+                  marginBottom={1}
+                >
+                  <text fg={textColor()}>
+                    {getLabel()}
                   </text>
                 </box>
               );

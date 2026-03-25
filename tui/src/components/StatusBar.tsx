@@ -1,9 +1,20 @@
-import { Show } from "solid-js";
+import { Show, createMemo } from "solid-js";
 import { useEi } from "../context/ei";
 import { useKeyboardNav } from "../context/keyboard";
+import { RoomMode } from "../../../src/core/types/enums.js";
 
 export function StatusBar() {
-  const { activePersonaId, personas, queueStatus, notification } = useEi();
+  const {
+    activePersonaId,
+    personas,
+    queueStatus,
+    notification,
+    activeRoomId,
+    roomMessages,
+    getRoom,
+    rooms,
+    humanRoomMessagePending,
+  } = useEi();
   const { focusedPanel, sidebarVisible } = useKeyboardNav();
 
   const getActiveDisplayName = () => {
@@ -44,6 +55,70 @@ export function StatusBar() {
     return "#2aa198";
   };
 
+  const respondedPersonaIds = createMemo(() => {
+    const roomId = activeRoomId();
+    if (!roomId) return new Set<string>();
+    const roomSummary = rooms().find(r => r.id === roomId);
+    if (!roomSummary?.active_node_id) return new Set<string>();
+    const msgs = roomMessages().filter(
+      m => m.parent_id === roomSummary.active_node_id && m.role === "persona" && m.persona_id
+    );
+    return new Set(msgs.map(m => m.persona_id!));
+  });
+
+  const allPersonasResponded = createMemo(() => {
+    const roomId = activeRoomId();
+    if (!roomId) return false;
+    const room = getRoom(roomId);
+    if (!room) return false;
+    const judgeId = room.judge_persona_id;
+    const nonJudgeIds = room.persona_ids.filter(id => id !== judgeId);
+    return nonJudgeIds.every(id => respondedPersonaIds().has(id));
+  });
+
+  const pendingPersonaNames = createMemo(() => {
+    const roomId = activeRoomId();
+    if (!roomId) return [];
+    const room = getRoom(roomId);
+    if (!room) return [];
+    const judgeId = room.judge_persona_id;
+    const allPersonas = personas();
+    return room.persona_ids
+      .filter(id => id !== judgeId && !respondedPersonaIds().has(id))
+      .map(id => allPersonas.find(p => p.id === id)?.display_name ?? id);
+  });
+
+  const getRoomWaitingText = () => {
+    const names: string[] = [];
+    if (!humanRoomMessagePending()) {
+      names.push("You");
+    }
+    names.push(...pendingPersonaNames());
+    return "Waiting for " + names.join(", ") + "...";
+  };
+
+  const activeRoom = () => {
+    const roomId = activeRoomId();
+    if (!roomId) return null;
+    return getRoom(roomId);
+  };
+
+  const centerIndicator = createMemo(() => {
+    const roomId = activeRoomId();
+    if (roomId) {
+      const room = getRoom(roomId);
+      if (room?.mode !== RoomMode.FreeForAll) {
+        if (humanRoomMessagePending() && allPersonasResponded()) {
+          return { text: "[Activate!]", color: "#b58900" };
+        }
+        if (humanRoomMessagePending()) {
+          return { text: "[Waiting]", color: "#586e75" };
+        }
+      }
+    }
+    return { text: `[${getFocusIndicator()}]`, color: "#586e75" };
+  });
+
   return (
     <box
       height={1}
@@ -54,11 +129,23 @@ export function StatusBar() {
     >
       <box flexGrow={1}>
         <Show when={notification()} fallback={
-          <text fg="#586e75">
-            <Show when={getActiveDisplayName()} fallback="No persona selected">
-              {getActiveDisplayName()}
+          <Show when={activeRoomId()} fallback={
+            <text fg="#586e75">
+              <Show when={getActiveDisplayName()} fallback="No persona selected">
+                {getActiveDisplayName()}
+              </Show>
+            </text>
+          }>
+            <Show when={allPersonasResponded()} fallback={
+              <text fg="#586e75">
+                {getRoomWaitingText()}
+              </text>
+            }>
+              <text fg="#586e75">
+                {activeRoom()?.display_name ?? ""}
+              </text>
             </Show>
-          </text>
+          </Show>
         }>
           <text fg={getNotificationColor()}>
             {notification()?.message}
@@ -66,8 +153,8 @@ export function StatusBar() {
         </Show>
       </box>
 
-      <text fg="#586e75" marginRight={2}>
-        [{getFocusIndicator()}]
+      <text fg={centerIndicator().color} marginRight={2}>
+        {centerIndicator().text}
       </text>
 
       <Show when={!sidebarVisible()}>
