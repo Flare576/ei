@@ -472,12 +472,13 @@ function App() {
     }
   }, [processor, activePersonaId]);
 
-  const handleSendMessage = useCallback(async () => {
-    if (!processor || !activePersonaId || !inputValue.trim()) return;
-    await processor.sendMessage(activePersonaId, inputValue.trim());
+  const handleSendMessage = useCallback(async (content: string | null, silenceReason?: string) => {
+    if (!processor || !activePersonaId) return;
+    if (content !== null && !content.trim()) return;
+    await processor.sendMessage(activePersonaId, content !== null ? content.trim() : null, silenceReason);
     setInputValue("");
     if (!activeRoomId) chatPanelRef.current?.focusInput();
-  }, [processor, activePersonaId, inputValue, activeRoomId]);
+  }, [processor, activePersonaId, activeRoomId]);
 
   
 

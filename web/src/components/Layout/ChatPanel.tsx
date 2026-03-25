@@ -67,7 +67,7 @@ interface ChatPanelProps {
   contextBoundary?: string;
   quotes?: Quote[];
   onInputChange: (value: string) => void;
-  onSendMessage: () => void;
+  onSendMessage: (content: string | null, silenceReason?: string) => void;
   onMarkMessageRead?: (messageId: string) => void;
   onRecallPending?: () => void;
   onSetContextBoundary?: (timestamp: string | null) => void;
@@ -161,6 +161,9 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
 
   const [showScrollButton, setShowScrollButton] = useState(false);
   const wasAtBottomRef = useRef(true);
+  const [isSilentMode, setIsSilentMode] = useState(false);
+  const [showSendDropdown, setShowSendDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const handleContainerScroll = useCallback(() => {
     const near = isNearBottom();
@@ -211,6 +214,17 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
     };
   }, [messages, onMarkMessageRead]);
 
+  useEffect(() => {
+    if (!showSendDropdown) return;
+    const handleClick = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowSendDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showSendDropdown]);
+
   const adjustTextareaHeight = useCallback(() => {
     const textarea = textareaRef.current;
     if (!textarea) return;
@@ -228,7 +242,12 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      onSendMessage();
+      if (isSilentMode) {
+        onSendMessage(null, inputValue.trim() || undefined);
+        setIsSilentMode(false);
+      } else {
+        onSendMessage(inputValue, undefined);
+      }
     }
     if (e.key === "c" && e.ctrlKey) {
       e.preventDefault();
@@ -484,25 +503,59 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
         )}
         <textarea
           ref={textareaRef}
-          className="ei-input-area__textarea"
+          className={`ei-input-area__textarea${isSilentMode ? " ei-input-area__textarea--silent" : ""}`}
           value={inputValue}
           onChange={(e) => onInputChange(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={activePersonaId 
-            ? hasPendingMessages 
-              ? "Type a message... (Up arrow to recall pending)" 
+          placeholder={
+            !activePersonaId
+              ? "Select a persona first"
+              : isSilentMode
+              ? "Silence reason (optional)\u2026"
+              : hasPendingMessages
+              ? "Type a message... (Up arrow to recall pending)"
               : "Type a message... (Enter to send, Shift+Enter for newline)"
-            : "Select a persona first"}
+          }
           disabled={!activePersonaId}
           rows={1}
         />
-        <button
-          className="ei-input-area__send"
-          onClick={onSendMessage}
-          disabled={!activePersonaId || !inputValue.trim() || isProcessing}
-        >
-          Send
-        </button>
+        <div className="ei-room-send-group" ref={dropdownRef}>
+          <button
+            className="ei-room-send-group__main"
+            onClick={() => {
+              if (isSilentMode) {
+                onSendMessage(null, inputValue.trim() || undefined);
+                setIsSilentMode(false);
+              } else {
+                onSendMessage(inputValue, undefined);
+              }
+            }}
+            disabled={!activePersonaId || (!isSilentMode && !inputValue.trim()) || isProcessing}
+          >
+            {isSilentMode ? "Silent" : "Send"}
+          </button>
+          <button
+            className="ei-room-send-group__dropdown-toggle"
+            onClick={() => setShowSendDropdown(v => !v)}
+            disabled={!activePersonaId}
+            aria-label="More send options"
+          >
+            ▼
+          </button>
+          {showSendDropdown && (
+            <div className="ei-room-send-dropdown">
+              <button
+                onClick={() => {
+                  setIsSilentMode(v => !v);
+                  setShowSendDropdown(false);
+                  textareaRef.current?.focus();
+                }}
+              >
+                {isSilentMode ? "Normal Response" : "Silent Response"}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
