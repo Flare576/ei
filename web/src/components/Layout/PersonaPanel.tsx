@@ -18,6 +18,7 @@ interface PersonaPanelProps {
   onSelectRoom?: (roomId: string) => void;
   onCreateRoom?: () => void;
   onArchiveRoom?: (roomId: string) => void;
+  onEditRoom?: (roomId: string) => void;
   onShowArchivedRooms?: () => void;
 }
 
@@ -53,6 +54,7 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
   onSelectRoom,
   onCreateRoom,
   onArchiveRoom,
+  onEditRoom,
   onShowArchivedRooms,
 }, ref) {
   const [activeTab, setActiveTab] = useState<"personas" | "rooms">("personas");
@@ -383,15 +385,26 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
                 {room.unread_count > 0 && (
                   <span className="ei-room-pill__badge">{room.unread_count}</span>
                 )}
-                {hoveredRoomId === room.id && onArchiveRoom && (
+                {hoveredRoomId === room.id && (onEditRoom || onArchiveRoom) && (
                   <div className="ei-room-pill__controls" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      className="ei-control-btn ei-control-btn--archive"
-                      onClick={() => onArchiveRoom(room.id)}
-                      title="Archive Room"
-                    >
-                      📦
-                    </button>
+                    {onEditRoom && (
+                      <button
+                        className="ei-control-btn"
+                        onClick={() => onEditRoom(room.id)}
+                        title="Edit Room"
+                      >
+                        ✏️
+                      </button>
+                    )}
+                    {onArchiveRoom && (
+                      <button
+                        className="ei-control-btn ei-control-btn--archive"
+                        onClick={() => onArchiveRoom(room.id)}
+                        title="Archive Room"
+                      >
+                        📦
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

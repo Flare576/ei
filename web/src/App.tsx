@@ -29,7 +29,7 @@ import type {
   } from "../../src/core/types";
 import { ContextStatus, LLMNextStep, RoomMode } from "../../src/core/types";
 import { Layout, PersonaPanel, ChatPanel, RoomChatPanel, ControlArea, HelpModal, ImagePreviewModal, type PersonaPanelHandle, type ChatPanelHandle, type RoomChatPanelHandle } from "./components/Layout";
-import { HumanEditor, PersonaEditor, PersonaCreatorModal, RoomCreatorModal, ArchivedPersonasModal, ArchivedRoomsModal } from "./components/EntityEditor";
+import { HumanEditor, PersonaEditor, PersonaCreatorModal, RoomCreatorModal, RoomEditorModal, ArchivedPersonasModal, ArchivedRoomsModal } from "./components/EntityEditor";
 import { QuoteCaptureModal, QuoteManagementModal } from "./components/Quote";
 import { SettingsModal } from "./components/Settings";
 import { MessageSelectorModal } from "./components/Modals/MessageSelectorModal";
@@ -160,6 +160,8 @@ function App() {
     setRoomActivating(pending);
   }, []);
   const [showRoomCreator, setShowRoomCreator] = useState(false);
+  const [showRoomEditor, setShowRoomEditor] = useState(false);
+  const [editingRoom, setEditingRoom] = useState<RoomEntity | null>(null);
   const [roomInputValue, setRoomInputValue] = useState("");
 
   const personaPanelRef = useRef<PersonaPanelHandle | null>(null);
@@ -796,6 +798,23 @@ function App() {
     }
   }, [processor, activeRoomId]);
 
+  const handleEditRoom = useCallback((roomId: string) => {
+    if (!processor) return;
+    const room = processor.getRoom(roomId);
+    if (room) {
+      setEditingRoom(room);
+      setShowRoomEditor(true);
+    }
+  }, [processor]);
+
+  const handleSaveRoomEdits = useCallback(async (roomId: string, updates: Partial<RoomEntity>) => {
+    if (!processor) return;
+    await processor.updateRoom(roomId, updates);
+    setRooms(processor.getRoomList());
+    setShowRoomEditor(false);
+    setEditingRoom(null);
+  }, [processor]);
+
   const handleUnarchiveRoom = useCallback(async (roomId: string) => {
     if (!processor) return;
     await processor.unarchiveRoom(roomId);
@@ -840,6 +859,11 @@ function App() {
     const humanMsg = allMsgs.find(
       m => m.role === "human" && m.parent_id === activeRoom?.active_node_id
     );
+    if (humanMsg) {
+      const childIds = new Set(allMsgs.filter(m => m.parent_id === humanMsg.id).map(m => m.id));
+      const hasGrandchildren = allMsgs.some(m => m.parent_id && childIds.has(m.parent_id));
+      if (hasGrandchildren) return;
+    }
     const recalledText = humanMsg?.verbal_response ?? humanMsg?.silence_reason ?? "";
     const ok = processorRef.current.recallHumanRoomMessage(activeRoomId);
     if (ok) {
@@ -1343,6 +1367,7 @@ function App() {
           onSelectRoom={handleSelectRoom}
           onCreateRoom={() => setShowRoomCreator(true)}
           onArchiveRoom={handleArchiveRoom}
+          onEditRoom={handleEditRoom}
           onShowArchivedRooms={() => setShowArchivedRooms(true)}
         />
       }
@@ -1598,6 +1623,15 @@ function App() {
       onCreate={handleCreateRoom}
       personas={personas.filter(p => !p.is_archived)}
     />
+    {editingRoom && (
+      <RoomEditorModal
+        isOpen={showRoomEditor}
+        onClose={() => { setShowRoomEditor(false); setEditingRoom(null); }}
+        onSave={handleSaveRoomEdits}
+        room={editingRoom}
+        personas={personas.filter(p => !p.is_archived)}
+      />
+    )}
     </>
     );
 }

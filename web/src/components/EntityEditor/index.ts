@@ -6,6 +6,7 @@ export { HumanEditor } from './HumanEditor';
 export { PersonaEditor } from './PersonaEditor';
 export { PersonaCreatorModal } from './PersonaCreatorModal';
 export { RoomCreatorModal } from './RoomCreatorModal';
+export { RoomEditorModal } from './RoomEditorModal';
 export { ArchivedPersonasModal } from './ArchivedPersonasModal';
 export { ArchivedRoomsModal } from './ArchivedRoomsModal';
 export { ContextStatus } from '../../../../src/core/types';
