@@ -4,7 +4,7 @@ import { openCYPEditor } from "../util/cyp-editor.js";
 
 export const activateCommand: Command = {
   name: "activate",
-  aliases: [],
+  aliases: ['a'],
   description: "Advance active node in current room",
   usage: "/activate | /activate <num>",
 

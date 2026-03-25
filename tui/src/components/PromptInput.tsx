@@ -71,9 +71,8 @@ export function PromptInput() {
   registerCommand(quotesCommand);
   registerCommand(editorCommand);
   registerCommand(personaCommand);
+  registerCommand(roomCommand);
   registerCommand(detailsCommand);
-  registerCommand(archiveCommand);
-  registerCommand(unarchiveCommand);
   registerCommand(newCommand);
   registerCommand(modelCommand);
   registerCommand(settingsCommand);
@@ -84,14 +83,15 @@ export function PromptInput() {
   registerCommand(queueCommand);
   registerCommand(dlqCommand);
   registerCommand(toolsCommand);
-  registerCommand(authCommand);
   registerCommand(dedupeCommand);
-  registerCommand(roomCommand);
   registerCommand(activateCommand);
   registerCommand(silenceCommand);
   registerCommand(captureCommand);
+  registerCommand(authCommand);
   registerCommand(pauseCommand);
   registerCommand(resumeCommand);
+  registerCommand(archiveCommand);
+  registerCommand(unarchiveCommand);
 
   let textareaRef: TextareaRenderable | undefined;
 
