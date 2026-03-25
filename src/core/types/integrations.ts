@@ -39,6 +39,7 @@ export interface ToolDefinition {
   enabled: boolean;
   created_at: string;                  // ISO timestamp
   max_calls_per_interaction?: number;  // Max times LLM may call this tool per response turn. Default: 3.
+  is_submit?: boolean;                 // If true, calling this tool IS the structured response — terminates the tool loop immediately and its arguments become response.parsed
 }
 
 // =============================================================================
