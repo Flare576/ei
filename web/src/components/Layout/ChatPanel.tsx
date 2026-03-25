@@ -18,7 +18,7 @@ function renderMessageContent(
 ): React.ReactNode {
   // Silence-reason messages get muted rendering
   if (message.silence_reason !== undefined) {
-    const label = activePersonaDisplayName ?? "Persona";
+    const label = message.role === "human" ? "You" : (activePersonaDisplayName ?? "Persona");
     return (
       <span className="silence-reason">
         [{label} chose not to respond because: {message.silence_reason}]
