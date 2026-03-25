@@ -139,6 +139,12 @@ export function PromptInput() {
   });
 
   createEffect(() => {
+    if (activeRoomId() && !humanRoomMessagePending()) {
+      setHumanSubmitted(false);
+    }
+  });
+
+  createEffect(() => {
     if (activeRoomId() && !humanSubmitted()) {
       const room = getRoom(activeRoomId()!);
       if (room?.mode !== RoomMode.FreeForAll && allPersonasResponded() && !humanRoomMessagePending()) {

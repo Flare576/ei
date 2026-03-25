@@ -560,8 +560,8 @@ export const EiProvider: ParentComponent = (props) => {
     const roomId = store.activeRoomId;
     if (!roomId || !processor) return;
     await processor.activateRoom(roomId);
-    void refreshRoomMessages();
-    refreshRoomActivePath();
+    await refreshRoomMessages();
+    void refreshRoomActivePath();
     void refreshRooms();
   };
 
