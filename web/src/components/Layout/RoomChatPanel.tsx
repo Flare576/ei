@@ -129,7 +129,8 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
 
   const respondedPersonaIds = new Set(
     currentRoundMessages
-      .filter(m => m.role === "persona" && m.persona_id)
+      .filter(m => m.role === "persona" && m.persona_id &&
+                   (m.verbal_response !== undefined || m.silence_reason !== undefined))
       .map(m => m.persona_id!)
   );
 
