@@ -1031,7 +1031,7 @@ export class Processor {
             }
 
             const roomId = request.data.roomId as string | undefined;
-            if (roomId && request.next_step === LLMNextStep.HandleRoomResponse) {
+            if (roomId && (request.next_step === LLMNextStep.HandleRoomResponse || request.next_step === LLMNextStep.HandleRoomJudge)) {
               this.interface.onRoomMessageProcessing?.(roomId);
             }
 
