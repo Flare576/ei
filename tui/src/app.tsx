@@ -5,6 +5,7 @@ import { OverlayProvider, useOverlay } from "./context/overlay";
 import { Layout } from "./components/Layout";
 import { Sidebar } from "./components/Sidebar";
 import { MessageList } from "./components/MessageList";
+import { RoomMessageList } from "./components/RoomMessageList";
 import { PromptInput } from "./components/PromptInput";
 import { StatusBar } from "./components/StatusBar";
 import { Show } from "solid-js";
@@ -14,7 +15,7 @@ import { useRenderer } from "@opentui/solid";
 
 function AppContent() {
   const { overlayRenderer, showOverlay } = useOverlay();
-  const { showWelcomeOverlay, dismissWelcomeOverlay } = useEi();
+  const { showWelcomeOverlay, dismissWelcomeOverlay, activeRoomId } = useEi();
   const renderer = useRenderer();
   // Show welcome overlay when LLM detection determines no provider is configured
   createEffect(() => {
@@ -33,7 +34,7 @@ function AppContent() {
     <box flexDirection="column" width="100%" height="100%">
       <Layout
         sidebar={<Sidebar />}
-        messages={<MessageList />}
+        messages={<Show when={activeRoomId()} fallback={<MessageList />}><RoomMessageList /></Show>}
         input={<PromptInput />}
       />
       <StatusBar />
