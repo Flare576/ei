@@ -310,7 +310,7 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
     const avatarColor = msg.persona_id ? getAvatarColor(msg.persona_id) : "#007bff";
 
     const siblings = isCYP && msg.parent_id !== null
-      ? allRoomMessages.filter(m => m.parent_id === msg.parent_id)
+      ? allRoomMessages.filter(m => m.parent_id === msg.parent_id && m.role === "persona")
       : [];
     const hasBranches = siblings.length > 1;
     const navOpen = navPickerMessageId === msg.id;
@@ -479,7 +479,7 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
           displayMessages.map(renderMessage)
         )}
 
-        {isProcessing && pendingPersonaCount > 0 && (
+        {isGathering && pendingPersonaCount > 0 && (
           <div className="ei-room-thinking">
             {expectedPersonaIds
               .filter(id => !respondedPersonaIds.has(id))
