@@ -166,7 +166,7 @@ export function PromptInput() {
         );
         const recalled = recallHumanRoomMessage();
         if (recalled) {
-          const content = pendingMsg?.verbal_response ?? "";
+          const content = pendingMsg?.verbal_response ?? pendingMsg?.silence_reason ?? "";
           textareaRef?.setText(content);
           setInputText(content);
           textareaRef?.gotoBufferEnd();
@@ -224,28 +224,14 @@ export function PromptInput() {
   });
 
   const handleSubmit = async () => {
+    const text = textareaRef?.plainText?.trim() ?? "";
+
     if (activeRoomId()) {
       const room = getRoom(activeRoomId()!);
 
-      if (room?.mode === RoomMode.ChooseYourPath && allPersonasResponded() && !humanRoomMessagePending()) {
-        if (room.active_node_id) {
-          await openCYPEditor({
-            roomId: activeRoomId()!,
-            activeNodeId: room.active_node_id,
-            messages: roomMessages(),
-            activePath: roomActivePath(),
-            personas: personas(),
-            selectBranch: selectCYPBranch,
-            showNotification,
-            renderer,
-          });
-        }
-        return;
-      }
-
-      if (room?.mode !== RoomMode.FreeForAll && humanRoomMessagePending() && allPersonasResponded()) {
-        if (room && room.mode === RoomMode.ChooseYourPath) {
-          if (room.active_node_id) {
+      if (room?.mode !== RoomMode.FreeForAll && !text) {
+        if (humanRoomMessagePending() && allPersonasResponded()) {
+          if (room?.mode === RoomMode.ChooseYourPath && room.active_node_id) {
             await openCYPEditor({
               roomId: activeRoomId()!,
               activeNodeId: room.active_node_id,
@@ -256,15 +242,14 @@ export function PromptInput() {
               showNotification,
               renderer,
             });
+          } else {
+            await activateRoom();
           }
-        } else {
-          await activateRoom();
         }
         return;
       }
     }
 
-    const text = textareaRef?.plainText?.trim();
     if (!text) return;
 
     if (text.startsWith("/")) {
