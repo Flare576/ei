@@ -14,6 +14,7 @@ export function StatusBar() {
     getRoom,
     rooms,
     humanRoomMessagePending,
+    isRoomProcessing,
   } = useEi();
   const { focusedPanel, sidebarVisible } = useKeyboardNav();
 
@@ -108,6 +109,9 @@ export function StatusBar() {
     if (roomId) {
       const room = getRoom(roomId);
       if (room?.mode !== RoomMode.FreeForAll) {
+        if (isRoomProcessing()) {
+          return { text: "[Waiting]", color: "#586e75" };
+        }
         if (humanRoomMessagePending() && allPersonasResponded()) {
           return { text: "[Activate!]", color: "#b58900" };
         }
