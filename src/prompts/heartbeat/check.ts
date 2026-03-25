@@ -126,7 +126,7 @@ ${formatPeopleWithGaps(data.human.people)}`;
 
   const outputFragment = `## Response Format
 
-Return JSON in this exact format:
+Call the \`submit_heartbeat_check\` tool with your decision. If the tool is unavailable, return JSON:
 
 \`\`\`json
 {
