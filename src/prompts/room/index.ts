@@ -44,7 +44,7 @@ export function buildRoomResponsePrompt(data: RoomResponsePromptData): PromptOut
   const humanSection = buildHumanSection(human);
   const quotesSection = buildQuotesSection(human.quotes, human);
   const participants = buildRoomParticipantsSection(other_participants);
-  const guidelines = buildRoomGuidelinesSection(name);
+  const guidelines = buildRoomGuidelinesSection(name, data.room.mode);
   const responseFormat = buildRoomResponseFormatSection();
   const toolsSection = tools && tools.length > 0 ? buildToolsSection() : "";
   const currentTime = formatCurrentTime();
@@ -86,7 +86,9 @@ export function buildRoomJudgePrompt(data: RoomJudgePromptData): PromptOutput {
 
 The conversation has reached a fork. Multiple participants have responded to the same moment, and it falls to you to decide which response the conversation continues from.
 
-There is no objectively correct answer. Pick the response you find most interesting, surprising, true, or fitting — the one that feels most alive to you, given who you are.`;
+There is no objectively correct answer. Pick the response you find most interesting, surprising, true, or fitting — the one that feels most alive to you, given who you are.
+
+**The MAP dynamic**: Every participant — personas and the Human alike — can see your description and traits. They have been crafting their responses specifically to appeal to your tastes. Personas are also constrained to stay true to their own identities; the Human is not. Factor that in if you choose to.`;
 
   const contextSection = context.length > 0
     ? buildRoomHistorySection(context)

@@ -4,6 +4,7 @@
 
 import type { RoomParticipantIdentity, RoomHistoryMessage, RoomJudgeCandidate } from "./types.js";
 import type { PersonaTrait, PersonaTopic } from "../../core/types.js";
+import { RoomMode } from "../../core/types.js";
 
 const DESCRIPTION_MAX_CHARS = 500;
 
@@ -48,8 +49,8 @@ export function buildRoomHistorySection(history: RoomHistoryMessage[]): string {
   return `## Conversation So Far\n\n${lines.join("\n\n")}`;
 }
 
-export function buildRoomGuidelinesSection(personaName: string): string {
-  return `## Guidelines
+export function buildRoomGuidelinesSection(personaName: string, mode?: RoomMode): string {
+  const baseGuidelines = `## Guidelines
 
 - You are one voice among several — contribute authentically, not performatively
 - Respond to the thread as a whole; you may address specific participants by name
@@ -60,6 +61,16 @@ export function buildRoomGuidelinesSection(personaName: string): string {
 - NEVER repeat or echo what was just said. Start directly with your own reaction.
 - Format your response as specified in the Response Format section.
 - ${personaName.toLowerCase() === "ei" ? "As Ei, you can see the full room dynamic and may help facilitate if things get stuck." : "Don't break character to comment on the room mechanics."}`;
+
+  if (mode === RoomMode.MessagesAgainstPersona) {
+    return baseGuidelines + `
+- **MAP Mode — Messages Against Persona**: This is a competition. Everyone (including you) is trying to craft the response the Judge selects to continue the conversation.
+- Your primary goal: provide the message the Judge thinks best moves the conversation forward. Study their description and traits above — understand what resonates with them.
+- Your submission must be true to your identity. You cannot abandon who you are to win.
+- Your advantage: you have direct access to the Judge's full description and personality traits. Use them. The Human's advantage: they are not bound by the identity constraint above.`;
+  }
+
+  return baseGuidelines;
 }
 
 export function buildRoomTraitsSection(traits: PersonaTrait[]): string {
