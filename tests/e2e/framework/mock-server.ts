@@ -378,16 +378,16 @@ export class MockLLMServerImpl implements MockLLMServer {
       return "human-concepts";
     }
 
-    if (content.includes("description") && content.includes("persona")) {
-      return "description";
-    }
-
     if (content.includes("the conversation has reached a fork")) {
       return "room-judge";
     }
 
     if (content.includes("you are participating in a shared multi-persona conversation")) {
       return "room-response";
+    }
+
+    if (content.includes("description") && content.includes("persona")) {
+      return "description";
     }
 
     return "response";
