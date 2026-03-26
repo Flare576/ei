@@ -7,6 +7,8 @@ vi.mock("../../../src/cli/retrieval.js", () => ({
   lookupById: vi.fn().mockResolvedValue(null),
 }));
 
+
+
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createMcpServer } from "../../../src/cli/mcp.js";
@@ -52,5 +54,18 @@ describe("MCP server", () => {
     const result = await client.callTool({ name: "ei_lookup", arguments: { id: "nonexistent-id" } });
     const content = result.content as Array<{ type: string; text: string }>;
     expect(content[0].text).toContain("No entity found");
+  });
+
+  it("ei_search type schema includes personas as a valid enum value", async () => {
+    ({ client } = await setupClient());
+    const tools = await client.listTools();
+    const eiSearch = tools.tools.find((t) => t.name === "ei_search");
+    expect(eiSearch).toBeDefined();
+    const typeSchema = (eiSearch!.inputSchema as Record<string, unknown>);
+    const properties = typeSchema.properties as Record<string, unknown>;
+    const typeProperty = properties?.type as Record<string, unknown>;
+    const enumValues = typeProperty?.enum as string[];
+    expect(Array.isArray(enumValues)).toBe(true);
+    expect(enumValues).toContain("personas");
   });
 });

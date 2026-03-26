@@ -26,6 +26,8 @@ const TYPE_ALIASES: Record<string, string> = {
   people: "people",
   topic: "topics",
   topics: "topics",
+  persona: "personas",
+  personas: "personas",
 };
 
 function printHelp(): void {
@@ -47,10 +49,11 @@ Usage:
   ei mcp                        Start the Ei MCP stdio server (for Cursor/Claude Desktop)
 
 Types:
-  quote / quotes    Quotes from conversation history
-  fact / facts      Facts about the user
-  person / people   People from the user's life
-  topic / topics    Topics of interest
+  quote / quotes      Quotes from conversation history
+  fact / facts        Facts about the user
+  person / people     People from the user's life
+  topic / topics      Topics of interest
+  persona / personas  Personas in this Ei instance
 
 Options:
   --number, -n     Maximum number of results (default: 10)
@@ -88,7 +91,7 @@ function buildOpenCodeToolContent(): string {
     '      "Search text, or an entity ID when lookup=true. Supports natural language. Omit to browse by recency."',
     '    ),',
     '    type: tool.schema',
-    '      .enum(["facts", "people", "topics", "quotes"])',
+    '      .enum(["facts", "people", "topics", "quotes", "personas"])',
     '      .optional()',
     '      .describe(',
     '        "Filter to a specific data type. Omit to search all types (balanced across all 4).",',

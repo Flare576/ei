@@ -20,10 +20,10 @@ export function createMcpServer(): McpServer {
       inputSchema: {
         query: z.string().optional().describe("Search text. Supports natural language. Omit to browse without semantic filtering — useful with recent=true or persona filter."),
         type: z
-          .enum(["facts", "people", "topics", "quotes"])
+          .enum(["facts", "people", "topics", "quotes", "personas"])
           .optional()
           .describe(
-            "Filter to a specific data type. Omit to search all types (balanced across all 4)."
+            "Filter to a specific data type. Omit to search all types (balanced across all 5)."
           ),
         persona: z
           .string()
