@@ -54,7 +54,7 @@ export async function removeToolProvider(sm: StateManager, id: string): Promise<
 // =============================================================================
 
 export function getToolList(sm: StateManager): ToolDefinition[] {
-  return sm.tools_getAll();
+  return sm.tools_getAll().filter(t => !t.is_submit);
 }
 
 export function getTool(sm: StateManager, id: string): ToolDefinition | null {
