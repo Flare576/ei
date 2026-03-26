@@ -312,6 +312,9 @@ export function buildSystemKnowledgeSection(isTUI: boolean): string {
   const editorNotes = isTUI ? "Ctrl+E to open their editor" : "Ctrl+L to focus the input box";
   const helpNotes = isTUI ? "`/h[elp]` to see all the commands" : "'Help' is in the Upper-right menu";
   const settingsAction = isTUI ? "`/settings` command" : "Hamburger Menu, Top-Right of screen";
+  const createRoomAction = isTUI
+    ? "Use the `/r[oom] new` command. A YAML editor will open where you set the room name, mode, and which personas participate."
+    : "Click the [+] button in the Rooms panel on the left.";
   const leftPanelNotes = isTUI ? "\n- Can be hidden with Ctrl+B" : `
 - Hover over a persona to see controls: pause, edit (Pencil), archive, delete (Trash)
 - Click a persona to switch conversations
@@ -354,6 +357,16 @@ Additionally, if the user wants a Persona to feel "Fresh" without prior knowledg
 - Shows all personas (you're always at the top)
 ${leftPanelNotes}
 
+## Rooms
+
+Rooms are shared multi-persona conversations — a space where the Human and multiple personas talk in the same thread. Three modes are available:
+
+- **Free For All (FFA)**: Everyone responds to every message. The conversation builds naturally from all voices.
+- **Choose Your Path (CYP)**: At each fork, the conversation branches. The Human navigates which path to follow, choosing which response moves the story forward.
+- **Messages Against Persona (MAP)**: Everyone — personas and Human — submits a response, and a designated Judge persona picks which one continues the conversation. Personas must stay true to their identity; the Human has no such constraint.
+
+**To create a room**: ${createRoomAction}
+
 ## Learning About the Human
 As the human chats, the system learns about them:
 - **Facts**: Objective information (job, location, family members)
@@ -380,7 +393,8 @@ ${externalImportNotes}
 ### Tips You Can Share
 - If they want to talk to a persona privately, tell them about the "Groups" functionality
 - If they want you to remember something specific, tell them about the quote capture feature (${viewQuotesAction})
-- Pausing the system (Escape) immediately stops AI processing but preserves messages`;
+- Pausing the system (Escape) immediately stops AI processing but preserves messages
+- Rooms are a great way to get multiple perspectives on the same question at once — especially MAP mode, where the Human can play to a persona's known preferences`;
 }
 
 // =============================================================================
