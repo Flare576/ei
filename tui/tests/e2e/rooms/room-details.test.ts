@@ -149,7 +149,7 @@ test.describe("T8: /details in room mode", () => {
     terminal.write(`/r ${ROOM_NAME}`);
     terminal.submit();
 
-    await expect(terminal.getByText(ROOM_NAME)).toBeVisible({ timeout: 10000 });
+    await expect(terminal.getByText(`Switched to ${ROOM_NAME}`)).toBeVisible({ timeout: 10000 });
 
     // Issue /d with no args — should open the room editor
     // EDITOR=true exits immediately (no-op editor), so we just verify no crash
@@ -160,7 +160,7 @@ test.describe("T8: /details in room mode", () => {
     await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 10000 });
 
     // Room name should still be visible (still in room mode after editor closes)
-    await expect(terminal.getByText(ROOM_NAME)).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText(`Switched to ${ROOM_NAME}`)).toBeVisible({ timeout: 5000 });
   });
 
   test("/d PersonaName in room mode opens persona editor not room", async ({ terminal }) => {
@@ -170,7 +170,7 @@ test.describe("T8: /details in room mode", () => {
     terminal.write(`/r ${ROOM_NAME}`);
     terminal.submit();
 
-    await expect(terminal.getByText(ROOM_NAME)).toBeVisible({ timeout: 10000 });
+    await expect(terminal.getByText(`Switched to ${ROOM_NAME}`)).toBeVisible({ timeout: 10000 });
 
     // Issue /d Ei — should open the Ei persona editor, not the room editor
     // EDITOR=true exits immediately
@@ -190,13 +190,13 @@ test.describe("T9: Sidebar Tab cycling behavior", () => {
     terminal.write(`/r ${ROOM_NAME}`);
     terminal.submit();
 
-    await expect(terminal.getByText(ROOM_NAME)).toBeVisible({ timeout: 10000 });
+    await expect(terminal.getByText(`Switched to ${ROOM_NAME}`)).toBeVisible({ timeout: 10000 });
 
     // Press Tab — with only one room, should wrap back to same room
     terminal.write(TAB);
 
     // Still in room mode, room name still visible
-    await expect(terminal.getByText(ROOM_NAME)).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText(`Switched to ${ROOM_NAME}`)).toBeVisible({ timeout: 5000 });
   });
 
   test("Tab cycles personas when in persona mode", async ({ terminal }) => {
@@ -224,7 +224,7 @@ test.describe("T9: Sidebar Tab cycling behavior", () => {
     terminal.write(`/r ${ROOM_NAME}`);
     terminal.submit();
 
-    await expect(terminal.getByText(ROOM_NAME)).toBeVisible({ timeout: 10000 });
+    await expect(terminal.getByText(`Switched to ${ROOM_NAME}`)).toBeVisible({ timeout: 10000 });
 
     // Switch back to persona mode via /p Ei
     terminal.write("/p Ei");
@@ -245,6 +245,6 @@ test.describe("T9: Sidebar Tab cycling behavior", () => {
     terminal.submit();
 
     // Sidebar should now show the room name
-    await expect(terminal.getByText(ROOM_NAME)).toBeVisible({ timeout: 10000 });
+    await expect(terminal.getByText(`Switched to ${ROOM_NAME}`)).toBeVisible({ timeout: 10000 });
   });
 });

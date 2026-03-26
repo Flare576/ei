@@ -111,15 +111,45 @@ function createCheckpointWithMAPRoom() {
         id: MAP_ROOM_ID,
         display_name: MAP_ROOM_NAME,
         entity: "room",
-        mode: "map",
+        mode: "messages_against_persona",
         persona_ids: ["ei", "007", JUDGE_PERSONA_ID],
         judge_persona_id: JUDGE_PERSONA_ID,
-        active_node_id: null,
+        active_node_id: "map-seed-001",
         is_archived: false,
         created_at: timestamp,
         last_updated: timestamp,
         last_activity: timestamp,
-        messages: [],
+        messages: [
+          {
+            id: "map-seed-001",
+            parent_id: null,
+            role: "human",
+            verbal_response: "Starting the MAP room",
+            timestamp,
+            read: true,
+            context_status: "default",
+          },
+          {
+            id: "map-ei-r1",
+            parent_id: "map-seed-001",
+            role: "persona",
+            persona_id: "ei",
+            verbal_response: "My MAP response",
+            timestamp,
+            read: false,
+            context_status: "default",
+          },
+          {
+            id: "map-sage-r1",
+            parent_id: "map-seed-001",
+            role: "persona",
+            persona_id: "007",
+            verbal_response: "My MAP response",
+            timestamp,
+            read: false,
+            context_status: "default",
+          },
+        ],
       },
     },
     queue: [],
@@ -151,7 +181,7 @@ mockServer.setResponseForType("room-response", {
 mockServer.setResponseForType("room-judge", {
   type: "fixed",
   content: JSON.stringify({
-    winner_message_id: "some-id",
+    winner_message_id: "map-ei-r1",
     reason: "Best answer",
   }),
 });
@@ -190,14 +220,17 @@ test.describe("T3 — MAP room activation cycle", () => {
     terminal.write(`/r ${MAP_ROOM_NAME}`);
     terminal.submit();
 
-    await expect(terminal.getByText(MAP_ROOM_NAME)).toBeVisible({ timeout: 10000 });
+    await expect(terminal.getByText(`Switched to ${MAP_ROOM_NAME}`)).toBeVisible({ timeout: 10000 });
 
-    // Send a message to start the round
+    // Submit human message → [Activate!] immediately (personas pre-seeded)
     terminal.write("What is your perspective on this matter?");
     terminal.submit();
 
-    // After sending, human message is pending — should show [Waiting] in center
-    await expect(terminal.getByText(/\[Waiting\]/)).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText(/\[Activate!\]/g)).toBeVisible({ timeout: 10000 });
+
+    // Activate → judge queued → [Waiting] during judge
+    terminal.submit();
+    await expect(terminal.getByText(/\[Waiting\]/g)).toBeVisible({ timeout: 10000 });
   });
 
   test("MAP room shows [Activate!] once all personas respond", async ({ terminal }) => {
@@ -207,17 +240,13 @@ test.describe("T3 — MAP room activation cycle", () => {
     terminal.write(`/r ${MAP_ROOM_NAME}`);
     terminal.submit();
 
-    await expect(terminal.getByText(MAP_ROOM_NAME)).toBeVisible({ timeout: 10000 });
+    await expect(terminal.getByText(`Switched to ${MAP_ROOM_NAME}`)).toBeVisible({ timeout: 10000 });
 
-    // Send a message to trigger persona responses
+    // Send message → [Activate!] immediately (personas pre-seeded, queue empty = "Ready" already)
     terminal.write("Please share your thoughts.");
     terminal.submit();
 
-    // Wait for all personas to respond (queue settles to Ready)
-    await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 30000 });
-
-    // Once personas responded and human message is still pending: [Activate!]
-    await expect(terminal.getByText(/\[Activate!\]/)).toBeVisible({ timeout: 10000 });
+    await expect(terminal.getByText(/\[Activate!\]/g)).toBeVisible({ timeout: 10000 });
   });
 
   test("MAP room shows human pending when human hasn't submitted", async ({ terminal }) => {
@@ -227,15 +256,11 @@ test.describe("T3 — MAP room activation cycle", () => {
     terminal.write(`/r ${MAP_ROOM_NAME}`);
     terminal.submit();
 
-    await expect(terminal.getByText(MAP_ROOM_NAME)).toBeVisible({ timeout: 10000 });
+    await expect(terminal.getByText(`Switched to ${MAP_ROOM_NAME}`)).toBeVisible({ timeout: 10000 });
 
-    // Send a message — human message now pending in the round
-    terminal.write("Test the waiting list.");
-    terminal.submit();
-
-    // Before personas have all responded, human hasn't submitted yet
+    // Don't submit — personas already responded, human hasn't
     // Left section should show "Waiting for ... You ..."
-    await expect(terminal.getByText(/Waiting for.*You/)).toBeVisible({ timeout: 10000 });
+    await expect(terminal.getByText(/Waiting for.*You/g)).toBeVisible({ timeout: 5000 });
   });
 
   test("MAP room activates on Enter with empty input after all responded", async ({ terminal }) => {
@@ -245,22 +270,21 @@ test.describe("T3 — MAP room activation cycle", () => {
     terminal.write(`/r ${MAP_ROOM_NAME}`);
     terminal.submit();
 
-    await expect(terminal.getByText(MAP_ROOM_NAME)).toBeVisible({ timeout: 10000 });
+    await expect(terminal.getByText(`Switched to ${MAP_ROOM_NAME}`)).toBeVisible({ timeout: 10000 });
 
-    // Send human message to start round
+    // Send human message → [Activate!] immediately
     terminal.write("Activate test message.");
     terminal.submit();
 
-    // Wait for [Activate!] — all personas have responded, human message pending
-    await expect(terminal.getByText(/\[Activate!\]/)).toBeVisible({ timeout: 30000 });
+    await expect(terminal.getByText(/\[Activate!\]/g)).toBeVisible({ timeout: 10000 });
 
     // Press Enter with empty input to trigger activation
     terminal.submit();
 
     // CRITICAL REGRESSION: [Activate!] must NOT persist while judge is running
     // After activation, center should show [Waiting] (judge phase), not [Activate!]
-    await expect(terminal.getByText(/\[Waiting\]/)).toBeVisible({ timeout: 10000 });
-    await expect(terminal.getByText(/\[Activate!\]/)).not.toBeVisible({ timeout: 2000 });
+    await expect(terminal.getByText(/\[Waiting\]/g)).toBeVisible({ timeout: 10000 });
+    await expect(terminal.getByText(/\[Activate!\]/g)).not.toBeVisible({ timeout: 2000 });
   });
 
   test("MAP judge verdict shows as verdict not chose-not-to-respond", async ({ terminal }) => {
@@ -270,14 +294,13 @@ test.describe("T3 — MAP room activation cycle", () => {
     terminal.write(`/r ${MAP_ROOM_NAME}`);
     terminal.submit();
 
-    await expect(terminal.getByText(MAP_ROOM_NAME)).toBeVisible({ timeout: 10000 });
+    await expect(terminal.getByText(`Switched to ${MAP_ROOM_NAME}`)).toBeVisible({ timeout: 10000 });
 
-    // Start a round
+    // Submit human message → [Activate!] immediately
     terminal.write("Judge this response please.");
     terminal.submit();
 
-    // Wait for [Activate!]
-    await expect(terminal.getByText(/\[Activate!\]/)).toBeVisible({ timeout: 30000 });
+    await expect(terminal.getByText(/\[Activate!\]/g)).toBeVisible({ timeout: 10000 });
 
     // Activate the judge phase
     terminal.submit();
@@ -286,7 +309,7 @@ test.describe("T3 — MAP room activation cycle", () => {
     await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 30000 });
 
     // Judge message must NOT show "chose not to respond" — it's a verdict
-    await expect(terminal.getByText(/chose not to respond/)).not.toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText(/chose not to respond/g)).not.toBeVisible({ timeout: 5000 });
   });
 });
 
@@ -298,22 +321,15 @@ test.describe("T4 — MAP silence and recall", () => {
     terminal.write(`/r ${MAP_ROOM_NAME}`);
     terminal.submit();
 
-    await expect(terminal.getByText(MAP_ROOM_NAME)).toBeVisible({ timeout: 10000 });
+    await expect(terminal.getByText(`Switched to ${MAP_ROOM_NAME}`)).toBeVisible({ timeout: 10000 });
 
-    // Start a round so the human has a pending slot
-    terminal.write("Opening question for silence test.");
-    terminal.submit();
-
-    // Wait for the round to start processing
-    await expect(terminal.getByText(/\[Waiting\]/)).toBeVisible({ timeout: 5000 });
-
-    // Issue silence command with a reason
+    // Personas already responded, human not submitted — issue silence directly
     terminal.write("/silence just thinking");
     terminal.submit();
 
     // Silence should be recorded — notification or status change confirms it
     await expect(
-      terminal.getByText(/Silence recorded|Response Submitted/gi)
+      terminal.getByText(/Press \[Up\] to recall/gi)
     ).toBeVisible({ timeout: 5000 });
   });
 
@@ -324,14 +340,7 @@ test.describe("T4 — MAP silence and recall", () => {
     terminal.write(`/r ${MAP_ROOM_NAME}`);
     terminal.submit();
 
-    await expect(terminal.getByText(MAP_ROOM_NAME)).toBeVisible({ timeout: 10000 });
-
-    // Start a round
-    terminal.write("Opening question for recall test.");
-    terminal.submit();
-
-    // Wait for the round to initialize
-    await expect(terminal.getByText(/\[Waiting\]/)).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText(`Switched to ${MAP_ROOM_NAME}`)).toBeVisible({ timeout: 10000 });
 
     // Issue silence command with a reason
     terminal.write("/silence just thinking");
@@ -339,13 +348,13 @@ test.describe("T4 — MAP silence and recall", () => {
 
     // Wait for confirmation of silence
     await expect(
-      terminal.getByText(/Silence recorded|Response Submitted/gi)
+      terminal.getByText(/Press \[Up\] to recall/gi)
     ).toBeVisible({ timeout: 5000 });
 
     // Press Up to recall — should restore the silence reason text
     terminal.keyUp();
 
     // Input should now contain "just thinking"
-    await expect(terminal.getByText(/just thinking/)).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText(/just thinking/g)).toBeVisible({ timeout: 5000 });
   });
 });

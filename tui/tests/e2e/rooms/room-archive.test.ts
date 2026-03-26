@@ -184,7 +184,7 @@ test.describe("Room Archive — archive and unarchive commands", () => {
     terminal.write(`/unarchive ${ARCHIVE_ROOM_NAME}`);
     terminal.submit();
 
-    await expect(terminal.getByText(ARCHIVE_ROOM_NAME)).toBeVisible({ timeout: 10000 });
+    await expect(terminal.getByText(`Room "${ARCHIVE_ROOM_NAME}" unarchived`)).toBeVisible({ timeout: 10000 });
   });
 
   test("/archive with wrong name shows not-found message", async ({ terminal }) => {
@@ -194,7 +194,7 @@ test.describe("Room Archive — archive and unarchive commands", () => {
     terminal.submit();
 
     await expect(
-      terminal.getByText(/not found|No persona or room named/i),
+      terminal.getByText(/not found|No persona or room named/gi),
     ).toBeVisible({ timeout: 10000 });
   });
 });

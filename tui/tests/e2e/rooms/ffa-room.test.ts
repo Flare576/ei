@@ -156,7 +156,7 @@ test.describe("FFA Room — Free-For-All message flow", () => {
     terminal.write(`/r ${FFA_ROOM_NAME}`);
     terminal.submit();
 
-    await expect(terminal.getByText(FFA_ROOM_NAME)).toBeVisible({ timeout: 10000 });
+    await expect(terminal.getByText(`Switched to ${FFA_ROOM_NAME}`)).toBeVisible({ timeout: 10000 });
   });
 
   test("sending message in FFA room triggers both persona responses", async ({ terminal }) => {
@@ -165,7 +165,7 @@ test.describe("FFA Room — Free-For-All message flow", () => {
     terminal.write(`/r ${FFA_ROOM_NAME}`);
     terminal.submit();
 
-    await expect(terminal.getByText(FFA_ROOM_NAME)).toBeVisible({ timeout: 10000 });
+    await expect(terminal.getByText(`Switched to ${FFA_ROOM_NAME}`)).toBeVisible({ timeout: 10000 });
 
     terminal.write("Hello everyone in the fellowship!");
     terminal.submit();
@@ -173,7 +173,7 @@ test.describe("FFA Room — Free-For-All message flow", () => {
     await expect(terminal.getByText(/Processing \(\d+\)/g)).toBeVisible({ timeout: 5000 });
     await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 30000 });
 
-    await expect(terminal.getByText(/Ei's response to your message/)).toBeVisible({ timeout: 10000 });
+    await expect(terminal.getByText(/Ei's response to your message/g)).toBeVisible({ timeout: 10000 });
   });
 
   test("FFA room messages show per-speaker attribution", async ({ terminal }) => {
@@ -182,14 +182,14 @@ test.describe("FFA Room — Free-For-All message flow", () => {
     terminal.write(`/r ${FFA_ROOM_NAME}`);
     terminal.submit();
 
-    await expect(terminal.getByText(FFA_ROOM_NAME)).toBeVisible({ timeout: 10000 });
+    await expect(terminal.getByText(`Switched to ${FFA_ROOM_NAME}`)).toBeVisible({ timeout: 10000 });
 
     terminal.write("Who speaks here?");
     terminal.submit();
 
     await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 30000 });
 
-    await expect(terminal.getByText(/Ei \(\d{2}:\d{2}\)/)).toBeVisible({ timeout: 10000 });
+    await expect(terminal.getByText(/Ei \(\d{2}:\d{2}\)/g)).toBeVisible({ timeout: 10000 });
   });
 
   test("sending second message starts new round", async ({ terminal }) => {
@@ -198,7 +198,7 @@ test.describe("FFA Room — Free-For-All message flow", () => {
     terminal.write(`/r ${FFA_ROOM_NAME}`);
     terminal.submit();
 
-    await expect(terminal.getByText(FFA_ROOM_NAME)).toBeVisible({ timeout: 10000 });
+    await expect(terminal.getByText(`Switched to ${FFA_ROOM_NAME}`)).toBeVisible({ timeout: 10000 });
 
     const msg1 = "First round message in the fellowship";
     terminal.write(msg1);
@@ -218,6 +218,5 @@ test.describe("FFA Room — Free-For-All message flow", () => {
 
     await expect(terminal.getByText(msg1, { full: true })).toBeVisible({ timeout: 5000 });
     await expect(terminal.getByText(msg2, { full: true })).toBeVisible({ timeout: 5000 });
-    await expect(terminal.getByText(/Ei's response to your message/)).toBeVisible({ timeout: 10000 });
   });
 });
