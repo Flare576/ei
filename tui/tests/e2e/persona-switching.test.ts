@@ -278,7 +278,7 @@ test.describe("Archive Commands", () => {
     terminal.submit();
 
     // Should show archived personas overlay with bob
-    await expect(terminal.getByText("Archived Personas")).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText("Archived Items (Enter to unarchive)")).toBeVisible({ timeout: 5000 });
     await expect(terminal.getByText(/bob/gi)).toBeVisible({ timeout: 5000 });
 
     terminal.keyEscape();

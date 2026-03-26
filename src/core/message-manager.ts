@@ -128,12 +128,13 @@ export async function sendMessage(
   qp: QueueProcessor,
   currentRequest: LLMRequest | null,
   personaId: string,
-  content: string,
+  content: string | null,
   isTUI: boolean,
   getModelForPersona: (id?: string) => string | undefined,
   onError: (err: { code: string; message: string }) => void,
   onMessageAdded: (id: string) => void,
-  onMessageQueued: (id: string) => void
+  onMessageQueued: (id: string) => void,
+  silenceReason?: string
 ): Promise<void> {
   const persona = sm.persona_getById(personaId);
   if (!persona) {
@@ -149,7 +150,8 @@ export async function sendMessage(
   const message: Message = {
     id: crypto.randomUUID(),
     role: "human",
-    verbal_response: content,
+    verbal_response: content ?? undefined,
+    silence_reason: content ? undefined : (silenceReason ?? "passed"),
     timestamp: new Date().toISOString(),
     read: false,
     context_status: "default" as ContextStatus,
@@ -158,7 +160,7 @@ export async function sendMessage(
   onMessageAdded(persona.id);
 
   const tools = sm.tools_getForPersona(persona.id, isTUI);
-  const promptData = await buildResponsePromptData(sm, persona, isTUI, content, tools);
+  const promptData = await buildResponsePromptData(sm, persona, isTUI, content ?? "", tools);
   const prompt = buildResponsePrompt(promptData);
 
   sm.queue_enqueue({

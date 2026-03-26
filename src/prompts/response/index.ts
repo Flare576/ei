@@ -81,7 +81,7 @@ ${conversationState}
 - Format your response as specified in the Response Format section above.`
 }
 
-const RESPONSE_FORMAT_INSTRUCTION = `Respond to the conversation above using the JSON format specified in the Response Format section.`;
+const RESPONSE_FORMAT_INSTRUCTION = `Call the \`submit_response\` tool with your response. If the tool is unavailable, use the JSON format specified in the Response Format section.`;
 
 /**
  * Standard system prompt for non-Ei personas

@@ -17,6 +17,8 @@ export enum LLMRequestType {
 
 export enum LLMPriority {
   High = "high",
+  Judge = "judge",
+  Room = "room",
   Normal = "normal",
   Low = "low",
 }
@@ -51,10 +53,18 @@ export enum LLMNextStep {
   HandleRewriteRewrite = "handleRewriteRewrite",
   HandleDedupCurate = "handleDedupCurate",
   HandleEventScan = "handleEventScan",
+  HandleRoomResponse = "handleRoomResponse",
+  HandleRoomJudge = "handleRoomJudge",
 }
 
 export enum ProviderType {
   LLM = "llm",
   Storage = "storage",
   Image = "image",
+}
+
+export enum RoomMode {
+  ChooseYourPath = "choose_your_path",
+  FreeForAll = "free_for_all",
+  MessagesAgainstPersona = "messages_against_persona",
 }

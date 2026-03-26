@@ -79,7 +79,7 @@ ${itemsSection}
 
 ## Response Format
 
-Pick ONE item (or none):
+Call the \`submit_ei_heartbeat\` tool with your decision. Pick ONE item (or none). If the tool is unavailable, return JSON:
 
 \`\`\`json
 {

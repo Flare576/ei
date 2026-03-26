@@ -1,5 +1,6 @@
 import type { Command } from "./registry.js";
 import { openPersonaEditor } from "../util/persona-editor.js";
+import { openRoomEditor } from "../util/room-editor.js";
 
 export const detailsCommand: Command = {
   name: "details",
@@ -8,6 +9,12 @@ export const detailsCommand: Command = {
   usage: "/details [persona] - Edit specified or current persona",
   
   async execute(args, ctx) {
+    if (args.length === 0 && ctx.ei.activeRoomId()) {
+      const roomId = ctx.ei.activeRoomId()!;
+      await openRoomEditor({ roomId, ctx });
+      return;
+    }
+
     let personaId: string | null;
     
     if (args.length > 0) {

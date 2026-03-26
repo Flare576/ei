@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
+import { useRef, useEffect, useCallback, useState, forwardRef, useImperativeHandle } from "react";
 import type { Message, Quote } from "../../../../src/core/types";
 import type { GenerationResult } from "../../comfyui";
 import { MarkdownContent } from "../Chat";
@@ -18,7 +18,7 @@ function renderMessageContent(
 ): React.ReactNode {
   // Silence-reason messages get muted rendering
   if (message.silence_reason !== undefined) {
-    const label = activePersonaDisplayName ?? "Persona";
+    const label = message.role === "human" ? "You" : (activePersonaDisplayName ?? "Persona");
     return (
       <span className="silence-reason">
         [{label} chose not to respond because: {message.silence_reason}]
@@ -67,7 +67,7 @@ interface ChatPanelProps {
   contextBoundary?: string;
   quotes?: Quote[];
   onInputChange: (value: string) => void;
-  onSendMessage: () => void;
+  onSendMessage: (content: string | null, silenceReason?: string) => void;
   onMarkMessageRead?: (messageId: string) => void;
   onRecallPending?: () => void;
   onSetContextBoundary?: (timestamp: string | null) => void;
@@ -79,6 +79,7 @@ interface ChatPanelProps {
   imageErrors?: Record<string, string>;
   onImageClick?: (messageId: string) => void;
   onImagePromptClick?: () => void;
+  onCapture?: () => void;
 }
 
 export interface ChatPanelHandle {
@@ -107,6 +108,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
   imageErrors = {},
   onImageClick,
   onImagePromptClick,
+  onCapture,
 }, ref) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -125,6 +127,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
       onSetContextBoundary(null);
     } else {
       onSetContextBoundary(new Date().toISOString());
+      setTimeout(() => scrollToBottom(), 50);
     }
   };
 
@@ -143,26 +146,45 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
     },
   }));
 
+  const SCROLL_THRESHOLD = 150;
+
   const scrollToBottom = useCallback(() => {
     const container = messagesContainerRef.current;
-    if (container) {
-      container.scrollTop = container.scrollHeight;
-    }
+    if (container) container.scrollTop = container.scrollHeight;
   }, []);
 
+  const isNearBottom = useCallback(() => {
+    const c = messagesContainerRef.current;
+    if (!c) return true;
+    return c.scrollHeight - c.scrollTop - c.clientHeight <= SCROLL_THRESHOLD;
+  }, []);
+
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const wasAtBottomRef = useRef(true);
+  const [isSilentMode, setIsSilentMode] = useState(false);
+  const [showSendDropdown, setShowSendDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const handleContainerScroll = useCallback(() => {
+    const near = isNearBottom();
+    wasAtBottomRef.current = near;
+    setShowScrollButton(!near);
+  }, [isNearBottom]);
+
+  const prevMessageCount = useRef(0);
   useEffect(() => {
-    const container = messagesContainerRef.current;
-    if (!container) return;
+    const count = messages.length;
+    if (count !== prevMessageCount.current) {
+      if (wasAtBottomRef.current) scrollToBottom();
+      prevMessageCount.current = count;
+    }
+  }, [messages.length, scrollToBottom]);
 
-    const observer = new MutationObserver(() => {
-      container.scrollTop = container.scrollHeight;
-    });
-
-    observer.observe(container, { childList: true, subtree: true });
+  useEffect(() => {
+    setShowScrollButton(false);
+    wasAtBottomRef.current = true;
     scrollToBottom();
-
-    return () => observer.disconnect();
-  }, [scrollToBottom]);
+  }, [activePersonaId, scrollToBottom]);
 
   useEffect(() => {
     if (!onMarkMessageRead || !messagesContainerRef.current) return;
@@ -192,6 +214,17 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
     };
   }, [messages, onMarkMessageRead]);
 
+  useEffect(() => {
+    if (!showSendDropdown) return;
+    const handleClick = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowSendDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showSendDropdown]);
+
   const adjustTextareaHeight = useCallback(() => {
     const textarea = textareaRef.current;
     if (!textarea) return;
@@ -209,7 +242,12 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      onSendMessage();
+      if (isSilentMode) {
+        onSendMessage(null, inputValue.trim() || undefined);
+        setIsSilentMode(false);
+      } else {
+        onSendMessage(inputValue, undefined);
+      }
     }
     if (e.key === "c" && e.ctrlKey) {
       e.preventDefault();
@@ -282,7 +320,8 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
         </h2>
       </div>
 
-      <div className="ei-chat-panel__messages" ref={messagesContainerRef}>
+      <div style={{ position: "relative", flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <div className="ei-chat-panel__messages" ref={messagesContainerRef} onScroll={handleContainerScroll}>
         {messages.length === 0 ? (
           <div className="ei-chat-panel__empty">
             {activePersonaId 
@@ -422,6 +461,15 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
         )}
         <div ref={messagesEndRef} />
       </div>
+      {showScrollButton && (
+        <button
+          className="ei-scroll-to-bottom"
+          onClick={() => { scrollToBottom(); setShowScrollButton(false); }}
+        >
+          ↓ Latest
+        </button>
+      )}
+      </div>
 
       <div className="ei-input-area">
         {activePersonaId && onSetContextBoundary && (
@@ -442,29 +490,72 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
                 🖼️
               </button>
             )}
+            {onCapture && (
+              <button
+                className="ei-boundary-btn ei-capture-btn"
+                onClick={onCapture}
+                title="Extract data from current conversation"
+              >
+                💡
+              </button>
+            )}
           </div>
         )}
         <textarea
           ref={textareaRef}
-          className="ei-input-area__textarea"
+          className={`ei-input-area__textarea${isSilentMode ? " ei-input-area__textarea--silent" : ""}`}
           value={inputValue}
           onChange={(e) => onInputChange(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={activePersonaId 
-            ? hasPendingMessages 
-              ? "Type a message... (Up arrow to recall pending)" 
+          placeholder={
+            !activePersonaId
+              ? "Select a persona first"
+              : isSilentMode
+              ? "Silence reason (optional)\u2026"
+              : hasPendingMessages
+              ? "Type a message... (Up arrow to recall pending)"
               : "Type a message... (Enter to send, Shift+Enter for newline)"
-            : "Select a persona first"}
+          }
           disabled={!activePersonaId}
           rows={1}
         />
-        <button
-          className="ei-input-area__send"
-          onClick={onSendMessage}
-          disabled={!activePersonaId || !inputValue.trim() || isProcessing}
-        >
-          Send
-        </button>
+        <div className="ei-room-send-group" ref={dropdownRef}>
+          <button
+            className="ei-room-send-group__main"
+            onClick={() => {
+              if (isSilentMode) {
+                onSendMessage(null, inputValue.trim() || undefined);
+                setIsSilentMode(false);
+              } else {
+                onSendMessage(inputValue, undefined);
+              }
+            }}
+            disabled={!activePersonaId || (!isSilentMode && !inputValue.trim()) || isProcessing}
+          >
+            {isSilentMode ? "Silent" : "Send"}
+          </button>
+          <button
+            className="ei-room-send-group__dropdown-toggle"
+            onClick={() => setShowSendDropdown(v => !v)}
+            disabled={!activePersonaId}
+            aria-label="More send options"
+          >
+            ▼
+          </button>
+          {showSendDropdown && (
+            <div className="ei-room-send-dropdown">
+              <button
+                onClick={() => {
+                  setIsSilentMode(v => !v);
+                  setShowSendDropdown(false);
+                  textareaRef.current?.focus();
+                }}
+              >
+                {isSilentMode ? "Normal Response" : "Silent Response"}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -59,6 +59,26 @@ All commands start with `/`. Append `!` to any command as a shorthand for `--for
 | `/resume` | `/unpause` | Resume the current paused persona |
 | `/resume <name>` | `/unpause <name>` | Resume a specific paused persona |
 
+### Rooms
+
+| Command | Aliases | Description |
+|---------|---------|-------------|
+| `/room` | `/r` | Open room picker overlay |
+| `/room <name>` | `/r <name>` | Switch to a room by name |
+| `/room new` | | Create a new room (opens `$EDITOR`) |
+| `/room new <name>` | | Create a new room with a pre-filled name |
+| `/capture` | | Force-extract quotes, topics, and people from current room now (bypasses threshold) |
+| `/archive <name>` | | Archive a room by name |
+| `/archive` | | List archived rooms (Enter to unarchive) |
+
+Rooms have three modes, set at creation time:
+
+| Mode | Badge | Description |
+|------|-------|-------------|
+| Free For All | `[FFA]` | All personas respond to every message |
+| Choose Your Path | `[CYP]` | The conversation branches at each response; you navigate which path to follow |
+| Messages Against Persona | `[MAP]` | Everyone submits a response; a Judge persona picks which one continues |
+
 ### Providers & Models
 
 | Command | Aliases | Description |

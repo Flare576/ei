@@ -1,7 +1,7 @@
 import { LLMRequest, LLMResponse, LLMRequestType, LLMNextStep, ProviderAccount, ChatMessage, Message, ToolDefinition } from "./types.js";
 import { callLLMRaw, parseJSONResponse, cleanResponseContent } from "./llm-client.js";
 import { hydratePromptPlaceholders } from "../prompts/message-utils.js";
-import { toOpenAITools, executeToolCalls, parseToolCalls } from "./tools/index.js";
+import { toOpenAITools, executeToolCalls, parseToolCalls, findSubmitToolCall } from "./tools/index.js";
 
 type QueueProcessorState = "idle" | "busy";
 type ResponseCallback = (response: LLMResponse) => Promise<void>;
@@ -118,7 +118,9 @@ export class QueueProcessor {
 
     if (isResponseType || isToolContinuation) {
       const personaId = request.data.personaId as string | undefined;
-      if (personaId && this.currentMessageFetcher) {
+      const isRoomRequest = !!(request.data.roomId as string | undefined);
+      // Room conversation is embedded in the prompt via placeholders — don't inject persona history.
+      if (personaId && !isRoomRequest && this.currentMessageFetcher) {
         messages = this.currentMessageFetcher(personaId);
       }
     }
@@ -128,15 +130,17 @@ export class QueueProcessor {
 
     if (this.currentRawMessageFetcher) {
       const personaId = request.data.personaId as string | undefined;
-      if (personaId) {
-        const rawMessages = this.currentRawMessageFetcher(personaId);
+      const roomId = request.data.roomId as string | undefined;
+      const fetchId = roomId ? `room:${roomId}` : personaId;
+      if (fetchId) {
+        const rawMessages = this.currentRawMessageFetcher(fetchId);
         const messageMap = new Map<string, Message>();
         for (const msg of rawMessages) {
           messageMap.set(msg.id, msg);
         }
 
         const placeholderCount = (request.user.match(/\[mid:[^\]]+\]/g) || []).length;
-        console.log(`[QueueProcessor] Hydrating ${placeholderCount} placeholders with ${messageMap.size} messages for ${personaId}`);
+        console.log(`[QueueProcessor] Hydrating ${placeholderCount} placeholders with ${messageMap.size} messages for ${fetchId}`);
 
         hydratedSystem = hydratePromptPlaceholders(request.system, messageMap);
         hydratedUser = hydratePromptPlaceholders(request.user, messageMap);
@@ -155,8 +159,20 @@ export class QueueProcessor {
     // =========================================================================
     if (isToolContinuation) {
       const rawHistory = request.data.toolHistory as LLMHistoryMessage[] | undefined;
+      const isRoomContinuation = !!(request.data.roomId as string | undefined);
       if (rawHistory && rawHistory.length > 0) {
-        messages = [...messages, ...rawHistory] as ChatMessage[];
+        if (isRoomContinuation) {
+          // Room: conversation is in hydratedUser (not messages). Place it BEFORE tool history
+          // so the LLM sees: context → tool calls → synthesize. Then clear hydratedUser to
+          // prevent it from being re-appended at the end by callLLMRaw.
+          messages = [
+            { role: "user" as const, content: hydratedUser },
+            ...rawHistory as ChatMessage[],
+          ];
+          hydratedUser = "";
+        } else {
+          messages = [...messages, ...rawHistory] as ChatMessage[];
+        }
         console.log(`[QueueProcessor] HandleToolContinuation: injecting ${rawHistory.length} tool history messages`);
       }
 
@@ -166,7 +182,12 @@ export class QueueProcessor {
       );
       const totalCalls = { count: (request.data.totalCallCount as number | undefined) ?? 0 };
 
-      const activeTools = this.currentTools ?? [];
+      // Restore exhausted tool names from previous iterations and filter them out
+      // so the LLM doesn't keep calling tools that have hit their per-interaction limit.
+      const priorExhausted = new Set<string>(
+        (request.data.exhaustedToolNames as string[] | undefined) ?? []
+      );
+      const activeTools = (this.currentTools ?? []).filter(t => !priorExhausted.has(t.name));
       const openAITools = activeTools.length > 0 ? toOpenAITools(activeTools) : [];
 
       const { content, finishReason, rawToolCalls, assistantMessage, thinking } = await callLLMRaw(
@@ -185,12 +206,30 @@ export class QueueProcessor {
       if (finishReason === "tool_calls" && rawToolCalls?.length) {
         const toolCalls = parseToolCalls(rawToolCalls);
         if (toolCalls.length > 0) {
+          // Submit tool intercept: if the LLM called submit_response (or any is_submit tool),
+          // its arguments ARE the structured response — return immediately without executing.
+          const submitCall = findSubmitToolCall(toolCalls, activeTools);
+          if (submitCall) {
+            const args = submitCall.arguments ?? {};
+            if (!args.should_respond && (args.verbal_response || args.action_response)) {
+              args.should_respond = true;
+            }
+            console.log(`[QueueProcessor] submit tool "${submitCall.name}" called — returning arguments as parsed response`);
+            return {
+              request,
+              success: true,
+              content: JSON.stringify(args),
+              parsed: args,
+              finish_reason: "stop",
+            };
+          }
+
           const appendedHistory: LLMHistoryMessage[] = [];
           if (assistantMessage) {
             appendedHistory.push(assistantMessage as unknown as LLMHistoryMessage);
           }
 
-          const { results } = await executeToolCalls(toolCalls, activeTools, callCounts, totalCalls, this.currentOnProviderConfigUpdate);
+          const { results, exhaustedToolNames } = await executeToolCalls(toolCalls, activeTools, callCounts, totalCalls, this.currentOnProviderConfigUpdate);
           for (const result of results) {
             appendedHistory.push({
               role: "tool",
@@ -200,6 +239,7 @@ export class QueueProcessor {
             });
           }
 
+          const mergedExhausted = new Set([...priorExhausted, ...exhaustedToolNames]);
           const newHistory = [...(rawHistory ?? []), ...appendedHistory];
           console.log(`[QueueProcessor] HandleToolContinuation: ${results.length} more tool result(s). Re-enqueueing.`);
 
@@ -216,6 +256,7 @@ export class QueueProcessor {
                 toolHistory: newHistory,
                 toolCallCounts: [...callCounts.entries()],
                 totalCallCount: totalCalls.count,
+                exhaustedToolNames: [...mergedExhausted],
               },
             });
           } else {
@@ -279,6 +320,24 @@ export class QueueProcessor {
         // Malformed tool_calls — treat as stop.
         console.warn("[QueueProcessor] finish_reason=tool_calls but no valid calls parsed — treating as stop");
         return this.handleResponseType(request, content ?? "", finishReason);
+      }
+
+      // Submit tool intercept: if the LLM called submit_response (or any is_submit tool),
+      // its arguments ARE the structured response — return immediately without executing.
+      const submitCall = findSubmitToolCall(toolCalls, activeTools);
+      if (submitCall) {
+        const args = submitCall.arguments ?? {};
+        if (!args.should_respond && (args.verbal_response || args.action_response)) {
+          args.should_respond = true;
+        }
+        console.log(`[QueueProcessor] submit tool "${submitCall.name}" called — returning arguments as parsed response`);
+        return {
+          request,
+          success: true,
+          content: JSON.stringify(args),
+          parsed: args,
+          finish_reason: "stop",
+        };
       }
 
       // Accumulate tool history: assistant message with tool_calls + tool results

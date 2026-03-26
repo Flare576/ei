@@ -39,6 +39,7 @@ export interface ToolDefinition {
   enabled: boolean;
   created_at: string;                  // ISO timestamp
   max_calls_per_interaction?: number;  // Max times LLM may call this tool per response turn. Default: 3.
+  is_submit?: boolean;                 // If true, calling this tool IS the structured response — terminates the tool loop immediately and its arguments become response.parsed
 }
 
 // =============================================================================
@@ -108,6 +109,12 @@ export interface Ei_Interface {
   onToolAdded?: () => void;
   onToolUpdated?: (id: string) => void;
   onToolRemoved?: () => void;
+  onRoomAdded?: () => void;
+  onRoomRemoved?: () => void;
+  onRoomUpdated?: (roomId: string) => void;
+  onRoomMessageAdded?: (roomId: string) => void;
+  onRoomMessageQueued?: (roomId: string) => void;
+  onRoomMessageProcessing?: (roomId: string) => void;
 }
 
 // =============================================================================
@@ -137,7 +144,8 @@ export interface StorageState {
       messages: Message[];
     }
   >;
+  rooms?: Record<string, import("./rooms.js").RoomEntity>;
   queue: LLMRequest[];
-  providers: ToolProvider[];    // Tool provider registry (Ei, Brave, etc.)
-  tools: ToolDefinition[];      // Platform-level tool registry
+  providers: ToolProvider[];
+  tools: ToolDefinition[];
 }

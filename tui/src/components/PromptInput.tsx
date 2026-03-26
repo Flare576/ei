@@ -1,4 +1,4 @@
-import { createEffect, createSignal } from "solid-js";
+import { createEffect, createMemo, createSignal } from "solid-js";
 import { getAllCommands } from "../commands/registry";
 import type { TextareaRenderable, KeyBinding } from "@opentui/core";
 import { useEi } from "../context/ei";
@@ -26,10 +26,16 @@ import { dlqCommand } from "../commands/dlq";
 import { toolsCommand } from "../commands/tools";
 import { authCommand } from '../commands/auth';
 import { dedupeCommand } from "../commands/dedupe";
+import { roomCommand } from "../commands/room.js";
+import { activateCommand } from "../commands/activate.js";
+import { silenceCommand } from "../commands/silence.js";
+import { captureCommand } from "../commands/capture.js";
+import { openCYPEditor } from "../util/cyp-editor.js";
 import { useOverlay } from "../context/overlay";
 import { CommandSuggest } from "./CommandSuggest";
 import { useKeyboard } from "@opentui/solid";
 import type { KeyEvent } from "@opentui/core";
+import { RoomMode } from "../../../src/core/types/enums.js";
 
 const TEXTAREA_KEYBINDINGS: KeyBinding[] = [
   { name: "return", action: "submit" },
@@ -39,7 +45,23 @@ const TEXTAREA_KEYBINDINGS: KeyBinding[] = [
 
 export function PromptInput() {
   const ei = useEi();
-  const { sendMessage, activePersonaId, stopProcessor, showNotification } = ei;
+  const {
+    sendMessage,
+    activePersonaId,
+    stopProcessor,
+    showNotification,
+    activeRoomId,
+    getRoom,
+    roomMessages,
+    roomActivePath,
+    personas,
+    sendFfaMessage,
+    submitHumanRoomMessage,
+    recallHumanRoomMessage,
+    activateRoom,
+    selectCYPBranch,
+    humanRoomMessagePending,
+  } = ei;
   const { registerTextarea, registerEditorHandler, exitApp, renderer, resetHistoryIndex } = useKeyboardNav();
   const { showOverlay, hideOverlay, overlayRenderer } = useOverlay();
 
@@ -49,12 +71,9 @@ export function PromptInput() {
   registerCommand(quotesCommand);
   registerCommand(editorCommand);
   registerCommand(personaCommand);
+  registerCommand(roomCommand);
   registerCommand(detailsCommand);
-  registerCommand(archiveCommand);
-  registerCommand(unarchiveCommand);
   registerCommand(newCommand);
-  registerCommand(pauseCommand);
-  registerCommand(resumeCommand);
   registerCommand(modelCommand);
   registerCommand(settingsCommand);
   registerCommand(providerCommand);
@@ -64,13 +83,35 @@ export function PromptInput() {
   registerCommand(queueCommand);
   registerCommand(dlqCommand);
   registerCommand(toolsCommand);
-  registerCommand(authCommand);
   registerCommand(dedupeCommand);
+  registerCommand(activateCommand);
+  registerCommand(silenceCommand);
+  registerCommand(captureCommand);
+  registerCommand(authCommand);
+  registerCommand(pauseCommand);
+  registerCommand(resumeCommand);
+  registerCommand(archiveCommand);
+  registerCommand(unarchiveCommand);
 
   let textareaRef: TextareaRenderable | undefined;
 
   const [inputText, setInputText] = createSignal("");
   const [suggestIndex, setSuggestIndex] = createSignal(0);
+
+  const allPersonasResponded = createMemo(() => {
+    const roomId = activeRoomId();
+    if (!roomId) return false;
+    const room = getRoom(roomId);
+    if (!room?.active_node_id) return false;
+    const respondedIds = new Set(
+      roomMessages()
+        .filter(m => m.parent_id === room.active_node_id && m.role === "persona" && m.persona_id)
+        .map(m => m.persona_id!)
+    );
+    const judgeId = room.judge_persona_id;
+    const nonJudgeIds = room.persona_ids.filter(id => id !== judgeId);
+    return nonJudgeIds.every(id => respondedIds.has(id));
+  });
 
   const suggestMatches = () => {
     const raw = inputText().trim();
@@ -95,7 +136,46 @@ export function PromptInput() {
     resetHistoryIndex();
   });
 
+  createEffect(() => {
+    if (activeRoomId() && !humanRoomMessagePending()) {
+      const room = getRoom(activeRoomId()!);
+      if (room?.mode !== RoomMode.FreeForAll && allPersonasResponded() && !humanRoomMessagePending()) {
+        showNotification("Use /silence to pass", "info");
+      }
+    }
+  });
+
   useKeyboard((event: KeyEvent) => {
+    if (event.name === "up" && activeRoomId() && humanRoomMessagePending()) {
+      const room = getRoom(activeRoomId()!);
+      if (room?.mode !== RoomMode.FreeForAll) {
+        // Lock check: if any child of active_node has children, the node is explored — don't allow recall
+        const activeNodeId = room?.active_node_id;
+        const allMessages = roomMessages();
+        const childrenOfActiveNode = allMessages.filter(m => m.parent_id === activeNodeId);
+        const isLocked = childrenOfActiveNode.some(child =>
+          allMessages.some(m => m.parent_id === child.id)
+        );
+        if (isLocked) {
+          showNotification("Cannot recall — this path has already been explored", "warn");
+          event.preventDefault();
+          return;
+        }
+        const pendingMsg = allMessages.find(
+          m => m.parent_id === room?.active_node_id && m.role === "human"
+        );
+        const recalled = recallHumanRoomMessage();
+        if (recalled) {
+          const content = pendingMsg?.verbal_response ?? pendingMsg?.silence_reason ?? "";
+          textareaRef?.setText(content);
+          setInputText(content);
+          textareaRef?.gotoBufferEnd();
+        }
+        event.preventDefault();
+        return;
+      }
+    }
+
     if (!suggestVisible()) return;
 
     if (event.name === "up") {
@@ -144,7 +224,32 @@ export function PromptInput() {
   });
 
   const handleSubmit = async () => {
-    const text = textareaRef?.plainText?.trim();
+    const text = textareaRef?.plainText?.trim() ?? "";
+
+    if (activeRoomId()) {
+      const room = getRoom(activeRoomId()!);
+
+      if (room?.mode !== RoomMode.FreeForAll && !text) {
+        if (humanRoomMessagePending() && allPersonasResponded()) {
+          if (room?.mode === RoomMode.ChooseYourPath && room.active_node_id) {
+            await openCYPEditor({
+              roomId: activeRoomId()!,
+              activeNodeId: room.active_node_id,
+              messages: roomMessages(),
+              activePath: roomActivePath(),
+              personas: personas(),
+              selectBranch: selectCYPBranch,
+              showNotification,
+              renderer,
+            });
+          } else {
+            await activateRoom();
+          }
+        }
+        return;
+      }
+    }
+
     if (!text) return;
 
     if (text.startsWith("/")) {
@@ -181,6 +286,33 @@ export function PromptInput() {
       return;
     }
 
+    if (activeRoomId()) {
+      const room = getRoom(activeRoomId()!);
+      if (room?.mode === RoomMode.FreeForAll) {
+        textareaRef?.clear();
+        setInputText("");
+        await sendFfaMessage(text, undefined);
+        return;
+      }
+
+      if (!humanRoomMessagePending()) {
+        const msgId = submitHumanRoomMessage(text, undefined);
+        if (msgId !== null) {
+          textareaRef?.clear();
+          setInputText("");
+        }
+        return;
+      }
+
+      if (humanRoomMessagePending() && allPersonasResponded()) {
+        await activateRoom();
+        return;
+      }
+
+      showNotification("Waiting for participants to respond...", "info");
+      return;
+    }
+
     textareaRef?.clear();
     setInputText("");
     resetHistoryIndex();
@@ -196,6 +328,7 @@ export function PromptInput() {
   registerEditorHandler(handleEditor);
 
   const getPlaceholder = () => {
+    if (activeRoomId() && humanRoomMessagePending()) return "Response Submitted - Press [Up] to recall";
     if (!activePersonaId()) return "Select a persona...";
     return "Type your message... (Enter to send, Ctrl+E for editor)";
   };

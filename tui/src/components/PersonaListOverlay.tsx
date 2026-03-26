@@ -1,7 +1,8 @@
 import { useKeyboard } from "@opentui/solid";
-import { For, createSignal, createMemo } from "solid-js";
+import { For, createSignal, createMemo, onMount, onCleanup } from "solid-js";
 import type { KeyEvent } from "@opentui/core";
 import type { PersonaSummary } from "../../../src/core/types.js";
+import { useKeyboardNav } from "../context/keyboard.js";
 
 interface PersonaListOverlayProps {
   personas: PersonaSummary[];
@@ -12,9 +13,13 @@ interface PersonaListOverlayProps {
 }
 
 export function PersonaListOverlay(props: PersonaListOverlayProps) {
+  const { setOverlayActive } = useKeyboardNav();
   const [selectedIndex, setSelectedIndex] = createSignal(0);
   const [filterText, setFilterText] = createSignal("");
   const [filterMode, setFilterMode] = createSignal(false);
+
+  onMount(() => setOverlayActive(true));
+  onCleanup(() => setOverlayActive(false));
 
   const filteredPersonas = createMemo(() => {
     const filter = filterText().toLowerCase();

@@ -24,11 +24,12 @@ You are checking if a topic candidate already exists in ${personaName}'s topic l
 
 # Matching Rules
 
-1. **Exact match**: Same topic name → return its ID
-2. **Similar match**: Clearly the same topic with different wording → return its ID
+1. **Exact match**: Same topic name → action "match", return its ID
+2. **Similar match**: Clearly the same topic with different wording → action "match", return its ID
    - "Steam Deck" and "Steam Deck Modding" → MATCH (same core topic)
    - "Cooking" and "Italian Cooking" → consider MATCH if the specific is part of the general
-3. **No match**: Genuinely different topic → return null
+3. **No match**: Genuinely different topic → action "create"
+4. **Skip**: Trivial, off-topic, or too vague to be a meaningful persona topic → action "skip"
 
 # Existing Topics
 
@@ -38,10 +39,9 @@ ${formatExistingTopics(data.existing_topics)}
 
 # Response Format
 
-Return ONLY the ID of the matching topic, or null if no match exists.
-
 \`\`\`json
 {
+  "action": "match" | "create" | "skip",
   "matched_id": "uuid-of-matching-topic" | null,
   "reason": "brief explanation"
 }
@@ -55,11 +55,12 @@ Name: ${data.candidate.name}
 Message Count: ${data.candidate.message_count}
 Sentiment Signal: ${data.candidate.sentiment_signal}
 
-Find the best match in ${personaName}'s existing topics, or return null if this is genuinely new.
+Find the best match in ${personaName}'s existing topics, or decide if this should be created or skipped.
 
 **Return JSON:**
 \`\`\`json
 {
+  "action": "match" | "create" | "skip",
   "matched_id": "..." | null,
   "reason": "..."
 }

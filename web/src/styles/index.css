@@ -23,6 +23,10 @@
 @import './conflict-resolution-modal.css';
 @import './hamburger-menu.css';
 
+/* Rooms */
+@import './room-panel.css';
+@import './room-chat.css';
+
 /* Features */
 @import './image-gen.css';
 

@@ -110,7 +110,8 @@ export function queuePersonaTopicUpdate(
       personaId: context.personaId,
       personaDisplayName: context.personaDisplayName,
       candidate,
-      matched_id: matchResult.matched_id,
+      existingTopicId: existingTopic?.id ?? null,
+      isNewTopic: !existingTopic,
       analyze_from_timestamp: getAnalyzeFromTimestamp(context),
     },
   });

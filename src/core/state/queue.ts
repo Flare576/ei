@@ -55,7 +55,7 @@ export class QueueState {
     if (this.paused || this.queue.length === 0) return null;
     const available = this.queue.filter(r => r.state === "pending");
     if (available.length === 0) return null;
-    const priorityOrder = { high: 0, normal: 1, low: 2 };
+    const priorityOrder = { high: 0, judge: 1, room: 2, normal: 3, low: 4 };
     const sorted = [...available].sort(
       (a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]
     );
@@ -72,7 +72,7 @@ export class QueueState {
     if (this.paused || this.queue.length === 0) return null;
     const available = this.queue.filter(r => r.state === "pending");
     if (available.length === 0) return null;
-    const priorityOrder = { high: 0, normal: 1, low: 2 };
+    const priorityOrder = { high: 0, judge: 1, room: 2, normal: 3, low: 4 };
     const sorted = [...available].sort(
       (a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]
     );

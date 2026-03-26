@@ -159,7 +159,7 @@ export async function callLLMRaw(
   const chatMessages: ChatMessage[] = [
     { role: "system", content: systemPrompt },
     ...messages,
-    { role: "user", content: userPrompt },
+    ...(userPrompt ? [{ role: "user" as const, content: userPrompt }] : []),
   ];
   
   const finalMessages = ensureUserFirst(chatMessages);

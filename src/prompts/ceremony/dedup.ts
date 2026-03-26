@@ -81,7 +81,7 @@ You have access to a tool called \`read_memory\` (6 calls max — see HARD RULES
   ]
 }
 
-Return raw JSON. No markdown fencing, no commentary, no explanation. Just the JSON object.
+Call \`submit_dedup_decisions\` with your decisions. If the tool is unavailable, return raw JSON — no markdown fencing, no commentary, just the object.
 
 Record format for "${typeLabel}" (based on type):
 
@@ -102,7 +102,7 @@ ${buildRecordFormatExamples(data.itemType)}
     similarity_range: data.similarityRange,
   }, null, 2);
 
-  const schemaReminder = `**Return JSON:**
+  const schemaReminder = `**Call \`submit_dedup_decisions\` with your decisions.** If the tool is unavailable, return JSON:
 \n\`\`\`json
 {
   "update": [

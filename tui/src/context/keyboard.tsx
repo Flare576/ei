@@ -7,7 +7,7 @@ import {
 } from "solid-js";
 import { useKeyboard, useRenderer, useSelectionHandler } from "@opentui/solid";
 import type { ScrollBoxRenderable, KeyEvent, TextareaRenderable, CliRenderer } from "@opentui/core";
-import type { PersonaSummary } from "../../../src/core/types.js";
+import type { PersonaSummary, RoomSummary } from "../../../src/core/types.js";
 import { useEi } from "./ei";
 import { logger } from "../util/logger";
 import { copyToClipboard } from "../util/clipboard";
@@ -25,6 +25,8 @@ interface KeyboardContextValue {
   exitApp: () => Promise<void>;
   renderer: CliRenderer;
   resetHistoryIndex: () => void;
+  overlayActive: () => boolean;
+  setOverlayActive: (active: boolean) => void;
 }
 
 const KeyboardContext = createContext<KeyboardContextValue>();
@@ -32,8 +34,9 @@ const KeyboardContext = createContext<KeyboardContextValue>();
 export const KeyboardProvider: ParentComponent = (props) => {
   const [focusedPanel, setFocusedPanel] = createSignal<Panel>("input");
   const [sidebarVisible, setSidebarVisible] = createSignal(true);
+  const [overlayActive, setOverlayActive] = createSignal(false);
   const renderer = useRenderer();
-  const { queueStatus, abortCurrentOperation, resumeQueue, pauseQueue, personas, activePersonaId, selectPersona, saveAndExit, showNotification, messages, recallPendingMessages, cleanupTimers } = useEi();
+  const { queueStatus, abortCurrentOperation, resumeQueue, pauseQueue, personas, activePersonaId, selectPersona, saveAndExit, showNotification, messages, recallPendingMessages, cleanupTimers, rooms, activeRoomId, selectRoom } = useEi();
   
   let messageScrollRef: ScrollBoxRenderable | null = null;
   let textareaRef: TextareaRenderable | null = null;
@@ -76,13 +79,26 @@ export const KeyboardProvider: ParentComponent = (props) => {
     if (event.name === "tab") {
       event.preventDefault();
       if (textareaRef && textareaRef.plainText.length > 0) return;
-      
+
+      if (activeRoomId()) {
+        const activeRooms = rooms().filter((r: RoomSummary) => !r.is_archived);
+        if (activeRooms.length <= 1) return;
+        const current = activeRoomId();
+        const currentIndex = activeRooms.findIndex((r: RoomSummary) => r.id === current);
+        let nextIndex: number;
+        if (event.shift) {
+          nextIndex = (currentIndex - 1 + activeRooms.length) % activeRooms.length;
+        } else {
+          nextIndex = (currentIndex + 1) % activeRooms.length;
+        }
+        selectRoom(activeRooms[nextIndex].id);
+        return;
+      }
+
       const unarchived = personas().filter((p: PersonaSummary) => !p.is_archived);
       if (unarchived.length <= 1) return;
-      
       const current = activePersonaId();
       const currentIndex = unarchived.findIndex((p: PersonaSummary) => p.id === current);
-      
       let nextIndex: number;
       if (event.shift) {
         nextIndex = (currentIndex - 1 + unarchived.length) % unarchived.length;
@@ -137,7 +153,7 @@ export const KeyboardProvider: ParentComponent = (props) => {
     }
 
 
-    if (event.name === "up" && !event.ctrl && !event.shift && !event.meta) {
+    if (event.name === "up" && !overlayActive() && !activeRoomId() && !event.ctrl && !event.shift && !event.meta) {
       if (!textareaRef) return;
       const cursor = textareaRef.logicalCursor;
       // Only intercept when cursor is at the very beginning (row 0, col 0)
@@ -174,7 +190,7 @@ export const KeyboardProvider: ParentComponent = (props) => {
       return;
     }
 
-    if (event.name === "down" && !event.ctrl && !event.shift && !event.meta) {
+    if (event.name === "down" && !overlayActive() && !activeRoomId() && !event.ctrl && !event.shift && !event.meta) {
       if (!textareaRef || historyIndex === -1) return;
       // Only intercept when cursor is at the very end
       if (textareaRef.cursorOffset !== textareaRef.plainText.length) return;
@@ -199,7 +215,7 @@ export const KeyboardProvider: ParentComponent = (props) => {
 
     if (!messageScrollRef) return;
 
-    const scrollAmount = messageScrollRef.height;
+    const scrollAmount = Math.floor(messageScrollRef.height / 2);
     
     if (event.name === "pageup") {
       event.preventDefault();
@@ -243,6 +259,8 @@ export const KeyboardProvider: ParentComponent = (props) => {
     exitApp,
     renderer,
     resetHistoryIndex,
+    overlayActive,
+    setOverlayActive,
   };
 
   return (

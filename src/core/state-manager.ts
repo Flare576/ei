@@ -12,6 +12,10 @@ import type {
   QueueFailResult,
   ToolDefinition,
   ToolProvider,
+  RoomEntity,
+  RoomMessage,
+  RoomSummary,
+  RoomCreationInput,
 } from "./types.js";
 import { BUILT_IN_FACT_NAMES } from './constants/built-in-facts.js';
 import type { Storage } from "../storage/interface.js";
@@ -20,12 +24,14 @@ import {
   PersonaState,
   QueueState,
   PersistenceState,
+  RoomState,
   createDefaultHumanEntity,
 } from "./state/index.js";
 
 export class StateManager {
   private humanState = new HumanState();
   private personaState = new PersonaState();
+  private roomState = new RoomState();
   private queueState = new QueueState();
   private persistenceState = new PersistenceState();
   private providers: ToolProvider[] = [];
@@ -40,6 +46,7 @@ export class StateManager {
     if (state) {
       this.humanState.load(state.human);
       this.personaState.load(state.personas);
+      this.roomState.load(state.rooms);
       this.queueState.load(state.queue);
       this.tools = state.tools ?? [];
       this.providers = state.providers ?? [];
@@ -230,10 +237,124 @@ export class StateManager {
       timestamp: new Date().toISOString(),
       human: this.humanState.get(),
       personas: this.personaState.export(),
+      rooms: this.roomState.export(),
       queue: this.queueState.export(),
       providers: this.providers,
       tools: this.tools,
     };
+  }
+
+  getRoomList(includeArchived = false): RoomSummary[] {
+    return this.roomState.getAll(includeArchived)
+      .map(r => this.roomState.getSummary(r.id)!)
+      .sort((a, b) => new Date(b.last_activity).getTime() - new Date(a.last_activity).getTime());
+  }
+
+  getRoom(roomId: string): RoomEntity | null {
+    return this.roomState.getById(roomId);
+  }
+
+  getRoomByName(name: string): RoomEntity | null {
+    return this.roomState.getByName(name);
+  }
+
+  addRoom(input: RoomCreationInput): RoomEntity {
+    const now = new Date().toISOString();
+    const initialMessage: RoomMessage = {
+      id: crypto.randomUUID(),
+      parent_id: null,
+      role: "human",
+      verbal_response: input.initial_message,
+      timestamp: now,
+      read: true,
+      context_status: "default" as import("./types.js").ContextStatus,
+    };
+    const room: RoomEntity = {
+      id: crypto.randomUUID(),
+      display_name: input.display_name,
+      entity: "room",
+      mode: input.mode,
+      persona_ids: input.persona_ids,
+      judge_persona_id: input.judge_persona_id,
+      active_node_id: initialMessage.id,
+      is_archived: false,
+      created_at: now,
+      last_updated: now,
+      last_activity: now,
+      messages: [initialMessage],
+    };
+    this.roomState.add(room);
+    this.scheduleSave();
+    return room;
+  }
+
+  updateRoom(roomId: string, updates: Partial<RoomEntity>): boolean {
+    const ok = this.roomState.update(roomId, updates);
+    if (ok) this.scheduleSave();
+    return ok;
+  }
+
+  archiveRoom(roomId: string): boolean {
+    const ok = this.roomState.archive(roomId);
+    if (ok) this.scheduleSave();
+    return ok;
+  }
+
+  deleteRoom(roomId: string): boolean {
+    const ok = this.roomState.delete(roomId);
+    if (ok) this.scheduleSave();
+    return ok;
+  }
+
+  getRoomMessages(roomId: string): RoomMessage[] {
+    return this.roomState.messages_get(roomId);
+  }
+
+  getRoomActivePath(roomId: string): RoomMessage[] {
+    return this.roomState.messages_getActivePath(roomId);
+  }
+
+  getRoomChildren(roomId: string, parentId: string | null): RoomMessage[] {
+    return this.roomState.messages_getChildren(roomId, parentId);
+  }
+
+  appendRoomMessage(roomId: string, message: RoomMessage): void {
+    this.roomState.messages_append(roomId, message);
+    this.scheduleSave();
+  }
+
+  updateRoomMessage(roomId: string, messageId: string, updates: Partial<RoomMessage>): boolean {
+    const ok = this.roomState.messages_update(roomId, messageId, updates);
+    if (ok) this.scheduleSave();
+    return ok;
+  }
+
+  setRoomActiveNode(roomId: string, messageId: string): boolean {
+    const ok = this.roomState.messages_setActiveNode(roomId, messageId);
+    if (ok) this.scheduleSave();
+    return ok;
+  }
+
+  removeRoomMessages(roomId: string, messageIds: string[]): void {
+    if (messageIds.length === 0) return;
+    this.roomState.messages_remove(roomId, messageIds);
+    this.scheduleSave();
+  }
+
+  markAllRoomMessagesRead(roomId: string): number {
+    const count = this.roomState.messages_markAllRead(roomId);
+    if (count > 0) this.scheduleSave();
+    return count;
+  }
+
+  getRoomUnextractedMessages(roomId: string, flag: "f" | "t" | "p" | "e"): RoomMessage[] {
+    return this.roomState.messages_getUnextracted(roomId, flag);
+  }
+
+  markRoomMessagesExtracted(roomId: string, messageIds: string[], flag: "f" | "t" | "p" | "e"): number {
+    const count = this.roomState.messages_markExtracted(roomId, messageIds, flag);
+    if (count > 0) this.scheduleSave();
+    return count;
   }
 
   private scheduleSave(): void {
@@ -662,6 +783,7 @@ export class StateManager {
   restoreFromState(state: StorageState): void {
     this.humanState.load(state.human);
     this.personaState.load(state.personas);
+    this.roomState.load(state.rooms);
     this.queueState.load(state.queue);
     this.providers = state.providers ?? [];
     this.tools = state.tools ?? [];

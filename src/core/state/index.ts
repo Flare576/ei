@@ -3,3 +3,4 @@ export { PersonaState } from "./personas.js";
 export type { PersonaData } from "./personas.js";
 export { QueueState } from "./queue.js";
 export { PersistenceState } from "./checkpoints.js";
+export { RoomState } from "./rooms.js";

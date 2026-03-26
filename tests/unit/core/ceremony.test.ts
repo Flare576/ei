@@ -6,7 +6,7 @@ import {
   isPastCeremonyTime 
 } from "../../../src/core/orchestrators/ceremony.js";
 import { 
-  calculateLogarithmicDecay, 
+  calculateExponentialDecay, 
   applyDecayToValue 
 } from "../../../src/core/utils/decay.js";
 import type { CeremonyConfig } from "../../../src/core/types.js";
@@ -125,46 +125,48 @@ describe("Ceremony Trigger Logic", () => {
 });
 
 describe("Decay Computation", () => {
-  describe("calculateLogarithmicDecay", () => {
+  describe("calculateExponentialDecay", () => {
     it("decays value toward zero over time", () => {
-      const result = calculateLogarithmicDecay(0.8, 24, 0.1);
+      const result = calculateExponentialDecay(0.8, 24, 0.1);
       expect(result).toBeLessThan(0.8);
       expect(result).toBeGreaterThan(0);
     });
 
     it("returns 0 when input is 0 (no negative values)", () => {
-      expect(calculateLogarithmicDecay(0, 24, 0.1)).toBe(0);
+      expect(calculateExponentialDecay(0, 24, 0.1)).toBe(0);
     });
 
-    it("does not decay value of exactly 1 (extreme stability)", () => {
-      const result = calculateLogarithmicDecay(1, 24, 0.1);
-      expect(result).toBe(1);
+    it("decays values at 1.0 (no immunity at peak)", () => {
+      const result = calculateExponentialDecay(1, 24, 0.1);
+      // v(t) = 1.0 * e^(-0.1 * 1) ≈ 0.905 after 1 day
+      expect(result).toBeLessThan(1);
+      expect(result).toBeCloseTo(0.905, 2);
     });
 
-    it("decays values close to 1", () => {
-      const result = calculateLogarithmicDecay(0.99, 24, 0.1);
-      expect(result).toBeLessThan(0.99);
-      expect(result).toBeGreaterThan(0.95);
+    it("decays faster at high values than at low values (proportional decay)", () => {
+      // Absolute drop at 0.9 should be larger than absolute drop at 0.1
+      // because decay is proportional: 0.9 * (1 - e^-K) > 0.1 * (1 - e^-K)
+      const decayAt09 = 0.9 - calculateExponentialDecay(0.9, 24, 0.1);
+      const decayAt01 = 0.1 - calculateExponentialDecay(0.1, 24, 0.1);
+
+      expect(decayAt09).toBeGreaterThan(decayAt01);
     });
 
-    it("decays faster at midpoint than at extremes", () => {
-      const decayAt05 = 0.5 - calculateLogarithmicDecay(0.5, 24, 0.1);
-      const decayAt09 = 0.9 - calculateLogarithmicDecay(0.9, 24, 0.1);
-      const decayAt01 = 0.1 - calculateLogarithmicDecay(0.1, 24, 0.1);
-      
-      expect(decayAt05).toBeGreaterThan(decayAt09);
-      expect(decayAt05).toBeGreaterThan(decayAt01);
+    it("reaches ~50% after 7 days at K=0.1", () => {
+      const result = calculateExponentialDecay(1.0, 7 * 24, 0.1);
+      // v(t) = e^(-0.1 * 7) ≈ 0.497
+      expect(result).toBeCloseTo(0.497, 2);
     });
 
     it("clamps result to [0, 1] range", () => {
-      const result = calculateLogarithmicDecay(0.5, 1000, 0.5);
+      const result = calculateExponentialDecay(0.5, 1000, 0.5);
       expect(result).toBeGreaterThanOrEqual(0);
       expect(result).toBeLessThanOrEqual(1);
     });
 
     it("respects custom K decay rate", () => {
-      const slowDecay = calculateLogarithmicDecay(0.5, 24, 0.05);
-      const fastDecay = calculateLogarithmicDecay(0.5, 24, 0.2);
+      const slowDecay = calculateExponentialDecay(0.5, 24, 0.05);
+      const fastDecay = calculateExponentialDecay(0.5, 24, 0.2);
       expect(slowDecay).toBeGreaterThan(fastDecay);
     });
   });

@@ -13,7 +13,7 @@ export function getMessageDisplayText(message: Message): string | null {
   if (message.action_response) parts.push(`_${message.action_response}_`);
   if (message.verbal_response) parts.push(message.verbal_response);
   if (message.silence_reason) {
-    const name = 'Persona'; // Caller doesn't pass persona name; frontends can override
+    const name = message.speaker_name ?? 'Persona';
     parts.push(`[${name} chose not to respond because: ${message.silence_reason}]`);
   }
   if (parts.length === 0) return null;
@@ -45,7 +45,7 @@ export function buildChatMessageContent(message: Message): string {
 }
 
 export function formatMessageAsPlaceholder(message: Message, personaName: string): string {
-  const role = message.role === "human" ? "human" : personaName;
+  const role = message.role === "human" ? "human" : (message.speaker_name ?? personaName);
   return `[mid:${message.id}:${role}]`;
 }
 

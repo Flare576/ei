@@ -335,7 +335,7 @@ export class MockLLMServerImpl implements MockLLMServer {
 
   private detectRequestType(
     messages: Array<{ role: string; content: string }>
-  ): "response" | "system-concepts" | "human-concepts" | "description" | "persona-generation" | "persona-trait" | "trait-extraction" | "fact-extraction" | "topic-extraction" | "person-extraction" | "image-synthesis" | "unknown" {
+  ): "response" | "system-concepts" | "human-concepts" | "description" | "persona-generation" | "persona-trait" | "trait-extraction" | "fact-extraction" | "topic-extraction" | "person-extraction" | "image-synthesis" | "room-response" | "room-judge" | "unknown" {
     if (!messages || messages.length === 0) {
       return "unknown";
     }
@@ -376,6 +376,14 @@ export class MockLLMServerImpl implements MockLLMServer {
 
     if (content.includes("human") && content.includes("concepts")) {
       return "human-concepts";
+    }
+
+    if (content.includes("the conversation has reached a fork")) {
+      return "room-judge";
+    }
+
+    if (content.includes("you are participating in a shared multi-persona conversation")) {
+      return "room-response";
     }
 
     if (content.includes("description") && content.includes("persona")) {
@@ -491,6 +499,27 @@ export class MockLLMServerImpl implements MockLLMServer {
           }),
           statusCode: 200,
         };
+
+      case "room-response":
+        return {
+          type: "fixed",
+          content: JSON.stringify({
+            should_respond: true,
+            verbal_response: "I find this conversation quite interesting.",
+          }),
+          statusCode: 200,
+        };
+
+      case "room-judge":
+        return {
+          type: "fixed",
+          content: JSON.stringify({
+            winner_message_id: "mock-winner-id",
+            reason: "This response was the most compelling.",
+          }),
+          statusCode: 200,
+        };
+
       case "response":
       default:
         return {

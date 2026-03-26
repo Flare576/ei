@@ -14,6 +14,7 @@ vi.mock("../../../src/core/tools/index.js", () => ({
   toOpenAITools: vi.fn(() => []),
   executeToolCalls: vi.fn(),
   parseToolCalls: vi.fn(() => []),
+  findSubmitToolCall: vi.fn(() => undefined),  // No submit tools by default
 }));
 
 import * as llmClient from "../../../src/core/llm-client.js";

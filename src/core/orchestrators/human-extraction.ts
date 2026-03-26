@@ -58,6 +58,7 @@ export interface ExtractionContext {
   messages_context: Message[];
   messages_analyze: Message[];
   extraction_flag?: "f" | "t" | "p" | "e";
+  roomId?: string;
 }
 
 export interface ExtractionOptions {
@@ -466,6 +467,7 @@ export function queueTopicUpdate(
   if (chunks.length === 0) return 0;
 
   for (const chunk of chunks) {
+    const primaryPersonaId = context.personaId.split("|")[0];
     const prompt = buildTopicUpdatePrompt({
       existing_item: existingItem,
       new_topic_name: isNewItem ? context.candidateName : undefined,
@@ -474,7 +476,7 @@ export function queueTopicUpdate(
       messages_context: chunk.messages_context,
       messages_analyze: chunk.messages_analyze,
       persona_name: chunk.personaDisplayName,
-      participant_context: buildParticipantContext(context.personaId, state),
+      participant_context: buildParticipantContext(primaryPersonaId, state),
     });
 
     state.queue_enqueue({
@@ -487,6 +489,7 @@ export function queueTopicUpdate(
       data: {
         personaId: context.personaId,
         personaDisplayName: context.personaDisplayName,
+        roomId: context.roomId,
         isNewItem,
         existingItemId: existingItem?.id,
         candidateCategory: context.candidateCategory,
@@ -624,6 +627,7 @@ export function queuePersonUpdate(
       data: {
         personaId: context.personaId,
         personaDisplayName: context.personaDisplayName,
+        roomId: context.roomId,
         isNewItem,
         existingItemId: existingItem?.id,
         candidateRelationship: context.candidateRelationship,

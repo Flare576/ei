@@ -11,3 +11,4 @@ export * from "./types/data-items.js";
 export * from "./types/entities.js";
 export * from "./types/llm.js";
 export * from "./types/integrations.js";
+export * from "./types/rooms.js";

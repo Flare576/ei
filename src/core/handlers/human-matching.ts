@@ -9,15 +9,10 @@ import type { StateManager } from "../state-manager.js";
 import type { ItemMatchResult, ExposureImpact, TopicUpdateResult, PersonUpdateResult } from "../../prompts/human/types.js";
 import { queueTopicUpdate, queuePersonUpdate, type ExtractionContext } from "../orchestrators/index.js";
 import { getEmbeddingService, getTopicEmbeddingText, getPersonEmbeddingText } from "../embedding-service.js";
+import { calculateExposureCurrent } from "../utils/exposure.js";
 
-function mergeGroups(personaGroup: string | null, isNewItem: boolean, existing: string[] | undefined): string[] | undefined {
-  if (!personaGroup) return existing;
-  if (isNewItem) return [personaGroup];
-  const groups = new Set(existing ?? []);
-  groups.add(personaGroup);
-  return Array.from(groups);
-}
-import { resolveMessageWindow, getMessageText } from "./utils.js";
+
+import { resolveMessageWindow, getMessageText, normalizeRoomMessages } from "./utils.js";
 
 export function handleTopicMatch(response: LLMResponse, state: StateManager): void {
   const result = response.parsed as ItemMatchResult | undefined;
@@ -28,6 +23,7 @@ export function handleTopicMatch(response: LLMResponse, state: StateManager): vo
 
   const personaId = response.request.data.personaId as string;
   const personaDisplayName = response.request.data.personaDisplayName as string;
+  const roomId = response.request.data.roomId as string | undefined;
   const { messages_context, messages_analyze } = resolveMessageWindow(response, state);
 
   let matched_guid = result.matched_guid;
@@ -51,6 +47,7 @@ export function handleTopicMatch(response: LLMResponse, state: StateManager): vo
   } = {
     personaId,
     personaDisplayName,
+    roomId,
     messages_context,
     messages_analyze,
     candidateName: response.request.data.candidateName as string,
@@ -73,6 +70,7 @@ export function handlePersonMatch(response: LLMResponse, state: StateManager): v
 
   const personaId = response.request.data.personaId as string;
   const personaDisplayName = response.request.data.personaDisplayName as string;
+  const roomId = response.request.data.roomId as string | undefined;
   const { messages_context, messages_analyze } = resolveMessageWindow(response, state);
 
   let matched_guid = result.matched_guid;
@@ -96,6 +94,7 @@ export function handlePersonMatch(response: LLMResponse, state: StateManager): v
   } = {
     personaId,
     personaDisplayName,
+    roomId,
     messages_context,
     messages_analyze,
     candidateName: response.request.data.candidateName as string,
@@ -121,12 +120,16 @@ export async function handleTopicUpdate(response: LLMResponse, state: StateManag
   const existingItemId = response.request.data.existingItemId as string | undefined;
   const personaId = response.request.data.personaId as string;
   const personaDisplayName = response.request.data.personaDisplayName as string;
+  const roomId = response.request.data.roomId as string | undefined;
   const candidateCategory = response.request.data.candidateCategory as string | undefined;
 
   if (!result.name || !result.description || result.sentiment === undefined) {
     console.error("[handleTopicUpdate] Missing required fields in result");
     return;
   }
+
+  const personaIds = personaId.split("|").filter(Boolean);
+  const primaryId = personaIds[0] ?? personaId;
 
   const now = new Date().toISOString();
   const human = state.getHuman();
@@ -137,8 +140,11 @@ export async function handleTopicUpdate(response: LLMResponse, state: StateManag
   };
   const itemId = resolveItemId();
 
-  const persona = state.persona_getById(personaId);
+  const persona = state.persona_getById(primaryId);
   const personaGroup = persona?.group_primary ?? null;
+  const allPersonaGroups = personaIds
+    .map(id => state.persona_getById(id)?.group_primary)
+    .filter((g): g is string => g != null);
 
   const existingTopic = isNewItem ? undefined : human.topics.find(t => t.id === existingItemId);
 
@@ -153,27 +159,34 @@ export async function handleTopicUpdate(response: LLMResponse, state: StateManag
   }
 
   const exposureImpact = result.exposure_impact as ExposureImpact | undefined;
+  const interestedPersonas = isNewItem
+    ? personaIds
+    : [...new Set([...(existingTopic?.interested_personas ?? []), ...personaIds])];
+  const personaGroupsMerged = isNewItem
+    ? (allPersonaGroups.length > 0 ? allPersonaGroups : existingTopic?.persona_groups)
+    : [...new Set([...(existingTopic?.persona_groups ?? []), ...allPersonaGroups])];
+
   const topic: Topic = {
     id: itemId,
     name: result.name,
     description: result.description,
     sentiment: result.sentiment,
     category: result.category ?? candidateCategory ?? existingTopic?.category,
-    exposure_current: calculateExposureCurrent(exposureImpact),
+    exposure_current: calculateExposureCurrent(exposureImpact, existingTopic?.exposure_current ?? 0),
     exposure_desired: result.exposure_desired ?? 0.5,
     last_updated: now,
     last_mentioned: now,
-    learned_by: isNewItem ? personaId : existingTopic?.learned_by,
-    last_changed_by: personaId,
-    interested_personas: isNewItem
-      ? [personaId]
-      : [...new Set([...(existingTopic?.interested_personas ?? []), personaId])],
-    persona_groups: mergeGroups(personaGroup, isNewItem, existingTopic?.persona_groups),
+    learned_by: isNewItem ? primaryId : existingTopic?.learned_by,
+    last_changed_by: primaryId,
+    interested_personas: interestedPersonas,
+    persona_groups: personaGroupsMerged,
     embedding,
   };
   state.human_topic_upsert(topic);
 
-  const allMessages = state.messages_get(personaId);
+  const allMessages = roomId
+    ? normalizeRoomMessages(state.getRoomMessages(roomId), state)
+    : state.messages_get(personaId);
   await validateAndStoreQuotes(result.quotes, allMessages, itemId, personaDisplayName, personaGroup, state);
 
   console.log(`[handleTopicUpdate] ${isNewItem ? "Created" : "Updated"} topic "${result.name}"`);
@@ -191,12 +204,16 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
   const existingItemId = response.request.data.existingItemId as string | undefined;
   const personaId = response.request.data.personaId as string;
   const personaDisplayName = response.request.data.personaDisplayName as string;
+  const roomId = response.request.data.roomId as string | undefined;
   const candidateRelationship = response.request.data.candidateRelationship as string | undefined;
 
   if (!result.name || !result.description || result.sentiment === undefined) {
     console.error("[handlePersonUpdate] Missing required fields in result");
     return;
   }
+
+  const personaIds = personaId.split("|").filter(Boolean);
+  const primaryId = personaIds[0] ?? personaId;
 
   const now = new Date().toISOString();
   const human = state.getHuman();
@@ -207,8 +224,11 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
   };
   const itemId = resolveItemId();
 
-  const persona = state.persona_getById(personaId);
+  const persona = state.persona_getById(primaryId);
   const personaGroup = persona?.group_primary ?? null;
+  const allPersonaGroups = personaIds
+    .map(id => state.persona_getById(id)?.group_primary)
+    .filter((g): g is string => g != null);
 
   const existingPerson = isNewItem ? undefined : human.people.find(p => p.id === existingItemId);
 
@@ -223,27 +243,34 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
   }
 
   const exposureImpact = result.exposure_impact as ExposureImpact | undefined;
+  const interestedPersonas = isNewItem
+    ? personaIds
+    : [...new Set([...(existingPerson?.interested_personas ?? []), ...personaIds])];
+  const personaGroupsMerged = isNewItem
+    ? (allPersonaGroups.length > 0 ? allPersonaGroups : existingPerson?.persona_groups)
+    : [...new Set([...(existingPerson?.persona_groups ?? []), ...allPersonaGroups])];
+
   const person: Person = {
     id: itemId,
     name: result.name,
     description: result.description,
     sentiment: result.sentiment,
     relationship: result.relationship ?? candidateRelationship ?? existingPerson?.relationship ?? "Unknown",
-    exposure_current: calculateExposureCurrent(exposureImpact),
+    exposure_current: calculateExposureCurrent(exposureImpact, existingPerson?.exposure_current ?? 0),
     exposure_desired: result.exposure_desired ?? 0.5,
     last_updated: now,
     last_mentioned: now,
-    learned_by: isNewItem ? personaId : existingPerson?.learned_by,
-    last_changed_by: personaId,
-    interested_personas: isNewItem
-      ? [personaId]
-      : [...new Set([...(existingPerson?.interested_personas ?? []), personaId])],
-    persona_groups: mergeGroups(personaGroup, isNewItem, existingPerson?.persona_groups),
+    learned_by: isNewItem ? primaryId : existingPerson?.learned_by,
+    last_changed_by: primaryId,
+    interested_personas: interestedPersonas,
+    persona_groups: personaGroupsMerged,
     embedding,
   };
   state.human_person_upsert(person);
 
-  const allMessages = state.messages_get(personaId);
+  const allMessages = roomId
+    ? normalizeRoomMessages(state.getRoomMessages(roomId), state)
+    : state.messages_get(personaId);
   await validateAndStoreQuotes(result.quotes, allMessages, itemId, personaDisplayName, personaGroup, state);
 
   console.log(`[handlePersonUpdate] ${isNewItem ? "Created" : "Updated"} person "${result.name}"`);
@@ -436,14 +463,5 @@ async function validateAndStoreQuotes(
   }
 }
 
-function calculateExposureCurrent(impact: ExposureImpact | undefined): number {
-  switch (impact) {
-    case "high": return 0.9;
-    case "medium": return 0.6;
-    case "low": return 0.3;
-    case "none": return 0.1;
-    default: return 0.5;
-  }
-}
 
 

@@ -7,9 +7,9 @@ interface LayoutProps {
 }
 
 const STORAGE_KEY = "ei_layout_state";
-const DEFAULT_LEFT_WIDTH = 280;
-const MIN_LEFT_WIDTH = 200;
-const MAX_LEFT_WIDTH = 400;
+const DEFAULT_LEFT_WIDTH = 337;
+const MIN_LEFT_WIDTH = 337;
+const MAX_LEFT_WIDTH = 337;
 
 interface LayoutState {
   leftPanelWidth: number;
