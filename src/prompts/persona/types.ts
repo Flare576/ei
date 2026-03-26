@@ -1,4 +1,5 @@
 import type { PersonaTrait, Message, PersonaTopic } from "../../core/types.js";
+import type { ExposureImpact } from "../human/types.js";
 
 export interface PromptOutput {
   system: string;
@@ -70,6 +71,6 @@ export interface PersonaTopicUpdateResult {
   approach: string;         // How they engage - populate if clear signal
   personal_stake: string;   // Why it matters - populate if clear signal
   sentiment: number;
-  exposure_current: number;
+  exposure_impact: ExposureImpact;
   exposure_desired: number;
 }

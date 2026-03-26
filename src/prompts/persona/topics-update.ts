@@ -80,15 +80,12 @@ Example: "As a hobbit who left home, the Shire is both memory and motivation."
 ## sentiment
 How ${personaName} feels about this topic. Scale: -1.0 (hate) to 1.0 (love).
 
-## exposure_current
-How recently/frequently this topic has been discussed. Scale: 0.0 to 1.0.
-
-**For existing topics**: ONLY INCREASE this value based on conversation activity.
-- Active discussion → increase by 0.2-0.3
-- Brief mention → increase by 0.1
-- Maximum: 1.0
-
-**For new topics**: Start at 0.3-0.5 depending on discussion depth.
+## exposure_impact
+How much this topic was discussed in the recent messages. Choose one:
+- "high" — Major topic, multiple substantive exchanges
+- "medium" — Meaningful mention, discussed with some depth
+- "low" — Brief or passing mention
+- "none" — Barely mentioned, tangential at best
 
 ## exposure_desired
 How much ${personaName} wants to discuss this topic. Scale: 0.0 to 1.0.
@@ -112,7 +109,7 @@ How much ${personaName} wants to discuss this topic. Scale: 0.0 to 1.0.
   "approach": "",
   "personal_stake": "",
   "sentiment": 0.5,
-  "exposure_current": 0.5,
+  "exposure_impact": "medium",
   "exposure_desired": 0.5
 }
 \`\`\``;
@@ -148,7 +145,7 @@ ${isNewTopic ? 'Create' : 'Update'} the PersonaTopic based on how ${personaName}
   "approach": "...",
   "personal_stake": "...",
   "sentiment": 0.5,
-  "exposure_current": 0.5,
+  "exposure_impact": "medium",
   "exposure_desired": 0.5
 }
 \`\`\``;
