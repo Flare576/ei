@@ -202,19 +202,19 @@ test.describe("T9: Sidebar Tab cycling behavior", () => {
   test("Tab cycles personas when in persona mode", async ({ terminal }) => {
     await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 15000 });
 
-    // Default mode is persona mode — Ei should be active
-    await expect(terminal.getByText("Ei")).toBeVisible({ timeout: 5000 });
+    // Default mode is persona mode — Ei should be active (sidebar shows * prefix for active)
+    await expect(terminal.getByText(/\* Ei/g)).toBeVisible({ timeout: 5000 });
 
     // Press Tab to cycle to next persona (Sage / 007)
     terminal.write(TAB);
 
     // Should now show Sage (007's display name) as active
-    await expect(terminal.getByText("Sage")).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText(/\* Sage/g)).toBeVisible({ timeout: 5000 });
 
     // Press Tab again to cycle back to Ei
     terminal.write(TAB);
 
-    await expect(terminal.getByText("Ei")).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText(/\* Ei/g)).toBeVisible({ timeout: 5000 });
   });
 
   test("/p PersonaName switches back to persona mode", async ({ terminal }) => {
@@ -230,15 +230,13 @@ test.describe("T9: Sidebar Tab cycling behavior", () => {
     terminal.write("/p Ei");
     terminal.submit();
 
-    // Sidebar should now show personas — Ei should be visible and active
-    await expect(terminal.getByText("Ei")).toBeVisible({ timeout: 10000 });
+    await expect(terminal.getByText(/\* Ei/g)).toBeVisible({ timeout: 10000 });
   });
 
   test("/r RoomName switches to room mode", async ({ terminal }) => {
     await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 15000 });
 
-    // Default is persona mode — Ei visible
-    await expect(terminal.getByText("Ei")).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText(/\* Ei/g)).toBeVisible({ timeout: 5000 });
 
     // Switch to room mode
     terminal.write(`/r ${ROOM_NAME}`);
