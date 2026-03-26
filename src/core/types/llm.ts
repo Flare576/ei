@@ -25,6 +25,8 @@ export interface Message {
   _synthesis?: boolean;         // True if message was created by multi-message synthesis
   speaker_name?: string;       // Display name of actual speaker; set on room messages for clean hydration
 
+  external?: boolean;          // Set by integration importers (OpenCode, Cursor, Claude Code); invisible to LLM context
+
 }
 
 export interface ChatMessage {

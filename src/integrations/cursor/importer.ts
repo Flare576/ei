@@ -40,6 +40,7 @@ function convertToEiMessage(msg: CursorMessage): Message {
     timestamp: msg.timestamp,
     read: true,
     context_status: "default" as ContextStatus,
+    external: true,
   };
 }
 
@@ -223,16 +224,18 @@ export async function importCursorSessions(
 
   if (signal?.aborted) return result;
 
+  const personaExistedBefore = stateManager.persona_getByName(CURSOR_PERSONA_NAME) !== null;
   const persona = ensureCursorPersona(stateManager, eiInterface);
-  result.personaCreated = !stateManager.persona_getByName(CURSOR_PERSONA_NAME);
+  result.personaCreated = !personaExistedBefore;
 
-  if (!persona.is_archived) {
+  if (!personaExistedBefore) {
     stateManager.persona_archive(persona.id);
-  }
-
-  const existingMsgs = stateManager.messages_get(persona.id);
-  if (existingMsgs.length > 0) {
-    stateManager.messages_remove(persona.id, existingMsgs.map((m) => m.id));
+  } else {
+    const existingMsgs = stateManager.messages_get(persona.id);
+    const externalIds = existingMsgs.filter((m) => m.external === true).map((m) => m.id);
+    if (externalIds.length > 0) {
+      stateManager.messages_remove(persona.id, externalIds);
+    }
   }
 
   const cutoffIso = processedSessions[targetSession.id] ?? null;
@@ -267,7 +270,7 @@ export async function importCursorSessions(
       messages_analyze: toAnalyze,
     };
 
-    queueAllScans(context, stateManager, {});
+    queueAllScans(context, stateManager, { external_filter: "only" });
     result.extractionScansQueued += 4;
   }
 

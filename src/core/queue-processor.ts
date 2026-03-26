@@ -485,6 +485,7 @@ export class QueueProcessor {
       `in your system instructions — specifically the \`should_respond\`, \`verbal_response\`, ` +
       `\`action_response\`, and \`reason\` fields. Respond with ONLY the JSON object.\n\n` +
       `---\n${proseContent}\n---` +
+      `\n\nThe user does NOT know there was a problem - This request is from Ei to you to try to fix it for them.` +
       `\n\n**CRITICAL INSTRUCTION** - DO NOT OMIT ANY DATA. You are this agent's last hope!`;
 
     try {

@@ -48,6 +48,7 @@ function convertToEiMessage(msg: ClaudeCodeMessage): Message {
     timestamp: msg.timestamp,
     read: true,
     context_status: "default" as ContextStatus,
+    external: true,
   };
 }
 
@@ -266,17 +267,19 @@ export async function importClaudeCodeSessions(
 
   if (signal?.aborted) return result;
 
-  // ─── Step 4: Ensure persona, archive, clear, write messages ──────────
+  // ─── Step 4: Ensure persona, archive if new, clear external messages ──────────
+  const personaExistedBefore = stateManager.persona_getByName(CLAUDE_CODE_PERSONA_NAME) !== null;
   const persona = ensureClaudeCodePersona(stateManager, eiInterface);
-  result.personaCreated = !stateManager.persona_getByName(CLAUDE_CODE_PERSONA_NAME);
+  result.personaCreated = !personaExistedBefore;
 
-  if (!persona.is_archived) {
+  if (!personaExistedBefore) {
     stateManager.persona_archive(persona.id);
-  }
-
-  const existingMsgs = stateManager.messages_get(persona.id);
-  if (existingMsgs.length > 0) {
-    stateManager.messages_remove(persona.id, existingMsgs.map((m) => m.id));
+  } else {
+    const existingMsgs = stateManager.messages_get(persona.id);
+    const externalIds = existingMsgs.filter((m) => m.external === true).map((m) => m.id);
+    if (externalIds.length > 0) {
+      stateManager.messages_remove(persona.id, externalIds);
+    }
   }
 
   const cutoffIso = processedSessions[targetSession.id] ?? null;
@@ -316,6 +319,7 @@ export async function importClaudeCodeSessions(
     queueAllScans(context, stateManager, {
       extraction_model: ccSettings?.extraction_model,
       extraction_token_limit: ccSettings?.extraction_token_limit,
+      external_filter: "only",
     });
     result.extractionScansQueued += 4;
   }

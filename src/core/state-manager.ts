@@ -542,8 +542,8 @@ export class StateManager {
     return result;
   }
 
-  messages_getUnextracted(personaId: string, flag: "f" | "t" | "p" | "e", limit?: number): Message[] {
-    return this.personaState.messages_getUnextracted(personaId, flag, limit);
+  messages_getUnextracted(personaId: string, flag: "f" | "t" | "p" | "e", limit?: number, external_filter?: "include" | "exclude" | "only"): Message[] {
+    return this.personaState.messages_getUnextracted(personaId, flag, limit, external_filter);
   }
 
   messages_markExtracted(personaId: string, messageIds: string[], flag: "f" | "t" | "p" | "e"): number {

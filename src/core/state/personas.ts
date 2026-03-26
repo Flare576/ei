@@ -213,10 +213,20 @@ export class PersonaState {
     return removed;
   }
 
-  messages_getUnextracted(personaId: string, flag: "f" | "t" | "p" | "e", limit?: number): Message[] {
+  messages_getUnextracted(
+    personaId: string,
+    flag: "f" | "t" | "p" | "e",
+    limit?: number,
+    external_filter?: "include" | "exclude" | "only"
+  ): Message[] {
     const data = this.personas.get(personaId);
     if (!data) return [];
-    const unextracted = data.messages.filter(m => m[flag] !== true);
+    let unextracted = data.messages.filter(m => m[flag] !== true);
+    if (external_filter === "exclude") {
+      unextracted = unextracted.filter(m => m.external !== true);
+    } else if (external_filter === "only") {
+      unextracted = unextracted.filter(m => m.external === true);
+    }
     if (limit && unextracted.length > limit) {
       return unextracted.slice(0, limit).map(m => ({ ...m }));
     }

@@ -317,6 +317,96 @@ describe("PersonaState", () => {
     });
   });
 
+  describe("messages_getUnextracted external_filter", () => {
+    let personaId: string;
+
+    const makeMsg = (id: string, isExternal?: boolean): Message => ({
+      id,
+      role: "human",
+      verbal_response: id,
+      timestamp: new Date().toISOString(),
+      read: true,
+      context_status: ContextStatusEnum.Default,
+      ...(isExternal ? { external: true } : {}),
+    });
+
+    beforeEach(() => {
+      const persona = makePersona("FilterBot");
+      personaId = persona.id;
+      state.add(persona);
+    });
+
+    it("returns all messages when external_filter is undefined", () => {
+      state.messages_append(personaId, makeMsg("regular-1"));
+      state.messages_append(personaId, makeMsg("external-1", true));
+
+      const result = state.messages_getUnextracted(personaId, "f", undefined, undefined);
+
+      expect(result).toHaveLength(2);
+    });
+
+    it("returns all messages when external_filter is 'include'", () => {
+      state.messages_append(personaId, makeMsg("regular-1"));
+      state.messages_append(personaId, makeMsg("external-1", true));
+
+      const result = state.messages_getUnextracted(personaId, "f", undefined, "include");
+
+      expect(result).toHaveLength(2);
+    });
+
+    it("excludes external messages when external_filter is 'exclude'", () => {
+      state.messages_append(personaId, makeMsg("regular-1"));
+      state.messages_append(personaId, makeMsg("external-1", true));
+
+      const result = state.messages_getUnextracted(personaId, "f", undefined, "exclude");
+
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe("regular-1");
+    });
+
+    it("returns only external messages when external_filter is 'only'", () => {
+      state.messages_append(personaId, makeMsg("regular-1"));
+      state.messages_append(personaId, makeMsg("external-1", true));
+
+      const result = state.messages_getUnextracted(personaId, "f", undefined, "only");
+
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe("external-1");
+    });
+
+    it("excludes already-extracted messages before applying external_filter", () => {
+      const alreadyExtracted: Message = { ...makeMsg("extracted-1"), f: true };
+      state.messages_append(personaId, alreadyExtracted);
+      state.messages_append(personaId, makeMsg("regular-1"));
+      state.messages_append(personaId, makeMsg("external-1", true));
+
+      const result = state.messages_getUnextracted(personaId, "f", undefined, "exclude");
+
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe("regular-1");
+    });
+
+    it("returns empty array when no external messages exist with filter 'only'", () => {
+      state.messages_append(personaId, makeMsg("regular-1"));
+      state.messages_append(personaId, makeMsg("regular-2"));
+
+      const result = state.messages_getUnextracted(personaId, "f", undefined, "only");
+
+      expect(result).toHaveLength(0);
+    });
+
+    it("respects limit after external_filter is applied", () => {
+      state.messages_append(personaId, makeMsg("r1"));
+      state.messages_append(personaId, makeMsg("r2"));
+      state.messages_append(personaId, makeMsg("r3"));
+      state.messages_append(personaId, makeMsg("e1", true));
+
+      const result = state.messages_getUnextracted(personaId, "f", 2, "exclude");
+
+      expect(result).toHaveLength(2);
+    });
+  });
+
   describe("load/export", () => {
     it("exports personas to serializable format", () => {
       const bot1 = makePersona("Bot1");

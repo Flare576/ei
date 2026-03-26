@@ -250,14 +250,23 @@ describe("importCursorSessions", () => {
     expect(mockStateManager.persona_archive).toHaveBeenCalledWith(cursorPersona!.id);
   });
 
-  it("clears existing messages before importing session", async () => {
+  it("removes only external messages on re-import, preserves non-external chat history", async () => {
     cursorPersona = buildPersonaEntity("cursor-id", "Cursor");
     messageStore.set("cursor-id", [
       {
-        id: "old-msg",
+        id: "ext-msg",
         role: "human",
-        verbal_response: "old",
+        verbal_response: "external session import",
         timestamp: "2025-01-01T00:00:00.000Z",
+        read: true,
+        context_status: "default" as ContextStatus,
+        external: true,
+      },
+      {
+        id: "chat-msg",
+        role: "human",
+        verbal_response: "regular chat message",
+        timestamp: "2025-01-01T00:01:00.000Z",
         read: true,
         context_status: "default" as ContextStatus,
       },
@@ -274,10 +283,11 @@ describe("importCursorSessions", () => {
 
     expect(mockStateManager.messages_remove).toHaveBeenCalledWith(
       "cursor-id",
-      expect.arrayContaining(["old-msg"])
+      expect.arrayContaining(["ext-msg"])
     );
     const stored = messageStore.get("cursor-id") ?? [];
-    expect(stored.some((m) => m.id === "old-msg")).toBe(false);
+    expect(stored.some((m) => m.id === "ext-msg")).toBe(false);
+    expect(stored.some((m) => m.id === "chat-msg")).toBe(true);
   });
 
   it("pre-marks messages before cutoff as fully extracted", async () => {

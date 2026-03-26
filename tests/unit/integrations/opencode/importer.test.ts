@@ -227,11 +227,11 @@ describe("importOpenCodeSessions", () => {
     expect(mockStateManager.persona_archive).toHaveBeenCalledWith(buildPersona!.id);
   });
 
-  it("clears existing messages before writing new session", async () => {
+  it("removes only external messages from existing persona on re-import", async () => {
     createdPersonas.set("build", { id: "persona-build", display_name: "build" });
-    messageStore.set("persona-build", [
-      makeMessage({ id: "old_msg", timestamp: "2026-01-01T00:00:00.000Z" }),
-    ]);
+    const externalMsg = makeMessage({ id: "ext_msg", timestamp: "2026-01-01T00:00:00.000Z", external: true });
+    const chatMsg = makeMessage({ id: "chat_msg", timestamp: "2026-01-01T00:00:01.000Z" });
+    messageStore.set("persona-build", [externalMsg, chatMsg]);
 
     const session = makeSession({ id: "ses_new" });
     const message: OpenCodeMessage = {
@@ -254,11 +254,66 @@ describe("importOpenCodeSessions", () => {
 
     expect(mockStateManager.messages_remove).toHaveBeenCalledWith(
       "persona-build",
-      expect.arrayContaining(["old_msg"])
+      expect.arrayContaining(["ext_msg"])
     );
     const stored = messageStore.get("persona-build") ?? [];
-    expect(stored.some(m => m.id === "old_msg")).toBe(false);
+    expect(stored.some(m => m.id === "ext_msg")).toBe(false);
+    expect(stored.some(m => m.id === "chat_msg")).toBe(true);
     expect(stored.some(m => m.id === "msg_new")).toBe(true);
+  });
+
+  it("preserves non-external messages when persona exists", async () => {
+    createdPersonas.set("build", { id: "persona-build", display_name: "build" });
+    const chatMsg = makeMessage({ id: "chat_msg", timestamp: "2026-01-01T00:00:00.000Z" });
+    messageStore.set("persona-build", [chatMsg]);
+
+    const session = makeSession({ id: "ses_new" });
+    const message: OpenCodeMessage = {
+      id: "msg_new",
+      sessionId: "ses_new",
+      role: "assistant",
+      agent: "build",
+      content: "New session",
+      timestamp: "2026-02-01T00:00:00.000Z",
+    };
+
+    mockReader.getSessionsUpdatedSince = vi.fn().mockResolvedValue([session]);
+    mockReader.getMessagesForSession = vi.fn().mockResolvedValue([message]);
+
+    await importOpenCodeSessions({
+      stateManager: mockStateManager as StateManager,
+      interface: mockInterface as Ei_Interface,
+      reader: mockReader as IOpenCodeReader,
+    });
+
+    const stored = messageStore.get("persona-build") ?? [];
+    expect(stored.some(m => m.id === "chat_msg")).toBe(true);
+  });
+
+  it("does not archive existing non-archived persona on re-import", async () => {
+    createdPersonas.set("build", { id: "persona-build", display_name: "build" });
+    messageStore.set("persona-build", []);
+
+    const session = makeSession({ id: "ses_new" });
+    const message: OpenCodeMessage = {
+      id: "msg_1",
+      sessionId: "ses_new",
+      role: "assistant",
+      agent: "build",
+      content: "Hello",
+      timestamp: "2026-02-01T00:00:00.000Z",
+    };
+
+    mockReader.getSessionsUpdatedSince = vi.fn().mockResolvedValue([session]);
+    mockReader.getMessagesForSession = vi.fn().mockResolvedValue([message]);
+
+    await importOpenCodeSessions({
+      stateManager: mockStateManager as StateManager,
+      interface: mockInterface as Ei_Interface,
+      reader: mockReader as IOpenCodeReader,
+    });
+
+    expect(mockStateManager.persona_archive).not.toHaveBeenCalled();
   });
 
   it("imports messages to correct persona", async () => {

@@ -13,7 +13,7 @@ export interface EnsureAgentPersonaOptions {
   reader?: IOpenCodeReader;
 }
 
-function resolveCanonicalAgent(agentName: string): { canonical: string; aliases: string[] } {
+export function resolveCanonicalAgent(agentName: string): { canonical: string; aliases: string[] } {
   for (const [canonical, variants] of Object.entries(AGENT_ALIASES)) {
     if (variants.includes(agentName)) {
       return { canonical, aliases: variants };

@@ -217,7 +217,7 @@ export function checkAndQueueHumanExtraction(
 ): void {
   const human = sm.getHuman();
 
-  const unextractedFacts = sm.messages_getUnextracted(personaId, "f");
+  const unextractedFacts = sm.messages_getUnextracted(personaId, "f", undefined, "exclude");
   const factsThreshold = Math.min(EXTRACTION_TAPER_CAP, human.facts.filter(f => f.description && f.description !== "").length);
   if (unextractedFacts.length > 0 && unextractedFacts.length >= factsThreshold) {
     const context: ExtractionContext = {
@@ -233,7 +233,7 @@ export function checkAndQueueHumanExtraction(
     );
   }
 
-  const unextractedTopics = sm.messages_getUnextracted(personaId, "t");
+  const unextractedTopics = sm.messages_getUnextracted(personaId, "t", undefined, "exclude");
   const topicsThreshold = Math.min(EXTRACTION_TAPER_CAP, human.topics.length);
   if (unextractedTopics.length > 0 && unextractedTopics.length >= topicsThreshold) {
     const context: ExtractionContext = {
@@ -249,7 +249,7 @@ export function checkAndQueueHumanExtraction(
     );
   }
 
-  const unextractedPeople = sm.messages_getUnextracted(personaId, "p");
+  const unextractedPeople = sm.messages_getUnextracted(personaId, "p", undefined, "exclude");
   const peopleThreshold = Math.min(EXTRACTION_TAPER_CAP, human.people.length);
   if (unextractedPeople.length > 0 && unextractedPeople.length >= peopleThreshold) {
     const context: ExtractionContext = {

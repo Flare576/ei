@@ -1,6 +1,12 @@
 import type { PersonaGenerationPromptData, PromptOutput } from "./types.js";
 import { DEFAULT_SEED_TRAITS } from "./seeds.js";
 
+/**
+ * @deprecated Use `processor.generatePersonaPreview()` instead.
+ * This queue-based generation flow is being replaced by a synchronous one-shot
+ * preview path that lets users review the result before persisting.
+ * Will be removed once `generatePersonaPreview` is wired up end-to-end.
+ */
 export function buildPersonaGenerationPrompt(data: PersonaGenerationPromptData): PromptOutput {
   if (!data.name) {
     throw new Error("buildPersonaGenerationPrompt: name is required");

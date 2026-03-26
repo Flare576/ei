@@ -68,6 +68,15 @@ export interface ExtractionOptions {
   extraction_model?: string;
   /** Override token budget for chunking */
   extraction_token_limit?: number;
+  /**
+   * Controls whether external (integration-imported) messages are included.
+   * - "exclude": skip messages where external === true
+   * - "only": include ONLY messages where external === true
+   * - "include": include all messages (backward-compat default; omit means same)
+   *
+   * NOTE: "include" is the backward-compat default only. All new callers must explicitly pass "exclude" or "only". Will be removed in a future release.
+   */
+  external_filter?: "include" | "exclude" | "only";
 }
 
 function getAnalyzeFromTimestamp(context: ExtractionContext): string | null {
@@ -512,7 +521,7 @@ export function queueEventSummary(
     return 0;
   }
 
-  const unextractedMessages = state.messages_getUnextracted(personaId, "e");
+  const unextractedMessages = state.messages_getUnextracted(personaId, "e", undefined, options?.external_filter);
   if (unextractedMessages.length === 0) {
     console.log(`[queueEventSummary] No unprocessed messages for ${persona.display_name}`);
     return 0;

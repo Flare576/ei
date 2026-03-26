@@ -3,7 +3,7 @@ import type { Ei_Interface, Message, ContextStatus } from "../../core/types.js";
 import type { IOpenCodeReader, OpenCodeSession, OpenCodeMessage } from "./types.js";
 import { UTILITY_AGENTS, AGENT_TO_AGENT_PREFIXES } from "./types.js";
 import { createOpenCodeReader } from "./reader-factory.js";
-import { ensureAgentPersona } from "../../core/personas/opencode-agent.js";
+import { ensureAgentPersona, resolveCanonicalAgent } from "../../core/personas/opencode-agent.js";
 import {
   queueAllScans,
   type ExtractionContext,
@@ -50,10 +50,10 @@ function convertToEiMessage(ocMsg: OpenCodeMessage): Message {
     timestamp: ocMsg.timestamp,
     read: true,
     context_status: "default" as ContextStatus,
+    external: true,
   };
 }
 
-/** Convert OC message to Ei Message with all extraction flags pre-set. */
 function convertToPreMarkedEiMessage(ocMsg: OpenCodeMessage): Message {
   return {
     ...convertToEiMessage(ocMsg),
@@ -171,9 +171,10 @@ export async function importOpenCodeSessions(
   // ─── Step 4: Resolve agents → personas, group by persona ID ────────
   // Resolve aliases up front so 'sisyphus' and 'Sisyphus (Ultraworker)'
   // land in the same bucket instead of clobbering each other.
-  const byPersonaId = new Map<string, { persona: NonNullable<ReturnType<typeof stateManager.persona_getByName>>; msgs: OpenCodeMessage[] }>();
+  const byPersonaId = new Map<string, { persona: NonNullable<ReturnType<typeof stateManager.persona_getByName>>; msgs: OpenCodeMessage[]; isNew: boolean; agentName: string }>();
   for (const msg of relevant) {
     let persona = stateManager.persona_getByName(msg.agent);
+    let isNew = false;
     if (!persona) {
       persona = await ensureAgentPersona(msg.agent, {
         stateManager,
@@ -181,28 +182,43 @@ export async function importOpenCodeSessions(
         reader,
       });
       result.personasCreated.push(msg.agent);
+      isNew = true;
     }
     const bucket = byPersonaId.get(persona.id);
     if (bucket) {
       bucket.msgs.push(msg);
     } else {
-      byPersonaId.set(persona.id, { persona, msgs: [msg] });
+      byPersonaId.set(persona.id, { persona, msgs: [msg], isNew, agentName: msg.agent });
     }
   }
 
   const cutoffIso = processedSessions[targetSession.id] ?? null;
   const cutoffMs = cutoffIso ? new Date(cutoffIso).getTime() : null;
 
-  for (const [, { persona, msgs: agentMsgs }] of byPersonaId) {
-    // Archive persona (message store only, not a conversational persona)
-    if (!persona.is_archived) {
+  for (const [, { persona, msgs: agentMsgs, isNew, agentName }] of byPersonaId) {
+    if (isNew) {
+      // Brand-new persona: archive it (coding-session store, not a live chat persona)
       stateManager.persona_archive(persona.id);
-    }
-
-    // Clear existing messages — this persona holds exactly one session at a time
-    const existingMsgs = stateManager.messages_get(persona.id);
-    if (existingMsgs.length > 0) {
-      stateManager.messages_remove(persona.id, existingMsgs.map(m => m.id));
+    } else if (persona.is_archived) {
+      // Existing archived persona: refresh identity fields, then remove only external messages
+      const agentInfo = await reader.getAgentInfo(persona.display_name);
+      const { aliases } = resolveCanonicalAgent(agentName);
+      stateManager.persona_update(persona.id, {
+        short_description: agentInfo?.description ?? persona.short_description,
+        aliases,
+      });
+      const existingMsgs = stateManager.messages_get(persona.id);
+      const externalIds = existingMsgs.filter(m => m.external === true).map(m => m.id);
+      if (externalIds.length > 0) {
+        stateManager.messages_remove(persona.id, externalIds);
+      }
+    } else {
+      // Existing live (non-archived) persona: only remove external messages, leave chat history intact
+      const existingMsgs = stateManager.messages_get(persona.id);
+      const externalIds = existingMsgs.filter(m => m.external === true).map(m => m.id);
+      if (externalIds.length > 0) {
+        stateManager.messages_remove(persona.id, externalIds);
+      }
     }
 
     // Write messages — pre-mark old ones, leave new ones unmarked for extraction
@@ -241,6 +257,7 @@ export async function importOpenCodeSessions(
         queueAllScans(context, stateManager, {
           extraction_model: openCodeSettings?.extraction_model,
           extraction_token_limit: openCodeSettings?.extraction_token_limit,
+          external_filter: "only",
         });
         result.extractionScansQueued += 4;
       }
