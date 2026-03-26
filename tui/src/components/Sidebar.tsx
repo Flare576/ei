@@ -64,9 +64,7 @@ export function Sidebar() {
     >
       <box flexDirection="column">
         <text fg={isFocused() ? "#268bd2" : "#93a1a1"} marginBottom={1}>
-          {isRoomMode()
-            ? `Rooms ${isFocused() ? "[*]" : ""}`
-            : `Personas ${isFocused() ? "[*]" : ""}`}
+          {isRoomMode() ? `/p Personas | * Rooms` : `* Personas | /r Rooms`}
         </text>
         
         <scrollbox height="100%">
