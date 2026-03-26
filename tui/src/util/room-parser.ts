@@ -6,9 +6,9 @@ export function buildRoomYAMLTemplate(personas: PersonaSummary[], initialName = 
   const activePersonas = personas.filter((p) => !p.is_archived);
   const personaLines = activePersonas.map((p) => `  ${p.display_name}: false`).join("\n");
   return `# Room configuration
-# mode: choose_your_path | free_for_all | messages_against_persona
+# mode: MAP | CYP | FFA
 display_name: "${initialName}"
-mode: free_for_all
+mode: FFA
 persona_ids:
 ${personaLines}
 # judge_persona_id: required for messages_against_persona, use display_name from persona_ids above
@@ -25,12 +25,19 @@ export function parseRoomYAML(content: string, personas: PersonaSummary[]): Room
     throw new Error("display_name is required");
   }
 
-  const rawMode = typeof parsed.mode === "string" ? parsed.mode.trim() : "";
-  const validModes = [RoomMode.ChooseYourPath, RoomMode.FreeForAll, RoomMode.MessagesAgainstPersona] as string[];
-  if (!validModes.includes(rawMode)) {
-    throw new Error("mode is required");
+  const rawMode = typeof parsed.mode === "string" ? parsed.mode.trim().toUpperCase() : "";
+  const modeMap: Record<string, RoomMode> = {
+    MAP: RoomMode.MessagesAgainstPersona,
+    CYP: RoomMode.ChooseYourPath,
+    FFA: RoomMode.FreeForAll,
+    MESSAGES_AGAINST_PERSONA: RoomMode.MessagesAgainstPersona,
+    CHOOSE_YOUR_PATH: RoomMode.ChooseYourPath,
+    FREE_FOR_ALL: RoomMode.FreeForAll,
+  };
+  const mode = modeMap[rawMode];
+  if (!mode) {
+    throw new Error("mode must be MAP, CYP, or FFA");
   }
-  const mode = rawMode as RoomMode;
 
   let persona_ids: string[] = [];
   if (parsed.persona_ids && typeof parsed.persona_ids === "object" && !Array.isArray(parsed.persona_ids)) {
