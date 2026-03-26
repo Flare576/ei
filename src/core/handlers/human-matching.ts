@@ -9,6 +9,7 @@ import type { StateManager } from "../state-manager.js";
 import type { ItemMatchResult, ExposureImpact, TopicUpdateResult, PersonUpdateResult } from "../../prompts/human/types.js";
 import { queueTopicUpdate, queuePersonUpdate, type ExtractionContext } from "../orchestrators/index.js";
 import { getEmbeddingService, getTopicEmbeddingText, getPersonEmbeddingText } from "../embedding-service.js";
+import { calculateExposureCurrent } from "../utils/exposure.js";
 
 
 import { resolveMessageWindow, getMessageText, normalizeRoomMessages } from "./utils.js";
@@ -171,7 +172,7 @@ export async function handleTopicUpdate(response: LLMResponse, state: StateManag
     description: result.description,
     sentiment: result.sentiment,
     category: result.category ?? candidateCategory ?? existingTopic?.category,
-    exposure_current: calculateExposureCurrent(exposureImpact),
+    exposure_current: calculateExposureCurrent(exposureImpact, existingTopic?.exposure_current ?? 0),
     exposure_desired: result.exposure_desired ?? 0.5,
     last_updated: now,
     last_mentioned: now,
@@ -255,7 +256,7 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
     description: result.description,
     sentiment: result.sentiment,
     relationship: result.relationship ?? candidateRelationship ?? existingPerson?.relationship ?? "Unknown",
-    exposure_current: calculateExposureCurrent(exposureImpact),
+    exposure_current: calculateExposureCurrent(exposureImpact, existingPerson?.exposure_current ?? 0),
     exposure_desired: result.exposure_desired ?? 0.5,
     last_updated: now,
     last_mentioned: now,
@@ -462,14 +463,5 @@ async function validateAndStoreQuotes(
   }
 }
 
-function calculateExposureCurrent(impact: ExposureImpact | undefined): number {
-  switch (impact) {
-    case "high": return 0.9;
-    case "medium": return 0.6;
-    case "low": return 0.3;
-    case "none": return 0.1;
-    default: return 0.5;
-  }
-}
 
 
