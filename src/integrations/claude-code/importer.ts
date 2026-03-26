@@ -1,5 +1,6 @@
 import type { StateManager } from "../../core/state-manager.js";
-import type { Ei_Interface, Topic, Message, ContextStatus, PersonaEntity } from "../../core/types.js";
+import type { Ei_Interface, Topic, Message, ContextStatus, PersonaEntity, PersonaTrait } from "../../core/types.js";
+import { DEFAULT_SEED_TRAITS } from "../../core/constants/seed-traits.js";
 import type { IClaudeCodeReader, ClaudeCodeSession, ClaudeCodeMessage } from "./types.js";
 import {
   CLAUDE_CODE_PERSONA_NAME,
@@ -74,6 +75,14 @@ function ensureClaudeCodePersona(
   if (existing) return existing;
 
   const now = new Date().toISOString();
+  const seedTraits: PersonaTrait[] = DEFAULT_SEED_TRAITS.map((t) => ({
+    id: crypto.randomUUID(),
+    name: t.name,
+    description: t.description,
+    sentiment: t.sentiment,
+    strength: t.strength,
+    last_updated: now,
+  }));
   const persona: PersonaEntity = {
     id: crypto.randomUUID(),
     display_name: CLAUDE_CODE_PERSONA_NAME,
@@ -84,7 +93,7 @@ function ensureClaudeCodePersona(
       "Claude Code is an agentic coding assistant that helps with coding tasks, debugging, architecture decisions, and more.",
     group_primary: CLAUDE_CODE_GROUP,
     groups_visible: [CLAUDE_CODE_GROUP],
-    traits: [],
+    traits: seedTraits,
     topics: [],
     is_paused: false,
     is_archived: false,

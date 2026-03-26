@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { isReservedPersonaName, RESERVED_PERSONA_NAMES } from '../../../../src/core/types';
 import type { ToolProvider, ToolDefinition } from '../../../../src/core/types';
+import type { PersonaGenerationResult } from '../../../../src/prompts/generation/types';
 import { PersonaToolsTab } from './tabs/PersonaToolsTab';
 
 interface Trait {
@@ -15,6 +16,7 @@ interface Topic {
   perspective: string;
   approach?: string;
   personal_stake?: string;
+  sentiment?: number;
   exposure_current?: number;
   exposure_desired?: number;
 }
@@ -38,6 +40,15 @@ interface PersonaCreatorModalProps {
   onAiAssist?: (systemPrompt: string, userPrompt: string) => Promise<string>;
   toolProviders?: ToolProvider[];
   toolDefinitions?: ToolDefinition[];
+  initialData?: {
+    name?: string;
+    description: string;
+    relationship?: string;
+    personaId?: string;
+  };
+  generatePersonaPreview?: (name: string, description: string, relationship?: string, personaId?: string) => Promise<PersonaGenerationResult>;
+  onUpdate?: (personaId: string, persona: NewPersonaData) => void;
+  personas?: Array<{ id: string; display_name: string }>;
 }
 
 type ExpandableSection = 'traits' | 'communication' | 'relationships' | 'topics' | 'model' | 'tools';
@@ -49,6 +60,10 @@ export function PersonaCreatorModal({
   onAiAssist,
   toolProviders = [],
   toolDefinitions = [],
+  initialData,
+  generatePersonaPreview,
+  onUpdate,
+  personas = [],
 }: PersonaCreatorModalProps) {
   const [name, setName] = useState('');
   const [group, setGroup] = useState('');
@@ -61,32 +76,63 @@ export function PersonaCreatorModal({
   const [expandedSections, setExpandedSections] = useState<Set<ExpandableSection>>(new Set());
   const [aiLoadingField, setAiLoadingField] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<Record<string, { text: string; onAccept: (v: string) => void; systemPrompt: string; userPrompt: string }>>({});
-  
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generationComplete, setGenerationComplete] = useState(false);
+  const [previousLongDescription, setPreviousLongDescription] = useState<string | undefined>(undefined);
+  const [selectedPersonaId, setSelectedPersonaId] = useState<string | undefined>(undefined);
+
   const modalRef = useRef<HTMLDivElement>(null);
   const previousActiveElement = useRef<Element | null>(null);
+  const autoGenerateAttempted = useRef(false);
 
   // Reset form when modal opens/closes
   useEffect(() => {
     if (isOpen) {
-      setName('');
       setGroup('');
-      setDescription('');
-      setShortDescription('');
       setModel('');
-      setTraits([]);
-      setTopics([]);
       setAssignedToolIds([]);
-      setGroup('');
-      setDescription('');
-      setShortDescription('');
-      setModel('');
-      setTraits([]);
-      setTopics([]);
       setExpandedSections(new Set());
       setAiLoadingField(null);
       setSuggestions({});
+      setIsGenerating(false);
+      setGenerationComplete(false);
+      setPreviousLongDescription(undefined);
+      autoGenerateAttempted.current = false;
+
+      if (initialData) {
+        setName(initialData.name ?? '');
+        setDescription(initialData.description);
+        setShortDescription(initialData.relationship ?? '');
+        setTraits([]);
+        setTopics([]);
+        setSelectedPersonaId(initialData.personaId);
+      } else {
+        setName('');
+        setDescription('');
+        setShortDescription('');
+        setTraits([]);
+        setTopics([]);
+        setSelectedPersonaId(undefined);
+      }
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (
+      isOpen &&
+      initialData &&
+      description.trim() &&
+      generatePersonaPreview &&
+      !generationComplete &&
+      !isGenerating &&
+      !autoGenerateAttempted.current &&
+      (onUpdate ? selectedPersonaId : name.trim())
+    ) {
+      autoGenerateAttempted.current = true;
+      runGeneration();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, name, description, generatePersonaPreview, generationComplete, isGenerating, selectedPersonaId]);
 
   // Focus management
   useEffect(() => {
@@ -235,6 +281,60 @@ export function PersonaCreatorModal({
     setTopics(topics.filter((_, i) => i !== index));
   };
 
+  const runGeneration = async () => {
+    const resolvedName = onUpdate
+      ? (personas.find(p => p.id === selectedPersonaId)?.display_name ?? name.trim())
+      : name.trim();
+    if (!generatePersonaPreview || !resolvedName || !description.trim()) return;
+    setIsGenerating(true);
+    try {
+      const result = await generatePersonaPreview(resolvedName, description.trim(), shortDescription.trim() || undefined, selectedPersonaId);
+      setShortDescription(result.short_description ?? shortDescription);
+      setDescription(result.long_description ?? description);
+      setPreviousLongDescription(result.previous_long_description);
+      setTraits(prev => [
+        ...prev,
+        ...result.traits.map(t => ({
+          name: t.name,
+          description: t.description,
+          strength: t.strength,
+          sentiment: t.sentiment,
+        })),
+      ]);
+      setTopics(prev => [
+        ...prev,
+        ...result.topics.map(t => ({
+          name: t.name,
+          perspective: t.perspective,
+          approach: t.approach,
+          personal_stake: t.personal_stake,
+          sentiment: t.sentiment ?? 0,
+          exposure_current: t.exposure_current ?? 0.5,
+          exposure_desired: t.exposure_desired ?? 0.5,
+        })),
+      ]);
+      setGenerationComplete(true);
+      if (result.aliases && result.aliases.length > 0) {
+        setName([resolvedName, ...result.aliases].join(', '));
+      } else if (!!(onUpdate)) {
+        setName(resolvedName);
+      }
+    } catch (error) {
+      console.error('Persona preview generation failed:', error);
+      setGenerationComplete(false);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleFinishPersonaDefinition = async () => {
+    if (!name.trim()) {
+      alert('Please provide a name for the persona');
+      return;
+    }
+    await runGeneration();
+  };
+
   const handleSubmit = () => {
     if (!name.trim()) {
       alert('Please provide a name for the persona');
@@ -269,8 +369,17 @@ export function PersonaCreatorModal({
       tools: assignedToolIds.length > 0 ? assignedToolIds : undefined,
     };
 
+    if (generationComplete && selectedPersonaId && onUpdate) {
+      onUpdate(selectedPersonaId, personaData);
+      return;
+    }
+
     onCreate(personaData);
   };
+
+  const isUpdateMode = !!(onUpdate);
+  const canAutoGenerate = !!(generatePersonaPreview && description.trim() && (isUpdateMode ? selectedPersonaId : name.trim()));
+  const showFinishDefinition = canAutoGenerate && !generationComplete;
 
   if (!isOpen) return null;
 
@@ -288,7 +397,7 @@ export function PersonaCreatorModal({
         {/* Header */}
         <div className="ei-creator-modal__header">
           <h2 id="creator-modal-title" className="ei-creator-modal__title">
-            Create New Persona
+            {isUpdateMode ? 'Update Persona' : 'Create New Persona'}
           </h2>
           <button 
             className="ei-btn ei-btn--icon"
@@ -299,324 +408,376 @@ export function PersonaCreatorModal({
           </button>
         </div>
 
-        {/* Content */}
-        <div className="ei-creator-modal__content">
-          {/* Core Fields */}
-          <div className="ei-creator-modal__core">
-            <div className="ei-form-group">
-              <label className="ei-form-label">Name (comma-delimited for aliases)</label>
-              <input
-                type="text"
-                className="ei-input"
-                placeholder="Primary Name, Alias 1, Alias 2..."
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                autoFocus
-              />
-              <span className="ei-form-hint">
-                First name will be primary, all others become aliases
-              </span>
-            </div>
-
-            <div className="ei-form-group">
-              <div className="ei-creator-modal__field-with-assist">
-                <label className="ei-form-label">Description</label>
-                {onAiAssist && (
-                  <button
-                    className="ei-ai-assist-btn"
-                    onClick={() => handleAiAssistClick('description',
-                      `You are helping craft a vivid, compelling persona description. Return only the improved description, nothing else.`,
-                      `Persona name: ${name}\n\nCurrent description: "${description}"\n\nImprove this description to make the persona feel alive and specific.`,
-                      setDescription
-                    )}
-                    disabled={aiLoadingField === 'description'}
-                  >
-                    ✨ AI Assist
-                  </button>
-                )}
-              </div>
-              <div style={{ position: 'relative' }}>
-                <textarea
-                  className="ei-textarea"
-                  placeholder="Describe this persona's personality, background, and purpose..."
-                  rows={6}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                />
-                {aiLoadingField === 'description' && (
-                  <div className="ei-field-loading-overlay">
-                    <div className="ei-field-loading-overlay__spinner" />
-                  </div>
-                )}
-              </div>
-              {renderSuggestion('description')}
-              <span className="ei-form-hint ei-creator-help-text">
-                In a hurry? We'll pre-fill based on description
-              </span>
-            </div>
-
-            <div className="ei-form-group">
-              <label className="ei-form-label">Group</label>
-              <input
-                type="text"
-                className="ei-input"
-                placeholder="e.g., Work, Creative, Gaming..."
-                value={group}
-                onChange={(e) => setGroup(e.target.value)}
-              />
-              <span className="ei-form-hint">
-                Optional - organize personas into groups with shared visibility
-              </span>
-            </div>
+        {/* Generating spinner */}
+        {isGenerating && (
+          <div className="ei-creator-modal__generating">
+            <div className="ei-field-loading-overlay__spinner" />
+            <span>Defining your persona...</span>
           </div>
+        )}
 
-          {/* Expandable Sections */}
-          <div className="ei-creator-modal__sections">
-            {/* Traits Section */}
-            <div className={`ei-creator-section ${expandedSections.has('traits') ? 'ei-creator-section--expanded' : ''}`}>
-              <div
-                className="ei-creator-section-header"
-                onClick={() => toggleSection('traits')}
-              >
-                <span className="ei-creator-section-header__text">
-                  {expandedSections.has('traits') ? '▼' : '▶'} Add Personification
-                </span>
-              </div>
-
-              {expandedSections.has('traits') && (
-                <div className="ei-creator-section-content">
-                  <p className="ei-creator-help-text">
-                    Define personality traits that characterize this persona
-                  </p>
-                  {traits.map((trait, index) => (
-                    <div key={index} className="ei-creator-mini-card">
-                      <input
-                        type="text"
-                        className="ei-input ei-input--sm"
-                        placeholder="Trait name (e.g., Analytical)"
-                        value={trait.name || ''}
-                        onChange={(e) => updateTrait(index, 'name', e.target.value)}
-                      />
-                      <div style={{ position: 'relative' }}>
-                        <div className="ei-creator-modal__field-with-assist ei-creator-modal__field-with-assist--inline">
-                          <label className="ei-form-label ei-form-label--sm">Description</label>
-                          {onAiAssist && (
-                            <button
-                              className="ei-ai-assist-btn ei-ai-assist-btn--sm"
-                              onClick={() => handleAiAssistClick(
-                                `trait-${index}-description`,
-                                `You're helping define a new AI Persona for the user to chat with! The Persona's core description is:\n\n${description}\n\nYou're helping generate a compelling **Description** for a Personality Trait called **${trait.name || 'this trait'}**. Return only the improved description text, nothing else.`,
-                                `Current description: ${trait.description || '(empty)'}`,
-                                (result) => updateTrait(index, 'description', result)
-                              )}
-                              disabled={aiLoadingField === `trait-${index}-description`}
-                            >
-                              ✨
-                            </button>
-                          )}
-                        </div>
-                        <textarea
-                          className="ei-textarea ei-textarea--sm"
-                          placeholder="Brief description..."
-                          rows={2}
-                          value={trait.description || ''}
-                          onChange={(e) => updateTrait(index, 'description', e.target.value)}
-                        />
-                        {aiLoadingField === `trait-${index}-description` && (
-                          <div className="ei-field-loading-overlay">
-                            <div className="ei-field-loading-overlay__spinner" />
-                          </div>
-                        )}
-                        {renderSuggestion(`trait-${index}-description`)}
-                      </div>
-                      <button
-                        className="ei-btn ei-btn--danger ei-btn--sm"
-                        onClick={() => removeTrait(index)}
-                      >
-                        Remove
-                      </button>
-                    </div>
+        {/* Content */}
+        {!isGenerating && (
+          <div className="ei-creator-modal__content">
+            {/* Persona picker for update mode */}
+            {isUpdateMode && personas.length > 0 && (
+              <div className="ei-form-group">
+                <label className="ei-form-label">Update Persona</label>
+                <select
+                  className="ei-input"
+                  value={selectedPersonaId ?? ''}
+                  onChange={(e) => setSelectedPersonaId(e.target.value || undefined)}
+                >
+                  <option value="">Select a persona...</option>
+                  {personas.map(p => (
+                    <option key={p.id} value={p.id}>{p.display_name}</option>
                   ))}
-                  <button
-                    className="ei-btn ei-btn--secondary ei-btn--sm"
-                    onClick={addTrait}
-                  >
-                    + Add Trait
-                  </button>
-                </div>
-              )}
-            </div>
+                </select>
+              </div>
+            )}
 
-            {/* Topics Section */}
-            <div className={`ei-creator-section ${expandedSections.has('topics') ? 'ei-creator-section--expanded' : ''}`}>
-              <div
-                className="ei-creator-section-header"
-                onClick={() => toggleSection('topics')}
-              >
-                <span className="ei-creator-section-header__text">
-                  {expandedSections.has('topics') ? '▼' : '▶'} Add Topics of Interest
+            {(!isUpdateMode || generationComplete) && (
+            <>
+            {/* Core Fields */}
+            <div className="ei-creator-modal__core">
+              <div className="ei-form-group">
+                <label className="ei-form-label">{isUpdateMode ? 'Aliases (comma-delimited)' : 'Name (comma-delimited for aliases)'}</label>
+                <input
+                  type="text"
+                  className="ei-input"
+                  placeholder="Primary Name, Alias 1, Alias 2..."
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  autoFocus={!initialData}
+                />
+                <span className="ei-form-hint">
+                  First name will be primary, all others become aliases
                 </span>
               </div>
 
-              {expandedSections.has('topics') && (
-                <div className="ei-creator-section-content">
-                  <p className="ei-creator-help-text">
-                    Subjects this persona is knowledgeable about or interested in
-                  </p>
-                  {topics.map((topic, index) => (
-                    <div key={index} className="ei-creator-mini-card">
-                      <input
-                        type="text"
-                        className="ei-input ei-input--sm"
-                        placeholder="Topic name (e.g., Quantum Physics)"
-                        value={topic.name || ''}
-                        onChange={(e) => updateTopic(index, 'name', e.target.value)}
-                      />
-
-                      {(['perspective', 'approach', 'personal_stake'] as const).map((field) => {
-                        const labels: Record<string, string> = {
-                          perspective: 'Perspective',
-                          approach: 'Approach',
-                          personal_stake: 'Personal Stake',
-                        };
-                        const placeholders: Record<string, string> = {
-                          perspective: 'Their point of view on this topic...',
-                          approach: 'How they engage with this topic...',
-                          personal_stake: 'Why this topic matters to them personally...',
-                        };
-                        const fieldKey = `topic-${index}-${field}`;
-                        return (
-                          <div key={field} style={{ position: 'relative' }}>
-                            <div className="ei-creator-modal__field-with-assist ei-creator-modal__field-with-assist--inline">
-                              <label className="ei-form-label ei-form-label--sm">{labels[field]}</label>
-                              {onAiAssist && (
-                                <button
-                                  className="ei-ai-assist-btn ei-ai-assist-btn--sm"
-                                  onClick={() => handleAiAssistClick(
-                                    fieldKey,
-                                    `You're helping define a new AI Persona for the user to chat with! The Persona's core description is:\n\n${description}\n\nYou're helping generate a Persona's ideal **${labels[field]}** on a Topic called **${topic.name || 'this topic'}**. Attached is what the user has so far — see if you can improve it! Return only the improved text, nothing else.`,
-                                    `Current contents of [${labels[field]}]: ${topic[field] || '(empty)'}`,
-                                    (result) => updateTopic(index, field, result)
-                                  )}
-                                  disabled={aiLoadingField === fieldKey}
-                                >
-                                  ✨
-                                </button>
-                              )}
-                            </div>
-                            <textarea
-                              className="ei-textarea ei-textarea--sm"
-                              placeholder={placeholders[field]}
-                              rows={2}
-                              value={topic[field] || ''}
-                              onChange={(e) => updateTopic(index, field, e.target.value)}
-                            />
-                            {aiLoadingField === fieldKey && (
-                              <div className="ei-field-loading-overlay">
-                                <div className="ei-field-loading-overlay__spinner" />
-                              </div>
-                            )}
-                            {renderSuggestion(fieldKey)}
-                          </div>
-                        );
-                      })}
-
-                      <button
-                        className="ei-btn ei-btn--danger ei-btn--sm"
-                        onClick={() => removeTopic(index)}
-                      >
-                        Remove
-                      </button>
+              <div className="ei-form-group">
+                <div className="ei-creator-modal__field-with-assist">
+                  <label className="ei-form-label">Description</label>
+                  {onAiAssist && (
+                    <button
+                      className="ei-ai-assist-btn"
+                      onClick={() => handleAiAssistClick('description',
+                        `You are helping craft a vivid, compelling persona description. Return only the improved description, nothing else.`,
+                        `Persona name: ${name}\n\nCurrent description: "${description}"\n\nImprove this description to make the persona feel alive and specific.`,
+                        setDescription
+                      )}
+                      disabled={aiLoadingField === 'description'}
+                    >
+                      ✨ AI Assist
+                    </button>
+                  )}
+                </div>
+                {generationComplete && previousLongDescription && (
+                  <span className="ei-form-hint">Previously: {previousLongDescription}</span>
+                )}
+                <div style={{ position: 'relative' }}>
+                  <textarea
+                    className="ei-textarea"
+                    placeholder="Describe this persona's personality, background, and purpose..."
+                    rows={6}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                  />
+                  {aiLoadingField === 'description' && (
+                    <div className="ei-field-loading-overlay">
+                      <div className="ei-field-loading-overlay__spinner" />
                     </div>
-                  ))}
-                  <button
-                    className="ei-btn ei-btn--secondary ei-btn--sm"
-                    onClick={addTopic}
-                  >
-                    + Add Topic
-                  </button>
+                  )}
                 </div>
-              )}
-            </div>
-
-            {/* Model Selection Section */}
-            <div className={`ei-creator-section ${expandedSections.has('model') ? 'ei-creator-section--expanded' : ''}`}>
-              <div 
-                className="ei-creator-section-header"
-                onClick={() => toggleSection('model')}
-              >
-                <span className="ei-creator-section-header__text">
-                  {expandedSections.has('model') ? '▼' : '▶'} Select LLM Model
+                {renderSuggestion('description')}
+                <span className="ei-form-hint ei-creator-help-text">
+                  In a hurry? We'll pre-fill based on description
                 </span>
               </div>
-              
-              {expandedSections.has('model') && (
-                <div className="ei-creator-section-content">
-                  <p className="ei-creator-help-text">
-                    Override the default model for this persona
-                  </p>
-                  <div className="ei-form-group">
-                    <label className="ei-form-label">Model</label>
-                    <input
-                      type="text"
-                      className="ei-input"
-                      placeholder="e.g., gpt-4, claude-3-opus (leave empty for default)"
-                      value={model}
-                      onChange={(e) => setModel(e.target.value)}
-                    />
-                    <span className="ei-form-hint">
-                      Uses system default if not specified
-                    </span>
-                  </div>
-                </div>
-              )}
+
+              <div className="ei-form-group">
+                <label className="ei-form-label">Group</label>
+                <input
+                  type="text"
+                  className="ei-input"
+                  placeholder="e.g., Work, Creative, Gaming..."
+                  value={group}
+                  onChange={(e) => setGroup(e.target.value)}
+                />
+                <span className="ei-form-hint">
+                  Optional - organize personas into groups with shared visibility
+                </span>
+              </div>
             </div>
 
-            {/* Tools Section — only shown when there are enabled tools */}
-            {toolDefinitions.some(t => t.enabled && toolProviders.some(p => p.id === t.provider_id && p.enabled)) && (
-              <div className={`ei-creator-section ${expandedSections.has('tools') ? 'ei-creator-section--expanded' : ''}`}>
+            {/* Expandable Sections */}
+            <div className="ei-creator-modal__sections">
+              {/* Traits Section */}
+              <div className={`ei-creator-section ${expandedSections.has('traits') ? 'ei-creator-section--expanded' : ''}`}>
                 <div
                   className="ei-creator-section-header"
-                  onClick={() => toggleSection('tools')}
+                  onClick={() => toggleSection('traits')}
                 >
                   <span className="ei-creator-section-header__text">
-                    {expandedSections.has('tools') ? '▼' : '▶'} Assign Tools
-                    {assignedToolIds.length > 0 && (
-                      <span className="ei-creator-section-header__badge">{assignedToolIds.length}</span>
+                    {expandedSections.has('traits') ? '▼' : '▶'} Add Personification
+                    {traits.length > 0 && (
+                      <span className="ei-creator-section-header__badge">({traits.length})</span>
                     )}
                   </span>
                 </div>
 
-                {expandedSections.has('tools') && (
+                {expandedSections.has('traits') && (
                   <div className="ei-creator-section-content">
-                    <PersonaToolsTab
-                      assignedToolIds={assignedToolIds}
-                      providers={toolProviders}
-                      tools={toolDefinitions}
-                      onUpdate={setAssignedToolIds}
-                    />
+                    <p className="ei-creator-help-text">
+                      Define personality traits that characterize this persona
+                    </p>
+                    {traits.map((trait, index) => (
+                      <div key={index} className="ei-creator-mini-card">
+                        <input
+                          type="text"
+                          className="ei-input ei-input--sm"
+                          placeholder="Trait name (e.g., Analytical)"
+                          value={trait.name || ''}
+                          onChange={(e) => updateTrait(index, 'name', e.target.value)}
+                        />
+                        <div style={{ position: 'relative' }}>
+                          <div className="ei-creator-modal__field-with-assist ei-creator-modal__field-with-assist--inline">
+                            <label className="ei-form-label ei-form-label--sm">Description</label>
+                            {onAiAssist && (
+                              <button
+                                className="ei-ai-assist-btn ei-ai-assist-btn--sm"
+                                onClick={() => handleAiAssistClick(
+                                  `trait-${index}-description`,
+                                  `You're helping define a new AI Persona for the user to chat with! The Persona's core description is:\n\n${description}\n\nYou're helping generate a compelling **Description** for a Personality Trait called **${trait.name || 'this trait'}**. Return only the improved description text, nothing else.`,
+                                  `Current description: ${trait.description || '(empty)'}`,
+                                  (result) => updateTrait(index, 'description', result)
+                                )}
+                                disabled={aiLoadingField === `trait-${index}-description`}
+                              >
+                                ✨
+                              </button>
+                            )}
+                          </div>
+                          <textarea
+                            className="ei-textarea ei-textarea--sm"
+                            placeholder="Brief description..."
+                            rows={2}
+                            value={trait.description || ''}
+                            onChange={(e) => updateTrait(index, 'description', e.target.value)}
+                          />
+                          {aiLoadingField === `trait-${index}-description` && (
+                            <div className="ei-field-loading-overlay">
+                              <div className="ei-field-loading-overlay__spinner" />
+                            </div>
+                          )}
+                          {renderSuggestion(`trait-${index}-description`)}
+                        </div>
+                        <button
+                          className="ei-btn ei-btn--danger ei-btn--sm"
+                          onClick={() => removeTrait(index)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      className="ei-btn ei-btn--secondary ei-btn--sm"
+                      onClick={addTrait}
+                    >
+                      + Add Trait
+                    </button>
                   </div>
                 )}
               </div>
+
+              {/* Topics Section */}
+              <div className={`ei-creator-section ${expandedSections.has('topics') ? 'ei-creator-section--expanded' : ''}`}>
+                <div
+                  className="ei-creator-section-header"
+                  onClick={() => toggleSection('topics')}
+                >
+                  <span className="ei-creator-section-header__text">
+                    {expandedSections.has('topics') ? '▼' : '▶'} Add Topics of Interest
+                    {topics.length > 0 && (
+                      <span className="ei-creator-section-header__badge">({topics.length})</span>
+                    )}
+                  </span>
+                </div>
+
+                {expandedSections.has('topics') && (
+                  <div className="ei-creator-section-content">
+                    <p className="ei-creator-help-text">
+                      Subjects this persona is knowledgeable about or interested in
+                    </p>
+                    {topics.map((topic, index) => (
+                      <div key={index} className="ei-creator-mini-card">
+                        <input
+                          type="text"
+                          className="ei-input ei-input--sm"
+                          placeholder="Topic name (e.g., Quantum Physics)"
+                          value={topic.name || ''}
+                          onChange={(e) => updateTopic(index, 'name', e.target.value)}
+                        />
+
+                        {(['perspective', 'approach', 'personal_stake'] as const).map((field) => {
+                          const labels: Record<string, string> = {
+                            perspective: 'Perspective',
+                            approach: 'Approach',
+                            personal_stake: 'Personal Stake',
+                          };
+                          const placeholders: Record<string, string> = {
+                            perspective: 'Their point of view on this topic...',
+                            approach: 'How they engage with this topic...',
+                            personal_stake: 'Why this topic matters to them personally...',
+                          };
+                          const fieldKey = `topic-${index}-${field}`;
+                          return (
+                            <div key={field} style={{ position: 'relative' }}>
+                              <div className="ei-creator-modal__field-with-assist ei-creator-modal__field-with-assist--inline">
+                                <label className="ei-form-label ei-form-label--sm">{labels[field]}</label>
+                                {onAiAssist && (
+                                  <button
+                                    className="ei-ai-assist-btn ei-ai-assist-btn--sm"
+                                    onClick={() => handleAiAssistClick(
+                                      fieldKey,
+                                      `You're helping define a new AI Persona for the user to chat with! The Persona's core description is:\n\n${description}\n\nYou're helping generate a Persona's ideal **${labels[field]}** on a Topic called **${topic.name || 'this topic'}**. Attached is what the user has so far — see if you can improve it! Return only the improved text, nothing else.`,
+                                      `Current contents of [${labels[field]}]: ${topic[field] || '(empty)'}`,
+                                      (result) => updateTopic(index, field, result)
+                                    )}
+                                    disabled={aiLoadingField === fieldKey}
+                                  >
+                                    ✨
+                                  </button>
+                                )}
+                              </div>
+                              <textarea
+                                className="ei-textarea ei-textarea--sm"
+                                placeholder={placeholders[field]}
+                                rows={2}
+                                value={topic[field] || ''}
+                                onChange={(e) => updateTopic(index, field, e.target.value)}
+                              />
+                              {aiLoadingField === fieldKey && (
+                                <div className="ei-field-loading-overlay">
+                                  <div className="ei-field-loading-overlay__spinner" />
+                                </div>
+                              )}
+                              {renderSuggestion(fieldKey)}
+                            </div>
+                          );
+                        })}
+
+                        <button
+                          className="ei-btn ei-btn--danger ei-btn--sm"
+                          onClick={() => removeTopic(index)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      className="ei-btn ei-btn--secondary ei-btn--sm"
+                      onClick={addTopic}
+                    >
+                      + Add Topic
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Model Selection Section */}
+              <div className={`ei-creator-section ${expandedSections.has('model') ? 'ei-creator-section--expanded' : ''}`}>
+                <div 
+                  className="ei-creator-section-header"
+                  onClick={() => toggleSection('model')}
+                >
+                  <span className="ei-creator-section-header__text">
+                    {expandedSections.has('model') ? '▼' : '▶'} Select LLM Model
+                  </span>
+                </div>
+                
+                {expandedSections.has('model') && (
+                  <div className="ei-creator-section-content">
+                    <p className="ei-creator-help-text">
+                      Override the default model for this persona
+                    </p>
+                    <div className="ei-form-group">
+                      <label className="ei-form-label">Model</label>
+                      <input
+                        type="text"
+                        className="ei-input"
+                        placeholder="e.g., gpt-4, claude-3-opus (leave empty for default)"
+                        value={model}
+                        onChange={(e) => setModel(e.target.value)}
+                      />
+                      <span className="ei-form-hint">
+                        Uses system default if not specified
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Tools Section — only shown when there are enabled tools */}
+              {toolDefinitions.some(t => t.enabled && toolProviders.some(p => p.id === t.provider_id && p.enabled)) && (
+                <div className={`ei-creator-section ${expandedSections.has('tools') ? 'ei-creator-section--expanded' : ''}`}>
+                  <div
+                    className="ei-creator-section-header"
+                    onClick={() => toggleSection('tools')}
+                  >
+                    <span className="ei-creator-section-header__text">
+                      {expandedSections.has('tools') ? '▼' : '▶'} Assign Tools
+                      {assignedToolIds.length > 0 && (
+                        <span className="ei-creator-section-header__badge">{assignedToolIds.length}</span>
+                      )}
+                    </span>
+                  </div>
+
+                  {expandedSections.has('tools') && (
+                    <div className="ei-creator-section-content">
+                      <PersonaToolsTab
+                        assignedToolIds={assignedToolIds}
+                        providers={toolProviders}
+                        tools={toolDefinitions}
+                        onUpdate={setAssignedToolIds}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            </>
             )}
           </div>
-        </div>
+        )}
 
         {/* Footer */}
-        <div className="ei-creator-modal__footer">
-          <button
-            className="ei-btn ei-btn--secondary"
-            onClick={handleClose}
-          >
-            Cancel
-          </button>
-          <button
-            className="ei-btn ei-btn--primary"
-            onClick={handleSubmit}
-          >
-            Create Persona
-          </button>
-        </div>
+        {!isGenerating && (
+          <div className="ei-creator-modal__footer">
+            <button
+              className="ei-btn ei-btn--secondary"
+              onClick={handleClose}
+            >
+              Cancel
+            </button>
+            {showFinishDefinition ? (
+              <button
+                className="ei-btn ei-btn--primary"
+                onClick={handleFinishPersonaDefinition}
+                disabled={!name.trim() || !description.trim()}
+              >
+                Finish Persona Definition
+              </button>
+            ) : (
+              <button
+                className="ei-btn ei-btn--primary"
+                onClick={handleSubmit}
+              >
+                {isUpdateMode ? 'Update Persona' : 'Create Persona'}
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

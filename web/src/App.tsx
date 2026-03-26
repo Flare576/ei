@@ -117,6 +117,13 @@ function App() {
   const [showHumanEditor, setShowHumanEditor] = useState(false);
   const [showPersonaEditor, setShowPersonaEditor] = useState(false);
   const [showPersonaCreator, setShowPersonaCreator] = useState(false);
+  const [personaCreatorInitialData, setPersonaCreatorInitialData] = useState<{
+    mode: 'create' | 'update';
+    name?: string;
+    description: string;
+    relationship?: string;
+    personaId?: string;
+  } | undefined>(undefined);
   const [showArchivedPersonas, setShowArchivedPersonas] = useState(false);
   const [showArchivedRooms, setShowArchivedRooms] = useState(false);
   const [editingPersonaId, setEditingPersonaId] = useState<string | null>(null);
@@ -1130,7 +1137,7 @@ function App() {
     description: string;
     short_description?: string;
     traits?: Array<{ name?: string; description?: string; sentiment?: number; strength?: number }>;
-    topics?: Array<{ name?: string; description?: string; exposure_current?: number; exposure_desired?: number }>;
+    topics?: Array<{ name?: string; perspective?: string; approach?: string; personal_stake?: string; sentiment?: number; exposure_current?: number; exposure_desired?: number }>;
     model?: string;
     group_primary?: string;
     tools?: string[];
@@ -1142,13 +1149,74 @@ function App() {
       long_description: data.description,
       short_description: data.short_description,
       traits: data.traits,
-      topics: data.topics,
+      topics: data.topics?.map(t => ({
+        ...t,
+        sentiment: t.sentiment ?? 0,
+        exposure_current: t.exposure_current ?? 0.5,
+        exposure_desired: t.exposure_desired ?? 0.5,
+      })),
       model: data.model,
       group_primary: data.group_primary,
       tools: data.tools,
     });
     processor.getPersonaList().then(setPersonas);
     setShowPersonaCreator(false);
+  }, [processor]);
+
+  const handlePersonaUpdateFromPreview = useCallback(async (personaId: string, data: {
+    name: string;
+    aliases: string[];
+    description: string;
+    short_description?: string;
+    traits?: Array<{ name?: string; description?: string; sentiment?: number; strength?: number }>;
+    topics?: Array<{ name?: string; perspective?: string; approach?: string; personal_stake?: string; sentiment?: number; exposure_current?: number; exposure_desired?: number }>;
+    model?: string;
+    group_primary?: string;
+    tools?: string[];
+  }) => {
+    if (!processor) return;
+    const persona = await processor.getPersona(personaId);
+    if (!persona) return;
+    const updates: Record<string, unknown> = {};
+    if (data.description) updates.long_description = data.description;
+    if (data.short_description) updates.short_description = data.short_description;
+    if (data.traits && data.traits.length > 0) {
+      const seen = new Set<string>();
+      updates.traits = data.traits.filter(t => {
+        const key = (t.name ?? '').toLowerCase().trim();
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    }
+    if (data.topics && data.topics.length > 0) {
+      const seen = new Set<string>();
+      updates.topics = data.topics
+        .filter(t => {
+          const key = (t.name ?? '').toLowerCase().trim();
+          if (!key || seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
+        .map(t => ({
+          ...t,
+          sentiment: t.sentiment ?? 0,
+          exposure_current: t.exposure_current ?? 0.5,
+          exposure_desired: t.exposure_desired ?? 0.5,
+        }));
+    }
+    if (data.name && data.aliases !== undefined) {
+      updates.aliases = data.aliases;
+    }
+    await processor.updatePersona(personaId, updates);
+    processor.getPersonaList().then(setPersonas);
+    setShowPersonaCreator(false);
+    setPersonaCreatorInitialData(undefined);
+  }, [processor]);
+
+  const handleGeneratePersonaPreview = useCallback(async (name: string, description: string, relationship?: string, personaId?: string) => {
+    if (!processor) throw new Error('Processor not ready');
+    return processor.generatePersonaPreview(name, description, relationship, personaId);
   }, [processor]);
 
   const handleUnarchivePersona = useCallback(async (personaId: string) => {
@@ -1485,6 +1553,14 @@ function App() {
             if (id === 'ei') return 'Ei';
             return personas.find(p => p.id === id)?.display_name ?? id;
           }}
+          onCreatePersona={(person) => {
+            setPersonaCreatorInitialData({ mode: 'create', name: person.name, description: person.description, relationship: person.relationship });
+            setShowPersonaCreator(true);
+          }}
+          onUpdatePersona={(person) => {
+            setPersonaCreatorInitialData({ mode: 'update', description: person.description, relationship: person.relationship });
+            setShowPersonaCreator(true);
+          }}
         />
       </>
     )}
@@ -1518,11 +1594,18 @@ function App() {
 
     <PersonaCreatorModal
       isOpen={showPersonaCreator}
-      onClose={() => setShowPersonaCreator(false)}
+      onClose={() => {
+        setShowPersonaCreator(false);
+        setPersonaCreatorInitialData(undefined);
+      }}
       onCreate={handlePersonaCreate}
       onAiAssist={handleAiAssist}
       toolProviders={toolProviders}
       toolDefinitions={toolDefinitions}
+      initialData={personaCreatorInitialData}
+      generatePersonaPreview={handleGeneratePersonaPreview}
+      onUpdate={personaCreatorInitialData?.mode === 'update' ? handlePersonaUpdateFromPreview : undefined}
+      personas={personas.map(p => ({ id: p.id, display_name: p.display_name }))}
     />
 
     <ArchivedRoomsModal

@@ -77,7 +77,6 @@ export const GroupedCardList = <T extends DataItemBase>({
   }: GroupedCardListProps<T>) => {
   const defaultRenderCard: RenderCardFn<T> = (item, onItemChange, onItemSave, onItemDelete, isDirty, itemSliders, resolvePersonaName, onAiAssist, aiContext) => (
     <DataItemCard
-      key={item.id}
       item={item}
       sliders={itemSliders}
       onChange={onItemChange}
@@ -132,11 +131,11 @@ export const GroupedCardList = <T extends DataItemBase>({
     return (
       <div className="ei-grouped-list">
         <div className="ei-grouped-list__flat">
-          {items.map((item) => {
+          {items.map((item, index) => {
             const isSelected = selectedIds.includes(item.id);
             return (
             <div
-              key={item.id}
+              key={item.id || `${item.name}-${index}`}
               className={selectionMode ? `ei-selection-wrapper${isSelected ? ' ei-selection-wrapper--selected' : ''}` : undefined}
               onClick={selectionMode && onSelectionChange ? () => onSelectionChange(item.id) : undefined}
             >
@@ -199,8 +198,8 @@ export const GroupedCardList = <T extends DataItemBase>({
               <span className="ei-grouped-list__group-toggle">▼</span>
             </div>
             <div className="ei-grouped-list__group-content">
-              {groupItems.map((item) => (
-                <div key={item.id}>
+              {groupItems.map((item, index) => (
+                <div key={item.id || `${item.name}-${index}`}>
                   {render(
                     item,
                     (field, value) => onChange(item.id, field, value),

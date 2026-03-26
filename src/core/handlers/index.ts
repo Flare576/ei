@@ -19,6 +19,7 @@ import { handleTopicMatch, handleTopicUpdate, handlePersonMatch, handlePersonUpd
 import { handleRewriteScan, handleRewriteRewrite } from "./rewrite.js";
 import { handleDedupCurate } from "./dedup.js";
 import { handleRoomResponse, handleRoomJudge } from "./rooms.js";
+import { handlePersonaPreview } from "./persona-preview.js";
 
 export const handlers: Record<LLMNextStep, ResponseHandler> = {
   handlePersonaResponse,
@@ -48,4 +49,5 @@ export const handlers: Record<LLMNextStep, ResponseHandler> = {
   handleEventScan,
   handleRoomResponse,
   handleRoomJudge,
+  handlePersonaPreview,
 };

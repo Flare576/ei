@@ -1,5 +1,7 @@
 import {
   LLMNextStep,
+  LLMRequestType,
+  LLMPriority,
   type LLMRequest,
   type Ei_Interface,
   type PersonaSummary,
@@ -21,6 +23,9 @@ import {
   type ToolDefinition,
   type ToolProvider,
 } from "./types.js";
+import { buildPersonaFromPersonPrompt } from "../prompts/index.js";
+import type { PersonaGenerationResult } from "../prompts/generation/types.js";
+
 import type { Storage } from "../storage/interface.js";
 import { remoteSync } from "../storage/remote.js";
 import { yoloMerge } from "../storage/merge.js";
@@ -34,6 +39,7 @@ import { createReadMemoryExecutor } from "./tools/builtin/read-memory.js";
 import { EI_WELCOME_MESSAGE, EI_PERSONA_DEFINITION } from "../templates/welcome.js";
 import { shouldStartCeremony, startCeremony, handleCeremonyProgress, queueUserDedupRequest, queueRoomCapture, queuePersonaCapture, checkAndQueueRoomExtraction } from "./orchestrators/index.js";
 import { BUILT_IN_FACTS } from "./constants/built-in-facts.js";
+import { DEFAULT_SEED_TRAITS } from "./constants/seed-traits.js";
 
 // Static module imports
 import {
@@ -152,6 +158,7 @@ export class Processor {
   private pendingConflict: StateConflictData | null = null;
   private storage: Storage | null = null;
   private importAbortController = new AbortController();
+  private personaPreviewResolvers = new Map<string, { resolve: (r: PersonaGenerationResult) => void; reject: (e: Error) => void }>();
 
   constructor(ei: Ei_Interface) {
     this.interface = ei;
@@ -1430,6 +1437,15 @@ const toolNextSteps = new Set([
         message += ` (attempt ${response.request.attempts}, retrying in ${Math.round(result.retryDelay / 1000)}s)`;
       } else if (result.dropped) {
         message += " (permanent failure \u2014 request removed)";
+        if (response.request.next_step === LLMNextStep.HandlePersonaPreview) {
+          const guid = response.request.data.guid as string;
+          const entry = this.personaPreviewResolvers.get(guid);
+          if (entry) {
+            this.personaPreviewResolvers.delete(guid);
+            entry.reject(new Error("Persona preview generation failed after max retries"));
+            return;
+          }
+        }
         if (response.request.next_step === LLMNextStep.HandleOneShot) {
           const guid = response.request.data.guid as string;
           this.interface.onOneShotReturned?.(guid, "");
@@ -1477,6 +1493,88 @@ const toolNextSteps = new Set([
         const guid = response.request.data.guid as string;
         const content = response.content ?? "";
         this.interface.onOneShotReturned?.(guid, content);
+      }
+
+      if (response.request.next_step === LLMNextStep.HandlePersonaPreview) {
+        const guid = response.request.data.guid as string;
+        const loopCounter = (response.request.data.loop_counter as number) ?? 0;
+        const existingPersonaId = response.request.data.personaId as string | undefined;
+        const MAX_PREVIEW_LOOPS = 3;
+        const entry = this.personaPreviewResolvers.get(guid);
+        if (!entry) return;
+
+        if (!response.success || !response.parsed) {
+          return;
+        }
+
+        let result = response.parsed as import("../prompts/generation/types.js").PersonaGenerationResult;
+        const isComplete =
+          result.traits && result.traits.length >= 3 &&
+          result.topics && result.topics.length >= 3 &&
+          result.long_description && result.short_description;
+
+        const hydrateWithExisting = (r: typeof result): typeof result => {
+          if (!existingPersonaId) return r;
+          const existing = this.stateManager.persona_getById(existingPersonaId);
+          if (!existing) return r;
+
+          const existingTraitNames = new Set(existing.traits.map(t => t.name.toLowerCase().trim()));
+          const newTraits = r.traits.filter(t => !existingTraitNames.has(t.name.toLowerCase().trim()));
+          const mergedTraits = [
+            ...existing.traits.map(t => ({
+              name: t.name,
+              description: t.description,
+              strength: t.strength ?? 0.5,
+              sentiment: t.sentiment,
+            })),
+            ...newTraits,
+          ];
+
+          const existingTopicNames = new Set(existing.topics.map(t => t.name.toLowerCase().trim()));
+          const newTopics = r.topics.filter(t => !existingTopicNames.has(t.name.toLowerCase().trim()));
+          const mergedTopics = [...existing.topics, ...newTopics];
+
+          return {
+            ...r,
+            traits: mergedTraits,
+            topics: mergedTopics,
+            previous_long_description: existing.long_description,
+            previous_short_description: existing.short_description,
+            aliases: existing.aliases ?? [],
+          };
+        };
+
+        if (isComplete) {
+          this.personaPreviewResolvers.delete(guid);
+          const hydratedComplete = hydrateWithExisting(result);
+          const seedTraitNamesComplete = new Set(hydratedComplete.traits.map((t: { name: string }) => t.name.toLowerCase().trim()));
+          DEFAULT_SEED_TRAITS
+            .filter(s => !seedTraitNamesComplete.has(s.name.toLowerCase().trim()))
+            .forEach(s => hydratedComplete.traits.push({ name: s.name, description: s.description, sentiment: s.sentiment, strength: s.strength }));
+          entry.resolve(hydratedComplete);
+          return;
+        }
+
+        if (loopCounter < MAX_PREVIEW_LOOPS) {
+          this.stateManager.queue_enqueue({
+            type: LLMRequestType.JSON,
+            priority: LLMPriority.High,
+            system: response.request.system,
+            user: response.request.user,
+            next_step: LLMNextStep.HandlePersonaPreview,
+            model: response.request.model,
+            data: { guid, loop_counter: loopCounter + 1, personaId: existingPersonaId },
+          });
+          return;
+        }
+
+        this.personaPreviewResolvers.delete(guid);
+        const hydratedFallback = hydrateWithExisting(result);
+        const seedTraitNamesFallback = new Set(hydratedFallback.traits.map((t: { name: string }) => t.name.toLowerCase().trim()));
+        DEFAULT_SEED_TRAITS
+          .filter(s => !seedTraitNamesFallback.has(s.name.toLowerCase().trim()))
+          .forEach(s => hydratedFallback.traits.push({ name: s.name, description: s.description, sentiment: s.sentiment, strength: s.strength }));
+        entry.resolve(hydratedFallback);
       }
 
       if (response.request.next_step === LLMNextStep.HandlePersonaGeneration) {
@@ -1528,6 +1626,10 @@ const toolNextSteps = new Set([
       }
 
       if (response.request.next_step === LLMNextStep.HandleFactFind) {
+        this.interface.onHumanUpdated?.();
+      }
+
+      if (response.request.next_step === LLMNextStep.HandleDedupCurate) {
         this.interface.onHumanUpdated?.();
       }
 
@@ -1853,6 +1955,45 @@ const toolNextSteps = new Set([
       systemPrompt,
       userPrompt
     );
+  }
+
+  async generatePersonaPreview(
+    name: string,
+    description: string,
+    relationship?: string,
+    personaId?: string
+  ): Promise<PersonaGenerationResult> {
+    let existing_trait_names: string[] | undefined;
+    let existing_topic_names: string[] | undefined;
+
+    if (personaId) {
+      const existing = this.stateManager.persona_getById(personaId);
+      if (existing) {
+        existing_trait_names = existing.traits.map((t) => t.name);
+        existing_topic_names = existing.topics.map((t) => t.name);
+      }
+    }
+
+    const prompt = buildPersonaFromPersonPrompt({
+      name,
+      description,
+      relationship,
+      existing_trait_names,
+      existing_topic_names,
+    });
+    const guid = crypto.randomUUID();
+    return new Promise<PersonaGenerationResult>((resolve, reject) => {
+      this.personaPreviewResolvers.set(guid, { resolve, reject });
+      this.stateManager.queue_enqueue({
+        type: LLMRequestType.JSON,
+        priority: LLMPriority.High,
+        system: prompt.system,
+        user: prompt.user,
+        next_step: LLMNextStep.HandlePersonaPreview,
+        model: getOneshotModel(this.stateManager),
+        data: { guid, loop_counter: 0, personaId },
+      });
+    });
   }
 
   // ==========================================================================

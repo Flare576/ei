@@ -25,6 +25,8 @@ interface HumanPeopleTabProps {
   dirtyIds: Set<string>;
   resolvePersonaName?: (id: string) => string;
   rewriteModelSet: boolean;
+  onCreatePersona?: (person: Person) => void;
+  onUpdatePersona?: (person: Person) => void;
 
   // Dedupe selection mode props
   isDedupeMode: boolean;
@@ -41,26 +43,6 @@ const personSliders = [
   { field: 'exposure_desired', label: 'Desired Exposure', min: 0, max: 1 },
 ];
 
-const renderPersonCard = (
-  person: Person,
-  onChange: (field: keyof Person, value: Person[keyof Person]) => void,
-  onSave: () => void,
-  onDelete: () => void,
-  isDirty: boolean,
-  sliders: { field: string; label: string; min?: number; max?: number }[],
-  resolvePersonaName?: (id: string) => string
-) => (
-  <PersonCard
-    person={person}
-    sliders={sliders}
-    onChange={onChange}
-    onSave={onSave}
-    onDelete={onDelete}
-    isDirty={isDirty}
-    resolvePersonaName={resolvePersonaName}
-  />
-);
-
 export const HumanPeopleTab = ({
   people,
   onChange,
@@ -70,6 +52,8 @@ export const HumanPeopleTab = ({
   dirtyIds,
   resolvePersonaName,
   rewriteModelSet,
+  onCreatePersona,
+  onUpdatePersona,
   isDedupeMode,
   selectedIds,
   onToggleDedupeMode,
@@ -77,6 +61,28 @@ export const HumanPeopleTab = ({
   onMerge,
 }: Omit<HumanPeopleTabProps, 'dedupingIds'>) => {
   const [filterQuery, setFilterQuery] = React.useState('');
+
+  const renderPersonCard = (
+    person: Person,
+    personOnChange: (field: keyof Person, value: Person[keyof Person]) => void,
+    personOnSave: () => void,
+    personOnDelete: () => void,
+    isDirty: boolean,
+    sliders: { field: string; label: string; min?: number; max?: number }[],
+    resolvePersonaNameFn?: (id: string) => string
+  ) => (
+    <PersonCard
+      person={person}
+      sliders={sliders}
+      onChange={personOnChange}
+      onSave={personOnSave}
+      onDelete={personOnDelete}
+      isDirty={isDirty}
+      resolvePersonaName={resolvePersonaNameFn}
+      onCreatePersona={onCreatePersona}
+      onUpdatePersona={onUpdatePersona}
+    />
+  );
 
   const handleMerge = async () => {
     if (selectedIds.length < 2) return;

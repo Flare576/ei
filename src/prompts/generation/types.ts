@@ -31,6 +31,17 @@ export interface PersonaGenerationResult {
     exposure_desired: number;
     sentiment: number;
   }>;
+  previous_long_description?: string;
+  previous_short_description?: string;
+  aliases?: string[];
+}
+
+export interface PersonaFromPersonPromptData {
+  name: string;
+  description: string;
+  relationship?: string;
+  existing_trait_names?: string[];
+  existing_topic_names?: string[];
 }
 
 export interface PersonaDescriptionsPromptData {

@@ -1,8 +1,10 @@
 import type { PersonaEntity, Ei_Interface } from "../types.js";
+import type { PersonaTrait } from "../types.js";
 import type { StateManager } from "../state-manager.js";
 import type { IOpenCodeReader } from "../../integrations/opencode/types.js";
 import { AGENT_ALIASES } from "../../integrations/opencode/types.js";
 import { createOpenCodeReader } from "../../integrations/opencode/reader-factory.js";
+import { DEFAULT_SEED_TRAITS } from "../constants/seed-traits.js";
 
 const OPENCODE_GROUP = "OpenCode";
 const TWELVE_HOURS_MS = 43200000;
@@ -47,6 +49,14 @@ export async function ensureAgentPersona(
 
   const now = new Date().toISOString();
   const personaId = crypto.randomUUID();
+  const seedTraits: PersonaTrait[] = DEFAULT_SEED_TRAITS.map((t) => ({
+    id: crypto.randomUUID(),
+    name: t.name,
+    description: t.description,
+    sentiment: t.sentiment,
+    strength: t.strength,
+    last_updated: now,
+  }));
   const persona: PersonaEntity = {
     id: personaId,
     display_name: canonical,
@@ -56,7 +66,7 @@ export async function ensureAgentPersona(
     long_description: "An OpenCode agent that assists with coding tasks.",
     group_primary: OPENCODE_GROUP,
     groups_visible: [OPENCODE_GROUP],
-    traits: [],
+    traits: seedTraits,
     topics: [],
     is_paused: false,
     is_archived: false,

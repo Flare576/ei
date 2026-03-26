@@ -65,11 +65,15 @@ export async function createPersona(
   };
   sm.persona_add(placeholder);
 
-  orchestratePersonaGeneration(
-    { ...input, id: personaId },
-    sm,
-    () => onPersonaUpdated(placeholder.display_name)
-  );
+  const hasTraits = input.traits && input.traits.length >= 3;
+  const hasTopics = input.topics && input.topics.length >= 3;
+  if (!hasTraits || !hasTopics) {
+    orchestratePersonaGeneration(
+      { ...input, id: personaId },
+      sm,
+      () => onPersonaUpdated(placeholder.display_name)
+    );
+  }
 
   return personaId;
 }

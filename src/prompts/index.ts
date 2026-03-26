@@ -16,10 +16,12 @@ export type {
 export {
   buildPersonaGenerationPrompt,
   buildPersonaDescriptionsPrompt,
+  buildPersonaFromPersonPrompt,
 } from "./generation/index.js";
 export type {
   PersonaGenerationPromptData,
   PersonaGenerationResult,
+  PersonaFromPersonPromptData,
   PersonaDescriptionsPromptData,
   PersonaDescriptionsResult,
 } from "./generation/types.js";

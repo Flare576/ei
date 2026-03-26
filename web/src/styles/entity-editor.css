@@ -917,6 +917,15 @@
   gap: var(--ei-spacing-lg);
 }
 
+.ei-creator-modal__generating {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  gap: 12px;
+}
+
 .ei-creator-modal__core {
   display: flex;
   flex-direction: column;
@@ -986,6 +995,10 @@
 
 .ei-creator-section-header:hover {
   background: var(--ei-bg-tertiary);
+}
+
+.ei-creator-section-header__badge {
+  margin-left: 6px;
 }
 
 .ei-creator-section-header__text {

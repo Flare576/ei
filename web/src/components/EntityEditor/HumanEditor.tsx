@@ -57,6 +57,8 @@ interface HumanEditorProps {
   onQuoteDelete?: (id: string) => void;
   onQueueDedupe: (type: 'topic' | 'person', ids: string[]) => Promise<void>;
   resolvePersonaName?: (id: string) => string;
+  onCreatePersona?: (person: Person) => void;
+  onUpdatePersona?: (person: Person) => void;
 }
 
 const tabs = [
@@ -80,6 +82,8 @@ export const HumanEditor = ({
   onQuoteDelete,
   onQueueDedupe,
   resolvePersonaName,
+  onCreatePersona,
+  onUpdatePersona,
 }: HumanEditorProps) => {
   const [activeTab, setActiveTab] = useState('facts');
   const [localFacts, setLocalFacts] = useState<Fact[]>(human.facts || []);
@@ -400,6 +404,8 @@ export const HumanEditor = ({
              onToggleDedupeMode={handleToggleDedupeMode}
              onSelectionChange={handleSelectionChange}
              onMerge={handleMerge}
+             onCreatePersona={onCreatePersona}
+             onUpdatePersona={onUpdatePersona}
            />
          );
        case 'quotes':

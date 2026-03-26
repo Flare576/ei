@@ -35,6 +35,8 @@ interface PersonCardProps {
   selectionMode?: boolean;
   isSelected?: boolean;
   onSelectionChange?: () => void;
+  onCreatePersona?: (person: Person) => void;
+  onUpdatePersona?: (person: Person) => void;
 }
 
 const defaultFormat = (v: number) => v.toFixed(2);
@@ -79,6 +81,8 @@ export const PersonCard = ({
   selectionMode = false,
   isSelected = false,
   onSelectionChange,
+  onCreatePersona,
+  onUpdatePersona,
 }: PersonCardProps): React.ReactElement => {
   const cardRef = React.useRef<HTMLDivElement>(null);
 
@@ -201,6 +205,24 @@ export const PersonCard = ({
               </div>
             )}
             <div className="ei-data-card__actions">
+              {onCreatePersona && (
+                <button
+                  className="ei-control-btn"
+                  onClick={() => onCreatePersona(person)}
+                  title="Create Persona from this person"
+                >
+                  +
+                </button>
+              )}
+              {onUpdatePersona && (
+                <button
+                  className="ei-control-btn"
+                  onClick={() => onUpdatePersona(person)}
+                  title="Update Persona from this person"
+                >
+                  ↑
+                </button>
+              )}
               <button 
                 className="ei-control-btn ei-control-btn--danger" 
                 onClick={onDelete}

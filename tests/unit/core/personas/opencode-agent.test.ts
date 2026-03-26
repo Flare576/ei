@@ -76,7 +76,10 @@ describe("ensureAgentPersona", () => {
         groups_visible: ["OpenCode"],
         is_static: false,
         heartbeat_delay_ms: 43200000,
-        traits: [],
+        traits: expect.arrayContaining([
+          expect.objectContaining({ name: "Genuine Responses" }),
+          expect.objectContaining({ name: "Natural Speech" }),
+        ]),
         topics: [],
       })
     );
@@ -247,14 +250,16 @@ describe("ensureAgentPersona", () => {
     expect(result.aliases).toContain("hephaestus");
   });
 
-  it("creates persona with empty traits and topics", async () => {
+  it("creates persona seeded with DEFAULT_SEED_TRAITS and empty topics", async () => {
     const result = await ensureAgentPersona("build", {
       stateManager: mockStateManager as StateManager,
       interface: mockInterface as Ei_Interface,
       reader: mockReader as IOpenCodeReader,
     });
 
-    expect(result.traits).toEqual([]);
+    expect(result.traits).toHaveLength(2);
+    expect(result.traits[0]).toMatchObject({ name: "Genuine Responses", sentiment: 0.5, strength: 0.7 });
+    expect(result.traits[1]).toMatchObject({ name: "Natural Speech", sentiment: 0.5, strength: 0.7 });
     expect(result.topics).toEqual([]);
   });
 });

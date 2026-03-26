@@ -1,5 +1,6 @@
 export { buildPersonaGenerationPrompt } from "./persona.js";
 export { buildPersonaDescriptionsPrompt } from "./descriptions.js";
+export { buildPersonaFromPersonPrompt } from "./from-person.js";
 export {
   DEFAULT_SEED_TRAITS,
   SEED_TRAIT_GENUINE,
@@ -9,6 +10,7 @@ export {
 export type {
   PersonaGenerationPromptData,
   PersonaGenerationResult,
+  PersonaFromPersonPromptData,
   PersonaDescriptionsPromptData,
   PersonaDescriptionsResult,
   PromptOutput,

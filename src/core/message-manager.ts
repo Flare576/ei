@@ -36,7 +36,7 @@ export async function getMessages(
 ): Promise<Message[]> {
   const persona = sm.persona_getById(personaId);
   if (!persona) return [];
-  return sm.messages_get(personaId);
+  return sm.messages_get(personaId).filter(m => m.external !== true);
 }
 
 export async function markMessageRead(

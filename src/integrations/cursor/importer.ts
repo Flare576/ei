@@ -1,5 +1,6 @@
 import type { StateManager } from "../../core/state-manager.js";
-import type { Ei_Interface, Topic, Message, ContextStatus, PersonaEntity } from "../../core/types.js";
+import type { Ei_Interface, Topic, Message, ContextStatus, PersonaEntity, PersonaTrait } from "../../core/types.js";
+import { DEFAULT_SEED_TRAITS } from "../../core/constants/seed-traits.js";
 import type { ICursorReader, CursorSession, CursorMessage } from "./types.js";
 import {
   CURSOR_PERSONA_NAME,
@@ -62,6 +63,14 @@ function ensureCursorPersona(
   if (existing) return existing;
 
   const now = new Date().toISOString();
+  const seedTraits: PersonaTrait[] = DEFAULT_SEED_TRAITS.map((t) => ({
+    id: crypto.randomUUID(),
+    name: t.name,
+    description: t.description,
+    sentiment: t.sentiment,
+    strength: t.strength,
+    last_updated: now,
+  }));
   const persona: PersonaEntity = {
     id: crypto.randomUUID(),
     display_name: CURSOR_PERSONA_NAME,
@@ -72,7 +81,7 @@ function ensureCursorPersona(
       "Cursor is an AI-powered IDE that helps with coding tasks, debugging, architecture decisions, and more.",
     group_primary: CURSOR_GROUP,
     groups_visible: [CURSOR_GROUP],
-    traits: [],
+    traits: seedTraits,
     topics: [],
     is_paused: false,
     is_archived: false,
