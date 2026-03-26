@@ -22,6 +22,7 @@ import {
 } from "../orchestrators/index.js";
 import { buildPersonaDescriptionsPrompt } from "../../prompts/generation/index.js";
 import { splitMessagesByTimestamp } from "./utils.js";
+import { calculateExposureCurrent } from "../utils/exposure.js";
 
 export const MIN_MESSAGE_COUNT_FOR_CREATE = 2;
 
@@ -272,7 +273,7 @@ export function handlePersonaTopicUpdate(response: LLMResponse, state: StateMana
       approach: result.approach || "",
       personal_stake: result.personal_stake || "",
       sentiment: result.sentiment,
-      exposure_current: result.exposure_current,
+      exposure_current: calculateExposureCurrent(result.exposure_impact, 0),
       exposure_desired: result.exposure_desired,
       last_updated: now,
     };
@@ -284,7 +285,7 @@ export function handlePersonaTopicUpdate(response: LLMResponse, state: StateMana
     const updatedTopics = persona.topics.map((t: PersonaTopic) => {
       if (t.id !== existingTopicId) return t;
 
-      const newExposure = Math.min(1.0, t.exposure_current + (result.exposure_current - t.exposure_current));
+      const newExposure = Math.max(calculateExposureCurrent(result.exposure_impact, t.exposure_current), t.exposure_current);
 
       return {
         ...t,
