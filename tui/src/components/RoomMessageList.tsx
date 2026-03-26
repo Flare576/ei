@@ -1,10 +1,15 @@
-import { For, Show, createMemo, onCleanup } from "solid-js";
+import { For, Show, createMemo, createSignal, createEffect, on, onCleanup } from "solid-js";
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core";
 import { useEi } from "../context/ei.js";
 import { useKeyboardNav } from "../context/keyboard.js";
 import { solarizedDarkSyntax } from "../util/syntax.js";
-import type { RoomMessage } from "../../../src/core/types.js";
+import type { RoomMessage, Quote } from "../../../src/core/types.js";
 import { RoomMode } from "../../../src/core/types/enums.js";
+import { insertQuoteMarkers } from "../util/quote-utils.js";
+
+interface RoomMessageWithQuotes extends RoomMessage {
+  _quotes: Quote[];
+}
 
 function formatTime(timestamp: string): string {
   const date = new Date(timestamp);
@@ -14,7 +19,7 @@ function formatTime(timestamp: string): string {
 }
 
 export function RoomMessageList() {
-  const { roomMessages, roomActivePath, personas, activeRoomId, getRoom } = useEi();
+  const { roomMessages, roomActivePath, personas, activeRoomId, getRoom, getQuotes, quotesVersion } = useEi();
   const { registerMessageScroll } = useKeyboardNav();
 
   const personaNameMap = createMemo(() => {
@@ -59,6 +64,32 @@ export function RoomMessageList() {
     return roomMessages();
   });
 
+  const [allQuotes, setAllQuotes] = createSignal<Quote[]>([]);
+
+  createEffect(on(() => [roomMessages(), quotesVersion()], () => {
+    void getQuotes().then(setAllQuotes);
+  }));
+
+  const quotesByMessage = createMemo(() => {
+    const map = new Map<string, Quote[]>();
+    for (const quote of allQuotes()) {
+      if (quote.message_id) {
+        const existing = map.get(quote.message_id) ?? [];
+        existing.push(quote);
+        map.set(quote.message_id, existing);
+      }
+    }
+    return map;
+  });
+
+  const displayMessagesWithQuotes = createMemo<RoomMessageWithQuotes[]>(() => {
+    const qMap = quotesByMessage();
+    return displayMessages().map(msg => ({
+      ...msg,
+      _quotes: qMap.get(msg.id) ?? [],
+    }));
+  });
+
   const getSpeakerName = (msg: RoomMessage): string => {
     if (msg.role === "human") return "Human";
     if (msg.persona_id) return personaNameMap().get(msg.persona_id) ?? msg.persona_id;
@@ -96,7 +127,7 @@ export function RoomMessageList() {
           stickyScroll={true}
           stickyStart="bottom"
         >
-          <For each={displayMessages()}>
+          <For each={displayMessagesWithQuotes()}>
             {(msg) => {
               const speakerName = getSpeakerName(msg);
               const speakerColor = getSpeakerColor(msg);
@@ -117,7 +148,8 @@ export function RoomMessageList() {
               const contentParts: string[] = [];
               if (msg.action_response) contentParts.push(`_${msg.action_response}_`);
               if (msg.verbal_response) contentParts.push(msg.verbal_response);
-              const normalContent = contentParts.join("\n\n");
+              const msgQuotes = msg._quotes;
+              const normalContent = insertQuoteMarkers(contentParts.join("\n\n"), msgQuotes);
 
               return (
                 <box flexDirection="column" marginBottom={1}>

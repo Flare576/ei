@@ -5,6 +5,7 @@ import { useKeyboardNav } from "../context/keyboard.js";
 import { logger } from "../util/logger.js";
 import { solarizedDarkSyntax } from "../util/syntax.js";
 import type { Quote, Message } from "../../../src/core/types.js";
+import { insertQuoteMarkers } from "../util/quote-utils.js";
 
 interface MessageWithQuotes extends Message {
   _quotes: Quote[];
@@ -26,24 +27,6 @@ function buildMessageText(message: Message): string {
   if (message.action_response) parts.push(`_${message.action_response}_`);
   if (message.verbal_response) parts.push(message.verbal_response);
   return parts.join('\n\n');
-}
-
-function insertQuoteMarkers(content: string, quotes: Quote[]): string {
-  const validQuotes = quotes
-    .filter(q => q.end !== null && q.end !== undefined)
-    .sort((a, b) => b.end! - a.end!);
-  
-  let result = content;
-  for (const quote of validQuotes) {
-    let insertPos = quote.end!;
-    if (insertPos >= 0 && insertPos <= result.length) {
-      while (insertPos > 0 && (result[insertPos - 1] === '\n' || result[insertPos - 1] === ' ')) {
-        insertPos--;
-      }
-      result = result.slice(0, insertPos) + "\u207a" + result.slice(insertPos);
-    }
-  }
-  return result;
 }
 
 let instanceId = 0;
