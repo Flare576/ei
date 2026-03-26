@@ -14,7 +14,7 @@ vi.mock("../../../src/core/embedding-service.js", async (importOriginal) => {
   };
 });
 
-import { retrieve, retrieveBalanced, resolveLinkedItems, lookupById } from "../../../src/cli/retrieval.js";
+import { retrieve, retrieveBalanced, resolveLinkedItems, lookupById, retrievePersonas, mapPersona } from "../../../src/cli/retrieval.js";
 
 const EMBEDDING = new Array(384).fill(1);
 const NOW = "2026-01-01T00:00:00Z";
@@ -49,9 +49,33 @@ function makeQuotes(count: number) {
   }));
 }
 
+function makePersonaEntities(count: number, namePrefix: string = "Persona") {
+  return Array.from({ length: count }, (_, i) => ({
+    id: `persona_${i}`,
+    display_name: `${namePrefix} ${i}`,
+    entity: "system",
+    short_description: `A test persona ${i}`,
+    long_description: `Base prompt for ${namePrefix} ${i}`,
+    model: "Local LLM:test-model",
+    traits: [],
+    topics: [],
+    is_paused: false,
+    is_archived: false,
+    is_static: false,
+    last_updated: NOW,
+    last_activity: NOW,
+  }));
+}
+
 function createTestState(counts: {
   facts?: number; traits?: number; people?: number; topics?: number; quotes?: number;
+  personas?: number; personaNamePrefix?: string;
 }) {
+  const personaEntities = makePersonaEntities(counts.personas ?? 0, counts.personaNamePrefix);
+  const personasRecord: Record<string, unknown> = {};
+  for (const entity of personaEntities) {
+    personasRecord[entity.id] = { entity, messages: [] };
+  }
   return {
     version: 1,
     timestamp: NOW,
@@ -65,7 +89,7 @@ function createTestState(counts: {
       last_updated: NOW,
       last_activity: NOW,
     },
-    personas: {},
+    personas: personasRecord,
     queue: [],
   };
 }
@@ -251,5 +275,77 @@ describe("quote linked_items shape", () => {
     expect(items[0]).toHaveProperty("id");
     expect(items[0]).toHaveProperty("name");
     expect(items[0]).toHaveProperty("type");
+  });
+});
+
+describe("retrievePersonas (string matching)", () => {
+  it("returns [] when no query and not recent", () => {
+    const state = createTestState({ personas: 3 });
+    const result = retrievePersonas("", state as any, 10);
+    expect(result).toEqual([]);
+  });
+
+  it("matches by display_name substring (case-insensitive)", () => {
+    const state = createTestState({ personas: 3, personaNamePrefix: "MyBot" });
+    const result = retrievePersonas("mybot", state as any, 10);
+    expect(result).toHaveLength(3);
+    expect(result.every(r => r.display_name.toLowerCase().includes("mybot"))).toBe(true);
+  });
+
+  it("returns [] when query does not match any persona", () => {
+    const state = createTestState({ personas: 2, personaNamePrefix: "Alpha" });
+    const result = retrievePersonas("zzz-no-match", state as any, 10);
+    expect(result).toEqual([]);
+  });
+
+  it("respects limit", () => {
+    const state = createTestState({ personas: 5 });
+    const result = retrievePersonas("Persona", state as any, 2);
+    expect(result).toHaveLength(2);
+  });
+
+  it("returns all personas sorted by last_updated when recent && !query", () => {
+    const state = createTestState({ personas: 3 });
+    const result = retrievePersonas("", state as any, 10, { recent: true });
+    expect(result).toHaveLength(3);
+  });
+
+  it("maps PersonaEntity fields correctly", () => {
+    const state = createTestState({ personas: 1, personaNamePrefix: "Alpha" });
+    const result = retrievePersonas("Alpha", state as any, 10);
+    expect(result).toHaveLength(1);
+    const r = result[0];
+    expect(r.id).toBe("persona_0");
+    expect(r.display_name).toBe("Alpha 0");
+    expect(r.short_description).toBe("A test persona 0");
+    expect(r.base_prompt).toBe("Base prompt for Alpha 0");
+    expect(r.model).toBe("Local LLM:test-model");
+    expect(Array.isArray(r.traits)).toBe(true);
+    expect(Array.isArray(r.topics)).toBe(true);
+  });
+});
+
+describe("retrieveBalanced with personas", () => {
+  it("includes personas in recent && !query path", async () => {
+    writeTestState(createTestState({ facts: 2, personas: 2 }));
+    const result = await retrieveBalanced("", 10, { recent: true });
+    const personaResults = result.filter(r => r.type === "persona");
+    expect(personaResults.length).toBeGreaterThan(0);
+  });
+
+  it("includes matching personas in query path", async () => {
+    writeTestState(createTestState({ facts: 2, personas: 2, personaNamePrefix: "SpecialBot" }));
+    const result = await retrieveBalanced("SpecialBot", 10);
+    const personaResults = result.filter(r => r.type === "persona");
+    expect(personaResults.length).toBeGreaterThan(0);
+    expect((personaResults[0] as any).display_name).toContain("SpecialBot");
+  });
+
+  it("persona results include type field", async () => {
+    writeTestState(createTestState({ personas: 1, personaNamePrefix: "TestPersona" }));
+    const result = await retrieveBalanced("TestPersona", 10);
+    const personaResult = result.find(r => r.type === "persona");
+    expect(personaResult).toBeDefined();
+    expect(personaResult!.type).toBe("persona");
   });
 });

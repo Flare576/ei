@@ -1,4 +1,6 @@
 import type { StorageState, Quote, Fact, Person, Topic } from "../core/types";
+import type { PersonaEntity } from "../core/types/entities.js";
+import type { PersonaTrait, PersonaTopic } from "../core/types/data-items.js";
 import { decodeAllEmbeddings } from "../storage/embeddings";
 import { crossFind } from "../core/utils/index.ts";
 import { join } from "path";
@@ -110,19 +112,30 @@ export interface TopicResult {
   sentiment: number;
 }
 
+export interface PersonaResult {
+  id: string;
+  display_name: string;
+  short_description?: string;
+  model?: string;
+  base_prompt: string;
+  traits: PersonaTrait[];
+  topics: PersonaTopic[];
+}
+
 export type BalancedResult =
   | ({ type: "quote" } & QuoteResult)
   | ({ type: "fact" } & FactResult)
   | ({ type: "person" } & PersonResult)
-  | ({ type: "topic" } & TopicResult);
+  | ({ type: "topic" } & TopicResult)
+  | ({ type: "persona" } & PersonaResult);
 
-const DATA_TYPES = ["quote", "fact", "person", "topic"] as const;
+const DATA_TYPES = ["quote", "fact", "person", "topic", "persona"] as const;
 type DataType = typeof DATA_TYPES[number];
 
 interface ScoredEntry {
   type: DataType;
   similarity: number;
-  mapped: QuoteResult | FactResult | PersonResult | TopicResult;
+  mapped: QuoteResult | FactResult | PersonResult | TopicResult | PersonaResult;
   itemId: string;
 }
 
@@ -182,6 +195,46 @@ function mapTopic(topic: Topic): TopicResult {
   };
 }
 
+export function mapPersona(persona: PersonaEntity): PersonaResult {
+  return {
+    id: persona.id,
+    display_name: persona.display_name,
+    short_description: persona.short_description,
+    model: persona.model,
+    base_prompt: persona.long_description ?? "",
+    traits: persona.traits,
+    topics: persona.topics,
+  };
+}
+
+export function retrievePersonas(
+  query: string,
+  state: StorageState,
+  limit: number = 10,
+  options: { recent?: boolean } = {}
+): PersonaResult[] {
+  const { recent } = options;
+  const personaList = Object.values(state.personas).map((p) => p.entity);
+
+  if (recent && !query) {
+    return personaList
+      .sort((a, b) => b.last_updated.localeCompare(a.last_updated))
+      .slice(0, limit)
+      .map(mapPersona);
+  }
+
+  if (!query) {
+    return [];
+  }
+
+  const q = query.toLowerCase();
+  return personaList
+    .filter((p) => p.display_name.toLowerCase().includes(q))
+    .sort((a, b) => b.last_updated.localeCompare(a.last_updated))
+    .slice(0, limit)
+    .map(mapPersona);
+}
+
 export async function retrieveBalanced(
   query: string,
   limit: number = 10,
@@ -199,11 +252,16 @@ export async function retrieveBalanced(
   const recentDate = (item: AnyItem): string => item.last_mentioned ?? item.last_updated ?? "";
 
   if (recent && !query) {
-    const allItems: Array<{ type: DataType; item: AnyItem; mapped: QuoteResult | FactResult | PersonResult | TopicResult }> = [
+    const allItems: Array<{ type: DataType; item: AnyItem; mapped: QuoteResult | FactResult | PersonResult | TopicResult | PersonaResult }> = [
       ...state.human.quotes.map(q => ({ type: "quote" as DataType, item: q as AnyItem, mapped: mapQuote(q, state) })),
       ...state.human.facts.map(f => ({ type: "fact" as DataType, item: f as AnyItem, mapped: mapFact(f) })),
       ...state.human.people.map(p => ({ type: "person" as DataType, item: p as AnyItem, mapped: mapPerson(p) })),
       ...state.human.topics.map(t => ({ type: "topic" as DataType, item: t as AnyItem, mapped: mapTopic(t) })),
+      ...Object.values(state.personas).map(({ entity: p }) => ({
+        type: "persona" as DataType,
+        item: { id: p.id, last_updated: p.last_updated } as AnyItem,
+        mapped: mapPersona(p),
+      })),
     ];
     return allItems
       .sort((a, b) => recentDate(b.item).localeCompare(recentDate(a.item)))
@@ -237,10 +295,19 @@ export async function retrieveBalanced(
         }
       }
     }
-    return allScored
+    const embeddingResults = allScored
       .sort((a, b) => recentDate(b.mapped as AnyItem).localeCompare(recentDate(a.mapped as AnyItem)))
       .slice(0, limit)
       .map(({ type, mapped }) => ({ type, ...mapped }) as BalancedResult);
+    const personaMatches = retrievePersonas(query, state, limit, { recent: true });
+    if (personaMatches.length > 0) {
+      const combined = [
+        ...personaMatches.map((p) => ({ type: "persona" as const, ...p }) as BalancedResult),
+        ...embeddingResults,
+      ];
+      return combined.slice(0, limit);
+    }
+    return embeddingResults;
   }
 
   for (const { type, items, mapper } of typeConfigs) {
@@ -278,7 +345,16 @@ export async function retrieveBalanced(
 
   result.sort((a, b) => b.similarity - a.similarity);
 
-  return result.map(({ type, mapped }) => ({ type, ...mapped }) as BalancedResult);
+  const embeddingFinal = result.map(({ type, mapped }) => ({ type, ...mapped }) as BalancedResult);
+  const personaFinal = retrievePersonas(query, state, limit);
+  if (personaFinal.length > 0) {
+    const combined = [
+      ...personaFinal.map((p) => ({ type: "persona" as const, ...p }) as BalancedResult),
+      ...embeddingFinal,
+    ];
+    return combined.slice(0, limit);
+  }
+  return embeddingFinal;
 }
 
 export async function lookupById(id: string): Promise<({ type: string } & Record<string, unknown>) | null> {
@@ -289,6 +365,8 @@ export async function lookupById(id: string): Promise<({ type: string } & Record
 
   const found = crossFind(id, state.human);
   if (!found) return null;
-  const { type, embedding, ...rest } = found;
-  return { type, ...rest };
+  const { type, ...rest } = found;
+  const withoutEmbedding = { ...rest } as Record<string, unknown>;
+  delete withoutEmbedding.embedding;
+  return { type, ...withoutEmbedding };
 }
