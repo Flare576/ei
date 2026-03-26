@@ -5,10 +5,11 @@
 ei                             # Start the TUI
 ei "query string"              # Return up to 10 results across all types
 ei -n 5 "query string"         # Return up to 5 results
-ei facts -n 5 "query string"   # Return up to 5 facts
-ei people -n 5 "query string"  # Return up to 5 people
-ei topics -n 5 "query string"  # Return up to 5 topics
-ei quotes -n 5 "query string"  # Return up to 5 quotes
+ei facts -n 5 "query string"      # Return up to 5 facts
+ei people -n 5 "query string"     # Return up to 5 people
+ei topics -n 5 "query string"     # Return up to 5 topics
+ei quotes -n 5 "query string"     # Return up to 5 quotes
+ei personas -n 5 "query string"   # Return up to 5 personas (name match)
 ei --persona "Beta" "query string"    # Filter results to what Beta has learned
 ei --recent                            # Most recently mentioned items (no query needed)
 ei --persona "Beta" --recent           # Most recently mentioned items Beta has learned
@@ -18,7 +19,7 @@ ei --install                   # Register Ei with OpenCode, Claude Code, and Cur
 ei mcp                         # Start the Ei MCP stdio server (for Cursor/Claude Desktop)
 ```
 
-Type aliases: `fact`, `person`, `topic`, `quote` all work (singular or plural).
+Type aliases: `fact`, `person`, `topic`, `quote`, `persona` all work (singular or plural).
 
 # An Agentic Tool
 
@@ -70,9 +71,10 @@ ei "What are the user's current preferences, active projects, and workflow?"
 \```
 
 Ei is a persistent knowledge base built from the user's conversations — facts, preferences,
-people, topics. Use it when the user references past work, mentions how they like things done,
-or asks "how did we do X." Use `ei --persona "Beta" "walruses"` to scope results to what a specific persona has learned. Query again mid-session when they correct you or reference something
-from a previous session.
+people, topics, personas. Use it when the user references past work, mentions how they like things done,
+or asks "how did we do X." Use `ei --persona "Beta" "walruses"` to scope results to what a specific
+persona has learned. Use `ei personas "name"` to find personas by name. Query again mid-session when
+they correct you or reference something from a previous session.
 ```
 
 ### Claude Code
@@ -83,6 +85,7 @@ Add to `~/.claude/CLAUDE.md` (user-level) or `CLAUDE.md` at project root:
 At session start, use the **ei** MCP to pull user context: call `ei_search` with a
 natural-language query about the user's preferences, active projects, and workflow.
 A `persona` filter is available to scope results to what a specific persona has learned.
+Use `type: "personas"` to search for personas by name.
 
 Use Ei when the user references past decisions, mentions people or preferences, or asks
 "how did we do X." Query again when they correct you or reference something from a previous
@@ -101,7 +104,7 @@ alwaysApply: true
 # Ei MCP — User knowledge base
 
 The **ei** MCP (server `user-ei`) is a persistent knowledge base built from the user's
-conversations (facts, people, topics, quotes).
+conversations (facts, people, topics, quotes, personas).
 
 **Use it when:**
 - The user refers to past decisions, fixes, or "how we did X" and current chat/codebase
@@ -112,7 +115,7 @@ conversations (facts, people, topics, quotes).
   than only code.
 
 **How to use:**
-1. Call `ei_search` (server `user-ei`) with a natural-language query (or omit query and use `recent: true` to browse); optionally filter by `type` (facts, people, topics, quotes) or `persona` display_name.
+1. Call `ei_search` (server `user-ei`) with a natural-language query (or omit query and use `recent: true` to browse); optionally filter by `type` (facts, people, topics, quotes, personas) or `persona` display_name.
 2. If you need full detail for a result, call `ei_lookup` with the entity `id` from step 1.
 
 Prefer querying Ei before asking the user for context they may have already shared.
@@ -120,13 +123,13 @@ Prefer querying Ei before asking the user for context they may have already shar
 
 ## What the Tool Provides
 
-The installed tool gives OpenCode agents access to all four data types with proper Zod-validated args:
+The installed tool gives OpenCode agents access to all five data types with proper Zod-validated args:
 
 | Arg | Type | Description |
 |-----|------|-------------|
 | `query` | string (optional) | Search text, or entity ID when `lookup=true`. Omit to browse by recency. |
 | `persona` | string (optional) | Persona display_name to filter results — only returns entities that persona has extracted |
-| `type` | enum (optional) | `facts` \| `people` \| `topics` \| `quotes` — omit for balanced results |
+| `type` | enum (optional) | `facts` \| `people` \| `topics` \| `quotes` \| `personas` — omit for balanced results |
 | `limit` | number (optional) | Max results, default 10 |
 | `lookup` | boolean (optional) | If true, fetch single entity by ID |
 | `recent` | boolean (optional) | If true, sort by most recently mentioned. Can be combined with `persona` or `query`. |
@@ -138,5 +141,7 @@ All search commands return arrays. Each result includes a `type` field.
 **Fact / Person / Topic**: `{ type, id, name, description, sentiment, ...type-specific fields }`
 
 **Quote**: `{ type, id, text, speaker, timestamp, linked_items[] }`
+
+**Persona**: `{ type, id, display_name, short_description, model, base_prompt, traits[], topics[] }`
 
 **ID lookup** (`lookup: true`): single object (not an array) with the same shape.
