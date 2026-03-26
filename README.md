@@ -58,6 +58,20 @@ A "Persona" is the combination of these two pieces of data, plus some _personali
 
 > <sup>1</sup>: By default. You can make them static.
 
+## What's a Room?
+
+Rooms let you throw multiple personas into the same conversation thread. Chaos ensues. Or collaboration. Sometimes both.
+
+Three modes, set at creation:
+
+**Free For All (FFA)**: Everyone talks. Every message gets a response from every persona. It's loud. Good for brainstorming or when you want a bunch of perspectives on the same thing.
+
+**Choose Your Path (CYP)**: The conversation branches. Each message triggers responses from all personas, but you pick which one continues the thread. Fork in the road, every turn. You're the navigator.
+
+**Messages Against Persona (MAP)**: The interesting one. Everyone submits a response, but a Judge persona picks which one actually shows up. The personas have to stay in character and compete for the Judge's approval. The human doesn't have to play by the rules. It's partly a game of "who knows this judge best?" and partly just fun to watch them try.
+
+Rooms learn the same way persona conversations do. Quotes, topics, people — all get extracted and persisted. The knowledge base grows no matter which mode you're in.
+
 ## The Basics
 
 Ei can operate with three types of input, and three types of output.
