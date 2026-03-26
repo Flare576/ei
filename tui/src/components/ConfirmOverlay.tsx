@@ -1,4 +1,6 @@
 import { useKeyboard } from "@opentui/solid";
+import { onMount, onCleanup } from "solid-js";
+import { useKeyboardNav } from "../context/keyboard.js";
 
 interface ConfirmOverlayProps {
   message: string;
@@ -7,6 +9,10 @@ interface ConfirmOverlayProps {
 }
 
 export function ConfirmOverlay(props: ConfirmOverlayProps) {
+  const { setOverlayActive } = useKeyboardNav();
+  onMount(() => setOverlayActive(true));
+  onCleanup(() => setOverlayActive(false));
+
   useKeyboard((event) => {
     event.preventDefault();
     

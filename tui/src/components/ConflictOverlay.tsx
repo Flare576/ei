@@ -1,5 +1,7 @@
 import { useKeyboard } from "@opentui/solid";
+import { onMount, onCleanup } from "solid-js";
 import type { StateConflictResolution } from "../../../src/core/types.js";
+import { useKeyboardNav } from "../context/keyboard.js";
 
 interface ConflictOverlayProps {
   localTimestamp: Date;
@@ -17,6 +19,10 @@ function formatTimestamp(date: Date): string {
 }
 
 export function ConflictOverlay(props: ConflictOverlayProps) {
+  const { setOverlayActive } = useKeyboardNav();
+  onMount(() => setOverlayActive(true));
+  onCleanup(() => setOverlayActive(false));
+
   useKeyboard((event) => {
     event.preventDefault();
 

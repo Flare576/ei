@@ -1,4 +1,6 @@
 import { useKeyboard } from "@opentui/solid";
+import { onMount, onCleanup } from "solid-js";
+import { useKeyboardNav } from "../context/keyboard.js";
 
 interface LoadingOverlayProps {
   message: string;
@@ -6,6 +8,10 @@ interface LoadingOverlayProps {
 }
 
 export function LoadingOverlay(props: LoadingOverlayProps) {
+  const { setOverlayActive } = useKeyboardNav();
+  onMount(() => setOverlayActive(true));
+  onCleanup(() => setOverlayActive(false));
+
   useKeyboard((event) => {
     if (event.name === "escape" && props.onCancel) {
       event.preventDefault();

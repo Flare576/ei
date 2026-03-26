@@ -1,7 +1,8 @@
 import { useKeyboard } from "@opentui/solid";
-import { For, createSignal, createMemo } from "solid-js";
+import { For, createSignal, createMemo, onMount, onCleanup } from "solid-js";
 import type { KeyEvent } from "@opentui/core";
 import type { Quote } from "../../../src/core/types.js";
+import { useKeyboardNav } from "../context/keyboard.js";
 
 interface QuotesOverlayProps {
   quotes: Quote[];
@@ -12,6 +13,9 @@ interface QuotesOverlayProps {
 }
 
 export function QuotesOverlay(props: QuotesOverlayProps) {
+  const { setOverlayActive } = useKeyboardNav();
+  onMount(() => setOverlayActive(true));
+  onCleanup(() => setOverlayActive(false));
   const [selectedIndex, setSelectedIndex] = createSignal(0);
   const [confirmDelete, setConfirmDelete] = createSignal(false);
 

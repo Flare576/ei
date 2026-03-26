@@ -1,12 +1,17 @@
 import { useKeyboard } from "@opentui/solid";
-import { For } from "solid-js";
+import { For, onMount, onCleanup } from "solid-js";
 import { getAllCommands } from "../commands/registry";
+import { useKeyboardNav } from "../context/keyboard.js";
 
 interface HelpOverlayProps {
   onDismiss: () => void;
 }
 
 export function HelpOverlay(props: HelpOverlayProps) {
+  const { setOverlayActive } = useKeyboardNav();
+  onMount(() => setOverlayActive(true));
+  onCleanup(() => setOverlayActive(false));
+
   useKeyboard((event) => {
     event.preventDefault();
     props.onDismiss();

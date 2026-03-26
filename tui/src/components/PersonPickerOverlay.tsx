@@ -1,5 +1,6 @@
 import { useKeyboard } from "@opentui/solid";
-import { For, createSignal } from "solid-js";
+import { For, createSignal, onMount, onCleanup } from "solid-js";
+import { useKeyboardNav } from "../context/keyboard.js";
 import type { KeyEvent } from "@opentui/core";
 
 export interface PersonPickerItem {
@@ -21,6 +22,10 @@ const truncate = (text: string, maxLen: number): string => {
 };
 
 export function PersonPickerOverlay(props: PersonPickerOverlayProps) {
+  const { setOverlayActive } = useKeyboardNav();
+  onMount(() => setOverlayActive(true));
+  onCleanup(() => setOverlayActive(false));
+
   const [selectedIndex, setSelectedIndex] = createSignal(0);
 
   useKeyboard((event: KeyEvent) => {

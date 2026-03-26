@@ -1,6 +1,7 @@
 import { useKeyboard } from "@opentui/solid";
-import { For, createSignal, createMemo } from "solid-js";
+import { For, createSignal, createMemo, onMount, onCleanup } from "solid-js";
 import type { KeyEvent } from "@opentui/core";
+import { useKeyboardNav } from "../context/keyboard.js";
 
 export interface ProviderListItem {
   id: string;
@@ -20,6 +21,9 @@ interface ProviderListOverlayProps {
 }
 
 export function ProviderListOverlay(props: ProviderListOverlayProps) {
+  const { setOverlayActive } = useKeyboardNav();
+  onMount(() => setOverlayActive(true));
+  onCleanup(() => setOverlayActive(false));
   const [selectedIndex, setSelectedIndex] = createSignal(0);
   const [filterText, setFilterText] = createSignal("");
   const [filterMode, setFilterMode] = createSignal(false);

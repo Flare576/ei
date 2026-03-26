@@ -136,6 +136,7 @@ export const KeyboardProvider: ParentComponent = (props) => {
     }
 
     if (event.name === "escape") {
+      if (overlayActive()) return;
       event.preventDefault();
       const status = queueStatus();
       
