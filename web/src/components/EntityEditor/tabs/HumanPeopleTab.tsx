@@ -95,13 +95,9 @@ export const HumanPeopleTab = ({
     onToggleDedupeMode();
   };
 
-  const filteredPeople = isDedupeMode
-    ? filterQuery.trim()
-      ? people.filter(p =>
-          p.name.toLowerCase().includes(filterQuery.toLowerCase())
-        )
-      : []
-    : people;
+  const filteredPeople = filterQuery.trim()
+    ? people.filter(p => p.name.toLowerCase().includes(filterQuery.toLowerCase()))
+    : isDedupeMode ? [] : people;
 
   return (
     <>
@@ -116,18 +112,16 @@ export const HumanPeopleTab = ({
         </button>
       </div>
 
-      {isDedupeMode && (
-        <div style={{ padding: '0 8px 8px' }}>
-          <input
-            type="text"
-            autoFocus
-            placeholder='Search to find duplicates — e.g. "Bob"'
-            value={filterQuery}
-            onChange={e => setFilterQuery(e.target.value)}
-            className="ei-search-input"
-          />
-        </div>
-      )}
+      <div style={{ padding: '0 8px 8px' }}>
+        <input
+          type="text"
+          autoFocus={isDedupeMode}
+          placeholder={isDedupeMode ? 'Search to find duplicates — e.g. "Bob"' : 'Filter people…'}
+          value={filterQuery}
+          onChange={e => setFilterQuery(e.target.value)}
+          className="ei-search-input"
+        />
+      </div>
 
       {isDedupeMode && !filterQuery.trim() && (
         <p className="ei-dedupe-empty-hint">Search for a name to find duplicates — then check the ones to merge.</p>
