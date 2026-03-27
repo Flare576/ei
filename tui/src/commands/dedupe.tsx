@@ -11,7 +11,7 @@ function buildDedupeYAML(type: DedupeType, terms: string[], entities: Array<Topi
     `# /dedupe ${type} ${terms.map(t => t.includes(" ") ? `"${t}"` : t).join(" ")}`,
     `# Terms: ${termDisplay}`,
     `# Found ${entities.length} match${entities.length === 1 ? "" : "es"}. DELETE blocks for entries to EXCLUDE from the merge.`,
-    `# Keep at least 2. Save to confirm, :q to cancel (Vim tip: :cq quits with error — same effect, but now you know it exists).`,
+    `# Keep at least 2. Save or quit to confirm • :cq to cancel.`,
     ``,
   ].join("\n");
 
@@ -129,12 +129,7 @@ export const dedupeCommand: Command = {
       return;
     }
 
-    if (result.content === null) {
-      ctx.showNotification("No changes — dedupe cancelled", "info");
-      return;
-    }
-
-    const keptIds = parseDedupeYAML(result.content);
+    const keptIds = parseDedupeYAML(result.content ?? yamlContent);
 
     if (keptIds.length < 2) {
       ctx.showNotification("Need at least 2 entries to merge — dedupe cancelled", "error");

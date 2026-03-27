@@ -1078,3 +1078,154 @@ export function toolkitFromYAML(yamlContent: string, original: ToolProvider, too
 
   return { updates, toolUpdates };
 }
+
+// =============================================================================
+// PERSONA PREVIEW SERIALIZATION (from-person generation flow)
+// =============================================================================
+
+/**
+ * YAML template for the first editor step in /persona new — description input.
+ */
+export function descriptionEntryToYAML(personaName: string): string {
+  return `# New Persona: ${personaName}
+# Describe who this persona is. This will be used to generate traits and topics.
+# Save to generate • :q to cancel.
+
+description: |
+  
+`;
+}
+
+/**
+ * Parse the description entry YAML.
+ */
+export function descriptionFromYAML(content: string): { description: string; relationship?: string } {
+  const data = YAML.parse(content) as { description?: string; relationship?: string };
+  if (!data) throw new Error("Failed to parse YAML");
+
+  const description = (data.description ?? "").replace(/\n/g, " ").trim();
+  const relationship = data.relationship?.trim() || undefined;
+
+  return { description, relationship };
+}
+
+/**
+ * YAML template for the traits/topics review editor step.
+ */
+export function personaPreviewToYAML(
+  preview: import('../../../src/prompts/generation/types.js').PersonaGenerationResult,
+  personaName: string,
+  personName?: string,
+  previousLongDescription?: string
+): string {
+  const normalizeLine = (s: string) => s.replace(/\n/g, ' ').trim();
+
+  const headerLines: string[] = [
+    `# Persona Preview: ${personaName}`,
+  ];
+  if (personName) {
+    headerLines.push(`# Source: ${personName}`);
+  }
+  headerLines.push(`# Edit or delete entries. Save or quit to apply • :cq to cancel.`);
+  headerLines.push(``);
+  if (previousLongDescription) {
+    headerLines.push(`# Previously: ${normalizeLine(previousLongDescription)}`);
+  }
+
+  const longDescYAML = `long_description: ${JSON.stringify(normalizeLine(preview.long_description))}`;
+  const shortDescYAML = `short_description: ${JSON.stringify(normalizeLine(preview.short_description ?? ''))}`;
+  const aliasesLine = (preview.aliases && preview.aliases.length > 0)
+    ? `aliases: ${preview.aliases.join(', ')}`
+    : null;
+
+  const traitsYAML = YAML.stringify(
+    { traits: preview.traits.map(t => ({
+      name: t.name,
+      description: t.description,
+      sentiment: Math.round(t.sentiment * 100) / 100,
+      strength: Math.round(t.strength * 100) / 100,
+    }))},
+    { lineWidth: 0 }
+  );
+
+  const topicsYAML = YAML.stringify(
+    { topics: preview.topics.map(t => ({
+      name: t.name,
+      perspective: t.perspective,
+      approach: t.approach,
+      personal_stake: t.personal_stake,
+      sentiment: Math.round(t.sentiment * 100) / 100,
+      exposure_current: Math.round(t.exposure_current * 100) / 100,
+      exposure_desired: Math.round(t.exposure_desired * 100) / 100,
+    }))},
+    { lineWidth: 0 }
+  );
+
+  return [
+    headerLines.join('\n'),
+    longDescYAML,
+    shortDescYAML,
+    ...(aliasesLine ? [aliasesLine] : []),
+    traitsYAML.trimEnd(),
+    topicsYAML.trimEnd(),
+    '',
+  ].join('\n');
+}
+
+interface PreviewYAMLData {
+  long_description?: string;
+  short_description?: string;
+  traits?: Array<{
+    name: string;
+    description: string;
+    sentiment?: number;
+    strength?: number;
+  }>;
+  topics?: Array<{
+    name: string;
+    perspective: string;
+    approach: string;
+    personal_stake: string;
+    sentiment?: number;
+    exposure_current?: number;
+    exposure_desired?: number;
+  }>;
+}
+
+/**
+ * Parse the preview YAML back into traits/topics with generated IDs.
+ */
+export function personaPreviewFromYAML(content: string): { long_description: string; short_description?: string; aliases?: string[]; traits: PersonaTrait[]; topics: PersonaTopic[] } {
+  const data = YAML.parse(content) as PreviewYAMLData & { aliases?: string };
+  if (!data) throw new Error("Failed to parse YAML");
+
+  const long_description = (data.long_description ?? "").replace(/\n/g, ' ').trim();
+  const short_description = data.short_description?.replace(/\n/g, ' ').trim() || undefined;
+
+  const traits: PersonaTrait[] = (data.traits ?? []).map(t => ({
+    id: crypto.randomUUID(),
+    name: t.name,
+    description: t.description,
+    sentiment: t.sentiment ?? 0,
+    strength: t.strength ?? 0.5,
+    last_updated: new Date().toISOString(),
+  }));
+
+  const topics: PersonaTopic[] = (data.topics ?? []).map(t => ({
+    id: crypto.randomUUID(),
+    name: t.name,
+    perspective: t.perspective,
+    approach: t.approach,
+    personal_stake: t.personal_stake,
+    sentiment: t.sentiment ?? 0,
+    exposure_current: t.exposure_current ?? 0.5,
+    exposure_desired: t.exposure_desired ?? 0.5,
+    last_updated: new Date().toISOString(),
+  }));
+
+  const aliases = data.aliases
+    ? data.aliases.split(',').map((s: string) => s.trim()).filter(Boolean)
+    : undefined;
+
+  return { long_description, short_description, aliases, traits, topics };
+}

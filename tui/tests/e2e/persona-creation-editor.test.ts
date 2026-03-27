@@ -128,6 +128,6 @@ test.describe("Persona Creation with Editor", () => {
     terminal.write("/p new newtest");
     terminal.submit();
     
-    await expect(terminal.getByText(/Created newtest/g)).toBeVisible({ timeout: 10000 });
+    await expect(terminal.getByText(/No description provided/gi)).toBeVisible({ timeout: 10000 });
   });
 });

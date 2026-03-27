@@ -138,6 +138,7 @@ export interface EiContextValue {
   sendSilenceMessage: (silenceReason?: string) => Promise<void>;
   humanRoomMessagePending: () => boolean;
   getArchivedRooms: () => RoomSummary[];
+  generatePersonaPreview: (name: string, description: string, relationship?: string, personaId?: string) => Promise<import('../../../src/prompts/generation/types.js').PersonaGenerationResult>;
 }
 const EiContext = createContext<EiContextValue>();
 
@@ -300,6 +301,11 @@ export const EiProvider: ParentComponent = (props) => {
   const createPersona = async (input: { name: string }): Promise<string> => {
     if (!processor) return "";
     return await processor.createPersona(input);
+  };
+
+  const generatePersonaPreview = async (name: string, description: string, relationship?: string, personaId?: string) => {
+    if (!processor) throw new Error("Processor not ready");
+    return processor.generatePersonaPreview(name, description, relationship, personaId);
   };
 
   const archivePersona = async (personaId: string) => {
@@ -915,6 +921,7 @@ export const EiProvider: ParentComponent = (props) => {
     sendSilenceMessage,
     humanRoomMessagePending,
     getArchivedRooms,
+    generatePersonaPreview,
   };
   return (
     <Switch>
