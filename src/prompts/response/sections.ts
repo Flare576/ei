@@ -155,7 +155,7 @@ export function buildHumanSection(human: ResponsePromptData["human"]): string {
   
   
   // Active topics (exposure_current > 0.3)
-  const activeTopics = human.topics.filter(t => t.exposure_current > 0.3);
+  const activeTopics = human.active_topics;
   if (activeTopics.length > 0) {
     const topics = activeTopics
       .sort((a, b) => b.exposure_current - a.exposure_current)
@@ -217,8 +217,7 @@ export function buildPrioritiesSection(
 ): string {
   const priorities: string[] = [];
   
-  const yourNeeds = persona.topics
-    .filter(t => t.exposure_desired - t.exposure_current > 0.2)
+  const yourNeeds = persona.interested_topics
     .slice(0, 3)
     .map(t => `- Bring up "${t.name}" - ${t.perspective || t.name}`);
   
@@ -227,8 +226,7 @@ export function buildPrioritiesSection(
   }
   
   // Their needs (topics they might want to discuss)
-  const theirNeeds = human.topics
-    .filter(t => t.exposure_desired - t.exposure_current > 0.2)
+  const theirNeeds = human.interested_topics
     .slice(0, 3)
     .map(t => `- They might want to talk about "${t.name}"`);
   

@@ -17,12 +17,18 @@ export interface ResponsePromptData {
     long_description?: string;
     traits: PersonaTrait[];
     topics: PersonaTopic[];
+    /** Pre-filtered: topics where exposure_desired - exposure_current > 0.2 */
+    interested_topics: PersonaTopic[];
   };
   human: {
     facts: Fact[];
     topics: Topic[];
     people: Person[];
     quotes: Quote[];
+    /** Pre-filtered: topics where exposure_current > 0.3 */
+    active_topics: Topic[];
+    /** Pre-filtered: topics where exposure_desired - exposure_current > 0.2 */
+    interested_topics: Topic[];
   };
   visible_personas: Array<{ name: string; short_description?: string }>;
   delay_ms: number;

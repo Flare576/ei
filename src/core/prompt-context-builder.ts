@@ -88,7 +88,14 @@ export async function filterHumanDataByVisibility(
       selectRelevantItems(human.people, DATA_ITEM_LIMIT, currentMessage),
       selectRelevantQuotes(human.quotes ?? [], currentMessage),
     ]);
-    return { facts, topics, people, quotes };
+    return {
+      facts,
+      topics,
+      people,
+      quotes,
+      active_topics: topics.filter(t => t.exposure_current > 0.3),
+      interested_topics: topics.filter(t => t.exposure_desired - t.exposure_current > 0.2),
+    };
   }
 
   const visibleGroups = new Set<string>();
@@ -117,7 +124,14 @@ export async function filterHumanDataByVisibility(
     selectRelevantQuotes(groupFilteredQuotes, currentMessage),
   ]);
 
-  return { facts, topics, people, quotes };
+  return {
+    facts,
+    topics,
+    people,
+    quotes,
+    active_topics: topics.filter(t => t.exposure_current > 0.3),
+    interested_topics: topics.filter(t => t.exposure_desired - t.exposure_current > 0.2),
+  };
 }
 
 // =============================================================================
@@ -190,6 +204,7 @@ export async function buildResponsePromptData(
        long_description: persona.long_description,
       traits: persona.traits,
       topics: persona.topics,
+      interested_topics: persona.topics.filter(t => t.exposure_desired - t.exposure_current > 0.2),
     },
     human: filteredHuman,
     visible_personas: visiblePersonas,
