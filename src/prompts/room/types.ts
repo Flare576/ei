@@ -42,6 +42,10 @@ export interface RoomResponsePromptData {
     topics: Topic[];
     people: Person[];
     quotes: Quote[];
+    /** Pre-filtered: topics where exposure_current > 0.3 */
+    active_topics: Topic[];
+    /** Pre-filtered: topics where exposure_desired - exposure_current > 0.2 */
+    interested_topics: Topic[];
   };
   history: RoomHistoryMessage[];
   isTUI: boolean;
