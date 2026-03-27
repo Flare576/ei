@@ -55,13 +55,19 @@ npm test
 ```
 If any test fails: STOP.
 
-### Check 5 — Core TypeScript build
+### Check 5 — Structural invariants
+```bash
+bash ci/structural-checks.sh
+```
+If any check fails: STOP. These are fast grep-based rules for architectural patterns (prompt builder purity, overlay keyboard registration, etc.). A failure here means a convention was violated that TypeScript won't catch.
+
+### Check 6 — Core TypeScript build
 ```bash
 npm run build
 ```
 If this fails: STOP. Fix type errors before releasing. This is what broke v0.1.15.
 
-### Check 6 — Web build (BOTH tsc and Vite — they catch different errors)
+### Check 7 — Web build (BOTH tsc and Vite — they catch different errors)
 ```bash
 cd web && npx tsc --noEmit && npx vite build 2>&1 | tail -5
 ```
@@ -71,7 +77,7 @@ Both must pass independently:
 
 This is what CI runs. (v0.1.9 = vite caught it; v0.1.18 deploy failure = tsc caught it)
 
-### Check 7 — Web E2E tests
+### Check 8 — Web E2E tests
 ```bash
 npm run test:e2e > .sisyphus/evidence/e2e-pre-release.txt 2>&1; echo "EXIT: $?"
 ```
@@ -81,7 +87,7 @@ grep -E "(passed|failed)" .sisyphus/evidence/e2e-pre-release.txt | tail -5
 ```
 If any test fails: STOP.
 
-**After all 7 checks pass, report a clean summary to Flare and ask for explicit go-ahead before cutting the release.**
+**After all 8 checks pass, report a clean summary to Flare and ask for explicit go-ahead before cutting the release.**
 
 ---
 

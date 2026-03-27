@@ -34,6 +34,9 @@ jobs:
       - name: Run unit tests (core + TUI)
         run: npm test
 
+      - name: Structural checks
+        run: bash ci/structural-checks.sh
+
       - name: Install web dependencies
         working-directory: ./web
         run: npm ci
