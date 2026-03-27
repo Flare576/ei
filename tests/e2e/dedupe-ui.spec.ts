@@ -331,7 +331,7 @@ test.describe("Dedupe UI — Merge Duplicates", () => {
     await page.locator("button").filter({ hasText: "Merge Duplicates" }).click();
 
     // Search input should appear and be auto-focused
-    const searchInput = page.locator(".ei-search-input");
+    const searchInput = page.locator('.ei-search-input[placeholder*="duplicates"]');
     await expect(searchInput).toBeVisible({ timeout: 3000 });
     await expect(searchInput).toBeFocused();
 
@@ -520,7 +520,7 @@ test.describe("Dedupe UI — Merge Duplicates", () => {
     await footer.locator("button").filter({ hasText: "Merge 2 into one" }).click();
 
     // Selection mode should exit — search input gone
-    await expect(page.locator(".ei-search-input")).not.toBeVisible({ timeout: 5000 });
+    await expect(page.locator('.ei-search-input[placeholder*="duplicates"]')).not.toBeVisible({ timeout: 5000 });
 
     // Toast should appear with merge info
     await expect(page.locator(".ei-toast")).toContainText("Merging", {
@@ -612,7 +612,7 @@ test.describe("Dedupe UI — Merge Duplicates", () => {
 
     // Enter selection mode
     await page.locator("button").filter({ hasText: "Merge Duplicates" }).click();
-    await expect(page.locator(".ei-search-input")).toBeVisible({ timeout: 3000 });
+    await expect(page.locator('.ei-search-input[placeholder*="duplicates"]')).toBeVisible({ timeout: 3000 });
 
     mockServer.clearRequestHistory();
 
@@ -620,7 +620,7 @@ test.describe("Dedupe UI — Merge Duplicates", () => {
     await page.locator("button").filter({ hasText: "Cancel" }).click();
 
     // Selection mode should exit
-    await expect(page.locator(".ei-search-input")).not.toBeVisible();
+    await expect(page.locator('.ei-search-input[placeholder*="duplicates"]')).not.toBeVisible();
 
     // "Merge Duplicates" button should be back
     await expect(
