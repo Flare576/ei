@@ -79,8 +79,10 @@ This is what CI runs. (v0.1.9 = vite caught it; v0.1.18 deploy failure = tsc cau
 
 ### Check 8 — Web E2E tests
 ```bash
-npm run test:e2e > .sisyphus/evidence/e2e-pre-release.txt 2>&1; echo "EXIT: $?"
+CI= npm run test:e2e > .sisyphus/evidence/e2e-pre-release.txt 2>&1; echo "EXIT: $?"
 ```
+**`CI=` is required.** The playwright config uses `reuseExistingServer: !process.env.CI` — if `CI` is set (as it is in the agent's default env), Playwright refuses to reuse Flare's running dev server and fails with a port conflict instead of running the tests.
+
 Save to file, then grep the summary:
 ```bash
 grep -E "(passed|failed)" .sisyphus/evidence/e2e-pre-release.txt | tail -5

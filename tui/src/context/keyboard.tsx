@@ -271,10 +271,27 @@ export const KeyboardProvider: ParentComponent = (props) => {
   );
 };
 
+// No-op stub returned when useKeyboardNav is called outside KeyboardProvider.
+// ConflictOverlay is the only legitimate caller in this situation — it renders
+// before KeyboardProvider exists because the app can't boot (state conflict).
+// All keyboard operations are genuinely meaningless at that point; the stub
+// makes setOverlayActive calls harmless rather than fatal.
+const KEYBOARD_NOOP: KeyboardContextValue = {
+  focusedPanel: () => "input" as Panel,
+  setFocusedPanel: () => {},
+  registerMessageScroll: () => {},
+  registerTextarea: () => {},
+  registerEditorHandler: () => {},
+  sidebarVisible: () => true,
+  toggleSidebar: () => {},
+  exitApp: async () => {},
+  renderer: null as unknown as CliRenderer,
+  resetHistoryIndex: () => {},
+  overlayActive: () => false,
+  setOverlayActive: () => {},
+};
+
 export const useKeyboardNav = () => {
   const ctx = useContext(KeyboardContext);
-  if (!ctx) {
-    throw new Error("useKeyboardNav must be used within KeyboardProvider");
-  }
-  return ctx;
+  return ctx ?? KEYBOARD_NOOP;
 };
