@@ -40,8 +40,8 @@ function countTrailingPersonaMessages(history: Message[]): number {
   return count;
 }
 
-function getLastPersonaMessage(history: Message[]): Message | undefined {
-  return history.filter(m => m.role === "system").slice(-1)[0];
+function getLastPersonaMessage(systemMessages: Message[]): Message | undefined {
+  return systemMessages.slice(-1)[0];
 }
 
 export function buildEiHeartbeatPrompt(data: EiHeartbeatPromptData): PromptOutput {
@@ -101,7 +101,7 @@ Or if nothing warrants reaching out:
 ${formatMessagesAsPlaceholders(data.recent_history, "Ei")}`;
 
   const consecutiveMessages = countTrailingPersonaMessages(data.recent_history);
-  const lastEiMsg = getLastPersonaMessage(data.recent_history);
+  const lastEiMsg = getLastPersonaMessage(data.system_messages);
 
   let unansweredWarning = "";
   if (lastEiMsg && consecutiveMessages >= 1) {

@@ -87,6 +87,7 @@ export type EiHeartbeatItem =
 export interface EiHeartbeatPromptData {
   items: EiHeartbeatItem[];
   recent_history: Message[];
+  system_messages: Message[];  // Pre-filtered system messages from recent_history
 }
 
 /**

@@ -15,10 +15,10 @@ export function buildPersonaGenerationPrompt(data: PersonaGenerationPromptData):
   const hasLongDescription = !!data.long_description?.trim();
   const hasShortDescription = !!data.short_description?.trim();
   
-  const userProvidedTraits = data.existing_traits?.filter(t => t.name?.trim()) ?? [];
+  const userProvidedTraits = data.filtered_traits;
   const allTraits = [...DEFAULT_SEED_TRAITS, ...userProvidedTraits];
   const existingTraitCount = allTraits.length;
-  const existingTopicCount = data.existing_topics?.filter(t => t.name?.trim())?.length ?? 0;
+  const existingTopicCount = data.filtered_topics.length;
 
   const needsShortDescription = !hasShortDescription;
   const needsMoreTraits = existingTraitCount < 3;
@@ -142,14 +142,12 @@ ${schemaFragment}`;
 
   if (existingTopicCount > 0) {
     userPrompt += `## User's Topics (PRESERVE EXACTLY, add more if fewer than 3)\n`;
-    for (const topic of data.existing_topics ?? []) {
-      if (topic.name?.trim()) {
-        userPrompt += `- ${topic.name}\n`;
-        if (topic.perspective) userPrompt += `  perspective: ${topic.perspective}\n`;
-        if (topic.approach) userPrompt += `  approach: ${topic.approach}\n`;
-        if (topic.personal_stake) userPrompt += `  personal_stake: ${topic.personal_stake}\n`;
-        if (topic.sentiment !== undefined) userPrompt += `  sentiment: ${topic.sentiment}\n`;
-      }
+    for (const topic of data.filtered_topics) {
+      userPrompt += `- ${topic.name}\n`;
+      if (topic.perspective) userPrompt += `  perspective: ${topic.perspective}\n`;
+      if (topic.approach) userPrompt += `  approach: ${topic.approach}\n`;
+      if (topic.personal_stake) userPrompt += `  personal_stake: ${topic.personal_stake}\n`;
+      if (topic.sentiment !== undefined) userPrompt += `  sentiment: ${topic.sentiment}\n`;
     }
     userPrompt += `\n`;
   }

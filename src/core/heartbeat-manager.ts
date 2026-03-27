@@ -158,9 +158,11 @@ export async function queueEiHeartbeat(
     return;
   }
 
+  const recentHistory = history.slice(-10);
   const promptData: EiHeartbeatPromptData = {
     items,
-    recent_history: history.slice(-10),
+    recent_history: recentHistory,
+    system_messages: recentHistory.filter(m => m.role === "system"),
   };
 
   const prompt = buildEiHeartbeatPrompt(promptData);

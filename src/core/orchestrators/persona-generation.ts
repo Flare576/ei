@@ -39,12 +39,16 @@ export function orchestratePersonaGeneration(
   const needsMoreTopics = topicCount < 3;
 
   if (needsShortDescription || needsMoreTraits || needsMoreTopics) {
+    const filteredTraits = (partial.traits ?? []).filter(t => t.name?.trim());
+    const filteredTopics = (partial.topics ?? []).filter(t => t.name?.trim());
     const prompt = buildPersonaGenerationPrompt({
       name: partial.name,
       long_description: partial.long_description,
       short_description: partial.short_description,
       existing_traits: partial.traits,
       existing_topics: partial.topics,
+      filtered_traits: filteredTraits,
+      filtered_topics: filteredTopics,
     });
 
     stateManager.queue_enqueue({
