@@ -282,8 +282,7 @@ function normalizeText(text: string): string {
     .replace(/[\u2018\u2019\u0060\u00B4]/g, "'")  // curly single, backtick, acute accent
     .replace(/[\u2014\u2013\u2012]/g, '-')         // em-dash, en-dash, figure dash
     .replace(/\u00A0/g, ' ')                       // non-breaking space
-    .replace(/[\u2000-\u200F]/g, ' ')              // unicode space variants
-    .replace(/\u2026|\.\.\./g, '\u2026');           // normalize both ellipsis forms → unicode ellipsis (1:1)
+    .replace(/[\u2000-\u200F]/g, ' ');              // unicode space variants
 }
 
 function stripPunctuation(text: string): string {
@@ -297,31 +296,46 @@ function stripPunctuation(text: string): string {
     .toLowerCase();
 }
 
-interface WordBoundaryMatch {
+export interface WordBoundaryMatch {
   start: number;
   end: number;
   text: string;
 }
 
-function findQuoteByWords(quoteText: string, msgText: string): WordBoundaryMatch | null {
+export function expandToWordBoundaries(text: string, start: number, end: number): WordBoundaryMatch {
+  // Only walk backward if start is mid-word (not already at a word boundary)
+  if (start > 0 && !/\s/.test(text[start]))
+    while (start > 0 && !/\s/.test(text[start - 1])) start--;
+  // Only walk forward if end is mid-word
+  if (end > 0 && !/\s/.test(text[end - 1]))
+    while (end < text.length && !/\s/.test(text[end])) end++;
+  return { start, end, text: text.slice(start, end) };
+}
+
+export function findQuoteByWords(quoteText: string, msgText: string): WordBoundaryMatch | null {
   const strippedQuote = stripPunctuation(quoteText);
   const quoteWords = strippedQuote.split(' ').filter(w => w.length > 0);
 
-  if (quoteWords.length < 3) return null;  // Too short to trust — require at least 3 words
+  if (quoteWords.length < 2) return null;  // Too short to trust — require at least 2 words
 
-  // Build word token list from original message with original positions
+  // Build word token list from original message with original positions.
+  // Each \S+ token is re-split into sub-tokens (sharing the parent's start/end)
+  // so that contractions stripped by stripPunctuation (e.g. don't → "don t")
+  // align correctly with quoteWords which is also split on spaces.
   const wordTokens: Array<{ word: string; start: number; end: number }> = [];
   const wordRegex = /\S+/g;
   let match: RegExpExecArray | null;
   while ((match = wordRegex.exec(msgText)) !== null) {
-    wordTokens.push({
-      word: stripPunctuation(match[0]),
-      start: match.index,
-      end: match.index + match[0].length,
-    });
+    const tokenStart = match.index;
+    const tokenEnd = match.index + match[0].length;
+    const stripped = stripPunctuation(match[0]);
+    const subWords = stripped.split(' ').filter(w => w.length > 0);
+    for (const sub of subWords) {
+      wordTokens.push({ word: sub, start: tokenStart, end: tokenEnd });
+    }
   }
 
-  // Find contiguous sequence of words matching the quote words
+  // Find contiguous sequence of word tokens matching the quote words
   for (let i = 0; i <= wordTokens.length - quoteWords.length; i++) {
     let allMatch = true;
     for (let j = 0; j < quoteWords.length; j++) {
@@ -333,11 +347,7 @@ function findQuoteByWords(quoteText: string, msgText: string): WordBoundaryMatch
     if (allMatch) {
       const startToken = wordTokens[i];
       const endToken = wordTokens[i + quoteWords.length - 1];
-      return {
-        start: startToken.start,
-        end: endToken.end,
-        text: msgText.slice(startToken.start, endToken.end),
-      };
+      return expandToWordBoundaries(msgText, startToken.start, endToken.end);
     }
   }
 
@@ -370,9 +380,10 @@ async function validateAndStoreQuotes(
       let matchLevel: string;
 
       if (start !== -1) {
-        matchStart = start;
-        matchEnd = start + candidate.text.length;
-        matchText = candidate.text;
+        const expanded = expandToWordBoundaries(msgText, start, start + candidate.text.length);
+        matchStart = expanded.start;
+        matchEnd = expanded.end;
+        matchText = expanded.text;
         matchLevel = "exact";
       } else {
         // Level 2: word-boundary fallback
