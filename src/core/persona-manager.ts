@@ -73,6 +73,13 @@ export async function createPersona(
       sm,
       () => onPersonaUpdated(placeholder.display_name)
     );
+  } else {
+    sm.persona_update(personaId, {
+      traits: input.traits as PersonaEntity["traits"],
+      topics: input.topics as PersonaEntity["topics"],
+      last_updated: now,
+    });
+    onPersonaUpdated(placeholder.display_name);
   }
 
   return personaId;

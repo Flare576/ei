@@ -351,6 +351,10 @@ export class MockLLMServerImpl implements MockLLMServer {
       return "image-synthesis";
     }
 
+    if (content.includes("you are building a persona definition from a real person")) {
+      return "persona-generation";
+    }
+
     if (content.includes("you are helping create a new ai persona named")) {
       return "persona-generation";
     }

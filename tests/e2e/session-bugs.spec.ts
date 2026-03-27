@@ -427,7 +427,11 @@ test.describe("Session Bug Coverage (0112)", () => {
     // Handle any dialogs
     page.on("dialog", (dialog) => dialog.accept());
 
-    // Click Create
+    // Click Finish Persona Definition (triggers generation)
+    await page.locator(".ei-creator-modal__footer button:has-text('Finish Persona Definition')").click();
+    // Wait for generation to complete (spinner disappears, Create Persona appears)
+    await expect(page.locator(".ei-creator-modal__footer button:has-text('Create Persona')")).toBeVisible({ timeout: 15000 });
+    // Click Create Persona to finalize
     await page.locator(".ei-creator-modal__footer button:has-text('Create Persona')").click();
 
     // Wait for persona to appear in list
@@ -439,6 +443,9 @@ test.describe("Session Bug Coverage (0112)", () => {
     const sophiaPill = page.locator(".ei-persona-pill").filter({ hasText: "Sophia" });
     
     await expect(sophiaPill.locator(".ei-persona-pill__desc")).toContainText(/philosopher|wise/i, { timeout: 30000 });
+
+    // Allow all persona update events to settle before opening editor
+    await page.waitForTimeout(2000);
 
     // Open edit panel
     await sophiaPill.hover();
