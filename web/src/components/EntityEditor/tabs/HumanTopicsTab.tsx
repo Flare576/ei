@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { GroupedCardList } from '../GroupedCardList';
 import { DataItemCard } from '../DataItemCard';
 
@@ -166,6 +166,13 @@ export const HumanTopicsTab = ({
   onMerge,
 }: Omit<HumanTopicsTabProps, 'dedupingIds'>) => {
   const [filterQuery, setFilterQuery] = React.useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isDedupeMode) {
+      searchInputRef.current?.focus();
+    }
+  }, [isDedupeMode]);
 
   const handleMerge = async () => {
     if (selectedIds.length < 2) return;
@@ -197,8 +204,8 @@ export const HumanTopicsTab = ({
 
       <div style={{ padding: '0 8px 8px' }}>
         <input
+          ref={searchInputRef}
           type="text"
-          autoFocus={isDedupeMode}
           placeholder={isDedupeMode ? 'Search to find duplicates — e.g. "Bob"' : 'Filter topics…'}
           value={filterQuery}
           onChange={e => setFilterQuery(e.target.value)}
