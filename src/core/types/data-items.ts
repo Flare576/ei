@@ -67,7 +67,9 @@ export interface Quote {
   data_item_ids: string[];       // FK[] to DataItemBase.id
   persona_groups: string[];      // Visibility groups
   text: string;                  // The quote content
-  speaker: "human" | string;     // Who said it (persona ID or "human")
+  speaker: "human" | string;     // Actual speaker: "human" or the persona's display_name
+  channel?: string;              // Display name of the Channel (persona or room) where captured.
+                                 // Undefined on pre-migration quotes.
   timestamp: string;             // ISO timestamp (from original message)
   start: number | null;          // Character offset in message (null = can't highlight)
   end: number | null;            // Character offset in message (null = can't highlight)
