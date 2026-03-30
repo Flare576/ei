@@ -54,6 +54,7 @@ export class StateManager {
       this.migrateFactValidation();
       this.migrateMessageFlags();
       this.migrateInterestedPersonas();
+      this.migrateProviderModel();
     } else {
       this.humanState.load(createDefaultHumanEntity());
     }
@@ -220,6 +221,80 @@ export class StateManager {
       this.humanState.set(human);
       console.log("[StateManager] Migrated interested_personas fields from learned_by + last_changed_by");
     }
+  }
+
+  private migrateProviderModel(): void {
+    const human = this.humanState.get();
+    const settings = human.settings;
+    if (!settings?.accounts?.length) return;
+
+    const modelLookup = new Map<string, string>();
+
+    for (const account of settings.accounts) {
+      if (account.models !== undefined) continue;
+
+      account.models = [];
+
+      if (account.default_model) {
+        const model = {
+          id: crypto.randomUUID(),
+          name: account.default_model,
+          context_window: (account as any).token_limit as number | undefined,
+          max_output_tokens: undefined as number | undefined,
+        };
+        account.models.push(model);
+        modelLookup.set(`${account.name}:${model.name}`, model.id);
+        account.default_model = model.id;
+      }
+
+      if (account.models.length === 0) {
+        const model = { id: crypto.randomUUID(), name: "(default)" };
+        account.models.push(model);
+        modelLookup.set(`${account.name}:(default)`, model.id);
+        account.default_model = model.id;
+      }
+
+      delete (account as any).token_limit;
+    }
+
+    const resolveRef = (ref: string | undefined): string | undefined => {
+      if (!ref) return ref;
+      const guid = modelLookup.get(ref);
+      if (guid) return guid;
+      const colonIdx = ref.indexOf(":");
+      if (colonIdx === -1) return ref;
+      return undefined;
+    };
+
+    settings.default_model = resolveRef(settings.default_model);
+    settings.oneshot_model = resolveRef(settings.oneshot_model);
+    settings.rewrite_model = resolveRef(settings.rewrite_model);
+
+    if (settings.opencode) {
+      settings.opencode.extraction_model = resolveRef(settings.opencode.extraction_model);
+      delete (settings.opencode as any).extraction_token_limit;
+    }
+
+    if (settings.claudeCode) {
+      settings.claudeCode.extraction_model = resolveRef(settings.claudeCode.extraction_model);
+      delete (settings.claudeCode as any).extraction_token_limit;
+    }
+
+    const personas = this.personaState.getAll();
+    for (const persona of personas) {
+      if (persona.model) {
+        persona.model = resolveRef(persona.model) ?? persona.model;
+        const colonIdx = persona.model.indexOf(":");
+        if (colonIdx !== -1) {
+          persona.model = undefined;
+        }
+        this.personaState.update(persona.id, { model: persona.model });
+      }
+    }
+
+    this.humanState.set(human);
+    this.scheduleSave();
+    console.log("[StateManager] Migrated provider/model references to GUID-based ModelConfig system");
   }
 
   /**
