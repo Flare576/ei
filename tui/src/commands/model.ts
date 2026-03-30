@@ -1,10 +1,31 @@
 import type { Command } from "./registry";
+import { openModelOverlay } from "./provider.js";
+import type { ModelListItem } from "../components/ModelListOverlay.js";
+import type { ProviderAccount } from "../../../src/core/types.js";
+
+async function buildModelList(ctx: Parameters<Command["execute"]>[1]): Promise<ModelListItem[]> {
+  const human = await ctx.ei.getHuman();
+  const accounts = (human.settings?.accounts ?? []).filter(
+    (a: ProviderAccount) => a.type === "llm" && a.enabled !== false
+  );
+  const items: ModelListItem[] = [];
+  for (const account of accounts) {
+    for (const model of account.models ?? []) {
+      items.push({
+        display: `${account.name}:${model.name}`,
+        guid: model.id,
+        providerId: account.id,
+      });
+    }
+  }
+  return items;
+}
 
 export const modelCommand: Command = {
   name: "model",
   aliases: [],
   description: "Set the LLM model for the current persona",
-  usage: "/model <model> or /model <provider:model>",
+  usage: "/model | /model Provider:model",
   execute: async (args, ctx) => {
     const personaId = ctx.ei.activePersonaId();
     if (!personaId) {
@@ -13,35 +34,27 @@ export const modelCommand: Command = {
     }
 
     if (args.length === 0) {
-      ctx.showNotification("Usage: /model <model> (e.g., sonnet-latest or openai:gpt-4o)", "info");
+      await openModelOverlay(ctx);
       return;
     }
 
-    const modelSpec = args[0];
+    const modelSpec = args.join(" ");
 
-    if (modelSpec.includes(":")) {
-      // Explicit provider:model — use as-is
-      await ctx.ei.updatePersona(personaId, { model: modelSpec });
-      ctx.showNotification(`Model set to ${modelSpec}`, "info");
+    const models = await buildModelList(ctx);
+
+    const match = models.find(
+      (m) => m.display.toLowerCase() === modelSpec.toLowerCase()
+    );
+
+    if (match) {
+      await ctx.ei.updatePersona(personaId, { model: match.guid });
+      ctx.showNotification(`Model set to ${match.display}`, "info");
       return;
     }
 
-    // No provider specified — infer from persona's current model
-    const persona = await ctx.ei.getPersona(personaId);
-    const currentModel = persona?.model;
-
-    if (currentModel) {
-      const provider = currentModel.includes(":")
-        ? currentModel.split(":")[0]
-        : currentModel;
-      const newModel = `${provider}:${modelSpec}`;
-      await ctx.ei.updatePersona(personaId, { model: newModel });
-      ctx.showNotification(`Model set to ${newModel}`, "info");
-    } else {
-      ctx.showNotification(
-        "No provider set. Use /provider first, or specify provider:model (e.g., openai:gpt-4o)",
-        "error"
-      );
-    }
+    ctx.showNotification(
+      `Invalid model. Use /model or /providers to see available models.`,
+      "error"
+    );
   },
 };
