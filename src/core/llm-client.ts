@@ -1,4 +1,4 @@
-import type { ChatMessage, ProviderAccount } from "./types.js";
+import type { ChatMessage, ProviderAccount, ModelConfig } from "./types.js";
 const DEFAULT_CONTEXT_WINDOW = 8192;
 
 export interface ProviderConfig {
@@ -85,37 +85,48 @@ export function resolveModel(modelSpec?: string, accounts?: ProviderAccount[]): 
 
 const tokenLimitLoggedModels = new Set<string>();
 
+function findModelAndAccount(
+  spec: string,
+  accounts: ProviderAccount[]
+): { model: ModelConfig | undefined; account: ProviderAccount | undefined } {
+  if (spec.includes(":")) {
+    const [providerName, ...rest] = spec.split(":");
+    const modelName = rest.join(":");
+    const account = accounts.find(
+      (a) => a.name.toLowerCase() === providerName.toLowerCase() && a.enabled
+    );
+    const model = account?.models?.find((m) => m.name === modelName);
+    return { model, account };
+  }
+  for (const account of accounts) {
+    const model = account.models?.find((m) => m.id === spec);
+    if (model) return { model, account };
+  }
+  return { model: undefined, account: undefined };
+}
+
 export function resolveTokenLimit(
   modelSpec?: string,
   accounts?: ProviderAccount[]
 ): number {
   const spec = modelSpec || "";
 
-  let provider = "";
-  let model = spec;
-  if (spec.includes(":")) {
-    const [p, ...rest] = spec.split(":");
-    provider = p;
-    model = rest.join(":");
-  }
+  if (accounts && spec) {
+    const { model, account } = findModelAndAccount(spec, accounts);
 
-  // 1. User override on matching account
-  if (accounts) {
-    const searchName = provider || spec;
-    const matchingAccount = accounts.find(
-      (acc) => acc.name.toLowerCase() === searchName.toLowerCase() && acc.enabled
-    );
-    if (matchingAccount?.token_limit) {
-      logTokenLimit(model, "user-override", matchingAccount.token_limit);
-      return matchingAccount.token_limit;
+    if (model?.context_window) {
+      logTokenLimit(spec, "model-config", model.context_window);
+      return model.context_window;
     }
-    if (matchingAccount && !provider) {
-      model = matchingAccount.default_model || model;
+
+    if (account?.token_limit) {
+      const displayName = spec.includes(":") ? spec.split(":").slice(1).join(":") : spec;
+      logTokenLimit(displayName, "user-override", account.token_limit);
+      return account.token_limit;
     }
   }
 
-  // 2. Conservative default
-  logTokenLimit(model, "default", DEFAULT_CONTEXT_WINDOW);
+  logTokenLimit(spec, "default", DEFAULT_CONTEXT_WINDOW);
   return DEFAULT_CONTEXT_WINDOW;
 }
 
