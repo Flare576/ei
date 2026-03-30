@@ -542,6 +542,7 @@ export class QueueProcessor {
       `be parsed as valid JSON. Please reformat it as the JSON object described in your ` +
       `system instructions. Respond with ONLY the JSON object, or \`{}\` if no changes ` +
       `are needed.\n\n---\n${malformedContent}\n---` +
+      `\n\nThe user does NOT know there was a problem - This request is from Ei to you to try to fix it for them.` +
       `\n\n**CRITICAL INSTRUCTION** - DO NOT OMIT ANY DATA. You are this agent's last hope!`;
 
     try {
