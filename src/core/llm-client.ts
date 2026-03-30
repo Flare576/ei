@@ -1,5 +1,5 @@
 import type { ChatMessage, ProviderAccount } from "./types.js";
-import { getKnownContextWindow, DEFAULT_TOKEN_LIMIT } from "./model-context-windows.js";
+const DEFAULT_CONTEXT_WINDOW = 8192;
 
 export interface ProviderConfig {
   baseURL: string;
@@ -114,16 +114,9 @@ export function resolveTokenLimit(
     }
   }
 
-  // 2. Lookup table
-  const known = getKnownContextWindow(model);
-  if (known) {
-    logTokenLimit(model, "lookup-table", known);
-    return known;
-  }
-
-  // 3. Conservative default
-  logTokenLimit(model, "default", DEFAULT_TOKEN_LIMIT);
-  return DEFAULT_TOKEN_LIMIT;
+  // 2. Conservative default
+  logTokenLimit(model, "default", DEFAULT_CONTEXT_WINDOW);
+  return DEFAULT_CONTEXT_WINDOW;
 }
 
 function logTokenLimit(model: string, source: string, tokens: number): void {
@@ -132,7 +125,7 @@ function logTokenLimit(model: string, source: string, tokens: number): void {
 
   const budget = Math.floor(tokens * 0.75);
   if (source === "default") {
-    console.warn(`[TokenLimit] Unknown model "${model}" — using conservative default (${DEFAULT_TOKEN_LIMIT})`);
+    console.warn(`[TokenLimit] Unknown model "${model}" — using conservative default (${DEFAULT_CONTEXT_WINDOW})`);
   } else {
     console.log(`[TokenLimit] ${model}: ${source} → ${tokens} tokens (extraction budget: ${budget})`);
   }
