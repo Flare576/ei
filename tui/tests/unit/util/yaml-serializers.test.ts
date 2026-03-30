@@ -8,9 +8,15 @@ import {
   contextFromYAML,
   settingsToYAML,
   settingsFromYAML,
+  newProviderToYAML,
+  newProviderFromYAML,
+  providerToYAML,
+  providerFromYAML,
+  modelGuidToDisplay,
+  displayToModelGuid,
 } from "../../../src/util/yaml-serializers";
-import type { PersonaEntity, HumanEntity, Message, HumanSettings } from "../../../../src/core/types";
-import { ContextStatus } from "../../../../src/core/types";
+import type { PersonaEntity, HumanEntity, Message, HumanSettings, ProviderAccount } from "../../../../src/core/types";
+import { ContextStatus, ProviderType } from "../../../../src/core/types";
 
 describe("personaToYAML", () => {
   const timestamp = "2024-01-01T00:00:00.000Z";
@@ -630,5 +636,371 @@ describe("round-trip serialization", () => {
     expect(result.message_min_count).toBe(200);
     expect(result.message_max_age_days).toBe(14);
     expect(result.ceremony?.event_window_hours).toBeUndefined();
+  });
+});
+
+// =============================================================================
+// PROVIDER SERIALIZATION TESTS
+// =============================================================================
+
+describe("providerToYAML / providerFromYAML", () => {
+  const timestamp = "2024-01-01T00:00:00.000Z";
+
+  const baseAccount: ProviderAccount = {
+    id: "provider-guid-1",
+    name: "TestLLM",
+    type: ProviderType.LLM,
+    url: "https://api.testllm.com/v1",
+    api_key: "sk-test-key",
+    default_model: "gpt-4o",
+    token_limit: undefined,
+    enabled: true,
+    created_at: timestamp,
+    models: [
+      { id: "model-guid-1", name: "gpt-4o" },
+      { id: "model-guid-2", name: "gpt-3.5-turbo", context_window: 16384 },
+    ],
+  };
+
+  test("providerToYAML includes models section", () => {
+    const yaml = providerToYAML(baseAccount);
+    expect(yaml).toContain("name: TestLLM");
+    expect(yaml).toContain("models:");
+    expect(yaml).toContain("name: gpt-4o");
+    expect(yaml).toContain("name: gpt-3.5-turbo");
+    expect(yaml).toContain("context_window: 16384");
+  });
+
+  test("providerToYAML does NOT include internal counter fields", () => {
+    const accountWithCounters: ProviderAccount = {
+      ...baseAccount,
+      models: [
+        {
+          id: "model-guid-1",
+          name: "gpt-4o",
+          total_calls: 42,
+          total_tokens_in: 1000,
+          total_tokens_out: 2000,
+          last_used: timestamp,
+        },
+      ],
+    };
+    const yaml = providerToYAML(accountWithCounters);
+    expect(yaml).not.toContain("total_calls");
+    expect(yaml).not.toContain("total_tokens_in");
+    expect(yaml).not.toContain("total_tokens_out");
+    expect(yaml).not.toContain("last_used");
+    expect(yaml).not.toContain("id:");
+  });
+
+  test("providerToYAML includes _delete comments", () => {
+    const yaml = providerToYAML(baseAccount);
+    expect(yaml).toContain("# _delete: true");
+  });
+
+  test("providerFromYAML round-trip preserves provider data", () => {
+    const yaml = providerToYAML(baseAccount);
+    const result = providerFromYAML(yaml, baseAccount);
+    expect(result._delete).toBe(false);
+    expect(result.account.id).toBe("provider-guid-1");
+    expect(result.account.name).toBe("TestLLM");
+    expect(result.account.url).toBe("https://api.testllm.com/v1");
+    expect(result.account.type).toBe(ProviderType.LLM);
+  });
+
+  test("providerFromYAML round-trip preserves model GUIDs by name", () => {
+    const yaml = providerToYAML(baseAccount);
+    const result = providerFromYAML(yaml, baseAccount);
+    expect(result._delete).toBe(false);
+    const models = result.account.models ?? [];
+    expect(models).toHaveLength(2);
+    const gpt4 = models.find(m => m.name === "gpt-4o");
+    const gpt35 = models.find(m => m.name === "gpt-3.5-turbo");
+    expect(gpt4?.id).toBe("model-guid-1");
+    expect(gpt35?.id).toBe("model-guid-2");
+    expect(gpt35?.context_window).toBe(16384);
+  });
+
+  test("providerFromYAML preserves usage counters on round-trip", () => {
+    const accountWithCounters: ProviderAccount = {
+      ...baseAccount,
+      models: [
+        {
+          id: "model-guid-1",
+          name: "gpt-4o",
+          total_calls: 99,
+          total_tokens_in: 5000,
+          total_tokens_out: 10000,
+          last_used: timestamp,
+        },
+      ],
+    };
+    const yaml = providerToYAML(accountWithCounters);
+    const result = providerFromYAML(yaml, accountWithCounters);
+    const model = (result.account.models ?? []).find(m => m.name === "gpt-4o");
+    expect(model?.total_calls).toBe(99);
+    expect(model?.total_tokens_in).toBe(5000);
+    expect(model?.total_tokens_out).toBe(10000);
+    expect(model?.last_used).toBe(timestamp);
+  });
+
+  test("providerFromYAML _delete: true returns _delete flag", () => {
+    const yaml = providerToYAML(baseAccount).replace(
+      "# _delete: true   # Delete this entire provider",
+      "_delete: true"
+    );
+    const result = providerFromYAML(yaml, baseAccount);
+    expect(result._delete).toBe(true);
+    expect(result.account).toBe(baseAccount);
+  });
+
+  test("providerFromYAML model _delete removes individual model", () => {
+    // Build YAML where gpt-3.5-turbo has _delete: true (uncommented)
+    const yaml = [
+      "name: TestLLM",
+      "type: llm",
+      "url: https://api.testllm.com/v1",
+      "api_key: sk-test-key",
+      "default_model: gpt-4o",
+      "token_limit: null",
+      "enabled: true",
+      "models:",
+      "  - name: gpt-4o",
+      "  - name: gpt-3.5-turbo",
+      "    _delete: true",
+    ].join("\n");
+    const result = providerFromYAML(yaml, baseAccount);
+    expect(result._delete).toBe(false);
+    const models = result.account.models ?? [];
+    expect(models).toHaveLength(1);
+    expect(models[0].name).toBe("gpt-4o");
+  });
+
+  test("newProviderToYAML generates template with models section", () => {
+    const yaml = newProviderToYAML();
+    expect(yaml).toContain("name:");
+    expect(yaml).toContain("models:");
+    expect(yaml).toContain("(default)");
+    expect(yaml).toContain("# _delete: true");
+  });
+
+  test("newProviderFromYAML parses minimal valid provider", () => {
+    const yaml = [
+      "name: My New Provider",
+      "type: llm",
+      "url: https://api.mynewprovider.com/v1",
+      "api_key: sk-abc",
+      "default_model: gpt-4o",
+      "token_limit: null",
+      "enabled: true",
+      "models:",
+      "  - name: gpt-4o",
+    ].join("\n");
+    const account = newProviderFromYAML(yaml);
+    expect(account.name).toBe("My New Provider");
+    expect(account.id).toBeDefined();
+    expect(account.models).toHaveLength(1);
+    expect(account.models![0].name).toBe("gpt-4o");
+    expect(account.models![0].id).toBeDefined();
+  });
+});
+
+// =============================================================================
+// GUID <-> DISPLAY NAME HELPER TESTS
+// =============================================================================
+
+describe("modelGuidToDisplay / displayToModelGuid", () => {
+  const accounts: ProviderAccount[] = [
+    {
+      id: "acc-1",
+      name: "Anthropic",
+      type: ProviderType.LLM,
+      url: "https://api.anthropic.com",
+      enabled: true,
+      created_at: "2024-01-01T00:00:00.000Z",
+      models: [
+        { id: "guid-claude-3-5", name: "claude-3-5-sonnet" },
+        { id: "guid-claude-opus", name: "claude-opus-4-5" },
+      ],
+    },
+    {
+      id: "acc-2",
+      name: "OpenAI",
+      type: ProviderType.LLM,
+      url: "https://api.openai.com",
+      enabled: true,
+      created_at: "2024-01-01T00:00:00.000Z",
+      models: [
+        { id: "guid-gpt4o", name: "gpt-4o" },
+      ],
+    },
+  ];
+
+  test("modelGuidToDisplay returns ProviderName:modelName", () => {
+    expect(modelGuidToDisplay("guid-claude-3-5", accounts)).toBe("Anthropic:claude-3-5-sonnet");
+    expect(modelGuidToDisplay("guid-gpt4o", accounts)).toBe("OpenAI:gpt-4o");
+  });
+
+  test("modelGuidToDisplay falls back to raw GUID if not found", () => {
+    expect(modelGuidToDisplay("unknown-guid", accounts)).toBe("unknown-guid");
+  });
+
+  test("displayToModelGuid resolves display string to GUID", () => {
+    expect(displayToModelGuid("Anthropic:claude-3-5-sonnet", accounts)).toBe("guid-claude-3-5");
+    expect(displayToModelGuid("OpenAI:gpt-4o", accounts)).toBe("guid-gpt4o");
+  });
+
+  test("displayToModelGuid returns undefined for unknown provider", () => {
+    expect(displayToModelGuid("Unknown:gpt-4o", accounts)).toBeUndefined();
+  });
+
+  test("displayToModelGuid returns undefined for unknown model", () => {
+    expect(displayToModelGuid("Anthropic:nonexistent-model", accounts)).toBeUndefined();
+  });
+
+  test("displayToModelGuid returns undefined if no colon", () => {
+    expect(displayToModelGuid("rawmodelname", accounts)).toBeUndefined();
+  });
+});
+
+// =============================================================================
+// PERSONA MODEL GUID <-> DISPLAY TESTS
+// =============================================================================
+
+describe("personaToYAML / personaFromYAML - model GUID display conversion", () => {
+  const timestamp = "2024-01-01T00:00:00.000Z";
+
+  const accounts: ProviderAccount[] = [
+    {
+      id: "acc-1",
+      name: "Anthropic",
+      type: ProviderType.LLM,
+      url: "https://api.anthropic.com",
+      enabled: true,
+      created_at: timestamp,
+      models: [
+        { id: "guid-claude-3-5", name: "claude-3-5-sonnet" },
+      ],
+    },
+  ];
+
+  const basePersona: PersonaEntity = {
+    id: "persona-1",
+    display_name: "Assistant",
+    entity: "system",
+    traits: [],
+    topics: [],
+    is_paused: false,
+    is_archived: false,
+    is_static: false,
+    last_updated: timestamp,
+    last_activity: timestamp,
+    last_heartbeat: timestamp,
+    heartbeat_delay_ms: 300000,
+    model: "guid-claude-3-5",
+  };
+
+  test("personaToYAML converts model GUID to display string when accounts provided", () => {
+    const yaml = personaToYAML(basePersona, undefined, undefined, undefined, accounts);
+    expect(yaml).toContain("model: Anthropic:claude-3-5-sonnet");
+    expect(yaml).not.toContain("guid-claude-3-5");
+  });
+
+  test("personaToYAML keeps raw model value when no accounts provided", () => {
+    const yaml = personaToYAML(basePersona);
+    expect(yaml).toContain("model: guid-claude-3-5");
+  });
+
+  test("personaFromYAML resolves display string to GUID when accounts provided", () => {
+    const yaml = personaToYAML(basePersona, undefined, undefined, undefined, accounts);
+    const result = personaFromYAML(yaml, basePersona, undefined, undefined, accounts);
+    expect(result.updates.model).toBe("guid-claude-3-5");
+  });
+
+  test("personaFromYAML round-trip preserves model GUID", () => {
+    const yaml = personaToYAML(basePersona, undefined, undefined, undefined, accounts);
+    const result = personaFromYAML(yaml, basePersona, undefined, undefined, accounts);
+    expect(result.updates.model).toBe(basePersona.model);
+  });
+
+  test("personaFromYAML throws for invalid Provider:model format", () => {
+    const yaml = `
+display_name: Assistant
+model: "NonExistentProvider:some-model"
+traits: []
+topics: []
+`;
+    expect(() => personaFromYAML(yaml, basePersona, undefined, undefined, accounts)).toThrow();
+  });
+
+  test("personaFromYAML keeps raw value when model has no colon (backward compat)", () => {
+    const yaml = `
+display_name: Assistant
+model: some-raw-model-string
+traits: []
+topics: []
+`;
+    const result = personaFromYAML(yaml, basePersona, undefined, undefined, accounts);
+    expect(result.updates.model).toBe("some-raw-model-string");
+  });
+
+  test("personaFromYAML keeps model as-is when no accounts provided", () => {
+    const yaml = `
+display_name: Assistant
+model: "Anthropic:claude-3-5-sonnet"
+traits: []
+topics: []
+`;
+    // Without accounts, colon-containing strings pass through unchanged
+    const result = personaFromYAML(yaml, basePersona);
+    expect(result.updates.model).toBe("Anthropic:claude-3-5-sonnet");
+  });
+});
+
+// =============================================================================
+// CONTEXT SERIALIZATION TESTS
+// =============================================================================
+
+describe("contextToYAML / contextFromYAML", () => {
+  const messages: Message[] = [
+    {
+      id: "msg-1",
+      role: "human",
+      timestamp: "2024-01-01T00:00:00.000Z",
+      context_status: ContextStatus.Default,
+      verbal_response: "Hello",
+    } as Message,
+    {
+      id: "msg-2",
+      role: "system",
+      timestamp: "2024-01-01T00:00:01.000Z",
+      context_status: ContextStatus.Always,
+      verbal_response: "Hi there",
+    } as Message,
+  ];
+
+  test("contextToYAML includes all messages", () => {
+    const yaml = contextToYAML(messages);
+    expect(yaml).toContain("msg-1");
+    expect(yaml).toContain("msg-2");
+    expect(yaml).toContain("_delete: false");
+  });
+
+  test("contextFromYAML returns all messages with _delete: false", () => {
+    const yaml = contextToYAML(messages);
+    const result = contextFromYAML(yaml);
+    expect(result.messages).toHaveLength(2);
+    expect(result.deletedMessageIds).toEqual([]);
+  });
+
+  test("contextFromYAML detects _delete: true", () => {
+    const yaml = contextToYAML(messages);
+    const modified = yaml.replace(
+      /- id: msg-1[\s\S]*?_delete: false/,
+      (match) => match.replace("_delete: false", "_delete: true")
+    );
+    const result = contextFromYAML(modified);
+    expect(result.deletedMessageIds).toContain("msg-1");
+    expect(result.messages.find(m => m.id === "msg-1")).toBeUndefined();
   });
 });

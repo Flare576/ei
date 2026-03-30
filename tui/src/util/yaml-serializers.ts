@@ -254,7 +254,7 @@ export function newPersonaFromYAML(yamlContent: string, allTools?: ToolDefinitio
   };
 }
 
-export function personaToYAML(persona: PersonaEntity, allGroups?: string[], allTools?: ToolDefinition[], allProviders?: import('../../../src/core/types.js').ToolProvider[]): string {
+export function personaToYAML(persona: PersonaEntity, allGroups?: string[], allTools?: ToolDefinition[], allProviders?: import('../../../src/core/types.js').ToolProvider[], accounts?: ProviderAccount[]): string {
   const useTraitPlaceholder = persona.traits.length === 0;
   const useTopicPlaceholder = persona.topics.length === 0;
   
@@ -265,15 +265,18 @@ export function personaToYAML(persona: PersonaEntity, allGroups?: string[], allT
     groupsForYAML.push({ [groupName]: visibleSet.has(groupName) });
   }
 
-  // Build tools map: all known tools, true if persona has it enabled
   const toolsMap = buildPersonaToolsMap(persona.tools ?? [], allTools ?? [], allProviders ?? []);
+
+  const modelDisplay = (persona.model && accounts && accounts.length > 0)
+    ? modelGuidToDisplay(persona.model, accounts)
+    : persona.model;
   
   const data: EditablePersonaData = {
     display_name: persona.display_name,
     aliases: persona.aliases,
     short_description: persona.short_description,
     long_description: persona.long_description || PLACEHOLDER_LONG_DESC,
-    model: persona.model,
+    model: modelDisplay,
     group_primary: persona.group_primary,
     groups_visible: groupsForYAML,
     traits: useTraitPlaceholder 
@@ -304,7 +307,7 @@ export interface PersonaYAMLResult {
   deletedTopicIds: string[];
 }
 
-export function personaFromYAML(yamlContent: string, original: PersonaEntity, allTools?: ToolDefinition[], allProviders?: import('../../../src/core/types.js').ToolProvider[]): PersonaYAMLResult {
+export function personaFromYAML(yamlContent: string, original: PersonaEntity, allTools?: ToolDefinition[], allProviders?: import('../../../src/core/types.js').ToolProvider[], accounts?: ProviderAccount[]): PersonaYAMLResult {
   const data = YAML.parse(yamlContent) as EditablePersonaData;
   
   const deletedTraitIds: string[] = [];
@@ -377,13 +380,23 @@ export function personaFromYAML(yamlContent: string, original: PersonaEntity, al
       }
     }
   }
+
+  let resolvedModel: string | undefined = data.model;
+  if (data.model && accounts && accounts.length > 0) {
+    const guid = displayToModelGuid(data.model, accounts);
+    if (guid !== undefined) {
+      resolvedModel = guid;
+    } else if (data.model.includes(':')) {
+      throw new Error(`Model "${data.model}" not found. Use "ProviderName:modelName" format with a valid provider and model.`);
+    }
+  }
   
   const updates: Partial<PersonaEntity> = {
     display_name: data.display_name,
     aliases: data.aliases,
     short_description: data.short_description,
     long_description: stripPlaceholder(data.long_description, PLACEHOLDER_LONG_DESC),
-    model: data.model,
+    model: resolvedModel,
     group_primary: data.group_primary,
     groups_visible: groupsVisible,
     traits,
@@ -770,6 +783,13 @@ export function quotesFromYAML(yamlContent: string): QuotesYAMLResult {
 // PROVIDER ACCOUNT SERIALIZATION
 // =============================================================================
 
+interface EditableModelData {
+  name: string;
+  context_window?: number;
+  max_output_tokens?: number;
+  _delete?: boolean;
+}
+
 interface EditableProviderData {
   name: string;
   type: "llm" | "storage";
@@ -779,56 +799,80 @@ interface EditableProviderData {
   token_limit?: number | null;
   extra_headers?: Record<string, string>;
   enabled?: boolean;
+  models?: EditableModelData[];
+  _delete?: boolean;
 }
 
+export interface ProviderYAMLResult {
+  account: ProviderAccount;
+  _delete: boolean;
+}
 
 function resolveEnvVar(value: string | undefined): string | undefined {
   if (!value || !value.startsWith("$")) return value;
   const varName = value.slice(1);
   return process.env[varName] || value;
 }
-const PLACEHOLDER_PROVIDER: EditableProviderData = {
-  name: "My Provider",
-  type: "llm",
-  url: "https://api.example.com/v1",
-  api_key: "your-api-key-or-$ENVAR",
-  default_model: "model-name",
-  token_limit: null,
-  extra_headers: {},
-  enabled: true,
-};
+
+const PLACEHOLDER_PROVIDER_NAME = "My Provider";
+const PLACEHOLDER_PROVIDER_URL = "https://api.example.com/v1";
+const PLACEHOLDER_PROVIDER_API_KEY = "your-api-key-or-$ENVAR";
+const PLACEHOLDER_PROVIDER_DEFAULT_MODEL = "model-name";
 
 /**
  * Generate YAML template for a NEW provider account
  */
 export function newProviderToYAML(): string {
-  return YAML.stringify(PLACEHOLDER_PROVIDER, {
-    lineWidth: 0,
-  });
+  const placeholderData = {
+    name: PLACEHOLDER_PROVIDER_NAME,
+    type: "llm",
+    url: PLACEHOLDER_PROVIDER_URL,
+    api_key: PLACEHOLDER_PROVIDER_API_KEY,
+    default_model: PLACEHOLDER_PROVIDER_DEFAULT_MODEL,
+    token_limit: null,
+    extra_headers: {},
+    enabled: true,
+  };
+
+  const modelsYAML = [
+    "models:",
+    "  - name: (default)",
+    "    # _delete: true",
+    "# _delete: true   # Delete this entire provider",
+  ].join("\n");
+
+  return YAML.stringify(placeholderData, { lineWidth: 0 }).trimEnd() + "\n" + modelsYAML + "\n";
 }
 
 /**
  * Parse YAML for a NEW provider account
  */
 export function newProviderFromYAML(yamlContent: string): ProviderAccount {
-  const data = YAML.parse(yamlContent) as EditableProviderData;
+  const cleaned = yamlContent
+    .split('\n')
+    .filter(line => !/^\s*#/.test(line))
+    .join('\n');
+  const data = YAML.parse(cleaned) as EditableProviderData;
   
-  if (!data.name || data.name === PLACEHOLDER_PROVIDER.name) {
+  if (!data.name || data.name === PLACEHOLDER_PROVIDER_NAME) {
     throw new Error("Provider name is required");
   }
-  if (!data.url || data.url === PLACEHOLDER_PROVIDER.url) {
+  if (!data.url || data.url === PLACEHOLDER_PROVIDER_URL) {
     throw new Error("Provider URL is required");
   }
-  if (data.api_key === PLACEHOLDER_PROVIDER.api_key) {
+  if (data.api_key === PLACEHOLDER_PROVIDER_API_KEY) {
     data.api_key = undefined;
   }
-  if (data.default_model === PLACEHOLDER_PROVIDER.default_model) {
+  if (data.default_model === PLACEHOLDER_PROVIDER_DEFAULT_MODEL) {
     data.default_model = undefined;
   }
   
   if (data.token_limit !== undefined && data.token_limit !== null && (typeof data.token_limit !== "number" || isNaN(data.token_limit))) {
     throw new Error(`token_limit must be a number (got: ${JSON.stringify(data.token_limit)}). Note: underscore separators (100_000) are not valid in YAML.`);
   }
+
+  // Parse models: filter out _delete:true items
+  const models = parseModels(data.models ?? []);
 
   return {
     id: crypto.randomUUID(),
@@ -840,15 +884,36 @@ export function newProviderFromYAML(yamlContent: string): ProviderAccount {
     token_limit: data.token_limit ?? undefined,
     extra_headers: data.extra_headers && Object.keys(data.extra_headers).length > 0 ? data.extra_headers : undefined,
     enabled: data.enabled ?? true,
+    models: models.length > 0 ? models : undefined,
     created_at: new Date().toISOString(),
   };
 }
 
 /**
- * Serialize existing provider account to YAML for editing
+ * Parse EditableModelData[] into ModelConfig[], generating new GUIDs for models without one.
+ * Filters out models with _delete: true.
+ */
+function parseModels(editableModels: EditableModelData[]): import('../../../src/core/types.js').ModelConfig[] {
+  const result: import('../../../src/core/types.js').ModelConfig[] = [];
+  for (const m of editableModels) {
+    if (m._delete) continue;
+    result.push({
+      id: crypto.randomUUID(),
+      name: m.name,
+      context_window: m.context_window,
+      max_output_tokens: m.max_output_tokens,
+    });
+  }
+  return result;
+}
+
+/**
+ * Serialize existing provider account to YAML for editing.
+ * Shows models[] as a nested section with _delete comments.
+ * Hides internal fields: id, total_calls, total_tokens_in, total_tokens_out, last_used.
  */
 export function providerToYAML(account: ProviderAccount): string {
-  const data: EditableProviderData = {
+  const topData = {
     name: account.name,
     type: account.type as "llm" | "storage",
     url: account.url,
@@ -858,17 +923,45 @@ export function providerToYAML(account: ProviderAccount): string {
     extra_headers: account.extra_headers,
     enabled: account.enabled ?? true,
   };
-  
-  return YAML.stringify(data, {
-    lineWidth: 0,
-  });
+
+  const topYAML = YAML.stringify(topData, { lineWidth: 0 }).trimEnd();
+
+  const modelLines: string[] = ["models:"];
+  const modelList = account.models ?? [];
+  if (modelList.length > 0) {
+    for (const m of modelList) {
+      modelLines.push(`  - name: ${m.name}`);
+      if (m.context_window !== undefined) {
+        modelLines.push(`    context_window: ${m.context_window}`);
+      }
+      if (m.max_output_tokens !== undefined) {
+        modelLines.push(`    max_output_tokens: ${m.max_output_tokens}`);
+      }
+      modelLines.push(`    # _delete: true`);
+    }
+  } else {
+    // Always show at least a default model placeholder
+    modelLines.push("  - name: (default)");
+    modelLines.push("    # _delete: true");
+  }
+  modelLines.push("# _delete: true   # Delete this entire provider");
+
+  return topYAML + "\n" + modelLines.join("\n") + "\n";
 }
 
 /**
- * Parse YAML for an existing provider account (preserves id and created_at)
+ * Parse YAML for an existing provider account (preserves id and created_at).
+ * Returns { account, _delete } where _delete signals the entire provider should be removed.
+ * Model _delete flags cause individual models to be removed.
+ * Preserves model GUIDs on round-trip; generates new GUIDs for new models.
  */
-export function providerFromYAML(yamlContent: string, original: ProviderAccount): ProviderAccount {
-  const data = YAML.parse(yamlContent) as EditableProviderData;
+export function providerFromYAML(yamlContent: string, original: ProviderAccount): ProviderYAMLResult {
+  // Strip comment lines before parsing (they encode _delete hints)
+  const cleaned = yamlContent
+    .split('\n')
+    .filter(line => !/^\s*#/.test(line))
+    .join('\n');
+  const data = YAML.parse(cleaned) as EditableProviderData;
   
   if (!data.name) {
     throw new Error("Provider name is required");
@@ -881,7 +974,34 @@ export function providerFromYAML(yamlContent: string, original: ProviderAccount)
     throw new Error(`token_limit must be a number (got: ${JSON.stringify(data.token_limit)}). Note: underscore separators (100_000) are not valid in YAML.`);
   }
 
-  return {
+  // Root-level _delete → signal deletion of entire provider
+  if (data._delete) {
+    return {
+      account: original,
+      _delete: true,
+    };
+  }
+
+  // Parse models: preserve existing GUIDs by name match, generate new GUIDs for new models
+  const existingModels = original.models ?? [];
+  const parsedModels: import('../../../src/core/types.js').ModelConfig[] = [];
+  for (const m of data.models ?? []) {
+    if (m._delete) continue;
+    const existing = existingModels.find(em => em.name === m.name);
+    parsedModels.push({
+      id: existing?.id ?? crypto.randomUUID(),
+      name: m.name,
+      context_window: m.context_window,
+      max_output_tokens: m.max_output_tokens,
+      // Preserve usage counters from original if model matched
+      total_calls: existing?.total_calls,
+      total_tokens_in: existing?.total_tokens_in,
+      total_tokens_out: existing?.total_tokens_out,
+      last_used: existing?.last_used,
+    });
+  }
+
+  const account: ProviderAccount = {
     id: original.id,
     name: data.name,
     type: (data.type === "storage" ? "storage" : "llm") as ProviderType,
@@ -891,8 +1011,42 @@ export function providerFromYAML(yamlContent: string, original: ProviderAccount)
     token_limit: data.token_limit ?? undefined,
     extra_headers: data.extra_headers && Object.keys(data.extra_headers).length > 0 ? data.extra_headers : undefined,
     enabled: data.enabled ?? true,
+    models: parsedModels.length > 0 ? parsedModels : undefined,
     created_at: original.created_at,
   };
+
+  return { account, _delete: false };
+}
+
+// =============================================================================
+// GUID <-> DISPLAY NAME HELPERS
+// =============================================================================
+
+/**
+ * Convert a model GUID to "ProviderName:modelName" display string.
+ * Falls back to the raw GUID if the model is not found.
+ */
+export function modelGuidToDisplay(guid: string, accounts: ProviderAccount[]): string {
+  for (const account of accounts) {
+    const model = (account.models ?? []).find(m => m.id === guid);
+    if (model) return `${account.name}:${model.name}`;
+  }
+  return guid; // fallback: return raw GUID if not found
+}
+
+/**
+ * Resolve "ProviderName:modelName" display string back to a model GUID.
+ * Returns undefined if no matching provider+model is found.
+ * Handles colons in model names by treating everything after the first colon as the model name.
+ */
+export function displayToModelGuid(display: string, accounts: ProviderAccount[]): string | undefined {
+  const colonIdx = display.indexOf(':');
+  if (colonIdx < 0) return undefined;
+  const providerName = display.substring(0, colonIdx);
+  const modelName = display.substring(colonIdx + 1);
+  const account = accounts.find(a => a.name === providerName);
+  const model = (account?.models ?? []).find(m => m.name === modelName);
+  return model?.id;
 }
 
 // =============================================================================

@@ -15,6 +15,7 @@ export interface EditProviderEditorResult {
   success: boolean;
   account: ProviderAccount | null;
   cancelled: boolean;
+  deleted?: boolean;
 }
 
 export async function createProviderViaEditor(ctx: CommandContext): Promise<NewProviderEditorResult> {
@@ -45,12 +46,14 @@ export async function createProviderViaEditor(ctx: CommandContext): Promise<NewP
     try {
       const account = newProviderFromYAML(result.content);
       
-      // Save to settings
+      if ((account.models ?? []).length === 0) {
+        throw new Error("Provider must have at least one model. Add a model under the models: section.");
+      }
+      
       const human = await ctx.ei.getHuman();
       const accounts = [...(human.settings?.accounts ?? []), account];
       const updates: Partial<HumanSettings> = { accounts };
       
-      // If no system default_model, auto-set to this new provider
       if (!human.settings?.default_model) {
         updates.default_model = account.default_model
           ? `${account.name}:${account.default_model}`
@@ -118,9 +121,22 @@ export async function openProviderEditor(account: ProviderAccount, ctx: CommandC
     }
     
     try {
-      const updated = providerFromYAML(result.content, account);
+      const parseResult = providerFromYAML(result.content, account);
       
-      // Update in settings
+      if (parseResult._delete) {
+        const human = await ctx.ei.getHuman();
+        const accounts = (human.settings?.accounts ?? []).filter(a => a.id !== account.id);
+        await ctx.ei.updateSettings({ accounts });
+        ctx.showNotification(`Deleted provider "${account.name}"`, "info");
+        return { success: true, account: null, cancelled: false, deleted: true };
+      }
+
+      const updated = parseResult.account;
+
+      if ((updated.models ?? []).length === 0) {
+        throw new Error("Provider must have at least one model. Remove _delete: true from at least one model, or add a new model.");
+      }
+      
       const human = await ctx.ei.getHuman();
       const accounts = [...(human.settings?.accounts ?? [])];
       const idx = accounts.findIndex(a => a.id === account.id);
@@ -164,3 +180,4 @@ export async function openProviderEditor(account: ProviderAccount, ctx: CommandC
     }
   }
 }
+

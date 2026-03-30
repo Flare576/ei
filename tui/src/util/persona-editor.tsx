@@ -1,5 +1,5 @@
 import { spawnEditor } from "./editor.js";
-import { personaToYAML, personaFromYAML, newPersonaToYAML, newPersonaFromYAML, validateModelProvider } from "./yaml-serializers.js";
+import { personaToYAML, personaFromYAML, newPersonaToYAML, newPersonaFromYAML } from "./yaml-serializers.js";
 import type { CommandContext } from "../commands/registry.js";
 import type { PersonaEntity } from "../../../src/core/types.js";
 import { logger } from "./logger.js";
@@ -57,18 +57,22 @@ export async function createPersonaViaEditor(options: NewPersonaEditorOptions): 
     }
     
     try {
-      const parsed = newPersonaFromYAML(result.content, allTools, allProviders);
-      // Validate provider name in model (case-insensitive match + auto-correct)
       const human = await ctx.ei.getHuman();
       const llmAccounts = human.settings?.accounts?.filter(a => a.type === "llm") ?? [];
-      parsed.model = validateModelProvider(parsed.model, llmAccounts);
+      const parsed = newPersonaFromYAML(result.content, allTools, allProviders);
+      if (parsed.model && parsed.model.includes(':') && llmAccounts.length > 0) {
+        const { displayToModelGuid } = await import("./yaml-serializers.js");
+        const guid = displayToModelGuid(parsed.model, llmAccounts);
+        if (guid === undefined) {
+          throw new Error(`Model "${parsed.model}" not found. Use "ProviderName:modelName" format with a valid provider and model.`);
+        }
+        parsed.model = guid;
+      }
       
       const personaId = await ctx.ei.createPersona({ 
         name: personaName,
         ...parsed,
       });
-      // Ensure store has the new persona before selecting
-      // (onPersonaAdded fires refreshPersonas but doesn't await it)
       await ctx.ei.refreshPersonas();
       ctx.ei.selectPersona(personaId);
       
@@ -113,7 +117,9 @@ export async function openPersonaEditor(options: PersonaEditorOptions): Promise<
   const allGroups = await ctx.ei.getGroupList();
   const allTools = ctx.ei.getToolList();
   const allProviders = ctx.ei.getToolProviderList();
-  let yamlContent = personaToYAML(persona, allGroups, allTools, allProviders);
+  const human = await ctx.ei.getHuman();
+  const llmAccounts = human.settings?.accounts?.filter(a => a.type === "llm") ?? [];
+  let yamlContent = personaToYAML(persona, allGroups, allTools, allProviders, llmAccounts);
   
   while (true) {
     const result = await spawnEditor({
@@ -138,11 +144,7 @@ export async function openPersonaEditor(options: PersonaEditorOptions): Promise<
     }
     
     try {
-      const parsed = personaFromYAML(result.content, persona, allTools, allProviders);
-      // Validate provider name in model (case-insensitive match + auto-correct)
-      const human = await ctx.ei.getHuman();
-      const llmAccounts = human.settings?.accounts?.filter(a => a.type === "llm") ?? [];
-      parsed.updates.model = validateModelProvider(parsed.updates.model, llmAccounts);
+      const parsed = personaFromYAML(result.content, persona, allTools, allProviders, llmAccounts);
       
       await ctx.ei.updatePersona(personaId, parsed.updates);
       
@@ -181,3 +183,4 @@ export async function openPersonaEditor(options: PersonaEditorOptions): Promise<
     }
   }
 }
+
