@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { ProviderList, ProviderEditor } from '../Settings';
+import { ModelPicker } from './ModelPicker';
 import { ToolkitList } from './ToolkitList';
 import { ToolkitEditor } from './ToolkitEditor';
 import type { ProviderAccount, SyncCredentials, ToolProvider, ToolDefinition } from '../../../../src/core/types';
@@ -304,44 +305,36 @@ export const SettingsModal = ({
             <section className="ei-settings-section">
               <h3 className="ei-settings-section__title">Default Models</h3>
               
-              <div className="ei-form-group">
-                <label htmlFor="default-model" className="ei-form-label">Default Model</label>
-                <input
-                  id="default-model"
-                  type="text"
-                  className="ei-input"
-                  value={settings.default_model || ""}
-                  onChange={(e) => handleChange("default_model", e.target.value)}
-                  placeholder="e.g., openai:gpt-4o or local:qwen3-30b"
-                />
-                <small className="ei-form-hint">Format: provider:model (e.g., openai:gpt-4o, local:google/gemma-3-12b)</small>
-              </div>
+              <ModelPicker
+                id="default-model"
+                label="Default Model"
+                value={settings.default_model}
+                onChange={(modelId) => onUpdate({ default_model: modelId })}
+                accounts={localAccounts}
+                hint="Used for all background processing and new personas."
+              />
 
-              <div className="ei-form-group">
-                <label htmlFor="oneshot-model" className="ei-form-label">🪄 Wand Model <span className="ei-form-optional">(optional)</span></label>
-                <input
-                  id="oneshot-model"
-                  type="text"
-                  className="ei-input"
-                  value={settings.oneshot_model || ""}
-                  onChange={(e) => handleChange("oneshot_model", e.target.value)}
-                  placeholder="Falls back to Default Model if not set"
-                />
-                <small className="ei-form-hint">Model used for AI-assist (✨) buttons. Use a smarter/larger model here if you want better suggestions.</small>
-              </div>
+              <ModelPicker
+                id="oneshot-model"
+                label="🪄 Wand Model"
+                value={settings.oneshot_model}
+                onChange={(modelId) => onUpdate({ oneshot_model: modelId })}
+                accounts={localAccounts}
+                allowEmpty
+                optionalLabel
+                hint="Model used for AI-assist (✨) buttons. Falls back to Default Model if not set."
+              />
 
-              <div className="ei-form-group">
-                <label htmlFor="rewrite-model" className="ei-form-label">🔄 Rewrite Model <span className="ei-form-optional">(optional)</span></label>
-                <input
-                  id="rewrite-model"
-                  type="text"
-                  className="ei-input"
-                  value={settings.rewrite_model || ""}
-                  onChange={(e) => handleChange("rewrite_model", e.target.value)}
-                  placeholder="Unset = rewrite disabled"
-                />
-                <small className="ei-form-hint">Model for the nightly Rewrite ceremony. Reorganizes bloated knowledge base items. Use a capable model (Sonnet/Opus class).</small>
-              </div>
+              <ModelPicker
+                id="rewrite-model"
+                label="🔄 Rewrite Model"
+                value={settings.rewrite_model}
+                onChange={(modelId) => onUpdate({ rewrite_model: modelId })}
+                accounts={localAccounts}
+                allowEmpty
+                optionalLabel
+                hint="Model for the nightly Rewrite ceremony. Use a capable model (Sonnet/Opus class). Unset = rewrite disabled."
+              />
             </section>
 
             <section className="ei-settings-section">

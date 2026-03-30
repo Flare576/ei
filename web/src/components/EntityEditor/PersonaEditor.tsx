@@ -6,7 +6,7 @@ import { PersonaTopicsTab } from './tabs/PersonaTopicsTab';
 import { ContextWindowTab } from './tabs/ContextWindowTab';
 import { PersonaToolsTab } from './tabs/PersonaToolsTab';
 import { ContextStatus } from '../../../../src/core/types';
-import type { Message, ToolProvider, ToolDefinition } from '../../../../src/core/types';
+import type { Message, ToolProvider, ToolDefinition, ProviderAccount } from '../../../../src/core/types';
 
 interface Trait {
   id: string;
@@ -87,6 +87,7 @@ interface PersonaEditorProps {
   onAiAssist?: (systemPrompt: string, userPrompt: string) => Promise<string>;
   toolProviders?: ToolProvider[];
   toolDefinitions?: ToolDefinition[];
+  accounts?: ProviderAccount[];
 }
 
 const tabs = [
@@ -116,6 +117,7 @@ export function PersonaEditor({
   onAiAssist,
   toolProviders = [],
   toolDefinitions = [],
+  accounts = [],
 }: PersonaEditorProps) {
   const [activeTab, setActiveTab] = useState('settings');
   const [localPersona, setLocalPersona] = useState<PersonaEntity>(persona);
@@ -274,6 +276,7 @@ export function PersonaEditor({
           persona={localPersona as PersonaEntityForSettings}
           onChange={handlePersonaFieldChange}
           availableGroups={availableGroups}
+          accounts={accounts}
         />
       )}
 

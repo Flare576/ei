@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import { ModelPicker } from "../../Settings/ModelPicker";
+import type { ProviderAccount } from "../../../../../src/core/types";
 
 interface PersonaEntity {
   entity: "system";
@@ -34,12 +36,14 @@ interface PersonaSettingsTabProps {
   persona: PersonaEntity;
   onChange: (field: keyof PersonaEntity, value: PersonaEntity[keyof PersonaEntity]) => void;
   availableGroups?: string[];
+  accounts?: ProviderAccount[];
 }
 
 export const PersonaSettingsTab: React.FC<PersonaSettingsTabProps> = ({
   persona,
   onChange,
   availableGroups = [],
+  accounts = [],
 }) => {
   const [newVisibleGroup, setNewVisibleGroup] = useState("");
   
@@ -207,22 +211,16 @@ export const PersonaSettingsTab: React.FC<PersonaSettingsTabProps> = ({
       <section className="ei-settings-section">
         <h3 className="ei-settings-section__title">Model &amp; Groups</h3>
 
-        <div className="ei-form-group">
-          <label htmlFor="model-override" className="ei-form-label">
-            LLM Model Override
-          </label>
-          <input
-            id="model-override"
-            type="text"
-            className="ei-input"
-            value={persona.model || ""}
-            onChange={(e) => onChange("model", e.target.value || undefined)}
-            placeholder="e.g., openai:gpt-4o or local:qwen3-30b"
-          />
-          <small className="ei-form-hint">
-            Format: provider:model (leave empty to use system default)
-          </small>
-        </div>
+        <ModelPicker
+          id="model-override"
+          label="LLM Model Override"
+          value={persona.model}
+          onChange={(modelId) => onChange("model", modelId)}
+          accounts={accounts}
+          allowEmpty
+          optionalLabel
+          hint="Leave empty to use the system default model."
+        />
 
         {isEiPersona(persona) ? (
           <>
