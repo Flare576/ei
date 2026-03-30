@@ -38,6 +38,23 @@ export interface BackupConfig {
 }
 
 /**
+ * ModelConfig - Configuration and usage tracking for a specific LLM model
+ * 
+ * Models are first-class entities tied to a ProviderAccount. Each model has
+ * its own capability configuration and usage statistics.
+ */
+export interface ModelConfig {
+  id: string;                       // GUID (crypto.randomUUID())
+  name: string;                     // Model identifier, e.g. "claude-haiku-4-5", "(default)"
+  context_window?: number;          // Input token limit (user sets effective limit)
+  max_output_tokens?: number;       // Output token limit (API-enforced)
+  total_calls?: number;             // Usage counter
+  total_tokens_in?: number;         // Usage counter
+  total_tokens_out?: number;        // Usage counter
+  last_used?: string;               // ISO timestamp
+}
+
+/**
  * ProviderAccount - Configuration for external service connections
  * 
  * Used for both LLM providers (OpenRouter, Bedrock, etc.) and storage providers
@@ -60,6 +77,7 @@ export interface ProviderAccount {
   // LLM-specific
   default_model?: string;          // Default model for this account
   token_limit?: number;            // Context window override (tokens). Used for extraction chunking.
+  models?: ModelConfig[];          // First-class model registry for this account
   
   // Provider-specific extras (e.g., OpenRouter needs HTTP-Referer, X-Title)
   extra_headers?: Record<string, string>;
@@ -73,9 +91,9 @@ export interface ProviderAccount {
 }
 
 export interface HumanSettings {
-  default_model?: string;
-  oneshot_model?: string;           // Model for AI-assist (wand) requests; falls back to default_model
-  rewrite_model?: string;           // Model for rewrite ceremony step; must be capable (Sonnet/Opus class). Unset = rewrite disabled.
+  default_model?: string;           // Will store ModelConfig.id GUID post-migration
+  oneshot_model?: string;           // Model for AI-assist (wand) requests; falls back to default_model. Will store ModelConfig.id GUID post-migration.
+  rewrite_model?: string;           // Model for rewrite ceremony step; must be capable (Sonnet/Opus class). Unset = rewrite disabled. Will store ModelConfig.id GUID post-migration.
   queue_paused?: boolean;
   skip_quote_delete_confirm?: boolean;
   name_display?: string;
