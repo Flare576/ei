@@ -9,7 +9,7 @@ export interface ProviderConfig {
 
 export interface ResolvedModel {
   provider: string;
-  model: string;
+  model: string | undefined;
   config: ProviderConfig;
   extraHeaders?: Record<string, string>;
 }
@@ -43,27 +43,90 @@ let llmCallCount = 0;
 
 
 
+function isGuid(str: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+}
+
+function buildResolvedModel(account: ProviderAccount, model: ModelConfig): ResolvedModel {
+  return {
+    provider: account.name,
+    model: model.name === "(default)" ? undefined : model.name,
+    config: {
+      name: account.name,
+      baseURL: account.url,
+      apiKey: account.api_key || "",
+    },
+    extraHeaders: account.extra_headers,
+  };
+}
+
+export function resolveModelById(
+  modelId: string,
+  accounts: ProviderAccount[]
+): { account: ProviderAccount; model: ModelConfig } | undefined {
+  for (const account of accounts) {
+    if (!account.enabled || account.type !== "llm") continue;
+    const model = account.models?.find((m) => m.id === modelId);
+    if (model) return { account, model };
+  }
+  return undefined;
+}
+
+export function getDisplayName(account: ProviderAccount, model: ModelConfig): string {
+  return `${account.name}:${model.name}`;
+}
+
 export function resolveModel(modelSpec?: string, accounts?: ProviderAccount[]): ResolvedModel {
   if (!modelSpec) {
     throw new Error("No model specified. Set a provider on this persona with /provider, or set a default_model in settings.");
   }
+
+  if (accounts && isGuid(modelSpec)) {
+    const result = resolveModelById(modelSpec, accounts);
+    if (result) {
+      return buildResolvedModel(result.account, result.model);
+    }
+
+    const fallbackAccount = accounts.find((acc) => acc.enabled && acc.type === "llm" && acc.default_model);
+    if (fallbackAccount?.default_model) {
+      const fallbackResult = resolveModelById(fallbackAccount.default_model, accounts);
+      if (fallbackResult) {
+        return buildResolvedModel(fallbackResult.account, fallbackResult.model);
+      }
+    }
+
+    throw new Error(
+      `Model "${modelSpec}" not found. It may have been deleted. Update this persona's model in settings.`
+    );
+  }
+
   let provider = "";
   let model = modelSpec;
-  
+
   if (modelSpec.includes(":")) {
     const [p, ...rest] = modelSpec.split(":");
     provider = p;
     model = rest.join(":");
   }
-  // Try to find matching account by name (case-insensitive)
-  // Check both "provider:model" format AND bare account names
+
   if (accounts) {
-    const searchName = provider || modelSpec; // If no ":", the whole spec might be an account name
+    const searchName = provider || modelSpec;
     const matchingAccount = accounts.find(
       (acc) => acc.name.toLowerCase() === searchName.toLowerCase() && acc.enabled && acc.type === "llm"
     );
     if (matchingAccount) {
-      // If bare account name was used, get model from account's default_model
+      const matchingModel = matchingAccount.models?.find((m) => m.name === model);
+      if (matchingModel) {
+        return buildResolvedModel(matchingAccount, matchingModel);
+      }
+
+      if (!provider && matchingAccount.default_model && matchingAccount.models) {
+        const defaultModel = matchingAccount.models.find((m) => m.id === matchingAccount.default_model);
+        if (defaultModel) {
+          return buildResolvedModel(matchingAccount, defaultModel);
+        }
+      }
+
       const resolvedModel = provider ? model : (matchingAccount.default_model || model);
       return {
         provider: matchingAccount.name,
@@ -77,7 +140,7 @@ export function resolveModel(modelSpec?: string, accounts?: ProviderAccount[]): 
       };
     }
   }
-  
+
   throw new Error(
     `No provider "${provider || modelSpec}" found. Create one with /provider new, or check that it's enabled.`
   );
