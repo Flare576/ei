@@ -256,7 +256,6 @@ export async function importOpenCodeSessions(
         const openCodeSettings = stateManager.getHuman().settings?.opencode;
         queueAllScans(context, stateManager, {
           extraction_model: openCodeSettings?.extraction_model,
-          extraction_token_limit: openCodeSettings?.extraction_token_limit,
           external_filter: "only",
         });
         result.extractionScansQueued += 4;

@@ -66,8 +66,6 @@ export interface ExtractionOptions {
   ceremony_progress?: number;
   /** Override model for extraction LLM calls */
   extraction_model?: string;
-  /** Override token budget for chunking */
-  extraction_token_limit?: number;
   /**
    * Controls whether external (integration-imported) messages are included.
    * - "exclude": skip messages where external === true
@@ -88,9 +86,6 @@ const EXTRACTION_BUDGET_RATIO = 0.75;
 const MIN_EXTRACTION_TOKENS = 10000;
 
 function getExtractionMaxTokens(state: StateManager, options?: ExtractionOptions): number {
-  if (options?.extraction_token_limit) {
-    return Math.max(MIN_EXTRACTION_TOKENS, Math.floor(options.extraction_token_limit * EXTRACTION_BUDGET_RATIO));
-  }
   const human = state.getHuman();
   const modelForTokenLimit = options?.extraction_model ?? human.settings?.default_model;
   const tokenLimit = resolveTokenLimit(modelForTokenLimit, human.settings?.accounts);
