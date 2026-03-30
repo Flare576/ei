@@ -19,6 +19,8 @@ export interface LLMCallOptions {
   temperature?: number;
   /** OpenAI-compatible tools array. When present and non-empty, sent with tool_choice: "auto". */
   tools?: Record<string, unknown>[];
+  /** Fire-and-forget callback invoked after a successful response to increment usage counters. */
+  onUsageUpdate?: (modelId: string, usage: { calls: number; tokens_in: number; tokens_out: number }) => void;
 }
 
 export interface LLMRawResponse {
@@ -215,13 +217,16 @@ export async function callLLMRaw(
 ): Promise<LLMRawResponse> {
   llmCallCount++;
   
-  const { signal, temperature = 0.7 } = options;
+  const { signal, temperature = 0.7, onUsageUpdate } = options;
   
   if (signal?.aborted) {
     throw new Error("LLM call aborted");
   }
   
   const { model, config, extraHeaders } = resolveModel(modelSpec, accounts);
+  const { model: modelConfig } = (accounts && modelSpec)
+    ? findModelAndAccount(modelSpec, accounts)
+    : { model: undefined };
   
   const chatMessages: ChatMessage[] = [
     { role: "system", content: systemPrompt },
@@ -253,10 +258,10 @@ export async function callLLMRaw(
   }
   
   const requestBody: Record<string, unknown> = {
-    model,
+    ...(model !== undefined && { model }),
     messages: finalMessages,
     temperature,
-    max_tokens: 64000,  // Opus 4: 128K max output, 200K total context. Local models clamp to their config. Prevents runaway generation.
+    max_tokens: modelConfig?.max_output_tokens ?? 64000,
   };
 
   if (options.tools && options.tools.length > 0) {
@@ -277,6 +282,13 @@ export async function callLLMRaw(
   }
   
   const data = await response.json();
+
+  if (onUsageUpdate && modelConfig) {
+    const tokensIn = data.usage?.prompt_tokens ?? data.usage?.input_tokens ?? 0;
+    const tokensOut = data.usage?.completion_tokens ?? data.usage?.output_tokens ?? 0;
+    onUsageUpdate(modelConfig.id, { calls: 1, tokens_in: tokensIn, tokens_out: tokensOut });
+  }
+
   const choice = data.choices?.[0];
   
   const assistantMessage = choice?.message as Record<string, unknown> | undefined;
