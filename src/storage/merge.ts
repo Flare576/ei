@@ -1,4 +1,4 @@
-import type { StorageState, DataItem, Quote, ToolProvider, ToolDefinition, ProviderAccount } from "../core/types.js";
+import type { StorageState, DataItem, Quote, ToolProvider, ToolDefinition, ProviderAccount, ModelConfig } from "../core/types.js";
 
 function mergeByName<T extends { name: string }>(
   local: T[],
@@ -13,6 +13,51 @@ function mergeByName<T extends { name: string }>(
       merged.push(remoteItem);
     } else if (preferRemote) {
       merged[localIndex] = remoteItem;
+    }
+  }
+
+  return merged;
+}
+
+function mergeModels(local: ModelConfig[], remote: ModelConfig[], preferRemote: boolean): ModelConfig[] {
+  const merged = [...local];
+
+  for (const remoteModel of remote) {
+    const localIndex = merged.findIndex(m => m.id === remoteModel.id);
+
+    if (localIndex === -1) {
+      merged.push(remoteModel);
+    } else {
+      const localModel = merged[localIndex];
+      const localCalls = localModel.total_calls ?? 0;
+      const remoteCalls = remoteModel.total_calls ?? 0;
+
+      const total_calls = Math.max(localCalls, remoteCalls);
+      const total_tokens_in = Math.max(localModel.total_tokens_in ?? 0, remoteModel.total_tokens_in ?? 0);
+      const total_tokens_out = Math.max(localModel.total_tokens_out ?? 0, remoteModel.total_tokens_out ?? 0);
+      const last_used = localCalls >= remoteCalls ? localModel.last_used : remoteModel.last_used;
+
+      const base = preferRemote ? { ...localModel, ...remoteModel } : localModel;
+      merged[localIndex] = { ...base, total_calls, total_tokens_in, total_tokens_out, last_used };
+    }
+  }
+
+  return merged;
+}
+
+function mergeById(local: ProviderAccount[], remote: ProviderAccount[], preferRemote: boolean): ProviderAccount[] {
+  const merged = [...local];
+
+  for (const remoteProvider of remote) {
+    const localIndex = merged.findIndex(p => p.id === remoteProvider.id);
+
+    if (localIndex === -1) {
+      merged.push(remoteProvider);
+    } else {
+      const localProvider = merged[localIndex];
+      const mergedModels = mergeModels(localProvider.models ?? [], remoteProvider.models ?? [], preferRemote);
+      const base = preferRemote ? { ...localProvider, ...remoteProvider } : localProvider;
+      merged[localIndex] = { ...base, models: mergedModels };
     }
   }
 
@@ -88,7 +133,7 @@ export function yoloMerge(local: StorageState, remote: StorageState): StorageSta
   const preferRemote = remote.timestamp > local.timestamp;
 
   if (remote.human.settings?.accounts && merged.human.settings) {
-    merged.human.settings.accounts = mergeByName<ProviderAccount>(
+    merged.human.settings.accounts = mergeById(
       merged.human.settings?.accounts || [],
       remote.human.settings.accounts,
       preferRemote,
