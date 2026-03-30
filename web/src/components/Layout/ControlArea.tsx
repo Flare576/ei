@@ -10,6 +10,7 @@ export interface ControlAreaProps {
   onHelpClick?: () => void;
   onSyncAndExit?: () => void;
   isSaving?: boolean;
+  onQueueClick?: () => void;
 }
 
 export function ControlArea({ 
@@ -20,6 +21,7 @@ export function ControlArea({
   onHelpClick,
   onSyncAndExit,
   isSaving,
+  onQueueClick,
 }: ControlAreaProps) {
   const isPaused = queueStatus.state === "paused";
   const isBusy = queueStatus.state === "busy";
@@ -49,16 +51,23 @@ export function ControlArea({
   return (
     <div className="ei-control-area">
       <div className="ei-control-area__status">
-        <span 
-          className={`ei-control-area__indicator ${isBusy ? "busy" : ""} ${isPaused ? "paused" : ""} ${isWaiting ? "waiting" : ""} ${isSaving ? "saving" : ""}`}
-        />
-        <span>{statusText}</span>
-        {queueStatus.dlq_count > 0 && (
-          <span className="ei-control-area__dlq">[DLQ:{queueStatus.dlq_count}]</span>
-        )}
-        {queueStatus.embedding_warning && (
-          <span className="ei-control-area__dlq" title="Embedding service unavailable — topic/person matching using recent items">⚠ embed</span>
-        )}
+        <span
+          className={`ei-control-area__status-text${onQueueClick ? " ei-control-area__status-text--clickable" : ""}`}
+          onClick={onQueueClick}
+          role={onQueueClick ? "button" : undefined}
+          title={onQueueClick ? "View queue" : undefined}
+        >
+          <span 
+            className={`ei-control-area__indicator ${isBusy ? "busy" : ""} ${isPaused ? "paused" : ""} ${isWaiting ? "waiting" : ""} ${isSaving ? "saving" : ""}`}
+          />
+          <span>{statusText}</span>
+          {queueStatus.dlq_count > 0 && (
+            <span className="ei-control-area__dlq">[DLQ:{queueStatus.dlq_count}]</span>
+          )}
+          {queueStatus.embedding_warning && (
+            <span className="ei-control-area__dlq" title="Embedding service unavailable — topic/person matching using recent items">⚠ embed</span>
+          )}
+        </span>
         <button
           className={`ei-btn ei-btn--icon ${isPaused ? "ei-play-btn" : "ei-pause-btn"}`}
           onClick={onPauseToggle}

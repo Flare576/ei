@@ -26,6 +26,7 @@ import type {
   RoomEntity,
   RoomMessage,
   RoomCreationInput,
+  LLMRequest,
   } from "../../src/core/types";
 import { ContextStatus, LLMNextStep, RoomMode } from "../../src/core/types";
 import { Layout, PersonaPanel, ChatPanel, RoomChatPanel, ControlArea, HelpModal, ImagePreviewModal, type PersonaPanelHandle, type ChatPanelHandle, type RoomChatPanelHandle } from "./components/Layout";
@@ -35,6 +36,7 @@ import { SettingsModal } from "./components/Settings";
 import { MessageSelectorModal } from "./components/Modals/MessageSelectorModal";
 import { ConflictResolutionModal } from "./components/Sync/ConflictResolutionModal";
 import { Onboarding } from "./components/Onboarding";
+import { QueuePanel } from "./components/Queue/QueuePanel";
 import { useKeyboardNavigation } from "./hooks/useKeyboardNavigation";
 import { generateImage, type GenerationResult } from "./comfyui";
 import { exchangeCode } from '../../src/core/tools/builtin/pkce.js';
@@ -44,6 +46,7 @@ import { clearLikedSongsCache } from '../../src/core/tools/builtin/spotify-liked
 import "./styles/index.css";
 import "./styles/entity-editor.css";
 import "./styles/onboarding.css";
+import "./styles/queue-panel.css";
 
 // System prompt for multi-message image synthesis
 const SYNTHESIS_SYSTEM_PROMPT = `You are building an image generation prompt from the user's conversation.
@@ -143,6 +146,9 @@ function App() {
    const [conflictData, setConflictData] = useState<{ localTimestamp: Date; remoteTimestamp: Date } | null>(null);
    const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [showQueuePanel, setShowQueuePanel] = useState(false);
+  const [queuePanelItems, setQueuePanelItems] = useState<{ pending: LLMRequest[]; dlq: LLMRequest[] }>({ pending: [], dlq: [] });
+  const [queueWasPaused, setQueueWasPaused] = useState(false);
   const [spotifyAuthError, setSpotifyAuthError] = useState<string | null>(null);
   const [showImagePreview, setShowImagePreview] = useState(false);
   const [currentImageResult, setCurrentImageResult] = useState<GenerationResult | null>(null);
@@ -517,6 +523,50 @@ function App() {
     }
     processor.getQueueStatus().then(setQueueStatus);
   }, [processor]);
+
+  const handleQueuePanelOpen = useCallback(async () => {
+    if (!processorRef.current) return;
+    const status = await processorRef.current.getQueueStatus();
+    setQueueWasPaused(status.state === "paused");
+    if (status.state !== "paused") {
+      await processorRef.current.abortCurrentOperation();
+    }
+    const pending = processorRef.current.getQueueActiveItems();
+    const dlq = processorRef.current.getDLQItems();
+    setQueuePanelItems({ pending, dlq });
+    setShowQueuePanel(true);
+    processorRef.current.getQueueStatus().then(setQueueStatus);
+  }, []);
+
+  const handleQueuePanelClose = useCallback(async () => {
+    setShowQueuePanel(false);
+    if (!processorRef.current) return;
+    if (!queueWasPaused) {
+      await processorRef.current.resumeQueue();
+    }
+    processorRef.current.getQueueStatus().then(setQueueStatus);
+  }, [queueWasPaused]);
+
+  const handleQueueItemsUpdate = useCallback(async (ids: string[], model: string) => {
+    if (!processorRef.current) return;
+    for (const id of ids) {
+      const allItems = [...queuePanelItems.pending, ...queuePanelItems.dlq];
+      const item = allItems.find(i => i.id === id);
+      const updates: Partial<LLMRequest> = {
+        model,
+        attempts: 0,
+        retry_after: undefined,
+      };
+      if (item?.state === "dlq") {
+        updates.state = "pending";
+      }
+      processorRef.current.updateQueueItem(id, updates);
+    }
+    const pending = processorRef.current.getQueueActiveItems();
+    const dlq = processorRef.current.getDLQItems();
+    setQueuePanelItems({ pending, dlq });
+    processorRef.current.getQueueStatus().then(setQueueStatus);
+  }, [queuePanelItems]);
 
   const handlePausePersona = useCallback(async (personaId: string, pauseUntil?: string) => {
     if (!processor) return;
@@ -1415,6 +1465,7 @@ function App() {
           onHelpClick={handleHelpClick}
           onSyncAndExit={human?.settings?.sync ? handleSaveAndExit : undefined}
           isSaving={isSaving}
+          onQueueClick={handleQueuePanelOpen}
         />
       }
       leftPanel={
@@ -1493,6 +1544,14 @@ function App() {
       }
     />
     <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
+    <QueuePanel
+      isOpen={showQueuePanel}
+      pendingItems={queuePanelItems.pending}
+      dlqItems={queuePanelItems.dlq}
+      personas={personas}
+      onClose={handleQueuePanelClose}
+      onUpdateItems={handleQueueItemsUpdate}
+    />
     
     {human && (
       <>
