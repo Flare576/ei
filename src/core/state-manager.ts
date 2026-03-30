@@ -839,6 +839,67 @@ export class StateManager {
     return result;
   }
 
+  deleteModel(providerId: string, modelId: string): { success: boolean; error?: string; cleared: string[] } {
+    const human = this.humanState.get();
+    const settings = human.settings;
+    if (!settings?.accounts?.length) {
+      return { success: false, error: `Provider not found: ${providerId}`, cleared: [] };
+    }
+
+    const provider = settings.accounts.find(a => a.id === providerId);
+    if (!provider) {
+      return { success: false, error: `Provider not found: ${providerId}`, cleared: [] };
+    }
+
+    if (!provider.models?.find(m => m.id === modelId)) {
+      return { success: false, error: `Model not found: ${modelId}`, cleared: [] };
+    }
+
+    if ((provider.models?.length ?? 0) <= 1) {
+      return { success: false, error: `Cannot delete the last model on a provider`, cleared: [] };
+    }
+
+    const cleared: string[] = [];
+
+    if (settings.default_model === modelId) {
+      settings.default_model = undefined;
+      cleared.push("settings.default_model");
+    }
+    if (settings.oneshot_model === modelId) {
+      settings.oneshot_model = undefined;
+      cleared.push("settings.oneshot_model");
+    }
+    if (settings.rewrite_model === modelId) {
+      settings.rewrite_model = undefined;
+      cleared.push("settings.rewrite_model");
+    }
+    if (settings.opencode?.extraction_model === modelId) {
+      settings.opencode.extraction_model = undefined;
+      cleared.push("settings.opencode.extraction_model");
+    }
+    if (settings.claudeCode?.extraction_model === modelId) {
+      settings.claudeCode.extraction_model = undefined;
+      cleared.push("settings.claudeCode.extraction_model");
+    }
+    if (provider.default_model === modelId) {
+      provider.default_model = undefined;
+      cleared.push("provider.default_model");
+    }
+
+    provider.models = provider.models!.filter(m => m.id !== modelId);
+    this.humanState.set(human);
+
+    for (const persona of this.personaState.getAll()) {
+      if (persona.model === modelId) {
+        this.personaState.update(persona.id, { model: undefined });
+        cleared.push(`persona:${persona.display_name}`);
+      }
+    }
+
+    this.scheduleSave();
+    return { success: true, cleared };
+  }
+
   async flush(): Promise<void> {
     await this.persistenceState.flush();
   }
