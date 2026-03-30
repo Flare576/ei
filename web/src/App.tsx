@@ -1589,6 +1589,7 @@ function App() {
         onAiAssist={handleAiAssist}
         toolProviders={toolProviders}
         toolDefinitions={toolDefinitions}
+        accounts={human?.settings?.accounts ?? []}
       />
     )}
 

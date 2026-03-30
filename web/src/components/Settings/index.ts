@@ -3,3 +3,4 @@ export { ProviderEditor } from './ProviderEditor';
 export { SettingsModal } from './SettingsModal';
 export { ToolkitList } from './ToolkitList';
 export { ToolkitEditor } from './ToolkitEditor';
+export { ModelPicker } from './ModelPicker';
