@@ -828,9 +828,9 @@ const PLACEHOLDER_PROVIDER_DEFAULT_MODEL = "model-name";
 /**
  * Generate YAML template for a NEW provider account
  */
-export function newProviderToYAML(): string {
+export function newProviderToYAML(name?: string): string {
   const placeholderData = {
-    name: PLACEHOLDER_PROVIDER_NAME,
+    name: name ?? PLACEHOLDER_PROVIDER_NAME,
     type: "llm",
     url: PLACEHOLDER_PROVIDER_URL,
     api_key: PLACEHOLDER_PROVIDER_API_KEY,

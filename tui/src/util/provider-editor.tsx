@@ -18,8 +18,8 @@ export interface EditProviderEditorResult {
   deleted?: boolean;
 }
 
-export async function createProviderViaEditor(ctx: CommandContext): Promise<NewProviderEditorResult> {
-  let yamlContent = newProviderToYAML();
+export async function createProviderViaEditor(ctx: CommandContext, name?: string): Promise<NewProviderEditorResult> {
+  let yamlContent = newProviderToYAML(name);
   
   while (true) {
     const result = await spawnEditor({
