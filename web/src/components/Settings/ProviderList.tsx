@@ -111,7 +111,7 @@ export const ProviderList: React.FC<ProviderListProps> = ({
                           <div className="ei-provider-card__meta-item">
                             <span className="ei-provider-card__meta-label">Model:</span>
                             <span className="ei-provider-card__meta-value">
-                              {account.default_model}
+                              {account.models?.find(m => m.id === account.default_model)?.name ?? account.default_model}
                             </span>
                           </div>
                         )}

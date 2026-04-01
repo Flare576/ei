@@ -57,7 +57,7 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
           <optgroup key={account.id} label={account.name}>
             {(account.models ?? []).map((model) => (
               <option key={model.id} value={model.id}>
-                {model.name}
+                {account.name} - {model.name}
               </option>
             ))}
           </optgroup>
