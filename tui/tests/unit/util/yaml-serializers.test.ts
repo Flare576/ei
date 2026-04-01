@@ -14,6 +14,8 @@ import {
   providerFromYAML,
   modelGuidToDisplay,
   displayToModelGuid,
+  queueItemsToYAML,
+  queueItemsFromYAML,
 } from "../../../src/util/yaml-serializers";
 import type { PersonaEntity, HumanEntity, Message, HumanSettings, ProviderAccount } from "../../../../src/core/types";
 import { ContextStatus, ProviderType } from "../../../../src/core/types";
@@ -1005,5 +1007,66 @@ describe("contextToYAML / contextFromYAML", () => {
     const result = contextFromYAML(modified);
     expect(result.deletedMessageIds).toContain("msg-1");
     expect(result.messages.find(m => m.id === "msg-1")).toBeUndefined();
+  });
+});
+
+// =============================================================================
+// QUEUE ITEM YAML TESTS
+// =============================================================================
+
+describe("queueItemsToYAML / queueItemsFromYAML", () => {
+  const makeLLMRequest = (overrides: Partial<import("../../../../src/core/types").LLMRequest> = {}): import("../../../../src/core/types").LLMRequest => ({
+    id: "req-1",
+    created_at: "2024-01-01T00:00:00.000Z",
+    attempts: 0,
+    state: "pending",
+    type: "HandlePersonaResponse" as import("../../../../src/core/types").LLMRequestType,
+    priority: "high" as import("../../../../src/core/types").LLMPriority,
+    system: "system prompt",
+    user: "user prompt",
+    next_step: "HandlePersonaResponse" as import("../../../../src/core/types").LLMNextStep,
+    data: {},
+    ...overrides,
+  });
+
+  test("queueItemsToYAML includes _delete: false by default", () => {
+    const items = [makeLLMRequest()];
+    const yaml = queueItemsToYAML(items, []);
+    expect(yaml).toContain("_delete: false");
+  });
+
+  test("_delete: false — item goes to updates, not deletedIds", () => {
+    const items = [makeLLMRequest({ id: "req-keep" })];
+    const yaml = queueItemsToYAML(items, []);
+    const result = queueItemsFromYAML(yaml, []);
+    expect(result.deletedIds).toEqual([]);
+    expect(result.updates).toHaveLength(1);
+    expect(result.updates[0].id).toBe("req-keep");
+  });
+
+  test("_delete: true — item goes to deletedIds, not updates", () => {
+    const items = [makeLLMRequest({ id: "req-delete" })];
+    const yaml = queueItemsToYAML(items, []).replace("_delete: false", "_delete: true");
+    const result = queueItemsFromYAML(yaml, []);
+    expect(result.deletedIds).toContain("req-delete");
+    expect(result.updates.find(u => u.id === "req-delete")).toBeUndefined();
+  });
+
+  test("mixed — some deleted, some updated", () => {
+    const items = [
+      makeLLMRequest({ id: "req-keep" }),
+      makeLLMRequest({ id: "req-delete" }),
+    ];
+    const yaml = queueItemsToYAML(items, []);
+    let occurrences = 0;
+    const modified = yaml.replace(/_delete: false/g, (match) => {
+      occurrences++;
+      return occurrences === 2 ? "_delete: true" : match;
+    });
+    const result = queueItemsFromYAML(modified, []);
+    expect(result.deletedIds).toHaveLength(1);
+    expect(result.deletedIds[0]).toBe("req-delete");
+    expect(result.updates).toHaveLength(1);
+    expect(result.updates[0].id).toBe("req-keep");
   });
 });
