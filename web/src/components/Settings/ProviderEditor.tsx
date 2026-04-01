@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ProviderType, type ProviderAccount } from '../../../../src/core/types.js';
+import { ProviderType, type ProviderAccount, type ModelConfig } from '../../../../src/core/types.js';
 
 interface ProviderEditorProps {
   isOpen: boolean;
@@ -18,8 +18,8 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
   const [type, setType] = useState<ProviderType>(ProviderType.LLM);
   const [url, setUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
-  const [defaultModel, setDefaultModel] = useState('');
-  const [tokenLimit, setTokenLimit] = useState('');
+  const [models, setModels] = useState<ModelConfig[]>([]);
+  const [defaultModelId, setDefaultModelId] = useState('');
   const [extraHeaders, setExtraHeaders] = useState<Array<{ key: string; value: string }>>([]);
   const [workflowJson, setWorkflowJson] = useState<string>('');
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -39,8 +39,8 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
         setType(account.type);
         setUrl(account.url);
         setApiKey(account.api_key || '');
-        setDefaultModel(account.default_model || '');
-        setTokenLimit(account.token_limit ? String(account.token_limit) : '');
+        setModels(account.models ?? []);
+        setDefaultModelId(account.default_model || '');
         setWorkflowJson(account.workflow_json ? JSON.stringify(account.workflow_json, null, 2) : '');
         setExtraHeaders(
           account.extra_headers
@@ -52,8 +52,8 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
         setType(ProviderType.LLM);
         setUrl('');
         setApiKey('');
-        setDefaultModel('');
-        setTokenLimit('');
+        setModels([]);
+        setDefaultModelId('');
         setWorkflowJson('');
         setExtraHeaders([]);
         setShowAdvanced(false);
@@ -134,14 +134,33 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
       }
     });
 
+    let finalModels = models.filter((m) => m.name.trim() !== '');
+    let finalDefaultModel = defaultModelId;
+
+    if (type === ProviderType.LLM) {
+      if (finalModels.length === 0) {
+        const defaultModel: ModelConfig = {
+          id: crypto.randomUUID(),
+          name: '(default)',
+        };
+        finalModels = [defaultModel];
+        finalDefaultModel = defaultModel.id;
+      }
+
+      const defaultExists = finalModels.some((m) => m.id === finalDefaultModel);
+      if (!finalDefaultModel || !defaultExists) {
+        finalDefaultModel = finalModels[0].id;
+      }
+    }
+
     const updatedAccount: ProviderAccount = {
       id: account?.id || crypto.randomUUID(),
       name: name.trim(),
       type,
       url: url.trim(),
       api_key: apiKey.trim() || undefined,
-      default_model: type === ProviderType.LLM && defaultModel.trim() ? defaultModel.trim() : undefined,
-      token_limit: type === ProviderType.LLM && tokenLimit.trim() ? parseInt(tokenLimit.trim(), 10) || undefined : undefined,
+      default_model: type === ProviderType.LLM && finalDefaultModel ? finalDefaultModel : undefined,
+      models: type === ProviderType.LLM && finalModels.length > 0 ? finalModels : undefined,
       workflow_json: type === ProviderType.Image && workflowJson.trim() ? JSON.parse(workflowJson.trim()) : undefined,
       extra_headers: Object.keys(extraHeadersObj).length > 0 ? extraHeadersObj : undefined,
       enabled: account?.enabled ?? true,
@@ -163,6 +182,36 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
     const updated = [...extraHeaders];
     updated[index][field] = value;
     setExtraHeaders(updated);
+  };
+
+  const handleAddModel = () => {
+    const newModel: ModelConfig = {
+      id: crypto.randomUUID(),
+      name: '',
+    };
+    setModels([...models, newModel]);
+    if (models.length === 0) {
+      setDefaultModelId(newModel.id);
+    }
+  };
+
+  const handleRemoveModel = (id: string) => {
+    const updated = models.filter((m) => m.id !== id);
+    setModels(updated);
+    if (defaultModelId === id) {
+      setDefaultModelId(updated.length > 0 ? updated[0].id : '');
+    }
+  };
+
+  const handleModelChange = (id: string, field: keyof Pick<ModelConfig, 'name' | 'context_window' | 'max_output_tokens'>, value: string) => {
+    setModels(models.map((m) => {
+      if (m.id !== id) return m;
+      if (field === 'name') {
+        return { ...m, name: value };
+      }
+      const numVal = value.trim() ? parseInt(value.trim(), 10) : undefined;
+      return { ...m, [field]: isNaN(numVal as number) ? undefined : numVal };
+    }));
   };
 
   const handleBackdropClick = (e: React.MouseEvent) => {
@@ -282,42 +331,102 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
           </div>
 
           {type === ProviderType.LLM && (
-            <div className="ei-form-group">
-              <label htmlFor="provider-default-model" className="ei-form-label">
-                Default Model <span className="ei-form-optional">(optional)</span>
-              </label>
-              <input
-                id="provider-default-model"
-                type="text"
-                className="ei-input"
-                value={defaultModel}
-                onChange={(e) => setDefaultModel(e.target.value)}
-                placeholder="e.g., gpt-4o, llama-3.3-70b"
-              />
-              <small className="ei-form-hint">
-                Model name to use by default with this provider
-              </small>
-            </div>
-          )}
+            <>
+              {models.length > 0 && (
+                <div className="ei-form-group">
+                  <label htmlFor="provider-default-model" className="ei-form-label">
+                    Default Model <span className="ei-form-optional">(optional)</span>
+                  </label>
+                  <select
+                    id="provider-default-model"
+                    className="ei-input ei-select"
+                    value={defaultModelId}
+                    onChange={(e) => setDefaultModelId(e.target.value)}
+                  >
+                    <option value="">— select a default —</option>
+                    {models.filter((m) => m.name.trim() !== '').map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+                  <small className="ei-form-hint">
+                    Model used by default with this provider
+                  </small>
+                </div>
+              )}
 
-          {type === ProviderType.LLM && (
-            <div className="ei-form-group">
-              <label htmlFor="provider-token-limit" className="ei-form-label">
-                Token Limit <span className="ei-form-optional">(optional)</span>
-              </label>
-              <input
-                id="provider-token-limit"
-                type="number"
-                className="ei-input"
-                value={tokenLimit}
-                onChange={(e) => setTokenLimit(e.target.value)}
-                placeholder="e.g., 128000"
-                min="1000"
-              />
-              <small className="ei-form-hint">
-                Context window size in tokens. Auto-detected for common models if not set.
-              </small>
-            </div>
+              <div className="ei-form-group">
+                <label className="ei-form-label">
+                  Models <span className="ei-form-optional">(optional)</span>
+                </label>
+                <div className="ei-provider-editor__models">
+                  {models.map((model) => (
+                    <div key={model.id} className="ei-provider-editor__model-card">
+                      <div className="ei-provider-editor__model-card-header">
+                        <input
+                          type="text"
+                          className="ei-input ei-provider-editor__model-name"
+                          value={model.name}
+                          onChange={(e) => handleModelChange(model.id, 'name', e.target.value)}
+                          placeholder="e.g., qwen/qwen3.5-35b-a3b"
+                          aria-label="Model name"
+                        />
+                        <button
+                          className="ei-provider-editor__model-remove"
+                          onClick={() => handleRemoveModel(model.id)}
+                          type="button"
+                          aria-label="Remove model"
+                          title="Remove model"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <div className="ei-provider-editor__model-token-fields">
+                        <div className="ei-provider-editor__model-field">
+                          <label className="ei-provider-editor__model-field-label">
+                            Context window <span className="ei-provider-editor__model-field-hint">(e.g., 8192)</span>
+                          </label>
+                          <input
+                            type="number"
+                            className="ei-input ei-provider-editor__model-context"
+                            value={model.context_window ?? ''}
+                            onChange={(e) => handleModelChange(model.id, 'context_window', e.target.value)}
+                            min="1"
+                            aria-label="Context window (tokens)"
+                            title="Context window (tokens)"
+                          />
+                        </div>
+                        <div className="ei-provider-editor__model-field">
+                          <label className="ei-provider-editor__model-field-label">
+                            Max output <span className="ei-provider-editor__model-field-hint">(e.g., 8000)</span>
+                          </label>
+                          <input
+                            type="number"
+                            className="ei-input ei-provider-editor__model-output"
+                            value={model.max_output_tokens ?? ''}
+                            onChange={(e) => handleModelChange(model.id, 'max_output_tokens', e.target.value)}
+                            min="1"
+                            aria-label="Max output tokens"
+                            title="Max output tokens"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <button
+                    className="ei-btn ei-btn--secondary ei-btn--sm"
+                    onClick={handleAddModel}
+                    type="button"
+                  >
+                    + Add Model
+                  </button>
+                </div>
+                <small className="ei-form-hint">
+                  Add models available from this provider. Context and Output limits are optional.
+                </small>
+              </div>
+            </>
           )}
 
           <div className="ei-provider-editor__advanced">
@@ -390,4 +499,3 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
     </div>
   );
 };
-

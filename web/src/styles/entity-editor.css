@@ -2371,6 +2371,82 @@
   flex: 2;
 }
 
+.ei-provider-editor__models {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ei-spacing-sm);
+}
+
+.ei-provider-editor__model-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ei-spacing-sm);
+  padding: var(--ei-spacing-md);
+  background: var(--ei-bg-secondary);
+  border: 1px solid var(--ei-border);
+  border-radius: var(--ei-radius-md);
+}
+
+.ei-provider-editor__model-card-header {
+  display: flex;
+  gap: var(--ei-spacing-sm);
+  align-items: center;
+}
+
+.ei-provider-editor__model-card-header .ei-provider-editor__model-name {
+  flex: 1;
+  font-weight: 500;
+}
+
+.ei-provider-editor__model-remove {
+  background: none;
+  border: none;
+  padding: var(--ei-spacing-xs);
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--ei-text-muted);
+  font-size: var(--ei-font-size-sm);
+  border-radius: var(--ei-radius-sm);
+  transition: color 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+
+.ei-provider-editor__model-remove:hover {
+  color: var(--ei-danger);
+  background: var(--ei-bg-tertiary);
+}
+
+.ei-provider-editor__model-token-fields {
+  display: flex;
+  gap: var(--ei-spacing-md);
+}
+
+.ei-provider-editor__model-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ei-spacing-xs);
+}
+
+.ei-provider-editor__model-field-label {
+  font-size: var(--ei-font-size-sm);
+  color: var(--ei-text-secondary);
+  font-weight: 500;
+}
+
+.ei-provider-editor__model-field-hint {
+  font-weight: 400;
+  color: var(--ei-text-muted);
+}
+
+.ei-provider-editor__model-field .ei-input {
+  font-size: var(--ei-font-size-sm);
+}
+
 /* ============================================
    PROVIDER LIST
    ============================================ */
