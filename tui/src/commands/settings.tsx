@@ -1,6 +1,6 @@
 import type { Command } from "./registry.js";
 import { spawnEditor } from "../util/editor.js";
-import { settingsToYAML, settingsFromYAML, validateModelProvider } from "../util/yaml-serializers.js";
+import { settingsToYAML, settingsFromYAML } from "../util/yaml-serializers.js";
 import { logger } from "../util/logger.js";
 import { ConfirmOverlay } from "../components/ConfirmOverlay.js";
 
@@ -12,7 +12,8 @@ export const settingsCommand: Command = {
   
   async execute(_args, ctx) {
     const human = await ctx.ei.getHuman();
-    let yamlContent = settingsToYAML(human.settings);
+    const accounts = human.settings?.accounts ?? [];
+    let yamlContent = settingsToYAML(human.settings, accounts);
     let editorIteration = 0;
     
     while (true) {
@@ -41,23 +42,14 @@ export const settingsCommand: Command = {
       }
       
       try {
-        const newSettings = settingsFromYAML(result.content, human.settings);
-        // Validate provider name in default_model (case-insensitive match + auto-correct)
+        const newSettings = settingsFromYAML(result.content, human.settings, accounts);
         const llmAccounts = human.settings?.accounts?.filter(a => a.type === "llm") ?? [];
-        newSettings.default_model = validateModelProvider(newSettings.default_model, llmAccounts);
 
-        if (newSettings.opencode?.extraction_model) {
-          newSettings.opencode.extraction_model = validateModelProvider(
-            newSettings.opencode.extraction_model,
-            llmAccounts
-          );
-        }
-
-        if (newSettings.claudeCode?.extraction_model) {
-          newSettings.claudeCode.extraction_model = validateModelProvider(
-            newSettings.claudeCode.extraction_model,
-            llmAccounts
-          );
+        if (newSettings.default_model) {
+          const isGuid = !newSettings.default_model.includes(':');
+          if (!isGuid && !llmAccounts.some(a => a.models?.some(m => m.id === newSettings.default_model))) {
+            throw new Error(`No matching model found for "${newSettings.default_model}". Use format: ProviderName:modelName`);
+          }
         }
 
         await ctx.ei.updateSettings(newSettings);

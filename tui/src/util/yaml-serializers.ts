@@ -558,12 +558,17 @@ interface EditableSettingsData {
   };
 }
 
-export function settingsToYAML(settings: HumanSettings | undefined): string {
+export function settingsToYAML(settings: HumanSettings | undefined, accounts: ProviderAccount[]): string {
+  const guidToDisplay = (guid: string | undefined | null): string | null => {
+    if (!guid) return null;
+    return modelGuidToDisplay(guid, accounts);
+  };
+
   // Always show all editable fields, using null for unset values so YAML displays them
   const data: EditableSettingsData = {
-    default_model: settings?.default_model ?? null,
-    oneshot_model: settings?.oneshot_model ?? null,
-    rewrite_model: settings?.rewrite_model ?? null,
+    default_model: guidToDisplay(settings?.default_model),
+    oneshot_model: guidToDisplay(settings?.oneshot_model),
+    rewrite_model: guidToDisplay(settings?.rewrite_model),
     time_mode: settings?.time_mode ?? null,
     name_display: settings?.name_display ?? null,
     default_heartbeat_ms: settings?.default_heartbeat_ms ?? 1800000,
@@ -580,14 +585,14 @@ export function settingsToYAML(settings: HumanSettings | undefined): string {
     opencode: {
       integration: settings?.opencode?.integration ?? false,
       polling_interval_ms: settings?.opencode?.polling_interval_ms ?? 60000,
-      extraction_model: settings?.opencode?.extraction_model ?? 'default',
+      extraction_model: guidToDisplay(settings?.opencode?.extraction_model) ?? 'default',
       last_sync: settings?.opencode?.last_sync ?? null,
       extraction_point: settings?.opencode?.extraction_point ?? null,
     },
     claudeCode: {
       integration: settings?.claudeCode?.integration ?? false,
       polling_interval_ms: settings?.claudeCode?.polling_interval_ms ?? 60000,
-      extraction_model: settings?.claudeCode?.extraction_model ?? 'default',
+      extraction_model: guidToDisplay(settings?.claudeCode?.extraction_model) ?? 'default',
       last_sync: settings?.claudeCode?.last_sync ?? null,
       extraction_point: settings?.claudeCode?.extraction_point ?? null,
     },
@@ -611,11 +616,16 @@ export function settingsToYAML(settings: HumanSettings | undefined): string {
   .replace(/^(\s+)(extraction_point: .+)$/mg, '$1# [read-only] $2')
   .replace(/^(\s+)(extraction_model: .+)$/mg, '$1$2 # e.g. Anthropic:claude-haiku-4-5');
 }
-export function settingsFromYAML(yamlContent: string, original: HumanSettings | undefined): HumanSettings {
+export function settingsFromYAML(yamlContent: string, original: HumanSettings | undefined, accounts: ProviderAccount[]): HumanSettings {
   const data = YAML.parse(yamlContent) as EditableSettingsData;
   
   const nullToUndefined = <T>(value: T | null | undefined): T | undefined => 
     value === null ? undefined : value;
+
+  const displayToGuid = (display: string | null | undefined): string | undefined => {
+    if (!display || display === 'default') return undefined;
+    return displayToModelGuid(display, accounts) ?? display;
+  };
   
   let ceremony: CeremonyConfig | undefined;
   if (data.ceremony) {
@@ -637,9 +647,7 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
       last_sync: original?.opencode?.last_sync,
       extraction_point: original?.opencode?.extraction_point,
       processed_sessions: original?.opencode?.processed_sessions,
-      extraction_model: (data.opencode.extraction_model != null && data.opencode.extraction_model !== 'default')
-        ? data.opencode.extraction_model
-        : undefined,
+      extraction_model: displayToGuid(data.opencode.extraction_model),
     };
   }
 
@@ -651,9 +659,7 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
       last_sync: original?.claudeCode?.last_sync,
       extraction_point: original?.claudeCode?.extraction_point,
       processed_sessions: original?.claudeCode?.processed_sessions,
-      extraction_model: (data.claudeCode.extraction_model != null && data.claudeCode.extraction_model !== 'default')
-        ? data.claudeCode.extraction_model
-        : undefined,
+      extraction_model: displayToGuid(data.claudeCode.extraction_model),
     };
   }
 
@@ -680,9 +686,9 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
   
   return {
     ...original,
-    default_model: nullToUndefined(data.default_model),
-    oneshot_model: nullToUndefined(data.oneshot_model),
-    rewrite_model: nullToUndefined(data.rewrite_model),
+    default_model: displayToGuid(data.default_model),
+    oneshot_model: displayToGuid(data.oneshot_model),
+    rewrite_model: displayToGuid(data.rewrite_model),
     time_mode: nullToUndefined(data.time_mode),
     name_display: nullToUndefined(data.name_display),
     default_heartbeat_ms: nullToUndefined(data.default_heartbeat_ms),
@@ -913,12 +919,16 @@ function parseModels(editableModels: EditableModelData[]): import('../../../src/
  * Hides internal fields: id, total_calls, total_tokens_in, total_tokens_out, last_used.
  */
 export function providerToYAML(account: ProviderAccount): string {
+  const defaultModelDisplay = account.default_model
+    ? modelGuidToDisplay(account.default_model, [account])
+    : undefined;
+
   const topData = {
     name: account.name,
     type: account.type as "llm" | "storage",
     url: account.url,
     api_key: account.api_key,
-    default_model: account.default_model,
+    default_model: defaultModelDisplay,
     token_limit: account.token_limit ?? null,
     extra_headers: account.extra_headers,
     enabled: account.enabled ?? true,
@@ -937,14 +947,13 @@ export function providerToYAML(account: ProviderAccount): string {
       if (m.max_output_tokens !== undefined) {
         modelLines.push(`    max_output_tokens: ${m.max_output_tokens}`);
       }
-      modelLines.push(`    # _delete: true`);
+      modelLines.push(`    _delete: false`);
     }
   } else {
-    // Always show at least a default model placeholder
     modelLines.push("  - name: (default)");
-    modelLines.push("    # _delete: true");
+    modelLines.push("    _delete: false");
   }
-  modelLines.push("# _delete: true   # Delete this entire provider");
+  modelLines.push("_delete: false   # Set to true to delete this entire provider");
 
   return topYAML + "\n" + modelLines.join("\n") + "\n";
 }
@@ -1114,7 +1123,7 @@ export function contextFromYAML(yamlContent: string): ContextYAMLResult {
 // QUEUE ITEM YAML
 // =============================================================================
 
-export function queueItemsToYAML(items: LLMRequest[]): string {
+export function queueItemsToYAML(items: LLMRequest[], accounts: ProviderAccount[]): string {
   const data = items.map(item => ({
     id: item.id,
     state: item.state,
@@ -1125,7 +1134,7 @@ export function queueItemsToYAML(items: LLMRequest[]): string {
     type: item.type,
     priority: item.priority,
     next_step: item.next_step,
-    model: item.model,
+    model: item.model ? modelGuidToDisplay(item.model, accounts) : undefined,
     data: item.data,
     // NOTE: system/user prompts omitted (large); to requeue: set state='pending', attempts=0
   }));
@@ -1141,7 +1150,7 @@ export interface QueueItemUpdate {
   data?: Record<string, unknown>;
 }
 
-export function queueItemsFromYAML(yamlContent: string): QueueItemUpdate[] {
+export function queueItemsFromYAML(yamlContent: string, accounts: ProviderAccount[]): QueueItemUpdate[] {
   const data = YAML.parse(yamlContent) as QueueItemUpdate[];
   if (!Array.isArray(data)) throw new Error("Expected a YAML array of queue items");
   return data.map(item => {
@@ -1155,7 +1164,7 @@ export function queueItemsFromYAML(yamlContent: string): QueueItemUpdate[] {
       id: item.id,
       state: item.state,
       attempts: typeof item.attempts === "number" ? item.attempts : 0,
-      model: item.model,
+      model: item.model ? displayToModelGuid(item.model, accounts) ?? item.model : undefined,
       priority: item.priority,
       data: item.data,
     };

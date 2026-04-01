@@ -20,7 +20,9 @@ export const queueCommand: Command = {
     ctx.ei.pauseQueue();
     ctx.showNotification(`Queue paused (${items.length} items)`, "info");
 
-    let yamlContent = queueItemsToYAML(items);
+    const human = await ctx.ei.getHuman();
+    const accounts = human.settings?.accounts ?? [];
+    let yamlContent = queueItemsToYAML(items, accounts);
 
     while (true) {
       const result = await spawnEditor({
@@ -42,7 +44,7 @@ export const queueCommand: Command = {
       }
 
       try {
-        const updates = queueItemsFromYAML(result.content);
+        const updates = queueItemsFromYAML(result.content, accounts);
         for (const update of updates) {
           await ctx.ei.updateQueueItem(update.id, update);
         }

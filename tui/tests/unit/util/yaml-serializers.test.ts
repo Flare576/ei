@@ -618,8 +618,8 @@ describe("round-trip serialization", () => {
       message_max_age_days: 7,
       ceremony: { time: "09:00", event_window_hours: 2 },
     };
-    const yaml = settingsToYAML(settings);
-    const result = settingsFromYAML(yaml, settings);
+    const yaml = settingsToYAML(settings, []);
+    const result = settingsFromYAML(yaml, settings, []);
     expect(result.default_heartbeat_ms).toBe(120000);
     expect(result.default_context_window_hours).toBe(4);
     expect(result.message_min_count).toBe(100);
@@ -629,8 +629,8 @@ describe("round-trip serialization", () => {
 
   test("returns defaults for new fields when not set", () => {
     const settings: HumanSettings = {};
-    const yaml = settingsToYAML(settings);
-    const result = settingsFromYAML(yaml, settings);
+    const yaml = settingsToYAML(settings, []);
+    const result = settingsFromYAML(yaml, settings, []);
     expect(result.default_heartbeat_ms).toBe(1800000);
     expect(result.default_context_window_hours).toBe(8);
     expect(result.message_min_count).toBe(200);
@@ -693,9 +693,12 @@ describe("providerToYAML / providerFromYAML", () => {
     expect(yaml).not.toContain("id:");
   });
 
-  test("providerToYAML includes _delete comments", () => {
+  test("providerToYAML includes _delete fields", () => {
     const yaml = providerToYAML(baseAccount);
-    expect(yaml).toContain("# _delete: true");
+    // Models have _delete: false inline
+    expect(yaml).toContain("_delete: false");
+    // Provider-level delete hint
+    expect(yaml).toContain("_delete: false   # Set to true to delete this entire provider");
   });
 
   test("providerFromYAML round-trip preserves provider data", () => {
@@ -746,7 +749,7 @@ describe("providerToYAML / providerFromYAML", () => {
 
   test("providerFromYAML _delete: true returns _delete flag", () => {
     const yaml = providerToYAML(baseAccount).replace(
-      "# _delete: true   # Delete this entire provider",
+      "_delete: false   # Set to true to delete this entire provider",
       "_delete: true"
     );
     const result = providerFromYAML(yaml, baseAccount);

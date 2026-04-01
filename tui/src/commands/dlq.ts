@@ -17,7 +17,9 @@ export const dlqCommand: Command = {
       return;
     }
 
-    let yamlContent = queueItemsToYAML(items);
+    const human = await ctx.ei.getHuman();
+    const accounts = human.settings?.accounts ?? [];
+    let yamlContent = queueItemsToYAML(items, accounts);
 
     while (true) {
       const result = await spawnEditor({
@@ -37,7 +39,7 @@ export const dlqCommand: Command = {
       }
 
       try {
-        const updates = queueItemsFromYAML(result.content);
+        const updates = queueItemsFromYAML(result.content, accounts);
         let recovered = 0;
         for (const update of updates) {
           await ctx.ei.updateQueueItem(update.id, update);
