@@ -107,6 +107,7 @@ import {
   getQueueActiveItems,
   getDLQItems,
   updateQueueItem,
+  deleteQueueItems,
   clearQueue,
   submitOneShot,
 } from "./queue-manager.js";
@@ -1929,6 +1930,10 @@ const toolNextSteps = new Set([
 
   updateQueueItem(id: string, updates: Partial<LLMRequest>): boolean {
     return updateQueueItem(this.stateManager, id, updates);
+  }
+
+  deleteQueueItems(ids: string[]): number {
+    return deleteQueueItems(this.stateManager, ids);
   }
 
   async clearQueue(): Promise<number> {

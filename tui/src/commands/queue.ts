@@ -44,12 +44,18 @@ export const queueCommand: Command = {
       }
 
       try {
-        const updates = queueItemsFromYAML(result.content, accounts);
+        const { updates, deletedIds } = queueItemsFromYAML(result.content, accounts);
+        if (deletedIds.length > 0) {
+          ctx.ei.deleteQueueItems(deletedIds);
+        }
         for (const update of updates) {
           await ctx.ei.updateQueueItem(update.id, update);
         }
         ctx.ei.resumeQueue();
-        ctx.showNotification(`Queue updated (${updates.length} items) — resumed`, "info");
+        const msg = deletedIds.length > 0
+          ? `Queue updated (${updates.length} updated, ${deletedIds.length} deleted) — resumed`
+          : `Queue updated (${updates.length} items) — resumed`;
+        ctx.showNotification(msg, "info");
         return;
       } catch (parseError) {
         const errorMsg = parseError instanceof Error ? parseError.message : String(parseError);

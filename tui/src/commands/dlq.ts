@@ -39,14 +39,20 @@ export const dlqCommand: Command = {
       }
 
       try {
-        const updates = queueItemsFromYAML(result.content, accounts);
+        const { updates, deletedIds } = queueItemsFromYAML(result.content, accounts);
+        if (deletedIds.length > 0) {
+          ctx.ei.deleteQueueItems(deletedIds);
+        }
         let recovered = 0;
         for (const update of updates) {
           await ctx.ei.updateQueueItem(update.id, update);
           if (update.state === "pending") recovered++;
         }
-        const msg = recovered > 0
-          ? `DLQ updated — ${recovered} item(s) requeued`
+        const parts: string[] = [];
+        if (recovered > 0) parts.push(`${recovered} item(s) requeued`);
+        if (deletedIds.length > 0) parts.push(`${deletedIds.length} deleted`);
+        const msg = parts.length > 0
+          ? `DLQ updated — ${parts.join(", ")}`
           : `DLQ updated (no items requeued)`;
         ctx.showNotification(msg, "info");
         return;

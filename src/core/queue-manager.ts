@@ -51,6 +51,10 @@ export function updateQueueItem(
   return sm.queue_updateItem(id, updates);
 }
 
+export function deleteQueueItems(sm: StateManager, ids: string[]): number {
+  return sm.queue_deleteItems(ids);
+}
+
 export async function clearQueue(sm: StateManager, qp: QueueProcessor): Promise<number> {
   qp.abort();
   return sm.queue_clear();

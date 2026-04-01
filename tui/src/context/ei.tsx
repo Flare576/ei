@@ -69,6 +69,7 @@ export interface EiContextValue {
   getQueueActiveItems: () => LLMRequest[];
   getDLQItems: () => LLMRequest[];
   updateQueueItem: (id: string, updates: Partial<LLMRequest>) => Promise<boolean>;
+  deleteQueueItems: (ids: string[]) => number;
   stopProcessor: () => Promise<void>;
   saveAndExit: () => Promise<{ success: boolean; error?: string }>;
   showNotification: (message: string, level: "error" | "warn" | "info") => void;
@@ -290,6 +291,11 @@ export const EiProvider: ParentComponent = (props) => {
   const updateQueueItem = async (id: string, updates: Partial<LLMRequest>): Promise<boolean> => {
     if (!processor) return false;
     return processor.updateQueueItem(id, updates);
+  };
+
+  const deleteQueueItems = (ids: string[]): number => {
+    if (!processor) return 0;
+    return processor.deleteQueueItems(ids);
   };
 
   const stopProcessor = async () => {
@@ -860,6 +866,7 @@ export const EiProvider: ParentComponent = (props) => {
     getQueueActiveItems,
     getDLQItems,
     updateQueueItem,
+    deleteQueueItems,
     stopProcessor,
     saveAndExit,
     showNotification,
