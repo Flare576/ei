@@ -126,6 +126,7 @@ export function RoomMessageList() {
           backgroundColor="#0f1419"
           stickyScroll={true}
           stickyStart="bottom"
+          viewportCulling={true}
         >
           <For each={displayMessagesWithQuotes()}>
             {(msg) => {
