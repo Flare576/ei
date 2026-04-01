@@ -79,13 +79,20 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  border-radius: var(--ei-radius-sm);
 }
 
 .ei-btn--danger-icon {
-  color: var(--ei-danger);
   background: transparent;
+  color: var(--ei-text-muted);
   border: none;
   opacity: 0.85;
+}
+
+.ei-btn--danger-icon:not(:disabled) {
+  background: var(--ei-danger);
+  color: #fff;
+  opacity: 1;
 }
 
 .ei-btn--danger-icon:hover:not(:disabled) {
