@@ -1,4 +1,4 @@
-import { test, expect, seedCheckpoint } from "./fixtures.js";
+import { test, expect, seedCheckpoint, createMinimalCheckpoint } from "./fixtures.js";
 
 async function openSettingsModal(page: import("@playwright/test").Page) {
   await page.locator('button[aria-label="Menu"]').click();
@@ -36,7 +36,10 @@ test.describe("Provider Management", () => {
     await page.locator('#provider-name').fill('Test Provider');
     await page.locator('#provider-url').fill('http://localhost:8080/v1');
     await page.locator('#provider-api-key').fill('test-api-key');
-    await page.locator('#provider-default-model').fill('test-model');
+
+    // Add a model via the model card UI
+    await page.locator('button:has-text("+ Add Model")').click();
+    await page.locator('.ei-provider-editor__model-name').first().fill('test-model');
 
     // Save
     await page.locator('.ei-provider-editor .ei-btn--primary:has-text("Save Provider")').click();
@@ -156,5 +159,67 @@ test.describe("Provider Management", () => {
     
     // Verify the bad name doesn't exist
     await expect(page.locator('.ei-provider-card:has-text("Changed Name")')).not.toBeVisible();
+  });
+
+  test("provider and model settings persist after reload", async ({ page, mockServerUrl }) => {
+    const checkpoint = createMinimalCheckpoint(mockServerUrl);
+    await page.addInitScript(({ key, data }) => {
+      if (!localStorage.getItem(key)) {
+        localStorage.setItem(key, JSON.stringify(data));
+      }
+    }, { key: "ei_state", data: checkpoint });
+    await page.goto("/");
+    await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
+
+    // Open settings and navigate to Providers
+    await openSettingsModal(page);
+    await navigateToProvidersTab(page);
+
+    // Click Add Provider button
+    await page.locator('button:has-text("Add Provider Account")').click();
+    await expect(page.locator('.ei-provider-editor')).toBeVisible({ timeout: 5000 });
+
+    // Fill provider details
+    await page.locator('#provider-name').fill('Persist Test Provider');
+    await page.locator('#provider-url').fill('http://localhost:9876/v1');
+    await page.locator('#provider-api-key').fill('persist-api-key');
+
+    // Add a model with token_limit and max_output_tokens
+    await page.locator('button:has-text("+ Add Model")').click();
+    await page.locator('.ei-provider-editor__model-name').first().fill('persist-model');
+    await page.locator('.ei-provider-editor__model-context').first().fill('128000');
+    await page.locator('.ei-provider-editor__model-output').first().fill('4096');
+
+    // Save
+    await page.locator('.ei-provider-editor .ei-btn--primary:has-text("Save Provider")').click();
+    await expect(page.locator('.ei-provider-editor')).not.toBeVisible();
+
+    // Verify provider card is visible before reload
+    await expect(page.locator('.ei-provider-card:has-text("Persist Test Provider")')).toBeVisible();
+
+    // Brief wait to ensure state is persisted to localStorage
+    await page.waitForTimeout(500);
+
+    // Reload the page
+    await page.reload();
+    await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
+
+    // Re-open settings and navigate to Providers
+    await openSettingsModal(page);
+    await navigateToProvidersTab(page);
+
+    // Find the persisted provider and open Edit
+    const persistedCard = page.locator('.ei-provider-card:has-text("Persist Test Provider")');
+    await expect(persistedCard).toBeVisible();
+    await persistedCard.locator('button:has-text("Edit")').click();
+
+    // Verify provider editor shows correct values
+    await expect(page.locator('.ei-provider-editor')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('#provider-name')).toHaveValue('Persist Test Provider');
+
+    // Verify model fields persisted
+    await expect(page.locator('.ei-provider-editor__model-name').first()).toHaveValue('persist-model');
+    await expect(page.locator('.ei-provider-editor__model-context').first()).toHaveValue('128000');
+    await expect(page.locator('.ei-provider-editor__model-output').first()).toHaveValue('4096');
   });
 });

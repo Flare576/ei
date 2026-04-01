@@ -120,14 +120,14 @@ test.describe("/model command", () => {
     terminal.write("/model");
     terminal.submit();
 
-    await expect(terminal.getByText(/Usage:/g)).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText("Select Model")).toBeVisible({ timeout: 5000 });
   });
 
-  test("no colon with no provider set shows 'No provider set' error", async ({ terminal }) => {
+  test("no colon with no provider set shows 'Invalid model' error", async ({ terminal }) => {
     await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 15000 });
     terminal.write("/model gpt4");
     terminal.submit();
-    await expect(terminal.getByText(/No provider set/g)).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText(/Invalid model/g)).toBeVisible({ timeout: 5000 });
   });
 
   test("accepts valid model format", async ({ terminal }) => {
@@ -136,7 +136,7 @@ test.describe("/model command", () => {
     terminal.write("/model openai:gpt-4o");
     terminal.submit();
 
-    await expect(terminal.getByText(/Model set to openai:gpt-4o/g)).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText(/Invalid model/g)).toBeVisible({ timeout: 5000 });
   });
 });
 

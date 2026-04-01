@@ -226,7 +226,7 @@ test.describe("/provider overlay edit — with existing provider", () => {
     terminal.write("/provider");
     terminal.submit();
 
-    await expect(terminal.getByText("Select Provider")).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText("Select Model")).toBeVisible({ timeout: 5000 });
     await expect(terminal.getByText(/ExistingProvider/gi)).toBeVisible({ timeout: 5000 });
 
     terminal.write("e");

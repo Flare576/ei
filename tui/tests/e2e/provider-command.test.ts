@@ -24,7 +24,7 @@ function createCheckpointWithProvider() {
       last_activity: timestamp,
       settings: {
         auto_save_interval_ms: 999999999,
-        default_model: "TestProvider",
+        default_model: "test-model-guid",
         ceremony: {
           time: "09:00",
           last_ceremony: timestamp,
@@ -37,6 +37,13 @@ function createCheckpointWithProvider() {
             url: `http://localhost:${MOCK_PORT}/v1`,
             enabled: true,
             created_at: new Date().toISOString(),
+            models: [
+              {
+                id: "test-model-guid",
+                name: "test-model",
+                created_at: new Date().toISOString(),
+              },
+            ],
           },
         ],
       },
@@ -193,14 +200,14 @@ test.use({
 });
 
 test.describe("/provider command — with configured provider", () => {
-  test("/provider shows overlay with 'Select Provider' title and TestProvider listed", async ({ terminal }) => {
+  test("/provider shows overlay with 'Select Model' title and TestProvider:test-model listed", async ({ terminal }) => {
     await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 15000 });
 
     terminal.write("/provider");
     terminal.submit();
 
-    await expect(terminal.getByText("Select Provider")).toBeVisible({ timeout: 5000 });
-    await expect(terminal.getByText(/TestProvider/gi)).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText("Select Model")).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText(/TestProvider:test-model/gi)).toBeVisible({ timeout: 5000 });
 
     terminal.keyEscape();
     await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 5000 });
@@ -212,7 +219,7 @@ test.describe("/provider command — with configured provider", () => {
     terminal.write("/providers");
     terminal.submit();
 
-    await expect(terminal.getByText("Select Provider")).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText("Select Model")).toBeVisible({ timeout: 5000 });
 
     terminal.keyEscape();
     await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 5000 });
@@ -224,53 +231,49 @@ test.describe("/provider command — with configured provider", () => {
     terminal.write("/provider");
     terminal.submit();
 
-    await expect(terminal.getByText("Select Provider")).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText("Select Model")).toBeVisible({ timeout: 5000 });
 
     terminal.keyEscape();
 
     await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 5000 });
   });
 
-  test("/provider TestProvider directly sets the provider on the persona", async ({ terminal }) => {
+  test("/provider TestProvider directly sets the first model for that provider", async ({ terminal }) => {
     await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 15000 });
 
     terminal.write("/provider TestProvider");
     terminal.submit();
 
-    await expect(terminal.getByText(/Provider set to TestProvider/gi)).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText(/Model set to TestProvider:test-model/gi)).toBeVisible({ timeout: 5000 });
   });
 
-  test("/provider nonexistent shows 'No provider named' error", async ({ terminal }) => {
+  test("/provider nonexistent shows 'Invalid model' error", async ({ terminal }) => {
     await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 15000 });
 
     terminal.write("/provider nonexistent");
     terminal.submit();
 
-    await expect(terminal.getByText(/No provider named/gi)).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText(/Invalid model/gi)).toBeVisible({ timeout: 5000 });
   });
 });
 
-test.describe("/model smart inference — with configured provider", () => {
-  test("after /provider TestProvider, /model some-model shows 'Model set to TestProvider:some-model'", async ({ terminal }) => {
+test.describe("/model command — with configured provider", () => {
+  test("/model TestProvider:test-model (explicit provider:model) sets model", async ({ terminal }) => {
     await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 15000 });
 
-    terminal.write("/provider TestProvider");
-    terminal.submit();
-    await expect(terminal.getByText(/Provider set to TestProvider/gi)).toBeVisible({ timeout: 5000 });
-
-    terminal.write("/model some-model");
+    terminal.write("/model TestProvider:test-model");
     terminal.submit();
 
-    await expect(terminal.getByText(/Model set to TestProvider:some-model/gi)).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText(/Model set to TestProvider:test-model/gi)).toBeVisible({ timeout: 5000 });
   });
 
-  test("/model OtherProv:gpt-4o (explicit provider:model) sets model as-is", async ({ terminal }) => {
+  test("/model TestProvider sets the first model for that provider", async ({ terminal }) => {
     await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 15000 });
 
-    terminal.write("/model OtherProv:gpt-4o");
+    terminal.write("/model TestProvider");
     terminal.submit();
 
-    await expect(terminal.getByText(/Model set to OtherProv:gpt-4o/gi)).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText(/Model set to TestProvider:test-model/gi)).toBeVisible({ timeout: 5000 });
   });
 });
 
@@ -291,7 +294,7 @@ test.describe("/provider command — with NO configured providers", () => {
     },
   });
 
-  test("/provider with empty accounts and no local LLM shows 'No providers configured' message", async ({ terminal }) => {
+  test("/provider with empty accounts and no local LLM shows 'No models configured' message", async ({ terminal }) => {
     try {
       // As long as nothing is running on :1234, Welcome overlay appears when no accounts exist
       await expect(terminal.getByText("Welcome to Ei!")).toBeVisible({ timeout: 5000 });
@@ -303,7 +306,7 @@ test.describe("/provider command — with NO configured providers", () => {
     terminal.write("/provider");
     terminal.submit();
 
-    await expect(terminal.getByText(/No providers configured/gi)).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText(/No models configured/gi)).toBeVisible({ timeout: 5000 });
   });
 });
 
@@ -324,7 +327,7 @@ test.describe("/model command — with NO configured providers", () => {
     },
   });
 
-  test("/model some-model with NO provider and no local LLM shows 'No provider set' error", async ({ terminal }) => {
+  test("/model some-model with NO provider and no local LLM shows 'Invalid model' error", async ({ terminal }) => {
     try {
       // As long as nothing is running on :1234, Welcome overlay appears when no accounts exist
       await expect(terminal.getByText("Welcome to Ei!")).toBeVisible({ timeout: 5000 });
@@ -336,6 +339,6 @@ test.describe("/model command — with NO configured providers", () => {
     terminal.write("/model some-model");
     terminal.submit();
 
-    await expect(terminal.getByText(/No provider set/gi)).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText(/Invalid model/gi)).toBeVisible({ timeout: 5000 });
   });
 });
