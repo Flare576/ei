@@ -1549,6 +1549,7 @@ function App() {
       pendingItems={queuePanelItems.pending}
       dlqItems={queuePanelItems.dlq}
       personas={personas}
+      accounts={human?.settings?.accounts ?? []}
       onClose={handleQueuePanelClose}
       onUpdateItems={handleQueueItemsUpdate}
     />

@@ -1,11 +1,23 @@
 import { useState, useRef, useEffect } from 'react';
 import type { LLMRequest } from '../../../../src/core/types/llm';
+import type { ProviderAccount } from '../../../../src/core/types';
+import { ModelPicker } from '../Settings/ModelPicker';
+
+function resolveModelName(modelId: string | undefined, accounts: ProviderAccount[]): string {
+  if (!modelId) return '(no model)';
+  for (const account of accounts) {
+    const model = account.models?.find(m => m.id === modelId);
+    if (model) return `${account.name} - ${model.name}`;
+  }
+  return '(no model)';
+}
 
 interface QueuePanelProps {
   isOpen: boolean;
   pendingItems: LLMRequest[];
   dlqItems: LLMRequest[];
   personas: Array<{ id: string; display_name: string }>;
+  accounts: ProviderAccount[];
   onClose: () => void;
   onUpdateItems: (ids: string[], model: string) => void;
 }
@@ -15,19 +27,19 @@ export function QueuePanel({
   pendingItems,
   dlqItems,
   personas,
+  accounts,
   onClose,
   onUpdateItems,
 }: QueuePanelProps) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [newModel, setNewModel] = useState('');
-  const modelInputRef = useRef<HTMLInputElement>(null);
+  const [newModel, setNewModel] = useState<string | undefined>(undefined);
   const modalRef = useRef<HTMLDivElement>(null);
   const previousActiveElement = useRef<Element | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       setSelectedIds([]);
-      setNewModel('');
+      setNewModel(undefined);
     }
   }, [isOpen]);
 
@@ -57,9 +69,8 @@ export function QueuePanel({
     const allItems = [...pendingItems, ...dlqItems];
     const firstSelected = allItems.find(item => item.id === firstSelectedId);
     if (firstSelected) {
-      setNewModel(firstSelected.model ?? '');
+      setNewModel(firstSelected.model ?? undefined);
     }
-    setTimeout(() => modelInputRef.current?.focus(), 0);
   }, [firstSelectedId]);
 
   if (!isOpen) return null;
@@ -84,10 +95,10 @@ export function QueuePanel({
   };
 
   const handleUpdateSelected = () => {
-    if (selectedIds.length === 0 || !newModel.trim()) return;
-    onUpdateItems(selectedIds, newModel.trim());
+    if (selectedIds.length === 0 || !newModel) return;
+    onUpdateItems(selectedIds, newModel);
     setSelectedIds([]);
-    setNewModel('');
+    setNewModel(undefined);
   };
 
   const allSelected = totalCount > 0 && selectedIds.length === totalCount;
@@ -129,25 +140,20 @@ export function QueuePanel({
 
           {someSelected && (
             <div className="ei-queue-panel__update-row">
-              <label className="ei-queue-panel__update-label" htmlFor="ei-queue-model-input">
+              <label className="ei-queue-panel__update-label">
                 New model for selected ({selectedIds.length}):
               </label>
-              <input
+              <ModelPicker
                 id="ei-queue-model-input"
-                ref={modelInputRef}
-                className="ei-queue-panel__model-input"
-                type="text"
+                label=""
                 value={newModel}
-                onChange={(e) => setNewModel(e.target.value)}
-                placeholder="model name"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleUpdateSelected();
-                }}
+                onChange={setNewModel}
+                accounts={accounts}
               />
               <button
                 className="ei-btn ei-btn--primary"
                 onClick={handleUpdateSelected}
-                disabled={!newModel.trim()}
+                disabled={!newModel}
               >
                 Update Selected
               </button>
@@ -170,6 +176,7 @@ export function QueuePanel({
                       isSelected={selectedIds.includes(item.id)}
                       onToggle={handleToggleItem}
                       isDlq={false}
+                      accounts={accounts}
                     />
                   ))}
                 </ul>
@@ -191,6 +198,7 @@ export function QueuePanel({
                       isSelected={selectedIds.includes(item.id)}
                       onToggle={handleToggleItem}
                       isDlq={true}
+                      accounts={accounts}
                     />
                   ))}
                 </ul>
@@ -209,9 +217,10 @@ interface QueueItemProps {
   isSelected: boolean;
   onToggle: (id: string) => void;
   isDlq: boolean;
+  accounts: ProviderAccount[];
 }
 
-function QueueItem({ item, personaName, isSelected, onToggle, isDlq }: QueueItemProps) {
+function QueueItem({ item, personaName, isSelected, onToggle, isDlq, accounts }: QueueItemProps) {
   return (
     <li className={`ei-queue-panel__item${isSelected ? ' ei-queue-panel__item--selected' : ''}`}>
       <label className="ei-queue-panel__item-label">
@@ -228,7 +237,7 @@ function QueueItem({ item, personaName, isSelected, onToggle, isDlq }: QueueItem
           <span className="ei-queue-panel__item-persona">{personaName}</span>
         )}
         <span className="ei-queue-panel__item-model">
-          {item.model ?? '(no model)'}
+          {resolveModelName(item.model, accounts)}
         </span>
         <span className="ei-queue-panel__item-attempts" title="Attempts">
           {item.attempts}
