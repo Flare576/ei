@@ -643,6 +643,18 @@
   font-style: normal;
 }
 
+.ei-form-error {
+  font-size: var(--ei-font-size-sm);
+  font-weight: 600;
+  color: var(--ei-danger);
+  margin-top: var(--ei-spacing-xs);
+}
+
+.ei-input--error {
+  border-color: var(--ei-danger) !important;
+  box-shadow: 0 0 0 1px var(--ei-danger);
+}
+
 .ei-form-warning {
   margin-top: var(--ei-spacing-md);
   padding: var(--ei-spacing-sm) var(--ei-spacing-md);
