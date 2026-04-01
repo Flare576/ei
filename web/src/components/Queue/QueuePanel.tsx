@@ -37,6 +37,7 @@ export function QueuePanel({
   const [newModel, setNewModel] = useState<string | undefined>(undefined);
   const modalRef = useRef<HTMLDivElement>(null);
   const previousActiveElement = useRef<Element | null>(null);
+  const selectAllRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -75,6 +76,16 @@ export function QueuePanel({
     }
   }, [firstSelectedId]);
 
+  const allItemCount = pendingItems.length + dlqItems.length;
+  const allSelected = allItemCount > 0 && selectedIds.length === allItemCount;
+  const someSelected = selectedIds.length > 0;
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = someSelected && !allSelected;
+    }
+  }, [someSelected, allSelected]);
+
   if (!isOpen) return null;
 
   const allItems = [...pendingItems, ...dlqItems];
@@ -110,8 +121,6 @@ export function QueuePanel({
     setNewModel(undefined);
   };
 
-  const allSelected = totalCount > 0 && selectedIds.length === totalCount;
-  const someSelected = selectedIds.length > 0;
   const showDivider = pendingItems.length > 0 && dlqItems.length > 0;
 
   return (
@@ -138,48 +147,42 @@ export function QueuePanel({
           </button>
         </div>
 
-        <div className="ei-queue-panel__toolbar">
-          <button
-            className="ei-btn ei-btn--secondary"
-            onClick={handleSelectAll}
+        <div className="ei-queue-panel__controls">
+          <input
+            ref={selectAllRef}
+            type="checkbox"
+            className="ei-queue-panel__checkbox"
+            checked={allSelected}
+            onChange={handleSelectAll}
             disabled={totalCount === 0}
-          >
-            {allSelected ? 'Deselect All' : 'Select All'}
-          </button>
-
-          {someSelected && (
-            <div className="ei-queue-panel__update-row">
-              <label className="ei-queue-panel__update-label">
-                New model for selected ({selectedIds.length}):
-              </label>
-              <ModelPicker
-                id="ei-queue-model-input"
-                label=""
-                value={newModel}
-                onChange={setNewModel}
-                accounts={accounts}
-              />
-              <button
-                className="ei-btn ei-btn--primary"
-                onClick={handleUpdateSelected}
-                disabled={!newModel}
-              >
-                Update Selected
-              </button>
-            </div>
-          )}
-
-          {someSelected && (
-            <div className="ei-queue-panel__delete-row">
-              <span className="ei-queue-panel__delete-warning">⚠ Deletion is permanent</span>
-              <button
-                className="ei-btn ei-btn--danger"
-                onClick={handleDeleteSelected}
-              >
-                Delete Selected ({selectedIds.length})
-              </button>
-            </div>
-          )}
+            title="Select all"
+            aria-label="Select all"
+          />
+          <span className="ei-queue-panel__controls-gap" aria-hidden="true" />
+          <div className="ei-queue-panel__controls-picker">
+            <ModelPicker
+              value={newModel}
+              onChange={setNewModel}
+              accounts={accounts}
+              label=""
+              id="ei-queue-model-picker"
+              allowEmpty
+            />
+          </div>
+          <button
+            className="ei-btn ei-btn--icon"
+            onClick={handleUpdateSelected}
+            disabled={!someSelected || !newModel}
+            title="Update selected items"
+            aria-label="Update selected"
+          >💾</button>
+          <button
+            className="ei-btn ei-btn--icon ei-btn--danger-icon"
+            onClick={handleDeleteSelected}
+            disabled={!someSelected}
+            title="Delete selected — permanent, cannot be undone"
+            aria-label="Delete selected"
+          >🗑️</button>
         </div>
 
         <div className="ei-queue-panel__body">
@@ -251,18 +254,10 @@ function QueueItem({ item, personaName, isSelected, onToggle, isDlq, accounts }:
           checked={isSelected}
           onChange={() => onToggle(item.id)}
         />
-        <span className="ei-queue-panel__item-type">
-          {item.next_step}
-        </span>
-        {personaName && (
-          <span className="ei-queue-panel__item-persona">{personaName}</span>
-        )}
-        <span className="ei-queue-panel__item-model">
-          {resolveModelName(item.model, accounts)}
-        </span>
-        <span className="ei-queue-panel__item-attempts" title="Attempts">
-          {item.attempts}
-        </span>
+        {personaName && <span className="ei-queue-panel__item-persona">{personaName}</span>}
+        <span className="ei-queue-panel__item-model">{resolveModelName(item.model, accounts)}</span>
+        <span className="ei-queue-panel__item-type">{item.next_step}</span>
+        <span className="ei-queue-panel__item-attempts" title="Attempts">{item.attempts}</span>
         {isDlq && (
           <span className="ei-queue-panel__dlq-badge" aria-label="Dead Letter Queue">
             DLQ
