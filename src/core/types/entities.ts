@@ -45,7 +45,7 @@ export interface BackupConfig {
 export interface ModelConfig {
   id: string;                       // GUID (crypto.randomUUID())
   name: string;                     // Model identifier, e.g. "claude-haiku-4-5", "(default)"
-  context_window?: number;          // Input token limit (user sets effective limit)
+  token_limit?: number;             // Input token limit (user sets effective limit)
   max_output_tokens?: number;       // Output token limit (API-enforced)
   total_calls?: number;             // Usage counter
   total_tokens_in?: number;         // Usage counter

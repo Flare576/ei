@@ -325,7 +325,7 @@ export class StateManager {
             const model = {
               id: crypto.randomUUID(),
               name: account.default_model,
-              context_window: (account as any).token_limit as number | undefined,
+              token_limit: (account as any).token_limit as number | undefined,
               max_output_tokens: undefined as number | undefined,
             };
             account.models.push(model);

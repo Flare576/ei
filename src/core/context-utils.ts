@@ -23,11 +23,10 @@ export function filterMessagesForContext(
 
     const msgMs = new Date(msg.timestamp).getTime();
 
-    if (contextBoundary) {
-      return msgMs >= boundaryMs;
-    }
+    if (msgMs < windowStartMs) return false;
+    if (contextBoundary && msgMs < boundaryMs) return false;
 
-    return msgMs >= windowStartMs;
+    return true;
   });
 }
 

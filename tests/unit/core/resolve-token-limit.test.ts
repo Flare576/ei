@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { resolveTokenLimit } from "../../../src/core/llm-client.js";
 import { ProviderType, type ProviderAccount, type ModelConfig } from "../../../src/core/types.js";
 
-const DEFAULT_CONTEXT_WINDOW = 8192;
+const DEFAULT_TOKEN_LIMIT = 8192;
 
 function createAccount(overrides: Partial<ProviderAccount> = {}): ProviderAccount {
   return {
@@ -32,18 +32,18 @@ describe("resolveTokenLimit", () => {
 
   it("falls back to default when no user override", () => {
     const accounts = [createAccount()];
-    expect(resolveTokenLimit("TestProvider:gpt-4o", accounts)).toBe(DEFAULT_CONTEXT_WINDOW);
+    expect(resolveTokenLimit("TestProvider:gpt-4o", accounts)).toBe(DEFAULT_TOKEN_LIMIT);
   });
 
   it("returns default for unknown model with no override", () => {
     const accounts = [createAccount()];
-    expect(resolveTokenLimit("TestProvider:unknown-model", accounts)).toBe(DEFAULT_CONTEXT_WINDOW);
+    expect(resolveTokenLimit("TestProvider:unknown-model", accounts)).toBe(DEFAULT_TOKEN_LIMIT);
   });
 
   it("returns default when no modelSpec and no accounts", () => {
-    expect(resolveTokenLimit()).toBe(DEFAULT_CONTEXT_WINDOW);
-    expect(resolveTokenLimit("")).toBe(DEFAULT_CONTEXT_WINDOW);
-    expect(resolveTokenLimit(undefined, [])).toBe(DEFAULT_CONTEXT_WINDOW);
+    expect(resolveTokenLimit()).toBe(DEFAULT_TOKEN_LIMIT);
+    expect(resolveTokenLimit("")).toBe(DEFAULT_TOKEN_LIMIT);
+    expect(resolveTokenLimit(undefined, [])).toBe(DEFAULT_TOKEN_LIMIT);
   });
 
   it("user override takes priority over default", () => {
@@ -53,7 +53,7 @@ describe("resolveTokenLimit", () => {
 
   it("resolves model from account default_model when bare provider name used", () => {
     const accounts = [createAccount({ default_model: "claude-3.5-sonnet" })];
-    expect(resolveTokenLimit("TestProvider", accounts)).toBe(DEFAULT_CONTEXT_WINDOW);
+    expect(resolveTokenLimit("TestProvider", accounts)).toBe(DEFAULT_TOKEN_LIMIT);
   });
 
   it("matches provider name case-insensitively", () => {
@@ -63,39 +63,39 @@ describe("resolveTokenLimit", () => {
 
   it("skips disabled accounts", () => {
     const accounts = [createAccount({ token_limit: 99_999, enabled: false })];
-    expect(resolveTokenLimit("TestProvider:gpt-4o", accounts)).toBe(DEFAULT_CONTEXT_WINDOW);
+    expect(resolveTokenLimit("TestProvider:gpt-4o", accounts)).toBe(DEFAULT_TOKEN_LIMIT);
   });
 
-  it("legacy 'Provider:model' returns ModelConfig.context_window when set", () => {
-    const model = createModel({ name: "gpt-4o", context_window: 128_000 });
+  it("legacy 'Provider:model' returns ModelConfig.token_limit when set", () => {
+    const model = createModel({ name: "gpt-4o", token_limit: 128_000 });
     const accounts = [createAccount({ models: [model] })];
     expect(resolveTokenLimit("TestProvider:gpt-4o", accounts)).toBe(128_000);
   });
 
-  it("ModelConfig.context_window takes priority over account.token_limit", () => {
-    const model = createModel({ name: "gpt-4o", context_window: 128_000 });
+  it("ModelConfig.token_limit takes priority over account.token_limit", () => {
+    const model = createModel({ name: "gpt-4o", token_limit: 128_000 });
     const accounts = [createAccount({ models: [model], token_limit: 50_000 })];
     expect(resolveTokenLimit("TestProvider:gpt-4o", accounts)).toBe(128_000);
   });
 
-  it("GUID input: returns ModelConfig.context_window when set", () => {
+  it("GUID input: returns ModelConfig.token_limit when set", () => {
     const modelId = crypto.randomUUID();
-    const model = createModel({ id: modelId, context_window: 100_000 });
+    const model = createModel({ id: modelId, token_limit: 100_000 });
     const accounts = [createAccount({ models: [model] })];
     expect(resolveTokenLimit(modelId, accounts)).toBe(100_000);
   });
 
-  it("GUID input: falls back to account token_limit when ModelConfig has no context_window", () => {
+  it("GUID input: falls back to account token_limit when ModelConfig has no token_limit", () => {
     const modelId = crypto.randomUUID();
     const model = createModel({ id: modelId });
     const accounts = [createAccount({ models: [model], token_limit: 50_000 })];
     expect(resolveTokenLimit(modelId, accounts)).toBe(50_000);
   });
 
-  it("GUID input: falls back to DEFAULT_CONTEXT_WINDOW when no context_window or token_limit", () => {
+  it("GUID input: falls back to DEFAULT_TOKEN_LIMIT when neither model nor account has token_limit", () => {
     const modelId = crypto.randomUUID();
     const model = createModel({ id: modelId });
     const accounts = [createAccount({ models: [model] })];
-    expect(resolveTokenLimit(modelId, accounts)).toBe(DEFAULT_CONTEXT_WINDOW);
+    expect(resolveTokenLimit(modelId, accounts)).toBe(DEFAULT_TOKEN_LIMIT);
   });
 });

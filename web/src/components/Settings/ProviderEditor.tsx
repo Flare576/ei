@@ -203,7 +203,7 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
     }
   };
 
-  const handleModelChange = (id: string, field: keyof Pick<ModelConfig, 'name' | 'context_window' | 'max_output_tokens'>, value: string) => {
+  const handleModelChange = (id: string, field: keyof Pick<ModelConfig, 'name' | 'token_limit' | 'max_output_tokens'>, value: string) => {
     setModels(models.map((m) => {
       if (m.id !== id) return m;
       if (field === 'name') {
@@ -384,18 +384,18 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
                       </div>
                       <div className="ei-provider-editor__model-token-fields">
                         <div className="ei-provider-editor__model-field">
-                          <label className="ei-provider-editor__model-field-label">
-                            Context window <span className="ei-provider-editor__model-field-hint">(e.g., 8192)</span>
-                          </label>
-                          <input
-                            type="number"
-                            className="ei-input ei-provider-editor__model-context"
-                            value={model.context_window ?? ''}
-                            onChange={(e) => handleModelChange(model.id, 'context_window', e.target.value)}
-                            min="1"
-                            aria-label="Context window (tokens)"
-                            title="Context window (tokens)"
-                          />
+                           <label className="ei-provider-editor__model-field-label">
+                             Token limit <span className="ei-provider-editor__model-field-hint">(e.g., 128000)</span>
+                           </label>
+                           <input
+                             type="number"
+                             className="ei-input ei-provider-editor__model-context"
+                             value={model.token_limit ?? ''}
+                             onChange={(e) => handleModelChange(model.id, 'token_limit', e.target.value)}
+                             min="1"
+                             aria-label="Token limit"
+                             title="Token limit"
+                           />
                         </div>
                         <div className="ei-provider-editor__model-field">
                           <label className="ei-provider-editor__model-field-label">

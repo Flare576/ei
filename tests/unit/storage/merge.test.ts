@@ -289,12 +289,12 @@ describe("yoloMerge() — ProviderAccount (ID-based)", () => {
     expect(model.total_calls).toBe(999);
   });
 
-  it("test: non-counter fields (context_window, max_output_tokens) use preferRemote logic", () => {
+  it("test: non-counter fields (token_limit, max_output_tokens) use preferRemote logic", () => {
     const sharedId = "aaaaaaaa-0000-0000-0000-000000000012";
     const modelId = "bbbbbbbb-0000-0000-0000-000000000012";
 
-    const localModel = makeModel({ id: modelId, context_window: 32000, max_output_tokens: 2000 });
-    const remoteModel = makeModel({ id: modelId, context_window: 128000, max_output_tokens: 8000 });
+    const localModel = makeModel({ id: modelId, token_limit: 32000, max_output_tokens: 2000 });
+    const remoteModel = makeModel({ id: modelId, token_limit: 128000, max_output_tokens: 8000 });
 
     // preferRemote=true: remote timestamp is newer
     const { local, remote } = pairWithAccounts(
@@ -307,7 +307,7 @@ describe("yoloMerge() — ProviderAccount (ID-based)", () => {
     const model = getAccounts(result)[0].models![0];
 
     // preferRemote=true → remote's non-counter values win
-    expect(model.context_window).toBe(128000);
+    expect(model.token_limit).toBe(128000);
     expect(model.max_output_tokens).toBe(8000);
   });
 
@@ -315,8 +315,8 @@ describe("yoloMerge() — ProviderAccount (ID-based)", () => {
     const sharedId = "aaaaaaaa-0000-0000-0000-000000000013";
     const modelId = "bbbbbbbb-0000-0000-0000-000000000013";
 
-    const localModel = makeModel({ id: modelId, context_window: 32000, max_output_tokens: 2000 });
-    const remoteModel = makeModel({ id: modelId, context_window: 128000, max_output_tokens: 8000 });
+    const localModel = makeModel({ id: modelId, token_limit: 32000, max_output_tokens: 2000 });
+    const remoteModel = makeModel({ id: modelId, token_limit: 128000, max_output_tokens: 8000 });
 
     // preferRemote=false: local timestamp is newer
     const { local, remote } = pairWithAccounts(
@@ -329,7 +329,7 @@ describe("yoloMerge() — ProviderAccount (ID-based)", () => {
     const model = getAccounts(result)[0].models![0];
 
     // preferRemote=false → local's non-counter values kept
-    expect(model.context_window).toBe(32000);
+    expect(model.token_limit).toBe(32000);
     expect(model.max_output_tokens).toBe(2000);
   });
 });

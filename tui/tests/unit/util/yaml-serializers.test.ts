@@ -658,7 +658,7 @@ describe("providerToYAML / providerFromYAML", () => {
     created_at: timestamp,
     models: [
       { id: "model-guid-1", name: "gpt-4o" },
-      { id: "model-guid-2", name: "gpt-3.5-turbo", context_window: 16384 },
+      { id: "model-guid-2", name: "gpt-3.5-turbo", token_limit: 16384 },
     ],
   };
 
@@ -668,7 +668,7 @@ describe("providerToYAML / providerFromYAML", () => {
     expect(yaml).toContain("models:");
     expect(yaml).toContain("name: gpt-4o");
     expect(yaml).toContain("name: gpt-3.5-turbo");
-    expect(yaml).toContain("context_window: 16384");
+    expect(yaml).toContain("token_limit: 16384");
   });
 
   test("providerToYAML does NOT include internal counter fields", () => {
@@ -721,7 +721,7 @@ describe("providerToYAML / providerFromYAML", () => {
     const gpt35 = models.find(m => m.name === "gpt-3.5-turbo");
     expect(gpt4?.id).toBe("model-guid-1");
     expect(gpt35?.id).toBe("model-guid-2");
-    expect(gpt35?.context_window).toBe(16384);
+    expect(gpt35?.token_limit).toBe(16384);
   });
 
   test("providerFromYAML preserves usage counters on round-trip", () => {

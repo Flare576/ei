@@ -63,14 +63,14 @@ describe("callLLMRaw — max_tokens resolution", () => {
     expect(getCapturedBody(mockFetch).max_tokens).toBe(32768);
   });
 
-  it("falls back to 64000 when ModelConfig has no max_output_tokens", async () => {
+  it("falls back to 8000 when ModelConfig has no max_output_tokens", async () => {
     const model = makeModel("llama-3-8b");
     const account = makeAccount("Local LLM", [model]);
     const mockFetch = stubFetch(makeLLMResponse());
 
     await callLLMRaw("sys", "user", [], `Local LLM:llama-3-8b`, {}, [account]);
 
-    expect(getCapturedBody(mockFetch).max_tokens).toBe(64000);
+    expect(getCapturedBody(mockFetch).max_tokens).toBe(8000);
   });
 });
 

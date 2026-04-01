@@ -791,7 +791,7 @@ export function quotesFromYAML(yamlContent: string): QuotesYAMLResult {
 
 interface EditableModelData {
   name: string;
-  context_window?: number;
+  token_limit?: number;
   max_output_tokens?: number;
   _delete?: boolean;
 }
@@ -906,13 +906,12 @@ function parseModels(editableModels: EditableModelData[]): import('../../../src/
     result.push({
       id: crypto.randomUUID(),
       name: m.name,
-      context_window: m.context_window,
+      token_limit: m.token_limit,
       max_output_tokens: m.max_output_tokens,
     });
   }
   return result;
 }
-
 /**
  * Serialize existing provider account to YAML for editing.
  * Shows models[] as a nested section with _delete comments.
@@ -941,8 +940,8 @@ export function providerToYAML(account: ProviderAccount): string {
   if (modelList.length > 0) {
     for (const m of modelList) {
       modelLines.push(`  - name: ${m.name}`);
-      if (m.context_window !== undefined) {
-        modelLines.push(`    context_window: ${m.context_window}`);
+      if (m.token_limit !== undefined) {
+        modelLines.push(`    token_limit: ${m.token_limit}`);
       }
       if (m.max_output_tokens !== undefined) {
         modelLines.push(`    max_output_tokens: ${m.max_output_tokens}`);
@@ -1000,7 +999,7 @@ export function providerFromYAML(yamlContent: string, original: ProviderAccount)
     parsedModels.push({
       id: existing?.id ?? crypto.randomUUID(),
       name: m.name,
-      context_window: m.context_window,
+      token_limit: m.token_limit,
       max_output_tokens: m.max_output_tokens,
       // Preserve usage counters from original if model matched
       total_calls: existing?.total_calls,

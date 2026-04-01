@@ -53,7 +53,7 @@ describe("StateManager.migrateProviderModel()", () => {
     expect(human.settings?.accounts).toBeUndefined();
   });
 
-  it("test 2: provider with default_model and token_limit → ModelConfig with context_window, default_model becomes GUID", async () => {
+  it("test 2: provider with default_model and token_limit → ModelConfig with token_limit, default_model becomes GUID", async () => {
     const state = createDefaultTestState();
     const provider = makeProvider({
       name: "OpenAI",
@@ -74,7 +74,7 @@ describe("StateManager.migrateProviderModel()", () => {
 
     const model = account.models![0];
     expect(model.name).toBe("gpt-4o");
-    expect(model.context_window).toBe(128000);
+    expect(model.token_limit).toBe(128000);
     expect(model.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
     expect(account.default_model).toBe(model.id);
     expect((account as any).token_limit).toBeUndefined();
@@ -95,7 +95,7 @@ describe("StateManager.migrateProviderModel()", () => {
     expect(account.models).toBeDefined();
     expect(account.models!.length).toBe(1);
     expect(account.models![0].name).toBe("(default)");
-    expect(account.models![0].context_window).toBeUndefined();
+    expect(account.models![0].token_limit).toBeUndefined();
     expect(account.default_model).toBe(account.models![0].id);
   });
 
@@ -118,8 +118,7 @@ describe("StateManager.migrateProviderModel()", () => {
     expect(account.models!.length).toBe(1);
     const model = account.models![0];
     expect(model.name).toBe("claude-opus-4");
-    expect(model.context_window).toBeUndefined();
-    expect(model.max_output_tokens).toBeUndefined();
+    expect(model.token_limit).toBeUndefined();
     expect(account.default_model).toBe(model.id);
   });
 
@@ -182,7 +181,7 @@ describe("StateManager.migrateProviderModel()", () => {
     const existingModel: ModelConfig = {
       id: "00000000-0000-0000-0000-000000000001",
       name: "gpt-4o",
-      context_window: 128000,
+      token_limit: 128000,
     };
     const state = createDefaultTestState();
     const provider = makeProvider({
@@ -206,7 +205,7 @@ describe("StateManager.migrateProviderModel()", () => {
     expect(account.models).toHaveLength(1);
     expect(account.models![0].id).toBe(existingModel.id);
     expect(account.models![0].name).toBe("gpt-4o");
-    expect(account.models![0].context_window).toBe(128000);
+    expect(account.models![0].token_limit).toBe(128000);
     expect(account.default_model).toBe(existingModel.id);
   });
 

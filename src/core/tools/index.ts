@@ -81,7 +81,7 @@ export function toOpenAITools(tools: ToolDefinition[]): Record<string, unknown>[
       name: t.name,
       description: t.description,
       parameters: t.input_schema,
-      ...(t.is_submit ? { strict: true } : {}),
+
     },
   }));
 }

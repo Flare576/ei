@@ -53,10 +53,10 @@ Priority queue for LLM requests:
 
 Multi-provider LLM abstraction layer:
 - Handles requests to Anthropic, OpenAI, Bedrock, local models
-- **Sets `max_tokens: 64000`** for all requests
+- **Sets `max_tokens: 8000`** by default (safe for most providers; users can configure higher per-model)
 - Prevents unbounded generation (test showed timeout after 2min without limit)
 - Local models silently clamp to their configured maximums
-- Anthropic Opus 4 accepts 64K (200K total context - 64K output = 136K input budget)
+- Anthropic Opus 4 accepts up to 64K output (configure `max_output_tokens` on the model to unlock)
 
 **JSON Response Parsing** (`parseJSONResponse()`):
 - **Strategy 1**: Extract from markdown code blocks (```json)

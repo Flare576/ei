@@ -1,5 +1,6 @@
 import type { ChatMessage, ProviderAccount, ModelConfig } from "./types.js";
-const DEFAULT_CONTEXT_WINDOW = 8192;
+const DEFAULT_TOKEN_LIMIT = 8192;
+const DEFAULT_MAX_OUTPUT_TOKENS = 8000;
 
 export interface ProviderConfig {
   baseURL: string;
@@ -179,9 +180,9 @@ export function resolveTokenLimit(
   if (accounts && spec) {
     const { model, account } = findModelAndAccount(spec, accounts);
 
-    if (model?.context_window) {
-      logTokenLimit(spec, "model-config", model.context_window);
-      return model.context_window;
+    if (model?.token_limit) {
+      logTokenLimit(spec, "model-config", model.token_limit);
+      return model.token_limit;
     }
 
     if (account?.token_limit) {
@@ -191,8 +192,8 @@ export function resolveTokenLimit(
     }
   }
 
-  logTokenLimit(spec, "default", DEFAULT_CONTEXT_WINDOW);
-  return DEFAULT_CONTEXT_WINDOW;
+  logTokenLimit(spec, "default", DEFAULT_TOKEN_LIMIT);
+  return DEFAULT_TOKEN_LIMIT;
 }
 
 function logTokenLimit(model: string, source: string, tokens: number): void {
@@ -201,7 +202,7 @@ function logTokenLimit(model: string, source: string, tokens: number): void {
 
   const budget = Math.floor(tokens * 0.75);
   if (source === "default") {
-    console.warn(`[TokenLimit] Unknown model "${model}" — using conservative default (${DEFAULT_CONTEXT_WINDOW})`);
+    console.warn(`[TokenLimit] Unknown model "${model}" — using conservative default (${DEFAULT_TOKEN_LIMIT})`);
   } else {
     console.log(`[TokenLimit] ${model}: ${source} → ${tokens} tokens (extraction budget: ${budget})`);
   }
@@ -261,7 +262,7 @@ export async function callLLMRaw(
     ...(model !== undefined && { model }),
     messages: finalMessages,
     temperature,
-    max_tokens: modelConfig?.max_output_tokens ?? 64000,
+    max_tokens: modelConfig?.max_output_tokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
   };
 
   if (options.tools && options.tools.length > 0) {
