@@ -153,6 +153,7 @@ function handleGet(string $encryptedId): void {
     
     $lastUpdated = strtotime($row['last_updated']);
     header('Last-Modified: ' . gmdate('D, d M Y H:i:s', $lastUpdated) . ' GMT');
+    header('Cache-Control: no-store');
     
     $etag = computeEtag($filePath);
     if ($etag) {
@@ -178,6 +179,7 @@ function handleHead(string $encryptedId): void {
     
     $lastUpdated = strtotime($row['last_updated']);
     header('Last-Modified: ' . gmdate('D, d M Y H:i:s', $lastUpdated) . ' GMT');
+    header('Cache-Control: no-store');
     
     $filePath = DATA_PATH . '/' . $row['file_path'];
     $etag = computeEtag($filePath);
