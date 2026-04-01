@@ -568,6 +568,15 @@ function App() {
     processorRef.current.getQueueStatus().then(setQueueStatus);
   }, [queuePanelItems]);
 
+  const handleQueueItemsDelete = useCallback((ids: string[]) => {
+    if (!processorRef.current) return;
+    processorRef.current.deleteQueueItems(ids);
+    const pending = processorRef.current.getQueueActiveItems();
+    const dlq = processorRef.current.getDLQItems();
+    setQueuePanelItems({ pending, dlq });
+    processorRef.current.getQueueStatus().then(setQueueStatus);
+  }, []);
+
   const handlePausePersona = useCallback(async (personaId: string, pauseUntil?: string) => {
     if (!processor) return;
     const persona = await processor.getPersona(personaId);
@@ -1552,6 +1561,7 @@ function App() {
       accounts={human?.settings?.accounts ?? []}
       onClose={handleQueuePanelClose}
       onUpdateItems={handleQueueItemsUpdate}
+      onDeleteItems={handleQueueItemsDelete}
     />
     
     {human && (

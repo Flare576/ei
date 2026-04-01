@@ -20,6 +20,7 @@ interface QueuePanelProps {
   accounts: ProviderAccount[];
   onClose: () => void;
   onUpdateItems: (ids: string[], model: string) => void;
+  onDeleteItems: (ids: string[]) => void;
 }
 
 export function QueuePanel({
@@ -30,6 +31,7 @@ export function QueuePanel({
   accounts,
   onClose,
   onUpdateItems,
+  onDeleteItems,
 }: QueuePanelProps) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [newModel, setNewModel] = useState<string | undefined>(undefined);
@@ -101,6 +103,13 @@ export function QueuePanel({
     setNewModel(undefined);
   };
 
+  const handleDeleteSelected = () => {
+    if (selectedIds.length === 0) return;
+    onDeleteItems(selectedIds);
+    setSelectedIds([]);
+    setNewModel(undefined);
+  };
+
   const allSelected = totalCount > 0 && selectedIds.length === totalCount;
   const someSelected = selectedIds.length > 0;
   const showDivider = pendingItems.length > 0 && dlqItems.length > 0;
@@ -156,6 +165,18 @@ export function QueuePanel({
                 disabled={!newModel}
               >
                 Update Selected
+              </button>
+            </div>
+          )}
+
+          {someSelected && (
+            <div className="ei-queue-panel__delete-row">
+              <span className="ei-queue-panel__delete-warning">⚠ Deletion is permanent</span>
+              <button
+                className="ei-btn ei-btn--danger"
+                onClick={handleDeleteSelected}
+              >
+                Delete Selected ({selectedIds.length})
               </button>
             </div>
           )}

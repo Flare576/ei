@@ -158,6 +158,13 @@ export class QueueState {
     return true;
   }
 
+  deleteItems(ids: string[]): number {
+    const idSet = new Set(ids);
+    const before = this.queue.length;
+    this.queue = this.queue.filter(r => !idSet.has(r.id));
+    return before - this.queue.length;
+  }
+
   trimDLQ(): number {
     const dlqItems = this.queue.filter(r => r.state === "dlq");
     const cutoff = new Date();

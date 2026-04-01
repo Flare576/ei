@@ -782,6 +782,12 @@ export class StateManager {
     return result;
   }
 
+  queue_deleteItems(ids: string[]): number {
+    const result = this.queueState.deleteItems(ids);
+    if (result > 0) this.scheduleSave();
+    return result;
+  }
+
   queue_dlqLength(): number {
     return this.queueState.dlqLength();
   }

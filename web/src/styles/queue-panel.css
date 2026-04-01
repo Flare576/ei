@@ -211,3 +211,33 @@
   border-radius: var(--ei-radius-sm);
   letter-spacing: 0.04em;
 }
+
+.ei-queue-panel__delete-row {
+  display: flex;
+  align-items: center;
+  gap: var(--ei-spacing-sm);
+  padding-top: var(--ei-spacing-xs);
+  border-top: 1px solid var(--ei-border-light);
+}
+
+.ei-queue-panel__delete-warning {
+  font-size: var(--ei-font-size-sm);
+  color: var(--ei-danger);
+  opacity: 0.75;
+  white-space: nowrap;
+}
+
+.ei-btn--danger {
+  background: var(--ei-danger);
+  color: #fff;
+  border: none;
+}
+
+.ei-btn--danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ei-danger) 80%, #000);
+}
+
+.ei-btn--danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
