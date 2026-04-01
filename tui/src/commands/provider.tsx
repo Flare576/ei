@@ -81,9 +81,9 @@ export async function openModelOverlay(ctx: Parameters<Command["execute"]>[1]): 
 
 export const providerCommand: Command = {
   name: "provider",
-  aliases: ["providers"],
-  description: "Manage LLM providers and models",
-  usage: "/provider [new]",
+  aliases: ["providers", "model", "models"],
+  description: "Manage LLM providers and select models for the active persona",
+  usage: "/provider | /provider <Provider> | /provider <Provider>:<Model> | /provider new [Name]",
 
   async execute(args, ctx) {
     if (args.length === 0) {
@@ -92,10 +92,51 @@ export const providerCommand: Command = {
     }
 
     if (args[0].toLowerCase() === "new") {
-      await createProviderViaEditor(ctx);
+      const name = args.slice(1).join(" ") || undefined;
+      await createProviderViaEditor(ctx, name);
       return;
     }
 
-    ctx.showNotification(`Unknown provider subcommand: ${args[0]}. Use /provider or /provider new.`, "warn");
+    const personaId = ctx.ei.activePersonaId();
+    if (!personaId) {
+      ctx.showNotification("No persona selected", "error");
+      return;
+    }
+
+    const modelSpec = args.join(" ");
+    const models = await buildModelList(ctx);
+
+    const exactMatch = models.find(
+      (m) => m.display.toLowerCase() === modelSpec.toLowerCase()
+    );
+    if (exactMatch) {
+      await assignModelGuid(exactMatch.guid, exactMatch.display, ctx);
+      return;
+    }
+
+    if (!modelSpec.includes(":")) {
+      const providerModels = models.filter(
+        (m) => m.display.split(":")[0].toLowerCase() === modelSpec.toLowerCase()
+      );
+      if (providerModels.length > 0) {
+        const human = await ctx.ei.getHuman();
+        const account = (human.settings?.accounts ?? []).find(
+          (a: ProviderAccount) => a.type === "llm" && a.enabled !== false && a.name.toLowerCase() === modelSpec.toLowerCase()
+        );
+        let target = providerModels[0];
+        if (account?.default_model) {
+          const defaultDisplay = `${account.name}:${account.default_model}`.toLowerCase();
+          const found = providerModels.find((m) => m.display.toLowerCase() === defaultDisplay);
+          if (found) target = found;
+        }
+        await assignModelGuid(target.guid, target.display, ctx);
+        return;
+      }
+    }
+
+    ctx.showNotification(
+      `Invalid model. Use /provider to see available models.`,
+      "error"
+    );
   }
 };

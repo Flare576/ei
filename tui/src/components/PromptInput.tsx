@@ -11,7 +11,6 @@ import { archiveCommand, unarchiveCommand } from "../commands/archive";
 import { newCommand } from "../commands/new";
 import { pauseCommand } from "../commands/pause";
 import { resumeCommand } from "../commands/resume";
-import { modelCommand } from "../commands/model";
 import { detailsCommand } from "../commands/details";
 import { meCommand } from "../commands/me";
 import { editorCommand } from "../commands/editor";
@@ -74,7 +73,6 @@ export function PromptInput() {
   registerCommand(roomCommand);
   registerCommand(detailsCommand);
   registerCommand(newCommand);
-  registerCommand(modelCommand);
   registerCommand(settingsCommand);
   registerCommand(providerCommand);
   registerCommand(setSyncCommand);
