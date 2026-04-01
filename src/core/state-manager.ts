@@ -50,14 +50,18 @@ export class StateManager {
       this.queueState.load(state.queue);
       this.tools = state.tools ?? [];
       this.providers = state.providers ?? [];
-      this.migrateLearnedByToIds();
-      this.migrateFactValidation();
-      this.migrateMessageFlags();
-      this.migrateInterestedPersonas();
-      this.migrateProviderModel();
+      this.runMigrations();
     } else {
       this.humanState.load(createDefaultHumanEntity());
     }
+  }
+
+  private runMigrations(): void {
+    this.migrateLearnedByToIds();
+    this.migrateFactValidation();
+    this.migrateMessageFlags();
+    this.migrateInterestedPersonas();
+    this.migrateProviderModel();
   }
 
   /**
@@ -230,23 +234,108 @@ export class StateManager {
 
     const modelLookup = new Map<string, string>();
 
-    for (const account of settings.accounts) {
-      if (account.models !== undefined) continue;
+    // Helper: ensure a model exists in an account and register it in modelLookup.
+    // ref must be in "ProviderName:model-name" format.
+    const ensureModelInAccount = (ref: string): void => {
+      const colonIdx = ref.indexOf(":");
+      if (colonIdx === -1) return;
+      const providerName = ref.substring(0, colonIdx);
+      const modelName = ref.substring(colonIdx + 1);
+      const account = settings.accounts!.find((a) => a.name === providerName);
+      if (!account) return;
 
-      account.models = [];
+      if (!account.models) account.models = [];
 
-      if (account.default_model) {
-        const model = {
+      const existing = account.models.find((m) => m.name === modelName);
+      if (existing) {
+        modelLookup.set(ref, existing.id);
+      } else {
+        const newModel = {
           id: crypto.randomUUID(),
-          name: account.default_model,
-          context_window: (account as any).token_limit as number | undefined,
-          max_output_tokens: undefined as number | undefined,
+          name: modelName,
         };
-        account.models.push(model);
-        modelLookup.set(`${account.name}:${model.name}`, model.id);
-        account.default_model = model.id;
+        account.models.push(newModel);
+        modelLookup.set(ref, newModel.id);
+      }
+    };
+
+    const isProviderRef = (val: string): boolean => {
+      const colonIdx = val.indexOf(":");
+      if (colonIdx === -1) return false;
+      const providerName = val.substring(0, colonIdx);
+      return settings.accounts!.some((a) => a.name === providerName);
+    };
+
+    // Phase 1: Collect ALL model refs from everywhere they can appear.
+    const allRefs: string[] = [];
+    const pushRef = (ref: string | undefined): void => {
+      if (ref && isProviderRef(ref)) allRefs.push(ref);
+    };
+
+    pushRef(settings.default_model);
+    pushRef(settings.oneshot_model);
+    pushRef(settings.rewrite_model);
+    pushRef(settings.opencode?.extraction_model);
+    pushRef(settings.claudeCode?.extraction_model);
+
+    const personas = this.personaState.getAll();
+    for (const persona of personas) {
+      pushRef(persona.model);
+    }
+
+    // Also include account.default_model values (legacy strings, not yet GUIDs)
+    for (const account of settings.accounts) {
+      if (account.default_model && isProviderRef(account.default_model)) {
+        allRefs.push(account.default_model);
+      }
+    }
+
+    // Phase 2: For each ref, ensure model exists in the matching account.
+    for (const ref of allRefs) {
+      ensureModelInAccount(ref);
+    }
+
+    // Helper: check if a value looks like a UUID (already migrated)
+    const isUUID = (val: string): boolean =>
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+
+    // Phase 3: Ensure every account has a models array and default_model is a GUID.
+    for (const account of settings.accounts) {
+      if (!account.models) {
+        account.models = [];
       }
 
+      // Handle account.default_model - could be:
+      // 1. Already a GUID (already migrated) - leave it
+      // 2. A "Provider:model" ref - look up in modelLookup
+      // 3. A plain model name like "claude-haiku-4-5-20251001" - add to models[] and convert
+      if (account.default_model) {
+        if (isUUID(account.default_model)) {
+          // Already migrated, nothing to do
+        } else if (isProviderRef(account.default_model)) {
+          // It's a "Provider:model" ref - should be in modelLookup from Phase 2
+          const guid = modelLookup.get(account.default_model);
+          if (guid) account.default_model = guid;
+        } else {
+          // Plain model name - check if it exists in models[], add if not, convert to GUID
+          const existing = account.models.find((m) => m.name === account.default_model);
+          if (existing) {
+            account.default_model = existing.id;
+          } else {
+            const model = {
+              id: crypto.randomUUID(),
+              name: account.default_model,
+              context_window: (account as any).token_limit as number | undefined,
+              max_output_tokens: undefined as number | undefined,
+            };
+            account.models.push(model);
+            modelLookup.set(`${account.name}:${model.name}`, model.id);
+            account.default_model = model.id;
+          }
+        }
+      }
+
+      // If still no models, create a placeholder
       if (account.models.length === 0) {
         const model = { id: crypto.randomUUID(), name: "(default)" };
         account.models.push(model);
@@ -280,15 +369,12 @@ export class StateManager {
       delete (settings.claudeCode as any).extraction_token_limit;
     }
 
-    const personas = this.personaState.getAll();
     for (const persona of personas) {
       if (persona.model) {
-        persona.model = resolveRef(persona.model) ?? persona.model;
-        const colonIdx = persona.model.indexOf(":");
-        if (colonIdx !== -1) {
-          persona.model = undefined;
-        }
-        this.personaState.update(persona.id, { model: persona.model });
+        const resolved = resolveRef(persona.model);
+        const colonIdx = (resolved ?? persona.model).indexOf(":");
+        const finalModel = colonIdx !== -1 ? undefined : (resolved ?? persona.model);
+        this.personaState.update(persona.id, { model: finalModel });
       }
     }
 
@@ -924,6 +1010,7 @@ export class StateManager {
     this.providers = state.providers ?? [];
     this.tools = state.tools ?? [];
     this.persistenceState.markExistingData();
+    this.runMigrations();
     this.scheduleSave();
   }
 
