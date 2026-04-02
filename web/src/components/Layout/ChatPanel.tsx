@@ -115,7 +115,11 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const { scrollRef, contentRef, isAtBottom, scrollToBottom } = useStickToBottom({ initial: 'instant', resize: 'instant' });
+  const { scrollRef, contentRef, isAtBottom, scrollToBottom } = useStickToBottom({
+    initial: 'instant',
+    resize: 'instant',
+    targetScrollTop: (_, { scrollElement }) => scrollElement.scrollHeight - scrollElement.clientHeight,
+  });
 
   const hasPendingMessages = messages.some(m => m.role === "human" && !m.read);
 
@@ -459,11 +463,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
             })}
           </div>
         )}
-        {contextBoundary && messages.length > 0 && messages[messages.length - 1].timestamp < contextBoundary && (
-          <div className="ei-context-divider">
-            <span>New conversation started</span>
-          </div>
-        )}
+
       </div>
       {!isAtBottom && (
         <button
