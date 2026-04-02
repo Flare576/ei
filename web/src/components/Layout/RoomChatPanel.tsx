@@ -1,4 +1,6 @@
-import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { useStickToBottom } from "use-stick-to-bottom";
 import type { RoomEntity, RoomMessage, PersonaSummary } from "../../../../src/core/types";
 import { RoomMode } from "../../../../src/core/types";
 import { MarkdownContent } from "../Chat";
@@ -87,14 +89,16 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
   isActivating = false,
   onCapture,
 }: RoomChatPanelProps, ref) {
-  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const cypContainerRef = useRef<HTMLDivElement>(null);
+
+  const { scrollRef, contentRef, isAtBottom, scrollToBottom } = useStickToBottom();
 
   useImperativeHandle(ref, () => ({
     focusInput: () => textareaRef.current?.focus(),
     scrollChat: (direction) => {
-      const container = messagesContainerRef.current;
+      const container = isCYP ? cypContainerRef.current : scrollRef.current;
       if (!container) return;
       const amount = container.clientHeight * 0.8;
       container.scrollBy({ top: direction === "up" ? -amount : amount, behavior: "smooth" });
@@ -105,7 +109,6 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
   const [isSilentMode, setIsSilentMode] = useState(false);
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
   const [navPickerMessageId, setNavPickerMessageId] = useState<string | null>(null);
-  const [showScrollButton, setShowScrollButton] = useState(false);
 
   const personaMap = new Map(personas.map(p => [p.id, p]));
 
@@ -169,56 +172,42 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
       ? [...allRoomMessages].sort((a, b) => a.timestamp.localeCompare(b.timestamp))
       : allRoomMessages.filter(m => m.parent_id !== room?.active_node_id);
 
-  const SCROLL_THRESHOLD = 150;
+  const messageHeights = useMemo(() => displayMessages.map(msg => {
+    const text = buildRoomMessageText(msg, room?.judge_persona_id);
+    if (!text) return 60;
+    const charsPerLine = 70;
+    const lineHeight = 20;
+    const headerHeight = 60;
+    const lines = Math.max(1, Math.ceil(text.length / charsPerLine));
+    let height = lines * lineHeight + headerHeight;
+    if (text.includes('```')) height += 120;
+    return height;
+  }), [displayMessages, room?.judge_persona_id]);
 
-  const scrollToBottom = useCallback(() => {
-    const container = messagesContainerRef.current;
-    if (container) container.scrollTop = container.scrollHeight;
-  }, []);
-
-  const isNearBottom = useCallback(() => {
-    const c = messagesContainerRef.current;
-    if (!c) return true;
-    return c.scrollHeight - c.scrollTop - c.clientHeight <= SCROLL_THRESHOLD;
-  }, []);
-
-  const wasAtBottomRef = useRef(true);
-
-  const handleContainerScroll = useCallback(() => {
-    const near = isNearBottom();
-    wasAtBottomRef.current = near;
-    setShowScrollButton(!near);
-  }, [isNearBottom]);
-
-  const prevMessageCount = useRef(0);
-  useEffect(() => {
-    const count = displayMessages.length;
-    if (count !== prevMessageCount.current) {
-      if (wasAtBottomRef.current) scrollToBottom();
-      prevMessageCount.current = count;
-    }
-  }, [displayMessages.length, scrollToBottom]);
+  const rowVirtualizer = useVirtualizer({
+    count: isCYP ? 0 : displayMessages.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: (i) => messageHeights[i] ?? 80,
+    overscan: 5,
+  });
 
   useEffect(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    textarea.style.height = "auto";
-    textarea.style.height = `${Math.min(textarea.scrollHeight, window.innerHeight * 0.33)}px`;
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = `${Math.min(ta.scrollHeight, window.innerHeight * 0.33)}px`;
   }, [inputValue]);
 
   useEffect(() => {
     setShowCYPPicker(false);
     setExpandedCards(new Set());
     setNavPickerMessageId(null);
-    setShowScrollButton(false);
-    wasAtBottomRef.current = true;
     scrollToBottom();
     textareaRef.current?.focus();
   }, [room?.id, scrollToBottom]);
 
   useEffect(() => {
     if (!room?.active_node_id) return;
-    wasAtBottomRef.current = true;
     setTimeout(() => scrollToBottom(), 50);
   }, [room?.active_node_id, scrollToBottom]);
 
@@ -470,72 +459,137 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
       </div>
 
       <div style={{ position: "relative", flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-      <div className="ei-room-chat-panel__messages" ref={messagesContainerRef} onScroll={handleContainerScroll}>
-        {displayMessages.length === 0 ? (
-          <div className="ei-room-chat-panel__empty">
-            {activeRoomId ? "No messages yet. The room is waiting\u2026" : "Select a room to start chatting"}
-          </div>
-        ) : (
-          displayMessages.map(renderMessage)
-        )}
+      {isCYP ? (
+        <div className="ei-room-chat-panel__messages" ref={cypContainerRef} style={{ height: "100%", overflow: "auto" }}>
+          {displayMessages.length === 0 ? (
+            <div className="ei-room-chat-panel__empty">
+              {activeRoomId ? "No messages yet. The room is waiting\u2026" : "Select a room to start chatting"}
+            </div>
+          ) : (
+            displayMessages.map(renderMessage)
+          )}
 
-        {isGathering && pendingPersonaCount > 0 && (
-          <div className="ei-room-thinking">
-            {expectedPersonaIds
-              .filter(id => !respondedPersonaIds.has(id))
-              .map(id => {
-                const p = personaMap.get(id);
-                const name = p?.display_name ?? id;
+          {isGathering && pendingPersonaCount > 0 && (
+            <div className="ei-room-thinking">
+              {expectedPersonaIds
+                .filter(id => !respondedPersonaIds.has(id))
+                .map(id => {
+                  const p = personaMap.get(id);
+                  const name = p?.display_name ?? id;
+                  return (
+                    <div key={id} className="ei-room-thinking__item">
+                      <span className="ei-room-thinking__spinner">⟳</span>
+                      {name} is thinking…
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+
+          {room && !isFFA && (statusText || showActivateButton) && (
+            <div className="ei-room-status">
+              {statusText && <span className="ei-room-status__text">{statusText}</span>}
+              {showActivateButton && (
+                <button className="ei-room-status__activate" onClick={handleActivate}>
+                  ▶ Activate
+                </button>
+              )}
+            </div>
+          )}
+
+          {showCYPPicker && (
+            <div className="ei-cyp-picker">
+              <div className="ei-cyp-picker__title">Choose a branch to continue:</div>
+              {currentRoundPersonaMessages.map(msg => renderCYPCard(msg))}
+              {humanSubmittedMessage && renderCYPCard(humanSubmittedMessage, true)}
+              <button
+                className="ei-btn ei-btn--ghost ei-btn--sm ei-cyp-picker__cancel"
+                onClick={() => setShowCYPPicker(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
+        <div className="ei-room-chat-panel__messages" ref={scrollRef} style={{ height: "100%", overflow: "auto" }}>
+          {displayMessages.length === 0 ? (
+            <div className="ei-room-chat-panel__empty">
+              {activeRoomId ? "No messages yet. The room is waiting\u2026" : "Select a room to start chatting"}
+            </div>
+          ) : (
+            <div
+              ref={contentRef}
+              style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: "relative" }}
+            >
+              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                const msg = displayMessages[virtualRow.index];
                 return (
-                  <div key={id} className="ei-room-thinking__item">
-                    <span className="ei-room-thinking__spinner">⟳</span>
-                    {name} is thinking…
+                  <div
+                    key={msg.id}
+                    data-index={virtualRow.index}
+                    ref={rowVirtualizer.measureElement}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}
+                  >
+                    {renderMessage(msg)}
                   </div>
                 );
               })}
-          </div>
-        )}
+            </div>
+          )}
 
-        {isFFA && ffaPendingCount > 0 && (
-          <div className="ei-room-status ei-room-status--ffa">
-            <span className="ei-room-status__text">
-              {ffaPendingCount} persona{ffaPendingCount !== 1 ? "s" : ""} responding…
-            </span>
-          </div>
-        )}
+          {isGathering && pendingPersonaCount > 0 && (
+            <div className="ei-room-thinking">
+              {expectedPersonaIds
+                .filter(id => !respondedPersonaIds.has(id))
+                .map(id => {
+                  const p = personaMap.get(id);
+                  const name = p?.display_name ?? id;
+                  return (
+                    <div key={id} className="ei-room-thinking__item">
+                      <span className="ei-room-thinking__spinner">⟳</span>
+                      {name} is thinking…
+                    </div>
+                  );
+                })}
+            </div>
+          )}
 
-        {room && !isFFA && (statusText || showActivateButton) && (
-          <div className="ei-room-status">
-            {statusText && <span className="ei-room-status__text">{statusText}</span>}
-            {showActivateButton && (
-              <button className="ei-room-status__activate" onClick={handleActivate}>
-                ▶ Activate
-              </button>
-            )}
-          </div>
-        )}
+          {isFFA && ffaPendingCount > 0 && (
+            <div className="ei-room-status ei-room-status--ffa">
+              <span className="ei-room-status__text">
+                {ffaPendingCount} persona{ffaPendingCount !== 1 ? "s" : ""} responding…
+              </span>
+            </div>
+          )}
 
-        {isCYP && showCYPPicker && (
-          <div className="ei-cyp-picker">
-            <div className="ei-cyp-picker__title">Choose a branch to continue:</div>
-            {currentRoundPersonaMessages.map(msg => renderCYPCard(msg))}
-            {humanSubmittedMessage && renderCYPCard(humanSubmittedMessage, true)}
-            <button
-              className="ei-btn ei-btn--ghost ei-btn--sm ei-cyp-picker__cancel"
-              onClick={() => setShowCYPPicker(false)}
-            >
-              Cancel
-            </button>
-          </div>
+          {room && !isFFA && (statusText || showActivateButton) && (
+            <div className="ei-room-status">
+              {statusText && <span className="ei-room-status__text">{statusText}</span>}
+              {showActivateButton && (
+                <button className="ei-room-status__activate" onClick={handleActivate}>
+                  ▶ Activate
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+        {!isAtBottom && (
+          <button
+            className="ei-scroll-to-bottom"
+            onClick={() => scrollToBottom()}
+          >
+            ↓ Latest
+          </button>
         )}
-      </div>
-      {showScrollButton && (
-        <button
-          className="ei-scroll-to-bottom"
-          onClick={() => { scrollToBottom(); setShowScrollButton(false); }}
-        >
-          ↓ Latest
-        </button>
+        </>
       )}
       </div>
 
