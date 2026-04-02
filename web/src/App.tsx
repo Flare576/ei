@@ -502,7 +502,11 @@ function App() {
   
 
   const handleSelectPersona = useCallback(async (personaId: string) => {
-    if (processor && activePersonaId && activePersonaId !== personaId) {
+    if (personaId === activePersonaId) {
+      chatPanelRef.current?.scrollToBottom();
+      return;
+    }
+    if (processor && activePersonaId) {
       await processor.markAllMessagesRead(activePersonaId);
       processor.getPersonaList().then(setPersonas);
     }

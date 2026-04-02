@@ -87,6 +87,7 @@ interface ChatPanelProps {
 export interface ChatPanelHandle {
   focusInput: () => void;
   scrollChat: (direction: "up" | "down") => void;
+  scrollToBottom: () => void;
 }
 
 export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function ChatPanel({
@@ -132,6 +133,30 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  // use-stick-to-bottom only observes contentRef for resize — it's blind to the scroll
+  // container shrinking/growing when the textarea expands in a flex layout. When the
+  // container grows (textarea shrank after send), re-assert bottom position if we're
+  // within the library's own 70px threshold of the new bottom.
+  const scrollToBottomRef = useRef(scrollToBottom);
+  useEffect(() => { scrollToBottomRef.current = scrollToBottom; }, [scrollToBottom]);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    let prevClientHeight = el.clientHeight;
+    const ro = new ResizeObserver(() => {
+      const newClientHeight = el.clientHeight;
+      if (newClientHeight > prevClientHeight) {
+        const { scrollTop, scrollHeight } = el;
+        if (scrollHeight - scrollTop - newClientHeight <= 70) {
+          scrollToBottomRef.current();
+        }
+      }
+      prevClientHeight = newClientHeight;
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []); // stable: scrollToBottom accessed via ref, scrollRef is a stable ref
 
   const hasPendingMessages = messages.some(m => m.role === "human" && !m.read);
 
@@ -195,6 +220,9 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
         behavior: "smooth",
       });
     },
+    scrollToBottom: () => {
+      scrollToBottom();
+    },
   }));
 
   const [isSilentMode, setIsSilentMode] = useState(false);
@@ -202,6 +230,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
 
   useEffect(() => {
     if (!activePersonaId || !onMarkMessageRead) return;
+    if (!isAtBottom) return;
     const timer = setTimeout(() => {
       messages.forEach(msg => {
         if (msg.role === "system" && !msg.read) {
@@ -210,7 +239,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
       });
     }, 2000);
     return () => clearTimeout(timer);
-  }, [activePersonaId, messages.length, onMarkMessageRead, messages]);
+  }, [activePersonaId, messages.length, onMarkMessageRead, messages, isAtBottom]);
 
   const hasScrolledRef = useRef(false);
   useLayoutEffect(() => {
@@ -222,6 +251,21 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
     hasScrolledRef.current = true;
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages.length]);
+
+  // Keep a stable ref to isAtBottom so the effect below can read it without
+  // adding it to deps (which would re-run on every scroll-to-bottom, not just new messages).
+  const isAtBottomRef = useRef(isAtBottom);
+  useLayoutEffect(() => { isAtBottomRef.current = isAtBottom; });
+
+  // useStickToBottom's resize handler uses preserveScrollPosition=true, which gates on
+  // isNearBottom at the moment the ResizeObserver fires. But the new message's estimated
+  // height has already pushed scrollDiff > 70px by then, so it silently skips the scroll.
+  // Explicit scroll here closes that gap.
+  useEffect(() => {
+    if (messages.length > 0 && hasScrolledRef.current && isAtBottomRef.current) {
+      scrollToBottomRef.current();
     }
   }, [messages.length]);
 
@@ -409,11 +453,6 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
                   }}
                 >
                   <div className={`ei-message-wrapper ${msg.role}`}>
-                    {showBoundaryMarker && (
-                      <div className="ei-context-divider">
-                        <span>New conversation started</span>
-                      </div>
-                    )}
                     <div 
                       data-message-id={msg.id}
                       className={getMessageClasses(msg)}
@@ -472,6 +511,11 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
                         )}
                       </div>
                     </div>
+                    {showBoundaryMarker && (
+                      <div className="ei-context-divider">
+                        <span>New conversation started</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
