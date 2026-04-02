@@ -502,6 +502,7 @@ function App() {
       await processor.markAllMessagesRead(activePersonaId);
       processor.getPersonaList().then(setPersonas);
     }
+    setMessages([]);
     setActivePersonaId(personaId);
     setActiveRoomId(null);
     if (!activeRoomId) chatPanelRef.current?.focusInput();
