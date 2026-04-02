@@ -207,11 +207,13 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
   }, [activePersonaId, messages.length, onMarkMessageRead, messages]);
 
   const hasScrolledRef = useRef(false);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (messages.length === 0 || hasScrolledRef.current) return;
     hasScrolledRef.current = true;
-    scrollToBottom('instant');
-  }, [messages.length, scrollToBottom]);
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages.length]);
 
   useEffect(() => {
     if (!showSendDropdown) return;
