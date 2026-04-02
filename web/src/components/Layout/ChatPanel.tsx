@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useState, useMemo, forwardRef, useImperativeHandle } from "react";
+import { useRef, useEffect, useLayoutEffect, useCallback, useState, useMemo, forwardRef, useImperativeHandle } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useStickToBottom } from "use-stick-to-bottom";
 import type { Message, Quote } from "../../../../src/core/types";
@@ -121,6 +121,18 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
     targetScrollTop: (_, { scrollElement }) => scrollElement.scrollHeight - scrollElement.clientHeight,
   });
 
+  const [containerWidth, setContainerWidth] = useState(0);
+  useLayoutEffect(() => {
+    if (scrollRef.current) setContainerWidth(scrollRef.current.clientWidth);
+  }, []);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setContainerWidth(e.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const hasPendingMessages = messages.some(m => m.role === "human" && !m.read);
 
   const lastMessage = messages[messages.length - 1];
@@ -137,17 +149,17 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
     }
   };
 
-  const messageHeights = useMemo(() => messages.map(msg => {
-    const text = [msg.verbal_response, msg.action_response].filter(Boolean).join('\n\n');
-    if (!text) return 60;
-    const charsPerLine = 70;
-    const lineHeight = 20;
-    const headerHeight = 40;
-    const lines = Math.max(1, Math.ceil(text.length / charsPerLine));
-    let height = lines * lineHeight + headerHeight;
-    if (text.includes('```')) height += 120;
-    return height;
-  }), [messages]);
+  const messageHeights = useMemo(() => {
+    const charsPerLine = containerWidth > 0 ? Math.floor(containerWidth / 7.5) : 70;
+    return messages.map(msg => {
+      const text = [msg.verbal_response, msg.action_response].filter(Boolean).join('\n\n');
+      if (!text) return 60;
+      const lines = Math.max(1, Math.ceil(text.length / charsPerLine));
+      let height = lines * 20 + 40;
+      if (text.includes('```')) height += 120;
+      return height;
+    });
+  }, [messages, containerWidth]);
 
   const boundaryMessageIndex = useMemo(() => {
     if (!contextBoundary) return -1;

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useStickToBottom } from "use-stick-to-bottom";
 import type { RoomEntity, RoomMessage, PersonaSummary } from "../../../../src/core/types";
@@ -99,6 +99,18 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
     targetScrollTop: (_, { scrollElement }) => scrollElement.scrollHeight - scrollElement.clientHeight,
   });
 
+  const [containerWidth, setContainerWidth] = useState(0);
+  useLayoutEffect(() => {
+    if (scrollRef.current) setContainerWidth(scrollRef.current.clientWidth);
+  }, []);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setContainerWidth(e.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   useImperativeHandle(ref, () => ({
     focusInput: () => textareaRef.current?.focus(),
     scrollChat: (direction) => {
@@ -176,17 +188,17 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
       ? [...allRoomMessages].sort((a, b) => a.timestamp.localeCompare(b.timestamp))
       : allRoomMessages.filter(m => m.parent_id !== room?.active_node_id);
 
-  const messageHeights = useMemo(() => displayMessages.map(msg => {
-    const text = buildRoomMessageText(msg, room?.judge_persona_id);
-    if (!text) return 60;
-    const charsPerLine = 70;
-    const lineHeight = 20;
-    const headerHeight = 60;
-    const lines = Math.max(1, Math.ceil(text.length / charsPerLine));
-    let height = lines * lineHeight + headerHeight;
-    if (text.includes('```')) height += 120;
-    return height;
-  }), [displayMessages, room?.judge_persona_id]);
+  const messageHeights = useMemo(() => {
+    const charsPerLine = containerWidth > 0 ? Math.floor(containerWidth / 7.5) : 70;
+    return displayMessages.map(msg => {
+      const text = buildRoomMessageText(msg, room?.judge_persona_id);
+      if (!text) return 60;
+      const lines = Math.max(1, Math.ceil(text.length / charsPerLine));
+      let height = lines * 20 + 60;
+      if (text.includes('```')) height += 120;
+      return height;
+    });
+  }, [displayMessages, room?.judge_persona_id, containerWidth]);
 
   const rowVirtualizer = useVirtualizer({
     count: isCYP ? 0 : displayMessages.length,
