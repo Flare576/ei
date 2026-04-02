@@ -368,3 +368,70 @@ Seeded on every startup via `Processor.bootstrapTools()`. Safe to call repeatedl
 3. Add seed block in `Processor.bootstrapTools()` using `tools_getByName` guard
 4. If it needs a new provider, add provider seed block before the tool seed block
 5. Update the Built-in Tool Registry table above
+
+---
+
+## Room Modes — Terminology and Flow
+
+This section captures design intent that isn't obvious from the code.
+
+### Key Terms
+
+| Term | Meaning |
+|------|---------|
+| **Participant** | Human + all Personas in the room, **except** the Judge in MAP. Everyone who submits a response. |
+| **Judge** | MAP only. One designated Persona who does not submit a response but evaluates all submissions and picks the winner. |
+| **Activated Node** | CYP only. A node that has already been chosen and locked in. Revisiting an Activated Node skips the "wait for responses" phase — all responses are already collected. |
+
+### Submission Rules (all modes)
+
+- Human responses are **required** to advance. There is no optional skip — but `silence_reason` counts as a valid submission (same as Persona silence).
+- A Participant has submitted when their message has either `verbal_response` or `silence_reason` set.
+- The Judge in MAP is **not** a Participant and never submits a round response.
+
+### Choose Your Path (CYP) — Round Flow
+
+1. Human sends a message. This creates the initial `active_node`.
+2. System waits for **all Participants** to submit responses. Responses are hidden from the chat until Activate.
+   - ↑ arrow recalls the human's response unless the current node is an Activated Node.
+3. Once all Participants have submitted, the Activate button becomes **enabled**.
+4. Human clicks Activate (or presses Enter when the send button reads "Activate").
+   - The node is marked Activated.
+   - The CYP picker UI appears, showing all submissions as cards.
+   - Cards show "Choose" (new node) or "Resume Path" (Activated Node).
+5. Human picks a card → that node becomes the new `active_node` → loop back to step 2.
+
+**Scroll-to-bottom triggers in CYP (three signals):**
+1. All Participants have submitted → Activate button becomes enabled
+2. Human clicks Activate → CYP picker appears inline below messages
+3. Human clicks "Choose" or "Resume Path" → new branch selected, chat updates
+
+### Messages Against Personas (MAP) — Round Flow
+
+1. Human creates a room with one **Judge** persona and at least one other Participant persona. Sends the initial message — this is `active_node`.
+2. System waits for **all Participants** (human + non-Judge personas) to submit. Responses are hidden from the chat.
+3. Once all Participants have submitted, Activate button becomes **enabled**.
+4. Human clicks Activate.
+   - Node is marked Activated — but **nothing is revealed yet**.
+   - All submissions are bundled and sent to the Judge with their full identity (description, traits, topics) as system context.
+   - Non-Judge personas are told to play to the Judge's personality; the human is not bound by their identity.
+5. Judge responds, picks the winner.
+   - All losing submissions are **permanently deleted**.
+   - The Judge's verdict is appended to the room and becomes the new `active_node`.
+   - Switching `active_node` reveals only the winning submission and the verdict in the chat.
+6. Loop back to step 2.
+
+**Scroll-to-bottom triggers in MAP:**
+1. All Participants have submitted → Activate button becomes enabled
+2. Judge verdict arrives → `active_node` changes → winning message + verdict appear
+
+### Activate Button Design Contract
+
+- **Always visible** in MAP and CYP (never hidden).
+- **Disabled / shows "Waiting…"** when any Participant hasn't submitted yet.
+- **Enabled** when all Participants have submitted (`needsActivation = true`).
+- Exists in two places: the status bar above the input area, and the send button (which relabels itself). Both should reflect the same state.
+
+### Hidden Message Counts
+
+Visible messages in MAP/CYP represent far fewer entries than are stored. In a 3-Persona MAP room, 100 visible messages = ~400 stored messages (3 competing + 1 winner per round). Virtualization is worth considering for heavy users but is not required for correctness.
