@@ -99,6 +99,7 @@ export function MessageList() {
           backgroundColor="#0f1419"
           stickyScroll={true}
           stickyStart="bottom"
+          viewportCulling={true}
         >
           <For each={messagesWithQuotes()}>
             {(message, index) => {

@@ -1,4 +1,6 @@
-import { useRef, useEffect, useCallback, useState, forwardRef, useImperativeHandle } from "react";
+import { useRef, useEffect, useLayoutEffect, useCallback, useState, useMemo, forwardRef, useImperativeHandle } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { useStickToBottom } from "use-stick-to-bottom";
 import type { Message, Quote } from "../../../../src/core/types";
 import type { GenerationResult } from "../../comfyui";
 import { MarkdownContent } from "../Chat";
@@ -85,6 +87,7 @@ interface ChatPanelProps {
 export interface ChatPanelHandle {
   focusInput: () => void;
   scrollChat: (direction: "up" | "down") => void;
+  scrollToBottom: () => void;
 }
 
 export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function ChatPanel({
@@ -110,10 +113,50 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
   onImagePromptClick,
   onCapture,
 }, ref) {
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const observerRef = useRef<IntersectionObserver | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const { scrollRef, contentRef, isAtBottom, scrollToBottom } = useStickToBottom({
+    initial: 'instant',
+    resize: 'instant',
+    targetScrollTop: (_, { scrollElement }) => scrollElement.scrollHeight - scrollElement.clientHeight,
+  });
+
+  const [containerWidth, setContainerWidth] = useState(0);
+  useLayoutEffect(() => {
+    if (scrollRef.current) setContainerWidth(scrollRef.current.clientWidth);
+  }, []);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setContainerWidth(e.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // use-stick-to-bottom only observes contentRef for resize — it's blind to the scroll
+  // container shrinking/growing when the textarea expands in a flex layout. When the
+  // container grows (textarea shrank after send), re-assert bottom position if we're
+  // within the library's own 70px threshold of the new bottom.
+  const scrollToBottomRef = useRef(scrollToBottom);
+  useEffect(() => { scrollToBottomRef.current = scrollToBottom; }, [scrollToBottom]);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    let prevClientHeight = el.clientHeight;
+    const ro = new ResizeObserver(() => {
+      const newClientHeight = el.clientHeight;
+      if (newClientHeight > prevClientHeight) {
+        const { scrollTop, scrollHeight } = el;
+        if (scrollHeight - scrollTop - newClientHeight <= 70) {
+          scrollToBottomRef.current();
+        }
+      }
+      prevClientHeight = newClientHeight;
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []); // stable: scrollToBottom accessed via ref, scrollRef is a stable ref
 
   const hasPendingMessages = messages.some(m => m.role === "human" && !m.read);
 
@@ -131,12 +174,45 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
     }
   };
 
+  const messageHeights = useMemo(() => {
+    const charsPerLine = containerWidth > 0 ? Math.floor(containerWidth / 7.5) : 70;
+    return messages.map(msg => {
+      const text = [msg.verbal_response, msg.action_response].filter(Boolean).join('\n\n');
+      if (!text) return 60;
+      const lines = Math.max(1, Math.ceil(text.length / charsPerLine));
+      let height = lines * 20 + 40;
+      if (text.includes('```')) height += 120;
+      return height;
+    });
+  }, [messages, containerWidth]);
+
+  const boundaryMessageIndex = useMemo(() => {
+    if (!contextBoundary) return -1;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].timestamp < contextBoundary) return i;
+    }
+    return -1;
+  }, [messages, contextBoundary]);
+
+  const rowVirtualizer = useVirtualizer({
+    count: messages.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: (i) => messageHeights[i] ?? 80,
+    overscan: 5,
+    enabled: messages.length > 0,
+    initialOffset: () => {
+      if (!scrollRef.current) return 0;
+      const totalHeight = messageHeights.reduce((sum, h) => sum + h, 0);
+      return Math.max(0, totalHeight - scrollRef.current.clientHeight + 32);
+    },
+  });
+
   useImperativeHandle(ref, () => ({
     focusInput: () => {
       textareaRef.current?.focus();
     },
     scrollChat: (direction) => {
-      const container = messagesContainerRef.current;
+      const container = scrollRef.current;
       if (!container) return;
       const scrollAmount = container.clientHeight * 0.8;
       container.scrollBy({
@@ -144,75 +220,54 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
         behavior: "smooth",
       });
     },
+    scrollToBottom: () => {
+      scrollToBottom();
+    },
   }));
 
-  const SCROLL_THRESHOLD = 150;
-
-  const scrollToBottom = useCallback(() => {
-    const container = messagesContainerRef.current;
-    if (container) container.scrollTop = container.scrollHeight;
-  }, []);
-
-  const isNearBottom = useCallback(() => {
-    const c = messagesContainerRef.current;
-    if (!c) return true;
-    return c.scrollHeight - c.scrollTop - c.clientHeight <= SCROLL_THRESHOLD;
-  }, []);
-
-  const [showScrollButton, setShowScrollButton] = useState(false);
-  const wasAtBottomRef = useRef(true);
   const [isSilentMode, setIsSilentMode] = useState(false);
   const [showSendDropdown, setShowSendDropdown] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const handleContainerScroll = useCallback(() => {
-    const near = isNearBottom();
-    wasAtBottomRef.current = near;
-    setShowScrollButton(!near);
-  }, [isNearBottom]);
-
-  const prevMessageCount = useRef(0);
   useEffect(() => {
-    const count = messages.length;
-    if (count !== prevMessageCount.current) {
-      if (wasAtBottomRef.current) scrollToBottom();
-      prevMessageCount.current = count;
+    if (!activePersonaId || !onMarkMessageRead) return;
+    if (!isAtBottom) return;
+    const timer = setTimeout(() => {
+      messages.forEach(msg => {
+        if (msg.role === "system" && !msg.read) {
+          onMarkMessageRead(msg.id);
+        }
+      });
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [activePersonaId, messages.length, onMarkMessageRead, messages, isAtBottom]);
+
+  const hasScrolledRef = useRef(false);
+  useLayoutEffect(() => {
+    if (messages.length === 0) {
+      hasScrolledRef.current = false;
+      return;
     }
-  }, [messages.length, scrollToBottom]);
+    if (hasScrolledRef.current) return;
+    hasScrolledRef.current = true;
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages.length]);
 
+  // Keep a stable ref to isAtBottom so the effect below can read it without
+  // adding it to deps (which would re-run on every scroll-to-bottom, not just new messages).
+  const isAtBottomRef = useRef(isAtBottom);
+  useLayoutEffect(() => { isAtBottomRef.current = isAtBottom; });
+
+  // useStickToBottom's resize handler uses preserveScrollPosition=true, which gates on
+  // isNearBottom at the moment the ResizeObserver fires. But the new message's estimated
+  // height has already pushed scrollDiff > 70px by then, so it silently skips the scroll.
+  // Explicit scroll here closes that gap.
   useEffect(() => {
-    setShowScrollButton(false);
-    wasAtBottomRef.current = true;
-    scrollToBottom();
-  }, [activePersonaId, scrollToBottom]);
-
-  useEffect(() => {
-    if (!onMarkMessageRead || !messagesContainerRef.current) return;
-
-    observerRef.current = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            const messageId = entry.target.getAttribute("data-message-id");
-            const isUnread = entry.target.classList.contains("unread");
-            const isSystemMessage = entry.target.classList.contains("system");
-            
-            if (messageId && isUnread && isSystemMessage) {
-              onMarkMessageRead(messageId);
-            }
-          }
-        });
-      },
-      { root: messagesContainerRef.current, threshold: 0.5 }
-    );
-
-    const messageElements = messagesContainerRef.current.querySelectorAll(".ei-message");
-    messageElements.forEach((el) => observerRef.current?.observe(el));
-
-    return () => {
-      observerRef.current?.disconnect();
-    };
-  }, [messages, onMarkMessageRead]);
+    if (messages.length > 0 && hasScrolledRef.current && isAtBottomRef.current) {
+      scrollToBottomRef.current();
+    }
+  }, [messages.length]);
 
   useEffect(() => {
     if (!showSendDropdown) return;
@@ -321,7 +376,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
       </div>
 
       <div style={{ position: "relative", flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-      <div className="ei-chat-panel__messages" ref={messagesContainerRef} onScroll={handleContainerScroll}>
+      <div className="ei-chat-panel__messages" ref={scrollRef} style={{ height: "100%", overflow: "auto" }}>
         {messages.length === 0 ? (
           <div className="ei-chat-panel__empty">
             {activePersonaId 
@@ -329,142 +384,150 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
               : "Select a persona to start chatting"}
           </div>
         ) : (
-          messages.map((msg, index) => {
-            const showDivider = contextBoundary && 
-              index > 0 && 
-              messages[index - 1].timestamp < contextBoundary && 
-              msg.timestamp >= contextBoundary;
-            
-            const scissorsButton = (
-              <button 
-                className="ei-message__scissors"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onScissorsClick?.(msg);
-                }}
-                title="Capture a quote"
-              >
-                ✂️
-              </button>
-            );
-            
-            const getImageButtonIcon = (messageId: string) => {
-              if (generatingImageFor === messageId) return "⏳";
-              if (imageErrors[messageId]) return "❗";
-              if (messageImages[messageId]) return "🎨";
-              return "🖼️";
-            };
-            
-            const getImageButtonTitle = (messageId: string) => {
-              if (generatingImageFor === messageId) return "Generating image...";
-              if (imageErrors[messageId]) return `Error: ${imageErrors[messageId]}`;
-              if (messageImages[messageId]) return "View or regenerate image";
-              return "Generate image from this message";
-            };
-            
-            const imageButton = onImageGenerate && (
-              <button 
-                className="ei-message__image"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (imageErrors[msg.id]) {
-                    // Clicking error icon opens modal with error
-                    onImageClick?.(msg.id);
-                  } else if (messageImages[msg.id]) {
-                    // Clicking 🎨 opens image in modal
-                    onImageClick?.(msg.id);
-                  } else if (!generatingImageFor) {
-                    // Only generate if not already generating
-                    onImageGenerate(msg);
-                  }
-                }}
-                title={getImageButtonTitle(msg.id)}
-                disabled={generatingImageFor === msg.id}
-              >
-                {getImageButtonIcon(msg.id)}
-              </button>
-            );
-            
-            return (
-              <div key={msg.id} className={`ei-message-wrapper ${msg.role}`}>
-                {showDivider && (
-                  <div className="ei-context-divider">
-                    <span>New conversation started</span>
-                  </div>
-                )}
-                <div 
-                  data-message-id={msg.id}
-                  className={getMessageClasses(msg)}
-                  onClick={() => handleMessageClick(msg)}
-                  style={{ cursor: isClickable(msg) ? "pointer" : undefined }}
+          <div
+            ref={contentRef}
+            style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: "relative" }}
+          >
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const msg = messages[virtualRow.index];
+              const showBoundaryMarker = virtualRow.index === boundaryMessageIndex;
+
+              const scissorsButton = (
+                <button 
+                  className="ei-message__scissors"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onScissorsClick?.(msg);
+                  }}
+                  title="Capture a quote"
                 >
-                  {msg.role === "human" && (
-                    <>
-                      {scissorsButton}
-                      {imageButton}
-                    </>
-                  )}
-                  <div className="ei-message__bubble" onClick={handleBubbleClick}>
-                    {msg._synthesis ? (
-                      <div 
-                        className="silence-reason" 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onImageClick?.(msg.id);
-                        }}
-                        style={{ cursor: 'pointer' }}
-                        title="Click to edit and regenerate"
-                      >
-                        {msg.verbal_response}
-                      </div>
-                    ) : (
-                      renderMessageContent(msg, quotes, activePersonaDisplayName)
-                    )}
-                  </div>
-                  {messageImages[msg.id] && (
+                  ✂️
+                </button>
+              );
+              
+              const getImageButtonIcon = (messageId: string) => {
+                if (generatingImageFor === messageId) return "⏳";
+                if (imageErrors[messageId]) return "❗";
+                if (messageImages[messageId]) return "🎨";
+                return "🖼️";
+              };
+              
+              const getImageButtonTitle = (messageId: string) => {
+                if (generatingImageFor === messageId) return "Generating image...";
+                if (imageErrors[messageId]) return `Error: ${imageErrors[messageId]}`;
+                if (messageImages[messageId]) return "View or regenerate image";
+                return "Generate image from this message";
+              };
+              
+              const imageButton = onImageGenerate && (
+                <button 
+                  className="ei-message__image"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (imageErrors[msg.id]) {
+                      onImageClick?.(msg.id);
+                    } else if (messageImages[msg.id]) {
+                      onImageClick?.(msg.id);
+                    } else if (!generatingImageFor) {
+                      onImageGenerate(msg);
+                    }
+                  }}
+                  title={getImageButtonTitle(msg.id)}
+                  disabled={generatingImageFor === msg.id}
+                >
+                  {getImageButtonIcon(msg.id)}
+                </button>
+              );
+
+              return (
+                <div
+                  key={msg.id}
+                  data-index={virtualRow.index}
+                  ref={rowVirtualizer.measureElement}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  <div className={`ei-message-wrapper ${msg.role}`}>
                     <div 
-                      className="ei-message__inline-image" 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onImageClick?.(msg.id);
-                      }}
-                      title="Click to view full size"
+                      data-message-id={msg.id}
+                      className={getMessageClasses(msg)}
+                      onClick={() => handleMessageClick(msg)}
+                      style={{ cursor: isClickable(msg) ? "pointer" : undefined }}
                     >
-                      <img 
-                        src={messageImages[msg.id]?.blobUrl}
-                        alt="Generated from message"
-                        className="ei-message__inline-image-img"
-                      />
+                      {msg.role === "human" && (
+                        <>
+                          {scissorsButton}
+                          {imageButton}
+                        </>
+                      )}
+                      <div className="ei-message__bubble" onClick={handleBubbleClick}>
+                        {msg._synthesis ? (
+                          <div 
+                            className="silence-reason" 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onImageClick?.(msg.id);
+                            }}
+                            style={{ cursor: 'pointer' }}
+                            title="Click to edit and regenerate"
+                          >
+                            {msg.verbal_response}
+                          </div>
+                        ) : (
+                          renderMessageContent(msg, quotes, activePersonaDisplayName)
+                        )}
+                      </div>
+                      {messageImages[msg.id] && (
+                        <div 
+                          className="ei-message__inline-image" 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onImageClick?.(msg.id);
+                          }}
+                          title="Click to view full size"
+                        >
+                          <img 
+                            src={messageImages[msg.id]?.blobUrl}
+                            alt="Generated from message"
+                            className="ei-message__inline-image-img"
+                          />
+                        </div>
+                      )}
+                      {msg.role === "system" && (
+                        <>
+                          {scissorsButton}
+                          {imageButton}
+                        </>
+                      )}
+                      <div className="ei-message__time">
+                        {formatTime(msg.timestamp)}
+                        {msg.role === "human" && !msg.read && (
+                          <span className="ei-message__status"> (pending)</span>
+                        )}
+                      </div>
                     </div>
-                  )}
-                  {msg.role === "system" && (
-                    <>
-                      {scissorsButton}
-                      {imageButton}
-                    </>
-                  )}
-                  <div className="ei-message__time">
-                    {formatTime(msg.timestamp)}
-                    {msg.role === "human" && !msg.read && (
-                      <span className="ei-message__status"> (pending)</span>
+                    {showBoundaryMarker && (
+                      <div className="ei-context-divider">
+                        <span>New conversation started</span>
+                      </div>
                     )}
                   </div>
                 </div>
-              </div>
-            );
-          })
-        )}
-        {contextBoundary && messages.length > 0 && messages[messages.length - 1].timestamp < contextBoundary && (
-          <div className="ei-context-divider">
-            <span>New conversation started</span>
+              );
+            })}
           </div>
         )}
-        <div ref={messagesEndRef} />
+
       </div>
-      {showScrollButton && (
+      {!isAtBottom && (
         <button
           className="ei-scroll-to-bottom"
-          onClick={() => { scrollToBottom(); setShowScrollButton(false); }}
+          onClick={() => scrollToBottom()}
         >
           ↓ Latest
         </button>
@@ -478,6 +541,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
               className="ei-boundary-btn"
               onClick={handleBoundaryToggle}
               title={boundaryIsActive ? "Resume previous conversation context" : "Start new conversation context"}
+              disabled={messages.length === 0 && !boundaryIsActive}
             >
               {boundaryIsActive ? "↩" : "✦"}
             </button>

@@ -19,6 +19,8 @@ export interface ResponsePromptData {
     topics: PersonaTopic[];
     /** Pre-filtered: topics where exposure_desired - exposure_current > 0.2 */
     interested_topics: PersonaTopic[];
+    /** When true, each message has a timestamp prepended; include a note so the persona doesn't echo them */
+    include_message_timestamps?: boolean;
   };
   human: {
     facts: Fact[];

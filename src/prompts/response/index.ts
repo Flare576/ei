@@ -54,6 +54,9 @@ Your role is unique among personas:
   const toolsSection = (data.tools && data.tools.length > 0) ? buildToolsSection() : "";
   const currentTime = formatCurrentTime();
   const conversationState = getConversationStateText(data.delay_ms);
+  const timestampNote = data.persona.include_message_timestamps
+    ? `\nNote: Timestamps are shown to help you understand time context — the user sees them too, no need to echo or reference them.`
+    : "";
 
   return `${identity}
 
@@ -71,7 +74,7 @@ ${priorities}
 
 ${responseFormat}${toolsSection ? `\n\n${toolsSection}` : ""}
 
-Current time: ${currentTime}
+Current time: ${currentTime}${timestampNote}
 ${conversationState}
 
 ## Final Instructions
@@ -99,6 +102,9 @@ function buildStandardSystemPrompt(data: ResponsePromptData): string {
   const toolsSection = (data.tools && data.tools.length > 0) ? buildToolsSection() : "";
   const currentTime = formatCurrentTime();
   const conversationState = getConversationStateText(data.delay_ms);
+  const timestampNote = data.persona.include_message_timestamps
+    ? `\nNote: Timestamps are shown to help you understand time context — the user sees them too, no need to echo or reference them.`
+    : "";
 
   return `${identity}
 
@@ -115,7 +121,7 @@ ${priorities}
 
 ${responseFormat}${toolsSection ? `\n\n${toolsSection}` : ""}
 
-Current time: ${currentTime}
+Current time: ${currentTime}${timestampNote}
 ${conversationState}
 
 ## Final Instructions
