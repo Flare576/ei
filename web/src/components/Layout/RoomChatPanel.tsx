@@ -198,11 +198,22 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
     ta.style.height = `${Math.min(ta.scrollHeight, window.innerHeight * 0.33)}px`;
   }, [inputValue]);
 
+  const scrolledForRoomRef = useRef<string | null>(null);
+  useEffect(() => { scrolledForRoomRef.current = null; }, [activeRoomId]);
+  useEffect(() => {
+    if (!activeRoomId || displayMessages.length === 0) return;
+    if (scrolledForRoomRef.current === activeRoomId) return;
+    scrolledForRoomRef.current = activeRoomId;
+    scrollToBottom({ animation: 'instant' });
+    const timer = setTimeout(() => scrollToBottom({ animation: 'instant' }), 100);
+    return () => clearTimeout(timer);
+  }, [activeRoomId, displayMessages.length, scrollToBottom]);
+
   useEffect(() => {
     setShowCYPPicker(false);
     setExpandedCards(new Set());
     setNavPickerMessageId(null);
-    scrollToBottom();
+    scrollToBottom({ animation: 'instant' });
     textareaRef.current?.focus();
   }, [room?.id, scrollToBottom]);
 

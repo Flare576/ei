@@ -190,6 +190,22 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
     return () => clearTimeout(timer);
   }, [activePersonaId, messages.length, onMarkMessageRead, messages]);
 
+  // Scroll to bottom when messages first arrive for this persona, and after a
+  // brief delay to catch any measurement corrections that propagate via ResizeObserver.
+  // Handles both initial load and persona switching (Bug: old persona's scroll position persists).
+  const scrolledForPersonaRef = useRef<string | null>(null);
+  useEffect(() => {
+    scrolledForPersonaRef.current = null;
+  }, [activePersonaId]);
+  useEffect(() => {
+    if (!activePersonaId || messages.length === 0) return;
+    if (scrolledForPersonaRef.current === activePersonaId) return;
+    scrolledForPersonaRef.current = activePersonaId;
+    scrollToBottom({ animation: 'instant' });
+    const timer = setTimeout(() => scrollToBottom({ animation: 'instant' }), 100);
+    return () => clearTimeout(timer);
+  }, [activePersonaId, messages.length, scrollToBottom]);
+
   useEffect(() => {
     if (!showSendDropdown) return;
     const handleClick = (e: MouseEvent) => {
