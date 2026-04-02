@@ -4,6 +4,7 @@
 
 import type { RoomResponsePromptData, RoomJudgePromptData, PromptOutput } from "./types.js";
 import { formatCurrentTime } from "../../core/format-utils.js";
+import { formatMessagesAsPlaceholders } from "../message-utils.js";
 import {
   buildRoomParticipantsSection,
   buildRoomHistorySection,
@@ -14,6 +15,8 @@ import {
   buildJudgeCandidatesSection,
   buildJudgeDecisionFormatSection,
 } from "./sections.js";
+
+export { buildSiblingAwarenessSection } from "./sections.js";
 import {
   buildHumanSection,
   buildQuotesSection,
@@ -67,7 +70,7 @@ export function buildRoomResponsePrompt(data: RoomResponsePromptData): PromptOut
     `Current time: ${currentTime}${timestampNote ? `\n${timestampNote}` : ""}`,
   ].filter(Boolean).join("\n\n");
 
-  const user = buildRoomHistorySection(history) +
+  const user = formatMessagesAsPlaceholders(history, name) +
     `\n\nRespond to the conversation above as ${name}. Call the \`submit_response\` tool with your response. If the tool is unavailable, use the JSON format in the Response Format section.`;
 
   return { system, user };

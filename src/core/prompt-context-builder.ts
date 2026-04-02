@@ -3,7 +3,8 @@ import { StateManager } from "./state-manager.js";
 import { getEmbeddingService, findTopK } from "./embedding-service.js";
 import type { ResponsePromptData, PromptOutput } from "../prompts/index.js";
 import { buildRoomResponsePrompt } from "../prompts/room/index.js";
-import type { RoomParticipantIdentity, RoomHistoryMessage } from "../prompts/room/types.js";
+import type { RoomParticipantIdentity } from "../prompts/room/types.js";
+import { normalizeRoomMessages } from "./handlers/utils.js";
 
 const QUOTE_LIMIT = 10;
 const DATA_ITEM_LIMIT = 15;
@@ -232,15 +233,7 @@ export async function buildRoomResponsePromptData(
 
   const filteredHuman = await filterHumanDataByVisibility(human, respondingPersona, currentMessage);
 
-  const history: RoomHistoryMessage[] = sourceMessages.map(m => ({
-    speaker_name: m.role === "human"
-      ? (human.settings?.name_display ?? "Human")
-      : (sm.persona_getById(m.persona_id ?? "")?.display_name ?? m.persona_id ?? "Unknown"),
-    speaker_id: m.role === "human" ? "human" : (m.persona_id ?? ""),
-    verbal_response: m.verbal_response,
-    action_response: m.action_response,
-    silence_reason: m.silence_reason,
-  }));
+  const history = normalizeRoomMessages(sourceMessages, sm);
 
   const otherParticipants: RoomParticipantIdentity[] = [];
   for (const pid of room.persona_ids) {
