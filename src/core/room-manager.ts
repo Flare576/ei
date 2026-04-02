@@ -32,7 +32,11 @@ async function queueRoomPersonaResponses(
   isTUI: boolean,
   onRoomMessageQueued: (roomId: string) => void
 ): Promise<void> {
-  for (const personaId of room.persona_ids) {
+  const personaIds = room.mode === RoomMode.FreeForAll
+    ? [...room.persona_ids].sort(() => Math.random() - 0.5)
+    : room.persona_ids;
+
+  for (const personaId of personaIds) {
     const persona = sm.persona_getById(personaId);
     if (!persona || persona.is_archived || persona.is_paused) continue;
     if (room.mode === RoomMode.MessagesAgainstPersona && room.judge_persona_id === personaId) continue;
@@ -186,7 +190,9 @@ export async function sendFfaMessage(
       .map(q => q.data.personaId as string)
   );
 
-  for (const personaId of updatedRoom.persona_ids) {
+  const shuffledIds = [...updatedRoom.persona_ids].sort(() => Math.random() - 0.5);
+
+  for (const personaId of shuffledIds) {
     if (alreadyQueued.has(personaId)) continue;
     const persona = sm.persona_getById(personaId);
     if (!persona || persona.is_archived || persona.is_paused) continue;
