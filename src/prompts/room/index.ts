@@ -48,6 +48,9 @@ export function buildRoomResponsePrompt(data: RoomResponsePromptData): PromptOut
   const responseFormat = buildRoomResponseFormatSection();
   const toolsSection = tools && tools.length > 0 ? buildToolsSection() : "";
   const currentTime = formatCurrentTime();
+  const timestampNote = persona.include_message_timestamps
+    ? `Note: Timestamps are shown to help you understand time context — the user sees them too, no need to echo or reference them.`
+    : "";
 
   const system = [
     identity,
@@ -61,7 +64,7 @@ export function buildRoomResponsePrompt(data: RoomResponsePromptData): PromptOut
     guidelines,
     responseFormat,
     toolsSection,
-    `Current time: ${currentTime}`,
+    `Current time: ${currentTime}${timestampNote ? `\n${timestampNote}` : ""}`,
   ].filter(Boolean).join("\n\n");
 
   const user = buildRoomHistorySection(history) +
