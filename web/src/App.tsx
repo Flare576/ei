@@ -289,6 +289,7 @@ function App() {
           if (list.length > 0) {
             const currentPersonaId = activePersonaIdRef.current;
             const personaExists = list.find(p => p.id === currentPersonaId);
+            setMessages([]);
             if (!personaExists) {
               setActivePersonaId(list[0].id);
               processorRef.current?.getMessages(list[0].id).then(setMessages);
@@ -404,6 +405,7 @@ function App() {
         p.getPersonaList().then((list) => {
           setPersonas(list);
           if (list.length > 0) {
+            setMessages([]);
             setActivePersonaId(list[0].id);
             p.getMessages(list[0].id).then(setMessages);
           }

@@ -174,6 +174,12 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
     getScrollElement: () => scrollRef.current,
     estimateSize: (i) => messageHeights[i] ?? 80,
     overscan: 5,
+    enabled: messages.length > 0,
+    initialOffset: () => {
+      if (!scrollRef.current) return 0;
+      const totalHeight = messageHeights.reduce((sum, h) => sum + h, 0);
+      return Math.max(0, totalHeight - scrollRef.current.clientHeight + 32);
+    },
   });
 
   useImperativeHandle(ref, () => ({
@@ -208,7 +214,11 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
 
   const hasScrolledRef = useRef(false);
   useLayoutEffect(() => {
-    if (messages.length === 0 || hasScrolledRef.current) return;
+    if (messages.length === 0) {
+      hasScrolledRef.current = false;
+      return;
+    }
+    if (hasScrolledRef.current) return;
     hasScrolledRef.current = true;
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
