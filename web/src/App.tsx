@@ -113,6 +113,11 @@ function App() {
   });
   const [activePersonaId, setActivePersonaId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+
+  const switchPersona = useCallback((personaId: string | null) => {
+    setMessages([]);
+    setActivePersonaId(personaId);
+  }, []);
   const [inputValue, setInputValue] = useState("");
   const [processingPersona, setProcessingPersona] = useState<string | null>(null);
   const [showHelp, setShowHelp] = useState(false);
@@ -289,11 +294,10 @@ function App() {
           if (list.length > 0) {
             const currentPersonaId = activePersonaIdRef.current;
             const personaExists = list.find(p => p.id === currentPersonaId);
-            setMessages([]);
             if (!personaExists) {
-              setActivePersonaId(list[0].id);
-              processorRef.current?.getMessages(list[0].id).then(setMessages);
+              switchPersona(list[0].id);
             } else if (currentPersonaId) {
+              setMessages([]);
               processorRef.current?.getMessages(currentPersonaId).then(setMessages);
             }
           }
@@ -405,9 +409,7 @@ function App() {
         p.getPersonaList().then((list) => {
           setPersonas(list);
           if (list.length > 0) {
-            setMessages([]);
-            setActivePersonaId(list[0].id);
-            p.getMessages(list[0].id).then(setMessages);
+            switchPersona(list[0].id);
           }
         });
         p.getQueueStatus().then(setQueueStatus);
@@ -504,11 +506,10 @@ function App() {
       await processor.markAllMessagesRead(activePersonaId);
       processor.getPersonaList().then(setPersonas);
     }
-    setMessages([]);
-    setActivePersonaId(personaId);
+    switchPersona(personaId);
     setActiveRoomId(null);
     if (!activeRoomId) chatPanelRef.current?.focusInput();
-  }, [processor, activePersonaId, activeRoomId]);
+  }, [processor, activePersonaId, activeRoomId, switchPersona]);
 
   const handleMarkMessageRead = useCallback(async (messageId: string) => {
     if (!processor || !activePersonaId) return;
@@ -597,9 +598,9 @@ function App() {
     processor.getPersonaList().then(setPersonas);
     if (activePersonaId === personaId) {
       const list = await processor.getPersonaList();
-      setActivePersonaId(list.length > 0 ? list[0].id : null);
+      switchPersona(list.length > 0 ? list[0].id : null);
     }
-  }, [processor, activePersonaId]);
+  }, [processor, activePersonaId, switchPersona]);
 
   const handleDeletePersona = useCallback(async (personaId: string, _deleteData: boolean) => {
     if (!processor) return;
@@ -607,9 +608,9 @@ function App() {
     processor.getPersonaList().then(setPersonas);
     if (activePersonaId === personaId) {
       const list = await processor.getPersonaList();
-      setActivePersonaId(list.length > 0 ? list[0].id : null);
+      switchPersona(list.length > 0 ? list[0].id : null);
     }
-  }, [processor, activePersonaId]);
+  }, [processor, activePersonaId, switchPersona]);
 
   
 
@@ -828,7 +829,7 @@ function App() {
     if (processor && activeRoomId && activeRoomId !== roomId) {
       await processor.markAllRoomMessagesRead(activeRoomId);
     }
-    setActivePersonaId(null);
+    switchPersona(null);
     setActiveRoomId(roomId);
     refreshRoomActivating(roomId);
     if (processor) {
@@ -849,7 +850,7 @@ function App() {
     setShowRoomCreator(false);
     const room = processor.getRoom(roomId);
     setActiveRoom(room ?? null);
-    setActivePersonaId(null);
+    switchPersona(null);
     setActiveRoomId(roomId);
     setRoomMessages(processor.getRoomMessages(roomId));
     setActiveRoomPath(processor.getRoomActivePath(roomId));
