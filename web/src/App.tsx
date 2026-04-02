@@ -1520,6 +1520,7 @@ function App() {
           />
         ) : (
           <ChatPanel
+            key={activePersonaId ?? ''}
             ref={chatPanelRef}
             activePersonaId={activePersonaId}
             activePersonaDisplayName={personas.find(p => p.id === activePersonaId)?.display_name ?? null}
