@@ -235,8 +235,33 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
 
   useEffect(() => {
     if (!room?.active_node_id) return;
-    setTimeout(() => scrollToBottom(), 50);
-  }, [room?.active_node_id, scrollToBottom]);
+    if (isCYP) {
+      const el = cypContainerRef.current;
+      setTimeout(() => { if (el) el.scrollTop = el.scrollHeight; }, 50);
+    } else {
+      setTimeout(() => scrollToBottom({ animation: 'instant' }), 50);
+    }
+  }, [room?.active_node_id, isCYP, scrollToBottom]);
+
+  const prevNeedsActivationRef = useRef(needsActivation);
+  useEffect(() => {
+    const prev = prevNeedsActivationRef.current;
+    prevNeedsActivationRef.current = needsActivation;
+    if (needsActivation && !prev) {
+      if (isCYP) {
+        const el = cypContainerRef.current;
+        if (el) el.scrollTop = el.scrollHeight;
+      } else {
+        scrollToBottom({ animation: 'instant' });
+      }
+    }
+  }, [needsActivation, isCYP, scrollToBottom]);
+
+  useEffect(() => {
+    if (!showCYPPicker) return;
+    const el = cypContainerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [showCYPPicker]);
 
   useEffect(() => {
     if (!showSendDropdown) return;
@@ -264,7 +289,7 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
     } else {
       onActivateRoom();
     }
-    setTimeout(() => scrollToBottom(), 0);
+    setTimeout(() => scrollToBottom({ animation: 'instant' }), 0);
   }, [isCYP, onActivateRoom, scrollToBottom]);
 
   const canSend = isFFA
@@ -548,7 +573,7 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
           ) : (
             <div
               ref={contentRef}
-              style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: "relative" }}
+              style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: "relative", flexShrink: 0 }}
             >
               {rowVirtualizer.getVirtualItems().map((virtualRow) => {
                 const msg = displayMessages[virtualRow.index];
