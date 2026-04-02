@@ -93,7 +93,7 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
   const dropdownRef = useRef<HTMLDivElement>(null);
   const cypContainerRef = useRef<HTMLDivElement>(null);
 
-  const { scrollRef, contentRef, isAtBottom, scrollToBottom } = useStickToBottom();
+  const { scrollRef, contentRef, isAtBottom, scrollToBottom } = useStickToBottom({ initial: 'instant' });
 
   useImperativeHandle(ref, () => ({
     focusInput: () => textareaRef.current?.focus(),

@@ -115,7 +115,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const { scrollRef, contentRef, isAtBottom, scrollToBottom } = useStickToBottom();
+  const { scrollRef, contentRef, isAtBottom, scrollToBottom } = useStickToBottom({ initial: 'instant' });
 
   const hasPendingMessages = messages.some(m => m.role === "human" && !m.read);
 
