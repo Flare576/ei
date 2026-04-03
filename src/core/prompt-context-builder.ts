@@ -223,11 +223,23 @@ export async function buildRoomResponsePromptData(
   isTUI: boolean,
   useAllMessages = false
 ): Promise<PromptOutput> {
+  const MIN_ROOM_MESSAGES = 20;
+
   const human = sm.getHuman();
   const activePath = sm.getRoomActivePath(room.id);
-  const sourceMessages = useAllMessages
+  const allSourceMessages = useAllMessages
     ? [...sm.getRoomMessages(room.id)].sort((a, b) => a.timestamp.localeCompare(b.timestamp))
     : activePath;
+
+  // Apply time window (same hours setting as 1:1 personas), but guarantee
+  // at least MIN_ROOM_MESSAGES so rooms never feel like they're starting over.
+  // Whichever anchor reaches further back wins.
+  const contextWindowHours = human.settings?.default_context_window_hours ?? 8;
+  const windowCutoff = new Date(Date.now() - contextWindowHours * 60 * 60 * 1000).toISOString();
+  const byTime = allSourceMessages.filter(m => m.timestamp >= windowCutoff);
+  const byCount = allSourceMessages.slice(-MIN_ROOM_MESSAGES);
+  const sourceMessages = byTime.length >= byCount.length ? byTime : byCount;
+
   const lastMessage = sourceMessages[sourceMessages.length - 1];
   const currentMessage = lastMessage?.verbal_response;
 
