@@ -873,6 +873,17 @@ export class StateManager {
     this.scheduleSave();
   }
 
+  tools_upsertBuiltin(tool: ToolDefinition): void {
+    const existing = this.tools.find(t => t.name === tool.name);
+    if (!existing) {
+      this.tools.push(tool);
+    } else if (existing.builtin) {
+      const idx = this.tools.indexOf(existing);
+      this.tools[idx] = { ...tool, id: existing.id, enabled: existing.enabled, created_at: existing.created_at };
+    }
+    this.scheduleSave();
+  }
+
   tools_update(id: string, updates: Partial<ToolDefinition>): boolean {
     const idx = this.tools.findIndex(t => t.id === id);
     if (idx === -1) return false;

@@ -301,18 +301,17 @@ export class Processor {
     }
 
     // read_memory tool
-    if (!this.stateManager.tools_getByName("read_memory")) {
-      this.stateManager.tools_add({
+    this.stateManager.tools_upsertBuiltin({
         id: crypto.randomUUID(),
         provider_id: "ei",
         name: "read_memory",
         display_name: "Read Memory",
         description:
-          "Search your personal memory for relevant facts, topics, people, or quotes. Use this when you need information about the user that may not be in the current conversation. Use `recent: true` to retrieve what's been discussed recently.",
+          "Search Ei's persistent knowledge base — facts, topics, people, and quotes learned across ALL conversations over time, not just this one. Use this when you need context about the user, their life, relationships, or interests that may not be visible in the current exchange. Use `recent: true` to retrieve what's been discussed recently.",
         input_schema: {
           type: "object",
           properties: {
-            query: { type: "string", description: "What to search for in memory" },
+            query: { type: "string", description: "What to search for — a person, topic, fact, or anything Ei has learned about the user" },
             types: {
               type: "array",
               items: { type: "string", enum: ["fact", "topic", "person", "quote"] },
@@ -328,12 +327,10 @@ export class Processor {
         enabled: true,
         created_at: now,
         max_calls_per_interaction: 6,  // Dedup needs to verify relationships before irreversible merges. Typical cluster (3-8 items) requires: parent concept lookup + 2 relationship verifications + context validation. Still under HARD_TOOL_CALL_LIMIT (10).
-      });
-    }
+    });
 
     // file_read tool (TUI only)
-    if (!this.stateManager.tools_getByName("file_read")) {
-      this.stateManager.tools_add({
+    this.stateManager.tools_upsertBuiltin({
         id: crypto.randomUUID(),
         provider_id: "ei",
         name: "file_read",
@@ -352,12 +349,10 @@ export class Processor {
         enabled: true,
         created_at: now,
         max_calls_per_interaction: 5,
-      });
-    }
+    });
 
     // list_directory tool (TUI only)
-    if (!this.stateManager.tools_getByName("list_directory")) {
-      this.stateManager.tools_add({
+    this.stateManager.tools_upsertBuiltin({
         id: crypto.randomUUID(),
         provider_id: "ei",
         name: "list_directory",
@@ -376,12 +371,10 @@ export class Processor {
         enabled: true,
         created_at: now,
         max_calls_per_interaction: 5,
-      });
-    }
+    });
 
     // directory_tree tool (TUI only)
-    if (!this.stateManager.tools_getByName("directory_tree")) {
-      this.stateManager.tools_add({
+    this.stateManager.tools_upsertBuiltin({
         id: crypto.randomUUID(),
         provider_id: "ei",
         name: "directory_tree",
@@ -401,12 +394,10 @@ export class Processor {
         enabled: true,
         created_at: now,
         max_calls_per_interaction: 3,
-      });
-    }
+    });
 
     // search_files tool (TUI only)
-    if (!this.stateManager.tools_getByName("search_files")) {
-      this.stateManager.tools_add({
+    this.stateManager.tools_upsertBuiltin({
         id: crypto.randomUUID(),
         provider_id: "ei",
         name: "search_files",
@@ -426,12 +417,10 @@ export class Processor {
         enabled: true,
         created_at: now,
         max_calls_per_interaction: 3,
-      });
-    }
+    });
 
     // grep tool (TUI only)
-    if (!this.stateManager.tools_getByName("grep")) {
-      this.stateManager.tools_add({
+    this.stateManager.tools_upsertBuiltin({
         id: crypto.randomUUID(),
         provider_id: "ei",
         name: "grep",
@@ -453,12 +442,10 @@ export class Processor {
         enabled: true,
         created_at: now,
         max_calls_per_interaction: 5,
-      });
-    }
+    });
 
     // get_file_info tool (TUI only)
-    if (!this.stateManager.tools_getByName("get_file_info")) {
-      this.stateManager.tools_add({
+    this.stateManager.tools_upsertBuiltin({
         id: crypto.randomUUID(),
         provider_id: "ei",
         name: "get_file_info",
@@ -477,12 +464,10 @@ export class Processor {
         enabled: true,
         created_at: now,
         max_calls_per_interaction: 5,
-      });
-    }
+    });
 
     // web_fetch tool
-    if (!this.stateManager.tools_getByName("web_fetch")) {
-      this.stateManager.tools_add({
+    this.stateManager.tools_upsertBuiltin({
         id: crypto.randomUUID(),
         provider_id: "ei",
         name: "web_fetch",
@@ -501,8 +486,7 @@ export class Processor {
         enabled: true,
         created_at: now,
         max_calls_per_interaction: 3,
-      });
-    }
+    });
 
     // --- Tavily Search provider ---
     if (!this.stateManager.tools_getProviderById("tavily")) {
@@ -521,8 +505,7 @@ export class Processor {
     }
 
     // tavily_web_search
-    if (!this.stateManager.tools_getByName("tavily_web_search")) {
-      this.stateManager.tools_add({
+    this.stateManager.tools_upsertBuiltin({
         id: crypto.randomUUID(),
         provider_id: "tavily",
         name: "tavily_web_search",
@@ -542,12 +525,10 @@ export class Processor {
         enabled: true,
         created_at: now,
         max_calls_per_interaction: 3,
-      });
-    }
+    });
 
     // tavily_news_search
-    if (!this.stateManager.tools_getByName("tavily_news_search")) {
-      this.stateManager.tools_add({
+    this.stateManager.tools_upsertBuiltin({
         id: crypto.randomUUID(),
         provider_id: "tavily",
         name: "tavily_news_search",
@@ -567,8 +548,7 @@ export class Processor {
         enabled: true,
         created_at: now,
         max_calls_per_interaction: 3,
-      });
-    }
+    });
 
     // --- Spotify provider ---
     if (!this.stateManager.tools_getProviderById("spotify")) {
@@ -587,8 +567,7 @@ export class Processor {
     }
 
     // get_currently_playing
-    if (!this.stateManager.tools_getByName("get_currently_playing")) {
-      this.stateManager.tools_add({
+    this.stateManager.tools_upsertBuiltin({
         id: crypto.randomUUID(),
         provider_id: "spotify",
         name: "get_currently_playing",
@@ -605,12 +584,10 @@ export class Processor {
         enabled: true,
         created_at: now,
         max_calls_per_interaction: 3,
-      });
-    }
+    });
 
     // get_liked_songs
-    if (!this.stateManager.tools_getByName("get_liked_songs")) {
-      this.stateManager.tools_add({
+    this.stateManager.tools_upsertBuiltin({
         id: crypto.randomUUID(),
         provider_id: "spotify",
         name: "get_liked_songs",
@@ -627,14 +604,12 @@ export class Processor {
         enabled: true,
         created_at: now,
         max_calls_per_interaction: 1,
-      });
-    }
+    });
 
     // submit_response tool — auto-injected for HandlePersonaResponse and HandleRoomResponse.
     // Not user-configurable; invisible in the tools UI. Terminates the tool loop immediately
     // when called; its arguments become response.parsed.
-    if (!this.stateManager.tools_getByName("submit_response")) {
-      this.stateManager.tools_add({
+    this.stateManager.tools_upsertBuiltin({
         id: crypto.randomUUID(),
         provider_id: "ei",
         name: "submit_response",
@@ -653,7 +628,7 @@ export class Processor {
             },
             action_response: {
               type: "string",
-              description: "What you do — rendered as italics stage directions. Optional alongside verbal_response.",
+              description: "Italicized stage directions only — physical actions, expressions, or internal states. Keep this distinct from verbal_response: do not repeat or paraphrase what you are saying. If you have nothing to physically do, omit this field.",
             },
             reason: {
               type: "string",
@@ -669,11 +644,9 @@ export class Processor {
         is_submit: true,
         max_calls_per_interaction: 1,
         created_at: now,
-      });
-    }
+    });
 
-    if (!this.stateManager.tools_getByName("submit_heartbeat_check")) {
-      this.stateManager.tools_add({
+    this.stateManager.tools_upsertBuiltin({
         id: crypto.randomUUID(),
         provider_id: "ei",
         name: "submit_heartbeat_check",
@@ -695,11 +668,9 @@ export class Processor {
         is_submit: true,
         max_calls_per_interaction: 1,
         created_at: now,
-      });
-    }
+    });
 
-    if (!this.stateManager.tools_getByName("submit_ei_heartbeat")) {
-      this.stateManager.tools_add({
+    this.stateManager.tools_upsertBuiltin({
         id: crypto.randomUUID(),
         provider_id: "ei",
         name: "submit_ei_heartbeat",
@@ -721,11 +692,9 @@ export class Processor {
         is_submit: true,
         max_calls_per_interaction: 1,
         created_at: now,
-      });
-    }
+    });
 
-    if (!this.stateManager.tools_getByName("submit_dedup_decisions")) {
-      this.stateManager.tools_add({
+    this.stateManager.tools_upsertBuiltin({
         id: crypto.randomUUID(),
         provider_id: "ei",
         name: "submit_dedup_decisions",
@@ -801,8 +770,7 @@ export class Processor {
         is_submit: true,
         max_calls_per_interaction: 1,
         created_at: now,
-      });
-    }
+    });
   }
 
   /**

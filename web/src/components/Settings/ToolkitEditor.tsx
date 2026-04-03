@@ -94,7 +94,7 @@ export const ToolkitEditor: React.FC<ToolkitEditorProps> = ({
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
 
-    if (!displayName.trim()) {
+    if (!provider.builtin && !displayName.trim()) {
       newErrors.displayName = 'Display name is required';
     }
 
@@ -165,36 +165,40 @@ export const ToolkitEditor: React.FC<ToolkitEditorProps> = ({
         </div>
 
         <div className="ei-provider-editor__content">
-          <div className="ei-form-group">
-            <label htmlFor="toolkit-display-name" className="ei-form-label">
-              Display Name <span className="ei-form-required">*</span>
-            </label>
-            <input
-              id="toolkit-display-name"
-              type="text"
-              className={`ei-input ${errors.displayName ? 'ei-input--error' : ''}`}
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="e.g., Brave Search"
-            />
-            {errors.displayName && (
-              <span className="ei-form-error">{errors.displayName}</span>
-            )}
-          </div>
+          {!provider.builtin && (
+            <div className="ei-form-group">
+              <label htmlFor="toolkit-display-name" className="ei-form-label">
+                Display Name <span className="ei-form-required">*</span>
+              </label>
+              <input
+                id="toolkit-display-name"
+                type="text"
+                className={`ei-input ${errors.displayName ? 'ei-input--error' : ''}`}
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="e.g., Brave Search"
+              />
+              {errors.displayName && (
+                <span className="ei-form-error">{errors.displayName}</span>
+              )}
+            </div>
+          )}
 
-          <div className="ei-form-group">
-            <label htmlFor="toolkit-description" className="ei-form-label">
-              Description <span className="ei-form-optional">(optional)</span>
-            </label>
-            <textarea
-              id="toolkit-description"
-              className="ei-input ei-textarea"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Short description of what this kit does"
-              rows={2}
-            />
-          </div>
+          {!provider.builtin && (
+            <div className="ei-form-group">
+              <label htmlFor="toolkit-description" className="ei-form-label">
+                Description <span className="ei-form-optional">(optional)</span>
+              </label>
+              <textarea
+                id="toolkit-description"
+                className="ei-input ei-textarea"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Short description of what this kit does"
+                rows={2}
+              />
+            </div>
+          )}
 
           {/* Spotify: show OAuth button instead of raw config rows */}
           {provider.name === 'spotify' && (

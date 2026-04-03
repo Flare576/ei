@@ -336,10 +336,21 @@ export async function callLLMRaw(
     console.log(`[LLM] Extended thinking detected (${thinking.length} chars)`);
   }
 
+  let finalToolCalls = rawToolCalls;
+  if ((!rawToolCalls || rawToolCalls.length === 0) && choice?.finish_reason === "stop" && typeof textContent === "string") {
+    const rescued = rescueGemmaToolCalls(textContent);
+    if (rescued.length > 0) {
+      console.log(`[LLM] Rescued ${rescued.length} tool call(s) from content (Gemma native format)`);
+      finalToolCalls = rescued;
+      textContent = null;
+      if (choice) (choice as Record<string, unknown>).finish_reason = "tool_calls";
+    }
+  }
+
   return {
     content: textContent,
     finishReason: choice?.finish_reason ?? null,
-    rawToolCalls,
+    rawToolCalls: finalToolCalls,
     assistantMessage,
     ...(thinking ? { thinking } : {}),
   };
@@ -393,6 +404,57 @@ export function repairJSON(jsonStr: string): string {
   }
   
   return repaired;
+}
+
+// =============================================================================
+// Gemma native tool call rescue
+// =============================================================================
+
+/**
+ * Gemma (via LM Studio) occasionally emits tool calls in `content` instead of
+ * `tool_calls`, using its native token format:
+ *
+ *   <|tool_call>call:FUNCTION{param:<|"|>string value<|"|>,bool:true}<tool_call|>
+ *
+ * This parser extracts those calls and converts them to OpenAI-compatible shape
+ * so the rest of the pipeline (parseToolCalls → executeToolCalls) sees a clean
+ * contract. Call it when finish_reason is "stop" and tool_calls is empty.
+ */
+export function rescueGemmaToolCalls(content: string): unknown[] {
+  const CALL_RE = /<\|tool_call>call:(\w+)\{([\s\S]*?)\}<tool_call\|>/g;
+  const STRING_PARAM_RE = /(\w+):<\|"?\|>([\s\S]*?)<\|"?\|>/g;
+  const SCALAR_PARAM_RE = /(\w+):(true|false|-?\d+\.?\d*)/g;
+
+  const rescued: unknown[] = [];
+  let callMatch: RegExpExecArray | null;
+
+  while ((callMatch = CALL_RE.exec(content)) !== null) {
+    const fnName = callMatch[1];
+    const argsStr = callMatch[2];
+    const args: Record<string, unknown> = {};
+
+    let m: RegExpExecArray | null;
+    STRING_PARAM_RE.lastIndex = 0;
+    while ((m = STRING_PARAM_RE.exec(argsStr)) !== null) {
+      args[m[1]] = m[2];
+    }
+
+    SCALAR_PARAM_RE.lastIndex = 0;
+    while ((m = SCALAR_PARAM_RE.exec(argsStr)) !== null) {
+      if (!(m[1] in args)) {
+        const v = m[2];
+        args[m[1]] = v === "true" ? true : v === "false" ? false : Number(v);
+      }
+    }
+
+    rescued.push({
+      id: crypto.randomUUID(),
+      type: "function",
+      function: { name: fnName, arguments: JSON.stringify(args) },
+    });
+  }
+
+  return rescued;
 }
 
 export function parseJSONResponse(content: string): unknown {
