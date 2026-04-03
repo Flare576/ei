@@ -123,6 +123,22 @@ Rules:
 - If the \`submit_response\` tool is unavailable, return the JSON object directly as your entire reply — no prose, no preamble`;
 }
 
+export function buildSiblingAwarenessSection(
+  siblings: Array<{ name: string; verbal_response: string }>,
+  personaName: string
+): string {
+  if (siblings.length === 0) return "";
+  const lines = siblings.map(s => `**${s.name}**: "${s.verbal_response}"`);
+  const header = siblings.length === 1
+    ? "## Another voice has already responded this round"
+    : "## Others have already responded this round";
+  return `${header}
+
+${lines.join("\n\n")}
+
+Find the angle that's distinctly yours on this same moment — don't try to cover more ground, just be the version of this reaction that only *${personaName}* could give.`;
+}
+
 export function buildJudgeCandidatesSection(candidates: RoomJudgeCandidate[]): string {
   const lines = candidates.map((c, i) => {
     const speaker = c.speaker_id === "human" ? "Human" : c.speaker_name;

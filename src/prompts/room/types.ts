@@ -2,7 +2,7 @@
  * Room Prompt Types
  */
 
-import type { Fact, PersonaTrait, Topic, Person, Quote, PersonaTopic, ToolDefinition } from "../../core/types.js";
+import type { Fact, Message, PersonaTrait, Topic, Person, Quote, PersonaTopic, ToolDefinition } from "../../core/types.js";
 import type { RoomMode } from "../../core/types.js";
 
 export interface RoomParticipantIdentity {
@@ -48,7 +48,7 @@ export interface RoomResponsePromptData {
     /** Pre-filtered: topics where exposure_desired - exposure_current > 0.2 */
     interested_topics: Topic[];
   };
-  history: RoomHistoryMessage[];
+  history: Message[];
   isTUI: boolean;
   tools?: ToolDefinition[];
 }

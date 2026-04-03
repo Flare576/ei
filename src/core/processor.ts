@@ -24,6 +24,7 @@ import {
   type ToolProvider,
 } from "./types.js";
 import { buildPersonaFromPersonPrompt } from "../prompts/index.js";
+import { buildSiblingAwarenessSection } from "../prompts/room/index.js";
 import type { PersonaGenerationResult } from "../prompts/generation/types.js";
 
 import type { Storage } from "../storage/interface.js";
@@ -1024,8 +1025,9 @@ export class Processor {
         const isBackingOff = retryAfter !== null && retryAfter > new Date().toISOString();
 
         if (!isBackingOff) {
-          const request = this.stateManager.queue_claimHighest();
+          let request = this.stateManager.queue_claimHighest();
           if (request) {
+            request = this.augmentRoomRequest(request);
             const personaId = request.data.personaId as string | undefined;
             const personaDisplayName = request.data.personaDisplayName as string | undefined;
             const personaSuffix = personaDisplayName ? ` [${personaDisplayName}]` : "";
@@ -1410,6 +1412,28 @@ const toolNextSteps = new Set([
       .finally(() => {
         this.cursorImportInProgress = false;
       });
+  }
+
+  private augmentRoomRequest(request: LLMRequest): LLMRequest {
+    if (request.next_step !== LLMNextStep.HandleRoomResponse) return request;
+
+    const roomId = request.data.roomId as string | undefined;
+    const parentMessageId = request.data.parentMessageId as string | undefined;
+    const personaDisplayName = request.data.personaDisplayName as string | undefined;
+
+    if (!roomId || !parentMessageId || !personaDisplayName) return request;
+
+    const siblings = this.stateManager.getRoomChildren(roomId, parentMessageId)
+      .filter((m: RoomMessage) => m.role === "persona" && m.verbal_response)
+      .map((m: RoomMessage) => ({
+        name: this.stateManager.persona_getById(m.persona_id ?? "")?.display_name ?? "Participant",
+        verbal_response: m.verbal_response!,
+      }));
+
+    if (siblings.length === 0) return request;
+
+    const siblingSection = buildSiblingAwarenessSection(siblings, personaDisplayName);
+    return { ...request, system: request.system + "\n\n" + siblingSection };
   }
 
   private classifyLLMError(error: string): string {
