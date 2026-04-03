@@ -1400,7 +1400,7 @@ const toolNextSteps = new Set([
 
     if (siblings.length === 0) return request;
 
-    const siblingSection = buildSiblingAwarenessSection(siblings, personaDisplayName);
+    const siblingSection = buildSiblingAwarenessSection(siblings);
     return { ...request, system: request.system + "\n\n" + siblingSection };
   }
 

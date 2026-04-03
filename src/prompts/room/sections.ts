@@ -124,19 +124,17 @@ Rules:
 }
 
 export function buildSiblingAwarenessSection(
-  siblings: Array<{ name: string; verbal_response: string }>,
-  personaName: string
+  siblings: Array<{ name: string; verbal_response: string }>
 ): string {
   if (siblings.length === 0) return "";
   const lines = siblings.map(s => `**${s.name}**: "${s.verbal_response}"`);
-  const header = siblings.length === 1
-    ? "## Another voice has already responded this round"
-    : "## Others have already responded this round";
-  return `${header}
+  return `## Room context — this round
+
+You're in a shared conversation. The human will read everyone's responses together. Here's what has already been contributed this round:
 
 ${lines.join("\n\n")}
 
-Find the angle that's distinctly yours on this same moment — don't try to cover more ground, just be the version of this reaction that only *${personaName}* could give.`;
+Respond as yourself — your read on this moment, your relationship with the human, the reaction that comes naturally to who you are. A room with distinct voices is more alive than one with echoes.`;
 }
 
 export function buildJudgeCandidatesSection(candidates: RoomJudgeCandidate[]): string {
