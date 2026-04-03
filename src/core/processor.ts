@@ -308,11 +308,11 @@ export class Processor {
         name: "read_memory",
         display_name: "Read Memory",
         description:
-          "Search your personal memory for relevant facts, topics, people, or quotes. Use this when you need information about the user that may not be in the current conversation. Use `recent: true` to retrieve what's been discussed recently.",
+          "Search Ei's persistent knowledge base — facts, topics, people, and quotes learned across ALL conversations over time, not just this one. Use this when you need context about the user, their life, relationships, or interests that may not be visible in the current exchange. Use `recent: true` to retrieve what's been discussed recently.",
         input_schema: {
           type: "object",
           properties: {
-            query: { type: "string", description: "What to search for in memory" },
+            query: { type: "string", description: "What to search for — a person, topic, fact, or anything Ei has learned about the user" },
             types: {
               type: "array",
               items: { type: "string", enum: ["fact", "topic", "person", "quote"] },
@@ -653,7 +653,7 @@ export class Processor {
             },
             action_response: {
               type: "string",
-              description: "What you do — rendered as italics stage directions. Optional alongside verbal_response.",
+              description: "Italicized stage directions only — physical actions, expressions, or internal states. Keep this distinct from verbal_response: do not repeat or paraphrase what you are saying. If you have nothing to physically do, omit this field.",
             },
             reason: {
               type: "string",
