@@ -47,7 +47,7 @@ interface EditablePersonaData {
   aliases?: string[];
   short_description?: string;
   long_description?: string;
-  model?: string;
+  model?: string | null;
   group_primary?: string | null;
   groups_visible?: Record<string, boolean>[];
   traits: YAMLTrait[];
@@ -243,7 +243,7 @@ export function newPersonaFromYAML(yamlContent: string, allTools?: ToolDefinitio
   
   return {
     long_description: stripPlaceholder(data.long_description, PLACEHOLDER_LONG_DESC),
-    model: data.model,
+    model: data.model ?? undefined,
     group_primary: data.group_primary ?? "General",
     groups_visible: groupsVisible.length > 0 ? groupsVisible : ["General"],
     traits,
@@ -276,7 +276,7 @@ export function personaToYAML(persona: PersonaEntity, allGroups?: string[], allT
     aliases: persona.aliases,
     short_description: persona.short_description,
     long_description: persona.long_description || PLACEHOLDER_LONG_DESC,
-    model: modelDisplay,
+    model: modelDisplay ?? null,
     group_primary: persona.group_primary,
     groups_visible: groupsForYAML,
     traits: useTraitPlaceholder 
@@ -381,7 +381,7 @@ export function personaFromYAML(yamlContent: string, original: PersonaEntity, al
     }
   }
 
-  let resolvedModel: string | undefined = data.model;
+  let resolvedModel: string | undefined = data.model ?? undefined;
   if (data.model && accounts && accounts.length > 0) {
     const guid = displayToModelGuid(data.model, accounts);
     if (guid !== undefined) {
