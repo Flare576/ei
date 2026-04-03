@@ -337,7 +337,7 @@ export async function callLLMRaw(
   }
 
   let finalToolCalls = rawToolCalls;
-  if ((!rawToolCalls || rawToolCalls.length === 0) && choice?.finish_reason === "stop" && typeof textContent === "string") {
+  if ((!rawToolCalls || rawToolCalls.length === 0) && choice?.finish_reason === "stop" && typeof textContent === "string" && textContent.trimStart().startsWith("<|tool_call>")) {
     const rescued = rescueGemmaToolCalls(textContent);
     if (rescued.length > 0) {
       console.log(`[LLM] Rescued ${rescued.length} tool call(s) from content (Gemma native format)`);
