@@ -1220,6 +1220,9 @@ export function toolkitToYAML(provider: ToolProvider, tools: ToolDefinition[]): 
   const toolsMap = tools.length > 0
     ? Object.fromEntries(tools.map(t => [t.display_name, t.enabled]))
     : undefined;
+  if (provider.builtin) {
+    return YAML.stringify({ enabled: provider.enabled, tools: toolsMap }, { lineWidth: 0 });
+  }
   const data: EditableToolkitData = {
     display_name: provider.display_name,
     enabled: provider.enabled,
@@ -1241,7 +1244,8 @@ export function toolkitFromYAML(yamlContent: string, original: ToolProvider, too
   const data = YAML.parse(yamlContent) as EditableToolkitData;
 
   if (!data.display_name) {
-    throw new Error("display_name is required");
+    if (!original.display_name) throw new Error("display_name is required");
+    data.display_name = original.display_name;
   }
 
   const updates: Partial<Omit<ToolProvider, 'id' | 'created_at'>> = {
