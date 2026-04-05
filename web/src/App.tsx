@@ -48,6 +48,14 @@ import "./styles/entity-editor.css";
 import "./styles/onboarding.css";
 import "./styles/queue-panel.css";
 
+function getContent(msg: { content?: string; verbal_response?: string; action_response?: string }): string {
+  if (msg.content) return msg.content;
+  const parts: string[] = [];
+  if (msg.action_response) parts.push(`_${msg.action_response}_`);
+  if (msg.verbal_response) parts.push(msg.verbal_response);
+  return parts.join('\n\n');
+}
+
 // System prompt for multi-message image synthesis
 const SYNTHESIS_SYSTEM_PROMPT = `You are building an image generation prompt from the user's conversation.
 
@@ -630,7 +638,7 @@ function App() {
 
   const handleImageGenerate = useCallback(async (message: Message) => {
     // Extract prompt from message
-    const prompt = message.verbal_response || message.action_response || "";
+    const prompt = getContent(message);
     
     if (!prompt.trim()) {
       alert("No prompt text found in this message");
@@ -938,7 +946,7 @@ function App() {
       const hasGrandchildren = allMsgs.some(m => m.parent_id && childIds.has(m.parent_id));
       if (hasGrandchildren) return;
     }
-    const recalledText = humanMsg?.verbal_response ?? humanMsg?.silence_reason ?? "";
+    const recalledText = humanMsg?.content ?? humanMsg?.verbal_response ?? humanMsg?.silence_reason ?? "";
     const ok = processorRef.current.recallHumanRoomMessage(activeRoomId);
     if (ok) {
       setRoomInputValue(recalledText);
@@ -1141,7 +1149,7 @@ function App() {
       const selectedMessages = messages.filter(m => selectedMessageIds.includes(m.id));
       const conversationText = selectedMessages
         .map(m => {
-          const content = m.verbal_response || m.action_response || '';
+          const content = getContent(m);
           return `${m.role}: ${content}`;
         })
         .join('\n\n');
@@ -1534,8 +1542,7 @@ function App() {
             activePersonaDisplayName={personas.find(p => p.id === activePersonaId)?.display_name ?? null}
             messages={messages}
             inputValue={inputValue}
-            isProcessing={processingPersona !== null}
-            contextBoundary={activePersonaEntity?.context_boundary}
+             contextBoundary={activePersonaEntity?.context_boundary}
             quotes={quotes}
             onInputChange={setInputValue}
             onSendMessage={handleSendMessage}
@@ -1725,7 +1732,6 @@ function App() {
        <QuoteManagementModal
          isOpen={editingQuote !== null}
          quote={editingQuote}
-         message={messages.find(m => m.id === editingQuote.message_id) || null}
          personaName={activePersonaEntity?.display_name || ''}
          dataItems={getDeduplicatedDataItems()}
          skipDeleteConfirm={skipDeleteConfirm}

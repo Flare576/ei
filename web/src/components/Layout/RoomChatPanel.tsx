@@ -5,6 +5,14 @@ import type { RoomEntity, RoomMessage, PersonaSummary } from "../../../../src/co
 import { RoomMode } from "../../../../src/core/types";
 import { MarkdownContent } from "../Chat";
 
+function getContent(msg: { content?: string; verbal_response?: string; action_response?: string }): string {
+  if (msg.content) return msg.content;
+  const parts: string[] = [];
+  if (msg.action_response) parts.push(`_${msg.action_response}_`);
+  if (msg.verbal_response) parts.push(msg.verbal_response);
+  return parts.join('\n\n');
+}
+
 export interface RoomChatPanelHandle {
   focusInput: () => void;
   scrollChat: (direction: "up" | "down") => void;
@@ -67,10 +75,7 @@ function buildRoomMessageText(msg: RoomMessage, judgePersonaId?: string): string
       : "chose not to respond:";
     return `_[${label} ${msg.silence_reason}]_`;
   }
-  const parts: string[] = [];
-  if (msg.action_response) parts.push(`_${msg.action_response}_`);
-  if (msg.verbal_response) parts.push(msg.verbal_response);
-  return parts.join("\n\n");
+  return getContent(msg);
 }
 
 export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>(function RoomChatPanel({
@@ -149,7 +154,7 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
   const respondedPersonaIds = new Set(
     currentRoundMessages
       .filter(m => m.role === "persona" && m.persona_id &&
-                   (m.verbal_response !== undefined || m.silence_reason !== undefined))
+                   !!(getContent(m) || m.silence_reason))
       .map(m => m.persona_id!)
   );
 

@@ -446,7 +446,6 @@ export const HumanEditor = ({
         <QuoteManagementModal
           isOpen={editingQuote !== null}
           quote={editingQuote}
-          message={null}
           personaName=""
           dataItems={[
             ...(human.topics || []).map(i => ({ id: i.id, name: i.name, type: 'Topic' })),

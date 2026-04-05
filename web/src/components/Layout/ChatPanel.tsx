@@ -5,12 +5,17 @@ import type { Message, Quote } from "../../../../src/core/types";
 import type { GenerationResult } from "../../comfyui";
 import { MarkdownContent } from "../Chat";
 
+function getContent(msg: { content?: string; verbal_response?: string; action_response?: string }): string {
+  if (msg.content) return msg.content;
+  const parts: string[] = [];
+  if (msg.action_response) parts.push(`_${msg.action_response}_`);
+  if (msg.verbal_response) parts.push(msg.verbal_response);
+  return parts.join('\n\n');
+}
+
 function buildMessageDisplayText(message: Message): string {
   if (message.silence_reason !== undefined) return "";
-  const parts: string[] = [];
-  if (message.action_response) parts.push(`_${message.action_response}_`);
-  if (message.verbal_response) parts.push(message.verbal_response);
-  return parts.join('\n\n');
+  return getContent(message);
 }
 
 function renderMessageContent(
@@ -65,7 +70,6 @@ interface ChatPanelProps {
   activePersonaDisplayName: string | null;
   messages: Message[];
   inputValue: string;
-  isProcessing: boolean;
   contextBoundary?: string;
   quotes?: Quote[];
   onInputChange: (value: string) => void;
@@ -95,7 +99,6 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
   activePersonaDisplayName,
   messages,
   inputValue,
-  isProcessing,
   contextBoundary,
   quotes = [],
   onInputChange,
@@ -177,7 +180,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
   const messageHeights = useMemo(() => {
     const charsPerLine = containerWidth > 0 ? Math.floor(containerWidth / 7.5) : 70;
     return messages.map(msg => {
-      const text = [msg.verbal_response, msg.action_response].filter(Boolean).join('\n\n');
+      const text = getContent(msg);
       if (!text) return 60;
       const lines = Math.max(1, Math.ceil(text.length / charsPerLine));
       let height = lines * 20 + 40;
@@ -476,7 +479,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
                             style={{ cursor: 'pointer' }}
                             title="Click to edit and regenerate"
                           >
-                            {msg.verbal_response}
+                          {getContent(msg)}
                           </div>
                         ) : (
                           renderMessageContent(msg, quotes, activePersonaDisplayName)
@@ -594,7 +597,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
                 onSendMessage(inputValue, undefined);
               }
             }}
-            disabled={!activePersonaId || (!isSilentMode && !inputValue.trim()) || isProcessing}
+            disabled={!activePersonaId || (!isSilentMode && !inputValue.trim())}
           >
             {isSilentMode ? "Silent" : "Send"}
           </button>

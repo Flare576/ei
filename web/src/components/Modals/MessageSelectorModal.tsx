@@ -1,6 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
 import type { Message } from '../../../../src/core/types';
 
+function getContent(msg: { content?: string; verbal_response?: string; action_response?: string }): string {
+  if (msg.content) return msg.content;
+  const parts: string[] = [];
+  if (msg.action_response) parts.push(`_${msg.action_response}_`);
+  if (msg.verbal_response) parts.push(msg.verbal_response);
+  return parts.join('\n\n');
+}
+
 interface MessageSelectorModalProps {
   isOpen: boolean;
   messages: Message[];
@@ -100,7 +108,7 @@ export function MessageSelectorModal({
 
           <div className="ei-message-selector__list">
             {selectableMessages.map(msg => {
-              const text = msg.verbal_response || msg.action_response || '';
+              const text = getContent(msg);
               const preview = text.length > 100 ? text.substring(0, 100) + '...' : text;
               const isSelected = selectedMessageIds.includes(msg.id);
 
