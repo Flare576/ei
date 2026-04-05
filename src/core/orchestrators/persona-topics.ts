@@ -15,12 +15,17 @@ export interface PersonaTopicContext {
   messages_analyze: Message[];
 }
 
+export interface PersonaTopicOptions {
+  ceremony_progress?: number;
+  roomId?: string;
+}
+
 function getAnalyzeFromTimestamp(context: PersonaTopicContext): string | null {
   if (context.messages_analyze.length === 0) return null;
   return context.messages_analyze[0].timestamp;
 }
 
-export function queuePersonaTopicScan(context: PersonaTopicContext, state: StateManager): void {
+export function queuePersonaTopicScan(context: PersonaTopicContext, state: StateManager, options?: PersonaTopicOptions): void {
   const prompt = buildPersonaTopicScanPrompt({
     persona_name: context.personaDisplayName,
     messages_context: context.messages_context,
@@ -37,6 +42,9 @@ export function queuePersonaTopicScan(context: PersonaTopicContext, state: State
       personaId: context.personaId,
       personaDisplayName: context.personaDisplayName,
       analyze_from_timestamp: getAnalyzeFromTimestamp(context),
+      message_ids: context.messages_analyze.map(m => m.id),
+      ceremony_progress: options?.ceremony_progress,
+      roomId: options?.roomId,
     },
   });
 }
@@ -44,7 +52,8 @@ export function queuePersonaTopicScan(context: PersonaTopicContext, state: State
 export function queuePersonaTopicMatch(
   candidate: PersonaTopicScanCandidate,
   context: PersonaTopicContext,
-  state: StateManager
+  state: StateManager,
+  options?: PersonaTopicOptions
 ): void {
   const persona = state.persona_getById(context.personaId);
   if (!persona) {
@@ -69,6 +78,7 @@ export function queuePersonaTopicMatch(
       personaDisplayName: context.personaDisplayName,
       candidate,
       analyze_from_timestamp: getAnalyzeFromTimestamp(context),
+      ceremony_progress: options?.ceremony_progress,
     },
   });
 }
@@ -77,7 +87,8 @@ export function queuePersonaTopicUpdate(
   candidate: PersonaTopicScanCandidate,
   matchResult: PersonaTopicMatchResult,
   context: PersonaTopicContext,
-  state: StateManager
+  state: StateManager,
+  options?: PersonaTopicOptions
 ): void {
   const persona = state.persona_getById(context.personaId);
   if (!persona) {
@@ -113,6 +124,7 @@ export function queuePersonaTopicUpdate(
       existingTopicId: existingTopic?.id ?? null,
       isNewTopic: !existingTopic,
       analyze_from_timestamp: getAnalyzeFromTimestamp(context),
+      ceremony_progress: options?.ceremony_progress,
     },
   });
 }

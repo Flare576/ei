@@ -19,6 +19,7 @@ import {
   queuePersonaTopicMatch,
   queuePersonaTopicUpdate,
   type PersonaTopicContext,
+  type PersonaTopicOptions,
 } from "../orchestrators/index.js";
 import { buildPersonaDescriptionsPrompt } from "../../prompts/generation/index.js";
 import { splitMessagesByTimestamp } from "./utils.js";
@@ -180,6 +181,20 @@ export function handlePersonaTopicScan(response: LLMResponse, state: StateManage
     return;
   }
 
+  const messageIds = response.request.data.message_ids as string[] | undefined;
+  if (messageIds?.length) {
+    const shortId = personaId.slice(0, 8);
+    const roomId = response.request.data.roomId as string | undefined;
+    if (roomId) {
+      state.markRoomMessagesPersonaExtracted(roomId, messageIds, shortId);
+    } else {
+      state.messages_markPersonaExtracted(personaId, messageIds, shortId);
+    }
+  }
+
+  const ceremonyProgress = response.request.data.ceremony_progress as number | undefined;
+  const options: PersonaTopicOptions | undefined = ceremonyProgress !== undefined ? { ceremony_progress: ceremonyProgress } : undefined;
+
   const analyzeFrom = response.request.data.analyze_from_timestamp as string | null;
   const allMessages = state.messages_get(personaId);
   const { messages_context, messages_analyze } = splitMessagesByTimestamp(allMessages, analyzeFrom);
@@ -192,7 +207,7 @@ export function handlePersonaTopicScan(response: LLMResponse, state: StateManage
   };
 
   for (const candidate of result.topics) {
-    queuePersonaTopicMatch(candidate, context, state);
+    queuePersonaTopicMatch(candidate, context, state, options);
   }
   console.log(`[handlePersonaTopicScan] Queued ${result.topics.length} topic(s) for matching`);
 }
@@ -227,6 +242,9 @@ export function handlePersonaTopicMatch(response: LLMResponse, state: StateManag
     return;
   }
 
+  const ceremonyProgress = response.request.data.ceremony_progress as number | undefined;
+  const options: PersonaTopicOptions | undefined = ceremonyProgress !== undefined ? { ceremony_progress: ceremonyProgress } : undefined;
+
   const allMessages = state.messages_get(personaId);
   const { messages_context, messages_analyze } = splitMessagesByTimestamp(allMessages, analyzeFrom);
 
@@ -237,7 +255,7 @@ export function handlePersonaTopicMatch(response: LLMResponse, state: StateManag
     messages_analyze,
   };
 
-  queuePersonaTopicUpdate(candidate, result, context, state);
+  queuePersonaTopicUpdate(candidate, result, context, state, options);
 }
 
 export function handlePersonaTopicUpdate(response: LLMResponse, state: StateManager): void {
