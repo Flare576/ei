@@ -15,6 +15,7 @@
   font-weight: 500;
   cursor: pointer;
   transition: all var(--ei-transition-fast);
+  white-space: nowrap;
 }
 
 .ei-btn--primary {
