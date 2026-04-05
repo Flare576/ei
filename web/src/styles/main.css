@@ -34,33 +34,7 @@
 .ei-divider {
   width: var(--ei-divider-width);
   background: var(--ei-border);
-  cursor: col-resize;
   flex-shrink: 0;
-  transition: background var(--ei-transition-fast);
-  position: relative;
-}
-
-.ei-divider:hover,
-.ei-divider.dragging {
-  background: var(--ei-accent);
-}
-
-.ei-divider::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 2px;
-  height: 30px;
-  background: var(--ei-text-muted);
-  border-radius: var(--ei-radius-full);
-  opacity: 0;
-  transition: opacity var(--ei-transition-fast);
-}
-
-.ei-divider:hover::after {
-  opacity: 1;
 }
 
 /* Center Panel (Chat) */
