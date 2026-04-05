@@ -382,9 +382,14 @@ function createMockProgressState(pendingCeremonies: boolean = false, hasActivity
       return [{ id: "msg1", role: "user", content: "test", created_at: now.toISOString(), f: false, r: false, p: false, o: false }];
     }),
     messages_markExtracted: vi.fn(),
+    messages_markPersonaExtracted: vi.fn(),
+    messages_getUnextractedForPersona: vi.fn(() => []),
     messages_sort: vi.fn(),
     setHuman: vi.fn(),
     queue_enqueue: vi.fn(),
+    getRoomList: vi.fn(() => []),
+    getRoomActivePath: vi.fn(() => []),
+    getRoomUnextractedMessagesForPersona: vi.fn(() => []),
     _human: human,
   };
 }
