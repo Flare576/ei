@@ -4,6 +4,7 @@ import type { StateManager } from "./state-manager.js";
 import { buildRoomResponsePromptData } from "./prompt-context-builder.js";
 import { buildRoomJudgePrompt } from "../prompts/room/index.js";
 import type { RoomHistoryMessage, RoomJudgeCandidate } from "../prompts/room/types.js";
+import { getMessageContent } from "./handlers/utils.js";
 
 export function getRoomList(sm: StateManager, includeArchived = false): RoomSummary[] {
   return sm.getRoomList(includeArchived);
@@ -45,7 +46,7 @@ async function queueRoomPersonaResponses(
     const model = persona.model ?? sm.getHuman().settings?.default_model ?? "";
 
     sm.queue_enqueue({
-      type: LLMRequestType.JSON,
+      type: LLMRequestType.Raw,
       priority: LLMPriority.Room,
       system: promptOutput.system,
       user: promptOutput.user,
@@ -201,7 +202,7 @@ export async function sendFfaMessage(
     const model = persona.model ?? sm.getHuman().settings?.default_model ?? "";
 
     sm.queue_enqueue({
-      type: LLMRequestType.JSON,
+      type: LLMRequestType.Raw,
       priority: LLMPriority.Room,
       system: promptOutput.system,
       user: promptOutput.user,
@@ -282,8 +283,7 @@ export async function activateRoom(
         ? (human.settings?.name_display ?? "Human")
         : (sm.persona_getById(m.persona_id ?? "")?.display_name ?? "Unknown"),
       speaker_id: m.role === "human" ? "human" : (m.persona_id ?? ""),
-      verbal_response: m.verbal_response,
-      action_response: m.action_response,
+      verbal_response: getMessageContent(m) || undefined,
       silence_reason: m.silence_reason,
     }));
 
@@ -293,8 +293,7 @@ export async function activateRoom(
         ? (human.settings?.name_display ?? "Human")
         : (sm.persona_getById(m.persona_id ?? "")?.display_name ?? "Unknown"),
       speaker_id: m.role === "human" ? "human" : (m.persona_id ?? ""),
-      verbal_response: m.verbal_response,
-      action_response: m.action_response,
+      verbal_response: getMessageContent(m) || undefined,
       silence_reason: m.silence_reason,
     }));
 
@@ -380,7 +379,7 @@ export async function selectCYPBranch(
     const model = persona.model ?? sm.getHuman().settings?.default_model ?? "";
 
     sm.queue_enqueue({
-      type: LLMRequestType.JSON,
+      type: LLMRequestType.Raw,
       priority: LLMPriority.Room,
       system: promptOutput.system,
       user: promptOutput.user,

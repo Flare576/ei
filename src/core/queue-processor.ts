@@ -113,10 +113,12 @@ export class QueueProcessor {
     // =========================================================================
     let messages: ChatMessage[] = [];
 
-    const isResponseType = request.type === "response" as LLMRequestType;
+    const isPersonaResponse = request.next_step === LLMNextStep.HandlePersonaResponse
+      || request.next_step === LLMNextStep.HandleRoomResponse
+      || request.type === "response" as LLMRequestType;
     const isToolContinuation = request.next_step === LLMNextStep.HandleToolContinuation;
 
-    if (isResponseType || isToolContinuation) {
+    if (isPersonaResponse || isToolContinuation) {
       const personaId = request.data.personaId as string | undefined;
       const isRoomRequest = !!(request.data.roomId as string | undefined);
       // Room conversation is embedded in the prompt via placeholders — don't inject persona history.

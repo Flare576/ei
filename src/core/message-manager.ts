@@ -8,6 +8,7 @@ import {
   type LLMRequest,
 } from "./types.js";
 import { formatTimestamp } from "./format-utils.js";
+import { getMessageContent } from "./handlers/utils.js";
 import { StateManager } from "./state-manager.js";
 import { QueueProcessor } from "./queue-processor.js";
 import {
@@ -113,7 +114,7 @@ export async function recallPendingMessages(
     .map((m) => m.id);
   if (pendingIds.length === 0) return "";
   const removed = sm.messages_remove(personaId, pendingIds);
-  const recalledContent = removed.map((m) => m.verbal_response ?? "").join("\n\n");
+  const recalledContent = removed.map((m) => getMessageContent(m)).join("\n\n");
   onMessageAdded(personaId);
   onMessageRecalled(personaId, recalledContent);
   return recalledContent;
@@ -164,7 +165,7 @@ export async function sendMessage(
   const prompt = buildResponsePrompt(promptData);
 
   sm.queue_enqueue({
-    type: LLMRequestType.Response,
+    type: LLMRequestType.Raw,
     priority: LLMPriority.High,
     system: prompt.system,
     user: prompt.user,
