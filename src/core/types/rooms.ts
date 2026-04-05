@@ -10,6 +10,7 @@ export interface RoomMessage {
   parent_id: string | null;
   role: "human" | "persona";
   persona_id?: string;
+  content?: string;
   verbal_response?: string;
   action_response?: string;
   silence_reason?: string;
