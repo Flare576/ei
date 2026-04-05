@@ -97,7 +97,7 @@ describe("buildCYPEditorYAML", () => {
         makeMsg({ id: "m1", parent_id: "root", verbal_response: "Hello there" }),
       ];
       const yaml = buildCYPEditorYAML("root", msgs, []);
-      expect(yaml).toContain("verbal_response: |");
+      expect(yaml).toContain("content: |");
       expect(yaml).toContain("    Hello there");
     });
 
@@ -115,8 +115,8 @@ describe("buildCYPEditorYAML", () => {
         makeMsg({ id: "m1", parent_id: "root", action_response: "*nods quietly*" }),
       ];
       const yaml = buildCYPEditorYAML("root", msgs, []);
-      expect(yaml).toContain("action_response: |");
-      expect(yaml).toContain("    *nods quietly*");
+      expect(yaml).toContain("content: |");
+      expect(yaml).toContain("    _*nods quietly*_");
     });
 
     test("message with both verbal_response and action_response: both fields present", () => {
@@ -129,10 +129,9 @@ describe("buildCYPEditorYAML", () => {
         }),
       ];
       const yaml = buildCYPEditorYAML("root", msgs, []);
-      expect(yaml).toContain("verbal_response: |");
+      expect(yaml).toContain("content: |");
       expect(yaml).toContain("    I speak");
-      expect(yaml).toContain("action_response: |");
-      expect(yaml).toContain("    *also does something*");
+      expect(yaml).toContain("    _*also does something*_");
     });
 
     test("silence_reason shown as inline string when verbal_response is absent", () => {
@@ -154,7 +153,7 @@ describe("buildCYPEditorYAML", () => {
         }),
       ];
       const yaml = buildCYPEditorYAML("root", msgs, []);
-      expect(yaml).toContain("verbal_response: |");
+      expect(yaml).toContain("content: |");
       expect(yaml).not.toContain("silence_reason:");
     });
 
@@ -348,10 +347,9 @@ describe("round-trip: build → (user marks chosen) → parse", () => {
       }),
     ];
     const yaml = buildCYPEditorYAML("root", msgs, []);
-    expect(yaml).toContain("verbal_response: |");
+    expect(yaml).toContain("content: |");
     expect(yaml).toContain("    I speak words");
-    expect(yaml).toContain("action_response: |");
-    expect(yaml).toContain("    *does a thing*");
+    expect(yaml).toContain("    _*does a thing*_");
 
     const blocks = parseCYPEditorYAML(yaml);
     expect(blocks).toHaveLength(1);

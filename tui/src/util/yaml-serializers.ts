@@ -1061,15 +1061,22 @@ export function displayToModelGuid(display: string, accounts: ProviderAccount[])
 // CONTEXT / MESSAGE SERIALIZATION
 // =============================================================================
 
+function getContent(m: { content?: string; verbal_response?: string; action_response?: string }): string {
+  if (m.content) return m.content;
+  const parts: string[] = [];
+  if (m.action_response) parts.push(`_${m.action_response}_`);
+  if (m.verbal_response) parts.push(m.verbal_response);
+  return parts.join('\n\n');
+}
+
 interface EditableMessage {
   id: string;
   role: "human" | "system";
   timestamp: string;
   context_status: ContextStatus;
   _delete?: boolean;
-  // verbal_response | action_response | silence_reason
-  verbal_response?: string;
-  action_response?: string;
+  // content | silence_reason
+  content?: string;
   silence_reason?: string;
 }
 
@@ -1077,7 +1084,7 @@ export function contextToYAML(messages: Message[]): string {
   const header = [
     "# context_status: default | always | never",
     "# _delete: true — permanently removes the message",
-    "# verbal_response | action_response | silence_reason",
+    "# content | silence_reason",
   ].join("\n");
 
   const data: EditableMessage[] = messages.map((m) => ({
@@ -1086,8 +1093,7 @@ export function contextToYAML(messages: Message[]): string {
     timestamp: m.timestamp,
     context_status: m.context_status,
     _delete: false,
-    verbal_response: m.verbal_response,
-    action_response: m.action_response,
+    content: getContent(m) || undefined,
     silence_reason: m.silence_reason,
   }));
 

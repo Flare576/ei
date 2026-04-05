@@ -7,6 +7,14 @@ import type { RoomMessage, Quote } from "../../../src/core/types.js";
 import { RoomMode } from "../../../src/core/types/enums.js";
 import { insertQuoteMarkers } from "../util/quote-utils.js";
 
+function getContent(msg: { content?: string; verbal_response?: string; action_response?: string }): string {
+  if (msg.content) return msg.content;
+  const parts: string[] = [];
+  if (msg.action_response) parts.push(`_${msg.action_response}_`);
+  if (msg.verbal_response) parts.push(msg.verbal_response);
+  return parts.join('\n\n');
+}
+
 interface RoomMessageWithQuotes extends RoomMessage {
   _quotes: Quote[];
 }
@@ -138,7 +146,7 @@ export function RoomMessageList() {
                 ? ` ⑂${siblingCount}`
                 : "";
               const header = `${speakerName} (${formatTime(msg.timestamp)}) [${idx}]${branchIndicator}:`;
-              const isSilence = msg.silence_reason !== undefined && !msg.verbal_response;
+              const isSilence = msg.silence_reason !== undefined && !getContent(msg);
               const isJudge = activeRoom()?.judge_persona_id !== undefined
                 && msg.persona_id === activeRoom()?.judge_persona_id;
               const silenceText = isSilence
@@ -146,11 +154,8 @@ export function RoomMessageList() {
                   ? `[${speakerName}'s verdict: ${msg.silence_reason ?? ""}]`
                   : `[${speakerName} chose not to respond: ${msg.silence_reason ?? ""}]`
                 : "";
-              const contentParts: string[] = [];
-              if (msg.action_response) contentParts.push(`_${msg.action_response}_`);
-              if (msg.verbal_response) contentParts.push(msg.verbal_response);
               const msgQuotes = msg._quotes;
-              const normalContent = insertQuoteMarkers(contentParts.join("\n\n"), msgQuotes);
+              const normalContent = insertQuoteMarkers(getContent(msg), msgQuotes);
 
               return (
                 <box flexDirection="column" marginBottom={1}>

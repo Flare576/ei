@@ -7,6 +7,14 @@ interface ParsedBlock {
   chosen: boolean;
 }
 
+function getContent(m: { content?: string; verbal_response?: string; action_response?: string }): string {
+  if (m.content) return m.content;
+  const parts: string[] = [];
+  if (m.action_response) parts.push(`_${m.action_response}_`);
+  if (m.verbal_response) parts.push(m.verbal_response);
+  return parts.join('\n\n');
+}
+
 export function buildCYPEditorYAML(
   activeNodeId: string,
   messages: RoomMessage[],
@@ -29,15 +37,12 @@ export function buildCYPEditorYAML(
     }
 
     const contentLines: string[] = [];
-    if (m.verbal_response !== undefined) {
-      const indented = m.verbal_response.split("\n").map((l) => `    ${l}`).join("\n");
-      contentLines.push(`  verbal_response: |\n${indented}`);
+    const msgContent = getContent(m);
+    if (msgContent) {
+      const indented = msgContent.split("\n").map((l) => `    ${l}`).join("\n");
+      contentLines.push(`  content: |\n${indented}`);
     }
-    if (m.action_response !== undefined) {
-      const indented = m.action_response.split("\n").map((l) => `    ${l}`).join("\n");
-      contentLines.push(`  action_response: |\n${indented}`);
-    }
-    if (m.silence_reason !== undefined && m.verbal_response === undefined) {
+    if (m.silence_reason !== undefined && !msgContent) {
       contentLines.push(`  silence_reason: "${m.silence_reason}"`);
     }
     if (contentLines.length === 0) {

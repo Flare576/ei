@@ -19,14 +19,19 @@ function formatTime(timestamp: string): string {
   return `${hours}:${minutes}`;
 }
 
+function getContent(msg: { content?: string; verbal_response?: string; action_response?: string }): string {
+  if (msg.content) return msg.content;
+  const parts: string[] = [];
+  if (msg.action_response) parts.push(`_${msg.action_response}_`);
+  if (msg.verbal_response) parts.push(msg.verbal_response);
+  return parts.join('\n\n');
+}
+
 function buildMessageText(message: Message): string {
   if (message.silence_reason !== undefined) {
     return `[chose not to respond: ${message.silence_reason}]`;
   }
-  const parts: string[] = [];
-  if (message.action_response) parts.push(`_${message.action_response}_`);
-  if (message.verbal_response) parts.push(message.verbal_response);
-  return parts.join('\n\n');
+  return getContent(message);
 }
 
 let instanceId = 0;
