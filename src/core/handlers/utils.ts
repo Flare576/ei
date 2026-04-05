@@ -1,6 +1,14 @@
 import type { Message, RoomMessage, LLMResponse } from "../types.js";
 import type { StateManager } from "../state-manager.js";
 
+export function getMessageContent(msg: { content?: string; verbal_response?: string; action_response?: string }): string {
+  if (msg.content) return msg.content;
+  const parts: string[] = [];
+  if (msg.action_response) parts.push(`_${msg.action_response}_`);
+  if (msg.verbal_response) parts.push(msg.verbal_response);
+  return parts.join('\n\n');
+}
+
 export function normalizeRoomMessages(messages: RoomMessage[], state: StateManager): Message[] {
   const human = state.getHuman();
   const humanName = human.settings?.name_display ?? "Human";
@@ -12,6 +20,7 @@ export function normalizeRoomMessages(messages: RoomMessage[], state: StateManag
       id: m.id,
       role: m.role === "human" ? "human" as const : "system" as const,
       speaker_name: speakerName,
+      content: m.content,
       verbal_response: m.verbal_response,
       action_response: m.action_response,
       silence_reason: m.silence_reason,
@@ -111,13 +120,6 @@ export function markMessagesExtracted(
   }
 }
 
-/**
- * Returns the combined display text of a message for quote indexing.
- * Mirrors the rendering logic used in the frontends.
- */
 export function getMessageText(message: Message): string {
-  const parts: string[] = [];
-  if (message.action_response) parts.push(`_${message.action_response}_`);
-  if (message.verbal_response) parts.push(message.verbal_response);
-  return parts.join('\n\n');
+  return getMessageContent(message);
 }

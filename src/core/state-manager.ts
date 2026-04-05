@@ -62,6 +62,34 @@ export class StateManager {
     this.migrateMessageFlags();
     this.migrateInterestedPersonas();
     this.migrateProviderModel();
+    this.migrateRoomMessageContent();
+  }
+
+  private migrateRoomMessageContent(): void {
+    const rooms = this.roomState.getAll(true);
+    let migratedCount = 0;
+
+    for (const room of rooms) {
+      for (const msg of room.messages) {
+        if (msg.content) continue;
+        if (msg.role === 'human') continue;
+        if (msg.silence_reason) continue;
+        const parts: string[] = [];
+        const legacy = msg as RoomMessage & { verbal_response?: string; action_response?: string };
+        if (legacy.action_response) parts.push(`_${legacy.action_response}_`);
+        if (legacy.verbal_response) parts.push(legacy.verbal_response);
+        if (parts.length === 0) continue;
+        msg.content = parts.join('\n\n');
+        delete (msg as any).verbal_response;
+        delete (msg as any).action_response;
+        migratedCount++;
+      }
+    }
+
+    if (migratedCount > 0) {
+      this.scheduleSave();
+      console.log(`[StateManager] Migrated ${migratedCount} room messages to unified content field`);
+    }
   }
 
   /**
