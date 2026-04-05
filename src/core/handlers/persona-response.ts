@@ -7,6 +7,7 @@ import {
 import type { StateManager } from "../state-manager.js";
 import type { PersonaResponseResult } from "../../prompts/response/index.js";
 import { handlers } from "./index.js";
+import { cleanResponseContent } from "../llm-client.js";
 
 export type ResponseHandler = (response: LLMResponse, state: StateManager) => void | Promise<void>;
 
@@ -18,18 +19,48 @@ export function handlePersonaResponse(response: LLMResponse, state: StateManager
     return;
   }
 
-  // Always mark user messages as read - even if persona chooses not to respond,
-  // the messages were "seen" and processed
   state.messages_markPendingAsRead(personaId);
 
-  // Structured JSON path: queue-processor parsed valid JSON into `parsed`
+  const raw = cleanResponseContent(response.content ?? "").trim();
+
+  if (raw.length > 0) {
+    const lines = raw.split('\n');
+    const isNoResponse = lines[0].replace(/[^a-zA-Z]/g, '').toLowerCase() === 'noresponse';
+
+    if (isNoResponse) {
+      const reason = lines.slice(1).join('\n').trim();
+      console.log(`[silence] ${personaDisplayName}: ${reason || "(no reason given)"}`);
+      const silentMessage: Message = {
+        id: crypto.randomUUID(),
+        role: "system",
+        silence_reason: reason || undefined,
+        timestamp: new Date().toISOString(),
+        read: false,
+        context_status: ContextStatus.Default,
+      };
+      state.messages_append(personaId, silentMessage);
+    } else {
+      const message: Message = {
+        id: crypto.randomUUID(),
+        role: "system",
+        content: raw,
+        timestamp: new Date().toISOString(),
+        read: false,
+        context_status: ContextStatus.Default,
+      };
+      state.messages_append(personaId, message);
+      console.log(`[handlePersonaResponse] Appended Markdown response to ${personaDisplayName}`);
+    }
+    return;
+  }
+
   if (response.parsed !== undefined) {
     const result = response.parsed as PersonaResponseResult;
 
     if (!result.should_respond) {
       const reason = result.reason;
       if (reason) {
-        console.log(`[handlePersonaResponse] ${personaDisplayName} chose silence: ${reason}`);
+        console.log(`[silence] ${personaDisplayName}: ${reason}`);
         const silentMessage: Message = {
           id: crypto.randomUUID(),
           role: "system",
@@ -40,12 +71,11 @@ export function handlePersonaResponse(response: LLMResponse, state: StateManager
         };
         state.messages_append(personaId, silentMessage);
       } else {
-        console.log(`[handlePersonaResponse] ${personaDisplayName} chose not to respond (no reason given)`);
+        console.log(`[silence] ${personaDisplayName}: (no reason given)`);
       }
       return;
     }
 
-    // Build message with structured fields
     const verbal = result.verbal_response || undefined;
     const action = result.action_response || undefined;
 
@@ -68,22 +98,7 @@ export function handlePersonaResponse(response: LLMResponse, state: StateManager
     return;
   }
 
-  // Legacy plain-text fallback
-  if (!response.content) {
-    console.log(`[handlePersonaResponse] ${personaDisplayName} chose not to respond (no reason given)`);
-    return;
-  }
-
-  const message: Message = {
-    id: crypto.randomUUID(),
-    role: "system",
-    verbal_response: response.content ?? undefined,
-    timestamp: new Date().toISOString(),
-    read: false,
-    context_status: ContextStatus.Default,
-  };
-  state.messages_append(personaId, message);
-  console.log(`[handlePersonaResponse] Appended response to ${personaDisplayName}`);
+  console.warn(`[silence] ${personaDisplayName}: empty response after cleaning`);
 }
 
 /**
