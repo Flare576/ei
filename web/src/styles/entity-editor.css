@@ -1939,6 +1939,12 @@
   font-weight: 600;
 }
 
+.ei-quote-preview--readonly {
+  border-left: 3px solid var(--ei-accent);
+  font-style: italic;
+  color: var(--ei-text-secondary);
+}
+
 .ei-quote-capture-modal__textarea {
   width: 100%;
   min-height: 80px;

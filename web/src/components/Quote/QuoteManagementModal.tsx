@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import type { Message, Quote } from '../../../../src/core/types';
+import type { Quote } from '../../../../src/core/types';
 import { DualListPicker } from './DualListPicker';
 
 interface DataItem {
@@ -11,7 +11,6 @@ interface DataItem {
 interface QuoteManagementModalProps {
   isOpen: boolean;
   quote: Quote | null;
-  message: Message | null;
   personaName: string;
   dataItems: DataItem[];
   skipDeleteConfirm?: boolean;
@@ -24,7 +23,6 @@ interface QuoteManagementModalProps {
 export function QuoteManagementModal({
   isOpen,
   quote,
-  message,
   dataItems,
   skipDeleteConfirm = false,
   onClose,
@@ -32,7 +30,6 @@ export function QuoteManagementModal({
   onDelete,
   onSkipDeleteConfirmChange,
 }: QuoteManagementModalProps) {
-  const [quoteText, setQuoteText] = useState('');
   const [selectedDataItems, setSelectedDataItems] = useState<string[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
@@ -41,7 +38,6 @@ export function QuoteManagementModal({
   // Initialize state when modal opens
   useEffect(() => {
     if (isOpen && quote) {
-      setQuoteText(quote.text);
       setSelectedDataItems(quote.data_item_ids);
       setShowDeleteConfirm(false);
     }
@@ -85,7 +81,6 @@ export function QuoteManagementModal({
 
   const handleSave = () => {
     onSave(quote.id, {
-      text: quoteText,
       data_item_ids: selectedDataItems,
     });
     onClose();
@@ -175,25 +170,10 @@ export function QuoteManagementModal({
                 </div>
               </div>
 
-              {/* Original Message Display (if available) */}
-              {message && (
-                <div className="ei-quote-capture-modal__section">
-                  <label className="ei-quote-capture-modal__label">Original Message</label>
-                  <div className="ei-quote-capture-modal__message-display">
-                    {(message.verbal_response ?? '')}
-                  </div>
-                </div>
-              )}
-
-              {/* Quote Text (Editable) */}
               <div className="ei-quote-capture-modal__section">
-                <label className="ei-quote-capture-modal__label">Quote Text</label>
-                <textarea
-                  className="ei-quote-capture-modal__textarea"
-                  value={quoteText}
-                  onChange={(e) => setQuoteText(e.target.value)}
-                  placeholder="Edit the quote text here..."
-                />
+                <div className="ei-quote-preview ei-quote-preview--readonly">
+                  {quote.text}
+                </div>
               </div>
 
               {/* Data Items Multi-Select */}
