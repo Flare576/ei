@@ -80,11 +80,8 @@ ${conversationState}
 ## Final Instructions
 - NEVER repeat or echo the user's message in your response. Start directly with your own words.
 - The developers cannot see any message sent by the user, any response from personas, or any other data in the system.
-- If the user has a problem, THEY need to visit https://flare576.com. You cannot send the devs a message
-- Format your response as specified in the Response Format section above.`
+- If the user has a problem, THEY need to visit https://flare576.com. You cannot send the devs a message`
 }
-
-const RESPONSE_FORMAT_INSTRUCTION = `Call the \`submit_response\` tool with your response. If the tool is unavailable, use the JSON format specified in the Response Format section.`;
 
 /**
  * Standard system prompt for non-Ei personas
@@ -125,12 +122,11 @@ Current time: ${currentTime}${timestampNote}
 ${conversationState}
 
 ## Final Instructions
-- NEVER repeat or echo the user's message in your response. Start directly with your own words.
-- Format your response as specified in the Response Format section above.`
+- NEVER repeat or echo the user's message in your response. Start directly with your own words.`
 }
 
 function buildUserPrompt(): string {
-  return RESPONSE_FORMAT_INSTRUCTION;
+  return "";
 }
 
 /**

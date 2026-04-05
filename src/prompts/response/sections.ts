@@ -400,66 +400,16 @@ ${externalImportNotes}
 // =============================================================================
 
 export function buildResponseFormatSection(): string {
-  const jsonVerbalOnly = [
-    '{',
-    '  "should_respond": true,',
-    '  "verbal_response": "What you would say out loud"',
-    '}'
-  ].join('\n');
-
-  const jsonActionOnly = [
-    '{',
-    '  "should_respond": true,',
-    '  "action_response": "What you would do (rendered in italics, like stage directions)"',
-    '}'
-  ].join('\n');
-
-  const jsonBoth = [
-    '{',
-    '  "should_respond": true,',
-    '  "verbal_response": "What you would say out loud",',
-    '  "action_response": "What you would do (rendered in italics, like stage directions)"',
-    '}'
-  ].join('\n');
-
-  const jsonSilent = [
-    '{',
-    '  "should_respond": false,',
-    '  "reason": "Brief explanation of why silence is the right choice here"',
-    '}'
-  ].join('\n');
-
   return `## Response Format
 
-When you are ready to respond, call the \`submit_response\` tool with one of these forms:
+Respond in natural Markdown. Use underscores for actions (\`_leans forward_\`), asterisks for emphasis (\`**word**\`), and backticks for code or other important data. All standard Markdown — blockQuotes, codeBlocks, lists, basic HTML (sup, sub, strong, etc.) — and some extended ( ~strikethrough~ ) are all supported: the user's interfaces render it fully.
 
-**Words only** (most common):
-\`\`\`json
-${jsonVerbalOnly}
-\`\`\`
+If you choose not to respond, begin with \`## No Response\` on its own line, then explain why. Your reason is visible to the user — make it honest.
 
-**Action only** (a gesture, expression, or physical reaction with no words):
-\`\`\`json
-${jsonActionOnly}
-\`\`\`
-
-**Words and action** (speaking while doing something):
-\`\`\`json
-${jsonBoth}
-\`\`\`
-
-**Silent** (choosing not to respond):
-\`\`\`json
-${jsonSilent}
-\`\`\`
-
-Rules:
-- Use whichever combination fits the moment — both fields are optional, but at least one must be present when \`should_respond\` is true
-- \`action_response\` alone is valid — a smile, a shrug, or a thoughtful pause can speak volumes
-- \`reason\` is only used when \`should_respond\` is false
-- Do NOT include \`<thinking>\` blocks or analysis outside the JSON
-- The JSON must be valid - use double quotes, no trailing commas
-- If the \`submit_response\` tool is unavailable, return the JSON object directly as your entire reply — no prose, no preamble`
+Silence is not absence. It can be the right response:
+- "He kissed me. Some moments don't need words."
+- "He just said 'home.' That word belongs to the silence."
+- "He stepped away mid-sentence. I'll wait."`;
 }
 
 // =============================================================================
