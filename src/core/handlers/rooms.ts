@@ -8,6 +8,7 @@ import type { StateManager } from "../state-manager.js";
 import type { PersonaResponseResult } from "../../prompts/response/index.js";
 import type { RoomJudgeResult } from "../../prompts/room/index.js";
 import { buildRoomResponsePromptData } from "../prompt-context-builder.js";
+import { cleanResponseContent } from "../llm-client.js";
 
 export function handleRoomResponse(response: LLMResponse, state: StateManager): void {
   const roomId = response.request.data.roomId as string;
@@ -21,13 +22,49 @@ export function handleRoomResponse(response: LLMResponse, state: StateManager): 
   }
 
   const now = new Date().toISOString();
+  const raw = cleanResponseContent(response.content ?? "").trim();
+
+  if (raw.length > 0) {
+    const lines = raw.split('\n');
+    const isNoResponse = lines[0].replace(/[^a-zA-Z]/g, '').toLowerCase() === 'noresponse';
+
+    if (isNoResponse) {
+      const reason = lines.slice(1).join('\n').trim();
+      console.log(`[silence] ${personaDisplayName}: ${reason || "(no reason given)"}`);
+      const msg: RoomMessage = {
+        id: crypto.randomUUID(),
+        parent_id: parentMessageId,
+        role: "persona",
+        persona_id: personaId,
+        silence_reason: reason || undefined,
+        timestamp: now,
+        read: false,
+        context_status: ContextStatus.Default,
+      };
+      state.appendRoomMessage(roomId, msg);
+    } else {
+      const msg: RoomMessage = {
+        id: crypto.randomUUID(),
+        parent_id: parentMessageId,
+        role: "persona",
+        persona_id: personaId,
+        content: raw,
+        timestamp: now,
+        read: false,
+        context_status: ContextStatus.Default,
+      };
+      state.appendRoomMessage(roomId, msg);
+      console.log(`[handleRoomResponse] Appended Markdown response from ${personaDisplayName} to room ${roomId}`);
+    }
+    return;
+  }
 
   if (response.parsed !== undefined) {
     const result = response.parsed as PersonaResponseResult;
 
     if (!result.should_respond) {
       const reason = result.reason;
-      console.log(`[handleRoomResponse] ${personaDisplayName} chose silence in room ${roomId}: ${reason ?? "(no reason)"}`);
+      console.log(`[silence] ${personaDisplayName}: ${reason ?? "(no reason given)"}`);
       if (reason) {
         const msg: RoomMessage = {
           id: crypto.randomUUID(),
@@ -64,27 +101,11 @@ export function handleRoomResponse(response: LLMResponse, state: StateManager): 
       context_status: ContextStatus.Default,
     };
     state.appendRoomMessage(roomId, msg);
-    console.log(`[handleRoomResponse] Appended response from ${personaDisplayName} to room ${roomId}`);
+    console.log(`[handleRoomResponse] Appended structured response from ${personaDisplayName} to room ${roomId}`);
     return;
   }
 
-  if (!response.content) {
-    console.log(`[handleRoomResponse] ${personaDisplayName} no response (empty content)`);
-    return;
-  }
-
-  const msg: RoomMessage = {
-    id: crypto.randomUUID(),
-    parent_id: parentMessageId,
-    role: "persona",
-    persona_id: personaId,
-    verbal_response: response.content,
-    timestamp: now,
-    read: false,
-    context_status: ContextStatus.Default,
-  };
-  state.appendRoomMessage(roomId, msg);
-  console.log(`[handleRoomResponse] Appended plain-text response from ${personaDisplayName} to room ${roomId}`);
+  console.warn(`[silence] ${personaDisplayName}: empty response after cleaning`);
 }
 
 export async function handleRoomJudge(response: LLMResponse, state: StateManager): Promise<void> {
@@ -159,7 +180,7 @@ export async function handleRoomJudge(response: LLMResponse, state: StateManager
     const model = persona.model ?? state.getHuman().settings?.default_model ?? "";
 
     state.queue_enqueue({
-      type: LLMRequestType.JSON,
+      type: LLMRequestType.Raw,
       priority: LLMPriority.Room,
       system: promptData.system,
       user: promptData.user,
