@@ -167,6 +167,9 @@ export class Processor {
     this.instanceId = ++processorInstanceCount;
     console.log(`[Processor ${this.instanceId}] CREATED`);
     this.detectEnvironment();
+    this.stateManager.setQueueChangeListener(() => {
+      this.interface.onQueueStateChanged?.("busy");
+    });
   }
 
   private detectEnvironment(): void {

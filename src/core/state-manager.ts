@@ -34,6 +34,11 @@ export class StateManager {
   private roomState = new RoomState();
   private queueState = new QueueState();
   private persistenceState = new PersistenceState();
+  private queueChangeListener?: () => void;
+
+  setQueueChangeListener(listener: () => void): void {
+    this.queueChangeListener = listener;
+  }
   private providers: ToolProvider[] = [];
   private tools: ToolDefinition[] = [];
   private embeddingWarning = false;
@@ -768,6 +773,7 @@ export class StateManager {
     };
     const id = this.queueState.enqueue(requestWithModel);
     this.scheduleSave();
+    this.queueChangeListener?.();
     return id;
   }
 
