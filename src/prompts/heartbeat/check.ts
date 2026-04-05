@@ -8,6 +8,7 @@
 import type { HeartbeatCheckPromptData, PromptOutput } from "./types.js";
 import { type Message, type Topic, type Person } from "../../core/types.js";
 import { formatMessagesAsPlaceholders, getMessageDisplayText } from "../message-utils.js";
+import { getMessageContent } from "../../core/handlers/utils.js";
 function formatTopicsWithGaps(topics: Topic[]): string {
   if (topics.length === 0) return "(No topics with engagement gaps)";
   
@@ -38,8 +39,7 @@ function formatPeopleWithGaps(people: Person[]): string {
 function isConversationalMessage(m: Message): boolean {
   if (m.role !== 'system') return false;
   if (m.silence_reason !== undefined) return false;
-  // Action-only: has action but no verbal response
-  if (!m.verbal_response) return false;
+  if (!getMessageContent(m)) return false;
   return true;
 }
 

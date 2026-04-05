@@ -1,5 +1,6 @@
 import { LLMRequestType, LLMPriority, LLMNextStep, type CeremonyConfig, type PersonaTopic, type Topic, type Message, type DataItemBase } from "../types.js";
 import type { StateManager } from "../state-manager.js";
+import { getMessageContent } from "../handlers/utils.js";
 import { applyDecayToValue } from "../utils/index.js";
 import {
   queueFactFind,
@@ -408,7 +409,7 @@ function extractConversationThemes(messages: Message[]): string[] {
   if (humanMessages.length === 0) return [];
   
   const words = humanMessages
-    .map(m => (m.verbal_response ?? '').toLowerCase())
+    .map(m => getMessageContent(m).toLowerCase())
     .join(" ")
     .split(/\s+/)
     .filter(w => w.length > 4);

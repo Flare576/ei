@@ -6,6 +6,7 @@ import {
   type Message,
 } from "./types.js";
 import { StateManager } from "./state-manager.js";
+import { getMessageContent } from "./handlers/utils.js";
 import {
   buildHeartbeatCheckPrompt,
   buildEiHeartbeatPrompt,
@@ -43,7 +44,7 @@ export function countTrailingPersonaMessages(history: Message[]): number {
   for (let i = history.length - 1; i >= 0; i--) {
     const msg = history[i];
     if (msg.role === "human") break;
-    if (msg.role === "system" && msg.verbal_response && msg.silence_reason === undefined) {
+    if (msg.role === "system" && getMessageContent(msg) && msg.silence_reason === undefined) {
       count++;
     }
   }
