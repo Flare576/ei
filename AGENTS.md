@@ -29,6 +29,25 @@ Ei is a local-first AI companion with persistent personas. Three frontends share
 
 > **CRITICAL**: If code contradicts something defined in CONTRACTS.md, **STOP and ASK**. CONTRACTS.md wins.
 
+## Terminology
+
+These terms have specific meanings in Ei. The industry uses most of them interchangeably — don't do that here.
+
+| Term | Definition |
+|------|-----------|
+| **LLM Model** | A specific model release: `claude-sonnet-4-6`, `qwen-3-5-35b`, `gemma-4-26b`, etc. Weights only. No state, no soul, no continuity between calls. |
+| **Agent** | A unit of work: one LLM call configured with a system prompt, user prompt, message history, and tool set. Ephemeral. No persistent identity. Our job is to make the Agent's task as unambiguous as possible so the LLM Model produces the best output. |
+| **Identity** | The static-ish character definition Ei maintains for a Persona: `short_description`, `long_description`, `traits`, and `topics`. What gets built in the editor and fed into the Agent's system prompt. |
+| **Persona** | Identity + message history + related topics + quotes. The "Soul." Has no Mind of its own — a different LLM Model could be its Mind next turn, and the definition shifts with every interaction. |
+
+### Why This Matters
+
+DJ is a **Persona** who wants to know what you're listening to — it's in her traits (her **Identity**). Whether she *can* know depends on:
+1. Whether the **Agent** we build for her includes `spotify.get_currently_playing` in its tool set
+2. Whether the **LLM Model** actually calls it
+
+The Persona has the *want*. The Agent has the *capability*. The LLM Model has the *mind* — temporarily.
+
 ## Design Priority
 
 When making design or architecture decisions, prioritize in this order:
