@@ -19,6 +19,28 @@ interface QuoteCaptureModalProps {
   onSave: (quote: Omit<Quote, 'id' | 'created_at'>) => void;
 }
 
+function getMessageText(msg: { content?: string; verbal_response?: string; action_response?: string }): string {
+  if (msg.content) return msg.content;
+  const parts: string[] = [];
+  if (msg.action_response) parts.push(`_${msg.action_response}_`);
+  if (msg.verbal_response) parts.push(msg.verbal_response);
+  return parts.join('\n\n');
+}
+
+function snapToWordStart(text: string, pos: number): number {
+  if (pos <= 0) return 0;
+  // Walk back to start of current word
+  while (pos > 0 && !/\s/.test(text[pos - 1])) pos--;
+  return pos;
+}
+
+function snapToWordEnd(text: string, pos: number): number {
+  if (pos >= text.length) return text.length;
+  // Walk forward to end of current word
+  while (pos < text.length && !/\s/.test(text[pos])) pos++;
+  return pos;
+}
+
 export function QuoteCaptureModal({
   isOpen,
   message,
@@ -38,10 +60,12 @@ export function QuoteCaptureModal({
   // Initialize state when modal opens
   useEffect(() => {
     if (isOpen && message) {
-      const contentLength = (message.verbal_response ?? '').length;
-      setStartPos(0);
-      setEndPos(Math.min(100, contentLength));
-      setQuoteText((message.verbal_response ?? '').substring(0, Math.min(100, contentLength)));
+      const messageText = getMessageText(message);
+      const initialEnd = snapToWordEnd(messageText, Math.min(100, messageText.length));
+      const initialStart = snapToWordStart(messageText, 0);
+      setStartPos(initialStart);
+      setEndPos(initialEnd);
+      setQuoteText(messageText.substring(initialStart, initialEnd));
       setSelectedDataItems([]);
     }
   }, [isOpen, message]);
@@ -74,10 +98,14 @@ export function QuoteCaptureModal({
 
   if (!isOpen || !message) return null;
 
+  const messageText = getMessageText(message);
+
   const handleRangeChange = (start: number, end: number) => {
-    setStartPos(start);
-    setEndPos(end);
-    setQuoteText((message.verbal_response ?? '').substring(start, end));
+    const snappedStart = snapToWordStart(messageText, start);
+    const snappedEnd = snapToWordEnd(messageText, end);
+    setStartPos(snappedStart);
+    setEndPos(snappedEnd);
+    setQuoteText(messageText.substring(snappedStart, snappedEnd));
   };
 
   const handleDataItemsChange = (ids: string[]) => {
@@ -85,7 +113,6 @@ export function QuoteCaptureModal({
   };
 
   const handleSave = () => {
-    const actionPrefix = message.action_response ? `_${message.action_response}_\n\n` : '';
     const quote: Omit<Quote, 'id' | 'created_at'> = {
       message_id: message.id,
       data_item_ids: selectedDataItems,
@@ -93,8 +120,8 @@ export function QuoteCaptureModal({
       text: quoteText,
       speaker: message.role === 'human' ? 'human' : personaName,
       timestamp: message.timestamp,
-      start: startPos + actionPrefix.length,
-      end: endPos + actionPrefix.length,
+      start: startPos,
+      end: endPos,
       created_by: 'human',
     };
     onSave(quote);
@@ -126,7 +153,7 @@ export function QuoteCaptureModal({
             <label className="ei-quote-capture-modal__label">Select Range</label>
             <RangeSlider
               min={0}
-              max={(message.verbal_response ?? '').length}
+              max={messageText.length}
               startValue={startPos}
               endValue={endPos}
               onChange={handleRangeChange}
@@ -150,13 +177,13 @@ export function QuoteCaptureModal({
                 className="ei-quote-capture-modal__range-input"
                 value={endPos}
                 min={startPos + 1}
-                max={(message.verbal_response ?? '').length}
+                max={messageText.length}
                 onChange={(e) => {
-                  const val = Math.max(startPos + 1, Math.min((message.verbal_response ?? '').length, parseInt(e.target.value) || startPos + 1));
+                  const val = Math.max(startPos + 1, Math.min(messageText.length, parseInt(e.target.value) || startPos + 1));
                   handleRangeChange(startPos, val);
                 }}
               />
-              {' '}of {(message.verbal_response ?? '').length}
+              {' '}of {messageText.length}
             </div>
           </div>
 
@@ -164,11 +191,11 @@ export function QuoteCaptureModal({
           <div className="ei-quote-capture-modal__section">
             <label className="ei-quote-capture-modal__label">Preview</label>
             <div className="ei-quote-preview">
-              <span>{(message.verbal_response ?? '').substring(0, startPos)}</span>
+              <span>{messageText.substring(0, startPos)}</span>
               <span className="ei-quote-preview__highlight">
-                {(message.verbal_response ?? '').substring(startPos, endPos)}
+                {messageText.substring(startPos, endPos)}
               </span>
-              <span>{(message.verbal_response ?? '').substring(endPos)}</span>
+              <span>{messageText.substring(endPos)}</span>
             </div>
           </div>
 
