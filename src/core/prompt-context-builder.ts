@@ -9,6 +9,38 @@ import { normalizeRoomMessages, getMessageContent } from "./handlers/utils.js";
 const QUOTE_LIMIT = 10;
 const DATA_ITEM_LIMIT = 15;
 const SIMILARITY_THRESHOLD = 0.3;
+const HUMAN_CONTEXT_COMBINED_LIMIT = 10;
+const HUMAN_CONTEXT_MIN_EACH = 2;
+
+// =============================================================================
+// COMBINED TOPICS + PEOPLE CAP
+// =============================================================================
+
+function capTopicsAndPeople<T extends { id: string }, P extends { id: string }>(
+  topics: T[],
+  people: P[]
+): { topics: T[]; people: P[] } {
+  const guaranteed = {
+    topics: topics.slice(0, HUMAN_CONTEXT_MIN_EACH),
+    people: people.slice(0, HUMAN_CONTEXT_MIN_EACH),
+  };
+
+  let remaining = HUMAN_CONTEXT_COMBINED_LIMIT - guaranteed.topics.length - guaranteed.people.length;
+  const extraTopics: T[] = [];
+  const extraPeople: P[] = [];
+  let ti = HUMAN_CONTEXT_MIN_EACH;
+  let pi = HUMAN_CONTEXT_MIN_EACH;
+
+  while (remaining > 0 && (ti < topics.length || pi < people.length)) {
+    if (ti < topics.length && remaining > 0) { extraTopics.push(topics[ti++]); remaining--; }
+    if (pi < people.length && remaining > 0) { extraPeople.push(people[pi++]); remaining--; }
+  }
+
+  return {
+    topics: [...guaranteed.topics, ...extraTopics],
+    people: [...guaranteed.people, ...extraPeople],
+  };
+}
 
 // =============================================================================
 // EMBEDDING-BASED RELEVANCE SELECTION
@@ -38,7 +70,6 @@ async function selectRelevantItems<T extends { id: string; embedding?: number[] 
     }
   }
 
-  // Fallback: return top items by recency
   return [...items]
     .sort((a, b) => {
       const aTime = (a as { last_updated?: string }).last_updated ?? "";
@@ -83,12 +114,13 @@ export async function filterHumanDataByVisibility(
   const DEFAULT_GROUP = "General";
 
   if (persona.id === "ei") {
-    const [facts, topics, people, quotes] = await Promise.all([
+    const [facts, rawTopics, rawPeople, quotes] = await Promise.all([
       selectRelevantItems(human.facts, DATA_ITEM_LIMIT, currentMessage),
       selectRelevantItems(human.topics, DATA_ITEM_LIMIT, currentMessage),
       selectRelevantItems(human.people, DATA_ITEM_LIMIT, currentMessage),
       selectRelevantQuotes(human.quotes ?? [], currentMessage),
     ]);
+    const { topics, people } = capTopicsAndPeople(rawTopics, rawPeople);
     return {
       facts,
       topics,
@@ -118,12 +150,13 @@ export async function filterHumanDataByVisibility(
     return effectiveGroups.some((g) => visibleGroups.has(g));
   });
 
-  const [facts, topics, people, quotes] = await Promise.all([
+  const [facts, rawTopics, rawPeople, quotes] = await Promise.all([
     selectRelevantItems(filterByGroup(human.facts), DATA_ITEM_LIMIT, currentMessage),
     selectRelevantItems(filterByGroup(human.topics), DATA_ITEM_LIMIT, currentMessage),
     selectRelevantItems(filterByGroup(human.people), DATA_ITEM_LIMIT, currentMessage),
     selectRelevantQuotes(groupFilteredQuotes, currentMessage),
   ]);
+  const { topics, people } = capTopicsAndPeople(rawTopics, rawPeople);
 
   return {
     facts,
