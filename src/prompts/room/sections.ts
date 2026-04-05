@@ -95,32 +95,11 @@ export function buildRoomTopicsSection(topics: PersonaTopic[]): string {
 export function buildRoomResponseFormatSection(): string {
   return `## Response Format
 
-When you are ready to respond, call the \`submit_response\` tool. Silence reasons are visible to everyone in the room, so be honest.
+Respond in natural Markdown. Use underscores for actions, asterisks for emphasis.
 
-**Words:**
-\`\`\`json
-{ "should_respond": true, "verbal_response": "What you say" }
-\`\`\`
+If you choose not to respond, start with \`## No Response\` then explain why. Your reason is visible to everyone in the room — make it honest.
 
-**Action:**
-\`\`\`json
-{ "should_respond": true, "action_response": "What you do (rendered in italics)" }
-\`\`\`
-
-**Words and action:**
-\`\`\`json
-{ "should_respond": true, "verbal_response": "What you say", "action_response": "What you do" }
-\`\`\`
-
-**Silent:**
-\`\`\`json
-{ "should_respond": false, "reason": "Why you're not speaking — this will be shown to other participants" }
-\`\`\`
-
-Rules:
-- At least one of verbal_response or action_response must be present when should_respond is true
-- reason is only used when should_respond is false
-- If the \`submit_response\` tool is unavailable, return the JSON object directly as your entire reply — no prose, no preamble`;
+Silence can be the right response: stepping back when someone else was addressed directly, letting a moment land without piling on, or when you'd be reaching just to have something to say.`;
 }
 
 export function buildSiblingAwarenessSection(

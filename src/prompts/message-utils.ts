@@ -1,17 +1,12 @@
 import type { Message } from "../core/types.js";
+import { getMessageContent } from "../core/handlers/utils.js";
 
 const MESSAGE_PLACEHOLDER_REGEX = /\[mid:([a-zA-Z0-9_-]+):([^\]]+)\]/g;
 
-/**
- * Returns the display text for a message from its structured fields.
- * - action_response as _italics_
- * - verbal_response as plain text
- * - silence_reason shown so the user understands why a persona stayed silent
- */
 export function getMessageDisplayText(message: Message): string | null {
   const parts: string[] = [];
-  if (message.action_response) parts.push(`_${message.action_response}_`);
-  if (message.verbal_response) parts.push(message.verbal_response);
+  const content = getMessageContent(message);
+  if (content) parts.push(content);
   if (message.silence_reason) {
     const name = message.speaker_name ?? 'Persona';
     parts.push(`[${name} chose not to respond because: ${message.silence_reason}]`);
@@ -20,23 +15,14 @@ export function getMessageDisplayText(message: Message): string | null {
   return parts.join('\n\n');
 }
 
-/**
- * Builds the content string for a ChatMessage sent to the LLM.
- * Unlike getMessageDisplayText (which is for frontend rendering and skips silence),
- * this includes ALL structured fields so the persona has full conversational context:
- *   - action_response as _italics_
- *   - verbal_response as plain text
- *   - silence_reason as "You chose not to respond because: ..."
- */
 export function buildChatMessageContent(message: Message): string {
   const parts: string[] = [];
-  if (message.action_response) parts.push(`_${message.action_response}_`);
-  
-  // Synthesis messages: wrap with context for LLM, but stored value is clean prompt
-  if (message._synthesis && message.verbal_response) {
-    parts.push(`[The user used your conversation to generate an image. The full prompt was: "${message.verbal_response}"]`);
-  } else if (message.verbal_response) {
-    parts.push(message.verbal_response);
+  const content = getMessageContent(message);
+
+  if (message._synthesis && content) {
+    parts.push(`[The user used your conversation to generate an image. The full prompt was: "${content}"]`);
+  } else if (content) {
+    parts.push(content);
   }
   if (message.silence_reason) {
     parts.push(`You chose not to respond because: ${message.silence_reason}`);
