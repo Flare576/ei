@@ -22,6 +22,7 @@ export interface Message {
   t?: boolean;                 // Topic extraction completed
   p?: boolean;                 // Person extraction completed
   e?: boolean;                 // Event (epic) extraction completed
+  persona_extracted?: Record<string, true>; // Per-persona topic scan tracking. Key = personaId.slice(0, 8)
   // Image generation fields (web-only, ephemeral)
   _synthesis?: boolean;         // True if message was created by multi-message synthesis
   speaker_name?: string;       // Display name of actual speaker; set on room messages for clean hydration

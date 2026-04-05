@@ -546,6 +546,16 @@ export class StateManager {
     return count;
   }
 
+  getRoomUnextractedMessagesForPersona(roomId: string, shortId: string): RoomMessage[] {
+    return this.roomState.messages_getUnextractedForPersona(roomId, shortId);
+  }
+
+  markRoomMessagesPersonaExtracted(roomId: string, messageIds: string[], shortId: string): number {
+    const count = this.roomState.messages_markPersonaExtracted(roomId, messageIds, shortId);
+    if (count > 0) this.scheduleSave();
+    return count;
+  }
+
   private scheduleSave(): void {
     this.persistenceState.scheduleSave(this.buildStorageState());
   }
@@ -738,6 +748,16 @@ export class StateManager {
   messages_markExtracted(personaId: string, messageIds: string[], flag: "f" | "t" | "p" | "e"): number {
     const result = this.personaState.messages_markExtracted(personaId, messageIds, flag);
     this.scheduleSave();
+    return result;
+  }
+
+  messages_getUnextractedForPersona(personaId: string, shortId: string, sinceTimestamp?: string): Message[] {
+    return this.personaState.messages_getUnextractedForPersona(personaId, shortId, sinceTimestamp);
+  }
+
+  messages_markPersonaExtracted(personaId: string, messageIds: string[], shortId: string): number {
+    const result = this.personaState.messages_markPersonaExtracted(personaId, messageIds, shortId);
+    if (result > 0) this.scheduleSave();
     return result;
   }
 

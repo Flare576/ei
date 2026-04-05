@@ -246,4 +246,29 @@ export class PersonaState {
     }
     return count;
   }
+
+  messages_getUnextractedForPersona(personaId: string, shortId: string, sinceTimestamp?: string): Message[] {
+    const data = this.personas.get(personaId);
+    if (!data) return [];
+    return data.messages
+      .filter(m => {
+        if (sinceTimestamp && new Date(m.timestamp).getTime() < new Date(sinceTimestamp).getTime()) return false;
+        return !m.persona_extracted?.[shortId];
+      })
+      .map(m => ({ ...m }));
+  }
+
+  messages_markPersonaExtracted(personaId: string, messageIds: string[], shortId: string): number {
+    const data = this.personas.get(personaId);
+    if (!data) return 0;
+    const idsSet = new Set(messageIds);
+    let count = 0;
+    for (const msg of data.messages) {
+      if (idsSet.has(msg.id) && !msg.persona_extracted?.[shortId]) {
+        msg.persona_extracted = { ...msg.persona_extracted, [shortId]: true };
+        count++;
+      }
+    }
+    return count;
+  }
 }

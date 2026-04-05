@@ -22,6 +22,7 @@ export interface RoomMessage {
   t?: boolean;
   p?: boolean;
   e?: boolean;
+  persona_extracted?: Record<string, true>; // Per-persona topic scan tracking. Key = personaId.slice(0, 8)
 }
 
 export interface RoomEntity {

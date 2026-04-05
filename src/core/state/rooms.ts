@@ -179,4 +179,25 @@ export class RoomState {
     }
     return count;
   }
+
+  messages_getUnextractedForPersona(roomId: string, shortId: string): RoomMessage[] {
+    const activePath = new Set(this.messages_getActivePath(roomId).map(m => m.id));
+    return (this.rooms.get(roomId)?.messages ?? [])
+      .filter(m => activePath.has(m.id) && !m.persona_extracted?.[shortId])
+      .map(m => ({ ...m }));
+  }
+
+  messages_markPersonaExtracted(roomId: string, messageIds: string[], shortId: string): number {
+    const room = this.rooms.get(roomId);
+    if (!room) return 0;
+    const ids = new Set(messageIds);
+    let count = 0;
+    for (const msg of room.messages) {
+      if (ids.has(msg.id) && !msg.persona_extracted?.[shortId]) {
+        msg.persona_extracted = { ...msg.persona_extracted, [shortId]: true };
+        count++;
+      }
+    }
+    return count;
+  }
 }
