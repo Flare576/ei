@@ -17,6 +17,7 @@ import {
   queueEventSummary,
   type ExtractionContext as HumanExtractionContext,
 } from "./human-extraction.js";
+import { queuePersonaTopicScan, type PersonaTopicContext } from "./persona-topics.js";
 
 const EXTRACTION_BUDGET_RATIO = 0.75;
 const MIN_EXTRACTION_TOKENS = 10000;
@@ -269,6 +270,23 @@ export function queueRoomCapture(state: StateManager, roomId: string): void {
   }
   queueRoomEventScan(roomId, roomDisplayName, allVisible, state, participantContext);
 
+  for (const personaId of room.persona_ids) {
+    const shortId = personaId.slice(0, 8);
+    const unprocessedRaw = state.getRoomUnextractedMessagesForPersona(roomId, shortId);
+    if (unprocessedRaw.length === 0) continue;
+    const personaForRoom = state.persona_getById(personaId);
+    if (!personaForRoom) continue;
+    const processedIds = new Set(allVisible.filter(m => !!m.persona_extracted?.[shortId]).map(m => m.id));
+    const personaTopicContext: PersonaTopicContext = {
+      personaId,
+      personaDisplayName: personaForRoom.display_name,
+      messages_context: allVisible.filter(m => processedIds.has(m.id)),
+      messages_analyze: normalizeRoomMessages(unprocessedRaw, state),
+    };
+    queuePersonaTopicScan(personaTopicContext, state, { roomId: roomId });
+    console.log(`[queueRoomCapture] Queued persona topic scan: ${personaForRoom.display_name} (${unprocessedRaw.length} messages)`);
+  }
+
   console.log(`[queueRoomCapture] Queued extraction for room ${roomDisplayName}`);
 }
 
@@ -313,6 +331,20 @@ export function queuePersonaCapture(state: StateManager, personaId: string): voi
   }
 
   queueEventSummary(personaId, state, options);
+
+  const shortId = personaId.slice(0, 8);
+  const unprocessedForPersona = state.messages_getUnextractedForPersona(personaId, shortId);
+  if (unprocessedForPersona.length > 0) {
+    const processedIds = new Set(allMessages.filter(m => !!m.persona_extracted?.[shortId]).map(m => m.id));
+    const personaTopicContext: PersonaTopicContext = {
+      personaId,
+      personaDisplayName: persona.display_name,
+      messages_context: allMessages.filter(m => processedIds.has(m.id)),
+      messages_analyze: unprocessedForPersona,
+    };
+    queuePersonaTopicScan(personaTopicContext, state);
+    console.log(`[queuePersonaCapture] Queued persona topic scan for ${persona.display_name} (${unprocessedForPersona.length} messages)`);
+  }
 
   console.log(`[queuePersonaCapture] Queued extraction for persona ${persona.display_name}`);
 }

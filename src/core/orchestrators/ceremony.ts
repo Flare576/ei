@@ -1,6 +1,6 @@
-import { LLMRequestType, LLMPriority, LLMNextStep, type CeremonyConfig, type PersonaTopic, type Topic, type Message, type DataItemBase } from "../types.js";
+import { LLMRequestType, LLMPriority, LLMNextStep, RoomMode, type CeremonyConfig, type PersonaTopic, type Topic, type Message, type DataItemBase } from "../types.js";
 import type { StateManager } from "../state-manager.js";
-import { getMessageContent } from "../handlers/utils.js";
+import { getMessageContent, normalizeRoomMessages } from "../handlers/utils.js";
 import { applyDecayToValue } from "../utils/index.js";
 import {
   queueFactFind,
@@ -10,7 +10,7 @@ import {
   type ExtractionContext,
   type ExtractionOptions,
 } from "./human-extraction.js";
-import { queuePersonaTopicScan, type PersonaTopicContext } from "./persona-topics.js";
+import { queuePersonaTopicScan, type PersonaTopicContext, type PersonaTopicOptions } from "./persona-topics.js";
 import { queueDedupPhase } from "./dedup-phase.js";
 import { buildPersonaExpirePrompt, buildPersonaExplorePrompt, buildDescriptionCheckPrompt, buildRewriteScanPrompt, type RewriteItemType } from "../../prompts/ceremony/index.js";
 
@@ -143,16 +143,20 @@ function queueExposurePhase(personaId: string, state: StateManager, options?: Ex
     console.log(`[ceremony:exposure] Queued human extraction scans (f:${unextractedFacts.length}, t:${unextractedTopics.length}, p:${unextractedPeople.length})`);
   }
 
-  const unextractedForPersonaTopics = state.messages_getUnextracted(personaId, "t");
-  if (unextractedForPersonaTopics.length > 0) {
+  const human = state.getHuman();
+  const lastCeremony = human.settings?.ceremony?.last_ceremony;
+  const shortId = personaId.slice(0, 8);
+  const forPersonaTopics = state.messages_getUnextractedForPersona(personaId, shortId, lastCeremony ?? undefined);
+  if (forPersonaTopics.length > 0) {
     const personaTopicContext: PersonaTopicContext = {
       personaId,
       personaDisplayName: persona.display_name,
-      messages_context: allMessages.filter(m => m.t === true),
-      messages_analyze: unextractedForPersonaTopics,
+      messages_context: allMessages.filter(m => !!m.persona_extracted?.[shortId]),
+      messages_analyze: forPersonaTopics,
     };
-    queuePersonaTopicScan(personaTopicContext, state);
-    console.log(`[ceremony:exposure] Queued persona topic scan for ${persona.display_name}`);
+    const personaTopicOptions: PersonaTopicOptions = { ceremony_progress: options?.ceremony_progress };
+    queuePersonaTopicScan(personaTopicContext, state, personaTopicOptions);
+    console.log(`[ceremony:exposure] Queued persona topic scan for ${persona.display_name} (${forPersonaTopics.length} messages)`);
   }
 }
 
@@ -194,6 +198,31 @@ export function handleCeremonyProgress(state: StateManager, lastPhase: number): 
     const options: ExtractionOptions = { ceremony_progress: 2 };
     for (const persona of personasWithUnprocessed) {
       queueExposurePhase(persona.id, state, options);
+    }
+
+    const rooms = state.getRoomList();
+    for (const room of rooms) {
+      if (room.mode === RoomMode.ChooseYourPath) continue;
+      for (const personaId of room.persona_ids) {
+        const shortId = personaId.slice(0, 8);
+        const unprocessedRaw = state.getRoomUnextractedMessagesForPersona(room.id, shortId);
+        if (unprocessedRaw.length === 0) continue;
+        const personaForRoom = state.persona_getById(personaId);
+        if (!personaForRoom) continue;
+        const allRoomMessagesRaw = state.getRoomActivePath(room.id);
+        const processedIds = new Set(allRoomMessagesRaw.filter(m => !!m.persona_extracted?.[shortId]).map(m => m.id));
+        const allNormalized = normalizeRoomMessages(allRoomMessagesRaw, state);
+        const unprocessedNormalized = normalizeRoomMessages(unprocessedRaw, state);
+        const personaTopicContext: PersonaTopicContext = {
+          personaId,
+          personaDisplayName: personaForRoom.display_name,
+          messages_context: allNormalized.filter(m => processedIds.has(m.id)),
+          messages_analyze: unprocessedNormalized,
+        };
+        const roomScanOptions: PersonaTopicOptions = { ceremony_progress: 2, roomId: room.id };
+        queuePersonaTopicScan(personaTopicContext, state, roomScanOptions);
+        console.log(`[ceremony:expose] Queued room persona topic scan: ${personaForRoom.display_name} in "${room.display_name}" (${unprocessedRaw.length} messages)`);
+      }
     }
     return;
   }
