@@ -33,8 +33,8 @@ import { yoloMerge } from "../storage/merge.js";
 import { StateManager } from "./state-manager.js";
 import { QueueProcessor } from "./queue-processor.js";
 import { handlers } from "./handlers/index.js";
-import { normalizeRoomMessages } from "./handlers/utils.js";
-import { ContextStatus as ContextStatusEnum } from "./types.js";
+import { normalizeRoomMessages, getMessageContent } from "./handlers/utils.js";
+import { ContextStatus as ContextStatusEnum, RoomMode } from "./types.js";
 import { registerReadMemoryExecutor, registerFileReadExecutor } from "./tools/index.js";
 import { createReadMemoryExecutor } from "./tools/builtin/read-memory.js";
 import { EI_WELCOME_MESSAGE, EI_PERSONA_DEFINITION } from "../templates/welcome.js";
@@ -606,7 +606,8 @@ export class Processor {
         max_calls_per_interaction: 1,
     });
 
-    // submit_response tool — auto-injected for HandlePersonaResponse and HandleRoomResponse.
+    // submit_response tool — auto-injected for Heartbeat steps only (HandleHeartbeatCheck).
+    // PersonaResponse and RoomResponse agents now use natural Markdown output instead.
     // Not user-configurable; invisible in the tools UI. Terminates the tool loop immediately
     // when called; its arguments become response.parsed.
     this.stateManager.tools_upsertBuiltin({
@@ -1046,8 +1047,6 @@ const toolNextSteps = new Set([
 
             // Auto-inject each handler's dedicated submit tool — infrastructure, not user-visible.
             const submitToolByStep: Partial<Record<string, string>> = {
-              [LLMNextStep.HandlePersonaResponse]:  "submit_response",
-              [LLMNextStep.HandleRoomResponse]:     "submit_response",
               [LLMNextStep.HandleHeartbeatCheck]:   "submit_heartbeat_check",
               [LLMNextStep.HandleEiHeartbeat]:      "submit_ei_heartbeat",
               [LLMNextStep.HandleDedupCurate]:      "submit_dedup_decisions",
@@ -1391,11 +1390,14 @@ const toolNextSteps = new Set([
 
     if (!roomId || !parentMessageId || !personaDisplayName) return request;
 
+    const room = this.stateManager.getRoom(roomId);
+    if (room?.mode !== RoomMode.FreeForAll) return request;
+
     const siblings = this.stateManager.getRoomChildren(roomId, parentMessageId)
-      .filter((m: RoomMessage) => m.role === "persona" && m.verbal_response)
+      .filter((m: RoomMessage) => m.role === "persona" && getMessageContent(m))
       .map((m: RoomMessage) => ({
         name: this.stateManager.persona_getById(m.persona_id ?? "")?.display_name ?? "Participant",
-        verbal_response: m.verbal_response!,
+        verbal_response: getMessageContent(m),
       }));
 
     if (siblings.length === 0) return request;
