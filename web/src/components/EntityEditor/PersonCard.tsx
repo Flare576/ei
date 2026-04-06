@@ -1,6 +1,12 @@
 import React from 'react';
 import { SliderControl } from './SliderControl';
 
+export interface PersonIdentifier {
+  type: string;
+  value: string;
+  is_primary?: boolean;
+}
+
 interface Person {
   id: string;
   name: string;
@@ -13,6 +19,7 @@ interface Person {
   learned_by?: string;
   last_changed_by?: string;
   persona_groups?: string[];
+  identifiers?: PersonIdentifier[];
 }
 
 interface SliderConfig {
@@ -38,6 +45,19 @@ interface PersonCardProps {
   onCreatePersona?: (person: Person) => void;
   onUpdatePersona?: (person: Person) => void;
 }
+
+const BUILT_IN_IDENTIFIER_TYPES = [
+  'full_name',
+  'nickname',
+  'email',
+  'github',
+  'discord',
+  'roblox',
+  'reddit',
+  'twitter',
+  'ff14',
+  'ei_persona',
+];
 
 const defaultFormat = (v: number) => v.toFixed(2);
 
@@ -69,6 +89,21 @@ const getEngagementGapInfo = (current: number, desired: number) => {
   };
 };
 
+function buildTypeOptions(identifiers: PersonIdentifier[]): string[] {
+  const all = [...BUILT_IN_IDENTIFIER_TYPES, ...identifiers.map(i => i.type)];
+  const seen = new Set<string>();
+  const deduped: string[] = [];
+  for (const t of all) {
+    const key = t.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      const fromUser = identifiers.find(i => i.type.toLowerCase() === key);
+      deduped.push(fromUser ? fromUser.type : t);
+    }
+  }
+  return deduped;
+}
+
 export const PersonCard = ({
   person,
   sliders,
@@ -86,14 +121,17 @@ export const PersonCard = ({
 }: PersonCardProps): React.ReactElement => {
   const cardRef = React.useRef<HTMLDivElement>(null);
 
+  const [newIdType, setNewIdType] = React.useState('full_name');
+  const [newIdValue, setNewIdValue] = React.useState('');
+  const [isAddingCustomType, setIsAddingCustomType] = React.useState(false);
+  const [customTypeInput, setCustomTypeInput] = React.useState('');
+
+  const identifiers: PersonIdentifier[] = person.identifiers ?? [];
+
   const handleBlur = (e: React.FocusEvent) => {
     if (isDirty && cardRef.current && !cardRef.current.contains(e.relatedTarget as Node)) {
       onSave();
     }
-  };
-
-  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    onChange('name', e.target.value);
   };
 
   const handleRelationshipChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -116,6 +154,64 @@ export const PersonCard = ({
     }
   };
 
+  const handleIdentifierValueChange = (index: number, value: string) => {
+    const updated = identifiers.map((id, i) => i === index ? { ...id, value } : id);
+    onChange('identifiers', updated);
+  };
+
+  const handleSetPrimary = (index: number) => {
+    const updated = identifiers.map((id, i) => ({ ...id, is_primary: i === index }));
+    onChange('identifiers', updated);
+  };
+
+  const handleDeleteIdentifier = (index: number) => {
+    const updated = identifiers.filter((_, i) => i !== index);
+    if (identifiers[index]?.is_primary && updated.length > 0) {
+      updated[0] = { ...updated[0], is_primary: true };
+    }
+    onChange('identifiers', updated);
+  };
+
+  const handleAddIdentifier = () => {
+    const resolvedType = isAddingCustomType ? customTypeInput.trim() : newIdType;
+    if (!resolvedType || !newIdValue.trim()) return;
+
+    const isPrimaryFirst = identifiers.length === 0;
+    const newEntry: PersonIdentifier = {
+      type: resolvedType,
+      value: newIdValue.trim(),
+      is_primary: isPrimaryFirst,
+    };
+    onChange('identifiers', [...identifiers, newEntry]);
+    setNewIdValue('');
+    setIsAddingCustomType(false);
+    setCustomTypeInput('');
+    if (isPrimaryFirst) {
+      setTimeout(() => onSave(), 0);
+    }
+  };
+
+  const handleNewIdTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    if (val === '__custom__') {
+      setIsAddingCustomType(true);
+      setCustomTypeInput('');
+    } else {
+      setIsAddingCustomType(false);
+      setNewIdType(val);
+    }
+  };
+
+  const primaryIdentifier = identifiers.find(i => i.is_primary) ?? identifiers[0];
+  const headingValue = primaryIdentifier
+    ? (primaryIdentifier.type === 'ei_persona' && resolvePersonaName
+        ? resolvePersonaName(primaryIdentifier.value)
+        : primaryIdentifier.value)
+    : (person.name || '(no name)');
+
+  const typeOptions = buildTypeOptions(identifiers);
+  const isPreMigration = person.identifiers === undefined || person.identifiers === null;
+
   const gapInfo = getEngagementGapInfo(person.exposure_current, person.exposure_desired);
 
   const cardClassName = [
@@ -126,7 +222,7 @@ export const PersonCard = ({
   ].filter(Boolean).join(' ');
 
   return (
-    <div 
+    <div
       ref={cardRef}
       className={cardClassName}
       style={{ position: 'relative' }}
@@ -149,17 +245,147 @@ export const PersonCard = ({
       )}
       <div className="ei-data-card__content">
         <div className="ei-data-card__header">
-          <input
-            type="text"
-            className="ei-data-card__name"
-            value={person.name}
-            onChange={handleNameChange}
-            placeholder="Name"
-            readOnly={selectionMode}
-          />
+          <span className="ei-person-heading" title="Set an identifier as primary to change this name">
+            {headingValue}
+          </span>
         </div>
 
         <div className="ei-data-card__body">
+
+          <div className="ei-identifiers">
+            <div className="ei-identifiers__header">
+              <span className="ei-identifiers__label">Identifiers</span>
+            </div>
+
+            {isPreMigration && (
+              <div className="ei-identifiers__migration-note">
+                Migration pending — no identifiers yet
+              </div>
+            )}
+
+            {!isPreMigration && identifiers.length === 0 && (
+              <div className="ei-identifiers__empty">
+                No identifiers yet — add one below
+              </div>
+            )}
+
+            {!isPreMigration && identifiers.length > 0 && (
+              <div className="ei-identifiers__list">
+                {identifiers.map((id, index) => {
+                  const displayValue =
+                    id.type === 'ei_persona' && resolvePersonaName
+                      ? resolvePersonaName(id.value)
+                      : id.value;
+
+                  return (
+                    <div
+                      key={index}
+                      className={`ei-identifier-row${id.is_primary ? ' ei-identifier-row--primary' : ''}`}
+                    >
+                      <span className="ei-identifier-row__type-badge">{id.type}</span>
+
+                      <input
+                        type="text"
+                        className="ei-identifier-row__value"
+                        value={id.value}
+                        onChange={e => handleIdentifierValueChange(index, e.target.value)}
+                        title={id.type === 'ei_persona' ? `Resolved: ${displayValue}` : undefined}
+                        readOnly={selectionMode}
+                        aria-label={`${id.type} identifier value`}
+                      />
+
+                      {!selectionMode && (
+                        <div className="ei-identifier-row__actions">
+                          <button
+                            className={`ei-identifier-row__primary-btn${id.is_primary ? ' ei-identifier-row__primary-btn--active' : ''}`}
+                            onClick={() => handleSetPrimary(index)}
+                            title={id.is_primary ? 'Primary identifier' : 'Set as primary'}
+                            aria-label={id.is_primary ? 'Primary identifier (active)' : 'Set as primary identifier'}
+                          >
+                            {id.is_primary ? '★' : '☆'}
+                          </button>
+                          <button
+                            className="ei-identifier-row__delete-btn"
+                            onClick={() => handleDeleteIdentifier(index)}
+                            title="Delete identifier"
+                            aria-label={`Delete ${id.type} identifier`}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {!selectionMode && !isPreMigration && (
+              <div className="ei-identifiers__add-row">
+                {isAddingCustomType ? (
+                  <input
+                    type="text"
+                    className="ei-identifiers__type-input"
+                    placeholder="Custom type…"
+                    value={customTypeInput}
+                    onChange={e => setCustomTypeInput(e.target.value)}
+                    autoFocus
+                    aria-label="Custom identifier type"
+                    onKeyDown={e => {
+                      if (e.key === 'Escape') {
+                        setIsAddingCustomType(false);
+                        setCustomTypeInput('');
+                      }
+                    }}
+                  />
+                ) : (
+                  <select
+                    className="ei-identifiers__type-select ei-select"
+                    value={newIdType}
+                    onChange={handleNewIdTypeChange}
+                    aria-label="Identifier type"
+                  >
+                    {typeOptions.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                    <option value="__custom__">+ Add new type…</option>
+                  </select>
+                )}
+
+                <input
+                  type="text"
+                  className="ei-identifiers__value-input"
+                  placeholder={
+                    (isAddingCustomType ? customTypeInput : newIdType) === 'ei_persona'
+                      ? 'Persona UUID…'
+                      : 'Value…'
+                  }
+                  value={newIdValue}
+                  onChange={e => setNewIdValue(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') handleAddIdentifier();
+                  }}
+                  aria-label="Identifier value"
+                />
+
+                <button
+                  className="ei-btn ei-btn--secondary ei-identifiers__add-btn"
+                  onClick={handleAddIdentifier}
+                  disabled={!(isAddingCustomType ? customTypeInput.trim() : newIdType) || !newIdValue.trim()}
+                  title="Add identifier"
+                >
+                  Add
+                </button>
+              </div>
+            )}
+
+            {!selectionMode && !isPreMigration && (isAddingCustomType ? customTypeInput : newIdType) === 'ei_persona' && (
+              <p className="ei-identifiers__hint">
+                Enter the persona's UUID, or use the persona editor to link from there
+              </p>
+            )}
+          </div>
+
           {!selectionMode && (
             <input
               type="text"
@@ -223,8 +449,8 @@ export const PersonCard = ({
                   ↑
                 </button>
               )}
-              <button 
-                className="ei-control-btn ei-control-btn--danger" 
+              <button
+                className="ei-control-btn ei-control-btn--danger"
                 onClick={onDelete}
                 title="Delete"
               >

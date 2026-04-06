@@ -1,6 +1,6 @@
 import React from 'react';
 import { GroupedCardList } from '../GroupedCardList';
-import { PersonCard } from '../PersonCard';
+import { PersonCard, PersonIdentifier } from '../PersonCard';
 
 interface Person {
   id: string;
@@ -14,6 +14,7 @@ interface Person {
   learned_by?: string;
   last_changed_by?: string;
   persona_groups?: string[];
+  identifiers?: PersonIdentifier[];
 }
 
 interface HumanPeopleTabProps {
@@ -96,7 +97,13 @@ export const HumanPeopleTab = ({
   };
 
   const filteredPeople = filterQuery.trim()
-    ? people.filter(p => p.name.toLowerCase().includes(filterQuery.toLowerCase()))
+    ? people.filter(p => {
+        const q = filterQuery.toLowerCase();
+        return (
+          p.name.toLowerCase().includes(q) ||
+          (p.identifiers ?? []).some(id => id.value.toLowerCase().includes(q))
+        );
+      })
     : isDedupeMode ? [] : people;
 
   return (
