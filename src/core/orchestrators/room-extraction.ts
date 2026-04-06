@@ -17,7 +17,7 @@ import {
   queueEventSummary,
   type ExtractionContext as HumanExtractionContext,
 } from "./human-extraction.js";
-import { queuePersonaTopicScan, type PersonaTopicContext } from "./persona-topics.js";
+import { queuePersonaTopicRating, type PersonaTopicContext } from "./persona-topics.js";
 
 const EXTRACTION_BUDGET_RATIO = 0.75;
 const MIN_EXTRACTION_TOKENS = 10000;
@@ -282,8 +282,9 @@ export function queueRoomCapture(state: StateManager, roomId: string): void {
       personaDisplayName: personaForRoom.display_name,
       messages_context: allVisible.filter(m => processedIds.has(m.id)),
       messages_analyze: normalizeRoomMessages(unprocessedRaw, state),
+      topics: personaForRoom.topics,
     };
-    queuePersonaTopicScan(personaTopicContext, state, { roomId: roomId });
+    queuePersonaTopicRating(personaTopicContext, state, { roomId: roomId });
     console.log(`[queueRoomCapture] Queued persona topic scan: ${personaForRoom.display_name} (${unprocessedRaw.length} messages)`);
   }
 
@@ -341,8 +342,9 @@ export function queuePersonaCapture(state: StateManager, personaId: string): voi
       personaDisplayName: persona.display_name,
       messages_context: allMessages.filter(m => processedIds.has(m.id)),
       messages_analyze: unprocessedForPersona,
+      topics: persona.topics,
     };
-    queuePersonaTopicScan(personaTopicContext, state);
+    queuePersonaTopicRating(personaTopicContext, state);
     console.log(`[queuePersonaCapture] Queued persona topic scan for ${persona.display_name} (${unprocessedForPersona.length} messages)`);
   }
 

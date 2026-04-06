@@ -1591,9 +1591,7 @@ const toolNextSteps = new Set([
 
       if (
         response.request.next_step === LLMNextStep.HandlePersonaTraitExtraction ||
-        response.request.next_step === LLMNextStep.HandlePersonaTopicScan ||
-        response.request.next_step === LLMNextStep.HandlePersonaTopicMatch ||
-        response.request.next_step === LLMNextStep.HandlePersonaTopicUpdate
+        response.request.next_step === LLMNextStep.HandlePersonaTopicRating
       ) {
         const personaId = response.request.data.personaId as string;
         if (personaId) {
