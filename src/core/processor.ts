@@ -232,6 +232,7 @@ export class Processor {
     }
     this.bootstrapTools();
     this.seedBuiltinFacts();
+    this.migrateLearnedOn();
     this.seedSettings();
     registerReadMemoryExecutor(createReadMemoryExecutor(this.searchHumanData.bind(this), this.getPersonaList.bind(this)));
     if (this.isTUI) {
@@ -800,6 +801,7 @@ export class Processor {
         sentiment: 0,
         validated_date: '',
         last_updated: now,
+        learned_on: now,
       };
       human.facts.push(newFact);
       seededCount++;
@@ -808,6 +810,27 @@ export class Processor {
     if (seededCount > 0) {
       this.stateManager.setHuman(human);
       console.log(`[Processor] Seeded ${seededCount} built-in facts`);
+    }
+  }
+
+  private migrateLearnedOn(): void {
+    const human = this.stateManager.getHuman();
+
+    const backfill = <T extends { learned_on?: string; last_updated: string }>(items: T[]): T[] =>
+      items.map(item => item.learned_on ? item : { ...item, learned_on: item.last_updated });
+
+    const facts = backfill(human.facts);
+    const topics = backfill(human.topics);
+    const people = backfill(human.people);
+
+    const changed =
+      facts.some((f, i) => f !== human.facts[i]) ||
+      topics.some((t, i) => t !== human.topics[i]) ||
+      people.some((p, i) => p !== human.people[i]);
+
+    if (changed) {
+      this.stateManager.setHuman({ ...human, facts, topics, people });
+      console.log("[Processor] Backfilled learned_on for existing data items");
     }
   }
 

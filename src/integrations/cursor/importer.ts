@@ -127,6 +127,7 @@ function ensureSessionTopic(
     persona_groups: CURSOR_TOPIC_GROUPS,
     learned_by: stateManager.persona_getByName(CURSOR_PERSONA_NAME)?.id ?? undefined,
     last_updated: new Date().toISOString(),
+    learned_on: new Date().toISOString(),
   };
 
   stateManager.human_topic_upsert(newTopic);

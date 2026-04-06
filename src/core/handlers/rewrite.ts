@@ -218,6 +218,7 @@ export async function handleRewriteRewrite(response: LLMResponse, state: StateMa
       description: item.description,
       sentiment: item.sentiment ?? 0,
       last_updated: now,
+      learned_on: now,
       learned_by: "ei",
       persona_groups: unionGroups,
       interested_personas: unionPersonas,
@@ -244,6 +245,7 @@ export async function handleRewriteRewrite(response: LLMResponse, state: StateMa
         }
         const person: Person = {
           ...baseFields,
+          identifiers: [],
           relationship: item.relationship ?? "Unknown",
           exposure_current: 0.5,
           exposure_desired: 0.5,

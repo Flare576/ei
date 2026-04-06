@@ -36,6 +36,7 @@ export function handlePersonaGeneration(response: LLMResponse, state: StateManag
       sentiment: userTrait?.sentiment ?? t.sentiment ?? 0,
       strength: userTrait?.strength ?? t.strength,
       last_updated: now,
+      learned_on: now,
     };
   });
 
@@ -50,6 +51,7 @@ export function handlePersonaGeneration(response: LLMResponse, state: StateManag
       sentiment: t.sentiment ?? 0,
       strength: t.strength,
       last_updated: now,
+      learned_on: now,
     }));
 
   const mergedTraits: PersonaTrait[] = mergedLlmTraits.length > 0

@@ -143,6 +143,7 @@ function ensureSessionTopic(
     persona_groups: CLAUDE_CODE_TOPIC_GROUPS,
     learned_by: stateManager.persona_getByName(CLAUDE_CODE_PERSONA_NAME)?.id ?? undefined,
     last_updated: new Date().toISOString(),
+    learned_on: new Date().toISOString(),
   };
 
   stateManager.human_topic_upsert(newTopic);

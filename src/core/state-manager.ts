@@ -183,6 +183,7 @@ export class StateManager {
           exposure_current: 0.3,
           exposure_desired: 0.3,
           last_updated: fact.last_updated,
+          learned_on: fact.last_updated,
           learned_by: fact.learned_by,
           last_changed_by: fact.last_changed_by,
           persona_groups: fact.persona_groups,

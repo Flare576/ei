@@ -56,6 +56,7 @@ export async function ensureAgentPersona(
     sentiment: t.sentiment,
     strength: t.strength,
     last_updated: now,
+    learned_on: now,
   }));
   const persona: PersonaEntity = {
     id: personaId,
