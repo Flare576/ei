@@ -1,6 +1,6 @@
-import { LLMRequestType, LLMPriority, LLMNextStep, RoomMode, type CeremonyConfig, type PersonaTopic, type Topic, type Message, type DataItemBase } from "../types.js";
+import { LLMRequestType, LLMPriority, LLMNextStep, RoomMode, type CeremonyConfig, type PersonaTopic, type Topic, type DataItemBase } from "../types.js";
 import type { StateManager } from "../state-manager.js";
-import { getMessageContent, normalizeRoomMessages } from "../handlers/utils.js";
+import { normalizeRoomMessages } from "../handlers/utils.js";
 import { applyDecayToValue } from "../utils/index.js";
 import {
   queueFactFind,
@@ -10,9 +10,9 @@ import {
   type ExtractionContext,
   type ExtractionOptions,
 } from "./human-extraction.js";
-import { queuePersonaTopicScan, type PersonaTopicContext, type PersonaTopicOptions } from "./persona-topics.js";
+import { queuePersonaTopicRating, type PersonaTopicContext, type PersonaTopicOptions } from "./persona-topics.js";
 import { queueDedupPhase } from "./dedup-phase.js";
-import { buildPersonaExpirePrompt, buildPersonaExplorePrompt, buildDescriptionCheckPrompt, buildRewriteScanPrompt, type RewriteItemType } from "../../prompts/ceremony/index.js";
+import { buildRewriteScanPrompt, type RewriteItemType } from "../../prompts/ceremony/index.js";
 
 export function isNewDay(lastCeremony: string | undefined, now: Date): boolean {
   if (!lastCeremony) return true;
@@ -153,10 +153,11 @@ function queueExposurePhase(personaId: string, state: StateManager, options?: Ex
       personaDisplayName: persona.display_name,
       messages_context: allMessages.filter(m => !!m.persona_extracted?.[shortId]),
       messages_analyze: forPersonaTopics,
+      topics: persona.topics,
     };
     const personaTopicOptions: PersonaTopicOptions = { ceremony_progress: options?.ceremony_progress };
-    queuePersonaTopicScan(personaTopicContext, state, personaTopicOptions);
-    console.log(`[ceremony:exposure] Queued persona topic scan for ${persona.display_name} (${forPersonaTopics.length} messages)`);
+    queuePersonaTopicRating(personaTopicContext, state, personaTopicOptions);
+    console.log(`[ceremony:exposure] Queued persona topic rating for ${persona.display_name} (${forPersonaTopics.length} messages)`);
   }
 }
 
@@ -218,10 +219,11 @@ export function handleCeremonyProgress(state: StateManager, lastPhase: number): 
           personaDisplayName: personaForRoom.display_name,
           messages_context: allNormalized.filter(m => processedIds.has(m.id)),
           messages_analyze: unprocessedNormalized,
+          topics: personaForRoom.topics,
         };
         const roomScanOptions: PersonaTopicOptions = { ceremony_progress: 2, roomId: room.id };
-        queuePersonaTopicScan(personaTopicContext, state, roomScanOptions);
-        console.log(`[ceremony:expose] Queued room persona topic scan: ${personaForRoom.display_name} in "${room.display_name}" (${unprocessedRaw.length} messages)`);
+        queuePersonaTopicRating(personaTopicContext, state, roomScanOptions);
+        console.log(`[ceremony:expose] Queued room persona topic rating: ${personaForRoom.display_name} in "${room.display_name}" (${unprocessedRaw.length} messages)`);
       }
     }
     return;
@@ -268,16 +270,9 @@ export function handleCeremonyProgress(state: StateManager, lastPhase: number): 
   runHumanCeremony(state);
 
   // Rewrite phase: fire-and-forget scans for bloated human data items
-  // No ceremony_progress gating — Expire/Explore only touch persona topics, zero overlap
   queueRewritePhase(state);
   
-  // Expire phase: queue LLM calls for each active persona
-  // handlePersonaExpire already chains to Explore → DescriptionCheck
-  for (const persona of activePersonas) {
-    queueExpirePhase(persona.id, state);
-  }
-  
-  console.log("[ceremony:progress] Ceremony Decay complete, Expire queued");
+  console.log("[ceremony:progress] Ceremony Decay complete");
 }
 
 // =============================================================================
@@ -362,124 +357,6 @@ export function prunePersonaMessages(personaId: string, state: StateManager): vo
     const persona = state.persona_getById(personaId);
     console.log(`[ceremony:prune] Removed ${toRemove.length} old messages from ${persona?.display_name ?? personaId}`);
   }
-}
-
-// =============================================================================
-// EXPIRE PHASE (queues LLM calls)
-// =============================================================================
-
-export function queueExpirePhase(personaId: string, state: StateManager): void {
-  const persona = state.persona_getById(personaId);
-  if (!persona) {
-    console.error(`[ceremony:expire] Persona not found: ${personaId}`);
-    return;
-  }
-  
-  console.log(`[ceremony:expire] Queueing for ${persona.display_name}`);
-  
-  if (persona.topics.length === 0) {
-    console.log(`[ceremony:expire] ${persona.display_name} has no topics, skipping to description check`);
-    queueDescriptionCheck(personaId, state);
-    return;
-  }
-  
-  const prompt = buildPersonaExpirePrompt({
-    persona_name: persona.display_name,
-    topics: persona.topics,
-  });
-  
-  state.queue_enqueue({
-    type: LLMRequestType.JSON,
-    priority: LLMPriority.Low,
-    system: prompt.system,
-    user: prompt.user,
-    next_step: LLMNextStep.HandlePersonaExpire,
-    data: { personaId, personaDisplayName: persona.display_name },
-  });
-}
-
-// =============================================================================
-// EXPLORE PHASE (queues LLM calls — chained from handlePersonaExpire in handlers)
-// =============================================================================
-
-export function queueExplorePhase(personaId: string, state: StateManager): void {
-  const persona = state.persona_getById(personaId);
-  if (!persona) {
-    console.error(`[ceremony:explore] Persona not found: ${personaId}`);
-    queueDescriptionCheck(personaId, state);
-    return;
-  }
-  
-  console.log(`[ceremony:explore] Queueing for ${persona.display_name}`);
-  
-  const messages = state.messages_get(personaId);
-  const recentMessages = messages.slice(-20);
-  const themes = extractConversationThemes(recentMessages);
-  
-  const prompt = buildPersonaExplorePrompt({
-    persona_name: persona.display_name,
-    traits: persona.traits,
-    remaining_topics: persona.topics,
-    recent_conversation_themes: themes,
-  });
-  
-  state.queue_enqueue({
-    type: LLMRequestType.JSON,
-    priority: LLMPriority.Low,
-    system: prompt.system,
-    user: prompt.user,
-    next_step: LLMNextStep.HandlePersonaExplore,
-    data: { personaId, personaDisplayName: persona.display_name },
-  });
-}
-
-function extractConversationThemes(messages: Message[]): string[] {
-  const humanMessages = messages.filter(m => m.role === "human");
-  if (humanMessages.length === 0) return [];
-  
-  const words = humanMessages
-    .map(m => getMessageContent(m).toLowerCase())
-    .join(" ")
-    .split(/\s+/)
-    .filter(w => w.length > 4);
-  
-  const frequency: Record<string, number> = {};
-  for (const word of words) {
-    frequency[word] = (frequency[word] || 0) + 1;
-  }
-  
-  return Object.entries(frequency)
-    .filter(([_, count]) => count >= 2)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([word]) => word);
-}
-
-export function queueDescriptionCheck(personaId: string, state: StateManager): void {
-  const persona = state.persona_getById(personaId);
-  if (!persona) {
-    console.error(`[ceremony:description] Persona not found: ${personaId}`);
-    return;
-  }
-  
-  console.log(`[ceremony:description] Queueing for ${persona.display_name}`);
-  
-  const prompt = buildDescriptionCheckPrompt({
-    persona_name: persona.display_name,
-    current_short_description: persona.short_description,
-    current_long_description: persona.long_description,
-    traits: persona.traits,
-    topics: persona.topics,
-  });
-  
-  state.queue_enqueue({
-    type: LLMRequestType.JSON,
-    priority: LLMPriority.Low,
-    system: prompt.system,
-    user: prompt.user,
-    next_step: LLMNextStep.HandleDescriptionCheck,
-    data: { personaId, personaDisplayName: persona.display_name },
-  });
 }
 
 // =============================================================================
