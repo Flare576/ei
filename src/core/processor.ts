@@ -1024,6 +1024,7 @@ const toolNextSteps = new Set([
   LLMNextStep.HandleEiHeartbeat,
   LLMNextStep.HandleToolContinuation,
   LLMNextStep.HandleDedupCurate,
+  LLMNextStep.HandlePersonIdentifierMigration,
 ]);
             const toolPersonaId =
               personaId ??
@@ -1038,8 +1039,13 @@ const toolNextSteps = new Set([
               (request.next_step === LLMNextStep.HandleToolContinuation &&
                 request.data.originalNextStep === LLMNextStep.HandleDedupCurate);
 
+            const isPersonMigrationRequest =
+              request.next_step === LLMNextStep.HandlePersonIdentifierMigration ||
+              (request.next_step === LLMNextStep.HandleToolContinuation &&
+                request.data.originalNextStep === LLMNextStep.HandlePersonIdentifierMigration);
+
             let tools: ToolDefinition[] = [];
-            if (isDedupRequest) {
+            if (isDedupRequest || isPersonMigrationRequest) {
               const readMemory = this.stateManager.tools_getByName("read_memory");
               if (readMemory?.enabled) {
                 tools = [readMemory];

@@ -141,7 +141,7 @@ export function queueDedupPhase(state: StateManager): void {
   
   const entityTypes: Array<{ type: DataItemType; items: DedupableItem[] }> = [
     { type: "topic", items: human.topics },
-    { type: "person", items: human.people },
+    // person dedup removed — replaced by person migration (Plan 2)
   ];
   
   let totalClusters = 0;

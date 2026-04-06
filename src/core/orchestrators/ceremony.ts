@@ -12,6 +12,7 @@ import {
 } from "./human-extraction.js";
 import { queuePersonaTopicRating, type PersonaTopicContext, type PersonaTopicOptions } from "./persona-topics.js";
 import { queueDedupPhase } from "./dedup-phase.js";
+import { queuePersonMigration } from "./person-migration.js";
 import { buildRewriteScanPrompt, type RewriteItemType } from "../../prompts/ceremony/index.js";
 
 export function isNewDay(lastCeremony: string | undefined, now: Date): boolean {
@@ -71,14 +72,15 @@ export function startCeremony(state: StateManager): void {
     },
   });
   
-  // PHASE 1: Deduplication (runs BEFORE Expose)
-  console.log("[ceremony] Starting Phase 1: Deduplication");
-  queueDedupPhase(state);
+  // PHASE 1: Deduplication (topics) + Person migration (replaces Dedup.Person)
+  console.log("[ceremony] Starting Phase 1: Deduplication (topics) + Person Migration");
+  queueDedupPhase(state);        // topics only (person dedup removed from dedup-phase.ts)
+  queuePersonMigration(state);   // person identifier migration
   
-  // Check if dedup work was queued
+  // Check if dedup or migration work was queued
   if (!state.queue_hasPendingCeremonies()) {
-    // No dedup work found → immediately advance to Expose phase
-    console.log("[ceremony] No dedup work, advancing to Expose phase");
+    // No dedup or migration work found → immediately advance to Expose phase
+    console.log("[ceremony] No dedup or migration work, advancing to Expose phase");
     handleCeremonyProgress(state, 1);
   }
   
