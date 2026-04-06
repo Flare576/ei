@@ -7,6 +7,7 @@ interface DataItemBase {
   description: string;
   sentiment: number;
   last_updated: string;
+  learned_on?: string;
   learned_by?: string;
   last_changed_by?: string;
   persona_groups?: string[];
@@ -205,7 +206,8 @@ export const DataItemCard = <T extends DataItemBase>({
           <div className="ei-data-card__footer">
             {showMeta && (
               <div className="ei-data-card__meta">
-                {item.learned_by && <span>Learned by: {resolvePersonaName ? resolvePersonaName(item.learned_by) : item.learned_by} • </span>}
+                {item.learned_on && <span>Learned: {formatTimestamp(item.learned_on)} • </span>}
+                {item.learned_by && <span>by: {resolvePersonaName ? resolvePersonaName(item.learned_by) : item.learned_by} • </span>}
                 <span>Updated: {formatTimestamp(item.last_updated)}</span>
               </div>
             )}
