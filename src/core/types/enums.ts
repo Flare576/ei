@@ -35,15 +35,10 @@ export enum LLMNextStep {
   HandlePersonMatch = "handlePersonMatch",
   HandlePersonUpdate = "handlePersonUpdate",
   HandlePersonaTraitExtraction = "handlePersonaTraitExtraction",
-  HandlePersonaTopicScan = "handlePersonaTopicScan",
-  HandlePersonaTopicMatch = "handlePersonaTopicMatch",
-  HandlePersonaTopicUpdate = "handlePersonaTopicUpdate",
+  HandlePersonaTopicRating = "handlePersonaTopicRating",
   HandleHeartbeatCheck = "handleHeartbeatCheck",
   HandleEiHeartbeat = "handleEiHeartbeat",
   HandleOneShot = "handleOneShot",
-  HandlePersonaExpire = "handlePersonaExpire",
-  HandlePersonaExplore = "handlePersonaExplore",
-  HandleDescriptionCheck = "handleDescriptionCheck",
   // Tool calling continuation (second LLM call after tool execution, may loop for more tool calls).
   // data.toolHistory: serialized LLMHistoryMessage[] (assistant + tool result messages)
   // data.toolCallCounts: serialized Map entries [[name, count], ...] carrying per-tool call counts
