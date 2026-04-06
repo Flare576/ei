@@ -93,6 +93,7 @@ export interface HumanSettings {
   default_model?: string;           // Will store ModelConfig.id GUID post-migration
   oneshot_model?: string;           // Model for AI-assist (wand) requests; falls back to default_model. Will store ModelConfig.id GUID post-migration.
   rewrite_model?: string;           // Model for rewrite ceremony step; must be capable (Sonnet/Opus class). Unset = rewrite disabled. Will store ModelConfig.id GUID post-migration.
+  people_migration_complete?: boolean; // Set to true when all Person records have identifiers. Ceremony migration step short-circuits when true.
   queue_paused?: boolean;
   skip_quote_delete_confirm?: boolean;
   name_display?: string;
