@@ -50,6 +50,7 @@ export interface TopicScanCandidate {
 
 export interface PersonScanCandidate {
   name: string;
+  identifiers?: Array<{ type: string; value: string; is_primary?: boolean }>;
   description: string;
   relationship: string;
   reason: string;

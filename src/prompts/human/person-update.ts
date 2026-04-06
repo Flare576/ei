@@ -14,7 +14,7 @@ export interface PersonUpdatePromptData {
 
 function formatExistingPerson(person: Person): string {
   return JSON.stringify({
-    name: person.name,
+    identifiers: person.identifiers ?? [],
     description: person.description,
     sentiment: person.sentiment,
     relationship: person.relationship,
@@ -29,12 +29,11 @@ export function buildPersonUpdatePrompt(data: PersonUpdatePromptData): PromptOut
   }
 
   const personaName = data.persona_name;
+  const isNewItem = data.existing_item === null;
 
-  const nameSection = `The person's actual name, or the clearest available identifier.
+  const identifierSection = `If you spot a platform handle, username, email, nickname, or full name explicitly mentioned in the conversation that isn't already in the person's identifiers, include it in \`identifiers_to_add\` (updates) or \`identifiers\` (new records).
 
-Only update when you learn something more specific.
-
-Examples: "Unknown woman" → "Carol", "Mom" → "Carol (Mom)", "David" → "David Kim"`;
+Known identifier types: \`full_name\`, \`nickname\`, \`email\`, \`github\`, \`discord\`, \`roblox\`, \`reddit\`, \`twitter\`, \`ff14\`, \`ei_persona\`. If unsure of type, use \`nickname\`.`;
 
   const descriptionSection = `A concise summary of who this person is and how they relate to the HUMAN USER. Personas use this to recognize this person and engage meaningfully when they come up.
 
@@ -110,8 +109,25 @@ You are CREATING a new PERSON from what was discovered:
 
 Return all fields based on what you find in the conversation.`;
 
-  const jsonTemplate = `{
-    "name": "...",
+  const jsonTemplate = isNewItem
+    ? `{
+    "identifiers": [
+      { "type": "nickname", "value": "Matt", "is_primary": true }
+    ],
+    "description": "...",
+    "sentiment": 0.0,
+    "relationship": "Mother|Friend|Coworker|AI Companion|etc.",
+    "exposure_desired": 0.5,
+    "exposure_impact": "high|medium|low|none",
+    "quotes": [
+      {
+        "text": "exact phrase from message",
+        "reason": "why this matters"
+      }
+    ]
+  }`
+    : `{
+    "identifiers_to_add": [{ "type": "github", "value": "handle" }],
     "description": "...",
     "sentiment": 0.0,
     "relationship": "Mother|Friend|Coworker|AI Companion|etc.",
@@ -133,14 +149,14 @@ Your job is to take that analysis and apply it to the record we already have **I
 
 This means detail you add should:
 1. Be meaningful, accurate, or still true to the HUMAN USER in six months or more
-2. **NOT** already be present in the description or name of the PERSON
+2. **NOT** already be present in the description or identifiers of the PERSON
 
 This PERSON will be recorded in the HUMAN USER's profile for agents and personas to later reference.
 
 # Field Definitions
 
-## Name (\`name\`)
-${nameSection}
+## Identifiers
+${identifierSection}
 
 ## Description (\`description\`)
 ${descriptionSection}
@@ -199,7 +215,7 @@ ONLY ANALYZE the "Most Recent Messages". The "Earlier Conversation" is provided 
 ${jsonTemplate}
 \`\`\`
 
-When returning a record, **ALWAYS** include \`name\`, \`description\`, and \`sentiment\`.
+When returning a record, **ALWAYS** include \`description\` and \`sentiment\`.
 
 If you find **NO EVIDENCE** of this PERSON in the "Most Recent Messages", respond with: \`{}\`
 

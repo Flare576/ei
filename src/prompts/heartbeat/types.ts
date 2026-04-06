@@ -79,6 +79,13 @@ export type EiHeartbeatItem =
       name: string;
       short_description?: string;
       days_inactive: number;
+    }
+  | {
+      id: string;
+      type: "New Person";
+      name: string;
+      description: string;
+      quote?: string;
     };
 
 /**

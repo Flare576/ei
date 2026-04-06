@@ -48,6 +48,16 @@ Examples:
 - name: "Alice from work", relationship: "Coworker", description: "Mentioned but not described further", reason: "User referenced a work colleague named Alice"
 - name: "Unknown", relationship: "Sibling", description: "User mentioned a sibling but did not give a name", reason: "User said 'my brother' without further context"
 
+## Identifiers (optional)
+
+If the conversation **explicitly** mentions a platform handle, username, email address, or alternative name for this person, capture it in \`identifiers\`.
+
+Known types: \`full_name\`, \`nickname\`, \`email\`, \`github\`, \`discord\`, \`roblox\`, \`reddit\`, \`twitter\`, \`ff14\`, \`ei_persona\`
+
+If you are unsure of the type, use \`nickname\` as a fallback. Do NOT invent types. Do NOT duplicate the \`name\` field as an identifier.
+
+Only include \`identifiers\` when explicitly mentioned in the conversation — omit it entirely if nothing qualifies.
+
 ## Output Format
 
 \`\`\`json
@@ -55,6 +65,9 @@ Examples:
   "people": [
     {
       "name": "The person's name, or 'Unknown' if not given",
+      "identifiers": [
+        { "type": "github", "value": "mldelaro" }
+      ],
       "description": "1-2 sentences: who this person is and their role in the user's life",
       "relationship": "Relationship type from the list above",
       "reason": "Evidence from the conversation that justified flagging this person"
@@ -62,6 +75,8 @@ Examples:
   ]
 }
 \`\`\`
+
+\`identifiers\` is OPTIONAL — only include when the conversation explicitly mentions platform handles, usernames, emails, or alternative names.
 
 **Return JSON only.**
 
@@ -90,13 +105,16 @@ Scan the "Most Recent Messages" for PEOPLE in the human user's life.
   "people": [
     {
       "name": "The person's name, or 'Unknown' if not given",
+      "identifiers": [{ "type": "github", "value": "handle" }],
       "description": "1-2 sentences: who this person is and their role in the user's life",
       "relationship": "Relationship type from the list above",
       "reason": "Evidence from the conversation that justified flagging this person"
     }
   ]
 }
-\`\`\``;
+\`\`\`
+
+\`identifiers\` is optional — include only when explicitly mentioned.`;
 
   return { system, user };
 }
