@@ -609,9 +609,9 @@ export class StateManager {
     return result;
   }
 
-  human_person_getByIdentifier(type: string, value: string): Person | undefined {
+  human_person_getByIdentifier(type: string | null, value: string): Person | undefined {
     return this.getHuman().people.find(p =>
-      p.identifiers?.some(i => i.type === type && i.value === value)
+      p.identifiers?.some(i => (!type || i.type === type) && i.value === value)
     );
   }
 
