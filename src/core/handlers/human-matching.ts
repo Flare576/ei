@@ -5,6 +5,7 @@ import {
   type Person,
   type Quote,
 } from "../types.js";
+import type { PersonIdentifier } from "../types/data-items.js";
 import type { StateManager } from "../state-manager.js";
 import type { ItemMatchResult, ExposureImpact, TopicUpdateResult, PersonUpdateResult } from "../../prompts/human/types.js";
 import { queueTopicUpdate, queuePersonUpdate, type ExtractionContext } from "../orchestrators/index.js";
@@ -194,7 +195,11 @@ export async function handleTopicUpdate(response: LLMResponse, state: StateManag
 }
 
 export async function handlePersonUpdate(response: LLMResponse, state: StateManager): Promise<void> {
-  const result = response.parsed as (PersonUpdateResult & { quotes?: Array<{ text: string; reason: string }> }) | undefined;
+  const result = response.parsed as (PersonUpdateResult & {
+    identifiers?: PersonIdentifier[];
+    identifiers_to_add?: PersonIdentifier[];
+    quotes?: Array<{ text: string; reason: string }>;
+  }) | undefined;
 
   if (!result || Object.keys(result).length === 0) {
     console.log("[handlePersonUpdate] No changes needed (empty result)");
@@ -207,6 +212,7 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
   const personaDisplayName = response.request.data.personaDisplayName as string;
   const roomId = response.request.data.roomId as string | undefined;
   const candidateRelationship = response.request.data.candidateRelationship as string | undefined;
+  const candidateIdentifiers = (response.request.data.candidateIdentifiers ?? []) as PersonIdentifier[];
 
   if (!result.name || !result.description || result.sentiment === undefined) {
     console.error("[handlePersonUpdate] Missing required fields in result");
@@ -251,6 +257,35 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
     ? (allPersonaGroups.length > 0 ? allPersonaGroups : existingPerson?.persona_groups)
     : [...new Set([...(existingPerson?.persona_groups ?? []), ...allPersonaGroups])];
 
+  let resolvedIdentifiers: PersonIdentifier[];
+  if (isNewItem) {
+    const llmIdentifiers: PersonIdentifier[] = (result.identifiers ?? []).map(i => ({
+      type: i.type,
+      value: i.value,
+      ...(i.is_primary ? { is_primary: i.is_primary } : {}),
+    }));
+    const allCandidateIds = [...llmIdentifiers, ...candidateIdentifiers];
+    if (allCandidateIds.length === 0) {
+      const hasSpace = result.name.includes(' ');
+      allCandidateIds.push({ type: hasSpace ? "full_name" : "nickname", value: result.name, is_primary: true });
+    }
+    const deduped: PersonIdentifier[] = [];
+    for (const id of allCandidateIds) {
+      if (!deduped.some(e => e.value === id.value)) {
+        deduped.push(id);
+      }
+    }
+    resolvedIdentifiers = deduped;
+  } else {
+    const base = [...(existingPerson?.identifiers ?? [])];
+    for (const id of (result.identifiers_to_add ?? [])) {
+      if (!base.some(e => e.value === id.value)) {
+        base.push({ type: id.type, value: id.value, ...(id.is_primary ? { is_primary: id.is_primary } : {}) });
+      }
+    }
+    resolvedIdentifiers = base;
+  }
+
   const person: Person = {
     id: itemId,
     name: result.name,
@@ -259,7 +294,8 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
     relationship: result.relationship ?? candidateRelationship ?? existingPerson?.relationship ?? "Unknown",
     exposure_current: calculateExposureCurrent(exposureImpact, existingPerson?.exposure_current ?? 0),
     exposure_desired: result.exposure_desired ?? 0.5,
-    identifiers: existingPerson?.identifiers ?? [],
+    identifiers: resolvedIdentifiers,
+    validated_date: isNewItem ? '' : (existingPerson?.validated_date ?? ''),
     last_updated: now,
     ...(isNewItem && { learned_on: now }),
     last_mentioned: now,

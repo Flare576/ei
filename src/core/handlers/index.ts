@@ -13,7 +13,7 @@ import {
   handlePersonaTopicRating,
 } from "./persona-topics.js";
 import { handleFactFind, handleHumanTopicScan, handleHumanPersonScan, handleEventScan } from "./human-extraction.js";
-import { handleTopicMatch, handleTopicUpdate, handlePersonMatch, handlePersonUpdate } from "./human-matching.js";
+import { handleTopicMatch, handleTopicUpdate, handlePersonUpdate } from "./human-matching.js";
 import { handleRewriteScan, handleRewriteRewrite } from "./rewrite.js";
 import { handleDedupCurate } from "./dedup.js";
 import { handleRoomResponse, handleRoomJudge } from "./rooms.js";
@@ -73,7 +73,6 @@ export const handlers: Record<LLMNextStep, ResponseHandler> = {
   handleHumanPersonScan,
   handleTopicMatch,
   handleTopicUpdate,
-  handlePersonMatch,
   handlePersonUpdate,
   handlePersonaTraitExtraction,
   handlePersonaTopicRating,

@@ -1,7 +1,7 @@
 import { StateManager } from "../state-manager.js";
 import { LLMResponse } from "../types.js";
 import type { DedupResult } from "../../prompts/ceremony/types.js";
-import type { DataItemType, Fact, Topic, Person, Quote } from "../types/data-items.js";
+import type { DataItemType, Fact, Topic, Person, PersonIdentifier, Quote } from "../types/data-items.js";
 import { getEmbeddingService } from "../embedding-service.js";
 
 /**
@@ -51,7 +51,7 @@ export async function handleDedupCurate(
 
   // Pre-compute: for each survivor (replaced_by), union the removed entity's groups.
   // Must happen before any phase mutates state so we read the original values.
-  const groupsToMerge = new Map<string, { persona_groups: string[]; interested_personas: string[]; learned_on?: string }>();
+  const groupsToMerge = new Map<string, { persona_groups: string[]; interested_personas: string[]; learned_on?: string; identifiers?: PersonIdentifier[] }>();
 
   // Map entity_type to pluralized state property name
   const pluralMap: Record<string, 'facts' | 'topics' | 'people'> = {
@@ -87,10 +87,24 @@ export async function handleDedupCurate(
     if (!removed) continue;
     const acc = groupsToMerge.get(removal.replaced_by) ?? { persona_groups: [], interested_personas: [] };
     const candidates = [acc.learned_on, removed.learned_on].filter(Boolean) as string[];
+
+    let mergedIdentifiers: PersonIdentifier[] | undefined;
+    if (entity_type === 'person') {
+      const removedPerson = removed as Person;
+      const accIdentifiers = acc.identifiers ?? [];
+      mergedIdentifiers = [...accIdentifiers];
+      for (const id of (removedPerson.identifiers ?? [])) {
+        if (!mergedIdentifiers.some(existing => existing.value === id.value)) {
+          mergedIdentifiers.push(id);
+        }
+      }
+    }
+
     groupsToMerge.set(removal.replaced_by, {
       persona_groups: [...new Set([...acc.persona_groups, ...(removed.persona_groups ?? [])])],
       interested_personas: [...new Set([...acc.interested_personas, ...(removed.interested_personas ?? [])])],
       learned_on: candidates.length > 0 ? candidates.sort()[0] : undefined,
+      ...(entity_type === 'person' && { identifiers: mergedIdentifiers }),
     });
   }
 
@@ -169,6 +183,14 @@ export async function handleDedupCurate(
       ...(update.exposure_desired !== undefined && { exposure_desired: update.exposure_desired }),
       ...(update.relationship !== undefined && { relationship: update.relationship }),
       ...(update.category !== undefined && { category: update.category }),
+      ...(entity_type === 'person' && mergedFromRemoved?.identifiers !== undefined && (() => {
+        const existingIds = (entity as Person).identifiers ?? [];
+        const result: PersonIdentifier[] = [...existingIds];
+        for (const id of mergedFromRemoved.identifiers!) {
+          if (!result.some(e => e.value === id.value)) result.push(id);
+        }
+        return { identifiers: result };
+      })()),
     };
     
     // Type-safe cast based on entity_type
@@ -241,7 +263,7 @@ export async function handleDedupCurate(
         exposure_desired: addition.exposure_desired ?? 0.5,
         last_ei_asked: null
       }),
-      ...(entity_type === 'person' && { identifiers: [], relationship: addition.relationship ?? 'Unknown' }),
+      ...(entity_type === 'person' && { identifiers: [], validated_date: '', relationship: addition.relationship ?? 'Unknown' }),
       ...(entity_type === 'topic' && { category: addition.category ?? 'Interest' }),
     };
     

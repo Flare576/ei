@@ -1,15 +1,56 @@
-import type { LLMResponse, Fact } from "../types.js";
+import type { LLMResponse, Fact, Person } from "../types.js";
+import type { PersonIdentifier } from "../types/data-items.js";
 import type { StateManager } from "../state-manager.js";
 import type {
   FactFindResult,
   TopicScanResult,
   PersonScanResult,
   TopicScanCandidate,
+  ItemMatchResult,
 } from "../../prompts/human/types.js";
-import { queueTopicMatch, queuePersonMatch, type ExtractionContext } from "../orchestrators/index.js";
+import { queueTopicMatch, queuePersonUpdate, type ExtractionContext } from "../orchestrators/index.js";
 import { markMessagesExtracted } from "./utils.js";
 import { BUILT_IN_FACT_NAMES } from "../constants/built-in-facts.js";
 import { getEmbeddingService, getItemEmbeddingText } from "../embedding-service.js";
+import { levenshtein, normalizeForMatch } from "../utils/levenshtein.js";
+
+function matchPersonCandidate(
+  candidateName: string,
+  candidateIdentifiers: PersonIdentifier[],
+  people: Person[]
+): Person | null {
+  const normName = normalizeForMatch(candidateName);
+
+  // Step 1: Exact match on any identifier value (type-agnostic)
+  for (const person of people) {
+    const allValues = [
+      ...(person.identifiers ?? []).map(i => normalizeForMatch(i.value)),
+      normalizeForMatch(person.name),
+    ];
+    if (allValues.includes(normName)) return person;
+  }
+  // Also check scan-extracted identifiers against existing identifier values
+  for (const scanId of candidateIdentifiers) {
+    const normVal = normalizeForMatch(scanId.value);
+    for (const person of people) {
+      if ((person.identifiers ?? []).some(i => normalizeForMatch(i.value) === normVal)) {
+        return person;
+      }
+    }
+  }
+
+  // Step 2: Fuzzy match (Levenshtein on candidate.name only)
+  const threshold = normName.length < 8 ? 2 : 3;
+  for (const person of people) {
+    const allValues = [
+      ...(person.identifiers ?? []).map(i => normalizeForMatch(i.value)),
+      normalizeForMatch(person.name),
+    ];
+    if (allValues.some(v => levenshtein(normName, v) <= threshold)) return person;
+  }
+
+  return null;
+}
 
 export async function handleFactFind(response: LLMResponse, state: StateManager): Promise<void> {
   const result = response.parsed as FactFindResult | undefined;
@@ -104,7 +145,7 @@ export async function handleHumanTopicScan(response: LLMResponse, state: StateMa
   console.log(`[handleHumanTopicScan] Queued ${result.topics.length} topic(s) for matching`);
 }
 
-export async function handleHumanPersonScan(response: LLMResponse, state: StateManager): Promise<void> {
+export function handleHumanPersonScan(response: LLMResponse, state: StateManager): void {
   const result = response.parsed as PersonScanResult | undefined;
   
   markMessagesExtracted(response, state, "p");
@@ -117,11 +158,30 @@ export async function handleHumanPersonScan(response: LLMResponse, state: StateM
   const context = response.request.data as unknown as ExtractionContext;
   if (!context?.personaId) return;
 
-  const extractionModel = (response.request.data as Record<string, unknown>).extraction_model as string | undefined;
+  const human = state.getHuman();
+
   for (const candidate of result.people) {
-    await queuePersonMatch(candidate, context, state, extractionModel);
+    const candidateIdentifiers: PersonIdentifier[] = (candidate.identifiers ?? []).map(i => ({
+      type: i.type,
+      value: i.value,
+      ...(i.is_primary ? { is_primary: i.is_primary } : {}),
+    }));
+
+    const matchedPerson = matchPersonCandidate(candidate.name, candidateIdentifiers, human.people);
+
+    const matchResult: ItemMatchResult = { matched_guid: matchedPerson?.id ?? null };
+    queuePersonUpdate(matchResult, {
+      ...context,
+      candidateName: candidate.name,
+      candidateDescription: candidate.description,
+      candidateRelationship: candidate.relationship,
+      candidateIdentifiers,
+    }, state);
+
+    const matched = matchedPerson ? `matched "${matchedPerson.name}"` : "no match (new person)";
+    console.log(`[handleHumanPersonScan] person "${candidate.name}": ${matched}`);
   }
-  console.log(`[handleHumanPersonScan] Queued ${result.people.length} person(s) for matching`);
+  console.log(`[handleHumanPersonScan] Processed ${result.people.length} person(s)`);
 }
 
 export async function handleEventScan(response: LLMResponse, state: StateManager): Promise<void> {
