@@ -6,7 +6,6 @@ export {
   queueAllScans,
   queueTopicMatch,
   queueTopicUpdate,
-  queuePersonMatch,
   queuePersonUpdate,
   queueEventSummary,
   type ExtractionContext,
@@ -19,7 +18,7 @@ export {
   prunePersonaMessages,
   runHumanCeremony,
   } from "./ceremony.js";
-export { queueDedupPhase, queueUserDedupRequest } from "./dedup-phase.js";
+export { queueUserDedupRequest } from "./dedup-phase.js";
 export { queuePersonMigration } from "./person-migration.js";
 export {
   queuePersonaTopicRating,
