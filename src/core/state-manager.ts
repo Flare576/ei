@@ -608,6 +608,12 @@ export class StateManager {
     return result;
   }
 
+  human_person_getByIdentifier(type: string, value: string): Person | undefined {
+    return this.getHuman().people.find(p =>
+      p.identifiers?.some(i => i.type === type && i.value === value)
+    );
+  }
+
   human_quote_add(quote: Quote): void {
     this.humanState.quote_add(quote);
     this.scheduleSave();

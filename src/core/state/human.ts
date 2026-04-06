@@ -89,6 +89,11 @@ export class HumanState {
   }
 
   person_upsert(person: Person): void {
+    person = { ...person, identifiers: person.identifiers ?? [] };
+    const primary = person.identifiers.find(i => i.is_primary) ?? person.identifiers[0];
+    if (primary) {
+      person = { ...person, name: primary.value };
+    }
     const idx = this.human.people.findIndex((p) => p.id === person.id);
     person.last_updated = new Date().toISOString();
     if (idx >= 0) {
