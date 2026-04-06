@@ -23,7 +23,7 @@ import {
 vi.mock("../../../../src/core/orchestrators/index.js", () => ({
   orchestratePersonaGeneration: vi.fn(),
   queueTopicMatch: vi.fn().mockResolvedValue(undefined),
-  queuePersonMatch: vi.fn().mockResolvedValue(undefined),
+  queuePersonUpdate: vi.fn().mockReturnValue(1),
 }));
 
 vi.mock("../../../../src/core/embedding-service.js", () => ({
@@ -41,7 +41,7 @@ vi.mock("../../../../src/core/embedding-service.js", () => ({
 
 
 import { handlers } from "../../../../src/core/handlers/index.js";
-import { queueTopicMatch, queuePersonMatch } from "../../../../src/core/orchestrators/index.js";
+import { queueTopicMatch, queuePersonUpdate } from "../../../../src/core/orchestrators/index.js";
 
 function createMockStateManager() {
   const human: HumanEntity = {
@@ -431,12 +431,11 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
 
       await handlers.handleHumanPersonScan(response, state as any);
 
-      expect(queuePersonMatch).toHaveBeenCalledTimes(1);
-      expect(queuePersonMatch).toHaveBeenCalledWith(
-        expect.objectContaining({ name: "Alice" }),
-        expect.any(Object),
-        state,
-        undefined
+      expect(queuePersonUpdate).toHaveBeenCalledTimes(1);
+      expect(queuePersonUpdate).toHaveBeenCalledWith(
+        { matched_guid: null },
+        expect.objectContaining({ candidateName: "Alice" }),
+        state
       );
     });
   });
@@ -601,6 +600,8 @@ describe("Extraction Handlers - Step 3 (Update) - interested_personas", () => {
         exposure_desired: 0.4,
         last_updated: "",
         interested_personas: ["persona-2"],
+        identifiers: [],
+        validated_date: "",
       });
 
       const request = createMockRequest({
