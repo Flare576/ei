@@ -7,12 +7,7 @@ import { handlePersonaResponse, handleToolContinuation, handleOneShot } from "./
 import { handleHeartbeatCheck, handleEiHeartbeat } from "./heartbeat.js";
 import { handlePersonaGeneration, handlePersonaDescriptions, handlePersonaTraitExtraction } from "./persona-generation.js";
 import {
-  handlePersonaExpire,
-  handlePersonaExplore,
-  handleDescriptionCheck,
-  handlePersonaTopicScan,
-  handlePersonaTopicMatch,
-  handlePersonaTopicUpdate,
+  handlePersonaTopicRating,
 } from "./persona-topics.js";
 import { handleFactFind, handleHumanTopicScan, handleHumanPersonScan, handleEventScan } from "./human-extraction.js";
 import { handleTopicMatch, handleTopicUpdate, handlePersonMatch, handlePersonUpdate } from "./human-matching.js";
@@ -33,15 +28,10 @@ export const handlers: Record<LLMNextStep, ResponseHandler> = {
   handlePersonMatch,
   handlePersonUpdate,
   handlePersonaTraitExtraction,
-  handlePersonaTopicScan,
-  handlePersonaTopicMatch,
-  handlePersonaTopicUpdate,
+  handlePersonaTopicRating,
   handleHeartbeatCheck,
   handleEiHeartbeat,
   handleOneShot,
-  handlePersonaExpire,
-  handlePersonaExplore,
-  handleDescriptionCheck,
   handleToolContinuation,
   handleRewriteScan,
   handleRewriteRewrite,
