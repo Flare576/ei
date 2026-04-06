@@ -107,4 +107,15 @@ export function handleEiHeartbeat(response: LLMResponse, state: StateManager): v
     default:
       console.warn(`[handleEiHeartbeat] Unexpected item type "${found.type}" for id "${result.id}"`);
   }
+
+  const newPersonIds = (response.request.data.newPersonIds ?? []) as string[];
+  if (newPersonIds.length > 0) {
+    const human = state.getHuman();
+    for (const personId of newPersonIds) {
+      const person = human.people.find(p => p.id === personId);
+      if (person) {
+        state.human_person_upsert({ ...person, validated_date: now });
+      }
+    }
+  }
 }

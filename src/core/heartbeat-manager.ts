@@ -85,6 +85,20 @@ export async function queueEiHeartbeat(
     });
   }
 
+  const newPeople = human.people
+    .filter(p => !p.validated_date)
+    .slice(0, 3);
+  for (const person of newPeople) {
+    const quote = human.quotes.find((q) => q.data_item_ids.includes(person.id));
+    items.push({
+      id: person.id,
+      type: "New Person",
+      name: person.name,
+      description: person.description ?? '',
+      quote: quote?.text,
+    });
+  }
+
   const underEngagedPeople = human.people
     .filter(
       (p) =>
@@ -175,7 +189,7 @@ export async function queueEiHeartbeat(
     user: prompt.user,
     next_step: LLMNextStep.HandleEiHeartbeat,
     model: getModelForPersona(sm, "ei"),
-    data: { personaId: "ei", isTUI },
+    data: { personaId: "ei", isTUI, newPersonIds: newPeople.map(p => p.id) },
   });
 }
 
