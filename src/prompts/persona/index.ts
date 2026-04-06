@@ -1,16 +1,9 @@
 export { buildPersonaTraitExtractionPrompt } from "./traits.js";
-export { buildPersonaTopicScanPrompt } from "./topics-scan.js";
-export { buildPersonaTopicMatchPrompt } from "./topics-match.js";
-export { buildPersonaTopicUpdatePrompt } from "./topics-update.js";
+export { buildPersonaTopicRatingPrompt } from "./topics-rate.js";
 export type {
   PersonaTraitExtractionPromptData,
-  PersonaTopicScanPromptData,
-  PersonaTopicScanCandidate,
-  PersonaTopicScanResult,
-  PersonaTopicMatchPromptData,
-  PersonaTopicMatchResult,
-  PersonaTopicUpdatePromptData,
-  PersonaTopicUpdateResult,
+  PersonaTopicRatingPromptData,
+  PersonaTopicRatingResult,
   TraitResult,
   PromptOutput,
 } from "./types.js";

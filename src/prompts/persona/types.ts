@@ -1,4 +1,4 @@
-import type { PersonaTrait, Message, PersonaTopic } from "../../core/types.js";
+import type { PersonaTrait, Message } from "../../core/types.js";
 import type { ExposureImpact } from "../human/types.js";
 
 export interface PromptOutput {
@@ -21,56 +21,16 @@ export interface TraitResult {
   strength: number;
 }
 
-// 3-Step Persona Topic Processing (Ticket 0124)
-
-// Step 1: Scan - Quick identification of topics discussed
-export interface PersonaTopicScanPromptData {
+export interface PersonaTopicRatingPromptData {
   persona_name: string;
+  topics: Array<{ id: string; name: string; description_hint: string }>;
   messages_context: Message[];
   messages_analyze: Message[];
 }
 
-export interface PersonaTopicScanCandidate {
-  name: string;
-  message_count: number;    // How many messages touched this topic
-  sentiment_signal: number; // Quick read: -1 to 1
-}
-
-export interface PersonaTopicScanResult {
-  topics: PersonaTopicScanCandidate[];
-}
-
-// Step 2: Match - Map candidate to existing topics
-export interface PersonaTopicMatchPromptData {
-  persona_name: string;
-  candidate: PersonaTopicScanCandidate;
-  existing_topics: PersonaTopic[];
-}
-
-export interface PersonaTopicMatchResult {
-  action: "match" | "create" | "skip";
-  matched_id?: string;  // If action is "match"
-  reason: string;       // Why this decision
-}
-
-// Step 3: Update - Generate structured PersonaTopic
-export interface PersonaTopicUpdatePromptData {
-  persona_name: string;
-  short_description?: string;
-  long_description?: string;
-  traits: PersonaTrait[];
-  existing_topic?: PersonaTopic; // If updating existing
-  candidate: PersonaTopicScanCandidate;
-  messages_context: Message[];
-  messages_analyze: Message[];
-}
-
-export interface PersonaTopicUpdateResult {
-  name: string;
-  perspective: string;      // Their view/opinion - ALWAYS populate
-  approach: string;         // How they engage - populate if clear signal
-  personal_stake: string;   // Why it matters - populate if clear signal
-  sentiment: number;
-  exposure_impact: ExposureImpact;
-  exposure_desired: number;
+export interface PersonaTopicRatingResult {
+  ratings: Array<{
+    topic_id: string;
+    exposure_impact: ExposureImpact;
+  }>;
 }
