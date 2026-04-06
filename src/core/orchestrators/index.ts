@@ -17,16 +17,11 @@ export {
   startCeremony,
   handleCeremonyProgress,
   prunePersonaMessages,
-  queueExpirePhase,
-  queueExplorePhase,
-  queueDescriptionCheck,
   runHumanCeremony,
   } from "./ceremony.js";
 export { queueDedupPhase, queueUserDedupRequest } from "./dedup-phase.js";
 export {
-  queuePersonaTopicScan,
-  queuePersonaTopicMatch,
-  queuePersonaTopicUpdate,
+  queuePersonaTopicRating,
   type PersonaTopicContext,
   type PersonaTopicOptions,
 } from "./persona-topics.js";

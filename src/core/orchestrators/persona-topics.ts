@@ -1,18 +1,17 @@
 import { LLMRequestType, LLMPriority, LLMNextStep, type Message, type PersonaTopic } from "../types.js";
 import type { StateManager } from "../state-manager.js";
 import {
-  buildPersonaTopicScanPrompt,
-  buildPersonaTopicMatchPrompt,
-  buildPersonaTopicUpdatePrompt,
-  type PersonaTopicScanCandidate,
-  type PersonaTopicMatchResult,
+  buildPersonaTopicRatingPrompt,
 } from "../../prompts/persona/index.js";
+import { chunkExtractionContext } from "./extraction-chunker.js";
+import { resolveTokenLimit } from "../llm-client.js";
 
 export interface PersonaTopicContext {
   personaId: string;
   personaDisplayName: string;
   messages_context: Message[];
   messages_analyze: Message[];
+  topics: PersonaTopic[];
 }
 
 export interface PersonaTopicOptions {
@@ -20,111 +19,75 @@ export interface PersonaTopicOptions {
   roomId?: string;
 }
 
-function getAnalyzeFromTimestamp(context: PersonaTopicContext): string | null {
-  if (context.messages_analyze.length === 0) return null;
-  return context.messages_analyze[0].timestamp;
+const EXTRACTION_BUDGET_RATIO = 0.75;
+const MIN_EXTRACTION_TOKENS = 10000;
+
+function getExtractionMaxTokens(state: StateManager): number {
+  const human = state.getHuman();
+  const modelForTokenLimit = human.settings?.default_model;
+  const tokenLimit = resolveTokenLimit(modelForTokenLimit, human.settings?.accounts);
+  return Math.max(MIN_EXTRACTION_TOKENS, Math.floor(tokenLimit * EXTRACTION_BUDGET_RATIO));
 }
 
-export function queuePersonaTopicScan(context: PersonaTopicContext, state: StateManager, options?: PersonaTopicOptions): void {
-  const prompt = buildPersonaTopicScanPrompt({
-    persona_name: context.personaDisplayName,
-    messages_context: context.messages_context,
-    messages_analyze: context.messages_analyze,
-  });
-
-  state.queue_enqueue({
-    type: LLMRequestType.JSON,
-    priority: LLMPriority.Low,
-    system: prompt.system,
-    user: prompt.user,
-    next_step: LLMNextStep.HandlePersonaTopicScan,
-    data: {
-      personaId: context.personaId,
-      personaDisplayName: context.personaDisplayName,
-      analyze_from_timestamp: getAnalyzeFromTimestamp(context),
-      message_ids: context.messages_analyze.map(m => m.id),
-      ceremony_progress: options?.ceremony_progress,
-      roomId: options?.roomId,
-    },
-  });
-}
-
-export function queuePersonaTopicMatch(
-  candidate: PersonaTopicScanCandidate,
+export function queuePersonaTopicRating(
   context: PersonaTopicContext,
   state: StateManager,
   options?: PersonaTopicOptions
 ): void {
-  const persona = state.persona_getById(context.personaId);
-  if (!persona) {
-    console.error(`[queuePersonaTopicMatch] Persona not found: ${context.personaId}`);
+  const maxTokens = getExtractionMaxTokens(state);
+  const { chunks } = chunkExtractionContext(
+    {
+      personaId: context.personaId,
+      personaDisplayName: context.personaDisplayName,
+      messages_context: context.messages_context,
+      messages_analyze: context.messages_analyze,
+    },
+    maxTokens
+  );
+
+  if (chunks.length === 0) {
+    console.log(`[queuePersonaTopicRating] No chunks to process for ${context.personaDisplayName}`);
     return;
   }
 
-  const prompt = buildPersonaTopicMatchPrompt({
-    persona_name: context.personaDisplayName,
-    candidate,
-    existing_topics: persona.topics,
-  });
-
-  state.queue_enqueue({
-    type: LLMRequestType.JSON,
-    priority: LLMPriority.Low,
-    system: prompt.system,
-    user: prompt.user,
-    next_step: LLMNextStep.HandlePersonaTopicMatch,
-    data: {
-      personaId: context.personaId,
-      personaDisplayName: context.personaDisplayName,
-      candidate,
-      analyze_from_timestamp: getAnalyzeFromTimestamp(context),
-      ceremony_progress: options?.ceremony_progress,
-    },
-  });
-}
-
-export function queuePersonaTopicUpdate(
-  candidate: PersonaTopicScanCandidate,
-  matchResult: PersonaTopicMatchResult,
-  context: PersonaTopicContext,
-  state: StateManager,
-  options?: PersonaTopicOptions
-): void {
-  const persona = state.persona_getById(context.personaId);
-  if (!persona) {
-    console.error(`[queuePersonaTopicUpdate] Persona not found: ${context.personaId}`);
-    return;
+  // Mark messages BEFORE queueing to prevent duplicate queueing
+  const shortId = context.personaId.slice(0, 8);
+  const allAnalyzeIds = context.messages_analyze.map(m => m.id);
+  if (options?.roomId) {
+    state.markRoomMessagesPersonaExtracted(options.roomId, allAnalyzeIds, shortId);
+  } else {
+    state.messages_markPersonaExtracted(context.personaId, allAnalyzeIds, shortId);
   }
 
-  const existingTopic = matchResult.matched_id
-    ? persona.topics.find((t: PersonaTopic) => t.id === matchResult.matched_id)
-    : undefined;
+  for (const chunk of chunks) {
+    const topicsForPrompt = context.topics.map(t => ({
+      id: t.id,
+      name: t.name,
+      description_hint: t.perspective?.slice(0, 80) || t.name,
+    }));
 
-  const prompt = buildPersonaTopicUpdatePrompt({
-    persona_name: context.personaDisplayName,
-    short_description: persona.short_description,
-    long_description: persona.long_description,
-    traits: persona.traits,
-    existing_topic: existingTopic,
-    candidate,
-    messages_context: context.messages_context,
-    messages_analyze: context.messages_analyze,
-  });
+    const prompt = buildPersonaTopicRatingPrompt({
+      persona_name: context.personaDisplayName,
+      topics: topicsForPrompt,
+      messages_context: chunk.messages_context,
+      messages_analyze: chunk.messages_analyze,
+    });
 
-  state.queue_enqueue({
-    type: LLMRequestType.JSON,
-    priority: LLMPriority.Low,
-    system: prompt.system,
-    user: prompt.user,
-    next_step: LLMNextStep.HandlePersonaTopicUpdate,
-    data: {
-      personaId: context.personaId,
-      personaDisplayName: context.personaDisplayName,
-      candidate,
-      existingTopicId: existingTopic?.id ?? null,
-      isNewTopic: !existingTopic,
-      analyze_from_timestamp: getAnalyzeFromTimestamp(context),
-      ceremony_progress: options?.ceremony_progress,
-    },
-  });
+    state.queue_enqueue({
+      type: LLMRequestType.JSON,
+      priority: LLMPriority.Low,
+      system: prompt.system,
+      user: prompt.user,
+      next_step: LLMNextStep.HandlePersonaTopicRating,
+      data: {
+        personaId: context.personaId,
+        personaDisplayName: context.personaDisplayName,
+        message_ids: chunk.messages_analyze.map(m => m.id),
+        ceremony_progress: options?.ceremony_progress,
+        roomId: options?.roomId,
+      },
+    });
+  }
+
+  console.log(`[queuePersonaTopicRating] Queued ${chunks.length} rating chunk(s) for ${context.personaDisplayName}`);
 }
