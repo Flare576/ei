@@ -434,7 +434,7 @@ describe("handleCeremonyProgress Multi-Phase Support", () => {
     consoleSpy.mockRestore();
   });
 
-  it("Phase 3 complete → advances to Decay/Expire/Explore", () => {
+  it("Phase 3 complete → advances to Decay", () => {
     const state = createMockProgressState(false, true);
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     

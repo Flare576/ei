@@ -14,9 +14,6 @@ vi.mock("../../../src/core/orchestrators/index.js", () => ({
   startCeremony: vi.fn(),
   handleCeremonyProgress: vi.fn(),
   prunePersonaMessages: vi.fn(),
-  queueExpirePhase: vi.fn(),
-  queueExplorePhase: vi.fn(),
-  queueDescriptionCheck: vi.fn(),
   runHumanCeremony: vi.fn(),
 }));
 
