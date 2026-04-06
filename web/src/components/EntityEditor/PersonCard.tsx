@@ -20,6 +20,7 @@ interface Person {
   last_changed_by?: string;
   persona_groups?: string[];
   identifiers?: PersonIdentifier[];
+  validated_date?: string;
 }
 
 interface SliderConfig {
@@ -128,9 +129,16 @@ export const PersonCard = ({
 
   const identifiers: PersonIdentifier[] = person.identifiers ?? [];
 
+  const handleSave = () => {
+    if (!person.validated_date) {
+      onChange('validated_date', new Date().toISOString());
+    }
+    onSave();
+  };
+
   const handleBlur = (e: React.FocusEvent) => {
     if (isDirty && cardRef.current && !cardRef.current.contains(e.relatedTarget as Node)) {
-      onSave();
+      handleSave();
     }
   };
 
@@ -187,7 +195,7 @@ export const PersonCard = ({
     setIsAddingCustomType(false);
     setCustomTypeInput('');
     if (isPrimaryFirst) {
-      setTimeout(() => onSave(), 0);
+      setTimeout(() => handleSave(), 0);
     }
   };
 

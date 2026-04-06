@@ -537,9 +537,12 @@ export function humanFromYAML(yamlContent: string, original?: HumanEntity): Huma
         ...(primary ? { is_primary: true } : {}),
       }));
       const originalPerson = original?.people.find(op => op.id === parsed.id);
-      const person: Person = originalPerson
+      const personBase: Person = originalPerson
         ? { ...originalPerson, ...parsed, identifiers }
         : { ...parsed, identifiers };
+      const person: Person = !personBase.validated_date
+        ? { ...personBase, validated_date: new Date().toISOString() }
+        : personBase;
       people.push(person);
     }
   }
