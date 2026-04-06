@@ -301,6 +301,55 @@ groups_visible: ["General"]
 
 ---
 
+## Person Identifiers
+
+A `Person` record has an `identifiers` array (`PersonIdentifier[]` in `src/core/types/data-items.ts`). This replaces the previous single-name model.
+
+### Matching Policy
+
+**All identifier values participate in matching, regardless of type.** The `type` field is purely descriptive metadata — it tells you *why* this value identifies the person, not whether to use it for matching. If you add `{ type: "flibidy", value: "Krashley" }`, the system will match on "Krashley".
+
+### `name` Sync Rule
+
+`DataItemBase.name` is retained for backward compatibility but is no longer user-facing. State manager derives `name` from the primary identifier on every write:
+
+```
+name = identifiers.find(i => i.is_primary)?.value ?? identifiers[0]?.value ?? name
+```
+
+Code that reads `person.name` continues to work transparently. The UI never exposes a "Name" field — the card heading is the primary identifier's value.
+
+### Pre-Migration State
+
+Records with `identifiers: []` are in the pre-migration state. `name` still functions as the fallback for all code. The ceremony migration step (replaces `Dedup.Person`) populates identifiers for these records via an Opus call with `read_memory` access. `HumanSettings.people_migration_complete` flags when all records are migrated.
+
+### `ei_persona` Type
+
+A special identifier type that links a `Person` record to a `PersonaEntity` in the same Ei instance. The `value` is the **Persona's UUID** (not the display name) — this survives persona renames. Resolve to display name via `state.persona_getById(value)?.display_name` for UI.
+
+A single `Person` record can have multiple `ei_persona` identifiers (one per persona that maps to them). This is the prerequisite for Plan 4 (drift detection). `ei_persona` links are **always user-initiated** — the system never auto-links without confirmation.
+
+### Built-in Identifier Types
+
+These are suggested types for UI discoverability (dropdowns, autocomplete). They carry no special behavior — any string is valid and stored as-is. All values participate in matching equally.
+
+| Type | Description |
+|------|-------------|
+| `full_name` | Legal or full birth name |
+| `nickname` | Informal name, diminutive, pet name |
+| `email` | Email address |
+| `github` | GitHub username |
+| `discord` | Discord username |
+| `roblox` | Roblox username |
+| `reddit` | Reddit username |
+| `twitter` | Twitter/X handle |
+| `ff14` | Final Fantasy XIV character name |
+| `ei_persona` | Links to a Persona in this Ei instance (value = Persona UUID) |
+
+The user can add any type string. Types are NOT unique — multiple identifiers with the same type are valid (e.g., two `nickname` entries). Type values are stored and displayed exactly as typed — no normalization.
+
+---
+
 ## Error Codes
 
 Standard error codes for `onError` events:
@@ -381,3 +430,4 @@ Standard error codes for `onError` events:
 | 2026-03-14 | **CONTRACTS Overhaul**: Removed TypeScript interface definitions (canonical source is now `src/core/types/*.ts`). Replaced Processor API and StateManager API method lists with prose layer descriptions. Removed: Table of Contents, Architecture Diagram, QueueProcessor API, all Entity Types sections, LLM Types section, Prompt Contracts section. Storage table updated: LocalStorage → IndexedDB (web). Added note on compressed embedding blob storage. Tool Types section moved to AGENTS.md (policy) and README.md (user-facing). |
 | 2026-03-27 | Added `channel` to `Quote`: display name of the Channel where captured. Fixed `speaker` to always reflect the actual speaker (persona display_name or "human") rather than the channel name for room quotes. |
 | 2026-04-05 | **Persona Ceremony Simplification**: Removed `HandlePersonaTopicScan`, `HandlePersonaTopicMatch`, `HandlePersonaTopicUpdate`, `HandlePersonaExpire`, `HandlePersonaExplore`, `HandleDescriptionCheck` from `LLMNextStep`. Added `HandlePersonaTopicRating`. Ceremony flow simplified to: Dedup → Expose (human extraction + persona topic **rating**) → EventSummary → Decay. Expire, Explore, and DescriptionCheck phases removed entirely. Persona topics now only update `exposure_current` — `perspective`, `approach`, `personal_stake`, `sentiment`, `exposure_desired` are never written by ceremony. |
+| 2026-04-06 | **People Schema Enhancement**: Added `PersonIdentifier` interface and `identifiers: PersonIdentifier[]` to `Person`. `DataItemBase.name` retained for backward compat — state manager syncs from primary identifier on every write. Added `people_migration_complete?: boolean` to `HumanSettings`. Added `HandlePersonIdentifierMigration` to `LLMNextStep`. Ceremony `Dedup.Person` step replaced by `Person Migration` step (same `ceremony_progress: 1` slot). Migration queues one Opus + `read_memory` call per unmigrated person; short-circuits when `people_migration_complete = true`. Added `human_person_getByIdentifier(type, value)` to StateManager. Person editor (web) gains identifiers UI; TUI `/me people` command shows identifiers as YAML list-of-maps. See "Person Identifiers" section above for matching policy and built-in types. |
