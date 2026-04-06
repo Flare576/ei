@@ -470,6 +470,7 @@ export function humanToYAML(human: HumanEntity, personaLookup?: Map<string, stri
     const displayName = personaLookup?.get(trimmed) ?? trimmed;
     return `${indent}# [read-only] ${key}${displayName}`;
   })
+  .replace(/^(\s+)(learned_on: .+)$/mg, '$1# [read-only] $2')
   .replace(/^(\s+)(identifiers:)/mg, (_, indent, key) => {
     const comment = personComments[commentIndex++] ?? '';
     return `${indent}${comment}\n${indent}${key}`;
