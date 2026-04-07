@@ -15,6 +15,7 @@ import { getEmbeddingService, getItemEmbeddingText, cosineSimilarity, getPersonE
 import { levenshtein, normalizeForMatch } from "../utils/levenshtein.js";
 
 const MULTI_MATCH_SIMILARITY_THRESHOLD = 0.75;
+const ZERO_MATCH_COSINE_THRESHOLD = 0.80;
 
 function matchPersonCandidate(
   candidateName: string,
@@ -206,6 +207,32 @@ export async function handleHumanPersonScan(response: LLMResponse, state: StateM
       } catch (err) {
         console.warn(`[handleHumanPersonScan] Multi-match embedding failed for "${candidate.name}", using first match:`, err);
         matchedPerson = matches[0];
+      }
+    } else {
+      const peopleWithEmbeddings = human.people.filter(p => p.embedding && p.embedding.length > 0);
+      if (peopleWithEmbeddings.length > 0) {
+        try {
+          const embeddingService = getEmbeddingService();
+          const candidateText = getPersonEmbeddingText({
+            name: candidate.name,
+            relationship: candidate.relationship,
+            description: candidate.description,
+          });
+          const candidateVector = await embeddingService.embed(candidateText);
+          let bestSimilarity = ZERO_MATCH_COSINE_THRESHOLD;
+          for (const person of peopleWithEmbeddings) {
+            const sim = cosineSimilarity(person.embedding!, candidateVector);
+            if (sim > bestSimilarity) {
+              bestSimilarity = sim;
+              matchedPerson = person;
+            }
+          }
+          if (matchedPerson) {
+            console.log(`[handleHumanPersonScan] Cosine fallback matched "${candidate.name}" → "${matchedPerson.name}" (similarity: ${bestSimilarity.toFixed(3)})`);
+          }
+        } catch (err) {
+          console.warn(`[handleHumanPersonScan] Cosine fallback failed for "${candidate.name}":`, err);
+        }
       }
     }
 
