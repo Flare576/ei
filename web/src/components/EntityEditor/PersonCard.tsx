@@ -1,5 +1,6 @@
 import React from 'react';
 import { SliderControl } from './SliderControl';
+import { BUILT_IN_IDENTIFIER_TYPES } from '../../../../src/core/constants/built-in-identifier-types.js';
 
 export interface PersonIdentifier {
   type: string;
@@ -46,19 +47,6 @@ interface PersonCardProps {
   onCreatePersona?: (person: Person) => void;
   onUpdatePersona?: (person: Person) => void;
 }
-
-const BUILT_IN_IDENTIFIER_TYPES = [
-  'full_name',
-  'nickname',
-  'email',
-  'github',
-  'discord',
-  'roblox',
-  'reddit',
-  'twitter',
-  'ff14',
-  'ei_persona',
-];
 
 const defaultFormat = (v: number) => v.toFixed(2);
 
@@ -122,7 +110,7 @@ export const PersonCard = ({
 }: PersonCardProps): React.ReactElement => {
   const cardRef = React.useRef<HTMLDivElement>(null);
 
-  const [newIdType, setNewIdType] = React.useState('full_name');
+  const [newIdType, setNewIdType] = React.useState(BUILT_IN_IDENTIFIER_TYPES[0]);
   const [newIdValue, setNewIdValue] = React.useState('');
   const [isAddingCustomType, setIsAddingCustomType] = React.useState(false);
   const [customTypeInput, setCustomTypeInput] = React.useState('');

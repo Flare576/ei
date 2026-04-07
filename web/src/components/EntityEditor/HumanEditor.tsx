@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { TabContainer } from './TabContainer';
 import { HumanFactsTab } from './tabs/HumanFactsTab';
 import { HumanTopicsTab } from './tabs/HumanTopicsTab';
@@ -6,6 +6,7 @@ import { HumanPeopleTab } from './tabs/HumanPeopleTab';
 import { HumanQuotesTab } from './tabs/HumanQuotesTab';
 import { QuoteManagementModal } from '../Quote/QuoteManagementModal';
 import type { Fact, Quote } from '../../../../src/core/types';
+import type { PersonIdentifier } from './PersonCard';
 
 interface Topic {
   id: string;
@@ -32,6 +33,8 @@ interface Person {
   learned_by?: string;
   last_changed_by?: string;
   persona_groups?: string[];
+  identifiers?: PersonIdentifier[];
+  validated_date?: string;
 }
 
 interface HumanEntity {
@@ -101,6 +104,8 @@ export const HumanEditor = ({
   const [toast, setToast] = useState<string | null>(null);
 
   const wasOpenRef = useRef(false);
+  const localPeopleRef = useRef<Person[]>([]);
+  localPeopleRef.current = localPeople;
 
   useEffect(() => {
     if (isOpen && !wasOpenRef.current) {
@@ -265,8 +270,8 @@ export const HumanEditor = ({
     setDirtyPersonIds(prev => new Set(prev).add(id));
   };
 
-  const handlePersonSave = async (id: string) => {
-    const person = localPeople.find(p => p.id === id);
+  const handlePersonSave = useCallback(async (id: string) => {
+    const person = localPeopleRef.current.find(p => p.id === id);
     if (person) {
       await onPersonSave(person);
       setDirtyPersonIds(prev => {
@@ -275,7 +280,7 @@ export const HumanEditor = ({
         return next;
       });
     }
-  };
+  }, [onPersonSave]);
 
   const handlePersonDelete = (id: string) => {
     onPersonDelete(id);
@@ -297,6 +302,7 @@ export const HumanEditor = ({
       exposure_current: 0,
       exposure_desired: 0.5,
       last_updated: new Date().toISOString(),
+      identifiers: [],
     };
     setLocalPeople(prev => [...prev, newPerson]);
     setDirtyPersonIds(prev => new Set(prev).add(newPerson.id));
