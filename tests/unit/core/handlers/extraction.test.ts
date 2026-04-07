@@ -567,6 +567,7 @@ describe("Extraction Handlers - Step 3 (Update) - interested_personas", () => {
           personaDisplayName: "TestPersona",
           isNewItem: true,
           existingItemId: undefined,
+          candidateName: "New Person",
           candidateRelationship: "friend",
           messages_context: [],
           messages_analyze: [],

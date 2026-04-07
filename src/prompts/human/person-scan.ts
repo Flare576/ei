@@ -1,5 +1,18 @@
-import type { PersonScanPromptData, PromptOutput } from "./types.js";
+import type { PersonScanPromptData, ParticipantContext, PromptOutput } from "./types.js";
 import { formatMessagesAsPlaceholders } from "../message-utils.js";
+
+function participantContextSection(ctx: ParticipantContext | undefined): string {
+  if (!ctx) return "";
+  const lines: string[] = ["# Participant Context", "The following may help you understand who is in this conversation.", ""];
+  lines.push(`## Persona: ${ctx.persona_name}`);
+  if (ctx.persona_description) lines.push(ctx.persona_description);
+  lines.push("");
+  lines.push("## Human User");
+  if (ctx.human_name) lines.push(`Name: ${ctx.human_name}`);
+  if (ctx.human_age !== undefined) lines.push(`Age: ${ctx.human_age}`);
+  lines.push("");
+  return lines.join("\n");
+}
 
 export function buildHumanPersonScanPrompt(data: PersonScanPromptData): PromptOutput {
   if (!data.persona_name) {
@@ -7,6 +20,16 @@ export function buildHumanPersonScanPrompt(data: PersonScanPromptData): PromptOu
   }
 
   const personaName = data.persona_name;
+  const humanName = data.participant_context?.human_name;
+
+  const builtInTypes = ['Full Name', 'First Name', 'Nickname', 'Email', 'GitHub', 'Discord',
+    'Roblox', 'Reddit', 'Twitter', 'FF14', 'Relationship', 'Ei Persona'];
+  const userTypes = data.known_identifier_types ?? [];
+  const allTypes = [...new Set([...builtInTypes, ...userTypes])].join(', ');
+
+  const selfGuard = humanName
+    ? `The HUMAN USER (${humanName}) wrote these messages. When the conversation is meaningfully about them as a person, you MAY include a self-record with \`relationship: "Self"\`. Do NOT apply their names or handles as identifiers for OTHER people in their life.`
+    : `The HUMAN USER wrote these messages. They are not automatically a person to flag — only include a self-record with \`relationship: "Self"\` when the conversation is meaningfully about them. Do NOT apply their names or handles as identifiers for other people in their life.`;
 
   const system = `# Task
 
@@ -14,7 +37,7 @@ You are scanning a conversation to quickly identify PEOPLE in the HUMAN USER's l
 
 Detect and flag. Do NOT analyze deeply — that happens later.
 
-## What to Capture
+${participantContextSection(data.participant_context)}## What to Capture
 
 Flag a PERSON when they were meaningfully discussed — not just mentioned in passing.
 
@@ -32,10 +55,12 @@ Someone in the human user's world. Use the relationship as the primary classifie
 
 **Professional**: Coworker, Manager, Report, Mentor, Client
 
+**Self**: The human user themselves (use \`relationship: "Self"\`)
+
 **AI**: Persona (use \`relationship: "AI Persona"\` for AI companions and assistants)
 
 **NOT a PERSON:**
-- The user themselves
+- ${selfGuard}
 - Biographical facts, topics, or hobbies
 - Fictional characters from books, movies, or media
 - Public figures only mentioned in passing (celebrities, politicians) — unless the user has a real relationship with them
@@ -52,9 +77,9 @@ Examples:
 
 If the conversation **explicitly** mentions a platform handle, username, email address, or alternative name for this person, capture it in \`identifiers\`.
 
-Known types: \`full_name\`, \`nickname\`, \`email\`, \`github\`, \`discord\`, \`roblox\`, \`reddit\`, \`twitter\`, \`ff14\`, \`ei_persona\`
+Known types: ${allTypes}
 
-If you are unsure of the type, use \`nickname\` as a fallback. Do NOT invent types. Do NOT duplicate the \`name\` field as an identifier.
+If you are unsure of the type, use \`Nickname\` as a fallback. Do NOT invent types. Do NOT duplicate the \`name\` field as an identifier.
 
 Only include \`identifiers\` when explicitly mentioned in the conversation — omit it entirely if nothing qualifies.
 
@@ -66,7 +91,7 @@ Only include \`identifiers\` when explicitly mentioned in the conversation — o
     {
       "name": "The person's name, or 'Unknown' if not given",
       "identifiers": [
-        { "type": "github", "value": "mldelaro" }
+        { "type": "GitHub", "value": "mldelaro" }
       ],
       "description": "1-2 sentences: who this person is and their role in the user's life",
       "relationship": "Relationship type from the list above",
@@ -105,7 +130,7 @@ Scan the "Most Recent Messages" for PEOPLE in the human user's life.
   "people": [
     {
       "name": "The person's name, or 'Unknown' if not given",
-      "identifiers": [{ "type": "github", "value": "handle" }],
+      "identifiers": [{ "type": "GitHub", "value": "handle" }],
       "description": "1-2 sentences: who this person is and their role in the user's life",
       "relationship": "Relationship type from the list above",
       "reason": "Evidence from the conversation that justified flagging this person"

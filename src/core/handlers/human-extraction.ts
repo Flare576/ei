@@ -11,15 +11,18 @@ import type {
 import { queueTopicMatch, queuePersonUpdate, type ExtractionContext } from "../orchestrators/index.js";
 import { markMessagesExtracted, resolveMessageWindow } from "./utils.js";
 import { BUILT_IN_FACT_NAMES } from "../constants/built-in-facts.js";
-import { getEmbeddingService, getItemEmbeddingText } from "../embedding-service.js";
+import { getEmbeddingService, getItemEmbeddingText, cosineSimilarity, getPersonEmbeddingText } from "../embedding-service.js";
 import { levenshtein, normalizeForMatch } from "../utils/levenshtein.js";
+
+const MULTI_MATCH_SIMILARITY_THRESHOLD = 0.75;
 
 function matchPersonCandidate(
   candidateName: string,
   candidateIdentifiers: PersonIdentifier[],
   people: Person[]
-): Person | null {
+): Person[] {
   const normName = normalizeForMatch(candidateName);
+  const matched = new Set<Person>();
 
   // Step 1: Exact match on any identifier value (type-agnostic)
   for (const person of people) {
@@ -27,17 +30,19 @@ function matchPersonCandidate(
       ...(person.identifiers ?? []).map(i => normalizeForMatch(i.value)),
       normalizeForMatch(person.name),
     ];
-    if (allValues.includes(normName)) return person;
+    if (allValues.includes(normName)) matched.add(person);
   }
   // Also check scan-extracted identifiers against existing identifier values
   for (const scanId of candidateIdentifiers) {
     const normVal = normalizeForMatch(scanId.value);
     for (const person of people) {
       if ((person.identifiers ?? []).some(i => normalizeForMatch(i.value) === normVal)) {
-        return person;
+        matched.add(person);
       }
     }
   }
+
+  if (matched.size > 0) return [...matched];
 
   // Step 2: Fuzzy match — skip for short names (< 6 chars): "mike"↔"jake" = 2 edits, false positive.
   if (normName.length >= 6) {
@@ -47,11 +52,11 @@ function matchPersonCandidate(
         ...(person.identifiers ?? []).map(i => normalizeForMatch(i.value)),
         normalizeForMatch(person.name),
       ];
-      if (allValues.some(v => levenshtein(normName, v) <= threshold)) return person;
+      if (allValues.some(v => levenshtein(normName, v) <= threshold)) matched.add(person);
     }
   }
 
-  return null;
+  return [...matched];
 }
 
 export async function handleFactFind(response: LLMResponse, state: StateManager): Promise<void> {
@@ -147,7 +152,7 @@ export async function handleHumanTopicScan(response: LLMResponse, state: StateMa
   console.log(`[handleHumanTopicScan] Queued ${result.topics.length} topic(s) for matching`);
 }
 
-export function handleHumanPersonScan(response: LLMResponse, state: StateManager): void {
+export async function handleHumanPersonScan(response: LLMResponse, state: StateManager): Promise<void> {
   const result = response.parsed as PersonScanResult | undefined;
   
   markMessagesExtracted(response, state, "p");
@@ -170,7 +175,39 @@ export function handleHumanPersonScan(response: LLMResponse, state: StateManager
       ...(i.is_primary ? { is_primary: i.is_primary } : {}),
     }));
 
-    const matchedPerson = matchPersonCandidate(candidate.name, candidateIdentifiers, human.people);
+    const matches = matchPersonCandidate(candidate.name, candidateIdentifiers, human.people);
+
+    let matchedPerson: Person | null = null;
+
+    if (matches.length === 1) {
+      matchedPerson = matches[0];
+    } else if (matches.length > 1) {
+      try {
+        const embeddingService = getEmbeddingService();
+        const candidateText = getPersonEmbeddingText({
+          name: candidate.name,
+          relationship: candidate.relationship,
+          description: candidate.description,
+        });
+        const candidateVector = await embeddingService.embed(candidateText);
+        let bestSimilarity = MULTI_MATCH_SIMILARITY_THRESHOLD;
+        for (const person of matches) {
+          if (person.embedding) {
+            const sim = cosineSimilarity(person.embedding, candidateVector);
+            if (sim > bestSimilarity) {
+              bestSimilarity = sim;
+              matchedPerson = person;
+            }
+          }
+        }
+        if (!matchedPerson) {
+          console.log(`[handleHumanPersonScan] Multi-match for "${candidate.name}" (${matches.length} hits) — no embedding above threshold, creating new record`);
+        }
+      } catch (err) {
+        console.warn(`[handleHumanPersonScan] Multi-match embedding failed for "${candidate.name}", using first match:`, err);
+        matchedPerson = matches[0];
+      }
+    }
 
     const matchResult: ItemMatchResult = { matched_guid: matchedPerson?.id ?? null };
     queuePersonUpdate(matchResult, {
@@ -183,7 +220,11 @@ export function handleHumanPersonScan(response: LLMResponse, state: StateManager
       candidateIdentifiers,
     }, state);
 
-    const matched = matchedPerson ? `matched "${matchedPerson.name}"` : "no match (new person)";
+    const matched = matchedPerson
+      ? `matched "${matchedPerson.name}"`
+      : matches.length > 1
+        ? `multi-match ambiguous (${matches.length} hits) — new record`
+        : "no match (new person)";
     console.log(`[handleHumanPersonScan] person "${candidate.name}": ${matched}`);
   }
   console.log(`[handleHumanPersonScan] Processed ${result.people.length} person(s)`);
