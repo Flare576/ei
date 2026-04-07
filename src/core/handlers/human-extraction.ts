@@ -17,6 +17,16 @@ import { levenshtein, normalizeForMatch } from "../utils/levenshtein.js";
 const MULTI_MATCH_SIMILARITY_THRESHOLD = 0.75;
 const ZERO_MATCH_COSINE_THRESHOLD = 0.80;
 
+// Relationships where a person typically has exactly one instance.
+// Only these fire the "sole relationship" uniqueness shortcut when the
+// existing record already has a real name (non-Unknown records in non-singleton
+// relationships fall through to cosine so we don't merge David into Sisyphus).
+const SINGLETON_RELATIONSHIPS = new Set([
+  'self',
+  'husband', 'wife', 'spouse',
+  'father', 'mother',
+]);
+
 function matchPersonCandidate(
   candidateName: string,
   candidateIdentifiers: PersonIdentifier[],
@@ -54,6 +64,21 @@ function matchPersonCandidate(
         normalizeForMatch(person.name),
       ];
       if (allValues.some(v => levenshtein(normName, v) <= threshold)) matched.add(person);
+    }
+  }
+
+  if (matched.size > 0) return [...matched];
+
+  // Step 2.5: First-name match — "Lucas Jeremy Scherer" should find "Lucas".
+  // Only fires when first word is >= 4 chars to avoid short-name collisions.
+  const candidateFirstWord = normName.split(/\s+/)[0];
+  if (candidateFirstWord.length >= 4) {
+    for (const person of people) {
+      const allNames = [
+        normalizeForMatch(person.name),
+        ...(person.identifiers ?? []).map(i => normalizeForMatch(i.value)),
+      ];
+      if (allNames.some(n => n.split(/\s+/)[0] === candidateFirstWord)) matched.add(person);
     }
   }
 
@@ -209,29 +234,65 @@ export async function handleHumanPersonScan(response: LLMResponse, state: StateM
         matchedPerson = matches[0];
       }
     } else {
-      const peopleWithEmbeddings = human.people.filter(p => p.embedding && p.embedding.length > 0);
-      if (peopleWithEmbeddings.length > 0) {
-        try {
-          const embeddingService = getEmbeddingService();
-          const candidateText = getPersonEmbeddingText({
-            name: candidate.name,
-            relationship: candidate.relationship,
-            description: candidate.description,
-          });
-          const candidateVector = await embeddingService.embed(candidateText);
-          let bestSimilarity = ZERO_MATCH_COSINE_THRESHOLD;
-          for (const person of peopleWithEmbeddings) {
-            const sim = cosineSimilarity(person.embedding!, candidateVector);
-            if (sim > bestSimilarity) {
-              bestSimilarity = sim;
-              matchedPerson = person;
+      // Step 3: relationship filter → uniqueness match or cosine on the relevant subset.
+      // Filter first (O(N)), then cosine only on the filtered set (O(K) where K <= N).
+      const normRel = candidate.relationship?.toLowerCase();
+      const sameRel = normRel && normRel !== 'unknown'
+        ? human.people.filter(p => p.relationship?.toLowerCase() === normRel)
+        : [];
+
+      if (sameRel.length === 1) {
+        const existing = sameRel[0];
+        const normExistingName = normalizeForMatch(existing.name);
+        const isUnknownPlaceholder = normExistingName === 'unknown' || normExistingName === normRel;
+        const isSingleton = SINGLETON_RELATIONSHIPS.has(normRel!);
+        if (isUnknownPlaceholder || isSingleton) {
+          matchedPerson = existing;
+          const reason = isUnknownPlaceholder ? 'unnamed placeholder' : 'singleton relationship';
+          console.log(`[handleHumanPersonScan] Relationship unique match: "${candidate.name}" → "${existing.name}" (sole ${candidate.relationship}, ${reason})`);
+        }
+      } else {
+        // N>1 same relationship → cosine within that subset.
+        // N=0 (unknown relationship or no stored records) → cosine against all people.
+        const searchPool = sameRel.length > 1
+          ? sameRel.filter(p => p.embedding && p.embedding.length > 0)
+          : human.people.filter(p => p.embedding && p.embedding.length > 0);
+
+        const poolLabel = sameRel.length > 1
+          ? `${sameRel.length} ${candidate.relationship} records`
+          : `all ${human.people.length} people`;
+
+        if (searchPool.length > 0) {
+          console.log(`[handleHumanPersonScan] "${candidate.name}": cosine against ${searchPool.length} embedded (${poolLabel})`);
+          try {
+            const embeddingService = getEmbeddingService();
+            const candidateText = getPersonEmbeddingText({
+              name: candidate.name,
+              relationship: candidate.relationship,
+              description: candidate.description,
+            });
+            const candidateVector = await embeddingService.embed(candidateText);
+            const scores: Array<{ name: string; sim: number }> = [];
+            let bestSimilarity = ZERO_MATCH_COSINE_THRESHOLD;
+            for (const person of searchPool) {
+              const sim = cosineSimilarity(person.embedding!, candidateVector);
+              scores.push({ name: person.name, sim });
+              if (sim > bestSimilarity) {
+                bestSimilarity = sim;
+                matchedPerson = person;
+              }
             }
+            const top3 = scores.sort((a, b) => b.sim - a.sim).slice(0, 3).map(s => `"${s.name}"=${s.sim.toFixed(3)}`).join(', ');
+            if (matchedPerson) {
+              console.log(`[handleHumanPersonScan] Cosine matched "${candidate.name}" → "${matchedPerson.name}" (${bestSimilarity.toFixed(3)}) | top3: ${top3}`);
+            } else {
+              console.log(`[handleHumanPersonScan] Cosine: no match above ${ZERO_MATCH_COSINE_THRESHOLD} for "${candidate.name}" | top3: ${top3}`);
+            }
+          } catch (err) {
+            console.warn(`[handleHumanPersonScan] Cosine failed for "${candidate.name}":`, err);
           }
-          if (matchedPerson) {
-            console.log(`[handleHumanPersonScan] Cosine fallback matched "${candidate.name}" → "${matchedPerson.name}" (similarity: ${bestSimilarity.toFixed(3)})`);
-          }
-        } catch (err) {
-          console.warn(`[handleHumanPersonScan] Cosine fallback failed for "${candidate.name}":`, err);
+        } else {
+          console.log(`[handleHumanPersonScan] "${candidate.name}": no embedded people in pool (${poolLabel}) — new person`);
         }
       }
     }

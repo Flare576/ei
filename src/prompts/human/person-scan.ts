@@ -45,22 +45,23 @@ Be **conservative**: ignore one-off mentions, greetings, small talk, or jokes. O
 
 ## What a PERSON Is
 
-Someone in the human user's world. Use the relationship as the primary classifier:
+Someone in the human user's world.
 
-**Immediate Family**: Father, Mother, Son, Daughter, Brother, Sister, Husband, Wife, Partner (and step/in-law variants)
+For "relationship", use the **specific value** — NOT the category name:
 
-**Extended Family**: Grandfather, Grandmother, Aunt, Uncle, Cousin, Niece, Nephew
+- Immediate Family: Father, Mother, Son, Daughter, Brother, Sister, Husband, Wife, Partner
+  (step/in-law variants OK: Step-Father, Sister-in-Law, etc.)
+- Extended Family: Grandfather, Grandmother, Aunt, Uncle, Cousin, Niece, Nephew
+- Social: Friend, Close Acquaintance, Lover, Love Interest, Fiance, Spouse
+- Professional: Coworker, Manager, Report, Mentor, Client
+- Self — the human user themselves
+- AI Persona — AI companions and assistants
 
-**Social**: Friend, Close Acquaintance, Lover, Love Interest, Fiance, Spouse
-
-**Professional**: Coworker, Manager, Report, Mentor, Client
-
-**Self**: The human user themselves (use \`relationship: "Self"\`)
-
-**AI**: Persona (use \`relationship: "AI Persona"\` for AI companions and assistants)
+Use the specific value where possible (e.g. "Father", "Brother", "Coworker"). Avoid returning the category label ("Immediate Family", "Extended Family", etc.) — use the item within the category instead. If the relationship doesn't fit any category cleanly, use the most natural plain-English description.
 
 **NOT a PERSON:**
 - ${selfGuard}
+- Hypothetical or fictional people used in examples, thought experiments, or use-case scenarios — even if they have names. If the user is describing how a feature *could* work for "Sarah" or "Jared", those are not real people in their life.
 - Biographical facts, topics, or hobbies
 - Fictional characters from books, movies, or media
 - Public figures only mentioned in passing (celebrities, politicians) — unless the user has a real relationship with them
@@ -79,7 +80,7 @@ If the conversation **explicitly** mentions a platform handle, username, email a
 
 Known types: ${allTypes}
 
-If you are unsure of the type, use \`Nickname\` as a fallback. Do NOT invent types. Do NOT duplicate the \`name\` field as an identifier.
+If you are unsure of the type, use \`Nickname\` as a fallback. Do NOT invent types. Do NOT duplicate the \`name\` field as an identifier. NEVER add dates, ages, or birthdays as identifiers.
 
 Only include \`identifiers\` when explicitly mentioned in the conversation — omit it entirely if nothing qualifies.
 
@@ -94,7 +95,7 @@ Only include \`identifiers\` when explicitly mentioned in the conversation — o
         { "type": "GitHub", "value": "mldelaro" }
       ],
       "description": "1-2 sentences: who this person is and their role in the user's life",
-      "relationship": "Relationship type from the list above",
+      "relationship": "Father|Mother|Brother|Son|Friend|Coworker|Self|etc.",
       "reason": "Evidence from the conversation that justified flagging this person"
     }
   ]
@@ -132,7 +133,7 @@ Scan the "Most Recent Messages" for PEOPLE in the human user's life.
       "name": "The person's name, or 'Unknown' if not given",
       "identifiers": [{ "type": "GitHub", "value": "handle" }],
       "description": "1-2 sentences: who this person is and their role in the user's life",
-      "relationship": "Relationship type from the list above",
+      "relationship": "Father|Mother|Brother|Son|Friend|Coworker|Self|etc.",
       "reason": "Evidence from the conversation that justified flagging this person"
     }
   ]

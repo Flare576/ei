@@ -103,12 +103,12 @@ Detail you add should:
   // Existing: full synthesis guidance
 
   const descriptionSection = isNewItem
-    ? `A concise summary of who this person is and how they relate to the HUMAN USER.
+    ? `A concise summary of who this person is and how they relate to the HUMAN USER. Keep it brief and factual — only what you can confirm from the conversation.
 
-- Capture who this person IS — their role, relationship texture, notable characteristics
-- Only include what you can confirm from the conversation
+- Capture who this person IS — their role in the user's life
 - Be useful to a persona who's never heard this person's name before
 - 1-3 sentences maximum
+- If you know their birth date or birth year, include it as a date (e.g. "born 1986-10-28") — never as a current age (ages change, dates don't)
 
 **ABSOLUTELY VITAL**: Do **NOT** embellish. Record only what the user actually said or demonstrated.`
     : `A concise summary of who this person is and how they relate to the HUMAN USER. Personas use this to recognize this person and engage meaningfully when they come up.
@@ -131,6 +131,7 @@ The description should NOT:
 - Append "Most recently:", "Latest mention:", or any temporal marker
 - Accumulate a session-by-session history of every time this person came up
 - Speculate about the person based on thin evidence
+- Record someone's age — record their birth date or birth year instead (e.g. "born 1981" not "age 44")
 
 **ABSOLUTELY VITAL**: Do **NOT** embellish — personas use their own voice. Record what the user actually said or demonstrated, not your interpretation of its emotional significance.`;
 
@@ -147,9 +148,11 @@ The description should NOT:
 
   const identifierSection = `${identityGuard}${unknownIdentifierGuard}
 
-If you spot a platform handle, username, email, nickname, or full name explicitly mentioned in the conversation that isn't already in the person's identifiers, include it in \`identifiers_to_add\` (updates) or \`identifiers\` (new records).
+If you spot a platform handle, username, email, nickname, or full name explicitly mentioned in the conversation that isn't already in the person's identifiers, include it in \`identifiers_to_add\` (updates) or \`identifiers\` (new records). Always mark exactly one identifier as \`"is_primary": true\` — prefer the most formal or complete name.
 
 For persons with a known relationship (Father, Mother, Sibling, etc.), also look for informal terms the HUMAN USER uses to address or refer to THAT SPECIFIC PERSON (\`Dad\`, \`Pop\`, \`Mom\`, \`Sis\`, etc.) and add them as \`{ "type": "Relationship", "value": "..." }\` identifiers.
+
+NEVER add dates, ages, birthdays, or anniversaries as identifiers. These are not identifying labels — if known, include them in the description instead.
 
 Known identifier types: ${allTypes}. If unsure of type, use \`Nickname\`.`;
 
