@@ -7,6 +7,7 @@ import {
 } from "./types.js";
 import { StateManager } from "./state-manager.js";
 import { orchestratePersonaGeneration } from "./orchestrators/index.js";
+import { computePersonaDescriptionEmbedding } from "./embedding-service.js";
 
 export async function getPersonaList(sm: StateManager): Promise<PersonaSummary[]> {
   return sm.persona_getAll().map((entity) => ({
@@ -117,6 +118,15 @@ export async function updatePersona(
 ): Promise<boolean> {
   const persona = sm.persona_getById(personaId);
   if (!persona) return false;
+
+  if ('long_description' in updates) {
+    const merged = { ...persona, ...updates };
+    const embedding = await computePersonaDescriptionEmbedding(merged);
+    if (embedding) {
+      updates = { ...updates, description_embedding: embedding };
+    }
+  }
+
   sm.persona_update(personaId, updates);
   return true;
 }

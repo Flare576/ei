@@ -16,6 +16,9 @@ import {
 } from "../prompts/index.js";
 import { filterMessagesForContext } from "./context-utils.js";
 import { filterHumanDataByVisibility } from "./prompt-context-builder.js";
+import { cosineSimilarity, computePersonaDescriptionEmbedding } from "./embedding-service.js";
+
+const REFLECTION_SIMILARITY_THRESHOLD = 0.80;
 
 // =============================================================================
 // MODEL HELPERS
@@ -228,6 +231,37 @@ export async function queueHeartbeatCheck(sm: StateManager, personaId: string, i
         b.exposure_desired - b.exposure_current - (a.exposure_desired - a.exposure_current)
     );
 
+  let driftContext: HeartbeatCheckPromptData["drift_context"];
+  const personRecord = sm.human_person_getByIdentifier("ei_persona", personaId);
+
+  if (personRecord?.embedding) {
+    let currentPersona = persona;
+
+    if (!currentPersona.description_embedding) {
+      const embedding = await computePersonaDescriptionEmbedding(currentPersona);
+      if (embedding) {
+        sm.persona_update(personaId, { description_embedding: embedding });
+        currentPersona = { ...currentPersona, description_embedding: embedding };
+      }
+    }
+
+    if (currentPersona.description_embedding) {
+      const lastAsked = currentPersona.reflection_last_asked
+        ? new Date(currentPersona.reflection_last_asked).getTime()
+        : 0;
+      if (new Date(personRecord.last_updated).getTime() > lastAsked) {
+        const similarity = cosineSimilarity(personRecord.embedding, currentPersona.description_embedding);
+        if (similarity < REFLECTION_SIMILARITY_THRESHOLD) {
+          driftContext = {
+            people_description: personRecord.description ?? '',
+            persona_description: currentPersona.long_description ?? '',
+          };
+          console.log(`[HeartbeatCheck ${persona.display_name}] Drift detected (similarity: ${similarity.toFixed(3)}) - including reflection context`);
+        }
+      }
+    }
+  }
+
   const promptData: HeartbeatCheckPromptData = {
     persona: {
       name: persona.display_name,
@@ -240,6 +274,7 @@ export async function queueHeartbeatCheck(sm: StateManager, personaId: string, i
     },
     recent_history: contextHistory.slice(-10),
     inactive_days: inactiveDays,
+    drift_context: driftContext,
   };
 
   const prompt = buildHeartbeatCheckPrompt(promptData);

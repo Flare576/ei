@@ -148,6 +148,8 @@ export interface PersonaEntity {
   last_heartbeat?: string;
   last_extraction?: string;
   tools?: string[];              // IDs of ToolDefinitions this persona can use. Empty/absent = no tool access.
+  reflection_last_asked?: string;   // ISO timestamp. Set ONLY when Persona explicitly surfaces identity drift (mentioned_reflection: true).
+  description_embedding?: number[]; // Embedding of long_description (short_description fallback). Excludes traits. See embedding-service.ts:getPersonaDescriptionText.
 }
 
 export interface PersonaCreationInput {

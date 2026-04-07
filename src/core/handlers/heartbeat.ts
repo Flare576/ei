@@ -27,6 +27,11 @@ export function handleHeartbeatCheck(response: LLMResponse, state: StateManager)
   state.persona_update(personaId, { last_heartbeat: now });
   state.queue_clearPersonaResponses(personaId, LLMNextStep.HandleHeartbeatCheck);
 
+  if (result.mentioned_reflection === true) {
+    state.persona_update(personaId, { reflection_last_asked: now });
+    console.log(`[HeartbeatCheck ${personaDisplayName}] Persona surfaced identity drift - reflection_last_asked set`);
+  }
+
   if (!result.should_respond) {
     console.log(`[HeartbeatCheck ${personaDisplayName}] Chose not to reach out (should_respond=false)`);
     return;
