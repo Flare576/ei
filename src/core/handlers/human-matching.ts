@@ -18,8 +18,7 @@ import { resolveMessageWindow, getMessageText, normalizeRoomMessages } from "./u
 export function handleTopicMatch(response: LLMResponse, state: StateManager): void {
   const result = response.parsed as ItemMatchResult | undefined;
   if (!result) {
-    console.error("[handleTopicMatch] No parsed result");
-    return;
+    throw new Error("[handleTopicMatch] No parsed result");
   }
 
   const personaId = response.request.data.personaId as string;
@@ -65,8 +64,7 @@ export function handleTopicMatch(response: LLMResponse, state: StateManager): vo
 export function handlePersonMatch(response: LLMResponse, state: StateManager): void {
   const result = response.parsed as ItemMatchResult | undefined;
   if (!result) {
-    console.error("[handlePersonMatch] No parsed result");
-    return;
+    throw new Error("[handlePersonMatch] No parsed result");
   }
 
   const personaId = response.request.data.personaId as string;
@@ -125,8 +123,7 @@ export async function handleTopicUpdate(response: LLMResponse, state: StateManag
   const candidateCategory = response.request.data.candidateCategory as string | undefined;
 
   if (!result.name || !result.description || result.sentiment === undefined) {
-    console.error("[handleTopicUpdate] Missing required fields in result");
-    return;
+    throw new Error(`[handleTopicUpdate] Missing required fields: name=${result.name}, description=${!!result.description}, sentiment=${result.sentiment}`);
   }
 
   const personaIds = personaId.split("|").filter(Boolean);
@@ -214,11 +211,11 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
   const candidateRelationship = response.request.data.candidateRelationship as string | undefined;
   const candidateIdentifiers = (response.request.data.candidateIdentifiers ?? []) as PersonIdentifier[];
 
-  if (!result.name || !result.description || result.sentiment === undefined) {
-    console.error("[handlePersonUpdate] Missing required fields in result");
-    return;
+  if (!result.description || result.sentiment === undefined) {
+    throw new Error(`[handlePersonUpdate] Missing required fields: description=${!!result.description}, sentiment=${result.sentiment}`);
   }
 
+  const candidateName = response.request.data.candidateName as string;
   const personaIds = personaId.split("|").filter(Boolean);
   const primaryId = personaIds[0] ?? personaId;
 
@@ -243,10 +240,10 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
   try {
     const embeddingService = getEmbeddingService();
     const relationship = result.relationship ?? candidateRelationship ?? existingPerson?.relationship;
-    const text = getPersonEmbeddingText({ name: result.name, relationship, description: result.description });
+    const text = getPersonEmbeddingText({ name: candidateName, relationship, description: result.description });
     embedding = await embeddingService.embed(text);
   } catch (err) {
-    console.warn(`[handlePersonUpdate] Failed to compute embedding for person "${result.name}":`, err);
+    console.warn(`[handlePersonUpdate] Failed to compute embedding for person "${candidateName}":`, err);
   }
 
   const exposureImpact = result.exposure_impact as ExposureImpact | undefined;
@@ -266,8 +263,8 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
     }));
     const allCandidateIds = [...llmIdentifiers, ...candidateIdentifiers];
     if (allCandidateIds.length === 0) {
-      const hasSpace = result.name.includes(' ');
-      allCandidateIds.push({ type: hasSpace ? "full_name" : "nickname", value: result.name, is_primary: true });
+      const hasSpace = candidateName.includes(' ');
+      allCandidateIds.push({ type: hasSpace ? "full_name" : "nickname", value: candidateName, is_primary: true });
     }
     const deduped: PersonIdentifier[] = [];
     for (const id of allCandidateIds) {
@@ -288,7 +285,7 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
 
   const person: Person = {
     id: itemId,
-    name: result.name,
+    name: candidateName,
     description: result.description,
     sentiment: result.sentiment,
     relationship: result.relationship ?? candidateRelationship ?? existingPerson?.relationship ?? "Unknown",
@@ -312,7 +309,8 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
     : state.messages_get(personaId);
   await validateAndStoreQuotes(result.quotes, allMessages, itemId, personaDisplayName, personaGroup, state);
 
-  console.log(`[handlePersonUpdate] ${isNewItem ? "Created" : "Updated"} person "${result.name}"`);
+  const resolvedName = resolvedIdentifiers.find(i => i.is_primary)?.value ?? candidateName;
+  console.log(`[handlePersonUpdate] ${isNewItem ? "Created" : "Updated"} person "${resolvedName}"`);
 }
 
 function normalizeText(text: string): string {

@@ -565,6 +565,7 @@ export function queuePersonUpdate(
         roomId: context.roomId,
         isNewItem,
         existingItemId: existingItem?.id,
+        candidateName: context.candidateName,
         candidateRelationship: context.candidateRelationship,
         candidateIdentifiers: isNewItem ? candidateIdentifiers : undefined,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),

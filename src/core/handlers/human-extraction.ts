@@ -9,7 +9,7 @@ import type {
   ItemMatchResult,
 } from "../../prompts/human/types.js";
 import { queueTopicMatch, queuePersonUpdate, type ExtractionContext } from "../orchestrators/index.js";
-import { markMessagesExtracted } from "./utils.js";
+import { markMessagesExtracted, resolveMessageWindow } from "./utils.js";
 import { BUILT_IN_FACT_NAMES } from "../constants/built-in-facts.js";
 import { getEmbeddingService, getItemEmbeddingText } from "../embedding-service.js";
 import { levenshtein, normalizeForMatch } from "../utils/levenshtein.js";
@@ -39,14 +39,16 @@ function matchPersonCandidate(
     }
   }
 
-  // Step 2: Fuzzy match (Levenshtein on candidate.name only)
-  const threshold = normName.length < 8 ? 2 : 3;
-  for (const person of people) {
-    const allValues = [
-      ...(person.identifiers ?? []).map(i => normalizeForMatch(i.value)),
-      normalizeForMatch(person.name),
-    ];
-    if (allValues.some(v => levenshtein(normName, v) <= threshold)) return person;
+  // Step 2: Fuzzy match — skip for short names (< 6 chars): "mike"↔"jake" = 2 edits, false positive.
+  if (normName.length >= 6) {
+    const threshold = normName.length < 10 ? 1 : 2;
+    for (const person of people) {
+      const allValues = [
+        ...(person.identifiers ?? []).map(i => normalizeForMatch(i.value)),
+        normalizeForMatch(person.name),
+      ];
+      if (allValues.some(v => levenshtein(normName, v) <= threshold)) return person;
+    }
   }
 
   return null;
@@ -158,6 +160,7 @@ export function handleHumanPersonScan(response: LLMResponse, state: StateManager
   const context = response.request.data as unknown as ExtractionContext;
   if (!context?.personaId) return;
 
+  const { messages_context, messages_analyze } = resolveMessageWindow(response, state);
   const human = state.getHuman();
 
   for (const candidate of result.people) {
@@ -172,6 +175,8 @@ export function handleHumanPersonScan(response: LLMResponse, state: StateManager
     const matchResult: ItemMatchResult = { matched_guid: matchedPerson?.id ?? null };
     queuePersonUpdate(matchResult, {
       ...context,
+      messages_context,
+      messages_analyze,
       candidateName: candidate.name,
       candidateDescription: candidate.description,
       candidateRelationship: candidate.relationship,
