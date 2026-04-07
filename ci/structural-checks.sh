@@ -75,6 +75,32 @@ if [ -z "$MISSING_FILES" ]; then pass "all prompt subdirs have types.ts + index.
 echo ""
 
 # ------------------------------------------------------------------
+# 6. Handlers must not silently drop queue items
+#    console.error() + return without throw = data graveyard.
+#    If a handler can't process an item, it must throw so the
+#    retry/DLQ machinery fires. (Bug: person records silently dropped
+#    when result.name was missing after prompt schema change.)
+# ------------------------------------------------------------------
+echo "Handlers — no silent drops (console.error + return without throw)"
+# Only check extraction handlers — these process LLM-extracted user data.
+# Losing a result here means data is gone. Heartbeat/dedup/rewrite returning
+# on error is fine (no user data at stake).
+EXTRACTION_HANDLERS="$ROOT/src/core/handlers/human-extraction.ts $ROOT/src/core/handlers/human-matching.ts"
+SILENT_DROPS=$(for file in $EXTRACTION_HANDLERS; do
+    python3 - "$file" <<'PYEOF'
+import sys, re
+content = open(sys.argv[1]).read()
+blocks = re.findall(r'console\.error\([^)]*\)[^}]{0,200}?return;', content, re.DOTALL)
+bad = [b for b in blocks if 'throw' not in b]
+if bad:
+    print(sys.argv[1])
+PYEOF
+  done || true)
+if [ -z "$SILENT_DROPS" ]; then pass "no silent drops in extraction handlers"; else fail "extraction handlers silently drop queue items — throw instead of return" "$SILENT_DROPS"; fi
+
+echo ""
+
+# ------------------------------------------------------------------
 # Summary
 # ------------------------------------------------------------------
 if [ "$FAILURES" -eq 0 ]; then

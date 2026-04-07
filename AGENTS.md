@@ -130,6 +130,13 @@ npm start        # Run the app
 - **Unit tests**: Pure functions, complex logic
 - **Integration tests**: Critical flows with mocks
 - **E2E validation**: Human testing (most reliable for UI)
+- **Structural invariant checks** (`ci/structural-checks.sh`): Fast grep-based fitness functions that enforce architectural rules without running the app. Run automatically in CI. Run locally with `bash ci/structural-checks.sh`. Currently guards:
+  - Prompt builders are synchronous (no `async`/`await`)
+  - Prompt builders are pure (no `.filter()`/`.reduce()` data logic — belongs in Processor)
+  - Prompt strings stay in `src/prompts/` (no escaped strings in handlers/orchestrators)
+  - All `*Overlay.tsx` components register with keyboard context
+  - Every prompt subdirectory has `types.ts` + `index.ts`
+  - Extraction handlers throw on bad results (no `console.error` + `return` — that's a silent data drop)
 
 ## Agent-Specific Notes
 
