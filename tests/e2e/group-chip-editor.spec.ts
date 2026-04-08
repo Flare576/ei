@@ -292,12 +292,11 @@ test.describe("GroupChipEditor — Facts tab", () => {
 
     const cards = page.locator(".ei-data-card");
 
-    // "Favorite Coffee" has persona_groups: ["Work"] — should have an active chip
-    const coffeeCard = cards.filter({ hasText: "Favorite Coffee" });
+    // Identify cards by description text (textarea .textContent) — not name (input value, invisible to hasText)
+    const coffeeCard = cards.filter({ hasText: "Loves espresso" });
     await expect(coffeeCard.locator(".ei-group-chip--active").filter({ hasText: "Work" })).toBeVisible({ timeout: 3000 });
 
-    // "Hobbies" has no persona_groups — should have no active chips
-    const hobbiesCard = cards.filter({ hasText: "Hobbies" });
+    const hobbiesCard = cards.filter({ hasText: "Hiking and reading" });
     await expect(hobbiesCard.locator(".ei-group-chip--active")).toHaveCount(0);
   });
 });
