@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { SliderControl } from './SliderControl';
+import { GroupChipEditor } from './GroupChipEditor';
 
 interface DataItemBase {
   id: string;
@@ -38,6 +39,7 @@ interface DataItemCardProps<T extends DataItemBase> {
   selectionMode?: boolean;
   isSelected?: boolean;
   onSelectionChange?: () => void;
+  availableGroups?: string[];
 }
 
 const defaultFormat = (v: number) => v.toFixed(2);
@@ -57,6 +59,7 @@ export const DataItemCard = <T extends DataItemBase>({
   selectionMode = false,
   isSelected = false,
   onSelectionChange,
+  availableGroups = [],
 }: DataItemCardProps<T>): React.ReactElement => {
   const cardRef = React.useRef<HTMLDivElement>(null);
   const [aiLoading, setAiLoading] = useState(false);
@@ -225,15 +228,12 @@ export const DataItemCard = <T extends DataItemBase>({
                 )}
               </div>
             )}
-            {item.persona_groups && item.persona_groups.length > 0 && (
-              <div className="ei-data-card__groups">
-                {item.persona_groups.map((group, idx) => (
-                  <span key={group} className={`ei-data-card__group-badge ${idx === 0 ? 'ei-data-card__group-badge--primary' : ''}`}>
-                    {group}
-                  </span>
-                ))}
-              </div>
-            )}
+            <GroupChipEditor
+              label="Groups"
+              value={item.persona_groups || []}
+              availableGroups={availableGroups}
+              onChange={(groups) => onChange('persona_groups' as keyof T, groups as T[keyof T])}
+            />
             <div className="ei-data-card__actions">
               <button 
                 className="ei-control-btn ei-control-btn--danger" 

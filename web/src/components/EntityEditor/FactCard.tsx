@@ -1,5 +1,6 @@
 import React from 'react';
 import { SliderControl } from './SliderControl';
+import { GroupChipEditor } from './GroupChipEditor';
 import type { Fact } from '../../../../src/core/types';
 
 interface SliderConfig {
@@ -20,6 +21,7 @@ interface FactCardProps {
   showMeta?: boolean;
   resolvePersonaName?: (id: string) => string;
   isBuiltIn?: boolean;
+  availableGroups?: string[];
 }
 
 const defaultFormat = (v: number) => v.toFixed(2);
@@ -34,6 +36,7 @@ export const FactCard = ({
   showMeta = true,
   resolvePersonaName,
   isBuiltIn = false,
+  availableGroups = [],
 }: FactCardProps): React.ReactElement => {
   const cardRef = React.useRef<HTMLDivElement>(null);
 
@@ -112,6 +115,12 @@ export const FactCard = ({
             <span>Updated: {formatTimestamp(fact.last_updated)}</span>
           </div>
         )}
+        <GroupChipEditor
+          label="Groups"
+          value={fact.persona_groups || []}
+          availableGroups={availableGroups}
+          onChange={(groups) => onChange('persona_groups', groups)}
+        />
         <div className="ei-data-card__actions">
           {!isBuiltIn && (
             <button

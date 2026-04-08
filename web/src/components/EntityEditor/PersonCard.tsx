@@ -1,5 +1,6 @@
 import React from 'react';
 import { SliderControl } from './SliderControl';
+import { GroupChipEditor } from './GroupChipEditor';
 import { BUILT_IN_IDENTIFIER_TYPES } from '../../../../src/core/constants/built-in-identifier-types.js';
 
 export interface PersonIdentifier {
@@ -54,6 +55,7 @@ interface PersonCardProps {
   onSelectionChange?: () => void;
   onCreatePersona?: (person: Person) => void;
   onUpdatePersona?: (person: Person) => void;
+  availableGroups?: string[];
 }
 
 const defaultFormat = (v: number) => v.toFixed(2);
@@ -116,6 +118,7 @@ export const PersonCard = ({
   onSelectionChange,
   onCreatePersona,
   onUpdatePersona,
+  availableGroups = [],
 }: PersonCardProps): React.ReactElement => {
   const cardRef = React.useRef<HTMLDivElement>(null);
 
@@ -479,6 +482,12 @@ export const PersonCard = ({
                 )}
               </div>
             )}
+            <GroupChipEditor
+              label="Groups"
+              value={person.persona_groups || []}
+              availableGroups={availableGroups}
+              onChange={(groups) => onChange('persona_groups', groups)}
+            />
             <div className="ei-data-card__actions">
               {onCreatePersona && (
                 <button
