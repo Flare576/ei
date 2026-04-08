@@ -250,10 +250,12 @@ export async function queueHeartbeatCheck(sm: StateManager, personaId: string, i
       const lastAsked = currentPersona.reflection_last_asked
         ? new Date(currentPersona.reflection_last_asked).getTime()
         : 0;
-      const personUpdatedSinceLastAsked = new Date(personRecord.last_updated).getTime() > lastAsked;
-      const cooldownExpired = lastAsked === 0 || (Date.now() - lastAsked >= REFLECTION_COOLDOWN_MS);
 
-      if (personUpdatedSinceLastAsked && cooldownExpired) {
+      // Gate: person must have been updated at least 1 week AFTER reflection was last asked.
+      // This handles both the cooldown AND the extraction echo — the ceremony extraction
+      // that fires right after a persona surfaces drift updates last_updated by minutes,
+      // which can never satisfy the 1-week offset requirement.
+      if (new Date(personRecord.last_updated).getTime() > lastAsked + REFLECTION_COOLDOWN_MS) {
         const similarity = cosineSimilarity(personRecord.embedding, currentPersona.description_embedding);
         if (similarity < REFLECTION_SIMILARITY_THRESHOLD) {
           driftContext = {
@@ -264,9 +266,6 @@ export async function queueHeartbeatCheck(sm: StateManager, personaId: string, i
         } else {
           console.log(`[HeartbeatCheck ${persona.display_name}] Person updated but no drift (similarity: ${similarity.toFixed(3)})`);
         }
-      } else if (personUpdatedSinceLastAsked && !cooldownExpired) {
-        const cooldownRemaining = Math.ceil((lastAsked + REFLECTION_COOLDOWN_MS - Date.now()) / (24 * 60 * 60 * 1000));
-        console.log(`[HeartbeatCheck ${persona.display_name}] Drift check suppressed — cooldown active (${cooldownRemaining}d remaining)`);
       }
     }
   }
