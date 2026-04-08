@@ -123,10 +123,6 @@ export async function handleTopicUpdate(response: LLMResponse, state: StateManag
   const roomId = response.request.data.roomId as string | undefined;
   const candidateCategory = response.request.data.candidateCategory as string | undefined;
 
-  if (!result.name || !result.description || result.sentiment === undefined) {
-    throw new Error(`[handleTopicUpdate] Missing required fields: name=${result.name}, description=${!!result.description}, sentiment=${result.sentiment}`);
-  }
-
   const personaIds = personaId.split("|").filter(Boolean);
   const primaryId = personaIds[0] ?? personaId;
 
@@ -147,14 +143,21 @@ export async function handleTopicUpdate(response: LLMResponse, state: StateManag
 
   const existingTopic = isNewItem ? undefined : human.topics.find(t => t.id === existingItemId);
 
+  const resolvedName = result.name || existingTopic?.name;
+  const resolvedDescription = typeof result.description === 'string' ? result.description : existingTopic?.description;
+
+  if (!resolvedName || !resolvedDescription || result.sentiment === undefined) {
+    throw new Error(`[handleTopicUpdate] Missing required fields: name=${resolvedName}, description=${!!resolvedDescription}, sentiment=${result.sentiment}`);
+  }
+
   let embedding: number[] | undefined;
   try {
     const embeddingService = getEmbeddingService();
     const category = result.category ?? candidateCategory ?? existingTopic?.category;
-    const text = getTopicEmbeddingText({ name: result.name, category, description: result.description });
+    const text = getTopicEmbeddingText({ name: resolvedName, category, description: resolvedDescription });
     embedding = await embeddingService.embed(text);
   } catch (err) {
-    console.warn(`[handleTopicUpdate] Failed to compute embedding for topic "${result.name}":`, err);
+    console.warn(`[handleTopicUpdate] Failed to compute embedding for topic "${resolvedName}":`, err);
   }
 
   const exposureImpact = result.exposure_impact as ExposureImpact | undefined;
@@ -167,8 +170,8 @@ export async function handleTopicUpdate(response: LLMResponse, state: StateManag
 
   const topic: Topic = {
     id: itemId,
-    name: result.name,
-    description: result.description,
+    name: resolvedName,
+    description: resolvedDescription,
     sentiment: result.sentiment,
     category: result.category ?? candidateCategory ?? existingTopic?.category,
     exposure_current: calculateExposureCurrent(exposureImpact, existingTopic?.exposure_current ?? 0),
@@ -189,7 +192,7 @@ export async function handleTopicUpdate(response: LLMResponse, state: StateManag
     : state.messages_get(personaId);
   await validateAndStoreQuotes(result.quotes, allMessages, itemId, personaDisplayName, personaGroup, state);
 
-  console.log(`[handleTopicUpdate] ${isNewItem ? "Created" : "Updated"} topic "${result.name}"`);
+  console.log(`[handleTopicUpdate] ${isNewItem ? "Created" : "Updated"} topic "${resolvedName}"`);
 }
 
 export async function handlePersonUpdate(response: LLMResponse, state: StateManager): Promise<void> {
