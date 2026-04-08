@@ -1666,6 +1666,7 @@ function App() {
             setPersonaCreatorInitialData({ mode: 'update', description: person.description, relationship: person.relationship, linkedPersonId: person.id });
             setShowPersonaCreator(true);
           }}
+          availableGroups={availableGroups}
         />
       </>
     )}

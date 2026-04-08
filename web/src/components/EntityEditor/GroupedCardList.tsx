@@ -31,7 +31,8 @@ type RenderCardFn<T extends DataItemBase> = (
   onAiAssist?: (systemPrompt: string, userPrompt: string) => Promise<string>,
   aiContext?: string,
   selectionMode?: boolean,
-  isSelected?: boolean
+  isSelected?: boolean,
+  availableGroups?: string[]
 ) => ReactNode;
 
 interface GroupedCardListProps<T extends DataItemBase> {
@@ -52,6 +53,7 @@ interface GroupedCardListProps<T extends DataItemBase> {
   selectionMode?: boolean;
   selectedIds?: string[];
   onSelectionChange?: (id: string) => void;
+  availableGroups?: string[];
 }
 
 const defaultGroupBy = <T extends DataItemBase>(item: T): string => {
@@ -76,8 +78,9 @@ export const GroupedCardList = <T extends DataItemBase>({
   selectionMode = false,
   selectedIds = [],
   onSelectionChange,
+  availableGroups = [],
   }: GroupedCardListProps<T>) => {
-  const defaultRenderCard: RenderCardFn<T> = (item, onItemChange, onItemSave, onItemDelete, isDirty, itemSliders, resolvePersonaName, onAiAssist, aiContext) => (
+  const defaultRenderCard: RenderCardFn<T> = (item, onItemChange, onItemSave, onItemDelete, isDirty, itemSliders, resolvePersonaNameFn, onAiAssistFn, aiCtx, selMode, isSel, groups) => (
     <DataItemCard
       item={item}
       sliders={itemSliders}
@@ -85,12 +88,13 @@ export const GroupedCardList = <T extends DataItemBase>({
       onSave={onItemSave}
       onDelete={onItemDelete}
       isDirty={isDirty}
-      resolvePersonaName={resolvePersonaName}
-      onAiAssist={onAiAssist}
-      aiContext={aiContext}
-      selectionMode={selectionMode}
-      isSelected={selectedIds.includes(item.id)}
+      resolvePersonaName={resolvePersonaNameFn}
+      onAiAssist={onAiAssistFn}
+      aiContext={aiCtx}
+      selectionMode={selMode}
+      isSelected={isSel}
       onSelectionChange={onSelectionChange ? () => onSelectionChange(item.id) : undefined}
+      availableGroups={groups}
     />
   );
 
@@ -162,7 +166,8 @@ export const GroupedCardList = <T extends DataItemBase>({
                   onAiAssist,
                   aiContext,
                   selectionMode,
-                  selectedIds.includes(item.id)
+                  selectedIds.includes(item.id),
+                  availableGroups
                 )}
               </div>
             </div>
@@ -215,7 +220,8 @@ export const GroupedCardList = <T extends DataItemBase>({
                     onAiAssist,
                     aiContext,
                     false,
-                    false
+                    false,
+                    availableGroups
                   )}
                 </div>
               ))}

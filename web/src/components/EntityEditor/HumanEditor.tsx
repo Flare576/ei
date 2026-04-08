@@ -65,6 +65,7 @@ interface HumanEditorProps {
   personas?: PersonaOption[];
   onCreatePersona?: (person: Person) => void;
   onUpdatePersona?: (person: Person) => void;
+  availableGroups?: string[];
 }
 
 const tabs = [
@@ -91,6 +92,7 @@ export const HumanEditor = ({
   personas,
   onCreatePersona,
   onUpdatePersona,
+  availableGroups = [],
 }: HumanEditorProps) => {
   const [activeTab, setActiveTab] = useState('facts');
   const [localFacts, setLocalFacts] = useState<Fact[]>(human.facts || []);
@@ -378,6 +380,7 @@ export const HumanEditor = ({
             onAdd={handleFactAdd}
             dirtyIds={dirtyFactIds}
             resolvePersonaName={resolvePersonaName}
+            availableGroups={availableGroups}
           />
         );
       case 'topics':
@@ -391,6 +394,7 @@ export const HumanEditor = ({
               dirtyIds={dirtyTopicIds}
               resolvePersonaName={resolvePersonaName}
               rewriteModelSet={!!human.settings?.rewrite_model}
+              availableGroups={availableGroups}
               isDedupeMode={isDedupeMode}
               selectedIds={Array.from(selectedIds)}
               onToggleDedupeMode={handleToggleDedupeMode}
@@ -410,6 +414,7 @@ export const HumanEditor = ({
              resolvePersonaName={resolvePersonaName}
              personas={personas}
              rewriteModelSet={!!human.settings?.rewrite_model}
+             availableGroups={availableGroups}
              isDedupeMode={isDedupeMode}
              selectedIds={Array.from(selectedIds)}
              onToggleDedupeMode={handleToggleDedupeMode}
