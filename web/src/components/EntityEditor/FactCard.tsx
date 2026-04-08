@@ -85,6 +85,13 @@ export const FactCard = ({
         />
       </div>
 
+      <GroupChipEditor
+        value={fact.persona_groups || []}
+        availableGroups={availableGroups}
+        onChange={(groups) => onChange('persona_groups', groups)}
+        compact
+      />
+
       <div className="ei-data-card__body">
         <textarea
           className="ei-data-card__description"
@@ -115,12 +122,6 @@ export const FactCard = ({
             <span>Updated: {formatTimestamp(fact.last_updated)}</span>
           </div>
         )}
-        <GroupChipEditor
-          label="Groups"
-          value={fact.persona_groups || []}
-          availableGroups={availableGroups}
-          onChange={(groups) => onChange('persona_groups', groups)}
-        />
         <div className="ei-data-card__actions">
           {!isBuiltIn && (
             <button

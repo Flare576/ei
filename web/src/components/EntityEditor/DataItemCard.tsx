@@ -143,6 +143,15 @@ export const DataItemCard = <T extends DataItemBase>({
           />
         </div>
 
+        {!selectionMode && (
+          <GroupChipEditor
+            value={item.persona_groups || []}
+            availableGroups={availableGroups}
+            onChange={(groups) => onChange('persona_groups' as keyof T, groups as T[keyof T])}
+            compact
+          />
+        )}
+
         {renderAfterHeader && !selectionMode && renderAfterHeader()}
 
         <div className="ei-data-card__body">
@@ -228,12 +237,6 @@ export const DataItemCard = <T extends DataItemBase>({
                 )}
               </div>
             )}
-            <GroupChipEditor
-              label="Groups"
-              value={item.persona_groups || []}
-              availableGroups={availableGroups}
-              onChange={(groups) => onChange('persona_groups' as keyof T, groups as T[keyof T])}
-            />
             <div className="ei-data-card__actions">
               <button 
                 className="ei-control-btn ei-control-btn--danger" 
