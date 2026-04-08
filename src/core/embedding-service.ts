@@ -242,7 +242,7 @@ function createBunService(): EmbeddingService {
       const cacheDir = process.env.EI_DATA_PATH
         ? path.join(process.env.EI_DATA_PATH, 'embeddings')
         : path.join(os.homedir(), '.local', 'share', 'ei', 'embeddings');
-      embedder = await mod.FlagEmbedding.init({ model: mod.EmbeddingModel.AllMiniLML6V2, cacheDir });
+      embedder = await mod.FlagEmbedding.init({ model: mod.EmbeddingModel.AllMiniLML6V2, cacheDir, showDownloadProgress: false });
       return embedder;
     })();
     
