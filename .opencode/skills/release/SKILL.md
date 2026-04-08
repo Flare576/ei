@@ -89,7 +89,20 @@ grep -E "(passed|failed)" .sisyphus/evidence/e2e-pre-release.txt | tail -5
 ```
 If any test fails: STOP.
 
-**After all 8 checks pass, report a clean summary to Flare and ask for explicit go-ahead before cutting the release.**
+### Check 9 — TUI E2E tests
+CI cannot run these — `tui-e2e-experimental.yml` is manual-trigger only because `tui-test` requires Node 20 and native PTY bindings that break on newer versions. The skill runs them locally where Node 20 is available via nvm.
+
+```bash
+cd tui && npm run test:e2e > ../.sisyphus/evidence/tui-e2e-pre-release.txt 2>&1; echo "EXIT: $?"
+```
+
+The `npm run test:e2e` script in `tui/package.json` handles the `nvm use 20` switch automatically. Save to file, then check:
+```bash
+grep -E "(passed|failed|FAILED)" ../.sisyphus/evidence/tui-e2e-pre-release.txt | tail -5
+```
+If any test fails: STOP.
+
+**After all 9 checks pass, report a clean summary to Flare and ask for explicit go-ahead before cutting the release.**
 
 ---
 
@@ -174,7 +187,7 @@ The publish job gates on CI — if tests fail, npm doesn't get updated even thou
 
 ## Hard Rules
 
-- Never skip a preflight check, even if "we just ran tests"
+- Never skip a preflight check, even if "we just ran tests" — this includes Check 9 (TUI E2E), which CI cannot run
 - Never tag from a branch — must be on `main`
 - Never tag with uncommitted changes unrelated to the version bump
 - Always confirm the target version with Flare before bumping `package.json`
