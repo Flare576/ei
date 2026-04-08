@@ -26,6 +26,7 @@ import { ContextStatus } from "../../../src/core/types.js";
 import type { ClaudeCodeSettings } from "../../../src/integrations/claude-code/types.js";
 import type { CursorSettings } from "../../../src/integrations/cursor/types.js";
 import { BUILT_IN_FACT_NAMES } from "../../../src/core/constants/built-in-facts.js";
+import { BUILT_IN_IDENTIFIER_TYPES } from "../../../src/core/constants/built-in-identifier-types.js";
 
 // =============================================================================
 // TYPES FOR YAML EDITING
@@ -434,18 +435,33 @@ function toYAMLIdentifiers(identifiers: PersonIdentifier[]): YAMLPersonIdentifie
   });
 }
 
-function knownTypesComment(identifiers: PersonIdentifier[]): string {
-  const types = [...new Set(identifiers.map(i => i.type))];
-  if (types.length === 0) return '# Run a ceremony to auto-populate';
-  return `# Known types: ${types.join(', ')}`;
+function knownTypesComment(personaLookup?: Map<string, string>): string {
+  const lines = [`# Valid types: ${BUILT_IN_IDENTIFIER_TYPES.join(', ')}`];
+  if (personaLookup && personaLookup.size > 0) {
+    lines.push(`# Personas: ${Array.from(personaLookup.values()).join(', ')}`);
+  }
+  return lines.join('\n');
+}
+
+type WithReadOnlyFields = {
+  learned_on?: string;
+  learned_by?: string;
+  last_updated: string;
+  last_changed_by?: string;
+  last_mentioned?: string;
+};
+
+function readOnlyToEnd<T extends WithReadOnlyFields>(item: T): T {
+  const { learned_on, learned_by, last_updated, last_changed_by, last_mentioned, ...rest } = item;
+  return { ...rest, learned_by, learned_on, last_changed_by, last_updated, last_mentioned } as T;
 }
 
 export function humanToYAML(human: HumanEntity, personaLookup?: Map<string, string>): string {
   const data: EditableHumanData = {
-    facts: human.facts.map(f => ({ ...f, _delete: false })),
-    topics: human.topics.map(t => ({ ...t, _delete: false })),
+    facts: human.facts.map(f => { const { interested_personas: _ip, ...rest } = readOnlyToEnd(f); return { ...rest, _delete: false }; }),
+    topics: human.topics.map(t => { const { interested_personas: _ip, ...rest } = readOnlyToEnd(t); return { ...rest, _delete: false }; }),
     people: human.people.map(p => {
-      const { identifiers, ...rest } = p;
+      const { identifiers, interested_personas: _ip, ...rest } = readOnlyToEnd(p);
       return {
         ...rest,
         identifiers: toYAMLIdentifiers(identifiers ?? []),
@@ -454,8 +470,7 @@ export function humanToYAML(human: HumanEntity, personaLookup?: Map<string, stri
     }),
   };
   
-  const personComments = human.people.map(p => knownTypesComment(p.identifiers ?? []));
-  let commentIndex = 0;
+  const personComment = knownTypesComment(personaLookup);
 
   return YAML.stringify(data, {
     lineWidth: 0,
@@ -471,9 +486,10 @@ export function humanToYAML(human: HumanEntity, personaLookup?: Map<string, stri
     return `${indent}# [read-only] ${key}${displayName}`;
   })
   .replace(/^(\s+)(learned_on: .+)$/mg, '$1# [read-only] $2')
-  .replace(/^(\s+)(identifiers:)/mg, (_, indent, key) => {
-    const comment = personComments[commentIndex++] ?? '';
-    return `${indent}${comment}\n${indent}${key}`;
+  .replace(/^(\s+)(last_mentioned: .+)$/mg, '$1# [read-only] $2')
+  .replace(/^(\s+)(last_updated: .+)$/mg, '$1# [read-only] $2')
+  .replace(/^(\s+)(identifiers:)/mg, (_, indent, _key) => {
+    return `${indent}${personComment}\n${indent}identifiers:`;
   });
 }
 
