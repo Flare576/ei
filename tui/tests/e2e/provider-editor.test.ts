@@ -5,67 +5,7 @@ import { join } from "path";
 import { BUN_PATH, getTestDataPath } from "./fixtures.js";
 
 const MOCK_PORT = 3108;
-const TEST_DATA_PATH = getTestDataPath("provider-editor");
 const WITH_PROVIDER_DATA_PATH = getTestDataPath("provider-editor-existing");
-
-function createMinimalCheckpoint() {
-  const timestamp = new Date().toISOString();
-  return {
-    version: 1,
-    timestamp,
-    human: {
-      entity: "human",
-      facts: [],
-      traits: [],
-      topics: [],
-      people: [],
-      quotes: [],
-      last_updated: timestamp,
-      last_activity: timestamp,
-      settings: {
-        auto_save_interval_ms: 999999999,
-        ceremony: {
-          time: "09:00",
-          last_ceremony: timestamp,
-        },
-      },
-    },
-    personas: {
-      ei: {
-        entity: {
-          entity: "system",
-          id: "ei",
-          display_name: "Ei",
-          aliases: ["Ei"],
-          short_description: "Your personal companion",
-          long_description: "A friendly AI companion for testing",
-          traits: [],
-          topics: [],
-          facts: [],
-          people: [],
-          is_paused: false,
-          is_archived: false,
-          is_static: false,
-          last_updated: timestamp,
-          last_activity: timestamp,
-          last_heartbeat: timestamp,
-          heartbeat_delay_ms: 999999999,
-        },
-        messages: [
-          {
-            id: "msg-1",
-            role: "system",
-            verbal_response: "Hello! I'm ready for testing.",
-            timestamp,
-            read: true,
-            context_status: "default",
-          },
-        ],
-      },
-    },
-    queue: [],
-  };
-}
 
 function createCheckpointWithExistingProvider() {
   const timestamp = new Date().toISOString();
@@ -138,12 +78,6 @@ function createCheckpointWithExistingProvider() {
 
 const mockServer = new MockLLMServerImpl();
 
-rmSync(TEST_DATA_PATH, { recursive: true, force: true });
-mkdirSync(TEST_DATA_PATH, { recursive: true });
-const checkpoint = createMinimalCheckpoint();
-const statePath = join(TEST_DATA_PATH, "state.json");
-writeFileSync(statePath, JSON.stringify(checkpoint, null, 2));
-
 rmSync(WITH_PROVIDER_DATA_PATH, { recursive: true, force: true });
 mkdirSync(WITH_PROVIDER_DATA_PATH, { recursive: true });
 const checkpointWithProvider = createCheckpointWithExistingProvider();
@@ -175,28 +109,25 @@ process.on("SIGTERM", () => {
   mockServer.stop().then(() => process.exit(0));
 });
 
-test.use({
-  program: {
-    file: BUN_PATH,
-    args: ["run", "dev"],
-  },
-  rows: 30,
-  columns: 100,
-  env: {
-    EI_DATA_PATH: TEST_DATA_PATH,
-    PATH: process.env.PATH!,
-    HOME: process.env.HOME!,
-    TERM: "xterm-256color",
-    EDITOR: `bash -c 'sed -i "" "s/My Provider/EditorProv/;s|https://api.example.com/v1|http://localhost:${MOCK_PORT}/v1|" "$1"' --`,
-  },
-});
-
 test.describe("/provider new — editor flow", () => {
+  test.use({
+    program: {
+      file: BUN_PATH,
+      args: ["run", "dev"],
+    },
+    rows: 30,
+    columns: 100,
+    env: {
+      EI_DATA_PATH: WITH_PROVIDER_DATA_PATH,
+      PATH: process.env.PATH!,
+      HOME: process.env.HOME!,
+      TERM: "xterm-256color",
+      EDITOR: `bash -c 'sed -i "" "s/My Provider/EditorProv/;s|https://api.example.com/v1|http://localhost:${MOCK_PORT}/v1|" "$1"' --`,
+    },
+  });
+
   test("/provider new opens editor, creates provider, shows 'Provider EditorProv created!'", async ({ terminal }) => {
-    // Welcome overlay appears when no accounts exist (local LLM detection fails)
-    await expect(terminal.getByText("Welcome to Ei!")).toBeVisible({ timeout: 15000 });
-    terminal.keyEscape(); // Dismiss welcome overlay
-    await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 15000 });
     terminal.write("/provider new");
     terminal.submit();
     await expect(terminal.getByText(/EditorProv/gi)).toBeVisible({ timeout: 10000 });
