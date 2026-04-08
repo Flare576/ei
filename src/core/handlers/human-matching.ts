@@ -122,6 +122,7 @@ export async function handleTopicUpdate(response: LLMResponse, state: StateManag
   const personaDisplayName = response.request.data.personaDisplayName as string;
   const roomId = response.request.data.roomId as string | undefined;
   const candidateCategory = response.request.data.candidateCategory as string | undefined;
+  const candidateName = response.request.data.candidateName as string | undefined;
 
   const personaIds = personaId.split("|").filter(Boolean);
   const primaryId = personaIds[0] ?? personaId;
@@ -143,7 +144,7 @@ export async function handleTopicUpdate(response: LLMResponse, state: StateManag
 
   const existingTopic = isNewItem ? undefined : human.topics.find(t => t.id === existingItemId);
 
-  const resolvedName = result.name || existingTopic?.name;
+  const resolvedName = result.name || existingTopic?.name || candidateName;
   const resolvedDescription = typeof result.description === 'string' ? result.description : existingTopic?.description;
 
   if (!resolvedName || !resolvedDescription || result.sentiment === undefined) {

@@ -422,6 +422,7 @@ export function queueTopicUpdate(
         roomId: context.roomId,
         isNewItem,
         existingItemId: existingItem?.id,
+        candidateName: isNewItem ? context.candidateName : undefined,
         candidateCategory: context.candidateCategory,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
       },
