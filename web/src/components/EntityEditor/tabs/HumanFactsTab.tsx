@@ -21,6 +21,7 @@ interface HumanFactsTabProps {
   onAdd: () => void;
   dirtyIds: Set<string>;
   resolvePersonaName?: (id: string) => string;
+  availableGroups?: string[];
 }
 
 const factSliders: SliderConfig[] = [
@@ -35,6 +36,7 @@ export const HumanFactsTab = ({
   onAdd,
   dirtyIds,
   resolvePersonaName,
+  availableGroups = [],
 }: HumanFactsTabProps) => {
   const renderFactCard = (
     item: Fact,
@@ -43,7 +45,12 @@ export const HumanFactsTab = ({
     onItemDelete: () => void,
     isDirty: boolean,
     sliders: SliderConfig[],
-    resolvePersonaName?: (id: string) => string
+    resolvePersonaNameFn?: (id: string) => string,
+    _onAiAssist?: unknown,
+    _aiContext?: unknown,
+    _selectionMode?: unknown,
+    _isSelected?: unknown,
+    groups: string[] = []
   ) => (
     <FactCard
       key={item.id}
@@ -53,8 +60,9 @@ export const HumanFactsTab = ({
       onSave={onItemSave}
       onDelete={onItemDelete}
       isDirty={isDirty}
-      resolvePersonaName={resolvePersonaName}
+      resolvePersonaName={resolvePersonaNameFn}
       isBuiltIn={BUILT_IN_FACT_NAMES.has(item.name)}
+      availableGroups={groups}
     />
   );
 
@@ -69,6 +77,8 @@ export const HumanFactsTab = ({
       dirtyIds={dirtyIds}
       renderCard={renderFactCard}
       resolvePersonaName={resolvePersonaName}
+      availableGroups={availableGroups}
+      hideGroupHeaders
     />
   );
 };

@@ -1,5 +1,6 @@
 import React from 'react';
 import { SliderControl } from './SliderControl';
+import { GroupChipEditor } from './GroupChipEditor';
 import { BUILT_IN_IDENTIFIER_TYPES } from '../../../../src/core/constants/built-in-identifier-types.js';
 
 export interface PersonIdentifier {
@@ -54,6 +55,7 @@ interface PersonCardProps {
   onSelectionChange?: () => void;
   onCreatePersona?: (person: Person) => void;
   onUpdatePersona?: (person: Person) => void;
+  availableGroups?: string[];
 }
 
 const defaultFormat = (v: number) => v.toFixed(2);
@@ -116,6 +118,7 @@ export const PersonCard = ({
   onSelectionChange,
   onCreatePersona,
   onUpdatePersona,
+  availableGroups = [],
 }: PersonCardProps): React.ReactElement => {
   const cardRef = React.useRef<HTMLDivElement>(null);
 
@@ -123,6 +126,7 @@ export const PersonCard = ({
   const [newIdValue, setNewIdValue] = React.useState('');
   const [isAddingCustomType, setIsAddingCustomType] = React.useState(false);
   const [customTypeInput, setCustomTypeInput] = React.useState('');
+  const [identifiersExpanded, setIdentifiersExpanded] = React.useState(false);
 
   const identifiers: PersonIdentifier[] = person.identifiers ?? [];
 
@@ -255,169 +259,187 @@ export const PersonCard = ({
           </span>
         </div>
 
+        {!selectionMode && (
+          <GroupChipEditor
+            value={person.persona_groups || []}
+            availableGroups={availableGroups}
+            onChange={(groups) => onChange('persona_groups', groups)}
+            compact
+          />
+        )}
+
         <div className="ei-data-card__body">
 
-          <div className="ei-identifiers">
-            <div className="ei-identifiers__header">
-              <span className="ei-identifiers__label">Identifiers</span>
-            </div>
-
+          <div className="ei-identifiers-collapsible">
             {isPreMigration && (
               <div className="ei-identifiers__migration-note">
                 Migration pending — no identifiers yet
               </div>
             )}
+            <button
+              type="button"
+              className="ei-identifiers-collapsible__toggle"
+              onClick={() => setIdentifiersExpanded(v => !v)}
+              aria-expanded={identifiersExpanded}
+            >
+              <span className="ei-identifiers-collapsible__arrow">{identifiersExpanded ? '▾' : '▸'}</span>
+              Identifiers ({identifiers.length})
+            </button>
 
-            {!isPreMigration && identifiers.length === 0 && (
-              <div className="ei-identifiers__empty">
-                No identifiers yet — add one below
-              </div>
-            )}
+            {identifiersExpanded && (
+              <div className="ei-identifiers">
+                {!isPreMigration && identifiers.length === 0 && (
+                  <div className="ei-identifiers__empty">
+                    No identifiers yet — add one below
+                  </div>
+                )}
 
-            {!isPreMigration && identifiers.length > 0 && (
-              <div className="ei-identifiers__list">
-                {identifiers.map((id, index) => {
-                    const displayValue =
-                    id.type === 'Ei Persona' && resolvePersonaName
-                      ? resolvePersonaName(id.value)
-                      : id.value;
+                {!isPreMigration && identifiers.length > 0 && (
+                  <div className="ei-identifiers__list">
+                    {identifiers.map((id, index) => {
+                        const displayValue =
+                        id.type === 'Ei Persona' && resolvePersonaName
+                          ? resolvePersonaName(id.value)
+                          : id.value;
 
-                  return (
-                    <div
-                      key={index}
-                      className={`ei-identifier-row${id.is_primary ? ' ei-identifier-row--primary' : ''}`}
-                    >
-                      <span className="ei-identifier-row__type-badge">{id.type}</span>
-
-                      {id.type === 'Ei Persona' && personas.length > 0 && !selectionMode ? (
-                        <select
-                          className="ei-identifier-row__value ei-select"
-                          value={id.value}
-                          onChange={e => handleIdentifierValueChange(index, e.target.value)}
-                          aria-label={`${id.type} identifier value`}
+                      return (
+                        <div
+                          key={index}
+                          className={`ei-identifier-row${id.is_primary ? ' ei-identifier-row--primary' : ''}`}
                         >
-                          <option value="">— pick a persona —</option>
-                          {personas.map(p => (
-                            <option key={p.id} value={p.id}>{p.display_name}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <input
-                          type="text"
-                          className="ei-identifier-row__value"
-                          value={id.type === 'Ei Persona' ? displayValue : id.value}
-                          onChange={e => handleIdentifierValueChange(index, e.target.value)}
-                          title={id.type === 'Ei Persona' ? `UUID: ${id.value}` : undefined}
-                          readOnly={selectionMode || id.type === 'Ei Persona'}
-                          aria-label={`${id.type} identifier value`}
-                        />
-                      )}
+                          <span className="ei-identifier-row__type-badge">{id.type}</span>
 
-                      {!selectionMode && (
-                        <div className="ei-identifier-row__actions">
-                          <button
-                            className={`ei-identifier-row__primary-btn${id.is_primary ? ' ei-identifier-row__primary-btn--active' : ''}`}
-                            onClick={() => handleSetPrimary(index)}
-                            title={id.is_primary ? 'Primary identifier' : 'Set as primary'}
-                            aria-label={id.is_primary ? 'Primary identifier (active)' : 'Set as primary identifier'}
-                          >
-                            {id.is_primary ? '★' : '☆'}
-                          </button>
-                          <button
-                            className="ei-identifier-row__delete-btn"
-                            onClick={() => handleDeleteIdentifier(index)}
-                            title="Delete identifier"
-                            aria-label={`Delete ${id.type} identifier`}
-                          >
-                            ×
-                          </button>
+                          {id.type === 'Ei Persona' && personas.length > 0 && !selectionMode ? (
+                            <select
+                              className="ei-identifier-row__value ei-select"
+                              value={id.value}
+                              onChange={e => handleIdentifierValueChange(index, e.target.value)}
+                              aria-label={`${id.type} identifier value`}
+                            >
+                              <option value="">— pick a persona —</option>
+                              {personas.map(p => (
+                                <option key={p.id} value={p.id}>{p.display_name}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              type="text"
+                              className="ei-identifier-row__value"
+                              value={id.type === 'Ei Persona' ? displayValue : id.value}
+                              onChange={e => handleIdentifierValueChange(index, e.target.value)}
+                              title={id.type === 'Ei Persona' ? `UUID: ${id.value}` : undefined}
+                              readOnly={selectionMode || id.type === 'Ei Persona'}
+                              aria-label={`${id.type} identifier value`}
+                            />
+                          )}
+
+                          {!selectionMode && (
+                            <div className="ei-identifier-row__actions">
+                              <button
+                                className={`ei-identifier-row__primary-btn${id.is_primary ? ' ei-identifier-row__primary-btn--active' : ''}`}
+                                onClick={() => handleSetPrimary(index)}
+                                title={id.is_primary ? 'Primary identifier' : 'Set as primary'}
+                                aria-label={id.is_primary ? 'Primary identifier (active)' : 'Set as primary identifier'}
+                              >
+                                {id.is_primary ? '★' : '☆'}
+                              </button>
+                              <button
+                                className="ei-identifier-row__delete-btn"
+                                onClick={() => handleDeleteIdentifier(index)}
+                                title="Delete identifier"
+                                aria-label={`Delete ${id.type} identifier`}
+                              >
+                                ×
+                              </button>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {!selectionMode && !isPreMigration && (
-              <div className="ei-identifiers__add-row">
-                {isAddingCustomType ? (
-                  <input
-                    type="text"
-                    className="ei-identifiers__type-input"
-                    placeholder="Custom type…"
-                    value={customTypeInput}
-                    onChange={e => setCustomTypeInput(e.target.value)}
-                    autoFocus
-                    aria-label="Custom identifier type"
-                    onKeyDown={e => {
-                      if (e.key === 'Escape') {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        setIsAddingCustomType(false);
-                        setCustomTypeInput('');
-                      }
-                    }}
-                  />
-                ) : (
-                  <select
-                    className="ei-identifiers__type-select ei-select"
-                    value={newIdType}
-                    onChange={handleNewIdTypeChange}
-                    aria-label="Identifier type"
-                  >
-                    {typeOptions.map(t => (
-                      <option key={t} value={t}>{t}</option>
-                    ))}
-                    <option value="__custom__">+ Add new type…</option>
-                  </select>
+                      );
+                    })}
+                  </div>
                 )}
 
-                {(isAddingCustomType ? customTypeInput : newIdType) === 'Ei Persona' && personas.length > 0 ? (
-                  <select
-                    className="ei-identifiers__value-input ei-select"
-                    value={newIdValue}
-                    onChange={e => setNewIdValue(e.target.value)}
-                    aria-label="Select persona"
-                  >
-                    <option value="">— pick a persona —</option>
-                    {personas.map(p => (
-                      <option key={p.id} value={p.id}>{p.display_name}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    type="text"
-                    className="ei-identifiers__value-input"
-                    placeholder={
-                      (isAddingCustomType ? customTypeInput : newIdType) === 'Ei Persona'
-                        ? 'Persona UUID…'
-                        : 'Value…'
-                    }
-                    value={newIdValue}
-                    onChange={e => setNewIdValue(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') handleAddIdentifier();
-                    }}
-                    aria-label="Identifier value"
-                  />
+                {!selectionMode && !isPreMigration && (
+                  <div className="ei-identifiers__add-row">
+                    {isAddingCustomType ? (
+                      <input
+                        type="text"
+                        className="ei-identifiers__type-input"
+                        placeholder="Custom type…"
+                        value={customTypeInput}
+                        onChange={e => setCustomTypeInput(e.target.value)}
+                        autoFocus
+                        aria-label="Custom identifier type"
+                        onKeyDown={e => {
+                          if (e.key === 'Escape') {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            setIsAddingCustomType(false);
+                            setCustomTypeInput('');
+                          }
+                        }}
+                      />
+                    ) : (
+                      <select
+                        className="ei-identifiers__type-select ei-select"
+                        value={newIdType}
+                        onChange={handleNewIdTypeChange}
+                        aria-label="Identifier type"
+                      >
+                        {typeOptions.map(t => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                        <option value="__custom__">+ Add new type…</option>
+                      </select>
+                    )}
+
+                    {(isAddingCustomType ? customTypeInput : newIdType) === 'Ei Persona' && personas.length > 0 ? (
+                      <select
+                        className="ei-identifiers__value-input ei-select"
+                        value={newIdValue}
+                        onChange={e => setNewIdValue(e.target.value)}
+                        aria-label="Select persona"
+                      >
+                        <option value="">— pick a persona —</option>
+                        {personas.map(p => (
+                          <option key={p.id} value={p.id}>{p.display_name}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        className="ei-identifiers__value-input"
+                        placeholder={
+                          (isAddingCustomType ? customTypeInput : newIdType) === 'Ei Persona'
+                            ? 'Persona UUID…'
+                            : 'Value…'
+                        }
+                        value={newIdValue}
+                        onChange={e => setNewIdValue(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') handleAddIdentifier();
+                        }}
+                        aria-label="Identifier value"
+                      />
+                    )}
+
+                    <button
+                      className="ei-btn ei-btn--secondary ei-identifiers__add-btn"
+                      onClick={handleAddIdentifier}
+                      disabled={!(isAddingCustomType ? customTypeInput.trim() : newIdType) || !newIdValue.trim()}
+                      title="Add identifier"
+                    >
+                      Add
+                    </button>
+                  </div>
                 )}
 
-                <button
-                  className="ei-btn ei-btn--secondary ei-identifiers__add-btn"
-                  onClick={handleAddIdentifier}
-                  disabled={!(isAddingCustomType ? customTypeInput.trim() : newIdType) || !newIdValue.trim()}
-                  title="Add identifier"
-                >
-                  Add
-                </button>
+                {!selectionMode && !isPreMigration && (isAddingCustomType ? customTypeInput : newIdType) === 'Ei Persona' && (
+                  <p className="ei-identifiers__hint">
+                    Enter the persona's UUID, or use the persona editor to link from there
+                  </p>
+                )}
               </div>
-            )}
-
-            {!selectionMode && !isPreMigration && (isAddingCustomType ? customTypeInput : newIdType) === 'Ei Persona' && (
-              <p className="ei-identifiers__hint">
-                Enter the persona's UUID, or use the persona editor to link from there
-              </p>
             )}
           </div>
 

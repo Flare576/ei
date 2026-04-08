@@ -1,6 +1,7 @@
 import React from 'react';
 import { GroupedCardList } from '../GroupedCardList';
-import { PersonCard, PersonIdentifier, PersonaOption } from '../PersonCard';
+import { PersonCard, PersonIdentifier } from '../PersonCard';
+import type { PersonaOption } from '../PersonCard';
 
 interface Person {
   id: string;
@@ -28,12 +29,12 @@ interface HumanPeopleTabProps {
   onAdd: () => void;
   dirtyIds: Set<string>;
   resolvePersonaName?: (id: string) => string;
-  personas?: PersonaOption[];
   rewriteModelSet: boolean;
   onCreatePersona?: (person: Person) => void;
   onUpdatePersona?: (person: Person) => void;
+  availableGroups?: string[];
+  personas?: PersonaOption[];
 
-  // Dedupe selection mode props
   isDedupeMode: boolean;
   selectedIds: string[];
   dedupingIds: string[];
@@ -60,6 +61,7 @@ export const HumanPeopleTab = ({
   rewriteModelSet,
   onCreatePersona,
   onUpdatePersona,
+  availableGroups = [],
   isDedupeMode,
   selectedIds,
   onToggleDedupeMode,
@@ -79,7 +81,8 @@ export const HumanPeopleTab = ({
     _onAiAssist?: unknown,
     _aiContext?: unknown,
     selectionMode?: boolean,
-    isSelected?: boolean
+    isSelected?: boolean,
+    groups: string[] = []
   ) => (
     <PersonCard
       person={person}
@@ -95,6 +98,7 @@ export const HumanPeopleTab = ({
       selectionMode={selectionMode}
       isSelected={isSelected}
       onSelectionChange={onSelectionChange ? () => onSelectionChange(person.id) : undefined}
+      availableGroups={groups}
     />
   );
 
@@ -160,6 +164,8 @@ export const HumanPeopleTab = ({
         selectionMode={isDedupeMode}
         selectedIds={selectedIds}
         onSelectionChange={onSelectionChange}
+        availableGroups={availableGroups}
+        hideGroupHeaders
       />
 
       {isDedupeMode && selectedIds.length >= 2 && (

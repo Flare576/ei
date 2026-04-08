@@ -40,6 +40,11 @@ async function openPeopleTab(page: import("@playwright/test").Page) {
   await page.locator('button[role="tab"]').filter({ hasText: "People" }).click();
 }
 
+async function expandIdentifiers(page: import("@playwright/test").Page) {
+  await page.locator(".ei-identifiers-collapsible__toggle").first().click();
+  await expect(page.locator(".ei-identifiers__add-row")).toBeVisible({ timeout: 3000 });
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Checkpoint builders
 // ─────────────────────────────────────────────────────────────────────────────
@@ -267,6 +272,7 @@ test.describe("Person Identifiers UI", () => {
 
     await openPeopleTab(page);
     await expect(page.locator(".ei-data-card").first()).toBeVisible({ timeout: 5000 });
+    await expandIdentifiers(page);
 
     await expect(page.locator(".ei-identifiers__empty")).toContainText("No identifiers yet");
     await expect(page.locator(".ei-identifiers__add-row")).toBeVisible();
@@ -284,7 +290,8 @@ test.describe("Person Identifiers UI", () => {
     await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
 
     await openPeopleTab(page);
-    await expect(page.locator(".ei-identifiers__add-row")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator(".ei-data-card").first()).toBeVisible({ timeout: 5000 });
+    await expandIdentifiers(page);
 
     // Select "Email" from the type dropdown
     await page.locator(".ei-identifiers__type-select").selectOption("Email");
@@ -311,7 +318,8 @@ test.describe("Person Identifiers UI", () => {
     await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
 
     await openPeopleTab(page);
-    await expect(page.locator(".ei-identifiers__add-row")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator(".ei-data-card").first()).toBeVisible({ timeout: 5000 });
+    await expandIdentifiers(page);
 
     await page.locator(".ei-identifiers__type-select").selectOption("Full Name");
     await page.locator(".ei-identifiers__value-input").fill("Alice Smith");
@@ -336,7 +344,8 @@ test.describe("Person Identifiers UI", () => {
     await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
 
     await openPeopleTab(page);
-    await expect(page.locator(".ei-identifiers__add-row")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator(".ei-data-card").first()).toBeVisible({ timeout: 5000 });
+    await expandIdentifiers(page);
 
     await page.locator(".ei-identifiers__type-select").selectOption("Nickname");
     await page.locator(".ei-identifiers__value-input").fill("Ally");
@@ -356,7 +365,8 @@ test.describe("Person Identifiers UI", () => {
     await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
 
     await openPeopleTab(page);
-    await expect(page.locator(".ei-identifiers__add-row")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator(".ei-data-card").first()).toBeVisible({ timeout: 5000 });
+    await expandIdentifiers(page);
 
     // Value empty → Add disabled
     await expect(page.locator(".ei-identifiers__add-btn")).toBeDisabled();
@@ -382,7 +392,8 @@ test.describe("Person Identifiers UI", () => {
     await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
 
     await openPeopleTab(page);
-    await expect(page.locator(".ei-identifiers__add-row")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator(".ei-data-card").first()).toBeVisible({ timeout: 5000 });
+    await expandIdentifiers(page);
 
     await page.locator(".ei-identifiers__type-select").selectOption("__custom__");
 
@@ -406,7 +417,8 @@ test.describe("Person Identifiers UI", () => {
     await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
 
     await openPeopleTab(page);
-    await expect(page.locator(".ei-identifiers__add-row")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator(".ei-data-card").first()).toBeVisible({ timeout: 5000 });
+    await expandIdentifiers(page);
 
     await page.locator(".ei-identifiers__type-select").selectOption("__custom__");
     await page.locator(".ei-identifiers__type-input").fill("Slack RNP");
@@ -431,7 +443,8 @@ test.describe("Person Identifiers UI", () => {
     await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
 
     await openPeopleTab(page);
-    await expect(page.locator(".ei-identifiers__add-row")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator(".ei-data-card").first()).toBeVisible({ timeout: 5000 });
+    await expandIdentifiers(page);
 
     await page.locator(".ei-identifiers__type-select").selectOption("Ei Persona");
 
@@ -460,6 +473,7 @@ test.describe("Person Identifiers UI", () => {
 
     await openPeopleTab(page);
     await expect(page.locator(".ei-data-card").first()).toBeVisible({ timeout: 5000 });
+    await expandIdentifiers(page);
 
     // The Ei Persona row should show the display name "Alice" not the UUID
     const eiPersonaRow = page.locator(".ei-identifier-row").filter({ hasText: "Ei Persona" });
@@ -485,6 +499,7 @@ test.describe("Person Identifiers UI", () => {
 
     await openPeopleTab(page);
     await expect(page.locator(".ei-data-card").first()).toBeVisible({ timeout: 5000 });
+    await expandIdentifiers(page);
 
     // Initially "Alice Smith" (Full Name) is primary → heading shows "Alice Smith"
     await expect(page.locator(".ei-person-heading")).toContainText("Alice Smith");
@@ -514,6 +529,8 @@ test.describe("Person Identifiers UI", () => {
     await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
 
     await openPeopleTab(page);
+    await expect(page.locator(".ei-data-card").first()).toBeVisible({ timeout: 5000 });
+    await expandIdentifiers(page);
     await expect(page.locator(".ei-identifier-row")).toHaveCount(2, { timeout: 5000 });
 
     // Delete the second identifier (Email)
@@ -534,6 +551,8 @@ test.describe("Person Identifiers UI", () => {
     await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
 
     await openPeopleTab(page);
+    await expect(page.locator(".ei-data-card").first()).toBeVisible({ timeout: 5000 });
+    await expandIdentifiers(page);
     await expect(page.locator(".ei-identifier-row")).toHaveCount(2, { timeout: 5000 });
 
     // Full Name is primary. Delete it.

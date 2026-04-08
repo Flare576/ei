@@ -32,12 +32,14 @@ import { BUILT_IN_IDENTIFIER_TYPES } from "../../../src/core/constants/built-in-
 // TYPES FOR YAML EDITING
 // =============================================================================
 
-interface EditableTopic extends Topic {
+interface EditableTopic extends Omit<Topic, 'persona_groups'> {
   _delete?: boolean;
+  persona_groups?: Record<string, boolean>[];
 }
 
-interface EditableFact extends Fact {
+interface EditableFact extends Omit<Fact, 'persona_groups'> {
   _delete?: boolean;
+  persona_groups?: Record<string, boolean>[];
 }
 
 interface YAMLPersonIdentifier {
@@ -46,9 +48,10 @@ interface YAMLPersonIdentifier {
   primary?: true;
 }
 
-interface EditablePersonYAML extends Omit<Person, 'identifiers'> {
+interface EditablePersonYAML extends Omit<Person, 'identifiers' | 'persona_groups'> {
   identifiers: YAMLPersonIdentifier[];
   _delete?: boolean;
+  persona_groups?: Record<string, boolean>[];
 }
 
 interface EditablePersonaData {
@@ -457,14 +460,20 @@ function readOnlyToEnd<T extends WithReadOnlyFields>(item: T): T {
   return { ...rest, learned_by, learned_on, last_changed_by, last_updated, last_mentioned } as T;
 }
 
-export function humanToYAML(human: HumanEntity, personaLookup?: Map<string, string>): string {
+function buildGroupCheckboxMap(itemGroups: string[], allGroups: string[]): Record<string, boolean>[] {
+  const activeSet = new Set(itemGroups);
+  return [...new Set([...allGroups, ...itemGroups])].map(g => ({ [g]: activeSet.has(g) }));
+}
+
+export function humanToYAML(human: HumanEntity, personaLookup?: Map<string, string>, allGroups: string[] = []): string {
   const data: EditableHumanData = {
-    facts: human.facts.map(f => { const { interested_personas: _ip, ...rest } = readOnlyToEnd(f); return { ...rest, _delete: false }; }),
-    topics: human.topics.map(t => { const { interested_personas: _ip, ...rest } = readOnlyToEnd(t); return { ...rest, _delete: false }; }),
+    facts: human.facts.map(f => { const { interested_personas: _ip, persona_groups, ...rest } = readOnlyToEnd(f); return { ...rest, persona_groups: buildGroupCheckboxMap(persona_groups ?? [], allGroups), _delete: false }; }),
+    topics: human.topics.map(t => { const { interested_personas: _ip, persona_groups, ...rest } = readOnlyToEnd(t); return { ...rest, persona_groups: buildGroupCheckboxMap(persona_groups ?? [], allGroups), _delete: false }; }),
     people: human.people.map(p => {
-      const { identifiers, interested_personas: _ip, ...rest } = readOnlyToEnd(p);
+      const { identifiers, interested_personas: _ip, persona_groups, ...rest } = readOnlyToEnd(p);
       return {
         ...rest,
+        persona_groups: buildGroupCheckboxMap(persona_groups ?? [], allGroups),
         identifiers: toYAMLIdentifiers(identifiers ?? [], personaLookup),
         _delete: false as const,
       };
@@ -503,8 +512,18 @@ export interface HumanYAMLResult {
   deletedPersonIds: string[];
 }
 
+function parseGroupCheckboxMap(groups: Record<string, boolean>[] | undefined): string[] {
+  if (!groups) return [];
+  const result: string[] = [];
+  for (const record of groups) {
+    for (const [name, active] of Object.entries(record)) {
+      if (active) result.push(name);
+    }
+  }
+  return result;
+}
+
 export function humanFromYAML(yamlContent: string, original?: HumanEntity): HumanYAMLResult {
-  // Strip read-only comment lines before parsing so users can't accidentally corrupt them
   const stripped = yamlContent
     .split('\n')
     .filter(line => !/^\s*#\s*\[read-only\]/.test(line))
@@ -520,9 +539,11 @@ export function humanFromYAML(yamlContent: string, original?: HumanEntity): Huma
     if (f._delete && !BUILT_IN_FACT_NAMES.has(f.name)) {
       deletedFactIds.push(f.id);
     } else {
-      const { _delete, ...parsed } = f;
+      const { _delete, persona_groups: groupMap, ...parsed } = f;
       const originalFact = original?.facts.find(of => of.id === parsed.id);
-      const fact = originalFact ? { ...originalFact, ...parsed } : parsed;
+      const fact: Fact = originalFact
+        ? { ...originalFact, ...parsed, persona_groups: parseGroupCheckboxMap(groupMap) }
+        : { ...parsed, persona_groups: parseGroupCheckboxMap(groupMap) };
       if (fact.description && !fact.validated_date) {
         fact.validated_date = new Date().toISOString();
       }
@@ -535,9 +556,11 @@ export function humanFromYAML(yamlContent: string, original?: HumanEntity): Huma
     if (t._delete) {
       deletedTopicIds.push(t.id);
     } else {
-      const { _delete, ...parsed } = t;
+      const { _delete, persona_groups: groupMap, ...parsed } = t;
       const originalTopic = original?.topics.find(ot => ot.id === parsed.id);
-      const topic = originalTopic ? { ...originalTopic, ...parsed } : parsed;
+      const topic: Topic = originalTopic
+        ? { ...originalTopic, ...parsed, persona_groups: parseGroupCheckboxMap(groupMap) }
+        : { ...parsed, persona_groups: parseGroupCheckboxMap(groupMap) };
       topics.push(topic);
     }
   }
@@ -547,7 +570,7 @@ export function humanFromYAML(yamlContent: string, original?: HumanEntity): Huma
     if (p._delete) {
       deletedPersonIds.push(p.id);
     } else {
-      const { _delete, identifiers: yamlIdentifiers, ...parsed } = p;
+      const { _delete, identifiers: yamlIdentifiers, persona_groups: groupMap, ...parsed } = p;
       const identifiers: PersonIdentifier[] = (yamlIdentifiers ?? []).map(({ type, value, primary }) => ({
         type,
         value,
@@ -555,8 +578,8 @@ export function humanFromYAML(yamlContent: string, original?: HumanEntity): Huma
       }));
       const originalPerson = original?.people.find(op => op.id === parsed.id);
       const personBase: Person = originalPerson
-        ? { ...originalPerson, ...parsed, identifiers }
-        : { ...parsed, identifiers };
+        ? { ...originalPerson, ...parsed, identifiers, persona_groups: parseGroupCheckboxMap(groupMap) }
+        : { ...parsed, identifiers, persona_groups: parseGroupCheckboxMap(groupMap) };
       const person: Person = !personBase.validated_date
         ? { ...personBase, validated_date: new Date().toISOString() }
         : personBase;

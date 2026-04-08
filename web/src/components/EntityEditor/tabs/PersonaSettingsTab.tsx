@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React from "react";
 import { ModelPicker } from "../../Settings/ModelPicker";
+import { GroupChipEditor } from "../GroupChipEditor";
 import type { ProviderAccount } from "../../../../../src/core/types";
 
 interface PersonaEntity {
@@ -45,7 +46,6 @@ export const PersonaSettingsTab: React.FC<PersonaSettingsTabProps> = ({
   availableGroups = [],
   accounts = [],
 }) => {
-  const [newVisibleGroup, setNewVisibleGroup] = useState("");
   
   const heartbeatMinutes = persona.heartbeat_delay_ms ? Math.round(persona.heartbeat_delay_ms / 60000) : 30;
   const contextHours = persona.context_window_hours ?? 8;
@@ -92,13 +92,7 @@ export const PersonaSettingsTab: React.FC<PersonaSettingsTabProps> = ({
     onChange("include_message_timestamps", e.target.checked);
   };
 
-  const handleGroupVisibilityToggle = (group: string) => {
-    const current = persona.groups_visible || [];
-    const updated = current.includes(group)
-      ? current.filter((g: string) => g !== group)
-      : [...current, group];
-    onChange("groups_visible", updated);
-  };
+
 
   return (
     <div className="ei-settings-form">
@@ -277,62 +271,12 @@ export const PersonaSettingsTab: React.FC<PersonaSettingsTabProps> = ({
               <small className="ei-form-hint">The main group this persona belongs to</small>
             </div>
 
-            <div className="ei-form-group">
-              <label className="ei-form-label">Can See Data From</label>
-              <div className="ei-group-input-row">
-                <input
-                  type="text"
-                  className="ei-input"
-                  value={newVisibleGroup}
-                  onChange={(e) => setNewVisibleGroup(e.target.value)}
-                  placeholder="Add new group"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && newVisibleGroup.trim()) {
-                      e.preventDefault();
-                      const group = newVisibleGroup.trim();
-                      if (!(persona.groups_visible || []).includes(group)) {
-                        onChange("groups_visible", [...(persona.groups_visible || []), group]);
-                      }
-                      setNewVisibleGroup("");
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  className="ei-btn ei-btn--secondary"
-                  onClick={() => {
-                    const group = newVisibleGroup.trim();
-                    if (group && !(persona.groups_visible || []).includes(group)) {
-                      onChange("groups_visible", [...(persona.groups_visible || []), group]);
-                    }
-                    setNewVisibleGroup("");
-                  }}
-                  disabled={!newVisibleGroup.trim()}
-                >
-                  Add
-                </button>
-              </div>
-              <div className="ei-group-chips">
-                {(() => {
-                  const allGroups = [...new Set([...availableGroups, ...(persona.groups_visible || [])])];
-                  return allGroups.map((group) => {
-                    const isVisible = (persona.groups_visible || []).includes(group);
-                    return (
-                      <button
-                        key={group}
-                        type="button"
-                        className={`ei-group-chip ei-group-chip--toggle ${isVisible ? "ei-group-chip--active" : ""}`}
-                        onClick={() => handleGroupVisibilityToggle(group)}
-                      >
-                        <span className="ei-group-chip__check">{isVisible ? "✓" : "○"}</span>
-                        {group}
-                      </button>
-                    );
-                  });
-                })()}
-              </div>
-              <small className="ei-form-hint">Groups whose data this persona can access</small>
-            </div>
+            <GroupChipEditor
+              label="Can See Data From"
+              value={persona.groups_visible || []}
+              availableGroups={availableGroups}
+              onChange={(groups) => onChange("groups_visible", groups)}
+            />
           </>
         )}
       </section>

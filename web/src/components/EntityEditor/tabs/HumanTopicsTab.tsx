@@ -24,8 +24,8 @@ interface HumanTopicsTabProps {
   dirtyIds: Set<string>;
   resolvePersonaName?: (id: string) => string;
   rewriteModelSet: boolean;
-  
-  // Dedupe selection mode props
+  availableGroups?: string[];
+
   isDedupeMode: boolean;
   selectedIds: string[];
   dedupingIds: string[];
@@ -79,7 +79,12 @@ const renderTopicCard = (
   onDelete: () => void,
   isDirty: boolean,
   sliders: { field: string; label: string; min?: number; max?: number }[],
-  resolvePersonaName?: (id: string) => string
+  resolvePersonaName?: (id: string) => string,
+  _onAiAssist?: unknown,
+  _aiContext?: unknown,
+  _selectionMode?: unknown,
+  _isSelected?: unknown,
+  availableGroups: string[] = []
 ) => {
   const gapInfo = getEngagementGapInfo(topic.exposure_current, topic.exposure_desired);
 
@@ -138,6 +143,7 @@ const renderTopicCard = (
         isDirty={isDirty}
         renderAfterHeader={renderCategoryInput}
         resolvePersonaName={resolvePersonaName}
+        availableGroups={availableGroups}
       />
       <div
         className={`ei-engagement-gap ${gapInfo.className}`}
@@ -159,6 +165,7 @@ export const HumanTopicsTab = ({
   dirtyIds,
   resolvePersonaName,
   rewriteModelSet,
+  availableGroups = [],
   isDedupeMode,
   selectedIds,
   onToggleDedupeMode,
@@ -230,6 +237,8 @@ export const HumanTopicsTab = ({
         selectionMode={isDedupeMode}
         selectedIds={selectedIds}
         onSelectionChange={onSelectionChange}
+        availableGroups={availableGroups}
+        hideGroupHeaders
       />
 
       {isDedupeMode && selectedIds.length >= 2 && (
