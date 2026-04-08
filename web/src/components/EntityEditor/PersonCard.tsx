@@ -32,6 +32,11 @@ interface SliderConfig {
   formatValue?: (v: number) => string;
 }
 
+export interface PersonaOption {
+  id: string;
+  display_name: string;
+}
+
 interface PersonCardProps {
   person: Person;
   sliders: SliderConfig[];
@@ -41,6 +46,7 @@ interface PersonCardProps {
   isDirty?: boolean;
   showMeta?: boolean;
   resolvePersonaName?: (id: string) => string;
+  personas?: PersonaOption[];
   selectionMode?: boolean;
   isSelected?: boolean;
   onSelectionChange?: () => void;
@@ -102,6 +108,7 @@ export const PersonCard = ({
   isDirty = false,
   showMeta = true,
   resolvePersonaName,
+  personas = [],
   selectionMode = false,
   isSelected = false,
   onSelectionChange,
@@ -200,7 +207,7 @@ export const PersonCard = ({
 
   const primaryIdentifier = identifiers.find(i => i.is_primary) ?? identifiers[0];
   const headingValue = primaryIdentifier
-    ? (primaryIdentifier.type === 'ei_persona' && resolvePersonaName
+    ? (primaryIdentifier.type === 'Ei Persona' && resolvePersonaName
         ? resolvePersonaName(primaryIdentifier.value)
         : primaryIdentifier.value)
     : (person.name || '(no name)');
@@ -268,8 +275,8 @@ export const PersonCard = ({
             {!isPreMigration && identifiers.length > 0 && (
               <div className="ei-identifiers__list">
                 {identifiers.map((id, index) => {
-                  const displayValue =
-                    id.type === 'ei_persona' && resolvePersonaName
+                    const displayValue =
+                    id.type === 'Ei Persona' && resolvePersonaName
                       ? resolvePersonaName(id.value)
                       : id.value;
 
@@ -280,15 +287,29 @@ export const PersonCard = ({
                     >
                       <span className="ei-identifier-row__type-badge">{id.type}</span>
 
-                      <input
-                        type="text"
-                        className="ei-identifier-row__value"
-                        value={id.value}
-                        onChange={e => handleIdentifierValueChange(index, e.target.value)}
-                        title={id.type === 'ei_persona' ? `Resolved: ${displayValue}` : undefined}
-                        readOnly={selectionMode}
-                        aria-label={`${id.type} identifier value`}
-                      />
+                      {id.type === 'Ei Persona' && personas.length > 0 && !selectionMode ? (
+                        <select
+                          className="ei-identifier-row__value ei-select"
+                          value={id.value}
+                          onChange={e => handleIdentifierValueChange(index, e.target.value)}
+                          aria-label={`${id.type} identifier value`}
+                        >
+                          <option value="">— pick a persona —</option>
+                          {personas.map(p => (
+                            <option key={p.id} value={p.id}>{p.display_name}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type="text"
+                          className="ei-identifier-row__value"
+                          value={id.type === 'Ei Persona' ? displayValue : id.value}
+                          onChange={e => handleIdentifierValueChange(index, e.target.value)}
+                          title={id.type === 'Ei Persona' ? `UUID: ${id.value}` : undefined}
+                          readOnly={selectionMode || id.type === 'Ei Persona'}
+                          aria-label={`${id.type} identifier value`}
+                        />
+                      )}
 
                       {!selectionMode && (
                         <div className="ei-identifier-row__actions">
@@ -329,6 +350,8 @@ export const PersonCard = ({
                     aria-label="Custom identifier type"
                     onKeyDown={e => {
                       if (e.key === 'Escape') {
+                        e.stopPropagation();
+                        e.preventDefault();
                         setIsAddingCustomType(false);
                         setCustomTypeInput('');
                       }
@@ -348,21 +371,35 @@ export const PersonCard = ({
                   </select>
                 )}
 
-                <input
-                  type="text"
-                  className="ei-identifiers__value-input"
-                  placeholder={
-                    (isAddingCustomType ? customTypeInput : newIdType) === 'ei_persona'
-                      ? 'Persona UUID…'
-                      : 'Value…'
-                  }
-                  value={newIdValue}
-                  onChange={e => setNewIdValue(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') handleAddIdentifier();
-                  }}
-                  aria-label="Identifier value"
-                />
+                {(isAddingCustomType ? customTypeInput : newIdType) === 'Ei Persona' && personas.length > 0 ? (
+                  <select
+                    className="ei-identifiers__value-input ei-select"
+                    value={newIdValue}
+                    onChange={e => setNewIdValue(e.target.value)}
+                    aria-label="Select persona"
+                  >
+                    <option value="">— pick a persona —</option>
+                    {personas.map(p => (
+                      <option key={p.id} value={p.id}>{p.display_name}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    className="ei-identifiers__value-input"
+                    placeholder={
+                      (isAddingCustomType ? customTypeInput : newIdType) === 'Ei Persona'
+                        ? 'Persona UUID…'
+                        : 'Value…'
+                    }
+                    value={newIdValue}
+                    onChange={e => setNewIdValue(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') handleAddIdentifier();
+                    }}
+                    aria-label="Identifier value"
+                  />
+                )}
 
                 <button
                   className="ei-btn ei-btn--secondary ei-identifiers__add-btn"
@@ -375,7 +412,7 @@ export const PersonCard = ({
               </div>
             )}
 
-            {!selectionMode && !isPreMigration && (isAddingCustomType ? customTypeInput : newIdType) === 'ei_persona' && (
+            {!selectionMode && !isPreMigration && (isAddingCustomType ? customTypeInput : newIdType) === 'Ei Persona' && (
               <p className="ei-identifiers__hint">
                 Enter the persona's UUID, or use the persona editor to link from there
               </p>

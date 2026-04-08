@@ -6,7 +6,7 @@ import { HumanPeopleTab } from './tabs/HumanPeopleTab';
 import { HumanQuotesTab } from './tabs/HumanQuotesTab';
 import { QuoteManagementModal } from '../Quote/QuoteManagementModal';
 import type { Fact, Quote } from '../../../../src/core/types';
-import type { PersonIdentifier } from './PersonCard';
+import type { PersonIdentifier, PersonaOption } from './PersonCard';
 
 interface Topic {
   id: string;
@@ -60,6 +60,7 @@ interface HumanEditorProps {
   onQuoteDelete?: (id: string) => void;
   onQueueDedupe: (type: 'topic' | 'person', ids: string[]) => Promise<void>;
   resolvePersonaName?: (id: string) => string;
+  personas?: PersonaOption[];
   onCreatePersona?: (person: Person) => void;
   onUpdatePersona?: (person: Person) => void;
 }
@@ -85,6 +86,7 @@ export const HumanEditor = ({
   onQuoteDelete,
   onQueueDedupe,
   resolvePersonaName,
+  personas,
   onCreatePersona,
   onUpdatePersona,
 }: HumanEditorProps) => {
@@ -404,6 +406,7 @@ export const HumanEditor = ({
              onAdd={handlePersonAdd}
              dirtyIds={dirtyPersonIds}
              resolvePersonaName={resolvePersonaName}
+             personas={personas}
              rewriteModelSet={!!human.settings?.rewrite_model}
              isDedupeMode={isDedupeMode}
              selectedIds={Array.from(selectedIds)}
