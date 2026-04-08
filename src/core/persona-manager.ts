@@ -135,11 +135,17 @@ export async function updatePersona(
 }
 
 export async function getGroupList(sm: StateManager): Promise<string[]> {
-  const personas = sm.persona_getAll();
   const groups = new Set<string>();
-  for (const p of personas) {
+
+  for (const p of sm.persona_getAll()) {
     if (p.group_primary) groups.add(p.group_primary);
     for (const g of p.groups_visible || []) groups.add(g);
   }
+
+  const human = sm.getHuman();
+  for (const item of [...(human.topics || []), ...(human.people || []), ...(human.facts || [])]) {
+    for (const g of item.persona_groups || []) groups.add(g);
+  }
+
   return [...groups].sort();
 }
