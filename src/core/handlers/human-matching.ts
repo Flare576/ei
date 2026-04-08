@@ -256,11 +256,14 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
 
   let resolvedIdentifiers: PersonIdentifier[];
   if (isNewItem) {
-    const llmIdentifiers: PersonIdentifier[] = (result.identifiers ?? []).map(i => ({
-      type: i.type,
-      value: i.value,
-      ...(i.is_primary ? { is_primary: i.is_primary } : {}),
-    }));
+    const llmIdentifiers: PersonIdentifier[] = sanitizeEiPersonaIdentifiers(
+      (result.identifiers ?? []).map(i => ({
+        type: i.type,
+        value: i.value,
+        ...(i.is_primary ? { is_primary: i.is_primary } : {}),
+      })),
+      state
+    );
     const allCandidateIds = [...llmIdentifiers, ...candidateIdentifiers];
     if (allCandidateIds.length === 0) {
       const hasSpace = candidateName.includes(' ');
@@ -275,7 +278,8 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
     resolvedIdentifiers = deduped;
   } else {
     const base = [...(existingPerson?.identifiers ?? [])];
-    for (const id of (result.identifiers_to_add ?? [])) {
+    const sanitizedToAdd = sanitizeEiPersonaIdentifiers(result.identifiers_to_add ?? [], state);
+    for (const id of sanitizedToAdd) {
       if (!base.some(e => e.value === id.value)) {
         base.push({ type: id.type, value: id.value, ...(id.is_primary ? { is_primary: id.is_primary } : {}) });
       }
@@ -311,6 +315,23 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
 
   const resolvedName = resolvedIdentifiers.find(i => i.is_primary)?.value ?? candidateName;
   console.log(`[handlePersonUpdate] ${isNewItem ? "Created" : "Updated"} person "${resolvedName}"`);
+}
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function sanitizeEiPersonaIdentifiers(
+  identifiers: PersonIdentifier[],
+  state: StateManager
+): PersonIdentifier[] {
+  return identifiers.map(id => {
+    if (id.type !== 'Ei Persona' && id.type !== 'AI Persona') return id;
+    if (UUID_REGEX.test(id.value)) return { ...id, type: 'Ei Persona' };
+    const matched = state.persona_getAll().find(p =>
+      p.display_name === id.value || p.aliases?.includes(id.value)
+    );
+    if (matched) return { ...id, type: 'Ei Persona', value: matched.id };
+    return id.type === 'AI Persona' ? id : { ...id, type: 'Nickname' };
+  });
 }
 
 function normalizeText(text: string): string {
