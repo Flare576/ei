@@ -250,7 +250,7 @@ ONLY ANALYZE the "Most Recent Messages". The "Earlier Conversation" is provided 
 ${jsonTemplate}
 \`\`\`
 
-When returning a record, **ALWAYS** include \`name\`, \`description\`, and \`sentiment\`.
+When returning a record, always include \`sentiment\`. Include \`name\` only if you are changing it; omit it to keep the existing name. Always include \`description\` when returning a record.
 
 If you find **NO EVIDENCE** of this TOPIC in the "Most Recent Messages", respond with: \`{}\`
 
