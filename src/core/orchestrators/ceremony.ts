@@ -457,7 +457,10 @@ export function queueRewritePhase(state: StateManager): void {
     }
   }
   for (const person of human.people) {
-    if ((person.description?.length ?? 0) > REWRITE_DESCRIPTION_THRESHOLD && !person.rewrite_checked) {
+    const isPersonaLinked = (person.identifiers ?? []).some(
+      i => i.type.toLowerCase() === 'ei persona'
+    );
+    if (!isPersonaLinked && (person.description?.length ?? 0) > REWRITE_DESCRIPTION_THRESHOLD && !person.rewrite_checked) {
       itemsToScan.push({ item: person, type: "person" });
     }
   }
