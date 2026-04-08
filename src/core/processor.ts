@@ -34,6 +34,7 @@ import { StateManager } from "./state-manager.js";
 import { QueueProcessor } from "./queue-processor.js";
 import { handlers } from "./handlers/index.js";
 import { normalizeRoomMessages, getMessageContent } from "./handlers/utils.js";
+import { sanitizeEiPersonaIdentifiers } from "./utils/identifier-utils.js";
 import { ContextStatus as ContextStatusEnum, RoomMode } from "./types.js";
 import { registerReadMemoryExecutor, registerFileReadExecutor } from "./tools/index.js";
 import { createReadMemoryExecutor } from "./tools/builtin/read-memory.js";
@@ -1854,7 +1855,8 @@ const toolNextSteps = new Set([
   }
 
   async upsertPerson(person: Person): Promise<void> {
-    await upsertPerson(this.stateManager, person);
+    const sanitized = { ...person, identifiers: sanitizeEiPersonaIdentifiers(person.identifiers ?? [], this.stateManager) };
+    await upsertPerson(this.stateManager, sanitized);
     this.interface.onHumanUpdated?.();
   }
 
