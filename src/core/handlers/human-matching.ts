@@ -313,7 +313,10 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
     : state.messages_get(personaId);
   await validateAndStoreQuotes(result.quotes, allMessages, itemId, personaDisplayName, personaGroup, state);
 
-  const resolvedName = resolvedIdentifiers.find(i => i.is_primary)?.value ?? candidateName;
+  const primaryValue = resolvedIdentifiers.find(i => i.is_primary)?.value ?? candidateName;
+  const resolvedName = (!primaryValue || primaryValue.toLowerCase() === 'unknown')
+    ? (result.relationship ?? candidateRelationship ?? '(unknown)')
+    : primaryValue;
   console.log(`[handlePersonUpdate] ${isNewItem ? "Created" : "Updated"} person "${resolvedName}"`);
 }
 
