@@ -240,9 +240,10 @@ test.describe("GroupChipEditor — People tab", () => {
     await expect(page.locator(".ei-data-card").first()).toBeVisible({ timeout: 5000 });
 
     const card = page.locator(".ei-data-card").first();
-    const groupInput = card.locator('.ei-group-chip-editor input, .ei-form-group input[placeholder="Add new group"]');
-    await groupInput.fill("Family");
-    await card.locator("button", { hasText: "Add" }).last().click();
+    await card.locator(".ei-group-chip--add").click();
+    await expect(card.locator('input[placeholder="New group…"]')).toBeVisible({ timeout: 2000 });
+    await card.locator('input[placeholder="New group…"]').fill("Family");
+    await card.locator(".ei-group-chips__add-confirm").click();
 
     await expect(card.locator(".ei-group-chip--active").filter({ hasText: "Family" })).toBeVisible({ timeout: 2000 });
   });
