@@ -19,6 +19,7 @@ import { filterHumanDataByVisibility } from "./prompt-context-builder.js";
 import { cosineSimilarity, computePersonaDescriptionEmbedding } from "./embedding-service.js";
 
 const REFLECTION_SIMILARITY_THRESHOLD = 0.80;
+const REFLECTION_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000; // 1 week between drift prompts
 
 // =============================================================================
 // MODEL HELPERS
@@ -249,7 +250,10 @@ export async function queueHeartbeatCheck(sm: StateManager, personaId: string, i
       const lastAsked = currentPersona.reflection_last_asked
         ? new Date(currentPersona.reflection_last_asked).getTime()
         : 0;
-      if (new Date(personRecord.last_updated).getTime() > lastAsked) {
+      const personUpdatedSinceLastAsked = new Date(personRecord.last_updated).getTime() > lastAsked;
+      const cooldownExpired = lastAsked === 0 || (Date.now() - lastAsked >= REFLECTION_COOLDOWN_MS);
+
+      if (personUpdatedSinceLastAsked && cooldownExpired) {
         const similarity = cosineSimilarity(personRecord.embedding, currentPersona.description_embedding);
         if (similarity < REFLECTION_SIMILARITY_THRESHOLD) {
           driftContext = {
@@ -257,7 +261,12 @@ export async function queueHeartbeatCheck(sm: StateManager, personaId: string, i
             persona_description: currentPersona.long_description ?? '',
           };
           console.log(`[HeartbeatCheck ${persona.display_name}] Drift detected (similarity: ${similarity.toFixed(3)}) - including reflection context`);
+        } else {
+          console.log(`[HeartbeatCheck ${persona.display_name}] Person updated but no drift (similarity: ${similarity.toFixed(3)})`);
         }
+      } else if (personUpdatedSinceLastAsked && !cooldownExpired) {
+        const cooldownRemaining = Math.ceil((lastAsked + REFLECTION_COOLDOWN_MS - Date.now()) / (24 * 60 * 60 * 1000));
+        console.log(`[HeartbeatCheck ${persona.display_name}] Drift check suppressed — cooldown active (${cooldownRemaining}d remaining)`);
       }
     }
   }
