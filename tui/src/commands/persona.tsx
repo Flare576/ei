@@ -17,7 +17,7 @@ export const personaCommand: Command = {
   name: "persona",
   aliases: ["p"],
   description: "Switch persona, list all, create new, or update from person",
-  usage: "/persona [name] | /persona new <name> | /persona update <personaName> <personName>",
+  usage: "/persona [name] | /persona new <name> | /persona update <personaName> [personName]",
 
   async execute(args, ctx) {
     const unarchived = ctx.ei.personas().filter(p => !p.is_archived);
@@ -148,12 +148,12 @@ export const personaCommand: Command = {
     }
 
     if (args[0].toLowerCase() === "update") {
-      if (args.length < 3) {
-        ctx.showNotification("Usage: /p update <personaName> <personName>", "error");
+      if (args.length < 2) {
+        ctx.showNotification("Usage: /p update <personaName> [personName]", "error");
         return;
       }
       const personaName = args[1];
-      const personName = args.slice(2).join(" ");
+      const personName = args.length >= 3 ? args.slice(2).join(" ") : undefined;
 
       // Step 0: resolve persona (offer to create if not found)
       let personaId = await ctx.ei.resolvePersonaName(personaName);
@@ -177,49 +177,59 @@ export const personaCommand: Command = {
         return;
       }
 
-      // Step 1: find matching people
       const human = await ctx.ei.getHuman();
-      const matches = (human.people ?? []).filter(p =>
-        p.name.toLowerCase().includes(personName.toLowerCase())
-      );
 
-      if (matches.length === 0) {
-        ctx.showNotification(`No person named "${personName}" in your data`, "error");
-        return;
-      }
-
-      // Step 2: disambiguation if multiple matches
-      let selectedPerson: typeof matches[0];
-      if (matches.length > 1) {
-        const people: PersonPickerItem[] = matches.map(p => ({
-          id: p.id,
-          name: p.name,
-          relationship: p.relationship,
-          description: p.description,
-        }));
-
-        const choice = await new Promise<typeof matches[0] | null>((resolve) => {
-          ctx.showOverlay((hideOverlay, _hideForEditor) => (
-            <PersonPickerOverlay
-              title={`Multiple matches for "${personName}"`}
-              people={people}
-              onSelect={(item) => {
-                hideOverlay();
-                const found = matches.find(m => m.id === item.id);
-                resolve(found ?? null);
-              }}
-              onDismiss={() => {
-                hideOverlay();
-                resolve(null);
-              }}
-            />
-          ), ctx.renderer);
-        });
-
-        if (!choice) return;
-        selectedPerson = choice;
+      let selectedPerson: (typeof human.people)[0];
+      if (!personName) {
+        const linked = (human.people ?? []).find(p =>
+          p.identifiers?.some(id => id.type === 'Ei Persona' && id.value === personaId)
+        );
+        if (!linked) {
+          ctx.showNotification(`No person linked to "${personaName}". Try: /p update ${personaName} <personName>`, "error");
+          return;
+        }
+        selectedPerson = linked;
       } else {
-        selectedPerson = matches[0];
+        const matches = (human.people ?? []).filter(p =>
+          p.name.toLowerCase().includes(personName.toLowerCase())
+        );
+
+        if (matches.length === 0) {
+          ctx.showNotification(`No person named "${personName}" in your data`, "error");
+          return;
+        }
+
+        if (matches.length > 1) {
+          const people: PersonPickerItem[] = matches.map(p => ({
+            id: p.id,
+            name: p.name,
+            relationship: p.relationship,
+            description: p.description,
+          }));
+
+          const choice = await new Promise<typeof matches[0] | null>((resolve) => {
+            ctx.showOverlay((hideOverlay, _hideForEditor) => (
+              <PersonPickerOverlay
+                title={`Multiple matches for "${personName}"`}
+                people={people}
+                onSelect={(item) => {
+                  hideOverlay();
+                  const found = matches.find(m => m.id === item.id);
+                  resolve(found ?? null);
+                }}
+                onDismiss={() => {
+                  hideOverlay();
+                  resolve(null);
+                }}
+              />
+            ), ctx.renderer);
+          });
+
+          if (!choice) return;
+          selectedPerson = choice;
+        } else {
+          selectedPerson = matches[0];
+        }
       }
 
       // Step 3: generate preview with loading overlay
