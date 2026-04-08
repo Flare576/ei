@@ -29,7 +29,9 @@ type RenderCardFn<T extends DataItemBase> = (
   sliders: SliderConfig[],
   resolvePersonaName?: (id: string) => string,
   onAiAssist?: (systemPrompt: string, userPrompt: string) => Promise<string>,
-  aiContext?: string
+  aiContext?: string,
+  selectionMode?: boolean,
+  isSelected?: boolean
 ) => ReactNode;
 
 interface GroupedCardListProps<T extends DataItemBase> {
@@ -158,7 +160,9 @@ export const GroupedCardList = <T extends DataItemBase>({
                   sliders,
                   resolvePersonaName,
                   onAiAssist,
-                  aiContext
+                  aiContext,
+                  selectionMode,
+                  selectedIds.includes(item.id)
                 )}
               </div>
             </div>
@@ -209,7 +213,9 @@ export const GroupedCardList = <T extends DataItemBase>({
                     sliders,
                     resolvePersonaName,
                     onAiAssist,
-                    aiContext
+                    aiContext,
+                    false,
+                    false
                   )}
                 </div>
               ))}

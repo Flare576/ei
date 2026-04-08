@@ -1,6 +1,6 @@
 import React from 'react';
 import { GroupedCardList } from '../GroupedCardList';
-import { PersonCard, PersonIdentifier } from '../PersonCard';
+import { PersonCard, PersonIdentifier, PersonaOption } from '../PersonCard';
 
 interface Person {
   id: string;
@@ -15,6 +15,7 @@ interface Person {
   last_changed_by?: string;
   persona_groups?: string[];
   identifiers?: PersonIdentifier[];
+  validated_date?: string;
 }
 
 interface HumanPeopleTabProps {
@@ -25,6 +26,7 @@ interface HumanPeopleTabProps {
   onAdd: () => void;
   dirtyIds: Set<string>;
   resolvePersonaName?: (id: string) => string;
+  personas?: PersonaOption[];
   rewriteModelSet: boolean;
   onCreatePersona?: (person: Person) => void;
   onUpdatePersona?: (person: Person) => void;
@@ -52,6 +54,7 @@ export const HumanPeopleTab = ({
   onAdd,
   dirtyIds,
   resolvePersonaName,
+  personas,
   rewriteModelSet,
   onCreatePersona,
   onUpdatePersona,
@@ -70,7 +73,11 @@ export const HumanPeopleTab = ({
     personOnDelete: () => void,
     isDirty: boolean,
     sliders: { field: string; label: string; min?: number; max?: number }[],
-    resolvePersonaNameFn?: (id: string) => string
+    resolvePersonaNameFn?: (id: string) => string,
+    _onAiAssist?: unknown,
+    _aiContext?: unknown,
+    selectionMode?: boolean,
+    isSelected?: boolean
   ) => (
     <PersonCard
       person={person}
@@ -80,8 +87,12 @@ export const HumanPeopleTab = ({
       onDelete={personOnDelete}
       isDirty={isDirty}
       resolvePersonaName={resolvePersonaNameFn}
+      personas={personas}
       onCreatePersona={onCreatePersona}
       onUpdatePersona={onUpdatePersona}
+      selectionMode={selectionMode}
+      isSelected={isSelected}
+      onSelectionChange={onSelectionChange ? () => onSelectionChange(person.id) : undefined}
     />
   );
 
