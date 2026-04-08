@@ -40,14 +40,15 @@ interface EditableHumanData {
 type WithReadOnlyFields = {
   learned_on?: string;
   learned_by?: string;
+  validated_date?: string;
+  last_mentioned?: string;
   last_updated: string;
   last_changed_by?: string;
-  last_mentioned?: string;
 };
 
 function readOnlyToEnd<T extends WithReadOnlyFields>(item: T): T {
-  const { learned_on, learned_by, last_updated, last_changed_by, last_mentioned, ...rest } = item;
-  return { ...rest, learned_by, learned_on, last_changed_by, last_updated, last_mentioned } as T;
+  const { learned_on, learned_by, validated_date, last_mentioned, last_updated, last_changed_by, ...rest } = item;
+  return { ...rest, learned_on, learned_by, validated_date, last_mentioned, last_updated, last_changed_by } as T;
 }
 
 function buildGroupCheckboxMap(itemGroups: string[], allGroups: string[]): Record<string, boolean>[] {
@@ -103,19 +104,20 @@ export function humanToYAML(human: HumanEntity, personaLookup?: Map<string, stri
   return YAML.stringify(data, {
     lineWidth: 0,
   })
+  .replace(/^(\s+)(learned_on: .+)$/mg, '$1# [read-only] $2')
   .replace(/^(\s+)(learned_by: )(.+)$/mg, (_, indent, key, val) => {
     const trimmed = val.trim();
     const displayName = personaLookup?.get(trimmed) ?? trimmed;
     return `${indent}# [read-only] ${key}${displayName}`;
   })
+  .replace(/^(\s+)(validated_date: .+)$/mg, '$1# [read-only] $2')
+  .replace(/^(\s+)(last_mentioned: .+)$/mg, '$1# [read-only] $2')
+  .replace(/^(\s+)(last_updated: .+)$/mg, '$1# [read-only] $2')
   .replace(/^(\s+)(last_changed_by: )(.+)$/mg, (_, indent, key, val) => {
     const trimmed = val.trim();
     const displayName = personaLookup?.get(trimmed) ?? trimmed;
     return `${indent}# [read-only] ${key}${displayName}`;
   })
-  .replace(/^(\s+)(learned_on: .+)$/mg, '$1# [read-only] $2')
-  .replace(/^(\s+)(last_mentioned: .+)$/mg, '$1# [read-only] $2')
-  .replace(/^(\s+)(last_updated: .+)$/mg, '$1# [read-only] $2')
   .replace(/^(\s+)(identifiers:)/mg, (_, indent, _key) => {
     return `${indent}${personComment}\n${indent}identifiers:`;
   });
@@ -155,7 +157,7 @@ function groupsEqual(a: string[] | undefined, b: string[] | undefined): boolean 
 
 function factChanged(parsed: Fact, original: Fact): boolean {
   const scalarFields: (keyof Fact)[] = [
-    'name', 'description', 'sentiment', 'validated_date',
+    'name', 'description', 'sentiment',
   ];
   for (const field of scalarFields) {
     if (parsed[field] !== original[field]) return true;
@@ -176,7 +178,7 @@ function topicChanged(parsed: Topic, original: Topic): boolean {
 function personChanged(parsed: Person, original: Person): boolean {
   const scalarFields: (keyof Person)[] = [
     'name', 'description', 'sentiment', 'relationship',
-    'exposure_current', 'exposure_desired', 'validated_date',
+    'exposure_current', 'exposure_desired',
   ];
   for (const field of scalarFields) {
     if (parsed[field] !== original[field]) return true;
@@ -209,11 +211,11 @@ export function humanFromYAML(yamlContent: string, original?: HumanEntity): Huma
       const fact: Fact = originalFact
         ? { ...originalFact, ...parsed, persona_groups: parseGroupCheckboxMap(groupMap) }
         : { ...parsed, persona_groups: parseGroupCheckboxMap(groupMap) };
-      if (fact.description && !fact.validated_date) {
-        fact.validated_date = new Date().toISOString();
-      }
       facts.push(fact);
       if (!originalFact || factChanged(fact, originalFact)) {
+        if (fact.description && !originalFact?.validated_date) {
+          fact.validated_date = new Date().toISOString();
+        }
         changedFactIds.add(fact.id);
       }
     }
@@ -248,12 +250,9 @@ export function humanFromYAML(yamlContent: string, original?: HumanEntity): Huma
         ...(primary ? { is_primary: true } : {}),
       }));
       const originalPerson = original?.people.find(op => op.id === parsed.id);
-      const personBase: Person = originalPerson
+      const person: Person = originalPerson
         ? { ...originalPerson, ...parsed, identifiers, persona_groups: parseGroupCheckboxMap(groupMap) }
         : { ...parsed, identifiers, persona_groups: parseGroupCheckboxMap(groupMap) };
-      const person: Person = !personBase.validated_date
-        ? { ...personBase, validated_date: new Date().toISOString() }
-        : personBase;
       people.push(person);
       if (!originalPerson || personChanged(person, originalPerson)) {
         changedPersonIds.add(person.id);
