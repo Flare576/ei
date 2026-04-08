@@ -1094,8 +1094,11 @@ const toolNextSteps = new Set([
               }
             }
             
+            const toolPersonaName = toolPersonaId
+              ? (this.stateManager.persona_getById(toolPersonaId)?.display_name ?? toolPersonaId)
+              : "none";
             console.log(
-              `[Tools] Dispatch for ${request.next_step} persona=${toolPersonaId ?? "none"}: ${tools.length} tool(s) attached`
+              `[Tools] Dispatch for ${request.next_step} persona=${toolPersonaName}: ${tools.length} tool(s) attached`
             );
 
             this.queueProcessor.start(
