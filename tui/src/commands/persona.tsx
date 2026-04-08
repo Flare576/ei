@@ -115,36 +115,64 @@ export const personaCommand: Command = {
 
       overlayCallbacks.hideForEditor?.();
 
-      // Step 3: review editor
-      const previewYAML = personaPreviewToYAML(preview, personaName);
-      const reviewResult = await spawnEditor({
-        initialContent: previewYAML,
-        filename: `${personaName}-preview.yaml`,
-        renderer: ctx.renderer,
-      });
+      let editorContent = personaPreviewToYAML(preview, personaName);
+      while (true) {
+        const reviewResult = await spawnEditor({
+          initialContent: editorContent,
+          filename: `${personaName}-preview.yaml`,
+          renderer: ctx.renderer,
+        });
 
-      if (reviewResult.aborted) {
-        ctx.showNotification("Cancelled", "info");
+        if (reviewResult.aborted) {
+          ctx.showNotification("Cancelled", "info");
+          return;
+        }
+
+        editorContent = reviewResult.content ?? editorContent;
+
+        let previewParsed: ReturnType<typeof personaPreviewFromYAML>;
+        try {
+          previewParsed = personaPreviewFromYAML(editorContent);
+        } catch (e) {
+          const shouldReEdit = await new Promise<boolean>(resolve => {
+            ctx.showOverlay((hideOverlay, hideForEditor) => (
+              <ConfirmOverlay
+                message={`Parse error:\n${e instanceof Error ? e.message : String(e)}\n\nRe-edit?`}
+                onConfirm={() => { hideForEditor(); resolve(true); }}
+                onCancel={() => { hideOverlay(); resolve(false); }}
+              />
+            ), ctx.renderer);
+          });
+          if (shouldReEdit) continue;
+          ctx.showNotification("Changes discarded", "info");
+          return;
+        }
+
+        if (!previewParsed.long_description?.trim()) {
+          const shouldReEdit = await new Promise<boolean>(resolve => {
+            ctx.showOverlay((hideOverlay, hideForEditor) => (
+              <ConfirmOverlay
+                message={`A long description is required — it drives traits, topics, and persona voice.\n\nRe-edit?`}
+                onConfirm={() => { hideForEditor(); resolve(true); }}
+                onCancel={() => { hideOverlay(); resolve(false); }}
+              />
+            ), ctx.renderer);
+          });
+          if (shouldReEdit) continue;
+          ctx.showNotification("Changes discarded", "info");
+          return;
+        }
+
+        // Step 4: create
+        const personaId = await ctx.ei.createPersona({
+          name: personaName,
+          ...previewParsed,
+        });
+        await ctx.ei.refreshPersonas();
+        ctx.ei.selectPersona(personaId);
+        ctx.showNotification(`Created ${personaName}`, "info");
         return;
       }
-
-      let previewParsed: ReturnType<typeof personaPreviewFromYAML>;
-      try {
-        previewParsed = personaPreviewFromYAML(reviewResult.content ?? previewYAML);
-      } catch (e) {
-        ctx.showNotification(`Parse error: ${e instanceof Error ? e.message : String(e)}`, "error");
-        return;
-      }
-
-      // Step 4: create
-      const personaId = await ctx.ei.createPersona({
-        name: personaName,
-        ...previewParsed,
-      });
-      await ctx.ei.refreshPersonas();
-      ctx.ei.selectPersona(personaId);
-      ctx.showNotification(`Created ${personaName}`, "info");
-      return;
     }
 
     if (args[0].toLowerCase() === "update") {
@@ -158,18 +186,8 @@ export const personaCommand: Command = {
       // Step 0: resolve persona (offer to create if not found)
       let personaId = await ctx.ei.resolvePersonaName(personaName);
       if (!personaId) {
-        const shouldCreate = await new Promise<boolean>(resolve => {
-          ctx.showOverlay((hideOverlay) => (
-            <ConfirmOverlay
-              message={`No persona named "${personaName}". Create one?`}
-              onConfirm={() => { hideOverlay(); resolve(true); }}
-              onCancel={() => { hideOverlay(); resolve(false); }}
-            />
-          ), ctx.renderer);
-        });
-        if (!shouldCreate) return;
-        personaId = await ctx.ei.createPersona({ name: personaName });
-        await ctx.ei.refreshPersonas();
+        ctx.showNotification(`No persona named "${personaName}". Use /persona new ${personaName} to create one first.`, "error");
+        return;
       }
       const persona = await ctx.ei.getPersona(personaId);
       if (!persona) {
