@@ -427,9 +427,10 @@ export function personaFromYAML(yamlContent: string, original: PersonaEntity, al
 // HUMAN SERIALIZATION
 // =============================================================================
 
-function toYAMLIdentifiers(identifiers: PersonIdentifier[]): YAMLPersonIdentifier[] {
+function toYAMLIdentifiers(identifiers: PersonIdentifier[], personaLookup?: Map<string, string>): YAMLPersonIdentifier[] {
   return identifiers.map(({ type, value, is_primary }) => {
-    const entry: YAMLPersonIdentifier = { type, value };
+    const resolvedValue = type === 'Ei Persona' ? (personaLookup?.get(value) ?? value) : value;
+    const entry: YAMLPersonIdentifier = { type, value: resolvedValue };
     if (is_primary) entry.primary = true;
     return entry;
   });
@@ -464,7 +465,7 @@ export function humanToYAML(human: HumanEntity, personaLookup?: Map<string, stri
       const { identifiers, interested_personas: _ip, ...rest } = readOnlyToEnd(p);
       return {
         ...rest,
-        identifiers: toYAMLIdentifiers(identifiers ?? []),
+        identifiers: toYAMLIdentifiers(identifiers ?? [], personaLookup),
         _delete: false as const,
       };
     }),
