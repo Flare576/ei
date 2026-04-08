@@ -139,6 +139,7 @@ function App() {
     description: string;
     relationship?: string;
     personaId?: string;
+    linkedPersonId?: string;
   } | undefined>(undefined);
   const [showArchivedPersonas, setShowArchivedPersonas] = useState(false);
   const [showArchivedRooms, setShowArchivedRooms] = useState(false);
@@ -1206,6 +1207,19 @@ function App() {
   }, [processor, activePersonaId, messages, handleAiAssist, handleImageGenerate]);
 
 
+  const linkPersonaToPersonRecord = useCallback(async (personaId: string, personId: string) => {
+    if (!processor) return;
+    const human = await processor.getHuman();
+    const person = human.people?.find(p => p.id === personId);
+    if (!person) return;
+    const identifiers = person.identifiers ?? [];
+    if (identifiers.some(id => id.type === 'Ei Persona' && id.value === personaId)) return;
+    const isPrimaryFirst = identifiers.length === 0;
+    const updated = [...identifiers, { type: 'Ei Persona', value: personaId, ...(isPrimaryFirst ? { is_primary: true } : {}) }];
+    await processor.upsertPerson({ ...person, identifiers: updated });
+    setHuman(await processor.getHuman());
+  }, [processor]);
+
   const handlePersonaCreate = useCallback(async (data: {
     name: string;
     aliases: string[];
@@ -1218,7 +1232,7 @@ function App() {
     tools?: string[];
   }) => {
     if (!processor) return;
-    await processor.createPersona({
+    const newPersonaId = await processor.createPersona({
       name: data.name,
       aliases: data.aliases,
       long_description: data.description,
@@ -1234,9 +1248,11 @@ function App() {
       group_primary: data.group_primary,
       tools: data.tools,
     });
+    const linkedPersonId = personaCreatorInitialData?.linkedPersonId;
+    if (linkedPersonId) await linkPersonaToPersonRecord(newPersonaId, linkedPersonId);
     processor.getPersonaList().then(setPersonas);
     setShowPersonaCreator(false);
-  }, [processor]);
+  }, [processor, personaCreatorInitialData, linkPersonaToPersonRecord]);
 
   const handlePersonaUpdateFromPreview = useCallback(async (personaId: string, data: {
     name: string;
@@ -1284,10 +1300,12 @@ function App() {
       updates.aliases = data.aliases;
     }
     await processor.updatePersona(personaId, updates);
+    const linkedPersonId = personaCreatorInitialData?.linkedPersonId;
+    if (linkedPersonId) await linkPersonaToPersonRecord(personaId, linkedPersonId);
     processor.getPersonaList().then(setPersonas);
     setShowPersonaCreator(false);
     setPersonaCreatorInitialData(undefined);
-  }, [processor]);
+  }, [processor, personaCreatorInitialData, linkPersonaToPersonRecord]);
 
   const handleGeneratePersonaPreview = useCallback(async (name: string, description: string, relationship?: string, personaId?: string) => {
     if (!processor) throw new Error('Processor not ready');
@@ -1639,12 +1657,13 @@ function App() {
             if (id === 'ei') return 'Ei';
             return personas.find(p => p.id === id)?.display_name ?? id;
           }}
+          personas={personas.map(p => ({ id: p.id, display_name: p.display_name }))}
           onCreatePersona={(person) => {
-            setPersonaCreatorInitialData({ mode: 'create', name: person.name, description: person.description, relationship: person.relationship });
+            setPersonaCreatorInitialData({ mode: 'create', name: person.name, description: person.description, relationship: person.relationship, linkedPersonId: person.id });
             setShowPersonaCreator(true);
           }}
           onUpdatePersona={(person) => {
-            setPersonaCreatorInitialData({ mode: 'update', description: person.description, relationship: person.relationship });
+            setPersonaCreatorInitialData({ mode: 'update', description: person.description, relationship: person.relationship, linkedPersonId: person.id });
             setShowPersonaCreator(true);
           }}
         />
