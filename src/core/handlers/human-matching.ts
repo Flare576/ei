@@ -216,10 +216,6 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
   const candidateRelationship = response.request.data.candidateRelationship as string | undefined;
   const candidateIdentifiers = (response.request.data.candidateIdentifiers ?? []) as PersonIdentifier[];
 
-  if (!result.description || result.sentiment === undefined) {
-    throw new Error(`[handlePersonUpdate] Missing required fields: description=${!!result.description}, sentiment=${result.sentiment}`);
-  }
-
   const candidateName = response.request.data.candidateName as string;
   const personaIds = personaId.split("|").filter(Boolean);
   const primaryId = personaIds[0] ?? personaId;
@@ -241,11 +237,18 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
 
   const existingPerson = isNewItem ? undefined : human.people.find(p => p.id === existingItemId);
 
+  const resolvedDescription = typeof result.description === 'string' ? result.description : existingPerson?.description;
+  const resolvedSentiment = result.sentiment !== undefined ? result.sentiment : existingPerson?.sentiment;
+
+  if (!resolvedDescription || resolvedSentiment === undefined) {
+    throw new Error(`[handlePersonUpdate] Missing required fields: description=${!!resolvedDescription}, sentiment=${resolvedSentiment}`);
+  }
+
   let embedding: number[] | undefined;
   try {
     const embeddingService = getEmbeddingService();
     const relationship = result.relationship ?? candidateRelationship ?? existingPerson?.relationship;
-    const text = getPersonEmbeddingText({ name: candidateName, relationship, description: result.description });
+    const text = getPersonEmbeddingText({ name: candidateName, relationship, description: resolvedDescription });
     embedding = await embeddingService.embed(text);
   } catch (err) {
     console.warn(`[handlePersonUpdate] Failed to compute embedding for person "${candidateName}":`, err);
@@ -295,8 +298,8 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
   const person: Person = {
     id: itemId,
     name: candidateName,
-    description: result.description,
-    sentiment: result.sentiment,
+    description: resolvedDescription,
+    sentiment: resolvedSentiment,
     relationship: result.relationship ?? candidateRelationship ?? existingPerson?.relationship ?? "Unknown",
     exposure_current: calculateExposureCurrent(exposureImpact, existingPerson?.exposure_current ?? 0),
     exposure_desired: result.exposure_desired ?? 0.5,

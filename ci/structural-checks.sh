@@ -101,6 +101,24 @@ if [ -z "$SILENT_DROPS" ]; then pass "no silent drops in extraction handlers"; e
 echo ""
 
 # ------------------------------------------------------------------
+# 7. Extraction update handlers must type-guard description before use
+#    LLMs occasionally return boolean true for description fields.
+#    Handlers must use typeof check before accepting description as a string,
+#    not raw truthiness (!result.description). This prevents boolean "true"
+#    from being stored as a description or causing spurious validation failures.
+# ------------------------------------------------------------------
+echo "Handlers — description field type-guarded in update handlers"
+UPDATE_HANDLERS="$ROOT/src/core/handlers/human-matching.ts"
+UNGUARDED=$(grep -n "result\.description" "$UPDATE_HANDLERS" 2>/dev/null \
+  | grep -v "typeof result\.description" \
+  | grep -v "resolvedDescription" \
+  | grep -v "!!result\.description" \
+  || true)
+if [ -z "$UNGUARDED" ]; then pass "description type-guarded in update handlers"; else fail "raw result.description used without typeof guard in update handlers" "$UNGUARDED"; fi
+
+echo ""
+
+# ------------------------------------------------------------------
 # Summary
 # ------------------------------------------------------------------
 if [ "$FAILURES" -eq 0 ]; then

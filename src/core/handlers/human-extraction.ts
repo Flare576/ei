@@ -123,9 +123,9 @@ export async function handleFactFind(response: LLMResponse, state: StateManager)
       continue;
     }
 
-    // Skip if the LLM returned a null/empty value — don't store null descriptions
-    if (!factResult.value) {
-      console.log(`[handleFactFind] Skipping fact with null/empty value: "${factResult.name}"`);
+    // Skip if the LLM returned a null/empty/non-string value — don't store booleans or nulls
+    if (!factResult.value || typeof factResult.value !== 'string') {
+      console.log(`[handleFactFind] Skipping fact with null/empty/non-string value: "${factResult.name}" (got ${typeof factResult.value})`);
       continue;
     }
 
