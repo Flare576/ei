@@ -28,6 +28,8 @@ function formatItem(item: EiHeartbeatItem): string {
       const desc = item.short_description ? ` — ${item.short_description}` : "";
       return `- **${item.id}** Inactive Persona: ${item.name}${desc} (${item.days_inactive} days inactive)`;
     }
+    default:
+      return '';
   }
 }
 

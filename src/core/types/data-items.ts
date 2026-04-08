@@ -62,11 +62,11 @@ export interface PersonIdentifier {
 }
 
 export interface Person extends DataItemBase {
-  identifiers: PersonIdentifier[];
+  identifiers?: PersonIdentifier[];
   // DataItemBase.name stays. Must always equal:
   //   identifiers.find(i => i.is_primary)?.value ?? identifiers[0]?.value ?? name
   // State manager syncs name on every write.
-  validated_date: string;  // ISO timestamp. Empty string = candidate for Ei heartbeat intro. Same contract as Fact.validated_date.
+  validated_date?: string;  // ISO timestamp. Empty string or absent = candidate for Ei heartbeat intro. Same contract as Fact.validated_date.
   relationship: string;
   exposure_current: number;
   exposure_desired: number;

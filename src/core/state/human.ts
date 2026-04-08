@@ -89,8 +89,9 @@ export class HumanState {
   }
 
   person_upsert(person: Person): void {
-    person = { ...person, identifiers: person.identifiers ?? [] };
-    const primary = person.identifiers.find(i => i.is_primary) ?? person.identifiers[0];
+    const identifiers = person.identifiers ?? [];
+    person = { ...person, identifiers };
+    const primary = identifiers.find(i => i.is_primary) ?? identifiers[0];
     if (primary) {
       person = { ...person, name: primary.value };
     }

@@ -246,6 +246,7 @@ export async function handleRewriteRewrite(response: LLMResponse, state: StateMa
         const person: Person = {
           ...baseFields,
           identifiers: [],
+          validated_date: '',
           relationship: item.relationship ?? "Unknown",
           exposure_current: 0.5,
           exposure_desired: 0.5,
