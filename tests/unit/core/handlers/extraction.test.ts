@@ -23,7 +23,7 @@ import {
 vi.mock("../../../../src/core/orchestrators/index.js", () => ({
   orchestratePersonaGeneration: vi.fn(),
   queueTopicMatch: vi.fn().mockResolvedValue(undefined),
-  queuePersonMatch: vi.fn().mockResolvedValue(undefined),
+  queuePersonUpdate: vi.fn().mockReturnValue(1),
 }));
 
 vi.mock("../../../../src/core/embedding-service.js", () => ({
@@ -41,7 +41,7 @@ vi.mock("../../../../src/core/embedding-service.js", () => ({
 
 
 import { handlers } from "../../../../src/core/handlers/index.js";
-import { queueTopicMatch, queuePersonMatch } from "../../../../src/core/orchestrators/index.js";
+import { queueTopicMatch, queuePersonUpdate } from "../../../../src/core/orchestrators/index.js";
 
 function createMockStateManager() {
   const human: HumanEntity = {
@@ -80,6 +80,7 @@ function createMockStateManager() {
     human_quote_getForMessage: vi.fn(() => []),
     persona_getById: vi.fn((id: string) => Object.values(personas).find(p => p.id === id) ?? null),
     persona_getByName: vi.fn((name: string) => Object.values(personas).find(p => p.display_name === name || p.aliases?.includes(name)) ?? null),
+    persona_getAll: vi.fn(() => Object.values(personas)),
     persona_add: vi.fn((entity: PersonaEntity) => { personas[entity.id] = entity; }),
     persona_update: vi.fn(),
     messages_get: vi.fn((id: string) => messages[id] ?? []),
@@ -431,12 +432,11 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
 
       await handlers.handleHumanPersonScan(response, state as any);
 
-      expect(queuePersonMatch).toHaveBeenCalledTimes(1);
-      expect(queuePersonMatch).toHaveBeenCalledWith(
-        expect.objectContaining({ name: "Alice" }),
-        expect.any(Object),
-        state,
-        undefined
+      expect(queuePersonUpdate).toHaveBeenCalledTimes(1);
+      expect(queuePersonUpdate).toHaveBeenCalledWith(
+        { matched_guid: null },
+        expect.objectContaining({ candidateName: "Alice" }),
+        state
       );
     });
   });
@@ -568,6 +568,7 @@ describe("Extraction Handlers - Step 3 (Update) - interested_personas", () => {
           personaDisplayName: "TestPersona",
           isNewItem: true,
           existingItemId: undefined,
+          candidateName: "New Person",
           candidateRelationship: "friend",
           messages_context: [],
           messages_analyze: [],
@@ -601,6 +602,8 @@ describe("Extraction Handlers - Step 3 (Update) - interested_personas", () => {
         exposure_desired: 0.4,
         last_updated: "",
         interested_personas: ["persona-2"],
+        identifiers: [],
+        validated_date: "",
       });
 
       const request = createMockRequest({
@@ -628,6 +631,203 @@ describe("Extraction Handlers - Step 3 (Update) - interested_personas", () => {
       expect(upsertedPerson.interested_personas).toContain("persona-1");
       expect(upsertedPerson.interested_personas).toContain("persona-2");
       expect(upsertedPerson.interested_personas).toHaveLength(2);
+    });
+  });
+
+  describe("handlePersonUpdate — learned_on preservation", () => {
+    it("sets learned_on on new person", async () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandlePersonUpdate,
+        data: { personaId: "persona-1", personaDisplayName: "TestPersona", isNewItem: true, candidateName: "New Person", candidateRelationship: "friend", messages_context: [], messages_analyze: [] },
+      });
+      await handlers[LLMNextStep.HandlePersonUpdate](createMockResponse(request, { description: "A person", sentiment: 0 }), state as any);
+      const upserted = (state.human_person_upsert as any).mock.calls[0][0];
+      expect(upserted.learned_on).toBeDefined();
+    });
+
+    it("preserves learned_on from existing person on update", async () => {
+      const ORIGINAL_DATE = "2024-01-01T00:00:00.000Z";
+      state._human.people.push({
+        id: "existing-person", name: "Someone", description: "Known", relationship: "friend",
+        sentiment: 0, exposure_current: 0, exposure_desired: 0.5, last_updated: "",
+        learned_on: ORIGINAL_DATE, identifiers: [], interested_personas: [], validated_date: "",
+      });
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandlePersonUpdate,
+        data: { personaId: "persona-1", personaDisplayName: "TestPersona", isNewItem: false, existingItemId: "existing-person", candidateRelationship: "friend", messages_context: [], messages_analyze: [] },
+      });
+      await handlers[LLMNextStep.HandlePersonUpdate](createMockResponse(request, { description: "Updated", sentiment: 0 }), state as any);
+      const upserted = (state.human_person_upsert as any).mock.calls[0][0];
+      expect(upserted.learned_on).toBe(ORIGINAL_DATE);
+    });
+  });
+
+  describe("handlePersonUpdate — Ei Persona identifier rules", () => {
+    const PERSONA_UUID = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+
+    function makePersonUpdateRequest(isNewItem: boolean, existingItemId?: string) {
+      return createMockRequest({
+        next_step: LLMNextStep.HandlePersonUpdate,
+        data: {
+          personaId: "persona-1",
+          personaDisplayName: "TestPersona",
+          isNewItem,
+          existingItemId,
+          candidateName: "Someone",
+          candidateRelationship: "friend",
+          messages_context: [],
+          messages_analyze: [],
+        },
+      });
+    }
+
+    it("Rule 1: keeps a valid UUID value for Ei Persona unchanged", async () => {
+      state._personas[PERSONA_UUID] = { id: PERSONA_UUID, display_name: "Sisyphus", aliases: [] } as any;
+      const request = makePersonUpdateRequest(true);
+      const response = createMockResponse(request, {
+        description: "A person",
+        sentiment: 0,
+        identifiers: [{ type: "Ei Persona", value: PERSONA_UUID, is_primary: true }],
+      });
+
+      await handlers[LLMNextStep.HandlePersonUpdate](response, state as any);
+
+      const upserted = (state.human_person_upsert as any).mock.calls[0][0];
+      expect(upserted.identifiers).toContainEqual(expect.objectContaining({ type: "Ei Persona", value: PERSONA_UUID }));
+    });
+
+    it("Rule 3: resolves display name to UUID when persona is found", async () => {
+      state._personas[PERSONA_UUID] = { id: PERSONA_UUID, display_name: "Sisyphus", aliases: ["Sisy"] } as any;
+      const request = makePersonUpdateRequest(true);
+      const response = createMockResponse(request, {
+        description: "A person",
+        sentiment: 0,
+        identifiers: [{ type: "Ei Persona", value: "Sisyphus", is_primary: true }],
+      });
+
+      await handlers[LLMNextStep.HandlePersonUpdate](response, state as any);
+
+      const upserted = (state.human_person_upsert as any).mock.calls[0][0];
+      expect(upserted.identifiers).toContainEqual(expect.objectContaining({ type: "Ei Persona", value: PERSONA_UUID }));
+    });
+
+    it("Rule 3: resolves alias to UUID when persona is found by alias", async () => {
+      state._personas[PERSONA_UUID] = { id: PERSONA_UUID, display_name: "Sisyphus", aliases: ["Sisy"] } as any;
+      const request = makePersonUpdateRequest(true);
+      const response = createMockResponse(request, {
+        description: "A person",
+        sentiment: 0,
+        identifiers: [{ type: "Ei Persona", value: "Sisy", is_primary: true }],
+      });
+
+      await handlers[LLMNextStep.HandlePersonUpdate](response, state as any);
+
+      const upserted = (state.human_person_upsert as any).mock.calls[0][0];
+      expect(upserted.identifiers).toContainEqual(expect.objectContaining({ type: "Ei Persona", value: PERSONA_UUID }));
+    });
+
+    it("Rule 3: reclassifies unresolvable Ei Persona value as Nickname", async () => {
+      const request = makePersonUpdateRequest(true);
+      const response = createMockResponse(request, {
+        description: "A person",
+        sentiment: 0,
+        identifiers: [{ type: "Ei Persona", value: "GhostPersona", is_primary: true }],
+      });
+
+      await handlers[LLMNextStep.HandlePersonUpdate](response, state as any);
+
+      const upserted = (state.human_person_upsert as any).mock.calls[0][0];
+      expect(upserted.identifiers).not.toContainEqual(expect.objectContaining({ type: "Ei Persona" }));
+      expect(upserted.identifiers).toContainEqual(expect.objectContaining({ type: "Nickname", value: "GhostPersona" }));
+    });
+
+    it("Rule 3: reclassified Nickname becomes the person's name when primary", async () => {
+      const request = makePersonUpdateRequest(true);
+      const response = createMockResponse(request, {
+        description: "A person",
+        sentiment: 0,
+        identifiers: [{ type: "Ei Persona", value: "Sisy", is_primary: true }],
+      });
+
+      await handlers[LLMNextStep.HandlePersonUpdate](response, state as any);
+
+      const upserted = (state.human_person_upsert as any).mock.calls[0][0];
+      expect(upserted.identifiers).toContainEqual(expect.objectContaining({ type: "Nickname", value: "Sisy", is_primary: true }));
+    });
+
+    it("normalizes 'AI Persona' to 'Ei Persona' when UUID is valid", async () => {
+      state._personas[PERSONA_UUID] = { id: PERSONA_UUID, display_name: "Sisyphus", aliases: [] } as any;
+      const request = makePersonUpdateRequest(true);
+      const response = createMockResponse(request, {
+        description: "A person",
+        sentiment: 0,
+        identifiers: [{ type: "AI Persona", value: PERSONA_UUID, is_primary: true }],
+      });
+
+      await handlers[LLMNextStep.HandlePersonUpdate](response, state as any);
+
+      const upserted = (state.human_person_upsert as any).mock.calls[0][0];
+      expect(upserted.identifiers).toContainEqual(expect.objectContaining({ type: "Ei Persona", value: PERSONA_UUID }));
+    });
+
+    it("normalizes 'AI Persona' display name to UUID when persona is found", async () => {
+      state._personas[PERSONA_UUID] = { id: PERSONA_UUID, display_name: "Sisyphus", aliases: [] } as any;
+      const request = makePersonUpdateRequest(true);
+      const response = createMockResponse(request, {
+        description: "A person",
+        sentiment: 0,
+        identifiers: [{ type: "AI Persona", value: "Sisyphus", is_primary: true }],
+      });
+
+      await handlers[LLMNextStep.HandlePersonUpdate](response, state as any);
+
+      const upserted = (state.human_person_upsert as any).mock.calls[0][0];
+      expect(upserted.identifiers).toContainEqual(expect.objectContaining({ type: "Ei Persona", value: PERSONA_UUID }));
+    });
+
+    it("keeps unresolvable 'AI Persona' as AI Persona (not Nickname)", async () => {
+      const request = makePersonUpdateRequest(true);
+      const response = createMockResponse(request, {
+        description: "A person",
+        sentiment: 0,
+        identifiers: [{ type: "AI Persona", value: "UnknownBot" }],
+      });
+
+      await handlers[LLMNextStep.HandlePersonUpdate](response, state as any);
+
+      const upserted = (state.human_person_upsert as any).mock.calls[0][0];
+      expect(upserted.identifiers).not.toContainEqual(expect.objectContaining({ type: "Ei Persona" }));
+      expect(upserted.identifiers).not.toContainEqual(expect.objectContaining({ type: "Nickname" }));
+      expect(upserted.identifiers).toContainEqual(expect.objectContaining({ type: "AI Persona", value: "UnknownBot" }));
+    });
+
+    it("Rule 3: applies to identifiers_to_add on existing person updates", async () => {
+      state._human.people.push({
+        id: "existing-person",
+        name: "Someone",
+        description: "Known",
+        relationship: "friend",
+        sentiment: 0,
+        exposure_current: 0,
+        exposure_desired: 0.5,
+        last_updated: "",
+        identifiers: [{ type: "Nickname", value: "Someone", is_primary: true }],
+        interested_personas: [],
+        validated_date: "",
+      });
+
+      const request = makePersonUpdateRequest(false, "existing-person");
+      const response = createMockResponse(request, {
+        description: "Updated",
+        sentiment: 0,
+        identifiers_to_add: [{ type: "Ei Persona", value: "NoSuchPersona" }],
+      });
+
+      await handlers[LLMNextStep.HandlePersonUpdate](response, state as any);
+
+      const upserted = (state.human_person_upsert as any).mock.calls[0][0];
+      expect(upserted.identifiers).not.toContainEqual(expect.objectContaining({ type: "Ei Persona" }));
+      expect(upserted.identifiers).toContainEqual(expect.objectContaining({ type: "Nickname", value: "NoSuchPersona" }));
     });
   });
 

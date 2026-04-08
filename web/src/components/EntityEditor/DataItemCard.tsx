@@ -7,7 +7,9 @@ interface DataItemBase {
   description: string;
   sentiment: number;
   last_updated: string;
+  learned_on?: string;
   learned_by?: string;
+  last_mentioned?: string;
   last_changed_by?: string;
   persona_groups?: string[];
 }
@@ -205,8 +207,22 @@ export const DataItemCard = <T extends DataItemBase>({
           <div className="ei-data-card__footer">
             {showMeta && (
               <div className="ei-data-card__meta">
-                {item.learned_by && <span>Learned by: {resolvePersonaName ? resolvePersonaName(item.learned_by) : item.learned_by} • </span>}
-                <span>Updated: {formatTimestamp(item.last_updated)}</span>
+                {(item.learned_by || item.learned_on) && (
+                  <div className="ei-data-card__footer-row">
+                    {item.learned_by
+                      ? <>Learned By {resolvePersonaName ? resolvePersonaName(item.learned_by) : item.learned_by}{item.learned_on ? ` on ${formatTimestamp(item.learned_on)}` : ''}</>
+                      : <>Learned on {formatTimestamp(item.learned_on!)}</>
+                    }
+                  </div>
+                )}
+                {(item.last_changed_by || item.last_mentioned || item.last_updated) && (
+                  <div className="ei-data-card__footer-row">
+                    {item.last_changed_by
+                      ? <>Updated By {resolvePersonaName ? resolvePersonaName(item.last_changed_by) : item.last_changed_by} on {formatTimestamp(item.last_mentioned ?? item.last_updated)}</>
+                      : <>Updated on {formatTimestamp(item.last_mentioned ?? item.last_updated)}</>
+                    }
+                  </div>
+                )}
               </div>
             )}
             {item.persona_groups && item.persona_groups.length > 0 && (

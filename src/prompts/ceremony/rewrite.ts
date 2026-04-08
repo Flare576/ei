@@ -74,7 +74,7 @@ ${buildNewExamples()}
 
 Rules:
 - The original record (id: "${data.item.id}") MUST appear in "existing", slimmed down.
-- Descriptions should be concise — ideally under 300 characters, never over 500.
+- Descriptions should be concise: ${data.itemType === 'topic' ? 'ideally under 300 characters, never over 500' : 'ideally under 600 characters, never over 1000'}.
 - Preserve sentiment, strength, confidence, and other numeric values from the source record where applicable.
 - "type" must be one of: "topic", "person".
 - Topics MUST include "category" — one of: Interest, Goal, Dream, Conflict, Concern, Fear, Hope, Plan, Project, Event. For Event topics, the description should be a narrative account of a specific moment, not a general summary.

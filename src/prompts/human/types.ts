@@ -26,7 +26,10 @@ export interface TopicScanPromptData extends BaseScanPromptData {
   participant_context?: ParticipantContext;
 }
 
-export interface PersonScanPromptData extends BaseScanPromptData {}
+export interface PersonScanPromptData extends BaseScanPromptData {
+  participant_context?: ParticipantContext;
+  known_identifier_types?: string[];
+}
 
 export interface FactFindPromptData {
   persona_name: string;
@@ -50,6 +53,7 @@ export interface TopicScanCandidate {
 
 export interface PersonScanCandidate {
   name: string;
+  identifiers?: Array<{ type: string; value: string; is_primary?: boolean }>;
   description: string;
   relationship: string;
   reason: string;

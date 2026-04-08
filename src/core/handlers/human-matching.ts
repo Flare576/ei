@@ -5,6 +5,7 @@ import {
   type Person,
   type Quote,
 } from "../types.js";
+import type { PersonIdentifier } from "../types/data-items.js";
 import type { StateManager } from "../state-manager.js";
 import type { ItemMatchResult, ExposureImpact, TopicUpdateResult, PersonUpdateResult } from "../../prompts/human/types.js";
 import { queueTopicUpdate, queuePersonUpdate, type ExtractionContext } from "../orchestrators/index.js";
@@ -13,12 +14,12 @@ import { calculateExposureCurrent } from "../utils/exposure.js";
 
 
 import { resolveMessageWindow, getMessageText, normalizeRoomMessages } from "./utils.js";
+import { sanitizeEiPersonaIdentifiers } from "../utils/identifier-utils.js";
 
 export function handleTopicMatch(response: LLMResponse, state: StateManager): void {
   const result = response.parsed as ItemMatchResult | undefined;
   if (!result) {
-    console.error("[handleTopicMatch] No parsed result");
-    return;
+    throw new Error("[handleTopicMatch] No parsed result");
   }
 
   const personaId = response.request.data.personaId as string;
@@ -64,8 +65,7 @@ export function handleTopicMatch(response: LLMResponse, state: StateManager): vo
 export function handlePersonMatch(response: LLMResponse, state: StateManager): void {
   const result = response.parsed as ItemMatchResult | undefined;
   if (!result) {
-    console.error("[handlePersonMatch] No parsed result");
-    return;
+    throw new Error("[handlePersonMatch] No parsed result");
   }
 
   const personaId = response.request.data.personaId as string;
@@ -124,8 +124,7 @@ export async function handleTopicUpdate(response: LLMResponse, state: StateManag
   const candidateCategory = response.request.data.candidateCategory as string | undefined;
 
   if (!result.name || !result.description || result.sentiment === undefined) {
-    console.error("[handleTopicUpdate] Missing required fields in result");
-    return;
+    throw new Error(`[handleTopicUpdate] Missing required fields: name=${result.name}, description=${!!result.description}, sentiment=${result.sentiment}`);
   }
 
   const personaIds = personaId.split("|").filter(Boolean);
@@ -175,6 +174,7 @@ export async function handleTopicUpdate(response: LLMResponse, state: StateManag
     exposure_current: calculateExposureCurrent(exposureImpact, existingTopic?.exposure_current ?? 0),
     exposure_desired: result.exposure_desired ?? 0.5,
     last_updated: now,
+    learned_on: isNewItem ? now : existingTopic?.learned_on,
     last_mentioned: now,
     learned_by: isNewItem ? primaryId : existingTopic?.learned_by,
     last_changed_by: primaryId,
@@ -193,7 +193,11 @@ export async function handleTopicUpdate(response: LLMResponse, state: StateManag
 }
 
 export async function handlePersonUpdate(response: LLMResponse, state: StateManager): Promise<void> {
-  const result = response.parsed as (PersonUpdateResult & { quotes?: Array<{ text: string; reason: string }> }) | undefined;
+  const result = response.parsed as (PersonUpdateResult & {
+    identifiers?: PersonIdentifier[];
+    identifiers_to_add?: PersonIdentifier[];
+    quotes?: Array<{ text: string; reason: string }>;
+  }) | undefined;
 
   if (!result || Object.keys(result).length === 0) {
     console.log("[handlePersonUpdate] No changes needed (empty result)");
@@ -206,12 +210,13 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
   const personaDisplayName = response.request.data.personaDisplayName as string;
   const roomId = response.request.data.roomId as string | undefined;
   const candidateRelationship = response.request.data.candidateRelationship as string | undefined;
+  const candidateIdentifiers = (response.request.data.candidateIdentifiers ?? []) as PersonIdentifier[];
 
-  if (!result.name || !result.description || result.sentiment === undefined) {
-    console.error("[handlePersonUpdate] Missing required fields in result");
-    return;
+  if (!result.description || result.sentiment === undefined) {
+    throw new Error(`[handlePersonUpdate] Missing required fields: description=${!!result.description}, sentiment=${result.sentiment}`);
   }
 
+  const candidateName = response.request.data.candidateName as string;
   const personaIds = personaId.split("|").filter(Boolean);
   const primaryId = personaIds[0] ?? personaId;
 
@@ -236,10 +241,10 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
   try {
     const embeddingService = getEmbeddingService();
     const relationship = result.relationship ?? candidateRelationship ?? existingPerson?.relationship;
-    const text = getPersonEmbeddingText({ name: result.name, relationship, description: result.description });
+    const text = getPersonEmbeddingText({ name: candidateName, relationship, description: result.description });
     embedding = await embeddingService.embed(text);
   } catch (err) {
-    console.warn(`[handlePersonUpdate] Failed to compute embedding for person "${result.name}":`, err);
+    console.warn(`[handlePersonUpdate] Failed to compute embedding for person "${candidateName}":`, err);
   }
 
   const exposureImpact = result.exposure_impact as ExposureImpact | undefined;
@@ -250,15 +255,51 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
     ? (allPersonaGroups.length > 0 ? allPersonaGroups : existingPerson?.persona_groups)
     : [...new Set([...(existingPerson?.persona_groups ?? []), ...allPersonaGroups])];
 
+  let resolvedIdentifiers: PersonIdentifier[];
+  if (isNewItem) {
+    const llmIdentifiers: PersonIdentifier[] = sanitizeEiPersonaIdentifiers(
+      (result.identifiers ?? []).map(i => ({
+        type: i.type,
+        value: i.value,
+        ...(i.is_primary ? { is_primary: i.is_primary } : {}),
+      })),
+      state
+    );
+    const allCandidateIds = [...llmIdentifiers, ...candidateIdentifiers];
+    if (allCandidateIds.length === 0) {
+      const hasSpace = candidateName.includes(' ');
+      allCandidateIds.push({ type: hasSpace ? "full_name" : "nickname", value: candidateName, is_primary: true });
+    }
+    const deduped: PersonIdentifier[] = [];
+    for (const id of allCandidateIds) {
+      if (!deduped.some(e => e.value === id.value)) {
+        deduped.push(id);
+      }
+    }
+    resolvedIdentifiers = deduped;
+  } else {
+    const base = [...(existingPerson?.identifiers ?? [])];
+    const sanitizedToAdd = sanitizeEiPersonaIdentifiers(result.identifiers_to_add ?? [], state);
+    for (const id of sanitizedToAdd) {
+      if (!base.some(e => e.value === id.value)) {
+        base.push({ type: id.type, value: id.value, ...(id.is_primary ? { is_primary: id.is_primary } : {}) });
+      }
+    }
+    resolvedIdentifiers = base;
+  }
+
   const person: Person = {
     id: itemId,
-    name: result.name,
+    name: candidateName,
     description: result.description,
     sentiment: result.sentiment,
     relationship: result.relationship ?? candidateRelationship ?? existingPerson?.relationship ?? "Unknown",
     exposure_current: calculateExposureCurrent(exposureImpact, existingPerson?.exposure_current ?? 0),
     exposure_desired: result.exposure_desired ?? 0.5,
+    identifiers: resolvedIdentifiers,
+    validated_date: isNewItem ? '' : (existingPerson?.validated_date ?? ''),
     last_updated: now,
+    learned_on: isNewItem ? now : existingPerson?.learned_on,
     last_mentioned: now,
     learned_by: isNewItem ? primaryId : existingPerson?.learned_by,
     last_changed_by: primaryId,
@@ -273,8 +314,13 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
     : state.messages_get(personaId);
   await validateAndStoreQuotes(result.quotes, allMessages, itemId, personaDisplayName, personaGroup, state);
 
-  console.log(`[handlePersonUpdate] ${isNewItem ? "Created" : "Updated"} person "${result.name}"`);
+  const primaryValue = resolvedIdentifiers.find(i => i.is_primary)?.value ?? candidateName;
+  const resolvedName = (!primaryValue || primaryValue.toLowerCase() === 'unknown')
+    ? (result.relationship ?? candidateRelationship ?? '(unknown)')
+    : primaryValue;
+  console.log(`[handlePersonUpdate] ${isNewItem ? "Created" : "Updated"} person "${resolvedName}"`);
 }
+
 
 function normalizeText(text: string): string {
   return text

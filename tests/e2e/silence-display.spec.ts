@@ -33,10 +33,7 @@ test.describe("Silence Display — 1:1 Chat (W7)", () => {
   test("1:1 persona silence shows persona name", async ({ page, mockServer, mockServerUrl }) => {
     mockServer.setResponseForType("response", {
       type: "fixed",
-      content: JSON.stringify({
-        should_respond: false,
-        reason: "taking a moment to reflect",
-      }),
+      content: "noresponse\ntaking a moment to reflect",
       statusCode: 200,
     });
 

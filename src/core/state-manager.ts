@@ -183,6 +183,7 @@ export class StateManager {
           exposure_current: 0.3,
           exposure_desired: 0.3,
           last_updated: fact.last_updated,
+          learned_on: fact.last_updated,
           learned_by: fact.learned_by,
           last_changed_by: fact.last_changed_by,
           persona_groups: fact.persona_groups,
@@ -606,6 +607,12 @@ export class StateManager {
     const result = this.humanState.person_remove(id);
     this.scheduleSave();
     return result;
+  }
+
+  human_person_getByIdentifier(type: string | null, value: string): Person | undefined {
+    return this.getHuman().people.find(p =>
+      p.identifiers?.some(i => (!type || i.type === type) && i.value === value)
+    );
   }
 
   human_quote_add(quote: Quote): void {

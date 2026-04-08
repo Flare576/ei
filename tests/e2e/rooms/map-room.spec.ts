@@ -1,6 +1,5 @@
 import { test, expect } from "../fixtures.js";
 
-// MAP room checkpoint: mode "messages_against_persona", 2 participant personas + 1 judge
 function createMAPRoomCheckpoint(mockServerUrl: string) {
   const timestamp = new Date().toISOString();
 
@@ -17,6 +16,9 @@ function createMAPRoomCheckpoint(mockServerUrl: string) {
       last_updated: timestamp,
       last_activity: timestamp,
       settings: {
+        ceremony: {
+          time: "23:59",
+        },
         auto_save_interval_ms: 5000,
         default_model: "Mock LLM:mock-model",
         accounts: [
@@ -63,7 +65,7 @@ function createMAPRoomCheckpoint(mockServerUrl: string) {
       },
       "007": {
         entity: {
-          entity: "persona",
+          entity: "system",
           id: "007",
           display_name: "Sage",
           aliases: ["Sage"],
@@ -75,6 +77,7 @@ function createMAPRoomCheckpoint(mockServerUrl: string) {
           people: [],
           is_paused: false,
           is_archived: false,
+          is_static: false,
           last_updated: timestamp,
           last_activity: timestamp,
         },
@@ -82,7 +85,7 @@ function createMAPRoomCheckpoint(mockServerUrl: string) {
       },
       "oracle-judge": {
         entity: {
-          entity: "persona",
+          entity: "system",
           id: "oracle-judge",
           display_name: "Oracle",
           aliases: ["Oracle"],
@@ -94,6 +97,7 @@ function createMAPRoomCheckpoint(mockServerUrl: string) {
           people: [],
           is_paused: false,
           is_archived: false,
+          is_static: false,
           last_updated: timestamp,
           last_activity: timestamp,
         },
@@ -186,13 +190,11 @@ test.describe("MAP Room — activation cycle (W3)", () => {
 
     await page.goto("/");
 
-    // Navigate to the Rooms tab
     await expect(
       page.locator(".ei-panel-tab").filter({ hasText: "Rooms" })
     ).toBeVisible({ timeout: 10000 });
     await page.locator(".ei-panel-tab").filter({ hasText: "Rooms" }).click();
 
-    // Select the MAP room
     await expect(page.locator(".ei-room-pill")).toBeVisible({ timeout: 5000 });
     await page.locator(".ei-room-pill").click();
 
@@ -231,19 +233,15 @@ test.describe("MAP Room — activation cycle (W3)", () => {
 
     await page.goto("/");
 
-    // Navigate to the Rooms tab
     await page.locator(".ei-panel-tab").filter({ hasText: "Rooms" }).click();
 
-    // Select the MAP room
     await expect(page.locator(".ei-room-pill")).toBeVisible({ timeout: 5000 });
     await page.locator(".ei-room-pill").click();
 
-    // Send a message
     const input = page.locator("textarea");
     await input.fill("Which response is best?");
     await input.press("Enter");
 
-    // Wait for Activate button to appear (all personas have responded)
     await expect(page.locator(".ei-room-status__activate")).toBeVisible({
       timeout: 20000,
     });
@@ -259,11 +257,9 @@ test.describe("MAP Room — activation cycle (W3)", () => {
   }) => {
     mockServer.setResponseForType("room-response", {
       type: "fixed",
-      content: JSON.stringify({
-        should_respond: true,
-        verbal_response: "My MAP response",
-      }),
+      content: "My MAP response",
       statusCode: 200,
+      delayMs: 500,
     });
     mockServer.setResponseForType("room-judge", {
       type: "fixed",
@@ -314,11 +310,9 @@ test.describe("MAP Room — activation cycle (W3)", () => {
   }) => {
     mockServer.setResponseForType("room-response", {
       type: "fixed",
-      content: JSON.stringify({
-        should_respond: true,
-        verbal_response: "My MAP response",
-      }),
+      content: "My MAP response",
       statusCode: 200,
+      delayMs: 500,
     });
     mockServer.setResponseForType("room-judge", {
       type: "fixed",
@@ -340,30 +334,24 @@ test.describe("MAP Room — activation cycle (W3)", () => {
 
     await page.goto("/");
 
-    // Navigate to the Rooms tab
     await page.locator(".ei-panel-tab").filter({ hasText: "Rooms" }).click();
 
-    // Select the MAP room
     await expect(page.locator(".ei-room-pill")).toBeVisible({ timeout: 5000 });
     await page.locator(".ei-room-pill").click();
 
-    // Send a message
     const input = page.locator("textarea");
     await input.fill("Which response is best?");
     await input.press("Enter");
 
-    // Wait for Activate and click
     await expect(page.locator(".ei-room-status__activate")).toBeVisible({
       timeout: 20000,
     });
     await page.locator(".ei-room-status__activate").click();
 
-    // Wait for verdict message
     await expect(
       page.locator(".ei-room-message__silence")
     ).toBeVisible({ timeout: 20000 });
 
-    // Judge verdict must NOT say "chose not to respond"
     await expect(page.locator(".ei-room-message__silence")).not.toContainText(
       "chose not to respond"
     );

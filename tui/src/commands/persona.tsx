@@ -17,7 +17,7 @@ export const personaCommand: Command = {
   name: "persona",
   aliases: ["p"],
   description: "Switch persona, list all, create new, or update from person",
-  usage: "/persona [name] | /persona new <name> | /persona update <personaName> <personName>",
+  usage: "/persona [name] | /persona new <name> | /persona update <personaName> [personName]",
 
   async execute(args, ctx) {
     const unarchived = ctx.ei.personas().filter(p => !p.is_archived);
@@ -115,61 +115,79 @@ export const personaCommand: Command = {
 
       overlayCallbacks.hideForEditor?.();
 
-      // Step 3: review editor
-      const previewYAML = personaPreviewToYAML(preview, personaName);
-      const reviewResult = await spawnEditor({
-        initialContent: previewYAML,
-        filename: `${personaName}-preview.yaml`,
-        renderer: ctx.renderer,
-      });
+      let editorContent = personaPreviewToYAML(preview, personaName);
+      while (true) {
+        const reviewResult = await spawnEditor({
+          initialContent: editorContent,
+          filename: `${personaName}-preview.yaml`,
+          renderer: ctx.renderer,
+        });
 
-      if (reviewResult.aborted) {
-        ctx.showNotification("Cancelled", "info");
+        if (reviewResult.aborted) {
+          ctx.showNotification("Cancelled", "info");
+          return;
+        }
+
+        editorContent = reviewResult.content ?? editorContent;
+
+        let previewParsed: ReturnType<typeof personaPreviewFromYAML>;
+        try {
+          previewParsed = personaPreviewFromYAML(editorContent);
+        } catch (e) {
+          const shouldReEdit = await new Promise<boolean>(resolve => {
+            ctx.showOverlay((hideOverlay, hideForEditor) => (
+              <ConfirmOverlay
+                message={`Parse error:\n${e instanceof Error ? e.message : String(e)}\n\nRe-edit?`}
+                onConfirm={() => { hideForEditor(); resolve(true); }}
+                onCancel={() => { hideOverlay(); resolve(false); }}
+              />
+            ), ctx.renderer);
+          });
+          if (shouldReEdit) continue;
+          ctx.showNotification("Changes discarded", "info");
+          return;
+        }
+
+        if (!previewParsed.long_description?.trim()) {
+          const shouldReEdit = await new Promise<boolean>(resolve => {
+            ctx.showOverlay((hideOverlay, hideForEditor) => (
+              <ConfirmOverlay
+                message={`A long description is required — it drives traits, topics, and persona voice.\n\nRe-edit?`}
+                onConfirm={() => { hideForEditor(); resolve(true); }}
+                onCancel={() => { hideOverlay(); resolve(false); }}
+              />
+            ), ctx.renderer);
+          });
+          if (shouldReEdit) continue;
+          ctx.showNotification("Changes discarded", "info");
+          return;
+        }
+
+        // Step 4: create
+        const personaId = await ctx.ei.createPersona({
+          name: personaName,
+          ...previewParsed,
+        });
+        await ctx.ei.refreshPersonas();
+        ctx.ei.selectPersona(personaId);
+        ctx.showNotification(`Created ${personaName}`, "info");
         return;
       }
-
-      let previewParsed: ReturnType<typeof personaPreviewFromYAML>;
-      try {
-        previewParsed = personaPreviewFromYAML(reviewResult.content ?? previewYAML);
-      } catch (e) {
-        ctx.showNotification(`Parse error: ${e instanceof Error ? e.message : String(e)}`, "error");
-        return;
-      }
-
-      // Step 4: create
-      const personaId = await ctx.ei.createPersona({
-        name: personaName,
-        ...previewParsed,
-      });
-      await ctx.ei.refreshPersonas();
-      ctx.ei.selectPersona(personaId);
-      ctx.showNotification(`Created ${personaName}`, "info");
-      return;
     }
 
     if (args[0].toLowerCase() === "update") {
-      if (args.length < 3) {
-        ctx.showNotification("Usage: /p update <personaName> <personName>", "error");
+      if (args.length < 2) {
+        ctx.showNotification("Usage: /p update <personaName> [personName]", "error");
         return;
       }
       const personaName = args[1];
-      const personName = args.slice(2).join(" ");
+      const personName = args.length >= 3 ? args.slice(2).join(" ") : undefined;
 
       // Step 0: resolve persona (offer to create if not found)
       let personaId = await ctx.ei.resolvePersonaName(personaName);
       if (!personaId) {
-        const shouldCreate = await new Promise<boolean>(resolve => {
-          ctx.showOverlay((hideOverlay) => (
-            <ConfirmOverlay
-              message={`No persona named "${personaName}". Create one?`}
-              onConfirm={() => { hideOverlay(); resolve(true); }}
-              onCancel={() => { hideOverlay(); resolve(false); }}
-            />
-          ), ctx.renderer);
-        });
-        if (!shouldCreate) return;
-        personaId = await ctx.ei.createPersona({ name: personaName });
-        await ctx.ei.refreshPersonas();
+        ctx.showNotification(`No persona named "${personaName}". Use /persona new ${personaName} to create one first.`, "error");
+        return;
       }
       const persona = await ctx.ei.getPersona(personaId);
       if (!persona) {
@@ -177,49 +195,59 @@ export const personaCommand: Command = {
         return;
       }
 
-      // Step 1: find matching people
       const human = await ctx.ei.getHuman();
-      const matches = (human.people ?? []).filter(p =>
-        p.name.toLowerCase().includes(personName.toLowerCase())
-      );
 
-      if (matches.length === 0) {
-        ctx.showNotification(`No person named "${personName}" in your data`, "error");
-        return;
-      }
-
-      // Step 2: disambiguation if multiple matches
-      let selectedPerson: typeof matches[0];
-      if (matches.length > 1) {
-        const people: PersonPickerItem[] = matches.map(p => ({
-          id: p.id,
-          name: p.name,
-          relationship: p.relationship,
-          description: p.description,
-        }));
-
-        const choice = await new Promise<typeof matches[0] | null>((resolve) => {
-          ctx.showOverlay((hideOverlay, _hideForEditor) => (
-            <PersonPickerOverlay
-              title={`Multiple matches for "${personName}"`}
-              people={people}
-              onSelect={(item) => {
-                hideOverlay();
-                const found = matches.find(m => m.id === item.id);
-                resolve(found ?? null);
-              }}
-              onDismiss={() => {
-                hideOverlay();
-                resolve(null);
-              }}
-            />
-          ), ctx.renderer);
-        });
-
-        if (!choice) return;
-        selectedPerson = choice;
+      let selectedPerson: (typeof human.people)[0];
+      if (!personName) {
+        const linked = (human.people ?? []).find(p =>
+          p.identifiers?.some(id => id.type === 'Ei Persona' && id.value === personaId)
+        );
+        if (!linked) {
+          ctx.showNotification(`No person linked to "${personaName}". Try: /p update ${personaName} <personName>`, "error");
+          return;
+        }
+        selectedPerson = linked;
       } else {
-        selectedPerson = matches[0];
+        const matches = (human.people ?? []).filter(p =>
+          p.name.toLowerCase().includes(personName.toLowerCase())
+        );
+
+        if (matches.length === 0) {
+          ctx.showNotification(`No person named "${personName}" in your data`, "error");
+          return;
+        }
+
+        if (matches.length > 1) {
+          const people: PersonPickerItem[] = matches.map(p => ({
+            id: p.id,
+            name: p.name,
+            relationship: p.relationship,
+            description: p.description,
+          }));
+
+          const choice = await new Promise<typeof matches[0] | null>((resolve) => {
+            ctx.showOverlay((hideOverlay, _hideForEditor) => (
+              <PersonPickerOverlay
+                title={`Multiple matches for "${personName}"`}
+                people={people}
+                onSelect={(item) => {
+                  hideOverlay();
+                  const found = matches.find(m => m.id === item.id);
+                  resolve(found ?? null);
+                }}
+                onDismiss={() => {
+                  hideOverlay();
+                  resolve(null);
+                }}
+              />
+            ), ctx.renderer);
+          });
+
+          if (!choice) return;
+          selectedPerson = choice;
+        } else {
+          selectedPerson = matches[0];
+        }
       }
 
       // Step 3: generate preview with loading overlay
@@ -301,6 +329,15 @@ export const personaCommand: Command = {
         traits: previewParsed.traits,
         topics: previewParsed.topics,
       });
+
+      const existingIdentifiers = selectedPerson.identifiers ?? [];
+      const alreadyLinked = existingIdentifiers.some(id => id.type === 'Ei Persona' && id.value === personaId);
+      if (!alreadyLinked) {
+        const isPrimaryFirst = existingIdentifiers.length === 0;
+        const updatedIdentifiers = [...existingIdentifiers, { type: 'Ei Persona', value: personaId, ...(isPrimaryFirst ? { is_primary: true } : {}) }];
+        await ctx.ei.upsertPerson({ ...selectedPerson, identifiers: updatedIdentifiers });
+      }
+
       ctx.showNotification(`Updated ${persona.display_name}`, "info");
       return;
     }

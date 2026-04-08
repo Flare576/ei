@@ -1,6 +1,6 @@
 import React from 'react';
 import { GroupedCardList } from '../GroupedCardList';
-import { PersonCard } from '../PersonCard';
+import { PersonCard, PersonIdentifier, PersonaOption } from '../PersonCard';
 
 interface Person {
   id: string;
@@ -11,9 +11,13 @@ interface Person {
   exposure_current: number;
   exposure_desired: number;
   last_updated: string;
+  learned_on?: string;
   learned_by?: string;
+  last_mentioned?: string;
   last_changed_by?: string;
   persona_groups?: string[];
+  identifiers?: PersonIdentifier[];
+  validated_date?: string;
 }
 
 interface HumanPeopleTabProps {
@@ -24,6 +28,7 @@ interface HumanPeopleTabProps {
   onAdd: () => void;
   dirtyIds: Set<string>;
   resolvePersonaName?: (id: string) => string;
+  personas?: PersonaOption[];
   rewriteModelSet: boolean;
   onCreatePersona?: (person: Person) => void;
   onUpdatePersona?: (person: Person) => void;
@@ -51,6 +56,7 @@ export const HumanPeopleTab = ({
   onAdd,
   dirtyIds,
   resolvePersonaName,
+  personas,
   rewriteModelSet,
   onCreatePersona,
   onUpdatePersona,
@@ -69,7 +75,11 @@ export const HumanPeopleTab = ({
     personOnDelete: () => void,
     isDirty: boolean,
     sliders: { field: string; label: string; min?: number; max?: number }[],
-    resolvePersonaNameFn?: (id: string) => string
+    resolvePersonaNameFn?: (id: string) => string,
+    _onAiAssist?: unknown,
+    _aiContext?: unknown,
+    selectionMode?: boolean,
+    isSelected?: boolean
   ) => (
     <PersonCard
       person={person}
@@ -79,8 +89,12 @@ export const HumanPeopleTab = ({
       onDelete={personOnDelete}
       isDirty={isDirty}
       resolvePersonaName={resolvePersonaNameFn}
+      personas={personas}
       onCreatePersona={onCreatePersona}
       onUpdatePersona={onUpdatePersona}
+      selectionMode={selectionMode}
+      isSelected={isSelected}
+      onSelectionChange={onSelectionChange ? () => onSelectionChange(person.id) : undefined}
     />
   );
 
@@ -96,7 +110,13 @@ export const HumanPeopleTab = ({
   };
 
   const filteredPeople = filterQuery.trim()
-    ? people.filter(p => p.name.toLowerCase().includes(filterQuery.toLowerCase()))
+    ? people.filter(p => {
+        const q = filterQuery.toLowerCase();
+        return (
+          p.name.toLowerCase().includes(q) ||
+          (p.identifiers ?? []).some(id => id.value.toLowerCase().includes(q))
+        );
+      })
     : isDedupeMode ? [] : people;
 
   return (

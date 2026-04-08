@@ -10,6 +10,7 @@ import type {
   PersonaTrait,
   Topic,
   Person,
+  PersonIdentifier,
   PersonaTopic,
   ProviderAccount,
   ProviderType,
@@ -25,6 +26,7 @@ import { ContextStatus } from "../../../src/core/types.js";
 import type { ClaudeCodeSettings } from "../../../src/integrations/claude-code/types.js";
 import type { CursorSettings } from "../../../src/integrations/cursor/types.js";
 import { BUILT_IN_FACT_NAMES } from "../../../src/core/constants/built-in-facts.js";
+import { BUILT_IN_IDENTIFIER_TYPES } from "../../../src/core/constants/built-in-identifier-types.js";
 
 // =============================================================================
 // TYPES FOR YAML EDITING
@@ -38,7 +40,14 @@ interface EditableFact extends Fact {
   _delete?: boolean;
 }
 
-interface EditablePerson extends Person {
+interface YAMLPersonIdentifier {
+  type: string;
+  value: string;
+  primary?: true;
+}
+
+interface EditablePersonYAML extends Omit<Person, 'identifiers'> {
+  identifiers: YAMLPersonIdentifier[];
   _delete?: boolean;
 }
 
@@ -64,7 +73,7 @@ interface EditablePersonaData {
 interface EditableHumanData {
   facts: EditableFact[];
   topics: EditableTopic[];
-  people: EditablePerson[];
+  people: EditablePersonYAML[];
 }
 
 // =============================================================================
@@ -418,13 +427,52 @@ export function personaFromYAML(yamlContent: string, original: PersonaEntity, al
 // HUMAN SERIALIZATION
 // =============================================================================
 
+function toYAMLIdentifiers(identifiers: PersonIdentifier[], personaLookup?: Map<string, string>): YAMLPersonIdentifier[] {
+  return identifiers.map(({ type, value, is_primary }) => {
+    const resolvedValue = type === 'Ei Persona' ? (personaLookup?.get(value) ?? value) : value;
+    const entry: YAMLPersonIdentifier = { type, value: resolvedValue };
+    if (is_primary) entry.primary = true;
+    return entry;
+  });
+}
+
+function knownTypesComment(personaLookup?: Map<string, string>): string {
+  const lines = [`# Valid types: ${BUILT_IN_IDENTIFIER_TYPES.join(', ')}`];
+  if (personaLookup && personaLookup.size > 0) {
+    lines.push(`# Personas: ${Array.from(personaLookup.values()).join(', ')}`);
+  }
+  return lines.join('\n');
+}
+
+type WithReadOnlyFields = {
+  learned_on?: string;
+  learned_by?: string;
+  last_updated: string;
+  last_changed_by?: string;
+  last_mentioned?: string;
+};
+
+function readOnlyToEnd<T extends WithReadOnlyFields>(item: T): T {
+  const { learned_on, learned_by, last_updated, last_changed_by, last_mentioned, ...rest } = item;
+  return { ...rest, learned_by, learned_on, last_changed_by, last_updated, last_mentioned } as T;
+}
+
 export function humanToYAML(human: HumanEntity, personaLookup?: Map<string, string>): string {
   const data: EditableHumanData = {
-    facts: human.facts.map(f => ({ ...f, _delete: false })),
-    topics: human.topics.map(t => ({ ...t, _delete: false })),
-    people: human.people.map(p => ({ ...p, _delete: false })),
+    facts: human.facts.map(f => { const { interested_personas: _ip, ...rest } = readOnlyToEnd(f); return { ...rest, _delete: false }; }),
+    topics: human.topics.map(t => { const { interested_personas: _ip, ...rest } = readOnlyToEnd(t); return { ...rest, _delete: false }; }),
+    people: human.people.map(p => {
+      const { identifiers, interested_personas: _ip, ...rest } = readOnlyToEnd(p);
+      return {
+        ...rest,
+        identifiers: toYAMLIdentifiers(identifiers ?? [], personaLookup),
+        _delete: false as const,
+      };
+    }),
   };
   
+  const personComment = knownTypesComment(personaLookup);
+
   return YAML.stringify(data, {
     lineWidth: 0,
   })
@@ -437,6 +485,12 @@ export function humanToYAML(human: HumanEntity, personaLookup?: Map<string, stri
     const trimmed = val.trim();
     const displayName = personaLookup?.get(trimmed) ?? trimmed;
     return `${indent}# [read-only] ${key}${displayName}`;
+  })
+  .replace(/^(\s+)(learned_on: .+)$/mg, '$1# [read-only] $2')
+  .replace(/^(\s+)(last_mentioned: .+)$/mg, '$1# [read-only] $2')
+  .replace(/^(\s+)(last_updated: .+)$/mg, '$1# [read-only] $2')
+  .replace(/^(\s+)(identifiers:)/mg, (_, indent, _key) => {
+    return `${indent}${personComment}\n${indent}identifiers:`;
   });
 }
 
@@ -493,9 +547,19 @@ export function humanFromYAML(yamlContent: string, original?: HumanEntity): Huma
     if (p._delete) {
       deletedPersonIds.push(p.id);
     } else {
-      const { _delete, ...parsed } = p;
+      const { _delete, identifiers: yamlIdentifiers, ...parsed } = p;
+      const identifiers: PersonIdentifier[] = (yamlIdentifiers ?? []).map(({ type, value, primary }) => ({
+        type,
+        value,
+        ...(primary ? { is_primary: true } : {}),
+      }));
       const originalPerson = original?.people.find(op => op.id === parsed.id);
-      const person = originalPerson ? { ...originalPerson, ...parsed } : parsed;
+      const personBase: Person = originalPerson
+        ? { ...originalPerson, ...parsed, identifiers }
+        : { ...parsed, identifiers };
+      const person: Person = !personBase.validated_date
+        ? { ...personBase, validated_date: new Date().toISOString() }
+        : personBase;
       people.push(person);
     }
   }

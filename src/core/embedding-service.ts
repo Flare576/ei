@@ -101,6 +101,29 @@ export async function computeQuoteEmbedding(text: string): Promise<number[] | un
   }
 }
 
+export function getPersonaDescriptionText(persona: {
+  display_name: string;
+  long_description?: string;
+  short_description?: string;
+}): string {
+  const desc = persona.long_description ?? persona.short_description;
+  return [persona.display_name, desc].filter(Boolean).join(' - ');
+}
+
+export async function computePersonaDescriptionEmbedding(persona: {
+  display_name: string;
+  long_description?: string;
+  short_description?: string;
+}): Promise<number[] | undefined> {
+  try {
+    const service = getEmbeddingService();
+    return await service.embed(getPersonaDescriptionText(persona));
+  } catch (err) {
+    console.warn(`[computePersonaDescriptionEmbedding] Failed for "${persona.display_name}":`, err);
+    return undefined;
+  }
+}
+
 // =============================================================================
 // FACTORY - Lazy loading based on environment
 // =============================================================================
@@ -219,7 +242,7 @@ function createBunService(): EmbeddingService {
       const cacheDir = process.env.EI_DATA_PATH
         ? path.join(process.env.EI_DATA_PATH, 'embeddings')
         : path.join(os.homedir(), '.local', 'share', 'ei', 'embeddings');
-      embedder = await mod.FlagEmbedding.init({ model: mod.EmbeddingModel.AllMiniLML6V2, cacheDir });
+      embedder = await mod.FlagEmbedding.init({ model: mod.EmbeddingModel.AllMiniLML6V2, cacheDir, showDownloadProgress: false });
       return embedder;
     })();
     

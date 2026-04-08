@@ -34,6 +34,7 @@ import { StateManager } from "./state-manager.js";
 import { QueueProcessor } from "./queue-processor.js";
 import { handlers } from "./handlers/index.js";
 import { normalizeRoomMessages, getMessageContent } from "./handlers/utils.js";
+import { sanitizeEiPersonaIdentifiers } from "./utils/identifier-utils.js";
 import { ContextStatus as ContextStatusEnum, RoomMode } from "./types.js";
 import { registerReadMemoryExecutor, registerFileReadExecutor } from "./tools/index.js";
 import { createReadMemoryExecutor } from "./tools/builtin/read-memory.js";
@@ -232,6 +233,7 @@ export class Processor {
     }
     this.bootstrapTools();
     this.seedBuiltinFacts();
+    this.migrateLearnedOn();
     this.seedSettings();
     registerReadMemoryExecutor(createReadMemoryExecutor(this.searchHumanData.bind(this), this.getPersonaList.bind(this)));
     if (this.isTUI) {
@@ -800,6 +802,7 @@ export class Processor {
         sentiment: 0,
         validated_date: '',
         last_updated: now,
+        learned_on: now,
       };
       human.facts.push(newFact);
       seededCount++;
@@ -808,6 +811,27 @@ export class Processor {
     if (seededCount > 0) {
       this.stateManager.setHuman(human);
       console.log(`[Processor] Seeded ${seededCount} built-in facts`);
+    }
+  }
+
+  private migrateLearnedOn(): void {
+    const human = this.stateManager.getHuman();
+
+    const backfill = <T extends { learned_on?: string; last_updated: string }>(items: T[]): T[] =>
+      items.map(item => item.learned_on ? item : { ...item, learned_on: item.last_updated });
+
+    const facts = backfill(human.facts);
+    const topics = backfill(human.topics);
+    const people = backfill(human.people);
+
+    const changed =
+      facts.some((f, i) => f !== human.facts[i]) ||
+      topics.some((t, i) => t !== human.topics[i]) ||
+      people.some((p, i) => p !== human.people[i]);
+
+    if (changed) {
+      this.stateManager.setHuman({ ...human, facts, topics, people });
+      console.log("[Processor] Backfilled learned_on for existing data items");
     }
   }
 
@@ -1024,6 +1048,7 @@ const toolNextSteps = new Set([
   LLMNextStep.HandleEiHeartbeat,
   LLMNextStep.HandleToolContinuation,
   LLMNextStep.HandleDedupCurate,
+  LLMNextStep.HandlePersonIdentifierMigration,
 ]);
             const toolPersonaId =
               personaId ??
@@ -1038,8 +1063,13 @@ const toolNextSteps = new Set([
               (request.next_step === LLMNextStep.HandleToolContinuation &&
                 request.data.originalNextStep === LLMNextStep.HandleDedupCurate);
 
+            const isPersonMigrationRequest =
+              request.next_step === LLMNextStep.HandlePersonIdentifierMigration ||
+              (request.next_step === LLMNextStep.HandleToolContinuation &&
+                request.data.originalNextStep === LLMNextStep.HandlePersonIdentifierMigration);
+
             let tools: ToolDefinition[] = [];
-            if (isDedupRequest) {
+            if (isDedupRequest || isPersonMigrationRequest) {
               const readMemory = this.stateManager.tools_getByName("read_memory");
               if (readMemory?.enabled) {
                 tools = [readMemory];
@@ -1065,8 +1095,11 @@ const toolNextSteps = new Set([
               }
             }
             
+            const toolPersonaName = toolPersonaId
+              ? (this.stateManager.persona_getById(toolPersonaId)?.display_name ?? toolPersonaId)
+              : "none";
             console.log(
-              `[Tools] Dispatch for ${request.next_step} persona=${toolPersonaId ?? "none"}: ${tools.length} tool(s) attached`
+              `[Tools] Dispatch for ${request.next_step} persona=${toolPersonaName}: ${tools.length} tool(s) attached`
             );
 
             this.queueProcessor.start(
@@ -1591,9 +1624,7 @@ const toolNextSteps = new Set([
 
       if (
         response.request.next_step === LLMNextStep.HandlePersonaTraitExtraction ||
-        response.request.next_step === LLMNextStep.HandlePersonaTopicScan ||
-        response.request.next_step === LLMNextStep.HandlePersonaTopicMatch ||
-        response.request.next_step === LLMNextStep.HandlePersonaTopicUpdate
+        response.request.next_step === LLMNextStep.HandlePersonaTopicRating
       ) {
         const personaId = response.request.data.personaId as string;
         if (personaId) {
@@ -1824,7 +1855,8 @@ const toolNextSteps = new Set([
   }
 
   async upsertPerson(person: Person): Promise<void> {
-    await upsertPerson(this.stateManager, person);
+    const sanitized = { ...person, identifiers: sanitizeEiPersonaIdentifiers(person.identifiers ?? [], this.stateManager) };
+    await upsertPerson(this.stateManager, sanitized);
     this.interface.onHumanUpdated?.();
   }
 

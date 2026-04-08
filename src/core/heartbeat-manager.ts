@@ -16,6 +16,10 @@ import {
 } from "../prompts/index.js";
 import { filterMessagesForContext } from "./context-utils.js";
 import { filterHumanDataByVisibility } from "./prompt-context-builder.js";
+import { cosineSimilarity, computePersonaDescriptionEmbedding } from "./embedding-service.js";
+
+const REFLECTION_SIMILARITY_THRESHOLD = 0.80;
+const REFLECTION_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000; // 1 week between drift prompts
 
 // =============================================================================
 // MODEL HELPERS
@@ -81,6 +85,20 @@ export async function queueEiHeartbeat(
       type: "Fact Check",
       name: fact.name,
       description: fact.description,
+      quote: quote?.text,
+    });
+  }
+
+  const newPeople = human.people
+    .filter(p => !p.validated_date)
+    .slice(0, 3);
+  for (const person of newPeople) {
+    const quote = human.quotes.find((q) => q.data_item_ids.includes(person.id));
+    items.push({
+      id: person.id,
+      type: "New Person",
+      name: person.name,
+      description: person.description ?? '',
       quote: quote?.text,
     });
   }
@@ -175,7 +193,7 @@ export async function queueEiHeartbeat(
     user: prompt.user,
     next_step: LLMNextStep.HandleEiHeartbeat,
     model: getModelForPersona(sm, "ei"),
-    data: { personaId: "ei", isTUI },
+    data: { personaId: "ei", isTUI, newPersonIds: newPeople.map(p => p.id) },
   });
 }
 
@@ -214,6 +232,44 @@ export async function queueHeartbeatCheck(sm: StateManager, personaId: string, i
         b.exposure_desired - b.exposure_current - (a.exposure_desired - a.exposure_current)
     );
 
+  let driftContext: HeartbeatCheckPromptData["drift_context"];
+  const personRecord = sm.human_person_getByIdentifier("ei_persona", personaId);
+
+  if (personRecord?.embedding) {
+    let currentPersona = persona;
+
+    if (!currentPersona.description_embedding) {
+      const embedding = await computePersonaDescriptionEmbedding(currentPersona);
+      if (embedding) {
+        sm.persona_update(personaId, { description_embedding: embedding });
+        currentPersona = { ...currentPersona, description_embedding: embedding };
+      }
+    }
+
+    if (currentPersona.description_embedding) {
+      const lastAsked = currentPersona.reflection_last_asked
+        ? new Date(currentPersona.reflection_last_asked).getTime()
+        : 0;
+
+      // Gate: person must have been updated at least 1 week AFTER reflection was last asked.
+      // This handles both the cooldown AND the extraction echo — the ceremony extraction
+      // that fires right after a persona surfaces drift updates last_updated by minutes,
+      // which can never satisfy the 1-week offset requirement.
+      if (new Date(personRecord.last_updated).getTime() > lastAsked + REFLECTION_COOLDOWN_MS) {
+        const similarity = cosineSimilarity(personRecord.embedding, currentPersona.description_embedding);
+        if (similarity < REFLECTION_SIMILARITY_THRESHOLD) {
+          driftContext = {
+            people_description: personRecord.description ?? '',
+            persona_description: currentPersona.long_description ?? '',
+          };
+          console.log(`[HeartbeatCheck ${persona.display_name}] Drift detected (similarity: ${similarity.toFixed(3)}) - including reflection context`);
+        } else {
+          console.log(`[HeartbeatCheck ${persona.display_name}] Person updated but no drift (similarity: ${similarity.toFixed(3)})`);
+        }
+      }
+    }
+  }
+
   const promptData: HeartbeatCheckPromptData = {
     persona: {
       name: persona.display_name,
@@ -226,6 +282,7 @@ export async function queueHeartbeatCheck(sm: StateManager, personaId: string, i
     },
     recent_history: contextHistory.slice(-10),
     inactive_days: inactiveDays,
+    drift_context: driftContext,
   };
 
   const prompt = buildHeartbeatCheckPrompt(promptData);

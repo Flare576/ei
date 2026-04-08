@@ -94,7 +94,21 @@ function stripEmbedding<T extends { embedding?: unknown }>(item: T): Omit<T, "em
 function buildRecordFormatHint(itemType: string): string {
   switch (itemType) {
     case "person":
-      return `Person fields: id, type, name, description, sentiment (-1 to 1), relationship, exposure_current (0-1), exposure_desired (0-1), learned_by (optional), last_changed_by (optional)`;
+      return `Person fields: id, type, name, identifiers (array of {type, value, is_primary?}), description, sentiment (-1 to 1), relationship, exposure_current (0-1), exposure_desired (0-1), learned_by (optional), last_changed_by (optional).
+
+When merging two Person records, combine ALL identifiers from both records into a single deduplicated list (by value). Mark exactly one as is_primary.
+
+Example merged person output:
+{
+  "identifiers": [
+    { "type": "nickname", "value": "Flare", "is_primary": true },
+    { "type": "full_name", "value": "Jeremy Scherer" },
+    { "type": "github", "value": "Flare576" }
+  ],
+  "description": "merged description...",
+  "sentiment": 0.5,
+  "relationship": "Friend"
+}`;
     case "topic":
       return `Topic fields: id, type, name, description, sentiment (-1 to 1), category, exposure_current (0-1), exposure_desired (0-1), learned_by (optional), last_changed_by (optional)`;
     default:

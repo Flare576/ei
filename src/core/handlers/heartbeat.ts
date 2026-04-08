@@ -27,6 +27,11 @@ export function handleHeartbeatCheck(response: LLMResponse, state: StateManager)
   state.persona_update(personaId, { last_heartbeat: now });
   state.queue_clearPersonaResponses(personaId, LLMNextStep.HandleHeartbeatCheck);
 
+  if (result.mentioned_reflection === true) {
+    state.persona_update(personaId, { reflection_last_asked: now });
+    console.log(`[HeartbeatCheck ${personaDisplayName}] Persona surfaced identity drift - reflection_last_asked set`);
+  }
+
   if (!result.should_respond) {
     console.log(`[HeartbeatCheck ${personaDisplayName}] Chose not to reach out (should_respond=false)`);
     return;
@@ -106,5 +111,16 @@ export function handleEiHeartbeat(response: LLMResponse, state: StateManager): v
       break;
     default:
       console.warn(`[handleEiHeartbeat] Unexpected item type "${found.type}" for id "${result.id}"`);
+  }
+
+  const newPersonIds = (response.request.data.newPersonIds ?? []) as string[];
+  if (newPersonIds.length > 0) {
+    const human = state.getHuman();
+    for (const personId of newPersonIds) {
+      const person = human.people.find(p => p.id === personId);
+      if (person) {
+        state.human_person_upsert({ ...person, validated_date: now });
+      }
+    }
   }
 }

@@ -35,9 +35,6 @@ vi.mock("../../../src/core/orchestrators/index.js", () => ({
   startCeremony: vi.fn(),
   handleCeremonyProgress: vi.fn(),
   prunePersonaMessages: vi.fn(),
-  queueExpirePhase: vi.fn(),
-  queueExplorePhase: vi.fn(),
-  queueDescriptionCheck: vi.fn(),
   runHumanCeremony: vi.fn(),
 }));
 
@@ -461,7 +458,7 @@ describe("Processor API Methods", () => {
 
   describe("getPersonaList", () => {
     it("returns mapped summaries of all personas", async () => {
-      await processor.createPersona({ name: "TestBot", short_description: "A test persona" });
+      await processor.createPersona({ name: "TestBot", short_description: "A test persona", long_description: "A persona used for testing the getPersonaList method." });
       
       const list = await processor.getPersonaList();
       

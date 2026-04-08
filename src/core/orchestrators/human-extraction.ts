@@ -1,4 +1,5 @@
 import { LLMRequestType, LLMPriority, LLMNextStep, type Message, type Topic, type Person } from "../types.js";
+import type { PersonIdentifier } from "../types/data-items.js";
 import type { StateManager } from "../state-manager.js";
 import {
   buildFactFindPrompt,
@@ -6,16 +7,14 @@ import {
   buildHumanPersonScanPrompt,
   buildTopicMatchPrompt,
   buildTopicUpdatePrompt,
-  buildPersonMatchPrompt,
   buildPersonUpdatePrompt,
   buildEventScanPrompt,
   type TopicScanCandidate,
-  type PersonScanCandidate,
   type ItemMatchResult,
   type ParticipantContext,
 } from "../../prompts/human/index.js";
 import { chunkExtractionContext } from "./extraction-chunker.js";
-import { getEmbeddingService, findTopK, getTopicEmbeddingText, getPersonEmbeddingText } from "../embedding-service.js";
+import { getEmbeddingService, findTopK, getTopicEmbeddingText } from "../embedding-service.js";
 import { resolveTokenLimit } from "../llm-client.js";
 import { BUILT_IN_FACT_NAMES } from "../constants/built-in-facts.js";
 import { buildEventWindows } from "../utils/event-windows.js";
@@ -192,11 +191,20 @@ export function queuePersonScan(context: ExtractionContext, state: StateManager,
     state.messages_markExtracted(chunk.personaId, chunk.messages_analyze.map(m => m.id), "p");
   }
 
+  const humanForScan = state.getHuman();
+  const userIdentifierTypesForScan = [...new Set(
+    humanForScan.people
+      .flatMap(p => (p.identifiers ?? []).map(i => i.type))
+      .filter(Boolean)
+  )];
+
   for (const chunk of chunks) {
     const prompt = buildHumanPersonScanPrompt({
       persona_name: chunk.personaDisplayName,
       messages_context: chunk.messages_context,
       messages_analyze: chunk.messages_analyze,
+      participant_context: buildParticipantContext(context.personaId, state),
+      known_identifier_types: userIdentifierTypesForScan,
     });
 
     state.queue_enqueue({
@@ -364,88 +372,6 @@ export async function queueTopicMatch(
   });
 }
 
-/**
- * Queue a person match request using embedding-based similarity (people only).
- */
-export async function queuePersonMatch(
-  candidate: PersonScanCandidate,
-  context: ExtractionContext,
-  state: StateManager,
-  extractionModel?: string
-): Promise<void> {
-  const human = state.getHuman();
-
-  const peopleWithEmbeddings = human.people.filter(p => p.embedding && p.embedding.length > 0);
-
-  let topKItems: Array<{ id: string; name: string; description: string; relationship?: string }> = [];
-
-  if (peopleWithEmbeddings.length > 0) {
-    try {
-      const embeddingService = getEmbeddingService();
-      const candidateText = getPersonEmbeddingText({
-        name: candidate.name,
-        relationship: candidate.relationship,
-        description: candidate.description,
-      });
-      const candidateVector = await embeddingService.embed(candidateText);
-
-      const topK = findTopK(candidateVector, peopleWithEmbeddings, EMBEDDING_TOP_K);
-      topKItems = topK
-        .filter(({ similarity }) => similarity >= EMBEDDING_MIN_SIMILARITY)
-        .map(({ item }) => ({
-          id: item.id,
-          name: item.name,
-          description: item.description,
-          relationship: item.relationship,
-        }));
-
-      console.log(`[queuePersonMatch] Embedding search: ${peopleWithEmbeddings.length} people → ${topKItems.length} candidates`);
-      if (topKItems.length > 0) state.embedding_setWarning(false);
-    } catch (err) {
-      console.error(`[queuePersonMatch] Embedding search failed, falling back to recent people:`, err);
-      state.embedding_setWarning(true);
-    }
-  }
-
-  if (topKItems.length === 0) {
-    const sorted = [...human.people].sort((a, b) => {
-      const aDate = a.last_mentioned ?? a.last_updated;
-      const bDate = b.last_mentioned ?? b.last_updated;
-      return bDate.localeCompare(aDate);
-    });
-    topKItems = sorted.slice(0, EMBEDDING_TOP_K).map(p => ({
-      id: p.id,
-      name: p.name,
-      description: p.description,
-      relationship: p.relationship,
-    }));
-    console.log(`[queuePersonMatch] No embedding matches, using ${topKItems.length} most-recent people`);
-  }
-
-  const prompt = buildPersonMatchPrompt({
-    candidate_name: candidate.name,
-    candidate_description: candidate.description,
-    candidate_relationship: candidate.relationship,
-    existing_people: topKItems,
-  });
-
-  state.queue_enqueue({
-    type: LLMRequestType.JSON,
-    priority: LLMPriority.Normal,
-    model: extractionModel,
-    system: prompt.system,
-    user: prompt.user,
-    next_step: LLMNextStep.HandlePersonMatch,
-    data: {
-      ...context,
-      candidateName: candidate.name,
-      candidateDescription: candidate.description,
-      candidateRelationship: candidate.relationship,
-      extraction_model: extractionModel,
-    },
-  });
-}
-
 export function queueTopicUpdate(
   matchResult: ItemMatchResult,
   context: ExtractionContext & {
@@ -592,6 +518,7 @@ export function queuePersonUpdate(
     candidateName: string;
     candidateDescription: string;
     candidateRelationship: string;
+    candidateIdentifiers?: PersonIdentifier[];
     extraction_model?: string;
   },
   state: StateManager
@@ -605,10 +532,31 @@ export function queuePersonUpdate(
     existingItem = human.people.find(p => p.id === matchedGuid) ?? null;
   }
 
+  const candidateIdentifiers = context.candidateIdentifiers ?? [];
+
+  if (!isNewItem && existingItem && candidateIdentifiers.length > 0) {
+    const merged = [...(existingItem.identifiers ?? [])];
+    for (const ci of candidateIdentifiers) {
+      if (!merged.some(ei => ei.value === ci.value)) {
+        merged.push(ci);
+      }
+    }
+    existingItem = { ...existingItem, identifiers: merged };
+    state.human_person_upsert(existingItem);
+  }
+
+  const userIdentifierTypes = [...new Set(
+    human.people
+      .flatMap(p => (p.identifiers ?? []).map(i => i.type))
+      .filter(Boolean)
+  )];
+
   const extractionOptions: ExtractionOptions = { extraction_model: context.extraction_model };
   const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state, extractionOptions));
 
   if (chunks.length === 0) return 0;
+
+  const primaryPersonaIdForUpdate = context.personaId.split("|")[0];
 
   for (const chunk of chunks) {
     const prompt = buildPersonUpdatePrompt({
@@ -619,6 +567,8 @@ export function queuePersonUpdate(
       messages_context: chunk.messages_context,
       messages_analyze: chunk.messages_analyze,
       persona_name: chunk.personaDisplayName,
+      participant_context: buildParticipantContext(primaryPersonaIdForUpdate, state),
+      known_identifier_types: userIdentifierTypes,
     });
 
     state.queue_enqueue({
@@ -634,7 +584,9 @@ export function queuePersonUpdate(
         roomId: context.roomId,
         isNewItem,
         existingItemId: existingItem?.id,
+        candidateName: context.candidateName,
         candidateRelationship: context.candidateRelationship,
+        candidateIdentifiers: isNewItem ? candidateIdentifiers : undefined,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
       },
     });

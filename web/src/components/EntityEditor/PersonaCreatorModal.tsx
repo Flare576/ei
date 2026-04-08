@@ -349,6 +349,11 @@ export function PersonaCreatorModal({
       return;
     }
 
+    if (!description.trim()) {
+      alert('A long description is required — it drives traits, topics, and persona voice.');
+      return;
+    }
+
     if (traits.length === 0 && topics.length === 0 && description) {
       if (!confirm('Generate personality from description? AI will create traits and topics based on the description.')) {
         return;

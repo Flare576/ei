@@ -93,6 +93,7 @@ export interface HumanSettings {
   default_model?: string;           // Will store ModelConfig.id GUID post-migration
   oneshot_model?: string;           // Model for AI-assist (wand) requests; falls back to default_model. Will store ModelConfig.id GUID post-migration.
   rewrite_model?: string;           // Model for rewrite ceremony step; must be capable (Sonnet/Opus class). Unset = rewrite disabled. Will store ModelConfig.id GUID post-migration.
+  people_migration_complete?: boolean; // Set to true when all Person records have identifiers. Ceremony migration step short-circuits when true.
   queue_paused?: boolean;
   skip_quote_delete_confirm?: boolean;
   name_display?: string;
@@ -147,6 +148,8 @@ export interface PersonaEntity {
   last_heartbeat?: string;
   last_extraction?: string;
   tools?: string[];              // IDs of ToolDefinitions this persona can use. Empty/absent = no tool access.
+  reflection_last_asked?: string;   // ISO timestamp. Set ONLY when Persona explicitly surfaces identity drift (mentioned_reflection: true).
+  description_embedding?: number[]; // Embedding of long_description (short_description fallback). Excludes traits. See embedding-service.ts:getPersonaDescriptionText.
 }
 
 export interface PersonaCreationInput {

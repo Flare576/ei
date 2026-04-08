@@ -42,7 +42,7 @@ function createMockStateManager() {
       { id: "top1", name: "AI", description: "Artificial Intelligence", sentiment: 0.8, exposure_current: 0.5, exposure_desired: 0.7, last_updated: "" },
     ],
     people: [
-      { id: "p1", name: "Alice", description: "Best friend", relationship: "friend", sentiment: 0.9, exposure_current: 0.6, exposure_desired: 0.8, last_updated: "" },
+      { id: "p1", name: "Alice", description: "Best friend", relationship: "friend", sentiment: 0.9, exposure_current: 0.6, exposure_desired: 0.8, last_updated: "", identifiers: [], validated_date: "" },
     ],
     quotes: [],
     last_updated: new Date().toISOString(),
@@ -182,11 +182,13 @@ describe("Scan Orchestrators (Step 1)", () => {
     it("enqueues person scan request with known persona names", () => {
       queuePersonScan(context, state as any);
 
-      expect(buildHumanPersonScanPrompt).toHaveBeenCalledWith({
-        persona_name: "Ei",
-        messages_context: context.messages_context,
-        messages_analyze: context.messages_analyze,
-      });
+      expect(buildHumanPersonScanPrompt).toHaveBeenCalledWith(
+        expect.objectContaining({
+          persona_name: "Ei",
+          messages_context: context.messages_context,
+          messages_analyze: context.messages_analyze,
+        })
+      );
 
       expect(state.queue_enqueue).toHaveBeenCalledWith(
         expect.objectContaining({

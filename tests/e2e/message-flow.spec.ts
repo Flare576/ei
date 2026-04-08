@@ -35,8 +35,7 @@ function isUserInitiatedRequest(body: { messages?: Array<{ role: string; content
 
 function getLatestUserInput(body: { messages?: Array<{ role: string; content: string }> }): string {
   const userMessages = body?.messages?.filter(m => m.role === "user") || [];
-  if (userMessages.length < 2) return userMessages[0]?.content || "";
-  return userMessages[userMessages.length - 2]?.content || "";
+  return userMessages[userMessages.length - 1]?.content || "";
 }
 
 function isExtractionRequest(body: { messages?: Array<{ role: string; content: string }> }): boolean {

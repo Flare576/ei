@@ -10,6 +10,7 @@ export interface DataItemBase {
   description: string;
   sentiment: number;
   last_updated: string;
+  learned_on?: string;           // ISO timestamp when item first entered the system. Immutable after creation. Pairs with learned_by.
   last_mentioned?: string;        // Set by extraction only, never ceremony. Used for --recent sorting.
   learned_by?: string;           // Persona ID that originally learned this item (stable UUID)
   last_changed_by?: string;      // Persona ID that most recently updated this item (stable UUID)
@@ -54,7 +55,18 @@ export interface PersonaTopic {
   last_updated: string;     // ISO timestamp
 }
 
+export interface PersonIdentifier {
+  type: string;         // User-extensible. "nickname", "github", "ei_persona", etc. NOT an enum.
+  value: string;        // The identifier value. For ei_persona: the Persona UUID.
+  is_primary?: boolean; // True = this is the display name. Synced to DataItemBase.name on write.
+}
+
 export interface Person extends DataItemBase {
+  identifiers: PersonIdentifier[];
+  // DataItemBase.name stays. Must always equal:
+  //   identifiers.find(i => i.is_primary)?.value ?? identifiers[0]?.value ?? name
+  // State manager syncs name on every write.
+  validated_date: string;  // ISO timestamp. Empty string = candidate for Ei heartbeat intro. Same contract as Fact.validated_date.
   relationship: string;
   exposure_current: number;
   exposure_desired: number;

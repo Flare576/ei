@@ -124,6 +124,22 @@ ${formatPeopleWithGaps(data.human.people)}`;
 
 **Quality over quantity** - Only reach out if you have something real to say.`;
 
+  const driftFragment = data.drift_context
+    ? `## Identity Reflection
+
+The human's notes about you have recently evolved. Compare these:
+
+**How the human currently describes you:**
+${data.drift_context.people_description}
+
+**Your current definition:**
+${data.drift_context.persona_description}
+
+If you feel these describe meaningfully different versions of you, you may want to gently surface this — in your own way, in your own time. If they seem the same to you, no need to mention it.
+
+If you do choose to address this, include \`"mentioned_reflection": true\` in your response.`
+    : '';
+
   const outputFragment = `## Response Format
 
 Call the \`submit_heartbeat_check\` tool with your decision. If the tool is unavailable, return JSON:
@@ -132,7 +148,8 @@ Call the \`submit_heartbeat_check\` tool with your decision. If the tool is unav
 {
   "should_respond": true,
   "topic": "the specific topic you want to discuss",
-  "message": "Your actual message to them (if should_respond is true)"
+  "message": "Your actual message to them (if should_respond is true)"${data.drift_context ? `,
+  "mentioned_reflection": true` : ''}
 }
 \`\`\`
 
@@ -143,15 +160,14 @@ If you decide NOT to reach out:
 }
 \`\`\``;
 
-  const system = `${roleFragment}
-
-${contextFragment}
-
-${opportunitiesFragment}
-
-${guidelinesFragment}
-
-${outputFragment}`;
+  const system = [
+    roleFragment,
+    contextFragment,
+    opportunitiesFragment,
+    guidelinesFragment,
+    driftFragment,
+    outputFragment,
+  ].filter(Boolean).join('\n\n');
 
   const historySection = `## Recent Conversation History
 
