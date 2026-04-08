@@ -301,6 +301,15 @@ export const personaCommand: Command = {
         traits: previewParsed.traits,
         topics: previewParsed.topics,
       });
+
+      const existingIdentifiers = selectedPerson.identifiers ?? [];
+      const alreadyLinked = existingIdentifiers.some(id => id.type === 'Ei Persona' && id.value === personaId);
+      if (!alreadyLinked) {
+        const isPrimaryFirst = existingIdentifiers.length === 0;
+        const updatedIdentifiers = [...existingIdentifiers, { type: 'Ei Persona', value: personaId, ...(isPrimaryFirst ? { is_primary: true } : {}) }];
+        await ctx.ei.upsertPerson({ ...selectedPerson, identifiers: updatedIdentifiers });
+      }
+
       ctx.showNotification(`Updated ${persona.display_name}`, "info");
       return;
     }
