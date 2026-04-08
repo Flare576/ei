@@ -17,7 +17,9 @@ interface Person {
   exposure_current: number;
   exposure_desired: number;
   last_updated: string;
+  learned_on?: string;
   learned_by?: string;
+  last_mentioned?: string;
   last_changed_by?: string;
   persona_groups?: string[];
   identifiers?: PersonIdentifier[];
@@ -459,8 +461,22 @@ export const PersonCard = ({
           <div className="ei-data-card__footer">
             {showMeta && (
               <div className="ei-data-card__meta">
-                {person.learned_by && <span>Learned by: {resolvePersonaName ? resolvePersonaName(person.learned_by) : person.learned_by} • </span>}
-                <span>Updated: {formatTimestamp(person.last_updated)}</span>
+                {(person.learned_by || person.learned_on) && (
+                  <div className="ei-data-card__footer-row">
+                    {person.learned_by
+                      ? <>Learned By {resolvePersonaName ? resolvePersonaName(person.learned_by) : person.learned_by}{person.learned_on ? ` on ${formatTimestamp(person.learned_on)}` : ''}</>
+                      : <>Learned on {formatTimestamp(person.learned_on!)}</>
+                    }
+                  </div>
+                )}
+                {(person.last_changed_by || person.last_mentioned || person.last_updated) && (
+                  <div className="ei-data-card__footer-row">
+                    {person.last_changed_by
+                      ? <>Updated By {resolvePersonaName ? resolvePersonaName(person.last_changed_by) : person.last_changed_by} on {formatTimestamp(person.last_mentioned ?? person.last_updated)}</>
+                      : <>Updated on {formatTimestamp(person.last_mentioned ?? person.last_updated)}</>
+                    }
+                  </div>
+                )}
               </div>
             )}
             <div className="ei-data-card__actions">

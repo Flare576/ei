@@ -277,6 +277,13 @@
   color: var(--ei-text-muted);
 }
 
+.ei-data-card__footer-row {
+  display: block;
+  font-size: var(--ei-font-size-sm);
+  color: var(--ei-text-muted);
+  line-height: 1.5;
+}
+
 .ei-data-card__groups {
   display: flex;
   flex-wrap: wrap;

@@ -11,7 +11,9 @@ interface Person {
   exposure_current: number;
   exposure_desired: number;
   last_updated: string;
+  learned_on?: string;
   learned_by?: string;
+  last_mentioned?: string;
   last_changed_by?: string;
   persona_groups?: string[];
   identifiers?: PersonIdentifier[];
