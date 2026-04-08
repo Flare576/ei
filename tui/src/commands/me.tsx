@@ -80,21 +80,27 @@ export const meCommand: Command = {
         }
         
         for (const fact of parsed.facts) {
-          await ctx.ei.upsertFact(fact);
+          if (parsed.changedFactIds.has(fact.id)) {
+            await ctx.ei.upsertFact(fact);
+          }
         }
         for (const topic of parsed.topics) {
-          await ctx.ei.upsertTopic(topic);
+          if (parsed.changedTopicIds.has(topic.id)) {
+            await ctx.ei.upsertTopic(topic);
+          }
         }
         for (const person of parsed.people) {
-          await ctx.ei.upsertPerson(person);
+          if (parsed.changedPersonIds.has(person.id)) {
+            await ctx.ei.upsertPerson(person);
+          }
         }
         
         const deleteCount = parsed.deletedFactIds.length + 
                            parsed.deletedTopicIds.length + 
                            parsed.deletedPersonIds.length;
-        const updateCount = parsed.facts.length + 
-                           parsed.topics.length + 
-                           parsed.people.length;
+        const updateCount = parsed.changedFactIds.size + 
+                           parsed.changedTopicIds.size + 
+                           parsed.changedPersonIds.size;
         
         ctx.showNotification(`Updated ${updateCount} items, deleted ${deleteCount}`, "info");
         return;
