@@ -14,7 +14,7 @@ import { calculateExposureCurrent } from "../utils/exposure.js";
 
 
 import { resolveMessageWindow, getMessageText, normalizeRoomMessages } from "./utils.js";
-import { UUID_REGEX, sanitizeEiPersonaIdentifiers } from "../utils/identifier-utils.js";
+import { sanitizeEiPersonaIdentifiers } from "../utils/identifier-utils.js";
 
 export function handleTopicMatch(response: LLMResponse, state: StateManager): void {
   const result = response.parsed as ItemMatchResult | undefined;
@@ -174,7 +174,7 @@ export async function handleTopicUpdate(response: LLMResponse, state: StateManag
     exposure_current: calculateExposureCurrent(exposureImpact, existingTopic?.exposure_current ?? 0),
     exposure_desired: result.exposure_desired ?? 0.5,
     last_updated: now,
-    ...(isNewItem && { learned_on: now }),
+    learned_on: isNewItem ? now : existingTopic?.learned_on,
     last_mentioned: now,
     learned_by: isNewItem ? primaryId : existingTopic?.learned_by,
     last_changed_by: primaryId,
@@ -299,7 +299,7 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
     identifiers: resolvedIdentifiers,
     validated_date: isNewItem ? '' : (existingPerson?.validated_date ?? ''),
     last_updated: now,
-    ...(isNewItem && { learned_on: now }),
+    learned_on: isNewItem ? now : existingPerson?.learned_on,
     last_mentioned: now,
     learned_by: isNewItem ? primaryId : existingPerson?.learned_by,
     last_changed_by: primaryId,

@@ -634,6 +634,34 @@ describe("Extraction Handlers - Step 3 (Update) - interested_personas", () => {
     });
   });
 
+  describe("handlePersonUpdate — learned_on preservation", () => {
+    it("sets learned_on on new person", async () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandlePersonUpdate,
+        data: { personaId: "persona-1", personaDisplayName: "TestPersona", isNewItem: true, candidateName: "New Person", candidateRelationship: "friend", messages_context: [], messages_analyze: [] },
+      });
+      await handlers[LLMNextStep.HandlePersonUpdate](createMockResponse(request, { description: "A person", sentiment: 0 }), state as any);
+      const upserted = (state.human_person_upsert as any).mock.calls[0][0];
+      expect(upserted.learned_on).toBeDefined();
+    });
+
+    it("preserves learned_on from existing person on update", async () => {
+      const ORIGINAL_DATE = "2024-01-01T00:00:00.000Z";
+      state._human.people.push({
+        id: "existing-person", name: "Someone", description: "Known", relationship: "friend",
+        sentiment: 0, exposure_current: 0, exposure_desired: 0.5, last_updated: "",
+        learned_on: ORIGINAL_DATE, identifiers: [], interested_personas: [], validated_date: "",
+      });
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandlePersonUpdate,
+        data: { personaId: "persona-1", personaDisplayName: "TestPersona", isNewItem: false, existingItemId: "existing-person", candidateRelationship: "friend", messages_context: [], messages_analyze: [] },
+      });
+      await handlers[LLMNextStep.HandlePersonUpdate](createMockResponse(request, { description: "Updated", sentiment: 0 }), state as any);
+      const upserted = (state.human_person_upsert as any).mock.calls[0][0];
+      expect(upserted.learned_on).toBe(ORIGINAL_DATE);
+    });
+  });
+
   describe("handlePersonUpdate — Ei Persona identifier rules", () => {
     const PERSONA_UUID = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
 
