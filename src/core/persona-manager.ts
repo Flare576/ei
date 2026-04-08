@@ -42,6 +42,9 @@ export async function createPersona(
       `Cannot create persona with reserved name "${input.name}". Reserved names: ${RESERVED_PERSONA_NAMES.join(", ")}`
     );
   }
+  if (!input.long_description?.trim()) {
+    throw new Error(`Persona "${input.name}" requires a long description.`);
+  }
   const now = new Date().toISOString();
   const DEFAULT_GROUP = "General";
   const personaId = crypto.randomUUID();
