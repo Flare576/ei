@@ -458,4 +458,51 @@ describe("Dedup Handler - handleDedupCurate", () => {
       })
     );
   });
+
+  it("drops quote links to already-merged entities in cascade dedup", async () => {
+    const topicC = createTopicWithEmbedding("topic-c", "Survivor", "The last one standing", []);
+    const topicB = createTopicWithEmbedding("topic-b", "Intermediate", "Gets removed in this call", []);
+
+    const quote: Quote = {
+      id: "quote-1",
+      message_id: null,
+      data_item_ids: ["topic-b"],
+      persona_groups: [],
+      text: "it's not impossible to add those features.",
+      speaker: "human",
+      timestamp: new Date().toISOString(),
+      start: null,
+      end: null,
+      created_at: new Date().toISOString(),
+      created_by: "human",
+    };
+
+    state._human.topics = [topicB, topicC];
+    state._human.quotes = [quote];
+
+    const request = createMockRequest({
+      data: {
+        entity_type: "topic",
+        entity_ids: ["topic-b", "topic-c"],
+        ceremony_progress: 1,
+      },
+    });
+
+    const dedupResult = {
+      update: [{ id: "topic-c", name: "Survivor", description: "The last one standing" }],
+      remove: [{ to_be_removed: "topic-b", replaced_by: "topic-a" }],
+      add: [],
+    };
+
+    const response = createMockResponse(request, dedupResult);
+
+    await handlers[LLMNextStep.HandleDedupCurate](response, state as unknown as StateManager);
+
+    expect(state.human_quote_update).toHaveBeenCalledWith(
+      "quote-1",
+      expect.objectContaining({
+        data_item_ids: [],
+      })
+    );
+  });
 });

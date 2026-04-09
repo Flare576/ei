@@ -114,7 +114,9 @@ export async function handleDedupCurate(
   // =========================================================================
   // PHASE 1: Update Quote foreign keys FIRST (before deletions)
   // =========================================================================
-  
+
+  const liveEntityIds = new Set(entityList.map((e: Fact | Topic | Person) => e.id));
+
   for (const removal of decisions.remove) {
     const quotes = state.quotes.filter((q: Quote) =>
       q.data_item_ids.includes(removal.to_be_removed)
@@ -123,6 +125,7 @@ export async function handleDedupCurate(
     for (const quote of quotes) {
       const updatedIds = quote.data_item_ids
         .map((id: string) => id === removal.to_be_removed ? removal.replaced_by : id)
+        .filter((id: string) => liveEntityIds.has(id))         // Drop links to already-merged entities
         .filter((id: string, idx: number, arr: string[]) => arr.indexOf(id) === idx);  // Dedupe
       
       stateManager.human_quote_update(quote.id, {
