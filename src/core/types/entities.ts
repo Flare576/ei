@@ -125,6 +125,7 @@ export interface HumanSettings {
   document?: DocumentSettings;
   active_theme?: string;
   custom_themes?: ThemeDefinition[];
+  personaHistory?: import("../../integrations/persona-history/types.js").PersonaHistorySettings;
 }
 
 export interface HumanEntity {
