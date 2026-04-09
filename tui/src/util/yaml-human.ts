@@ -51,6 +51,19 @@ function readOnlyToEnd<T extends WithReadOnlyFields>(item: T): T {
   return { ...rest, learned_on, learned_by, validated_date, last_mentioned, last_updated, last_changed_by } as T;
 }
 
+const FIELD_ORDER = ['id', 'name', 'description', 'sentiment', 'relationship', 'category', 'exposure_current', 'exposure_desired'];
+
+function canonicalFieldOrder<T extends object>(item: T): T {
+  const ordered: Record<string, unknown> = {};
+  for (const key of FIELD_ORDER) {
+    if (key in item) ordered[key] = (item as Record<string, unknown>)[key];
+  }
+  for (const [key, val] of Object.entries(item)) {
+    if (!(key in ordered)) ordered[key] = val;
+  }
+  return ordered as T;
+}
+
 function buildGroupCheckboxMap(itemGroups: string[], allGroups: string[]): Record<string, boolean>[] {
   const activeSet = new Set(itemGroups);
   return [...new Set([...allGroups, ...itemGroups])].map(g => ({ [g]: activeSet.has(g) }));
@@ -65,8 +78,10 @@ function toYAMLIdentifiers(identifiers: PersonIdentifier[], personaLookup?: Map<
   });
 }
 
-function knownTypesComment(personaLookup?: Map<string, string>): string {
-  const lines = [`# Valid types: ${BUILT_IN_IDENTIFIER_TYPES.join(', ')}`];
+function knownTypesComment(people: Person[], personaLookup?: Map<string, string>): string {
+  const userTypes = people.flatMap(p => (p.identifiers ?? []).map(i => i.type));
+  const allTypes = [...new Set([...BUILT_IN_IDENTIFIER_TYPES, ...userTypes])];
+  const lines = [`# Valid types: ${allTypes.join(', ')}`];
   if (personaLookup && personaLookup.size > 0) {
     lines.push(`# Personas: ${Array.from(personaLookup.values()).join(', ')}`);
   }
@@ -84,11 +99,68 @@ function parseGroupCheckboxMap(groups: Record<string, boolean>[] | undefined): s
   return result;
 }
 
-export function humanToYAML(human: HumanEntity, personaLookup?: Map<string, string>, allGroups: string[] = []): string {
-  const data: EditableHumanData = {
-    facts: human.facts.map(f => { const { interested_personas: _ip, persona_groups, ...rest } = readOnlyToEnd(f); return { ...rest, persona_groups: buildGroupCheckboxMap(persona_groups ?? [], allGroups), _delete: false }; }),
-    topics: human.topics.map(t => { const { interested_personas: _ip, persona_groups, ...rest } = readOnlyToEnd(t); return { ...rest, persona_groups: buildGroupCheckboxMap(persona_groups ?? [], allGroups), _delete: false }; }),
-    people: human.people.map(p => {
+function sectionStub(type: "facts" | "topics" | "people", people: Person[], personaLookup?: Map<string, string>): string {
+  if (type === "facts") {
+    return [
+      `  # --- New Fact (uncomment to create) ---`,
+      `  # - name: ''`,
+      `  #   description: ''`,
+      `  #   sentiment: 0`,
+    ].join('\n');
+  }
+
+  if (type === "topics") {
+    return [
+      `  # --- New Topic (uncomment to create) ---`,
+      `  # - name: ''`,
+      `  #   description: ''`,
+      `  #   category: ''  # Interest, Goal, Dream, Conflict, Concern, Fear, Hope, Plan, Project`,
+      `  #   exposure_desired: 0.5`,
+      `  #   sentiment: 0`,
+    ].join('\n');
+  }
+
+  const userTypes = people.flatMap(p => (p.identifiers ?? []).map(i => i.type));
+  const allTypes = [...new Set([...BUILT_IN_IDENTIFIER_TYPES, ...userTypes])];
+  const identifierTypeHint = allTypes.join(', ');
+  const personaNames = personaLookup && personaLookup.size > 0
+    ? Array.from(personaLookup.values()).join(', ')
+    : null;
+
+  return [
+    `  # --- New Person (uncomment to create) ---`,
+    `  # - name: ''`,
+    `  #   description: ''`,
+    `  #   relationship: ''`,
+    `  #   exposure_desired: 0.5`,
+    `  #   sentiment: 0`,
+    `  #   identifiers:`,
+    `  #     # Valid types: ${identifierTypeHint}`,
+    ...(personaNames ? [`  #     # Personas: ${personaNames}`] : []),
+    `  #     - type: ''`,
+    `  #       value: ''`,
+    `  #       primary: true`,
+  ].join('\n');
+}
+
+export function humanToYAML(
+  human: HumanEntity,
+  personaLookup?: Map<string, string>,
+  allGroups: string[] = [],
+  sections?: Set<"facts" | "topics" | "people">,
+): string {
+  const activeSections = sections ?? new Set<"facts" | "topics" | "people">(["facts", "topics", "people"]);
+
+  const data: Partial<EditableHumanData> = {};
+
+  if (activeSections.has("facts") && human.facts.length > 0) {
+    data.facts = human.facts.map(f => { const { interested_personas: _ip, persona_groups, ...rest } = readOnlyToEnd(f); return { ...rest, persona_groups: buildGroupCheckboxMap(persona_groups ?? [], allGroups), _delete: false }; });
+  }
+  if (activeSections.has("topics") && human.topics.length > 0) {
+    data.topics = human.topics.map(t => { const { interested_personas: _ip, persona_groups, ...rest } = readOnlyToEnd(t); return { ...rest, persona_groups: buildGroupCheckboxMap(persona_groups ?? [], allGroups), _delete: false }; });
+  }
+  if (activeSections.has("people") && human.people.length > 0) {
+    data.people = human.people.map(p => {
       const { identifiers, interested_personas: _ip, persona_groups, ...rest } = readOnlyToEnd(p);
       return {
         ...rest,
@@ -96,31 +168,51 @@ export function humanToYAML(human: HumanEntity, personaLookup?: Map<string, stri
         identifiers: toYAMLIdentifiers(identifiers ?? [], personaLookup),
         _delete: false as const,
       };
-    }),
+    });
+  }
+
+  const personComment = knownTypesComment(human.people, personaLookup);
+
+  const applyReadOnlyMarkers = (yaml: string): string =>
+    yaml
+      .replace(/^(\s+)(learned_on: .+)$/mg, '$1# [read-only] $2')
+      .replace(/^(\s+)(learned_by: )(.+)$/mg, (_, indent, key, val) => {
+        const trimmed = val.trim();
+        const displayName = personaLookup?.get(trimmed) ?? trimmed;
+        return `${indent}# [read-only] ${key}${displayName}`;
+      })
+      .replace(/^(\s+)(validated_date: .+)$/mg, '$1# [read-only] $2')
+      .replace(/^(\s+)(last_mentioned: .+)$/mg, '$1# [read-only] $2')
+      .replace(/^(\s+)(last_updated: .+)$/mg, '$1# [read-only] $2')
+      .replace(/^(\s+)(last_changed_by: )(.+)$/mg, (_, indent, key, val) => {
+        const trimmed = val.trim();
+        const displayName = personaLookup?.get(trimmed) ?? trimmed;
+        return `${indent}# [read-only] ${key}${displayName}`;
+      })
+      .replace(/^(\s+)(identifiers:)/mg, (_, indent, _key) => {
+        return `${indent}${personComment}\n${indent}identifiers:`;
+      });
+
+  const serializeSection = (key: "facts" | "topics" | "people", items: unknown[] | undefined): string => {
+    const stub = sectionStub(key, human.people, personaLookup);
+    if (!items || items.length === 0) {
+      return `${key}:\n${stub}`;
+    }
+    const ordered = (items as object[]).map(canonicalFieldOrder);
+    const itemsYaml = YAML.stringify(ordered, { lineWidth: 0 })
+      .split('\n')
+      .map(line => `  ${line}`)
+      .join('\n')
+      .trimEnd();
+    return `${key}:\n${applyReadOnlyMarkers(itemsYaml)}\n${stub}`;
   };
 
-  const personComment = knownTypesComment(personaLookup);
+  const parts: string[] = [];
+  if (activeSections.has("facts")) parts.push(serializeSection("facts", data.facts));
+  if (activeSections.has("topics")) parts.push(serializeSection("topics", data.topics));
+  if (activeSections.has("people")) parts.push(serializeSection("people", data.people));
 
-  return YAML.stringify(data, {
-    lineWidth: 0,
-  })
-  .replace(/^(\s+)(learned_on: .+)$/mg, '$1# [read-only] $2')
-  .replace(/^(\s+)(learned_by: )(.+)$/mg, (_, indent, key, val) => {
-    const trimmed = val.trim();
-    const displayName = personaLookup?.get(trimmed) ?? trimmed;
-    return `${indent}# [read-only] ${key}${displayName}`;
-  })
-  .replace(/^(\s+)(validated_date: .+)$/mg, '$1# [read-only] $2')
-  .replace(/^(\s+)(last_mentioned: .+)$/mg, '$1# [read-only] $2')
-  .replace(/^(\s+)(last_updated: .+)$/mg, '$1# [read-only] $2')
-  .replace(/^(\s+)(last_changed_by: )(.+)$/mg, (_, indent, key, val) => {
-    const trimmed = val.trim();
-    const displayName = personaLookup?.get(trimmed) ?? trimmed;
-    return `${indent}# [read-only] ${key}${displayName}`;
-  })
-  .replace(/^(\s+)(identifiers:)/mg, (_, indent, _key) => {
-    return `${indent}${personComment}\n${indent}identifiers:`;
-  });
+  return parts.join('\n') + '\n';
 }
 
 export interface HumanYAMLResult {
@@ -192,7 +284,7 @@ export function humanFromYAML(yamlContent: string, original?: HumanEntity): Huma
     .split('\n')
     .filter(line => !/^\s*#\s*\[read-only\]/.test(line))
     .join('\n');
-  const data = YAML.parse(stripped) as EditableHumanData;
+  const data = (YAML.parse(stripped) ?? {}) as EditableHumanData;
 
   const deletedFactIds: string[] = [];
   const deletedTopicIds: string[] = [];
@@ -207,10 +299,11 @@ export function humanFromYAML(yamlContent: string, original?: HumanEntity): Huma
       deletedFactIds.push(f.id);
     } else {
       const { _delete, persona_groups: groupMap, ...parsed } = f;
+      if (!parsed.id) parsed.id = crypto.randomUUID();
       const originalFact = original?.facts.find(of => of.id === parsed.id);
       const fact: Fact = originalFact
         ? { ...originalFact, ...parsed, persona_groups: parseGroupCheckboxMap(groupMap) }
-        : { ...parsed, persona_groups: parseGroupCheckboxMap(groupMap) };
+        : { ...parsed, last_updated: new Date().toISOString(), persona_groups: parseGroupCheckboxMap(groupMap) };
       facts.push(fact);
       if (!originalFact || factChanged(fact, originalFact)) {
         if (fact.description && !originalFact?.validated_date) {
@@ -227,10 +320,11 @@ export function humanFromYAML(yamlContent: string, original?: HumanEntity): Huma
       deletedTopicIds.push(t.id);
     } else {
       const { _delete, persona_groups: groupMap, ...parsed } = t;
+      if (!parsed.id) parsed.id = crypto.randomUUID();
       const originalTopic = original?.topics.find(ot => ot.id === parsed.id);
       const topic: Topic = originalTopic
         ? { ...originalTopic, ...parsed, persona_groups: parseGroupCheckboxMap(groupMap) }
-        : { ...parsed, persona_groups: parseGroupCheckboxMap(groupMap) };
+        : { ...parsed, last_updated: new Date().toISOString(), persona_groups: parseGroupCheckboxMap(groupMap) };
       topics.push(topic);
       if (!originalTopic || topicChanged(topic, originalTopic)) {
         changedTopicIds.add(topic.id);
@@ -244,6 +338,7 @@ export function humanFromYAML(yamlContent: string, original?: HumanEntity): Huma
       deletedPersonIds.push(p.id);
     } else {
       const { _delete, identifiers: yamlIdentifiers, persona_groups: groupMap, ...parsed } = p;
+      if (!parsed.id) parsed.id = crypto.randomUUID();
       const identifiers: PersonIdentifier[] = (yamlIdentifiers ?? []).map(({ type, value, primary }) => ({
         type,
         value,
@@ -252,7 +347,7 @@ export function humanFromYAML(yamlContent: string, original?: HumanEntity): Huma
       const originalPerson = original?.people.find(op => op.id === parsed.id);
       const person: Person = originalPerson
         ? { ...originalPerson, ...parsed, identifiers, persona_groups: parseGroupCheckboxMap(groupMap) }
-        : { ...parsed, identifiers, persona_groups: parseGroupCheckboxMap(groupMap) };
+        : { ...parsed, last_updated: new Date().toISOString(), identifiers, persona_groups: parseGroupCheckboxMap(groupMap) };
       people.push(person);
       if (!originalPerson || personChanged(person, originalPerson)) {
         changedPersonIds.add(person.id);

@@ -367,9 +367,12 @@ describe("humanToYAML", () => {
 
   test("serializes minimal human data", () => {
     const yaml = humanToYAML(minimalHuman);
-    expect(yaml).toContain("facts: []");
-    expect(yaml).toContain("topics: []");
-    expect(yaml).toContain("people: []");
+    expect(yaml).toContain("# --- New Fact");
+    expect(yaml).toContain("# --- New Topic");
+    expect(yaml).toContain("# --- New Person");
+    expect(yaml).not.toContain("facts: []");
+    expect(yaml).not.toContain("topics: []");
+    expect(yaml).not.toContain("people: []");
   });
 
   test("serializes human with all data types", () => {
