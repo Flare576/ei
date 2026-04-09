@@ -33,8 +33,10 @@ export const OverlayProvider: ParentComponent = (props) => {
     const hideOverlay = () => {
       logger.debug("[overlay] hideOverlay called");
       setOverlayRenderer(null);
+      cliRenderer?.requestRender();
     };
     setOverlayRenderer(() => () => renderer(hideOverlay, hideForEditor));
+    queueMicrotask(() => cliRenderer?.requestRender());
   };
 
   const hideOverlay = () => {
