@@ -1212,6 +1212,15 @@ const toolNextSteps = new Set([
       await this.checkAndSyncCursor(human, now);
     }
 
+    if (
+      this.isTUI &&
+      human.settings?.personaHistory?.integration &&
+      !human.settings.personaHistory.complete &&
+      this.stateManager.queue_length() === 0
+    ) {
+      await this.checkAndSyncPersonaHistory(human);
+    }
+
     if (human.settings?.ceremony && shouldStartCeremony(human.settings.ceremony, this.stateManager)) {
       if (human.settings?.sync && remoteSync.isConfigured()) {
         const state = this.stateManager.getStorageState();
@@ -1449,6 +1458,32 @@ const toolNextSteps = new Set([
       })
       .finally(() => {
         this.cursorImportInProgress = false;
+      });
+  }
+
+  private personaHistoryImportInProgress = false;
+
+  private async checkAndSyncPersonaHistory(_human: HumanEntity): Promise<void> {
+    if (this.personaHistoryImportInProgress) return;
+
+    this.personaHistoryImportInProgress = true;
+    import("../integrations/persona-history/importer.js")
+      .then(({ importPersonaHistory }) =>
+        importPersonaHistory({ stateManager: this.stateManager })
+      )
+      .then((result) => {
+        if (result.scansQueued > 0) {
+          console.log(
+            `[Processor] PersonaHistory: ${result.scansQueued} scans queued` +
+            (result.complete ? " — import complete" : "")
+          );
+        }
+      })
+      .catch((err) => {
+        console.warn(`[Processor] PersonaHistory sync failed:`, err);
+      })
+      .finally(() => {
+        this.personaHistoryImportInProgress = false;
       });
   }
 
