@@ -8,6 +8,7 @@ import type {
 import type { ClaudeCodeSettings } from "../../../src/integrations/claude-code/types.js";
 import type { CursorSettings } from "../../../src/integrations/cursor/types.js";
 import { modelGuidToDisplay, displayToModelGuid } from "./yaml-shared.js";
+import { parseDuration, formatDuration } from "./duration.js";
 
 interface EditableSettingsData {
   default_model?: string | null;
@@ -15,7 +16,7 @@ interface EditableSettingsData {
   rewrite_model?: string | null;
   time_mode?: "24h" | "12h" | "local" | "utc" | null;
   name_display?: string | null;
-  default_heartbeat_ms?: number | null;
+  default_heartbeat_ms?: string | null;
   default_context_window_hours?: number | null;
   message_min_count?: number | null;
   message_max_age_days?: number | null;
@@ -28,28 +29,28 @@ interface EditableSettingsData {
   };
   opencode?: {
     integration?: boolean | null;
-    polling_interval_ms?: number | null;
+    polling_interval_ms?: string | null;
     last_sync?: string | null;
     extraction_point?: string | null;
     extraction_model?: string | null;
   };
   claudeCode?: {
     integration?: boolean | null;
-    polling_interval_ms?: number | null;
+    polling_interval_ms?: string | null;
     last_sync?: string | null;
     extraction_point?: string | null;
     extraction_model?: string | null;
   };
   cursor?: {
     integration?: boolean | null;
-    polling_interval_ms?: number | null;
+    polling_interval_ms?: string | null;
     last_sync?: string | null;
     extraction_point?: string | null;
   };
   backup?: {
     enabled?: boolean | null;
     max_backups?: number | null;
-    interval_ms?: number | null;
+    interval_ms?: string | null;
   };
 }
 
@@ -65,7 +66,7 @@ export function settingsToYAML(settings: HumanSettings | undefined, accounts: Pr
     rewrite_model: guidToDisplay(settings?.rewrite_model),
     time_mode: settings?.time_mode ?? null,
     name_display: settings?.name_display ?? null,
-    default_heartbeat_ms: settings?.default_heartbeat_ms ?? 1800000,
+    default_heartbeat_ms: formatDuration(settings?.default_heartbeat_ms ?? 1800000),
     default_context_window_hours: settings?.default_context_window_hours ?? 8,
     message_min_count: settings?.message_min_count ?? 200,
     message_max_age_days: settings?.message_max_age_days ?? 14,
@@ -78,28 +79,28 @@ export function settingsToYAML(settings: HumanSettings | undefined, accounts: Pr
     },
     opencode: {
       integration: settings?.opencode?.integration ?? false,
-      polling_interval_ms: settings?.opencode?.polling_interval_ms ?? 60000,
+      polling_interval_ms: formatDuration(settings?.opencode?.polling_interval_ms ?? 60000),
       extraction_model: guidToDisplay(settings?.opencode?.extraction_model) ?? 'default',
       last_sync: settings?.opencode?.last_sync ?? null,
       extraction_point: settings?.opencode?.extraction_point ?? null,
     },
     claudeCode: {
       integration: settings?.claudeCode?.integration ?? false,
-      polling_interval_ms: settings?.claudeCode?.polling_interval_ms ?? 60000,
+      polling_interval_ms: formatDuration(settings?.claudeCode?.polling_interval_ms ?? 60000),
       extraction_model: guidToDisplay(settings?.claudeCode?.extraction_model) ?? 'default',
       last_sync: settings?.claudeCode?.last_sync ?? null,
       extraction_point: settings?.claudeCode?.extraction_point ?? null,
     },
     cursor: {
       integration: settings?.cursor?.integration ?? false,
-      polling_interval_ms: settings?.cursor?.polling_interval_ms ?? 60000,
+      polling_interval_ms: formatDuration(settings?.cursor?.polling_interval_ms ?? 60000),
       last_sync: settings?.cursor?.last_sync ?? null,
       extraction_point: settings?.cursor?.extraction_point ?? null,
     },
     backup: {
       enabled: settings?.backup?.enabled ?? false,
       max_backups: settings?.backup?.max_backups ?? 24,
-      interval_ms: settings?.backup?.interval_ms ?? 3600000,
+      interval_ms: formatDuration(settings?.backup?.interval_ms ?? 3600000),
     },
   };
 
@@ -116,6 +117,11 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
 
   const nullToUndefined = <T>(value: T | null | undefined): T | undefined =>
     value === null ? undefined : value;
+
+  const parseMsDuration = (value: string | null | undefined, fallback: number): number | undefined => {
+    if (value == null) return undefined;
+    return parseDuration(value) ?? fallback;
+  };
 
   const displayToGuid = (display: string | null | undefined): string | undefined => {
     if (!display || display === 'default') return undefined;
@@ -138,7 +144,7 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
   if (data.opencode) {
     opencode = {
       integration: nullToUndefined(data.opencode.integration),
-      polling_interval_ms: nullToUndefined(data.opencode.polling_interval_ms),
+      polling_interval_ms: parseMsDuration(data.opencode.polling_interval_ms, 60000),
       last_sync: original?.opencode?.last_sync,
       extraction_point: original?.opencode?.extraction_point,
       processed_sessions: original?.opencode?.processed_sessions,
@@ -150,7 +156,7 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
   if (data.claudeCode) {
     claudeCode = {
       integration: nullToUndefined(data.claudeCode.integration),
-      polling_interval_ms: nullToUndefined(data.claudeCode.polling_interval_ms),
+      polling_interval_ms: parseMsDuration(data.claudeCode.polling_interval_ms, 60000),
       last_sync: original?.claudeCode?.last_sync,
       extraction_point: original?.claudeCode?.extraction_point,
       processed_sessions: original?.claudeCode?.processed_sessions,
@@ -162,7 +168,7 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
   if (data.cursor) {
     cursor = {
       integration: nullToUndefined(data.cursor.integration),
-      polling_interval_ms: nullToUndefined(data.cursor.polling_interval_ms),
+      polling_interval_ms: parseMsDuration(data.cursor.polling_interval_ms, 60000),
       last_sync: original?.cursor?.last_sync,
       extraction_point: original?.cursor?.extraction_point,
       processed_sessions: original?.cursor?.processed_sessions,
@@ -174,7 +180,7 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
     backup = {
       enabled: nullToUndefined(data.backup.enabled),
       max_backups: nullToUndefined(data.backup.max_backups),
-      interval_ms: nullToUndefined(data.backup.interval_ms),
+      interval_ms: parseMsDuration(data.backup.interval_ms, 3600000),
       last_backup: original?.backup?.last_backup,
     };
   }
@@ -186,7 +192,7 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
     rewrite_model: displayToGuid(data.rewrite_model),
     time_mode: nullToUndefined(data.time_mode),
     name_display: nullToUndefined(data.name_display),
-    default_heartbeat_ms: nullToUndefined(data.default_heartbeat_ms),
+    default_heartbeat_ms: parseMsDuration(data.default_heartbeat_ms, 1800000),
     default_context_window_hours: nullToUndefined(data.default_context_window_hours),
     message_min_count: nullToUndefined(data.message_min_count),
     message_max_age_days: nullToUndefined(data.message_max_age_days),
