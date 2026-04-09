@@ -107,6 +107,14 @@ export interface DedupPromptData {
   similarityRange: { min: number; max: number };  // e.g., { min: 0.90, max: 0.98 }
 }
 
+/** Input: exactly 2 records — one established, one just created — for binary merge decision. */
+export interface ValidatePromptData {
+  established: DataItemBase;
+  newcomer: DataItemBase;
+  itemType: RewriteItemType;
+  similarity: number;
+}
+
 /** Output: merge decisions (update/remove/add). */
 export interface DedupResult {
   update: Array<{
