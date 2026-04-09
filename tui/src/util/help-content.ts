@@ -26,10 +26,16 @@ CORE COMMANDS
         /provider new              Create a new provider
 
     /me
-        Edit your personal data (facts, traits, topics, people) in $EDITOR.
-        /me facts     Edit only facts
-        /me topics    Edit only topics
-        /me people    Edit only people
+        Edit your personal data (facts, topics, people) in $EDITOR.
+        Each section includes a commented stub — uncomment and fill it in
+        to create a new entry. No UUID required; one is generated for you.
+
+        /me fact               Edit only facts (stub included)
+        /me topic              Edit only topics (stub included)
+        /me person             Edit only people (stub included)
+        /me fact new           Open with just the new-fact stub
+        /me fact coffee        Filter facts whose name contains "coffee"
+        /me person "New York"  Quoted search for multi-word names
 
     /details, /d
         Edit the current persona's details in $EDITOR.
