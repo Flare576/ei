@@ -1,4 +1,4 @@
-import type { DedupPromptData } from "./types.js";
+import type { DedupPromptData, ValidatePromptData } from "./types.js";
 
 // =============================================================================
 // DEDUP CURATOR — Merge duplicate entities with data preservation
@@ -130,6 +130,94 @@ ${buildRecordFormatExamples(data.itemType)}
 \`\`\`
 
 Return raw JSON only. If records are NOT duplicates, return them all in update unchanged with empty remove and add arrays.`;
+
+  const user = `${payload}
+
+---
+
+${schemaReminder}`;
+
+  return { system, user };
+}
+
+// =============================================================================
+// VALIDATE — Binary merge decision for a newly created record
+// =============================================================================
+
+export function buildValidatePrompt(data: ValidatePromptData): { system: string; user: string } {
+  const typeLabel = data.itemType.charAt(0).toUpperCase() + data.itemType.slice(1);
+  const pct = Math.round(data.similarity * 100);
+
+  const system = `# Your Task
+
+A new ${typeLabel} record was just created from a real conversation. The moment it landed in the system, we checked it against everything already stored and found one record with a similarity score of ${pct}% — high enough that they might be the same thing under different words.
+
+You are the last gate before a duplicate takes root.
+
+**Established record**: Has been in the system. Learned from prior conversations.
+**Newcomer**: Just synthesized from the most recent conversation. Description is current-state, not a log.
+
+## What You're Deciding
+
+Are these the same thing — the same interest, concern, goal, or moment — described twice? Or are they genuinely distinct, and both deserve to exist?
+
+Similarity of meaning is not the same as identity. "Concern about job security" and "Fear of career stagnation" share semantic space. They are not the same record.
+
+Ask yourself: *If a persona referenced the established record in conversation, would the newcomer feel like a repeat? Or would it feel like something different being said?*
+
+If they are the same thing: **merge**. Preserve every unique detail from both. The newcomer's description is synthesized and current — weight it, but don't discard what the established record learned first.
+
+If they are distinct: **keep both**. Return them both in \`update\` unchanged. Leave \`remove\` and \`add\` empty.
+
+## Output Format
+
+\`\`\`json
+{
+  "update": [ /* one or both records — include ALL fields from whichever survive */ ],
+  "remove": [ /* { "to_be_removed": "uuid", "replaced_by": "uuid" } — only if merging */ ],
+  "add": []
+}
+\`\`\`
+
+Rules:
+- \`add\` is always empty here. We are not creating new records from this decision.
+- If merging: the merged record goes in \`update\`, the absorbed record goes in \`remove\`.
+- If keeping both: return both in \`update\` exactly as received. Do not modify either.
+- Descriptions must stay concise — under 300 characters, never over 500. Synthesize; don't concatenate.
+- When merging numeric fields: take the HIGHER value for \`exposure_current\`, \`exposure_desired\`, \`strength\`, \`confidence\`. Average \`sentiment\`.
+- Do NOT invent information. Only what exists in these two records.
+
+Return raw JSON only. No markdown fencing, no commentary.`;
+
+  const payload = JSON.stringify({
+    established: stripEmbedding(data.established),
+    newcomer: stripEmbedding(data.newcomer),
+    item_type: data.itemType,
+    similarity_score: data.similarity,
+  }, null, 2);
+
+  const schemaReminder = `**Return JSON:**
+\n\`\`\`json
+{
+  "update": [
+    {
+      "id": "uuid-of-surviving-record",
+      "type": "${data.itemType}",
+      "name": "canonical name",
+      "description": "merged or unchanged description"
+    }
+  ],
+  "remove": [
+    {
+      "to_be_removed": "uuid-of-absorbed-record",
+      "replaced_by": "uuid-of-surviving-record"
+    }
+  ],
+  "add": []
+}
+\`\`\`
+
+If keeping both, return both in \`update\` unchanged with empty \`remove\` and \`add\`.`;
 
   const user = `${payload}
 

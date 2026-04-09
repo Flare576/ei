@@ -88,4 +88,5 @@ export const handlers: Record<LLMNextStep, ResponseHandler> = {
   handleRoomJudge,
   handlePersonaPreview,
   [LLMNextStep.HandlePersonIdentifierMigration]: handlePersonIdentifierMigration,
+  [LLMNextStep.HandleTopicValidate]: handleDedupCurate,
 };

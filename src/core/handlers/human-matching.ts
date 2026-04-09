@@ -8,7 +8,7 @@ import {
 import type { PersonIdentifier } from "../types/data-items.js";
 import type { StateManager } from "../state-manager.js";
 import type { ItemMatchResult, ExposureImpact, TopicUpdateResult, PersonUpdateResult } from "../../prompts/human/types.js";
-import { queueTopicUpdate, queuePersonUpdate, type ExtractionContext } from "../orchestrators/index.js";
+import { queueTopicUpdate, queuePersonUpdate, queueTopicValidate, type ExtractionContext } from "../orchestrators/index.js";
 import { getEmbeddingService, getTopicEmbeddingText, getPersonEmbeddingText } from "../embedding-service.js";
 import { calculateExposureCurrent } from "../utils/exposure.js";
 
@@ -200,6 +200,11 @@ export async function handleTopicUpdate(response: LLMResponse, state: StateManag
     ? normalizeRoomMessages(state.getRoomMessages(roomId), state)
     : state.messages_get(personaId);
   await validateAndStoreQuotes(result.quotes, allMessages, itemId, personaDisplayName, personaGroup, state);
+
+  if (isNewItem && embedding) {
+    const extractionModel = (response.request.data as Record<string, unknown>).extraction_model as string | undefined;
+    await queueTopicValidate(topic, state, extractionModel);
+  }
 
   console.log(`[handleTopicUpdate] ${isNewItem ? "Created" : "Updated"} topic "${resolvedName}"`);
 }

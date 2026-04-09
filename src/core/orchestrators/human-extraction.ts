@@ -13,6 +13,7 @@ import {
   type ItemMatchResult,
   type ParticipantContext,
 } from "../../prompts/human/index.js";
+import { buildValidatePrompt } from "../../prompts/ceremony/dedup.js";
 import { chunkExtractionContext } from "./extraction-chunker.js";
 import { getEmbeddingService, findTopK, getTopicEmbeddingText } from "../embedding-service.js";
 import { resolveTokenLimit } from "../llm-client.js";
@@ -291,6 +292,13 @@ const EMBEDDING_TOP_K = 20;
 const EMBEDDING_MIN_SIMILARITY = 0.3;
 
 /**
+ * Minimum cosine similarity to trigger the post-create validate step.
+ * Higher than EMBEDDING_MIN_SIMILARITY (0.3) because we need near-duplicates,
+ * not just vague thematic overlap.
+ */
+export const VALIDATE_MIN_SIMILARITY = 0.85;
+
+/**
  * Queue a topic match request using embedding-based similarity (topics only).
  */
 export async function queueTopicMatch(
@@ -548,7 +556,7 @@ export function queuePersonUpdate(
   }
 
   const userIdentifierTypes = [...new Set(
-    human.people
+    state.getHuman().people
       .flatMap(p => (p.identifiers ?? []).map(i => i.type))
       .filter(Boolean)
   )];
@@ -596,6 +604,57 @@ export function queuePersonUpdate(
   }
 
   return chunks.length;
+}
+
+export async function queueTopicValidate(
+  newTopic: Topic,
+  state: StateManager,
+  extractionModel?: string
+): Promise<void> {
+  if (!newTopic.embedding || newTopic.embedding.length === 0) {
+    console.log(`[queueTopicValidate] Skipping "${newTopic.name}" — no embedding available`);
+    return;
+  }
+
+  const human = state.getHuman();
+  const candidates = human.topics.filter(t => t.id !== newTopic.id && t.embedding && t.embedding.length > 0);
+
+  if (candidates.length === 0) {
+    console.log(`[queueTopicValidate] No existing topics with embeddings to compare against`);
+    return;
+  }
+
+  const topResult = findTopK(newTopic.embedding, candidates, 1);
+  if (topResult.length === 0 || topResult[0].similarity < VALIDATE_MIN_SIMILARITY) {
+    const best = topResult[0];
+    console.log(`[queueTopicValidate] "${newTopic.name}" is genuinely new (best match: ${best ? `"${best.item.name}" @ ${best.similarity.toFixed(3)}` : "none"})`);
+    return;
+  }
+
+  const existingTopic = topResult[0].item;
+  const similarity = topResult[0].similarity;
+
+  console.log(`[queueTopicValidate] Near-duplicate candidate: "${newTopic.name}" ↔ "${existingTopic.name}" (${similarity.toFixed(3)}) — queuing validate`);
+
+  const prompt = buildValidatePrompt({
+    established: existingTopic,
+    newcomer: newTopic,
+    itemType: "topic",
+    similarity,
+  });
+
+  state.queue_enqueue({
+    type: LLMRequestType.JSON,
+    priority: LLMPriority.Normal,
+    model: extractionModel,
+    system: prompt.system,
+    user: prompt.user,
+    next_step: LLMNextStep.HandleTopicValidate,
+    data: {
+      entity_type: "topic",
+      entity_ids: [existingTopic.id, newTopic.id],
+    },
+  });
 }
 
 

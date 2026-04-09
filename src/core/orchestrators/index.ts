@@ -8,6 +8,8 @@ export {
   queueTopicUpdate,
   queuePersonUpdate,
   queueEventSummary,
+  queueTopicValidate,
+  VALIDATE_MIN_SIMILARITY,
   type ExtractionContext,
   type ExtractionOptions,
 } from "./human-extraction.js";
