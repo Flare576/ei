@@ -152,9 +152,7 @@ export async function spawnEditor(options: EditorOptions): Promise<EditorResult>
         logger.debug("[editor] already suspended before spawn, skipping resume");
       }
       
-      queueMicrotask(() => {
-        renderer.requestRender();
-      });
+      renderer.requestRender();
       
       if (code !== 0) {
         try { fs.unlinkSync(tmpFile); } catch {}
