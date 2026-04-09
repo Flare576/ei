@@ -26,16 +26,19 @@ export const editorCommand: Command = {
     });
     
     if (result.aborted) {
+      ctx.setInputText("");
       ctx.showNotification("Editor cancelled", "info");
       return;
     }
     
     if (!result.success) {
+      ctx.setInputText("");
       ctx.showNotification("Editor failed to open", "error");
       return;
     }
     
     if (result.content === null) {
+      ctx.setInputText("");
       ctx.showNotification("No changes made", "info");
       return;
     }
