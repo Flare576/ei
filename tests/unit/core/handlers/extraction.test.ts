@@ -559,6 +559,99 @@ describe("Extraction Handlers - Step 3 (Update) - interested_personas", () => {
     });
   });
 
+  describe("handleTopicUpdate — partial model responses (Haiku omission patterns)", () => {
+    const existingTopic: Topic = {
+      id: "existing-topic",
+      name: "CloudFormation Deployment",
+      description: "Existing description",
+      sentiment: 0.7,
+      exposure_current: 0.5,
+      exposure_desired: 0.5,
+      last_updated: "",
+      interested_personas: [],
+    };
+
+    beforeEach(() => {
+      state._human.topics.push({ ...existingTopic });
+    });
+
+    it("uses existing name when model omits name on update", async () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleTopicUpdate,
+        data: { personaId: "persona-1", personaDisplayName: "Sisyphus", isNewItem: false, existingItemId: "existing-topic", candidateCategory: "Project" },
+      });
+      const response = createMockResponse(request, { description: "Updated description", sentiment: 0.8 });
+      await handlers[LLMNextStep.HandleTopicUpdate](response, state as any);
+      const upserted = (state.human_topic_upsert as any).mock.calls[0][0];
+      expect(upserted.name).toBe("CloudFormation Deployment");
+      expect(upserted.description).toBe("Updated description");
+    });
+
+    it("uses existing sentiment when model omits sentiment on update", async () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleTopicUpdate,
+        data: { personaId: "persona-1", personaDisplayName: "Sisyphus", isNewItem: false, existingItemId: "existing-topic", candidateCategory: "Project" },
+      });
+      const response = createMockResponse(request, { description: "Updated description" });
+      await handlers[LLMNextStep.HandleTopicUpdate](response, state as any);
+      const upserted = (state.human_topic_upsert as any).mock.calls[0][0];
+      expect(upserted.sentiment).toBe(0.7);
+    });
+
+    it("uses existing description when model returns boolean true for description", async () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleTopicUpdate,
+        data: { personaId: "persona-1", personaDisplayName: "Sisyphus", isNewItem: false, existingItemId: "existing-topic", candidateCategory: "Project" },
+      });
+      const response = createMockResponse(request, { description: true, sentiment: 0.8 });
+      await handlers[LLMNextStep.HandleTopicUpdate](response, state as any);
+      const upserted = (state.human_topic_upsert as any).mock.calls[0][0];
+      expect(upserted.description).toBe("Existing description");
+    });
+
+    it("skips update (no upsert) when existing topic has no description and model omits it", async () => {
+      state._human.topics[0].description = "";
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleTopicUpdate,
+        data: { personaId: "persona-1", personaDisplayName: "Sisyphus", isNewItem: false, existingItemId: "existing-topic", candidateCategory: "Project" },
+      });
+      const response = createMockResponse(request, { sentiment: 0.8 });
+      await handlers[LLMNextStep.HandleTopicUpdate](response, state as any);
+      expect(state.human_topic_upsert).not.toHaveBeenCalled();
+    });
+
+    it("uses candidateName as final fallback for new topic when model omits name", async () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleTopicUpdate,
+        data: { personaId: "persona-1", personaDisplayName: "Sisyphus", isNewItem: true, candidateName: "Slack Experiments", candidateDescription: "Sending Slack messages via MCP", candidateCategory: "Event" },
+      });
+      const response = createMockResponse(request, { description: "First time using Slack MCP to post as Jeremy", sentiment: 0.8 });
+      await handlers[LLMNextStep.HandleTopicUpdate](response, state as any);
+      const upserted = (state.human_topic_upsert as any).mock.calls[0][0];
+      expect(upserted.name).toBe("Slack Experiments");
+    });
+
+    it("uses candidateDescription as fallback for new topic when model omits description", async () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleTopicUpdate,
+        data: { personaId: "persona-1", personaDisplayName: "Sisyphus", isNewItem: true, candidateName: "Slack Experiments", candidateDescription: "Candidate description from scan", candidateCategory: "Event" },
+      });
+      const response = createMockResponse(request, { name: "Slack Experiments", sentiment: 0.8 });
+      await handlers[LLMNextStep.HandleTopicUpdate](response, state as any);
+      const upserted = (state.human_topic_upsert as any).mock.calls[0][0];
+      expect(upserted.description).toBe("Candidate description from scan");
+    });
+
+    it("throws for new topic when name and description are unresolvable", async () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleTopicUpdate,
+        data: { personaId: "persona-1", personaDisplayName: "Sisyphus", isNewItem: true, candidateCategory: "Event" },
+      });
+      const response = createMockResponse(request, { sentiment: 0.8 });
+      await expect(handlers[LLMNextStep.HandleTopicUpdate](response, state as any)).rejects.toThrow("Cannot create new topic");
+    });
+  });
+
   describe("handlePersonUpdate", () => {
     it("sets interested_personas to [personaId] for new people", async () => {
       const request = createMockRequest({
@@ -631,6 +724,100 @@ describe("Extraction Handlers - Step 3 (Update) - interested_personas", () => {
       expect(upsertedPerson.interested_personas).toContain("persona-1");
       expect(upsertedPerson.interested_personas).toContain("persona-2");
       expect(upsertedPerson.interested_personas).toHaveLength(2);
+    });
+  });
+
+  describe("handlePersonUpdate — partial model responses (Haiku omission patterns)", () => {
+    const existingPerson: Person = {
+      id: "existing-person",
+      name: "David",
+      description: "Existing description of David",
+      sentiment: 0.75,
+      relationship: "Coworker",
+      exposure_current: 0.6,
+      exposure_desired: 0.5,
+      last_updated: "",
+      interested_personas: [],
+      identifiers: [{ type: "Full Name", value: "David Moody" }],
+    };
+
+    beforeEach(() => {
+      state._human.people.push({ ...existingPerson });
+    });
+
+    it("uses existing description when model omits description on update", async () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandlePersonUpdate,
+        data: { personaId: "persona-1", personaDisplayName: "Sisyphus", isNewItem: false, existingItemId: "existing-person", candidateName: "David", candidateRelationship: "Coworker" },
+      });
+      const response = createMockResponse(request, { sentiment: 0.8 });
+      await handlers[LLMNextStep.HandlePersonUpdate](response, state as any);
+      const upserted = (state.human_person_upsert as any).mock.calls[0][0];
+      expect(upserted.description).toBe("Existing description of David");
+    });
+
+    it("uses existing sentiment when model omits sentiment on update", async () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandlePersonUpdate,
+        data: { personaId: "persona-1", personaDisplayName: "Sisyphus", isNewItem: false, existingItemId: "existing-person", candidateName: "David", candidateRelationship: "Coworker" },
+      });
+      const response = createMockResponse(request, { description: "Updated description" });
+      await handlers[LLMNextStep.HandlePersonUpdate](response, state as any);
+      const upserted = (state.human_person_upsert as any).mock.calls[0][0];
+      expect(upserted.sentiment).toBe(0.75);
+    });
+
+    it("uses existing description when model returns boolean true for description", async () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandlePersonUpdate,
+        data: { personaId: "persona-1", personaDisplayName: "Sisyphus", isNewItem: false, existingItemId: "existing-person", candidateName: "David", candidateRelationship: "Coworker" },
+      });
+      const response = createMockResponse(request, { description: true, sentiment: 0.8 });
+      await handlers[LLMNextStep.HandlePersonUpdate](response, state as any);
+      const upserted = (state.human_person_upsert as any).mock.calls[0][0];
+      expect(upserted.description).toBe("Existing description of David");
+    });
+
+    it("skips update (no upsert) when existing person has no description and model omits it", async () => {
+      state._human.people[0].description = "";
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandlePersonUpdate,
+        data: { personaId: "persona-1", personaDisplayName: "Sisyphus", isNewItem: false, existingItemId: "existing-person", candidateName: "David", candidateRelationship: "Coworker" },
+      });
+      const response = createMockResponse(request, { sentiment: 0.8 });
+      await handlers[LLMNextStep.HandlePersonUpdate](response, state as any);
+      expect(state.human_person_upsert).not.toHaveBeenCalled();
+    });
+
+    it("uses candidateDescription as fallback for new person when model omits description", async () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandlePersonUpdate,
+        data: { personaId: "persona-1", personaDisplayName: "Sisyphus", isNewItem: true, candidateName: "Alice", candidateDescription: "Candidate description from scan", candidateRelationship: "Friend" },
+      });
+      const response = createMockResponse(request, { sentiment: 0.5 });
+      await handlers[LLMNextStep.HandlePersonUpdate](response, state as any);
+      const upserted = (state.human_person_upsert as any).mock.calls[0][0];
+      expect(upserted.description).toBe("Candidate description from scan");
+    });
+
+    it("defaults sentiment to 0 for new person when model omits it", async () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandlePersonUpdate,
+        data: { personaId: "persona-1", personaDisplayName: "Sisyphus", isNewItem: true, candidateName: "Alice", candidateDescription: "A new person", candidateRelationship: "Friend" },
+      });
+      const response = createMockResponse(request, { description: "A new person I met" });
+      await handlers[LLMNextStep.HandlePersonUpdate](response, state as any);
+      const upserted = (state.human_person_upsert as any).mock.calls[0][0];
+      expect(upserted.sentiment).toBe(0);
+    });
+
+    it("throws for new person when description is unresolvable", async () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandlePersonUpdate,
+        data: { personaId: "persona-1", personaDisplayName: "Sisyphus", isNewItem: true, candidateName: "Alice", candidateRelationship: "Friend" },
+      });
+      const response = createMockResponse(request, { sentiment: 0.5 });
+      await expect(handlers[LLMNextStep.HandlePersonUpdate](response, state as any)).rejects.toThrow("Cannot create new person");
     });
   });
 
@@ -896,4 +1083,207 @@ describe("Extraction Handlers - Step 3 (Update) - interested_personas", () => {
       expect(upsertedFact.interested_personas).toEqual(["persona-1"]);
     });
   });
+});
+
+// =============================================================================
+// PARTIAL RESPONSE CONTRACT TESTS
+//
+// Every handler that writes description/sentiment to a human data item must:
+//   1. Accept a partial result (any subset of fields) without throwing
+//   2. Fall back to existing record values when model omits fields
+//   3. Produce a valid upsert OR a clean no-op — never a retry storm
+//
+// To add a new update handler to this contract: add an entry to UPDATE_HANDLERS.
+// The list is intentionally explicit — adding a handler here is a commitment
+// that it implements the fallback contract.
+// =============================================================================
+
+describe("Human data update handler — partial response contract", () => {
+  type UpdateHandlerSpec = {
+    step: LLMNextStep;
+    label: string;
+    existingRecord: Topic | Person;
+    seedState: (state: ReturnType<typeof createMockStateManager>, record: Topic | Person) => void;
+    makeRequest: (state: ReturnType<typeof createMockStateManager>, record: Topic | Person) => LLMRequest;
+    getUpsertMock: (state: ReturnType<typeof createMockStateManager>) => ReturnType<typeof vi.fn>;
+    partialCases: Array<{
+      label: string;
+      result: Record<string, unknown>;
+      expectUpsert: boolean;
+      assertUpserted?: (upserted: any) => void;
+    }>;
+  };
+
+  const existingTopic: Topic = {
+    id: "contract-topic",
+    name: "Ei Platform Architecture",
+    description: "Existing topic description",
+    sentiment: 0.6,
+    exposure_current: 0.4,
+    exposure_desired: 0.5,
+    last_updated: "",
+    interested_personas: [],
+  };
+
+  const existingPerson: Person = {
+    id: "contract-person",
+    name: "David",
+    description: "Existing person description",
+    sentiment: 0.75,
+    relationship: "Coworker",
+    exposure_current: 0.5,
+    exposure_desired: 0.5,
+    last_updated: "",
+    interested_personas: [],
+    identifiers: [{ type: "Full Name", value: "David Moody" }],
+  };
+
+  const UPDATE_HANDLERS: UpdateHandlerSpec[] = [
+    {
+      step: LLMNextStep.HandleTopicUpdate,
+      label: "handleTopicUpdate",
+      existingRecord: existingTopic,
+      seedState: (state, record) => { state._human.topics.push({ ...(record as Topic) }); },
+      makeRequest: (_state, record) => createMockRequest({
+        next_step: LLMNextStep.HandleTopicUpdate,
+        data: {
+          personaId: "persona-1",
+          personaDisplayName: "Sisyphus",
+          isNewItem: false,
+          existingItemId: record.id,
+          candidateCategory: "Project",
+          candidateName: (record as Topic).name,
+          candidateDescription: (record as Topic).description,
+        },
+      }),
+      getUpsertMock: (state) => state.human_topic_upsert as ReturnType<typeof vi.fn>,
+      partialCases: [
+        {
+          label: "description only — uses existing name and sentiment",
+          result: { description: "Updated description" },
+          expectUpsert: true,
+          assertUpserted: (u) => {
+            expect(u.name).toBe("Ei Platform Architecture");
+            expect(u.description).toBe("Updated description");
+            expect(u.sentiment).toBe(0.6);
+          },
+        },
+        {
+          label: "sentiment only — uses existing name and description",
+          result: { sentiment: 0.9 },
+          expectUpsert: true,
+          assertUpserted: (u) => {
+            expect(u.name).toBe("Ei Platform Architecture");
+            expect(u.description).toBe("Existing topic description");
+            expect(u.sentiment).toBe(0.9);
+          },
+        },
+        {
+          label: "description + sentiment, no name — uses existing name",
+          result: { description: "New description", sentiment: 0.8 },
+          expectUpsert: true,
+          assertUpserted: (u) => {
+            expect(u.name).toBe("Ei Platform Architecture");
+          },
+        },
+        {
+          label: "boolean description — uses existing description",
+          result: { description: true, sentiment: 0.7 },
+          expectUpsert: true,
+          assertUpserted: (u) => {
+            expect(u.description).toBe("Existing topic description");
+          },
+        },
+      ],
+    },
+    {
+      step: LLMNextStep.HandlePersonUpdate,
+      label: "handlePersonUpdate",
+      existingRecord: existingPerson,
+      seedState: (state, record) => { state._human.people.push({ ...(record as Person) }); },
+      makeRequest: (_state, record) => createMockRequest({
+        next_step: LLMNextStep.HandlePersonUpdate,
+        data: {
+          personaId: "persona-1",
+          personaDisplayName: "Sisyphus",
+          isNewItem: false,
+          existingItemId: record.id,
+          candidateName: (record as Person).name,
+          candidateDescription: (record as Person).description,
+          candidateRelationship: (record as Person).relationship,
+        },
+      }),
+      getUpsertMock: (state) => state.human_person_upsert as ReturnType<typeof vi.fn>,
+      partialCases: [
+        {
+          label: "description only — uses existing sentiment",
+          result: { description: "Updated description" },
+          expectUpsert: true,
+          assertUpserted: (u) => {
+            expect(u.description).toBe("Updated description");
+            expect(u.sentiment).toBe(0.75);
+          },
+        },
+        {
+          label: "sentiment only — uses existing description",
+          result: { sentiment: 0.9 },
+          expectUpsert: true,
+          assertUpserted: (u) => {
+            expect(u.description).toBe("Existing person description");
+            expect(u.sentiment).toBe(0.9);
+          },
+        },
+        {
+          label: "boolean description — uses existing description",
+          result: { description: true, sentiment: 0.8 },
+          expectUpsert: true,
+          assertUpserted: (u) => {
+            expect(u.description).toBe("Existing person description");
+          },
+        },
+        {
+          label: "description + sentiment — both written",
+          result: { description: "New description", sentiment: 0.5 },
+          expectUpsert: true,
+          assertUpserted: (u) => {
+            expect(u.description).toBe("New description");
+            expect(u.sentiment).toBe(0.5);
+          },
+        },
+      ],
+    },
+  ];
+
+  for (const spec of UPDATE_HANDLERS) {
+    describe(spec.label, () => {
+      let state: ReturnType<typeof createMockStateManager>;
+
+      beforeEach(() => {
+        state = createMockStateManager();
+        vi.clearAllMocks();
+        spec.seedState(state, spec.existingRecord);
+      });
+
+      for (const tc of spec.partialCases) {
+        it(tc.label, async () => {
+          const request = spec.makeRequest(state, spec.existingRecord);
+          const response = createMockResponse(request, tc.result);
+
+          await expect(
+            handlers[spec.step](response, state as any)
+          ).resolves.not.toThrow();
+
+          const mock = spec.getUpsertMock(state);
+          if (tc.expectUpsert) {
+            expect(mock).toHaveBeenCalledTimes(1);
+            if (tc.assertUpserted) {
+              tc.assertUpserted(mock.mock.calls[0][0]);
+            }
+          } else {
+            expect(mock).not.toHaveBeenCalled();
+          }
+        });
+      }
+    });
+  }
 });

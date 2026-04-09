@@ -123,6 +123,7 @@ export async function handleTopicUpdate(response: LLMResponse, state: StateManag
   const roomId = response.request.data.roomId as string | undefined;
   const candidateCategory = response.request.data.candidateCategory as string | undefined;
   const candidateName = response.request.data.candidateName as string | undefined;
+  const candidateDescription = response.request.data.candidateDescription as string | undefined;
 
   const personaIds = personaId.split("|").filter(Boolean);
   const primaryId = personaIds[0] ?? personaId;
@@ -145,10 +146,15 @@ export async function handleTopicUpdate(response: LLMResponse, state: StateManag
   const existingTopic = isNewItem ? undefined : human.topics.find(t => t.id === existingItemId);
 
   const resolvedName = result.name || existingTopic?.name || candidateName;
-  const resolvedDescription = typeof result.description === 'string' ? result.description : existingTopic?.description;
+  const resolvedDescription = typeof result.description === 'string' ? result.description : existingTopic?.description ?? candidateDescription;
+  const resolvedSentiment = result.sentiment !== undefined ? result.sentiment : existingTopic?.sentiment ?? 0;
 
-  if (!resolvedName || !resolvedDescription || result.sentiment === undefined) {
-    throw new Error(`[handleTopicUpdate] Missing required fields: name=${resolvedName}, description=${!!resolvedDescription}, sentiment=${result.sentiment}`);
+  if (!resolvedName || !resolvedDescription) {
+    if (isNewItem) {
+      throw new Error(`[handleTopicUpdate] Cannot create new topic — missing required fields: name=${resolvedName}, description=${!!resolvedDescription}`);
+    }
+    console.log(`[handleTopicUpdate] Skipping update for "${resolvedName ?? existingItemId}" — no description available and existing record preserved`);
+    return;
   }
 
   let embedding: number[] | undefined;
@@ -173,7 +179,7 @@ export async function handleTopicUpdate(response: LLMResponse, state: StateManag
     id: itemId,
     name: resolvedName,
     description: resolvedDescription,
-    sentiment: result.sentiment,
+    sentiment: resolvedSentiment,
     category: result.category ?? candidateCategory ?? existingTopic?.category,
     exposure_current: calculateExposureCurrent(exposureImpact, existingTopic?.exposure_current ?? 0),
     exposure_desired: result.exposure_desired ?? 0.5,
@@ -217,6 +223,7 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
   const candidateIdentifiers = (response.request.data.candidateIdentifiers ?? []) as PersonIdentifier[];
 
   const candidateName = response.request.data.candidateName as string;
+  const candidateDescription = response.request.data.candidateDescription as string | undefined;
   const personaIds = personaId.split("|").filter(Boolean);
   const primaryId = personaIds[0] ?? personaId;
 
@@ -237,11 +244,15 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
 
   const existingPerson = isNewItem ? undefined : human.people.find(p => p.id === existingItemId);
 
-  const resolvedDescription = typeof result.description === 'string' ? result.description : existingPerson?.description;
-  const resolvedSentiment = result.sentiment !== undefined ? result.sentiment : existingPerson?.sentiment;
+  const resolvedDescription = typeof result.description === 'string' ? result.description : existingPerson?.description ?? candidateDescription;
+  const resolvedSentiment = result.sentiment !== undefined ? result.sentiment : existingPerson?.sentiment ?? 0;
 
-  if (!resolvedDescription || resolvedSentiment === undefined) {
-    throw new Error(`[handlePersonUpdate] Missing required fields: description=${!!resolvedDescription}, sentiment=${resolvedSentiment}`);
+  if (!resolvedDescription) {
+    if (isNewItem) {
+      throw new Error(`[handlePersonUpdate] Cannot create new person "${candidateName}" — no description available`);
+    }
+    console.log(`[handlePersonUpdate] Skipping update for "${candidateName}" — no description available and existing record preserved`);
+    return;
   }
 
   let embedding: number[] | undefined;
