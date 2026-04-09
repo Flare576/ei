@@ -7,6 +7,7 @@ import type {
   ProviderAccount,
 } from "../../../src/core/types.js";
 import { modelGuidToDisplay, displayToModelGuid } from "./yaml-shared.js";
+import { parseDuration, formatDuration } from "./duration.js";
 
 const PLACEHOLDER_LONG_DESC = "Detailed description of this persona's personality, background, and role";
 
@@ -36,8 +37,8 @@ interface EditablePersonaData {
   groups_visible?: Record<string, boolean>[];
   traits: YAMLTrait[];
   topics: YAMLPersonaTopic[];
-  heartbeat_delay_ms?: string | number;
-  context_window_hours?: number;
+  heartbeat_delay_ms?: string | null;
+  context_window_hours?: number | null;
   is_paused?: boolean;
   pause_until?: string;
   is_static?: boolean;
@@ -175,10 +176,10 @@ export function newPersonaFromYAML(yamlContent: string, allTools?: ToolDefinitio
     groups_visible: groupsVisible.length > 0 ? groupsVisible : ["General"],
     traits,
     topics,
-    heartbeat_delay_ms: data.heartbeat_delay_ms === 'default' || data.heartbeat_delay_ms === undefined
+    heartbeat_delay_ms: data.heartbeat_delay_ms == null
       ? undefined
-      : Number(data.heartbeat_delay_ms) || undefined,
-    context_window_hours: data.context_window_hours,
+      : parseDuration(data.heartbeat_delay_ms) ?? undefined,
+    context_window_hours: data.context_window_hours ?? undefined,
     tools: resolvePersonaToolsFromMap(data.tools, allTools ?? [], allProviders ?? []),
   };
 }
@@ -216,8 +217,8 @@ export function personaToYAML(persona: PersonaEntity, allGroups?: string[], allT
       : persona.topics.map(({ name, perspective, approach, personal_stake, exposure_current, exposure_desired }) => ({
           name, perspective, approach, personal_stake, exposure_current, exposure_desired
         })),
-    heartbeat_delay_ms: persona.heartbeat_delay_ms || 'default',
-    context_window_hours: persona.context_window_hours,
+    heartbeat_delay_ms: persona.heartbeat_delay_ms ? formatDuration(persona.heartbeat_delay_ms) : null,
+    context_window_hours: persona.context_window_hours ?? null,
     is_paused: persona.is_paused || undefined,
     pause_until: persona.pause_until,
     is_static: persona.is_static || undefined,
@@ -324,10 +325,10 @@ export function personaFromYAML(yamlContent: string, original: PersonaEntity, al
     groups_visible: groupsVisible,
     traits,
     topics,
-    heartbeat_delay_ms: data.heartbeat_delay_ms === 'default' || data.heartbeat_delay_ms === undefined
+    heartbeat_delay_ms: data.heartbeat_delay_ms == null
       ? undefined
-      : Number(data.heartbeat_delay_ms) || undefined,
-    context_window_hours: data.context_window_hours,
+      : parseDuration(data.heartbeat_delay_ms) ?? undefined,
+    context_window_hours: data.context_window_hours ?? undefined,
     is_paused: data.is_paused ?? false,
     pause_until: data.pause_until,
     is_static: data.is_static ?? false,
