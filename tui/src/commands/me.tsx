@@ -6,37 +6,73 @@ import { ConfirmOverlay } from "../components/ConfirmOverlay.js";
 
 type DataType = "facts" | "topics" | "people";
 
-const VALID_TYPES: DataType[] = ["facts", "topics", "people"];
+const TYPE_ALIASES: Record<string, DataType> = {
+  facts: "facts", fact: "facts",
+  topics: "topics", topic: "topics",
+  people: "people", person: "people", persons: "people",
+};
 
 export const meCommand: Command = {
   name: "me",
   aliases: [],
   description: "Edit your data in $EDITOR",
-  usage: "/me [facts|topics|people]",
-  
+  usage: "/me [fact|topic|person] [new | <search>]",
+
   async execute(args, ctx) {
     const human = await ctx.ei.getHuman();
-    
-    const filterArg = args[0]?.toLowerCase();
-    const filterType: DataType | null = filterArg && VALID_TYPES.includes(filterArg as DataType) 
-      ? filterArg as DataType 
-      : null;
-    
-    if (filterArg && !filterType) {
-      ctx.showNotification(`Invalid type: ${filterArg}. Use: facts, topics, people`, "error");
+
+    const typeArg = args[0]?.toLowerCase();
+    const filterType: DataType | null = typeArg ? (TYPE_ALIASES[typeArg] ?? null) : null;
+
+    if (typeArg && !filterType) {
+      ctx.showNotification(`Unknown type: ${typeArg}. Use: fact, topic, person`, "error");
       return;
     }
-    
+
+    const secondArg = args[1]?.toLowerCase();
+    const isNew = secondArg === "new";
+    const searchTerm = !isNew && secondArg ? args.slice(1).join(" ") : null;
+
+    if (isNew && args.length > 2) {
+      ctx.showNotification(
+        `Use /me ${typeArg} new to create, or /me ${typeArg} ${args.slice(2).join(" ")} to search`,
+        "error"
+      );
+      return;
+    }
+
+    if ((isNew || searchTerm) && !filterType) {
+      ctx.showNotification(`Specify a type first: /me fact|topic|person [new | <search>]`, "error");
+      return;
+    }
+
+    const filterItems = <T extends { name: string }>(items: T[]): T[] => {
+      if (isNew) return [];
+      if (searchTerm) return items.filter(i => i.name.toLowerCase().includes(searchTerm.toLowerCase()));
+      return items;
+    };
+
     const filteredHuman = filterType ? {
       ...human,
-      facts: filterType === "facts" ? human.facts : [],
-      topics: filterType === "topics" ? human.topics : [],
-      people: filterType === "people" ? human.people : [],
+      facts:  filterType === "facts"  ? filterItems(human.facts)  : [],
+      topics: filterType === "topics" ? filterItems(human.topics) : [],
+      people: filterType === "people" ? filterItems(human.people) : [],
     } : human;
+
+    const isEmpty = filteredHuman.facts.length === 0
+      && filteredHuman.topics.length === 0
+      && filteredHuman.people.length === 0;
+
+    if (searchTerm && isEmpty) {
+      ctx.showNotification(`No ${filterType} matching "${searchTerm}" — open editor to create one`, "info");
+    }
     
     const personaLookup = new Map(ctx.ei.personas().map(p => [p.id, p.display_name]));
     const allGroups = await ctx.ei.getGroupList();
-    let yamlContent = humanToYAML(filteredHuman, personaLookup, allGroups);
+    const sections = filterType
+      ? new Set<"facts" | "topics" | "people">([filterType])
+      : new Set<"facts" | "topics" | "people">(["facts", "topics", "people"]);
+    let yamlContent = humanToYAML(filteredHuman, personaLookup, allGroups, sections);
     let editorIteration = 0;
     
     while (true) {
