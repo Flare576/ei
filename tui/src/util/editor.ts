@@ -23,6 +23,41 @@ export interface EditorResult {
   aborted: boolean;
 }
 
+export async function spawnPager(content: string, renderer: CliRenderer): Promise<void> {
+  const pager = process.env.PAGER || "less";
+  const tmpDir = os.tmpdir();
+  const tmpFile = path.join(tmpDir, `ei-help-${Date.now()}.txt`);
+
+  fs.writeFileSync(tmpFile, content, "utf-8");
+
+  await new Promise(resolve => setTimeout(resolve, 50));
+
+  return new Promise((resolve) => {
+    renderer.suspend();
+    renderer.currentRenderBuffer.clear();
+
+    const child = spawn(pager, [tmpFile], {
+      stdio: "inherit",
+      shell: true,
+    });
+
+    child.on("error", () => {
+      try { fs.unlinkSync(tmpFile); } catch {}
+      renderer.resume();
+      renderer.requestRender();
+      resolve();
+    });
+
+    child.on("exit", () => {
+      try { fs.unlinkSync(tmpFile); } catch {}
+      renderer.currentRenderBuffer.clear();
+      renderer.resume();
+      renderer.requestRender();
+      resolve();
+    });
+  });
+}
+
 export async function spawnEditorRaw(options: EditorRawOptions): Promise<EditorResult> {
   const { initialContent, filename } = options;
   const editor = process.env.EDITOR || process.env.VISUAL || "vi";
