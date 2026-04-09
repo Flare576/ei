@@ -4,6 +4,13 @@ import { App } from "./app";
 
 import { InstanceLock } from "./util/instance-lock";
 import { FileStorage } from "./storage/file";
+import pkg from "../../package.json";
+
+const args = process.argv.slice(2);
+if (args.includes("--version") || args.includes("version") || args.includes("-v")) {
+  process.stdout.write(`${pkg.version}\n`);
+  process.exit(0);
+}
 
 const storage = new FileStorage(Bun.env.EI_DATA_PATH);
 const lock = new InstanceLock(storage.getDataPath());
