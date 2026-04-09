@@ -182,6 +182,6 @@ test.describe("/me Command", () => {
     
     await new Promise(resolve => setTimeout(resolve, 500));
     
-    await expect(terminal.getByText("Invalid type")).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText("Unknown type")).toBeVisible({ timeout: 5000 });
   });
 });
