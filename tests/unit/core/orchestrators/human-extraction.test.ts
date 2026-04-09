@@ -4,6 +4,7 @@ import {
   LLMRequestType,
   LLMPriority,
   type Message,
+  type Topic,
   type HumanEntity,
   type PersonaEntity,
 } from "../../../../src/core/types.js";
@@ -12,6 +13,8 @@ import {
   queueTopicScan,
   queuePersonScan,
   queueAllScans,
+  queueTopicValidate,
+  VALIDATE_MIN_SIMILARITY,
   type ExtractionContext,
 } from "../../../../src/core/orchestrators/human-extraction.js";
 
@@ -22,11 +25,26 @@ vi.mock("../../../../src/prompts/human/index.js", () => ({
   buildEventScanPrompt: vi.fn().mockReturnValue({ system: "event-sys", user: "event-usr" }),
 }));
 
+vi.mock("../../../../src/prompts/ceremony/dedup.js", () => ({
+  buildValidatePrompt: vi.fn().mockReturnValue({ system: "validate-sys", user: "validate-usr" }),
+}));
+
+const mockFindTopK = vi.fn();
+vi.mock("../../../../src/core/embedding-service.js", () => ({
+  getEmbeddingService: () => ({
+    embed: vi.fn().mockResolvedValue(new Array(384).fill(0.1)),
+  }),
+  findTopK: (...args: unknown[]) => mockFindTopK(...args),
+  getTopicEmbeddingText: ({ name, description }: { name: string; description?: string }) =>
+    `${name}: ${description ?? ""}`,
+}));
+
 import {
   buildFactFindPrompt,
   buildHumanTopicScanPrompt,
   buildHumanPersonScanPrompt,
 } from "../../../../src/prompts/human/index.js";
+import { buildValidatePrompt } from "../../../../src/prompts/ceremony/dedup.js";
 
 function createMockStateManager() {
   const human: HumanEntity = {
@@ -210,6 +228,125 @@ describe("Scan Orchestrators (Step 1)", () => {
       expect(nextSteps).toContain(LLMNextStep.HandleHumanPersonScan);
       expect(nextSteps).toContain(LLMNextStep.HandleEventScan);
     });
+  });
+});
+
+describe("queueTopicValidate", () => {
+  function makeTopic(id: string, name: string, withEmbedding = true): Topic {
+    return {
+      id,
+      name,
+      description: `Description for ${name}`,
+      sentiment: 0,
+      exposure_current: 0.5,
+      exposure_desired: 0.5,
+      last_updated: new Date().toISOString(),
+      embedding: withEmbedding ? new Array(384).fill(0.1) : undefined,
+    };
+  }
+
+  function makeState(existingTopics: Topic[]) {
+    return {
+      getHuman: vi.fn(() => ({
+        topics: existingTopics,
+      })),
+      queue_enqueue: vi.fn(),
+    };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("queues HandleTopicValidate when topP(1) similarity meets threshold", async () => {
+    const newTopic = makeTopic("new-id", "Machine Learning");
+    const existingTopic = makeTopic("existing-id", "Artificial Intelligence");
+    const state = makeState([existingTopic, newTopic]);
+
+    mockFindTopK.mockReturnValue([{ item: existingTopic, similarity: VALIDATE_MIN_SIMILARITY }]);
+
+    await queueTopicValidate(newTopic, state as any);
+
+    expect(state.queue_enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        next_step: LLMNextStep.HandleTopicValidate,
+        type: LLMRequestType.JSON,
+        priority: LLMPriority.Normal,
+        system: "validate-sys",
+        user: "validate-usr",
+        data: {
+          entity_type: "topic",
+          entity_ids: [existingTopic.id, newTopic.id],
+        },
+      })
+    );
+    expect(buildValidatePrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        established: existingTopic,
+        newcomer: newTopic,
+        itemType: "topic",
+        similarity: VALIDATE_MIN_SIMILARITY,
+      })
+    );
+  });
+
+  it("does not queue when similarity is below threshold", async () => {
+    const newTopic = makeTopic("new-id", "Cooking");
+    const existingTopic = makeTopic("existing-id", "Baking");
+    const state = makeState([existingTopic, newTopic]);
+
+    mockFindTopK.mockReturnValue([{ item: existingTopic, similarity: VALIDATE_MIN_SIMILARITY - 0.01 }]);
+
+    await queueTopicValidate(newTopic, state as any);
+
+    expect(state.queue_enqueue).not.toHaveBeenCalled();
+  });
+
+  it("does not queue when new topic has no embedding", async () => {
+    const newTopic = makeTopic("new-id", "Hiking", false);
+    const state = makeState([makeTopic("existing-id", "Outdoor Activities")]);
+
+    await queueTopicValidate(newTopic, state as any);
+
+    expect(state.queue_enqueue).not.toHaveBeenCalled();
+    expect(mockFindTopK).not.toHaveBeenCalled();
+  });
+
+  it("does not queue when there are no other embedded topics to compare", async () => {
+    const newTopic = makeTopic("new-id", "Sailing");
+    const state = makeState([newTopic]);
+
+    await queueTopicValidate(newTopic, state as any);
+
+    expect(state.queue_enqueue).not.toHaveBeenCalled();
+  });
+
+  it("excludes the new topic itself from the candidate pool", async () => {
+    const newTopic = makeTopic("new-id", "Jazz");
+    const otherTopic = makeTopic("other-id", "Music");
+    const state = makeState([newTopic, otherTopic]);
+
+    mockFindTopK.mockReturnValue([{ item: otherTopic, similarity: 0.9 }]);
+
+    await queueTopicValidate(newTopic, state as any);
+
+    const candidatesPassedToFindTopK = mockFindTopK.mock.calls[0][1] as Topic[];
+    expect(candidatesPassedToFindTopK.some((t: Topic) => t.id === newTopic.id)).toBe(false);
+    expect(candidatesPassedToFindTopK.some((t: Topic) => t.id === otherTopic.id)).toBe(true);
+  });
+
+  it("passes extractionModel through to the queued request", async () => {
+    const newTopic = makeTopic("new-id", "TypeScript");
+    const existingTopic = makeTopic("existing-id", "JavaScript");
+    const state = makeState([existingTopic, newTopic]);
+
+    mockFindTopK.mockReturnValue([{ item: existingTopic, similarity: 0.9 }]);
+
+    await queueTopicValidate(newTopic, state as any, "my-model");
+
+    expect(state.queue_enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({ model: "my-model" })
+    );
   });
 });
 

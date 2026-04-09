@@ -24,6 +24,7 @@ vi.mock("../../../../src/core/orchestrators/index.js", () => ({
   orchestratePersonaGeneration: vi.fn(),
   queueTopicMatch: vi.fn().mockResolvedValue(undefined),
   queuePersonUpdate: vi.fn().mockReturnValue(1),
+  queueTopicValidate: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../../../../src/core/embedding-service.js", () => ({
