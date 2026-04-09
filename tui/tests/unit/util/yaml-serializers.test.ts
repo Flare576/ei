@@ -47,6 +47,23 @@ describe("personaToYAML", () => {
     expect(yaml).not.toContain("_delete:");
   });
 
+  test("serializes heartbeat_delay_ms as human-readable duration string", () => {
+    const yaml = personaToYAML(minimalPersona);
+    expect(yaml).toContain("heartbeat_delay_ms: 5m");
+    expect(yaml).not.toContain("300000");
+  });
+
+  test("serializes context_window_hours as null when unset", () => {
+    const yaml = personaToYAML(minimalPersona);
+    expect(yaml).toContain("context_window_hours: null");
+  });
+
+  test("serializes context_window_hours as number when set", () => {
+    const persona = { ...minimalPersona, context_window_hours: 24 };
+    const yaml = personaToYAML(persona);
+    expect(yaml).toContain("context_window_hours: 24");
+  });
+
   test("serializes persona with traits and topics", () => {
     const persona: PersonaEntity = {
       ...minimalPersona,
@@ -247,7 +264,7 @@ group_primary: work
 groups_visible:
   - work: true
   - personal: true
-heartbeat_delay_ms: 600000
+heartbeat_delay_ms: 10m
 context_window_hours: 48
 traits: []
 topics: []
@@ -259,6 +276,19 @@ topics: []
     expect(result.updates.groups_visible).toEqual(["work", "personal"]);
     expect(result.updates.heartbeat_delay_ms).toBe(600000);
     expect(result.updates.context_window_hours).toBe(48);
+  });
+
+  test("parses null heartbeat_delay_ms as undefined", () => {
+    const yaml = `
+display_name: TestBot
+heartbeat_delay_ms: null
+context_window_hours: null
+traits: []
+topics: []
+`;
+    const result = personaFromYAML(yaml, emptyOriginal);
+    expect(result.updates.heartbeat_delay_ms).toBeUndefined();
+    expect(result.updates.context_window_hours).toBeUndefined();
   });
 
   test("parses groups_visible with mixed true/false values", () => {
@@ -627,6 +657,16 @@ describe("round-trip serialization", () => {
     expect(result.message_min_count).toBe(100);
     expect(result.message_max_age_days).toBe(7);
     expect(result.ceremony?.event_window_hours).toBe(2);
+  });
+
+  test("serializes _ms fields as human-readable duration strings", () => {
+    const settings: HumanSettings = {
+      default_heartbeat_ms: 120000,
+    };
+    const yaml = settingsToYAML(settings, []);
+    expect(yaml).toContain("default_heartbeat_ms: 2m");
+    expect(yaml).not.toContain("120000");
+    expect(yaml).toContain("polling_interval_ms: 1m");
   });
 
   test("returns defaults for new fields when not set", () => {
