@@ -380,15 +380,15 @@ export function queueTopicUpdate(
     candidateCategory: string;
     extraction_model?: string;
   },
-  state: StateManager
+  state: StateManager,
+  resolvedItem?: Topic | null
 ): number {
-  const human = state.getHuman();
   const matchedGuid = matchResult.matched_guid;
   const isNewItem = matchedGuid === null;
 
-  let existingItem: Topic | null = null;
-  if (!isNewItem && matchedGuid) {
-    existingItem = human.topics.find(t => t.id === matchedGuid) ?? null;
+  let existingItem: Topic | null = resolvedItem ?? null;
+  if (!isNewItem && matchedGuid && existingItem === null) {
+    existingItem = state.getHuman().topics.find(t => t.id === matchedGuid) ?? null;
   }
 
   const extractionOptions: ExtractionOptions = { extraction_model: context.extraction_model };
@@ -523,15 +523,15 @@ export function queuePersonUpdate(
     candidateIdentifiers?: PersonIdentifier[];
     extraction_model?: string;
   },
-  state: StateManager
+  state: StateManager,
+  resolvedItem?: Person | null
 ): number {
-  const human = state.getHuman();
   const matchedGuid = matchResult.matched_guid;
   const isNewItem = matchedGuid === null;
 
-  let existingItem: Person | null = null;
-  if (!isNewItem && matchedGuid) {
-    existingItem = human.people.find(p => p.id === matchedGuid) ?? null;
+  let existingItem: Person | null = resolvedItem ?? null;
+  if (!isNewItem && matchedGuid && existingItem === null) {
+    existingItem = state.getHuman().people.find(p => p.id === matchedGuid) ?? null;
   }
 
   const candidateIdentifiers = context.candidateIdentifiers ?? [];

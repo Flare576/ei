@@ -28,12 +28,13 @@ export function handleTopicMatch(response: LLMResponse, state: StateManager): vo
   const { messages_context, messages_analyze } = resolveMessageWindow(response, state);
 
   let matched_guid = result.matched_guid;
+  let resolvedTopic: import('../types/data-items.js').Topic | null = null;
   if (matched_guid === "new") {
     matched_guid = null;
   } else if (matched_guid) {
     const human = state.getHuman();
-    const found = human.topics.find(t => t.id === matched_guid);
-    if (!found) {
+    resolvedTopic = human.topics.find(t => t.id === matched_guid) ?? null;
+    if (!resolvedTopic) {
       console.warn(`[handleTopicMatch] matched_guid "${matched_guid}" not found in topics — treating as new`);
       matched_guid = null;
     }
@@ -57,7 +58,7 @@ export function handleTopicMatch(response: LLMResponse, state: StateManager): vo
     extraction_model: response.request.data.extraction_model as string | undefined,
   };
 
-  queueTopicUpdate(result, context, state);
+  queueTopicUpdate(result, context, state, resolvedTopic);
   const matched = matched_guid ? `matched GUID "${matched_guid}"` : "no match (new topic)";
   console.log(`[handleTopicMatch] topic "${context.candidateName}": ${matched}`);
 }
@@ -74,12 +75,13 @@ export function handlePersonMatch(response: LLMResponse, state: StateManager): v
   const { messages_context, messages_analyze } = resolveMessageWindow(response, state);
 
   let matched_guid = result.matched_guid;
+  let resolvedPerson: import('../types/data-items.js').Person | null = null;
   if (matched_guid === "new") {
     matched_guid = null;
   } else if (matched_guid) {
     const human = state.getHuman();
-    const found = human.people.find(p => p.id === matched_guid);
-    if (!found) {
+    resolvedPerson = human.people.find(p => p.id === matched_guid) ?? null;
+    if (!resolvedPerson) {
       console.warn(`[handlePersonMatch] matched_guid "${matched_guid}" not found in people — treating as new`);
       matched_guid = null;
     }
@@ -103,7 +105,7 @@ export function handlePersonMatch(response: LLMResponse, state: StateManager): v
     extraction_model: response.request.data.extraction_model as string | undefined,
   };
 
-  queuePersonUpdate(result, context, state);
+  queuePersonUpdate(result, context, state, resolvedPerson);
   const matched = matched_guid ? `matched GUID "${matched_guid}"` : "no match (new person)";
   console.log(`[handlePersonMatch] person "${context.candidateName}": ${matched}`);
 }
