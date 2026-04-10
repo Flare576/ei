@@ -159,10 +159,16 @@ test.use({
 async function runMeTopicsAndCapture(terminal: any): Promise<string> {
   await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 15000 });
 
+  if (existsSync(CAPTURE_FILE)) rmSync(CAPTURE_FILE);
+
   terminal.write("/me topics");
   terminal.submit();
 
-  await new Promise(resolve => setTimeout(resolve, 1500));
+  const deadline = Date.now() + 15000;
+  while (!existsSync(CAPTURE_FILE) && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+
   await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 10000 });
 
   expect(existsSync(CAPTURE_FILE)).toBe(true);
@@ -174,32 +180,17 @@ async function runMeTopicsAndCapture(terminal: any): Promise<string> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 test.describe("/me topics — persona_groups YAML serialization", () => {
-  test("active group serialized as true in checkbox map", async ({ terminal }) => {
+  test("persona_groups serialized correctly as checkbox map", async ({ terminal }) => {
     const yaml = await runMeTopicsAndCapture(terminal);
 
     expect(yaml).toContain("name: TypeScript");
     expect(yaml).toContain("persona_groups:");
     expect(yaml).toMatch(/Work:\s*true/);
-  });
 
-  test("known-but-absent group serialized as false in checkbox map", async ({ terminal }) => {
-    const yaml = await runMeTopicsAndCapture(terminal);
-
-    // TypeScript is in Work but not Personal — Personal should appear as false
     expect(yaml).toMatch(/Personal:\s*false/);
-  });
-
-  test("topic with no persona_groups shows empty checkbox list", async ({ terminal }) => {
-    const yaml = await runMeTopicsAndCapture(terminal);
 
     expect(yaml).toContain("name: Hiking");
-    // Hiking has no groups — persona_groups block should be present but empty
-    // (YAML.stringify renders empty array as `[]` or `\n` depending on version)
     expect(yaml).toMatch(/name: Hiking[\s\S]*?persona_groups:\s*(\[\]|\n\s+-)/);
-  });
-
-  test("persona_groups block appears before _delete in YAML output", async ({ terminal }) => {
-    const yaml = await runMeTopicsAndCapture(terminal);
 
     const groupsIndex = yaml.indexOf("persona_groups:");
     const deleteIndex = yaml.indexOf("_delete:");
