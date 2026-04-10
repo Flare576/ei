@@ -1064,6 +1064,24 @@ export class StateManager {
     return { success: true, cleared };
   }
 
+  model_update_usage(modelId: string, delta: { calls: number; tokens_in: number; tokens_out: number }): void {
+    const human = this.humanState.get();
+    const accounts = human.settings?.accounts;
+    if (!accounts) return;
+
+    for (const account of accounts) {
+      const model = account.models?.find(m => m.id === modelId);
+      if (model) {
+        model.total_calls = (model.total_calls ?? 0) + delta.calls;
+        model.total_tokens_in = (model.total_tokens_in ?? 0) + delta.tokens_in;
+        model.total_tokens_out = (model.total_tokens_out ?? 0) + delta.tokens_out;
+        model.last_used = new Date().toISOString();
+        this.scheduleSave();
+        return;
+      }
+    }
+  }
+
   async flush(): Promise<void> {
     await this.persistenceState.flush();
   }

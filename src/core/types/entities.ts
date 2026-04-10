@@ -44,9 +44,11 @@ export interface BackupConfig {
  */
 export interface ModelConfig {
   id: string;                       // GUID (crypto.randomUUID())
-  name: string;                     // Model identifier, e.g. "claude-haiku-4-5", "(default)"
+  name: string;                     // Display name shown in UI, e.g. "Gemma4 (thinking)", "(default)"
+  model_id?: string;                // Actual model identifier sent to API — falls back to name if absent
   token_limit?: number;             // Input token limit (user sets effective limit)
   max_output_tokens?: number;       // Output token limit (API-enforced)
+  thinking_budget?: number;         // Thinking token budget: 0 = disabled, N = enable with N tokens, undefined = don't send
   total_calls?: number;             // Usage counter
   total_tokens_in?: number;         // Usage counter
   total_tokens_out?: number;        // Usage counter

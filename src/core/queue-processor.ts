@@ -37,9 +37,10 @@ export interface QueueProcessorStartOptions {
   onEnqueue?: EnqueueCallback;
   /**
    * Called when a tool executor updates its provider config (e.g. Spotify refresh token rotation).
-   * Injected by Processor to persist the updated config back to storage.
+   * Injected by Processor pointing to stateManager.queue_enqueue.
    */
   onProviderConfigUpdate?: (providerId: string, updates: Record<string, string>) => void;
+  onUsageUpdate?: (modelId: string, usage: { calls: number; tokens_in: number; tokens_out: number }) => void;
 }
 
 export class QueueProcessor {
@@ -52,6 +53,7 @@ export class QueueProcessor {
   private currentTools: ToolDefinition[] | undefined;
   private currentOnEnqueue: EnqueueCallback | undefined;
   private currentOnProviderConfigUpdate: ((providerId: string, updates: Record<string, string>) => void) | undefined;
+  private currentOnUsageUpdate: ((modelId: string, usage: { calls: number; tokens_in: number; tokens_out: number }) => void) | undefined;
 
   getState(): QueueProcessorState {
     return this.state;
@@ -70,6 +72,7 @@ export class QueueProcessor {
     this.currentTools = options?.tools;
     this.currentOnEnqueue = options?.onEnqueue;
     this.currentOnProviderConfigUpdate = options?.onProviderConfigUpdate;
+    this.currentOnUsageUpdate = options?.onUsageUpdate;
     this.abortController = new AbortController();
 
     this.processRequest(request)
@@ -197,7 +200,7 @@ export class QueueProcessor {
         hydratedUser,
         messages,
         request.model,
-        { signal: this.abortController?.signal, tools: openAITools },
+        { signal: this.abortController?.signal, tools: openAITools, onUsageUpdate: this.currentOnUsageUpdate },
         this.currentAccounts
       );
 
@@ -304,7 +307,7 @@ export class QueueProcessor {
       hydratedUser,
       messages,
       request.model,
-      { signal: this.abortController?.signal, tools: openAITools },
+      { signal: this.abortController?.signal, tools: openAITools, onUsageUpdate: this.currentOnUsageUpdate },
       this.currentAccounts
     );
     if (thinking) {
@@ -496,7 +499,7 @@ export class QueueProcessor {
         reformatUserPrompt,
         messages, // existing tool history — gives full context without duplicating the ask
         request.model,
-        { signal: this.abortController?.signal },
+        { signal: this.abortController?.signal, onUsageUpdate: this.currentOnUsageUpdate },
         this.currentAccounts
       );
 
@@ -553,7 +556,7 @@ export class QueueProcessor {
         reformatUserPrompt,
         [], // no message history needed — schema is already in the system prompt
         request.model,
-        { signal: this.abortController?.signal },
+        { signal: this.abortController?.signal, onUsageUpdate: this.currentOnUsageUpdate },
         this.currentAccounts
       );
 

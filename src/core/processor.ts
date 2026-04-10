@@ -1130,6 +1130,9 @@ const toolNextSteps = new Set([
                     });
                   }
                 },
+                onUsageUpdate: (modelId, usage) => {
+                  this.stateManager.model_update_usage(modelId, usage);
+                },
               }
             );
 

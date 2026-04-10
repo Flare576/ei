@@ -51,9 +51,10 @@ function isGuid(str: string): boolean {
 }
 
 function buildResolvedModel(account: ProviderAccount, model: ModelConfig): ResolvedModel {
+  const apiModelId = model.model_id ?? model.name;
   return {
     provider: account.name,
-    model: model.name === "(default)" ? undefined : model.name,
+    model: apiModelId === "(default)" ? undefined : apiModelId,
     config: {
       name: account.name,
       baseURL: account.url,
@@ -264,6 +265,10 @@ export async function callLLMRaw(
     temperature,
     max_tokens: modelConfig?.max_output_tokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
   };
+
+  if (modelConfig?.thinking_budget !== undefined) {
+    requestBody.think = { budget_tokens: modelConfig.thinking_budget };
+  }
 
   if (options.tools && options.tools.length > 0) {
     requestBody.tools = options.tools;
