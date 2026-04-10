@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ProviderType, type ProviderAccount, type ModelConfig } from '../../../../src/core/types.js';
 
+const tokenFormatter = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
+const formatTokens = (n: number) => tokenFormatter.format(n);
+
 interface ProviderEditorProps {
   isOpen: boolean;
   account: ProviderAccount | null;
@@ -456,7 +459,7 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
                       </div>
                       {model.total_calls !== undefined && model.total_calls > 0 && (
                         <div className="ei-form-hint">
-                          {model.total_calls} calls · {model.total_tokens_in ?? 0} in / {model.total_tokens_out ?? 0} out tokens
+                          {formatTokens(model.total_calls)} calls · {formatTokens(model.total_tokens_in ?? 0)} in / {formatTokens(model.total_tokens_out ?? 0)} out tokens
                           {model.last_used ? ` · last used ${new Date(model.last_used).toLocaleDateString()}` : ''}
                         </div>
                       )}

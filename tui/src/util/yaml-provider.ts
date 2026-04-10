@@ -5,6 +5,9 @@ import type {
 } from "../../../src/core/types.js";
 import { modelGuidToDisplay } from "./yaml-shared.js";
 
+const tokenFormatter = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
+const formatTokens = (n: number) => tokenFormatter.format(n);
+
 interface EditableModelData {
   name: string;
   model_id?: string;
@@ -157,7 +160,7 @@ export function providerToYAML(account: ProviderAccount): string {
       if (m.total_calls !== undefined || m.total_tokens_in !== undefined) {
         const tokensIn = m.total_tokens_in ?? 0;
         const tokensOut = m.total_tokens_out ?? 0;
-        modelLines.push(`    # stats: ${m.total_calls ?? 0} calls · ${tokensIn.toLocaleString()} in / ${tokensOut.toLocaleString()} out`);
+        modelLines.push(`    # stats: ${formatTokens(m.total_calls ?? 0)} calls · ${formatTokens(tokensIn)} in / ${formatTokens(tokensOut)} out`);
         if (m.last_used) {
           modelLines.push(`    # used: ${m.last_used}`);
         }
