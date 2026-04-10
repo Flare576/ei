@@ -14,6 +14,7 @@ import { Processor } from "../../../src/core/processor.js";
 import { FileStorage } from "../storage/file.js";
 import { remoteSync } from "../../../src/storage/remote.js";
 import { logger, clearLog, interceptConsole } from "../util/logger.js";
+import { E2E_SKIP_LOCAL_DETECT } from "../util/e2e-flags.js";
 import { ConflictOverlay } from "../components/ConflictOverlay.js";
 import type {
   Ei_Interface,
@@ -698,7 +699,10 @@ export const EiProvider: ParentComponent = (props) => {
       try {
         const human = await processor!.getHuman();
         const hasAccounts = human.settings?.accounts && human.settings.accounts.length > 0;
-        if (!hasAccounts) {
+        if (!hasAccounts && E2E_SKIP_LOCAL_DETECT) {
+          logger.info("E2E_SKIP_LOCAL_DETECT active, skipping local LLM check");
+          setShowWelcomeOverlay(true);
+        } else if (!hasAccounts) {
           logger.info("No LLM accounts configured, checking for local LLM...");
           try {
             const response = await fetch("http://127.0.0.1:1234/v1/models", {

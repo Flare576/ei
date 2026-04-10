@@ -291,17 +291,13 @@ test.describe("/provider command — with NO configured providers", () => {
       HOME: process.env.HOME!,
       TERM: "xterm-256color",
       EDITOR: "true",
+      EI_E2E_MODE: "1",
     },
   });
 
-  test("/provider with empty accounts and no local LLM shows 'No models configured' message", async ({ terminal }) => {
-    try {
-      // As long as nothing is running on :1234, Welcome overlay appears when no accounts exist
-      await expect(terminal.getByText("Welcome to Ei!")).toBeVisible({ timeout: 5000 });
-      terminal.keyEscape(); // Dismiss welcome overlay
-    } catch {
-      console.log("Turn of your local LLM to run these tests");
-    }
+  test("/provider with empty accounts shows Welcome overlay then 'No models configured'", async ({ terminal }) => {
+    await expect(terminal.getByText("Welcome to Ei!")).toBeVisible({ timeout: 5000 });
+    terminal.keyEscape();
     await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 5000 });
     terminal.write("/provider");
     terminal.submit();
