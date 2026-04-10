@@ -103,7 +103,8 @@ export const meCommand: Command = {
       }
       
       try {
-        const parsed = humanFromYAML(result.content, filteredHuman);
+        const currentHuman = await ctx.ei.getHuman();
+        const parsed = humanFromYAML(result.content, filteredHuman, currentHuman);
         
         for (const id of parsed.deletedFactIds) {
           await ctx.ei.removeDataItem("fact", id);
@@ -131,14 +132,20 @@ export const meCommand: Command = {
           }
         }
         
-        const deleteCount = parsed.deletedFactIds.length + 
-                           parsed.deletedTopicIds.length + 
+        const deleteCount = parsed.deletedFactIds.length +
+                           parsed.deletedTopicIds.length +
                            parsed.deletedPersonIds.length;
-        const updateCount = parsed.changedFactIds.size + 
-                           parsed.changedTopicIds.size + 
+        const updateCount = parsed.changedFactIds.size +
+                           parsed.changedTopicIds.size +
                            parsed.changedPersonIds.size;
-        
-        ctx.showNotification(`Updated ${updateCount} items, deleted ${deleteCount}`, "info");
+        const skippedCount = parsed.skippedFactCount +
+                            parsed.skippedTopicCount +
+                            parsed.skippedPersonCount;
+
+        const msg = skippedCount > 0
+          ? `Updated ${updateCount}, deleted ${deleteCount}, skipped ${skippedCount} (changed by another process)`
+          : `Updated ${updateCount} items, deleted ${deleteCount}`;
+        ctx.showNotification(msg, "info");
         return;
         
       } catch (parseError) {

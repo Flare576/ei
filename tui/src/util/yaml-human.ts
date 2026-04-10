@@ -225,6 +225,9 @@ export interface HumanYAMLResult {
   changedFactIds: Set<string>;
   changedTopicIds: Set<string>;
   changedPersonIds: Set<string>;
+  skippedFactCount: number;
+  skippedTopicCount: number;
+  skippedPersonCount: number;
 }
 
 function identifiersEqual(a: PersonIdentifier[] | undefined, b: PersonIdentifier[] | undefined): boolean {
@@ -279,7 +282,7 @@ function personChanged(parsed: Person, original: Person): boolean {
   return !identifiersEqual(parsed.identifiers, original.identifiers);
 }
 
-export function humanFromYAML(yamlContent: string, original?: HumanEntity): HumanYAMLResult {
+export function humanFromYAML(yamlContent: string, original?: HumanEntity, current?: HumanEntity): HumanYAMLResult {
   const stripped = yamlContent
     .split('\n')
     .filter(line => !/^\s*#\s*\[read-only\]/.test(line))
@@ -292,6 +295,15 @@ export function humanFromYAML(yamlContent: string, original?: HumanEntity): Huma
   const changedFactIds = new Set<string>();
   const changedTopicIds = new Set<string>();
   const changedPersonIds = new Set<string>();
+  let skippedFactCount = 0;
+  let skippedTopicCount = 0;
+  let skippedPersonCount = 0;
+
+  const staleInState = (id: string | undefined, originalItem: { last_updated: string } | undefined, currentItems: { id: string; last_updated: string }[] | undefined): boolean => {
+    if (!id || !originalItem || !current || !currentItems) return false;
+    const currentItem = currentItems.find(i => i.id === id);
+    return !!currentItem && currentItem.last_updated !== originalItem.last_updated;
+  };
 
   const facts: Fact[] = [];
   for (const f of data.facts ?? []) {
@@ -306,10 +318,14 @@ export function humanFromYAML(yamlContent: string, original?: HumanEntity): Huma
         : { ...parsed, last_updated: new Date().toISOString(), persona_groups: parseGroupCheckboxMap(groupMap) };
       facts.push(fact);
       if (!originalFact || factChanged(fact, originalFact)) {
-        if (fact.description && !originalFact?.validated_date) {
-          fact.validated_date = new Date().toISOString();
+        if (staleInState(parsed.id, originalFact, current?.facts)) {
+          skippedFactCount++;
+        } else {
+          if (fact.description && !originalFact?.validated_date) {
+            fact.validated_date = new Date().toISOString();
+          }
+          changedFactIds.add(fact.id);
         }
-        changedFactIds.add(fact.id);
       }
     }
   }
@@ -327,7 +343,11 @@ export function humanFromYAML(yamlContent: string, original?: HumanEntity): Huma
         : { ...parsed, last_updated: new Date().toISOString(), persona_groups: parseGroupCheckboxMap(groupMap) };
       topics.push(topic);
       if (!originalTopic || topicChanged(topic, originalTopic)) {
-        changedTopicIds.add(topic.id);
+        if (staleInState(parsed.id, originalTopic, current?.topics)) {
+          skippedTopicCount++;
+        } else {
+          changedTopicIds.add(topic.id);
+        }
       }
     }
   }
@@ -350,7 +370,11 @@ export function humanFromYAML(yamlContent: string, original?: HumanEntity): Huma
         : { ...parsed, last_updated: new Date().toISOString(), identifiers, persona_groups: parseGroupCheckboxMap(groupMap) };
       people.push(person);
       if (!originalPerson || personChanged(person, originalPerson)) {
-        changedPersonIds.add(person.id);
+        if (staleInState(parsed.id, originalPerson, current?.people)) {
+          skippedPersonCount++;
+        } else {
+          changedPersonIds.add(person.id);
+        }
       }
     }
   }
@@ -365,5 +389,8 @@ export function humanFromYAML(yamlContent: string, original?: HumanEntity): Huma
     changedFactIds,
     changedTopicIds,
     changedPersonIds,
+    skippedFactCount,
+    skippedTopicCount,
+    skippedPersonCount,
   };
 }
