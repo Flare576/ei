@@ -643,6 +643,84 @@ describe("round-trip serialization", () => {
     expect(result.deletedFactIds).toEqual([]);
     expect(result.deletedTopicIds).toEqual([]);
     expect(result.deletedPersonIds).toEqual([]);
+    expect(result.skippedFactCount).toBe(0);
+    expect(result.skippedTopicCount).toBe(0);
+    expect(result.skippedPersonCount).toBe(0);
+  });
+
+  test("optimistic lock: skips user edits when state was updated while editor was open", () => {
+    const t1 = "2026-01-01T00:00:00.000Z";
+    const t2 = "2026-01-01T00:01:00.000Z";
+
+    const original: HumanEntity = {
+      entity: "human",
+      facts: [{ id: "f1", name: "Coffee", description: "Old desc", sentiment: 0, last_updated: t1, validated_date: "" }],
+      topics: [{ id: "top1", name: "Tech", description: "Old desc", exposure_current: 0.5, exposure_desired: 0.5, sentiment: 0, last_updated: t1 }],
+      people: [{ id: "p1", name: "Bob", description: "Old desc", relationship: "friend", sentiment: 0, exposure_current: 0.5, exposure_desired: 0.5, last_updated: t1 }],
+      quotes: [], last_updated: t1, last_activity: t1, settings: {},
+    };
+
+    const current: HumanEntity = {
+      ...original,
+      facts: [{ ...original.facts[0], description: "Updated by extraction", last_updated: t2 }],
+      topics: [{ ...original.topics[0], exposure_current: 0.9, last_updated: t2 }],
+      people: [{ ...original.people[0], description: "Updated by extraction", last_updated: t2 }],
+    };
+
+    const yaml = humanToYAML(original);
+    const edited = yaml
+      .replace("Old desc", "User edit")
+      .replace("Old desc", "User edit")
+      .replace("Old desc", "User edit");
+
+    const result = humanFromYAML(edited, original, current);
+
+    expect(result.changedFactIds.size).toBe(0);
+    expect(result.changedTopicIds.size).toBe(0);
+    expect(result.changedPersonIds.size).toBe(0);
+    expect(result.skippedFactCount).toBe(1);
+    expect(result.skippedTopicCount).toBe(1);
+    expect(result.skippedPersonCount).toBe(1);
+  });
+
+  test("optimistic lock: saves user edits when state was NOT updated while editor was open", () => {
+    const t1 = "2026-01-01T00:00:00.000Z";
+
+    const original: HumanEntity = {
+      entity: "human",
+      facts: [{ id: "f1", name: "Coffee", description: "Old desc", sentiment: 0, last_updated: t1, validated_date: "" }],
+      topics: [], people: [], quotes: [], last_updated: t1, last_activity: t1, settings: {},
+    };
+
+    const current: HumanEntity = { ...original };
+
+    const yaml = humanToYAML(original);
+    const edited = yaml.replace("Old desc", "User edit");
+
+    const result = humanFromYAML(edited, original, current);
+
+    expect(result.changedFactIds.size).toBe(1);
+    expect(result.skippedFactCount).toBe(0);
+  });
+
+  test("optimistic lock: new entries (no id) are always saved regardless of current state", () => {
+    const t1 = "2026-01-01T00:00:00.000Z";
+
+    const original: HumanEntity = {
+      entity: "human",
+      facts: [], topics: [], people: [], quotes: [], last_updated: t1, last_activity: t1, settings: {},
+    };
+
+    const current: HumanEntity = { ...original };
+
+    const yaml = `facts:\n  - name: Brand New Fact\n    description: Created from stub\n    sentiment: 1\n`;
+
+    const result = humanFromYAML(yaml, original, current);
+
+    expect(result.changedFactIds.size).toBe(1);
+    expect(result.skippedFactCount).toBe(0);
+    expect(result.facts[0].name).toBe("Brand New Fact");
+    expect(result.facts[0].id).toBeTruthy();
   });
 
   test("round-trips all new configurable settings fields", () => {
