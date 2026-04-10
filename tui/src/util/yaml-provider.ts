@@ -7,8 +7,10 @@ import { modelGuidToDisplay } from "./yaml-shared.js";
 
 interface EditableModelData {
   name: string;
+  model_id?: string;
   token_limit?: number;
   max_output_tokens?: number;
+  thinking_budget?: number;
   _delete?: boolean;
 }
 
@@ -45,11 +47,14 @@ function parseModels(editableModels: EditableModelData[]): import('../../../src/
   const result: import('../../../src/core/types.js').ModelConfig[] = [];
   for (const m of editableModels) {
     if (m._delete) continue;
+    const modelId = m.model_id ?? undefined;
     result.push({
       id: crypto.randomUUID(),
       name: m.name,
-      token_limit: m.token_limit,
-      max_output_tokens: m.max_output_tokens,
+      model_id: (modelId === null || modelId === m.name) ? undefined : modelId,
+      token_limit: m.token_limit ?? undefined,
+      max_output_tokens: m.max_output_tokens ?? undefined,
+      thinking_budget: m.thinking_budget ?? undefined,
     });
   }
   return result;
@@ -70,6 +75,10 @@ export function newProviderToYAML(name?: string): string {
   const modelsYAML = [
     "models:",
     "  - name: (default)",
+    "    model_id: (default)",
+    "    token_limit: null",
+    "    max_output_tokens: null",
+    "    thinking_budget: null",
     "    # _delete: true",
     "# _delete: true   # Delete this entire provider",
   ].join("\n");
@@ -141,16 +150,26 @@ export function providerToYAML(account: ProviderAccount): string {
   if (modelList.length > 0) {
     for (const m of modelList) {
       modelLines.push(`  - name: ${m.name}`);
-      if (m.token_limit !== undefined) {
-        modelLines.push(`    token_limit: ${m.token_limit}`);
-      }
-      if (m.max_output_tokens !== undefined) {
-        modelLines.push(`    max_output_tokens: ${m.max_output_tokens}`);
+      modelLines.push(`    model_id: ${m.model_id ?? m.name}`);
+      modelLines.push(`    token_limit: ${m.token_limit ?? null}`);
+      modelLines.push(`    max_output_tokens: ${m.max_output_tokens ?? null}`);
+      modelLines.push(`    thinking_budget: ${m.thinking_budget ?? null}`);
+      if (m.total_calls !== undefined || m.total_tokens_in !== undefined) {
+        const tokensIn = m.total_tokens_in ?? 0;
+        const tokensOut = m.total_tokens_out ?? 0;
+        modelLines.push(`    # stats: ${m.total_calls ?? 0} calls · ${tokensIn.toLocaleString()} in / ${tokensOut.toLocaleString()} out`);
+        if (m.last_used) {
+          modelLines.push(`    # used: ${m.last_used}`);
+        }
       }
       modelLines.push(`    _delete: false`);
     }
   } else {
     modelLines.push("  - name: (default)");
+    modelLines.push(`    model_id: (default)`);
+    modelLines.push(`    token_limit: null`);
+    modelLines.push(`    max_output_tokens: null`);
+    modelLines.push(`    thinking_budget: null`);
     modelLines.push("    _delete: false");
   }
   modelLines.push("_delete: false   # Set to true to delete this entire provider");
@@ -185,11 +204,14 @@ export function providerFromYAML(yamlContent: string, original: ProviderAccount)
   for (const m of data.models ?? []) {
     if (m._delete) continue;
     const existing = existingModels.find(em => em.name === m.name);
+    const modelId = m.model_id ?? undefined;
     parsedModels.push({
       id: existing?.id ?? crypto.randomUUID(),
       name: m.name,
-      token_limit: m.token_limit,
-      max_output_tokens: m.max_output_tokens,
+      model_id: (modelId === null || modelId === m.name) ? undefined : modelId,
+      token_limit: m.token_limit ?? undefined,
+      max_output_tokens: m.max_output_tokens ?? undefined,
+      thinking_budget: m.thinking_budget ?? undefined,
       total_calls: existing?.total_calls,
       total_tokens_in: existing?.total_tokens_in,
       total_tokens_out: existing?.total_tokens_out,
