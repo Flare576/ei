@@ -203,11 +203,20 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
     }
   };
 
-  const handleModelChange = (id: string, field: keyof Pick<ModelConfig, 'name' | 'token_limit' | 'max_output_tokens'>, value: string) => {
+  const handleModelChange = (id: string, field: keyof Pick<ModelConfig, 'name' | 'model_id' | 'token_limit' | 'max_output_tokens' | 'thinking_budget'>, value: string) => {
     setModels(models.map((m) => {
       if (m.id !== id) return m;
       if (field === 'name') {
         return { ...m, name: value };
+      }
+      if (field === 'model_id') {
+        const trimmed = value.trim();
+        return { ...m, model_id: trimmed === '' || trimmed === m.name ? undefined : trimmed };
+      }
+      if (field === 'thinking_budget') {
+        if (value.trim() === '') return { ...m, thinking_budget: undefined };
+        const numVal = parseInt(value.trim(), 10);
+        return { ...m, thinking_budget: isNaN(numVal) ? undefined : numVal };
       }
       const numVal = value.trim() ? parseInt(value.trim(), 10) : undefined;
       return { ...m, [field]: isNaN(numVal as number) ? undefined : numVal };
@@ -362,25 +371,45 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
                 </label>
                 <div className="ei-provider-editor__models">
                   {models.map((model) => (
-                    <div key={model.id} className="ei-provider-editor__model-card">
-                      <div className="ei-provider-editor__model-card-header">
-                        <input
-                          type="text"
-                          className="ei-input ei-provider-editor__model-name"
-                          value={model.name}
-                          onChange={(e) => handleModelChange(model.id, 'name', e.target.value)}
-                          placeholder="e.g., qwen/qwen3.5-35b-a3b"
-                          aria-label="Model name"
-                        />
-                        <button
-                          className="ei-provider-editor__model-remove"
-                          onClick={() => handleRemoveModel(model.id)}
-                          type="button"
-                          aria-label="Remove model"
-                          title="Remove model"
-                        >
-                          ✕
-                        </button>
+                    <div key={model.id} className="ei-provider-editor__model-card" style={{ position: 'relative' }}>
+                      <button
+                        className="ei-provider-editor__model-remove"
+                        onClick={() => handleRemoveModel(model.id)}
+                        type="button"
+                        aria-label="Remove model"
+                        title="Remove model"
+                        style={{ position: 'absolute', top: '8px', right: '8px' }}
+                      >
+                        ✕
+                      </button>
+                      <div className="ei-provider-editor__model-token-fields">
+                        <div className="ei-provider-editor__model-field">
+                          <label className="ei-provider-editor__model-field-label">
+                            Display name
+                          </label>
+                          <input
+                            type="text"
+                            className="ei-input ei-provider-editor__model-name"
+                            value={model.name}
+                            onChange={(e) => handleModelChange(model.id, 'name', e.target.value)}
+                            placeholder="e.g., qwen/qwen3.5-35b-a3b"
+                            aria-label="Model name"
+                          />
+                        </div>
+                        <div className="ei-provider-editor__model-field">
+                          <label className="ei-provider-editor__model-field-label">
+                            API Model ID
+                          </label>
+                          <input
+                            type="text"
+                            className="ei-input"
+                            value={model.model_id ?? ''}
+                            onChange={(e) => handleModelChange(model.id, 'model_id', e.target.value)}
+                            placeholder={model.name}
+                            aria-label="API Model ID"
+                          />
+                          <small className="ei-provider-editor__model-field-hint">(defaults to name if blank)</small>
+                        </div>
                       </div>
                       <div className="ei-provider-editor__model-token-fields">
                         <div className="ei-provider-editor__model-field">
@@ -410,8 +439,27 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
                             aria-label="Max output tokens"
                             title="Max output tokens"
                           />
-                        </div>
+                         </div>
                       </div>
+                      <div className="ei-provider-editor__model-field">
+                        <label className="ei-provider-editor__model-field-label">
+                          Thinking budget <span className="ei-provider-editor__model-field-hint">(tokens; 0 = disabled, blank = don't send)</span>
+                        </label>
+                        <input
+                          type="number"
+                          className="ei-input"
+                          value={model.thinking_budget ?? ''}
+                          onChange={(e) => handleModelChange(model.id, 'thinking_budget', e.target.value)}
+                          min="0"
+                          aria-label="Thinking budget"
+                        />
+                      </div>
+                      {model.total_calls !== undefined && model.total_calls > 0 && (
+                        <div className="ei-form-hint">
+                          {model.total_calls} calls · {model.total_tokens_in ?? 0} in / {model.total_tokens_out ?? 0} out tokens
+                          {model.last_used ? ` · last used ${new Date(model.last_used).toLocaleDateString()}` : ''}
+                        </div>
+                      )}
                     </div>
                   ))}
                   <button
