@@ -467,12 +467,24 @@ export function queueEventSummary(
 
   const allMessages = state.messages_get(personaId);
   const extractionModel = options?.extraction_model;
+  const gapMs = gapHours * 60 * 60 * 1000;
+  const now = Date.now();
   let totalChunks = 0;
 
-  state.messages_markExtracted(personaId, sorted.map(m => m.id), "e");
-
-  for (const windowMessages of windows) {
+  for (let i = 0; i < windows.length; i++) {
+    const windowMessages = windows[i];
     if (windowMessages.length === 0) continue;
+
+    const isLastWindow = i === windows.length - 1;
+    if (isLastWindow) {
+      const lastMsgTime = new Date(windowMessages[windowMessages.length - 1].timestamp).getTime();
+      if (now - lastMsgTime < gapMs) {
+        console.log(`[queueEventSummary] Skipping open window for ${persona.display_name} — last message < ${gapHours}h ago`);
+        continue;
+      }
+    }
+
+    state.messages_markExtracted(personaId, windowMessages.map(m => m.id), "e");
 
     const windowStartTime = new Date(windowMessages[0].timestamp).getTime();
     const messages_context = allMessages.filter(

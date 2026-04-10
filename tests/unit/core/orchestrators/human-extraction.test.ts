@@ -14,6 +14,7 @@ import {
   queuePersonScan,
   queueAllScans,
   queueTopicValidate,
+  queueEventSummary,
   VALIDATE_MIN_SIMILARITY,
   type ExtractionContext,
 } from "../../../../src/core/orchestrators/human-extraction.js";
@@ -103,7 +104,7 @@ function createMockStateManager() {
     queue_enqueue: vi.fn(),
     messages_markExtracted: vi.fn(),
     messages_getUnextracted: vi.fn().mockReturnValue([
-      { id: "unextracted-1", role: "human", verbal_response: "test", timestamp: new Date().toISOString(), read: true, context_status: "default" },
+      { id: "unextracted-1", role: "human", verbal_response: "test", timestamp: new Date(Date.now() - 10 * 60 * 60 * 1000).toISOString(), read: true, context_status: "default" },
     ]),
     messages_get: vi.fn().mockReturnValue([]),
     _human: human,
@@ -347,6 +348,119 @@ describe("queueTopicValidate", () => {
     expect(state.queue_enqueue).toHaveBeenCalledWith(
       expect.objectContaining({ model: "my-model" })
     );
+  });
+});
+
+describe("queueEventSummary — open window guard", () => {
+  const HOUR_MS = 60 * 60 * 1000;
+  const GAP_HOURS = 8;
+
+  function makeMsg(id: string, hoursAgo: number, role: "human" | "system" = "human"): Message {
+    return {
+      id,
+      role,
+      verbal_response: `msg ${id}`,
+      timestamp: new Date(Date.now() - hoursAgo * HOUR_MS).toISOString(),
+      read: true,
+      context_status: "default" as any,
+      e: false,
+    };
+  }
+
+  function makeEventState(unextracted: Message[], all: Message[] = unextracted) {
+    return {
+      getHuman: vi.fn(() => ({
+        settings: { ceremony: { event_window_hours: GAP_HOURS } },
+        topics: [], facts: [], people: [], quotes: [], traits: [],
+        last_updated: "", last_activity: "",
+      })),
+      persona_getById: vi.fn(() => ({
+        id: "p1", display_name: "TestPersona", entity: "system",
+        aliases: [], traits: [], topics: [],
+        is_paused: false, is_archived: false, is_static: false,
+        last_updated: "", last_activity: "",
+      })),
+      messages_getUnextracted: vi.fn(() => unextracted),
+      messages_get: vi.fn(() => all),
+      messages_markExtracted: vi.fn(),
+      queue_enqueue: vi.fn(),
+    };
+  }
+
+  beforeEach(() => vi.clearAllMocks());
+
+  it("processes a closed window (last message > 8h ago)", () => {
+    const msgs = [
+      makeMsg("1", 10),
+      makeMsg("2", 9),
+    ];
+    const state = makeEventState(msgs);
+
+    const chunks = queueEventSummary("p1", state as any);
+
+    expect(chunks).toBeGreaterThan(0);
+    expect(state.messages_markExtracted).toHaveBeenCalled();
+    expect(state.queue_enqueue).toHaveBeenCalled();
+  });
+
+  it("skips an open window (last message < 8h ago)", () => {
+    const msgs = [
+      makeMsg("1", 2),
+      makeMsg("2", 1),
+    ];
+    const state = makeEventState(msgs);
+
+    const chunks = queueEventSummary("p1", state as any);
+
+    expect(chunks).toBe(0);
+    expect(state.messages_markExtracted).not.toHaveBeenCalled();
+    expect(state.queue_enqueue).not.toHaveBeenCalled();
+  });
+
+  it("processes closed windows and skips the trailing open window", () => {
+    const msgs = [
+      makeMsg("1", 20),
+      makeMsg("2", 19),
+      makeMsg("3", 2),
+      makeMsg("4", 1),
+    ];
+    const state = makeEventState(msgs);
+
+    const chunks = queueEventSummary("p1", state as any);
+
+    expect(chunks).toBeGreaterThan(0);
+    const markedIds: string[] = state.messages_markExtracted.mock.calls.flatMap((c: any) => c[1]);
+    expect(markedIds).toContain("1");
+    expect(markedIds).toContain("2");
+    expect(markedIds).not.toContain("3");
+    expect(markedIds).not.toContain("4");
+  });
+
+  it("processes all windows when every window is closed", () => {
+    const msgs = [
+      makeMsg("1", 30),
+      makeMsg("2", 29),
+      makeMsg("3", 10),
+      makeMsg("4", 9),
+    ];
+    const state = makeEventState(msgs);
+
+    queueEventSummary("p1", state as any);
+
+    const markedIds: string[] = state.messages_markExtracted.mock.calls.flatMap((c: any) => c[1]);
+    expect(markedIds).toContain("1");
+    expect(markedIds).toContain("2");
+    expect(markedIds).toContain("3");
+    expect(markedIds).toContain("4");
+  });
+
+  it("returns 0 when there are no unextracted messages", () => {
+    const state = makeEventState([]);
+
+    const chunks = queueEventSummary("p1", state as any);
+
+    expect(chunks).toBe(0);
+    expect(state.queue_enqueue).not.toHaveBeenCalled();
   });
 });
 
