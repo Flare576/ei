@@ -281,6 +281,7 @@ export function queueDirectTopicUpdate(
         isNewItem: false,
         existingItemId: topic.id,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
+        extraction_model: extractionModel,
       },
     });
   }
@@ -425,14 +426,11 @@ export function queueTopicUpdate(
       user: prompt.user,
       next_step: LLMNextStep.HandleTopicUpdate,
       data: {
-        personaId: context.personaId,
-        personaDisplayName: context.personaDisplayName,
-        roomId: context.roomId,
+        ...context,
         isNewItem,
         existingItemId: existingItem?.id,
         candidateName: isNewItem ? context.candidateName : undefined,
         candidateDescription: isNewItem ? context.candidateDescription : undefined,
-        candidateCategory: context.candidateCategory,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
       },
     });
@@ -599,6 +597,7 @@ export function queuePersonUpdate(
         candidateRelationship: context.candidateRelationship,
         candidateIdentifiers: isNewItem ? candidateIdentifiers : undefined,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
+        extraction_model: context.extraction_model,
       },
     });
   }
@@ -653,6 +652,7 @@ export async function queueTopicValidate(
     data: {
       entity_type: "topic",
       entity_ids: [existingTopic.id, newTopic.id],
+      extraction_model: extractionModel,
     },
   });
 }
