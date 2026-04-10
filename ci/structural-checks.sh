@@ -119,6 +119,49 @@ if [ -z "$UNGUARDED" ]; then pass "description type-guarded in update handlers";
 echo ""
 
 # ------------------------------------------------------------------
+# 8. Extraction pipeline — every queue_enqueue in human-extraction.ts
+#    must carry extraction_model in its data block (literal key or via
+#    ...options spread). Without it, downstream handlers can't forward
+#    the model and silently fall back to the user's default.
+#    room-extraction.ts is intentionally excluded — rooms have no
+#    per-extraction model setting.
+# ------------------------------------------------------------------
+echo "Extraction pipeline — extraction_model forwarded in every queue_enqueue"
+MISSING_EXTRACTION_MODEL=$(python3 - "$ROOT/src/core/orchestrators/human-extraction.ts" <<'PYEOF'
+import re, sys
+
+content = open(sys.argv[1]).read()
+lines = content.splitlines()
+violations = []
+
+for i, line in enumerate(lines):
+    if 'queue_enqueue(' in line:
+        block = '\n'.join(lines[i:i+30])
+        data_match = re.search(r'data:\s*\{(.*?)\}[,\s]*\}', block, re.DOTALL)
+        if data_match:
+            data_content = data_match.group(1)
+            has_literal = 'extraction_model' in data_content
+            has_options_spread = '...options' in data_content
+            has_context_spread = '...context' in data_content
+            if not (has_literal or has_options_spread or has_context_spread):
+                next_step = re.search(r'next_step:\s*LLMNextStep\.(\w+)', block)
+                ns = next_step.group(1) if next_step else '?'
+                violations.append(f"  line {i+1}: {ns}")
+
+if violations:
+    for v in violations:
+        print(v)
+PYEOF
+)
+if [ -z "$MISSING_EXTRACTION_MODEL" ]; then
+  pass "extraction_model forwarded in all human-extraction.ts queue_enqueue calls"
+else
+  fail "queue_enqueue missing extraction_model in data (human-extraction.ts)" "$MISSING_EXTRACTION_MODEL"
+fi
+
+echo ""
+
+# ------------------------------------------------------------------
 # Summary
 # ------------------------------------------------------------------
 if [ "$FAILURES" -eq 0 ]; then
