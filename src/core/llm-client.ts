@@ -165,10 +165,16 @@ function findModelAndAccount(
     const model = account?.models?.find((m) => m.name === modelName);
     return { model, account };
   }
+  // Try matching by model UUID first
   for (const account of accounts) {
     const model = account.models?.find((m) => m.id === spec);
     if (model) return { model, account };
   }
+  // Fall back to matching by account name (bare spec like "EG" or "RnP")
+  const accountByName = accounts.find(
+    (a) => a.name.toLowerCase() === spec.toLowerCase() && a.enabled
+  );
+  if (accountByName) return { model: undefined, account: accountByName };
   return { model: undefined, account: undefined };
 }
 
