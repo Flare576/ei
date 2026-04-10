@@ -707,6 +707,7 @@ export const EiProvider: ParentComponent = (props) => {
             });
             if (response.ok) {
               logger.info("Local LLM detected, auto-configuring...");
+              const defaultModelId = crypto.randomUUID();
               const localAccount: ProviderAccount = {
                 id: crypto.randomUUID(),
                 name: "Local LLM",
@@ -714,13 +715,15 @@ export const EiProvider: ParentComponent = (props) => {
                 url: "http://127.0.0.1:1234/v1",
                 enabled: true,
                 created_at: new Date().toISOString(),
+                default_model: defaultModelId,
+                models: [{ id: defaultModelId, name: "(default)" }],
               };
               const currentHuman = await processor!.getHuman();
               await processor!.updateHuman({
                 settings: {
                   ...currentHuman.settings,
                   accounts: [localAccount],
-                  default_model: "Local LLM",
+                  default_model: defaultModelId,
                 },
               });
               showNotification("Local LLM detected and configured!", "info");

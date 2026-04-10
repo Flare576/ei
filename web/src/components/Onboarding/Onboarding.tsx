@@ -87,6 +87,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
 
       if (response.ok) {
         setLocalCheckResult('success');
+        const defaultModelId = crypto.randomUUID();
         const localAccount: ProviderAccount = {
           id: crypto.randomUUID(),
           name: 'Local LLM',
@@ -94,9 +95,10 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
           url: localUrl,
           enabled: true,
           created_at: new Date().toISOString(),
+          default_model: defaultModelId,
+          models: [{ id: defaultModelId, name: '(default)' }],
         };
         setAccounts(prev => {
-          // Deduplication check
           if (prev.some(a => a.url === localAccount.url && a.type === localAccount.type)) {
             return prev;
           }
