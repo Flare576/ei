@@ -195,8 +195,8 @@
 }
 
 .ei-control-btn--archive:hover {
-  background: linear-gradient(135deg, #fde8c8 0%, #fcd9a8 100%);
-  border: 1px solid #d4923a;
+  background: linear-gradient(135deg, var(--ei-archive-bg-start) 0%, var(--ei-archive-bg-end) 100%);
+  border: 1px solid var(--ei-archive-border);
 }
 
 /* Pause Duration Options */

@@ -40,17 +40,17 @@
 
 .ei-room-chat-panel__mode--cyp {
   background: rgba(0, 123, 255, 0.15);
-  color: #0056b3;
+  color: var(--ei-room-cyp);
 }
 
 .ei-room-chat-panel__mode--ffa {
   background: rgba(40, 167, 69, 0.15);
-  color: #1a7a35;
+  color: var(--ei-room-ffa);
 }
 
 .ei-room-chat-panel__mode--map {
   background: rgba(111, 66, 193, 0.15);
-  color: #6f42c1;
+  color: var(--ei-room-map);
 }
 
 .ei-room-chat-panel__messages {
@@ -202,7 +202,7 @@
   background: rgba(0, 123, 255, 0.06);
   border: 1px dashed rgba(0, 123, 255, 0.3);
   border-radius: var(--ei-radius-md);
-  color: #0056b3;
+  color: var(--ei-room-cyp);
   font-size: var(--ei-font-size-sm);
   font-style: italic;
 }
@@ -397,11 +397,11 @@
 }
 
 .ei-cyp-explored-badge--yes {
-  color: #28a745;
+  color: var(--ei-success);
 }
 
 .ei-cyp-explored-badge--no {
-  color: #6c757d;
+  color: var(--ei-text-secondary);
 }
 
 .ei-cyp-branch-badge {

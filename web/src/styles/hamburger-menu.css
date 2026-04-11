@@ -106,7 +106,7 @@
 }
 
 .ei-play-btn:hover {
-  background: #218838;
+  background: var(--ei-success-hover);
   transform: scale(1.05);
 }
 

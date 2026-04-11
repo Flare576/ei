@@ -112,17 +112,17 @@
 
 .ei-room-pill__mode-badge--cyp {
   background: rgba(0, 123, 255, 0.15);
-  color: #0056b3;
+  color: var(--ei-room-cyp);
 }
 
 .ei-room-pill__mode-badge--ffa {
   background: rgba(40, 167, 69, 0.15);
-  color: #1a7a35;
+  color: var(--ei-room-ffa);
 }
 
 .ei-room-pill__mode-badge--map {
   background: rgba(111, 66, 193, 0.15);
-  color: #6f42c1;
+  color: var(--ei-room-map);
 }
 
 /* Unread Badge */
