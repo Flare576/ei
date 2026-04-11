@@ -28,8 +28,45 @@ import type {
   RoomCreationInput,
   LLMRequest,
   } from "../../src/core/types";
+import { decodeTheme, themeToStyleString, isBuiltInTheme } from '../../src/core/utils/theme-codec.js';
+import type { ThemeDefinition } from '../../src/core/types/entities.js';
 import { ContextStatus, LLMNextStep, RoomMode } from "../../src/core/types";
 import { Layout, PersonaPanel, ChatPanel, RoomChatPanel, ControlArea, HelpModal, ImagePreviewModal, type PersonaPanelHandle, type ChatPanelHandle, type RoomChatPanelHandle } from "./components/Layout";
+
+function applyTheme(activeThemeId: string | undefined, customThemes: ThemeDefinition[]): void {
+  const el = document.documentElement;
+  // Remove any previously injected custom theme style
+  document.getElementById('ei-custom-theme')?.remove();
+
+  if (!activeThemeId || activeThemeId === 'default') {
+    el.removeAttribute('data-theme');
+    return;
+  }
+
+  if (isBuiltInTheme(activeThemeId)) {
+    el.setAttribute('data-theme', activeThemeId);
+    return;
+  }
+
+  // Custom theme — find by UUID and inject <style>
+  const custom = customThemes.find(t => t.id === activeThemeId);
+  if (!custom) {
+    el.removeAttribute('data-theme');
+    return;
+  }
+
+  const tokens = decodeTheme(custom.encoded);
+  if (!tokens) {
+    el.removeAttribute('data-theme');
+    return;
+  }
+
+  el.setAttribute('data-theme', 'custom');
+  const style = document.createElement('style');
+  style.id = 'ei-custom-theme';
+  style.textContent = `[data-theme="custom"] {\n${themeToStyleString(tokens)}\n}`;
+  document.head.appendChild(style);
+}
 import { HumanEditor, PersonaEditor, PersonaCreatorModal, RoomCreatorModal, RoomEditorModal, ArchivedPersonasModal, ArchivedRoomsModal } from "./components/EntityEditor";
 import { QuoteCaptureModal, QuoteManagementModal } from "./components/Quote";
 import { SettingsModal } from "./components/Settings";
@@ -47,6 +84,7 @@ import "./styles/index.css";
 import "./styles/entity-editor.css";
 import "./styles/onboarding.css";
 import "./styles/queue-panel.css";
+import "./styles/theme-editor.css";
 
 function getContent(msg: { content?: string; verbal_response?: string; action_response?: string }): string {
   if (msg.content) return msg.content;
@@ -242,6 +280,13 @@ function App() {
   useEffect(() => {
     activePersonaIdRef.current = activePersonaId;
   }, [activePersonaId]);
+
+  useEffect(() => {
+    applyTheme(
+      human?.settings?.active_theme,
+      human?.settings?.custom_themes ?? []
+    );
+  }, [human?.settings?.active_theme, human?.settings?.custom_themes]);
 
   useEffect(() => {
     editingPersonaIdRef.current = editingPersonaId;
@@ -966,7 +1011,7 @@ function App() {
 
   const handleHumanUpdate = useCallback(async (updates: Record<string, unknown>) => {
     if (!processor) return;
-    const { default_model, oneshot_model, rewrite_model, queue_paused, name_display, time_mode, accounts, sync, ceremony_time, default_heartbeat_ms, default_context_window_hours, message_min_count, message_max_age_days, event_window_hours, ...rest } = updates;
+    const { default_model, oneshot_model, rewrite_model, queue_paused, name_display, time_mode, accounts, sync, ceremony_time, default_heartbeat_ms, default_context_window_hours, message_min_count, message_max_age_days, event_window_hours, active_theme, custom_themes, ...rest } = updates;
     
     const settingsUpdates: Record<string, unknown> = {};
     if (default_model !== undefined) settingsUpdates.default_model = default_model;
@@ -981,6 +1026,8 @@ function App() {
     if (message_max_age_days !== undefined) settingsUpdates.message_max_age_days = message_max_age_days;
     if (accounts !== undefined) settingsUpdates.accounts = accounts;
     if (sync !== undefined || updates.hasOwnProperty('sync')) settingsUpdates.sync = sync;
+    if (active_theme !== undefined) settingsUpdates.active_theme = active_theme;
+    if (custom_themes !== undefined) settingsUpdates.custom_themes = custom_themes;
     if (ceremony_time !== undefined) {
       settingsUpdates.ceremony = { ...human?.settings?.ceremony, time: ceremony_time as string };
     }
@@ -1627,6 +1674,11 @@ function App() {
           onToolProviderRemove={handleToolProviderRemove}
           onToolUpdate={handleToolUpdate}
           onSpotifyConfigChange={handleSpotifyConfigChange}
+          activeTheme={human.settings?.active_theme}
+          customThemes={human.settings?.custom_themes ?? []}
+          onThemeChange={(id) => handleHumanUpdate({ active_theme: id })}
+          onCustomThemeUpsert={(theme) => handleHumanUpdate({ custom_themes: [...(human.settings?.custom_themes ?? []).filter(t => t.id !== theme.id), theme] })}
+          onCustomThemeRemove={(id) => handleHumanUpdate({ custom_themes: (human.settings?.custom_themes ?? []).filter(t => t.id !== id) })}
         />
 
         <HumanEditor
