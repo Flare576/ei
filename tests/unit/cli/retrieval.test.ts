@@ -67,9 +67,27 @@ function makePersonaEntities(count: number, namePrefix: string = "Persona") {
   }));
 }
 
+function makePeople(count: number, identifiers: { type: string; value: string }[][] = []) {
+  return Array.from({ length: count }, (_, i) => ({
+    id: `person_${i}`,
+    name: `Test person ${i}`,
+    description: `A test person`,
+    sentiment: 0.5,
+    relationship: "friend",
+    exposure_current: 0.5,
+    exposure_desired: 0.5,
+    last_updated: NOW,
+    last_mentioned: NOW,
+    learned_by: "ei",
+    embedding: EMBEDDING,
+    identifiers: identifiers[i] ?? [{ type: "Nickname", value: `person${i}` }],
+  }));
+}
+
 function createTestState(counts: {
   facts?: number; traits?: number; people?: number; topics?: number; quotes?: number;
   personas?: number; personaNamePrefix?: string;
+  peopleIdentifiers?: { type: string; value: string }[][];
 }) {
   const personaEntities = makePersonaEntities(counts.personas ?? 0, counts.personaNamePrefix);
   const personasRecord: Record<string, unknown> = {};
@@ -83,7 +101,7 @@ function createTestState(counts: {
       entity: "human",
       facts: makeDataItems("fact", counts.facts ?? 0, { validated_date: NOW }),
       traits: makeDataItems("trait", counts.traits ?? 0, { strength: 0.5 }),
-      people: makeDataItems("person", counts.people ?? 0, { relationship: "friend", exposure_current: 0.5, exposure_desired: 0.5 }),
+      people: makePeople(counts.people ?? 0, counts.peopleIdentifiers),
       topics: makeDataItems("topic", counts.topics ?? 0, { category: "Interest", exposure_current: 0.5, exposure_desired: 0.5 }),
       quotes: makeQuotes(counts.quotes ?? 0),
       last_updated: NOW,
@@ -322,6 +340,58 @@ describe("retrievePersonas (string matching)", () => {
     expect(r.model).toBe("Local LLM:test-model");
     expect(Array.isArray(r.traits)).toBe(true);
     expect(Array.isArray(r.topics)).toBe(true);
+  });
+});
+
+describe("person identifiers in retrieval results", () => {
+  it("retrieveBalanced includes identifiers on person results", async () => {
+    writeTestState(createTestState({
+      people: 2,
+      peopleIdentifiers: [
+        [{ type: "GitHub", value: "flare576" }, { type: "Nickname", value: "Flare" }],
+        [{ type: "Email", value: "test@example.com" }],
+      ],
+    }));
+    const result = await retrieveBalanced("test");
+    const personResults = result.filter(r => r.type === "person");
+    expect(personResults.length).toBeGreaterThan(0);
+    for (const p of personResults) {
+      expect(p).toHaveProperty("identifiers");
+      expect(Array.isArray((p as any).identifiers)).toBe(true);
+    }
+  });
+
+  it("retrieveBalanced person identifiers contain type and value fields", async () => {
+    writeTestState(createTestState({
+      people: 1,
+      peopleIdentifiers: [[{ type: "GitHub", value: "flare576" }]],
+    }));
+    const result = await retrieveBalanced("test");
+    const person = result.find(r => r.type === "person") as any;
+    expect(person).toBeDefined();
+    expect(person.identifiers[0]).toMatchObject({ type: "GitHub", value: "flare576" });
+  });
+
+  it("lookupById includes identifiers on person result", async () => {
+    writeTestState(createTestState({
+      people: 1,
+      peopleIdentifiers: [[{ type: "Discord", value: "flare#1234" }]],
+    }));
+    const result = await lookupById("person_0");
+    expect(result).not.toBeNull();
+    expect(result!.type).toBe("person");
+    expect(result!).toHaveProperty("identifiers");
+    expect((result!.identifiers as any[])[0]).toMatchObject({ type: "Discord", value: "flare#1234" });
+  });
+
+  it("person with no identifiers returns empty array (not undefined)", async () => {
+    const state = createTestState({ people: 1 });
+    (state.human.people[0] as any).identifiers = undefined;
+    writeTestState(state);
+    const result = await retrieveBalanced("test");
+    const person = result.find(r => r.type === "person") as any;
+    expect(person).toBeDefined();
+    expect(person.identifiers).toEqual([]);
   });
 });
 
