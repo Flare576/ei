@@ -14,7 +14,7 @@ import { calculateExposureCurrent } from "../utils/exposure.js";
 
 
 import { resolveMessageWindow, getMessageText, normalizeRoomMessages } from "./utils.js";
-import { sanitizeEiPersonaIdentifiers } from "../utils/identifier-utils.js";
+import { sanitizeEiPersonaIdentifiers, normalizeIdentifierType } from "../utils/identifier-utils.js";
 
 export function handleTopicMatch(response: LLMResponse, state: StateManager): void {
   const result = response.parsed as ItemMatchResult | undefined;
@@ -284,7 +284,7 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
   if (isNewItem) {
     const llmIdentifiers: PersonIdentifier[] = sanitizeEiPersonaIdentifiers(
       (result.identifiers ?? []).map(i => ({
-        type: i.type,
+        type: normalizeIdentifierType(i.type, state),
         value: i.value,
         ...(i.is_primary ? { is_primary: i.is_primary } : {}),
       })),
@@ -293,7 +293,7 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
     const allCandidateIds = [...llmIdentifiers, ...candidateIdentifiers];
     if (allCandidateIds.length === 0) {
       const hasSpace = candidateName.includes(' ');
-      allCandidateIds.push({ type: hasSpace ? "full_name" : "nickname", value: candidateName, is_primary: true });
+      allCandidateIds.push({ type: hasSpace ? "Full Name" : "Nickname", value: candidateName, is_primary: true });
     }
     const deduped: PersonIdentifier[] = [];
     for (const id of allCandidateIds) {
@@ -304,7 +304,13 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
     resolvedIdentifiers = deduped;
   } else {
     const base = [...(existingPerson?.identifiers ?? [])];
-    const sanitizedToAdd = sanitizeEiPersonaIdentifiers(result.identifiers_to_add ?? [], state);
+    const sanitizedToAdd = sanitizeEiPersonaIdentifiers(
+      (result.identifiers_to_add ?? []).map(i => ({
+        ...i,
+        type: normalizeIdentifierType(i.type, state),
+      })),
+      state
+    );
     for (const id of sanitizedToAdd) {
       if (!base.some(e => e.value === id.value)) {
         base.push({ type: id.type, value: id.value, ...(id.is_primary ? { is_primary: id.is_primary } : {}) });
