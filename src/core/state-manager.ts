@@ -18,6 +18,7 @@ import type {
   RoomCreationInput,
 } from "./types.js";
 import { BUILT_IN_FACT_NAMES } from './constants/built-in-facts.js';
+import type { ThemeDefinition } from './types/entities.js';
 import type { Storage } from "../storage/interface.js";
 import {
   HumanState,
@@ -68,6 +69,7 @@ export class StateManager {
     this.migrateInterestedPersonas();
     this.migrateProviderModel();
     this.migrateRoomMessageContent();
+    this.migrateThemes();
   }
 
   private migrateRoomMessageContent(): void {
@@ -566,6 +568,14 @@ export class StateManager {
     this.persistenceState.scheduleSave(this.buildStorageState());
   }
 
+  private migrateThemes(): void {
+    const human = this.humanState.get();
+    if (!human.settings) return;
+    if (human.settings.custom_themes !== undefined) return;
+    human.settings.custom_themes = [];
+    this.humanState.set(human);
+  }
+
   getHuman(): HumanEntity {
     return this.humanState.get();
   }
@@ -573,6 +583,44 @@ export class StateManager {
   setHuman(entity: HumanEntity): void {
     this.humanState.set(entity);
     this.scheduleSave();
+  }
+
+  human_theme_getActive(): string | undefined {
+    return this.getHuman().settings?.active_theme;
+  }
+
+  human_theme_setActive(id: string | undefined): void {
+    const human = this.getHuman();
+    human.settings ??= {};
+    human.settings.active_theme = id;
+    this.setHuman(human);
+  }
+
+  human_theme_getAll(): ThemeDefinition[] {
+    return this.getHuman().settings?.custom_themes ?? [];
+  }
+
+  human_theme_upsert(theme: ThemeDefinition): void {
+    const human = this.getHuman();
+    human.settings ??= {};
+    human.settings.custom_themes ??= [];
+    const idx = human.settings.custom_themes.findIndex(t => t.id === theme.id);
+    if (idx >= 0) {
+      human.settings.custom_themes[idx] = theme;
+    } else {
+      human.settings.custom_themes.push(theme);
+    }
+    this.setHuman(human);
+  }
+
+  human_theme_remove(id: string): boolean {
+    const human = this.getHuman();
+    const themes = human.settings?.custom_themes ?? [];
+    const idx = themes.findIndex(t => t.id === id);
+    if (idx < 0) return false;
+    themes.splice(idx, 1);
+    this.setHuman(human);
+    return true;
   }
 
   human_fact_upsert(fact: Fact): void {
