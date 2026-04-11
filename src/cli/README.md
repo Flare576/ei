@@ -72,9 +72,11 @@ ei "What are the user's current preferences, active projects, and workflow?"
 
 Ei is a persistent knowledge base built from the user's conversations — facts, preferences,
 people, topics, personas. Use it when the user references past work, mentions how they like things done,
-or asks "how did we do X." Use `ei --persona "Beta" "walruses"` to scope results to what a specific
-persona has learned. Use `ei personas "name"` to find personas by name. Query again mid-session when
-they correct you or reference something from a previous session.
+asks "how did we do X," or needs to look up a person by any name, handle, or account (GitHub username,
+Discord handle, email, nickname, etc.) — people results include an `identifiers` array covering all
+known accounts and aliases for that person. Use `ei --persona "Beta" "walruses"` to scope results to
+what a specific persona has learned. Use `ei personas "name"` to find personas by name. Query again
+mid-session when they correct you or reference something from a previous session.
 ```
 
 ### Claude Code
@@ -87,9 +89,11 @@ natural-language query about the user's preferences, active projects, and workfl
 A `persona` filter is available to scope results to what a specific persona has learned.
 Use `type: "personas"` to search for personas by name.
 
-Use Ei when the user references past decisions, mentions people or preferences, or asks
-"how did we do X." Query again when they correct you or reference something from a previous
-session.
+Use Ei when the user references past decisions, mentions people or preferences, asks
+"how did we do X," or needs to look up a person by any name, handle, or account — people
+results include an `identifiers` array (GitHub username, Discord handle, email, nickname, etc.)
+covering all known accounts and aliases. Query again when they correct you or reference
+something from a previous session.
 ```
 
 ### Cursor
@@ -111,6 +115,9 @@ conversations (facts, people, topics, quotes, personas).
   doesn't have that context.
 - You need the user's preferences, contacts, or project conventions (e.g. who to ask for
   access, how something was fixed).
+- You need to look up a person by any name, handle, or account — people results include an
+  `identifiers` array (GitHub username, Discord handle, email, nickname, etc.) covering all
+  known accounts and aliases for that person.
 - The question is about the user personally (people, workflow, prior discussions) rather
   than only code.
 
@@ -138,7 +145,9 @@ The installed tool gives OpenCode agents access to all five data types with prop
 
 All search commands return arrays. Each result includes a `type` field.
 
-**Fact / Person / Topic**: `{ type, id, name, description, sentiment, ...type-specific fields }`
+**Fact / Topic**: `{ type, id, name, description, sentiment, ...type-specific fields }`
+
+**Person**: `{ type, id, name, description, relationship, sentiment, identifiers[] }` — `identifiers` contains all known accounts and aliases (e.g. `{ type: "GitHub", value: "flare576" }`)
 
 **Quote**: `{ type, id, text, speaker, timestamp, linked_items[] }`
 
