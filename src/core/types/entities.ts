@@ -91,6 +91,14 @@ export interface ProviderAccount {
   created_at: string;              // ISO timestamp
 }
 
+export interface ThemeDefinition {
+  id: string;
+  name: string;
+  base?: string;
+  encoded: string;
+  created_at: string;
+}
+
 export interface HumanSettings {
   default_model?: string;           // Will store ModelConfig.id GUID post-migration
   oneshot_model?: string;           // Model for AI-assist (wand) requests; falls back to default_model. Will store ModelConfig.id GUID post-migration.
@@ -111,6 +119,8 @@ export interface HumanSettings {
   backup?: BackupConfig;
   claudeCode?: import("../../integrations/claude-code/types.js").ClaudeCodeSettings;
   cursor?: import("../../integrations/cursor/types.js").CursorSettings;
+  active_theme?: string;
+  custom_themes?: ThemeDefinition[];
 }
 
 export interface HumanEntity {
