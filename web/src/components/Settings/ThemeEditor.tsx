@@ -38,62 +38,7 @@ const TOKEN_SECTIONS: Array<{ title: string; tokens: string[] }> = [
   },
 ];
 
-const PRESET_DEFAULTS: Record<string, Record<string, string>> = {
-  'default': {
-    '--ei-bg-primary': '#ffffff', '--ei-bg-secondary': '#f8f9fa', '--ei-bg-tertiary': '#e9ecef',
-    '--ei-text-primary': '#212529', '--ei-text-secondary': '#6c757d', '--ei-text-muted': '#adb5bd',
-    '--ei-border': '#dee2e6', '--ei-border-light': '#e9ecef',
-    '--ei-accent': '#007bff', '--ei-accent-hover': '#0056b3',
-    '--ei-success': '#28a745', '--ei-success-hover': '#218838',
-    '--ei-warning': '#ffc107', '--ei-warning-text': '#856404',
-    '--ei-danger': '#dc3545',
-    '--ei-status-thinking': '#ffc107', '--ei-status-ready': '#28a745',
-    '--ei-status-unread': '#dc3545', '--ei-status-paused': '#6c757d',
-    '--ei-room-cyp': '#0056b3', '--ei-room-ffa': '#1a7a35', '--ei-room-map': '#6f42c1',
-    '--ei-archive-bg-start': '#fde8c8', '--ei-archive-bg-end': '#fcd9a8', '--ei-archive-border': '#d4923a',
-    '--ei-ai-assist-start': '#667eea', '--ei-ai-assist-end': '#764ba2',
-    '--ei-code-bg': '#0a0e14', '--ei-code-bg-controls': '#0f131a', '--ei-code-border': '#1a2332',
-    '--ei-code-text': '#c7c7c7', '--ei-code-text-muted': '#8892a6',
-    '--ei-code-accent': '#59c2ff', '--ei-code-string': '#ffcc66',
-    '--ei-code-error': '#ff6b6b', '--ei-code-success': '#50fa7b', '--ei-code-special': '#bd93f9',
-  },
-  'dark': {
-    '--ei-bg-primary': '#1a1a1a', '--ei-bg-secondary': '#2d2d2d', '--ei-bg-tertiary': '#3d3d3d',
-    '--ei-text-primary': '#e9ecef', '--ei-text-secondary': '#adb5bd', '--ei-text-muted': '#6c757d',
-    '--ei-border': '#404040', '--ei-border-light': '#333333',
-    '--ei-accent': '#4dabf7', '--ei-accent-hover': '#339af0',
-    '--ei-success': '#51cf66', '--ei-success-hover': '#40c057',
-    '--ei-warning': '#ffd43b', '--ei-warning-text': '#e67700',
-    '--ei-danger': '#ff6b6b',
-    '--ei-status-thinking': '#ffd43b', '--ei-status-ready': '#51cf66',
-    '--ei-status-unread': '#ff6b6b', '--ei-status-paused': '#6c757d',
-    '--ei-room-cyp': '#339af0', '--ei-room-ffa': '#51cf66', '--ei-room-map': '#cc5de8',
-    '--ei-archive-bg-start': '#5c3d11', '--ei-archive-bg-end': '#4a3008', '--ei-archive-border': '#c07800',
-    '--ei-ai-assist-start': '#5c7cfa', '--ei-ai-assist-end': '#9c36b5',
-    '--ei-code-bg': '#0a0e14', '--ei-code-bg-controls': '#0f131a', '--ei-code-border': '#1a2332',
-    '--ei-code-text': '#c7c7c7', '--ei-code-text-muted': '#8892a6',
-    '--ei-code-accent': '#59c2ff', '--ei-code-string': '#ffcc66',
-    '--ei-code-error': '#ff6b6b', '--ei-code-success': '#50fa7b', '--ei-code-special': '#bd93f9',
-  },
-  'spoopy': {
-    '--ei-bg-primary': '#1e1e2e', '--ei-bg-secondary': '#181825', '--ei-bg-tertiary': '#313244',
-    '--ei-text-primary': '#cdd6f4', '--ei-text-secondary': '#a6adc8', '--ei-text-muted': '#6c7086',
-    '--ei-border': '#45475a', '--ei-border-light': '#313244',
-    '--ei-accent': '#fab387', '--ei-accent-hover': '#f9823a',
-    '--ei-success': '#a6e3a1', '--ei-success-hover': '#7dc97a',
-    '--ei-warning': '#f9e2af', '--ei-warning-text': '#c9a227',
-    '--ei-danger': '#f38ba8',
-    '--ei-status-thinking': '#f9e2af', '--ei-status-ready': '#a6e3a1',
-    '--ei-status-unread': '#f38ba8', '--ei-status-paused': '#6c7086',
-    '--ei-room-cyp': '#89b4fa', '--ei-room-ffa': '#a6e3a1', '--ei-room-map': '#cba6f7',
-    '--ei-archive-bg-start': '#45475a', '--ei-archive-bg-end': '#313244', '--ei-archive-border': '#fab387',
-    '--ei-ai-assist-start': '#cba6f7', '--ei-ai-assist-end': '#fab387',
-    '--ei-code-bg': '#11111b', '--ei-code-bg-controls': '#181825', '--ei-code-border': '#313244',
-    '--ei-code-text': '#cdd6f4', '--ei-code-text-muted': '#7f849c',
-    '--ei-code-accent': '#fab387', '--ei-code-string': '#a6e3a1',
-    '--ei-code-error': '#f38ba8', '--ei-code-success': '#a6e3a1', '--ei-code-special': '#cba6f7',
-  },
-};
+
 
 const PRESET_LABELS: Record<string, string> = {
   'default': 'Default', 'dark': 'Dark', 'coder': 'c0d3r', 'depressing': 'Depressing',
@@ -102,19 +47,12 @@ const PRESET_LABELS: Record<string, string> = {
 };
 
 function getBaseTokens(baseId: string | undefined, customThemes: ThemeDefinition[], fallback: ThemeTokenMap): ThemeTokenMap {
-  if (!baseId) return fallback;
+  if (!baseId || baseId === 'default') {
+    return getComputedThemeTokens(null) ?? fallback;
+  }
 
   if ((BUILT_IN_THEME_NAMES as readonly string[]).includes(baseId)) {
-    const preset = PRESET_DEFAULTS[baseId];
-    if (preset) {
-      const full: ThemeTokenMap = {};
-      for (const key of THEME_TOKEN_ORDER) {
-        full[`--ei-${key}`] = preset[`--ei-${key}`] ?? fallback[`--ei-${key}`] ?? '#000000';
-      }
-      return full;
-    }
-    const computed = getComputedThemeTokens(baseId);
-    if (computed) return computed;
+    return getComputedThemeTokens(baseId) ?? fallback;
   }
 
   const custom = customThemes.find(t => t.id === baseId);
@@ -123,23 +61,37 @@ function getBaseTokens(baseId: string | undefined, customThemes: ThemeDefinition
     if (decoded) return decoded;
   }
 
-  return fallback;
+  return getComputedThemeTokens(null) ?? fallback;
 }
 
-function getComputedThemeTokens(themeId: string): ThemeTokenMap | null {
-  const prevTheme = document.documentElement.getAttribute('data-theme');
-  document.documentElement.setAttribute('data-theme', themeId);
-  const style = getComputedStyle(document.documentElement);
+function getComputedThemeTokens(themeId: string | null): ThemeTokenMap | null {
+  const el = document.documentElement;
+  const prevTheme = el.getAttribute('data-theme');
+  const prevCustomStyle = document.getElementById('ei-custom-theme');
+
+  if (themeId === null) {
+    el.removeAttribute('data-theme');
+  } else {
+    el.setAttribute('data-theme', themeId);
+  }
+  prevCustomStyle?.remove();
+
+  const style = getComputedStyle(el);
   const tokens: ThemeTokenMap = {};
   for (const key of THEME_TOKEN_ORDER) {
     const val = style.getPropertyValue(`--ei-${key}`).trim();
     tokens[`--ei-${key}`] = val || '#000000';
   }
+
   if (prevTheme) {
-    document.documentElement.setAttribute('data-theme', prevTheme);
+    el.setAttribute('data-theme', prevTheme);
   } else {
-    document.documentElement.removeAttribute('data-theme');
+    el.removeAttribute('data-theme');
   }
+  if (prevCustomStyle) {
+    document.head.appendChild(prevCustomStyle);
+  }
+
   return tokens;
 }
 
@@ -260,12 +212,11 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({
     setErrors(newErrors);
     if (Object.keys(newErrors).length > 0) return;
 
-    const base = theme?.base ?? (activeTheme && !(theme) ? activeTheme : undefined);
+    const base = theme?.base ?? (!theme && activeTheme ? activeTheme : undefined);
     const saved = theme
       ? { ...theme, name: name.trim(), encoded: encodeTheme(tokens) }
       : makeThemeDefinition(name.trim(), tokens, base);
 
-    document.getElementById('ei-custom-theme')?.remove();
     onSave(saved);
   };
 
