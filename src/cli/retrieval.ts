@@ -1,6 +1,6 @@
 import type { StorageState, Quote, Fact, Person, Topic } from "../core/types";
 import type { PersonaEntity } from "../core/types/entities.js";
-import type { PersonaTrait, PersonaTopic } from "../core/types/data-items.js";
+import type { PersonaTrait, PersonaTopic, PersonIdentifier } from "../core/types/data-items.js";
 import { decodeAllEmbeddings } from "../storage/embeddings";
 import { crossFind } from "../core/utils/index.ts";
 import { join } from "path";
@@ -102,6 +102,7 @@ export interface PersonResult {
   description: string;
   relationship: string;
   sentiment: number;
+  identifiers: PersonIdentifier[];
 }
 
 export interface TopicResult {
@@ -182,6 +183,7 @@ function mapPerson(person: Person): PersonResult {
     description: person.description,
     relationship: person.relationship,
     sentiment: person.sentiment,
+    identifiers: person.identifiers ?? [],
   };
 }
 
