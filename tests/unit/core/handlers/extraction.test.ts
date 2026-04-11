@@ -822,6 +822,172 @@ describe("Extraction Handlers - Step 3 (Update) - interested_personas", () => {
     });
   });
 
+  describe("handlePersonUpdate — identifier type normalization", () => {
+    function makePersonUpdateRequest(isNewItem: boolean, existingItemId?: string) {
+      return createMockRequest({
+        next_step: LLMNextStep.HandlePersonUpdate,
+        data: {
+          personaId: "persona-1",
+          personaDisplayName: "TestPersona",
+          isNewItem,
+          existingItemId,
+          candidateName: "Someone",
+          candidateRelationship: "friend",
+          messages_context: [],
+          messages_analyze: [],
+        },
+      });
+    }
+
+    it("normalizes lowercase type to canonical built-in on new person", async () => {
+      const request = makePersonUpdateRequest(true);
+      const response = createMockResponse(request, {
+        description: "A person",
+        sentiment: 0,
+        identifiers: [{ type: "nickname", value: "Flare", is_primary: true }],
+      });
+
+      await handlers[LLMNextStep.HandlePersonUpdate](response, state as any);
+
+      const upserted = (state.human_person_upsert as any).mock.calls[0][0];
+      expect(upserted.identifiers).toContainEqual(
+        expect.objectContaining({ type: "Nickname", value: "Flare" })
+      );
+    });
+
+    it("normalizes underscored type to canonical built-in on new person", async () => {
+      const request = makePersonUpdateRequest(true);
+      const response = createMockResponse(request, {
+        description: "A person",
+        sentiment: 0,
+        identifiers: [{ type: "full_name", value: "Jeremy Scherer", is_primary: true }],
+      });
+
+      await handlers[LLMNextStep.HandlePersonUpdate](response, state as any);
+
+      const upserted = (state.human_person_upsert as any).mock.calls[0][0];
+      expect(upserted.identifiers).toContainEqual(
+        expect.objectContaining({ type: "Full Name", value: "Jeremy Scherer" })
+      );
+    });
+
+    it("normalizes uppercase type to canonical built-in on new person", async () => {
+      const request = makePersonUpdateRequest(true);
+      const response = createMockResponse(request, {
+        description: "A person",
+        sentiment: 0,
+        identifiers: [{ type: "EMAIL", value: "test@example.com", is_primary: true }],
+      });
+
+      await handlers[LLMNextStep.HandlePersonUpdate](response, state as any);
+
+      const upserted = (state.human_person_upsert as any).mock.calls[0][0];
+      expect(upserted.identifiers).toContainEqual(
+        expect.objectContaining({ type: "Email", value: "test@example.com" })
+      );
+    });
+
+    it("normalizes type in identifiers_to_add on existing person update", async () => {
+      state._human.people.push({
+        id: "existing-person",
+        name: "Someone",
+        description: "Known",
+        relationship: "friend",
+        sentiment: 0,
+        exposure_current: 0,
+        exposure_desired: 0.5,
+        last_updated: "",
+        identifiers: [{ type: "Nickname", value: "Someone", is_primary: true }],
+        interested_personas: [],
+        validated_date: "",
+      });
+
+      const request = makePersonUpdateRequest(false, "existing-person");
+      const response = createMockResponse(request, {
+        description: "Updated",
+        sentiment: 0,
+        identifiers_to_add: [{ type: "full_name", value: "Someone Real" }],
+      });
+
+      await handlers[LLMNextStep.HandlePersonUpdate](response, state as any);
+
+      const upserted = (state.human_person_upsert as any).mock.calls[0][0];
+      expect(upserted.identifiers).toContainEqual(
+        expect.objectContaining({ type: "Full Name", value: "Someone Real" })
+      );
+    });
+
+    it("fallback auto-identifier uses 'Full Name' for names with spaces", async () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandlePersonUpdate,
+        data: {
+          personaId: "persona-1",
+          personaDisplayName: "TestPersona",
+          isNewItem: true,
+          candidateName: "Jeremy Scherer",
+          candidateRelationship: "friend",
+          messages_context: [],
+          messages_analyze: [],
+        },
+      });
+      const response = createMockResponse(request, {
+        description: "A person",
+        sentiment: 0,
+        identifiers: [],
+      });
+
+      await handlers[LLMNextStep.HandlePersonUpdate](response, state as any);
+
+      const upserted = (state.human_person_upsert as any).mock.calls[0][0];
+      expect(upserted.identifiers).toContainEqual(
+        expect.objectContaining({ type: "Full Name", value: "Jeremy Scherer", is_primary: true })
+      );
+    });
+
+    it("fallback auto-identifier uses 'Nickname' for single-word names", async () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandlePersonUpdate,
+        data: {
+          personaId: "persona-1",
+          personaDisplayName: "TestPersona",
+          isNewItem: true,
+          candidateName: "Flare",
+          candidateRelationship: "friend",
+          messages_context: [],
+          messages_analyze: [],
+        },
+      });
+      const response = createMockResponse(request, {
+        description: "A person",
+        sentiment: 0,
+        identifiers: [],
+      });
+
+      await handlers[LLMNextStep.HandlePersonUpdate](response, state as any);
+
+      const upserted = (state.human_person_upsert as any).mock.calls[0][0];
+      expect(upserted.identifiers).toContainEqual(
+        expect.objectContaining({ type: "Nickname", value: "Flare", is_primary: true })
+      );
+    });
+
+    it("preserves unknown custom type when no match exists", async () => {
+      const request = makePersonUpdateRequest(true);
+      const response = createMockResponse(request, {
+        description: "A person",
+        sentiment: 0,
+        identifiers: [{ type: "sehimu_thinara", value: "SomeValue" }],
+      });
+
+      await handlers[LLMNextStep.HandlePersonUpdate](response, state as any);
+
+      const upserted = (state.human_person_upsert as any).mock.calls[0][0];
+      expect(upserted.identifiers).toContainEqual(
+        expect.objectContaining({ type: "sehimu_thinara", value: "SomeValue" })
+      );
+    });
+  });
+
   describe("handlePersonUpdate — learned_on preservation", () => {
     it("sets learned_on on new person", async () => {
       const request = createMockRequest({
