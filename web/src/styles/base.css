@@ -18,14 +18,42 @@
   --ei-accent: #007bff;
   --ei-accent-hover: #0056b3;
   --ei-success: #28a745;
+  --ei-success-hover: #218838;
   --ei-warning: #ffc107;
+  --ei-warning-text: #856404;
   --ei-danger: #dc3545;
-  
+
   /* Status colors */
   --ei-status-thinking: #ffc107;
   --ei-status-ready: #28a745;
   --ei-status-unread: #dc3545;
   --ei-status-paused: #6c757d;
+
+  /* Room mode badge colors */
+  --ei-room-cyp: var(--ei-accent-hover);
+  --ei-room-ffa: #1a7a35;
+  --ei-room-map: #6f42c1;
+
+  /* Archive button */
+  --ei-archive-bg-start: #fde8c8;
+  --ei-archive-bg-end: #fcd9a8;
+  --ei-archive-border: #d4923a;
+
+  /* AI Assist button */
+  --ei-ai-assist-start: #667eea;
+  --ei-ai-assist-end: #764ba2;
+
+  /* Code / context window syntax theme */
+  --ei-code-bg: #0a0e14;
+  --ei-code-bg-controls: #0f131a;
+  --ei-code-border: #1a2332;
+  --ei-code-text: #c7c7c7;
+  --ei-code-text-muted: #8892a6;
+  --ei-code-accent: #59c2ff;
+  --ei-code-string: #ffcc66;
+  --ei-code-error: #ff6b6b;
+  --ei-code-success: #50fa7b;
+  --ei-code-special: #bd93f9;
   
   /* Layout dimensions */
   --ei-panel-left-width: 280px;
