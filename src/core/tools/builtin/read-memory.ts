@@ -57,7 +57,7 @@ export function createReadMemoryExecutor(searchHumanData: SearchHumanData, getPe
       const output: Record<string, unknown[]> = {};
       if (results.facts.length > 0) output.facts = results.facts.map(f => ({ name: f.name, description: f.description }));
       if (results.topics.length > 0) output.topics = results.topics.map(t => ({ name: t.name, description: t.description }));
-      if (results.people.length > 0) output.people = results.people.map(p => ({ name: p.name, relationship: p.relationship, description: p.description }));
+      if (results.people.length > 0) output.people = results.people.map(p => ({ name: p.name, relationship: p.relationship, description: p.description, identifiers: p.identifiers ?? [] }));
       if (results.quotes.length > 0) output.quotes = results.quotes.map(q => ({ text: q.text, speaker: q.speaker }));
 
       if (Object.keys(output).length === 0) {
