@@ -3,7 +3,10 @@ import { ProviderList, ProviderEditor } from '../Settings';
 import { ModelPicker } from './ModelPicker';
 import { ToolkitList } from './ToolkitList';
 import { ToolkitEditor } from './ToolkitEditor';
+import { ThemeList } from './ThemeList';
+import { ThemeEditor } from './ThemeEditor';
 import type { ProviderAccount, SyncCredentials, ToolProvider, ToolDefinition } from '../../../../src/core/types';
+import type { ThemeDefinition } from '../../../../src/core/types/entities.js';
 
 interface SettingsData {
   name_display?: string;
@@ -34,10 +37,16 @@ interface SettingsModalProps {
   onToolProviderRemove: (id: string) => void;
   onSpotifyConfigChange?: (refreshToken: string) => void;
   onToolUpdate: (id: string, updates: Partial<Omit<ToolDefinition, 'id' | 'created_at'>>) => void;
+  activeTheme?: string;
+  customThemes?: ThemeDefinition[];
+  onThemeChange?: (id: string) => void;
+  onCustomThemeUpsert?: (theme: ThemeDefinition) => void;
+  onCustomThemeRemove?: (id: string) => void;
 }
 
 const tabs = [
   { id: 'general', label: 'General', icon: '⚙️' },
+  { id: 'appearance', label: 'Appearance', icon: '🎨' },
   { id: 'providers', label: 'Providers', icon: '🔌' },
   { id: 'toolkits', label: 'Toolkits', icon: '🔧' },
   { id: 'data', label: 'Data', icon: '💾' },
@@ -56,6 +65,11 @@ export const SettingsModal = ({
   onToolProviderRemove,
   onToolUpdate,
   onSpotifyConfigChange,
+  activeTheme,
+  customThemes = [],
+  onThemeChange,
+  onCustomThemeUpsert,
+  onCustomThemeRemove,
 }: SettingsModalProps) => {
   const [activeTab, setActiveTab] = useState('general');
   const modalRef = useRef<HTMLDivElement>(null);
@@ -66,6 +80,8 @@ export const SettingsModal = ({
   const [editingAccount, setEditingAccount] = useState<ProviderAccount | null>(null);
   const [toolkitEditorOpen, setToolkitEditorOpen] = useState(false);
   const [editingProvider, setEditingProvider] = useState<ToolProvider | null>(null);
+  const [themeEditorOpen, setThemeEditorOpen] = useState(false);
+  const [editingTheme, setEditingTheme] = useState<ThemeDefinition | null>(null);
   
   const [syncUsername, setSyncUsername] = useState(settings.sync?.username || "");
   const [syncPassphrase, setSyncPassphrase] = useState(settings.sync?.passphrase || "");
@@ -296,6 +312,43 @@ export const SettingsModal = ({
                 <small className="ei-form-hint">Treat gaps of this duration or more as separate events</small>
               </div>
             </section>
+          </div>
+        );
+
+      case 'appearance':
+        return (
+          <div className="ei-settings-form">
+            <ThemeList
+              activeTheme={activeTheme}
+              customThemes={customThemes}
+              onSelect={(id) => onThemeChange?.(id)}
+              onEdit={(theme) => {
+                setEditingTheme(theme);
+                setThemeEditorOpen(true);
+              }}
+              onDelete={(id) => onCustomThemeRemove?.(id)}
+              onCreateNew={() => {
+                setEditingTheme(null);
+                setThemeEditorOpen(true);
+              }}
+            />
+
+            <ThemeEditor
+              isOpen={themeEditorOpen}
+              theme={editingTheme}
+              onSave={(saved) => {
+                onCustomThemeUpsert?.(saved);
+                onThemeChange?.(saved.id);
+                setThemeEditorOpen(false);
+                setEditingTheme(null);
+              }}
+              onClose={() => {
+                setThemeEditorOpen(false);
+                setEditingTheme(null);
+              }}
+              activeTheme={activeTheme}
+              customThemes={customThemes}
+            />
           </div>
         );
 

@@ -4,3 +4,5 @@ export { SettingsModal } from './SettingsModal';
 export { ToolkitList } from './ToolkitList';
 export { ToolkitEditor } from './ToolkitEditor';
 export { ModelPicker } from './ModelPicker';
+export { ThemeList } from './ThemeList';
+export { ThemeEditor } from './ThemeEditor';
