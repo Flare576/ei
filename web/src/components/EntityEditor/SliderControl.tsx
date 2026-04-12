@@ -25,6 +25,7 @@ export const SliderControl: React.FC<SliderControlProps> = ({
   disabled = false,
   tooltip,
 }) => {
+  const safeValue = typeof value === 'number' && isFinite(value) ? value : (min ?? 0);
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     onChange(parseFloat(e.target.value));
   };
@@ -36,7 +37,7 @@ export const SliderControl: React.FC<SliderControlProps> = ({
           {label}
           {tooltip && <span className="ei-slider-control__help">ⓘ</span>}
         </span>
-        <span className="ei-slider-control__value">{formatValue(value)}</span>
+        <span className="ei-slider-control__value">{formatValue(safeValue)}</span>
       </div>
       <input
         type="range"
@@ -44,7 +45,7 @@ export const SliderControl: React.FC<SliderControlProps> = ({
         min={min}
         max={max}
         step={step}
-        value={value}
+        value={safeValue}
         onChange={handleChange}
         disabled={disabled}
       />

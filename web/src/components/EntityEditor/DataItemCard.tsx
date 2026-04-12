@@ -40,6 +40,7 @@ interface DataItemCardProps<T extends DataItemBase> {
   isSelected?: boolean;
   onSelectionChange?: () => void;
   availableGroups?: string[];
+  showGroupEditor?: boolean;
 }
 
 const defaultFormat = (v: number) => v.toFixed(2);
@@ -60,6 +61,7 @@ export const DataItemCard = <T extends DataItemBase>({
   isSelected = false,
   onSelectionChange,
   availableGroups = [],
+  showGroupEditor = true,
 }: DataItemCardProps<T>): React.ReactElement => {
   const cardRef = React.useRef<HTMLDivElement>(null);
   const [aiLoading, setAiLoading] = useState(false);
@@ -143,7 +145,7 @@ export const DataItemCard = <T extends DataItemBase>({
           />
         </div>
 
-        {!selectionMode && (
+        {!selectionMode && showGroupEditor && (
           <GroupChipEditor
             value={item.persona_groups || []}
             availableGroups={availableGroups}

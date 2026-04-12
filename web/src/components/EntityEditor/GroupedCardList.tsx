@@ -32,7 +32,8 @@ type RenderCardFn<T extends DataItemBase> = (
   aiContext?: string,
   selectionMode?: boolean,
   isSelected?: boolean,
-  availableGroups?: string[]
+  availableGroups?: string[],
+  showGroupEditor?: boolean
 ) => ReactNode;
 
 interface GroupedCardListProps<T extends DataItemBase> {
@@ -54,6 +55,7 @@ interface GroupedCardListProps<T extends DataItemBase> {
   selectedIds?: string[];
   onSelectionChange?: (id: string) => void;
   availableGroups?: string[];
+  showGroupEditor?: boolean;
 }
 
 const defaultGroupBy = <T extends DataItemBase>(item: T): string => {
@@ -79,8 +81,9 @@ export const GroupedCardList = <T extends DataItemBase>({
   selectedIds = [],
   onSelectionChange,
   availableGroups = [],
+  showGroupEditor = true,
   }: GroupedCardListProps<T>) => {
-  const defaultRenderCard: RenderCardFn<T> = (item, onItemChange, onItemSave, onItemDelete, isDirty, itemSliders, resolvePersonaNameFn, onAiAssistFn, aiCtx, selMode, isSel, groups) => (
+  const defaultRenderCard: RenderCardFn<T> = (item, onItemChange, onItemSave, onItemDelete, isDirty, itemSliders, resolvePersonaNameFn, onAiAssistFn, aiCtx, selMode, isSel, groups, showGrpEditor) => (
     <DataItemCard
       item={item}
       sliders={itemSliders}
@@ -95,6 +98,7 @@ export const GroupedCardList = <T extends DataItemBase>({
       isSelected={isSel}
       onSelectionChange={onSelectionChange ? () => onSelectionChange(item.id) : undefined}
       availableGroups={groups}
+      showGroupEditor={showGrpEditor}
     />
   );
 
@@ -167,7 +171,8 @@ export const GroupedCardList = <T extends DataItemBase>({
                   aiContext,
                   selectionMode,
                   selectedIds.includes(item.id),
-                  availableGroups
+                  availableGroups,
+                  showGroupEditor
                 )}
               </div>
             </div>
@@ -221,7 +226,8 @@ export const GroupedCardList = <T extends DataItemBase>({
                     aiContext,
                     false,
                     false,
-                    availableGroups
+                    availableGroups,
+                    showGroupEditor
                   )}
                 </div>
               ))}
