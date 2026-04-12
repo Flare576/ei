@@ -14,6 +14,7 @@ interface QuoteManagementModalProps {
   quote: Quote | null;
   personaName: string;
   dataItems: DataItem[];
+  humanDisplayName?: string;
   skipDeleteConfirm?: boolean;
   onClose: () => void;
   onSave: (id: string, updates: Partial<Quote>) => void;
@@ -25,6 +26,7 @@ export function QuoteManagementModal({
   isOpen,
   quote,
   dataItems,
+  humanDisplayName,
   skipDeleteConfirm = false,
   onClose,
   onSave,
@@ -165,7 +167,7 @@ export function QuoteManagementModal({
               <div className="ei-quote-capture-modal__section">
                 <div className="ei-quote-capture-modal__message-info">
                   <span className="ei-quote-capture-modal__speaker">
-                    {quote.speaker === 'human' ? 'Human' : quote.speaker}
+                    {quote.speaker === 'human' ? (humanDisplayName || 'Human') : quote.speaker}
                   </span>
                   <span className="ei-quote-capture-modal__timestamp">
                     {new Date(quote.timestamp).toLocaleString()}

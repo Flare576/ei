@@ -1816,6 +1816,11 @@ function App() {
          isOpen={editingQuote !== null}
          quote={editingQuote}
          personaName={activePersonaEntity?.display_name || ''}
+         humanDisplayName={
+           human?.settings?.name_display ||
+           human?.facts?.find(f => f.name === "Nickname/Preferred Name")?.description ||
+           "Human"
+         }
          dataItems={getDeduplicatedDataItems()}
          skipDeleteConfirm={skipDeleteConfirm}
          onClose={() => setEditingQuote(null)}

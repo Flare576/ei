@@ -463,6 +463,11 @@ export const HumanEditor = ({
           isOpen={editingQuote !== null}
           quote={editingQuote}
           personaName=""
+          humanDisplayName={
+            human.name_display ||
+            human.facts?.find(f => f.name === "Nickname/Preferred Name")?.description ||
+            "Human"
+          }
           dataItems={[
             ...(human.topics || []).map(i => ({ id: i.id, name: i.name, type: 'Topic' })),
             ...(human.people || []).map(i => ({ id: i.id, name: i.name, type: 'Person' })),
