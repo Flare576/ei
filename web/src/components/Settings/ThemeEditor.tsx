@@ -324,27 +324,28 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({
             </div>
           ))}
 
-          {showImport && (
-            <div className="ei-theme-editor__import-area">
-              <label className="ei-form-label">Paste Theme String</label>
-              <textarea
-                value={importText}
-                onChange={(e) => { setImportText(e.target.value); setImportError(''); }}
-                placeholder="ei-theme:v1:..."
-                rows={3}
-              />
-              {importError && <span className="ei-form-error">{importError}</span>}
-              <div style={{ display: 'flex', gap: 'var(--ei-spacing-xs)' }}>
-                <button className="ei-btn ei-btn--primary ei-btn--sm" onClick={handleImportApply}>
-                  Apply
-                </button>
-                <button className="ei-btn ei-btn--secondary ei-btn--sm" onClick={() => { setShowImport(false); setImportError(''); }}>
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
         </div>
+
+        {showImport && (
+          <div className="ei-theme-editor__import-area">
+            <label className="ei-form-label">Paste Theme String</label>
+            <textarea
+              value={importText}
+              onChange={(e) => { setImportText(e.target.value); setImportError(''); }}
+              placeholder="ei-theme:v1:..."
+              rows={3}
+            />
+            {importError && <span className="ei-form-error">{importError}</span>}
+            <div style={{ display: 'flex', gap: 'var(--ei-spacing-xs)' }}>
+              <button className="ei-btn ei-btn--primary ei-btn--sm" onClick={handleImportApply}>
+                Apply
+              </button>
+              <button className="ei-btn ei-btn--secondary ei-btn--sm" onClick={() => { setShowImport(false); setImportError(''); }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="ei-theme-editor__footer">
           <div className="ei-theme-editor__footer-left">
