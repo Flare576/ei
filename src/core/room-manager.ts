@@ -278,9 +278,14 @@ export async function activateRoom(
 
     const currentRound = allMessages.filter(m => m.parent_id === room.active_node_id);
 
+    const humanDisplayName =
+      human.settings?.name_display ||
+      human.facts?.find(f => f.name === "Nickname/Preferred Name")?.description ||
+      "Human";
+
     const context: RoomHistoryMessage[] = sm.getRoomActivePath(roomId).map(m => ({
       speaker_name: m.role === "human"
-        ? (human.settings?.name_display ?? "Human")
+        ? humanDisplayName
         : (sm.persona_getById(m.persona_id ?? "")?.display_name ?? "Unknown"),
       speaker_id: m.role === "human" ? "human" : (m.persona_id ?? ""),
       verbal_response: getMessageContent(m) || undefined,
@@ -290,7 +295,7 @@ export async function activateRoom(
     const candidates: RoomJudgeCandidate[] = currentRound.map(m => ({
       message_id: m.id,
       speaker_name: m.role === "human"
-        ? (human.settings?.name_display ?? "Human")
+        ? humanDisplayName
         : (sm.persona_getById(m.persona_id ?? "")?.display_name ?? "Unknown"),
       speaker_id: m.role === "human" ? "human" : (m.persona_id ?? ""),
       verbal_response: getMessageContent(m) || undefined,
@@ -305,6 +310,7 @@ export async function activateRoom(
         long_description: judgePersona.long_description,
         traits: judgePersona.traits,
       },
+      human: { name: humanDisplayName },
       context,
       candidates,
     });

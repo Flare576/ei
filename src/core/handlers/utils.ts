@@ -11,7 +11,10 @@ export function getMessageContent(msg: { content?: string; verbal_response?: str
 
 export function normalizeRoomMessages(messages: RoomMessage[], state: StateManager): Message[] {
   const human = state.getHuman();
-  const humanName = human.settings?.name_display ?? "Human";
+  const humanName =
+    human.settings?.name_display ||
+    human.facts?.find(f => f.name === "Nickname/Preferred Name")?.description ||
+    "Human";
   return messages.map(m => {
     const speakerName = m.role === "human"
       ? humanName

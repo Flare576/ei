@@ -121,7 +121,12 @@ export async function filterHumanDataByVisibility(
       selectRelevantQuotes(human.quotes ?? [], currentMessage),
     ]);
     const { topics, people } = capTopicsAndPeople(rawTopics, rawPeople);
+    const humanName =
+      human.settings?.name_display ||
+      human.facts?.find(f => f.name === "Nickname/Preferred Name")?.description ||
+      "Human";
     return {
+      name: humanName,
       facts,
       topics,
       people,
@@ -158,7 +163,12 @@ export async function filterHumanDataByVisibility(
   ]);
   const { topics, people } = capTopicsAndPeople(rawTopics, rawPeople);
 
+  const humanName =
+    human.settings?.name_display ||
+    human.facts?.find(f => f.name === "Nickname/Preferred Name")?.description ||
+    "Human";
   return {
+    name: humanName,
     facts,
     topics,
     people,
@@ -297,7 +307,10 @@ export async function buildRoomResponsePromptData(
   }
   otherParticipants.push({
     id: "human",
-    name: human.settings?.name_display ?? "Human",
+    name:
+      human.settings?.name_display ||
+      human.facts?.find(f => f.name === "Nickname/Preferred Name")?.description ||
+      "Human",
     traits: [],
     is_human: true,
   });
