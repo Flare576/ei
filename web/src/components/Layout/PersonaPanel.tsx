@@ -1,6 +1,9 @@
-import { useState, useRef, useEffect, forwardRef, useImperativeHandle, useCallback } from "react";
+import { useState, useRef, useEffect, forwardRef, useImperativeHandle, useCallback, useMemo } from "react";
 import type { PersonaSummary, RoomSummary } from "../../../../src/core/types";
+import type { ThemeDefinition } from "../../../../src/core/types/entities.js";
 import { RoomMode } from "../../../../src/core/types";
+import { PersonaAvatar } from "../Avatar";
+import { decodeTheme } from "../../../../src/core/utils/theme-codec.js";
 
 interface PersonaPanelProps {
   personas: PersonaSummary[];
@@ -20,11 +23,24 @@ interface PersonaPanelProps {
   onArchiveRoom?: (roomId: string) => void;
   onEditRoom?: (roomId: string) => void;
   onShowArchivedRooms?: () => void;
+  customThemes?: ThemeDefinition[];
 }
 
 export interface PersonaPanelHandle {
   focusPanel: () => void;
 }
+
+const BUILTIN_ACCENT_COLORS: Record<string, string> = {
+  'default': '#007bff',
+  'dark': '#4dabf7',
+  'coder': '#98971a',
+  'depressing': '#81a1c1',
+  'cotton-candy': '#ea76cb',
+  'crimuh': '#c41e3a',
+  'spoopy': '#fab387',
+  'lovey-dovey': '#f5c2e7',
+  'lucky': '#b8bb26',
+};
 
 const MODE_BADGE_LABEL: Record<RoomMode, string> = {
   [RoomMode.ChooseYourPath]: "CYP",
@@ -56,9 +72,19 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
   onArchiveRoom,
   onEditRoom,
   onShowArchivedRooms,
+  customThemes = [],
 }, ref) {
   const [activeTab, setActiveTab] = useState<"personas" | "rooms">("personas");
   const [expanded, setExpanded] = useState(false);
+
+  const accentColors = useMemo(() => {
+    const map: Record<string, string> = { ...BUILTIN_ACCENT_COLORS };
+    for (const t of customThemes) {
+      const tokens = decodeTheme(t.encoded);
+      if (tokens?.['--ei-accent']) map[t.id] = tokens['--ei-accent'];
+    }
+    return map;
+  }, [customThemes]);
   const [hoveredPersonaId, setHoveredPersonaId] = useState<string | null>(null);
   const [hoveredRoomId, setHoveredRoomId] = useState<string | null>(null);
   const [showPauseOptions, setShowPauseOptions] = useState<string | null>(null);
@@ -109,15 +135,6 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
     if (processingPersonaId === persona.id) return "thinking";
     if (persona.unread_count > 0) return "unread";
     return "";
-  };
-
-  const getInitials = (displayName: string) => {
-    return displayName
-      .split(/\s+/)
-      .map(w => w[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2);
   };
 
   const handlePause = (personaId: string, hours?: number) => {
@@ -277,6 +294,9 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
               <div
                 key={persona.id}
                 className={`ei-persona-pill ${persona.id === activePersonaId ? "active" : ""} ${index === focusedIndex ? "focused" : ""}`}
+                style={persona.preferred_theme && accentColors[persona.preferred_theme]
+                  ? { '--persona-accent': accentColors[persona.preferred_theme] } as React.CSSProperties
+                  : undefined}
                 onClick={() => {
                   onSelectPersona(persona.id);
                   setExpanded(false);
@@ -290,10 +310,19 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
                 tabIndex={0}
                 role="button"
               >
-                <div className={`ei-persona-pill__avatar ${persona.is_paused ? "paused" : ""}`}>
-                  {getInitials(persona.display_name)}
-                  <span className={`ei-persona-pill__status ${getStatusClass(persona)}`} />
-                </div>
+                <PersonaAvatar
+                  personaId={persona.id}
+                  displayName={persona.display_name}
+                  avatarEmoji={persona.avatar_emoji}
+                  avatarImage={persona.avatar_image}
+                  size={36}
+                  className={`ei-persona-pill__avatar${persona.is_paused ? " paused" : ""}`}
+                  showStatus
+                  statusClass={getStatusClass(persona)}
+                  style={persona.preferred_theme && accentColors[persona.preferred_theme]
+                    ? { background: accentColors[persona.preferred_theme] }
+                    : undefined}
+                />
                 <div className="ei-persona-pill__info">
                   <div className="ei-persona-pill__name">{persona.display_name}</div>
                   {persona.short_description && (
@@ -371,9 +400,12 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
                 role="button"
                  onKeyDown={(e) => handleRoomPillKeyDown(e, index)}
               >
-                <div className="ei-room-pill__avatar">
-                  {getInitials(room.display_name)}
-                </div>
+                <PersonaAvatar
+                  personaId={room.id}
+                  displayName={room.display_name}
+                  size={36}
+                  className="ei-room-pill__avatar"
+                />
                 <div className="ei-room-pill__info">
                   <div className="ei-room-pill__name">{room.display_name}</div>
                   <div className="ei-room-pill__meta">

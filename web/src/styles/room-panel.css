@@ -64,17 +64,9 @@
 
 /* Room Avatar */
 .ei-room-pill__avatar {
-  width: 36px;
-  height: 36px;
   border-radius: var(--ei-radius-md);
   background: var(--ei-text-secondary);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
   font-size: var(--ei-font-size-sm);
-  flex-shrink: 0;
 }
 
 /* Room Info */

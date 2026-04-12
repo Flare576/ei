@@ -4,6 +4,7 @@ import { useStickToBottom } from "use-stick-to-bottom";
 import type { RoomEntity, RoomMessage, PersonaSummary } from "../../../../src/core/types";
 import { RoomMode } from "../../../../src/core/types";
 import { MarkdownContent } from "../Chat";
+import { PersonaAvatar } from "../Avatar";
 
 function getContent(msg: { content?: string; verbal_response?: string; action_response?: string }): string {
   if (msg.content) return msg.content;
@@ -47,24 +48,7 @@ const MODE_CLASS: Record<RoomMode, string> = {
   [RoomMode.MessagesAgainstPersona]: "ei-room-chat-panel__mode--map",
 };
 
-const AVATAR_COLORS = [
-  "#e74c3c", "#e67e22", "#2ecc71", "#1abc9c",
-  "#3498db", "#9b59b6", "#e91e63", "#00bcd4", "#8bc34a",
-];
-
-const EXPAND_THRESHOLD = 200;
-
-function getAvatarColor(id: string): string {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0;
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
-}
-
-function getInitials(name: string): string {
-  return name.split(/\s+/).map(w => w[0]).join("").toUpperCase().slice(0, 2);
-}
-
-function formatTime(timestamp: string): string {
+const EXPAND_THRESHOLD = 200;function formatTime(timestamp: string): string {
   return new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
@@ -353,7 +337,6 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
   const renderMessage = (msg: RoomMessage) => {
     const persona = msg.persona_id ? personaMap.get(msg.persona_id) : null;
     const speakerName = persona?.display_name ?? (msg.role === "human" ? "You" : "Persona");
-    const avatarColor = msg.persona_id ? getAvatarColor(msg.persona_id) : "#007bff";
 
     const siblings = isCYP && msg.parent_id !== null
       ? allRoomMessages.filter(m => m.parent_id === msg.parent_id && m.role === "persona")
@@ -364,15 +347,25 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
       s.id !== msg.id && !allRoomMessages.some(m => m.parent_id === s.id)
     ).length;
 
+    const personaTheme = msg.role === "persona" ? (persona?.preferred_theme ?? undefined) : undefined;
+
     return (
-      <div key={msg.id} className={`ei-room-message-wrapper ${msg.role}`}>
+      <div key={msg.id} className={`ei-room-message-wrapper ${msg.role}`} data-persona-theme={personaTheme}>
         {msg.role === "persona" && (
-          <div className="ei-room-message__speaker-row">
-            <div className="ei-room-message__avatar" style={{ background: avatarColor }}>
-              {getInitials(speakerName)}
+            <div className="ei-room-message__speaker-row">
+              <PersonaAvatar
+                personaId={msg.persona_id ?? "human"}
+                displayName={speakerName}
+                avatarEmoji={persona?.avatar_emoji}
+                avatarImage={persona?.avatar_image}
+                size={28}
+                className="ei-room-message__avatar"
+              />
+              <span className="ei-room-message__speaker-name">{speakerName}</span>
+              {persona?.short_description && (
+                <span className="ei-room-message__speaker-desc">{persona.short_description}</span>
+              )}
             </div>
-            <span className="ei-room-message__speaker-name">{speakerName}</span>
-          </div>
         )}
         <div className="ei-room-message">
           <div className="ei-room-message__bubble">
@@ -405,16 +398,20 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
               const isCurrent = sibling.id === msg.id;
               const sibPersona = sibling.persona_id ? personaMap.get(sibling.persona_id) : null;
               const sibName = sibPersona?.display_name ?? (sibling.role === "human" ? "You" : "Persona");
-              const sibColor = sibling.persona_id ? getAvatarColor(sibling.persona_id) : "#007bff";
               const sibText = buildRoomMessageText(sibling, room?.judge_persona_id);
               const preview = sibText.slice(0, EXPAND_THRESHOLD);
               const siblingIsExplored = allRoomMessages.some(m => m.parent_id === sibling.id);
               return (
                 <div key={sibling.id} className={`ei-cyp-card${isCurrent ? " ei-cyp-card--current" : ""}`}>
-                  <div className="ei-cyp-card__header">
-                    <div className="ei-cyp-card__avatar" style={{ background: sibColor }}>
-                      {getInitials(sibName)}
-                    </div>
+                   <div className="ei-cyp-card__header">
+                    <PersonaAvatar
+                      personaId={sibling.persona_id ?? "unknown"}
+                      displayName={sibName}
+                      avatarEmoji={sibPersona?.avatar_emoji}
+                      avatarImage={sibPersona?.avatar_image}
+                      size={20}
+                      className="ei-cyp-card__avatar"
+                    />
                     <span className="ei-cyp-card__name">{sibName}</span>
                     <span className={`ei-cyp-explored-badge ${siblingIsExplored ? "ei-cyp-explored-badge--yes" : "ei-cyp-explored-badge--no"}`}>
                       {siblingIsExplored ? "\u2713 explored" : "\u25cb unexplored"}
@@ -454,7 +451,6 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
   const renderCYPCard = (msg: RoomMessage, isHuman = false) => {
     const persona = msg.persona_id ? personaMap.get(msg.persona_id) : null;
     const name = isHuman ? "You" : (persona?.display_name ?? "Persona");
-    const color = isHuman ? "#007bff" : (msg.persona_id ? getAvatarColor(msg.persona_id) : "#6c757d");
     const text = buildRoomMessageText(msg, room?.judge_persona_id);
     const isLong = text.length > EXPAND_THRESHOLD;
     const isExpanded = expandedCards.has(msg.id);
@@ -464,9 +460,14 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
     return (
       <div key={msg.id} className={`ei-cyp-card${isHuman ? " ei-cyp-card--human" : ""}`}>
         <div className="ei-cyp-card__header">
-          <div className="ei-cyp-card__avatar" style={{ background: color }}>
-            {getInitials(name)}
-          </div>
+          <PersonaAvatar
+            personaId={msg.persona_id ?? "human"}
+            displayName={name}
+            avatarEmoji={persona?.avatar_emoji}
+            avatarImage={persona?.avatar_image}
+            size={20}
+            className="ei-cyp-card__avatar"
+          />
           <span className="ei-cyp-card__name">{name}</span>
           {(
             <span className={`ei-cyp-explored-badge ${isExplored ? "ei-cyp-explored-badge--yes" : "ei-cyp-explored-badge--no"}`}>

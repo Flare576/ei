@@ -41,14 +41,20 @@
   align-items: center;
   gap: var(--ei-spacing-sm);
   padding: var(--ei-spacing-sm) var(--ei-spacing-md);
+  padding-left: calc(var(--ei-spacing-md) - 3px);
   margin-bottom: var(--ei-spacing-xs);
   background: transparent;
   border: none;
+  border-left: 3px solid transparent;
   border-radius: var(--ei-radius-md);
   cursor: pointer;
-  transition: background var(--ei-transition-fast);
+  transition: background var(--ei-transition-fast), border-left-color var(--ei-transition-fast);
   width: 100%;
   text-align: left;
+}
+
+.ei-persona-pill[style*="--persona-accent"] {
+  border-left-color: var(--persona-accent);
 }
 
 .ei-persona-pill:hover {
@@ -66,33 +72,7 @@
 }
 
 .ei-persona-pill__avatar {
-  position: relative;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--ei-radius-full);
-  background: var(--ei-accent);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
   font-size: var(--ei-font-size-sm);
-  flex-shrink: 0;
-}
-
-.ei-persona-pill__status {
-  position: absolute;
-  bottom: -2px;
-  right: -2px;
-  width: 12px;
-  height: 12px;
-  border-radius: var(--ei-radius-full);
-  border: 2px solid var(--ei-bg-secondary);
-  background: var(--ei-status-ready);
-}
-
-.ei-persona-pill__status.thinking {
-  background: var(--ei-status-thinking);
 }
 
 .ei-persona-pill__status.unread {
