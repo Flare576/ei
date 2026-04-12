@@ -338,7 +338,6 @@ export const SettingsModal = ({
               theme={editingTheme}
               onSave={(saved) => {
                 onCustomThemeUpsert?.(saved);
-                onThemeChange?.(saved.id);
                 setThemeEditorOpen(false);
                 setEditingTheme(null);
               }}

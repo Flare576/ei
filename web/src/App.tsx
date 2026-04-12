@@ -1677,7 +1677,10 @@ function App() {
           activeTheme={human.settings?.active_theme}
           customThemes={human.settings?.custom_themes ?? []}
           onThemeChange={(id) => handleHumanUpdate({ active_theme: id })}
-          onCustomThemeUpsert={(theme) => handleHumanUpdate({ custom_themes: [...(human.settings?.custom_themes ?? []).filter(t => t.id !== theme.id), theme] })}
+          onCustomThemeUpsert={(theme) => handleHumanUpdate({
+            custom_themes: [...(human.settings?.custom_themes ?? []).filter(t => t.id !== theme.id), theme],
+            active_theme: theme.id,
+          })}
           onCustomThemeRemove={(id) => handleHumanUpdate({ custom_themes: (human.settings?.custom_themes ?? []).filter(t => t.id !== id) })}
         />
 
