@@ -39,6 +39,7 @@ export interface RoomResponsePromptData {
   };
   other_participants: RoomParticipantIdentity[];
   human: {
+    name: string;
     facts: Fact[];
     topics: Topic[];
     people: Person[];
@@ -71,6 +72,9 @@ export interface RoomJudgePromptData {
     short_description?: string;
     long_description?: string;
     traits: PersonaTrait[];
+  };
+  human: {
+    name: string;
   };
   context: RoomHistoryMessage[];
   candidates: RoomJudgeCandidate[];

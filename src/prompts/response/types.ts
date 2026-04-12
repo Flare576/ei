@@ -23,6 +23,7 @@ export interface ResponsePromptData {
     include_message_timestamps?: boolean;
   };
   human: {
+    name: string;
     facts: Fact[];
     topics: Topic[];
     people: Person[];
