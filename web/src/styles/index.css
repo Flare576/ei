@@ -13,6 +13,7 @@
 @import './input-area.css';
 
 /* UI elements */
+@import './avatar.css';
 @import './buttons.css';
 @import './scrollbar.css';
 @import './markdown.css';

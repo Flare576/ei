@@ -1,0 +1,46 @@
+.ei-persona-avatar {
+  position: relative;
+  border-radius: var(--ei-radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: var(--ei-font-size-sm);
+  color: white;
+  flex-shrink: 0;
+  overflow: hidden;
+  user-select: none;
+}
+
+.ei-persona-avatar__status {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 12px;
+  height: 12px;
+  border-radius: var(--ei-radius-full);
+  border: 2px solid var(--ei-bg-secondary);
+  background: var(--ei-status-ready);
+}
+
+.ei-persona-avatar__status.thinking {
+  background: var(--ei-status-thinking);
+}
+
+.ei-persona-avatar__status.unread {
+  background: var(--ei-status-unread);
+}
+
+.ei-persona-avatar__status.paused {
+  background: var(--ei-status-paused, var(--ei-text-muted));
+}
+
+.ei-persona-avatar__status.paused::after {
+  content: "▶";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 6px;
+  color: white;
+}
