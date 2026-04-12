@@ -119,7 +119,6 @@ test.describe("Chat Flow", () => {
     await expect(terminal.getByText(/Processing \(\d+\)/g)).toBeVisible({ timeout: 5000 });
     await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 30000 });
     //
-    // Also verify "Human" label appears (message attribution)
     await expect(terminal.getByText(/Human \(/g)).toBeVisible({ timeout: 5000 });
 
     await expect(terminal.getByText(EXPECTED_RESPONSE, { full: true })).toBeVisible({ timeout: 10000 });

@@ -162,6 +162,33 @@ fi
 echo ""
 
 # ------------------------------------------------------------------
+# 9. No hardcoded "Human" speaker labels in prompt builders or UI components
+#    The human's display name should come from the lookup chain:
+#      settings.name_display || facts["Nickname/Preferred Name"] || "Human"
+#    Hardcoded "Human" as a speaker label is the anti-pattern this guards.
+#    Scope: src/prompts/ (prompt text), tui/src/components/, web/src/components/
+#    Note: "Human" in prose instructions, type checks, or structural headers is fine —
+#    only rendered speaker attribution contexts are in scope here.
+# ------------------------------------------------------------------
+echo "Human display name — no hardcoded speaker labels"
+HARDCODED_HUMAN=$(grep -rn '"Human"' \
+  "$ROOT/src/prompts/" \
+  "$ROOT/tui/src/components/" \
+  "$ROOT/web/src/components/" \
+  --include="*.ts" --include="*.tsx" 2>/dev/null \
+  | grep -v '|| "Human"' \
+  | grep -v 'createSignal("Human")' \
+  | grep -vE ':\s+"Human"[;,]?$' \
+  || true)
+if [ -z "$HARDCODED_HUMAN" ]; then
+  pass "no hardcoded 'Human' speaker labels in prompts or UI components"
+else
+  fail "hardcoded 'Human' speaker label found — use dynamic name chain (name_display || Nickname/Preferred Name || 'Human')" "$HARDCODED_HUMAN"
+fi
+
+echo ""
+
+# ------------------------------------------------------------------
 # Summary
 # ------------------------------------------------------------------
 if [ "$FAILURES" -eq 0 ]; then
