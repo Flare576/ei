@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.13.23",
+    "emoji-picker-react": "^4.18.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^10.1.0",

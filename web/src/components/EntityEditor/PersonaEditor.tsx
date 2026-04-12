@@ -57,6 +57,9 @@ interface PersonaEntity {
   last_extraction?: string;
   last_inactivity_ping?: string;
   tools?: string[];
+  avatar_emoji?: string;
+  avatar_image?: string;
+  preferred_theme?: string;
 }
 
 type PersonaEntityForSettings = Omit<PersonaEntity, 'traits' | 'topics'> & {
@@ -88,6 +91,7 @@ interface PersonaEditorProps {
   toolProviders?: ToolProvider[];
   toolDefinitions?: ToolDefinition[];
   accounts?: ProviderAccount[];
+  customThemes?: { id: string; name: string }[];
 }
 
 const tabs = [
@@ -118,6 +122,7 @@ export function PersonaEditor({
   toolProviders = [],
   toolDefinitions = [],
   accounts = [],
+  customThemes = [],
 }: PersonaEditorProps) {
   const [activeTab, setActiveTab] = useState('settings');
   const [localPersona, setLocalPersona] = useState<PersonaEntity>(persona);
@@ -277,6 +282,7 @@ export function PersonaEditor({
           onChange={handlePersonaFieldChange}
           availableGroups={availableGroups}
           accounts={accounts}
+          customThemes={customThemes}
         />
       )}
 

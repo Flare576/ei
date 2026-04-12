@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import EmojiPicker, { EmojiClickData } from 'emoji-picker-react';
 import { GroupedCardList } from '../GroupedCardList';
+import { PersonaAvatar } from '../../Avatar/PersonaAvatar';
 
 interface Trait {
   id: string;
@@ -13,6 +15,8 @@ interface Trait {
 }
 
 interface PersonaEntity {
+  id: string;
+  display_name: string;
   entity: "system";
   aliases?: string[];
   short_description?: string;
@@ -34,6 +38,8 @@ interface PersonaEntity {
   last_heartbeat?: string;
   last_extraction?: string;
   last_inactivity_ping?: string;
+  avatar_emoji?: string;
+  avatar_image?: string;
 }
 
 interface PersonaIdentityTabProps {
@@ -52,6 +58,30 @@ const traitSliders = [
   { field: 'strength', label: 'Strength', min: 0, max: 1 },
 ];
 
+async function resizeToAvatar(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const size = Math.min(img.width, img.height);
+        const canvas = document.createElement('canvas');
+        canvas.width = 64;
+        canvas.height = 64;
+        const ctx = canvas.getContext('2d')!;
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, (img.width - size) / 2, (img.height - size) / 2, size, size, 0, 0, 64, 64);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.onerror = reject;
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 export const PersonaIdentityTab = ({
   persona,
   onChange,
@@ -65,6 +95,52 @@ export const PersonaIdentityTab = ({
   const [newAlias, setNewAlias] = useState('');
   const [aiLoadingField, setAiLoadingField] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<Record<string, { text: string; prev?: string }>>({});
+  const [avatarTab, setAvatarTab] = useState<'emoji' | 'image'>(persona.avatar_image ? 'image' : 'emoji');
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [emojiInput, setEmojiInput] = useState(persona.avatar_emoji ?? '');
+  const pickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [pickerOpen]);
+
+  const handleEmojiInputChange = (value: string) => {
+    setEmojiInput(value);
+    const match = value.match(/\p{Emoji_Presentation}|\p{Extended_Pictographic}/u);
+    const first = match?.[0] ?? value.trim().charAt(0);
+    if (first) {
+      onChange('avatar_emoji', first);
+      onChange('avatar_image', undefined);
+    }
+  };
+
+  const handleEmojiClick = (emojiData: EmojiClickData) => {
+    setEmojiInput(emojiData.emoji);
+    onChange('avatar_emoji', emojiData.emoji);
+    onChange('avatar_image', undefined);
+    setPickerOpen(false);
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const base64 = await resizeToAvatar(file);
+      onChange('avatar_image', base64);
+      onChange('avatar_emoji', undefined);
+      setEmojiInput('');
+    } catch {
+      return;
+    }
+    e.target.value = '';
+  };
 
   const handleAiAssist = async (field: string, systemPrompt: string, userPrompt: string) => {
     if (!onAiAssist) return;
@@ -123,15 +199,102 @@ export const PersonaIdentityTab = ({
 
   return (
     <div className="ei-persona-identity-tab">
-      {/* Image Display Section */}
+      {/* Avatar Section */}
       <div className="ei-form-group">
-        <label className="ei-form-label">Profile Image</label>
-        <div className="ei-persona-image-placeholder">
-          <span className="ei-persona-image-placeholder__text">
-            Image display coming in future version
-          </span>
+        <label className="ei-form-label">Avatar</label>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+          <PersonaAvatar
+            personaId={persona.id}
+            displayName={persona.display_name}
+            size={64}
+            avatarEmoji={persona.avatar_emoji}
+            avatarImage={persona.avatar_image}
+            style={{ fontSize: '1.75rem' }}
+          />
+          <div className="ei-avatar-tabs" style={{ display: 'flex', gap: '4px' }}>
+            <button
+              type="button"
+              className={`ei-btn ei-btn--sm ${avatarTab === 'emoji' ? 'ei-btn--primary' : 'ei-btn--secondary'}`}
+              onClick={() => setAvatarTab('emoji')}
+            >
+              Emoji
+            </button>
+            <button
+              type="button"
+              className={`ei-btn ei-btn--sm ${avatarTab === 'image' ? 'ei-btn--primary' : 'ei-btn--secondary'}`}
+              onClick={() => setAvatarTab('image')}
+            >
+              Image
+            </button>
+          </div>
         </div>
-        <span className="ei-form-hint">Image upload will be available in a future update</span>
+
+        {avatarTab === 'emoji' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <input
+                type="text"
+                className="ei-input"
+                placeholder="Paste or type an emoji…"
+                value={emojiInput}
+                onChange={(e) => handleEmojiInputChange(e.target.value)}
+                style={{ width: '160px' }}
+              />
+              <button
+                type="button"
+                className="ei-btn ei-btn--secondary ei-btn--sm"
+                onClick={() => setPickerOpen((o) => !o)}
+              >
+                Pick Emoji
+              </button>
+              {persona.avatar_emoji && (
+                <button
+                  type="button"
+                  className="ei-btn ei-btn--ghost ei-btn--sm"
+                  onClick={() => {
+                    onChange('avatar_emoji', undefined);
+                    setEmojiInput('');
+                  }}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            {pickerOpen && (
+              <div ref={pickerRef} style={{ position: 'relative', zIndex: 100 }}>
+                <EmojiPicker
+                  onEmojiClick={handleEmojiClick}
+                  lazyLoadEmojis
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {avatarTab === 'image' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <input
+                type="file"
+                accept="image/*"
+                className="ei-input"
+                onChange={handleImageUpload}
+                style={{ flex: 1 }}
+              />
+              {persona.avatar_image && (
+                <button
+                  type="button"
+                  className="ei-btn ei-btn--ghost ei-btn--sm"
+                  onClick={() => onChange('avatar_image', undefined)}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <span className="ei-form-hint">Image will be cropped and resized to 64×64.</span>
+          </div>
+        )}
       </div>
 
       {/* Aliases Section */}
@@ -287,6 +450,7 @@ export const PersonaIdentityTab = ({
           hideGroupHeaders
           onAiAssist={onAiAssist}
           aiContext={persona.long_description}
+          showGroupEditor={false}
         />
       </div>
     </div>

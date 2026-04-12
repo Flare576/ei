@@ -27,6 +27,7 @@ interface PersonaEntity {
   last_heartbeat?: string;
   last_extraction?: string;
   last_inactivity_ping?: string;
+  preferred_theme?: string;
 }
 
 const isEiPersona = (persona: PersonaEntity): boolean => {
@@ -38,6 +39,7 @@ interface PersonaSettingsTabProps {
   onChange: (field: keyof PersonaEntity, value: PersonaEntity[keyof PersonaEntity]) => void;
   availableGroups?: string[];
   accounts?: ProviderAccount[];
+  customThemes?: { id: string; name: string }[];
 }
 
 export const PersonaSettingsTab: React.FC<PersonaSettingsTabProps> = ({
@@ -45,6 +47,7 @@ export const PersonaSettingsTab: React.FC<PersonaSettingsTabProps> = ({
   onChange,
   availableGroups = [],
   accounts = [],
+  customThemes = [],
 }) => {
   
   const heartbeatMinutes = persona.heartbeat_delay_ms ? Math.round(persona.heartbeat_delay_ms / 60000) : 30;
@@ -199,6 +202,45 @@ export const PersonaSettingsTab: React.FC<PersonaSettingsTabProps> = ({
             <span>Archived</span>
           </label>
           <small className="ei-form-hint">Archived personas are hidden from normal view</small>
+        </div>
+      </section>
+
+      <section className="ei-settings-section">
+        <h3 className="ei-settings-section__title">Appearance</h3>
+
+        <div className="ei-form-group">
+          <label htmlFor="preferred-theme" className="ei-form-label">
+            Preferred Theme
+          </label>
+          <select
+            id="preferred-theme"
+            className="ei-input"
+            value={persona.preferred_theme ?? ""}
+            onChange={(e) => onChange("preferred_theme", e.target.value || undefined)}
+          >
+            <option value="">Use global theme</option>
+            <optgroup label="Built-in">
+              <option value="default">Default</option>
+              <option value="dark">Dark</option>
+              <option value="coder">c0d3r</option>
+              <option value="depressing">Depressing</option>
+              <option value="cotton-candy">Cotton Candy</option>
+              <option value="crimuh">Crimuh</option>
+              <option value="spoopy">Spoopy</option>
+              <option value="lovey-dovey">Lovey-Dovey</option>
+              <option value="lucky">Lucky</option>
+            </optgroup>
+            {customThemes.length > 0 && (
+              <optgroup label="Custom">
+                {customThemes.map(t => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+          <small className="ei-form-hint">
+            Sets the chat panel theme when talking to this persona. Leave empty to use the global theme.
+          </small>
         </div>
       </section>
 
