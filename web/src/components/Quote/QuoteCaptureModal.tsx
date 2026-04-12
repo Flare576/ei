@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import type { Message, Quote } from '../../../../src/core/types';
 import { RangeSlider } from './RangeSlider';
 import { DualListPicker } from './DualListPicker';
+import { useOverlayClose } from '../../hooks/useOverlayClose';
 
 interface DataItem {
   id: string;
@@ -96,6 +97,8 @@ export function QuoteCaptureModal({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
+  const overlayProps = useOverlayClose(onClose);
+
   if (!isOpen || !message) return null;
 
   const messageText = getMessageText(message);
@@ -127,14 +130,8 @@ export function QuoteCaptureModal({
     onSave(quote);
   };
 
-  const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
-  };
-
   return (
-    <div className="ei-modal-overlay" onClick={handleBackdropClick}>
+    <div className="ei-modal-overlay" {...overlayProps}>
       <div className="ei-quote-capture-modal" ref={modalRef} tabIndex={-1}>
         <div className="ei-quote-capture-modal__header">
           <h2 className="ei-quote-capture-modal__title">Capture Quote</h2>

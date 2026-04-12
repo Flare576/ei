@@ -136,6 +136,7 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({
   const previousActiveElement = useRef<Element | null>(null);
   const savedActiveTheme = useRef<string | undefined>(undefined);
   const savedCustomStyleContent = useRef<string | null>(null);
+  const overlayMouseDownRef = useRef(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -248,7 +249,11 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({
     : null;
 
   return (
-    <div className="ei-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}>
+    <div
+      className="ei-modal-overlay"
+      onMouseDown={(e) => { overlayMouseDownRef.current = e.target === e.currentTarget; }}
+      onClick={(e) => { if (e.target === e.currentTarget && overlayMouseDownRef.current) handleClose(); }}
+    >
       <div
         className="ei-theme-editor"
         ref={modalRef}

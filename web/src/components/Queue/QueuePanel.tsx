@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import type { LLMRequest } from '../../../../src/core/types/llm';
 import type { ProviderAccount } from '../../../../src/core/types';
 import { ModelPicker } from '../Settings/ModelPicker';
+import { useOverlayClose } from '../../hooks/useOverlayClose';
 
 function resolveModelName(modelId: string | undefined, accounts: ProviderAccount[]): string {
   if (!modelId) return '(no model)';
@@ -86,6 +87,8 @@ export function QueuePanel({
     }
   }, [someSelected, allSelected]);
 
+  const overlayProps = useOverlayClose(onClose);
+
   if (!isOpen) return null;
 
   const allItems = [...pendingItems, ...dlqItems];
@@ -124,7 +127,7 @@ export function QueuePanel({
   const showDivider = pendingItems.length > 0 && dlqItems.length > 0;
 
   return (
-    <div className="ei-modal-overlay" onClick={onClose}>
+    <div className="ei-modal-overlay" {...overlayProps}>
       <div
         ref={modalRef}
         className="ei-modal-content ei-queue-panel"

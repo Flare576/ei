@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ProviderType, type ProviderAccount, type ModelConfig } from '../../../../src/core/types.js';
+import { useOverlayClose } from '../../hooks/useOverlayClose';
 
 const tokenFormatter = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
 const formatTokens = (n: number) => tokenFormatter.format(n);
@@ -91,6 +92,8 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
+
+  const overlayProps = useOverlayClose(onClose);
 
   if (!isOpen) return null;
 
@@ -226,14 +229,8 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
     }));
   };
 
-  const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
-  };
-
   return (
-    <div className="ei-modal-overlay" onClick={handleBackdropClick}>
+    <div className="ei-modal-overlay" {...overlayProps}>
       <div
         className="ei-provider-editor"
         ref={modalRef}

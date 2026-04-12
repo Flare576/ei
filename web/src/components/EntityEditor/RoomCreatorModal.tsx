@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import type { PersonaSummary, RoomCreationInput } from '../../../../src/core/types';
 import { RoomMode } from '../../../../src/core/types';
+import { useOverlayClose } from '../../hooks/useOverlayClose';
 
 interface RoomCreatorModalProps {
   isOpen: boolean;
@@ -129,13 +130,15 @@ export function RoomCreatorModal({ isOpen, onClose, onCreate, personas }: RoomCr
     onCreate(input);
   };
 
+  const overlayProps = useOverlayClose(handleClose);
+
   if (!isOpen) return null;
 
   const activePersonas = personas.filter(p => !p.is_archived);
   const judgeEligiblePersonas = activePersonas.filter(p => selectedPersonaIds.includes(p.id));
 
   return (
-    <div className="ei-modal-overlay" onClick={handleClose}>
+    <div className="ei-modal-overlay" {...overlayProps}>
       <div
         className="ei-creator-modal"
         onClick={(e) => e.stopPropagation()}

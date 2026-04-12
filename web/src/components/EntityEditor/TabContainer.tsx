@@ -1,4 +1,5 @@
 import { useRef, useEffect, type ReactNode } from "react";
+import { useOverlayClose } from "../../hooks/useOverlayClose";
 
 interface TabConfig {
   id: string;
@@ -36,6 +37,8 @@ export function TabContainer({
     }
     onClose();
   };
+
+  const overlayProps = useOverlayClose(handleClose);
 
   // Focus management - save and restore focus
   useEffect(() => {
@@ -82,7 +85,7 @@ export function TabContainer({
   }, [isDirty, onClose]);
 
   return (
-    <div className="ei-modal-overlay" onClick={handleClose}>
+    <div className="ei-modal-overlay" {...overlayProps}>
       <div 
         className="ei-tab-container"
         onClick={(e) => e.stopPropagation()}

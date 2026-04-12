@@ -3,6 +3,7 @@ import { isReservedPersonaName, RESERVED_PERSONA_NAMES } from '../../../../src/c
 import type { ToolProvider, ToolDefinition } from '../../../../src/core/types';
 import type { PersonaGenerationResult } from '../../../../src/prompts/generation/types';
 import { PersonaToolsTab } from './tabs/PersonaToolsTab';
+import { useOverlayClose } from '../../hooks/useOverlayClose';
 
 interface Trait {
   name: string;
@@ -386,10 +387,12 @@ export function PersonaCreatorModal({
   const canAutoGenerate = !!(generatePersonaPreview && description.trim() && (isUpdateMode ? selectedPersonaId : name.trim()));
   const showFinishDefinition = canAutoGenerate && !generationComplete;
 
+  const overlayProps = useOverlayClose(handleClose);
+
   if (!isOpen) return null;
 
   return (
-    <div className="ei-modal-overlay" onClick={handleClose}>
+    <div className="ei-modal-overlay" {...overlayProps}>
       <div 
         className="ei-creator-modal"
         onClick={(e) => e.stopPropagation()}

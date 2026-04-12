@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { ToolProvider, ToolDefinition } from '../../../../src/core/types.js';
 import { SpotifyAuthButton } from './SpotifyAuthButton.js';
+import { useOverlayClose } from '../../hooks/useOverlayClose';
 
 interface ToolkitEditorProps {
   isOpen: boolean;
@@ -89,6 +90,8 @@ export const ToolkitEditor: React.FC<ToolkitEditorProps> = ({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
+  const overlayProps = useOverlayClose(onClose);
+
   if (!isOpen || !provider) return null;
 
   const validate = (): boolean => {
@@ -134,14 +137,8 @@ export const ToolkitEditor: React.FC<ToolkitEditorProps> = ({
     onToolUpdate(id, { enabled: checked });
   };
 
-  const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
-  };
-
   return (
-    <div className="ei-modal-overlay" onClick={handleBackdropClick}>
+    <div className="ei-modal-overlay" {...overlayProps}>
       <div
         className="ei-provider-editor"
         ref={modalRef}
