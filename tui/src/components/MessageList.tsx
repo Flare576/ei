@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal, createEffect, on } from "solid-js";
+import { For, Show, createMemo, createSignal, createEffect, on, onMount } from "solid-js";
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core";
 import { useEi } from "../context/ei.js";
 import { useKeyboardNav } from "../context/keyboard.js";
@@ -40,12 +40,23 @@ export function MessageList() {
   const myId = ++instanceId;
   logger.info(`MessageList instance ${myId} MOUNTED`);
   
-  const { messages, activePersonaId, personas, activeContextBoundary, getQuotes, quotesVersion } = useEi();
+  const { messages, activePersonaId, personas, activeContextBoundary, getQuotes, quotesVersion, getHuman } = useEi();
   const { focusedPanel, registerMessageScroll } = useKeyboardNav();
 
   const isFocused = () => focusedPanel() === "messages";
 
+  const [humanDisplayName, setHumanDisplayName] = createSignal("Human");
   const [allQuotes, setAllQuotes] = createSignal<Quote[]>([]);
+
+  onMount(() => {
+    void getHuman().then(human => {
+      const name =
+        human.settings?.name_display ||
+        human.facts?.find(f => f.name === "Nickname/Preferred Name")?.description ||
+        "Human";
+      setHumanDisplayName(name);
+    });
+  });
 
   createEffect(on(() => [messages(), quotesVersion()], () => {
     void getQuotes().then(setAllQuotes);
@@ -112,7 +123,7 @@ export function MessageList() {
                 const persona = personas().find(p => p.id === activePersonaId());
                 return persona?.display_name ?? "Ei";
               };
-              const speaker = message.role === "human" ? "Human" : getDisplayName();
+              const speaker = message.role === "human" ? humanDisplayName() : getDisplayName();
               const speakerColor = message.role === "human" ? "#2aa198" : "#b58900";
               
               const header = () => `${speaker} (${formatTime(message.timestamp)}) [✂️  ${message._quoteIndex}]:`;

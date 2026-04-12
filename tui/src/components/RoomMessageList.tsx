@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal, createEffect, on, onCleanup } from "solid-js";
+import { For, Show, createMemo, createSignal, createEffect, on, onCleanup, onMount } from "solid-js";
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core";
 import { useEi } from "../context/ei.js";
 import { useKeyboardNav } from "../context/keyboard.js";
@@ -27,8 +27,20 @@ function formatTime(timestamp: string): string {
 }
 
 export function RoomMessageList() {
-  const { roomMessages, roomActivePath, personas, activeRoomId, getRoom, getQuotes, quotesVersion } = useEi();
+  const { roomMessages, roomActivePath, personas, activeRoomId, getRoom, getQuotes, quotesVersion, getHuman } = useEi();
   const { registerMessageScroll } = useKeyboardNav();
+
+  const [humanDisplayName, setHumanDisplayName] = createSignal("Human");
+
+  onMount(() => {
+    void getHuman().then(human => {
+      const name =
+        human.settings?.name_display ||
+        human.facts?.find(f => f.name === "Nickname/Preferred Name")?.description ||
+        "Human";
+      setHumanDisplayName(name);
+    });
+  });
 
   const personaNameMap = createMemo(() => {
     const map = new Map<string, string>();
@@ -99,7 +111,7 @@ export function RoomMessageList() {
   });
 
   const getSpeakerName = (msg: RoomMessage): string => {
-    if (msg.role === "human") return "Human";
+    if (msg.role === "human") return humanDisplayName();
     if (msg.persona_id) return personaNameMap().get(msg.persona_id) ?? msg.persona_id;
     return "Persona";
   };
