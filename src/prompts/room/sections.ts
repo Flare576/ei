@@ -32,11 +32,11 @@ export function buildRoomParticipantsSection(participants: RoomParticipantIdenti
   return `## Others in the Room\n\n${lines.join("\n\n")}`;
 }
 
-export function buildRoomHistorySection(history: RoomHistoryMessage[]): string {
+export function buildRoomHistorySection(history: RoomHistoryMessage[], humanName: string): string {
   if (history.length === 0) return "";
 
   const lines = history.map(msg => {
-    const speaker = msg.speaker_id === "human" ? "Human" : msg.speaker_name;
+    const speaker = msg.speaker_id === "human" ? humanName : msg.speaker_name;
     if (msg.silence_reason) {
       return `**${speaker}**: *[chose not to respond: ${msg.silence_reason}]*`;
     }
@@ -116,9 +116,9 @@ ${lines.join("\n\n")}
 Respond as yourself — your read on this moment, your relationship with the human, the reaction that comes naturally to who you are. A room with distinct voices is more alive than one with echoes.`;
 }
 
-export function buildJudgeCandidatesSection(candidates: RoomJudgeCandidate[]): string {
+export function buildJudgeCandidatesSection(candidates: RoomJudgeCandidate[], humanName: string): string {
   const lines = candidates.map((c, i) => {
-    const speaker = c.speaker_id === "human" ? "Human" : c.speaker_name;
+    const speaker = c.speaker_id === "human" ? humanName : c.speaker_name;
     const content = c.silence_reason
       ? `*[chose not to respond: ${c.silence_reason}]*`
       : [c.verbal_response, c.action_response ? `*${c.action_response}*` : ""].filter(Boolean).join(" ");

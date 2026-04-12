@@ -277,7 +277,7 @@ export function buildQuotesSection(quotes: Quote[], human: ResponsePromptData["h
   const idToName = new Map(allDataItems.map(item => [item.id, item.name]));
   
   const formatted = quotes.map(q => {
-    const speaker = q.speaker === "human" ? "Human" : q.speaker;
+    const speaker = q.speaker === "human" ? human.name : q.speaker;
     const date = formatDate(q.timestamp);
     const linkedNames = q.data_item_ids
       .map(id => idToName.get(id))

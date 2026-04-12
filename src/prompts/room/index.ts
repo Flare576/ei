@@ -97,10 +97,10 @@ There is no objectively correct answer. Pick the response you find most interest
 **The MAP dynamic**: Every participant — personas and the Human alike — can see your description and traits. They have been crafting their responses specifically to appeal to your tastes. Personas are also constrained to stay true to their own identities; the Human is not. Factor that in if you choose to.`;
 
   const contextSection = context.length > 0
-    ? buildRoomHistorySection(context)
+    ? buildRoomHistorySection(context, data.human.name)
     : "";
 
-  const candidatesSection = buildJudgeCandidatesSection(candidates);
+  const candidatesSection = buildJudgeCandidatesSection(candidates, data.human.name);
   const decisionSection = buildJudgeDecisionFormatSection();
   const currentTime = formatCurrentTime();
 
