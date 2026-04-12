@@ -162,6 +162,9 @@ export interface PersonaEntity {
   tools?: string[];              // IDs of ToolDefinitions this persona can use. Empty/absent = no tool access.
   reflection_last_asked?: string;   // ISO timestamp. Set ONLY when Persona explicitly surfaces identity drift (mentioned_reflection: true).
   description_embedding?: number[]; // Embedding of long_description (short_description fallback). Excludes traits. See embedding-service.ts:getPersonaDescriptionText.
+  avatar_emoji?: string;            // Single emoji character used as avatar in place of initials.
+  avatar_image?: string;            // Base64-encoded 64×64 image used as avatar (takes priority over avatar_emoji).
+  preferred_theme?: string;         // Theme ID (built-in name or ThemeDefinition.id). Applied to chat panel when this persona is active.
 }
 
 export interface PersonaCreationInput {

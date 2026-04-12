@@ -20,6 +20,9 @@ export async function getPersonaList(sm: StateManager): Promise<PersonaSummary[]
     unread_count: sm.messages_countUnread(entity.id),
     last_activity: entity.last_activity,
     context_boundary: entity.context_boundary,
+    avatar_emoji: entity.avatar_emoji,
+    avatar_image: entity.avatar_image,
+    preferred_theme: entity.preferred_theme,
   }));
 }
 

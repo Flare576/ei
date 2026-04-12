@@ -56,6 +56,9 @@ export interface PersonaSummary {
   unread_count: number;
   last_activity?: string;
   context_boundary?: string;
+  avatar_emoji?: string;
+  avatar_image?: string;
+  preferred_theme?: string;
 }
 
 export interface MessageQueryOptions {
