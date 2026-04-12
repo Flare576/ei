@@ -13,6 +13,7 @@
   padding: 0 var(--ei-spacing-md);
   height: var(--ei-control-height);
   background: var(--ei-bg-primary);
+  border-bottom: 1px solid var(--ei-border);
   z-index: 100;
 }
 

@@ -96,25 +96,28 @@
   align-items: center;
   gap: var(--ei-spacing-xs);
   margin-bottom: 4px;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .ei-room-message__avatar {
-  width: 24px;
-  height: 24px;
-  border-radius: var(--ei-radius-full);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 0.65rem;
-  flex-shrink: 0;
+  font-size: 0.7rem;
 }
 
 .ei-room-message__speaker-name {
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--ei-text-secondary);
+}
+
+.ei-room-message__speaker-desc {
+  font-size: 0.75rem;
+  color: var(--ei-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+  flex-shrink: 1;
 }
 
 /* Message row (avatar + bubble side by side) */
@@ -146,7 +149,9 @@
   background: var(--ei-bg-primary);
   color: var(--ei-text-primary);
   border-bottom-left-radius: var(--ei-radius-sm);
-  box-shadow: var(--ei-shadow-sm);
+  box-shadow:
+    var(--ei-shadow-sm),
+    0 0 0 1.5px var(--ei-border);
 }
 
 .ei-room-message__time {
@@ -366,16 +371,7 @@
 }
 
 .ei-cyp-card__avatar {
-  width: 20px;
-  height: 20px;
-  border-radius: var(--ei-radius-full);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
   font-size: 0.6rem;
-  flex-shrink: 0;
 }
 
 .ei-cyp-card__name {
@@ -493,3 +489,13 @@
 .ei-scroll-to-bottom:hover {
   opacity: 0.9;
 }
+
+.ei-room-message-wrapper[data-persona-theme="default"] { --ei-bg-primary: #ffffff; --ei-text-primary: #212529; --ei-border: #dee2e6; }
+.ei-room-message-wrapper[data-persona-theme="dark"]    { --ei-bg-primary: #1a1a1a; --ei-text-primary: #e9ecef; --ei-border: #404040; }
+.ei-room-message-wrapper[data-persona-theme="coder"]   { --ei-bg-primary: #282828; --ei-text-primary: #ebdbb2; --ei-border: #504945; }
+.ei-room-message-wrapper[data-persona-theme="depressing"]   { --ei-bg-primary: #eceff4; --ei-text-primary: #2e3440; --ei-border: #d8dee9; }
+.ei-room-message-wrapper[data-persona-theme="cotton-candy"] { --ei-bg-primary: #eff1f5; --ei-text-primary: #4c4f69; --ei-border: #bcc0cc; }
+.ei-room-message-wrapper[data-persona-theme="crimuh"]       { --ei-bg-primary: #0a1628; --ei-text-primary: #f0f4f8; --ei-border: #1e4080; }
+.ei-room-message-wrapper[data-persona-theme="spoopy"]       { --ei-bg-primary: #1e1e2e; --ei-text-primary: #cdd6f4; --ei-border: #45475a; }
+.ei-room-message-wrapper[data-persona-theme="lovey-dovey"]  { --ei-bg-primary: #1e1e2e; --ei-text-primary: #cdd6f4; --ei-border: #45475a; }
+.ei-room-message-wrapper[data-persona-theme="lucky"]        { --ei-bg-primary: #282828; --ei-text-primary: #ebdbb2; --ei-border: #504945; }

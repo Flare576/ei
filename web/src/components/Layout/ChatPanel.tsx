@@ -2,8 +2,10 @@ import { useRef, useEffect, useLayoutEffect, useCallback, useState, useMemo, for
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useStickToBottom } from "use-stick-to-bottom";
 import type { Message, Quote } from "../../../../src/core/types";
+import type { ThemeDefinition } from "../../../../src/core/types/entities.js";
 import type { GenerationResult } from "../../comfyui";
 import { MarkdownContent } from "../Chat";
+import { decodeTheme, themeToStyleString, isBuiltInTheme } from "../../../../src/core/utils/theme-codec.js";
 
 function getContent(msg: { content?: string; verbal_response?: string; action_response?: string }): string {
   if (msg.content) return msg.content;
@@ -72,6 +74,8 @@ interface ChatPanelProps {
   inputValue: string;
   contextBoundary?: string;
   quotes?: Quote[];
+  personaTheme?: string;
+  customThemes?: ThemeDefinition[];
   onInputChange: (value: string) => void;
   onSendMessage: (content: string | null, silenceReason?: string) => void;
   onMarkMessageRead?: (messageId: string) => void;
@@ -101,6 +105,8 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
   inputValue,
   contextBoundary,
   quotes = [],
+  personaTheme,
+  customThemes = [],
   onInputChange,
   onSendMessage,
   onMarkMessageRead,
@@ -162,6 +168,21 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
   }, []); // stable: scrollToBottom accessed via ref, scrollRef is a stable ref
 
   const hasPendingMessages = messages.some(m => m.role === "human" && !m.read);
+
+  useEffect(() => {
+    const styleId = 'ei-persona-chat-theme';
+    document.getElementById(styleId)?.remove();
+    if (!personaTheme || isBuiltInTheme(personaTheme)) return;
+    const custom = customThemes.find(t => t.id === personaTheme);
+    if (!custom) return;
+    const tokens = decodeTheme(custom.encoded);
+    if (!tokens) return;
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = `.ei-chat-panel [data-persona-theme="${personaTheme}"] {\n${themeToStyleString(tokens)}\n}`;
+    document.head.appendChild(style);
+    return () => { document.getElementById(styleId)?.remove(); };
+  }, [personaTheme, customThemes]);
 
   const lastMessage = messages[messages.length - 1];
   const boundaryIsActive = contextBoundary && 
@@ -378,7 +399,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
         </h2>
       </div>
 
-      <div style={{ position: "relative", flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <div style={{ position: "relative", flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }} data-persona-theme={personaTheme || undefined}>
       <div className="ei-chat-panel__messages" ref={scrollRef} style={{ height: "100%", overflow: "auto" }}>
         {messages.length === 0 ? (
           <div className="ei-chat-panel__empty">
@@ -535,7 +556,6 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
           ↓ Latest
         </button>
       )}
-      </div>
 
       <div className="ei-input-area">
         {activePersonaId && onSetContextBoundary && (
@@ -623,6 +643,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
             </div>
           )}
         </div>
+      </div>
       </div>
     </div>
   );

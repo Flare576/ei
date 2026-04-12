@@ -1100,9 +1100,12 @@ function App() {
     if (!processor || !editingPersonaId) return;
     await processor.updatePersona(editingPersonaId, updates);
     const updated = await processor.getPersona(editingPersonaId);
-    if (updated) setEditingPersona(updated);
+    if (updated) {
+      setEditingPersona(updated);
+      if (editingPersonaId === activePersonaId) setActivePersonaEntity(updated);
+    }
     processor.getPersonaList().then(setPersonas);
-  }, [processor, editingPersonaId]);
+  }, [processor, editingPersonaId, activePersonaId]);
 
   const handlePersonaTraitSave = useCallback(async (trait: PersonaTrait) => {
     if (!processor || !editingPersonaId) return;
@@ -1578,6 +1581,7 @@ function App() {
           onArchiveRoom={handleArchiveRoom}
           onEditRoom={handleEditRoom}
           onShowArchivedRooms={() => setShowArchivedRooms(true)}
+          customThemes={human?.settings?.custom_themes ?? []}
         />
       }
       centerPanel={
@@ -1607,6 +1611,8 @@ function App() {
             activePersonaDisplayName={personas.find(p => p.id === activePersonaId)?.display_name ?? null}
             messages={messages}
             inputValue={inputValue}
+            personaTheme={activePersonaEntity?.preferred_theme}
+            customThemes={human?.settings?.custom_themes ?? []}
              contextBoundary={activePersonaEntity?.context_boundary}
             quotes={quotes}
             onInputChange={setInputValue}
@@ -1751,6 +1757,7 @@ function App() {
         toolProviders={toolProviders}
         toolDefinitions={toolDefinitions}
         accounts={human?.settings?.accounts ?? []}
+        customThemes={human?.settings?.custom_themes ?? []}
       />
     )}
 

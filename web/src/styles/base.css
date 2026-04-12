@@ -423,6 +423,382 @@
   --ei-code-special: #d3869b;
 }
 
+/* ============================================
+   SCOPED MESSAGES-AREA PERSONA THEMES
+   Mirrors the [data-theme="X"] blocks above,
+   scoped to .ei-chat-panel [data-persona-theme="X"]
+   so sidebar/header stay on the global theme.
+   ============================================ */
+
+/* default — restores :root light-theme values */
+.ei-chat-panel [data-persona-theme="default"] {
+  --ei-bg-primary: #ffffff;
+  --ei-bg-secondary: #f8f9fa;
+  --ei-bg-tertiary: #e9ecef;
+  --ei-text-primary: #212529;
+  --ei-text-secondary: #6c757d;
+  --ei-text-muted: #adb5bd;
+  --ei-border: #dee2e6;
+  --ei-border-light: #e9ecef;
+  --ei-accent: #007bff;
+  --ei-accent-hover: #0056b3;
+  --ei-success: #28a745;
+  --ei-success-hover: #218838;
+  --ei-warning: #ffc107;
+  --ei-warning-text: #856404;
+  --ei-danger: #dc3545;
+  --ei-status-thinking: #ffc107;
+  --ei-status-ready: #28a745;
+  --ei-status-unread: #dc3545;
+  --ei-status-paused: #6c757d;
+  --ei-room-cyp: #0056b3;
+  --ei-room-ffa: #1a7a35;
+  --ei-room-map: #6f42c1;
+  --ei-archive-bg-start: #fde8c8;
+  --ei-archive-bg-end: #fcd9a8;
+  --ei-archive-border: #d4923a;
+  --ei-ai-assist-start: #667eea;
+  --ei-ai-assist-end: #764ba2;
+  --ei-code-bg: #0a0e14;
+  --ei-code-bg-controls: #0f131a;
+  --ei-code-border: #1a2332;
+  --ei-code-text: #c7c7c7;
+  --ei-code-text-muted: #8892a6;
+  --ei-code-accent: #59c2ff;
+  --ei-code-string: #ffcc66;
+  --ei-code-error: #ff6b6b;
+  --ei-code-success: #50fa7b;
+  --ei-code-special: #bd93f9;
+}
+
+/* dark */
+.ei-chat-panel [data-persona-theme="dark"] {
+  --ei-bg-primary: #1a1a1a;
+  --ei-bg-secondary: #2d2d2d;
+  --ei-bg-tertiary: #3d3d3d;
+  --ei-text-primary: #e9ecef;
+  --ei-text-secondary: #adb5bd;
+  --ei-text-muted: #6c757d;
+  --ei-border: #404040;
+  --ei-border-light: #333333;
+  --ei-accent: #4dabf7;
+  --ei-accent-hover: #339af0;
+  --ei-success: #51cf66;
+  --ei-success-hover: #40c057;
+  --ei-warning: #ffd43b;
+  --ei-warning-text: #e67700;
+  --ei-danger: #ff6b6b;
+  --ei-status-thinking: #ffd43b;
+  --ei-status-ready: #51cf66;
+  --ei-status-unread: #ff6b6b;
+  --ei-status-paused: #6c757d;
+  --ei-room-cyp: #339af0;
+  --ei-room-ffa: #51cf66;
+  --ei-room-map: #cc5de8;
+  --ei-archive-bg-start: #5c3d11;
+  --ei-archive-bg-end: #4a3008;
+  --ei-archive-border: #c07800;
+  --ei-ai-assist-start: #5c7cfa;
+  --ei-ai-assist-end: #9c36b5;
+  --ei-code-bg: #0a0e14;
+  --ei-code-bg-controls: #0f131a;
+  --ei-code-border: #1a2332;
+  --ei-code-text: #c7c7c7;
+  --ei-code-text-muted: #8892a6;
+  --ei-code-accent: #59c2ff;
+  --ei-code-string: #ffcc66;
+  --ei-code-error: #ff6b6b;
+  --ei-code-success: #50fa7b;
+  --ei-code-special: #bd93f9;
+}
+
+/* coder — Gruvbox Dark */
+.ei-chat-panel [data-persona-theme="coder"] {
+  --ei-bg-primary: #282828;
+  --ei-bg-secondary: #1d2021;
+  --ei-bg-tertiary: #3c3836;
+  --ei-text-primary: #ebdbb2;
+  --ei-text-secondary: #a89984;
+  --ei-text-muted: #7c6f64;
+  --ei-border: #504945;
+  --ei-border-light: #3c3836;
+  --ei-accent: #98971a;
+  --ei-accent-hover: #79740e;
+  --ei-success: #8ec07c;
+  --ei-success-hover: #689d6a;
+  --ei-warning: #fabd2f;
+  --ei-warning-text: #b57614;
+  --ei-danger: #cc241d;
+  --ei-status-thinking: #fabd2f;
+  --ei-status-ready: #8ec07c;
+  --ei-status-unread: #cc241d;
+  --ei-status-paused: #7c6f64;
+  --ei-room-cyp: #458588;
+  --ei-room-ffa: #8ec07c;
+  --ei-room-map: #b16286;
+  --ei-archive-bg-start: #3c3836;
+  --ei-archive-bg-end: #282828;
+  --ei-archive-border: #a89984;
+  --ei-ai-assist-start: #458588;
+  --ei-ai-assist-end: #b16286;
+  --ei-code-bg: #1d2021;
+  --ei-code-bg-controls: #282828;
+  --ei-code-border: #504945;
+  --ei-code-text: #ebdbb2;
+  --ei-code-text-muted: #a89984;
+  --ei-code-accent: #83a598;
+  --ei-code-string: #b8bb26;
+  --ei-code-error: #fb4934;
+  --ei-code-success: #b8bb26;
+  --ei-code-special: #d3869b;
+}
+
+/* depressing — Nord Light */
+.ei-chat-panel [data-persona-theme="depressing"] {
+  --ei-bg-primary: #eceff4;
+  --ei-bg-secondary: #e5e9f0;
+  --ei-bg-tertiary: #d8dee9;
+  --ei-text-primary: #2e3440;
+  --ei-text-secondary: #4c566a;
+  --ei-text-muted: #6d7a94;
+  --ei-border: #d8dee9;
+  --ei-border-light: #e5e9f0;
+  --ei-accent: #81a1c1;
+  --ei-accent-hover: #5e81ac;
+  --ei-success: #a3be8c;
+  --ei-success-hover: #88ab6f;
+  --ei-warning: #ebcb8b;
+  --ei-warning-text: #8a6a00;
+  --ei-danger: #bf616a;
+  --ei-status-thinking: #ebcb8b;
+  --ei-status-ready: #a3be8c;
+  --ei-status-unread: #bf616a;
+  --ei-status-paused: #6d7a94;
+  --ei-room-cyp: #5e81ac;
+  --ei-room-ffa: #a3be8c;
+  --ei-room-map: #b48ead;
+  --ei-archive-bg-start: #d8dee9;
+  --ei-archive-bg-end: #e5e9f0;
+  --ei-archive-border: #81a1c1;
+  --ei-ai-assist-start: #81a1c1;
+  --ei-ai-assist-end: #b48ead;
+  --ei-code-bg: #2e3440;
+  --ei-code-bg-controls: #3b4252;
+  --ei-code-border: #434c5e;
+  --ei-code-text: #eceff4;
+  --ei-code-text-muted: #9099aa;
+  --ei-code-accent: #88c0d0;
+  --ei-code-string: #a3be8c;
+  --ei-code-error: #bf616a;
+  --ei-code-success: #a3be8c;
+  --ei-code-special: #b48ead;
+}
+
+/* cotton-candy — Catppuccin Latte */
+.ei-chat-panel [data-persona-theme="cotton-candy"] {
+  --ei-bg-primary: #eff1f5;
+  --ei-bg-secondary: #e6e9ef;
+  --ei-bg-tertiary: #ccd0da;
+  --ei-text-primary: #4c4f69;
+  --ei-text-secondary: #6c6f85;
+  --ei-text-muted: #9ca0b0;
+  --ei-border: #bcc0cc;
+  --ei-border-light: #ccd0da;
+  --ei-accent: #ea76cb;
+  --ei-accent-hover: #8839ef;
+  --ei-success: #40a02b;
+  --ei-success-hover: #2d8a1e;
+  --ei-warning: #df8e1d;
+  --ei-warning-text: #8c6a00;
+  --ei-danger: #d20f39;
+  --ei-status-thinking: #df8e1d;
+  --ei-status-ready: #40a02b;
+  --ei-status-unread: #d20f39;
+  --ei-status-paused: #9ca0b0;
+  --ei-room-cyp: #04a5e5;
+  --ei-room-ffa: #40a02b;
+  --ei-room-map: #8839ef;
+  --ei-archive-bg-start: #f2d5cf;
+  --ei-archive-bg-end: #eebebe;
+  --ei-archive-border: #ea76cb;
+  --ei-ai-assist-start: #ea76cb;
+  --ei-ai-assist-end: #8839ef;
+  --ei-code-bg: #bcc0cc;
+  --ei-code-bg-controls: #ccd0da;
+  --ei-code-border: #acb0be;
+  --ei-code-text: #4c4f69;
+  --ei-code-text-muted: #6c6f85;
+  --ei-code-accent: #1e66f5;
+  --ei-code-string: #40a02b;
+  --ei-code-error: #d20f39;
+  --ei-code-success: #40a02b;
+  --ei-code-special: #8839ef;
+}
+
+/* crimuh — Christmas */
+.ei-chat-panel [data-persona-theme="crimuh"] {
+  --ei-bg-primary: #0a1628;
+  --ei-bg-secondary: #112240;
+  --ei-bg-tertiary: #1a3357;
+  --ei-text-primary: #f0f4f8;
+  --ei-text-secondary: #94a3b8;
+  --ei-text-muted: #64748b;
+  --ei-border: #1e4080;
+  --ei-border-light: #1a3357;
+  --ei-accent: #c41e3a;
+  --ei-accent-hover: #9b1730;
+  --ei-success: #22c55e;
+  --ei-success-hover: #16a34a;
+  --ei-warning: #eab308;
+  --ei-warning-text: #ca8a04;
+  --ei-danger: #f97316;
+  --ei-status-thinking: #eab308;
+  --ei-status-ready: #22c55e;
+  --ei-status-unread: #f97316;
+  --ei-status-paused: #64748b;
+  --ei-room-cyp: #38bdf8;
+  --ei-room-ffa: #22c55e;
+  --ei-room-map: #a855f7;
+  --ei-archive-bg-start: #7f1d1d;
+  --ei-archive-bg-end: #991b1b;
+  --ei-archive-border: #c41e3a;
+  --ei-ai-assist-start: #c41e3a;
+  --ei-ai-assist-end: #a855f7;
+  --ei-code-bg: #0d1117;
+  --ei-code-bg-controls: #161b22;
+  --ei-code-border: #21262d;
+  --ei-code-text: #e6edf3;
+  --ei-code-text-muted: #8b949e;
+  --ei-code-accent: #38bdf8;
+  --ei-code-string: #22c55e;
+  --ei-code-error: #f97316;
+  --ei-code-success: #22c55e;
+  --ei-code-special: #a855f7;
+}
+
+/* spoopy — Catppuccin Mocha + Orange */
+.ei-chat-panel [data-persona-theme="spoopy"] {
+  --ei-bg-primary: #1e1e2e;
+  --ei-bg-secondary: #181825;
+  --ei-bg-tertiary: #313244;
+  --ei-text-primary: #cdd6f4;
+  --ei-text-secondary: #a6adc8;
+  --ei-text-muted: #6c7086;
+  --ei-border: #45475a;
+  --ei-border-light: #313244;
+  --ei-accent: #fab387;
+  --ei-accent-hover: #f9823a;
+  --ei-success: #a6e3a1;
+  --ei-success-hover: #7dc97a;
+  --ei-warning: #f9e2af;
+  --ei-warning-text: #c9a227;
+  --ei-danger: #f38ba8;
+  --ei-status-thinking: #f9e2af;
+  --ei-status-ready: #a6e3a1;
+  --ei-status-unread: #f38ba8;
+  --ei-status-paused: #6c7086;
+  --ei-room-cyp: #89b4fa;
+  --ei-room-ffa: #a6e3a1;
+  --ei-room-map: #cba6f7;
+  --ei-archive-bg-start: #45475a;
+  --ei-archive-bg-end: #313244;
+  --ei-archive-border: #fab387;
+  --ei-ai-assist-start: #cba6f7;
+  --ei-ai-assist-end: #fab387;
+  --ei-code-bg: #11111b;
+  --ei-code-bg-controls: #181825;
+  --ei-code-border: #313244;
+  --ei-code-text: #cdd6f4;
+  --ei-code-text-muted: #7f849c;
+  --ei-code-accent: #fab387;
+  --ei-code-string: #a6e3a1;
+  --ei-code-error: #f38ba8;
+  --ei-code-success: #a6e3a1;
+  --ei-code-special: #cba6f7;
+}
+
+/* lovey-dovey — Catppuccin Mocha Pink */
+.ei-chat-panel [data-persona-theme="lovey-dovey"] {
+  --ei-bg-primary: #1e1e2e;
+  --ei-bg-secondary: #181825;
+  --ei-bg-tertiary: #313244;
+  --ei-text-primary: #cdd6f4;
+  --ei-text-secondary: #a6adc8;
+  --ei-text-muted: #6c7086;
+  --ei-border: #45475a;
+  --ei-border-light: #313244;
+  --ei-accent: #f5c2e7;
+  --ei-accent-hover: #f38ba8;
+  --ei-success: #94e2d5;
+  --ei-success-hover: #6fd4c4;
+  --ei-warning: #fab387;
+  --ei-warning-text: #d4800a;
+  --ei-danger: #f9e2af;
+  --ei-status-thinking: #fab387;
+  --ei-status-ready: #94e2d5;
+  --ei-status-unread: #f9e2af;
+  --ei-status-paused: #6c7086;
+  --ei-room-cyp: #89b4fa;
+  --ei-room-ffa: #94e2d5;
+  --ei-room-map: #cba6f7;
+  --ei-archive-bg-start: #45475a;
+  --ei-archive-bg-end: #313244;
+  --ei-archive-border: #f5c2e7;
+  --ei-ai-assist-start: #f38ba8;
+  --ei-ai-assist-end: #cba6f7;
+  --ei-code-bg: #11111b;
+  --ei-code-bg-controls: #181825;
+  --ei-code-border: #313244;
+  --ei-code-text: #cdd6f4;
+  --ei-code-text-muted: #7f849c;
+  --ei-code-accent: #f5c2e7;
+  --ei-code-string: #94e2d5;
+  --ei-code-error: #f9e2af;
+  --ei-code-success: #94e2d5;
+  --ei-code-special: #cba6f7;
+}
+
+/* lucky — Gruvbox Dark Green */
+.ei-chat-panel [data-persona-theme="lucky"] {
+  --ei-bg-primary: #282828;
+  --ei-bg-secondary: #1d2021;
+  --ei-bg-tertiary: #3c3836;
+  --ei-text-primary: #ebdbb2;
+  --ei-text-secondary: #a89984;
+  --ei-text-muted: #7c6f64;
+  --ei-border: #504945;
+  --ei-border-light: #3c3836;
+  --ei-accent: #b8bb26;
+  --ei-accent-hover: #98971a;
+  --ei-success: #8ec07c;
+  --ei-success-hover: #689d6a;
+  --ei-warning: #fabd2f;
+  --ei-warning-text: #b57614;
+  --ei-danger: #fb4934;
+  --ei-status-thinking: #fabd2f;
+  --ei-status-ready: #8ec07c;
+  --ei-status-unread: #fb4934;
+  --ei-status-paused: #7c6f64;
+  --ei-room-cyp: #83a598;
+  --ei-room-ffa: #8ec07c;
+  --ei-room-map: #d3869b;
+  --ei-archive-bg-start: #3c3836;
+  --ei-archive-bg-end: #282828;
+  --ei-archive-border: #b8bb26;
+  --ei-ai-assist-start: #b8bb26;
+  --ei-ai-assist-end: #d3869b;
+  --ei-code-bg: #1d2021;
+  --ei-code-bg-controls: #282828;
+  --ei-code-border: #504945;
+  --ei-code-text: #ebdbb2;
+  --ei-code-text-muted: #a89984;
+  --ei-code-accent: #83a598;
+  --ei-code-string: #b8bb26;
+  --ei-code-error: #fb4934;
+  --ei-code-success: #8ec07c;
+  --ei-code-special: #d3869b;
+}
+
 /* Reset & Base */
 * {
   box-sizing: border-box;
