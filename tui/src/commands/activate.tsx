@@ -1,6 +1,7 @@
 import type { Command } from "./registry";
 import { RoomMode } from "../../../src/core/types/enums.js";
 import { openCYPEditor } from "../util/cyp-editor.js";
+import { buildCYPTree } from "../util/cyp-tree.js";
 
 export const activateCommand: Command = {
   name: "activate",
@@ -55,18 +56,18 @@ export const activateCommand: Command = {
 
     const num = parseInt(args[0], 10);
     if (isNaN(num) || num < 1) {
-      ctx.showNotification("Usage: /activate <num> (1-based message index)", "error");
+      ctx.showNotification("Usage: /activate <num> (1-based BFS tree number)", "error");
       return;
     }
 
     const messages = ctx.ei.roomMessages();
-    const target = messages[num - 1];
-    if (!target) {
-      ctx.showNotification(`No message at index ${num} (room has ${messages.length} messages)`, "error");
+    const { numToId } = buildCYPTree(messages);
+    const targetId = numToId.get(num);
+    if (!targetId) {
+      ctx.showNotification(`No message at tree position ${num} (tree has ${numToId.size} nodes)`, "error");
       return;
     }
-
-    await ctx.ei.selectCYPBranch(target.id);
+    await ctx.ei.selectCYPBranch(targetId);
 
     const freshRoom = ctx.ei.getRoom(roomId);
     const newActiveNodeId = freshRoom?.active_node_id;
