@@ -262,6 +262,11 @@
   pointer-events: none;
 }
 
+.ei-cyp-node--placeholder.ei-cyp-node--human-turn {
+  cursor: pointer;
+  pointer-events: all;
+}
+
 .ei-cyp-node__placeholder-label {
   font-size: 0.8rem;
   color: var(--ei-text-muted);

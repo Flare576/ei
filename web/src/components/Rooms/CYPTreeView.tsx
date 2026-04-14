@@ -30,6 +30,7 @@ interface CYPNodeData extends Record<string, unknown> {
   message: RoomMessage;
   speakerName: string;
   state: NodeState;
+  hasChildren: boolean;
   onSelectBranch: (messageId: string) => void;
   onClose: () => void;
 }
@@ -39,6 +40,10 @@ type IncompleteFamilies = Set<string>;
 interface CYPPlaceholderNodeData extends Record<string, unknown> {
   label: string;
   speakerName: string;
+  parentId: string | null;
+  isHumanTurn: boolean;
+  onSelectBranch: (messageId: string) => void;
+  onClose: () => void;
 }
 
 const STATE_ICON: Record<NodeState, string> = {
@@ -103,7 +108,7 @@ function getLayoutedElements(
 
 function CYPNode({ data, selected }: NodeProps<Node<CYPNodeData>>) {
   const [expanded, setExpanded] = useState(false);
-  const { message, speakerName, state, onSelectBranch, onClose } = data;
+  const { message, speakerName, state, hasChildren, onSelectBranch, onClose } = data;
 
   const content = message.content ?? message.verbal_response ?? message.action_response ?? '';
   const preview = content.length > 60 ? content.slice(0, 60) + '…' : content;
@@ -128,7 +133,8 @@ function CYPNode({ data, selected }: NodeProps<Node<CYPNodeData>>) {
     if (!isMasked) setExpanded((prev) => !prev);
   }, [isMasked]);
 
-  const canJump = state === 'explored' || state === 'active' || state === 'activated' || state === 'initial';
+  const jumpTarget = hasChildren ? message.id : message.parent_id;
+  const jumpLabel = hasChildren ? 'Jump here' : 'Jump to parent';
 
   return (
     <div
@@ -145,16 +151,13 @@ function CYPNode({ data, selected }: NodeProps<Node<CYPNodeData>>) {
       ) : expanded ? (
         <>
           <div className="ei-cyp-node__full-content">{content || '(no content)'}</div>
-          {canJump && (
+          {jumpTarget && (
             <div className="ei-cyp-node__actions" onClick={(e) => e.stopPropagation()}>
               <button
                 className="ei-btn ei-btn--sm ei-btn--primary"
-                onClick={() => {
-                  onSelectBranch(message.id);
-                  onClose();
-                }}
+                onClick={() => { onSelectBranch(jumpTarget); onClose(); }}
               >
-                Jump here
+                {jumpLabel}
               </button>
             </div>
           )}
@@ -167,12 +170,28 @@ function CYPNode({ data, selected }: NodeProps<Node<CYPNodeData>>) {
 }
 
 function CYPPlaceholderNode({ data }: NodeProps<Node<CYPPlaceholderNodeData>>) {
-  const { label, speakerName } = data;
+  const [expanded, setExpanded] = useState(false);
+  const { label, speakerName, parentId, isHumanTurn, onSelectBranch, onClose } = data;
+
   return (
-    <div className="ei-cyp-node ei-cyp-node--placeholder">
+    <div
+      className={`ei-cyp-node ei-cyp-node--placeholder${isHumanTurn ? ' ei-cyp-node--human-turn' : ''}${expanded ? ' ei-cyp-node--expanded' : ''}`}
+      style={expanded ? { opacity: 1, pointerEvents: 'all', cursor: 'pointer' } : undefined}
+      onClick={isHumanTurn ? () => setExpanded((p) => !p) : undefined}
+    >
       <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
       <div className="ei-cyp-node__speaker">{speakerName}</div>
       <div className="ei-cyp-node__placeholder-label">{label}</div>
+      {expanded && parentId && (
+        <div className="ei-cyp-node__actions" onClick={(e) => e.stopPropagation()}>
+          <button
+            className="ei-btn ei-btn--sm ei-btn--primary"
+            onClick={() => { onSelectBranch(parentId); onClose(); }}
+          >
+            Jump to parent
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -245,7 +264,7 @@ export function CYPTreeView({
           id: placeholderId,
           type: 'cypPlaceholderNode',
           position: { x: 0, y: 0 },
-          data: { label: '✏️ Your turn', speakerName: 'You' } satisfies CYPPlaceholderNodeData,
+          data: { label: '✏️ Your turn', speakerName: 'You', parentId, isHumanTurn: true, onSelectBranch, onClose } satisfies CYPPlaceholderNodeData,
         });
         placeholderEdges.push({
           id: `e-${parentId}-${placeholderId}`,
@@ -265,7 +284,7 @@ export function CYPTreeView({
           id: placeholderId,
           type: 'cypPlaceholderNode',
           position: { x: 0, y: 0 },
-          data: { label: '⏳ Waiting...', speakerName: personaMap.get(personaId) ?? personaId.slice(0, 8) } satisfies CYPPlaceholderNodeData,
+          data: { label: '⏳ Waiting...', speakerName: personaMap.get(personaId) ?? personaId.slice(0, 8), parentId, isHumanTurn: false, onSelectBranch, onClose } satisfies CYPPlaceholderNodeData,
         });
         placeholderEdges.push({
           id: `e-${parentId}-${placeholderId}`,
@@ -290,7 +309,7 @@ export function CYPTreeView({
         type: 'cypNode',
         position: { x: 0, y: 0 },
         zIndex: isOnActivePath ? 10 : 1,
-        data: { message: msg, speakerName, state, onSelectBranch, onClose } satisfies CYPNodeData,
+        data: { message: msg, speakerName, state, hasChildren: exploredIds.has(msg.id), onSelectBranch, onClose } satisfies CYPNodeData,
       };
     });
 
