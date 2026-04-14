@@ -68,6 +68,7 @@ function applyTheme(activeThemeId: string | undefined, customThemes: ThemeDefini
   document.head.appendChild(style);
 }
 import { HumanEditor, PersonaEditor, PersonaCreatorModal, RoomCreatorModal, RoomEditorModal, ArchivedPersonasModal, ArchivedRoomsModal } from "./components/EntityEditor";
+import { RoomOverviewOverlay, CYPTreeView } from "./components/Rooms";
 import { QuoteCaptureModal, QuoteManagementModal } from "./components/Quote";
 import { SettingsModal } from "./components/Settings";
 import { MessageSelectorModal } from "./components/Modals/MessageSelectorModal";
@@ -227,6 +228,8 @@ function App() {
   const [showRoomCreator, setShowRoomCreator] = useState(false);
   const [showRoomEditor, setShowRoomEditor] = useState(false);
   const [editingRoom, setEditingRoom] = useState<RoomEntity | null>(null);
+  const [showRoomOverview, setShowRoomOverview] = useState(false);
+  const [overviewRoomId, setOverviewRoomId] = useState<string | null>(null);
   const [roomInputValue, setRoomInputValue] = useState("");
 
   const personaPanelRef = useRef<PersonaPanelHandle | null>(null);
@@ -935,6 +938,11 @@ function App() {
     }
   }, [processor]);
 
+  const handleShowRoomOverview = useCallback((roomId: string) => {
+    setOverviewRoomId(roomId);
+    setShowRoomOverview(true);
+  }, []);
+
   const handleSaveRoomEdits = useCallback(async (roomId: string, updates: Partial<RoomEntity>) => {
     if (!processor) return;
     await processor.updateRoom(roomId, updates);
@@ -1602,6 +1610,7 @@ function App() {
              isProcessing={processingRoomId === activeRoomId}
              isActivating={roomActivating}
              onCapture={activeRoomId ? () => processorRef.current?.captureRoom(activeRoomId) : undefined}
+             onShowOverview={activeRoomId ? () => handleShowRoomOverview(activeRoomId) : undefined}
           />
         ) : (
           <ChatPanel
@@ -1888,6 +1897,35 @@ function App() {
         room={editingRoom}
         personas={personas.filter(p => !p.is_archived)}
       />
+    )}
+    {showRoomOverview && overviewRoomId && activeRoom && overviewRoomId === activeRoom.id && (
+      <RoomOverviewOverlay
+        isOpen={showRoomOverview}
+        onClose={() => { setShowRoomOverview(false); setOverviewRoomId(null); }}
+        room={activeRoom}
+      >
+        {activeRoom.mode === 'choose_your_path' ? (
+          <CYPTreeView
+            allMessages={roomMessages}
+            activeNodeId={activeRoom.active_node_id ?? ''}
+            activeRoomPath={activeRoomPath}
+            personas={personas}
+            onSelectBranch={handleSelectCYPBranch}
+            onClose={() => { setShowRoomOverview(false); setOverviewRoomId(null); }}
+            pendingQueueItems={
+              (processorRef.current?.getQueueActiveItems() ?? [])
+                .filter(item => item.next_step === LLMNextStep.HandleRoomResponse)
+                .map(item => ({
+                  parentMessageId: item.data.parentMessageId as string,
+                  personaId: item.data.personaId as string,
+                }))
+            }
+            roomPersonaIds={activeRoom.persona_ids}
+          />
+        ) : (
+          <div className="ei-room-overview__placeholder">Coming soon…</div>
+        )}
+      </RoomOverviewOverlay>
     )}
     </>
     );

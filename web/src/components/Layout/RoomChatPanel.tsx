@@ -34,6 +34,7 @@ interface RoomChatPanelProps {
   isProcessing: boolean;
   isActivating?: boolean;
   onCapture?: () => void;
+  onShowOverview?: () => void;
 }
 
 const MODE_LABEL: Record<RoomMode, string> = {
@@ -77,6 +78,7 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
   isProcessing,
   isActivating = false,
   onCapture,
+  onShowOverview,
 }: RoomChatPanelProps, ref) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -514,6 +516,7 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
             "Room"
           )}
         </h2>
+
       </div>
 
       <div style={{ position: "relative", flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -652,15 +655,26 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
       </div>
 
       <div className="ei-input-area">
-        {onCapture && (
+        {(onCapture || (onShowOverview && room)) && (
           <div className="ei-input-area__controls">
-            <button
-              className="ei-boundary-btn"
-              onClick={onCapture}
-              title="Extract data from current conversation"
-            >
-              💡
-            </button>
+            {onCapture && (
+              <button
+                className="ei-boundary-btn"
+                onClick={onCapture}
+                title="Extract data from current conversation"
+              >
+                💡
+              </button>
+            )}
+            {onShowOverview && room && (
+              <button
+                className="ei-boundary-btn"
+                onClick={onShowOverview}
+                title="Overview"
+              >
+                🗺
+              </button>
+            )}
           </div>
         )}
         <textarea
