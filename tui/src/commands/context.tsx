@@ -3,6 +3,8 @@ import { spawnEditor } from "../util/editor.js";
 import { contextToYAML, contextFromYAML } from "../util/yaml-serializers.js";
 import { logger } from "../util/logger.js";
 import { ConfirmOverlay } from "../components/ConfirmOverlay.js";
+import { CYPTreeOverlay } from "../components/CYPTreeOverlay.js";
+import { RoomMode } from "../../../src/core/types/enums.js";
 
 export const contextCommand: Command = {
   name: "context",
@@ -12,8 +14,52 @@ export const contextCommand: Command = {
 
   async execute(_args, ctx) {
     const personaId = ctx.ei.activePersonaId();
+    const roomId = ctx.ei.activeRoomId();
+
+    if (!personaId && roomId) {
+      const room = ctx.ei.getRoom(roomId);
+      if (!room) {
+        ctx.showNotification("Room not found", "warn");
+        return;
+      }
+
+      if (room.mode === RoomMode.ChooseYourPath) {
+        const activeNodeId = room.active_node_id;
+        if (!activeNodeId) {
+          ctx.showNotification("No active node in room", "warn");
+          return;
+        }
+        ctx.showOverlay((hideOverlay) => (
+          <CYPTreeOverlay
+            roomId={roomId}
+            roomName={room.display_name}
+            messages={ctx.ei.roomMessages()}
+            activeNodeId={activeNodeId}
+            activeRoomPath={ctx.ei.roomActivePath()}
+            personas={ctx.ei.personas()}
+            onSelectBranch={(msgId) => ctx.ei.selectCYPBranch(msgId)}
+            onDismiss={hideOverlay}
+          />
+        ), ctx.renderer);
+        return;
+      }
+
+      if (room.mode === RoomMode.FreeForAll) {
+        ctx.showNotification("FFA context coming soon", "info");
+        return;
+      }
+
+      if (room.mode === RoomMode.MessagesAgainstPersona) {
+        ctx.showNotification("MAP score view coming soon", "info");
+        return;
+      }
+
+      ctx.showNotification("Unknown room mode", "warn");
+      return;
+    }
+
     if (!personaId) {
-      ctx.showNotification("No active persona", "error");
+      ctx.showNotification("No active chat", "warn");
       return;
     }
 
