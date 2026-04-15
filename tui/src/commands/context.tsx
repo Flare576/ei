@@ -16,7 +16,7 @@ export const contextCommand: Command = {
     const personaId = ctx.ei.activePersonaId();
     const roomId = ctx.ei.activeRoomId();
 
-    if (!personaId && roomId) {
+    if (roomId) {
       const room = ctx.ei.getRoom(roomId);
       if (!room) {
         ctx.showNotification("Room not found", "warn");
