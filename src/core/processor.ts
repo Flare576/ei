@@ -1354,7 +1354,7 @@ const toolNextSteps = new Set([
         if (result.sessionsProcessed > 0) {
           console.log(
             `[Processor] Claude Code sync complete: ${result.sessionsProcessed} sessions, ` +
-              `${result.topicsCreated} topics created, ${result.messagesImported} messages imported, ` +
+              `${result.messagesImported} messages imported, ` +
               `${result.extractionScansQueued} extraction scans queued`
           );
         }
@@ -1407,7 +1407,7 @@ const toolNextSteps = new Set([
         if (result.sessionsProcessed > 0) {
           console.log(
             `[Processor] Cursor sync complete: ${result.sessionsProcessed} sessions, ` +
-              `${result.topicsCreated} topics created, ${result.messagesImported} messages imported, ` +
+              `${result.messagesImported} messages imported, ` +
               `${result.extractionScansQueued} extraction scans queued`
           );
         }

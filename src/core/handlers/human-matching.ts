@@ -176,6 +176,10 @@ export async function handleTopicUpdate(response: LLMResponse, state: StateManag
   const personaGroupsMerged = isNewItem
     ? (allPersonaGroups.length > 0 ? allPersonaGroups : existingTopic?.persona_groups)
     : [...new Set([...(existingTopic?.persona_groups ?? []), ...allPersonaGroups])];
+  const incomingSources = (response.request.data.sources ?? []) as string[];
+  const sources = isNewItem
+    ? incomingSources
+    : [...new Set([...(existingTopic?.sources ?? []), ...incomingSources])];
 
   const topic: Topic = {
     id: itemId,
@@ -191,6 +195,7 @@ export async function handleTopicUpdate(response: LLMResponse, state: StateManag
     learned_by: isNewItem ? primaryId : existingTopic?.learned_by,
     last_changed_by: primaryId,
     interested_personas: interestedPersonas,
+    sources: sources.length > 0 ? sources : undefined,
     persona_groups: personaGroupsMerged,
     embedding,
   };
@@ -279,6 +284,10 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
   const personaGroupsMerged = isNewItem
     ? (allPersonaGroups.length > 0 ? allPersonaGroups : existingPerson?.persona_groups)
     : [...new Set([...(existingPerson?.persona_groups ?? []), ...allPersonaGroups])];
+  const incomingPersonSources = (response.request.data.sources ?? []) as string[];
+  const personSources = isNewItem
+    ? incomingPersonSources
+    : [...new Set([...(existingPerson?.sources ?? []), ...incomingPersonSources])];
 
   let resolvedIdentifiers: PersonIdentifier[];
   if (isNewItem) {
@@ -335,6 +344,7 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
     learned_by: isNewItem ? primaryId : existingPerson?.learned_by,
     last_changed_by: primaryId,
     interested_personas: interestedPersonas,
+    sources: personSources.length > 0 ? personSources : undefined,
     persona_groups: personaGroupsMerged,
     embedding,
   };
