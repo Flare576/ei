@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { isReservedPersonaName, RESERVED_PERSONA_NAMES } from '../../../../src/core/types';
-import type { ToolProvider, ToolDefinition } from '../../../../src/core/types';
+import type { ToolProvider, ToolDefinition, ProviderAccount } from '../../../../src/core/types';
 import type { PersonaGenerationResult } from '../../../../src/prompts/generation/types';
 import { PersonaToolsTab } from './tabs/PersonaToolsTab';
+import { ModelPicker } from '../Settings/ModelPicker';
 import { useOverlayClose } from '../../hooks/useOverlayClose';
 
 interface Trait {
@@ -41,6 +42,7 @@ interface PersonaCreatorModalProps {
   onAiAssist?: (systemPrompt: string, userPrompt: string) => Promise<string>;
   toolProviders?: ToolProvider[];
   toolDefinitions?: ToolDefinition[];
+  accounts?: ProviderAccount[];
   initialData?: {
     name?: string;
     description: string;
@@ -61,6 +63,7 @@ export function PersonaCreatorModal({
   onAiAssist,
   toolProviders = [],
   toolDefinitions = [],
+  accounts = [],
   initialData,
   generatePersonaPreview,
   onUpdate,
@@ -709,19 +712,16 @@ export function PersonaCreatorModal({
                     <p className="ei-creator-help-text">
                       Override the default model for this persona
                     </p>
-                    <div className="ei-form-group">
-                      <label className="ei-form-label">Model</label>
-                      <input
-                        type="text"
-                        className="ei-input"
-                        placeholder="e.g., gpt-4, claude-3-opus (leave empty for default)"
-                        value={model}
-                        onChange={(e) => setModel(e.target.value)}
-                      />
-                      <span className="ei-form-hint">
-                        Uses system default if not specified
-                      </span>
-                    </div>
+                    <ModelPicker
+                      id="creator-model-override"
+                      label="Model"
+                      value={model || undefined}
+                      onChange={(modelId) => setModel(modelId ?? '')}
+                      accounts={accounts}
+                      allowEmpty
+                      optionalLabel
+                      hint="Uses system default if not specified."
+                    />
                   </div>
                 )}
               </div>
