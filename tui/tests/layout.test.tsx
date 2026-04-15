@@ -1,12 +1,20 @@
-import { test, expect, mock } from "bun:test";
+import { test, expect, mock, afterAll } from "bun:test";
 
-// Mock logger to prevent disk writes during unit tests
 mock.module("../src/util/logger", () => ({
   logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
   default: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
   clearLog: () => {},
   interceptConsole: () => {},
 }));
+
+import { mkdtempSync } from "fs";
+import { rm } from "fs/promises";
+import { tmpdir } from "os";
+import { join } from "path";
+
+const testDataDir = mkdtempSync(join(tmpdir(), "ei-layout-test-"));
+const originalDataPath = process.env.EI_DATA_PATH;
+process.env.EI_DATA_PATH = testDataDir;
 import { testRender } from "@opentui/solid";
 import { Layout } from "../src/components/Layout";
 import { Sidebar } from "../src/components/Sidebar";
@@ -73,8 +81,17 @@ test("PromptInput renders without error", async () => {
       <PromptInput />
     </TestProviders>
   ), { width: 80, height: 24 });
-  
+
   const output = captureCharFrame();
   expect(output).toBeDefined();
   expect(output.length).toBeGreaterThan(0);
+});
+
+afterAll(async () => {
+  if (originalDataPath !== undefined) {
+    process.env.EI_DATA_PATH = originalDataPath;
+  } else {
+    delete process.env.EI_DATA_PATH;
+  }
+  await rm(testDataDir, { recursive: true, force: true });
 });
