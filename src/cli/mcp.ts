@@ -3,7 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { retrieveBalanced, lookupById, loadLatestState, type BalancedResult } from "./retrieval.js";
 import type { StorageState } from "../core/types/index.js";
-import { resolvePersonaId, filterByPersona, filterTypeSpecificByPersona } from "./persona-filter.js";
+import { resolvePersonaId, filterByPersona, filterTypeSpecificByPersona, filterBySource, filterTypeSpecificBySource } from "./persona-filter.js";
 
 // Exported so tests can inject their own transport
 export function createMcpServer(): McpServer {
@@ -31,6 +31,12 @@ export function createMcpServer(): McpServer {
           .describe(
             "Filter to entities a specific persona has learned about. Use the persona display name."
           ),
+        source: z
+          .string()
+          .optional()
+          .describe(
+            "Filter to entities from a specific source. Prefix match against namespaced source identifiers (e.g. 'cursor', 'opencode', 'opencode:ses_abc123')."
+          ),
         limit: z
           .number()
           .optional()
@@ -42,16 +48,16 @@ export function createMcpServer(): McpServer {
           .describe("If true, sort by most recently mentioned."),
       },
     },
-    async ({ query: rawQuery, type, persona, limit, recent }) => {
+    async ({ query: rawQuery, type, persona, source, limit, recent }) => {
       const query = rawQuery ?? "";
       const options = { recent: recent ?? false };
       const effectiveLimit = limit ?? 10;
 
       let state: StorageState | null = null;
       let personaId: string | undefined;
-      if (persona) {
+      if (persona || source) {
         state = await loadLatestState();
-        if (state) {
+        if (state && persona) {
           personaId = resolvePersonaId(state, persona) ?? undefined;
           if (!personaId) {
             return {
@@ -68,10 +74,16 @@ export function createMcpServer(): McpServer {
         if (personaId && state) {
           result = filterTypeSpecificByPersona(result as { id: string }[], state, personaId, type);
         }
+        if (source && state) {
+          result = filterTypeSpecificBySource(result as { id: string }[], state, source, type);
+        }
       } else {
         result = await retrieveBalanced(query, effectiveLimit, options);
         if (personaId && state) {
           result = filterByPersona(result as BalancedResult[], state, personaId);
+        }
+        if (source && state) {
+          result = filterBySource(result as BalancedResult[], state, source);
         }
       }
 
@@ -88,17 +100,30 @@ export function createMcpServer(): McpServer {
         "Look up a specific entity in the Ei knowledge base by ID. Returns the full entity record. Use IDs from ei_search results.",
       inputSchema: {
         id: z.string().describe("The entity ID to look up."),
+        source: z
+          .string()
+          .optional()
+          .describe(
+            "Filter to entities from a specific source. Prefix match against namespaced source identifiers (e.g. 'cursor', 'opencode', 'opencode:ses_abc123'). If the entity does not match, returns not found."
+          ),
       },
     },
-    async ({ id }) => {
+    async ({ id, source }) => {
       const result = await lookupById(id);
-      const text =
-        result === null
-          ? `No entity found with ID: ${id}`
-          : JSON.stringify(result, null, 2);
+
+      if (result === null) {
+        return { content: [{ type: "text" as const, text: `No entity found with ID: ${id}` }] };
+      }
+
+      if (source) {
+        const sources = (result as { sources?: string[] }).sources;
+        if (!sources?.some((s) => s.startsWith(source))) {
+          return { content: [{ type: "text" as const, text: `No entity found with ID: ${id}` }] };
+        }
+      }
 
       return {
-        content: [{ type: "text" as const, text }],
+        content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
       };
     }
   );
