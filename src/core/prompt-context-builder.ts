@@ -1,4 +1,5 @@
-import type { PersonaEntity, HumanEntity, DataItemBase, Quote, RoomEntity } from "./types.js";
+import type { PersonaEntity, HumanEntity, DataItemBase, Quote, RoomEntity, RoomMessage } from "./types.js";
+import { RoomMode, ContextStatus } from "./types.js";
 import { StateManager } from "./state-manager.js";
 import { getEmbeddingService, findTopK } from "./embedding-service.js";
 import type { ResponsePromptData, PromptOutput } from "../prompts/index.js";
@@ -274,14 +275,30 @@ export async function buildRoomResponsePromptData(
     ? [...sm.getRoomMessages(room.id)].sort((a, b) => a.timestamp.localeCompare(b.timestamp))
     : activePath;
 
-  // Apply time window (same hours setting as 1:1 personas), but guarantee
-  // at least MIN_ROOM_MESSAGES so rooms never feel like they're starting over.
-  // Whichever anchor reaches further back wins.
-  const contextWindowHours = human.settings?.default_context_window_hours ?? 8;
-  const windowCutoff = new Date(Date.now() - contextWindowHours * 60 * 60 * 1000).toISOString();
-  const byTime = allSourceMessages.filter(m => m.timestamp >= windowCutoff);
-  const byCount = allSourceMessages.slice(-MIN_ROOM_MESSAGES);
-  const sourceMessages = byTime.length >= byCount.length ? byTime : byCount;
+  let sourceMessages: RoomMessage[];
+  if (room.mode === RoomMode.FreeForAll) {
+    const contextWindowHours = room.context_window_hours
+      ?? human.settings?.default_context_window_hours
+      ?? 8;
+    const windowCutoff = new Date(Date.now() - contextWindowHours * 60 * 60 * 1000).toISOString();
+    const boundaryMs = room.context_boundary ? new Date(room.context_boundary).getTime() : 0;
+    sourceMessages = allSourceMessages.filter(m => {
+      const msgMs = new Date(m.timestamp).getTime();
+      if (m.context_status === ContextStatus.Always) return true;
+      if (m.context_status === ContextStatus.Never) return false;
+      if (msgMs < new Date(windowCutoff).getTime()) return false;
+      if (boundaryMs && msgMs < boundaryMs) return false;
+      return true;
+    });
+    const byCount = allSourceMessages.slice(-MIN_ROOM_MESSAGES);
+    if (byCount.length > sourceMessages.length) sourceMessages = byCount;
+  } else {
+    const contextWindowHours = human.settings?.default_context_window_hours ?? 8;
+    const windowCutoff = new Date(Date.now() - contextWindowHours * 60 * 60 * 1000).toISOString();
+    const byTime = allSourceMessages.filter(m => m.timestamp >= windowCutoff);
+    const byCount = allSourceMessages.slice(-MIN_ROOM_MESSAGES);
+    sourceMessages = byTime.length >= byCount.length ? byTime : byCount;
+  }
 
   const lastMessage = sourceMessages[sourceMessages.length - 1];
   const currentMessage = lastMessage ? getMessageContent(lastMessage) : undefined;
