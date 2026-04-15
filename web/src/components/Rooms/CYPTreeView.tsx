@@ -1,5 +1,5 @@
 import '@xyflow/react/dist/style.css';
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import {
   ReactFlow,
   Background,
@@ -12,6 +12,7 @@ import {
 } from '@xyflow/react';
 import dagre from '@dagrejs/dagre';
 import type { RoomMessage, PersonaSummary } from '../../../../src/core/types';
+import { MarkdownContent } from '../Chat';
 
 interface CYPTreeViewProps {
   allMessages: RoomMessage[];
@@ -106,6 +107,24 @@ function getLayoutedElements(
   return { nodes: layoutedNodes, edges };
 }
 
+function ScrollableContent({ content }: { content: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const stop = (e: WheelEvent) => { e.stopPropagation(); };
+    el.addEventListener('wheel', stop, { passive: true });
+    return () => el.removeEventListener('wheel', stop);
+  }, []);
+
+  return (
+    <div ref={ref} className="ei-cyp-node__full-content">
+      {content ? <MarkdownContent content={content} /> : '(no content)'}
+    </div>
+  );
+}
+
 function CYPNode({ data, selected }: NodeProps<Node<CYPNodeData>>) {
   const [expanded, setExpanded] = useState(false);
   const { message, speakerName, state, hasChildren, onSelectBranch, onClose } = data;
@@ -150,7 +169,7 @@ function CYPNode({ data, selected }: NodeProps<Node<CYPNodeData>>) {
         <div className="ei-cyp-node__masked-content">[Content hidden]</div>
       ) : expanded ? (
         <>
-          <div className="ei-cyp-node__full-content">{content || '(no content)'}</div>
+          <ScrollableContent content={content} />
           {jumpTarget && (
             <div className="ei-cyp-node__actions" onClick={(e) => e.stopPropagation()}>
               <button
