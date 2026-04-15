@@ -278,12 +278,12 @@ test.describe("CYP Room — branch selection", () => {
     await expect(navPicker).toBeVisible({ timeout: 3000 });
 
     const navCards = navPicker.locator(".ei-cyp-card");
-    await expect(navCards).toHaveCount(2, { timeout: 5000 });
+    await expect(navCards).toHaveCount(3, { timeout: 5000 });
 
     const exploredNavBadge = navPicker.locator(".ei-cyp-explored-badge--yes");
     await expect(exploredNavBadge).toHaveCount(1, { timeout: 5000 });
 
     const unexploredNavBadge = navPicker.locator(".ei-cyp-explored-badge--no");
-    await expect(unexploredNavBadge).toHaveCount(1, { timeout: 5000 });
+    await expect(unexploredNavBadge).toHaveCount(2, { timeout: 5000 });
   });
 });
