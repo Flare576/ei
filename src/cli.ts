@@ -15,7 +15,7 @@ import { parseArgs } from "util";
 import { join } from "path";
 import { retrieveBalanced, lookupById, loadLatestState } from "./cli/retrieval";
 import type { StorageState } from "./core/types";
-import { resolvePersonaId, filterByPersona, filterTypeSpecificByPersona } from "./cli/persona-filter.js";
+import { resolvePersonaId, filterByPersona, filterTypeSpecificByPersona, filterBySource, filterTypeSpecificBySource } from "./cli/persona-filter.js";
 
 const TYPE_ALIASES: Record<string, string> = {
   quote: "quotes",
@@ -59,6 +59,7 @@ Options:
   --number, -n     Maximum number of results (default: 10)
   --recent, -r     Sort by last_mentioned date (most recent first)
   --persona, -p    Filter to entities a specific persona has learned about
+  --source, -s     Filter to entities from a specific source (prefix match, e.g. "cursor", "opencode:ses_abc123")
   --id             Look up entity by ID (accepts value or stdin)
   --install        Register Ei with OpenCode, Claude Code, and Cursor
   --help, -h       Show this help message
@@ -70,6 +71,7 @@ Examples:
   ei --recent                            # Most recently mentioned items
   ei topics --recent "work"              # Recent work-related topics
   ei --persona "Architect" "work stuff"  # What Architect knows about work
+  ei topics --source cursor "X"          # Topics learned from Cursor sessions
   ei --id abc-123                        # Look up entity by ID
   ei "memory leak" | jq .[0].id | ei --id  # Pipe ID from search
 `);
@@ -305,6 +307,7 @@ async function main(): Promise<void> {
         number: { type: "string", short: "n" },
         recent: { type: "boolean", short: "r" },
         persona: { type: "string", short: "p" },
+        source: { type: "string", short: "s" },
         help: { type: "boolean", short: "h" },
       },
       allowPositionals: true,
@@ -325,6 +328,7 @@ async function main(): Promise<void> {
   // Default to recent mode when no query — allows `ei --persona Foo` and `ei` with no args
   const recent = parsed.values.recent === true || !query;
   const personaName = parsed.values.persona?.trim();
+  const sourcePrefix = parsed.values.source?.trim();
 
   if (isNaN(limit) || limit < 1) {
     console.error("--number must be a positive integer");
@@ -333,16 +337,18 @@ async function main(): Promise<void> {
 
   let state: StorageState | null = null;
   let personaId: string | undefined;
-  if (personaName) {
+  if (personaName || sourcePrefix) {
     state = await loadLatestState();
     if (!state) {
       console.error("No saved state found. Is EI_DATA_PATH set correctly?");
       process.exit(1);
     }
-    personaId = resolvePersonaId(state, personaName) ?? undefined;
-    if (!personaId) {
-      console.error(`Persona "${personaName}" not found.`);
-      process.exit(1);
+    if (personaName) {
+      personaId = resolvePersonaId(state, personaName) ?? undefined;
+      if (!personaId) {
+        console.error(`Persona "${personaName}" not found.`);
+        process.exit(1);
+      }
     }
   }
 
@@ -355,10 +361,16 @@ async function main(): Promise<void> {
     if (personaId && state) {
       result = filterTypeSpecificByPersona(result, state, personaId, targetType);
     }
+    if (sourcePrefix && state) {
+      result = filterTypeSpecificBySource(result, state, sourcePrefix, targetType);
+    }
   } else {
     result = await retrieveBalanced(query, limit, options);
     if (personaId && state) {
       result = filterByPersona(result, state, personaId);
+    }
+    if (sourcePrefix && state) {
+      result = filterBySource(result, state, sourcePrefix);
     }
   }
 
