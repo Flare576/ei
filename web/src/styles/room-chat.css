@@ -386,6 +386,23 @@
   line-height: 1.4;
 }
 
+.ei-cyp-card__preview--collapsed {
+  max-height: 6.5em;
+  overflow: hidden;
+  position: relative;
+}
+
+.ei-cyp-card__preview--collapsed::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2em;
+  background: linear-gradient(transparent, var(--ei-bg-primary));
+  pointer-events: none;
+}
+
 .ei-cyp-explored-badge {
   font-size: 0.72em;
   margin-left: 6px;

@@ -341,7 +341,7 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
     const speakerName = persona?.display_name ?? (msg.role === "human" ? "You" : "Persona");
 
     const siblings = isCYP && msg.parent_id !== null
-      ? allRoomMessages.filter(m => m.parent_id === msg.parent_id && m.role === "persona")
+      ? allRoomMessages.filter(m => m.parent_id === msg.parent_id)
       : [];
     const hasBranches = siblings.length > 1;
     const navOpen = navPickerMessageId === msg.id;
@@ -401,7 +401,8 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
               const sibPersona = sibling.persona_id ? personaMap.get(sibling.persona_id) : null;
               const sibName = sibPersona?.display_name ?? (sibling.role === "human" ? "You" : "Persona");
               const sibText = buildRoomMessageText(sibling, room?.judge_persona_id);
-              const preview = sibText.slice(0, EXPAND_THRESHOLD);
+              const sibIsLong = sibText.length > EXPAND_THRESHOLD;
+              const sibIsExpanded = expandedCards.has(sibling.id);
               const siblingIsExplored = allRoomMessages.some(m => m.parent_id === sibling.id);
               return (
                 <div key={sibling.id} className={`ei-cyp-card${isCurrent ? " ei-cyp-card--current" : ""}`}>
@@ -419,9 +420,17 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
                       {siblingIsExplored ? "\u2713 explored" : "\u25cb unexplored"}
                     </span>
                   </div>
-                  <div className="ei-cyp-card__preview">
-                    {preview}{preview.length < sibText.length ? "\u2026" : ""}
+                  <div className={`ei-cyp-card__preview${sibIsLong && !sibIsExpanded ? " ei-cyp-card__preview--collapsed" : ""}`}>
+                    <MarkdownContent content={sibText} />
                   </div>
+                  {sibIsLong && (
+                    <button
+                      className="ei-cyp-card__expand"
+                      onClick={() => toggleCardExpand(sibling.id)}
+                    >
+                      {sibIsExpanded ? "▲ Show less" : "▼ Show more"}
+                    </button>
+                  )}
                   <button
                     className={`ei-btn ei-btn--sm ${isCurrent ? "ei-btn--secondary" : "ei-btn--primary"}`}
                     onClick={() => {
@@ -456,7 +465,6 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
     const text = buildRoomMessageText(msg, room?.judge_persona_id);
     const isLong = text.length > EXPAND_THRESHOLD;
     const isExpanded = expandedCards.has(msg.id);
-    const preview = isExpanded ? text : text.slice(0, EXPAND_THRESHOLD);
     const isExplored = allRoomMessages.some(m => m.parent_id === msg.id);
 
     return (
@@ -477,8 +485,8 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
             </span>
           )}
         </div>
-        <div className="ei-cyp-card__preview">
-          {preview}{!isExpanded && isLong ? "…" : ""}
+        <div className={`ei-cyp-card__preview${isLong && !isExpanded ? " ei-cyp-card__preview--collapsed" : ""}`}>
+          <MarkdownContent content={text} />
         </div>
         {isLong && (
           <button
