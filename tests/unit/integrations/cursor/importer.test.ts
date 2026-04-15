@@ -457,20 +457,20 @@ describe("importCursorSessions", () => {
     expect(result.messagesImported).toBe(2);
   });
 
-  it("creates topic for each session", async () => {
+  it("passes sources with session id in ExtractionContext", async () => {
     const session = makeSession({ id: "session-abc" });
     mockReader.getSessions = vi.fn().mockResolvedValue([session]);
 
-    const result = await importCursorSessions({
+    await importCursorSessions({
       stateManager: mockStateManager as StateManager,
       interface: mockInterface as Ei_Interface,
       reader: mockReader as ICursorReader,
     });
 
-    expect(result.topicsCreated).toBe(1);
-    expect(mockStateManager.human_topic_upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "session-abc", name: "Test Session" })
-    );
+    const enqueued = mockStateManager.queue_enqueue.mock.calls;
+    expect(enqueued.length).toBeGreaterThan(0);
+    const firstData = enqueued[0][0].data as Record<string, unknown>;
+    expect(firstData.sources).toEqual(["cursor:session-abc"]);
   });
 
   it("fires onMessageAdded after import", async () => {

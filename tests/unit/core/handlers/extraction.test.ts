@@ -558,6 +558,75 @@ describe("Extraction Handlers - Step 3 (Update) - interested_personas", () => {
       const upsertedTopic = (state.human_topic_upsert as any).mock.calls[0][0];
       expect(upsertedTopic.interested_personas).toEqual(["persona-1", "persona-2"]);
     });
+
+    it("sets sources on new topic from context", async () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleTopicUpdate,
+        data: {
+          personaId: "persona-1",
+          personaDisplayName: "TestPersona",
+          isNewItem: true,
+          existingItemId: undefined,
+          candidateCategory: "Interest",
+          sources: ["opencode:ses_abc123"],
+          messages_context: [],
+          messages_analyze: [],
+        },
+      });
+
+      const response = createMockResponse(request, {
+        name: "New Topic",
+        description: "A brand new topic",
+        sentiment: 0.5,
+      });
+
+      await handlers[LLMNextStep.HandleTopicUpdate](response, state as any);
+
+      const upsertedTopic = (state.human_topic_upsert as any).mock.calls[0][0];
+      expect(upsertedTopic.sources).toEqual(["opencode:ses_abc123"]);
+    });
+
+    it("accumulates sources on existing topic (grow-only union, deduped)", async () => {
+      state._human.topics.push({
+        id: "existing-topic",
+        name: "Existing Topic",
+        description: "Already exists",
+        sentiment: 0.3,
+        exposure_current: 0.5,
+        exposure_desired: 0.5,
+        last_updated: "",
+        interested_personas: [],
+        sources: ["opencode:ses_abc123", "cursor:composer-1"],
+      });
+
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleTopicUpdate,
+        data: {
+          personaId: "persona-1",
+          personaDisplayName: "TestPersona",
+          isNewItem: false,
+          existingItemId: "existing-topic",
+          candidateCategory: "Interest",
+          sources: ["opencode:ses_abc123", "opencode:ses_new456"],
+          messages_context: [],
+          messages_analyze: [],
+        },
+      });
+
+      const response = createMockResponse(request, {
+        name: "Existing Topic",
+        description: "Updated",
+        sentiment: 0.5,
+      });
+
+      await handlers[LLMNextStep.HandleTopicUpdate](response, state as any);
+
+      const upsertedTopic = (state.human_topic_upsert as any).mock.calls[0][0];
+      expect(upsertedTopic.sources).toContain("opencode:ses_abc123");
+      expect(upsertedTopic.sources).toContain("cursor:composer-1");
+      expect(upsertedTopic.sources).toContain("opencode:ses_new456");
+      expect(upsertedTopic.sources).toHaveLength(3);
+    });
   });
 
   describe("handleTopicUpdate — partial model responses (Haiku omission patterns)", () => {
@@ -725,6 +794,78 @@ describe("Extraction Handlers - Step 3 (Update) - interested_personas", () => {
       expect(upsertedPerson.interested_personas).toContain("persona-1");
       expect(upsertedPerson.interested_personas).toContain("persona-2");
       expect(upsertedPerson.interested_personas).toHaveLength(2);
+    });
+
+    it("sets sources on new person from context", async () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandlePersonUpdate,
+        data: {
+          personaId: "persona-1",
+          personaDisplayName: "TestPersona",
+          isNewItem: true,
+          existingItemId: undefined,
+          candidateName: "New Person",
+          candidateRelationship: "friend",
+          sources: ["cursor:composer-abc"],
+          messages_context: [],
+          messages_analyze: [],
+        },
+      });
+
+      const response = createMockResponse(request, {
+        name: "New Person",
+        description: "Someone new",
+        sentiment: 0.5,
+        relationship: "friend",
+      });
+
+      await handlers[LLMNextStep.HandlePersonUpdate](response, state as any);
+
+      const upsertedPerson = (state.human_person_upsert as any).mock.calls[0][0];
+      expect(upsertedPerson.sources).toEqual(["cursor:composer-abc"]);
+    });
+
+    it("accumulates sources on existing person (grow-only union, deduped)", async () => {
+      state._human.people.push({
+        id: "existing-person",
+        name: "Existing Person",
+        description: "Already known",
+        relationship: "colleague",
+        sentiment: 0.5,
+        exposure_current: 0.4,
+        exposure_desired: 0.4,
+        last_updated: "",
+        interested_personas: [],
+        identifiers: [],
+        sources: ["claudecode:uuid-1"],
+      });
+
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandlePersonUpdate,
+        data: {
+          personaId: "persona-1",
+          personaDisplayName: "TestPersona",
+          isNewItem: false,
+          existingItemId: "existing-person",
+          candidateRelationship: "colleague",
+          sources: ["claudecode:uuid-1", "opencode:ses_xyz"],
+          messages_context: [],
+          messages_analyze: [],
+        },
+      });
+
+      const response = createMockResponse(request, {
+        name: "Existing Person",
+        description: "Updated",
+        sentiment: 0.6,
+      });
+
+      await handlers[LLMNextStep.HandlePersonUpdate](response, state as any);
+
+      const upsertedPerson = (state.human_person_upsert as any).mock.calls[0][0];
+      expect(upsertedPerson.sources).toContain("claudecode:uuid-1");
+      expect(upsertedPerson.sources).toContain("opencode:ses_xyz");
+      expect(upsertedPerson.sources).toHaveLength(2);
     });
   });
 
@@ -1248,6 +1389,74 @@ describe("Extraction Handlers - Step 3 (Update) - interested_personas", () => {
 
       const upsertedFact = (state.human_fact_upsert as any).mock.calls[0][0];
       expect(upsertedFact.interested_personas).toEqual(["persona-1"]);
+    });
+  });
+
+  describe("handleFactFind - sources", () => {
+    it("accumulates sources on existing fact (grow-only union, deduped)", async () => {
+      state._human.facts.push({
+        id: "fact-1",
+        name: "Full Name",
+        description: "",
+        sentiment: 0,
+        validated_date: "",
+        last_updated: "",
+        sources: ["opencode:ses_abc123"],
+      });
+
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleFactFind,
+        data: {
+          personaId: "persona-1",
+          personaDisplayName: "TestPersona",
+          sources: ["opencode:ses_abc123", "cursor:composer-1"],
+          messages_context: [],
+          messages_analyze: [],
+        },
+      });
+
+      const response = createMockResponse(request, {
+        facts: [{ name: "Full Name", value: "Test User", evidence: "..." }],
+      });
+
+      await handlers[LLMNextStep.HandleFactFind](response, state as any);
+
+      const upsertedFact = (state.human_fact_upsert as any).mock.calls[0][0];
+      expect(upsertedFact.sources).toContain("opencode:ses_abc123");
+      expect(upsertedFact.sources).toContain("cursor:composer-1");
+      expect(upsertedFact.sources).toHaveLength(2);
+    });
+
+    it("sets sources on fact when existing fact has none", async () => {
+      state._human.facts.push({
+        id: "fact-1",
+        name: "Full Name",
+        description: "",
+        sentiment: 0,
+        validated_date: "",
+        last_updated: "",
+        sources: undefined,
+      });
+
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleFactFind,
+        data: {
+          personaId: "persona-1",
+          personaDisplayName: "TestPersona",
+          sources: ["claudecode:uuid-xyz"],
+          messages_context: [],
+          messages_analyze: [],
+        },
+      });
+
+      const response = createMockResponse(request, {
+        facts: [{ name: "Full Name", value: "Test User", evidence: "..." }],
+      });
+
+      await handlers[LLMNextStep.HandleFactFind](response, state as any);
+
+      const upsertedFact = (state.human_fact_upsert as any).mock.calls[0][0];
+      expect(upsertedFact.sources).toEqual(["claudecode:uuid-xyz"]);
     });
   });
 });
