@@ -17,6 +17,7 @@ import type {
   RoomSummary,
   RoomCreationInput,
 } from "./types.js";
+import { RoomMode } from "./types.js";
 import { BUILT_IN_FACT_NAMES } from './constants/built-in-facts.js';
 import type { ThemeDefinition } from './types/entities.js';
 import type { Storage } from "../storage/interface.js";
@@ -70,6 +71,7 @@ export class StateManager {
     this.migrateProviderModel();
     this.migrateRoomMessageContent();
     this.migrateThemes();
+    this.migrateFfaParentIds();
   }
 
   private migrateRoomMessageContent(): void {
@@ -574,6 +576,30 @@ export class StateManager {
     if (human.settings.custom_themes !== undefined) return;
     human.settings.custom_themes = [];
     this.humanState.set(human);
+  }
+
+  private migrateFfaParentIds(): void {
+    const rooms = this.roomState.getAll(true);
+    let migratedCount = 0;
+
+    for (const room of rooms) {
+      if (room.mode !== RoomMode.FreeForAll) continue;
+      const rootMsg = room.messages.find(m => m.parent_id === null);
+      if (!rootMsg) continue;
+
+      for (const msg of room.messages) {
+        if (msg.role !== "human") continue;
+        if (msg.id === rootMsg.id) continue;
+        if (msg.parent_id === rootMsg.id) continue;
+        msg.parent_id = rootMsg.id;
+        migratedCount++;
+      }
+    }
+
+    if (migratedCount > 0) {
+      this.scheduleSave();
+      console.log(`[StateManager] Migrated ${migratedCount} FFA human messages to root parent_id`);
+    }
   }
 
   getHuman(): HumanEntity {

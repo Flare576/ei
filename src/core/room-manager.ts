@@ -149,8 +149,15 @@ export async function sendFfaMessage(
   }
 
   const now = new Date().toISOString();
+
+  // FFA human messages always hang off the room root (the initial message with parent_id === null)
+  // so the tree is a flat star: root → every human turn, each human turn → persona responses.
+  // This gives the context window a bounded, predictable shape instead of a chain.
+  const ffaRootMsg = sm.getRoomMessages(roomId).find(m => m.parent_id === null);
+  const ffaParentId = ffaRootMsg?.id ?? room.active_node_id;
+
   const existing = sm.getRoomMessages(roomId).find(
-    m => m.role === "human" && m.parent_id === room.active_node_id
+    m => m.role === "human" && m.id === room.active_node_id && m.parent_id === ffaParentId
   );
 
   let humanMsgId: string;
@@ -164,7 +171,7 @@ export async function sendFfaMessage(
   } else {
     const msg: RoomMessage = {
       id: crypto.randomUUID(),
-      parent_id: room.active_node_id,
+      parent_id: ffaParentId,
       role: "human",
       verbal_response: content ?? undefined,
       silence_reason: content ? undefined : (silenceReason ?? "passed"),
