@@ -250,6 +250,7 @@ export async function importOpenCodeSessions(
         personaDisplayName: persona.display_name,
         messages_context: contextMsgs,
         messages_analyze: toAnalyze,
+        sources: [`opencode:${targetSession.id}`],
       };
 
       if (!signal?.aborted) {

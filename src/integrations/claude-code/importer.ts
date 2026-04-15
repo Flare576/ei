@@ -1,10 +1,9 @@
 import type { StateManager } from "../../core/state-manager.js";
-import type { Ei_Interface, Topic, Message, ContextStatus, PersonaEntity, PersonaTrait } from "../../core/types.js";
+import type { Ei_Interface, Message, ContextStatus, PersonaEntity, PersonaTrait } from "../../core/types.js";
 import { DEFAULT_SEED_TRAITS } from "../../core/constants/seed-traits.js";
 import type { IClaudeCodeReader, ClaudeCodeSession, ClaudeCodeMessage } from "./types.js";
 import {
   CLAUDE_CODE_PERSONA_NAME,
-  CLAUDE_CODE_TOPIC_GROUPS,
   MIN_SESSION_AGE_MS,
 } from "./types.js";
 import { ClaudeCodeReader } from "./reader.js";
@@ -20,8 +19,6 @@ import { isProcessRunning } from "../process-check.js";
 
 export interface ClaudeCodeImportResult {
   sessionsProcessed: number;
-  topicsCreated: number;
-  topicsUpdated: number;
   messagesImported: number;
   personaCreated: boolean;
   extractionScansQueued: number;
@@ -110,47 +107,6 @@ function ensureClaudeCodePersona(
 }
 
 // =============================================================================
-// Topic Management
-// =============================================================================
-
-function ensureSessionTopic(
-  session: ClaudeCodeSession,
-  stateManager: StateManager
-): "created" | "updated" | "unchanged" {
-  const human = stateManager.getHuman();
-  const existingTopic = human.topics.find((t) => t.id === session.id);
-
-  if (existingTopic) {
-    if (existingTopic.name !== session.title) {
-      const updatedTopic: Topic = {
-        ...existingTopic,
-        name: session.title,
-        last_updated: new Date().toISOString(),
-      };
-      stateManager.human_topic_upsert(updatedTopic);
-      return "updated";
-    }
-    return "unchanged";
-  }
-
-  const newTopic: Topic = {
-    id: session.id,
-    name: session.title,
-    description: `Claude Code session in ${session.cwd}`,
-    sentiment: 0,
-    exposure_current: 0.5,
-    exposure_desired: 0.3,
-    persona_groups: CLAUDE_CODE_TOPIC_GROUPS,
-    learned_by: stateManager.persona_getByName(CLAUDE_CODE_PERSONA_NAME)?.id ?? undefined,
-    last_updated: new Date().toISOString(),
-    learned_on: new Date().toISOString(),
-  };
-
-  stateManager.human_topic_upsert(newTopic);
-  return "created";
-}
-
-// =============================================================================
 // State Helpers
 // =============================================================================
 
@@ -205,26 +161,15 @@ export async function importClaudeCodeSessions(
 
   const result: ClaudeCodeImportResult = {
     sessionsProcessed: 0,
-    topicsCreated: 0,
-    topicsUpdated: 0,
     messagesImported: 0,
     personaCreated: false,
     extractionScansQueued: 0,
   };
 
-  // ─── Step 1: Ensure topics exist for ALL sessions ─────────────────────
+  // ─── Step 1: Get all sessions ─────────────────────────────────────────
   const allSessions = await reader.getSessions();
 
-  for (const session of allSessions) {
-    const topicResult = ensureSessionTopic(session, stateManager);
-    if (topicResult === "created") result.topicsCreated++;
-    else if (topicResult === "updated") result.topicsUpdated++;
-  }
-
   if (signal?.aborted) return result;
-  if (result.topicsCreated > 0 || result.topicsUpdated > 0) {
-    eiInterface?.onHumanUpdated?.();
-  }
 
   // ─── Step 2: Find next unprocessed session ────────────────────────────
   const human = stateManager.getHuman();
@@ -323,6 +268,7 @@ export async function importClaudeCodeSessions(
       personaDisplayName: persona.display_name,
       messages_context: contextMsgs,
       messages_analyze: toAnalyze,
+      sources: [`claudecode:${targetSession.id}`],
     };
 
     const ccSettings = stateManager.getHuman().settings?.claudeCode;
