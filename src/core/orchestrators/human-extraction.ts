@@ -59,6 +59,7 @@ export interface ExtractionContext {
   messages_analyze: Message[];
   extraction_flag?: "f" | "t" | "p" | "e";
   roomId?: string;
+  sources?: string[];
 }
 
 export interface ExtractionOptions {
@@ -132,6 +133,7 @@ export function queueFactFind(context: ExtractionContext, state: StateManager, o
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
         extraction_flag: context.extraction_flag,
         message_ids_to_mark: chunk.messages_analyze.map(m => m.id),
+        sources: context.sources,
       },
     });
   }
@@ -173,6 +175,7 @@ export function queueTopicScan(context: ExtractionContext, state: StateManager, 
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
         extraction_flag: context.extraction_flag,
         message_ids_to_mark: chunk.messages_analyze.map(m => m.id),
+        sources: context.sources,
       },
     });
   }
@@ -222,6 +225,7 @@ export function queuePersonScan(context: ExtractionContext, state: StateManager,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
         extraction_flag: context.extraction_flag,
         message_ids_to_mark: chunk.messages_analyze.map(m => m.id),
+        sources: context.sources,
       },
     });
   }
@@ -610,6 +614,7 @@ export function queuePersonUpdate(
         candidateIdentifiers: isNewItem ? candidateIdentifiers : undefined,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
         extraction_model: context.extraction_model,
+        sources: context.sources,
       },
     });
   }

@@ -38,6 +38,7 @@ These field names have **specific meanings** and should be used consistently:
 | `last_ei_asked` | ISO string \| null | When Ei last proactively asked about this Person/Topic |
 | `last_updated` | ISO string | When this record was last modified |
 | `last_activity` | ISO string | When the user last interacted with this entity |
+| `sources` | string[] | Namespaced source identifiers — where items were learned from. Format: "provider:id" (e.g., "opencode:ses_abc123", "cursor:composerId"). Grow-only union. |
 
 > **V0 Migration Note**: `level_current` → `exposure_current`, `level_ideal` → `exposure_desired`
 
