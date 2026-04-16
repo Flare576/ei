@@ -68,7 +68,7 @@ function applyTheme(activeThemeId: string | undefined, customThemes: ThemeDefini
   document.head.appendChild(style);
 }
 import { HumanEditor, PersonaEditor, PersonaCreatorModal, RoomCreatorModal, RoomEditorModal, ArchivedPersonasModal, ArchivedRoomsModal } from "./components/EntityEditor";
-import { RoomOverviewOverlay, CYPTreeView } from "./components/Rooms";
+import { RoomOverviewOverlay, CYPTreeView, FFAContextView } from "./components/Rooms";
 import { QuoteCaptureModal, QuoteManagementModal } from "./components/Quote";
 import { SettingsModal } from "./components/Settings";
 import { MessageSelectorModal } from "./components/Modals/MessageSelectorModal";
@@ -1017,6 +1017,22 @@ function App() {
     setActiveRoomPath(processorRef.current.getRoomActivePath(activeRoomId));
   }, [activeRoomId]);
 
+  const handleSetRoomMessageContextStatus = useCallback(async (
+    roomId: string,
+    messageId: string,
+    status: ContextStatus,
+  ) => {
+    if (!processorRef.current) return;
+    processorRef.current.getStateManager().updateRoomMessage(roomId, messageId, { context_status: status });
+    await processorRef.current.updateRoom(roomId, {});
+  }, []);
+
+  const handleDeleteRoomMessages = useCallback(async (roomId: string, messageIds: string[]) => {
+    if (!processorRef.current) return;
+    processorRef.current.getStateManager().removeRoomMessages(roomId, messageIds);
+    await processorRef.current.updateRoom(roomId, {});
+  }, []);
+
   const handleHumanUpdate = useCallback(async (updates: Record<string, unknown>) => {
     if (!processor) return;
     const { default_model, oneshot_model, rewrite_model, queue_paused, name_display, time_mode, accounts, sync, ceremony_time, default_heartbeat_ms, default_context_window_hours, message_min_count, message_max_age_days, event_window_hours, active_theme, custom_themes, ...rest } = updates;
@@ -1921,6 +1937,23 @@ function App() {
                 }))
             }
             roomPersonaIds={activeRoom.persona_ids}
+          />
+        ) : activeRoom.mode === 'free_for_all' ? (
+          <FFAContextView
+            room={activeRoom}
+            allMessages={roomMessages}
+            personas={personas}
+            humanName={
+              human?.settings?.name_display ||
+              human?.facts?.find(f => f.name === "Nickname/Preferred Name")?.description ||
+              "You"
+            }
+            defaultContextWindowHours={human?.settings?.default_context_window_hours}
+            onUpdateRoom={(updates) => processorRef.current?.updateRoom(activeRoom.id, updates) ?? Promise.resolve()}
+            onDeleteMessages={(ids) => handleDeleteRoomMessages(activeRoom.id, ids)}
+            onSetMessageContextStatus={(msgId, status) =>
+              handleSetRoomMessageContextStatus(activeRoom.id, msgId, status)
+            }
           />
         ) : (
           <div className="ei-room-overview__placeholder">Coming soon…</div>
