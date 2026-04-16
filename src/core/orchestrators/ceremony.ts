@@ -1,4 +1,4 @@
-import { LLMRequestType, LLMPriority, LLMNextStep, RoomMode, type CeremonyConfig, type PersonaTopic, type Topic, type DataItemBase } from "../types.js";
+import { LLMRequestType, LLMPriority, LLMNextStep, RoomMode, ContextStatus, type CeremonyConfig, type PersonaTopic, type Topic, type DataItemBase } from "../types.js";
 import type { StateManager } from "../state-manager.js";
 import { normalizeRoomMessages } from "../handlers/utils.js";
 import { applyDecayToValue } from "../utils/index.js";
@@ -347,7 +347,7 @@ export function prunePersonaMessages(personaId: string, state: StateManager): vo
     if (msgMs >= cutoffMs) break; // Sorted by time, no more old ones
     
     const fullyExtracted = m.t && m.p && m.f; // r intentionally excluded — trait extraction deprecated
-    if (fullyExtracted) {
+    if (fullyExtracted && m.context_status !== ContextStatus.Always) {
       toRemove.push(m.id);
     }
   }
