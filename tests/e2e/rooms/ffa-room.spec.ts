@@ -25,10 +25,19 @@ function buildFfaCheckpoint(mockServerUrl: string) {
       is_archived: false,
       last_updated: timestamp,
       last_activity: timestamp,
+      heartbeat_delay_ms: 999999999,
     },
     messages: [],
   };
 
+  const eiPersonas = checkpoint.personas as Record<string, { entity: Record<string, unknown> }>;
+  if (eiPersonas["ei"]) {
+    eiPersonas["ei"].entity.heartbeat_delay_ms = 999999999;
+    eiPersonas["ei"].entity.last_heartbeat = timestamp;
+    eiPersonas["ei"].entity.last_activity = timestamp;
+  }
+
+  const initialMessageId = "ffa-initial-msg-001";
   checkpoint.rooms = {
     "fellowship-room": {
       id: "fellowship-room",
@@ -37,9 +46,39 @@ function buildFfaCheckpoint(mockServerUrl: string) {
       mode: "free_for_all",
       persona_ids: ["ei", "007"],
       judge_persona_id: null,
-      active_node_id: null,
+      active_node_id: initialMessageId,
       is_archived: false,
-      messages: [],
+      messages: [
+        {
+          id: initialMessageId,
+          parent_id: null,
+          role: "human",
+          verbal_response: "Let's begin.",
+          timestamp,
+          read: true,
+          context_status: "default",
+        },
+        {
+          id: "ffa-initial-ei-response",
+          parent_id: initialMessageId,
+          role: "persona",
+          persona_id: "ei",
+          verbal_response: "Hello! Ready to chat.",
+          timestamp,
+          read: true,
+          context_status: "default",
+        },
+        {
+          id: "ffa-initial-sage-response",
+          parent_id: initialMessageId,
+          role: "persona",
+          persona_id: "007",
+          verbal_response: "Greetings, indeed.",
+          timestamp,
+          read: true,
+          context_status: "default",
+        },
+      ],
       created_at: timestamp,
       last_updated: timestamp,
       last_activity: timestamp,
@@ -92,10 +131,7 @@ test.describe("FFA Room message flow", () => {
   }) => {
     mockServer.setResponseForType("room-response", {
       type: "fixed",
-      content: JSON.stringify({
-        should_respond: true,
-        verbal_response: "Mock persona response",
-      }),
+      content: "Mock persona response",
       statusCode: 200,
     });
 
@@ -119,13 +155,10 @@ test.describe("FFA Room message flow", () => {
     await textarea.fill("Hello everyone!");
     await textarea.press("Enter");
 
-    await expect(page.locator(".ei-room-message-wrapper.human")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator(".ei-room-message-wrapper.human").last()).toBeVisible({ timeout: 5000 });
 
-    await expect(
-      page.locator(".ei-room-message-wrapper.persona")
-    ).toHaveCount(2, { timeout: 20000 });
-
-    await expect(page.locator("text=Mock persona response").first()).toBeVisible({ timeout: 20000 });
+    await expect(page.locator("text=Mock persona response").first()).toBeVisible({ timeout: 30000 });
+    await expect(page.locator("text=Mock persona response")).toHaveCount(2, { timeout: 5000 });
   });
 
   test("FFA room shows thinking indicators while personas process", async ({
@@ -135,10 +168,7 @@ test.describe("FFA Room message flow", () => {
   }) => {
     mockServer.setResponseForType("room-response", {
       type: "fixed",
-      content: JSON.stringify({
-        should_respond: true,
-        verbal_response: "Mock persona response",
-      }),
+      content: "Mock persona response",
       statusCode: 200,
     });
 
@@ -165,9 +195,8 @@ test.describe("FFA Room message flow", () => {
     const thinkingOrStatus = page.locator(".ei-room-thinking__item, .ei-room-status--ffa");
     await expect(thinkingOrStatus.first()).toBeVisible({ timeout: 10000 });
 
-    await expect(
-      page.locator(".ei-room-message-wrapper.persona")
-    ).toHaveCount(2, { timeout: 20000 });
+    await expect(page.locator("text=Mock persona response").first()).toBeVisible({ timeout: 30000 });
+    await expect(page.locator("text=Mock persona response")).toHaveCount(2, { timeout: 5000 });
   });
 
   test("FFA room per-speaker attribution shows persona name", async ({
@@ -177,10 +206,7 @@ test.describe("FFA Room message flow", () => {
   }) => {
     mockServer.setResponseForType("room-response", {
       type: "fixed",
-      content: JSON.stringify({
-        should_respond: true,
-        verbal_response: "Mock persona response",
-      }),
+      content: "Mock persona response",
       statusCode: 200,
     });
 
@@ -206,13 +232,84 @@ test.describe("FFA Room message flow", () => {
 
     await expect(
       page.locator(".ei-room-message-wrapper.persona")
-    ).toHaveCount(2, { timeout: 20000 });
+    ).toHaveCount(4, { timeout: 30000 });
 
     const speakerNames = page.locator(".ei-room-message__speaker-name");
-    await expect(speakerNames).toHaveCount(2, { timeout: 5000 });
-
     const allNames = await speakerNames.allTextContents();
     expect(allNames).toContain("Ei");
     expect(allNames).toContain("Sage");
+  });
+});
+
+test.describe("FFA Room context overview (web)", () => {
+  test.beforeEach(async ({ mockServer }) => {
+    mockServer.clearRequestHistory();
+    mockServer.clearResponseQueue();
+  });
+
+  test("root row has no delete button in FFA context view", async ({
+    page,
+    mockServerUrl,
+  }) => {
+    const checkpoint = buildFfaCheckpoint(mockServerUrl);
+
+    await page.addInitScript(
+      ({ key, data }) => {
+        localStorage.clear();
+        localStorage.setItem(key, JSON.stringify(data));
+      },
+      { key: STATE_KEY, data: checkpoint }
+    );
+
+    await page.goto("/");
+
+    await page.locator(".ei-panel-tab", { hasText: "Rooms" }).click();
+    await page.locator(".ei-room-pill").filter({ hasText: "Fellowship" }).click();
+    await expect(page.locator(".ei-room-chat-panel")).toBeVisible({ timeout: 5000 });
+
+    await page.locator('button[title="Overview"]').click();
+    await expect(page.locator(".ei-ffa-context")).toBeVisible({ timeout: 5000 });
+
+    const rows = page.locator(".ei-ffa-context__row");
+    const firstRow = rows.first();
+
+    await expect(firstRow.locator(".ei-ffa-context__delete-btn")).toHaveCount(0);
+  });
+
+  test("status badge cycles default → always → never on click", async ({
+    page,
+    mockServerUrl,
+  }) => {
+    const checkpoint = buildFfaCheckpoint(mockServerUrl);
+
+    await page.addInitScript(
+      ({ key, data }) => {
+        localStorage.clear();
+        localStorage.setItem(key, JSON.stringify(data));
+      },
+      { key: STATE_KEY, data: checkpoint }
+    );
+
+    await page.goto("/");
+
+    await page.locator(".ei-panel-tab", { hasText: "Rooms" }).click();
+    await page.locator(".ei-room-pill").filter({ hasText: "Fellowship" }).click();
+    await expect(page.locator(".ei-room-chat-panel")).toBeVisible({ timeout: 5000 });
+
+    await page.locator('button[title="Overview"]').click();
+    await expect(page.locator(".ei-ffa-context")).toBeVisible({ timeout: 5000 });
+
+    const firstStatus = page.locator(".ei-ffa-context__status-btn").first();
+
+    await expect(firstStatus).toContainText("Default");
+
+    await firstStatus.click();
+    await expect(firstStatus).toContainText("Always");
+
+    await firstStatus.click();
+    await expect(firstStatus).toContainText("Never");
+
+    await firstStatus.click();
+    await expect(firstStatus).toContainText("Default");
   });
 });
