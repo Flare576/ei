@@ -56,6 +56,17 @@ function getMessageText(msg: RoomMessage): string {
   return msg.verbal_response ?? msg.content ?? msg.silence_reason ?? '';
 }
 
+function collectDescendants(msgId: string, allMessages: RoomMessage[]): RoomMessage[] {
+  const result: RoomMessage[] = [];
+  const queue = allMessages.filter((m) => m.parent_id === msgId);
+  while (queue.length > 0) {
+    const next = queue.shift()!;
+    result.push(next);
+    allMessages.filter((m) => m.parent_id === next.id).forEach((m) => queue.push(m));
+  }
+  return result;
+}
+
 export function FFAContextView({
   room,
   allMessages,
@@ -81,9 +92,7 @@ export function FFAContextView({
   const childCounts = useMemo(() => {
     const counts = new Map<string, number>();
     for (const msg of allMessages) {
-      if (msg.parent_id) {
-        counts.set(msg.parent_id, (counts.get(msg.parent_id) ?? 0) + 1);
-      }
+      counts.set(msg.id, collectDescendants(msg.id, allMessages).length);
     }
     return counts;
   }, [allMessages]);
@@ -122,7 +131,7 @@ export function FFAContextView({
     (e: React.MouseEvent, msg: RoomMessage) => {
       e.stopPropagation();
       if (msg.role === 'human') {
-        const children = allMessages.filter((m) => m.parent_id === msg.id);
+        const children = collectDescendants(msg.id, allMessages);
         setPendingDelete({ humanMsg: msg, children });
       } else {
         void onDeleteMessages([msg.id]);
@@ -179,6 +188,7 @@ export function FFAContextView({
               const isExpanded = expandedRows.has(msg.id);
               const text = getMessageText(msg);
               const count = childCounts.get(msg.id) ?? 0;
+              const isRoot = msg.parent_id === null;
 
               return (
                 <tr
@@ -218,7 +228,7 @@ export function FFAContextView({
                     </button>
                   </td>
                   <td className="ei-ffa-context__td ei-ffa-context__td--delete">
-                    <button
+                    {!isRoot && <button
                       className="ei-ffa-context__delete-btn"
                       onClick={(e) => handleDeleteClick(e, msg)}
                       aria-label={`Delete message from ${getSpeakerName(msg)}`}
@@ -227,7 +237,7 @@ export function FFAContextView({
                       🗑{msg.role === 'human' && count > 0 && (
                         <span className="ei-ffa-context__delete-count">×{count}</span>
                       )}
-                    </button>
+                    </button>}
                   </td>
                 </tr>
               );
