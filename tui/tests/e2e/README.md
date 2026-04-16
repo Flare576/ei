@@ -18,6 +18,40 @@ rm -rf .tui-test /tmp/ei-test-*
 npx @microsoft/tui-test tests/e2e/
 ```
 
+## Common Pitfalls
+
+### Ceremony Will Jam Your Queue
+
+The Processor runs a daily "ceremony" on startup if `human.settings.ceremony.last_ceremony` is unset or in the past. It queues several LLM tasks that block room/persona responses from completing.
+
+**Symptom**: Test times out with "Ready" never appearing, thinking indicators stuck, or persona responses never showing up.
+
+**Fix**: The shared `fixtures.ts` already sets `last_ceremony: new Date().toISOString()` — use `createTestSettings()` from it for all human settings blocks. If you build a custom checkpoint without it, add this manually:
+
+```typescript
+settings: {
+  ...createTestSettings(MOCK_SERVER_URL),
+  // or manually:
+  ceremony: {
+    time: "09:00",
+    last_ceremony: new Date().toISOString(),
+  },
+}
+```
+
+This has bitten us twice. Don't let it bite you a third time.
+
+### Heartbeats Fire Immediately Without `heartbeat_delay_ms`
+
+If a persona entity doesn't have `heartbeat_delay_ms` set (or `last_heartbeat` is unset), heartbeat checks fire immediately on startup and queue additional LLM work.
+
+```typescript
+// Always include on persona entities in test checkpoints:
+heartbeat_delay_ms: 999999999,
+last_heartbeat: timestamp,
+last_activity: timestamp,
+```
+
 ## Critical Pattern: Module-Level Setup
 
 tui-test spawns the terminal BEFORE test callbacks run. All setup must happen at module level:

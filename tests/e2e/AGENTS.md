@@ -10,7 +10,27 @@ Hard-won lessons from debugging E2E tests. Read before writing new tests.
 
 ## Common Pitfalls
 
-### 1. Mock Response Data Must Be Complete
+### 1. Ceremony Will Jam Your Queue (Seed `last_ceremony`)
+
+The Processor runs a daily "ceremony" (exposure decay, persona enrichment). If `human.settings.ceremony.last_ceremony` is unset or in the past, it fires immediately on startup and queues several LLM tasks that clog the queue before your test's room responses or persona responses can complete.
+
+**Symptom**: Tests time out with "Waiting on server... (N pending)" and thinking indicators that never resolve — even with instant mock responses.
+
+**Fix**: `createMinimalCheckpoint` now seeds `last_ceremony: timestamp` automatically. If you build a custom checkpoint that doesn't use `createMinimalCheckpoint`, always set:
+
+```typescript
+settings: {
+  ceremony: {
+    time: "09:00",
+    last_ceremony: new Date().toISOString(), // ← prevents ceremony from firing
+  },
+  // ...
+}
+```
+
+This has bitten us twice. Don't let it bite you a third time.
+
+### 2. Mock Response Data Must Be Complete
 
 The orchestrators have completion criteria. If your mock response doesn't satisfy them, the system will loop until it hits MAX_ORCHESTRATOR_LOOPS (4).
 
