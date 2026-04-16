@@ -63,24 +63,39 @@ export function contextFromYAML(yamlContent: string): ContextYAMLResult {
   return { messages, deletedMessageIds };
 }
 
-interface FfaEditableChild {
+interface FfaEditableNode {
   id: string;
-  role: "persona";
-  speaker: string;
+  role: "human" | "persona";
+  speaker?: string;
   context_status: ContextStatus;
   _delete?: boolean;
   content?: string;
   silence_reason?: string;
+  children?: FfaEditableNode[];
 }
 
-interface FfaEditableHumanMessage {
-  id: string;
-  role: "human";
-  context_status: ContextStatus;
-  _delete?: boolean;
-  content?: string;
-  silence_reason?: string;
-  children: FfaEditableChild[];
+function buildNode(msg: RoomMessage, messages: RoomMessage[], speakerMap: Map<string, string>, isRoot = false): FfaEditableNode {
+  const children = messages
+    .filter((m) => m.parent_id === msg.id)
+    .map((child) => buildNode(child, messages, speakerMap));
+
+  const node: FfaEditableNode = {
+    id: msg.id,
+    role: msg.role === "human" ? "human" : "persona",
+    context_status: msg.context_status,
+    ...(!isRoot && { _delete: false }),
+  };
+
+  if (msg.role === "persona" && msg.persona_id) {
+    node.speaker = speakerMap.get(msg.persona_id) ?? msg.persona_id.slice(0, 8);
+  }
+
+  const text = getContent(msg);
+  if (text) node.content = text;
+  if (msg.silence_reason) node.silence_reason = msg.silence_reason;
+  if (children.length > 0) node.children = children;
+
+  return node;
 }
 
 export function ffaContextToYAML(
@@ -89,85 +104,49 @@ export function ffaContextToYAML(
 ): string {
   const header = [
     "# context_status: default | always | never",
-    "# _delete: true — permanently removes the message",
-    "# Deleting a human message also deletes its persona responses",
+    "# _delete: true — removes this message and all its descendants",
   ].join("\n");
 
   const rootMsg = messages.find((m) => m.parent_id === null);
   if (!rootMsg) return header + "\n[]";
 
-  const humanMessages = messages.filter(
-    (m) => m.role === "human" && m.parent_id === rootMsg.id
-  );
-
-  const data: FfaEditableHumanMessage[] = humanMessages.map((hm) => {
-    const children = messages
-      .filter((m) => m.role === "persona" && m.parent_id === hm.id)
-      .map((pm) => {
-        const speaker = pm.persona_id
-          ? (speakerMap.get(pm.persona_id) ?? pm.persona_id.slice(0, 8))
-          : "unknown";
-        const child: FfaEditableChild = {
-          id: pm.id,
-          role: "persona",
-          speaker,
-          context_status: pm.context_status,
-          _delete: false,
-          content: getContent(pm) || undefined,
-          silence_reason: pm.silence_reason,
-        };
-        if (!child.content) delete child.content;
-        if (!child.silence_reason) delete child.silence_reason;
-        return child;
-      });
-
-    const entry: FfaEditableHumanMessage = {
-      id: hm.id,
-      role: "human",
-      context_status: hm.context_status,
-      _delete: false,
-      content: getContent(hm) || undefined,
-      silence_reason: hm.silence_reason,
-      children,
-    };
-    if (!entry.content) delete entry.content;
-    if (!entry.silence_reason) delete entry.silence_reason;
-    return entry;
-  });
-
-  return header + "\n" + YAML.stringify(data, { lineWidth: 0 });
+  return header + "\n" + YAML.stringify([buildNode(rootMsg, messages, speakerMap, true)], { lineWidth: 0 });
 }
 
 export interface FfaContextYAMLResult {
   messages: Array<{ id: string; context_status: ContextStatus }>;
   deletedMessageIds: string[];
+  implicitDeleteCount: number;
 }
 
 export function ffaContextFromYAML(yamlContent: string): FfaContextYAMLResult {
-  const data = YAML.parse(yamlContent) as FfaEditableHumanMessage[];
+  const data = YAML.parse(yamlContent) as FfaEditableNode[];
 
   const deletedMessageIds: string[] = [];
   const messages: Array<{ id: string; context_status: ContextStatus }> = [];
+  let implicitDeleteCount = 0;
 
-  for (const hm of data ?? []) {
-    if (hm._delete) {
-      deletedMessageIds.push(hm.id);
-      for (const child of hm.children ?? []) {
-        deletedMessageIds.push(child.id);
-      }
+  function collectDeleted(node: FfaEditableNode, parentDeleted: boolean): void {
+    const selfDeleted = parentDeleted || !!node._delete;
+    if (selfDeleted) {
+      deletedMessageIds.push(node.id);
+      if (!node._delete) implicitDeleteCount++;
     } else {
-      const normalized = (hm.context_status ?? 'default').toString().toLowerCase() as ContextStatus;
-      messages.push({ id: hm.id, context_status: normalized });
-      for (const child of hm.children ?? []) {
-        if (child._delete) {
-          deletedMessageIds.push(child.id);
-        } else {
-          const childNormalized = (child.context_status ?? 'default').toString().toLowerCase() as ContextStatus;
-          messages.push({ id: child.id, context_status: childNormalized });
-        }
-      }
+      const normalized = (node.context_status ?? 'default').toString().toLowerCase() as ContextStatus;
+      messages.push({ id: node.id, context_status: normalized });
+    }
+    for (const child of node.children ?? []) {
+      collectDeleted(child, selfDeleted);
     }
   }
 
-  return { messages, deletedMessageIds };
+  const nodes = data ?? [];
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
+    const isRoot = i === 0;
+    if (isRoot && node._delete) continue; // root deletion not allowed — it anchors the room
+    collectDeleted(node, false);
+  }
+
+  return { messages, deletedMessageIds, implicitDeleteCount };
 }

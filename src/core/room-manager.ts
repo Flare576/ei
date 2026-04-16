@@ -154,7 +154,11 @@ export async function sendFfaMessage(
   // so the tree is a flat star: root → every human turn, each human turn → persona responses.
   // This gives the context window a bounded, predictable shape instead of a chain.
   const ffaRootMsg = sm.getRoomMessages(roomId).find(m => m.parent_id === null);
-  const ffaParentId = ffaRootMsg?.id ?? room.active_node_id;
+  if (!ffaRootMsg) {
+    onError({ code: "ROOM_NO_ROOT", message: "FFA room has no root message. Try archiving and recreating the room." });
+    return;
+  }
+  const ffaParentId = ffaRootMsg.id;
 
   const existing = sm.getRoomMessages(roomId).find(
     m => m.role === "human" && m.id === room.active_node_id && m.parent_id === ffaParentId

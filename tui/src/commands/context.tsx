@@ -52,7 +52,7 @@ export const contextCommand: Command = {
         }
 
         const personas = ctx.ei.personas();
-        const speakerMap = new Map(personas.map((p) => [p.id, p.display_name ?? p.name]));
+        const speakerMap = new Map(personas.map((p) => [p.id, p.display_name]));
 
         const originalStatus = new Map(allMessages.map((m) => [m.id, m.context_status]));
 
@@ -95,6 +95,21 @@ export const contextCommand: Command = {
             const parsed = ffaContextFromYAML(result.content);
 
             if (parsed.deletedMessageIds.length > 0) {
+              const count = parsed.deletedMessageIds.length;
+              const hasImplicit = parsed.implicitDeleteCount > 0;
+              const confirmed = await new Promise<boolean>((resolve) => {
+                ctx.showOverlay((hideOverlay) => (
+                  <ConfirmOverlay
+                    message={`Delete ${count} message${count === 1 ? "" : "s"}?${hasImplicit ? `\n(includes ${parsed.implicitDeleteCount} persona response${parsed.implicitDeleteCount === 1 ? "" : "s"})` : ""}`}
+                    onConfirm={() => { hideOverlay(); resolve(true); }}
+                    onCancel={() => { hideOverlay(); resolve(false); }}
+                  />
+                ), ctx.renderer);
+              });
+              if (!confirmed) {
+                ctx.showNotification("Delete cancelled", "info");
+                return;
+              }
               await ctx.ei.deleteRoomMessages(roomId, parsed.deletedMessageIds);
             }
 
