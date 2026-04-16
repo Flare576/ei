@@ -1,6 +1,6 @@
 import type { Command } from "./registry.js";
 import { spawnEditor } from "../util/editor.js";
-import { contextToYAML, contextFromYAML } from "../util/yaml-serializers.js";
+import { contextToYAML, contextFromYAML, ffaContextToYAML, ffaContextFromYAML } from "../util/yaml-serializers.js";
 import { logger } from "../util/logger.js";
 import { ConfirmOverlay } from "../components/ConfirmOverlay.js";
 import { CYPTreeOverlay } from "../components/CYPTreeOverlay.js";
@@ -45,8 +45,111 @@ export const contextCommand: Command = {
       }
 
       if (room.mode === RoomMode.FreeForAll) {
-        ctx.showNotification("FFA context coming soon", "info");
-        return;
+        const allMessages = ctx.ei.roomMessages();
+        if (allMessages.length === 0) {
+          ctx.showNotification("No messages to edit", "info");
+          return;
+        }
+
+        const personas = ctx.ei.personas();
+        const speakerMap = new Map(personas.map((p) => [p.id, p.display_name ?? p.name]));
+
+        const originalStatus = new Map(allMessages.map((m) => [m.id, m.context_status]));
+
+        let yamlContent = ffaContextToYAML(allMessages, speakerMap);
+        let editorIteration = 0;
+
+        while (true) {
+          editorIteration++;
+          logger.debug("[context] ffa starting editor iteration", { iteration: editorIteration });
+
+          const result = await spawnEditor({
+            initialContent: yamlContent,
+            filename: "ffa-context.yaml",
+            renderer: ctx.renderer,
+          });
+
+          logger.debug("[context] ffa editor returned", {
+            iteration: editorIteration,
+            aborted: result.aborted,
+            success: result.success,
+            hasContent: result.content !== null,
+          });
+
+          if (result.aborted) {
+            ctx.showNotification("Editor cancelled", "info");
+            return;
+          }
+
+          if (!result.success) {
+            ctx.showNotification("Editor failed to open", "error");
+            return;
+          }
+
+          if (result.content === null) {
+            ctx.showNotification("No changes made", "info");
+            return;
+          }
+
+          try {
+            const parsed = ffaContextFromYAML(result.content);
+
+            if (parsed.deletedMessageIds.length > 0) {
+              await ctx.ei.deleteRoomMessages(roomId, parsed.deletedMessageIds);
+            }
+
+            for (const msg of parsed.messages) {
+              const orig = originalStatus.get(msg.id);
+              if (orig !== undefined && orig !== msg.context_status) {
+                await ctx.ei.setRoomMessageContextStatus(roomId, msg.id, msg.context_status);
+              }
+            }
+
+            const deleteCount = parsed.deletedMessageIds.length;
+            const notification =
+              deleteCount > 0
+                ? `Context updated (${deleteCount} message${deleteCount === 1 ? "" : "s"} deleted)`
+                : "Context updated";
+
+            ctx.showNotification(notification, "info");
+            return;
+          } catch (parseError) {
+            const errorMsg = parseError instanceof Error ? parseError.message : String(parseError);
+            logger.debug("[context] ffa YAML parse error, prompting for re-edit", {
+              iteration: editorIteration,
+              error: errorMsg,
+            });
+
+            const shouldReEdit = await new Promise<boolean>((resolve) => {
+              ctx.showOverlay((hideOverlay, hideForEditor) => (
+                <ConfirmOverlay
+                  message={`YAML parse error:\n${errorMsg}\n\nRe-edit?`}
+                  onConfirm={() => {
+                    logger.debug("[context] ffa user confirmed re-edit");
+                    hideForEditor();
+                    resolve(true);
+                  }}
+                  onCancel={() => {
+                    logger.debug("[context] ffa user cancelled re-edit");
+                    hideOverlay();
+                    resolve(false);
+                  }}
+                />
+              ), ctx.renderer);
+            });
+
+            logger.debug("[context] ffa shouldReEdit", { shouldReEdit, iteration: editorIteration });
+
+            if (shouldReEdit) {
+              yamlContent = result.content;
+              logger.debug("[context] ffa continuing to next iteration");
+              continue;
+            } else {
+              ctx.showNotification("Changes discarded", "info");
+              return;
+            }
+          }
+        }
       }
 
       if (room.mode === RoomMode.MessagesAgainstPersona) {
