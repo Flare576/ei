@@ -110,6 +110,8 @@ export interface EiContextValue {
   dismissWelcomeOverlay: () => void;
   deleteMessages: (personaId: string, messageIds: string[]) => Promise<void>;
   setMessageContextStatus: (personaId: string, messageId: string, status: ContextStatus) => Promise<void>;
+  deleteRoomMessages: (roomId: string, messageIds: string[]) => Promise<void>;
+  setRoomMessageContextStatus: (roomId: string, messageId: string, status: ContextStatus) => Promise<void>;
   recallPendingMessages: () => Promise<string>;
   getToolProviderList: () => ToolProvider[];
   getToolList: () => ToolDefinition[];
@@ -468,6 +470,22 @@ export const EiProvider: ParentComponent = (props) => {
     if (!processor) return;
     await processor.setMessageContextStatus(personaId, messageId, status);
     setStore("messages", store.messages.map(m => m.id === messageId ? { ...m, context_status: status } : m));
+  };
+
+  const deleteRoomMessages = async (roomId: string, messageIds: string[]): Promise<void> => {
+    if (!processor) return;
+    processor.getStateManager().removeRoomMessages(roomId, messageIds);
+    if (roomId === store.activeRoomId) {
+      setStore("roomMessages", msgs => msgs.filter(m => !messageIds.includes(m.id)));
+    }
+  };
+
+  const setRoomMessageContextStatus = async (roomId: string, messageId: string, status: ContextStatus): Promise<void> => {
+    if (!processor) return;
+    processor.getStateManager().updateRoomMessage(roomId, messageId, { context_status: status });
+    if (roomId === store.activeRoomId) {
+      setStore("roomMessages", msgs => msgs.map(m => m.id === messageId ? { ...m, context_status: status } : m));
+    }
   };
 
   const recallPendingMessages = async (): Promise<string> => {
@@ -905,6 +923,8 @@ export const EiProvider: ParentComponent = (props) => {
     dismissWelcomeOverlay: () => setShowWelcomeOverlay(false),
     deleteMessages,
     setMessageContextStatus,
+    deleteRoomMessages,
+    setRoomMessageContextStatus,
     recallPendingMessages,
     getToolProviderList,
     getToolList,
