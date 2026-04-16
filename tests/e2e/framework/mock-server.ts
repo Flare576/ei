@@ -370,6 +370,10 @@ export class MockLLMServerImpl implements MockLLMServer {
       if (content.includes("people")) return "person-extraction";
     }
 
+    if (content.includes("you are participating in a shared multi-persona conversation")) {
+      return "room-response";
+    }
+
     if (content.includes("you are ei") && content.includes("companion")) {
       return "response";
     }
@@ -384,10 +388,6 @@ export class MockLLMServerImpl implements MockLLMServer {
 
     if (content.includes("the conversation has reached a fork")) {
       return "room-judge";
-    }
-
-    if (content.includes("you are participating in a shared multi-persona conversation")) {
-      return "room-response";
     }
 
     if (content.includes("description") && content.includes("persona")) {
@@ -507,10 +507,7 @@ export class MockLLMServerImpl implements MockLLMServer {
       case "room-response":
         return {
           type: "fixed",
-          content: JSON.stringify({
-            should_respond: true,
-            verbal_response: "I find this conversation quite interesting.",
-          }),
+          content: "I find this conversation quite interesting.",
           statusCode: 200,
         };
 

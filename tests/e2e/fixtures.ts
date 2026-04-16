@@ -214,6 +214,10 @@ export function createMinimalCheckpoint(
       settings: {
         auto_save_interval_ms: 5000,
         default_model: "Mock LLM:mock-model",
+        ceremony: {
+          time: "09:00",
+          last_ceremony: timestamp,
+        },
         accounts: [{
           id: "mock-llm-account",
           name: "Mock LLM",
