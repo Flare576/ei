@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { ZoneMap } from "./ZoneMap";
 
 interface HelpModalProps {
   isOpen: boolean;
@@ -77,6 +78,11 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
 
         <div className="ei-help-modal__content">
           <section className="ei-help-section">
+            <h3>UI Map</h3>
+            <ZoneMap />
+          </section>
+
+          <section className="ei-help-section">
             <h3>Keyboard Shortcuts</h3>
             <dl className="ei-shortcut-list">
               <div className="ei-shortcut">
@@ -96,10 +102,6 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
                 <dd>Navigate personas (when panel focused)</dd>
               </div>
               <div className="ei-shortcut">
-                <dt><kbd>Enter</kbd></dt>
-                <dd>Select persona / Send message</dd>
-              </div>
-              <div className="ei-shortcut">
                 <dt><kbd>Shift</kbd> + <kbd>Enter</kbd></dt>
                 <dd>New line in message</dd>
               </div>
@@ -116,36 +118,6 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
                 <dd>Scroll chat history</dd>
               </div>
             </dl>
-          </section>
-
-          <section className="ei-help-section">
-            <h3>Core Concepts</h3>
-            <dl className="ei-concept-list">
-              <dt>Personas</dt>
-              <dd>AI personalities you create and chat with. Each has unique traits and topics.</dd>
-              
-              <dt>Ei</dt>
-              <dd>Your default companion persona. Ei helps manage other personas and learns about you.</dd>
-              
-              <dt>Auto-save</dt>
-              <dd>Your state is saved automatically after every change. Use Export/Import from Settings to backup or restore.</dd>
-              
-              <dt>Pending Messages</dt>
-              <dd>Messages waiting to be processed. Click or press ↑ to recall them for editing.</dd>
-              
-              <dt>Pause</dt>
-              <dd>Stops all processing immediately. Press Escape or click the pause button.</dd>
-            </dl>
-          </section>
-
-          <section className="ei-help-section">
-            <h3>Tips</h3>
-            <ul className="ei-tips-list">
-              <li>Hover over a persona to see quick actions (pause, edit, archive, delete)</li>
-              <li>Click on unread messages to mark them as read</li>
-              <li>Use the save system before making big changes - you can always undo!</li>
-              <li>Pausing aborts current AI processing but preserves your messages</li>
-            </ul>
           </section>
         </div>
 

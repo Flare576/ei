@@ -105,8 +105,8 @@ Rooms have three modes, set at creation time:
 
 | Command | Aliases | Description |
 |---------|---------|-------------|
-| `/me` | | Edit all your data (facts, traits, topics, people) in `$EDITOR` |
-| `/me <type>` | | Edit one type: `facts`, `traits`, `topics`, or `people` |
+| `/me` | | Edit all your data (facts, topics, people) in `$EDITOR` |
+| `/me <type>` | | Edit one type: `facts`, `topics`, or `people` |
 | `/dedupe <person\|topic> <term> [term2 ...]` | | Fuzzy-search and merge duplicate people or topics in `$EDITOR`. Unquoted words are individual OR terms; quoted strings match as exact phrases: `/dedupe person Flare "Jeremy Scherer"` finds records matching `Flare` OR `Jeremy Scherer` |
 | `/settings` | `/set` | Edit your global settings in `$EDITOR` |
 | `/setsync <user> <pass>` | `/ss` | Set sync credentials (triggers restart) |

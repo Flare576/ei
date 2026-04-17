@@ -368,7 +368,6 @@ Rooms are shared multi-persona conversations — a space where the Human and mul
 ## Learning About the Human
 As the human chats, the system learns about them:
 - **Facts**: Objective information (job, location, family members)
-- **Traits**: Personality characteristics and tendencies
 - **Topics**: Interests and how they feel about them
 - **People**: Relationships in their life
 - **Quotes**: Memorable things said in conversation (human selects these with ${viewQuotesAction})

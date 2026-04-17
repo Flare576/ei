@@ -36,7 +36,6 @@ As you chat, Ei builds up a picture of you: facts, personality traits, people in
 Open the **☰ menu** (top-right) → **My Data**. You'll see tabs for:
 
 - **Facts** — Things Ei knows about you ("You live in Austin", "You prefer dark mode")
-- **Traits** — How you tend to think and communicate
 - **Topics** — Subjects you care about, with context on your interest level
 - **People** — Friends, family, colleagues Ei has learned about
 - **Quotes** — Memorable things you or your personas have said
