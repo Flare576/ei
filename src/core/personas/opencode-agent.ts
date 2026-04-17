@@ -26,6 +26,7 @@ export function resolveCanonicalAgent(agentName: string): { canonical: string; a
   let name = agentName;
   name = name.replace(/^ai-sdlc[:-]/, "");
   name = name.replace(/\s*\([^)]+\)\s*$/, "").trim();
+  name = name.replace(/\s{2,}\S+.*$/, "").trim();
   name = name.replace(/-/g, " ");
   const canonical = name.replace(/\b\w/g, (c) => c.toUpperCase());
 

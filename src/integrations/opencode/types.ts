@@ -180,6 +180,8 @@ export const AGENT_ALIASES: Record<string, string[]> = {
     "sisyphus",
     "Sisyphus",
     "Sisyphus (Ultraworker)",
+    "Sisyphus Ultraworker",
+    "sisyphus ultraworker",
     "Planner-Sisyphus",
     "planner-sisyphus",
   ],
