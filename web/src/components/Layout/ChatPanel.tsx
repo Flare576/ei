@@ -572,9 +572,9 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
               <button
                 className="ei-boundary-btn ei-image-prompt-btn"
                 onClick={onImagePromptClick}
-                title="Generate image from selected messages"
+                title="Synthesize image from selected messages"
               >
-                🖼️
+                🎨
               </button>
             )}
             {onCapture && (
