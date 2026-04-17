@@ -38,6 +38,7 @@ export enum LLMNextStep {
   HandleHeartbeatCheck = "handleHeartbeatCheck",
   HandleEiHeartbeat = "handleEiHeartbeat",
   HandleOneShot = "handleOneShot",
+  HandleOneShotJSON = "handleOneShotJSON",
   // Tool calling continuation (second LLM call after tool execution, may loop for more tool calls).
   // data.toolHistory: serialized LLMHistoryMessage[] (assistant + tool result messages)
   // data.toolCallCounts: serialized Map entries [[name, count], ...] carrying per-tool call counts

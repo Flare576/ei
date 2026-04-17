@@ -102,6 +102,7 @@ export interface Ei_Interface {
   onError?: (error: EiError) => void;
   onStateImported?: () => void;
   onOneShotReturned?: (guid: string, content: string) => void;
+  onOneShotJSONReturned?: (guid: string, parsed: unknown) => void;
   onContextBoundaryChanged?: (personaId: string) => void;
   onSaveAndExitStart?: () => void;
   onSaveAndExitFinish?: () => void;
