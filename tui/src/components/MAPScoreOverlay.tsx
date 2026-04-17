@@ -32,7 +32,7 @@ function truncate(s: string, n: number): string {
 }
 
 function getMessageText(m: RoomMessage): string {
-  return m.verbal_response ?? m.content ?? m.silence_reason ?? "";
+  return (m.verbal_response ?? m.content ?? m.silence_reason ?? "").replace(/\n+/g, " ");
 }
 
 export function MAPScoreOverlay(props: MAPScoreOverlayProps) {
@@ -262,15 +262,15 @@ export function MAPScoreOverlay(props: MAPScoreOverlayProps) {
           <text fg="#eee8d5">{roomTitle()}</text>
         </box>
 
-        <box paddingLeft={1} paddingRight={1} marginTop={1}>
+        <box paddingLeft={1} paddingRight={1} marginTop={1} height={1}>
           <text fg="#6272a4">{headerLine()}</text>
         </box>
-        <box paddingLeft={1} paddingRight={1}>
+        <box paddingLeft={1} paddingRight={1} height={1}>
           <text fg="#44475a">{dividerLine()}</text>
         </box>
 
         <scrollbox
-          height="100%"
+          flexGrow={1}
           ref={(el: ScrollBoxRenderable) => { scrollRef = el; }}
         >
           <For each={scoreRows()}>
@@ -285,13 +285,13 @@ export function MAPScoreOverlay(props: MAPScoreOverlayProps) {
           </For>
         </scrollbox>
 
-        <box paddingLeft={1} paddingRight={1}>
+        <box paddingLeft={1} paddingRight={1} height={1}>
           <text fg="#586e75">{"─".repeat(COL_ROUND + COL_WINNER + COL_MSG + COL_VERDICT + 9)}</text>
         </box>
-        <box paddingLeft={1} paddingRight={1}>
+        <box paddingLeft={1} paddingRight={1} height={1}>
           <text fg="#b58900">{scoreSummary()}</text>
         </box>
-        <box paddingLeft={1} paddingRight={1} paddingBottom={1}>
+        <box paddingLeft={1} paddingRight={1} height={1} marginBottom={1}>
           <text fg="#586e75">{"[q] close  [j/k] scroll  [PgUp/PgDn] page"}</text>
         </box>
       </box>
