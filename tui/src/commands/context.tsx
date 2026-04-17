@@ -4,6 +4,7 @@ import { contextToYAML, contextFromYAML, ffaContextToYAML, ffaContextFromYAML } 
 import { logger } from "../util/logger.js";
 import { ConfirmOverlay } from "../components/ConfirmOverlay.js";
 import { CYPTreeOverlay } from "../components/CYPTreeOverlay.js";
+import { MAPScoreOverlay } from "../components/MAPScoreOverlay.js";
 import { RoomMode } from "../../../src/core/types/enums.js";
 
 export const contextCommand: Command = {
@@ -168,7 +169,28 @@ export const contextCommand: Command = {
       }
 
       if (room.mode === RoomMode.MessagesAgainstPersona) {
-        ctx.showNotification("MAP score view coming soon", "info");
+        if (!room.judge_persona_id) {
+          ctx.showNotification("No judge configured for this room", "warn");
+          return;
+        }
+        const human = await ctx.ei.getHuman();
+        const humanName =
+          human.settings?.name_display ||
+          human.facts?.find((f) => f.name === "Nickname/Preferred Name")?.description ||
+          "You";
+        ctx.showOverlay((hideOverlay) => (
+          <MAPScoreOverlay
+            roomId={roomId}
+            roomName={room.display_name}
+            messages={ctx.ei.roomMessages()}
+            activeNodeId={room.active_node_id ?? ""}
+            activeRoomPath={ctx.ei.roomActivePath()}
+            personas={ctx.ei.personas()}
+            judgePersonaId={room.judge_persona_id!}
+            humanName={humanName}
+            onDismiss={hideOverlay}
+          />
+        ), ctx.renderer);
         return;
       }
 

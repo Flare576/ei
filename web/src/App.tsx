@@ -68,7 +68,7 @@ function applyTheme(activeThemeId: string | undefined, customThemes: ThemeDefini
   document.head.appendChild(style);
 }
 import { HumanEditor, PersonaEditor, PersonaCreatorModal, RoomCreatorModal, RoomEditorModal, ArchivedPersonasModal, ArchivedRoomsModal } from "./components/EntityEditor";
-import { RoomOverviewOverlay, CYPTreeView, FFAContextView } from "./components/Rooms";
+import { RoomOverviewOverlay, CYPTreeView, FFAContextView, MAPScoreView } from "./components/Rooms";
 import { QuoteCaptureModal, QuoteManagementModal } from "./components/Quote";
 import { SettingsModal } from "./components/Settings";
 import { MessageSelectorModal } from "./components/Modals/MessageSelectorModal";
@@ -1965,9 +1965,19 @@ function App() {
               handleSetRoomMessageContextStatus(activeRoom.id, msgId, status)
             }
           />
-        ) : (
-          <div className="ei-room-overview__placeholder">Coming soon…</div>
-        )}
+        ) : activeRoom.mode === 'messages_against_persona' ? (
+          <MAPScoreView
+            room={activeRoom}
+            allMessages={roomMessages}
+            personas={personas}
+            humanName={
+              human?.settings?.name_display ||
+              human?.facts?.find(f => f.name === "Nickname/Preferred Name")?.description ||
+              "You"
+            }
+            judgePersonaId={activeRoom.judge_persona_id ?? ''}
+          />
+        ) : null}
       </RoomOverviewOverlay>
     )}
     </>
