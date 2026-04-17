@@ -112,6 +112,7 @@ import {
   deleteQueueItems,
   clearQueue,
   submitOneShot,
+  submitOneShotJSON,
 } from "./queue-manager.js";
 import {
   getRoomList,
@@ -1484,6 +1485,10 @@ const toolNextSteps = new Set([
           const guid = response.request.data.guid as string;
           this.interface.onOneShotReturned?.(guid, "");
         }
+        if (response.request.next_step === LLMNextStep.HandleOneShotJSON) {
+          const guid = response.request.data.guid as string;
+          this.interface.onOneShotJSONReturned?.(guid, null);
+        }
       }
 
       this.interface.onError?.({ code, message });
@@ -1527,6 +1532,11 @@ const toolNextSteps = new Set([
         const guid = response.request.data.guid as string;
         const content = response.content ?? "";
         this.interface.onOneShotReturned?.(guid, content);
+      }
+
+      if (response.request.next_step === LLMNextStep.HandleOneShotJSON) {
+        const guid = response.request.data.guid as string;
+        this.interface.onOneShotJSONReturned?.(guid, response.parsed ?? null);
       }
 
       if (response.request.next_step === LLMNextStep.HandlePersonaPreview) {
@@ -1986,6 +1996,16 @@ const toolNextSteps = new Set([
 
   async submitOneShot(guid: string, systemPrompt: string, userPrompt: string): Promise<void> {
     return submitOneShot(
+      this.stateManager,
+      () => getOneshotModel(this.stateManager),
+      guid,
+      systemPrompt,
+      userPrompt
+    );
+  }
+
+  async submitOneShotJSON(guid: string, systemPrompt: string, userPrompt: string): Promise<void> {
+    return submitOneShotJSON(
       this.stateManager,
       () => getOneshotModel(this.stateManager),
       guid,

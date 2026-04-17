@@ -77,3 +77,21 @@ export async function submitOneShot(
     data: { guid },
   });
 }
+
+export async function submitOneShotJSON(
+  sm: StateManager,
+  getOneshotModel: () => string | undefined,
+  guid: string,
+  systemPrompt: string,
+  userPrompt: string
+): Promise<void> {
+  sm.queue_enqueue({
+    type: LLMRequestType.JSON,
+    priority: LLMPriority.High,
+    system: systemPrompt,
+    user: userPrompt,
+    next_step: LLMNextStep.HandleOneShotJSON,
+    model: getOneshotModel(),
+    data: { guid },
+  });
+}

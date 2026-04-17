@@ -139,3 +139,8 @@ export function handleOneShot(_response: LLMResponse, _state: StateManager): voi
   // One-shot is handled specially in Processor to fire onOneShotReturned
   // This handler is a no-op placeholder
 }
+
+export function handleOneShotJSON(_response: LLMResponse, _state: StateManager): void {
+  // One-shot JSON is handled specially in Processor to fire onOneShotJSONReturned
+  // This handler is a no-op placeholder
+}

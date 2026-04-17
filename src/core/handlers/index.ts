@@ -6,7 +6,7 @@ import type { PersonIdentifier } from "../types/data-items.js";
 
 export type { ResponseHandler } from "./persona-response.js";
 
-import { handlePersonaResponse, handleToolContinuation, handleOneShot } from "./persona-response.js";
+import { handlePersonaResponse, handleToolContinuation, handleOneShot, handleOneShotJSON } from "./persona-response.js";
 import { handleHeartbeatCheck, handleEiHeartbeat } from "./heartbeat.js";
 import { handlePersonaGeneration, handlePersonaDescriptions, handlePersonaTraitExtraction } from "./persona-generation.js";
 import {
@@ -79,6 +79,7 @@ export const handlers: Record<LLMNextStep, ResponseHandler> = {
   handleHeartbeatCheck,
   handleEiHeartbeat,
   handleOneShot,
+  handleOneShotJSON,
   handleToolContinuation,
   handleRewriteScan,
   handleRewriteRewrite,
