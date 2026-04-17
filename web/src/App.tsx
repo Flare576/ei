@@ -1976,6 +1976,9 @@ function App() {
               "You"
             }
             judgePersonaId={activeRoom.judge_persona_id ?? ''}
+            onSetMessageContextStatus={(msgId, status) =>
+              handleSetRoomMessageContextStatus(activeRoom.id, msgId, status)
+            }
           />
         ) : null}
       </RoomOverviewOverlay>

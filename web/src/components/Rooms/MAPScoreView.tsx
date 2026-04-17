@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import type { RoomEntity, RoomMessage, PersonaSummary } from '../../../../src/core/types';
+import { ContextStatus } from '../../../../src/core/types';
 import { MarkdownContent } from '../Chat/MarkdownContent';
 import '../../styles/room-overview.css';
 
@@ -9,7 +10,26 @@ interface MAPScoreViewProps {
   personas: PersonaSummary[];
   humanName: string;
   judgePersonaId: string;
+  onSetMessageContextStatus: (messageId: string, status: ContextStatus) => Promise<void>;
 }
+
+const STATUS_CYCLE: Record<ContextStatus, ContextStatus> = {
+  [ContextStatus.Default]: ContextStatus.Always,
+  [ContextStatus.Always]: ContextStatus.Never,
+  [ContextStatus.Never]: ContextStatus.Default,
+};
+
+const STATUS_LABEL: Record<ContextStatus, string> = {
+  [ContextStatus.Default]: 'Default',
+  [ContextStatus.Always]: 'Always',
+  [ContextStatus.Never]: 'Never',
+};
+
+const STATUS_CLASS: Record<ContextStatus, string> = {
+  [ContextStatus.Default]: 'ei-ffa-context__status--default',
+  [ContextStatus.Always]: 'ei-ffa-context__status--always',
+  [ContextStatus.Never]: 'ei-ffa-context__status--never',
+};
 
 interface RoundRow {
   roundNum: number;
@@ -19,12 +39,8 @@ interface RoundRow {
   inProgress: boolean;
 }
 
-function truncate(text: string, len = 80): string {
-  if (text.length <= len) return text;
-  return text.slice(0, len) + '…';
-}
 
-export function MAPScoreView({ room, allMessages, personas, humanName, judgePersonaId }: MAPScoreViewProps) {
+export function MAPScoreView({ room, allMessages, personas, humanName, judgePersonaId, onSetMessageContextStatus }: MAPScoreViewProps) {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   const toggleExpand = useCallback((id: string) => {
@@ -38,6 +54,14 @@ export function MAPScoreView({ room, allMessages, personas, humanName, judgePers
       return next;
     });
   }, []);
+
+  const handleStatusCycle = useCallback(
+    async (e: React.MouseEvent, msg: RoomMessage) => {
+      e.stopPropagation();
+      await onSetMessageContextStatus(msg.id, STATUS_CYCLE[msg.context_status]);
+    },
+    [onSetMessageContextStatus]
+  );
 
   const personaMap = useMemo(() => {
     const m = new Map<string, string>();
@@ -61,60 +85,51 @@ export function MAPScoreView({ room, allMessages, personas, humanName, judgePers
   }, [room.active_node_id, allMessages]);
 
   const { rounds, scoreMap } = useMemo(() => {
-    const humanMsgs = activePath.filter((m) => m.role === 'human');
-    const winnerMsgs = activePath.filter(
-      (m) =>
-        m.role === 'persona' &&
-        m.persona_id !== judgePersonaId &&
-        m.verbal_response != null
-    );
-    const verdictMsgs = activePath.filter(
-      (m) => m.persona_id === judgePersonaId && m.silence_reason != null
-    );
+    if (activePath.length === 0) return { rounds: [], scoreMap: new Map<string, number>() };
 
-    const verdictByParent = new Map<string | null, RoomMessage>();
-    verdictMsgs.forEach((v) => verdictByParent.set(v.parent_id, v));
+    const byId = new Map<string, RoomMessage>();
+    allMessages.forEach((m) => byId.set(m.id, m));
+
+    // Verdicts are siblings of winners — same parent_id as the winner, not children of it.
+    // Index by parent_id so we can look up the verdict for any given winner in O(1).
+    const verdictByParentId = new Map<string, RoomMessage>();
+    allMessages
+      .filter((m) => m.persona_id === judgePersonaId && m.silence_reason != null)
+      .forEach((v) => { if (v.parent_id) verdictByParentId.set(v.parent_id, v); });
 
     const runningScore = new Map<string, number>();
     const rows: RoundRow[] = [];
 
-    humanMsgs.forEach((humanMsg, idx) => {
-      if (idx === 0) {
-        rows.push({
-          roundNum: 0,
-          humanMsg,
-          winnerMsg: null,
-          verdictMsg: null,
-          inProgress: false,
-        });
-        return;
+    const seedMsg = activePath[0];
+    rows.push({ roundNum: 0, humanMsg: seedMsg, winnerMsg: null, verdictMsg: null, inProgress: false });
+
+    // Active path: human → winner-1 → winner-2 → ...
+    // Each non-judge persona message on the path is a round winner.
+    // The prompt that started that round is the winner's parent (previous winner or seed human).
+    let roundNum = 0;
+    for (const msg of activePath) {
+      if (msg.role !== 'persona' || msg.persona_id === judgePersonaId) continue;
+
+      roundNum++;
+      const humanMsg = msg.parent_id ? (byId.get(msg.parent_id) ?? seedMsg) : seedMsg;
+      const verdictMsg = msg.parent_id ? (verdictByParentId.get(msg.parent_id) ?? null) : null;
+
+      if (msg.persona_id) {
+        runningScore.set(msg.persona_id, (runningScore.get(msg.persona_id) ?? 0) + 1);
       }
 
-      const humanIdx = activePath.indexOf(humanMsg);
-      const winnerMsg =
-        winnerMsgs.find((w) => activePath.indexOf(w) === humanIdx + 1) ?? null;
+      rows.push({ roundNum, humanMsg, winnerMsg: msg, verdictMsg, inProgress: false });
+    }
 
-      const sourceForVerdict = winnerMsg ?? humanMsg;
-      const verdictMsg = verdictByParent.get(sourceForVerdict.id) ?? null;
-
-      const inProgress = winnerMsg === null;
-
-      if (winnerMsg?.persona_id) {
-        const pid = winnerMsg.persona_id;
-        runningScore.set(pid, (runningScore.get(pid) ?? 0) + 1);
-      }
-
-      rows.push({
-        roundNum: idx,
-        humanMsg,
-        winnerMsg,
-        verdictMsg,
-        inProgress,
-      });
-    });
+    const activeMsg = byId.get(room.active_node_id ?? '');
+    if (activeMsg?.role === 'persona' && !activeMsg.content && !activeMsg.verbal_response && !activeMsg.silence_reason) {
+      roundNum++;
+      const humanMsg = activeMsg.parent_id ? (byId.get(activeMsg.parent_id) ?? seedMsg) : seedMsg;
+      rows.push({ roundNum, humanMsg, winnerMsg: null, verdictMsg: null, inProgress: true });
+    }
 
     return { rounds: rows, scoreMap: new Map<string, number>(runningScore) };
-  }, [activePath, judgePersonaId]);
+  }, [activePath, allMessages, judgePersonaId, room.active_node_id]);
 
   const runningTotals = useMemo(() => {
     const totals = new Map<string, Map<string, number>>();
@@ -134,7 +149,7 @@ export function MAPScoreView({ room, allMessages, personas, humanName, judgePers
     const entries: Array<{ name: string; score: number }> = [];
 
     personas
-      .filter((p) => p.id !== judgePersonaId)
+      .filter((p) => p.id !== judgePersonaId && !p.is_archived && room.persona_ids.includes(p.id))
       .forEach((p) => {
         entries.push({ name: p.display_name, score: scoreMap.get(p.id) ?? 0 });
       });
@@ -161,6 +176,7 @@ export function MAPScoreView({ room, allMessages, personas, humanName, judgePers
               <th className="ei-map-score__th ei-map-score__th--winner">Winner</th>
               <th className="ei-map-score__th ei-map-score__th--message">Message</th>
               <th className="ei-map-score__th ei-map-score__th--verdict">Verdict</th>
+              <th className="ei-map-score__th ei-map-score__th--status">Status</th>
             </tr>
           </thead>
           <tbody>
@@ -172,12 +188,14 @@ export function MAPScoreView({ room, allMessages, personas, humanName, judgePers
               </tr>
             )}
             {rounds.map((row) => {
-              const msgId = row.humanMsg.id;
-              const isMsgExpanded = expandedRows.has(`msg-${msgId}`);
-              const isVerdictExpanded = expandedRows.has(`verdict-${msgId}`);
-              const msgText = row.humanMsg.content ?? row.humanMsg.verbal_response ?? '';
+              const rowKey = row.winnerMsg ? row.winnerMsg.id : `seed-${row.humanMsg.id}`;
+              const isMsgExpanded = expandedRows.has(`msg-${rowKey}`);
+              const isVerdictExpanded = expandedRows.has(`verdict-${rowKey}`);
+              const msgText = row.winnerMsg
+                ? (row.winnerMsg.content ?? row.winnerMsg.verbal_response ?? '')
+                : (row.humanMsg.content ?? row.humanMsg.verbal_response ?? '');
               const verdictText = row.verdictMsg?.silence_reason ?? '';
-              const runningNow = runningTotals.get(msgId);
+              const runningNow = runningTotals.get(row.humanMsg.id);
               const winnerPersonaId = row.winnerMsg?.persona_id;
               const winnerName = winnerPersonaId ? personaMap.get(winnerPersonaId) ?? winnerPersonaId.slice(0, 8) : null;
               const winnerCount = winnerPersonaId ? (runningNow?.get(winnerPersonaId) ?? 0) : 0;
@@ -187,7 +205,7 @@ export function MAPScoreView({ room, allMessages, personas, humanName, judgePers
 
               return (
                 <tr
-                  key={msgId}
+                  key={rowKey}
                   className={[
                     'ei-map-score__row',
                     isSeed ? 'ei-map-score__row--seed' : '',
@@ -217,42 +235,40 @@ export function MAPScoreView({ room, allMessages, personas, humanName, judgePers
 
                   <td
                     className="ei-map-score__td ei-map-score__td--message"
-                    onClick={() => toggleExpand(`msg-${msgId}`)}
+                    onClick={() => toggleExpand(`msg-${rowKey}`)}
                   >
-                    {isMsgExpanded ? (
-                      <div className="ei-map-score__content--expanded">
-                        <MarkdownContent content={msgText} />
-                      </div>
-                    ) : (
-                      <div className="ei-map-score__content--collapsed">
-                        {truncate(msgText)}
-                      </div>
-                    )}
+                    <div className={isMsgExpanded ? 'ei-map-score__content--expanded' : 'ei-map-score__content--collapsed'}>
+                      <MarkdownContent content={msgText} />
+                    </div>
                     <span className="ei-map-score__expand-hint">{isMsgExpanded ? '▲' : '▼'}</span>
                   </td>
 
                   <td
                     className="ei-map-score__td ei-map-score__td--verdict"
-                    onClick={verdictText ? () => toggleExpand(`verdict-${msgId}`) : undefined}
+                    onClick={verdictText ? () => toggleExpand(`verdict-${rowKey}`) : undefined}
                   >
                     {isSeed ? (
                       <span className="ei-map-score__verdict--initial">(initial)</span>
                     ) : isInProgress ? null : verdictText ? (
                       <>
-                        {isVerdictExpanded ? (
-                          <div className="ei-map-score__content--expanded">
-                            <MarkdownContent content={verdictText} />
-                          </div>
-                        ) : (
-                          <div className="ei-map-score__content--collapsed">
-                            {truncate(verdictText)}
-                          </div>
-                        )}
-                        <span className="ei-map-score__expand-hint">
-                          {isVerdictExpanded ? '▲' : '▼'}
-                        </span>
+                        <div className={isVerdictExpanded ? 'ei-map-score__content--expanded' : 'ei-map-score__content--collapsed'}>
+                          <MarkdownContent content={verdictText} />
+                        </div>
+                        <span className="ei-map-score__expand-hint">{isVerdictExpanded ? '▲' : '▼'}</span>
                       </>
                     ) : null}
+                  </td>
+
+                  <td className="ei-map-score__td ei-map-score__td--status">
+                    {row.winnerMsg && (
+                      <button
+                        className={`ei-ffa-context__status-btn ${STATUS_CLASS[row.winnerMsg.context_status]}`}
+                        onClick={(e) => handleStatusCycle(e, row.winnerMsg!)}
+                        title={`Click to cycle: Default → Always → Never (current: ${STATUS_LABEL[row.winnerMsg.context_status]})`}
+                      >
+                        {STATUS_LABEL[row.winnerMsg.context_status]}
+                      </button>
+                    )}
                   </td>
                 </tr>
               );

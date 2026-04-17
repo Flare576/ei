@@ -641,8 +641,9 @@
 
 .ei-map-score__th--round   { width: 6%;  min-width: 52px; }
 .ei-map-score__th--winner  { width: 18%; min-width: 120px; }
-.ei-map-score__th--message { width: 38%; }
-.ei-map-score__th--verdict { width: 38%; }
+.ei-map-score__th--message { width: 33%; }
+.ei-map-score__th--verdict { width: 33%; }
+.ei-map-score__th--status  { width: 10%; min-width: 80px; }
 
 .ei-map-score__row {
   border-bottom: 1px solid var(--ei-border-light, var(--ei-border));
@@ -676,6 +677,7 @@
 .ei-map-score__td--winner { white-space: nowrap; }
 .ei-map-score__td--message { max-width: 0; overflow: hidden; cursor: pointer; }
 .ei-map-score__td--verdict { max-width: 0; overflow: hidden; }
+.ei-map-score__td--status  { white-space: nowrap; }
 
 .ei-map-score__td--verdict[onClick] {
   cursor: pointer;
@@ -707,12 +709,13 @@
   font-size: 0.8rem;
 }
 
-.ei-map-score__content--collapsed {
+.ei-map-score__content--collapsed .ei-markdown {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
   font-size: 0.8rem;
   color: var(--ei-text-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .ei-map-score__content--expanded .ei-markdown {
@@ -720,11 +723,21 @@
   color: var(--ei-text-secondary);
 }
 
+.ei-map-score__td--message,
+.ei-map-score__td--verdict {
+  position: relative;
+}
+
 .ei-map-score__expand-hint {
   display: none;
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
   font-size: 0.6rem;
   color: var(--ei-text-muted);
-  margin-top: 2px;
+  background: var(--ei-bg-primary);
+  padding: 0 2px;
+  line-height: 1;
 }
 
 .ei-map-score__row:hover .ei-map-score__expand-hint {
