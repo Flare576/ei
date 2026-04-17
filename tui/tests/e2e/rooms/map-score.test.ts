@@ -200,41 +200,35 @@ test.describe("MAP score overlay — /context command", () => {
   test("/context in MAP room shows MAP Scoreboard header", async ({ terminal }) => {
     await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 15000 });
 
-    // Navigate to the MAP room
     terminal.write(`/r ${MAP_ROOM_NAME}`);
     terminal.submit();
 
     await expect(terminal.getByText(`Switched to ${MAP_ROOM_NAME}`)).toBeVisible({ timeout: 10000 });
 
-    // Open the MAP scoreboard via /context
     terminal.write("/context");
     terminal.submit();
 
-    // Verify the MAP Scoreboard overlay header is visible
-    await expect(terminal.getByText(/MAP Scoreboard/)).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText(/MAP Scoreboard/g)).toBeVisible({ timeout: 5000 });
 
-    // Close the overlay
     terminal.write("q");
+    await expect(terminal.getByText(/MAP Scoreboard/g)).not.toBeVisible({ timeout: 3000 });
   });
 
   test("/context in MAP room shows winning persona name in scoreboard", async ({ terminal }) => {
     await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 15000 });
 
-    // Navigate to the MAP room
     terminal.write(`/r ${MAP_ROOM_NAME}`);
     terminal.submit();
 
     await expect(terminal.getByText(`Switched to ${MAP_ROOM_NAME}`)).toBeVisible({ timeout: 10000 });
 
-    // Open the MAP scoreboard via /context
     terminal.write("/context");
     terminal.submit();
 
-    // Verify the winning persona "Ei" appears in the scoreboard
-    await expect(terminal.getByText(/MAP Scoreboard/)).toBeVisible({ timeout: 5000 });
-    await expect(terminal.getByText(/Ei/)).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText(/MAP Scoreboard/g)).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText(/Ei \(1\)/g)).toBeVisible({ timeout: 5000 });
 
-    // Close the overlay
     terminal.write("q");
+    await expect(terminal.getByText(/MAP Scoreboard/g)).not.toBeVisible({ timeout: 3000 });
   });
 });
