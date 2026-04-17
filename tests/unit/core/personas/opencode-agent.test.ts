@@ -164,6 +164,8 @@ describe("ensureAgentPersona", () => {
       "sisyphus",
       "Sisyphus",
       "Sisyphus (Ultraworker)",
+      "Sisyphus Ultraworker",
+      "sisyphus ultraworker",
       "Planner-Sisyphus",
       "planner-sisyphus",
     ]);
