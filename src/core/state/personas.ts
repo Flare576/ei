@@ -46,8 +46,8 @@ export class PersonaState {
     return this.personas.get(id)?.entity ?? null;
   }
 
-  getByName(nameOrAlias: string): PersonaEntity | null {
-    const searchTerm = nameOrAlias.toLowerCase();
+   getByName(nameOrAlias: string): PersonaEntity | null {
+    const searchTerm = nameOrAlias.replace(/^\p{Z}+|\p{Z}+$/gu, "").toLowerCase();
     
     // Priority 1: Exact display_name match
     for (const data of this.personas.values()) {
