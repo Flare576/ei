@@ -237,6 +237,7 @@ function App() {
   const roomChatPanelRef = useRef<RoomChatPanelHandle | null>(null);
   const activeRoomIdRef = useRef<string | null>(null);
   const oneShotResolvers = useRef<Map<string, (result: string) => void>>(new Map());
+  const oneShotJSONResolvers = useRef<Map<string, (result: unknown) => void>>(new Map());
   const storageRef = useRef<Storage | null>(null);
 
   useKeyboardNavigation({
@@ -387,6 +388,13 @@ function App() {
         if (resolve) {
           oneShotResolvers.current.delete(guid);
           resolve(content);
+        }
+      },
+      onOneShotJSONReturned: (guid, parsed) => {
+        const resolve = oneShotJSONResolvers.current.get(guid);
+        if (resolve) {
+          oneShotJSONResolvers.current.delete(guid);
+          resolve(parsed);
         }
       },
       onToolProviderAdded: () => {
@@ -1216,6 +1224,18 @@ function App() {
     });
   }, []);
 
+  const handleAiAssistJSON = useCallback(async (systemPrompt: string, userPrompt: string): Promise<unknown> => {
+    if (!processorRef.current) throw new Error('Processor not ready');
+    const guid = crypto.randomUUID();
+    return new Promise<unknown>((resolve, reject) => {
+      oneShotJSONResolvers.current.set(guid, resolve);
+      processorRef.current!.submitOneShotJSON(guid, systemPrompt, userPrompt).catch((err) => {
+        oneShotJSONResolvers.current.delete(guid);
+        reject(err);
+      });
+    });
+  }, []);
+
   const handleSynthesisRequest = useCallback(async (selectedMessageIds: string[], instructions: string) => {
     if (!processor || !activePersonaId) return;
     
@@ -1233,20 +1253,10 @@ function App() {
         ? `${conversationText}\n\nUser instructions: ${instructions}`
         : conversationText;
       
-      // Call OneShot for synthesis
-      const result = await handleAiAssist(SYNTHESIS_SYSTEM_PROMPT, userPrompt);
+      const raw = await handleAiAssistJSON(SYNTHESIS_SYSTEM_PROMPT, userPrompt);
+      const parsed = raw as { image_prompt: string; explanation?: string; negative_prompt?: string };
       
-      // Parse JSON response
-      let parsed: { image_prompt: string; explanation?: string; negative_prompt?: string };
-      try {
-        parsed = JSON.parse(result);
-      } catch (e) {
-        console.error('Failed to parse synthesis JSON:', result);
-        alert('Failed to generate image prompt. Please try again.');
-        return;
-      }
-      
-      if (!parsed.image_prompt) {
+      if (!parsed?.image_prompt) {
         console.error('No image_prompt in synthesis result:', parsed);
         alert('Failed to generate image prompt. Please try again.');
         return;
@@ -1278,7 +1288,7 @@ function App() {
       console.error('Synthesis request failed:', error);
       alert('Failed to generate image prompt. Please try again.');
     }
-  }, [processor, activePersonaId, messages, handleAiAssist, handleImageGenerate]);
+  }, [processor, activePersonaId, messages, handleAiAssistJSON, handleImageGenerate]);
 
 
   const linkPersonaToPersonRecord = useCallback(async (personaId: string, personId: string) => {
