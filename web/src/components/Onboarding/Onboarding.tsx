@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { remoteSync } from '../../../../src/storage/remote.js';
 import { ProviderType, type ProviderAccount } from '../../../../src/core/types.js';
 import { ProviderList, ProviderEditor } from '../Settings';
+import { ZoneMap } from '../Layout';
 
 enum OnboardingStep {
   Welcome = 0,
@@ -544,27 +545,12 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
 
   const renderComplete = () => (
     <div className="ei-onboarding__content">
-      <div className="ei-onboarding__complete-icon">🎉</div>
-      
-      <h1 className="ei-onboarding__title">You're All Set!</h1>
+      <h1 className="ei-onboarding__title">Here's what you're about to see</h1>
       <p className="ei-onboarding__subtitle">
-        Ei is ready to meet you.
+        A quick map before you dive in. Help is always in the ☰ menu if you need it again.
       </p>
 
-      <div className="ei-onboarding__complete-summary">
-        <p>
-          You've configured <strong>{accounts.length}</strong> LLM provider{accounts.length !== 1 ? 's' : ''}.
-        </p>
-        <p>
-          Ei will introduce themselves and start learning about you. Take your time - 
-          there's no rush. Everything you share stays private and local.
-        </p>
-      </div>
-
-      <div className="ei-onboarding__tip">
-        <strong>Pro tip:</strong> Later, go to Settings (gear icon) to set up device sync. 
-        This lets you access Ei from multiple devices while keeping your data encrypted.
-      </div>
+      <ZoneMap defaultOpenIndex={0} />
 
       <div className="ei-onboarding__actions">
         <button
