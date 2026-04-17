@@ -70,6 +70,18 @@ export function MAPScoreOverlay(props: MAPScoreOverlayProps) {
 
     if (path.length === 0) return [];
 
+    const msgById = new Map<string, RoomMessage>();
+    for (const m of props.messages) msgById.set(m.id, m);
+
+    // Verdicts are siblings of winners — same parent_id as the winner.
+    // They are NOT on the active path, so index all messages by parent_id.
+    const verdictByParentId = new Map<string, RoomMessage>();
+    for (const m of props.messages) {
+      if (m.persona_id === judgeId && m.silence_reason && m.parent_id) {
+        verdictByParentId.set(m.parent_id, m);
+      }
+    }
+
     const winCounts = new Map<string, number>();
     const rows: ScoreRow[] = [];
     let round = 0;
@@ -87,63 +99,29 @@ export function MAPScoreOverlay(props: MAPScoreOverlayProps) {
       isInProgress: false,
     });
 
-    // Each completed round on the active path follows: winner → verdict (judge) → human prompt.
-    // Losers are deleted by handleRoomJudge, so only winner + verdict survive per round.
-    let i = 1;
-    while (i < path.length) {
-      const msg = path[i];
+    // Active path: human → winner-1 → winner-2 → ...
+    // Each non-judge persona message on the path is a round winner.
+    for (const msg of path) {
+      if (msg.role !== "persona" || msg.persona_id === judgeId) continue;
 
-      if (msg.role === "human") {
-        const nextMsg = path[i + 1];
-        if (!nextMsg || nextMsg.role === "human") {
-          round++;
-          rows.push({
-            round,
-            winnerId: null,
-            winnerName: "In progress",
-            winnerScore: 0,
-            messagePreview: truncate(getMessageText(msg), 50),
-            verdict: "",
-            isInProgress: true,
-          });
-        }
-        i++;
-        continue;
-      }
+      round++;
+      const winnerId = msg.persona_id ?? "";
+      const prev = winCounts.get(winnerId) ?? 0;
+      const newCount = prev + 1;
+      winCounts.set(winnerId, newCount);
+      const winnerName = pMap.get(winnerId) ?? winnerId.slice(0, 8);
+      const verdictMsg = msg.parent_id ? verdictByParentId.get(msg.parent_id) : undefined;
+      const verdict = verdictMsg ? truncate(verdictMsg.silence_reason ?? "", 50) : "";
 
-      if (msg.role === "persona" && msg.persona_id !== judgeId && msg.verbal_response) {
-        round++;
-        const winnerId = msg.persona_id ?? "";
-        const prev = winCounts.get(winnerId) ?? 0;
-        const newCount = prev + 1;
-        winCounts.set(winnerId, newCount);
-        const winnerName = pMap.get(winnerId) ?? winnerId.slice(0, 8);
-
-        let verdict = "";
-        if (i + 1 < path.length) {
-          const nextMsg = path[i + 1];
-          if (
-            nextMsg.role === "persona" &&
-            nextMsg.persona_id === judgeId &&
-            nextMsg.silence_reason
-          ) {
-            verdict = truncate(nextMsg.silence_reason, 50);
-            i++;
-          }
-        }
-
-        rows.push({
-          round,
-          winnerId,
-          winnerName: `${winnerName} (${newCount})`,
-          winnerScore: newCount,
-          messagePreview: truncate(getMessageText(msg), 50),
-          verdict,
-          isInProgress: false,
-        });
-      }
-
-      i++;
+      rows.push({
+        round,
+        winnerId,
+        winnerName: `${winnerName} (${newCount})`,
+        winnerScore: newCount,
+        messagePreview: truncate(getMessageText(msg), 50),
+        verdict,
+        isInProgress: false,
+      });
     }
 
     return rows;
@@ -158,7 +136,7 @@ export function MAPScoreOverlay(props: MAPScoreOverlayProps) {
     let humanWins = 0;
 
     for (const m of path) {
-      if (m.role === "persona" && m.persona_id !== judgeId && m.verbal_response) {
+      if (m.role === "persona" && m.persona_id !== judgeId) {
         const id = m.persona_id ?? "";
         counts.set(id, (counts.get(id) ?? 0) + 1);
       }
