@@ -8,7 +8,7 @@
   font-size: var(--ei-font-size-sm);
   color: white;
   flex-shrink: 0;
-  overflow: hidden;
+  overflow: visible;
   user-select: none;
 }
 
