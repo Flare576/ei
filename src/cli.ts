@@ -16,6 +16,13 @@ import { join } from "path";
 import { retrieveBalanced, lookupById, loadLatestState } from "./cli/retrieval";
 import type { StorageState } from "./core/types";
 import { resolvePersonaId, filterByPersona, filterTypeSpecificByPersona, filterBySource, filterTypeSpecificBySource } from "./cli/persona-filter.js";
+import pkg from "../package.json" assert { type: "json" };
+
+const rawArgs = process.argv.slice(2);
+if (rawArgs.includes("--version") || rawArgs.includes("-v")) {
+  process.stdout.write(`${pkg.version}\n`);
+  process.exit(0);
+}
 
 const TYPE_ALIASES: Record<string, string> = {
   quote: "quotes",
