@@ -41,6 +41,7 @@ const zones: Zone[] = [
       <ul className="ei-zone-map__list">
         <li><strong>My Data</strong> — everything Ei has learned about you: facts, topics, people in your life, and quotes worth keeping. You can view, edit, or delete anything here.</li>
         <li><strong>Settings</strong> — add or manage LLM providers, set a default model, pick a theme, configure sync, and set up tool integrations (Tavily web search, Spotify)</li>
+        <li><strong>Help</strong> — this map, right here, always available</li>
         <li><strong>Sync &amp; Exit</strong> — saves your data and syncs to your configured device if sync is enabled</li>
       </ul>
     ),
@@ -52,10 +53,10 @@ const zones: Zone[] = [
     content: (
       <ul className="ei-zone-map__list">
         <li><strong>✦ (diamond)</strong> — Start a fresh context boundary. The AI only sees messages after this point — older history stays saved but isn't sent. Press again to clear the boundary.</li>
-        <li><strong>💡 (bulb)</strong> — Extract what the AI has learned about you from this conversation. Facts, topics, people — all get pulled out and added to your profile.</li>
-        <li><strong>🖼️ (image, in toolbar)</strong> — Select messages to synthesize into an image prompt</li>
-        <li><strong>✂️ (scissors, on your messages)</strong> — Capture a quote from that message directly to your memory</li>
-        <li><strong>🖼️ (image, on your messages)</strong> — Generate an image from that specific message</li>
+        <li><strong>💡 (bulb)</strong> — Ei periodically extracts data from conversations, but you can trigger it manually too. Facts, topics, people — all get pulled out and added to your profile.</li>
+        <li><strong>🎨 (palette, in toolbar)</strong> — Select messages to synthesize into an image prompt</li>
+        <li>On each of your messages: <strong>✂️</strong> captures a quote to memory; <strong>🖼️</strong> generates an image from that message. Both are always visible, and light up on hover.</li>
+        <li>In a Room, the <strong>🗺 button</strong> shows a visual map of the conversation branches</li>
       </ul>
     ),
   },
