@@ -650,6 +650,15 @@
   font-style: normal;
 }
 
+.ei-form-hint--note {
+  color: var(--ei-text-secondary);
+  font-style: normal;
+  background: var(--ei-bg-tertiary);
+  border-left: 3px solid var(--ei-accent);
+  padding: var(--ei-spacing-xs) var(--ei-spacing-sm);
+  border-radius: 0 var(--ei-radius-sm) var(--ei-radius-sm) 0;
+}
+
 .ei-form-error {
   font-size: var(--ei-font-size-sm);
   font-weight: 600;
