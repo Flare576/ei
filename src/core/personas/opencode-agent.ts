@@ -16,6 +16,7 @@ export interface EnsureAgentPersonaOptions {
 }
 
 export function resolveCanonicalAgent(agentName: string): { canonical: string; aliases: string[] } {
+  agentName = agentName.replace(/^\p{Z}+|\p{Z}+$/gu, "");
   for (const [canonical, variants] of Object.entries(AGENT_ALIASES)) {
     if (variants.includes(agentName)) {
       return { canonical, aliases: variants };
