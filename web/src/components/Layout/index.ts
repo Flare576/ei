@@ -6,3 +6,4 @@ export { ControlArea } from "./ControlArea";
 export { HelpModal } from "./HelpModal";
 export { HamburgerMenu } from "./HamburgerMenu";
 export { ImagePreviewModal } from "./ImagePreviewModal";
+export { ZoneMap } from './ZoneMap';
