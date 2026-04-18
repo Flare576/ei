@@ -178,7 +178,16 @@ export class FileStorage implements Storage {
     while (Date.now() - startTime < LOCK_TIMEOUT_MS) {
       const lockFile = Bun.file(lockPath);
       if (await lockFile.exists()) {
-        const lockContent = await lockFile.text();
+        // Read may throw if another writer deleted the lock between exists() and text() —
+        // treat that as "lock is gone, proceed to acquire" by falling through.
+        let lockContent: string;
+        try {
+          lockContent = await lockFile.text();
+        } catch {
+          // Lock vanished in the race window — retry from top to re-check state cleanly.
+          await new Promise((r) => setTimeout(r, LOCK_RETRY_DELAY_MS));
+          continue;
+        }
         const lockTime = parseInt(lockContent, 10);
         if (!isNaN(lockTime) && Date.now() - lockTime > LOCK_TIMEOUT_MS) {
           try {
