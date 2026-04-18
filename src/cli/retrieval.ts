@@ -94,6 +94,8 @@ export interface FactResult {
   name: string;
   description: string;
   sentiment: number;
+  validated_date?: string;
+  sources?: string[];
 }
 
 export interface PersonResult {
@@ -172,6 +174,8 @@ function mapFact(fact: Fact): FactResult {
     name: fact.name,
     description: fact.description,
     sentiment: fact.sentiment,
+    validated_date: fact.validated_date,
+    sources: fact.sources,
   };
 }
 

@@ -20,6 +20,7 @@ export async function execute(query: string, limit: number, options: { recent?: 
     name: fact.name,
     description: fact.description,
     sentiment: fact.sentiment,
-    validated: fact.validated,
+    validated_date: fact.validated_date,
+    sources: fact.sources,
   }));
 }

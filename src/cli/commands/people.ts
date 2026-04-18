@@ -22,5 +22,6 @@ export async function execute(query: string, limit: number, options: { recent?: 
     relationship: person.relationship,
     sentiment: person.sentiment,
     identifiers: person.identifiers ?? [],
+    sources: person.sources,
   }));
 }

@@ -21,5 +21,6 @@ export async function execute(query: string, limit: number, options: { recent?: 
     description: topic.description,
     category: topic.category,
     sentiment: topic.sentiment,
+    sources: topic.sources,
   }));
 }
