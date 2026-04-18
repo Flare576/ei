@@ -680,6 +680,7 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
               <Tooltip text="Room conversation overview" align="right">
                 <button
                   className="ei-boundary-btn"
+                  aria-label="Overview"
                   onClick={onShowOverview}
                 >
                   🗺

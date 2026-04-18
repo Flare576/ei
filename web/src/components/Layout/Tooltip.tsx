@@ -17,7 +17,7 @@ export function Tooltip({ text, children, disabled, align = 'center' }: TooltipP
   return (
     <div className="ei-tooltip">
       {children}
-      <div className={bubbleClass}>{text}</div>
+      <div className={bubbleClass} aria-hidden="true">{text}</div>
     </div>
   );
 }
