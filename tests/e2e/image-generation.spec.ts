@@ -418,13 +418,13 @@ test.describe("Image Generation and Removal", () => {
     const input = page.locator("textarea");
     await input.fill("Generate image");
     await input.press("Enter");
-    await expect(page.locator("text=Generate image")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('.ei-message__bubble', { hasText: 'Generate image' }).first()).toBeVisible({ timeout: 5000 });
     
     // Wait for LLM response to arrive (creates new message)
     await page.waitForTimeout(500);
     
     // Find button on the USER's message specifically (not the response)
-    const userMessage = page.locator('.ei-message').filter({ hasText: 'Generate image' });
+    const userMessage = page.locator('.ei-message-wrapper.human .ei-message').filter({ hasText: 'Generate image' });
     const messageImageButton = userMessage.locator('.ei-message__image');
     await expect(messageImageButton).toBeVisible({ timeout: 5000 });
     await messageImageButton.click();

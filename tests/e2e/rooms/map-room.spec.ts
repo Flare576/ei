@@ -486,8 +486,8 @@ test.describe("MAP Room — activation cycle (W3)", () => {
     await expect(page.locator(".ei-room-pill")).toBeVisible({ timeout: 5000 });
     await page.locator(".ei-room-pill").click();
 
-    await expect(page.locator('button[title="Overview"]')).toBeVisible({ timeout: 5000 });
-    await page.locator('button[title="Overview"]').click();
+    await expect(page.locator('button[aria-label="Overview"]')).toBeVisible({ timeout: 5000 });
+    await page.locator('button[aria-label="Overview"]').click();
 
     await expect(page.locator(".ei-map-score")).toBeVisible({ timeout: 5000 });
   });
@@ -512,8 +512,8 @@ test.describe("MAP Room — activation cycle (W3)", () => {
     await expect(page.locator(".ei-room-pill")).toBeVisible({ timeout: 5000 });
     await page.locator(".ei-room-pill").click();
 
-    await expect(page.locator('button[title="Overview"]')).toBeVisible({ timeout: 5000 });
-    await page.locator('button[title="Overview"]').click();
+    await expect(page.locator('button[aria-label="Overview"]')).toBeVisible({ timeout: 5000 });
+    await page.locator('button[aria-label="Overview"]').click();
 
     await expect(page.locator(".ei-map-score")).toBeVisible({ timeout: 5000 });
     await expect(

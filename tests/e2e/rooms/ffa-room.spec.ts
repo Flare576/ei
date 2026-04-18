@@ -267,7 +267,7 @@ test.describe("FFA Room context overview (web)", () => {
     await page.locator(".ei-room-pill").filter({ hasText: "Fellowship" }).click();
     await expect(page.locator(".ei-room-chat-panel")).toBeVisible({ timeout: 5000 });
 
-    await page.locator('button[title="Overview"]').click();
+    await page.locator('button[aria-label="Overview"]').click();
     await expect(page.locator(".ei-ffa-context")).toBeVisible({ timeout: 5000 });
 
     const rows = page.locator(".ei-ffa-context__row");
@@ -296,7 +296,7 @@ test.describe("FFA Room context overview (web)", () => {
     await page.locator(".ei-room-pill").filter({ hasText: "Fellowship" }).click();
     await expect(page.locator(".ei-room-chat-panel")).toBeVisible({ timeout: 5000 });
 
-    await page.locator('button[title="Overview"]').click();
+    await page.locator('button[aria-label="Overview"]').click();
     await expect(page.locator(".ei-ffa-context")).toBeVisible({ timeout: 5000 });
 
     const firstStatus = page.locator(".ei-ffa-context__status-btn").first();
