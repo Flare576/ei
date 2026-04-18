@@ -5,6 +5,7 @@ import type { Message, Quote } from "../../../../src/core/types";
 import type { ThemeDefinition } from "../../../../src/core/types/entities.js";
 import type { GenerationResult } from "../../comfyui";
 import { MarkdownContent } from "../Chat";
+import { Tooltip } from './Tooltip';
 import { decodeTheme, themeToStyleString, isBuiltInTheme } from "../../../../src/core/utils/theme-codec.js";
 
 function getContent(msg: { content?: string; verbal_response?: string; action_response?: string }): string {
@@ -417,16 +418,17 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
               const showBoundaryMarker = virtualRow.index === boundaryMessageIndex;
 
               const scissorsButton = (
-                <button 
-                  className="ei-message__scissors"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onScissorsClick?.(msg);
-                  }}
-                  title="Capture a quote"
-                >
-                  ✂️
-                </button>
+                <Tooltip text="Capture a quote">
+                  <button 
+                    className="ei-message__scissors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onScissorsClick?.(msg);
+                    }}
+                  >
+                    ✂️
+                  </button>
+                </Tooltip>
               );
               
               const getImageButtonIcon = (messageId: string) => {
@@ -444,23 +446,24 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
               };
               
               const imageButton = onImageGenerate && (
-                <button 
-                  className="ei-message__image"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (imageErrors[msg.id]) {
-                      onImageClick?.(msg.id);
-                    } else if (messageImages[msg.id]) {
-                      onImageClick?.(msg.id);
-                    } else if (!generatingImageFor) {
-                      onImageGenerate(msg);
-                    }
-                  }}
-                  title={getImageButtonTitle(msg.id)}
-                  disabled={generatingImageFor === msg.id}
-                >
-                  {getImageButtonIcon(msg.id)}
-                </button>
+                <Tooltip text={getImageButtonTitle(msg.id)} disabled={generatingImageFor === msg.id}>
+                  <button 
+                    className="ei-message__image"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (imageErrors[msg.id]) {
+                        onImageClick?.(msg.id);
+                      } else if (messageImages[msg.id]) {
+                        onImageClick?.(msg.id);
+                      } else if (!generatingImageFor) {
+                        onImageGenerate(msg);
+                      }
+                    }}
+                    disabled={generatingImageFor === msg.id}
+                  >
+                    {getImageButtonIcon(msg.id)}
+                  </button>
+                </Tooltip>
               );
 
               return (
@@ -560,31 +563,34 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
       <div className="ei-input-area">
         {activePersonaId && onSetContextBoundary && (
           <div className="ei-input-area__controls">
-            <button 
-              className="ei-boundary-btn"
-              onClick={handleBoundaryToggle}
-              title={boundaryIsActive ? "Resume previous conversation context" : "Start new conversation context"}
-              disabled={messages.length === 0 && !boundaryIsActive}
-            >
-              {boundaryIsActive ? "↩" : "✦"}
-            </button>
-            {onImagePromptClick && (
-              <button
-                className="ei-boundary-btn ei-image-prompt-btn"
-                onClick={onImagePromptClick}
-                title="Synthesize image from selected messages"
+            <Tooltip text={boundaryIsActive ? "Resume previous conversation context" : "Start new conversation context"}>
+              <button 
+                className="ei-boundary-btn"
+                onClick={handleBoundaryToggle}
+                disabled={messages.length === 0 && !boundaryIsActive}
               >
-                🎨
+                {boundaryIsActive ? "↩" : "✦"}
               </button>
+            </Tooltip>
+            {onImagePromptClick && (
+              <Tooltip text="Synthesize image from selected messages">
+                <button
+                  className="ei-boundary-btn ei-image-prompt-btn"
+                  onClick={onImagePromptClick}
+                >
+                  🎨
+                </button>
+              </Tooltip>
             )}
             {onCapture && (
-              <button
-                className="ei-boundary-btn ei-capture-btn"
-                onClick={onCapture}
-                title="Extract data from current conversation"
-              >
-                💡
-              </button>
+              <Tooltip text="Extract data from current conversation">
+                <button
+                  className="ei-boundary-btn ei-capture-btn"
+                  onClick={onCapture}
+                >
+                  💡
+                </button>
+              </Tooltip>
             )}
           </div>
         )}
