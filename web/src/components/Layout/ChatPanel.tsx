@@ -583,7 +583,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
               </Tooltip>
             )}
             {onCapture && (
-              <Tooltip text="Extract data from current conversation">
+              <Tooltip text="Extract data from current conversation" align="right">
                 <button
                   className="ei-boundary-btn ei-capture-btn"
                   onClick={onCapture}

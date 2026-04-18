@@ -47,3 +47,27 @@
   border: 5px solid transparent;
   border-top-color: var(--ei-bg-tertiary);
 }
+
+.ei-tooltip__bubble--right {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
+.ei-tooltip__bubble--right::before,
+.ei-tooltip__bubble--right::after {
+  left: auto;
+  right: 10px;
+  transform: none;
+}
+
+.ei-tooltip__bubble--left {
+  left: 0;
+  transform: none;
+}
+
+.ei-tooltip__bubble--left::before,
+.ei-tooltip__bubble--left::after {
+  left: 10px;
+  transform: none;
+}

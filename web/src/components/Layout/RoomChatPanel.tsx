@@ -677,7 +677,7 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
               </Tooltip>
             )}
             {onShowOverview && room && (
-              <Tooltip text="Room conversation overview">
+              <Tooltip text="Room conversation overview" align="right">
                 <button
                   className="ei-boundary-btn"
                   onClick={onShowOverview}
