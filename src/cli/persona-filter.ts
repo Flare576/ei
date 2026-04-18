@@ -1,4 +1,4 @@
-import type { StorageState } from "../core/types/index.js";
+import type { StorageState } from "../core/types.js";
 import type { BalancedResult } from "./retrieval.js";
 
 export function resolvePersonaId(state: StorageState, name: string): string | null {

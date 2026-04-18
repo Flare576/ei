@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { retrieveBalanced, lookupById, loadLatestState, type BalancedResult } from "./retrieval.js";
-import type { StorageState } from "../core/types/index.js";
+import type { StorageState } from "../core/types.js";
 import { resolvePersonaId, filterByPersona, filterTypeSpecificByPersona, filterBySource, filterTypeSpecificBySource } from "./persona-filter.js";
 
 // Exported so tests can inject their own transport
