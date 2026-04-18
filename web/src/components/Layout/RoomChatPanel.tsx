@@ -5,6 +5,7 @@ import type { RoomEntity, RoomMessage, PersonaSummary } from "../../../../src/co
 import { RoomMode } from "../../../../src/core/types";
 import { MarkdownContent } from "../Chat";
 import { PersonaAvatar } from "../Avatar";
+import { Tooltip } from './Tooltip';
 
 function getContent(msg: { content?: string; verbal_response?: string; action_response?: string }): string {
   if (msg.content) return msg.content;
@@ -666,22 +667,24 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
         {(onCapture || (onShowOverview && room)) && (
           <div className="ei-input-area__controls">
             {onCapture && (
-              <button
-                className="ei-boundary-btn"
-                onClick={onCapture}
-                title="Extract data from current conversation"
-              >
-                💡
-              </button>
+              <Tooltip text="Extract data from current conversation">
+                <button
+                  className="ei-boundary-btn"
+                  onClick={onCapture}
+                >
+                  💡
+                </button>
+              </Tooltip>
             )}
             {onShowOverview && room && (
-              <button
-                className="ei-boundary-btn"
-                onClick={onShowOverview}
-                title="Overview"
-              >
-                🗺
-              </button>
+              <Tooltip text="Room conversation overview" align="right">
+                <button
+                  className="ei-boundary-btn"
+                  onClick={onShowOverview}
+                >
+                  🗺
+                </button>
+              </Tooltip>
             )}
           </div>
         )}

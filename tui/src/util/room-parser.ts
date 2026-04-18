@@ -7,6 +7,9 @@ export function buildRoomYAMLTemplate(personas: PersonaSummary[], initialName = 
   const personaLines = activePersonas.map((p) => `  ${p.display_name}: false`).join("\n");
   return `# Room configuration
 # mode: MAP | CYP | FFA
+#
+# CYP NOTE: Ei will NOT automatically extract Topics and People in Choose Your Path rooms.
+# When you reach an important moment, use the /capture command to extract data manually.
 display_name: "${initialName}"
 mode: FFA
 persona_ids:

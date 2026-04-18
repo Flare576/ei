@@ -10,10 +10,11 @@ interface RoomCreatorModalProps {
   personas: PersonaSummary[];
 }
 
-const MODE_INFO: Record<RoomMode, { label: string; description: string }> = {
+const MODE_INFO: Record<RoomMode, { label: string; description: string; note?: string }> = {
   [RoomMode.ChooseYourPath]: {
     label: "Choose Your Path (CYP)",
     description: "Each persona responds independently. You pick whose response to continue with.",
+    note: "Because of how CYP branching works, Ei will not automatically scan for Topics and People as you progress. When you reach an important moment — or whenever you like — use the 💡 bulb button in the chat to extract data and share it with your personas.",
   },
   [RoomMode.FreeForAll]: {
     label: "Free For All (FFA)",
@@ -192,6 +193,11 @@ export function RoomCreatorModal({ isOpen, onClose, onCreate, personas }: RoomCr
                     <div className="ei-form-hint" style={{ marginBottom: 0 }}>
                       {MODE_INFO[m].description}
                     </div>
+                    {MODE_INFO[m].note && mode === m && (
+                      <div className="ei-form-hint ei-form-hint--note" style={{ marginTop: '6px' }}>
+                        {MODE_INFO[m].note}
+                      </div>
+                    )}
                   </div>
                 </label>
               ))}
