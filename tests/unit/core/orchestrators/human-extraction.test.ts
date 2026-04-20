@@ -15,6 +15,8 @@ import {
   queueAllScans,
   queueTopicValidate,
   queueEventSummary,
+  queueTargetedPersonUpdate,
+  queueTargetedTopicUpdate,
   VALIDATE_MIN_SIMILARITY,
   type ExtractionContext,
 } from "../../../../src/core/orchestrators/human-extraction.js";
@@ -24,6 +26,17 @@ vi.mock("../../../../src/prompts/human/index.js", () => ({
   buildHumanTopicScanPrompt: vi.fn().mockReturnValue({ system: "topic-sys", user: "topic-usr" }),
   buildHumanPersonScanPrompt: vi.fn().mockReturnValue({ system: "person-sys", user: "person-usr" }),
   buildEventScanPrompt: vi.fn().mockReturnValue({ system: "event-sys", user: "event-usr" }),
+  buildPersonUpdatePrompt: vi.fn().mockReturnValue({ system: "person-update-sys", user: "person-update-usr" }),
+  buildTopicUpdatePrompt: vi.fn().mockReturnValue({ system: "topic-update-sys", user: "topic-update-usr" }),
+}));
+
+vi.mock("../../../../src/core/handlers/utils.js", () => ({
+  normalizeRoomMessages: vi.fn((msgs: unknown[]) => msgs),
+  getMessageContent: vi.fn((msg: { content?: string; verbal_response?: string }) => msg.content ?? msg.verbal_response ?? ""),
+  resolveMessageWindow: vi.fn((msgs: unknown[]) => msgs),
+  splitMessagesByTimestamp: vi.fn(() => ({ before: [], after: [] })),
+  markMessagesExtracted: vi.fn(),
+  getMessageText: vi.fn((msg: { content?: string; verbal_response?: string }) => msg.content ?? msg.verbal_response ?? ""),
 }));
 
 vi.mock("../../../../src/prompts/ceremony/dedup.js", () => ({
@@ -461,6 +474,102 @@ describe("queueEventSummary — open window guard", () => {
 
     expect(chunks).toBe(0);
     expect(state.queue_enqueue).not.toHaveBeenCalled();
+  });
+});
+
+describe("queueTargetedPersonUpdate — guard conditions", () => {
+  it("returns 0 and warns when person ID is not found", () => {
+    const state = createMockStateManager();
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const result = queueTargetedPersonUpdate("nonexistent-id", "ei", state as any);
+
+    expect(result).toBe(0);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("Person nonexistent-id not found"));
+    expect(state.queue_enqueue).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it("returns 0 and warns when persona ID is not found (non-room path)", () => {
+    const state = createMockStateManager();
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const result = queueTargetedPersonUpdate("p1", "nonexistent-persona", state as any);
+
+    expect(result).toBe(0);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("Persona nonexistent-persona not found"));
+    expect(state.queue_enqueue).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it("returns 0 when persona has no messages", () => {
+    const state = createMockStateManager();
+    state.messages_get.mockReturnValue([]);
+
+    const result = queueTargetedPersonUpdate("p1", "ei", state as any);
+
+    expect(result).toBe(0);
+    expect(state.queue_enqueue).not.toHaveBeenCalled();
+  });
+
+  it("enqueues work when person and persona exist with messages", () => {
+    const state = createMockStateManager();
+    state.messages_get.mockReturnValue([
+      createMessage("m1", "Beta is great"),
+    ]);
+
+    const result = queueTargetedPersonUpdate("p1", "ei", state as any);
+
+    expect(result).toBeGreaterThan(0);
+    expect(state.queue_enqueue).toHaveBeenCalled();
+  });
+});
+
+describe("queueTargetedTopicUpdate — guard conditions", () => {
+  it("returns 0 and warns when topic ID is not found", () => {
+    const state = createMockStateManager();
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const result = queueTargetedTopicUpdate("nonexistent-topic", "ei", state as any);
+
+    expect(result).toBe(0);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("Topic nonexistent-topic not found"));
+    expect(state.queue_enqueue).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it("returns 0 and warns when persona ID is not found (non-room path)", () => {
+    const state = createMockStateManager();
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const result = queueTargetedTopicUpdate("top1", "nonexistent-persona", state as any);
+
+    expect(result).toBe(0);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("Persona nonexistent-persona not found"));
+    expect(state.queue_enqueue).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it("returns 0 when persona has no messages", () => {
+    const state = createMockStateManager();
+    state.messages_get.mockReturnValue([]);
+
+    const result = queueTargetedTopicUpdate("top1", "ei", state as any);
+
+    expect(result).toBe(0);
+    expect(state.queue_enqueue).not.toHaveBeenCalled();
+  });
+
+  it("enqueues work when topic and persona exist with messages", () => {
+    const state = createMockStateManager();
+    state.messages_get.mockReturnValue([
+      createMessage("m1", "AI is fascinating"),
+    ]);
+
+    const result = queueTargetedTopicUpdate("top1", "ei", state as any);
+
+    expect(result).toBeGreaterThan(0);
+    expect(state.queue_enqueue).toHaveBeenCalled();
   });
 });
 
