@@ -167,3 +167,49 @@
   font-size: var(--ei-font-size-sm);
   font-style: italic;
 }
+
+.ei-knowledge-search-modal__loading {
+  padding: var(--ei-spacing-lg);
+  text-align: center;
+  color: var(--ei-text-muted);
+  font-size: var(--ei-font-size-sm);
+  font-style: italic;
+}
+
+.ei-knowledge-search-modal__section-header {
+  padding: var(--ei-spacing-xs) var(--ei-spacing-lg);
+  font-size: var(--ei-font-size-xs);
+  font-weight: 600;
+  color: var(--ei-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: var(--ei-spacing-sm);
+}
+
+.ei-knowledge-search-modal__result-card {
+  padding: var(--ei-spacing-sm) var(--ei-spacing-lg);
+  border-bottom: 1px solid var(--ei-border-light);
+}
+
+.ei-knowledge-search-modal__result-card:last-child {
+  border-bottom: none;
+}
+
+.ei-knowledge-search-modal__result-name {
+  font-size: var(--ei-font-size-sm);
+  font-weight: 600;
+  color: var(--ei-text-primary);
+  margin-bottom: var(--ei-spacing-xs);
+}
+
+.ei-knowledge-search-modal__result-body {
+  font-size: var(--ei-font-size-sm);
+  color: var(--ei-text-secondary);
+  line-height: 1.4;
+}
+
+.ei-knowledge-search-modal__result-meta {
+  font-size: var(--ei-font-size-xs);
+  color: var(--ei-text-muted);
+  margin-top: var(--ei-spacing-xs);
+}

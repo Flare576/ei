@@ -1931,11 +1931,14 @@ function App() {
        onClose={() => setShowCaptureModal(false)}
      />
 
-     <KnowledgeSearchModal
-       isOpen={showKnowledgeModal}
-       onClose={() => setShowKnowledgeModal(false)}
-       onSearch={async () => []}
-     />
+      <KnowledgeSearchModal
+        isOpen={showKnowledgeModal}
+        onClose={() => setShowKnowledgeModal(false)}
+        onSearch={async (query) => {
+          if (!processorRef.current) return { facts: [], topics: [], people: [], quotes: [] };
+          return processorRef.current.searchHumanData(query);
+        }}
+      />
 
     {showImagePreview && currentViewingMessageId && (() => {
       const currentMessage = messages.find(m => m.id === currentViewingMessageId);
