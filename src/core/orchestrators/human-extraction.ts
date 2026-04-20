@@ -15,6 +15,7 @@ import {
   type PersonaEntitySnapshot,
 } from "../../prompts/human/index.js";
 import { buildValidatePrompt } from "../../prompts/ceremony/dedup.js";
+import { normalizeRoomMessages } from "../handlers/utils.js";
 import { chunkExtractionContext } from "./extraction-chunker.js";
 import { getEmbeddingService, findTopK, getTopicEmbeddingText } from "../embedding-service.js";
 import { resolveTokenLimit } from "../llm-client.js";
@@ -658,7 +659,7 @@ export function queueTargetedPersonUpdate(
       console.warn(`[queueTargetedPersonUpdate] Room ${roomId} not found`);
       return 0;
     }
-    allMessages = state.getRoomActivePath(roomId);
+    allMessages = normalizeRoomMessages(state.getRoomActivePath(roomId), state);
     contextPersonaId = room.persona_ids.join("|");
     displayName = room.display_name;
   } else {
@@ -718,7 +719,7 @@ export function queueTargetedTopicUpdate(
       console.warn(`[queueTargetedTopicUpdate] Room ${roomId} not found`);
       return 0;
     }
-    allMessages = state.getRoomActivePath(roomId);
+    allMessages = normalizeRoomMessages(state.getRoomActivePath(roomId), state);
     contextPersonaId = room.persona_ids.join("|");
     displayName = room.display_name;
   } else {
