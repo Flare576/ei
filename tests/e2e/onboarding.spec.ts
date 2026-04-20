@@ -55,7 +55,7 @@ test.describe("Onboarding Flow", () => {
     await page.locator("text=Start Fresh").click();
     
     // Wait for the LLM check to complete - should show one of the results
-    const foundLocator = page.locator("text=Local LLM found!");
+    const foundLocator = page.locator(".ei-onboarding__status--success");
     const notFoundLocator = page.locator("text=No local LLM detected");
     const corsLocator = page.locator("text=CORS Issue Detected");
     
@@ -113,7 +113,7 @@ test.describe("Onboarding Flow", () => {
     await page.locator("text=Start Fresh").click();
     
     // Wait for LLM check to complete - one of three results
-    const foundLocator = page.locator("text=Local LLM found!");
+    const foundLocator = page.locator(".ei-onboarding__status--success");
     const notFoundLocator = page.locator("text=No local LLM detected");
     const corsLocator = page.locator("text=CORS Issue Detected");
     await expect(foundLocator.or(notFoundLocator).or(corsLocator)).toBeVisible({ timeout: 10000 });
@@ -144,7 +144,7 @@ test.describe("Onboarding Flow", () => {
     await page.locator("text=Start Fresh").click();
     
     // Wait for LLM check to complete
-    const foundLocator = page.locator("text=Local LLM found!");
+    const foundLocator = page.locator(".ei-onboarding__status--success");
     const notFoundLocator = page.locator("text=No local LLM detected");
     const corsLocator = page.locator("text=CORS Issue Detected");
     await expect(foundLocator.or(notFoundLocator).or(corsLocator)).toBeVisible({ timeout: 10000 });
