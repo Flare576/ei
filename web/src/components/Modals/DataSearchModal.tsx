@@ -72,7 +72,10 @@ export function DataSearchModal({
   }, [filteredItems]);
 
   const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'ArrowDown') {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      onClose();
+    } else if (e.key === 'ArrowDown') {
       e.preventDefault();
       setHighlightedIndex(i => Math.min(i + 1, filteredItems.length - 1));
     } else if (e.key === 'ArrowUp') {

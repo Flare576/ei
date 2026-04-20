@@ -216,6 +216,7 @@ export function KnowledgeSearchModal({
             placeholder="Type to search Ei's memory…"
             value={query}
             onChange={e => setQuery(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); onClose(); } }}
           />
         </div>
 
