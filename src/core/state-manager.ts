@@ -373,11 +373,18 @@ export class StateManager {
         }
       }
 
+      for (const m of account.models) {
+        if (m.name === "(default)") {
+          m.name = "default";
+          if (m.model_id === "(default)") m.model_id = undefined;
+        }
+      }
+
       // If still no models, create a placeholder
       if (account.models.length === 0) {
-        const model = { id: crypto.randomUUID(), name: "(default)" };
+        const model = { id: crypto.randomUUID(), name: "default" };
         account.models.push(model);
-        modelLookup.set(`${account.name}:(default)`, model.id);
+        modelLookup.set(`${account.name}:default`, model.id);
         account.default_model = model.id;
       }
 

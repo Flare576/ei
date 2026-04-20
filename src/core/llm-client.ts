@@ -54,7 +54,7 @@ function buildResolvedModel(account: ProviderAccount, model: ModelConfig): Resol
   const apiModelId = model.model_id ?? model.name;
   return {
     provider: account.name,
-    model: apiModelId === "(default)" ? undefined : apiModelId,
+    model: apiModelId === "default" ? undefined : apiModelId,
     config: {
       name: account.name,
       baseURL: account.url,
@@ -77,6 +77,7 @@ export function resolveModelById(
 }
 
 export function getDisplayName(account: ProviderAccount, model: ModelConfig): string {
+  if (model.name === "default") return account.name;
   return `${account.name}:${model.name}`;
 }
 
@@ -119,7 +120,7 @@ export function resolveModel(modelSpec?: string, accounts?: ProviderAccount[]): 
       (acc) => acc.name.toLowerCase() === searchName.toLowerCase() && acc.enabled && acc.type === "llm"
     );
     if (matchingAccount) {
-      const matchingModel = matchingAccount.models?.find((m) => m.name === model);
+      const matchingModel = matchingAccount.models?.find((m) => m.name === model || m.model_id === model);
       if (matchingModel) {
         return buildResolvedModel(matchingAccount, matchingModel);
       }
@@ -162,7 +163,7 @@ function findModelAndAccount(
     const account = accounts.find(
       (a) => a.name.toLowerCase() === providerName.toLowerCase() && a.enabled
     );
-    const model = account?.models?.find((m) => m.name === modelName);
+    const model = account?.models?.find((m) => m.name === modelName || m.model_id === modelName);
     return { model, account };
   }
   // Try matching by model UUID first
