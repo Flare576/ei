@@ -12,6 +12,7 @@ import {
   type ExtractionContext,
 } from "../../core/orchestrators/human-extraction.js";
 import { isProcessRunning } from "../process-check.js";
+import { getMachineId } from "../machine-id.js";
 
 // =============================================================================
 // Export Types
@@ -268,7 +269,7 @@ export async function importClaudeCodeSessions(
       personaDisplayName: persona.display_name,
       messages_context: contextMsgs,
       messages_analyze: toAnalyze,
-      sources: [`claudecode:${targetSession.id}`],
+      sources: [`claudecode:${getMachineId()}:${targetSession.id}`],
     };
 
     const ccSettings = stateManager.getHuman().settings?.claudeCode;

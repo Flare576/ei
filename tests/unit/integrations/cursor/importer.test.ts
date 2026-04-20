@@ -470,7 +470,10 @@ describe("importCursorSessions", () => {
     const enqueued = mockStateManager.queue_enqueue.mock.calls;
     expect(enqueued.length).toBeGreaterThan(0);
     const firstData = enqueued[0][0].data as Record<string, unknown>;
-    expect(firstData.sources).toEqual(["cursor:session-abc"]);
+    expect(firstData.sources).toHaveLength(1);
+    expect(firstData.sources as string[]).toEqual(
+      expect.arrayContaining([expect.stringMatching(/^cursor:[^:]+:session-abc$/)])
+    );
   });
 
   it("fires onMessageAdded after import", async () => {

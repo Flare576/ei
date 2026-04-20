@@ -9,6 +9,7 @@ import {
   type ExtractionContext,
 } from "../../core/orchestrators/human-extraction.js";
 import { isProcessRunning } from "../process-check.js";
+import { getMachineId } from "../machine-id.js";
 
 // =============================================================================
 // Constants
@@ -250,7 +251,7 @@ export async function importOpenCodeSessions(
         personaDisplayName: persona.display_name,
         messages_context: contextMsgs,
         messages_analyze: toAnalyze,
-        sources: [`opencode:${targetSession.id}`],
+        sources: [`opencode:${getMachineId()}:${targetSession.id}`],
       };
 
       if (!signal?.aborted) {

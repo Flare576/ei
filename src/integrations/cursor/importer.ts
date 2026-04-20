@@ -8,6 +8,7 @@ import {
 } from "./types.js";
 import { CursorReader } from "./reader.js";
 import { isProcessRunning } from "../process-check.js";
+import { getMachineId } from "../machine-id.js";
 import {
   queueAllScans,
   type ExtractionContext,
@@ -227,7 +228,7 @@ export async function importCursorSessions(
       personaDisplayName: persona.display_name,
       messages_context: contextMsgs,
       messages_analyze: toAnalyze,
-      sources: [`cursor:${targetSession.id}`],
+      sources: [`cursor:${getMachineId()}:${targetSession.id}`],
     };
 
     queueAllScans(context, stateManager, { external_filter: "only" });
