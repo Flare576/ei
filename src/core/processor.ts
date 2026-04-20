@@ -1994,12 +1994,12 @@ const toolNextSteps = new Set([
     queueRoomCapture(this.stateManager, roomId);
   }
 
-  captureTargetedPerson(personId: string, personaId: string): number {
-    return queueTargetedPersonUpdate(personId, personaId, this.stateManager);
+  captureTargetedPerson(personId: string, personaId: string, roomId?: string): number {
+    return queueTargetedPersonUpdate(personId, personaId, this.stateManager, roomId);
   }
 
-  captureTargetedTopic(topicId: string, personaId: string): number {
-    return queueTargetedTopicUpdate(topicId, personaId, this.stateManager);
+  captureTargetedTopic(topicId: string, personaId: string, roomId?: string): number {
+    return queueTargetedTopicUpdate(topicId, personaId, this.stateManager, roomId);
   }
 
   async submitOneShot(guid: string, systemPrompt: string, userPrompt: string): Promise<void> {

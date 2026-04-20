@@ -58,7 +58,7 @@ function buildRoomParticipantContext(roomId: string, state: StateManager): Parti
   };
 }
 
-function getRoomVisibleMessages(state: StateManager, roomId: string): Message[] {
+export function getRoomVisibleMessages(state: StateManager, roomId: string): Message[] {
   const room = state.getRoom(roomId);
   if (!room) return [];
   const rawMessages = room.mode === RoomMode.FreeForAll

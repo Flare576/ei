@@ -1447,43 +1447,24 @@ function App() {
   }, [human, activePersonaEntity]);
 
   const captureModalItems = useMemo(() => {
-    const DEFAULT_GROUP = "General";
-    const personaName = activePersonaEntity?.aliases?.[0] ?? "";
-    const isEi = personaName.toLowerCase() === "ei";
-
-    const visibleGroups = new Set<string>();
-    if (activePersonaEntity?.group_primary) {
-      visibleGroups.add(activePersonaEntity.group_primary);
-    }
-    (activePersonaEntity?.groups_visible ?? []).forEach((g: string) => visibleGroups.add(g));
-
-    const isVisible = (itemGroups: string[] | undefined): boolean => {
-      if (isEi) return true;
-      const effectiveGroups = !itemGroups || itemGroups.length === 0 ? [DEFAULT_GROUP] : itemGroups;
-      return effectiveGroups.some(g => visibleGroups.has(g));
-    };
-
-    const items = [
-      ...(human?.people || []).filter(i => isVisible(i.persona_groups)).map(i => ({ id: i.id, name: i.name, type: 'Person' as const })),
-      ...(human?.topics || []).filter(i => isVisible(i.persona_groups)).map(i => ({ id: i.id, name: i.name, type: 'Topic' as const })),
-    ];
     const seen = new Set<string>();
-    return items.filter(item => {
+    return [
+      ...(human?.people || []).map(i => ({ id: i.id, name: i.name, type: 'Person' as const })),
+      ...(human?.topics || []).map(i => ({ id: i.id, name: i.name, type: 'Topic' as const })),
+    ].filter(item => {
       if (seen.has(item.id)) return false;
       seen.add(item.id);
       return true;
     });
-  }, [human, activePersonaEntity]);
+  }, [human]);
 
   const handleTargetedCapture = useCallback((item: { id: string; name: string; type: 'Person' | 'Topic' }) => {
     if (!processorRef.current) return;
     if (activeRoomId) {
-      const primaryPersonaId = activeRoom?.persona_ids[0];
-      if (!primaryPersonaId) return;
       if (item.type === 'Person') {
-        processorRef.current.captureTargetedPerson(item.id, primaryPersonaId);
+        processorRef.current.captureTargetedPerson(item.id, '', activeRoomId);
       } else {
-        processorRef.current.captureTargetedTopic(item.id, primaryPersonaId);
+        processorRef.current.captureTargetedTopic(item.id, '', activeRoomId);
       }
     } else if (activePersonaId) {
       if (item.type === 'Person') {
@@ -1493,7 +1474,7 @@ function App() {
       }
     }
     setShowCaptureModal(false);
-  }, [activeRoomId, activeRoom, activePersonaId]);
+  }, [activeRoomId, activePersonaId]);
 
   const handleCaptureAll = useCallback(() => {
     if (!processorRef.current) return;

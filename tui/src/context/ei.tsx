@@ -658,14 +658,20 @@ export const EiProvider: ParentComponent = (props) => {
   };
 
   const captureTargetedPerson = (personId: string): number => {
+    if (!processor) return 0;
+    const roomId = store.activeRoomId;
+    if (roomId) return processor.captureTargetedPerson(personId, '', roomId);
     const personaId = store.activePersonaId;
-    if (!personaId || !processor) return 0;
+    if (!personaId) return 0;
     return processor.captureTargetedPerson(personId, personaId);
   };
 
   const captureTargetedTopic = (topicId: string): number => {
+    if (!processor) return 0;
+    const roomId = store.activeRoomId;
+    if (roomId) return processor.captureTargetedTopic(topicId, '', roomId);
     const personaId = store.activePersonaId;
-    if (!personaId || !processor) return 0;
+    if (!personaId) return 0;
     return processor.captureTargetedTopic(topicId, personaId);
   };
 

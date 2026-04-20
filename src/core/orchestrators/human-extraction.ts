@@ -639,7 +639,8 @@ export function queuePersonUpdate(
 export function queueTargetedPersonUpdate(
   personId: string,
   personaId: string,
-  state: StateManager
+  state: StateManager,
+  roomId?: string
 ): number {
   const existingItem = state.getHuman().people.find(p => p.id === personId) ?? null;
   if (!existingItem) {
@@ -647,13 +648,30 @@ export function queueTargetedPersonUpdate(
     return 0;
   }
 
-  const persona = state.persona_getById(personaId);
-  if (!persona) {
-    console.warn(`[queueTargetedPersonUpdate] Persona ${personaId} not found`);
-    return 0;
+  let allMessages: Message[];
+  let contextPersonaId: string;
+  let displayName: string;
+
+  if (roomId) {
+    const room = state.getRoom(roomId);
+    if (!room) {
+      console.warn(`[queueTargetedPersonUpdate] Room ${roomId} not found`);
+      return 0;
+    }
+    allMessages = state.getRoomActivePath(roomId);
+    contextPersonaId = room.persona_ids.join("|");
+    displayName = room.display_name;
+  } else {
+    const persona = state.persona_getById(personaId);
+    if (!persona) {
+      console.warn(`[queueTargetedPersonUpdate] Persona ${personaId} not found`);
+      return 0;
+    }
+    allMessages = state.messages_get(personaId);
+    contextPersonaId = personaId;
+    displayName = persona.display_name;
   }
 
-  const allMessages = state.messages_get(personaId);
   if (allMessages.length === 0) return 0;
 
   const model = state.getHuman().settings?.default_model;
@@ -663,14 +681,15 @@ export function queueTargetedPersonUpdate(
     candidateRelationship: string;
     extraction_model?: string;
   } = {
-    personaId,
-    personaDisplayName: persona.display_name,
+    personaId: contextPersonaId,
+    personaDisplayName: displayName,
     messages_context: [],
     messages_analyze: allMessages,
     candidateName: existingItem.name,
     candidateDescription: existingItem.description,
     candidateRelationship: existingItem.relationship,
     extraction_model: model,
+    roomId,
   };
 
   const matchResult: ItemMatchResult = { matched_guid: personId };
@@ -680,7 +699,8 @@ export function queueTargetedPersonUpdate(
 export function queueTargetedTopicUpdate(
   topicId: string,
   personaId: string,
-  state: StateManager
+  state: StateManager,
+  roomId?: string
 ): number {
   const existingItem = state.getHuman().topics.find(t => t.id === topicId) ?? null;
   if (!existingItem) {
@@ -688,21 +708,39 @@ export function queueTargetedTopicUpdate(
     return 0;
   }
 
-  const persona = state.persona_getById(personaId);
-  if (!persona) {
-    console.warn(`[queueTargetedTopicUpdate] Persona ${personaId} not found`);
-    return 0;
+  let allMessages: Message[];
+  let contextPersonaId: string;
+  let displayName: string;
+
+  if (roomId) {
+    const room = state.getRoom(roomId);
+    if (!room) {
+      console.warn(`[queueTargetedTopicUpdate] Room ${roomId} not found`);
+      return 0;
+    }
+    allMessages = state.getRoomActivePath(roomId);
+    contextPersonaId = room.persona_ids.join("|");
+    displayName = room.display_name;
+  } else {
+    const persona = state.persona_getById(personaId);
+    if (!persona) {
+      console.warn(`[queueTargetedTopicUpdate] Persona ${personaId} not found`);
+      return 0;
+    }
+    allMessages = state.messages_get(personaId);
+    contextPersonaId = personaId;
+    displayName = persona.display_name;
   }
 
-  const allMessages = state.messages_get(personaId);
   if (allMessages.length === 0) return 0;
 
   const model = state.getHuman().settings?.default_model;
   const context: ExtractionContext = {
-    personaId,
-    personaDisplayName: persona.display_name,
+    personaId: contextPersonaId,
+    personaDisplayName: displayName,
     messages_context: [],
     messages_analyze: allMessages,
+    roomId,
   };
 
   return queueDirectTopicUpdate(existingItem, context, state, { extraction_model: model });
