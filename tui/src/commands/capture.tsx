@@ -4,7 +4,7 @@ export const captureCommand: Command = {
   name: "capture",
   aliases: [],
   description: "Trigger extraction on current chat",
-  usage: "/capture | /capture opencode",
+  usage: "/capture | /capture opencode | /capture person <name> | /capture topic <name>",
 
   async execute(args, ctx) {
     if (args.length === 0) {
@@ -18,12 +18,72 @@ export const captureCommand: Command = {
       return;
     }
 
+    const subcommand = args[0].toLowerCase();
+
+    if (subcommand === "person" || subcommand === "people") {
+      const searchTerm = args.slice(1).join(" ").trim();
+      if (!searchTerm) {
+        ctx.showNotification("Usage: /capture person <name>", "error");
+        return;
+      }
+      const human = await ctx.ei.getHuman();
+      const matches = (human.people ?? []).filter(p =>
+        p.name.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      if (matches.length === 0) {
+        ctx.showNotification(`No person matching "${searchTerm}" found`, "warn");
+        return;
+      }
+      if (matches.length > 1) {
+        const names = matches.map(p => p.name).join(", ");
+        ctx.showNotification(`Multiple matches: ${names} — be more specific`, "warn");
+        return;
+      }
+      const person = matches[0];
+      const queued = ctx.ei.captureTargetedPerson(person.id);
+      if (queued === 0) {
+        ctx.showNotification(`No messages to scan for "${person.name}"`, "warn");
+      } else {
+        ctx.showNotification(`Re-scan queued for "${person.name}" (${queued} chunk${queued !== 1 ? "s" : ""})`, "info");
+      }
+      return;
+    }
+
+    if (subcommand === "topic") {
+      const searchTerm = args.slice(1).join(" ").trim();
+      if (!searchTerm) {
+        ctx.showNotification("Usage: /capture topic <name>", "error");
+        return;
+      }
+      const human = await ctx.ei.getHuman();
+      const matches = (human.topics ?? []).filter(t =>
+        t.name.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      if (matches.length === 0) {
+        ctx.showNotification(`No topic matching "${searchTerm}" found`, "warn");
+        return;
+      }
+      if (matches.length > 1) {
+        const names = matches.map(t => t.name).join(", ");
+        ctx.showNotification(`Multiple matches: ${names} — be more specific`, "warn");
+        return;
+      }
+      const topic = matches[0];
+      const queued = ctx.ei.captureTargetedTopic(topic.id);
+      if (queued === 0) {
+        ctx.showNotification(`No messages to scan for "${topic.name}"`, "warn");
+      } else {
+        ctx.showNotification(`Re-scan queued for "${topic.name}" (${queued} chunk${queued !== 1 ? "s" : ""})`, "info");
+      }
+      return;
+    }
+
     const integrationMap: Record<string, "opencode" | "claudeCode" | "cursor"> = {
       opencode: "opencode",
       claudecode: "claudeCode",
       cursor: "cursor",
     };
-    const integrationKey = integrationMap[args[0].toLowerCase()];
+    const integrationKey = integrationMap[subcommand];
     if (integrationKey) {
       const human = await ctx.ei.getHuman();
       const intSettings = human.settings?.[integrationKey];
@@ -31,7 +91,6 @@ export const captureCommand: Command = {
         ctx.showNotification(`${args[0]} integration not enabled. Enable in /settings.`, "warn");
         return;
       }
-      // Reset last_sync to epoch to force immediate scan on next processor tick
       await ctx.ei.updateHuman({
         settings: {
           ...human.settings,
@@ -45,6 +104,6 @@ export const captureCommand: Command = {
       return;
     }
 
-    ctx.showNotification("Named capture not yet supported. Use /room or /persona to switch first.", "warn");
+    ctx.showNotification("Usage: /capture | /capture person <name> | /capture topic <name> | /capture opencode|claudecode|cursor", "warn");
   },
 };

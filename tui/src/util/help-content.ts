@@ -85,6 +85,8 @@ ROOM COMMANDS
 
     /capture
         Force-extract quotes, topics, and people from the current chat now.
+        /capture person <name>  Re-scan all messages for a specific person.
+        /capture topic <name>   Re-scan all messages for a specific topic.
 
 EXTENDED COMMANDS
     /tools

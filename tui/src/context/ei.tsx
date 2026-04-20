@@ -139,6 +139,8 @@ export interface EiContextValue {
   markAllRoomMessagesRead: () => Promise<number>;
   captureRoom: () => void;
   capturePersona: () => void;
+  captureTargetedPerson: (personId: string) => number;
+  captureTargetedTopic: (topicId: string) => number;
   sendSilenceMessage: (silenceReason?: string) => Promise<void>;
   humanRoomMessagePending: () => boolean;
   getArchivedRooms: () => RoomSummary[];
@@ -655,6 +657,18 @@ export const EiProvider: ParentComponent = (props) => {
     processor.capturePersona(personaId);
   };
 
+  const captureTargetedPerson = (personId: string): number => {
+    const personaId = store.activePersonaId;
+    if (!personaId || !processor) return 0;
+    return processor.captureTargetedPerson(personId, personaId);
+  };
+
+  const captureTargetedTopic = (topicId: string): number => {
+    const personaId = store.activePersonaId;
+    if (!personaId || !processor) return 0;
+    return processor.captureTargetedTopic(topicId, personaId);
+  };
+
   const resolveRoomName = (nameOrAlias: string): string | null => {
     if (!processor) return null;
     return processor.resolveRoomName(nameOrAlias);
@@ -968,6 +982,8 @@ export const EiProvider: ParentComponent = (props) => {
     markAllRoomMessagesRead,
     captureRoom,
     capturePersona,
+    captureTargetedPerson,
+    captureTargetedTopic,
     sendSilenceMessage,
     humanRoomMessagePending,
     getArchivedRooms,
