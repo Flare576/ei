@@ -1,3 +1,4 @@
+import { PersonPickerOverlay } from "../components/PersonPickerOverlay.js";
 import type { Command } from "./registry";
 
 export const captureCommand: Command = {
@@ -34,18 +35,37 @@ export const captureCommand: Command = {
         ctx.showNotification(`No person matching "${searchTerm}" found`, "warn");
         return;
       }
-      if (matches.length > 1) {
-        const names = matches.map(p => p.name).join(", ");
-        ctx.showNotification(`Multiple matches: ${names} — be more specific`, "warn");
+
+      const firePerson = (id: string, name: string) => {
+        const queued = ctx.ei.captureTargetedPerson(id);
+        if (queued === 0) {
+          ctx.showNotification(`No messages to scan for "${name}"`, "warn");
+        } else {
+          ctx.showNotification(`Re-scan queued for "${name}" (${queued} chunk${queued !== 1 ? "s" : ""})`, "info");
+        }
+      };
+
+      if (matches.length === 1) {
+        firePerson(matches[0].id, matches[0].name);
         return;
       }
-      const person = matches[0];
-      const queued = ctx.ei.captureTargetedPerson(person.id);
-      if (queued === 0) {
-        ctx.showNotification(`No messages to scan for "${person.name}"`, "warn");
-      } else {
-        ctx.showNotification(`Re-scan queued for "${person.name}" (${queued} chunk${queued !== 1 ? "s" : ""})`, "info");
-      }
+
+      ctx.showOverlay((hideOverlay) => (
+        <PersonPickerOverlay
+          title={`Multiple matches for "${searchTerm}" — pick one:`}
+          people={matches.map(p => ({
+            id: p.id,
+            name: p.name,
+            relationship: p.relationship,
+            description: p.description,
+          }))}
+          onSelect={(picked) => {
+            hideOverlay();
+            firePerson(picked.id, picked.name);
+          }}
+          onDismiss={hideOverlay}
+        />
+      ), ctx.renderer);
       return;
     }
 
@@ -63,18 +83,37 @@ export const captureCommand: Command = {
         ctx.showNotification(`No topic matching "${searchTerm}" found`, "warn");
         return;
       }
-      if (matches.length > 1) {
-        const names = matches.map(t => t.name).join(", ");
-        ctx.showNotification(`Multiple matches: ${names} — be more specific`, "warn");
+
+      const fireTopic = (id: string, name: string) => {
+        const queued = ctx.ei.captureTargetedTopic(id);
+        if (queued === 0) {
+          ctx.showNotification(`No messages to scan for "${name}"`, "warn");
+        } else {
+          ctx.showNotification(`Re-scan queued for "${name}" (${queued} chunk${queued !== 1 ? "s" : ""})`, "info");
+        }
+      };
+
+      if (matches.length === 1) {
+        fireTopic(matches[0].id, matches[0].name);
         return;
       }
-      const topic = matches[0];
-      const queued = ctx.ei.captureTargetedTopic(topic.id);
-      if (queued === 0) {
-        ctx.showNotification(`No messages to scan for "${topic.name}"`, "warn");
-      } else {
-        ctx.showNotification(`Re-scan queued for "${topic.name}" (${queued} chunk${queued !== 1 ? "s" : ""})`, "info");
-      }
+
+      ctx.showOverlay((hideOverlay) => (
+        <PersonPickerOverlay
+          title={`Multiple matches for "${searchTerm}" — pick one:`}
+          people={matches.map(t => ({
+            id: t.id,
+            name: t.name,
+            relationship: t.category,
+            description: t.description,
+          }))}
+          onSelect={(picked) => {
+            hideOverlay();
+            fireTopic(picked.id, picked.name);
+          }}
+          onDismiss={hideOverlay}
+        />
+      ), ctx.renderer);
       return;
     }
 
