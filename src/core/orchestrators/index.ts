@@ -9,6 +9,8 @@ export {
   queuePersonUpdate,
   queueEventSummary,
   queueTopicValidate,
+  queueTargetedPersonUpdate,
+  queueTargetedTopicUpdate,
   VALIDATE_MIN_SIMILARITY,
   type ExtractionContext,
   type ExtractionOptions,

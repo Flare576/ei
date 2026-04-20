@@ -12,6 +12,7 @@ import {
   type TopicScanCandidate,
   type ItemMatchResult,
   type ParticipantContext,
+  type PersonaEntitySnapshot,
 } from "../../prompts/human/index.js";
 import { buildValidatePrompt } from "../../prompts/ceremony/dedup.js";
 import { chunkExtractionContext } from "./extraction-chunker.js";
@@ -582,6 +583,18 @@ export function queuePersonUpdate(
 
   const primaryPersonaIdForUpdate = context.personaId.split("|")[0];
 
+  const linkedPersonaId = !isNewItem
+    ? (existingItem?.identifiers ?? []).find(i => i.type.toLowerCase() === 'ei persona')?.value
+    : undefined;
+  const linkedPersonaEntity = linkedPersonaId ? state.persona_getById(linkedPersonaId) : undefined;
+  const personaEntitySnapshot: PersonaEntitySnapshot | undefined = linkedPersonaEntity
+    ? {
+        long_description: linkedPersonaEntity.long_description ?? '',
+        traits: (linkedPersonaEntity.traits ?? []).map(t => ({ name: t.name, description: t.description })),
+        topics: (linkedPersonaEntity.topics ?? []).map(t => ({ name: t.name, perspective: t.perspective })),
+      }
+    : undefined;
+
   for (const chunk of chunks) {
     const prompt = buildPersonUpdatePrompt({
       existing_item: existingItem,
@@ -593,6 +606,7 @@ export function queuePersonUpdate(
       persona_name: chunk.personaDisplayName,
       participant_context: buildParticipantContext(primaryPersonaIdForUpdate, state),
       known_identifier_types: userIdentifierTypes,
+      persona_entity: personaEntitySnapshot,
     });
 
     state.queue_enqueue({
@@ -620,6 +634,78 @@ export function queuePersonUpdate(
   }
 
   return chunks.length;
+}
+
+export function queueTargetedPersonUpdate(
+  personId: string,
+  personaId: string,
+  state: StateManager
+): number {
+  const existingItem = state.getHuman().people.find(p => p.id === personId) ?? null;
+  if (!existingItem) {
+    console.warn(`[queueTargetedPersonUpdate] Person ${personId} not found`);
+    return 0;
+  }
+
+  const persona = state.persona_getById(personaId);
+  if (!persona) {
+    console.warn(`[queueTargetedPersonUpdate] Persona ${personaId} not found`);
+    return 0;
+  }
+
+  const allMessages = state.messages_get(personaId);
+  if (allMessages.length === 0) return 0;
+
+  const model = state.getHuman().settings?.default_model;
+  const context: ExtractionContext & {
+    candidateName: string;
+    candidateDescription: string;
+    candidateRelationship: string;
+    extraction_model?: string;
+  } = {
+    personaId,
+    personaDisplayName: persona.display_name,
+    messages_context: [],
+    messages_analyze: allMessages,
+    candidateName: existingItem.name,
+    candidateDescription: existingItem.description,
+    candidateRelationship: existingItem.relationship,
+    extraction_model: model,
+  };
+
+  const matchResult: ItemMatchResult = { matched_guid: personId };
+  return queuePersonUpdate(matchResult, context, state, existingItem);
+}
+
+export function queueTargetedTopicUpdate(
+  topicId: string,
+  personaId: string,
+  state: StateManager
+): number {
+  const existingItem = state.getHuman().topics.find(t => t.id === topicId) ?? null;
+  if (!existingItem) {
+    console.warn(`[queueTargetedTopicUpdate] Topic ${topicId} not found`);
+    return 0;
+  }
+
+  const persona = state.persona_getById(personaId);
+  if (!persona) {
+    console.warn(`[queueTargetedTopicUpdate] Persona ${personaId} not found`);
+    return 0;
+  }
+
+  const allMessages = state.messages_get(personaId);
+  if (allMessages.length === 0) return 0;
+
+  const model = state.getHuman().settings?.default_model;
+  const context: ExtractionContext = {
+    personaId,
+    personaDisplayName: persona.display_name,
+    messages_context: [],
+    messages_analyze: allMessages,
+  };
+
+  return queueDirectTopicUpdate(existingItem, context, state, { extraction_model: model });
 }
 
 export async function queueTopicValidate(

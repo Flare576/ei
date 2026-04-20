@@ -39,7 +39,7 @@ import { ContextStatus as ContextStatusEnum, RoomMode } from "./types.js";
 import { registerReadMemoryExecutor, registerFileReadExecutor } from "./tools/index.js";
 import { createReadMemoryExecutor } from "./tools/builtin/read-memory.js";
 import { EI_WELCOME_MESSAGE, EI_PERSONA_DEFINITION } from "../templates/welcome.js";
-import { shouldStartCeremony, startCeremony, handleCeremonyProgress, queueUserDedupRequest, queueRoomCapture, queuePersonaCapture, checkAndQueueRoomExtraction } from "./orchestrators/index.js";
+import { shouldStartCeremony, startCeremony, handleCeremonyProgress, queueUserDedupRequest, queueRoomCapture, queuePersonaCapture, checkAndQueueRoomExtraction, queueTargetedPersonUpdate, queueTargetedTopicUpdate } from "./orchestrators/index.js";
 import { BUILT_IN_FACTS } from "./constants/built-in-facts.js";
 import { DEFAULT_SEED_TRAITS } from "./constants/seed-traits.js";
 
@@ -1992,6 +1992,14 @@ const toolNextSteps = new Set([
 
   captureRoom(roomId: string): void {
     queueRoomCapture(this.stateManager, roomId);
+  }
+
+  captureTargetedPerson(personId: string, personaId: string): number {
+    return queueTargetedPersonUpdate(personId, personaId, this.stateManager);
+  }
+
+  captureTargetedTopic(topicId: string, personaId: string): number {
+    return queueTargetedTopicUpdate(topicId, personaId, this.stateManager);
   }
 
   async submitOneShot(guid: string, systemPrompt: string, userPrompt: string): Promise<void> {
