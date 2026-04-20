@@ -147,7 +147,7 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
       if (finalModels.length === 0) {
         const defaultModel: ModelConfig = {
           id: crypto.randomUUID(),
-          name: '(default)',
+          name: 'default',
         };
         finalModels = [defaultModel];
         finalDefaultModel = defaultModel.id;

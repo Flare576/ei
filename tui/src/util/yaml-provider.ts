@@ -77,8 +77,8 @@ export function newProviderToYAML(name?: string): string {
 
   const modelsYAML = [
     "models:",
-    "  - name: (default)",
-    "    model_id: (default)",
+    "  - name: default",
+    "    model_id: default",
     "    token_limit: null",
     "    max_output_tokens: null",
     "    thinking_budget: null",
@@ -168,8 +168,8 @@ export function providerToYAML(account: ProviderAccount): string {
       modelLines.push(`    _delete: false`);
     }
   } else {
-    modelLines.push("  - name: (default)");
-    modelLines.push(`    model_id: (default)`);
+    modelLines.push("  - name: default");
+    modelLines.push(`    model_id: default`);
     modelLines.push(`    token_limit: null`);
     modelLines.push(`    max_output_tokens: null`);
     modelLines.push(`    thinking_budget: null`);
