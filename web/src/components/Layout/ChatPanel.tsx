@@ -91,6 +91,7 @@ interface ChatPanelProps {
   onImageClick?: (messageId: string) => void;
   onImagePromptClick?: () => void;
   onCapture?: () => void;
+  onKnowledgeSearch?: () => void;
 }
 
 export interface ChatPanelHandle {
@@ -122,6 +123,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
   onImageClick,
   onImagePromptClick,
   onCapture,
+  onKnowledgeSearch,
 }, ref) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -589,6 +591,16 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
                   onClick={onCapture}
                 >
                   💡
+                </button>
+              </Tooltip>
+            )}
+            {onKnowledgeSearch && (
+              <Tooltip text="Search Ei's memory" align="right">
+                <button
+                  className="ei-boundary-btn"
+                  onClick={onKnowledgeSearch}
+                >
+                  🔍
                 </button>
               </Tooltip>
             )}

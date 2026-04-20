@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Processor } from "../../src/core/processor";
 import { LocalStorage } from "../../src/storage/local";
 import { IndexedDBStorage } from "../../src/storage/indexed";
@@ -72,6 +72,8 @@ import { RoomOverviewOverlay, CYPTreeView, FFAContextView, MAPScoreView } from "
 import { QuoteCaptureModal, QuoteManagementModal } from "./components/Quote";
 import { SettingsModal } from "./components/Settings";
 import { MessageSelectorModal } from "./components/Modals/MessageSelectorModal";
+import { TargetedCaptureModal } from "./components/Modals/TargetedCaptureModal";
+import { KnowledgeSearchModal } from "./components/Modals/KnowledgeSearchModal";
 import { ConflictResolutionModal } from "./components/Sync/ConflictResolutionModal";
 import { Onboarding } from "./components/Onboarding";
 import { QueuePanel } from "./components/Queue/QueuePanel";
@@ -197,6 +199,8 @@ function App() {
    const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false);
    const [showConflictModal, setShowConflictModal] = useState(false);
    const [conflictData, setConflictData] = useState<{ localTimestamp: Date; remoteTimestamp: Date } | null>(null);
+   const [showCaptureModal, setShowCaptureModal] = useState(false);
+   const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
    const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showQueuePanel, setShowQueuePanel] = useState(false);
@@ -1442,6 +1446,65 @@ function App() {
     });
   }, [human, activePersonaEntity]);
 
+  const captureModalItems = useMemo(() => {
+    const DEFAULT_GROUP = "General";
+    const personaName = activePersonaEntity?.aliases?.[0] ?? "";
+    const isEi = personaName.toLowerCase() === "ei";
+
+    const visibleGroups = new Set<string>();
+    if (activePersonaEntity?.group_primary) {
+      visibleGroups.add(activePersonaEntity.group_primary);
+    }
+    (activePersonaEntity?.groups_visible ?? []).forEach((g: string) => visibleGroups.add(g));
+
+    const isVisible = (itemGroups: string[] | undefined): boolean => {
+      if (isEi) return true;
+      const effectiveGroups = !itemGroups || itemGroups.length === 0 ? [DEFAULT_GROUP] : itemGroups;
+      return effectiveGroups.some(g => visibleGroups.has(g));
+    };
+
+    const items = [
+      ...(human?.people || []).filter(i => isVisible(i.persona_groups)).map(i => ({ id: i.id, name: i.name, type: 'Person' as const })),
+      ...(human?.topics || []).filter(i => isVisible(i.persona_groups)).map(i => ({ id: i.id, name: i.name, type: 'Topic' as const })),
+    ];
+    const seen = new Set<string>();
+    return items.filter(item => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    });
+  }, [human, activePersonaEntity]);
+
+  const handleTargetedCapture = useCallback((item: { id: string; name: string; type: 'Person' | 'Topic' }) => {
+    if (!processorRef.current) return;
+    if (activeRoomId) {
+      const primaryPersonaId = activeRoom?.persona_ids[0];
+      if (!primaryPersonaId) return;
+      if (item.type === 'Person') {
+        processorRef.current.captureTargetedPerson(item.id, primaryPersonaId);
+      } else {
+        processorRef.current.captureTargetedTopic(item.id, primaryPersonaId);
+      }
+    } else if (activePersonaId) {
+      if (item.type === 'Person') {
+        processorRef.current.captureTargetedPerson(item.id, activePersonaId);
+      } else {
+        processorRef.current.captureTargetedTopic(item.id, activePersonaId);
+      }
+    }
+    setShowCaptureModal(false);
+  }, [activeRoomId, activeRoom, activePersonaId]);
+
+  const handleCaptureAll = useCallback(() => {
+    if (!processorRef.current) return;
+    if (activeRoomId) {
+      processorRef.current.captureRoom(activeRoomId);
+    } else if (activePersonaId) {
+      processorRef.current.capturePersona(activePersonaId);
+    }
+    setShowCaptureModal(false);
+  }, [activeRoomId, activePersonaId]);
+
   const handleQuoteSave = useCallback(async (quoteData: Omit<Quote, 'id' | 'created_at'>) => {
     if (!processor) return;
     const quote: Quote = {
@@ -1635,8 +1698,9 @@ function App() {
              onRecallMessage={handleRecallHumanRoomMessage}
              isProcessing={processingRoomId === activeRoomId}
              isActivating={roomActivating}
-             onCapture={activeRoomId ? () => processorRef.current?.captureRoom(activeRoomId) : undefined}
-             onShowOverview={activeRoomId ? () => handleShowRoomOverview(activeRoomId) : undefined}
+              onCapture={activeRoomId ? () => setShowCaptureModal(true) : undefined}
+              onShowOverview={activeRoomId ? () => handleShowRoomOverview(activeRoomId) : undefined}
+              onKnowledgeSearch={activeRoomId ? () => setShowKnowledgeModal(true) : undefined}
           />
         ) : (
           <ChatPanel
@@ -1669,7 +1733,8 @@ function App() {
              imageErrors={imageErrors}
              onImageClick={handleImageClick}
              onImagePromptClick={handleImagePromptClick}
-              onCapture={activePersonaId ? () => processorRef.current?.capturePersona(activePersonaId) : undefined}
+              onCapture={activePersonaId ? () => setShowCaptureModal(true) : undefined}
+              onKnowledgeSearch={activePersonaId ? () => setShowKnowledgeModal(true) : undefined}
           />
         )
       }
@@ -1876,6 +1941,20 @@ function App() {
          onYoloMerge={() => handleConflictResolve("yolo")}
        />
      )}
+
+     <TargetedCaptureModal
+       isOpen={showCaptureModal}
+       items={captureModalItems}
+       onCapture={handleTargetedCapture}
+       onCaptureAll={handleCaptureAll}
+       onClose={() => setShowCaptureModal(false)}
+     />
+
+     <KnowledgeSearchModal
+       isOpen={showKnowledgeModal}
+       onClose={() => setShowKnowledgeModal(false)}
+       onSearch={async () => []}
+     />
 
     {showImagePreview && currentViewingMessageId && (() => {
       const currentMessage = messages.find(m => m.id === currentViewingMessageId);

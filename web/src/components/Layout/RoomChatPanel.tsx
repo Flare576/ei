@@ -36,6 +36,7 @@ interface RoomChatPanelProps {
   isActivating?: boolean;
   onCapture?: () => void;
   onShowOverview?: () => void;
+  onKnowledgeSearch?: () => void;
 }
 
 const MODE_LABEL: Record<RoomMode, string> = {
@@ -80,6 +81,7 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
   isActivating = false,
   onCapture,
   onShowOverview,
+  onKnowledgeSearch,
 }: RoomChatPanelProps, ref) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -664,7 +666,7 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
       </div>
 
       <div className="ei-input-area">
-        {(onCapture || (onShowOverview && room)) && (
+        {(onCapture || onKnowledgeSearch || (onShowOverview && room)) && (
           <div className="ei-input-area__controls">
             {onCapture && (
               <Tooltip text="Extract data from current conversation">
@@ -673,6 +675,16 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
                   onClick={onCapture}
                 >
                   💡
+                </button>
+              </Tooltip>
+            )}
+            {onKnowledgeSearch && (
+              <Tooltip text="Search Ei's memory" align="right">
+                <button
+                  className="ei-boundary-btn"
+                  onClick={onKnowledgeSearch}
+                >
+                  🔍
                 </button>
               </Tooltip>
             )}
