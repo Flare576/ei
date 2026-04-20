@@ -35,7 +35,7 @@ export function createMcpServer(): McpServer {
           .string()
           .optional()
           .describe(
-            "Filter to entities from a specific source. Prefix match against namespaced source identifiers (e.g. 'cursor', 'opencode', 'opencode:ses_abc123')."
+            "Filter to entities from a specific source. Prefix match against namespaced source identifiers (e.g. 'cursor', 'opencode', 'opencode:my-machine', 'opencode:my-machine:ses_abc123')."
           ),
         limit: z
           .number()
@@ -104,7 +104,7 @@ export function createMcpServer(): McpServer {
           .string()
           .optional()
           .describe(
-            "Filter to entities from a specific source. Prefix match against namespaced source identifiers (e.g. 'cursor', 'opencode', 'opencode:ses_abc123'). If the entity does not match, returns not found."
+            "Filter to entities from a specific source. Prefix match against namespaced source identifiers (e.g. 'cursor', 'opencode', 'opencode:my-machine', 'opencode:my-machine:ses_abc123'). If the entity does not match, returns not found."
           ),
       },
     },

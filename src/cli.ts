@@ -66,7 +66,7 @@ Options:
   --number, -n     Maximum number of results (default: 10)
   --recent, -r     Sort by last_mentioned date (most recent first)
   --persona, -p    Filter to entities a specific persona has learned about
-  --source, -s     Filter to entities from a specific source (prefix match, e.g. "cursor", "opencode:ses_abc123")
+  --source, -s     Filter to entities from a specific source (prefix match, e.g. "cursor", "opencode:my-machine", "opencode:my-machine:ses_abc123")
   --id             Look up entity by ID (accepts value or stdin)
   --install        Register Ei with OpenCode, Claude Code, and Cursor
   --help, -h       Show this help message
