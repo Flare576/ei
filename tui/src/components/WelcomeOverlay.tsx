@@ -54,7 +54,7 @@ export function WelcomeOverlay(props: WelcomeOverlayProps) {
           Options:
         </text>
         <text fg="#93a1a1">
-          1. Start a local LLM (LM Studio, Ollama) on port 1234
+          1. Start LMStudio (port 1234) or Ollama (port 11434)
         </text>
         <text fg="#93a1a1">
           2. Run /provider new to configure a cloud provider

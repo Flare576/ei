@@ -721,41 +721,57 @@ export const EiProvider: ParentComponent = (props) => {
           logger.info("E2E_SKIP_LOCAL_DETECT active, skipping local LLM check");
           setShowWelcomeOverlay(true);
         } else if (!hasAccounts) {
-          logger.info("No LLM accounts configured, checking for local LLM...");
-          try {
-            const response = await fetch("http://127.0.0.1:1234/v1/models", {
-              method: "GET",
-              signal: AbortSignal.timeout(3000),
-            });
-            if (response.ok) {
-              logger.info("Local LLM detected, auto-configuring...");
+          logger.info("No LLM accounts configured, checking for local LLMs...");
+
+          const candidates = [
+            { name: "LMStudio", url: "http://127.0.0.1:1234/v1" },
+            { name: "Ollama", url: "http://127.0.0.1:11434/v1" },
+          ];
+
+          const detected = await Promise.all(
+            candidates.map(async (candidate) => {
+              try {
+                const response = await fetch(`${candidate.url}/models`, {
+                  method: "GET",
+                  signal: AbortSignal.timeout(3000),
+                });
+                return response.ok ? candidate : null;
+              } catch {
+                return null;
+              }
+            })
+          );
+
+          const found = detected.filter(Boolean) as typeof candidates;
+
+          if (found.length > 0) {
+            const accounts: ProviderAccount[] = found.map((candidate) => {
               const defaultModelId = crypto.randomUUID();
-              const localAccount: ProviderAccount = {
+              return {
                 id: crypto.randomUUID(),
-                name: "Local LLM",
+                name: candidate.name,
                 type: "llm" as ProviderType,
-                url: "http://127.0.0.1:1234/v1",
+                url: candidate.url,
                 enabled: true,
                 created_at: new Date().toISOString(),
                 default_model: defaultModelId,
-                models: [{ id: defaultModelId, name: "(default)" }],
+                models: [{ id: defaultModelId, name: "default" }],
               };
-              const currentHuman = await processor!.getHuman();
-              await processor!.updateHuman({
-                settings: {
-                  ...currentHuman.settings,
-                  accounts: [localAccount],
-                  default_model: defaultModelId,
-                },
-              });
-              showNotification("Local LLM detected and configured!", "info");
-              logger.info("Local LLM auto-configured successfully");
-            } else {
-              logger.info("Local LLM check failed, showing welcome overlay");
-              setShowWelcomeOverlay(true);
-            }
-          } catch {
-            logger.info("No local LLM found, showing welcome overlay");
+            });
+            const firstDefaultModelId = accounts[0].default_model!;
+            const currentHuman = await processor!.getHuman();
+            await processor!.updateHuman({
+              settings: {
+                ...currentHuman.settings,
+                accounts,
+                default_model: firstDefaultModelId,
+              },
+            });
+            const names = found.map((c) => c.name).join(" and ");
+            showNotification(`${names} detected and configured!`, "info");
+            logger.info(`Auto-configured: ${names}`);
+          } else {
+            logger.info("No local LLMs found, showing welcome overlay");
             setShowWelcomeOverlay(true);
           }
         }

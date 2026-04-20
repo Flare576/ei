@@ -91,13 +91,13 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
         const defaultModelId = crypto.randomUUID();
         const localAccount: ProviderAccount = {
           id: crypto.randomUUID(),
-          name: 'Local LLM',
+          name: localUrl.includes(':11434') ? 'Ollama' : 'LMStudio',
           type: ProviderType.LLM,
           url: localUrl,
           enabled: true,
           created_at: new Date().toISOString(),
           default_model: defaultModelId,
-          models: [{ id: defaultModelId, name: '(default)' }],
+          models: [{ id: defaultModelId, name: 'default' }],
         };
         setAccounts(prev => {
           if (prev.some(a => a.url === localAccount.url && a.type === localAccount.type)) {
@@ -345,7 +345,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
           <div className="ei-onboarding__status ei-onboarding__status--success">
             <div className="ei-onboarding__status-icon">✅</div>
             <div>
-              <strong>Local LLM found!</strong>
+              <strong>{localUrl.includes(':11434') ? 'Ollama' : 'LMStudio'} found!</strong>
               <p>Great! We detected a local AI model. You're all set to use Ei privately with your own hardware.</p>
             </div>
           </div>
@@ -508,7 +508,8 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
           <strong>Popular options:</strong>
         </p>
         <ul>
-          <li><strong>Local:</strong> LM Studio at <code>http://127.0.0.1:1234/v1</code></li>
+          <li><strong>LMStudio:</strong> <code>http://127.0.0.1:1234/v1</code></li>
+          <li><strong>Ollama:</strong> <code>http://127.0.0.1:11434/v1</code></li>
           <li><strong>OpenAI:</strong> <code>https://api.openai.com/v1</code> (requires API key)</li>
           <li><strong>Anthropic:</strong> <code>https://api.anthropic.com/v1</code> (requires API key)</li>
           <li><strong>Google:</strong> <code>https://generativelanguage.googleapis.com/v1beta</code> (requires API key)</li>
