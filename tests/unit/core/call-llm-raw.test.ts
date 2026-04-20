@@ -85,19 +85,19 @@ describe("callLLMRaw — model field in request body", () => {
     expect(getCapturedBody(mockFetch).model).toBe("claude-opus-4");
   });
 
-  it("omits model field for '(default)' models", async () => {
-    const model = makeModel("(default)");
-    const account = makeAccount("Local LLM", [model]);
+  it("omits model field for 'default' sentinel models", async () => {
+    const model = makeModel("default");
+    const account = makeAccount("LMStudio", [model]);
     const mockFetch = stubFetch(makeLLMResponse());
 
-    await callLLMRaw("sys", "user", [], `Local LLM:(default)`, {}, [account]);
+    await callLLMRaw("sys", "user", [], `LMStudio:default`, {}, [account]);
 
     expect("model" in getCapturedBody(mockFetch)).toBe(false);
   });
 
-  it("omits model field when resolved via GUID for a '(default)' model", async () => {
-    const model = makeModel("(default)");
-    const account = makeAccount("Local LLM", [model]);
+  it("omits model field when resolved via GUID for a 'default' sentinel model", async () => {
+    const model = makeModel("default");
+    const account = makeAccount("LMStudio", [model]);
     const mockFetch = stubFetch(makeLLMResponse());
 
     await callLLMRaw("sys", "user", [], model.id, {}, [account]);
@@ -143,7 +143,7 @@ describe("callLLMRaw — usage counter callback", () => {
   });
 
   it("does not call onUsageUpdate when modelConfig not found (unknown GUID fallback)", async () => {
-    const defaultModel = makeModel("(default)");
+    const defaultModel = makeModel("default");
     const account = makeAccount("Fallback", [makeModel("gpt-4o"), defaultModel], {
       default_model: defaultModel.id,
     });

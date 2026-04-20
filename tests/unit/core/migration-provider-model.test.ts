@@ -80,7 +80,7 @@ describe("StateManager.migrateProviderModel()", () => {
     expect((account as any).token_limit).toBeUndefined();
   });
 
-  it("test 3: provider with no default_model and no token_limit → gets single (default) model", async () => {
+  it("test 3: provider with no default_model and no token_limit → gets single 'default' sentinel model", async () => {
     const state = createDefaultTestState();
     const provider = makeProvider({ name: "LocalLLM" });
     state.human.settings = { accounts: [provider] };
@@ -94,7 +94,7 @@ describe("StateManager.migrateProviderModel()", () => {
 
     expect(account.models).toBeDefined();
     expect(account.models!.length).toBe(1);
-    expect(account.models![0].name).toBe("(default)");
+    expect(account.models![0].name).toBe("default");
     expect(account.models![0].token_limit).toBeUndefined();
     expect(account.default_model).toBe(account.models![0].id);
   });
@@ -250,6 +250,27 @@ describe("StateManager.migrateProviderModel()", () => {
     expect(p1.model).toBe(openaiGuid);
     expect(p2.model).toBe(anthropicGuid);
     expect(p3.model).toBe(openaiGuid);
+  });
+
+  it("test 9b: existing '(default)' model name is migrated to 'default' sentinel", async () => {
+    const state = createDefaultTestState();
+    const existingModelId = crypto.randomUUID();
+    const provider = makeProvider({
+      name: "LMStudio",
+      default_model: existingModelId,
+      models: [{ id: existingModelId, name: "(default)", model_id: "(default)" } as ModelConfig],
+    });
+    state.human.settings = { accounts: [provider] };
+
+    const storage = createMockStorage();
+    (storage.load as any).mockResolvedValue(state);
+    await sm.initialize(storage);
+
+    const human = sm.getHuman();
+    const account = human.settings!.accounts![0];
+    expect(account.models![0].name).toBe("default");
+    expect(account.models![0].model_id).toBeUndefined();
+    expect(account.default_model).toBe(existingModelId);
   });
 
   it("test 9: extraction_token_limit removed from OpenCodeSettings and ClaudeCodeSettings after migration", async () => {

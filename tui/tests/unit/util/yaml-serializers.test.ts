@@ -906,7 +906,7 @@ describe("providerToYAML / providerFromYAML", () => {
     const yaml = newProviderToYAML();
     expect(yaml).toContain("name:");
     expect(yaml).toContain("models:");
-    expect(yaml).toContain("(default)");
+    expect(yaml).toContain("name: default");
     expect(yaml).toContain("# _delete: true");
   });
 

@@ -80,10 +80,10 @@ describe("getDisplayName", () => {
     expect(getDisplayName(account, model)).toBe("OpenAI:gpt-4o");
   });
 
-  it("returns 'Provider:(default)' for a default model", () => {
-    const model = createModel("(default)");
+  it("returns just 'Provider' (no colon) for a default sentinel model", () => {
+    const model = createModel("default");
     const account = createAccount({ name: "LocalLLM" });
-    expect(getDisplayName(account, model)).toBe("LocalLLM:(default)");
+    expect(getDisplayName(account, model)).toBe("LocalLLM");
   });
 
   it("handles colons in model names (e.g. org/model:variant)", () => {
@@ -116,9 +116,9 @@ describe("resolveModel", () => {
     expect(result.config.baseURL).toBe("http://localhost:1234/v1");
   });
 
-  // ── Test 2: GUID for "(default)" returns model: undefined ──────────────────
-  it("test 2: GUID for '(default)' model returns undefined model name", () => {
-    const model = createModel("(default)");
+  // ── Test 2: GUID for "default" sentinel returns model: undefined ──────────────────
+  it("test 2: GUID for 'default' sentinel model returns undefined model name", () => {
+    const model = createModel("default");
     const account = createAccount({ name: "LocalLLM", models: [model] });
     const result = resolveModel(model.id, [account]);
     expect(result.provider).toBe("LocalLLM");
@@ -194,11 +194,11 @@ describe("resolveModel", () => {
     expect(`${resolved.provider}:${resolved.model}`).toBe("OpenAI:gpt-4o");
   });
 
-  // ── Test 10: legacy "(default)" model via Provider:model returns undefined ───
-  it("test 10: legacy 'Provider:(default)' resolves to model: undefined", () => {
-    const model = createModel("(default)");
+  // ── Test 10: "default" sentinel via Provider:model returns undefined ───
+  it("test 10: 'Provider:default' resolves to model: undefined", () => {
+    const model = createModel("default");
     const account = createAccount({ name: "LocalLLM", models: [model] });
-    const result = resolveModel("LocalLLM:(default)", [account]);
+    const result = resolveModel("LocalLLM:default", [account]);
     expect(result.provider).toBe("LocalLLM");
     expect(result.model).toBeUndefined();
   });
