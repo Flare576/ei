@@ -597,7 +597,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
             {onKnowledgeSearch && (
               <Tooltip text="Search Ei's memory" align="right">
                 <button
-                  className="ei-boundary-btn"
+                  className="ei-boundary-btn ei-knowledge-btn"
                   onClick={onKnowledgeSearch}
                 >
                   🔍

@@ -681,7 +681,7 @@ export const RoomChatPanel = forwardRef<RoomChatPanelHandle, RoomChatPanelProps>
             {onKnowledgeSearch && (
               <Tooltip text="Search Ei's memory" align="right">
                 <button
-                  className="ei-boundary-btn"
+                  className="ei-boundary-btn ei-knowledge-btn"
                   onClick={onKnowledgeSearch}
                 >
                   🔍
