@@ -15,6 +15,7 @@ export type { PersonUpdatePromptData } from "./person-update.js";
 export type {
   PromptOutput,
   ParticipantContext,
+  PersonaEntitySnapshot,
   FactScanPromptData,
   TopicScanPromptData,
   PersonScanPromptData,

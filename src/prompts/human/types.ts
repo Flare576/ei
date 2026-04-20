@@ -12,6 +12,13 @@ export interface ParticipantContext {
   human_age?: number;            // calculated from Birthday fact — omitted if not set
 }
 
+/** Snapshot of a linked Persona entity — passed to person-update when the Person record has an 'Ei Persona' identifier. */
+export interface PersonaEntitySnapshot {
+  long_description: string;
+  traits: Array<{ name: string; description: string }>;
+  topics: Array<{ name: string; perspective: string }>;
+}
+
 interface BaseScanPromptData {
   messages_context: Message[];
   messages_analyze: Message[];
