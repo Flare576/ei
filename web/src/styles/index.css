@@ -23,6 +23,7 @@
 @import './save-load-modal.css';
 @import './conflict-resolution-modal.css';
 @import './hamburger-menu.css';
+@import './data-search-modal.css';
 
 /* Rooms */
 @import './room-panel.css';

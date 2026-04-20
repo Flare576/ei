@@ -1,0 +1,169 @@
+/* ============================================
+   DATA SEARCH MODAL
+   Shared filterable-search chrome used by
+   TargetedCaptureModal and KnowledgeSearchModal
+   ============================================ */
+
+.ei-data-search-modal {
+  background: var(--ei-bg-primary);
+  border-radius: var(--ei-radius-lg);
+  max-width: 480px;
+  width: 90%;
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--ei-shadow-lg);
+  animation: modal-in 0.2s ease;
+}
+
+.ei-data-search-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--ei-spacing-md) var(--ei-spacing-lg);
+  border-bottom: 1px solid var(--ei-border);
+  flex-shrink: 0;
+}
+
+.ei-data-search-modal__title {
+  margin: 0;
+  font-size: var(--ei-font-size-lg);
+  font-weight: 600;
+  color: var(--ei-text-primary);
+}
+
+.ei-data-search-modal__close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--ei-text-muted);
+  font-size: var(--ei-font-size-base);
+  padding: var(--ei-spacing-xs);
+  border-radius: var(--ei-radius-sm);
+  line-height: 1;
+  transition: color var(--ei-transition-fast), background var(--ei-transition-fast);
+}
+
+.ei-data-search-modal__close:hover {
+  color: var(--ei-text-primary);
+  background: var(--ei-bg-tertiary);
+}
+
+.ei-data-search-modal__search {
+  padding: var(--ei-spacing-md) var(--ei-spacing-lg);
+  border-bottom: 1px solid var(--ei-border-light);
+  flex-shrink: 0;
+}
+
+.ei-data-search-modal__input {
+  width: 100%;
+  padding: var(--ei-spacing-sm) var(--ei-spacing-md);
+  border: 1px solid var(--ei-border);
+  border-radius: var(--ei-radius-md);
+  background: var(--ei-bg-secondary);
+  color: var(--ei-text-primary);
+  font-size: var(--ei-font-size-sm);
+  font-family: var(--ei-font-family);
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color var(--ei-transition-fast);
+}
+
+.ei-data-search-modal__input:focus {
+  border-color: var(--ei-accent);
+}
+
+.ei-data-search-modal__results {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--ei-spacing-sm) 0;
+  min-height: 120px;
+}
+
+.ei-data-search-modal__result {
+  display: flex;
+  align-items: center;
+  gap: var(--ei-spacing-sm);
+  padding: var(--ei-spacing-sm) var(--ei-spacing-lg);
+  cursor: pointer;
+  transition: background var(--ei-transition-fast);
+  user-select: none;
+}
+
+.ei-data-search-modal__result:hover,
+.ei-data-search-modal__result--highlighted {
+  background: var(--ei-bg-secondary);
+}
+
+.ei-data-search-modal__result--highlighted {
+  background: var(--ei-bg-tertiary);
+}
+
+.ei-data-search-modal__result-badge {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.ei-data-search-modal__result-name {
+  font-size: var(--ei-font-size-sm);
+  color: var(--ei-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ei-data-search-modal__empty {
+  padding: var(--ei-spacing-lg);
+  text-align: center;
+  color: var(--ei-text-muted);
+  font-size: var(--ei-font-size-sm);
+}
+
+.ei-data-search-modal__footer-content {
+  border-top: 1px solid var(--ei-border-light);
+  padding: var(--ei-spacing-md) var(--ei-spacing-lg);
+  flex-shrink: 0;
+}
+
+.ei-data-search-modal__scan-all {
+  width: 100%;
+  padding: var(--ei-spacing-sm) var(--ei-spacing-md);
+  border: 1px solid var(--ei-border);
+  border-radius: var(--ei-radius-md);
+  background: var(--ei-bg-secondary);
+  color: var(--ei-text-secondary);
+  font-size: var(--ei-font-size-sm);
+  font-family: var(--ei-font-family);
+  cursor: pointer;
+  transition: all var(--ei-transition-fast);
+  text-align: center;
+}
+
+.ei-data-search-modal__scan-all:hover {
+  background: var(--ei-bg-tertiary);
+  border-color: var(--ei-accent);
+  color: var(--ei-text-primary);
+}
+
+.ei-data-search-modal__hint {
+  padding: var(--ei-spacing-sm) var(--ei-spacing-lg);
+  font-size: var(--ei-font-size-sm);
+  color: var(--ei-text-muted);
+  text-align: center;
+  border-top: 1px solid var(--ei-border-light);
+  flex-shrink: 0;
+}
+
+/* ============================================
+   KNOWLEDGE SEARCH MODAL
+   Reuses the same chrome as DataSearchModal
+   ============================================ */
+
+.ei-knowledge-search-modal__placeholder {
+  padding: var(--ei-spacing-lg);
+  text-align: center;
+  color: var(--ei-text-muted);
+  font-size: var(--ei-font-size-sm);
+  font-style: italic;
+}
