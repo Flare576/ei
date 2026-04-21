@@ -17,8 +17,7 @@ export interface RoomParticipantIdentity {
 export interface RoomHistoryMessage {
   speaker_name: string;
   speaker_id: string;
-  verbal_response?: string;
-  action_response?: string;
+  content?: string;
   silence_reason?: string;
 }
 
@@ -58,8 +57,7 @@ export interface RoomJudgeCandidate {
   message_id: string;
   speaker_name: string;
   speaker_id: string;
-  verbal_response?: string;
-  action_response?: string;
+  content?: string;
   silence_reason?: string;
 }
 
@@ -87,8 +85,7 @@ export interface RoomJudgeResult {
 
 export interface PersonaResponseResult {
   should_respond: boolean;
-  verbal_response?: string;
-  action_response?: string;
+  content?: string;
   reason?: string;
 }
 
