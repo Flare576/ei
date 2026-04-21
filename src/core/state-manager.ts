@@ -81,10 +81,9 @@ export class StateManager {
     for (const room of rooms) {
       for (const msg of room.messages) {
         if (msg.content) continue;
-        if (msg.role === 'human') continue;
         if (msg.silence_reason) continue;
-        const parts: string[] = [];
         const legacy = msg as RoomMessage & { verbal_response?: string; action_response?: string };
+        const parts: string[] = [];
         if (legacy.action_response) parts.push(`_${legacy.action_response}_`);
         if (legacy.verbal_response) parts.push(legacy.verbal_response);
         if (parts.length === 0) continue;
@@ -470,7 +469,7 @@ export class StateManager {
       id: crypto.randomUUID(),
       parent_id: null,
       role: "human",
-      verbal_response: input.initial_message,
+      content: input.initial_message,
       timestamp: now,
       read: true,
       context_status: "default" as import("./types.js").ContextStatus,
