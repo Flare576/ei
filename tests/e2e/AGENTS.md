@@ -175,7 +175,7 @@ mockServer.setResponseForType("image-synthesis", {
 // - GET /view?filename=X → returns 1x1 PNG
 ```
 
-**Important**: Image synthesis prompts return ONLY `{image_prompt: "..."}`, NOT the standard `{should_respond, verbal_response, reason}` format.
+**Important**: Image synthesis prompts return ONLY `{image_prompt: "..."}`, NOT the standard `{should_respond, content, reason}` format.
 
 ### Seeding Image Provider in Fixtures
 
@@ -272,7 +272,7 @@ If synthesis messages aren't being created:
 
 3. **Check response format**:
    - Must be: `{image_prompt: "..."}`
-   - NOT: `{should_respond, verbal_response, reason}`
+   - NOT: `{should_respond, content, reason}`
 
 ### MessageImages State Structure
 

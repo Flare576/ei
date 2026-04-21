@@ -412,7 +412,7 @@ This section captures design intent that isn't obvious from the code.
 ### Submission Rules (all modes)
 
 - Human responses are **required** to advance. There is no optional skip — but `silence_reason` counts as a valid submission (same as Persona silence).
-- A Participant has submitted when their message has either `verbal_response` or `silence_reason` set.
+- A Participant has submitted when their message has either `content` or `silence_reason` set.
 - The Judge in MAP is **not** a Participant and never submits a round response.
 
 ### Choose Your Path (CYP) — Round Flow
