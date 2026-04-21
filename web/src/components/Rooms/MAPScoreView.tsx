@@ -122,7 +122,7 @@ export function MAPScoreView({ room, allMessages, personas, humanName, judgePers
     }
 
     const activeMsg = byId.get(room.active_node_id ?? '');
-    if (activeMsg?.role === 'persona' && !activeMsg.content && !activeMsg.verbal_response && !activeMsg.silence_reason) {
+    if (activeMsg?.role === 'persona' && !activeMsg.content && !activeMsg.silence_reason) {
       roundNum++;
       const humanMsg = activeMsg.parent_id ? (byId.get(activeMsg.parent_id) ?? seedMsg) : seedMsg;
       rows.push({ roundNum, humanMsg, winnerMsg: null, verdictMsg: null, inProgress: true });
@@ -192,8 +192,8 @@ export function MAPScoreView({ room, allMessages, personas, humanName, judgePers
               const isMsgExpanded = expandedRows.has(`msg-${rowKey}`);
               const isVerdictExpanded = expandedRows.has(`verdict-${rowKey}`);
               const msgText = row.winnerMsg
-                ? (row.winnerMsg.content ?? row.winnerMsg.verbal_response ?? '')
-                : (row.humanMsg.content ?? row.humanMsg.verbal_response ?? '');
+                ? (row.winnerMsg.content ?? '')
+                : (row.humanMsg.content ?? '');
               const verdictText = row.verdictMsg?.silence_reason ?? '';
               const runningNow = runningTotals.get(row.humanMsg.id);
               const winnerPersonaId = row.winnerMsg?.persona_id;

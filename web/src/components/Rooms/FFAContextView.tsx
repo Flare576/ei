@@ -53,7 +53,7 @@ function formatTimestamp(ts: string): string {
 }
 
 function getMessageText(msg: RoomMessage): string {
-  return msg.verbal_response ?? msg.content ?? msg.silence_reason ?? '';
+  return msg.content ?? msg.silence_reason ?? '';
 }
 
 function collectDescendants(msgId: string, allMessages: RoomMessage[]): RoomMessage[] {

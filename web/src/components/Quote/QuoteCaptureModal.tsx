@@ -20,12 +20,8 @@ interface QuoteCaptureModalProps {
   onSave: (quote: Omit<Quote, 'id' | 'created_at'>) => void;
 }
 
-function getMessageText(msg: { content?: string; verbal_response?: string; action_response?: string }): string {
-  if (msg.content) return msg.content;
-  const parts: string[] = [];
-  if (msg.action_response) parts.push(`_${msg.action_response}_`);
-  if (msg.verbal_response) parts.push(msg.verbal_response);
-  return parts.join('\n\n');
+function getMessageText(msg: { content?: string }): string {
+  return msg.content ?? '';
 }
 
 function snapToWordStart(text: string, pos: number): number {
