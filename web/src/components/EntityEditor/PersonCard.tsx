@@ -238,11 +238,7 @@ export const PersonCard = ({
       onBlur={handleBlur}
       onClick={selectionMode ? onSelectionChange : undefined}
     >
-      {selectionMode && (
-        <div className="ei-data-card__checkbox">
-          <input type="checkbox" checked={isSelected} readOnly />
-        </div>
-      )}
+
       {!selectionMode && (
         <div
           className={`ei-engagement-gap ${gapInfo.className}`}
@@ -276,17 +272,19 @@ export const PersonCard = ({
                 Migration pending — no identifiers yet
               </div>
             )}
-            <button
-              type="button"
-              className="ei-identifiers-collapsible__toggle"
-              onClick={() => setIdentifiersExpanded(v => !v)}
-              aria-expanded={identifiersExpanded}
-            >
-              <span className="ei-identifiers-collapsible__arrow">{identifiersExpanded ? '▾' : '▸'}</span>
-              Identifiers ({identifiers.length})
-            </button>
+            {!selectionMode && (
+              <button
+                type="button"
+                className="ei-identifiers-collapsible__toggle"
+                onClick={() => setIdentifiersExpanded(v => !v)}
+                aria-expanded={identifiersExpanded}
+              >
+                <span className="ei-identifiers-collapsible__arrow">{identifiersExpanded ? '▾' : '▸'}</span>
+                Identifiers ({identifiers.length})
+              </button>
+            )}
 
-            {identifiersExpanded && (
+            {(selectionMode || identifiersExpanded) && (
               <div className="ei-identifiers">
                 {!isPreMigration && identifiers.length === 0 && (
                   <div className="ei-identifiers__empty">
