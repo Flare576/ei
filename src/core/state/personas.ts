@@ -5,15 +5,15 @@ type LegacyMessage = Message & { verbal_response?: string; action_response?: str
 
 function migrateMessage(msg: Message): Message {
   if (msg.content) return msg;
-  if (msg.role === 'human') return msg;
   if (msg.silence_reason) return msg;
   const legacy = msg as LegacyMessage;
+  const hasLegacy = 'verbal_response' in legacy || 'action_response' in legacy;
+  if (!hasLegacy) return msg;
   const parts: string[] = [];
   if (legacy.action_response) parts.push(`_${legacy.action_response}_`);
   if (legacy.verbal_response) parts.push(legacy.verbal_response);
-  if (parts.length === 0) return msg;
   const { verbal_response: _vr, action_response: _ar, ...rest } = legacy;
-  return { ...rest, content: parts.join('\n\n') };
+  return parts.length > 0 ? { ...rest, content: parts.join('\n\n') } : rest as Message;
 }
 
 export interface PersonaData {

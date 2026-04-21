@@ -69,9 +69,46 @@ export class StateManager {
     this.migrateMessageFlags();
     this.migrateInterestedPersonas();
     this.migrateProviderModel();
+    this.migratePersonaMessageContent();
     this.migrateRoomMessageContent();
     this.migrateThemes();
     this.migrateFfaParentIds();
+  }
+
+  private migratePersonaMessageContent(): void {
+    // TODO(v1.0.0): Remove legacy persona message migration — verbal_response/action_response no longer written
+    const rawPersonas = (this.personaState as unknown as { personas: Map<string, { messages: Message[] }> }).personas;
+    let migratedCount = 0;
+    for (const [, data] of rawPersonas) {
+      const messages = data.messages;
+      for (const msg of messages) {
+        const legacy = msg as Message & { verbal_response?: string; action_response?: string };
+        if (!('verbal_response' in legacy || 'action_response' in legacy)) continue;
+        if (msg.content) {
+          delete (legacy as any).verbal_response;
+          delete (legacy as any).action_response;
+          migratedCount++;
+          continue;
+        }
+        if (msg.silence_reason) {
+          delete (legacy as any).verbal_response;
+          delete (legacy as any).action_response;
+          migratedCount++;
+          continue;
+        }
+        const parts: string[] = [];
+        if (legacy.action_response) parts.push(`_${legacy.action_response}_`);
+        if (legacy.verbal_response) parts.push(legacy.verbal_response);
+        if (parts.length > 0) (msg as any).content = parts.join('\n\n');
+        delete (legacy as any).verbal_response;
+        delete (legacy as any).action_response;
+        migratedCount++;
+      }
+    }
+    if (migratedCount > 0) {
+      this.scheduleSave();
+      console.log(`[StateManager] Migrated ${migratedCount} persona messages to unified content field`);
+    }
   }
 
   private migrateRoomMessageContent(): void {
@@ -84,11 +121,12 @@ export class StateManager {
         if (msg.silence_reason) continue;
         // TODO(v1.0.0): Remove legacy room message migration — verbal_response/action_response no longer written
         const legacy = msg as RoomMessage & { verbal_response?: string; action_response?: string };
+        const hasLegacy = 'verbal_response' in legacy || 'action_response' in legacy;
+        if (!hasLegacy) continue;
         const parts: string[] = [];
         if (legacy.action_response) parts.push(`_${legacy.action_response}_`);
         if (legacy.verbal_response) parts.push(legacy.verbal_response);
-        if (parts.length === 0) continue;
-        msg.content = parts.join('\n\n');
+        if (parts.length > 0) msg.content = parts.join('\n\n');
         delete (msg as any).verbal_response;
         delete (msg as any).action_response;
         migratedCount++;
