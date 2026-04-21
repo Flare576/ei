@@ -437,4 +437,75 @@ describe("PersonaState", () => {
       expect(state.messages_get(persona.id)).toHaveLength(1);
     });
   });
+
+  describe("messages_getAlways", () => {
+    let personaId: string;
+
+    const makeAlwaysMessage = (content: string, role: "human" | "system" = "system", tsOffset = 0): Message => ({
+      id: crypto.randomUUID(),
+      role,
+      content,
+      timestamp: new Date(Date.now() + tsOffset).toISOString(),
+      read: true,
+      context_status: ContextStatusEnum.Always,
+    });
+
+    beforeEach(() => {
+      const persona = makePersona("TestBot");
+      personaId = persona.id;
+      state.add(persona);
+    });
+
+    it("returns empty array when no messages exist", () => {
+      expect(state.messages_getAlways(personaId)).toEqual([]);
+    });
+
+    it("returns empty array for non-existent persona", () => {
+      expect(state.messages_getAlways("nonexistent")).toEqual([]);
+    });
+
+    it("returns only messages with context_status Always", () => {
+      state.messages_append(personaId, makeMessage("default message"));
+      state.messages_append(personaId, makeAlwaysMessage("pinned message"));
+      state.messages_append(personaId, { ...makeMessage("never message"), context_status: ContextStatusEnum.Never });
+
+      const result = state.messages_getAlways(personaId);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].content).toBe("pinned message");
+    });
+
+    it("returns messages sorted chronologically by timestamp", () => {
+      state.messages_append(personaId, makeAlwaysMessage("third", "system", 2000));
+      state.messages_append(personaId, makeAlwaysMessage("first", "system", 0));
+      state.messages_append(personaId, makeAlwaysMessage("second", "system", 1000));
+
+      const result = state.messages_getAlways(personaId);
+
+      expect(result).toHaveLength(3);
+      expect(result[0].content).toBe("first");
+      expect(result[1].content).toBe("second");
+      expect(result[2].content).toBe("third");
+    });
+
+    it("returns copies, not references", () => {
+      state.messages_append(personaId, makeAlwaysMessage("original"));
+
+      const result = state.messages_getAlways(personaId);
+      result[0].content = "mutated";
+
+      expect(state.messages_getAlways(personaId)[0].content).toBe("original");
+    });
+
+    it("works for both human and system role messages", () => {
+      state.messages_append(personaId, makeAlwaysMessage("human says", "human"));
+      state.messages_append(personaId, makeAlwaysMessage("persona says", "system"));
+
+      const result = state.messages_getAlways(personaId);
+
+      expect(result).toHaveLength(2);
+      expect(result.map(m => m.content)).toContain("human says");
+      expect(result.map(m => m.content)).toContain("persona says");
+    });
+  });
 });
