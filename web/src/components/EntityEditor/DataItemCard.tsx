@@ -34,6 +34,7 @@ interface DataItemCardProps<T extends DataItemBase> {
   showMeta?: boolean;
   resolvePersonaName?: (id: string) => string;
   renderAfterHeader?: () => React.ReactNode;
+  headerBadge?: React.ReactNode;
   onAiAssist?: (systemPrompt: string, userPrompt: string) => Promise<string>;
   aiContext?: string;
   selectionMode?: boolean;
@@ -54,6 +55,7 @@ export const DataItemCard = <T extends DataItemBase>({
   isDirty = false,
   showMeta = true,
   renderAfterHeader,
+  headerBadge,
   resolvePersonaName,
   onAiAssist,
   aiContext,
@@ -143,6 +145,7 @@ export const DataItemCard = <T extends DataItemBase>({
             placeholder="Name"
             readOnly={selectionMode}
           />
+          {headerBadge}
         </div>
 
         {!selectionMode && showGroupEditor && (

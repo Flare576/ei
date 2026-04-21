@@ -82,8 +82,8 @@ const renderTopicCard = (
   resolvePersonaName?: (id: string) => string,
   _onAiAssist?: unknown,
   _aiContext?: unknown,
-  _selectionMode?: unknown,
-  _isSelected?: unknown,
+  selectionMode?: boolean,
+  _isSelected?: boolean,
   availableGroups: string[] = []
 ) => {
   const gapInfo = getEngagementGapInfo(topic.exposure_current, topic.exposure_desired);
@@ -113,7 +113,8 @@ const renderTopicCard = (
         value={topic.category || ''}
         onChange={handleCategoryChange}
         placeholder="Interest, Goal, Conflict..."
-        list={`category-suggestions-${topic.id}`}
+        list={selectionMode ? undefined : `category-suggestions-${topic.id}`}
+        readOnly={selectionMode}
         style={{
           flex: 1,
           fontSize: '0.8rem',
@@ -124,16 +125,42 @@ const renderTopicCard = (
           color: 'var(--ei-text-primary, #e8eef4)',
         }}
       />
-      <datalist id={`category-suggestions-${topic.id}`}>
-        {CATEGORY_SUGGESTIONS.map(cat => (
-          <option key={cat} value={cat} />
-        ))}
-      </datalist>
+      {!selectionMode && (
+        <datalist id={`category-suggestions-${topic.id}`}>
+          {CATEGORY_SUGGESTIONS.map(cat => (
+            <option key={cat} value={cat} />
+          ))}
+        </datalist>
+      )}
     </div>
   );
 
+  if (selectionMode) {
+    return (
+      <div className="ei-data-card">
+        <div className="ei-data-card__content">
+          <div className="ei-data-card__header">
+            <input
+              type="text"
+              className="ei-data-card__name"
+              value={topic.name}
+              readOnly
+            />
+          </div>
+          <textarea
+            className="ei-data-card__description"
+            value={topic.description}
+            rows={2}
+            readOnly
+          />
+          {topic.category && renderCategoryInput()}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ position: 'relative' }}>
+    <div>
       <DataItemCard
         item={topic}
         sliders={sliders}
@@ -144,14 +171,15 @@ const renderTopicCard = (
         renderAfterHeader={renderCategoryInput}
         resolvePersonaName={resolvePersonaName}
         availableGroups={availableGroups}
+        headerBadge={(
+          <div
+            className={`ei-engagement-gap ${gapInfo.className}`}
+            title={gapInfo.description}
+          >
+            {gapInfo.label}
+          </div>
+        )}
       />
-      <div
-        className={`ei-engagement-gap ${gapInfo.className}`}
-        style={{ position: 'absolute', top: '12px', right: '12px' }}
-        title={gapInfo.description}
-      >
-        {gapInfo.label}
-      </div>
     </div>
   );
 };
