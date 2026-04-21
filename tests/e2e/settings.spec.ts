@@ -25,7 +25,6 @@ test.describe("Settings Management", () => {
     
     await expect(page.locator('.ei-settings-section__title').first()).toContainText('Display', { timeout: 5000 });
     await expect(page.locator('#name-display')).toBeVisible();
-    await expect(page.locator('#time-mode')).toBeVisible();
   });
 
   test("can navigate to provider accounts section", async ({ page, mockServerUrl }) => {

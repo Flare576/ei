@@ -92,40 +92,39 @@ describe("buildCYPEditorYAML", () => {
   });
 
   describe("content formatting", () => {
-    test("verbal_response appears as block scalar with 4-space-indented content", () => {
+    test("content appears as block scalar with 4-space-indented content", () => {
       const msgs = [
-        makeMsg({ id: "m1", parent_id: "root", verbal_response: "Hello there" }),
+        makeMsg({ id: "m1", parent_id: "root", content: "Hello there" }),
       ];
       const yaml = buildCYPEditorYAML("root", msgs, []);
       expect(yaml).toContain("content: |");
       expect(yaml).toContain("    Hello there");
     });
 
-    test("multi-line verbal_response: each line indented 4 spaces", () => {
+    test("multi-line content: each line indented 4 spaces", () => {
       const msgs = [
-        makeMsg({ id: "m1", parent_id: "root", verbal_response: "Line one\nLine two" }),
+        makeMsg({ id: "m1", parent_id: "root", content: "Line one\nLine two" }),
       ];
       const yaml = buildCYPEditorYAML("root", msgs, []);
       expect(yaml).toContain("    Line one");
       expect(yaml).toContain("    Line two");
     });
 
-    test("action_response appears as block scalar with 4-space-indented content", () => {
+    test("action inline in content with underscore wrapping appears as block scalar", () => {
       const msgs = [
-        makeMsg({ id: "m1", parent_id: "root", action_response: "*nods quietly*" }),
+        makeMsg({ id: "m1", parent_id: "root", content: "_*nods quietly*_" }),
       ];
       const yaml = buildCYPEditorYAML("root", msgs, []);
       expect(yaml).toContain("content: |");
       expect(yaml).toContain("    _*nods quietly*_");
     });
 
-    test("message with both verbal_response and action_response: both fields present", () => {
+    test("content with inline action: single field, renders correctly", () => {
       const msgs = [
         makeMsg({
           id: "m1",
           parent_id: "root",
-          verbal_response: "I speak",
-          action_response: "*also does something*",
+          content: "I speak\n\n_*also does something*_",
         }),
       ];
       const yaml = buildCYPEditorYAML("root", msgs, []);
@@ -134,21 +133,21 @@ describe("buildCYPEditorYAML", () => {
       expect(yaml).toContain("    _*also does something*_");
     });
 
-    test("silence_reason shown as inline string when verbal_response is absent", () => {
+    test("silence_reason shown as inline string when content is absent", () => {
       const msgs = [
         makeMsg({ id: "m1", parent_id: "root", silence_reason: "deep in thought" }),
       ];
       const yaml = buildCYPEditorYAML("root", msgs, []);
       expect(yaml).toContain(`silence_reason: "deep in thought"`);
-      expect(yaml).not.toContain("verbal_response:");
+      expect(yaml).not.toContain("content:");
     });
 
-    test("silence_reason suppressed when verbal_response is present", () => {
+    test("silence_reason suppressed when content is present", () => {
       const msgs = [
         makeMsg({
           id: "m1",
           parent_id: "root",
-          verbal_response: "I do speak",
+          content: "I do speak",
           silence_reason: "should be hidden",
         }),
       ];
@@ -161,8 +160,7 @@ describe("buildCYPEditorYAML", () => {
       const msgs = [makeMsg({ id: "m1", parent_id: "root" })];
       const yaml = buildCYPEditorYAML("root", msgs, []);
       expect(yaml).toContain("# (no content)");
-      expect(yaml).not.toContain("verbal_response:");
-      expect(yaml).not.toContain("action_response:");
+      expect(yaml).not.toContain("content:");
       expect(yaml).not.toContain("silence_reason:");
     });
   });
@@ -293,7 +291,7 @@ describe("parseCYPEditorYAML", () => {
   test("4-space-indented content lines (block scalar body) do not corrupt chosen state", () => {
     const yaml = [
       `- id: "msg-y"`,
-      `  verbal_response: |`,
+      `  content: |`,
       `    some response text`,
       `    more text`,
       `  _chosen: false`,
@@ -322,8 +320,8 @@ describe("parseCYPEditorYAML", () => {
 describe("round-trip: build → (user marks chosen) → parse", () => {
   test("basic round-trip: mark one child chosen → parser returns its ID", () => {
     const msgs = [
-      makeMsg({ id: "opt-a", parent_id: "root", verbal_response: "Option A" }),
-      makeMsg({ id: "opt-b", parent_id: "root", verbal_response: "Option B" }),
+      makeMsg({ id: "opt-a", parent_id: "root", content: "Option A" }),
+      makeMsg({ id: "opt-b", parent_id: "root", content: "Option B" }),
     ];
     const yaml = buildCYPEditorYAML("root", msgs, []);
     const edited = yaml.replace(
@@ -337,13 +335,12 @@ describe("round-trip: build → (user marks chosen) → parse", () => {
     expect(chosen[0].id).toBe("opt-a");
   });
 
-  test("round-trip with both verbal_response and action_response: both appear in YAML", () => {
+  test("round-trip with inline action in content: renders and parses correctly", () => {
     const msgs = [
       makeMsg({
         id: "combo",
         parent_id: "root",
-        verbal_response: "I speak words",
-        action_response: "*does a thing*",
+        content: "I speak words\n\n_*does a thing*_",
       }),
     ];
     const yaml = buildCYPEditorYAML("root", msgs, []);
@@ -395,9 +392,9 @@ describe("round-trip: build → (user marks chosen) → parse", () => {
 
   test("three children: marking second one chosen works correctly", () => {
     const msgs = [
-      makeMsg({ id: "a", parent_id: "root", verbal_response: "A speaks" }),
-      makeMsg({ id: "b", parent_id: "root", verbal_response: "B speaks" }),
-      makeMsg({ id: "c", parent_id: "root", verbal_response: "C speaks" }),
+      makeMsg({ id: "a", parent_id: "root", content: "A speaks" }),
+      makeMsg({ id: "b", parent_id: "root", content: "B speaks" }),
+      makeMsg({ id: "c", parent_id: "root", content: "C speaks" }),
     ];
     const yaml = buildCYPEditorYAML("root", msgs, []);
     const edited = yaml.replace(
@@ -414,7 +411,7 @@ describe("round-trip: build → (user marks chosen) → parse", () => {
 
   test("persona display name resolved correctly in full round-trip", () => {
     const msgs = [
-      makeMsg({ id: "response", parent_id: "root", role: "persona", persona_id: "p42", verbal_response: "greetings" }),
+      makeMsg({ id: "response", parent_id: "root", role: "persona", persona_id: "p42", content: "greetings" }),
     ];
     const personas = [makePersona("p42", "Oracle")];
     const yaml = buildCYPEditorYAML("root", msgs, personas);

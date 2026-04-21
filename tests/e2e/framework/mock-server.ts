@@ -527,7 +527,7 @@ export class MockLLMServerImpl implements MockLLMServer {
           type: "fixed",
           content: JSON.stringify({
             should_respond: true,
-            verbal_response: "Hello! This is a test response from the mock LLM server.",
+            content: "Hello! This is a test response from the mock LLM server.",
             reason: "greeting"
           }),
           statusCode: 200,
