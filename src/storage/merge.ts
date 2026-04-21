@@ -150,7 +150,7 @@ export function yoloMerge(local: StorageState, remote: StorageState): StorageSta
     if (remoteSettings.queue_paused !== undefined) localSettings.queue_paused = remoteSettings.queue_paused;
     if (remoteSettings.skip_quote_delete_confirm !== undefined) localSettings.skip_quote_delete_confirm = remoteSettings.skip_quote_delete_confirm;
     if (remoteSettings.name_display !== undefined) localSettings.name_display = remoteSettings.name_display;
-    if (remoteSettings.time_mode !== undefined) localSettings.time_mode = remoteSettings.time_mode;
+
 
     if (remoteSettings.opencode) localSettings.opencode = remoteSettings.opencode;
     if (remoteSettings.ceremony) localSettings.ceremony = remoteSettings.ceremony;

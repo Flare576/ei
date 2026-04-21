@@ -14,7 +14,6 @@ interface EditableSettingsData {
   default_model?: string | null;
   oneshot_model?: string | null;
   rewrite_model?: string | null;
-  time_mode?: "24h" | "12h" | "local" | "utc" | null;
   name_display?: string | null;
   default_heartbeat_ms?: string | null;
   default_context_window_hours?: number | null;
@@ -64,7 +63,6 @@ export function settingsToYAML(settings: HumanSettings | undefined, accounts: Pr
     default_model: guidToDisplay(settings?.default_model),
     oneshot_model: guidToDisplay(settings?.oneshot_model),
     rewrite_model: guidToDisplay(settings?.rewrite_model),
-    time_mode: settings?.time_mode ?? null,
     name_display: settings?.name_display ?? null,
     default_heartbeat_ms: formatDuration(settings?.default_heartbeat_ms ?? 1800000),
     default_context_window_hours: settings?.default_context_window_hours ?? 8,
@@ -190,7 +188,6 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
     default_model: displayToGuid(data.default_model),
     oneshot_model: displayToGuid(data.oneshot_model),
     rewrite_model: displayToGuid(data.rewrite_model),
-    time_mode: nullToUndefined(data.time_mode),
     name_display: nullToUndefined(data.name_display),
     default_heartbeat_ms: parseMsDuration(data.default_heartbeat_ms, 1800000),
     default_context_window_hours: nullToUndefined(data.default_context_window_hours),

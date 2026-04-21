@@ -10,7 +10,6 @@ import type { ThemeDefinition } from '../../../../src/core/types/entities.js';
 
 interface SettingsData {
   name_display?: string;
-  time_mode?: "24h" | "12h" | "local" | "utc";
   ceremony_time: string;
   default_model?: string;
   oneshot_model?: string;
@@ -207,20 +206,7 @@ export const SettingsModal = ({
                 />
               </div>
 
-              <div className="ei-form-group">
-                <label htmlFor="time-mode" className="ei-form-label">Time Mode</label>
-                <select
-                  id="time-mode"
-                  className="ei-input ei-select"
-                  value={settings.time_mode || "24h"}
-                  onChange={(e) => handleChange("time_mode", e.target.value)}
-                >
-                  <option value="24h">24-Hour</option>
-                  <option value="12h">12-Hour</option>
-                  <option value="local">Local Time</option>
-                  <option value="utc">UTC</option>
-                </select>
-              </div>
+
             </section>
 
             <section className="ei-settings-section">

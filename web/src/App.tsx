@@ -1047,7 +1047,7 @@ function App() {
 
   const handleHumanUpdate = useCallback(async (updates: Record<string, unknown>) => {
     if (!processor) return;
-    const { default_model, oneshot_model, rewrite_model, queue_paused, name_display, time_mode, accounts, sync, ceremony_time, default_heartbeat_ms, default_context_window_hours, message_min_count, message_max_age_days, event_window_hours, active_theme, custom_themes, ...rest } = updates;
+    const { default_model, oneshot_model, rewrite_model, queue_paused, name_display, accounts, sync, ceremony_time, default_heartbeat_ms, default_context_window_hours, message_min_count, message_max_age_days, event_window_hours, active_theme, custom_themes, ...rest } = updates;
     
     const settingsUpdates: Record<string, unknown> = {};
     if (default_model !== undefined) settingsUpdates.default_model = default_model;
@@ -1055,7 +1055,6 @@ function App() {
     if (rewrite_model !== undefined) settingsUpdates.rewrite_model = rewrite_model;
     if (queue_paused !== undefined) settingsUpdates.queue_paused = queue_paused;
     if (name_display !== undefined) settingsUpdates.name_display = name_display;
-    if (time_mode !== undefined) settingsUpdates.time_mode = time_mode;
     if (default_heartbeat_ms !== undefined) settingsUpdates.default_heartbeat_ms = default_heartbeat_ms;
     if (default_context_window_hours !== undefined) settingsUpdates.default_context_window_hours = default_context_window_hours;
     if (message_min_count !== undefined) settingsUpdates.message_min_count = message_min_count;
@@ -1739,7 +1738,6 @@ function App() {
           onClose={() => setShowSettingsModal(false)}
           settings={{
             name_display: human.settings?.name_display,
-            time_mode: human.settings?.time_mode,
             ceremony_time: human.settings?.ceremony?.time ?? "09:00",
             default_model: human.settings?.default_model,
             oneshot_model: human.settings?.oneshot_model,

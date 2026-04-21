@@ -8,7 +8,6 @@ interface HumanSettings {
   queue_paused?: boolean;
   name_color?: string;
   name_display?: string;
-  time_mode?: "24h" | "12h" | "local" | "utc";
   accounts?: ProviderAccount[];
   sync?: SyncCredentials;
 }
@@ -119,20 +118,7 @@ export const HumanSettingsTab: React.FC<HumanSettingsTabProps> = ({
           </div>
         </div>
 
-        <div className="ei-form-group">
-          <label htmlFor="time-mode" className="ei-form-label">Time Mode</label>
-          <select
-            id="time-mode"
-            className="ei-input ei-select"
-            value={settings.time_mode || "24h"}
-            onChange={(e) => onChange("time_mode", e.target.value as HumanSettings["time_mode"])}
-          >
-            <option value="24h">24-Hour</option>
-            <option value="12h">12-Hour</option>
-            <option value="local">Local Time</option>
-            <option value="utc">UTC</option>
-          </select>
-        </div>
+
       </section>
 
       <section className="ei-settings-section">
