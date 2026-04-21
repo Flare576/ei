@@ -222,7 +222,7 @@ export function personaToYAML(persona: PersonaEntity, allGroups?: string[], allT
     is_paused: persona.is_paused || undefined,
     pause_until: persona.pause_until,
     is_static: persona.is_static || undefined,
-    include_message_timestamps: persona.include_message_timestamps || undefined,
+    include_message_timestamps: persona.include_message_timestamps ?? false,
     tools: toolsMap,
   };
 

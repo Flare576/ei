@@ -38,7 +38,6 @@ export const editorCommand: Command = {
     }
     
     if (result.content === null) {
-      ctx.setInputText("");
       ctx.showNotification("No changes made", "info");
       return;
     }
