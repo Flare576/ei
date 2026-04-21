@@ -43,7 +43,7 @@ function convertToEiMessage(msg: ClaudeCodeMessage): Message {
   return {
     id: msg.id,
     role: msg.role === "user" ? "human" : "system",
-    verbal_response: msg.content,
+    content: msg.content,
     timestamp: msg.timestamp,
     read: true,
     context_status: "default" as ContextStatus,

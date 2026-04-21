@@ -35,7 +35,7 @@ function convertToEiMessage(msg: CursorMessage): Message {
   return {
     id: msg.id,
     role: msg.type === 1 ? "human" : "system",
-    verbal_response: msg.text,
+    content: msg.text,
     timestamp: msg.timestamp,
     read: true,
     context_status: "default" as ContextStatus,
