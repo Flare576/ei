@@ -32,7 +32,7 @@ function truncate(s: string, n: number): string {
 }
 
 function getMessageText(m: RoomMessage): string {
-  return (m.verbal_response ?? m.content ?? m.silence_reason ?? "").replace(/\n+/g, " ");
+  return (m.content ?? m.silence_reason ?? "").replace(/\n+/g, " ");
 }
 
 export function MAPScoreOverlay(props: MAPScoreOverlayProps) {

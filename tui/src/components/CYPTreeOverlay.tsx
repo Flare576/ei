@@ -31,8 +31,6 @@ interface TreeLine {
 
 function getMessageContent(m: RoomMessage): string {
   if (m.content) return m.content;
-  if (m.verbal_response) return m.verbal_response;
-  if (m.action_response) return m.action_response;
   if (m.silence_reason) return `(${m.silence_reason})`;
   return "";
 }

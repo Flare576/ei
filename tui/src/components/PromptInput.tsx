@@ -164,7 +164,7 @@ export function PromptInput() {
         );
         const recalled = recallHumanRoomMessage();
         if (recalled) {
-          const content = pendingMsg?.verbal_response ?? pendingMsg?.silence_reason ?? "";
+          const content = pendingMsg?.content ?? pendingMsg?.silence_reason ?? "";
           textareaRef?.setText(content);
           setInputText(content);
           textareaRef?.gotoBufferEnd();

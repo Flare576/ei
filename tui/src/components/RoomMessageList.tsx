@@ -7,12 +7,8 @@ import type { RoomMessage, Quote } from "../../../src/core/types.js";
 import { RoomMode } from "../../../src/core/types/enums.js";
 import { insertQuoteMarkers } from "../util/quote-utils.js";
 
-function getContent(msg: { content?: string; verbal_response?: string; action_response?: string }): string {
-  if (msg.content) return msg.content;
-  const parts: string[] = [];
-  if (msg.action_response) parts.push(`_${msg.action_response}_`);
-  if (msg.verbal_response) parts.push(msg.verbal_response);
-  return parts.join('\n\n');
+function getContent(msg: { content?: string }): string {
+  return msg.content ?? '';
 }
 
 interface RoomMessageWithQuotes extends RoomMessage {
