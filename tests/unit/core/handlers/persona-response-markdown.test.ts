@@ -362,7 +362,7 @@ describe("PersonaState.load() — migrateMessage() round-trip", () => {
     expect(messages[0].silence_reason).toBe("User said goodbye");
   });
 
-  it("skips migration for human messages", () => {
+  it("migrates human messages with verbal_response to content", () => {
     const state = new PersonaState();
     state.load({
       "p-1": {
@@ -374,8 +374,8 @@ describe("PersonaState.load() — migrateMessage() round-trip", () => {
     });
 
     const messages = state.messages_get("p-1");
-    expect(messages[0].content).toBeUndefined();
-    expect((messages[0] as any).verbal_response).toBe("Human said this");
+    expect(messages[0].content).toBe("Human said this");
+    expect((messages[0] as any).verbal_response).toBeUndefined();
   });
 
   it("skips migration when message has no content fields", () => {
