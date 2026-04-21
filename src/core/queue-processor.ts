@@ -216,7 +216,7 @@ export class QueueProcessor {
           const submitCall = findSubmitToolCall(toolCalls, activeTools);
           if (submitCall) {
             const args = submitCall.arguments ?? {};
-            if (!args.should_respond && (args.verbal_response || args.action_response)) {
+            if (!args.should_respond && args.content) {
               args.should_respond = true;
             }
             console.log(`[QueueProcessor] submit tool "${submitCall.name}" called — returning arguments as parsed response`);
@@ -332,7 +332,7 @@ export class QueueProcessor {
       const submitCall = findSubmitToolCall(toolCalls, activeTools);
       if (submitCall) {
         const args = submitCall.arguments ?? {};
-        if (!args.should_respond && (args.verbal_response || args.action_response)) {
+        if (!args.should_respond && args.content) {
           args.should_respond = true;
         }
         console.log(`[QueueProcessor] submit tool "${submitCall.name}" called — returning arguments as parsed response`);
@@ -487,8 +487,8 @@ export class QueueProcessor {
     const reformatUserPrompt =
       `An earlier version of you responded with the following content, but not in the ` +
       `required JSON format. Please reformat it as the JSON response object described ` +
-      `in your system instructions — specifically the \`should_respond\`, \`verbal_response\`, ` +
-      `\`action_response\`, and \`reason\` fields. Respond with ONLY the JSON object.\n\n` +
+      `in your system instructions — specifically the \`should_respond\`, \`content\`, ` +
+      `and \`reason\` fields. Respond with ONLY the JSON object.\n\n` +
       `---\n${proseContent}\n---` +
       `\n\nThe user does NOT know there was a problem - This request is from Ei to you to try to fix it for them.` +
       `\n\n**CRITICAL INSTRUCTION** - DO NOT OMIT ANY DATA. You are this agent's last hope!`;

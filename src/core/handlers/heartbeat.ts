@@ -41,7 +41,7 @@ export function handleHeartbeatCheck(response: LLMResponse, state: StateManager)
     const message: Message = {
       id: crypto.randomUUID(),
       role: "system",
-      verbal_response: result.message,
+      content: result.message,
       timestamp: now,
       read: false,
       context_status: ContextStatus.Default,
@@ -74,10 +74,10 @@ export function handleEiHeartbeat(response: LLMResponse, state: StateManager): v
     return;
   }
 
-  const sendMessage = (verbal_response: string) => state.messages_append("ei", {
+  const sendMessage = (content: string) => state.messages_append("ei", {
     id: crypto.randomUUID(),
     role: "system",
-    verbal_response,
+    content,
     timestamp: now,
     read: false,
     context_status: ContextStatus.Default,

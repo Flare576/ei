@@ -151,7 +151,7 @@ export async function sendMessage(
   const message: Message = {
     id: crypto.randomUUID(),
     role: "human",
-    verbal_response: content ?? undefined,
+    content: content ?? undefined,
     silence_reason: content ? undefined : (silenceReason ?? "passed"),
     timestamp: new Date().toISOString(),
     read: false,

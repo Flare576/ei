@@ -3,9 +3,11 @@ import type { StateManager } from "../state-manager.js";
 
 export function getMessageContent(msg: { content?: string; verbal_response?: string; action_response?: string }): string {
   if (msg.content) return msg.content;
+  // Legacy fallback for data not yet migrated on disk
+  const legacy = msg as { verbal_response?: string; action_response?: string };
   const parts: string[] = [];
-  if (msg.action_response) parts.push(`_${msg.action_response}_`);
-  if (msg.verbal_response) parts.push(msg.verbal_response);
+  if (legacy.action_response) parts.push(`_${legacy.action_response}_`);
+  if (legacy.verbal_response) parts.push(legacy.verbal_response);
   return parts.join('\n\n');
 }
 
@@ -24,8 +26,6 @@ export function normalizeRoomMessages(messages: RoomMessage[], state: StateManag
       role: m.role === "human" ? "human" as const : "system" as const,
       speaker_name: speakerName,
       content: m.content,
-      verbal_response: m.verbal_response,
-      action_response: m.action_response,
       silence_reason: m.silence_reason,
       timestamp: m.timestamp,
       read: m.read,
