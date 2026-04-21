@@ -659,7 +659,7 @@ export function queueTargetedPersonUpdate(
       console.warn(`[queueTargetedPersonUpdate] Room ${roomId} not found`);
       return 0;
     }
-    allMessages = normalizeRoomMessages(state.getRoomActivePath(roomId), state);
+    allMessages = normalizeRoomMessages(state.getRoomMessages(roomId), state);
     contextPersonaId = room.persona_ids.join("|");
     displayName = room.display_name;
   } else {
@@ -719,7 +719,7 @@ export function queueTargetedTopicUpdate(
       console.warn(`[queueTargetedTopicUpdate] Room ${roomId} not found`);
       return 0;
     }
-    allMessages = normalizeRoomMessages(state.getRoomActivePath(roomId), state);
+    allMessages = normalizeRoomMessages(state.getRoomMessages(roomId), state);
     contextPersonaId = room.persona_ids.join("|");
     displayName = room.display_name;
   } else {
