@@ -4,6 +4,7 @@ import type { StateManager } from "../state-manager.js";
 export function getMessageContent(msg: { content?: string; verbal_response?: string; action_response?: string }): string {
   if (msg.content) return msg.content;
   // Legacy fallback for data not yet migrated on disk
+  // TODO(v1.0.0): Remove legacy verbal_response/action_response fallback
   const legacy = msg as { verbal_response?: string; action_response?: string };
   const parts: string[] = [];
   if (legacy.action_response) parts.push(`_${legacy.action_response}_`);

@@ -82,6 +82,7 @@ export class StateManager {
       for (const msg of room.messages) {
         if (msg.content) continue;
         if (msg.silence_reason) continue;
+        // TODO(v1.0.0): Remove legacy room message migration — verbal_response/action_response no longer written
         const legacy = msg as RoomMessage & { verbal_response?: string; action_response?: string };
         const parts: string[] = [];
         if (legacy.action_response) parts.push(`_${legacy.action_response}_`);

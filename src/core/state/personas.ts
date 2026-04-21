@@ -1,5 +1,6 @@
 import type { PersonaEntity, Message, ContextStatus } from "../types.js";
 
+// TODO(v1.0.0): Remove LegacyMessage migration — verbal_response/action_response no longer written
 type LegacyMessage = Message & { verbal_response?: string; action_response?: string };
 
 function migrateMessage(msg: Message): Message {
