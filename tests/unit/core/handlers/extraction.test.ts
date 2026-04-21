@@ -335,7 +335,7 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
           personaId: "ei",
           personaDisplayName: "Ei",
           messages_context: [],
-          messages_analyze: [{ id: "1", role: "human", verbal_response: "test", timestamp: "", read: true, context_status: "default" }],
+          messages_analyze: [{ id: "1", role: "human", content: "test", timestamp: "", read: true, context_status: "default" }],
         },
       });
 

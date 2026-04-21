@@ -323,7 +323,7 @@ describe("PersonaState", () => {
     const makeMsg = (id: string, isExternal?: boolean): Message => ({
       id,
       role: "human",
-      verbal_response: id,
+      content: id,
       timestamp: new Date().toISOString(),
       read: true,
       context_status: ContextStatusEnum.Default,
