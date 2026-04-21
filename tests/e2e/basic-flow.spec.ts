@@ -11,7 +11,7 @@ test.describe("Basic Chat Flow", () => {
       type: "fixed",
       content: JSON.stringify({
         should_respond: true,
-        verbal_response: "Hello! Nice to meet you. I am Ei, your companion.",
+        content: "Hello! Nice to meet you. I am Ei, your companion.",
         reason: "greeting"
       }),
       statusCode: 200,
@@ -54,7 +54,7 @@ test.describe("Basic Chat Flow", () => {
       type: "fixed",
       content: JSON.stringify({
         should_respond: true,
-        verbal_response: "Ahoy! Nice to meet ye, matey!",
+        content: "Ahoy! Nice to meet ye, matey!",
         reason: "greeting"
       }),
       statusCode: 200,

@@ -25,7 +25,7 @@ mockServer.setResponseForType("response", {
   type: "fixed",
   content: JSON.stringify({
     should_respond: true,
-    verbal_response: "Test response from mock server",
+    content: "Test response from mock server",
     reason: "responding"
   }),
 });

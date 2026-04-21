@@ -57,7 +57,7 @@ function createMAPRoomCheckpoint(mockServerUrl: string) {
           {
             id: "msg-0",
             role: "assistant",
-            verbal_response:
+            content:
               "Hello! I'm Ei, your personal companion. I'm here to chat, learn about you, and grow alongside you. What's on your mind today?",
             timestamp,
           },
@@ -123,7 +123,7 @@ function createMAPRoomCheckpoint(mockServerUrl: string) {
             id: "map-seed-msg",
             parent_id: null,
             role: "human",
-            verbal_response: "Starting the MAP room",
+            content: "Starting the MAP room",
             timestamp,
             read: true,
             context_status: "default",
@@ -133,7 +133,7 @@ function createMAPRoomCheckpoint(mockServerUrl: string) {
             parent_id: "map-seed-msg",
             role: "persona",
             persona_id: "ei",
-            verbal_response: "My MAP response",
+            content: "My MAP response",
             timestamp,
             read: false,
             context_status: "default",
@@ -143,7 +143,7 @@ function createMAPRoomCheckpoint(mockServerUrl: string) {
             parent_id: "map-seed-msg",
             role: "persona",
             persona_id: "007",
-            verbal_response: "My MAP response",
+            content: "My MAP response",
             timestamp,
             read: false,
             context_status: "default",
@@ -277,7 +277,7 @@ function createMAPCompletedRoundCheckpoint(mockServerUrl: string) {
             id: "map-seed-msg",
             parent_id: null,
             role: "human",
-            verbal_response: "Starting the MAP room",
+            content: "Starting the MAP room",
             timestamp,
             read: true,
             context_status: "default",
@@ -286,7 +286,7 @@ function createMAPCompletedRoundCheckpoint(mockServerUrl: string) {
             id: "map-round2-msg",
             parent_id: "map-seed-msg",
             role: "human",
-            verbal_response: "Which response is best?",
+            content: "Which response is best?",
             timestamp,
             read: true,
             context_status: "default",
@@ -296,7 +296,7 @@ function createMAPCompletedRoundCheckpoint(mockServerUrl: string) {
             parent_id: "map-round2-msg",
             role: "persona",
             persona_id: "ei",
-            verbal_response: "My winning response",
+            content: "My winning response",
             timestamp,
             read: true,
             context_status: "default",
@@ -337,7 +337,7 @@ test.describe("MAP Room — activation cycle (W3)", () => {
       type: "fixed",
       content: JSON.stringify({
         should_respond: true,
-        verbal_response: "My MAP response",
+        content: "My MAP response",
       }),
       statusCode: 200,
     });
@@ -380,7 +380,7 @@ test.describe("MAP Room — activation cycle (W3)", () => {
       type: "fixed",
       content: JSON.stringify({
         should_respond: true,
-        verbal_response: "My MAP response",
+        content: "My MAP response",
       }),
       statusCode: 200,
     });

@@ -360,7 +360,7 @@ describe("round-trip: build → (user marks chosen) → parse", () => {
     ];
     const yaml = buildCYPEditorYAML("root", msgs, []);
     expect(yaml).toContain(`silence_reason: "too cool to talk"`);
-    expect(yaml).not.toContain("verbal_response:");
+    expect(yaml).not.toContain("content:");
 
     const blocks = parseCYPEditorYAML(yaml);
     expect(blocks[0].id).toBe("silent-bob");

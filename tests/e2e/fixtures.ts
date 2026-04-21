@@ -164,7 +164,7 @@ export interface MinimalCheckpoint {
         last_updated: string;
         last_activity: string;
       };
-      messages: Array<{ id: string; role: string; verbal_response: string; timestamp: string }>;
+      messages: Array<{ id: string; role: string; content: string; timestamp: string }>;
     };
   };
   queue: never[];
@@ -173,14 +173,14 @@ export interface MinimalCheckpoint {
 
 export interface MinimalCheckpointOptions {
   mockServerUrl: string;
-  messages?: Array<{ role: string; verbal_response: string }>;
+  messages?: Array<{ role: string; content: string }>;
   imageProviderUrl?: string;
   imageWorkflow?: any;
 }
 
 export function createMinimalCheckpoint(
   optionsOrUrl: MinimalCheckpointOptions | string,
-  messages: Array<{ role: string; verbal_response: string }> = [{ role: "assistant", verbal_response: DEFAULT_WELCOME_MESSAGE }],
+  messages: Array<{ role: string; content: string }> = [{ role: "assistant", content: DEFAULT_WELCOME_MESSAGE }],
   imageProviderUrl?: string
 ): MinimalCheckpoint {
   // Handle both old signature (url, messages, imageProviderUrl) and new object signature
@@ -259,7 +259,7 @@ export function createMinimalCheckpoint(
         messages: messages.map((m, i) => ({
           id: `msg-${i}`,
           role: m.role,
-          verbal_response: m.verbal_response,
+          content: m.content,
           timestamp,
         })),
       },
@@ -276,7 +276,7 @@ export function createMinimalCheckpoint(
 export async function seedCheckpoint(
   page: import("@playwright/test").Page,
   optionsOrUrl: MinimalCheckpointOptions | string,
-  messages: Array<{ role: string; verbal_response: string }> = [{ role: "assistant", verbal_response: DEFAULT_WELCOME_MESSAGE }],
+  messages: Array<{ role: string; content: string }> = [{ role: "assistant", content: DEFAULT_WELCOME_MESSAGE }],
   imageProviderUrl?: string
 ) {
   const state = createMinimalCheckpoint(optionsOrUrl, messages, imageProviderUrl);

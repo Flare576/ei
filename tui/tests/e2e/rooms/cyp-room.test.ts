@@ -52,7 +52,7 @@ function createCheckpointWithCYPRoom() {
           {
             id: "msg-1",
             role: "system",
-            verbal_response: "Hello! I'm ready for testing.",
+            content: "Hello! I'm ready for testing.",
             timestamp,
             read: true,
             context_status: "default",
@@ -100,7 +100,7 @@ function createCheckpointWithCYPRoom() {
             id: "cyp-seed-001",
             parent_id: null,
             role: "human",
-            verbal_response: "Starting the CYP room",
+            content: "Starting the CYP room",
             timestamp,
             read: true,
             context_status: "default",
@@ -110,7 +110,7 @@ function createCheckpointWithCYPRoom() {
             parent_id: "cyp-seed-001",
             role: "persona",
             persona_id: "ei",
-            verbal_response: "CYP response option",
+            content: "CYP response option",
             timestamp,
             read: false,
             context_status: "default",
@@ -120,7 +120,7 @@ function createCheckpointWithCYPRoom() {
             parent_id: "cyp-seed-001",
             role: "persona",
             persona_id: "007",
-            verbal_response: "CYP response option",
+            content: "CYP response option",
             timestamp,
             read: false,
             context_status: "default",
@@ -150,7 +150,7 @@ mockServer.setResponseForType("room-response", {
   type: "fixed",
   content: JSON.stringify({
     should_respond: true,
-    verbal_response: "CYP persona response",
+    content: "CYP persona response",
   }),
 });
 

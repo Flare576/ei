@@ -64,7 +64,7 @@ function createCheckpointWithExistingProvider() {
           {
             id: "msg-1",
             role: "system",
-            verbal_response: "Hello! I'm ready for testing.",
+            content: "Hello! I'm ready for testing.",
             timestamp,
             read: true,
             context_status: "default",
@@ -94,7 +94,7 @@ mockServer.setResponseForType("response", {
   type: "fixed",
   content: JSON.stringify({
     should_respond: true,
-    verbal_response: "Test response from mock server",
+    content: "Test response from mock server",
     reason: "responding"
   }),
 });

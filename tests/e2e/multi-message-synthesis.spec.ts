@@ -13,7 +13,7 @@ test.describe("Multi-Message Image Synthesis", () => {
       type: "fixed",
       content: JSON.stringify({
         should_respond: true,
-        verbal_response: "Test response",
+        content: "Test response",
         reason: "testing"
       }),
       statusCode: 200,
@@ -124,7 +124,7 @@ test.describe("Multi-Message Image Synthesis", () => {
       type: "fixed",
       content: JSON.stringify({
         should_respond: true,
-        verbal_response: "Here's a test image for you",
+        content: "Here's a test image for you",
         reason: "testing"
       }),
       statusCode: 200,
@@ -144,7 +144,7 @@ test.describe("Multi-Message Image Synthesis", () => {
     // Wait for USER message to appear
     await expect(page.locator("text=Show me a test image")).toBeVisible({ timeout: 5000 });
     
-    // Wait for EI's RESPONSE to appear (contains the verbal_response we'll use as prompt)
+    // Wait for EI's RESPONSE to appear (contains the content we'll use as prompt)
     await expect(page.locator("text=Here's a test image for you")).toBeVisible({ timeout: 5000 });
     // Click single-message image button (🖼️ on the message itself)
     const messageImageButton = page.locator('.ei-message__image').last();
@@ -185,7 +185,7 @@ test.describe("Multi-Message Image Synthesis", () => {
       type: "fixed",
       content: JSON.stringify({
         should_respond: true,
-        verbal_response: "Normal message",
+        content: "Normal message",
         reason: "testing"
       }),
       statusCode: 200,

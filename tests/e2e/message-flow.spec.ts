@@ -54,7 +54,7 @@ test.describe("Message Flow - Comprehensive", () => {
       type: "fixed",
       content: JSON.stringify({
         should_respond: true,
-        verbal_response: "I hear you!",
+        content: "I hear you!",
         reason: "responding"
       }),
       statusCode: 200,
@@ -104,7 +104,7 @@ test.describe("Message Flow - Comprehensive", () => {
       type: "fixed",
       content: JSON.stringify({
         should_respond: true,
-        verbal_response: "I remember our conversation!",
+        content: "I remember our conversation!",
         reason: "responding"
       }),
       statusCode: 200,
@@ -153,7 +153,7 @@ test.describe("Message Flow - Comprehensive", () => {
       type: "fixed",
       content: JSON.stringify({
         should_respond: true,
-        verbal_response: "Thank you for sharing!",
+        content: "Thank you for sharing!",
         reason: "responding"
       }),
       statusCode: 200,
@@ -190,7 +190,7 @@ test.describe("Message Flow - Comprehensive", () => {
       type: "fixed",
       content: JSON.stringify({
         should_respond: true,
-        verbal_response: "Processing your message!",
+        content: "Processing your message!",
         reason: "responding"
       }),
       statusCode: 200,
@@ -242,7 +242,7 @@ test.describe("Message Flow - Comprehensive", () => {
       type: "fixed",
       content: JSON.stringify({
         should_respond: true,
-        verbal_response: "Understood!",
+        content: "Understood!",
         reason: "responding"
       }),
       statusCode: 200,
@@ -294,7 +294,7 @@ test.describe("Message Flow - Comprehensive", () => {
       type: "fixed",
       content: JSON.stringify({
         should_respond: true,
-        verbal_response: "Slow response coming...",
+        content: "Slow response coming...",
         reason: "responding"
       }),
       statusCode: 200,
@@ -331,7 +331,7 @@ test.describe("Message Flow - Comprehensive", () => {
       type: "fixed",
       content: JSON.stringify({
         should_respond: true,
-        verbal_response: "Quick response!",
+        content: "Quick response!",
         reason: "responding"
       }),
       statusCode: 200,
@@ -366,7 +366,7 @@ test.describe("Message Flow - Comprehensive", () => {
       type: "fixed",
       content: JSON.stringify({
         should_respond: true,
-        verbal_response: "I got your message!",
+        content: "I got your message!",
         reason: "responding"
       }),
       statusCode: 200,
