@@ -122,6 +122,14 @@ export class PersonaState {
     return messages.map(m => ({ ...m }));
   }
 
+  messages_getAlways(personaId: string): Message[] {
+    const messages = this.personas.get(personaId)?.messages ?? [];
+    return messages
+      .filter(m => m.context_status === "always")
+      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+      .map(m => ({ ...m }));
+  }
+
   messages_append(personaId: string, message: Message): void {
     const data = this.personas.get(personaId);
     if (!data) return;
