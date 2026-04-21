@@ -33,8 +33,8 @@ function formatPeopleWithGaps(people: Person[]): string {
 
 /**
  * A "real" persona message is one the persona actually said to the human.
- * silence_reason messages (persona chose not to speak) and empty messages
- * don't count as conversational outreach.
+  * silence_reason messages (sender chose not to speak) and empty messages
+  * don't count as conversational outreach.
  */
 function isConversationalMessage(m: Message): boolean {
   if (m.role !== 'system') return false;

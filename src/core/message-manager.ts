@@ -283,8 +283,12 @@ export function fetchMessagesForLLM(
    const contextWindowHours = persona.context_window_hours ?? human.settings?.default_context_window_hours ?? 8;
    const filteredHistory = filterMessagesForContext(history, persona.context_boundary, contextWindowHours);
 
+  const humanName = human.settings?.name_display
+    || human.facts?.find(f => f.name === "Nickname/Preferred Name")?.description
+    || "Human";
+
   return filteredHistory.reduce<import("./types.js").ChatMessage[]>((acc, m) => {
-    const content = buildChatMessageContent(m);
+    const content = buildChatMessageContent(m, humanName);
     if (content.length > 0) {
       const finalContent = persona.include_message_timestamps ? `[${formatTimestamp(m.timestamp)}] ${content}` : content;
       acc.push({

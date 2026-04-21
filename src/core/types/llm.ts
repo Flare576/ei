@@ -9,7 +9,7 @@ export interface Message {
   id: string;
   role: "human" | "system";
   content?: string;           // Raw Markdown response
-  silence_reason?: string;   // Why the persona chose not to respond (not shown to LLM)
+  silence_reason?: string;   // Why the sender chose not to respond (human or persona)
   timestamp: string;
   read: boolean;               // Has human seen this system message?
   context_status: import("./enums.js").ContextStatus;

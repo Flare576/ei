@@ -8,24 +8,27 @@ export function getMessageDisplayText(message: Message): string | null {
   const content = getMessageContent(message);
   if (content) parts.push(content);
   if (message.silence_reason) {
-    const name = message.speaker_name ?? 'Persona';
+    const name = message.role === "human"
+      ? (message.speaker_name ?? 'Human')
+      : (message.speaker_name ?? 'Persona');
     parts.push(`[${name} chose not to respond because: ${message.silence_reason}]`);
   }
   if (parts.length === 0) return null;
   return parts.join('\n\n');
 }
 
-export function buildChatMessageContent(message: Message): string {
+export function buildChatMessageContent(message: Message, humanName?: string): string {
   const parts: string[] = [];
   const content = getMessageContent(message);
 
   if (message._synthesis && content) {
-    parts.push(`[The user used your conversation to generate an image. The full prompt was: "${content}"]`);
+    parts.push(`[${humanName ?? 'The user'} used your conversation to generate an image. The full prompt was: "${content}"]`);
   } else if (content) {
     parts.push(content);
   }
   if (message.silence_reason) {
-    parts.push(`You chose not to respond because: ${message.silence_reason}`);
+    const silentParty = message.role === "human" ? (humanName ?? "The human") : "You";
+    parts.push(`${silentParty} chose not to respond because: ${message.silence_reason}`);
   }
   return parts.join('\n\n');
 }
