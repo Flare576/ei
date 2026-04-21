@@ -272,7 +272,7 @@ export class Processor {
     const welcomeMessage: Message = {
       id: crypto.randomUUID(),
       role: "system",
-      verbal_response: EI_WELCOME_MESSAGE,
+      content: EI_WELCOME_MESSAGE,
       timestamp: new Date().toISOString(),
       read: false,
       context_status: ContextStatusEnum.Always,
@@ -629,13 +629,9 @@ export class Processor {
               type: "boolean",
               description: "Whether you are responding (true) or staying silent (false)",
             },
-            verbal_response: {
+            content: {
               type: "string",
-              description: "What you say out loud. Required when should_respond is true (unless action_response is provided).",
-            },
-            action_response: {
-              type: "string",
-              description: "Italicized stage directions only — physical actions, expressions, or internal states. Keep this distinct from verbal_response: do not repeat or paraphrase what you are saying. If you have nothing to physically do, omit this field.",
+              description: "Your response in Markdown. Required when should_respond is true. Use _underscores_ for actions or stage directions inline with your text.",
             },
             reason: {
               type: "string",
@@ -1437,7 +1433,7 @@ const toolNextSteps = new Set([
       .filter((m: RoomMessage) => m.role === "persona" && getMessageContent(m))
       .map((m: RoomMessage) => ({
         name: this.stateManager.persona_getById(m.persona_id ?? "")?.display_name ?? "Participant",
-        verbal_response: getMessageContent(m),
+        content: getMessageContent(m),
       }));
 
     if (siblings.length === 0) return request;

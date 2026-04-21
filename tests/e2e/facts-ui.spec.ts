@@ -93,7 +93,7 @@ function buildCheckpointWithCustomFact(mockServerUrl: string) {
           {
             id: "msg-0",
             role: "assistant",
-            verbal_response: "Hello! I'm Ei, your personal companion.",
+            content: "Hello! I'm Ei, your personal companion.",
             timestamp: ts,
           },
         ],

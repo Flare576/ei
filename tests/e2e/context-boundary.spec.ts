@@ -37,7 +37,7 @@ test.describe("Context Boundary", () => {
       type: "fixed",
       content: JSON.stringify({
         should_respond: true,
-        verbal_response: "This is a new message after the boundary!",
+        content: "This is a new message after the boundary!",
         reason: "responding to user"
       }),
       statusCode: 200,

@@ -29,7 +29,7 @@ function makeMessage(id: string): Message {
   return {
     id,
     role: "human",
-    verbal_response: "test message",
+    content: "test message",
     timestamp: new Date().toISOString(),
     read: true,
     context_status: "default" as any,

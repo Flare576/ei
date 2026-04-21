@@ -12,7 +12,7 @@ const createMessage = (
 ): Message => ({
   id,
   role: "human",
-  verbal_response: `Message ${id}`,
+  content: `Message ${id}`,
   timestamp,
   read: true,
   context_status: status,

@@ -40,10 +40,7 @@ export function buildRoomHistorySection(history: RoomHistoryMessage[], humanName
     if (msg.silence_reason) {
       return `**${speaker}**: *[chose not to respond: ${msg.silence_reason}]*`;
     }
-    const parts: string[] = [];
-    if (msg.verbal_response) parts.push(msg.verbal_response);
-    if (msg.action_response) parts.push(`*${msg.action_response}*`);
-    return `**${speaker}**: ${parts.join(" ")}`;
+    return `**${speaker}**: ${msg.content ?? ''}`;
   });
 
   return `## Conversation So Far\n\n${lines.join("\n\n")}`;
@@ -103,10 +100,10 @@ Silence can be the right response: stepping back when someone else was addressed
 }
 
 export function buildSiblingAwarenessSection(
-  siblings: Array<{ name: string; verbal_response: string }>
+  siblings: Array<{ name: string; content: string }>
 ): string {
   if (siblings.length === 0) return "";
-  const lines = siblings.map(s => `**${s.name}**: "${s.verbal_response}"`);
+  const lines = siblings.map(s => `**${s.name}**: "${s.content}"`);
   return `## Room context — this round
 
 You're in a shared conversation. The human will read everyone's responses together. Here's what has already been contributed this round:
@@ -121,7 +118,7 @@ export function buildJudgeCandidatesSection(candidates: RoomJudgeCandidate[], hu
     const speaker = c.speaker_id === "human" ? humanName : c.speaker_name;
     const content = c.silence_reason
       ? `*[chose not to respond: ${c.silence_reason}]*`
-      : [c.verbal_response, c.action_response ? `*${c.action_response}*` : ""].filter(Boolean).join(" ");
+      : (c.content ?? '');
     return `### Option ${i + 1} — ${speaker}\nMessage ID: \`${c.message_id}\`\n\n${content}`;
   });
   return `## The Responses\n\n${lines.join("\n\n")}`;

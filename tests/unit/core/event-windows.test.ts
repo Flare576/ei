@@ -6,7 +6,7 @@ function makeMessage(id: string, isoTimestamp: string): Message {
   return {
     id,
     role: "human",
-    verbal_response: `message ${id}`,
+    content: `message ${id}`,
     timestamp: isoTimestamp,
     read: true,
     context_status: ContextStatus.Default,

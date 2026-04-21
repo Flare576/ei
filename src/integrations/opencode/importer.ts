@@ -47,7 +47,7 @@ function convertToEiMessage(ocMsg: OpenCodeMessage): Message {
   return {
     id: ocMsg.id,
     role: ocMsg.role === "user" ? "human" : "system",
-    verbal_response: ocMsg.content,
+    content: ocMsg.content,
     timestamp: ocMsg.timestamp,
     read: true,
     context_status: "default" as ContextStatus,

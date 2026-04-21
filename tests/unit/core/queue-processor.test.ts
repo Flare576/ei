@@ -136,14 +136,14 @@ describe("QueueProcessor", () => {
     });
 
     it("handles response type - parsed as JSON (response→json redirect)", async () => {
-      const jsonContent = '{"should_respond": true, "verbal_response": "Hello world"}';
+      const jsonContent = '{"should_respond": true, "content": "Hello world"}';
       vi.mocked(llmClient.callLLMRaw).mockResolvedValue({
         content: jsonContent,
         finishReason: "stop",
       });
       vi.mocked(llmClient.parseJSONResponse).mockReturnValue({
         should_respond: true,
-        verbal_response: "Hello world",
+        content: "Hello world",
       });
       
       let response: LLMResponse | undefined;
@@ -153,7 +153,7 @@ describe("QueueProcessor", () => {
       expect(response?.success).toBe(true);
       expect(response?.parsed).toEqual({
         should_respond: true,
-        verbal_response: "Hello world",
+        content: "Hello world",
       });
     });
 
@@ -466,12 +466,12 @@ describe("QueueProcessor", () => {
 
       beforeEach(() => {
         vi.mocked(llmClient.callLLMRaw).mockResolvedValue({
-          content: '{"should_respond": true, "verbal_response": "synthesis result"}',
+          content: '{"should_respond": true, "content": "synthesis result"}',
           finishReason: "stop",
         });
         vi.mocked(llmClient.parseJSONResponse).mockReturnValue({
           should_respond: true,
-          verbal_response: "synthesis result",
+          content: "synthesis result",
         });
       });
 

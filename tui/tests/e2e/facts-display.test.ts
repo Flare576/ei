@@ -87,7 +87,7 @@ const checkpoint = {
         {
           id: "msg-1",
           role: "system",
-          verbal_response: "Hello! I'm ready for testing.",
+          content: "Hello! I'm ready for testing.",
           timestamp: ts,
           read: true,
           context_status: "default",
@@ -113,7 +113,7 @@ mockServer.setResponseForType("response", {
   type: "fixed",
   content: JSON.stringify({
     should_respond: true,
-    verbal_response: "Test response",
+    content: "Test response",
     reason: "responding",
   }),
 });

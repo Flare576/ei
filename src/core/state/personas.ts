@@ -1,14 +1,18 @@
 import type { PersonaEntity, Message, ContextStatus } from "../types.js";
 
+// TODO(v1.0.0): Remove LegacyMessage migration — verbal_response/action_response no longer written
+type LegacyMessage = Message & { verbal_response?: string; action_response?: string };
+
 function migrateMessage(msg: Message): Message {
   if (msg.content) return msg;
   if (msg.role === 'human') return msg;
   if (msg.silence_reason) return msg;
+  const legacy = msg as LegacyMessage;
   const parts: string[] = [];
-  if (msg.action_response) parts.push(`_${msg.action_response}_`);
-  if (msg.verbal_response) parts.push(msg.verbal_response);
+  if (legacy.action_response) parts.push(`_${legacy.action_response}_`);
+  if (legacy.verbal_response) parts.push(legacy.verbal_response);
   if (parts.length === 0) return msg;
-  const { verbal_response: _vr, action_response: _ar, ...rest } = msg;
+  const { verbal_response: _vr, action_response: _ar, ...rest } = legacy;
   return { ...rest, content: parts.join('\n\n') };
 }
 

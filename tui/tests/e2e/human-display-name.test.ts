@@ -56,7 +56,7 @@ function createCheckpointWithDisplayName() {
           {
             id: "msg-1",
             role: "system",
-            verbal_response: "Hello! I'm ready for testing.",
+            content: "Hello! I'm ready for testing.",
             timestamp,
             read: true,
             context_status: "default",
@@ -81,7 +81,7 @@ function createCheckpointWithDisplayName() {
             id: "ffa-display-root-001",
             parent_id: null,
             role: "human",
-            verbal_response: "Let's begin.",
+            content: "Let's begin.",
             timestamp,
             read: true,
             context_status: "default",
@@ -91,7 +91,7 @@ function createCheckpointWithDisplayName() {
             parent_id: "ffa-display-root-001",
             role: "persona",
             persona_id: "ei",
-            verbal_response: "Ei's initial greeting.",
+            content: "Ei's initial greeting.",
             timestamp,
             read: true,
             context_status: "default",
@@ -121,7 +121,7 @@ mockServer.setResponseForType("response", {
   type: "fixed",
   content: JSON.stringify({
     should_respond: true,
-    verbal_response: "Got your message.",
+    content: "Got your message.",
     reason: "responding",
   }),
 });
@@ -130,7 +130,7 @@ mockServer.setResponseForType("room-response", {
   type: "fixed",
   content: JSON.stringify({
     should_respond: true,
-    verbal_response: "Got your room message.",
+    content: "Got your room message.",
   }),
 });
 

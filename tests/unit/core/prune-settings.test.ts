@@ -9,7 +9,7 @@ function makeMsg(id: string, daysOld: number, fullyExtracted = true): Message {
   return {
     id,
     role: "human" as const,
-    verbal_response: "test",
+    content: "test",
     timestamp: ts.toISOString(),
     read: true,
     context_status: ContextStatus.Default,

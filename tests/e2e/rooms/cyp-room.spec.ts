@@ -50,7 +50,7 @@ function buildCypCheckpoint(mockServerUrl: string) {
           id: "cyp-seed-msg",
           parent_id: null,
           role: "human",
-          verbal_response: "Starting the CYP room",
+          content: "Starting the CYP room",
           timestamp,
           read: true,
           context_status: "default",
@@ -60,7 +60,7 @@ function buildCypCheckpoint(mockServerUrl: string) {
           parent_id: "cyp-seed-msg",
           role: "persona",
           persona_id: "ei",
-          verbal_response: "CYP response option",
+          content: "CYP response option",
           timestamp,
           read: false,
           context_status: "default",
@@ -70,7 +70,7 @@ function buildCypCheckpoint(mockServerUrl: string) {
           parent_id: "cyp-seed-msg",
           role: "persona",
           persona_id: "007",
-          verbal_response: "CYP response option",
+          content: "CYP response option",
           timestamp,
           read: false,
           context_status: "default",
@@ -109,7 +109,7 @@ test.describe("CYP Room — branch selection", () => {
       type: "fixed",
       content: JSON.stringify({
         should_respond: true,
-        verbal_response: "CYP response option",
+        content: "CYP response option",
       }),
       statusCode: 200,
     });
@@ -154,7 +154,7 @@ test.describe("CYP Room — branch selection", () => {
       type: "fixed",
       content: JSON.stringify({
         should_respond: true,
-        verbal_response: "CYP response option",
+        content: "CYP response option",
       }),
       statusCode: 200,
     });
@@ -212,7 +212,7 @@ test.describe("CYP Room — branch selection", () => {
       type: "fixed",
       content: JSON.stringify({
         should_respond: true,
-        verbal_response: "CYP response option",
+        content: "CYP response option",
       }),
       statusCode: 200,
     });

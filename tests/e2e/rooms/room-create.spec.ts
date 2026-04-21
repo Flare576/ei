@@ -2,7 +2,7 @@ import { test, expect, createMinimalCheckpoint } from "../fixtures.js";
 
 const ROOM_MOCK_RESPONSE = {
   type: "fixed" as const,
-  content: JSON.stringify({ should_respond: true, verbal_response: "Mock room response" }),
+  content: JSON.stringify({ should_respond: true, content: "Mock room response" }),
   statusCode: 200,
 };
 

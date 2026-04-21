@@ -45,8 +45,7 @@ export interface ResponsePromptData {
  */
 export interface PersonaResponseResult {
   should_respond: boolean;
-  verbal_response?: string;
-  action_response?: string;
+  content?: string;
   reason?: string;
 }
 

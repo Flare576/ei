@@ -26,26 +26,26 @@ export function ImagePreviewModal({
   error,
 }: ImagePreviewModalProps) {
   const [metadataCollapsed, setMetadataCollapsed] = useState<boolean>(true);
-  const [localPrompt, setLocalPrompt] = useState<string>(message.verbal_response || "");
+  const [localPrompt, setLocalPrompt] = useState<string>(message.content || "");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const isSynthesis = message._synthesis === true;
 
   // Sync local prompt with message changes
   useEffect(() => {
-    setLocalPrompt(message.verbal_response || "");
-  }, [message.verbal_response]);
+    setLocalPrompt(message.content || "");
+  }, [message.content]);
 
   const handlePromptBlur = () => {
     // Save on blur if prompt changed
-    if (localPrompt !== message.verbal_response) {
+    if (localPrompt !== message.content) {
       onPromptUpdate(localPrompt);
     }
   };
 
   const handleRegenerateClick = () => {
     // Save prompt before regenerating if user hasn't blurred yet
-    if (textareaRef.current === document.activeElement && localPrompt !== message.verbal_response) {
+    if (textareaRef.current === document.activeElement && localPrompt !== message.content) {
       onPromptUpdate(localPrompt);
     }
     onRegenerate();
@@ -55,7 +55,7 @@ export function ImagePreviewModal({
     if (!imageUrl) return;
     
     // Sanitize prompt for filename (remove special chars, truncate)
-    const promptText = message.verbal_response || "image";
+    const promptText = message.content || "image";
     const sanitizedPrompt = promptText
       .slice(0, 50)
       .replace(/[^a-z0-9]/gi, '_')

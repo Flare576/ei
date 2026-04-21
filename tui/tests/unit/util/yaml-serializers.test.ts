@@ -1094,14 +1094,14 @@ describe("contextToYAML / contextFromYAML", () => {
       role: "human",
       timestamp: "2024-01-01T00:00:00.000Z",
       context_status: ContextStatus.Default,
-      verbal_response: "Hello",
+      content: "Hello",
     } as Message,
     {
       id: "msg-2",
       role: "system",
       timestamp: "2024-01-01T00:00:01.000Z",
       context_status: ContextStatus.Always,
-      verbal_response: "Hi there",
+      content: "Hi there",
     } as Message,
   ];
 

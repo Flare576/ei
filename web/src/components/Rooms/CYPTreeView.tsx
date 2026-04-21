@@ -129,7 +129,7 @@ function CYPNode({ data, selected }: NodeProps<Node<CYPNodeData>>) {
   const [expanded, setExpanded] = useState(false);
   const { message, speakerName, state, hasChildren, onSelectBranch, onClose } = data;
 
-  const content = message.content ?? message.verbal_response ?? message.action_response ?? '';
+  const content = message.content ?? '';
   const preview = content.length > 60 ? content.slice(0, 60) + '…' : content;
 
   const isActive = state === 'active';

@@ -81,10 +81,9 @@ export function handleRoomResponse(response: LLMResponse, state: StateManager): 
       return;
     }
 
-    const verbal = result.verbal_response || undefined;
-    const action = result.action_response || undefined;
+    const content = result.content || undefined;
 
-    if (!verbal && !action) {
+    if (!content) {
       console.log(`[handleRoomResponse] ${personaDisplayName} returned should_respond=true but no content`);
       return;
     }
@@ -94,8 +93,7 @@ export function handleRoomResponse(response: LLMResponse, state: StateManager): 
       parent_id: parentMessageId,
       role: "persona",
       persona_id: personaId,
-      verbal_response: verbal,
-      action_response: action,
+      content,
       timestamp: now,
       read: false,
       context_status: ContextStatus.Default,

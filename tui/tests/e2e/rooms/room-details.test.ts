@@ -52,7 +52,7 @@ function createCheckpointWithFFARoom() {
           {
             id: "msg-1",
             role: "system",
-            verbal_response: "Hello! I'm ready for testing.",
+            content: "Hello! I'm ready for testing.",
             timestamp,
             read: true,
             context_status: "default",

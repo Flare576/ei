@@ -7,12 +7,8 @@ interface ParsedBlock {
   chosen: boolean;
 }
 
-function getContent(m: { content?: string; verbal_response?: string; action_response?: string }): string {
-  if (m.content) return m.content;
-  const parts: string[] = [];
-  if (m.action_response) parts.push(`_${m.action_response}_`);
-  if (m.verbal_response) parts.push(m.verbal_response);
-  return parts.join('\n\n');
+function getContent(m: { content?: string }): string {
+  return m.content ?? '';
 }
 
 export function buildCYPEditorYAML(

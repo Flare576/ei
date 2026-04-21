@@ -76,10 +76,9 @@ export function handlePersonaResponse(response: LLMResponse, state: StateManager
       return;
     }
 
-    const verbal = result.verbal_response || undefined;
-    const action = result.action_response || undefined;
+    const content = result.content || undefined;
 
-    if (!verbal && !action) {
+    if (!content) {
       console.log(`[handlePersonaResponse] ${personaDisplayName} JSON had should_respond=true but no content fields`);
       return;
     }
@@ -87,8 +86,7 @@ export function handlePersonaResponse(response: LLMResponse, state: StateManager
     const message: Message = {
       id: crypto.randomUUID(),
       role: "system",
-      verbal_response: verbal,
-      action_response: action,
+      content,
       timestamp: new Date().toISOString(),
       read: false,
       context_status: ContextStatus.Default,

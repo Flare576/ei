@@ -89,12 +89,8 @@ import "./styles/onboarding.css";
 import "./styles/queue-panel.css";
 import "./styles/theme-editor.css";
 
-function getContent(msg: { content?: string; verbal_response?: string; action_response?: string }): string {
-  if (msg.content) return msg.content;
-  const parts: string[] = [];
-  if (msg.action_response) parts.push(`_${msg.action_response}_`);
-  if (msg.verbal_response) parts.push(msg.verbal_response);
-  return parts.join('\n\n');
+function getContent(msg: { content?: string }): string {
+  return msg.content ?? '';
 }
 
 // System prompt for multi-message image synthesis
@@ -830,13 +826,13 @@ function App() {
     if (!currentViewingMessageId || !activePersonaId) return;
     
     processor?.updateMessage(activePersonaId, currentViewingMessageId, {
-      verbal_response: newPrompt
+      content: newPrompt
     });
     
     // Update local messages state to reflect change immediately
     setMessages(prev => prev.map(msg => 
       msg.id === currentViewingMessageId 
-        ? { ...msg, verbal_response: newPrompt }
+        ? { ...msg, content: newPrompt }
         : msg
     ));
   }, [currentViewingMessageId, activePersonaId, processor]);
@@ -1012,7 +1008,7 @@ function App() {
       const hasGrandchildren = allMsgs.some(m => m.parent_id && childIds.has(m.parent_id));
       if (hasGrandchildren) return;
     }
-    const recalledText = humanMsg?.content ?? humanMsg?.verbal_response ?? humanMsg?.silence_reason ?? "";
+    const recalledText = humanMsg?.content ?? humanMsg?.silence_reason ?? "";
     const ok = processorRef.current.recallHumanRoomMessage(activeRoomId);
     if (ok) {
       setRoomInputValue(recalledText);
@@ -1269,7 +1265,7 @@ function App() {
       const synthesisMessage: Message = {
         id: crypto.randomUUID(),
         role: 'human',
-        verbal_response: parsed.image_prompt,
+        content: parsed.image_prompt,
         _synthesis: true,
         timestamp: new Date().toISOString(),
         read: true,

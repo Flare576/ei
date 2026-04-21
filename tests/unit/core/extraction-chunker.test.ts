@@ -3,11 +3,11 @@ import { chunkExtractionContext, estimateContextTokens } from "../../../src/core
 import type { ExtractionContext } from "../../../src/core/orchestrators/human-extraction.js";
 import { ContextStatus, type Message } from "../../../src/core/types.js";
 
-function createMessage(content: string): Message {
+function createMessage(text: string): Message {
   return {
     id: crypto.randomUUID(),
     role: "human",
-    verbal_response: content,
+    content: text,
     timestamp: new Date().toISOString(),
     read: false,
     context_status: ContextStatus.Default,
@@ -82,11 +82,11 @@ describe("extraction-chunker", () => {
 
       if (result.chunks.length > 1) {
         expect(result.chunks[0].messages_context.some(m => 
-          (m.verbal_response ?? '').includes("original-context-marker")
+          (m.content ?? '').includes("original-context-marker")
         )).toBe(true);
 
         expect(result.chunks[1].messages_context.every(m => 
-          !(m.verbal_response ?? '').includes("original-context-marker")
+          !(m.content ?? '').includes("original-context-marker")
         )).toBe(true);
       }
     });

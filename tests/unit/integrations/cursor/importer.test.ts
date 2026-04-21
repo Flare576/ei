@@ -256,7 +256,7 @@ describe("importCursorSessions", () => {
       {
         id: "ext-msg",
         role: "human",
-        verbal_response: "external session import",
+        content: "external session import",
         timestamp: "2025-01-01T00:00:00.000Z",
         read: true,
         context_status: "default" as ContextStatus,
@@ -265,7 +265,7 @@ describe("importCursorSessions", () => {
       {
         id: "chat-msg",
         role: "human",
-        verbal_response: "regular chat message",
+        content: "regular chat message",
         timestamp: "2025-01-01T00:01:00.000Z",
         read: true,
         context_status: "default" as ContextStatus,

@@ -115,7 +115,7 @@ function buildCheckpointPreMigration(mockServerUrl: string) {
           {
             id: "msg-0",
             role: "assistant",
-            verbal_response: "Hello! I'm Ei.",
+            content: "Hello! I'm Ei.",
             timestamp: ts,
           },
         ],

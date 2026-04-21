@@ -32,11 +32,11 @@ vi.mock("../../../../src/prompts/human/index.js", () => ({
 
 vi.mock("../../../../src/core/handlers/utils.js", () => ({
   normalizeRoomMessages: vi.fn((msgs: unknown[]) => msgs),
-  getMessageContent: vi.fn((msg: { content?: string; verbal_response?: string }) => msg.content ?? msg.verbal_response ?? ""),
+  getMessageContent: vi.fn((msg: { content?: string }) => msg.content ?? ""),
   resolveMessageWindow: vi.fn((msgs: unknown[]) => msgs),
   splitMessagesByTimestamp: vi.fn(() => ({ before: [], after: [] })),
   markMessagesExtracted: vi.fn(),
-  getMessageText: vi.fn((msg: { content?: string; verbal_response?: string }) => msg.content ?? msg.verbal_response ?? ""),
+  getMessageText: vi.fn((msg: { content?: string }) => msg.content ?? ""),
 }));
 
 vi.mock("../../../../src/prompts/ceremony/dedup.js", () => ({
@@ -117,7 +117,7 @@ function createMockStateManager() {
     queue_enqueue: vi.fn(),
     messages_markExtracted: vi.fn(),
     messages_getUnextracted: vi.fn().mockReturnValue([
-      { id: "unextracted-1", role: "human", verbal_response: "test", timestamp: new Date(Date.now() - 10 * 60 * 60 * 1000).toISOString(), read: true, context_status: "default" },
+      { id: "unextracted-1", role: "human", content: "test", timestamp: new Date(Date.now() - 10 * 60 * 60 * 1000).toISOString(), read: true, context_status: "default" },
     ]),
     messages_get: vi.fn().mockReturnValue([]),
     _human: human,
@@ -372,7 +372,7 @@ describe("queueEventSummary — open window guard", () => {
     return {
       id,
       role,
-      verbal_response: `msg ${id}`,
+      content: `msg ${id}`,
       timestamp: new Date(Date.now() - hoursAgo * HOUR_MS).toISOString(),
       read: true,
       context_status: "default" as any,

@@ -8,9 +8,7 @@ import type { LLMRequestType, LLMPriority, LLMNextStep } from "./enums.js";
 export interface Message {
   id: string;
   role: "human" | "system";
-  content?: string;           // Raw Markdown response (primary path going forward)
-  verbal_response?: string;   // Human text or persona's spoken reply
-  action_response?: string;  // Stage direction / action the persona performs
+  content?: string;           // Raw Markdown response
   silence_reason?: string;   // Why the persona chose not to respond (not shown to LLM)
   timestamp: string;
   read: boolean;               // Has human seen this system message?

@@ -108,7 +108,7 @@ export function submitHumanRoomMessage(
 
   if (existing) {
     sm.updateRoomMessage(roomId, existing.id, {
-      verbal_response: content ?? undefined,
+      content: content ?? undefined,
       silence_reason: content ? undefined : (silenceReason ?? "passed"),
       timestamp: now,
     });
@@ -120,7 +120,7 @@ export function submitHumanRoomMessage(
     id: crypto.randomUUID(),
     parent_id: room.active_node_id,
     role: "human",
-    verbal_response: content ?? undefined,
+    content: content ?? undefined,
     silence_reason: content ? undefined : (silenceReason ?? "passed"),
     timestamp: now,
     read: true,
@@ -167,7 +167,7 @@ export async function sendFfaMessage(
   let humanMsgId: string;
   if (existing) {
     sm.updateRoomMessage(roomId, existing.id, {
-      verbal_response: content ?? undefined,
+      content: content ?? undefined,
       silence_reason: content ? undefined : (silenceReason ?? "passed"),
       timestamp: now,
     });
@@ -177,7 +177,7 @@ export async function sendFfaMessage(
       id: crypto.randomUUID(),
       parent_id: ffaParentId,
       role: "human",
-      verbal_response: content ?? undefined,
+      content: content ?? undefined,
       silence_reason: content ? undefined : (silenceReason ?? "passed"),
       timestamp: now,
       read: true,
@@ -299,7 +299,7 @@ export async function activateRoom(
         ? humanDisplayName
         : (sm.persona_getById(m.persona_id ?? "")?.display_name ?? "Unknown"),
       speaker_id: m.role === "human" ? "human" : (m.persona_id ?? ""),
-      verbal_response: getMessageContent(m) || undefined,
+      content: getMessageContent(m) || undefined,
       silence_reason: m.silence_reason,
     }));
 
@@ -309,7 +309,7 @@ export async function activateRoom(
         ? humanDisplayName
         : (sm.persona_getById(m.persona_id ?? "")?.display_name ?? "Unknown"),
       speaker_id: m.role === "human" ? "human" : (m.persona_id ?? ""),
-      verbal_response: getMessageContent(m) || undefined,
+      content: getMessageContent(m) || undefined,
       silence_reason: m.silence_reason,
     }));
 

@@ -54,7 +54,7 @@ function createCheckpointWithMAPRoom() {
           {
             id: "msg-1",
             role: "system",
-            verbal_response: "Hello! I'm ready for testing.",
+            content: "Hello! I'm ready for testing.",
             timestamp,
             read: true,
             context_status: "default",
@@ -124,7 +124,7 @@ function createCheckpointWithMAPRoom() {
             id: "map-seed-001",
             parent_id: null,
             role: "human",
-            verbal_response: "Starting the MAP room",
+            content: "Starting the MAP room",
             timestamp,
             read: true,
             context_status: "default",
@@ -134,7 +134,7 @@ function createCheckpointWithMAPRoom() {
             parent_id: "map-seed-001",
             role: "persona",
             persona_id: "ei",
-            verbal_response: "My MAP response",
+            content: "My MAP response",
             timestamp,
             read: false,
             context_status: "default",
@@ -144,7 +144,7 @@ function createCheckpointWithMAPRoom() {
             parent_id: "map-seed-001",
             role: "persona",
             persona_id: "007",
-            verbal_response: "My MAP response",
+            content: "My MAP response",
             timestamp,
             read: false,
             context_status: "default",
@@ -174,7 +174,7 @@ mockServer.setResponseForType("room-response", {
   type: "fixed",
   content: JSON.stringify({
     should_respond: true,
-    verbal_response: "My response",
+    content: "My response",
   }),
 });
 

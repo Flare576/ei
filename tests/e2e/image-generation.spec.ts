@@ -13,7 +13,7 @@ test.describe("Image Generation and Removal", () => {
       type: "fixed",
       content: JSON.stringify({
         should_respond: true,
-        verbal_response: "A serene mountain landscape at dawn",
+        content: "A serene mountain landscape at dawn",
         reason: "testing"
       }),
       statusCode: 200,
@@ -82,7 +82,7 @@ test.describe("Image Generation and Removal", () => {
       type: "fixed",
       content: JSON.stringify({
         should_respond: true,
-        verbal_response: "Test response",
+        content: "Test response",
         reason: "testing"
       }),
       statusCode: 200,
@@ -183,7 +183,7 @@ test.describe("Image Generation and Removal", () => {
       type: "fixed",
       content: JSON.stringify({
         should_respond: true,
-        verbal_response: "A peaceful forest scene",
+        content: "A peaceful forest scene",
         reason: "testing"
       }),
       statusCode: 200,
@@ -254,7 +254,7 @@ test.describe("Image Generation and Removal", () => {
       type: "fixed",
       content: JSON.stringify({
         should_respond: true,
-        verbal_response: "Test response",
+        content: "Test response",
         reason: "testing"
       }),
       statusCode: 200,
@@ -342,7 +342,7 @@ test.describe("Image Generation and Removal", () => {
       type: "fixed",
       content: JSON.stringify({
         should_respond: true,
-        verbal_response: "A majestic eagle in flight",
+        content: "A majestic eagle in flight",
         reason: "testing"
       }),
       statusCode: 200,
@@ -395,7 +395,7 @@ test.describe("Image Generation and Removal", () => {
       type: "fixed",
       content: JSON.stringify({
         should_respond: true,
-        verbal_response: "Test response",
+        content: "Test response",
         reason: "testing"
       }),
       statusCode: 200,
