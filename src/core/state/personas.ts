@@ -51,7 +51,8 @@ export class PersonaState {
   }
 
    getByName(nameOrAlias: string): PersonaEntity | null {
-    const searchTerm = nameOrAlias.replace(/^\p{Z}+|\p{Z}+$/gu, "").toLowerCase();
+    // Same ZWS strip as resolveCanonicalAgent — see that function for the full explanation.
+    const searchTerm = nameOrAlias.replace(/^[\p{Z}\u200B\u200C\u200D\u2060\uFEFF]+|[\p{Z}\u200B\u200C\u200D\u2060\uFEFF]+$/gu, "").toLowerCase();
     
     // Priority 1: Exact display_name match
     for (const data of this.personas.values()) {

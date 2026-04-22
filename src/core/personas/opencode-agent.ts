@@ -16,7 +16,13 @@ export interface EnsureAgentPersonaOptions {
 }
 
 export function resolveCanonicalAgent(agentName: string): { canonical: string; aliases: string[] } {
-  agentName = agentName.replace(/^\p{Z}+|\p{Z}+$/gu, "");
+  // Strip Unicode whitespace (\p{Z}) AND zero-width characters (\u200B, \u200C, \u200D, \u2060, \uFEFF).
+  // The \u200B strip is not decorative — oh-my-openagent intentionally prefixes agent display
+  // names with zero-width spaces (U+200B) as a sort hack to float them to the top of the agent
+  // picker list (1 ZWS = Sisyphus, 2 = Hephaestus, 3 = Prometheus, 4 = Atlas). Those prefixed
+  // names end up stored verbatim in OpenCode's SQLite message rows and come back to us here.
+  // \p{Z} alone does NOT catch \u200B (Unicode category Cf, not Zs), so we must be explicit.
+  agentName = agentName.replace(/^[\p{Z}\u200B\u200C\u200D\u2060\uFEFF]+|[\p{Z}\u200B\u200C\u200D\u2060\uFEFF]+$/gu, "");
   for (const [canonical, variants] of Object.entries(AGENT_ALIASES)) {
     if (variants.includes(agentName)) {
       return { canonical, aliases: variants };

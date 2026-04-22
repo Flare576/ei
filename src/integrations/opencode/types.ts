@@ -176,10 +176,19 @@ export const AGENT_TO_AGENT_PREFIXES = [
  */
 export const AGENT_ALIASES: Record<string, string[]> = {
   // ── OhMyOpenCode primary agents ──────────────────────────────────────────
+  //
+  // oh-my-openagent uses "Foo - Bar" display names for its agents and stores
+  // them verbatim in OpenCode's SQLite message rows. It also prefixes them
+  // with invisible U+200B ZERO WIDTH SPACE characters as a sort hack (1 ZWS
+  // for Sisyphus, 2 for Hephaestus, etc.) — those are stripped upstream in
+  // resolveCanonicalAgent before the alias lookup, so only the clean form is
+  // needed here. Parenthetical variants ("Foo (Bar)") are legacy names from
+  // earlier oh-my-openagent versions, kept for backward compatibility.
   Sisyphus: [
     "sisyphus",
     "Sisyphus",
-    "Sisyphus (Ultraworker)",
+    "Sisyphus - Ultraworker",   // oh-my-openagent ≥ 3.x display name (stored in OpenCode DB)
+    "Sisyphus (Ultraworker)",   // legacy oh-my-openagent display name
     "Sisyphus Ultraworker",
     "sisyphus ultraworker",
     "Planner-Sisyphus",
@@ -190,21 +199,28 @@ export const AGENT_ALIASES: Record<string, string[]> = {
   Atlas: [
     "atlas",
     "Atlas",
+    "Atlas - Plan Executor",    // oh-my-openagent ≥ 3.x display name
+    "Atlas (Plan Executor)",    // mixed-case variant observed in DB
     "atlas (plan executor)",
     "Atlas (plan executor)",
   ],
   Prometheus: [
     "prometheus",
     "Prometheus",
+    "Prometheus - Plan Builder", // oh-my-openagent ≥ 3.x display name
     "prometheus (plan builder)",
     "Prometheus (plan builder)",
   ],
   Hephaestus: [
     "hephaestus",
     "Hephaestus",
+    "Hephaestus - Deep Agent",  // oh-my-openagent ≥ 3.x display name
     "hephaestus (deep agent)",
     "Hephaestus (deep agent)",
   ],
+  // Metis, Momus, Sisyphus-Junior intentionally absent — they are subagent-only.
+  // The sqlite reader filters to parent_id IS NULL (primary sessions only), so
+  // messages from these agents can never reach the importer.
 
   // ── ai-sdlc agents (RobotsAndPencils/ai-sdlc-claude-code-template) ───────
   // Installed via scripts/install-opencode.sh as "ai-sdlc-{name}" in OpenCode.
