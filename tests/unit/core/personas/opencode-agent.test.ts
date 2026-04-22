@@ -162,6 +162,7 @@ describe("ensureAgentPersona", () => {
     expect(result.aliases).toEqual([
       "sisyphus",
       "Sisyphus",
+      "Sisyphus - Ultraworker",
       "Sisyphus (Ultraworker)",
       "Sisyphus Ultraworker",
       "sisyphus ultraworker",
@@ -170,6 +171,82 @@ describe("ensureAgentPersona", () => {
     ]);
     expect(result.display_name).toBe("Sisyphus");
   });
+
+  it("strips leading ZWS (U+200B) before alias lookup — oh-my-openagent sort hack", async () => {
+    const zwsPrefixed = "\u200BSisyphus - Ultraworker";
+    const result = await ensureAgentPersona(zwsPrefixed, {
+      stateManager: mockStateManager as StateManager,
+      interface: mockInterface as Ei_Interface,
+      reader: mockReader as IOpenCodeReader,
+    });
+
+    expect(result.display_name).toBe("Sisyphus");
+    expect(result.aliases).toContain("Sisyphus - Ultraworker");
+  });
+
+  it("strips multiple leading ZWS before alias lookup (Hephaestus gets 2 ZWS)", async () => {
+    const zwsPrefixed = "\u200B\u200BHephaestus - Deep Agent";
+    const result = await ensureAgentPersona(zwsPrefixed, {
+      stateManager: mockStateManager as StateManager,
+      interface: mockInterface as Ei_Interface,
+      reader: mockReader as IOpenCodeReader,
+    });
+
+    expect(result.display_name).toBe("Hephaestus");
+    expect(result.aliases).toContain("Hephaestus - Deep Agent");
+  });
+
+  it("resolves 'Sisyphus - Ultraworker' (OMOC ≥ 3.x display name) to canonical 'Sisyphus'", async () => {
+    const result = await ensureAgentPersona("Sisyphus - Ultraworker", {
+      stateManager: mockStateManager as StateManager,
+      interface: mockInterface as Ei_Interface,
+      reader: mockReader as IOpenCodeReader,
+    });
+
+    expect(result.display_name).toBe("Sisyphus");
+  });
+
+  it("resolves 'Hephaestus - Deep Agent' to canonical 'Hephaestus'", async () => {
+    const result = await ensureAgentPersona("Hephaestus - Deep Agent", {
+      stateManager: mockStateManager as StateManager,
+      interface: mockInterface as Ei_Interface,
+      reader: mockReader as IOpenCodeReader,
+    });
+
+    expect(result.display_name).toBe("Hephaestus");
+  });
+
+  it("resolves 'Prometheus - Plan Builder' to canonical 'Prometheus'", async () => {
+    const result = await ensureAgentPersona("Prometheus - Plan Builder", {
+      stateManager: mockStateManager as StateManager,
+      interface: mockInterface as Ei_Interface,
+      reader: mockReader as IOpenCodeReader,
+    });
+
+    expect(result.display_name).toBe("Prometheus");
+  });
+
+  it("resolves 'Atlas - Plan Executor' to canonical 'Atlas'", async () => {
+    const result = await ensureAgentPersona("Atlas - Plan Executor", {
+      stateManager: mockStateManager as StateManager,
+      interface: mockInterface as Ei_Interface,
+      reader: mockReader as IOpenCodeReader,
+    });
+
+    expect(result.display_name).toBe("Atlas");
+  });
+
+  it("resolves 'Atlas (Plan Executor)' (mixed-case DB variant) to canonical 'Atlas'", async () => {
+    const result = await ensureAgentPersona("Atlas (Plan Executor)", {
+      stateManager: mockStateManager as StateManager,
+      interface: mockInterface as Ei_Interface,
+      reader: mockReader as IOpenCodeReader,
+    });
+
+    expect(result.display_name).toBe("Atlas");
+  });
+
+
 
   it("sets alias to agent name for unknown agents", async () => {
     const result = await ensureAgentPersona("some-unknown-agent", {
