@@ -23,7 +23,6 @@ interface PersonaEntity {
   include_message_timestamps?: boolean;
   context_boundary?: string;
   last_updated: string;
-  last_activity: string;
   last_heartbeat?: string;
   last_extraction?: string;
   last_inactivity_ping?: string;

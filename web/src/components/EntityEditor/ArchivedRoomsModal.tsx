@@ -84,18 +84,6 @@ export function ArchivedRoomsModal({
     }
   };
 
-  const formatDate = (isoString: string): string => {
-    try {
-      return new Date(isoString).toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      });
-    } catch {
-      return isoString;
-    }
-  };
-
   const getParticipantNames = (personaIds: string[]): string => {
     if (personaIds.length === 0) return "No participants";
     const names = personaIds.map(id => personas.find(p => p.id === id)?.display_name ?? id);
@@ -162,9 +150,6 @@ export function ArchivedRoomsModal({
                   </div>
 
                   <div className="ei-persona-card__footer">
-                    <div className="ei-persona-card__archived-date">
-                      Last activity: {formatDate(room.last_activity)}
-                    </div>
                     <div className="ei-persona-card__actions">
                       <button
                         className="ei-btn ei-btn--secondary ei-btn--sm"

@@ -25,11 +25,8 @@ export function Sidebar() {
     personas().filter(p => !p.is_archived)
   );
 
-  // Memoize visible (non-archived) rooms sorted by last_activity desc
   const visibleRooms = createMemo(() =>
-    rooms()
-      .filter((r: RoomSummary) => !r.is_archived)
-      .sort((a: RoomSummary, b: RoomSummary) => b.last_activity.localeCompare(a.last_activity))
+    rooms().filter((r: RoomSummary) => !r.is_archived)
   );
 
   const [highlightedPersona, setHighlightedPersona] = createSignal<string | null>(null);
