@@ -265,7 +265,6 @@ export class Processor {
       id: "ei",
       display_name: "Ei",
       last_updated: new Date().toISOString(),
-      last_activity: new Date().toISOString(),
     };
     this.stateManager.persona_add(eiEntity);
 
@@ -1191,9 +1190,7 @@ const toolNextSteps = new Set([
 
       const defaultHeartbeatMs = this.stateManager.getHuman().settings?.default_heartbeat_ms ?? 1800000;
       const heartbeatDelay = persona.heartbeat_delay_ms ?? defaultHeartbeatMs;
-      const lastActivity = persona.last_activity
-        ? new Date(persona.last_activity).getTime()
-        : 0;
+      const lastActivity = this.stateManager.messages_getLastActivity(persona.id);
       const timeSinceActivity = now - lastActivity;
 
       if (timeSinceActivity >= heartbeatDelay) {

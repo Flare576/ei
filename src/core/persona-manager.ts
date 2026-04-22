@@ -18,7 +18,6 @@ export async function getPersonaList(sm: StateManager): Promise<PersonaSummary[]
     is_paused: entity.is_paused,
     is_archived: entity.is_archived,
     unread_count: sm.messages_countUnread(entity.id),
-    last_activity: entity.last_activity,
     context_boundary: entity.context_boundary,
     avatar_emoji: entity.avatar_emoji,
     avatar_image: entity.avatar_image,
@@ -68,7 +67,6 @@ export async function createPersona(
     is_archived: false,
     is_static: false,
     last_updated: now,
-    last_activity: now,
   };
   sm.persona_add(placeholder);
 

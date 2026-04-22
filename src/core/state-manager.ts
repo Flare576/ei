@@ -490,8 +490,14 @@ export class StateManager {
 
   getRoomList(includeArchived = false): RoomSummary[] {
     return this.roomState.getAll(includeArchived)
-      .map(r => this.roomState.getSummary(r.id)!)
-      .sort((a, b) => new Date(b.last_activity).getTime() - new Date(a.last_activity).getTime());
+      .sort((a, b) => {
+        const lastMsg = (room: typeof a) => {
+          const msgs = room.messages;
+          return msgs.length > 0 ? new Date(msgs[msgs.length - 1].timestamp).getTime() : 0;
+        };
+        return lastMsg(b) - lastMsg(a);
+      })
+      .map(r => this.roomState.getSummary(r.id)!);
   }
 
   getRoom(roomId: string): RoomEntity | null {
@@ -524,7 +530,6 @@ export class StateManager {
       is_archived: false,
       created_at: now,
       last_updated: now,
-      last_activity: now,
       messages: [initialMessage],
     };
     this.roomState.add(room);
@@ -813,6 +818,30 @@ export class StateManager {
 
   messages_getAlways(personaId: string): Message[] {
     return this.personaState.messages_getAlways(personaId);
+  }
+
+  /**
+   * Returns the timestamp (epoch ms) of the last internal Ei message for a persona.
+   * Always excludes external=true messages (imported from OpenCode, Cursor, Claude Code).
+   *
+   * @param personaId - The persona to query
+   * @param mode - Optional filter:
+   *   omitted  → latest message in either direction (human or persona)
+   *   'self'   → latest message from the persona (role='system'), silence counts
+   *   'human'  → latest message from the human (role='human')
+   * @returns epoch ms, or 0 if no matching messages found
+   */
+  messages_getLastActivity(personaId: string, mode?: 'self' | 'human'): number {
+    const messages = this.personaState.messages_get(personaId);
+    const filtered = messages.filter(m => {
+      if (m.external === true) return false;
+      if (mode === 'self') return m.role === 'system';
+      if (mode === 'human') return m.role === 'human';
+      return true;
+    });
+    if (filtered.length === 0) return 0;
+    const last = filtered[filtered.length - 1];
+    return new Date(last.timestamp).getTime();
   }
 
   messages_append(personaId: string, message: Message): void {

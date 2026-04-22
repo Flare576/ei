@@ -87,5 +87,4 @@ Ei's unique role:
   is_archived: false,
   is_static: false,
   last_updated: new Date().toISOString(),
-  last_activity: new Date().toISOString(),
 };

@@ -75,7 +75,6 @@ export class RoomState {
       persona_ids: room.persona_ids,
       active_node_id: room.active_node_id,
       is_archived: room.is_archived,
-      last_activity: room.last_activity,
       unread_count: this.messages_countUnread(roomId),
     };
   }
@@ -108,7 +107,6 @@ export class RoomState {
     const room = this.rooms.get(roomId);
     if (!room) return;
     room.messages.push(message);
-    room.last_activity = message.timestamp;
     room.last_updated = new Date().toISOString();
   }
 

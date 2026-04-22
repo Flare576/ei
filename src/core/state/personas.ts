@@ -134,7 +134,6 @@ export class PersonaState {
     const data = this.personas.get(personaId);
     if (!data) return;
     data.messages.push(message);
-    data.entity.last_activity = message.timestamp;
     data.entity.last_updated = new Date().toISOString();
   }
 

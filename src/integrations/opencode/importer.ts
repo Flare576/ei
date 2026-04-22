@@ -234,9 +234,6 @@ export async function importOpenCodeSessions(
     }
 
     stateManager.messages_sort(persona.id);
-    stateManager.persona_update(persona.id, {
-      last_activity: new Date().toISOString(),
-    });
     eiInterface?.onMessageAdded?.(persona.id);
 
     // ─── Step 5: Queue extraction for unmarked messages ────────────────

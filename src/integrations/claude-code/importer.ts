@@ -99,7 +99,6 @@ function ensureClaudeCodePersona(
     heartbeat_delay_ms: TWELVE_HOURS_MS,
     last_heartbeat: now,
     last_updated: now,
-    last_activity: now,
   };
 
   stateManager.persona_add(persona);
@@ -252,9 +251,6 @@ export async function importClaudeCodeSessions(
   }
 
   stateManager.messages_sort(persona.id);
-  stateManager.persona_update(persona.id, {
-    last_activity: new Date().toISOString(),
-  });
   eiInterface?.onMessageAdded?.(persona.id);
 
   // ─── Step 5: Queue extraction for new messages ────────────────────────
