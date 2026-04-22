@@ -15,8 +15,9 @@
  * decodeEmbedding returns it as-is. Mixed old/new files are handled transparently.
  *
  * IMPORTANT: encodeAllEmbeddings does NOT mutate the input state. It returns a new
- * StorageState where human item arrays are shallow-copied with encoded embedding fields.
- * This prevents the live in-memory state from being corrupted with base64 strings.
+ * StorageState where human item arrays and persona entities are shallow-copied with
+ * encoded embedding fields. This prevents the live in-memory state from being
+ * corrupted with base64 strings.
  */
 
 import type { StorageState } from "../core/types.js";
@@ -58,46 +59,80 @@ function decodeEmbedding(value: unknown): number[] | undefined {
 
 const HUMAN_ITEM_KEYS = ["facts", "topics", "people", "quotes"] as const;
 
-/**
- * Returns a new StorageState with embeddings encoded as base64 strings.
- * Does NOT mutate the input — human item arrays are shallow-copied.
- */
 export function encodeAllEmbeddings(state: StorageState): StorageState {
-  const human = (state as unknown as Record<string, unknown>)["human"] as Record<string, unknown> | undefined;
-  if (!human) return state;
+  const raw = state as unknown as Record<string, unknown>;
 
-  const encodedHuman: Record<string, unknown> = { ...human };
-  for (const key of HUMAN_ITEM_KEYS) {
-    const items = human[key];
-    if (Array.isArray(items)) {
-      encodedHuman[key] = items.map((item: Record<string, unknown>) => {
-        if (!Array.isArray(item.embedding) || item.embedding.length === 0) return item;
-        return { ...item, embedding: encodeEmbedding(item.embedding as number[]) };
-      });
+  const human = raw["human"] as Record<string, unknown> | undefined;
+  let encodedHuman = human;
+  if (human) {
+    encodedHuman = { ...human };
+    for (const key of HUMAN_ITEM_KEYS) {
+      const items = human[key];
+      if (Array.isArray(items)) {
+        (encodedHuman as Record<string, unknown>)[key] = items.map((item: Record<string, unknown>) => {
+          if (!Array.isArray(item.embedding) || item.embedding.length === 0) return item;
+          return { ...item, embedding: encodeEmbedding(item.embedding as number[]) };
+        });
+      }
     }
   }
 
-  return { ...state, human: encodedHuman as unknown as StorageState["human"] };
+  const personas = raw["personas"] as Record<string, unknown> | undefined;
+  let encodedPersonas = personas;
+  if (personas) {
+    encodedPersonas = {};
+    for (const [id, data] of Object.entries(personas)) {
+      const d = data as Record<string, unknown>;
+      const entity = d["entity"] as Record<string, unknown> | undefined;
+      if (!entity || !Array.isArray(entity["description_embedding"]) || (entity["description_embedding"] as unknown[]).length === 0) {
+        (encodedPersonas as Record<string, unknown>)[id] = data;
+      } else {
+        (encodedPersonas as Record<string, unknown>)[id] = {
+          ...d,
+          entity: { ...entity, description_embedding: encodeEmbedding(entity["description_embedding"] as number[]) },
+        };
+      }
+    }
+  }
+
+  return { ...state, human: encodedHuman as unknown as StorageState["human"], personas: encodedPersonas as unknown as StorageState["personas"] };
 }
 
-/**
- * Returns a new StorageState with embeddings decoded from base64 to number[].
- * Does NOT mutate the input — human item arrays are shallow-copied.
- */
 export function decodeAllEmbeddings(state: StorageState): StorageState {
-  const human = (state as unknown as Record<string, unknown>)["human"] as Record<string, unknown> | undefined;
-  if (!human) return state;
+  const raw = state as unknown as Record<string, unknown>;
 
-  const decodedHuman: Record<string, unknown> = { ...human };
-  for (const key of HUMAN_ITEM_KEYS) {
-    const items = human[key];
-    if (Array.isArray(items)) {
-      decodedHuman[key] = items.map((item: Record<string, unknown>) => {
-        if (item.embedding === undefined || Array.isArray(item.embedding)) return item;
-        return { ...item, embedding: decodeEmbedding(item.embedding) };
-      });
+  const human = raw["human"] as Record<string, unknown> | undefined;
+  let decodedHuman = human;
+  if (human) {
+    decodedHuman = { ...human };
+    for (const key of HUMAN_ITEM_KEYS) {
+      const items = human[key];
+      if (Array.isArray(items)) {
+        (decodedHuman as Record<string, unknown>)[key] = items.map((item: Record<string, unknown>) => {
+          if (item.embedding === undefined || Array.isArray(item.embedding)) return item;
+          return { ...item, embedding: decodeEmbedding(item.embedding) };
+        });
+      }
     }
   }
 
-  return { ...state, human: decodedHuman as unknown as StorageState["human"] };
+  const personas = raw["personas"] as Record<string, unknown> | undefined;
+  let decodedPersonas = personas;
+  if (personas) {
+    decodedPersonas = {};
+    for (const [id, data] of Object.entries(personas)) {
+      const d = data as Record<string, unknown>;
+      const entity = d["entity"] as Record<string, unknown> | undefined;
+      if (!entity || entity["description_embedding"] === undefined || Array.isArray(entity["description_embedding"])) {
+        (decodedPersonas as Record<string, unknown>)[id] = data;
+      } else {
+        (decodedPersonas as Record<string, unknown>)[id] = {
+          ...d,
+          entity: { ...entity, description_embedding: decodeEmbedding(entity["description_embedding"]) },
+        };
+      }
+    }
+  }
+
+  return { ...state, human: decodedHuman as unknown as StorageState["human"], personas: decodedPersonas as unknown as StorageState["personas"] };
 }
