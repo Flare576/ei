@@ -54,7 +54,6 @@ export interface PersonaSummary {
   is_paused: boolean;
   is_archived: boolean;
   unread_count: number;
-  last_activity?: string;
   context_boundary?: string;
   avatar_emoji?: string;
   avatar_image?: string;
