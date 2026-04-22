@@ -241,12 +241,21 @@ export async function buildResponsePromptData(
     ? Date.now() - new Date(previousMessage.timestamp).getTime()
     : 0;
 
+  const alwaysMessages = sm.messages_getAlways(persona.id);
+  const temporalAnchors = alwaysMessages.map(m => ({
+    role: m.role === "human" ? "human" as const : "system" as const,
+    content: m.content,
+    silence_reason: m.silence_reason,
+    timestamp: m.timestamp,
+    _synthesis: m._synthesis,
+  }));
+
   return {
     persona: {
       name: persona.display_name,
       aliases: persona.aliases ?? [],
       short_description: persona.short_description,
-       long_description: persona.long_description,
+      long_description: persona.long_description,
       traits: persona.traits,
       topics: persona.topics,
       interested_topics: persona.topics.filter(t => t.exposure_desired - t.exposure_current > 0.2),
@@ -254,6 +263,7 @@ export async function buildResponsePromptData(
     },
     human: filteredHuman,
     visible_personas: visiblePersonas,
+    temporal_anchors: temporalAnchors,
     delay_ms: delayMs,
     isTUI,
     tools,

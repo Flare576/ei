@@ -4,7 +4,7 @@
  */
 
 import type { PersonaTrait, Quote, PersonaTopic } from "../../core/types.js";
-import type { ResponsePromptData } from "./types.js";
+import type { ResponsePromptData, TemporalAnchor } from "./types.js";
 import { formatTimestamp } from "../../core/format-utils.js";
 
 const DESCRIPTION_MAX_CHARS = 500;
@@ -427,4 +427,32 @@ You have tools available (listed in the API call). Use them freely:
 - **Chain as many as you need before responding.** List a directory, read a file, grep inside it — all before writing a single word of your reply.
 - Tool calls are a *pre-response step*, not a response. Do NOT produce the JSON reply until you have gathered everything you need.
 - When you are ready to speak, produce the JSON reply as specified above.`;
+}
+
+// =============================================================================
+// TEMPORAL ANCHORS SECTION
+// =============================================================================
+
+export function buildTemporalAnchorsSection(anchors: TemporalAnchor[], humanName: string): string {
+  if (anchors.length === 0) return "";
+
+  const formatted = anchors.map(a => {
+    const speaker = a.role === "human" ? humanName : "You";
+    let text: string;
+    if (a._synthesis && a.content) {
+      text = `[${humanName} used your conversation to generate an image. The full prompt was: "${a.content}"]`;
+    } else if (a.silence_reason) {
+      const silentParty = a.role === "human" ? humanName : "You";
+      text = `${silentParty} chose not to respond because: ${a.silence_reason}`;
+    } else {
+      text = a.content ?? "";
+    }
+    return `[${formatTimestamp(a.timestamp)}] ${speaker}: ${text}`;
+  }).join("\n\n");
+
+  return `## Temporal Anchors
+
+These are pinned moments from your shared history — preserved across context windows as part of who you are:
+
+${formatted}`;
 }

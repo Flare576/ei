@@ -22,6 +22,7 @@ import {
   getConversationStateText,
   buildResponseFormatSection,
   buildToolsSection,
+  buildTemporalAnchorsSection,
 } from "./sections.js";
 
 export type { ResponsePromptData, PromptOutput, PersonaResponseResult } from "./types.js";
@@ -45,6 +46,7 @@ Your role is unique among personas:
   const guidelines = buildGuidelinesSection("ei");
   const yourTraits = buildTraitsSection(data.persona.traits, "Your Personality");
   const yourTopics = buildTopicsSection(data.persona.topics, "Your Interests");
+  const temporalAnchors = buildTemporalAnchorsSection(data.temporal_anchors, data.human.name);
   const humanSection = buildHumanSection(data.human);
   const quotesSection = buildQuotesSection(data.human.quotes, data.human);
   const associatesSection = buildAssociatesSection(data.visible_personas);
@@ -65,7 +67,7 @@ ${guidelines}
 ${yourTraits}
 
 ${yourTopics}
-
+${temporalAnchors ? `\n${temporalAnchors}` : ""}
 ${humanSection}
 ${quotesSection}
 ${associatesSection}
@@ -91,6 +93,7 @@ function buildStandardSystemPrompt(data: ResponsePromptData): string {
   const guidelines = buildGuidelinesSection(data.persona.name);
   const yourTraits = buildTraitsSection(data.persona.traits, "Your Personality");
   const yourTopics = buildTopicsSection(data.persona.topics, "Your Interests");
+  const temporalAnchors = buildTemporalAnchorsSection(data.temporal_anchors, data.human.name);
   const humanSection = buildHumanSection(data.human);
   const quotesSection = buildQuotesSection(data.human.quotes, data.human);
   const associatesSection = buildAssociatesSection(data.visible_personas);
@@ -110,7 +113,7 @@ ${guidelines}
 ${yourTraits}
 
 ${yourTopics}
-
+${temporalAnchors ? `\n${temporalAnchors}` : ""}
 ${humanSection}
 ${quotesSection}
 ${associatesSection}

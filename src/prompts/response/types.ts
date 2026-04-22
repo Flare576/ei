@@ -6,6 +6,14 @@
 import type { Fact, PersonaTrait, Topic, Person, Quote, PersonaTopic } from "../../core/types.js";
 import type { ToolDefinition } from "../../core/types.js";
 
+export interface TemporalAnchor {
+  role: "human" | "system";
+  content?: string;
+  silence_reason?: string;
+  timestamp: string;
+  _synthesis?: boolean;
+}
+
 /**
  * Data contract for buildResponsePrompt (from CONTRACTS.md)
  */
@@ -34,6 +42,7 @@ export interface ResponsePromptData {
     interested_topics: Topic[];
   };
   visible_personas: Array<{ name: string; short_description?: string }>;
+  temporal_anchors: TemporalAnchor[];
   delay_ms: number;
   isTUI: boolean;
   /** Tools assigned to this persona and available in the current runtime. Used to conditionally include tool-use instructions in the system prompt. */

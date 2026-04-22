@@ -811,6 +811,10 @@ export class StateManager {
     return this.personaState.messages_get(personaId);
   }
 
+  messages_getAlways(personaId: string): Message[] {
+    return this.personaState.messages_getAlways(personaId);
+  }
+
   messages_append(personaId: string, message: Message): void {
     this.personaState.messages_append(personaId, message);
     this.scheduleSave();

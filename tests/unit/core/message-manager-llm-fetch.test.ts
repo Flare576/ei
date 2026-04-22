@@ -106,3 +106,81 @@ describe("fetchMessagesForLLM — timestamp injection", () => {
     expect(formatTimestamp).not.toHaveBeenCalled();
   });
 });
+
+describe("fetchMessagesForLLM — silence_reason role attribution", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const persona: Partial<PersonaEntity> = {
+    id: "p1",
+    context_window_hours: 999,
+    context_boundary: undefined,
+    include_message_timestamps: false,
+  };
+
+  it("labels human silence with human display name", () => {
+    const msg: Message = {
+      id: "m1",
+      role: "human",
+      silence_reason: "needed a break",
+      timestamp: new Date().toISOString(),
+      read: true,
+      context_status: "default" as any,
+    };
+    const sm = createMockStateManager(persona as PersonaEntity, [msg]);
+
+    const result = fetchMessagesForLLM(sm as any, "p1");
+
+    expect(result).toHaveLength(1);
+    expect(result[0].content).toContain("chose not to respond because: needed a break");
+    expect(result[0].content).not.toContain("You chose not to respond");
+  });
+
+  it("labels persona silence with 'You'", () => {
+    const msg: Message = {
+      id: "m1",
+      role: "system",
+      silence_reason: "nothing to add",
+      timestamp: new Date().toISOString(),
+      read: false,
+      context_status: "default" as any,
+    };
+    const sm = createMockStateManager(persona as PersonaEntity, [msg]);
+
+    const result = fetchMessagesForLLM(sm as any, "p1");
+
+    expect(result).toHaveLength(1);
+    expect(result[0].content).toBe("You chose not to respond because: nothing to add");
+  });
+
+  it("uses human settings name_display when available", () => {
+    const msg: Message = {
+      id: "m1",
+      role: "human",
+      silence_reason: "busy",
+      timestamp: new Date().toISOString(),
+      read: true,
+      context_status: "default" as any,
+    };
+
+    const humanWithName: HumanEntity = {
+      entity: "human",
+      facts: [],
+      topics: [],
+      people: [],
+      quotes: [],
+      last_updated: new Date().toISOString(),
+      last_activity: new Date().toISOString(),
+      settings: { name_display: "Flare" },
+    };
+
+    const sm = {
+      persona_getById: vi.fn(() => persona as PersonaEntity),
+      getHuman: vi.fn(() => humanWithName),
+      messages_get: vi.fn(() => [msg]),
+    };
+
+    const result = fetchMessagesForLLM(sm as any, "p1");
+
+    expect(result[0].content).toContain("Flare chose not to respond because: busy");
+  });
+});

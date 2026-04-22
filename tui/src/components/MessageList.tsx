@@ -23,9 +23,10 @@ function getContent(msg: { content?: string }): string {
   return msg.content ?? '';
 }
 
-function buildMessageText(message: Message): string {
+function buildMessageText(message: Message, humanName: string): string {
   if (message.silence_reason !== undefined) {
-    return `[chose not to respond: ${message.silence_reason}]`;
+    const silentParty = message.role === "human" ? humanName : "Persona";
+    return `[${silentParty} chose not to respond: ${message.silence_reason}]`;
   }
   return getContent(message);
 }
@@ -124,7 +125,7 @@ export function MessageList() {
               
               const header = () => `${speaker} (${formatTime(message.timestamp)}) [✂️  ${message._quoteIndex}]:`;
               
-              const displayContent = insertQuoteMarkers(buildMessageText(message), message._quotes);
+              const displayContent = insertQuoteMarkers(buildMessageText(message, humanDisplayName()), message._quotes);
               
               const showDivider = () => {
                 const boundary = activeContextBoundary();
