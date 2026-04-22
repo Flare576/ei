@@ -21,7 +21,6 @@ function createCheckpointWithProvider() {
       people: [],
       quotes: [],
       last_updated: timestamp,
-      last_activity: timestamp,
       settings: {
         auto_save_interval_ms: 999999999,
         default_model: "test-model-guid",
@@ -65,7 +64,6 @@ function createCheckpointWithProvider() {
           is_archived: false,
           is_static: false,
           last_updated: timestamp,
-          last_activity: timestamp,
           last_heartbeat: timestamp,
           heartbeat_delay_ms: 999999999,
         },
@@ -98,7 +96,6 @@ function createCheckpointWithoutProvider() {
       people: [],
       quotes: [],
       last_updated: timestamp,
-      last_activity: timestamp,
       settings: {
         auto_save_interval_ms: 999999999,
         ceremony: {
@@ -124,7 +121,6 @@ function createCheckpointWithoutProvider() {
           is_archived: false,
           is_static: false,
           last_updated: timestamp,
-          last_activity: timestamp,
           last_heartbeat: timestamp,
           heartbeat_delay_ms: 999999999,
         },

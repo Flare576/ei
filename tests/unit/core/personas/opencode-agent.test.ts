@@ -41,7 +41,6 @@ describe("ensureAgentPersona", () => {
       is_archived: false,
       is_static: true,
       last_updated: "2026-01-01T00:00:00.000Z",
-      last_activity: "2026-01-01T00:00:00.000Z",
     };
 
     mockStateManager.persona_getByName = vi.fn().mockReturnValue(existingPersona);
@@ -317,7 +316,6 @@ describe("ensureAllAgentPersonas", () => {
       is_archived: false,
       is_static: true,
       last_updated: "2026-01-01T00:00:00.000Z",
-      last_activity: "2026-01-01T00:00:00.000Z",
     };
 
     mockStateManager.persona_getByName = vi.fn().mockImplementation((name: string) =>

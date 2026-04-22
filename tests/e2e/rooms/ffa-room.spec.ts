@@ -24,7 +24,6 @@ function buildFfaCheckpoint(mockServerUrl: string) {
       is_paused: false,
       is_archived: false,
       last_updated: timestamp,
-      last_activity: timestamp,
       heartbeat_delay_ms: 999999999,
     },
     messages: [],
@@ -34,7 +33,6 @@ function buildFfaCheckpoint(mockServerUrl: string) {
   if (eiPersonas["ei"]) {
     eiPersonas["ei"].entity.heartbeat_delay_ms = 999999999;
     eiPersonas["ei"].entity.last_heartbeat = timestamp;
-    eiPersonas["ei"].entity.last_activity = timestamp;
   }
 
   const initialMessageId = "ffa-initial-msg-001";
@@ -81,7 +79,6 @@ function buildFfaCheckpoint(mockServerUrl: string) {
       ],
       created_at: timestamp,
       last_updated: timestamp,
-      last_activity: timestamp,
     },
   };
 

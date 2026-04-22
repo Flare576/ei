@@ -53,7 +53,6 @@ function buildCheckpointWithCustomFact(mockServerUrl: string) {
       people: [],
       quotes: [],
       last_updated: ts,
-      last_activity: ts,
       settings: {
         auto_save_interval_ms: 5000,
         default_model: "Mock LLM:mock-model",
@@ -87,7 +86,6 @@ function buildCheckpointWithCustomFact(mockServerUrl: string) {
           is_paused: false,
           is_archived: false,
           last_updated: ts,
-          last_activity: ts,
         },
         messages: [
           {
@@ -128,7 +126,6 @@ function buildCheckpointWithBuiltInFact(mockServerUrl: string) {
       people: [],
       quotes: [],
       last_updated: ts,
-      last_activity: ts,
       settings: {
         auto_save_interval_ms: 5000,
         default_model: "Mock LLM:mock-model",
@@ -162,7 +159,6 @@ function buildCheckpointWithBuiltInFact(mockServerUrl: string) {
           is_paused: false,
           is_archived: false,
           last_updated: ts,
-          last_activity: ts,
         },
         messages: [],
       },
@@ -222,7 +218,6 @@ test.describe("Facts UI — Built-in Facts", () => {
             people: [],
             quotes: [],
             last_updated: new Date().toISOString(),
-            last_activity: new Date().toISOString(),
             settings: {
               auto_save_interval_ms: 5000,
               default_model: "Mock LLM:mock-model",
@@ -256,7 +251,6 @@ test.describe("Facts UI — Built-in Facts", () => {
                 is_paused: false,
                 is_archived: false,
                 last_updated: new Date().toISOString(),
-                last_activity: new Date().toISOString(),
               },
               messages: [],
             },

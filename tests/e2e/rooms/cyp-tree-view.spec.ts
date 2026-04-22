@@ -21,7 +21,6 @@ function addSagePersona(checkpoint: Record<string, unknown>, timestamp: string) 
       is_paused: false,
       is_archived: false,
       last_updated: timestamp,
-      last_activity: timestamp,
     },
     messages: [],
   };
@@ -40,7 +39,6 @@ function buildRoomBase(overrides: Record<string, unknown>) {
     capture_used: false,
     created_at: timestamp,
     last_updated: timestamp,
-    last_activity: timestamp,
     ...overrides,
   };
 }

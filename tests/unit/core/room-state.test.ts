@@ -18,7 +18,6 @@ describe("RoomState", () => {
     is_archived: false,
     created_at: "2026-01-01T00:00:00.000Z",
     last_updated: "2026-01-01T00:00:00.000Z",
-    last_activity: "2026-01-01T00:00:00.000Z",
     messages: [],
     ...overrides,
   });
@@ -167,7 +166,7 @@ describe("RoomState", () => {
   // ─── messages_append / messages_get ─────────────────────────────────────────
 
   describe("messages_append / messages_get", () => {
-    it("appends a message and updates last_activity", () => {
+    it("appends a message and updates last_updated", () => {
       state.add(makeRoom("r1"));
       const msg = makeMessage("m1", null, { timestamp: "2026-06-01T09:00:00.000Z" });
       state.messages_append("r1", msg);
@@ -175,7 +174,6 @@ describe("RoomState", () => {
       const msgs = state.messages_get("r1");
       expect(msgs).toHaveLength(1);
       expect(msgs[0].id).toBe("m1");
-      expect(state.getById("r1")!.last_activity).toBe("2026-06-01T09:00:00.000Z");
     });
 
     it("appending multiple messages preserves order", () => {
@@ -396,7 +394,6 @@ describe("RoomState", () => {
         persona_ids: ["p1", "p2"],
         active_node_id: null,
         is_archived: false,
-        last_activity: "2026-03-01T00:00:00.000Z",
       }));
 
       const summary = state.getSummary("r1")!;
@@ -406,7 +403,6 @@ describe("RoomState", () => {
       expect(summary.persona_ids).toEqual(["p1", "p2"]);
       expect(summary.active_node_id).toBeNull();
       expect(summary.is_archived).toBe(false);
-      expect(summary.last_activity).toBe("2026-03-01T00:00:00.000Z");
     });
 
     it("unread_count counts only persona messages on the active path", () => {

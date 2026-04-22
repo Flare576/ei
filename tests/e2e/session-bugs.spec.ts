@@ -40,7 +40,6 @@ interface PersonaEntity {
   archived_at?: string;
   is_static?: boolean;
   last_updated: string;
-  last_activity: string;
 }
 
 interface PersonaData {
@@ -58,7 +57,6 @@ interface Checkpoint {
     topics: unknown[];
     people: unknown[];
     last_updated: string;
-    last_activity: string;
     settings: { auto_save_interval_ms: number; default_model: string; accounts: unknown[] };
   };
   personas: Record<string, PersonaData>;
@@ -98,7 +96,6 @@ function createCheckpoint(
         is_paused: config.is_paused ?? false,
         is_archived: config.is_archived ?? false,
         last_updated: timestamp,
-        last_activity: timestamp,
       },
       messages: (config.messages ?? []).map((m, i) => ({
         id: `msg-${key}-${i}`,
@@ -121,7 +118,6 @@ function createCheckpoint(
       topics: [],
       people: [],
       last_updated: timestamp,
-      last_activity: timestamp,
       settings: {
         auto_save_interval_ms: 30000,
         default_model: "Mock LLM:mock-model",
@@ -544,7 +540,6 @@ test.describe("Session Bug Coverage (0112)", () => {
         topics: [],
         people: [],
         last_updated: timestamp,
-        last_activity: timestamp,
         settings: {
           auto_save_interval_ms: 30000,
           default_model: "Mock LLM:mock-model",
@@ -576,7 +571,6 @@ test.describe("Session Bug Coverage (0112)", () => {
             is_paused: false,
             is_archived: false,
             last_updated: timestamp,
-            last_activity: timestamp,
           },
           messages: [],
         },

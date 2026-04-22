@@ -47,7 +47,6 @@ function createMockStateManager(
     people: [],
     quotes: [],
     last_updated: new Date().toISOString(),
-    last_activity: new Date().toISOString(),
     settings: {},
   };
 
@@ -169,7 +168,6 @@ describe("fetchMessagesForLLM — silence_reason role attribution", () => {
       people: [],
       quotes: [],
       last_updated: new Date().toISOString(),
-      last_activity: new Date().toISOString(),
       settings: { name_display: "Flare" },
     };
 

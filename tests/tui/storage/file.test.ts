@@ -18,7 +18,6 @@ const createMockState = (timestamp: string = new Date().toISOString()): StorageS
     people: [],
     quotes: [],
     last_updated: timestamp,
-    last_activity: timestamp,
   } as HumanEntity,
   personas: {},
   queue: [],

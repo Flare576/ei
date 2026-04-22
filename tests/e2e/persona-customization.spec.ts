@@ -27,7 +27,6 @@ interface PersonaEntity {
   is_paused: boolean;
   is_archived: boolean;
   last_updated: string;
-  last_activity: string;
 }
 
 interface Checkpoint {
@@ -40,7 +39,6 @@ interface Checkpoint {
     topics: unknown[];
     people: unknown[];
     last_updated: string;
-    last_activity: string;
     settings: {
       auto_save_interval_ms: number;
       default_model: string;
@@ -93,7 +91,6 @@ function createCheckpoint(
         is_paused: false,
         is_archived: false,
         last_updated: timestamp,
-        last_activity: timestamp,
         // Spread extra optional fields (avatar_emoji, preferred_theme)
         ...(config.avatar_emoji !== undefined ? { avatar_emoji: config.avatar_emoji } : {}),
         ...(config.preferred_theme !== undefined ? { preferred_theme: config.preferred_theme } : {}),
@@ -112,7 +109,6 @@ function createCheckpoint(
       topics: [],
       people: [],
       last_updated: timestamp,
-      last_activity: timestamp,
       settings: {
         auto_save_interval_ms: 30000,
         default_model: "Mock LLM:mock-model",

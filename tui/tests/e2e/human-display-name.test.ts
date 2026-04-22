@@ -25,7 +25,6 @@ function createCheckpointWithDisplayName() {
       people: [],
       quotes: [],
       last_updated: timestamp,
-      last_activity: timestamp,
       settings: {
         ...createTestSettings(MOCK_SERVER_URL),
         name_display: DISPLAY_NAME,
@@ -48,7 +47,6 @@ function createCheckpointWithDisplayName() {
           is_archived: false,
           is_static: false,
           last_updated: timestamp,
-          last_activity: timestamp,
           last_heartbeat: timestamp,
           heartbeat_delay_ms: 999999999,
         },
@@ -75,7 +73,6 @@ function createCheckpointWithDisplayName() {
         is_archived: false,
         created_at: timestamp,
         last_updated: timestamp,
-        last_activity: timestamp,
         messages: [
           {
             id: "ffa-display-root-001",

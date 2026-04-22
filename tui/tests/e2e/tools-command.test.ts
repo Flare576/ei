@@ -26,7 +26,6 @@ function createCheckpointWithToolkit(mockServerUrl: string) {
       people: [],
       quotes: [],
       last_updated: timestamp,
-      last_activity: timestamp,
       settings: {
         auto_save_interval_ms: 999999999,
         default_model: "Mock LLM:mock-model",
@@ -61,7 +60,6 @@ function createCheckpointWithToolkit(mockServerUrl: string) {
           is_archived: false,
           is_static: false,
           last_updated: timestamp,
-          last_activity: timestamp,
           last_heartbeat: timestamp,
           heartbeat_delay_ms: 999999999,
         },

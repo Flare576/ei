@@ -33,7 +33,6 @@ describe("personaToYAML", () => {
     is_archived: false,
     is_static: false,
     last_updated: timestamp,
-    last_activity: timestamp,
     last_heartbeat: timestamp,
     heartbeat_delay_ms: 300000,
   };
@@ -148,7 +147,6 @@ describe("personaFromYAML", () => {
     is_archived: false,
     is_static: false,
     last_updated: timestamp,
-    last_activity: timestamp,
     last_heartbeat: timestamp,
     heartbeat_delay_ms: 300000,
   };
@@ -361,7 +359,6 @@ describe("humanToYAML", () => {
     people: [],
     quotes: [],
     last_updated: timestamp,
-    last_activity: timestamp,
     settings: {},
   };
 
@@ -589,7 +586,6 @@ describe("round-trip serialization", () => {
       is_archived: false,
       is_static: false,
       last_updated: timestamp,
-      last_activity: timestamp,
       last_heartbeat: timestamp,
       heartbeat_delay_ms: 300000,
       context_window_hours: 24,
@@ -627,7 +623,6 @@ describe("round-trip serialization", () => {
       ],
       quotes: [],
       last_updated: timestamp,
-      last_activity: timestamp,
       settings: {},
     };
 
@@ -657,7 +652,6 @@ describe("round-trip serialization", () => {
       facts: [{ id: "f1", name: "Coffee", description: "Old desc", sentiment: 0, last_updated: t1, validated_date: "" }],
       topics: [{ id: "top1", name: "Tech", description: "Old desc", exposure_current: 0.5, exposure_desired: 0.5, sentiment: 0, last_updated: t1 }],
       people: [{ id: "p1", name: "Bob", description: "Old desc", relationship: "friend", sentiment: 0, exposure_current: 0.5, exposure_desired: 0.5, last_updated: t1 }],
-      quotes: [], last_updated: t1, last_activity: t1, settings: {},
     };
 
     const current: HumanEntity = {
@@ -689,7 +683,11 @@ describe("round-trip serialization", () => {
     const original: HumanEntity = {
       entity: "human",
       facts: [{ id: "f1", name: "Coffee", description: "Old desc", sentiment: 0, last_updated: t1, validated_date: "" }],
-      topics: [], people: [], quotes: [], last_updated: t1, last_activity: t1, settings: {},
+      topics: [],
+      people: [],
+      quotes: [],
+      last_updated: t1,
+      settings: {},
     };
 
     const current: HumanEntity = { ...original };
@@ -708,7 +706,12 @@ describe("round-trip serialization", () => {
 
     const original: HumanEntity = {
       entity: "human",
-      facts: [], topics: [], people: [], quotes: [], last_updated: t1, last_activity: t1, settings: {},
+      facts: [],
+      topics: [],
+      people: [],
+      quotes: [],
+      last_updated: t1,
+      settings: {},
     };
 
     const current: HumanEntity = { ...original };
@@ -1020,7 +1023,6 @@ describe("personaToYAML / personaFromYAML - model GUID display conversion", () =
     is_archived: false,
     is_static: false,
     last_updated: timestamp,
-    last_activity: timestamp,
     last_heartbeat: timestamp,
     heartbeat_delay_ms: 300000,
     model: "guid-claude-3-5",

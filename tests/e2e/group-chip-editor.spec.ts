@@ -111,7 +111,6 @@ function buildCheckpointWithGroups(mockServerUrl: string) {
       ],
       quotes: [],
       last_updated: ts,
-      last_activity: ts,
       settings: {
         auto_save_interval_ms: 5000,
         default_model: "Mock LLM:mock-model",
@@ -147,7 +146,6 @@ function buildCheckpointWithGroups(mockServerUrl: string) {
           group_primary: "Work",
           groups_visible: ["Work", "Personal"],
           last_updated: ts,
-          last_activity: ts,
           last_heartbeat: ts,
           heartbeat_delay_ms: 999999999,
         },

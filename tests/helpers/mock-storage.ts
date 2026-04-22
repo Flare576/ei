@@ -34,7 +34,6 @@ export function createDefaultTestState(): StorageState {
       people: [],
       quotes: [],
       last_updated: new Date().toISOString(),
-      last_activity: new Date().toISOString(),
     },
     personas: {},
     queue: [],

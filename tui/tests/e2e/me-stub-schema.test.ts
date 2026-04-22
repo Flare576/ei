@@ -56,7 +56,6 @@ const checkpoint = {
     people: [],
     quotes: [],
     last_updated: ts,
-    last_activity: ts,
     settings: createTestSettings(MOCK_SERVER_URL),
   },
   personas: {
@@ -76,7 +75,6 @@ const checkpoint = {
         is_archived: false,
         is_static: false,
         last_updated: ts,
-        last_activity: ts,
         last_heartbeat: ts,
         heartbeat_delay_ms: 999999999,
       },

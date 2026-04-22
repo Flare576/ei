@@ -26,7 +26,6 @@ function createCheckpointWithMAPRoom() {
       people: [],
       quotes: [],
       last_updated: timestamp,
-      last_activity: timestamp,
       settings: createTestSettings(MOCK_SERVER_URL),
     },
     personas: {
@@ -46,7 +45,6 @@ function createCheckpointWithMAPRoom() {
           is_archived: false,
           is_static: false,
           last_updated: timestamp,
-          last_activity: timestamp,
           last_heartbeat: timestamp,
           heartbeat_delay_ms: 999999999,
         },
@@ -77,7 +75,6 @@ function createCheckpointWithMAPRoom() {
           is_archived: false,
           is_static: false,
           last_updated: timestamp,
-          last_activity: timestamp,
           last_heartbeat: timestamp,
           heartbeat_delay_ms: 999999999,
         },
@@ -99,7 +96,6 @@ function createCheckpointWithMAPRoom() {
           is_archived: false,
           is_static: false,
           last_updated: timestamp,
-          last_activity: timestamp,
           last_heartbeat: timestamp,
           heartbeat_delay_ms: 999999999,
         },
@@ -118,7 +114,6 @@ function createCheckpointWithMAPRoom() {
         is_archived: false,
         created_at: timestamp,
         last_updated: timestamp,
-        last_activity: timestamp,
         messages: [
           {
             id: "map-seed-001",

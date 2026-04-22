@@ -121,7 +121,6 @@ function buildCheckpointWithoutRewriteModel(mockServerUrl: string) {
       ],
       quotes: [],
       last_updated: ts,
-      last_activity: ts,
       settings: {
         auto_save_interval_ms: 5000,
         default_model: "Mock LLM:mock-model",
@@ -155,7 +154,6 @@ function buildCheckpointWithoutRewriteModel(mockServerUrl: string) {
           is_paused: false,
           is_archived: false,
           last_updated: ts,
-          last_activity: ts,
         },
         messages: [
           {

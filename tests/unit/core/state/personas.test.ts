@@ -18,7 +18,6 @@ describe("PersonaState", () => {
     is_archived: false,
     is_static: false,
     last_updated: new Date().toISOString(),
-    last_activity: new Date().toISOString(),
   });
 
   const makeMessage = (content: string, role: "human" | "system" = "human"): Message => ({
@@ -146,14 +145,14 @@ describe("PersonaState", () => {
       expect(state.messages_get("nonexistent")).toEqual([]);
     });
 
-    it("updates persona last_activity on message append", async () => {
-      const before = state.getById(personaId)?.last_activity;
+    it("updates persona last_updated on message append", async () => {
+      const before = state.getById(personaId)?.last_updated;
       
       await new Promise((r) => setTimeout(r, 2));
       
       state.messages_append(personaId, makeMessage("Hello"));
       
-      const after = state.getById(personaId)?.last_activity;
+      const after = state.getById(personaId)?.last_updated;
       expect(new Date(after ?? 0).getTime()).toBeGreaterThanOrEqual(new Date(before ?? 0).getTime());
     });
   });

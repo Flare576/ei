@@ -89,7 +89,6 @@ function createTestPersona(overrides: Partial<PersonaEntity> = {}): PersonaEntit
     is_archived: false,
     is_static: false,
     last_updated: new Date().toISOString(),
-    last_activity: new Date().toISOString(),
     ...overrides,
   };
 }
@@ -216,7 +215,6 @@ describe("Processor Lifecycle", () => {
         topics: [],
         people: [],
         last_updated: new Date().toISOString(),
-        last_activity: new Date().toISOString(),
       },
       personas: {
         ei: {
@@ -278,12 +276,11 @@ describe("Processor Heartbeat Scheduling", () => {
     vi.useRealTimers();
   });
 
-  it("queues heartbeat check after heartbeat_delay_ms elapses since last_activity", async () => {
-    const oldActivity = new Date(Date.now() - 3600000).toISOString();
+  it("queues heartbeat check after heartbeat_delay_ms elapses since last message", async () => {
+    const oldTimestamp = new Date(Date.now() - 3600000).toISOString();
     const testBotPersona = createTestPersona({
       aliases: ["TestBot"],
       heartbeat_delay_ms: 1800000,
-      last_activity: oldActivity,
     });
     
     storage.load.mockResolvedValue({
@@ -296,12 +293,20 @@ describe("Processor Heartbeat Scheduling", () => {
         topics: [],
         people: [],
         last_updated: new Date().toISOString(),
-        last_activity: new Date().toISOString(),
       },
       personas: {
         [testBotPersona.id]: {
           entity: testBotPersona,
-          messages: [],
+          messages: [
+            {
+              id: "old-msg",
+              role: "system",
+              content: "Old message",
+              timestamp: oldTimestamp,
+              read: true,
+              context_status: "default",
+            },
+          ],
         },
       },
       queue: [],
@@ -321,7 +326,6 @@ describe("Processor Heartbeat Scheduling", () => {
   });
 
   it("does NOT queue heartbeat for paused personas", async () => {
-    const oldActivity = new Date(Date.now() - 3600000).toISOString();
     storage.load.mockResolvedValue({
       version: 1,
       timestamp: new Date().toISOString(),
@@ -332,7 +336,6 @@ describe("Processor Heartbeat Scheduling", () => {
         topics: [],
         people: [],
         last_updated: new Date().toISOString(),
-        last_activity: new Date().toISOString(),
       },
       personas: {
         PausedBot: {
@@ -340,7 +343,6 @@ describe("Processor Heartbeat Scheduling", () => {
             aliases: ["PausedBot"],
             is_paused: true,
             heartbeat_delay_ms: 1000,
-            last_activity: oldActivity,
           }),
           messages: [],
         },
@@ -361,7 +363,6 @@ describe("Processor Heartbeat Scheduling", () => {
   });
 
   it("does NOT queue heartbeat for archived personas", async () => {
-    const oldActivity = new Date(Date.now() - 3600000).toISOString();
     storage.load.mockResolvedValue({
       version: 1,
       timestamp: new Date().toISOString(),
@@ -372,7 +373,6 @@ describe("Processor Heartbeat Scheduling", () => {
         topics: [],
         people: [],
         last_updated: new Date().toISOString(),
-        last_activity: new Date().toISOString(),
       },
       personas: {
         ArchivedBot: {
@@ -380,7 +380,6 @@ describe("Processor Heartbeat Scheduling", () => {
             aliases: ["ArchivedBot"],
             is_archived: true,
             heartbeat_delay_ms: 1000,
-            last_activity: oldActivity,
           }),
           messages: [],
         },
@@ -400,8 +399,8 @@ describe("Processor Heartbeat Scheduling", () => {
     await processor.stop();
   });
 
-  it("does NOT queue heartbeat if last_activity is recent", async () => {
-    const recentActivity = new Date().toISOString();
+  it("does NOT queue heartbeat if last message is recent", async () => {
+    const recentTimestamp = new Date().toISOString();
     storage.load.mockResolvedValue({
       version: 1,
       timestamp: new Date().toISOString(),
@@ -412,16 +411,23 @@ describe("Processor Heartbeat Scheduling", () => {
         topics: [],
         people: [],
         last_updated: new Date().toISOString(),
-        last_activity: new Date().toISOString(),
       },
       personas: {
         ActiveBot: {
           entity: createTestPersona({
             aliases: ["ActiveBot"],
             heartbeat_delay_ms: 1800000,
-            last_activity: recentActivity,
           }),
-          messages: [],
+          messages: [
+            {
+              id: "recent-msg",
+              role: "system",
+              content: "Recent message",
+              timestamp: recentTimestamp,
+              read: true,
+              context_status: "default",
+            },
+          ],
         },
       },
       queue: [],
@@ -659,7 +665,7 @@ describe("Processor API Methods", () => {
     it("updateHuman updates and fires onHumanUpdated", async () => {
       mock.calls.length = 0;
       
-      await processor.updateHuman({ last_activity: new Date().toISOString() });
+      await processor.updateHuman({ last_updated: new Date().toISOString() });
       
       expect(mock.calls).toContain("onHumanUpdated");
     });
@@ -754,7 +760,6 @@ describe("Processor Visibility Filtering", () => {
         topics: [],
         people: [],
         last_updated: new Date().toISOString(),
-        last_activity: new Date().toISOString(),
       },
       personas: {
         [eiPersona.id]: { entity: eiPersona, messages: [] },
@@ -793,7 +798,6 @@ describe("Processor Visibility Filtering", () => {
         topics: [],
         people: [],
         last_updated: new Date().toISOString(),
-        last_activity: new Date().toISOString(),
       },
       personas: {
         [eiPersona.id]: { entity: eiPersona, messages: [] },
@@ -901,7 +905,6 @@ describe("Processor Human Extraction Throttling", () => {
         topics: [],
         people: [],
         last_updated: new Date().toISOString(),
-        last_activity: new Date().toISOString(),
       },
       personas: {
         ei: {
@@ -940,7 +943,6 @@ describe("Processor Human Extraction Throttling", () => {
         topics: [],
         people: [],
         last_updated: new Date().toISOString(),
-        last_activity: new Date().toISOString(),
       },
       personas: {
         ei: {
@@ -985,7 +987,6 @@ describe("Processor Human Extraction Throttling", () => {
         topics: [],
         people: [],
         last_updated: now.toISOString(),
-        last_activity: now.toISOString(),
       },
       personas: {
         ei: {
@@ -1021,7 +1022,6 @@ describe("Processor Human Extraction Throttling", () => {
         topics: [],
         people: [],
         last_updated: new Date().toISOString(),
-        last_activity: new Date().toISOString(),
       },
       personas: {
         [eiPersona.id]: {
@@ -1072,7 +1072,6 @@ describe("Processor Message Recall", () => {
         topics: [],
         people: [],
         last_updated: new Date().toISOString(),
-        last_activity: new Date().toISOString(),
       },
       personas: {
         [testBotPersona.id]: {
@@ -1106,7 +1105,6 @@ describe("Processor Message Recall", () => {
         topics: [],
         people: [],
         last_updated: new Date().toISOString(),
-        last_activity: new Date().toISOString(),
       },
       personas: {
         [testBotPersona.id]: {
@@ -1144,7 +1142,6 @@ describe("Processor Message Recall", () => {
         topics: [],
         people: [],
         last_updated: new Date().toISOString(),
-        last_activity: new Date().toISOString(),
       },
       personas: {
         [testBotPersona.id]: {
@@ -1181,7 +1178,6 @@ describe("Processor Message Recall", () => {
         topics: [],
         people: [],
         last_updated: new Date().toISOString(),
-        last_activity: new Date().toISOString(),
       },
       personas: {
         [testBotPersona.id]: {
@@ -1231,7 +1227,6 @@ describe("Processor markMessageRead", () => {
         topics: [],
         people: [],
         last_updated: new Date().toISOString(),
-        last_activity: new Date().toISOString(),
       },
       personas: {
         [testBotPersona.id]: {
@@ -1267,7 +1262,6 @@ describe("Processor markMessageRead", () => {
         topics: [],
         people: [],
         last_updated: new Date().toISOString(),
-        last_activity: new Date().toISOString(),
       },
       personas: {
         [testBotPersona.id]: {

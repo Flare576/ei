@@ -214,7 +214,6 @@ function createMockRewriteState(overrides: Partial<HumanEntity> = {}) {
     people: [],
     quotes: [],
     last_updated: new Date().toISOString(),
-    last_activity: new Date().toISOString(),
     ...overrides,
   };
 
@@ -352,7 +351,6 @@ function createMockProgressState(pendingCeremonies: boolean = false, hasActivity
     people: [],
     quotes: [],
     last_updated: now.toISOString(),
-    last_activity: now.toISOString(),
     settings: {
       ceremony: {
         time: "03:00",
@@ -367,7 +365,6 @@ function createMockProgressState(pendingCeremonies: boolean = false, hasActivity
     is_paused: false,
     is_archived: false,
     is_static: false,
-    last_activity: hasActivity ? now.toISOString() : yesterday.toISOString(),
     topics: [],
     traits: [],
   };
@@ -450,10 +447,10 @@ describe("handleCeremonyProgress Multi-Phase Support", () => {
   it("filters out paused/archived/static personas", () => {
     const state = createMockProgressState(false, true);
     state.persona_getAll.mockReturnValue([
-      { id: "active", display_name: "Active", is_paused: false, is_archived: false, is_static: false, last_activity: new Date().toISOString(), topics: [], traits: [] },
-      { id: "paused", display_name: "Paused", is_paused: true, is_archived: false, is_static: false, last_activity: new Date().toISOString(), topics: [], traits: [] },
-      { id: "archived", display_name: "Archived", is_paused: false, is_archived: true, is_static: false, last_activity: new Date().toISOString(), topics: [], traits: [] },
-      { id: "static", display_name: "Static", is_paused: false, is_archived: false, is_static: true, last_activity: new Date().toISOString(), topics: [], traits: [] },
+      { id: "active", display_name: "Active", is_paused: false, is_archived: false, is_static: false, last_updated: new Date().toISOString(), topics: [], traits: [] },
+      { id: "paused", display_name: "Paused", is_paused: true, is_archived: false, is_static: false, last_updated: new Date().toISOString(), topics: [], traits: [] },
+      { id: "archived", display_name: "Archived", is_paused: false, is_archived: true, is_static: false, last_updated: new Date().toISOString(), topics: [], traits: [] },
+      { id: "static", display_name: "Static", is_paused: false, is_archived: false, is_static: true, last_updated: new Date().toISOString(), topics: [], traits: [] },
     ]);
     
     handleCeremonyProgress(state as any, 1);

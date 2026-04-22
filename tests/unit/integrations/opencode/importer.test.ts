@@ -50,7 +50,6 @@ describe("importOpenCodeSessions", () => {
       is_archived: archived,
       is_static: false,
       last_updated: "2026-01-01T00:00:00.000Z",
-      last_activity: "2026-01-01T00:00:00.000Z",
     };
   }
 
@@ -66,7 +65,6 @@ describe("importOpenCodeSessions", () => {
       people: [],
       quotes: [],
       last_updated: "2026-01-01T00:00:00.000Z",
-      last_activity: "2026-01-01T00:00:00.000Z",
     };
 
     mockStateManager = {
@@ -668,35 +666,6 @@ describe("importOpenCodeSessions", () => {
 
     expect(mockInterface.onMessageAdded).toHaveBeenCalledWith(buildPersona!.id);
     expect(mockInterface.onMessageAdded).toHaveBeenCalledWith(sisyphusPersona!.id);
-  });
-
-  it("updates persona last_activity after import", async () => {
-    const session = makeSession({ id: "ses_test123", title: "Test" });
-    const message: OpenCodeMessage = {
-      id: "msg_1",
-      sessionId: "ses_test123",
-      role: "assistant",
-      agent: "build",
-      content: "Test",
-      timestamp: "2026-02-01T00:00:00.000Z",
-    };
-
-    mockReader.getSessionsUpdatedSince = vi.fn().mockResolvedValue([session]);
-    mockReader.getMessagesForSession = vi.fn().mockResolvedValue([message]);
-
-    await importOpenCodeSessions({
-      stateManager: mockStateManager as StateManager,
-      interface: mockInterface as Ei_Interface,
-      reader: mockReader as IOpenCodeReader,
-    });
-
-    const buildPersona = createdPersonas.get("Build");
-    expect(mockStateManager.persona_update).toHaveBeenCalledWith(
-      buildPersona!.id,
-      expect.objectContaining({
-        last_activity: expect.any(String),
-      })
-    );
   });
 
   it("floor-skips sessions below extraction_point that are already in processed_sessions", async () => {

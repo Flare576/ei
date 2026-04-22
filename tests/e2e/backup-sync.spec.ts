@@ -24,7 +24,6 @@ function createValidCheckpoint(mockServerUrl: string, messages: Array<{ role: st
       topics: [],
       people: [],
       last_updated: timestamp,
-      last_activity: timestamp,
       settings: {
         auto_save_interval_ms: 5000,
         default_model: "Mock LLM:mock-model",
@@ -56,7 +55,6 @@ function createValidCheckpoint(mockServerUrl: string, messages: Array<{ role: st
           is_paused: false,
           is_archived: false,
           last_updated: timestamp,
-          last_activity: timestamp,
         },
         messages: messages.map((m, i) => ({
           id: `msg-${i}`,

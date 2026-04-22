@@ -78,7 +78,6 @@ function createMockStateManager() {
     ],
     quotes: [],
     last_updated: new Date().toISOString(),
-    last_activity: new Date().toISOString(),
   };
 
   const personas: PersonaEntity[] = [
@@ -93,7 +92,6 @@ function createMockStateManager() {
       is_archived: false,
       is_static: false,
       last_updated: "",
-      last_activity: "",
     },
     {
       id: "friend-id",
@@ -106,7 +104,6 @@ function createMockStateManager() {
       is_archived: false,
       is_static: false,
       last_updated: "",
-      last_activity: "",
     },
   ];
 
@@ -385,13 +382,11 @@ describe("queueEventSummary — open window guard", () => {
       getHuman: vi.fn(() => ({
         settings: { ceremony: { event_window_hours: GAP_HOURS } },
         topics: [], facts: [], people: [], quotes: [], traits: [],
-        last_updated: "", last_activity: "",
       })),
       persona_getById: vi.fn(() => ({
         id: "p1", display_name: "TestPersona", entity: "system",
         aliases: [], traits: [], topics: [],
         is_paused: false, is_archived: false, is_static: false,
-        last_updated: "", last_activity: "",
       })),
       messages_getUnextracted: vi.fn(() => unextracted),
       messages_get: vi.fn(() => all),

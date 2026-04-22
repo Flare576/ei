@@ -39,7 +39,6 @@ async function seedTwoPersonasNoRooms(
           is_paused: false,
           is_archived: false,
           last_updated: timestamp,
-          last_activity: timestamp,
         },
         messages: [],
       },

@@ -130,7 +130,6 @@ export interface MinimalCheckpoint {
     people: never[];
     quotes: never[];
     last_updated: string;
-    last_activity: string;
     settings: {
       auto_save_interval_ms: number;
       default_model: string;
@@ -162,7 +161,6 @@ export interface MinimalCheckpoint {
         is_paused: boolean;
         is_archived: boolean;
         last_updated: string;
-        last_activity: string;
       };
       messages: Array<{ id: string; role: string; content: string; timestamp: string }>;
     };
@@ -210,7 +208,6 @@ export function createMinimalCheckpoint(
       people: [],
       quotes: [],
       last_updated: timestamp,
-      last_activity: timestamp,
       settings: {
         auto_save_interval_ms: 5000,
         default_model: "Mock LLM:mock-model",
@@ -254,7 +251,6 @@ export function createMinimalCheckpoint(
           is_paused: false,
           is_archived: false,
           last_updated: timestamp,
-          last_activity: timestamp,
         },
         messages: messages.map((m, i) => ({
           id: `msg-${i}`,

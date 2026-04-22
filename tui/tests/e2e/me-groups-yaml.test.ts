@@ -68,7 +68,6 @@ const checkpoint = {
     people: [],
     quotes: [],
     last_updated: ts,
-    last_activity: ts,
     settings: createTestSettings(MOCK_SERVER_URL),
   },
   personas: {
@@ -90,7 +89,6 @@ const checkpoint = {
         group_primary: "Work",
         groups_visible: ["Work", "Personal"],
         last_updated: ts,
-        last_activity: ts,
         last_heartbeat: ts,
         heartbeat_delay_ms: 999999999,
       },

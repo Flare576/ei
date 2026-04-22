@@ -23,7 +23,6 @@ function createMinimalCheckpoint() {
       people: [],
       quotes: [],
       last_updated: timestamp,
-      last_activity: timestamp,
       settings: createTestSettings(MOCK_SERVER_URL),
     },
     personas: {
@@ -42,7 +41,6 @@ function createMinimalCheckpoint() {
           is_paused: false,
           is_archived: false,
           last_updated: timestamp,
-          last_activity: timestamp,
           last_heartbeat: timestamp,
           heartbeat_delay_ms: 999999999,
         },

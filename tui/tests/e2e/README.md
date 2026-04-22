@@ -49,7 +49,6 @@ If a persona entity doesn't have `heartbeat_delay_ms` set (or `last_heartbeat` i
 // Always include on persona entities in test checkpoints:
 heartbeat_delay_ms: 999999999,
 last_heartbeat: timestamp,
-last_activity: timestamp,
 ```
 
 ## Critical Pattern: Module-Level Setup

@@ -14,7 +14,6 @@ function createMAPRoomCheckpoint(mockServerUrl: string) {
       people: [],
       quotes: [],
       last_updated: timestamp,
-      last_activity: timestamp,
       settings: {
         ceremony: {
           time: "23:59",
@@ -51,7 +50,6 @@ function createMAPRoomCheckpoint(mockServerUrl: string) {
           is_paused: false,
           is_archived: false,
           last_updated: timestamp,
-          last_activity: timestamp,
         },
         messages: [
           {
@@ -79,7 +77,6 @@ function createMAPRoomCheckpoint(mockServerUrl: string) {
           is_archived: false,
           is_static: false,
           last_updated: timestamp,
-          last_activity: timestamp,
         },
         messages: [],
       },
@@ -99,7 +96,6 @@ function createMAPRoomCheckpoint(mockServerUrl: string) {
           is_archived: false,
           is_static: false,
           last_updated: timestamp,
-          last_activity: timestamp,
         },
         messages: [],
       },
@@ -116,7 +112,6 @@ function createMAPRoomCheckpoint(mockServerUrl: string) {
         is_archived: false,
         created_at: timestamp,
         last_updated: timestamp,
-        last_activity: timestamp,
         capture_used: false,
         messages: [
           {
@@ -172,7 +167,6 @@ function createMAPCompletedRoundCheckpoint(mockServerUrl: string) {
       people: [],
       quotes: [],
       last_updated: timestamp,
-      last_activity: timestamp,
       settings: {
         ceremony: {
           time: "23:59",
@@ -210,7 +204,6 @@ function createMAPCompletedRoundCheckpoint(mockServerUrl: string) {
           is_paused: false,
           is_archived: false,
           last_updated: timestamp,
-          last_activity: timestamp,
         },
         messages: [],
       },
@@ -230,7 +223,6 @@ function createMAPCompletedRoundCheckpoint(mockServerUrl: string) {
           is_archived: false,
           is_static: false,
           last_updated: timestamp,
-          last_activity: timestamp,
         },
         messages: [],
       },
@@ -250,7 +242,6 @@ function createMAPCompletedRoundCheckpoint(mockServerUrl: string) {
           is_archived: false,
           is_static: false,
           last_updated: timestamp,
-          last_activity: timestamp,
         },
         messages: [],
       },
@@ -270,7 +261,6 @@ function createMAPCompletedRoundCheckpoint(mockServerUrl: string) {
         is_archived: false,
         created_at: timestamp,
         last_updated: timestamp,
-        last_activity: timestamp,
         capture_used: false,
         messages: [
           {

@@ -20,7 +20,6 @@ function createCheckpointWithExistingProvider() {
       people: [],
       quotes: [],
       last_updated: timestamp,
-      last_activity: timestamp,
       settings: {
         auto_save_interval_ms: 999999999,
         ceremony: {
@@ -56,7 +55,6 @@ function createCheckpointWithExistingProvider() {
           is_archived: false,
           is_static: false,
           last_updated: timestamp,
-          last_activity: timestamp,
           last_heartbeat: timestamp,
           heartbeat_delay_ms: 999999999,
         },

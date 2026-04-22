@@ -27,7 +27,6 @@ export function createCheckpointWithTwoPersonas(mockServerUrl: string) {
       people: [],
       quotes: [],
       last_updated: timestamp,
-      last_activity: timestamp,
       settings: createTestSettings(mockServerUrl),
     },
     personas: {
@@ -47,7 +46,6 @@ export function createCheckpointWithTwoPersonas(mockServerUrl: string) {
           is_archived: false,
           is_static: false,
           last_updated: timestamp,
-          last_activity: timestamp,
           last_heartbeat: timestamp,
           heartbeat_delay_ms: 999999999,
         },
@@ -78,7 +76,6 @@ export function createCheckpointWithTwoPersonas(mockServerUrl: string) {
           is_archived: false,
           is_static: false,
           last_updated: timestamp,
-          last_activity: timestamp,
           last_heartbeat: timestamp,
           heartbeat_delay_ms: 999999999,
         },

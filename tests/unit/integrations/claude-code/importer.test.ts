@@ -55,7 +55,6 @@ describe("importClaudeCodeSessions", () => {
       people: [],
       quotes: [],
       last_updated: OLD_TIMESTAMP,
-      last_activity: OLD_TIMESTAMP,
     };
 
     mockStateManager = {
@@ -74,7 +73,6 @@ describe("importClaudeCodeSessions", () => {
           is_archived: false,
           is_static: false,
           last_updated: OLD_TIMESTAMP,
-          last_activity: OLD_TIMESTAMP,
         };
       }),
       persona_getByName: vi.fn((name: string) => {
@@ -91,7 +89,6 @@ describe("importClaudeCodeSessions", () => {
             is_archived: false,
             is_static: false,
             last_updated: OLD_TIMESTAMP,
-            last_activity: OLD_TIMESTAMP,
           };
         }
         return null;

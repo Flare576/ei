@@ -24,7 +24,6 @@ function createCheckpointWithCYPRoom() {
       people: [],
       quotes: [],
       last_updated: timestamp,
-      last_activity: timestamp,
       settings: createTestSettings(MOCK_SERVER_URL),
     },
     personas: {
@@ -44,7 +43,6 @@ function createCheckpointWithCYPRoom() {
           is_archived: false,
           is_static: false,
           last_updated: timestamp,
-          last_activity: timestamp,
           last_heartbeat: timestamp,
           heartbeat_delay_ms: 999999999,
         },
@@ -75,7 +73,6 @@ function createCheckpointWithCYPRoom() {
           is_archived: false,
           is_static: false,
           last_updated: timestamp,
-          last_activity: timestamp,
           last_heartbeat: timestamp,
           heartbeat_delay_ms: 999999999,
         },
@@ -94,7 +91,6 @@ function createCheckpointWithCYPRoom() {
         is_archived: false,
         created_at: timestamp,
         last_updated: timestamp,
-        last_activity: timestamp,
         messages: [
           {
             id: "cyp-seed-001",

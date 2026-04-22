@@ -63,7 +63,6 @@ function makePersonaEntities(count: number, namePrefix: string = "Persona") {
     is_archived: false,
     is_static: false,
     last_updated: NOW,
-    last_activity: NOW,
   }));
 }
 
@@ -105,7 +104,6 @@ function createTestState(counts: {
       topics: makeDataItems("topic", counts.topics ?? 0, { category: "Interest", exposure_current: 0.5, exposure_desired: 0.5 }),
       quotes: makeQuotes(counts.quotes ?? 0),
       last_updated: NOW,
-      last_activity: NOW,
     },
     personas: personasRecord,
     queue: [],

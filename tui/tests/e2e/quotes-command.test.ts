@@ -50,7 +50,6 @@ function createCheckpointWithQuotes() {
         },
       ],
       last_updated: timestamp,
-      last_activity: timestamp,
       settings: createTestSettings(MOCK_SERVER_URL),
     },
     personas: {
@@ -70,7 +69,6 @@ function createCheckpointWithQuotes() {
           is_archived: false,
           is_static: false,
           last_updated: timestamp,
-          last_activity: timestamp,
           last_heartbeat: timestamp,
           heartbeat_delay_ms: 999999999,
         },

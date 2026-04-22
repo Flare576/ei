@@ -89,7 +89,6 @@ describe("StateManager", () => {
       is_archived: false,
       is_static: false,
       last_updated: new Date().toISOString(),
-      last_activity: new Date().toISOString(),
     });
 
     it("adds and retrieves personas", () => {
@@ -147,7 +146,6 @@ describe("StateManager", () => {
         is_archived: false,
         is_static: false,
         last_updated: "",
-        last_activity: "",
       });
     });
 
@@ -421,7 +419,6 @@ describe("StateManager", () => {
       is_archived: false,
       is_static: false,
       last_updated: new Date().toISOString(),
-      last_activity: new Date().toISOString(),
       ...(tools !== undefined ? { tools } : {}),
     });
 

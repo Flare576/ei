@@ -43,7 +43,6 @@ function buildBaseCheckpoint(mockServerUrl: string, facts: object[] = [], topics
       people: [],
       quotes: [],
       last_updated: ts,
-      last_activity: ts,
       settings: {
         auto_save_interval_ms: 5000,
         default_model: "Mock LLM:mock-model",
@@ -77,7 +76,6 @@ function buildBaseCheckpoint(mockServerUrl: string, facts: object[] = [], topics
           is_paused: false,
           is_archived: false,
           last_updated: ts,
-          last_activity: ts,
         },
         messages: [
           {

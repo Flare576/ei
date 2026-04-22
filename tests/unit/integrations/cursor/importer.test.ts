@@ -46,7 +46,6 @@ function buildPersonaEntity(id: string, displayName: string, archived = false) {
     is_archived: archived,
     is_static: false,
     last_updated: "2026-01-01T00:00:00.000Z",
-    last_activity: "2026-01-01T00:00:00.000Z",
   };
 }
 
@@ -69,7 +68,6 @@ describe("importCursorSessions", () => {
       people: [],
       quotes: [],
       last_updated: "2026-01-01T00:00:00.000Z",
-      last_activity: "2026-01-01T00:00:00.000Z",
     };
 
     mockStateManager = {
