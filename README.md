@@ -16,6 +16,8 @@ Unless you enable Syncing, that's where it stays.
 
 If you have a local LLM, literally no data leaves your system(s) by default. If you don't, you'll need to provide an LLM for Ei to use. I tried to make that as easy as possible via adding Providers via API Key.
 
+> **One honest note**: the first time you load Ei in a browser, it downloads the embedding library and model weights from public CDNs (jsdelivr, HuggingFace). Those CDNs see your IP address — but not your data. All embedding runs locally in your browser after that first download. The TUI version caches everything on first run and is fully offline after. Additionally, the same is true for my webhost - it must see your IP address to serve you assets, but no analytics, reports, metrics, etc. are done on them.
+
 There's no other usage, debugging, analytics, tracking, or history information stored or transmitted - anonymized or otherwise.
 
 If there's a problem with the system, you need to tell me here on GitHub, or on Bluesky, or Discord, or whatever. There's no "report a bug" button, no "DONATE" link in the app.
