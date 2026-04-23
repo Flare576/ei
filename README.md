@@ -4,7 +4,7 @@ A local-first AI companion system with persistent personas and coding tool integ
 
 You can access the Web version at [ei.flare576.com](https://ei.flare576.com).
 
-You can install the local version via `npm install -g ei-tui` (see [### TUI](#tui) for details).
+You can run the local version via `bunx ei-tui` — no install needed, always current (see [### TUI](#tui) for details).
 
 If you're here to give your coding tools (OpenCode, Claude Code, Cursor) persistent memory, jump over to [TUI README.md](./tui/README.md) to learn how to get information _into_ Ei, and [CLI README.md](./src/cli/README.md) to get it back _out_.
 
@@ -110,15 +110,16 @@ More information can be found in the [Web Readme](web/README.md)
 # Install Bun (if you don't have it)
 curl -fsSL https://bun.sh/install | bash
 
-# Install Ei
-npm install -g ei-tui
-```
+# Run Ei — no install needed, always the latest version
+bunx ei-tui
 
-When you install Ei, you pull down this package and it's dependencies.
+# Or, if you use it as much as I do, add this to your profile!
+alias ei='bunx ei-tui'
+```
 
 If you have a Local LLM, that's the first and last set of signals that leave your machine for Ei unless you tell it otherwise.
 
-Regardless, Running `ei` pops open the TUI interface and, just like on the web, all messages and summary requests flow to your LLM provider, but the core data stays on your device.
+Regardless, running `ei` (or `bunx ei-tui`) pops open the TUI interface and, just like on the web, all messages and summary requests flow to your LLM provider, but the core data stays on your device.
 
 More information (including commands) can be found in the [TUI Readme](tui/README.md)
 

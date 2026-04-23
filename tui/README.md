@@ -24,8 +24,11 @@ OpenCode also supports reading Ei's extracted knowledge back out via the [CLI to
 # Install Bun (if you don't have it)
 curl -fsSL https://bun.sh/install | bash
 
-# Install Ei
-npm install -g ei-tui
+# Run Ei — no install needed, always the latest version
+bunx ei-tui
+
+# Or, if you use it as much as I do, add this to your profile!
+alias ei='bunx ei-tui'
 ```
 
 ## TUI Commands
