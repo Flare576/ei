@@ -7,7 +7,7 @@ import type { PersonIdentifier } from "../types/data-items.js";
 export type { ResponseHandler } from "./persona-response.js";
 
 import { handlePersonaResponse, handleToolContinuation, handleOneShot, handleOneShotJSON } from "./persona-response.js";
-import { handleHeartbeatCheck, handleEiHeartbeat } from "./heartbeat.js";
+import { handleHeartbeatCheck, handleEiHeartbeat, handleReflectionCritic } from "./heartbeat.js";
 import { handlePersonaGeneration, handlePersonaDescriptions, handlePersonaTraitExtraction } from "./persona-generation.js";
 import {
   handlePersonaTopicRating,
@@ -90,4 +90,5 @@ export const handlers: Record<LLMNextStep, ResponseHandler> = {
   handlePersonaPreview,
   [LLMNextStep.HandlePersonIdentifierMigration]: handlePersonIdentifierMigration,
   [LLMNextStep.HandleTopicValidate]: handleDedupCurate,
+  [LLMNextStep.HandleReflectionCritic]: handleReflectionCritic,
 };

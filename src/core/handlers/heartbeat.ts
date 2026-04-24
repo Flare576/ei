@@ -1,11 +1,15 @@
 import {
   ContextStatus,
   LLMNextStep,
+  LLMRequestType,
+  LLMPriority,
   type LLMResponse,
   type Message,
 } from "../types.js";
 import type { StateManager } from "../state-manager.js";
 import type { HeartbeatCheckResult, EiHeartbeatResult } from "../../prompts/heartbeat/types.js";
+import type { ReflectionCriticResult } from "../../prompts/reflection/types.js";
+import { getModelForPersona } from "../heartbeat-manager.js";
 import { crossFind } from "../utils/index.js";
 
 export function handleHeartbeatCheck(response: LLMResponse, state: StateManager): void {
@@ -26,11 +30,6 @@ export function handleHeartbeatCheck(response: LLMResponse, state: StateManager)
   const now = new Date().toISOString();
   state.persona_update(personaId, { last_heartbeat: now });
   state.queue_clearPersonaResponses(personaId, LLMNextStep.HandleHeartbeatCheck);
-
-  if (result.mentioned_reflection === true) {
-    state.persona_update(personaId, { reflection_last_asked: now });
-    console.log(`[HeartbeatCheck ${personaDisplayName}] Persona surfaced identity drift - reflection_last_asked set`);
-  }
 
   if (!result.should_respond) {
     console.log(`[HeartbeatCheck ${personaDisplayName}] Chose not to reach out (should_respond=false)`);
@@ -123,4 +122,51 @@ export function handleEiHeartbeat(response: LLMResponse, state: StateManager): v
       }
     }
   }
+}
+
+export function handleReflectionCritic(response: LLMResponse, state: StateManager): void {
+  const personaId = response.request.data.personaId as string;
+  const personaDisplayName = response.request.data.personaDisplayName as string;
+
+  const result = response.parsed as ReflectionCriticResult | undefined;
+  if (!result?.updated_identity || !result.critique) {
+    console.error(`[ReflectionCritic ${personaDisplayName}] Invalid or missing parsed result`);
+    return;
+  }
+
+  const personRecord = state.human_person_getByIdentifier("Ei Persona", personaId);
+  if (personRecord) {
+    state.human_person_upsert({
+      ...personRecord,
+      description: result.updated_identity.long_description,
+    });
+    console.log(`[ReflectionCritic ${personaDisplayName}] Person record description replaced (was log, now distilled identity)`);
+  }
+
+  const persona = state.persona_getById(personaId);
+  if (!persona) {
+    console.error(`[ReflectionCritic ${personaDisplayName}] Persona not found after critic`);
+    return;
+  }
+
+  const mergedTopics = result.updated_identity.topics.map(updatedTopic => {
+    const existing = persona.topics.find(t => t.name === updatedTopic.name);
+    return {
+      ...updatedTopic,
+      sentiment: updatedTopic.sentiment ?? existing?.sentiment ?? 0,
+      exposure_current: updatedTopic.exposure_current ?? existing?.exposure_current ?? 0,
+      exposure_desired: updatedTopic.exposure_desired ?? existing?.exposure_desired ?? 0.5,
+    };
+  });
+
+  state.persona_update(personaId, {
+    pending_update: {
+      short_description: result.updated_identity.short_description,
+      long_description: result.updated_identity.long_description,
+      traits: result.updated_identity.traits,
+      topics: mergedTopics,
+      critique: result.critique,
+    },
+  });
+  console.log(`[ReflectionCritic ${personaDisplayName}] pending_update written to persona`);
 }
