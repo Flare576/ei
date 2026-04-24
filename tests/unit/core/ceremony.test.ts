@@ -387,6 +387,7 @@ function createMockProgressState(pendingCeremonies: boolean = false, hasActivity
     getRoomList: vi.fn(() => []),
     getRoomActivePath: vi.fn(() => []),
     getRoomUnextractedMessagesForPersona: vi.fn(() => []),
+    human_person_getByIdentifier: vi.fn(() => undefined),
     _human: human,
   };
 }
