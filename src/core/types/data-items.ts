@@ -57,8 +57,8 @@ export interface PersonaTopic {
 }
 
 export interface PersonIdentifier {
-  type: string;         // User-extensible. "nickname", "github", "ei_persona", etc. NOT an enum.
-  value: string;        // The identifier value. For ei_persona: the Persona UUID.
+  type: string;         // User-extensible. "Nickname", "GitHub", "Ei Persona", etc. NOT an enum. Matching is case-insensitive.
+  value: string;        // The identifier value. For "Ei Persona": the Persona UUID.
   is_primary?: boolean; // True = this is the display name. Synced to DataItemBase.name on write.
 }
 
