@@ -133,22 +133,34 @@ export function StatusBar() {
     >
       <box flexGrow={1}>
         <Show when={notification()} fallback={
-          <Show when={activeRoomId()} fallback={
-            <text fg="#586e75">
-              <Show when={getActiveDisplayName()} fallback="No persona selected">
-                {getActiveDisplayName()}
+          <Show
+            when={(() => {
+              const id = activePersonaId();
+              return id ? personas().find(p => p.id === id)?.has_pending_update : false;
+            })()}
+            fallback={
+              <Show when={activeRoomId()} fallback={
+                <text fg="#586e75">
+                  <Show when={getActiveDisplayName()} fallback="No persona selected">
+                    {getActiveDisplayName()}
+                  </Show>
+                </text>
+              }>
+                <Show when={allPersonasResponded() && humanRoomMessagePending()} fallback={
+                  <text fg="#586e75">
+                    {getRoomWaitingText()}
+                  </text>
+                }>
+                  <text fg="#586e75">
+                    {activeRoom()?.display_name ?? ""}
+                  </text>
+                </Show>
               </Show>
+            }
+          >
+            <text fg="#b58900">
+              {`Pending changes for ${getActiveDisplayName()} — talk with them, then use /persona update ${getActiveDisplayName()} to review`}
             </text>
-          }>
-            <Show when={allPersonasResponded() && humanRoomMessagePending()} fallback={
-              <text fg="#586e75">
-                {getRoomWaitingText()}
-              </text>
-            }>
-              <text fg="#586e75">
-                {activeRoom()?.display_name ?? ""}
-              </text>
-            </Show>
           </Show>
         }>
           <text fg={getNotificationColor()}>
