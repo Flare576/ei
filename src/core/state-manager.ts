@@ -734,8 +734,9 @@ export class StateManager {
   }
 
   human_person_getByIdentifier(type: string | null, value: string): Person | undefined {
+    const typeLower = type?.toLowerCase();
     return this.getHuman().people.find(p =>
-      p.identifiers?.some(i => (!type || i.type === type) && i.value === value)
+      p.identifiers?.some(i => (!typeLower || i.type.toLowerCase() === typeLower) && i.value === value)
     );
   }
 
