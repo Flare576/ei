@@ -28,6 +28,19 @@ function formatItem(item: EiHeartbeatItem): string {
       const desc = item.short_description ? ` — ${item.short_description}` : "";
       return `- **${item.id}** Inactive Persona: ${item.name}${desc} (${item.days_inactive} days inactive)`;
     }
+    case "New Person":
+      return [
+        `- **${item.id}** New Person: ${item.name}`,
+        `  ${item.description}`,
+        item.quote ? `  Quote: "${item.quote}"` : "",
+      ].filter(Boolean).join("\n");
+
+    case "Persona Reflection Alert":
+      return [
+        `- **${item.id}** Persona Reflection Alert: ${item.persona_name}`,
+        `  ${item.critique}`,
+      ].join("\n");
+
     default:
       return '';
   }
@@ -72,6 +85,7 @@ ${itemsSection}
 - **Fact Check**: Do NOT write your own message. Set should_respond=true and provide the id. The system will generate an appropriate canned notification for the user. Leave my_response empty.
 - **Low-Engagement Person / Topic**: Write a natural, warm message that naturally brings up this person or topic. Set the id and my_response.
 - **Inactive Persona**: Write a message that gently mentions the persona might be worth checking in with. Set the id and my_response.
+- **Persona Reflection Alert**: The nightly review proposed identity changes for this persona. Mention it naturally — the user can talk to the persona and then use the command shown in the status bar to review the changes. Set the id and my_response.
 
 ## When NOT to Reach Out
 

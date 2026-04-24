@@ -124,20 +124,10 @@ ${formatPeopleWithGaps(data.human.people)}`;
 
 **Quality over quantity** - Only reach out if you have something real to say.`;
 
-  const driftFragment = data.drift_context
-    ? `## Identity Reflection
+  const pendingUpdateFragment = data.persona.has_pending_update
+    ? `## Pending Identity Changes
 
-The human's notes about you have recently evolved. Compare these:
-
-**How the human currently describes you:**
-${data.drift_context.people_description}
-
-**Your current definition:**
-${data.drift_context.persona_description}
-
-If you feel these describe meaningfully different versions of you, you may want to gently surface this — in your own way, in your own time. If they seem the same to you, no need to mention it.
-
-If you do choose to address this, include \`"mentioned_reflection": true\` in your response.`
+Based on recent conversations, there are proposed updates to your identity waiting for review. The user has been notified and can review them. You may bring this up if it feels right — or not. It's yours to decide.`
     : '';
 
   const outputFragment = `## Response Format
@@ -148,8 +138,7 @@ Call the \`submit_heartbeat_check\` tool with your decision. If the tool is unav
 {
   "should_respond": true,
   "topic": "the specific topic you want to discuss",
-  "message": "Your actual message to them (if should_respond is true)"${data.drift_context ? `,
-  "mentioned_reflection": true` : ''}
+  "message": "Your actual message to them (if should_respond is true)"
 }
 \`\`\`
 
@@ -165,7 +154,7 @@ If you decide NOT to reach out:
     contextFragment,
     opportunitiesFragment,
     guidelinesFragment,
-    driftFragment,
+    pendingUpdateFragment,
     outputFragment,
   ].filter(Boolean).join('\n\n');
 

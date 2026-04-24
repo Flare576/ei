@@ -21,6 +21,7 @@ export interface HeartbeatCheckPromptData {
     name: string;
     traits: PersonaTrait[];
     topics: PersonaTopic[];
+    has_pending_update: boolean;
   };
   human: {
     topics: Topic[];     // Filtered, sorted by engagement gap
@@ -28,10 +29,6 @@ export interface HeartbeatCheckPromptData {
   };
   recent_history: Message[];  // Last N messages for context
   inactive_days: number;      // Days since last activity
-  drift_context?: {
-    people_description: string;
-    persona_description: string;
-  };
 }
 
 /**
@@ -41,7 +38,6 @@ export interface HeartbeatCheckResult {
   should_respond: boolean;
   topic?: string;
   message?: string;
-  mentioned_reflection?: boolean;
 }
 
 // =============================================================================
@@ -91,6 +87,12 @@ export type EiHeartbeatItem =
       name: string;
       description: string;
       quote?: string;
+    }
+  | {
+      id: string;
+      type: "Persona Reflection Alert";
+      persona_name: string;
+      critique: string;
     };
 
 /**
