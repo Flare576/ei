@@ -59,6 +59,15 @@
   margin-left: var(--ei-spacing-xs);
 }
 
+.ei-control-area__reflection-badge {
+  color: var(--ei-accent);
+  font-size: var(--ei-font-size-sm);
+  font-weight: 600;
+  margin-left: var(--ei-spacing-xs);
+  cursor: pointer;
+  text-decoration: underline dotted;
+}
+
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
