@@ -1,6 +1,7 @@
 import YAML from "yaml";
 import type { Command } from "./registry";
 import { isReservedPersonaName } from "../../../src/core/types.js";
+import { logger } from "../util/logger.js";
 import { PersonaListOverlay } from "../components/PersonaListOverlay";
 import { LoadingOverlay } from "../components/LoadingOverlay.js";
 import { PersonPickerOverlay } from "../components/PersonPickerOverlay.js";
@@ -67,6 +68,7 @@ export const personaCommand: Command = {
       try {
         parsed = descriptionFromYAML(descResult.content);
       } catch (e) {
+        logger.error("[persona:new] description parse error", e);
         ctx.showNotification(`Parse error: ${e instanceof Error ? e.message : String(e)}`, "error");
         return;
       }
@@ -105,6 +107,7 @@ export const personaCommand: Command = {
           .catch(e => {
             if (!dismissed && overlayCallbacks.hideOverlay) {
               overlayCallbacks.hideOverlay();
+              logger.error("[persona:new] generation failed", e);
               ctx.showNotification(`Generation failed: ${e instanceof Error ? e.message : String(e)}`, "error");
               resolve(null);
             }
@@ -243,6 +246,7 @@ export const personaCommand: Command = {
             shouldApply = raw._apply === true;
             previewParsed = personaPreviewFromYAML(content);
           } catch (e) {
+            logger.error("[persona:update] pending update parse error", e);
             ctx.showNotification(`Parse error: ${e instanceof Error ? e.message : String(e)}`, "error");
             return;
           }
@@ -364,6 +368,7 @@ export const personaCommand: Command = {
           .catch(e => {
             if (!dismissed && overlayCallbacks2.hideOverlay) {
               overlayCallbacks2.hideOverlay();
+              logger.error("[persona:update] generation failed", e);
               ctx.showNotification(`Generation failed: ${e instanceof Error ? e.message : String(e)}`, "error");
               resolve(null);
             }
@@ -398,6 +403,7 @@ export const personaCommand: Command = {
       try {
         previewParsed = personaPreviewFromYAML(reviewResult.content ?? updatePreviewYAML);
       } catch (e) {
+        logger.error("[persona:update] preview parse error", e);
         ctx.showNotification(`Parse error: ${e instanceof Error ? e.message : String(e)}`, "error");
         return;
       }
