@@ -159,7 +159,7 @@ export function StatusBar() {
             }
           >
             <text fg="#b58900">
-              {`Pending changes for ${getActiveDisplayName()} — talk with them, then use /persona update ${getActiveDisplayName()} to review`}
+              {`✦ Reflection ready for ${getActiveDisplayName()} — /reflect to learn more`}
             </text>
           </Show>
         }>

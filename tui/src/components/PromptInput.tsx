@@ -27,6 +27,7 @@ import { authCommand } from '../commands/auth';
 import { dedupeCommand } from "../commands/dedupe";
 import { roomCommand } from "../commands/room.js";
 import { activateCommand } from "../commands/activate.js";
+import { reflectCommand } from "../commands/reflect.js";
 import { silenceCommand } from "../commands/silence.js";
 import { captureCommand } from "../commands/capture.js";
 import { openCYPEditor } from "../util/cyp-editor.js";
@@ -90,6 +91,7 @@ export function PromptInput() {
   registerCommand(resumeCommand);
   registerCommand(archiveCommand);
   registerCommand(unarchiveCommand);
+  registerCommand(reflectCommand);
 
   let textareaRef: TextareaRenderable | undefined;
 
