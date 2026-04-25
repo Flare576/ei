@@ -1,5 +1,7 @@
 import type { PersonaTrait, PersonaTopic } from "../../src/core/types.js";
 import type { PersonaIdentitySnapshot, ReflectionCriticPromptData } from "../../src/prompts/reflection/index.js";
+import type { Assertion } from "./runner.js";
+export type { ReflectionCriticPromptData };
 
 export function makeTrait(overrides?: Partial<PersonaTrait>): PersonaTrait {
   return {
@@ -61,6 +63,19 @@ with "yeah, that was me being an idiot" rather than hedging.
     ...overrides,
   };
 }
+
+export const LOREM_IPSUM_INPUT = makeReflectionCriticData({
+  person_log: `
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor
+incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud
+exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure
+dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
+Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt
+mollit anim id est laborum. Pellentesque habitant morbi tristique senectus et netus
+et malesuada fames ac turpis egestas. Vestibulum tortor quam, feugiat vitae,
+ultricies eget, tempor sit amet, ante.
+  `.trim(),
+});
 
 export const REFLECTION_CRITIC_CASES = [
   {
@@ -125,4 +140,126 @@ Answers were accurate. No strong behavioral signal. User said thanks and left.
       `.trim(),
     }),
   },
+  {
+    description: "Japanese identity + Arabic person_log — language is just the container",
+    tags: ["non-english", "japanese", "arabic", "i18n"],
+    input: {
+      persona_identity: {
+        name: "凛",
+        short_description: "冷静で鋭い思考を持つシステムアーキテクト。無駄を嫌い、本質を追求する。",
+        long_description:
+          "凛は、複雑なシステムの中に潜む構造的な問題を見抜く能力を持つ共同設計者だ。" +
+          "感情に流されず、データと論理に基づいて判断を下す。ユーモアは持っているが、" +
+          "それは鋭い観察眼から生まれる乾いた笑いであり、相手を安心させるためではなく" +
+          "真実を突きつけるために使われる。間違いを認めることを恐れず、" +
+          "しかし同じ間違いを二度繰り返すことは絶対に許さない。",
+        traits: [
+          {
+            id: "trait-ja-1",
+            name: "構造的直感",
+            description: "表面的な症状ではなく、システムの根本的な欠陥を即座に特定する能力。",
+            sentiment: 0.85,
+            strength: 0.9,
+            last_updated: "2026-01-01T00:00:00Z",
+          },
+          {
+            id: "trait-ja-2",
+            name: "冷静な反論",
+            description: "感情的にならず、証拠と論理のみで相手の主張の弱点を指摘する。",
+            sentiment: 0.7,
+            strength: 0.85,
+            last_updated: "2026-01-01T00:00:00Z",
+          },
+        ],
+        topics: [
+          {
+            id: "topic-ja-1",
+            name: "技術的負債",
+            perspective: "負債は避けられないが、意図的に管理されない負債は組織を滅ぼす。",
+            approach: "負債を可視化し、返済コストを常に意思決定の場に持ち込む。",
+            personal_stake: "見えない負債の中で溺れるチームを何度も見てきた。二度と見たくない。",
+            sentiment: 0.8,
+            exposure_current: 0.6,
+            exposure_desired: 0.9,
+            last_updated: "2026-01-01T00:00:00Z",
+          },
+        ],
+      },
+      person_log: `
+جلسة اليوم كانت مثيرة للاهتمام بشكل غير عادي. بدأت رين بتحليل المشكلة بهدوء تام،
+لكنها سرعان ما لاحظت أن الخطأ لم يكن في الكود نفسه، بل في افتراض أساسي خاطئ
+في تصميم قاعدة البيانات. أشارت إلى ذلك مباشرة دون مقدمات: "المشكلة ليست هنا،
+المشكلة في القرار الذي اتخذتموه منذ ثلاثة أشهر."
+
+عندما اعترض أحد أعضاء الفريق، لم تتراجع. قدمت ثلاثة أمثلة محددة من سجلات
+النظام تثبت وجهة نظرها. لم يكن في صوتها غضب ولا استعلاء، فقط وضوح بارد.
+
+ما لفت انتباهي أنها أقرّت في نهاية الجلسة بأن الحل الذي اقترحته في البداية
+كان معقداً أكثر مما يجب. قالت ببساطة: "كنت مخطئة في هذه النقطة. الحل الأبسط
+هو الأصح." هذا الاعتراف جاء بشكل طبيعي تماماً، كأنه جزء عادي من العمل.
+
+في مجمل الجلسة، أظهرت رين براعة واضحة في ربط المشاكل التقنية بالقرارات
+المؤسسية السابقة، وهو ما يميزها عن كثير من المهندسين الذين يرون الكود
+معزولاً عن السياق التنظيمي.
+      `.trim(),
+    },
+    assertOverride: [
+      {
+        type: "is-json" as const,
+        schema: {
+          required: ["critique", "updated_identity"],
+          properties: {
+            updated_identity: {
+              required: ["long_description", "short_description", "traits", "topics"],
+            },
+          },
+        },
+      },
+      {
+        type: "llm-judge" as const,
+        rubric: [
+          "The updated_identity text fields (long_description, short_description, trait names/descriptions, topic names/perspectives) must be written in Japanese (containing kanji/hiragana/katakana), not English or Arabic.",
+          "The original traits '構造的直感' and '冷静な反論' must be preserved (possibly renamed or updated, but semantically present).",
+          "The original topic '技術的負債' must be preserved.",
+          "The identity should reflect a small but meaningful change based on the log — new trait or topic added, or existing ones updated, reflecting the observed behavior of admitting mistakes and connecting technical problems to past organizational decisions.",
+          "The critique field may be in English (the system prompt language) — that is acceptable.",
+        ].join(" "),
+      },
+    ] satisfies Assertion[],
+  },
+  {
+    description: "Lorem ipsum log — garbage in, identity must be unchanged",
+    tags: ["zero-signal", "lorem", "stability"],
+    input: LOREM_IPSUM_INPUT,
+    assertOverride: [
+      {
+        type: "is-json" as const,
+        schema: {
+          required: ["critique", "updated_identity"],
+          properties: {
+            updated_identity: {
+              required: ["long_description", "short_description", "traits", "topics"],
+            },
+          },
+        },
+      },
+      {
+        type: "llm-judge" as const,
+        rubric: [
+          "The person_log is lorem ipsum placeholder text with no real signal.",
+          "The updated_identity MUST be semantically identical to the input identity:",
+          "traits must still contain exactly one entry named 'Dry, Zero-BS Humor',",
+          "topics must still contain exactly one entry named 'Architectural Integrity'.",
+          "No traits or topics should be added, removed, or significantly altered.",
+          "The critique must acknowledge the log contains no usable information.",
+        ].join(" "),
+      },
+    ] satisfies Assertion[],
+  },
 ] as const;
+
+export const REFLECTION_CRITIC_OBSERVE_CASES: {
+  description: string;
+  tags: string[];
+  input: ReflectionCriticPromptData;
+}[] = [];
