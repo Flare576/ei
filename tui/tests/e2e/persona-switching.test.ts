@@ -221,7 +221,7 @@ test.describe("Persona Switching", () => {
 
     // Overlay should show with title and personas
     await expect(terminal.getByText("Select Persona")).toBeVisible({ timeout: 5000 });
-    await expect(terminal.getByText(/ei/gi)).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText(/\* Ei/g)).toBeVisible({ timeout: 5000 });
     await expect(terminal.getByText(/alice/gi)).toBeVisible({ timeout: 5000 });
 
     // Bob should NOT be in the list (archived)
