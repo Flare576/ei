@@ -159,12 +159,13 @@ export interface PersonaEntity {
   tools?: string[];              // IDs of ToolDefinitions this persona can use. Empty/absent = no tool access.
   reflection_last_asked?: string;   // ISO timestamp. Set ONLY when Persona explicitly surfaces identity drift (mentioned_reflection: true).
   description_embedding?: number[]; // Embedding of long_description (short_description fallback). Excludes traits. See embedding-service.ts:getPersonaDescriptionText.
-  pending_update?: {                // Proposed identity revision from ceremony reflection. Cleared when user accepts or dismisses via /persona update <name>.
+  pending_update?: {                // Proposed identity revision from ceremony reflection. Cleared when user accepts or dismisses via /reflect apply.
     short_description: string;
     long_description: string;
     traits: import("./data-items.js").PersonaTrait[];
     topics: import("./data-items.js").PersonaTopic[];
     critique: string;              // Analyst's prose — for Ei to use when urgency is high, not surfaced to the persona.
+    created_at: string;            // ISO timestamp of when the Critic ran. Used to name the reflect folder.
   };
   avatar_emoji?: string;            // Single emoji character used as avatar in place of initials.
   avatar_image?: string;            // Base64-encoded 64×64 image used as avatar (takes priority over avatar_emoji).

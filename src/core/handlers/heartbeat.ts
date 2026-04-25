@@ -159,13 +159,25 @@ export function handleReflectionCritic(response: LLMResponse, state: StateManage
     };
   });
 
+  const sanitizedTraits = result.updated_identity.traits.map(t => ({
+    ...t,
+    name: t.name?.trim() ?? "",
+    description: t.description?.trim() ?? "",
+  }));
+
+  const sanitizedTopics = mergedTopics.map(t => ({
+    ...t,
+    name: t.name?.trim() ?? "",
+  }));
+
   state.persona_update(personaId, {
     pending_update: {
-      short_description: result.updated_identity.short_description,
-      long_description: result.updated_identity.long_description,
-      traits: result.updated_identity.traits,
-      topics: mergedTopics,
+      short_description: result.updated_identity.short_description?.trim() ?? "",
+      long_description: result.updated_identity.long_description?.trim() ?? "",
+      traits: sanitizedTraits,
+      topics: sanitizedTopics,
       critique: result.critique,
+      created_at: new Date().toISOString(),
     },
   });
   console.log(`[ReflectionCritic ${personaDisplayName}] pending_update written to persona`);
