@@ -143,6 +143,7 @@ export function RoomMessageList() {
           stickyScroll={true}
           stickyStart="bottom"
           viewportCulling={true}
+          wrapperOptions={{ paddingRight: 2 }}
         >
           <For each={displayMessagesWithQuotes()}>
             {(msg) => {
@@ -172,10 +173,10 @@ export function RoomMessageList() {
                     attributes={TextAttributes.BOLD}
                     content={header}
                   />
-                  <box marginLeft={2} visible={isSilence}>
+                  <box paddingLeft={2} flexGrow={1} visible={isSilence}>
                     <text fg="#586e75" content={silenceText} />
                   </box>
-                  <box marginLeft={2} visible={!isSilence}>
+                  <box paddingLeft={2} flexGrow={1} visible={!isSilence}>
                     <markdown
                       content={normalContent}
                       syntaxStyle={solarizedDarkSyntax}

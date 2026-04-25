@@ -113,6 +113,7 @@ export function MessageList() {
           stickyScroll={true}
           stickyStart="bottom"
           viewportCulling={true}
+          wrapperOptions={{ paddingRight: 2 }}
         >
           <For each={messagesWithQuotes()}>
             {(message, index) => {
@@ -159,7 +160,7 @@ export function MessageList() {
                       attributes={TextAttributes.BOLD}
                       content={header()}
                     />
-                    <box marginLeft={2}>
+                    <box paddingLeft={2} flexGrow={1}>
                       <markdown
                         content={displayContent}
                         syntaxStyle={solarizedDarkSyntax}
