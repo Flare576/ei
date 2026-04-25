@@ -24,6 +24,7 @@
 @import './conflict-resolution-modal.css';
 @import './hamburger-menu.css';
 @import './data-search-modal.css';
+@import './reflection-modal.css';
 
 /* Rooms */
 @import './room-panel.css';
