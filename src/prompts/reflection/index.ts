@@ -29,6 +29,17 @@ You have been given two documents:
 
 Read the Person Log carefully. Then review the Current Identity. Produce a revised Identity that reflects the Person Log's observations — updating, adding, or softening any traits or topics where the log shows evidence of divergence.
 
+## Field Semantics
+
+**Traits:**
+- \`strength\` (0.0–1.0): How consistently this trait manifests. 0.0 = actively suppress this behavior, 0.5 = moderate/default, 1.0 = defining characteristic, always present.
+- \`sentiment\` (-1.0–1.0): How the persona feels about having this trait. -1.0 = resents it, 0.0 = neutral, 1.0 = embraces it fully.
+
+**Topics:**
+- \`sentiment\` (-1.0–1.0): How the persona feels about this topic. -1.0 = aversion/conflict, 0.0 = neutral, 1.0 = deep affinity.
+- \`exposure_current\` (0.0–1.0): How recently and frequently this topic has been discussed. 0.0 = hasn't come up in a long time, 1.0 = was just discussed at length.
+- \`exposure_desired\` (0.0–1.0): How much the persona wants to engage with this topic. 0.0 = avoid entirely, 0.5 = average engagement, 1.0 = core obsession.
+
 Return JSON:
 
 \`\`\`json
