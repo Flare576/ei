@@ -1,15 +1,12 @@
 import {
   ContextStatus,
   LLMNextStep,
-  LLMRequestType,
-  LLMPriority,
   type LLMResponse,
   type Message,
 } from "../types.js";
 import type { StateManager } from "../state-manager.js";
 import type { HeartbeatCheckResult, EiHeartbeatResult } from "../../prompts/heartbeat/types.js";
 import type { ReflectionCriticResult } from "../../prompts/reflection/types.js";
-import { getModelForPersona } from "../heartbeat-manager.js";
 import { crossFind } from "../utils/index.js";
 
 export function handleHeartbeatCheck(response: LLMResponse, state: StateManager): void {

@@ -31,16 +31,6 @@ export function ControlArea({
   const isBusy = queueStatus.state === "busy";
   const isWaiting = !isBusy && !isPaused && queueStatus.pending_count > 0;
   
-  const statusText = isSaving
-    ? "Saving..."
-    : isPaused
-    ? "Paused"
-    : isBusy
-    ? `Processing... (${queueStatus.pending_count} pending)`
-    : isWaiting
-    ? `Waiting on server... (${queueStatus.pending_count} pending)`
-    : "Ready";
-
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === "Escape") {
       onPauseToggle();
