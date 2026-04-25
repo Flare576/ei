@@ -81,6 +81,15 @@ export {
   buildRoomResponsePrompt,
   buildRoomJudgePrompt,
 } from "./room/index.js";
+
+export { buildReflectionCriticPrompt } from "./reflection/index.js";
+export type {
+  ReflectionCriticPromptData,
+  ReflectionCriticResult,
+  PersonaIdentitySnapshot,
+} from "./reflection/types.js";
+
+
 export type {
   RoomResponsePromptData,
   RoomJudgePromptData,

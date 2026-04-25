@@ -1,5 +1,7 @@
+import YAML from "yaml";
 import type { Command } from "./registry";
 import { isReservedPersonaName } from "../../../src/core/types.js";
+import { logger } from "../util/logger.js";
 import { PersonaListOverlay } from "../components/PersonaListOverlay";
 import { LoadingOverlay } from "../components/LoadingOverlay.js";
 import { PersonPickerOverlay } from "../components/PersonPickerOverlay.js";
@@ -66,6 +68,7 @@ export const personaCommand: Command = {
       try {
         parsed = descriptionFromYAML(descResult.content);
       } catch (e) {
+        logger.error("[persona:new] description parse error", e);
         ctx.showNotification(`Parse error: ${e instanceof Error ? e.message : String(e)}`, "error");
         return;
       }
@@ -104,6 +107,7 @@ export const personaCommand: Command = {
           .catch(e => {
             if (!dismissed && overlayCallbacks.hideOverlay) {
               overlayCallbacks.hideOverlay();
+              logger.error("[persona:new] generation failed", e);
               ctx.showNotification(`Generation failed: ${e instanceof Error ? e.message : String(e)}`, "error");
               resolve(null);
             }
@@ -199,11 +203,91 @@ export const personaCommand: Command = {
 
       let selectedPerson: (typeof human.people)[0];
       if (!personName) {
+        if (persona.pending_update) {
+          const previewContent = personaPreviewToYAML(
+            {
+              long_description: persona.pending_update.long_description,
+              short_description: persona.pending_update.short_description ?? '',
+              traits: persona.pending_update.traits.map(t => ({ ...t, strength: t.strength ?? 0.5, sentiment: t.sentiment ?? 0 })),
+              topics: persona.pending_update.topics,
+            },
+            persona.display_name,
+            undefined,
+            persona.long_description,
+          );
+          const applyHeader = [
+            `# Set _apply: true to apply these changes. Leave false to dismiss without applying.`,
+            `# :cq to cancel (pending changes will remain).`,
+            `_apply: false`,
+            ``,
+          ].join('\n');
+          const reviewResult = await spawnEditor({
+            initialContent: applyHeader + previewContent,
+            filename: `${personaId}-pending-update.yaml`,
+            renderer: ctx.renderer,
+          });
+
+          if (reviewResult.aborted) {
+            ctx.showNotification("Cancelled — pending changes preserved", "info");
+            return;
+          }
+
+          if (reviewResult.content === null) {
+            await ctx.ei.updatePersona(personaId, { pending_update: undefined });
+            ctx.showNotification(`Dismissed pending changes for ${persona.display_name}`, "info");
+            return;
+          }
+
+          const content = reviewResult.content;
+          let shouldApply = false;
+          let previewParsed: ReturnType<typeof personaPreviewFromYAML>;
+          try {
+            const raw = YAML.parse(content) as Record<string, unknown>;
+            shouldApply = raw._apply === true;
+            previewParsed = personaPreviewFromYAML(content);
+          } catch (e) {
+            logger.error("[persona:update] pending update parse error", e);
+            ctx.showNotification(`Parse error: ${e instanceof Error ? e.message : String(e)}`, "error");
+            return;
+          }
+
+          if (!shouldApply) {
+            const goBack = await new Promise<boolean>((resolve) => {
+              ctx.showOverlay((hideOverlay, hideForEditor) => (
+                <ConfirmOverlay
+                  message={`You made edits but _apply is still false — changes won't be applied.\n\nConfirm = go back and edit\nCancel = dismiss without applying`}
+                  onConfirm={() => { hideForEditor(); resolve(true); }}
+                  onCancel={() => { hideOverlay(); resolve(false); }}
+                />
+              ), ctx.renderer);
+            });
+
+            if (goBack) {
+              ctx.showNotification("Pending changes preserved", "info");
+              return;
+            }
+
+            await ctx.ei.updatePersona(personaId, { pending_update: undefined });
+            ctx.showNotification(`Dismissed pending changes for ${persona.display_name}`, "info");
+            return;
+          }
+
+          await ctx.ei.updatePersona(personaId, {
+            long_description: previewParsed.long_description,
+            short_description: previewParsed.short_description,
+            traits: previewParsed.traits,
+            topics: previewParsed.topics,
+            pending_update: undefined,
+          });
+          ctx.showNotification(`Applied changes to ${persona.display_name}`, "info");
+          return;
+        }
+
         const linked = (human.people ?? []).find(p =>
-          p.identifiers?.some(id => id.type === 'Ei Persona' && id.value === personaId)
+          p.identifiers?.some(id => id.type.toLowerCase() === 'ei persona' && id.value === personaId)
         );
         if (!linked) {
-          ctx.showNotification(`No person linked to "${personaName}". Try: /p update ${personaName} <personName>`, "error");
+          ctx.showNotification(`No pending update or linked person for "${personaName}". Try: /p update ${personaName} <personName>`, "error");
           return;
         }
         selectedPerson = linked;
@@ -284,6 +368,7 @@ export const personaCommand: Command = {
           .catch(e => {
             if (!dismissed && overlayCallbacks2.hideOverlay) {
               overlayCallbacks2.hideOverlay();
+              logger.error("[persona:update] generation failed", e);
               ctx.showNotification(`Generation failed: ${e instanceof Error ? e.message : String(e)}`, "error");
               resolve(null);
             }
@@ -318,6 +403,7 @@ export const personaCommand: Command = {
       try {
         previewParsed = personaPreviewFromYAML(reviewResult.content ?? updatePreviewYAML);
       } catch (e) {
+        logger.error("[persona:update] preview parse error", e);
         ctx.showNotification(`Parse error: ${e instanceof Error ? e.message : String(e)}`, "error");
         return;
       }
@@ -331,7 +417,7 @@ export const personaCommand: Command = {
       });
 
       const existingIdentifiers = selectedPerson.identifiers ?? [];
-      const alreadyLinked = existingIdentifiers.some(id => id.type === 'Ei Persona' && id.value === personaId);
+      const alreadyLinked = existingIdentifiers.some(id => id.type.toLowerCase() === 'ei persona' && id.value === personaId);
       if (!alreadyLinked) {
         const isPrimaryFirst = existingIdentifiers.length === 0;
         const updatedIdentifiers = [...existingIdentifiers, { type: 'Ei Persona', value: personaId, ...(isPrimaryFirst ? { is_primary: true } : {}) }];

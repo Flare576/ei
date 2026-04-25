@@ -1,6 +1,7 @@
 import type { OverlayRenderer } from "../context/overlay";
 import type { EiContextValue } from "../context/ei";
 import type { CliRenderer } from "@opentui/core";
+import { logger } from "../util/logger";
 
 export interface Command {
   name: string;
@@ -116,6 +117,7 @@ export async function parseAndExecute(
     await command.execute(args, ctx);
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
+    logger.error(`[command:${commandName}] ${errorMsg}`, error);
     ctx.showNotification(`Command failed: ${errorMsg}`, "error");
   }
 

@@ -39,7 +39,7 @@ settings: {
 }
 ```
 
-This has bitten us twice. Don't let it bite you a third time.
+This has bitten us three times. Don't let it bite you a fourth time.
 
 ### Heartbeats Fire Immediately Without `heartbeat_delay_ms`
 

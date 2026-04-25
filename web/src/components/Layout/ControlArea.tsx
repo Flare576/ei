@@ -11,6 +11,8 @@ export interface ControlAreaProps {
   onSyncAndExit?: () => void;
   isSaving?: boolean;
   onQueueClick?: () => void;
+  pendingReflectionPersonas?: Array<{ id: string; display_name: string }>;
+  onReflectionClick?: (personaId: string) => void;
 }
 
 export function ControlArea({ 
@@ -22,6 +24,8 @@ export function ControlArea({
   onSyncAndExit,
   isSaving,
   onQueueClick,
+  pendingReflectionPersonas = [],
+  onReflectionClick,
 }: ControlAreaProps) {
   const isPaused = queueStatus.state === "paused";
   const isBusy = queueStatus.state === "busy";
@@ -51,22 +55,43 @@ export function ControlArea({
   return (
     <div className="ei-control-area">
       <div className="ei-control-area__status">
-        <span
-          className={`ei-control-area__status-text${onQueueClick ? " ei-control-area__status-text--clickable" : ""}`}
-          onClick={onQueueClick}
-          role={onQueueClick ? "button" : undefined}
-          title={onQueueClick ? "View queue" : undefined}
-        >
+        <span className="ei-control-area__status-text">
           <span 
             className={`ei-control-area__indicator ${isBusy ? "busy" : ""} ${isPaused ? "paused" : ""} ${isWaiting ? "waiting" : ""} ${isSaving ? "saving" : ""}`}
           />
-          <span>{statusText}</span>
+          <span>{isSaving ? "Saving..." : isPaused ? "Paused" : isBusy ? "Processing..." : isWaiting ? "Waiting on server..." : "Ready"}</span>
+          {(isBusy || isWaiting) && onQueueClick && (
+            <span
+              className="ei-control-area__status-text--clickable"
+              onClick={onQueueClick}
+              role="button"
+              title="View queue"
+            >
+              {` (${queueStatus.pending_count} pending)`}
+            </span>
+          )}
           {queueStatus.dlq_count > 0 && (
-            <span className="ei-control-area__dlq">[DLQ:{queueStatus.dlq_count}]</span>
+            <span
+              className={`ei-control-area__dlq${onQueueClick ? " ei-control-area__status-text--clickable" : ""}`}
+              onClick={onQueueClick}
+              role={onQueueClick ? "button" : undefined}
+              title={onQueueClick ? "View queue" : undefined}
+            >[DLQ:{queueStatus.dlq_count}]</span>
           )}
           {queueStatus.embedding_warning && (
             <span className="ei-control-area__dlq" title="Embedding service unavailable — topic/person matching using recent items">⚠ embed</span>
           )}
+          {pendingReflectionPersonas.map(p => (
+            <span
+              key={p.id}
+              className="ei-control-area__reflection-badge"
+              title={`${p.display_name} has a pending reflection — click to review`}
+              onClick={() => onReflectionClick?.(p.id)}
+              role="button"
+            >
+              ✦ {p.display_name}
+            </span>
+          ))}
         </span>
         <button
           className={`ei-btn ei-btn--icon ${isPaused ? "ei-play-btn" : "ei-pause-btn"}`}

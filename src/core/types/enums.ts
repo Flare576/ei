@@ -53,6 +53,7 @@ export enum LLMNextStep {
   HandlePersonaPreview = "handlePersonaPreview",
   HandlePersonIdentifierMigration = "handlePersonIdentifierMigration",
   HandleTopicValidate = "handleTopicValidate",
+  HandleReflectionCritic = "handleReflectionCritic",
 }
 
 export enum ProviderType {

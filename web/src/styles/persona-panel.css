@@ -129,6 +129,15 @@
   text-align: center;
 }
 
+.ei-persona-pill__reflection-badge {
+  color: var(--ei-accent);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
 /* Empty state */
 .ei-persona-panel__empty {
   padding: var(--ei-spacing-lg);

@@ -76,7 +76,8 @@ export function Sidebar() {
                 const name = displayName();
                 const unread = persona.unread_count > 0 ? ` (${persona.unread_count} new)` : "";
                 const paused = persona.is_paused ? " ⏸" : "";
-                return `${prefix}${name}${unread}${paused}`;
+                const reflect = persona.has_pending_update ? " ✦" : "";
+                return `${prefix}${name}${unread}${paused}${reflect}`;
               };
 
               const textColor = () => {

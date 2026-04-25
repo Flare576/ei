@@ -734,8 +734,9 @@ export class StateManager {
   }
 
   human_person_getByIdentifier(type: string | null, value: string): Person | undefined {
+    const typeLower = type?.toLowerCase();
     return this.getHuman().people.find(p =>
-      p.identifiers?.some(i => (!type || i.type === type) && i.value === value)
+      p.identifiers?.some(i => (!typeLower || i.type.toLowerCase() === typeLower) && i.value === value)
     );
   }
 
@@ -908,8 +909,8 @@ export class StateManager {
     return result;
   }
 
-  messages_getUnextractedForPersona(personaId: string, shortId: string, sinceTimestamp?: string): Message[] {
-    return this.personaState.messages_getUnextractedForPersona(personaId, shortId, sinceTimestamp);
+  messages_getUnextractedForPersona(personaId: string, shortId: string): Message[] {
+    return this.personaState.messages_getUnextractedForPersona(personaId, shortId);
   }
 
   messages_markPersonaExtracted(personaId: string, messageIds: string[], shortId: string): number {

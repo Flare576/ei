@@ -214,8 +214,8 @@ export function personaToYAML(persona: PersonaEntity, allGroups?: string[], allT
       : persona.traits.map(({ name, description, sentiment, strength }) => ({ name, description, sentiment: sentiment ?? 0, strength: strength ?? 0.5 })),
     topics: useTopicPlaceholder
       ? [PLACEHOLDER_TOPIC]
-      : persona.topics.map(({ name, perspective, approach, personal_stake, exposure_current, exposure_desired }) => ({
-          name, perspective, approach, personal_stake, exposure_current, exposure_desired
+      : persona.topics.map(({ name, perspective, approach, personal_stake, sentiment, exposure_current, exposure_desired }) => ({
+          name, perspective, approach, personal_stake, sentiment: sentiment ?? 0, exposure_current, exposure_desired
         })),
     heartbeat_delay_ms: persona.heartbeat_delay_ms ? formatDuration(persona.heartbeat_delay_ms) : null,
     context_window_hours: persona.context_window_hours ?? null,

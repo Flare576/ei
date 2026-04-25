@@ -46,6 +46,10 @@ function buildBaseCheckpoint(mockServerUrl: string, facts: object[] = [], topics
       settings: {
         auto_save_interval_ms: 5000,
         default_model: "Mock LLM:mock-model",
+        ceremony: {
+          time: "09:00",
+          last_ceremony: ts,
+        },
         accounts: [
           {
             id: "mock-llm-account",
@@ -76,6 +80,8 @@ function buildBaseCheckpoint(mockServerUrl: string, facts: object[] = [], topics
           is_paused: false,
           is_archived: false,
           last_updated: ts,
+          last_heartbeat: ts,
+          heartbeat_delay_ms: 999999999,
         },
         messages: [
           {
@@ -160,9 +166,9 @@ test.describe("PersonaCreatorModal — long_description gate", () => {
           { name: "Calm", description: "Never panics", sentiment: 0.6, strength: 0.7 },
         ],
         topics: [
-          { name: "Testing", description: "Enjoys thorough testing", sentiment: 0.7, exposure_current: 0.5, exposure_desired: 0.8 },
-          { name: "Automation", description: "Loves automated pipelines", sentiment: 0.8, exposure_current: 0.4, exposure_desired: 0.7 },
-          { name: "Quality", description: "Committed to quality", sentiment: 0.9, exposure_current: 0.3, exposure_desired: 0.6 },
+          { name: "Testing", perspective: "Thorough testing catches real problems", approach: "Covers happy path and edge cases", personal_stake: "Quality output reflects well on everyone", sentiment: 0.7, exposure_current: 0.5, exposure_desired: 0.8 },
+          { name: "Automation", perspective: "Automation frees humans for creative work", approach: "Automate the repetitive, not the thinking", personal_stake: "Time saved is time better spent", sentiment: 0.8, exposure_current: 0.4, exposure_desired: 0.7 },
+          { name: "Quality", perspective: "Quality is everyone's responsibility", approach: "Review early, review often", personal_stake: "Shipped bugs are personal failures", sentiment: 0.9, exposure_current: 0.3, exposure_desired: 0.6 },
         ],
       }),
       statusCode: 200,

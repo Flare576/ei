@@ -16,10 +16,6 @@ import {
 } from "../prompts/index.js";
 import { filterMessagesForContext } from "./context-utils.js";
 import { filterHumanDataByVisibility } from "./prompt-context-builder.js";
-import { cosineSimilarity, computePersonaDescriptionEmbedding } from "./embedding-service.js";
-
-const REFLECTION_SIMILARITY_THRESHOLD = 0.80;
-const REFLECTION_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000; // 1 week between drift prompts
 
 // =============================================================================
 // MODEL HELPERS
@@ -172,6 +168,18 @@ export async function queueEiHeartbeat(
     });
   }
 
+  const personasWithPendingUpdate = personas.filter(
+    (p) => !p.is_archived && !p.is_paused && p.id !== "ei" && p.pending_update?.critique
+  );
+  for (const p of personasWithPendingUpdate) {
+    items.push({
+      id: p.id,
+      type: "Persona Reflection Alert",
+      persona_name: p.display_name,
+      critique: p.pending_update!.critique,
+    });
+  }
+
   if (items.length === 0) {
     console.log("[queueEiHeartbeat] No items to address, skipping");
     return;
@@ -231,49 +239,12 @@ export async function queueHeartbeatCheck(sm: StateManager, personaId: string, i
         b.exposure_desired - b.exposure_current - (a.exposure_desired - a.exposure_current)
     );
 
-  let driftContext: HeartbeatCheckPromptData["drift_context"];
-  const personRecord = sm.human_person_getByIdentifier("ei_persona", personaId);
-
-  if (personRecord?.embedding) {
-    let currentPersona = persona;
-
-    if (!currentPersona.description_embedding) {
-      const embedding = await computePersonaDescriptionEmbedding(currentPersona);
-      if (embedding) {
-        sm.persona_update(personaId, { description_embedding: embedding });
-        currentPersona = { ...currentPersona, description_embedding: embedding };
-      }
-    }
-
-    if (currentPersona.description_embedding) {
-      const lastAsked = currentPersona.reflection_last_asked
-        ? new Date(currentPersona.reflection_last_asked).getTime()
-        : 0;
-
-      // Gate: person must have been updated at least 1 week AFTER reflection was last asked.
-      // This handles both the cooldown AND the extraction echo — the ceremony extraction
-      // that fires right after a persona surfaces drift updates last_updated by minutes,
-      // which can never satisfy the 1-week offset requirement.
-      if (new Date(personRecord.last_updated).getTime() > lastAsked + REFLECTION_COOLDOWN_MS) {
-        const similarity = cosineSimilarity(personRecord.embedding, currentPersona.description_embedding);
-        if (similarity < REFLECTION_SIMILARITY_THRESHOLD) {
-          driftContext = {
-            people_description: personRecord.description ?? '',
-            persona_description: currentPersona.long_description ?? '',
-          };
-          console.log(`[HeartbeatCheck ${persona.display_name}] Drift detected (similarity: ${similarity.toFixed(3)}) - including reflection context`);
-        } else {
-          console.log(`[HeartbeatCheck ${persona.display_name}] Person updated but no drift (similarity: ${similarity.toFixed(3)})`);
-        }
-      }
-    }
-  }
-
   const promptData: HeartbeatCheckPromptData = {
     persona: {
       name: persona.display_name,
       traits: persona.traits,
       topics: persona.topics,
+      has_pending_update: !!persona.pending_update,
     },
     human: {
       topics: sortByEngagementGap(filteredHuman.topics).slice(0, 5),
@@ -281,7 +252,6 @@ export async function queueHeartbeatCheck(sm: StateManager, personaId: string, i
     },
     recent_history: contextHistory.slice(-10),
     inactive_days: inactiveDays,
-    drift_context: driftContext,
   };
 
   const prompt = buildHeartbeatCheckPrompt(promptData);

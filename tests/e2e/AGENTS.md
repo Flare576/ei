@@ -28,7 +28,7 @@ settings: {
 }
 ```
 
-This has bitten us twice. Don't let it bite you a third time.
+This has bitten us three times. Don't let it bite you a fourth time.
 
 ### 2. Mock Response Data Must Be Complete
 
@@ -37,7 +37,7 @@ The orchestrators have completion criteria. If your mock response doesn't satisf
 **Persona Generation requires:**
 - `short_description`
 - 3+ traits (each with `name`, `description`, `sentiment`, `strength`)
-- 3+ topics (each with `name`, `description`, `sentiment`, `exposure_current`, `exposure_desired`)
+- 3+ topics (each with `name`, `perspective`, `approach`, `personal_stake`, `sentiment`, `exposure_current`, `exposure_desired`) — **NOT** `description`
 
 ```typescript
 // ❌ WRONG - Will loop 4 times and fail
@@ -46,7 +46,7 @@ mockServer.setResponseForType("persona-generation", {
   content: JSON.stringify({
     short_description: "A philosopher",
     traits: [{ name: "Wise", description: "...", sentiment: 0.5, strength: 0.8 }],  // Only 1!
-    topics: [{ name: "Philosophy", description: "...", sentiment: 0.5, exposure_current: 0.5, exposure_desired: 0.7 }],  // Only 1!
+    topics: [{ name: "Philosophy", description: "...", sentiment: 0.5, exposure_current: 0.5, exposure_desired: 0.7 }],  // Only 1! Also wrong shape — topics use perspective/approach/personal_stake, not description
   }),
 });
 
@@ -56,14 +56,14 @@ mockServer.setResponseForType("persona-generation", {
   content: JSON.stringify({
     short_description: "A philosopher",
     traits: [
-      { name: "Wise", description: "...", sentiment: 0.5, strength: 0.8 },
-      { name: "Calm", description: "...", sentiment: 0.3, strength: 0.6 },
-      { name: "Patient", description: "...", sentiment: 0.4, strength: 0.7 },
+      { name: "Wise", description: "Deep thinker", sentiment: 0.5, strength: 0.8 },
+      { name: "Calm", description: "Unruffled under pressure", sentiment: 0.3, strength: 0.6 },
+      { name: "Patient", description: "Willing to wait for understanding", sentiment: 0.4, strength: 0.7 },
     ],
     topics: [
-      { name: "Philosophy", description: "...", sentiment: 0.5, exposure_current: 0.5, exposure_desired: 0.7 },
-      { name: "Ethics", description: "...", sentiment: 0.6, exposure_current: 0.3, exposure_desired: 0.6 },
-      { name: "Logic", description: "...", sentiment: 0.4, exposure_current: 0.4, exposure_desired: 0.5 },
+      { name: "Philosophy", perspective: "Truth is worth pursuing", approach: "Socratic questioning", personal_stake: "Meaning matters", sentiment: 0.5, exposure_current: 0.5, exposure_desired: 0.7 },
+      { name: "Ethics", perspective: "Actions have consequences", approach: "Consider all affected parties", personal_stake: "Character is built in small choices", sentiment: 0.6, exposure_current: 0.3, exposure_desired: 0.6 },
+      { name: "Logic", perspective: "Clear reasoning cuts through noise", approach: "Define terms, check premises", personal_stake: "Bad arguments cause real harm", sentiment: 0.4, exposure_current: 0.4, exposure_desired: 0.5 },
     ],
   }),
 });

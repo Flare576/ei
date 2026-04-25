@@ -15,6 +15,7 @@ interface PersonaPanelProps {
   onArchivePersona?: (personaId: string) => void;
   onDeletePersona?: (personaId: string, deleteData: boolean) => void;
   onEditPersona?: (personaId: string) => void;
+  onReflectionClick?: (personaId: string) => void;
   onShowArchived?: () => void;
   rooms?: RoomSummary[];
   activeRoomId?: string | null;
@@ -64,6 +65,7 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
   onArchivePersona,
   onDeletePersona,
   onEditPersona,
+  onReflectionClick,
   onShowArchived,
   rooms = [],
   activeRoomId = null,
@@ -331,6 +333,14 @@ export const PersonaPanel = forwardRef<PersonaPanelHandle, PersonaPanelProps>(fu
                 </div>
                 {persona.unread_count > 0 && !persona.is_paused && (
                   <span className="ei-persona-pill__badge">{persona.unread_count}</span>
+                )}
+                {persona.has_pending_update && (
+                  <span
+                    className="ei-persona-pill__reflection-badge"
+                    title="Pending reflection — talk it over"
+                    onClick={(e) => { e.stopPropagation(); onReflectionClick?.(persona.id); }}
+                    role="button"
+                  >✦</span>
                 )}
                 
                 {hoveredPersonaId === persona.id && (

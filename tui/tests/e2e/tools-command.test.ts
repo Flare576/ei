@@ -29,6 +29,10 @@ function createCheckpointWithToolkit(mockServerUrl: string) {
       settings: {
         auto_save_interval_ms: 999999999,
         default_model: "Mock LLM:mock-model",
+        ceremony: {
+          time: "09:00",
+          last_ceremony: timestamp,
+        },
         accounts: [
           {
             id: "mock-llm-account",

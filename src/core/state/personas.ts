@@ -259,14 +259,11 @@ export class PersonaState {
     return count;
   }
 
-  messages_getUnextractedForPersona(personaId: string, shortId: string, sinceTimestamp?: string): Message[] {
+  messages_getUnextractedForPersona(personaId: string, shortId: string): Message[] {
     const data = this.personas.get(personaId);
     if (!data) return [];
     return data.messages
-      .filter(m => {
-        if (sinceTimestamp && new Date(m.timestamp).getTime() < new Date(sinceTimestamp).getTime()) return false;
-        return !m.persona_extracted?.[shortId];
-      })
+      .filter(m => !m.persona_extracted?.[shortId])
       .map(m => ({ ...m }));
   }
 
