@@ -74,6 +74,8 @@
   background: var(--ei-bg-tertiary);
   border-radius: var(--ei-radius-md);
   overflow-x: auto;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .ei-message.human .ei-pre {

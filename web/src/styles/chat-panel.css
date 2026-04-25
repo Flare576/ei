@@ -41,6 +41,8 @@
   flex-direction: column;
   margin-bottom: var(--ei-spacing-md);
   max-width: 85%;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .ei-message-wrapper.human {
@@ -59,6 +61,8 @@
   flex-direction: row;
   align-items: flex-start;
   gap: var(--ei-spacing-xs);
+  width: 100%;
+  min-width: 0;
 }
 
 .ei-message.human {
@@ -77,6 +81,7 @@
   padding: var(--ei-spacing-sm) var(--ei-spacing-md);
   border-radius: var(--ei-radius-lg);
   word-wrap: break-word;
+  min-width: 0;
 }
 
 .ei-message.human .ei-message__bubble {
