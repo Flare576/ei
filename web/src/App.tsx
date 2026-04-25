@@ -931,8 +931,14 @@ function App() {
     await processor.updatePersona(reflectionPersonaId, {
       long_description: updatedIdentity.long_description,
       short_description: updatedIdentity.short_description,
-      traits: updatedIdentity.traits,
-      topics: updatedIdentity.topics,
+      traits: updatedIdentity.traits.map(t => ({
+        ...t,
+        id: t.id?.startsWith('pending-') ? crypto.randomUUID() : t.id,
+      })),
+      topics: updatedIdentity.topics.map(t => ({
+        ...t,
+        id: t.id?.startsWith('pending-') ? crypto.randomUUID() : t.id,
+      })),
       pending_update: undefined,
     });
     setShowReflectionModal(false);
