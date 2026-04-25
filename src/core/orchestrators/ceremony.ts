@@ -147,10 +147,8 @@ function queueExposurePhase(personaId: string, state: StateManager, options?: Ex
     console.log(`[ceremony:exposure] Queued human extraction scans (f:${unextractedFacts.length}, t:${unextractedTopics.length}, p:${unextractedPeople.length})`);
   }
 
-  const human = state.getHuman();
-  const lastCeremony = human.settings?.ceremony?.last_ceremony;
   const shortId = personaId.slice(0, 8);
-  const forPersonaTopics = state.messages_getUnextractedForPersona(personaId, shortId, lastCeremony ?? undefined);
+  const forPersonaTopics = state.messages_getUnextractedForPersona(personaId, shortId);
   if (forPersonaTopics.length > 0) {
     const personaTopicContext: PersonaTopicContext = {
       personaId,

@@ -909,8 +909,8 @@ export class StateManager {
     return result;
   }
 
-  messages_getUnextractedForPersona(personaId: string, shortId: string, sinceTimestamp?: string): Message[] {
-    return this.personaState.messages_getUnextractedForPersona(personaId, shortId, sinceTimestamp);
+  messages_getUnextractedForPersona(personaId: string, shortId: string): Message[] {
+    return this.personaState.messages_getUnextractedForPersona(personaId, shortId);
   }
 
   messages_markPersonaExtracted(personaId: string, messageIds: string[], shortId: string): number {
