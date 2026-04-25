@@ -189,6 +189,68 @@ fi
 echo ""
 
 # ------------------------------------------------------------------
+# 10. TUI commands — catch blocks with showNotification error must also log
+#     If a catch block surfaces an error to the user via showNotification(..., "error"),
+#     it must also call logger.error/warn so the full stack trace goes to tui.log.
+#     Silent notification-only catches bury the stack and make debugging impossible.
+#     Scope: tui/src/ (commands, util, context)
+# ------------------------------------------------------------------
+echo "TUI catch blocks — showNotification error must be paired with logger call"
+UNLOGGED_CATCHES=$(python3 << 'PYEOF'
+import re, os, sys
+
+src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tui", "src")
+violations = []
+
+for root, dirs, files in os.walk(src):
+    dirs[:] = [d for d in dirs if d != "node_modules"]
+    for fname in files:
+        if not fname.endswith((".ts", ".tsx")):
+            continue
+        fpath = os.path.join(root, fname)
+        with open(fpath) as f:
+            lines = f.readlines()
+
+        i = 0
+        while i < len(lines):
+            if re.search(r'\bcatch\s*\(', lines[i]):
+                catch_line = i + 1
+                brace_depth = 0
+                block_lines = []
+                j = i
+                while j < len(lines):
+                    for ch in lines[j]:
+                        if ch == '{': brace_depth += 1
+                        elif ch == '}': brace_depth -= 1
+                    block_lines.append(lines[j])
+                    if brace_depth < 0 or (brace_depth == 0 and j > i):
+                        break
+                    j += 1
+
+                block = "".join(block_lines)
+                has_notif_error = bool(re.search(r'showNotification\s*\(.*"error"', block))
+                has_logger = bool(re.search(r'logger\.(error|warn|debug|info)\s*\(', block))
+
+                if has_notif_error and not has_logger:
+                    rel = os.path.relpath(fpath, src)
+                    violations.append(f"  {rel}:{catch_line}")
+
+                i = j
+            i += 1
+
+for v in violations:
+    print(v)
+PYEOF
+)
+if [ -z "$UNLOGGED_CATCHES" ]; then
+  pass "all TUI catch blocks with showNotification error also call logger"
+else
+  fail "TUI catch blocks show error notification without logger call (stack trace lost)" "$UNLOGGED_CATCHES"
+fi
+
+echo ""
+
+# ------------------------------------------------------------------
 # Summary
 # ------------------------------------------------------------------
 if [ "$FAILURES" -eq 0 ]; then
