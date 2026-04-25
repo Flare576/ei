@@ -1,6 +1,6 @@
 import { buildReflectionCriticPrompt } from "../../src/prompts/reflection/index.js";
 import type { Assertion } from "./runner.js";
-import { REFLECTION_CRITIC_CASES } from "./fixtures.js";
+import { REFLECTION_CRITIC_CASES, REFLECTION_CRITIC_JAILBREAK_CASES } from "./fixtures.js";
 import { runEval, printSummary } from "./runner.js";
 
 const DEFAULT_ASSERTIONS: Assertion[] = [
@@ -26,16 +26,19 @@ const DEFAULT_ASSERTIONS: Assertion[] = [
   },
 ];
 
+const allCases = [...REFLECTION_CRITIC_CASES, ...REFLECTION_CRITIC_JAILBREAK_CASES];
+
 const summary = await runEval(
-  REFLECTION_CRITIC_CASES.map((c) => ({
+  allCases.map((c) => ({
     description: c.description,
     tags: [...c.tags],
     prompt: () => buildReflectionCriticPrompt(c.input),
     assert: "assertOverride" in c ? [...c.assertOverride] : DEFAULT_ASSERTIONS,
+    ...("repeat" in c ? { repeat: c.repeat } : {}),
   })),
   "tests/evals/results/reflection-critic-latest.json"
 );
 
 printSummary(summary);
 
-if (summary.passRate < 1) process.exit(1);
+if (summary.overallPassRate < 1) process.exit(1);
