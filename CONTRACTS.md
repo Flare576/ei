@@ -207,6 +207,30 @@ The StateManager is the **in-memory state store**. It holds all runtime data and
 - Serializing state to/from `StorageState` for persistence
 - Running load-time migrations (field renames, schema changes)
 
+### Two-Phase Initialization Pattern
+
+Startup runs two distinct phases. Understanding when to add to each matters:
+
+**Phase 1 — Migrations** (`StateManager.runMigrations()`, runs after state is loaded from storage)
+
+These transform existing data from an old shape to a new one. They fire only when persisted state is present, detect the old format by property presence, and are idempotent (safe to run repeatedly). Use this when:
+- A field is renamed or restructured (`verbal_response` → `content`)
+- A new field is backfilled from existing data (`learned_by` display names → IDs)
+- Data needs to be moved between types (old-style validated facts → topics)
+
+If you're writing a migration, `migrateLearnedOn()` is the reference pattern.
+
+**Phase 2 — Seeds** (`Processor.completeInitialization()`, runs after migrations)
+
+These ensure required structure exists with defaults. They always run — on first load, on every subsequent load — and skip gracefully if the structure is already present. Use this when:
+- A new required field or entity must exist for the system to function
+- The default value is meaningful regardless of prior state
+- The operation is purely additive (never transforms or removes)
+
+If you're writing a seed, `seedSettings()` or `bootstrapTools()` are the reference patterns.
+
+**The rule of thumb**: If you're fixing old data, it's a migration. If you're ensuring new structure exists, it's a seed. A migration that runs on a fresh install should be a no-op. A seed that runs on upgrade should be safe.
+
 **Relationship to other layers**:
 - Receives a `Storage` instance at `initialize()` time and delegates all persistence to it
 - Is called exclusively by the Processor — no other layer mutates state through StateManager
