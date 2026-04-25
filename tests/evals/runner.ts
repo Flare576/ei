@@ -5,7 +5,8 @@ export interface EvalCase {
   description: string;
   tags?: string[];
   prompt: () => { system: string; user: string };
-  assert: Assertion[];
+  assert?: Assertion[];
+  observe?: true;
 }
 
 export type Assertion =
@@ -109,24 +110,27 @@ export async function runEval(
 
     try {
       response = await callLLM(system, user);
-      assertionResults = await Promise.all(
-        c.assert.map(async (a) => {
-          const { passed, reason } = await runAssertion(a, response);
-          return { type: a.type, passed, reason };
-        })
-      );
+      if (!c.observe && c.assert) {
+        assertionResults = await Promise.all(
+          c.assert.map(async (a) => {
+            const { passed, reason } = await runAssertion(a, response);
+            return { type: a.type, passed, reason };
+          })
+        );
+      }
     } catch (err) {
-      assertionResults = c.assert.map((a) => ({
+      const msg = err instanceof Error ? err.message : String(err);
+      assertionResults = (c.assert ?? []).map((a) => ({
         type: a.type,
         passed: false,
-        reason: err instanceof Error ? err.message : String(err),
+        reason: msg,
       }));
     }
 
     results.push({
       description: c.description,
       tags: c.tags ?? [],
-      passed: assertionResults.every((a) => a.passed),
+      passed: c.observe ? true : assertionResults.every((a) => a.passed),
       response,
       assertions: assertionResults,
       durationMs: Date.now() - start,
@@ -149,17 +153,31 @@ export async function runEval(
 }
 
 export function printSummary(summary: EvalRunSummary): void {
-  const passed = summary.cases.filter((r) => r.passed).length;
-  const total = summary.cases.length;
+  const assertCases = summary.cases.filter((r) => r.assertions.length > 0);
+  const observeCases = summary.cases.filter((r) => r.assertions.length === 0);
+  const passed = assertCases.filter((r) => r.passed).length;
+
   console.log(`\nModel: ${summary.model}`);
   console.log(`Ran: ${summary.ranAt}`);
-  console.log(`Results: ${passed}/${total} passed (${Math.round(summary.passRate * 100)}%)\n`);
-  for (const r of summary.cases) {
-    const icon = r.passed ? "✓" : "✗";
-    console.log(`  ${icon} ${r.description} (${r.durationMs}ms)`);
-    for (const a of r.assertions) {
-      if (!a.passed) console.log(`      ↳ [${a.type}] ${a.reason}`);
+
+  if (assertCases.length > 0) {
+    console.log(`\nAssertions: ${passed}/${assertCases.length} passed\n`);
+    for (const r of assertCases) {
+      const icon = r.passed ? "✓" : "✗";
+      console.log(`  ${icon} ${r.description} (${r.durationMs}ms)`);
+      for (const a of r.assertions) {
+        if (!a.passed) console.log(`      ↳ [${a.type}] ${a.reason}`);
+      }
     }
   }
+
+  if (observeCases.length > 0) {
+    console.log(`\nObservations (${observeCases.length}):\n`);
+    for (const r of observeCases) {
+      console.log(`  ── ${r.description} (${r.durationMs}ms)`);
+      console.log(`     ${r.response.replace(/\n/g, "\n     ")}`);
+    }
+  }
+
   console.log();
 }
