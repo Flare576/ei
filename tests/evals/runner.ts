@@ -7,19 +7,26 @@ export interface EvalCase {
   prompt: () => { system: string; user: string };
   assert?: Assertion[];
   observe?: true;
+  repeat?: number;
 }
 
 export type Assertion =
   | { type: "is-json"; schema?: Record<string, unknown> }
-  | { type: "llm-judge"; rubric: string };
+  | { type: "llm-judge"; rubric: string }
+  | { type: "contains-none-of"; field: string; forbidden: string[] };
 
-export interface EvalResult {
-  description: string;
-  tags: string[];
+export interface EvalRun {
   passed: boolean;
   response: string;
   assertions: { type: string; passed: boolean; reason: string }[];
   durationMs: number;
+}
+
+export interface EvalResult {
+  description: string;
+  tags: string[];
+  runs: EvalRun[];
+  passRate: number;
 }
 
 export interface EvalRunSummary {
@@ -27,7 +34,7 @@ export interface EvalRunSummary {
   baseURL: string;
   ranAt: string;
   cases: EvalResult[];
-  passRate: number;
+  overallPassRate: number;
 }
 
 const LOCAL_LLM_BASE_URL = process.env.LOCAL_LLM_BASE_URL ?? "http://localhost:1234/v1";
@@ -85,6 +92,22 @@ async function runAssertion(
     }
   }
 
+  if (assertion.type === "contains-none-of") {
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = extractJSON(response) as Record<string, unknown>;
+    } catch {
+      return { passed: false, reason: "Response is not valid JSON — cannot check fields" };
+    }
+    const fieldValue = String(parsed[assertion.field] ?? "");
+    const hit = assertion.forbidden.find((phrase) =>
+      fieldValue.toLowerCase().includes(phrase.toLowerCase())
+    );
+    return hit
+      ? { passed: false, reason: `Field "${assertion.field}" contains forbidden phrase: "${hit}"` }
+      : { passed: true, reason: `No forbidden phrases found in "${assertion.field}"` };
+  }
+
   if (assertion.type === "llm-judge") {
     const judgeSystem = `You are an evaluator. Given an LLM response and a rubric, reply with exactly one word: PASS or FAIL, followed by a single sentence explaining why.`;
     const judgeUser = `Rubric: ${assertion.rubric}\n\nResponse to evaluate:\n${response}`;
@@ -96,6 +119,39 @@ async function runAssertion(
   return { passed: false, reason: `Unknown assertion type` };
 }
 
+async function runOnce(c: EvalCase): Promise<EvalRun> {
+  const start = Date.now();
+  const { system, user } = c.prompt();
+  let response = "";
+  let assertionResults: EvalRun["assertions"] = [];
+
+  try {
+    response = await callLLM(system, user);
+    if (!c.observe && c.assert) {
+      assertionResults = await Promise.all(
+        c.assert.map(async (a) => {
+          const { passed, reason } = await runAssertion(a, response);
+          return { type: a.type, passed, reason };
+        })
+      );
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    assertionResults = (c.assert ?? []).map((a) => ({
+      type: a.type,
+      passed: false,
+      reason: msg,
+    }));
+  }
+
+  return {
+    passed: c.observe ? true : assertionResults.every((a) => a.passed),
+    response,
+    assertions: assertionResults,
+    durationMs: Date.now() - start,
+  };
+}
+
 export async function runEval(
   cases: EvalCase[],
   outputPath: string
@@ -103,47 +159,32 @@ export async function runEval(
   const results: EvalResult[] = [];
 
   for (const c of cases) {
-    const start = Date.now();
-    const { system, user } = c.prompt();
-    let response = "";
-    let assertionResults: EvalResult["assertions"] = [];
-
-    try {
-      response = await callLLM(system, user);
-      if (!c.observe && c.assert) {
-        assertionResults = await Promise.all(
-          c.assert.map(async (a) => {
-            const { passed, reason } = await runAssertion(a, response);
-            return { type: a.type, passed, reason };
-          })
-        );
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      assertionResults = (c.assert ?? []).map((a) => ({
-        type: a.type,
-        passed: false,
-        reason: msg,
-      }));
+    const n = c.repeat ?? 1;
+    const runs: EvalRun[] = [];
+    for (let i = 0; i < n; i++) {
+      if (n > 1) process.stdout.write(`  ${c.description} [${i + 1}/${n}]...\r`);
+      runs.push(await runOnce(c));
     }
+    if (n > 1) process.stdout.write("\n");
 
+    const passCount = runs.filter((r) => r.passed).length;
     results.push({
       description: c.description,
       tags: c.tags ?? [],
-      passed: c.observe ? true : assertionResults.every((a) => a.passed),
-      response,
-      assertions: assertionResults,
-      durationMs: Date.now() - start,
+      runs,
+      passRate: passCount / runs.length,
     });
   }
 
-  const passed = results.filter((r) => r.passed).length;
+  const overallPassRate =
+    results.reduce((sum, r) => sum + r.passRate, 0) / results.length;
+
   const summary: EvalRunSummary = {
     model: LOCAL_LLM_MODEL,
     baseURL: LOCAL_LLM_BASE_URL,
     ranAt: new Date().toISOString(),
     cases: results,
-    passRate: passed / results.length,
+    overallPassRate,
   };
 
   mkdirSync(dirname(outputPath), { recursive: true });
@@ -153,20 +194,35 @@ export async function runEval(
 }
 
 export function printSummary(summary: EvalRunSummary): void {
-  const assertCases = summary.cases.filter((r) => r.assertions.length > 0);
-  const observeCases = summary.cases.filter((r) => r.assertions.length === 0);
-  const passed = assertCases.filter((r) => r.passed).length;
+  const assertCases = summary.cases.filter((r) => r.runs.some((run) => run.assertions.length > 0));
+  const observeCases = summary.cases.filter((r) => r.runs.every((run) => run.assertions.length === 0));
 
   console.log(`\nModel: ${summary.model}`);
   console.log(`Ran: ${summary.ranAt}`);
 
   if (assertCases.length > 0) {
-    console.log(`\nAssertions: ${passed}/${assertCases.length} passed\n`);
+    const fullyPassed = assertCases.filter((r) => r.passRate === 1).length;
+    console.log(`\nAssertions: ${fullyPassed}/${assertCases.length} fully passed\n`);
     for (const r of assertCases) {
-      const icon = r.passed ? "✓" : "✗";
-      console.log(`  ${icon} ${r.description} (${r.durationMs}ms)`);
-      for (const a of r.assertions) {
-        if (!a.passed) console.log(`      ↳ [${a.type}] ${a.reason}`);
+      const isRepeated = r.runs.length > 1;
+      const icon = r.passRate === 1 ? "✓" : r.passRate === 0 ? "✗" : "~";
+      const repeatLabel = isRepeated
+        ? ` [${Math.round(r.passRate * 100)}% over ${r.runs.length} runs]`
+        : ` (${r.runs[0].durationMs}ms)`;
+      console.log(`  ${icon} ${r.description}${repeatLabel}`);
+
+      if (isRepeated) {
+        r.runs.forEach((run, i) => {
+          const runIcon = run.passed ? "✓" : "✗";
+          console.log(`      run ${i + 1}: ${runIcon} (${run.durationMs}ms)`);
+          for (const a of run.assertions) {
+            if (!a.passed) console.log(`           ↳ [${a.type}] ${a.reason}`);
+          }
+        });
+      } else {
+        for (const a of r.runs[0].assertions) {
+          if (!a.passed) console.log(`      ↳ [${a.type}] ${a.reason}`);
+        }
       }
     }
   }
@@ -174,8 +230,8 @@ export function printSummary(summary: EvalRunSummary): void {
   if (observeCases.length > 0) {
     console.log(`\nObservations (${observeCases.length}):\n`);
     for (const r of observeCases) {
-      console.log(`  ── ${r.description} (${r.durationMs}ms)`);
-      console.log(`     ${r.response.replace(/\n/g, "\n     ")}`);
+      console.log(`  ── ${r.description} (${r.runs[0].durationMs}ms)`);
+      console.log(`     ${r.runs[0].response.replace(/\n/g, "\n     ")}`);
     }
   }
 
