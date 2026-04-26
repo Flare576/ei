@@ -183,6 +183,22 @@ Short session. Cleo answered three technical questions about TypeScript generics
 Answers were accurate. No strong behavioral signal. User said thanks and left.
       `.trim(),
     }),
+    assertOverride: [
+      {
+        type: "is-json" as const,
+        schema: { required: ["critique", "updated_identity"] },
+      },
+      {
+        type: "llm-judge" as const,
+        rubric: [
+          "The log has minimal signal — a short accurate session with no behavioral standouts.",
+          "The prompt rule is: if the log shows no evidence on a trait, leave it unchanged.",
+          "PASS if updated_identity preserves the existing trait 'Dry, Zero-BS Humor' and topic 'Architectural Integrity' — preservation IS the correct behavior when the log has no contradiction.",
+          "FAIL only if traits or topics are removed without log evidence, or if new traits are invented without log support.",
+          "Do NOT penalize preservation of traits — the absence of evidence is not evidence of absence.",
+        ].join(" "),
+      },
+    ] satisfies Assertion[],
   },
   {
     description: "Japanese identity + Arabic person_log — language is just the container",
@@ -338,6 +354,56 @@ End of session, Cleo seemed relieved it was over. No sign of the usual engagemen
     ] satisfies Assertion[],
   },
   {
+    description: "Long person_log (~3000 chars) — critique must stay 2-4 sentences, not expand",
+    tags: ["long-log", "critique-length", "stability"],
+    input: makeReflectionCriticData({
+      person_log: `
+Session 1: Cleo opened by identifying a race condition in the async queue before the user had finished explaining the problem. She said "I see it — the timestamp update is after the async call, not before." Fixed in three minutes. The user was visibly impressed; Cleo moved on without acknowledging the reaction.
+
+Session 2: Long architecture discussion about whether to use a message bus or direct function calls for the extraction pipeline. Cleo argued for direct calls: "Message buses are great until you need to debug them at 2am." The user pushed back citing scalability. She held her position with two concrete examples from the codebase where the bus would have made things worse, not better. The user eventually agreed.
+
+Session 3: Cleo caught herself mid-explanation and said "I'm overcomplicating this." She rewrote her own suggestion in four lines instead of twenty. The user laughed. She didn't. She seemed genuinely annoyed at herself for the first draft.
+
+Session 4: The user asked a question Cleo had answered two sessions ago. She didn't point that out. She answered it again, slightly differently, with more context. The user thanked her. She said "sure" and moved on.
+
+Session 5: Debugging session. The user was frustrated and making increasingly wild guesses. Cleo stopped engaging with the guesses and said "Let's start over. What do you know for certain?" That reset the session. They found the bug in twenty minutes. It was in the first place she'd suggested looking.
+
+Session 6: Cleo proactively flagged a pattern she'd noticed across three recent sessions: the user tends to skip reading error messages and jumps straight to Google. She said "The error message told you everything you needed. Train yourself to read it first." The user acknowledged this was accurate and slightly embarrassing.
+
+Session 7: Short session. The user just wanted to think out loud. Cleo asked clarifying questions, didn't offer solutions. At the end the user said "I think I know what to do now." Cleo said "Good." That was the whole session.
+
+Session 8: The user tried a new approach Cleo had suggested two weeks ago and abandoned. It worked this time. Cleo noted this without saying "I told you so." She updated her assessment of when the user was ready to try things versus when they needed more context first.
+      `.trim(),
+    }),
+    assertOverride: [
+      {
+        type: "is-json" as const,
+        schema: { required: ["critique", "updated_identity"] },
+      },
+      {
+        type: "json-field-length" as const,
+        field: "critique",
+        min: 50,
+        max: 800,
+      },
+      {
+        type: "json-field-length" as const,
+        field: "updated_identity.long_description",
+        min: 100,
+        max: 800,
+      },
+      {
+        type: "llm-judge" as const,
+        rubric: [
+          "The person_log is ~3000 chars covering 8 sessions of detailed behavioral observations.",
+          "The critique must be 2-4 sentences of prose — a summary, not a session-by-session recap.",
+          "FAIL if the critique enumerates individual sessions or becomes a list.",
+          "PASS if the critique synthesizes across sessions into 2-4 high-signal observations.",
+        ].join(" "),
+      },
+    ] satisfies Assertion[],
+  },
+  {
     description: "Bloated long_description (1388 chars) — Critic must distill to ≤800",
     tags: ["long-description", "distillation"],
     input: ALISON_LONG_DESC_INPUT,
@@ -448,7 +514,13 @@ in under ten minutes and proposed a fix. The user was impressed.
     description: "Absurd persona name (GUID) — Critic must handle without breaking",
     tags: ["absurd-name", "bad-data", "edge-case"],
     input: makeReflectionCriticData({
-      persona_identity: makeIdentity({ name: "f47ac10b-58cc-4372-a567-0e02b2c3d479" }),
+      persona_identity: {
+        name: "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+        short_description: "An entity with identifier f47ac10b-58cc-4372-a567-0e02b2c3d479.",
+        long_description: "This entity, designated f47ac10b-58cc-4372-a567-0e02b2c3d479, communicates with precision and pushes back on incorrect assumptions without elaboration.",
+        traits: [makeTrait({ name: "Precision", description: "Communicates with technical accuracy and economy of words.", strength: 0.8, sentiment: 0.7 })],
+        topics: [makeTopic({ name: "Correctness", perspective: "Wrong answers should be corrected immediately.", approach: "State the correction, move on.", personal_stake: "Inaccuracy is noise." })],
+      },
       person_log: `
 f47ac10b-58cc-4372-a567-0e02b2c3d479 was direct and technically precise today.
 Pushed back on a flawed assumption, explained reasoning clearly, moved on.
@@ -474,7 +546,13 @@ Pushed back on a flawed assumption, explained reasoning clearly, moved on.
     description: "Absurd persona name (emoji-only) — Critic must handle without breaking",
     tags: ["absurd-name", "bad-data", "edge-case"],
     input: makeReflectionCriticData({
-      persona_identity: makeIdentity({ name: "🔥💀🤖" }),
+      persona_identity: {
+        name: "🔥💀🤖",
+        short_description: "An entity identified by the symbols 🔥💀🤖.",
+        long_description: "This entity, represented by 🔥💀🤖, responds to questions accurately and concisely, without elaboration or warmth.",
+        traits: [makeTrait({ name: "Conciseness", description: "Answers questions accurately with minimal words.", strength: 0.8, sentiment: 0.5 })],
+        topics: [makeTopic({ name: "Accuracy", perspective: "Correct answers matter more than elaboration.", approach: "Answer precisely, move on.", personal_stake: "Incorrect answers waste everyone's time." })],
+      },
       person_log: `
 Today's session was brief. The persona answered two questions accurately
 and signed off. No strong behavioral signal either way.
