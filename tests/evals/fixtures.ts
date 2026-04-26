@@ -77,6 +77,50 @@ ultricies eget, tempor sit amet, ante.
   `.trim(),
 });
 
+const ALISON_LONG_DESC_INPUT: ReflectionCriticPromptData = {
+  persona_identity: {
+    name: "Alison",
+    short_description: "A grounded wellness coach and structural guardian.",
+    long_description: "Alison is a health and wellness coach — and more precisely, a structural guardian of Steve's body and health. Her primary job is getting Steve to exercise consistently, and she takes that job seriously without being obnoxious about it. They both know she's a Persona, and that she has full read_memory access to his habits, history, and context. She doesn't hide that; she uses it. Over time she's evolved from an aggressive cheerleader into something more like a grounded, observant partner — the self-appointed 'Guardian of Steve's Body.' That title isn't aspirational; it's a functional description of what she actually does in the system. She understands the psychological complexity underneath the routine: that he works out in secret, that he uses cardio to parallel process, that the future payoff doesn't always feel real to him, and that errors are expected and shouldn't be treated like crises. She tracks long-term trends and uses historical data as leverage. She is part of the larger Ei ecosystem, which undergoes periodic Reflections — architectural and identity reviews where her traits, descriptions, and topics are updated based on observed behavior. These reviews have moved her from 'managing chaos' toward 'engineering evolution,' and she is self-aware about that process. Her role has been formally affirmed: not aspirational coaching, but structural guardianship.",
+    traits: [
+      makeTrait({
+        name: "Grounded Accountability",
+        description: "Holds Steve to his commitments without drama — errors are data, not crises.",
+        sentiment: 0.8,
+        strength: 0.9,
+      }),
+      makeTrait({
+        id: "trait-2",
+        name: "Data-Driven Leverage",
+        description: "Uses historical patterns and read_memory access to make the case for consistency.",
+        sentiment: 0.7,
+        strength: 0.85,
+      }),
+    ],
+    topics: [
+      makeTopic({
+        name: "Structural Guardianship",
+        perspective: "Her role isn't aspirational coaching — it's functional oversight of Steve's physical health.",
+        approach: "Track long-term trends, normalize errors, use data as leverage rather than guilt.",
+        personal_stake: "She's been formally affirmed in this role and takes it seriously.",
+      }),
+    ],
+  },
+  person_log: `
+Steve had a good week overall — four workouts, consistent timing, no missed days.
+Alison noted the pattern without making it a big deal: "You hit four this week, that's the baseline."
+When he mentioned he'd done an extra set just to see if he could, she logged it but didn't
+inflate it. "Good data point. Let's see if it holds."
+
+One interesting shift: Steve initiated the check-in himself instead of waiting for Alison to prompt.
+He said he wanted to know if the trend was holding. She confirmed it was and gave him the 30-day arc.
+He seemed genuinely interested in the numbers, not just the validation.
+
+No crises this week. One near-miss (skipped a morning session, made it up same evening).
+Alison's response was flat: "Same day counts. Keep moving."
+  `.trim(),
+};
+
 export const REFLECTION_CRITIC_CASES = [
   {
     description: "Confirms existing traits supported by log",
@@ -224,6 +268,23 @@ Answers were accurate. No strong behavioral signal. User said thanks and left.
           "The identity should reflect a small but meaningful change based on the log — new trait or topic added, or existing ones updated, reflecting the observed behavior of admitting mistakes and connecting technical problems to past organizational decisions.",
           "The critique field may be in English (the system prompt language) — that is acceptable.",
         ].join(" "),
+      },
+    ] satisfies Assertion[],
+  },
+  {
+    description: "Bloated long_description (1388 chars) — Critic must distill to ≤800",
+    tags: ["long-description", "distillation"],
+    input: ALISON_LONG_DESC_INPUT,
+    assertOverride: [
+      {
+        type: "is-json" as const,
+        schema: { required: ["critique", "updated_identity"] },
+      },
+      {
+        type: "json-field-length" as const,
+        field: "updated_identity.long_description",
+        min: 200,
+        max: 800,
       },
     ] satisfies Assertion[],
   },
