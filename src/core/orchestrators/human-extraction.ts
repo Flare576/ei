@@ -67,6 +67,8 @@ export interface ExtractionContext {
 export interface ExtractionOptions {
   /** Ceremony phase number (1=Dedup, 2=Expose) */
   ceremony_progress?: number;
+  /** Set to 1 on scans queued while there is a Pending Reflection. */
+  reflection_progress?: number;
   /** Override model for extraction LLM calls */
   extraction_model?: string;
   /**
