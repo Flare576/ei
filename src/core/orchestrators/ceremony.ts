@@ -139,7 +139,10 @@ function queueExposurePhase(personaId: string, state: StateManager, options?: Ex
       messages_analyze: unextractedPeople,
       extraction_flag: "p",
     };
-    queuePersonScan(context, state, options);
+    const personScanOptions = persona.pending_update
+      ? { ...options, reflection_progress: 1 }
+      : options;
+    queuePersonScan(context, state, personScanOptions);
   }
   
   const totalUnextracted = unextractedFacts.length + unextractedTopics.length + unextractedPeople.length;
@@ -445,6 +448,35 @@ const REWRITE_DESCRIPTION_THRESHOLD = 750;
  * Phase 2 items enqueue at Normal priority, naturally processing before more
  * Low-priority Phase 1 scans.
  */
+/**
+ * Forces an unconditional, threshold-bypassing Person scan on Apply/Dismiss.
+ * Cannot be replaced by checkAndQueueHumanExtraction — that function gates on
+ * MIN(10, people_count) and would silently skip messages if the threshold isn't
+ * met, leaving reflection-era noise unprocessed and ungated.
+ */
+export function queueReflectionDrain(personaId: string, state: StateManager): void {
+  const persona = state.persona_getById(personaId);
+  if (!persona) return;
+
+  const allMessages = state.messages_get(personaId);
+  const unextractedPeople = state.messages_getUnextracted(personaId, "p");
+
+  if (unextractedPeople.length === 0) {
+    console.log(`[reflection:drain] No unextracted messages for ${persona.display_name} — drain complete`);
+    return;
+  }
+
+  const context: ExtractionContext = {
+    personaId,
+    personaDisplayName: persona.display_name,
+    messages_context: allMessages.filter(m => m.p === true),
+    messages_analyze: unextractedPeople,
+    extraction_flag: "p",
+  };
+  queuePersonScan(context, state, { reflection_progress: 1 });
+  console.log(`[reflection:drain] Queued Person scan for ${persona.display_name} (${unextractedPeople.length} messages) — clears on completion`);
+}
+
 export function queueRewritePhase(state: StateManager): void {
   const human = state.getHuman();
   const rewriteModel = human.settings?.rewrite_model;
