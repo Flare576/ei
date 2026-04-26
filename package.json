@@ -57,6 +57,7 @@
     "test:evals:topic-scan": "vite-node tests/evals/topic-scan.eval.ts",
     "test:evals:topic-match": "vite-node tests/evals/topic-match.eval.ts",
     "test:evals:topic-update": "vite-node tests/evals/topic-update.eval.ts",
+    "test:evals:topic-validate": "vite-node tests/evals/topic-validate.eval.ts",
     "test:all": "npm run test && npm run test:e2e && npm run test:e2e:tui",
     "typecheck": "tsc --noEmit",
     "web": "cd web && npm run dev",
