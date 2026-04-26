@@ -298,6 +298,15 @@ export async function handleHumanPersonScan(response: LLMResponse, state: StateM
       }
     }
 
+    if (matchedPerson && response.request.data.reflection_progress === 1) {
+      const linkedPersonaId = matchedPerson.identifiers
+        ?.find(i => i.type === "Ei Persona")?.value;
+      if (linkedPersonaId) {
+        console.log(`[handleHumanPersonScan] Skipping update for "${candidate.name}" — scan marked as reflection drain (reflection_progress=1)`);
+        continue;
+      }
+    }
+
     const matchResult: ItemMatchResult = { matched_guid: matchedPerson?.id ?? null };
     queuePersonUpdate(matchResult, {
       ...context,

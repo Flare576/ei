@@ -327,13 +327,7 @@ export const reflectCommand: Command = {
         topics: persona.pending_update!.topics,
       };
 
-      await ctx.ei.updatePersona(personaId, {
-        long_description: source.long_description,
-        short_description: source.short_description,
-        traits: source.traits,
-        topics: source.topics,
-        pending_update: undefined,
-      });
+      await ctx.ei.finalizeReflection(personaId, "apply", source);
 
       if (fs.existsSync(folderPath)) {
         fs.rmSync(folderPath, { recursive: true, force: true });
@@ -363,7 +357,7 @@ export const reflectCommand: Command = {
         return;
       }
 
-      await ctx.ei.updatePersona(personaId, { pending_update: undefined });
+      await ctx.ei.finalizeReflection(personaId, "dismiss");
       const folderPath = getReflectFolder(persona);
       if (fs.existsSync(folderPath)) {
         fs.rmSync(folderPath, { recursive: true, force: true });

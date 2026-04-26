@@ -233,7 +233,7 @@ export const personaCommand: Command = {
           }
 
           if (reviewResult.content === null) {
-            await ctx.ei.updatePersona(personaId, { pending_update: undefined });
+            await ctx.ei.finalizeReflection(personaId, "dismiss");
             ctx.showNotification(`Dismissed pending changes for ${persona.display_name}`, "info");
             return;
           }
@@ -267,17 +267,16 @@ export const personaCommand: Command = {
               return;
             }
 
-            await ctx.ei.updatePersona(personaId, { pending_update: undefined });
+            await ctx.ei.finalizeReflection(personaId, "dismiss");
             ctx.showNotification(`Dismissed pending changes for ${persona.display_name}`, "info");
             return;
           }
 
-          await ctx.ei.updatePersona(personaId, {
+          await ctx.ei.finalizeReflection(personaId, "apply", {
             long_description: previewParsed.long_description,
             short_description: previewParsed.short_description,
             traits: previewParsed.traits,
             topics: previewParsed.topics,
-            pending_update: undefined,
           });
           ctx.showNotification(`Applied changes to ${persona.display_name}`, "info");
           return;

@@ -928,19 +928,7 @@ function App() {
     topics: PersonaTopic[];
   }) => {
     if (!processor || !reflectionPersonaId) return;
-    await processor.updatePersona(reflectionPersonaId, {
-      long_description: updatedIdentity.long_description,
-      short_description: updatedIdentity.short_description,
-      traits: updatedIdentity.traits.map(t => ({
-        ...t,
-        id: t.id?.startsWith('pending-') ? crypto.randomUUID() : t.id,
-      })),
-      topics: updatedIdentity.topics.map(t => ({
-        ...t,
-        id: t.id?.startsWith('pending-') ? crypto.randomUUID() : t.id,
-      })),
-      pending_update: undefined,
-    });
+    await processor.finalizeReflection(reflectionPersonaId, "apply", updatedIdentity);
     setShowReflectionModal(false);
     setReflectionPersonaId(null);
     setReflectionPersona(null);
@@ -949,7 +937,7 @@ function App() {
 
   const handleReflectionDismiss = useCallback(async () => {
     if (!processor || !reflectionPersonaId) return;
-    await processor.updatePersona(reflectionPersonaId, { pending_update: undefined });
+    await processor.finalizeReflection(reflectionPersonaId, "dismiss");
     setShowReflectionModal(false);
     setReflectionPersonaId(null);
     setReflectionPersona(null);

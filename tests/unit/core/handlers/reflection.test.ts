@@ -226,7 +226,7 @@ describe("handleReflectionCritic", () => {
     expect(traits[1].id).toBeUndefined();
   });
 
-  it("updates the linked Person record's description with updated long_description", () => {
+  it("clears the linked Person record's description (zeroed for fresh evidence after reflection)", () => {
     seedPersona(state);
     seedPersonRecord(state);
 
@@ -237,7 +237,7 @@ describe("handleReflectionCritic", () => {
 
     expect(state.human_person_upsert).toHaveBeenCalledTimes(1);
     const upsertedPerson = (state.human_person_upsert as any).mock.calls[0][0];
-    expect(upsertedPerson.description).toContain("controlled experiment");
+    expect(upsertedPerson.description).toBe("");
     expect(upsertedPerson.id).toBe("person-beta");
   });
 

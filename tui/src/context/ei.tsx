@@ -80,6 +80,7 @@ export interface EiContextValue {
   deletePersona: (personaId: string) => Promise<void>;
   setContextBoundary: (personaId: string, timestamp: string | null) => Promise<void>;
   updatePersona: (personaId: string, updates: Partial<PersonaEntity>) => Promise<void>;
+  finalizeReflection: (personaId: string, action: "apply" | "dismiss", identity?: { short_description?: string; long_description: string; traits: NonNullable<PersonaEntity["pending_update"]>["traits"]; topics: NonNullable<PersonaEntity["pending_update"]>["topics"] }) => Promise<void>;
   getPersona: (personaId: string) => Promise<PersonaEntity | null>;
   resolvePersonaName: (nameOrAlias: string) => Promise<string | null>;
   getHuman: () => Promise<HumanEntity>;
@@ -357,6 +358,16 @@ export const EiProvider: ParentComponent = (props) => {
   const updatePersona = async (personaId: string, updates: Partial<PersonaEntity>) => {
     if (!processor) return;
     await processor.updatePersona(personaId, updates);
+    await refreshPersonas();
+  };
+
+  const finalizeReflection = async (
+    personaId: string,
+    action: "apply" | "dismiss",
+    identity?: { short_description?: string; long_description: string; traits: NonNullable<PersonaEntity["pending_update"]>["traits"]; topics: NonNullable<PersonaEntity["pending_update"]>["topics"] }
+  ) => {
+    if (!processor) return;
+    await processor.finalizeReflection(personaId, action, identity);
     await refreshPersonas();
   };
 
@@ -937,6 +948,7 @@ export const EiProvider: ParentComponent = (props) => {
     deletePersona,
     setContextBoundary,
     updatePersona,
+    finalizeReflection,
     getPersona,
     resolvePersonaName,
     getHuman,

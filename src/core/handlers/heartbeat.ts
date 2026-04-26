@@ -135,9 +135,9 @@ export function handleReflectionCritic(response: LLMResponse, state: StateManage
   if (personRecord) {
     state.human_person_upsert({
       ...personRecord,
-      description: result.updated_identity.long_description,
+      description: "",
     });
-    console.log(`[ReflectionCritic ${personaDisplayName}] Person record description replaced (was log, now distilled identity)`);
+    console.log(`[ReflectionCritic ${personaDisplayName}] Person record description cleared — ready for fresh evidence after reflection`);
   }
 
   const persona = state.persona_getById(personaId);
