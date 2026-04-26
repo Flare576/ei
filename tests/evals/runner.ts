@@ -13,7 +13,8 @@ export interface EvalCase {
 export type Assertion =
   | { type: "is-json"; schema?: Record<string, unknown> }
   | { type: "llm-judge"; rubric: string }
-  | { type: "contains-none-of"; field: string; forbidden: string[] };
+  | { type: "contains-none-of"; field: string; forbidden: string[] }
+  | { type: "json-field-length"; field: string; min?: number; max?: number };
 
 export interface EvalRun {
   passed: boolean;
@@ -90,6 +91,27 @@ async function runAssertion(
     } catch {
       return { passed: false, reason: "Response is not valid JSON" };
     }
+  }
+
+  if (assertion.type === "json-field-length") {
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = extractJSON(response) as Record<string, unknown>;
+    } catch {
+      return { passed: false, reason: "Response is not valid JSON — cannot check field length" };
+    }
+    const parts = assertion.field.split(".");
+    let value: unknown = parsed;
+    for (const part of parts) {
+      value = (value as Record<string, unknown>)?.[part];
+    }
+    const len = typeof value === "string" ? value.length : -1;
+    if (len === -1) return { passed: false, reason: `Field "${assertion.field}" is not a string` };
+    if (assertion.min !== undefined && len < assertion.min)
+      return { passed: false, reason: `Field "${assertion.field}" is ${len} chars, below minimum ${assertion.min}` };
+    if (assertion.max !== undefined && len > assertion.max)
+      return { passed: false, reason: `Field "${assertion.field}" is ${len} chars, above maximum ${assertion.max}` };
+    return { passed: true, reason: `Field "${assertion.field}" is ${len} chars (within ${assertion.min ?? 0}–${assertion.max ?? "∞"})` };
   }
 
   if (assertion.type === "contains-none-of") {
