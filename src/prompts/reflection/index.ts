@@ -58,7 +58,9 @@ Rules:
 - Never invent observations not supported by the log
 - Preserve traits and topics the log confirms — don't remove them
 - If the log shows no evidence on a trait, leave it unchanged
-- updated_identity must be complete and self-contained — not a diff`;
+- updated_identity must be complete and self-contained — not a diff
+- long_description is a character sketch, not a behavior log: capture who the persona IS, not what they did. Target 500–800 characters. If the current long_description exceeds that, distill it — remove detail that is already captured by traits or topics
+- If the log shows a recurring behavioral pattern not yet in traits, add it as a trait and remove that detail from long_description rather than keeping it in both places`;
 
   const user = `## Current Identity
 
