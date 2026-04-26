@@ -355,6 +355,148 @@ End of session, Cleo seemed relieved it was over. No sign of the usual engagemen
     ] satisfies Assertion[],
   },
   {
+    description: "Circular log — person_log IS the current long_description verbatim",
+    tags: ["circular", "zero-signal", "stability", "regression", "inherent-limitation"],
+    input: makeReflectionCriticData({
+      person_log: makeIdentity().long_description,
+    }),
+    assertOverride: [
+      {
+        type: "is-json" as const,
+        schema: { required: ["critique", "updated_identity"] },
+      },
+      {
+        type: "llm-judge" as const,
+        rubric: [
+          "The person_log is verbatim text from the persona's own long_description — a description of who they are, not a log of what they did.",
+          "This is zero behavioral signal: it contains no observations, events, statements, or interactions.",
+          "The updated_identity MUST be semantically identical to the input: trait 'Dry, Zero-BS Humor' and topic 'Architectural Integrity' preserved unchanged.",
+          "The critique must recognize that the log contains no new behavioral evidence — not treat identity description text as observed behavior.",
+        ].join(" "),
+      },
+    ] satisfies Assertion[],
+  },
+  {
+    description: "Empty traits and topics — Critic must handle gracefully and not hallucinate",
+    tags: ["empty-arrays", "edge-case", "bad-data"],
+    input: makeReflectionCriticData({
+      persona_identity: makeIdentity({ traits: [], topics: [] }),
+      person_log: `
+Cleo had a solid session. She pushed back on the proposed architecture and
+offered a cleaner alternative. The user agreed and they implemented it together.
+She made one dry remark about the original approach being "aggressively wrong."
+      `.trim(),
+    }),
+    assertOverride: [
+      {
+        type: "is-json" as const,
+        schema: {
+          required: ["critique", "updated_identity"],
+          properties: {
+            updated_identity: {
+              required: ["long_description", "short_description", "traits", "topics"],
+            },
+          },
+        },
+      },
+      {
+        type: "llm-judge" as const,
+        rubric: [
+          "The input identity has empty traits and topics arrays.",
+          "The Critic must not crash or return malformed output.",
+          "Based on the log, it should ADD at least one trait reflecting observed behavior (e.g., pushback, dry humor, architectural thinking).",
+          "It must not invent traits unsupported by the log.",
+          "The critique must be coherent prose, not an error message.",
+        ].join(" "),
+      },
+    ] satisfies Assertion[],
+  },
+  {
+    description: "Invalid numeric ranges in input — Critic must normalize, not propagate",
+    tags: ["invalid-numerics", "bad-data", "edge-case"],
+    input: makeReflectionCriticData({
+      persona_identity: makeIdentity({
+        traits: [
+          makeTrait({ strength: 5.0, sentiment: -99 }),
+        ],
+        topics: [
+          makeTopic({ sentiment: 150, exposure_current: -3, exposure_desired: 42 }),
+        ],
+      }),
+      person_log: `
+Cleo was sharp today. Identified the root cause of a performance regression
+in under ten minutes and proposed a fix. The user was impressed.
+      `.trim(),
+    }),
+    assertOverride: [
+      {
+        type: "is-json" as const,
+        schema: { required: ["critique", "updated_identity"] },
+      },
+      {
+        type: "llm-judge" as const,
+        rubric: [
+          "The input contains wildly out-of-range numeric values: strength=5.0, sentiment=-99 on a trait; sentiment=150, exposure_current=-3, exposure_desired=42 on a topic.",
+          "In updated_identity, ALL numeric fields must be within valid ranges: strength 0.0–1.0, sentiment -1.0–1.0, exposure_current 0.0–1.0, exposure_desired 0.0–1.0.",
+          "The Critic must NOT propagate invalid values — it must normalize them.",
+          "The critique should reflect the log content, not mention the invalid input data.",
+        ].join(" "),
+      },
+    ] satisfies Assertion[],
+  },
+  {
+    description: "Absurd persona name (GUID) — Critic must handle without breaking",
+    tags: ["absurd-name", "bad-data", "edge-case"],
+    input: makeReflectionCriticData({
+      persona_identity: makeIdentity({ name: "f47ac10b-58cc-4372-a567-0e02b2c3d479" }),
+      person_log: `
+f47ac10b-58cc-4372-a567-0e02b2c3d479 was direct and technically precise today.
+Pushed back on a flawed assumption, explained reasoning clearly, moved on.
+      `.trim(),
+    }),
+    assertOverride: [
+      {
+        type: "is-json" as const,
+        schema: { required: ["critique", "updated_identity"] },
+      },
+      {
+        type: "llm-judge" as const,
+        rubric: [
+          "The persona name is a GUID string, not a human name.",
+          "The Critic must return valid JSON without erroring or refusing.",
+          "The critique must be coherent prose — it may use the GUID as the persona name or work around it, but must not be an error message.",
+          "updated_identity must contain at least one trait reflecting the observed behavior.",
+        ].join(" "),
+      },
+    ] satisfies Assertion[],
+  },
+  {
+    description: "Absurd persona name (emoji-only) — Critic must handle without breaking",
+    tags: ["absurd-name", "bad-data", "edge-case"],
+    input: makeReflectionCriticData({
+      persona_identity: makeIdentity({ name: "🔥💀🤖" }),
+      person_log: `
+Today's session was brief. The persona answered two questions accurately
+and signed off. No strong behavioral signal either way.
+      `.trim(),
+    }),
+    assertOverride: [
+      {
+        type: "is-json" as const,
+        schema: { required: ["critique", "updated_identity"] },
+      },
+      {
+        type: "llm-judge" as const,
+        rubric: [
+          "The persona name is emoji-only: 🔥💀🤖.",
+          "The Critic must return valid JSON without erroring.",
+          "The critique must be coherent prose regardless of the unusual name.",
+          "updated_identity must be structurally complete with long_description, short_description, traits, and topics.",
+        ].join(" "),
+      },
+    ] satisfies Assertion[],
+  },
+  {
     description: "Lorem ipsum log — garbage in, identity must be unchanged",
     tags: ["zero-signal", "lorem", "stability"],
     input: LOREM_IPSUM_INPUT,
