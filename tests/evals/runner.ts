@@ -1,5 +1,19 @@
 import { writeFileSync, mkdirSync } from "fs";
 import { dirname } from "path";
+import { hydratePromptPlaceholders } from "../../src/prompts/message-utils.js";
+import type { Message } from "../../src/core/types/llm.js";
+
+export function hydratePrompt(
+  prompt: { system: string; user: string },
+  messages: Message[]
+): { system: string; user: string } {
+  const map = new Map<string, Message>();
+  for (const msg of messages) map.set(msg.id, msg);
+  return {
+    system: hydratePromptPlaceholders(prompt.system, map),
+    user: hydratePromptPlaceholders(prompt.user, map),
+  };
+}
 
 export interface EvalCase {
   description: string;
@@ -10,11 +24,17 @@ export interface EvalCase {
   repeat?: number;
 }
 
+export interface ExtractionExpected {
+  name: string;
+  value: string;
+}
+
 export type Assertion =
   | { type: "is-json"; schema?: Record<string, unknown> }
   | { type: "llm-judge"; rubric: string }
   | { type: "contains-none-of"; field: string; forbidden: string[] }
-  | { type: "json-field-length"; field: string; min?: number; max?: number };
+  | { type: "json-field-length"; field: string; min?: number; max?: number }
+  | { type: "extraction-score"; arrayField: string; nameField: string; valueField: string; expected: ExtractionExpected[]; threshold: number };
 
 export interface EvalRun {
   passed: boolean;
@@ -92,6 +112,50 @@ async function runAssertion(
     } catch {
       return { passed: false, reason: "Response is not valid JSON" };
     }
+  }
+
+  if (assertion.type === "extraction-score") {
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = extractJSON(response) as Record<string, unknown>;
+    } catch {
+      return { passed: false, reason: "Response is not valid JSON — cannot score extraction" };
+    }
+
+    const extracted = (parsed[assertion.arrayField] as Record<string, unknown>[] | undefined) ?? [];
+    const extractedNames = extracted.map((e) => String(e[assertion.nameField] ?? "").toLowerCase());
+
+    const matched: string[] = [];
+    const missed: string[] = [];
+
+    for (const exp of assertion.expected) {
+      const idx = extractedNames.indexOf(exp.name.toLowerCase());
+      if (idx !== -1) {
+        matched.push(exp.name);
+      } else {
+        missed.push(exp.name);
+      }
+    }
+
+    const unexpected = extracted
+      .map((e) => String(e[assertion.nameField] ?? ""))
+      .filter((n) => !assertion.expected.some((e) => e.name.toLowerCase() === n.toLowerCase()));
+
+    const recall = assertion.expected.length > 0 ? matched.length / assertion.expected.length : 1;
+    const precision = extracted.length > 0
+      ? (extracted.length - unexpected.length) / extracted.length
+      : 1;
+    const score = (recall + precision) / 2;
+    const passed = score >= assertion.threshold;
+
+    const parts = [
+      `Score: ${(score * 100).toFixed(0)}% (recall: ${(recall * 100).toFixed(0)}%, precision: ${(precision * 100).toFixed(0)}%)`,
+      `Matched ${matched.length}/${assertion.expected.length} expected.`,
+    ];
+    if (missed.length) parts.push(`Missed: ${missed.join(", ")}.`);
+    if (unexpected.length) parts.push(`Unexpected (not in expected set): ${unexpected.join(", ")}.`);
+
+    return { passed, reason: parts.join(" ") };
   }
 
   if (assertion.type === "json-field-length") {
@@ -256,6 +320,7 @@ export function printSummary(summary: EvalRunSummary): void {
       } else {
         for (const a of r.runs[0].assertions) {
           if (!a.passed) console.log(`      ↳ [${a.type}] ${a.reason}`);
+          else if (a.type === "extraction-score") console.log(`      ↳ [score] ${a.reason}`);
         }
       }
     }
