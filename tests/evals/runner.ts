@@ -36,6 +36,7 @@ export interface EvalRunSummary {
   ranAt: string;
   cases: EvalResult[];
   overallPassRate: number;
+  totalElapsedMs: number;
 }
 
 const LOCAL_LLM_BASE_URL = process.env.LOCAL_LLM_BASE_URL ?? "http://localhost:1234/v1";
@@ -179,15 +180,20 @@ export async function runEval(
   outputPath: string
 ): Promise<EvalRunSummary> {
   const results: EvalResult[] = [];
+  const suiteStart = Date.now();
 
   for (const c of cases) {
     const n = c.repeat ?? 1;
     const runs: EvalRun[] = [];
     for (let i = 0; i < n; i++) {
-      if (n > 1) process.stdout.write(`  ${c.description} [${i + 1}/${n}]...\r`);
+      const caseStart = Date.now();
+      const label = n > 1 ? `  ${c.description} [${i + 1}/${n}]` : `  ${c.description}`;
+      process.stdout.write(`${label}...\r`);
       runs.push(await runOnce(c));
+      const elapsed = ((Date.now() - caseStart) / 1000).toFixed(1);
+      process.stdout.write(`${label} (${elapsed}s)   \r`);
     }
-    if (n > 1) process.stdout.write("\n");
+    process.stdout.write("\n");
 
     const passCount = runs.filter((r) => r.passed).length;
     results.push({
@@ -200,6 +206,7 @@ export async function runEval(
 
   const overallPassRate =
     results.reduce((sum, r) => sum + r.passRate, 0) / results.length;
+  const totalElapsedMs = Date.now() - suiteStart;
 
   const summary: EvalRunSummary = {
     model: LOCAL_LLM_MODEL,
@@ -207,6 +214,7 @@ export async function runEval(
     ranAt: new Date().toISOString(),
     cases: results,
     overallPassRate,
+    totalElapsedMs,
   };
 
   mkdirSync(dirname(outputPath), { recursive: true });
@@ -219,8 +227,12 @@ export function printSummary(summary: EvalRunSummary): void {
   const assertCases = summary.cases.filter((r) => r.runs.some((run) => run.assertions.length > 0));
   const observeCases = summary.cases.filter((r) => r.runs.every((run) => run.assertions.length === 0));
 
+  const mins = Math.floor(summary.totalElapsedMs / 60000);
+  const secs = ((summary.totalElapsedMs % 60000) / 1000).toFixed(1);
+  const elapsed = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+
   console.log(`\nModel: ${summary.model}`);
-  console.log(`Ran: ${summary.ranAt}`);
+  console.log(`Ran: ${summary.ranAt} (total: ${elapsed})`);
 
   if (assertCases.length > 0) {
     const fullyPassed = assertCases.filter((r) => r.passRate === 1).length;
