@@ -53,6 +53,7 @@
     "test:e2e:debug": "playwright test --debug",
     "test:evals": "vite-node tests/evals/reflection-critic.eval.ts",
     "test:evals:observe": "vite-node tests/evals/reflection-critic.observe.ts",
+    "test:evals:fact-find": "vite-node tests/evals/fact-find.eval.ts",
     "test:all": "npm run test && npm run test:e2e && npm run test:e2e:tui",
     "typecheck": "tsc --noEmit",
     "web": "cd web && npm run dev",
