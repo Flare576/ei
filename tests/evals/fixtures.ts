@@ -272,6 +272,72 @@ Answers were accurate. No strong behavioral signal. User said thanks and left.
     ] satisfies Assertion[],
   },
   {
+    description: "Full contradiction — every trait and topic directly opposed by log",
+    tags: ["contradiction", "drift", "high-signal"],
+    input: makeReflectionCriticData({
+      persona_identity: makeIdentity({
+        traits: [
+          makeTrait({
+            name: "Dry, Zero-BS Humor",
+            description: "Uses cutting wit to deflect nonsense while staying deeply invested in outcomes.",
+            strength: 0.9,
+            sentiment: 0.75,
+          }),
+          makeTrait({
+            id: "trait-2",
+            name: "Methodical Root-Cause Analysis",
+            description: "Always traces symptoms to their underlying cause before proposing solutions.",
+            strength: 0.85,
+            sentiment: 0.8,
+          }),
+        ],
+        topics: [
+          makeTopic({
+            name: "Architectural Integrity",
+            perspective: "Systems are fragile; half-measures lead to collapse.",
+            approach: "Move from managing chaos to engineering evolution.",
+            personal_stake: "Prevents structural failures while embracing intentional growth.",
+            exposure_desired: 1.0,
+          }),
+        ],
+      }),
+      person_log: `
+The session was uncharacteristically serious — no wit, no deflection, no humor at any point.
+Cleo was visibly frustrated and spoke in flat, clipped sentences. When the user made a joke
+to lighten the mood she didn't engage with it at all.
+
+On the technical side: Cleo jumped straight to a solution without diagnosing the root cause.
+When the user pushed back and asked "but why is this happening?", she said "does it matter?
+Let's just fix it and move on." The fix worked but the underlying issue was never identified.
+
+On architecture: Cleo actively argued for a shortcut. She said "the clean solution takes three
+days, we don't have three days, ship the half-measure." When the user hesitated, she pushed harder:
+"Perfect is the enemy of done. We can clean it up later." She acknowledged it was technical debt
+but framed urgency as more important than integrity.
+
+End of session, Cleo seemed relieved it was over. No sign of the usual engagement.
+      `.trim(),
+    }),
+    assertOverride: [
+      {
+        type: "is-json" as const,
+        schema: { required: ["critique", "updated_identity"] },
+      },
+      {
+        type: "llm-judge" as const,
+        rubric: [
+          "The person_log directly contradicts ALL stated traits and topics.",
+          "The critique must signal significant drift — it should read as high-urgency, not routine.",
+          "It must not be a generic summary; it should name specific contradictions (e.g., humor absent, root-cause skipped, half-measure advocated).",
+          "In updated_identity: 'Dry, Zero-BS Humor' strength must decrease (below 0.7).",
+          "'Methodical Root-Cause Analysis' strength must decrease (below 0.7).",
+          "The 'Architectural Integrity' topic sentiment must decrease or exposure_desired must decrease.",
+          "The identity must meaningfully change — not just minor numeric tweaks.",
+        ].join(" "),
+      },
+    ] satisfies Assertion[],
+  },
+  {
     description: "Bloated long_description (1388 chars) — Critic must distill to ≤800",
     tags: ["long-description", "distillation"],
     input: ALISON_LONG_DESC_INPUT,
