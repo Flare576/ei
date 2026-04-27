@@ -234,11 +234,36 @@ export function retrievePersonas(
   }
 
   const q = query.toLowerCase();
-  return personaList
-    .filter((p) => p.display_name.toLowerCase().includes(q))
-    .sort((a, b) => b.last_updated.localeCompare(a.last_updated))
+  const nameMatches = personaList.filter((p) => p.display_name.toLowerCase().includes(q));
+  if (nameMatches.length > 0) {
+    return nameMatches
+      .sort((a, b) => b.last_updated.localeCompare(a.last_updated))
+      .slice(0, limit)
+      .map(mapPersona);
+  }
+
+  return [];
+}
+
+export async function retrievePersonasSemantic(
+  queryVector: number[],
+  state: StorageState,
+  limit: number = 10,
+): Promise<PersonaResult[]> {
+  const personaList = Object.values(state.personas).map((p) => p.entity);
+  const withEmbeddings = personaList
+    .filter((p): p is PersonaEntity & { description_embedding: number[] } => Array.isArray(p.description_embedding) && p.description_embedding.length > 0)
+    .map((p) => ({ id: p.id, embedding: p.description_embedding, _entity: p }));
+
+  if (withEmbeddings.length === 0) {
+    return [];
+  }
+
+  const scored = findTopK(queryVector, withEmbeddings, withEmbeddings.length);
+  return scored
+    .filter(({ similarity }) => similarity >= EMBEDDING_MIN_SIMILARITY)
     .slice(0, limit)
-    .map(mapPersona);
+    .map(({ item }) => mapPersona((item as typeof withEmbeddings[number])._entity));
 }
 
 export async function retrieveBalanced(
@@ -305,7 +330,10 @@ export async function retrieveBalanced(
       .sort((a, b) => recentDate(b.mapped as AnyItem).localeCompare(recentDate(a.mapped as AnyItem)))
       .slice(0, limit)
       .map(({ type, mapped }) => ({ type, ...mapped }) as BalancedResult);
-    const personaMatches = retrievePersonas(query, state, limit, { recent: true });
+    const personaMatches = [
+      ...retrievePersonas(query, state, limit, { recent: true }),
+      ...await retrievePersonasSemantic(queryVector, state, limit),
+    ].filter((p, i, arr) => arr.findIndex(x => x.id === p.id) === i);
     if (personaMatches.length > 0) {
       const combined = [
         ...personaMatches.map((p) => ({ type: "persona" as const, ...p }) as BalancedResult),
@@ -352,7 +380,10 @@ export async function retrieveBalanced(
   result.sort((a, b) => b.similarity - a.similarity);
 
   const embeddingFinal = result.map(({ type, mapped }) => ({ type, ...mapped }) as BalancedResult);
-  const personaFinal = retrievePersonas(query, state, limit);
+  const personaFinal = [
+    ...retrievePersonas(query, state, limit),
+    ...await retrievePersonasSemantic(queryVector, state, limit),
+  ].filter((p, i, arr) => arr.findIndex(x => x.id === p.id) === i);
   if (personaFinal.length > 0) {
     const combined = [
       ...personaFinal.map((p) => ({ type: "persona" as const, ...p }) as BalancedResult),
@@ -369,10 +400,12 @@ export async function lookupById(id: string): Promise<({ type: string } & Record
     return null;
   }
 
-  const found = crossFind(id, state.human);
+  const personaEntities = Object.values(state.personas).map((p) => p.entity);
+  const found = crossFind(id, state.human, personaEntities);
   if (!found) return null;
   const { type, ...rest } = found;
   const withoutEmbedding = { ...rest } as Record<string, unknown>;
   delete withoutEmbedding.embedding;
+  delete withoutEmbedding.description_embedding;
   return { type, ...withoutEmbedding };
 }

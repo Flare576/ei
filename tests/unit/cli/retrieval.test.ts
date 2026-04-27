@@ -11,10 +11,11 @@ vi.mock("../../../src/core/embedding-service.js", async (importOriginal) => {
     getEmbeddingService: () => ({
       embed: async () => new Array(384).fill(1),
     }),
+    findTopK: (actual as any).findTopK,
   };
 });
 
-import { retrieve, retrieveBalanced, resolveLinkedItems, lookupById, retrievePersonas, mapPersona } from "../../../src/cli/retrieval.js";
+import { retrieve, retrieveBalanced, resolveLinkedItems, lookupById, retrievePersonas, retrievePersonasSemantic, mapPersona } from "../../../src/cli/retrieval.js";
 
 const EMBEDDING = new Array(384).fill(1);
 const NOW = "2026-01-01T00:00:00Z";
@@ -49,7 +50,7 @@ function makeQuotes(count: number) {
   }));
 }
 
-function makePersonaEntities(count: number, namePrefix: string = "Persona") {
+function makePersonaEntities(count: number, namePrefix: string = "Persona", withEmbeddings = false) {
   return Array.from({ length: count }, (_, i) => ({
     id: `persona_${i}`,
     display_name: `${namePrefix} ${i}`,
@@ -63,6 +64,7 @@ function makePersonaEntities(count: number, namePrefix: string = "Persona") {
     is_archived: false,
     is_static: false,
     last_updated: NOW,
+    ...(withEmbeddings ? { description_embedding: EMBEDDING } : {}),
   }));
 }
 
@@ -85,10 +87,10 @@ function makePeople(count: number, identifiers: { type: string; value: string }[
 
 function createTestState(counts: {
   facts?: number; traits?: number; people?: number; topics?: number; quotes?: number;
-  personas?: number; personaNamePrefix?: string;
+  personas?: number; personaNamePrefix?: string; personaWithEmbeddings?: boolean;
   peopleIdentifiers?: { type: string; value: string }[][];
 }) {
-  const personaEntities = makePersonaEntities(counts.personas ?? 0, counts.personaNamePrefix);
+  const personaEntities = makePersonaEntities(counts.personas ?? 0, counts.personaNamePrefix, counts.personaWithEmbeddings);
   const personasRecord: Record<string, unknown> = {};
   for (const entity of personaEntities) {
     personasRecord[entity.id] = { entity, messages: [] };
@@ -415,5 +417,72 @@ describe("retrieveBalanced with personas", () => {
     const personaResult = result.find(r => r.type === "persona");
     expect(personaResult).toBeDefined();
     expect(personaResult!.type).toBe("persona");
+  });
+
+  it("finds personas via semantic search when query does not match display_name", async () => {
+    writeTestState(createTestState({ facts: 1, personas: 2, personaNamePrefix: "UniqueBot", personaWithEmbeddings: true }));
+    // Query that won't match "UniqueBot 0" or "UniqueBot 1" by name
+    const result = await retrieveBalanced("technical co-architect", 10);
+    const personaResults = result.filter(r => r.type === "persona");
+    // With identical embeddings (all 1s) and threshold 0.3, similarity will be 1.0 — should match
+    expect(personaResults.length).toBeGreaterThan(0);
+  });
+});
+
+describe("lookupById — persona records", () => {
+  it("finds a persona by ID", async () => {
+    writeTestState(createTestState({ personas: 2, personaNamePrefix: "TestAgent" }));
+    const result = await lookupById("persona_0");
+    expect(result).not.toBeNull();
+    expect(result!.type).toBe("persona");
+    expect(result!.id).toBe("persona_0");
+    expect(result!.display_name).toBe("TestAgent 0");
+  });
+
+  it("strips description_embedding from persona result", async () => {
+    writeTestState(createTestState({ personas: 1, personaWithEmbeddings: true }));
+    const result = await lookupById("persona_0");
+    expect(result).not.toBeNull();
+    expect(result).not.toHaveProperty("description_embedding");
+    expect(result).not.toHaveProperty("embedding");
+  });
+
+  it("returns null for persona ID when no personas exist", async () => {
+    writeTestState(createTestState({ facts: 1 }));
+    const result = await lookupById("persona_0");
+    expect(result).toBeNull();
+  });
+});
+
+describe("retrievePersonasSemantic", () => {
+  it("returns [] when no personas have embeddings", async () => {
+    const state = createTestState({ personas: 3 });
+    const queryVector = EMBEDDING;
+    const result = await retrievePersonasSemantic(queryVector, state as any, 10);
+    expect(result).toEqual([]);
+  });
+
+  it("returns matching personas when embeddings are present", async () => {
+    const state = createTestState({ personas: 2, personaWithEmbeddings: true });
+    const queryVector = EMBEDDING;
+    const result = await retrievePersonasSemantic(queryVector, state as any, 10);
+    expect(result.length).toBeGreaterThan(0);
+    expect(result[0]).toHaveProperty("display_name");
+    expect(result[0]).toHaveProperty("traits");
+    expect(result[0]).toHaveProperty("topics");
+  });
+
+  it("respects limit", async () => {
+    const state = createTestState({ personas: 5, personaWithEmbeddings: true });
+    const queryVector = EMBEDDING;
+    const result = await retrievePersonasSemantic(queryVector, state as any, 2);
+    expect(result.length).toBeLessThanOrEqual(2);
+  });
+
+  it("skips personas without embeddings", async () => {
+    const state = createTestState({ personas: 3, personaWithEmbeddings: false });
+    const queryVector = EMBEDDING;
+    const result = await retrievePersonasSemantic(queryVector, state as any, 10);
+    expect(result).toEqual([]);
   });
 });
