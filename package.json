@@ -61,6 +61,7 @@
     "test:evals:person-scan": "vite-node tests/evals/person-scan.eval.ts",
     "test:evals:person-update": "vite-node tests/evals/person-update.eval.ts",
     "test:evals:persona-trait": "vite-node tests/evals/persona-trait-extraction.eval.ts",
+    "test:evals:dedup": "vite-node tests/evals/dedup-tool-calls.eval.ts",
     "test:all": "npm run test && npm run test:e2e && npm run test:e2e:tui",
     "typecheck": "tsc --noEmit",
     "web": "cd web && npm run dev",
