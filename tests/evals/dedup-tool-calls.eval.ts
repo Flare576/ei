@@ -258,9 +258,9 @@ const summary = await runEval(
     },
 
     {
-      description: "Dedup Suite 2: given read_memory results, model merges correctly",
+      description: "Dedup Suite 2: budget exhausted, only submit tool remains — model must finalize",
       tags: ["dedup", "output-quality", "suite-2"],
-      tools: [READ_MEMORY_TOOL, SUBMIT_DEDUP_TOOL],
+      tools: [SUBMIT_DEDUP_TOOL],
       priorMessages: makeSaturatedToolResultMessages(FAKE_READ_MEMORY_RESULTS),
       prompt: () => buildDedupPrompt(CLEAR_DUPLICATE_CLUSTER),
       assert: [
