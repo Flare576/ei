@@ -33,6 +33,7 @@ export type Assertion =
   | { type: "is-json"; schema?: Record<string, unknown> }
   | { type: "llm-judge"; rubric: string }
   | { type: "contains-none-of"; field: string; forbidden: string[] }
+  | { type: "contains-all-of"; field: string; required: string[] }
   | { type: "json-field-length"; field: string; min?: number; max?: number }
   | { type: "extraction-score"; arrayField: string; nameField: string; valueField: string; expected: ExtractionExpected[]; threshold: number };
 
@@ -193,6 +194,34 @@ async function runAssertion(
     return hit
       ? { passed: false, reason: `Field "${assertion.field}" contains forbidden phrase: "${hit}"` }
       : { passed: true, reason: `No forbidden phrases found in "${assertion.field}"` };
+  }
+
+  if (assertion.type === "contains-all-of") {
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = extractJSON(response) as Record<string, unknown>;
+    } catch {
+      return { passed: false, reason: "Response is not valid JSON — cannot check fields" };
+    }
+    const parts = assertion.field.split(".");
+    let value: unknown = parsed;
+    for (const part of parts) {
+      const idx = parseInt(part, 10);
+      if (!isNaN(idx)) {
+        value = (value as unknown[])?.[idx];
+      } else {
+        value = (value as Record<string, unknown>)?.[part];
+      }
+    }
+    const fieldValue = Array.isArray(value)
+      ? value.map((v) => String(v ?? "")).join(" ").toLowerCase()
+      : String(value ?? "").toLowerCase();
+    const missing = assertion.required.filter(
+      (phrase) => !fieldValue.includes(phrase.toLowerCase())
+    );
+    return missing.length === 0
+      ? { passed: true, reason: `All ${assertion.required.length} required phrases found` }
+      : { passed: false, reason: `Missing from "${assertion.field}": ${missing.map((p) => `"${p}"`).join(", ")}` };
   }
 
   if (assertion.type === "llm-judge") {
