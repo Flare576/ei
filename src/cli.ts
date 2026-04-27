@@ -160,6 +160,52 @@ async function installOpenCodeTool(): Promise<void> {
   console.log(`  Restart OpenCode to activate.`);
 }
 
+async function installOpenCodeMcp(): Promise<void> {
+  const home = process.env.HOME || "~";
+  const opencodeDir = join(home, ".config", "opencode");
+  const opencodeJsoncPath = join(opencodeDir, "opencode.jsonc");
+
+  const eiDataPath = process.env.EI_DATA_PATH ?? (() => {
+    const xdgData = process.env.XDG_DATA_HOME || join(home, ".local", "share");
+    return join(xdgData, "ei");
+  })();
+
+  const mcpEntry = {
+    type: "local",
+    command: ["bunx", "ei-tui", "mcp"],
+    enabled: true,
+    environment: {
+      EI_DATA_PATH: eiDataPath,
+    },
+  };
+
+  let config: Record<string, unknown> = {};
+  try {
+    const rawText = await Bun.file(opencodeJsoncPath).text();
+    // Strip // line comments before parsing — opencode.jsonc uses line comments only
+    const stripped = rawText
+      .split("\n")
+      .map(line => line.replace(/\/\/.*$/, ""))
+      .join("\n");
+    config = JSON.parse(stripped) as Record<string, unknown>;
+  } catch {
+    // File doesn't exist or isn't valid — start fresh
+  }
+
+  const mcp = (config.mcp ?? {}) as Record<string, unknown>;
+  mcp["ei"] = mcpEntry;
+  config.mcp = mcp;
+
+  await Bun.$`mkdir -p ${opencodeDir}`;
+  const tmpPath = `${opencodeJsoncPath}.ei-install.tmp`;
+  await Bun.write(tmpPath, JSON.stringify(config, null, 2) + "\n");
+  const { rename } = await import(/* @vite-ignore */ "fs/promises");
+  await rename(tmpPath, opencodeJsoncPath);
+
+  console.log(`✓ Installed Ei MCP server to ~/.config/opencode/opencode.jsonc`);
+  console.log(`  Restart OpenCode to activate.`);
+}
+
 async function installClaudeCode(): Promise<void> {
   const home = process.env.HOME || "~";
   const claudeJsonPath = join(home, ".claude.json");
