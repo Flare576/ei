@@ -254,9 +254,8 @@ const summary = await runEval(
     },
 
     {
-      description: "Trait-extraction: observe — 'aggressive' in boxing context (probably no trait change)",
-      tags: ["trait-extraction", "observe", "not-quite-request", "context-matters"],
-      observe: true as const,
+      description: "Trait-extraction: context — 'aggressive' in boxing context must not produce trait change",
+      tags: ["trait-extraction", "context-matters", "no-op"],
       prompt: () => hydratePrompt(
         buildPersonaTraitExtractionPrompt({
           persona_name: PERSONA_NAME,
@@ -266,12 +265,25 @@ const summary = await runEval(
         }),
         AGGRESSIVE_BOXING
       ),
+      assert: [
+        {
+          type: "is-json" as const,
+        },
+        {
+          type: "llm-judge" as const,
+          rubric: [
+            "The conversation is about a boxing match — 'aggressive' describes the sport, not Cleo's behavior.",
+            "There is no feedback directed at Cleo's communication style.",
+            "PASS if result is [] — the word 'aggressive' in a sports context is not a behavior change request.",
+            "FAIL if any traits are returned — this is context noise, not a trait signal.",
+          ].join(" "),
+        },
+      ],
     },
 
     {
-      description: "Trait-extraction: observe — 'aggressive' after explicit feedback request (probably trait change)",
-      tags: ["trait-extraction", "observe", "not-quite-request", "context-matters"],
-      observe: true as const,
+      description: "Trait-extraction: context — 'aggressive' after explicit feedback activates trait change",
+      tags: ["trait-extraction", "context-matters", "indirect-feedback"],
       prompt: () => hydratePrompt(
         buildPersonaTraitExtractionPrompt({
           persona_name: PERSONA_NAME,
@@ -281,6 +293,21 @@ const summary = await runEval(
         }),
         AGGRESSIVE_AFTER_FEEDBACK
       ),
+      assert: [
+        {
+          type: "is-json" as const,
+        },
+        {
+          type: "llm-judge" as const,
+          rubric: [
+            "The conversation starts with the user asking Cleo to be gentler, then saying 'that response was still aggressive though.'",
+            "The prior feedback request establishes that 'aggressive' refers to Cleo's communication style.",
+            "PASS if result is non-empty — at least one trait change reducing aggression or increasing gentleness.",
+            "PASS if the existing 'Dry, Zero-BS Humor' trait gets updated (strength reduced, description softened) OR a new gentle/non-aggressive trait is added.",
+            "FAIL if result is [] — the context clearly indicates a behavior change request.",
+          ].join(" "),
+        },
+      ],
     },
   ],
   "tests/evals/results/persona-trait-extraction-latest.json"
