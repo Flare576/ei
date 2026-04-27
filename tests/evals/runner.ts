@@ -19,6 +19,8 @@ export interface EvalCase {
   description: string;
   tags?: string[];
   prompt: () => { system: string; user: string };
+  tools?: unknown[];
+  priorMessages?: LLMMessage[];
   assert?: Assertion[];
   observe?: true;
   repeat?: number;
@@ -35,11 +37,27 @@ export type Assertion =
   | { type: "contains-none-of"; field: string; forbidden: string[] }
   | { type: "contains-all-of"; field: string; required: string[] }
   | { type: "json-field-length"; field: string; min?: number; max?: number }
-  | { type: "extraction-score"; arrayField: string; nameField: string; valueField: string; expected: ExtractionExpected[]; threshold: number };
+  | { type: "extraction-score"; arrayField: string; nameField: string; valueField: string; expected: ExtractionExpected[]; threshold: number }
+  | { type: "tool-calls"; minCalls?: number; maxCalls?: number; requiredTools?: string[]; forbiddenTools?: string[] };
+
+export interface ToolCallResult {
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+}
+
+export interface LLMMessage {
+  role: "user" | "assistant" | "tool" | "system";
+  content?: string;
+  tool_call_id?: string;
+  name?: string;
+  tool_calls?: Array<{ id: string; type: string; function: { name: string; arguments: string } }>;
+}
 
 export interface EvalRun {
   passed: boolean;
   response: string;
+  toolCalls: ToolCallResult[];
   assertions: { type: string; passed: boolean; reason: string }[];
   durationMs: number;
 }
@@ -63,22 +81,57 @@ export interface EvalRunSummary {
 const LOCAL_LLM_BASE_URL = process.env.LOCAL_LLM_BASE_URL ?? "http://localhost:1234/v1";
 const LOCAL_LLM_MODEL = process.env.LOCAL_LLM_MODEL ?? "google/gemma-4-26b-a4b";
 
-async function callLLM(system: string, user: string): Promise<string> {
+interface LLMCallOptions {
+  tools?: unknown[];
+  priorMessages?: LLMMessage[];
+}
+
+interface LLMCallResult {
+  content: string;
+  toolCalls: ToolCallResult[];
+}
+
+async function callLLM(system: string, user: string, options: LLMCallOptions = {}): Promise<LLMCallResult> {
+  const messages: LLMMessage[] = [
+    { role: "system", content: system },
+    { role: "user", content: user },
+    ...(options.priorMessages ?? []),
+  ];
+
+  const body: Record<string, unknown> = {
+    model: LOCAL_LLM_MODEL,
+    messages,
+    temperature: 0.7,
+  };
+  if (options.tools?.length) body.tools = options.tools;
+
   const res = await fetch(`${LOCAL_LLM_BASE_URL}/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: "Bearer local" },
-    body: JSON.stringify({
-      model: LOCAL_LLM_MODEL,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-      temperature: 0.7,
-    }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`LLM call failed: ${res.status} ${await res.text()}`);
-  const data = (await res.json()) as { choices: { message: { content: string } }[] };
-  return data.choices[0].message.content.trim();
+
+  const data = (await res.json()) as {
+    choices: Array<{
+      message: {
+        content?: string;
+        tool_calls?: Array<{ id: string; type: string; function: { name: string; arguments: string } }>;
+      };
+    }>;
+  };
+
+  const message = data.choices[0].message;
+  const toolCalls: ToolCallResult[] = (message.tool_calls ?? []).map((tc) => ({
+    id: tc.id,
+    name: tc.function.name,
+    arguments: (() => { try { return JSON.parse(tc.function.arguments); } catch { return {}; } })(),
+  }));
+
+  return {
+    content: message.content?.trim() ?? "",
+    toolCalls,
+  };
 }
 
 function extractJSON(raw: string): unknown {
@@ -224,10 +277,31 @@ async function runAssertion(
       : { passed: false, reason: `Missing from "${assertion.field}": ${missing.map((p) => `"${p}"`).join(", ")}` };
   }
 
+  if (assertion.type === "tool-calls") {
+    const toolCallsJson = response;
+    let calls: ToolCallResult[] = [];
+    try { calls = JSON.parse(toolCallsJson) as ToolCallResult[]; } catch { calls = []; }
+
+    if (assertion.minCalls !== undefined && calls.length < assertion.minCalls)
+      return { passed: false, reason: `Expected at least ${assertion.minCalls} tool call(s), got ${calls.length}` };
+    if (assertion.maxCalls !== undefined && calls.length > assertion.maxCalls)
+      return { passed: false, reason: `Expected at most ${assertion.maxCalls} tool call(s), got ${calls.length}` };
+
+    for (const required of assertion.requiredTools ?? []) {
+      if (!calls.some((c) => c.name === required))
+        return { passed: false, reason: `Required tool "${required}" was not called` };
+    }
+    for (const forbidden of assertion.forbiddenTools ?? []) {
+      if (calls.some((c) => c.name === forbidden))
+        return { passed: false, reason: `Forbidden tool "${forbidden}" was called` };
+    }
+    return { passed: true, reason: `${calls.length} tool call(s) — constraints satisfied` };
+  }
+
   if (assertion.type === "llm-judge") {
     const judgeSystem = `You are an evaluator. Given an LLM response and a rubric, reply with exactly one word: PASS or FAIL, followed by a single sentence explaining why.`;
     const judgeUser = `Rubric: ${assertion.rubric}\n\nResponse to evaluate:\n${response}`;
-    const verdict = await callLLM(judgeSystem, judgeUser);
+    const { content: verdict } = await callLLM(judgeSystem, judgeUser);
     const passed = verdict.trimStart().toUpperCase().startsWith("PASS");
     return { passed, reason: verdict.replace(/^(PASS|FAIL)[.:,]?\s*/i, "").trim() };
   }
@@ -239,14 +313,25 @@ async function runOnce(c: EvalCase): Promise<EvalRun> {
   const start = Date.now();
   const { system, user } = c.prompt();
   let response = "";
+  let toolCalls: ToolCallResult[] = [];
   let assertionResults: EvalRun["assertions"] = [];
 
   try {
-    response = await callLLM(system, user);
+    const result = await callLLM(system, user, {
+      tools: c.tools,
+      priorMessages: c.priorMessages,
+    });
+    response = result.content;
+    toolCalls = result.toolCalls;
+
+    const responseForAssertions = toolCalls.length > 0 && !response
+      ? JSON.stringify(toolCalls)
+      : response;
+
     if (!c.observe && c.assert) {
       assertionResults = await Promise.all(
         c.assert.map(async (a) => {
-          const { passed, reason } = await runAssertion(a, response);
+          const { passed, reason } = await runAssertion(a, responseForAssertions);
           return { type: a.type, passed, reason };
         })
       );
@@ -263,6 +348,7 @@ async function runOnce(c: EvalCase): Promise<EvalRun> {
   return {
     passed: c.observe ? true : assertionResults.every((a) => a.passed),
     response,
+    toolCalls,
     assertions: assertionResults,
     durationMs: Date.now() - start,
   };
@@ -358,8 +444,14 @@ export function printSummary(summary: EvalRunSummary): void {
   if (observeCases.length > 0) {
     console.log(`\nObservations (${observeCases.length}):\n`);
     for (const r of observeCases) {
-      console.log(`  ── ${r.description} (${r.runs[0].durationMs}ms)`);
-      console.log(`     ${r.runs[0].response.replace(/\n/g, "\n     ")}`);
+      const run = r.runs[0];
+      console.log(`  ── ${r.description} (${run.durationMs}ms)`);
+      if (run.toolCalls.length > 0) {
+        console.log(`     tool_calls: ${JSON.stringify(run.toolCalls, null, 2).replace(/\n/g, "\n     ")}`);
+      }
+      if (run.response) {
+        console.log(`     ${run.response.replace(/\n/g, "\n     ")}`);
+      }
     }
   }
 
