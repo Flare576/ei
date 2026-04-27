@@ -81,6 +81,35 @@ export interface EvalRunSummary {
 const LOCAL_LLM_BASE_URL = process.env.LOCAL_LLM_BASE_URL ?? "http://localhost:1234/v1";
 const LOCAL_LLM_MODEL = process.env.LOCAL_LLM_MODEL ?? "google/gemma-4-26b-a4b";
 
+function resolveProvider(): { baseURL: string; model: string; authHeader: string } {
+  const provider = process.env.EVAL_PROVIDER;
+  if (provider === "anthropic") {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) throw new Error("EVAL_PROVIDER=anthropic requires ANTHROPIC_API_KEY");
+    return {
+      baseURL: "https://api.anthropic.com/v1",
+      model: process.env.EVAL_MODEL ?? "claude-opus-4-6-20251201",
+      authHeader: `x-api-key: ${apiKey}`,
+    };
+  }
+  if (provider === "openai") {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) throw new Error("EVAL_PROVIDER=openai requires OPENAI_API_KEY");
+    return {
+      baseURL: "https://api.openai.com/v1",
+      model: process.env.EVAL_MODEL ?? "gpt-4o",
+      authHeader: `Bearer ${apiKey}`,
+    };
+  }
+  return {
+    baseURL: LOCAL_LLM_BASE_URL,
+    model: process.env.EVAL_MODEL ?? LOCAL_LLM_MODEL,
+    authHeader: "Bearer local",
+  };
+}
+
+const PROVIDER = resolveProvider();
+
 interface LLMCallOptions {
   tools?: unknown[];
   priorMessages?: LLMMessage[];
@@ -98,16 +127,24 @@ async function callLLM(system: string, user: string, options: LLMCallOptions = {
     ...(options.priorMessages ?? []),
   ];
 
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (PROVIDER.authHeader.startsWith("x-api-key:")) {
+    headers["x-api-key"] = PROVIDER.authHeader.slice("x-api-key: ".length);
+    headers["anthropic-version"] = "2023-06-01";
+  } else {
+    headers["Authorization"] = PROVIDER.authHeader;
+  }
+
   const body: Record<string, unknown> = {
-    model: LOCAL_LLM_MODEL,
+    model: PROVIDER.model,
     messages,
     temperature: 0.7,
   };
   if (options.tools?.length) body.tools = options.tools;
 
-  const res = await fetch(`${LOCAL_LLM_BASE_URL}/chat/completions`, {
+  const res = await fetch(`${PROVIDER.baseURL}/chat/completions`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: "Bearer local" },
+    headers,
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`LLM call failed: ${res.status} ${await res.text()}`);
@@ -280,7 +317,10 @@ async function runAssertion(
   if (assertion.type === "tool-calls") {
     const toolCallsJson = response;
     let calls: ToolCallResult[] = [];
-    try { calls = JSON.parse(toolCallsJson) as ToolCallResult[]; } catch { calls = []; }
+    try {
+      const parsed = JSON.parse(toolCallsJson);
+      calls = Array.isArray(parsed) ? parsed as ToolCallResult[] : [];
+    } catch { calls = []; }
 
     if (assertion.minCalls !== undefined && calls.length < assertion.minCalls)
       return { passed: false, reason: `Expected at least ${assertion.minCalls} tool call(s), got ${calls.length}` };
@@ -388,8 +428,8 @@ export async function runEval(
   const totalElapsedMs = Date.now() - suiteStart;
 
   const summary: EvalRunSummary = {
-    model: LOCAL_LLM_MODEL,
-    baseURL: LOCAL_LLM_BASE_URL,
+    model: PROVIDER.model,
+    baseURL: PROVIDER.baseURL,
     ranAt: new Date().toISOString(),
     cases: results,
     overallPassRate,
