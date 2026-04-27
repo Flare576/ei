@@ -84,81 +84,6 @@ Examples:
 `);
 }
 
-function buildOpenCodeToolContent(): string {
-  const lines = [
-    'import { tool } from "@opencode-ai/plugin"',
-    '',
-    'export default tool({',
-    '  description: [',
-    '    "Search the user\'s Ei knowledge base \u2014 a persistent memory store built from conversations.",',
-    '    "Returns facts, people, topics of interest, and quotes.",',
-    '    "Use this to recall anything about the user: preferences, relationships, or past discussions.",',
-    '    "Results include entity IDs that can be passed back with lookup=true to get full detail.",',
-    '  ].join(" "),',
-    '  args: {',
-    '    query: tool.schema.string().optional().describe(',
-    '      "Search text, or an entity ID when lookup=true. Supports natural language. Omit to browse by recency."',
-    '    ),',
-    '    type: tool.schema',
-    '      .enum(["facts", "people", "topics", "quotes", "personas"])',
-    '      .optional()',
-    '      .describe(',
-    '        "Filter to a specific data type. Omit to search all types (balanced across all 4).",',
-    '      ),',
-    '    persona: tool.schema',
-    '      .string()',
-    '      .optional()',
-    '      .describe(',
-    '        "Filter to entities a specific persona has learned about. Use the persona display name.",',
-    '      ),',
-    '    limit: tool.schema',
-    '      .number()',
-    '      .int()',
-    '      .positive()',
-    '      .default(10)',
-    '      .optional()',
-    '      .describe("Maximum number of results to return. Default: 10."),',
-    '    lookup: tool.schema',
-    '      .boolean()',
-    '      .optional()',
-    '      .describe(',
-    '        "If true, treat query as an entity ID and return that single entity in full detail."',
-    '      ),',
-    '    recent: tool.schema',
-    '      .boolean()',
-    '      .optional()',
-    '      .describe(',
-    '        "If true, sort by most recently mentioned. Can be combined with persona or query."',
-    '      ),',
-    '  },',
-    '  async execute(args) {',
-    '    const cmd: string[] = ["ei"];',
-    '    if (args.lookup) {',
-    '      cmd.push("--id", args.query ?? "");',
-    '    } else {',
-    '      if (args.type) cmd.push(args.type);',
-    '      if (args.persona) cmd.push("--persona", args.persona);',
-    '      if (args.recent) cmd.push("--recent");',
-    '      if (args.limit && args.limit !== 10) cmd.push("-n", String(args.limit));',
-    '      if (args.query) cmd.push(args.query);',
-    '    }',
-    '    return Bun.$`${cmd}`.text();',
-    '  },',
-    '})',
-    '',
-  ];
-  return lines.join('\n');
-}
-
-async function installOpenCodeTool(): Promise<void> {
-  const toolsDir = join(process.env.HOME || "~", ".config", "opencode", "tools");
-  const toolPath = join(toolsDir, "ei.ts");
-
-  await Bun.$`mkdir -p ${toolsDir}`;
-  await Bun.write(toolPath, buildOpenCodeToolContent());
-  console.log(`✓ Installed Ei tool to ${toolPath}`);
-  console.log(`  Restart OpenCode to activate.`);
-}
 
 async function installOpenCodeMcp(): Promise<void> {
   const home = process.env.HOME || "~";
@@ -303,7 +228,7 @@ async function main(): Promise<void> {
   }
 
   if (args[0] === "--install") {
-    await installOpenCodeTool();
+    await installOpenCodeMcp();
     await installMcpClients();
     process.exit(0);
   }
