@@ -2,6 +2,7 @@ import { buildTopicUpdatePrompt } from "../../src/prompts/human/topic-update.js"
 import type { Message } from "../../src/core/types/llm.js";
 import type { Topic } from "../../src/core/types.js";
 import { runEval, printSummary, hydratePrompt } from "./runner.js";
+import type { Assertion } from "./runner.js";
 
 const PERSONA_NAME = "Aria";
 
@@ -86,6 +87,11 @@ const summary = await runEval(
           schema: { required: ["description"] },
         },
         {
+          type: "contains-all-of" as const,
+          field: "description",
+          required: ["200", "install", "finish"],
+        },
+        {
           type: "llm-judge" as const,
           rubric: [
             "The existing topic says Tempo is published on npm. The conversation adds: 200 installs, Steve's ambivalence about growth, the tension between feature-adding and keeping it 'finished'.",
@@ -95,7 +101,7 @@ const summary = await runEval(
             "FAIL if the description exceeds 3-4 sentences (synthesis, not accumulation).",
           ].join(" "),
         },
-      ],
+      ] satisfies Assertion[],
     },
     {
       description: "Topic-update: no signal — unrelated conversation returns {}",

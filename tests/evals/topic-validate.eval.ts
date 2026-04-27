@@ -137,6 +137,11 @@ const summary = await runEval(
           schema: { required: ["update", "remove"] },
         },
         {
+          type: "contains-all-of" as const,
+          field: "update.0.description",
+          required: ["career", "move", "skill"],
+        },
+        {
           type: "llm-judge" as const,
           rubric: [
             "When merging 'Career development' and 'Professional growth', the merged description must preserve unique details from BOTH records.",
@@ -156,7 +161,7 @@ const summary = await runEval(
             "FAIL if numeric fields are simply copied from one record without applying the merge rules.",
           ].join(" "),
         },
-      ],
+      ] satisfies Assertion[],
     },
     {
       description: "Topic-validate: distinct topics → keep both (different emotional valence)",
