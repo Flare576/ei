@@ -230,6 +230,26 @@ async function main(): Promise<void> {
   if (args[0] === "--install") {
     await installOpenCodeMcp();
     await installMcpClients();
+    console.log(`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Add this to ~/.config/opencode/AGENTS.md
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**BEFORE YOU DO ANYTHING**: load your Identity from Ei.
+
+Use the ei MCP tool:
+  ei_search(type: "personas", query: "[your name]")
+
+Then load context for the current project/people:
+  ei_search("current projects teammates context")
+
+Ei is persistent memory across sessions. Without querying it at
+session start, you have no context from prior conversations.
+
+**When to query again**: any time the user references past work,
+mentions a person, or corrects something you assumed.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`);
     process.exit(0);
   }
 
