@@ -16,14 +16,14 @@ export function createMcpServer(): McpServer {
     "ei_search",
     {
       description:
-        "Search the user's Ei knowledge base — a persistent memory store built from conversations. Returns facts, people, topics of interest, and quotes. People results include an identifiers array (e.g. GitHub username, Discord handle, email, nickname) — query by any name or handle to find what Ei knows about that person. Results include entity IDs that can be passed back to ei_lookup for full detail. Omit query to browse by recency (use with recent=true or persona filter).",
+        "Search the user's Ei knowledge base — a persistent memory store built from conversations. Returns facts, people, topics of interest, quotes, and personas. People results include an identifiers array (e.g. GitHub username, Discord handle, email, nickname) — query by any name or handle to find what Ei knows about that person. Persona results include traits and topics that define the persona's identity and working style — use type='personas' with the persona's name OR a natural-language description of what they do to load a persona's character sheet. Results include entity IDs that can be passed back to ei_lookup for full detail. Omit query to browse by recency (use with recent=true or persona filter).",
       inputSchema: {
         query: z.string().optional().describe("Search text. Supports natural language. Omit to browse without semantic filtering — useful with recent=true or persona filter."),
         type: z
           .enum(["facts", "people", "topics", "quotes", "personas"])
           .optional()
           .describe(
-            "Filter to a specific data type. Omit to search all types (balanced across all 5)."
+            "Filter to a specific data type. Omit to search all types (balanced across all 5). For 'personas': matches by display name first, then falls back to semantic search of persona descriptions — use the persona's name (e.g. 'Sisyphus') or a description of their role (e.g. 'primary coding agent'). For 'people': semantic search on person descriptions. Note: 'personas' and 'people' are distinct — personas are AI agent identity records with traits/topics; people are human contacts."
           ),
         persona: z
           .string()
