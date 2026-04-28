@@ -18,7 +18,7 @@ export function hydratePrompt(
 export interface EvalCase {
   description: string;
   tags?: string[];
-  prompt: () => { system: string; user: string };
+  prompt: () => { system: string; user: string } | Promise<{ system: string; user: string }>;
   tools?: unknown[];
   priorMessages?: LLMMessage[];
   assert?: Assertion[];
@@ -351,7 +351,7 @@ async function runAssertion(
 
 async function runOnce(c: EvalCase): Promise<EvalRun> {
   const start = Date.now();
-  const { system, user } = c.prompt();
+  const { system, user } = await c.prompt();
   let response = "";
   let toolCalls: ToolCallResult[] = [];
   let assertionResults: EvalRun["assertions"] = [];
@@ -398,6 +398,21 @@ export async function runEval(
   cases: EvalCase[],
   outputPath: string
 ): Promise<EvalRunSummary> {
+  const filterArg = process.argv.find(a => a.startsWith("--filter="))?.slice("--filter=".length);
+  const activeFilter = filterArg ?? process.env.EVAL_FILTER;
+  if (activeFilter) {
+    const needle = activeFilter.toLowerCase();
+    cases = cases.filter(c =>
+      c.description.toLowerCase().includes(needle) ||
+      (c.tags ?? []).some(t => t.toLowerCase().includes(needle))
+    );
+    if (cases.length === 0) {
+      console.error(`No eval cases matched filter: "${activeFilter}"`);
+      process.exit(1);
+    }
+    console.log(`Filter "${activeFilter}" matched ${cases.length} case(s)`);
+  }
+
   const results: EvalResult[] = [];
   const suiteStart = Date.now();
 
