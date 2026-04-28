@@ -73,7 +73,8 @@ function queueRoomTopicScan(
   messages_context: Message[],
   messages_analyze: Message[],
   state: StateManager,
-  participantContext: ParticipantContext
+  participantContext: ParticipantContext,
+  ceremony_progress?: number
 ): void {
   const context: HumanExtractionContext = {
     personaId: roomId,
@@ -105,6 +106,7 @@ function queueRoomTopicScan(
         personaId: (state.getRoom(roomId)?.persona_ids ?? []).join("|"),
         personaDisplayName: roomDisplayName,
         message_ids_to_mark: chunk.messages_analyze.map(m => m.id),
+        ...(ceremony_progress !== undefined ? { ceremony_progress } : {}),
       },
     });
   }
@@ -115,7 +117,8 @@ function queueRoomPersonScan(
   roomDisplayName: string,
   messages_context: Message[],
   messages_analyze: Message[],
-  state: StateManager
+  state: StateManager,
+  ceremony_progress?: number
 ): void {
   const context: HumanExtractionContext = {
     personaId: roomId,
@@ -146,6 +149,7 @@ function queueRoomPersonScan(
         personaId: (state.getRoom(roomId)?.persona_ids ?? []).join("|"),
         personaDisplayName: roomDisplayName,
         message_ids_to_mark: chunk.messages_analyze.map(m => m.id),
+        ...(ceremony_progress !== undefined ? { ceremony_progress } : {}),
       },
     });
   }
@@ -239,6 +243,40 @@ export function checkAndQueueRoomExtraction(state: StateManager, roomId: string)
   }
 
   console.log(`[checkAndQueueRoomExtraction] Auto-triggered extraction for room ${roomDisplayName} (threshold: ${threshold})`);
+}
+
+export function queueRoomHumanExtraction(state: StateManager, roomId: string, ceremony_progress?: number): void {
+  const room = state.getRoom(roomId);
+  if (!room || room.mode === RoomMode.ChooseYourPath) return;
+
+  const allVisible = getRoomVisibleMessages(state, roomId);
+  if (allVisible.length === 0) return;
+
+  const participantContext = buildRoomParticipantContext(roomId, state);
+  const roomDisplayName = room.display_name;
+
+  const unextractedT = allVisible.filter(m => !m.t);
+  const unextractedP = allVisible.filter(m => !m.p);
+
+  if (unextractedT.length === 0 && unextractedP.length === 0) return;
+
+  if (unextractedT.length > 0) {
+    const analyzeStart = unextractedT[0].timestamp;
+    const messages_contextT = allVisible.filter(
+      m => m.t === true && new Date(m.timestamp).getTime() < new Date(analyzeStart).getTime()
+    );
+    queueRoomTopicScan(roomId, roomDisplayName, messages_contextT, unextractedT, state, participantContext, ceremony_progress);
+  }
+
+  if (unextractedP.length > 0) {
+    const analyzeStart = unextractedP[0].timestamp;
+    const messages_contextP = allVisible.filter(
+      m => m.p === true && new Date(m.timestamp).getTime() < new Date(analyzeStart).getTime()
+    );
+    queueRoomPersonScan(roomId, roomDisplayName, messages_contextP, unextractedP, state, ceremony_progress);
+  }
+
+  console.log(`[queueRoomHumanExtraction] Queued human extraction for room "${roomDisplayName}" (t:${unextractedT.length}, p:${unextractedP.length})`);
 }
 
 export function queueRoomCapture(state: StateManager, roomId: string): void {
