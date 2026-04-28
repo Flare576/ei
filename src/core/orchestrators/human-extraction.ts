@@ -12,7 +12,6 @@ import {
   type TopicScanCandidate,
   type ItemMatchResult,
   type ParticipantContext,
-  type PersonaEntitySnapshot,
 } from "../../prompts/human/index.js";
 import { buildValidatePrompt } from "../../prompts/ceremony/dedup.js";
 import { normalizeRoomMessages } from "../handlers/utils.js";
@@ -100,20 +99,22 @@ function getExtractionMaxTokens(state: StateManager, options?: ExtractionOptions
 export function queueFactFind(context: ExtractionContext, state: StateManager, options?: ExtractionOptions): number {
   const human = state.getHuman();
   const extractionModel = options?.extraction_model;
+
+  const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state, options));
+
+  // Always pre-mark f — even when all facts are already known.
+  // Once we stop scanning for facts, messages must still be marked so the
+  // ceremony doesn't treat them as perpetually unprocessed.
+  for (const chunk of chunks) {
+    state.messages_markExtracted(chunk.personaId, chunk.messages_analyze.map(m => m.id), "f");
+  }
+
   const missing_fact_names = human.facts
     .filter(f => !f.description || f.description === "")
     .map(f => f.name)
     .filter(name => BUILT_IN_FACT_NAMES.has(name));
 
   if (missing_fact_names.length === 0) return 0;
-
-  const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state, options));
-
-  // Pre-mark messages before enqueuing — prevents duplicate scans if the
-  // queue check fires again during LLM latency (100ms loop × 5s call = 50 dupes)
-  for (const chunk of chunks) {
-    state.messages_markExtracted(chunk.personaId, chunk.messages_analyze.map(m => m.id), "f");
-  }
 
   for (const chunk of chunks) {
     const prompt = buildFactFindPrompt({
@@ -586,18 +587,6 @@ export function queuePersonUpdate(
 
   const primaryPersonaIdForUpdate = context.personaId.split("|")[0];
 
-  const linkedPersonaId = !isNewItem
-    ? (existingItem?.identifiers ?? []).find(i => i.type.toLowerCase() === 'ei persona')?.value
-    : undefined;
-  const linkedPersonaEntity = linkedPersonaId ? state.persona_getById(linkedPersonaId) : undefined;
-  const personaEntitySnapshot: PersonaEntitySnapshot | undefined = linkedPersonaEntity
-    ? {
-        long_description: linkedPersonaEntity.long_description ?? '',
-        traits: (linkedPersonaEntity.traits ?? []).map(t => ({ name: t.name, description: t.description })),
-        topics: (linkedPersonaEntity.topics ?? []).map(t => ({ name: t.name, perspective: t.perspective })),
-      }
-    : undefined;
-
   for (const chunk of chunks) {
     const prompt = buildPersonUpdatePrompt({
       existing_item: existingItem,
@@ -609,7 +598,6 @@ export function queuePersonUpdate(
       persona_name: chunk.personaDisplayName,
       participant_context: buildParticipantContext(primaryPersonaIdForUpdate, state),
       known_identifier_types: userIdentifierTypes,
-      persona_entity: personaEntitySnapshot,
     });
 
     state.queue_enqueue({
