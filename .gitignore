@@ -15,6 +15,10 @@ coverage/
 playwright-report/
 test-results/
 
+# AGENTS.md files are core to this project's architecture — always track them
+# (overrides global gitignore rules that suppress AGENTS.md)
+!**/AGENTS.md
+
 # Editor/IDE
 .vscode/
 .idea/
