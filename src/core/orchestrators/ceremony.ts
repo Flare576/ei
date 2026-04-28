@@ -11,6 +11,7 @@ import {
   type ExtractionOptions,
 } from "./human-extraction.js";
 import { queuePersonaTopicRating, type PersonaTopicContext, type PersonaTopicOptions } from "./persona-topics.js";
+import { getRoomVisibleMessages, queueRoomHumanExtraction } from "./room-extraction.js";
 import { queuePersonMigration } from "./person-migration.js";
 import { buildRewriteScanPrompt, type RewriteItemType } from "../../prompts/ceremony/index.js";
 import { buildReflectionCriticPrompt } from "../../prompts/reflection/index.js";
@@ -209,20 +210,26 @@ export function handleCeremonyProgress(state: StateManager, lastPhase: number): 
     const rooms = state.getRoomList();
     for (const room of rooms) {
       if (room.mode === RoomMode.ChooseYourPath) continue;
+
+      // Human extraction (t/p) — straggler scan for messages that never hit the
+      // per-send threshold in checkAndQueueRoomExtraction
+      queueRoomHumanExtraction(state, room.id, 2);
+
+      // Persona topic rating — uses getRoomVisibleMessages so FFA rooms get all
+      // messages, not just the active path chain
+      const allRoomMessages = getRoomVisibleMessages(state, room.id);
       for (const personaId of room.persona_ids) {
         const shortId = personaId.slice(0, 8);
         const unprocessedRaw = state.getRoomUnextractedMessagesForPersona(room.id, shortId);
         if (unprocessedRaw.length === 0) continue;
         const personaForRoom = state.persona_getById(personaId);
         if (!personaForRoom) continue;
-        const allRoomMessagesRaw = state.getRoomActivePath(room.id);
-        const processedIds = new Set(allRoomMessagesRaw.filter(m => !!m.persona_extracted?.[shortId]).map(m => m.id));
-        const allNormalized = normalizeRoomMessages(allRoomMessagesRaw, state);
+        const processedIds = new Set(allRoomMessages.filter(m => !!m.persona_extracted?.[shortId]).map(m => m.id));
         const unprocessedNormalized = normalizeRoomMessages(unprocessedRaw, state);
         const personaTopicContext: PersonaTopicContext = {
           personaId,
           personaDisplayName: personaForRoom.display_name,
-          messages_context: allNormalized.filter(m => processedIds.has(m.id)),
+          messages_context: allRoomMessages.filter(m => processedIds.has(m.id)),
           messages_analyze: unprocessedNormalized,
           topics: personaForRoom.topics,
         };
