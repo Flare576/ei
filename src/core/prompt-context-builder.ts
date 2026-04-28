@@ -47,24 +47,48 @@ function capTopicsAndPeople<T extends { id: string }, P extends { id: string }>(
 // EMBEDDING-BASED RELEVANCE SELECTION
 // =============================================================================
 
+const RECENT_MESSAGES_FOR_CONTEXT = 5;
+
+async function buildQueryVectors(queries: string[]): Promise<number[][]> {
+  const embeddingService = getEmbeddingService();
+  return Promise.all(queries.map(q => embeddingService.embed(q)));
+}
+
+function unionTopK<T extends { id: string }>(
+  candidates: T[],
+  queryVectors: number[][],
+  limit: number
+): T[] {
+  const best = new Map<string, { item: T; similarity: number }>();
+  for (const qv of queryVectors) {
+    for (const { item, similarity } of findTopK(qv, candidates, limit)) {
+      const existing = best.get(item.id);
+      if (!existing || similarity > existing.similarity) {
+        best.set(item.id, { item, similarity });
+      }
+    }
+  }
+  return Array.from(best.values())
+    .filter(({ similarity }) => similarity >= SIMILARITY_THRESHOLD)
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, limit)
+    .map(({ item }) => item);
+}
+
 async function selectRelevantItems<T extends { id: string; embedding?: number[] }>(
   items: T[],
   limit: number,
-  currentMessage?: string
+  queries: string[]
 ): Promise<T[]> {
   if (items.length === 0) return [];
 
   const withEmbeddings = items.filter((i) => i.embedding?.length);
+  const activeQueries = queries.filter(Boolean);
 
-  if (currentMessage && withEmbeddings.length > 0) {
+  if (activeQueries.length > 0 && withEmbeddings.length > 0) {
     try {
-      const embeddingService = getEmbeddingService();
-      const queryVector = await embeddingService.embed(currentMessage);
-      const results = findTopK(queryVector, withEmbeddings, limit);
-      const relevant = results
-        .filter(({ similarity }) => similarity >= SIMILARITY_THRESHOLD)
-        .map(({ item }) => item);
-
+      const queryVectors = await buildQueryVectors(activeQueries);
+      const relevant = unionTopK(withEmbeddings, queryVectors, limit);
       if (relevant.length > 0) return relevant;
     } catch (err) {
       console.warn("[filterHumanDataByVisibility] Embedding search failed:", err);
@@ -80,19 +104,15 @@ async function selectRelevantItems<T extends { id: string; embedding?: number[] 
     .slice(0, limit);
 }
 
-async function selectRelevantQuotes(quotes: Quote[], currentMessage?: string): Promise<Quote[]> {
+async function selectRelevantQuotes(quotes: Quote[], queries: string[]): Promise<Quote[]> {
   if (quotes.length === 0) return [];
   const withEmbeddings = quotes.filter((q) => q.embedding?.length);
+  const activeQueries = queries.filter(Boolean);
 
-  if (currentMessage && withEmbeddings.length > 0) {
+  if (activeQueries.length > 0 && withEmbeddings.length > 0) {
     try {
-      const embeddingService = getEmbeddingService();
-      const queryVector = await embeddingService.embed(currentMessage);
-      const results = findTopK(queryVector, withEmbeddings, QUOTE_LIMIT);
-      const relevant = results
-        .filter(({ similarity }) => similarity >= SIMILARITY_THRESHOLD)
-        .map(({ item }) => item);
-
+      const queryVectors = await buildQueryVectors(activeQueries);
+      const relevant = unionTopK(withEmbeddings, queryVectors, QUOTE_LIMIT);
       if (relevant.length > 0) return relevant;
     } catch (err) {
       console.warn("[filterHumanDataByVisibility] Embedding search failed:", err);
@@ -110,16 +130,16 @@ async function selectRelevantQuotes(quotes: Quote[], currentMessage?: string): P
 export async function filterHumanDataByVisibility(
   human: HumanEntity,
   persona: PersonaEntity,
-  currentMessage?: string
+  queries: string[]
 ): Promise<ResponsePromptData["human"]> {
   const DEFAULT_GROUP = "General";
 
   if (persona.id === "ei") {
     const [facts, rawTopics, rawPeople, quotes] = await Promise.all([
-      selectRelevantItems(human.facts, DATA_ITEM_LIMIT, currentMessage),
-      selectRelevantItems(human.topics, DATA_ITEM_LIMIT, currentMessage),
-      selectRelevantItems(human.people, DATA_ITEM_LIMIT, currentMessage),
-      selectRelevantQuotes(human.quotes ?? [], currentMessage),
+      selectRelevantItems(human.facts, DATA_ITEM_LIMIT, queries),
+      selectRelevantItems(human.topics, DATA_ITEM_LIMIT, queries),
+      selectRelevantItems(human.people, DATA_ITEM_LIMIT, queries),
+      selectRelevantQuotes(human.quotes ?? [], queries),
     ]);
     const { topics, people } = capTopicsAndPeople(rawTopics, rawPeople);
     const humanName =
@@ -157,10 +177,10 @@ export async function filterHumanDataByVisibility(
   });
 
   const [facts, rawTopics, rawPeople, quotes] = await Promise.all([
-    selectRelevantItems(filterByGroup(human.facts), DATA_ITEM_LIMIT, currentMessage),
-    selectRelevantItems(filterByGroup(human.topics), DATA_ITEM_LIMIT, currentMessage),
-    selectRelevantItems(filterByGroup(human.people), DATA_ITEM_LIMIT, currentMessage),
-    selectRelevantQuotes(groupFilteredQuotes, currentMessage),
+    selectRelevantItems(filterByGroup(human.facts), DATA_ITEM_LIMIT, queries),
+    selectRelevantItems(filterByGroup(human.topics), DATA_ITEM_LIMIT, queries),
+    selectRelevantItems(filterByGroup(human.people), DATA_ITEM_LIMIT, queries),
+    selectRelevantQuotes(groupFilteredQuotes, queries),
   ]);
   const { topics, people } = capTopicsAndPeople(rawTopics, rawPeople);
 
@@ -233,13 +253,24 @@ export async function buildResponsePromptData(
   tools?: import("./types.js").ToolDefinition[]
 ): Promise<ResponsePromptData> {
   const human = sm.getHuman();
-  const filteredHuman = await filterHumanDataByVisibility(human, persona, currentMessage);
-  const visiblePersonas = getVisiblePersonas(sm, persona);
   const messages = sm.messages_get(persona.id);
   const previousMessage = messages.length >= 2 ? messages[messages.length - 2] : null;
   const delayMs = previousMessage
     ? Date.now() - new Date(previousMessage.timestamp).getTime()
     : 0;
+
+  const recentMessageContents = messages
+    .slice(-RECENT_MESSAGES_FOR_CONTEXT - 1, -1)
+    .map(m => getMessageContent(m))
+    .filter(Boolean);
+
+  const queries = [
+    ...(currentMessage ? [currentMessage] : []),
+    ...recentMessageContents,
+  ];
+
+  const filteredHuman = await filterHumanDataByVisibility(human, persona, queries);
+  const visiblePersonas = getVisiblePersonas(sm, persona);
 
   const alwaysMessages = sm.messages_getAlways(persona.id);
   const temporalAnchors = alwaysMessages.map(m => ({
@@ -313,7 +344,7 @@ export async function buildRoomResponsePromptData(
   const lastMessage = sourceMessages[sourceMessages.length - 1];
   const currentMessage = lastMessage ? getMessageContent(lastMessage) : undefined;
 
-  const filteredHuman = await filterHumanDataByVisibility(human, respondingPersona, currentMessage);
+  const filteredHuman = await filterHumanDataByVisibility(human, respondingPersona, currentMessage ? [currentMessage] : []);
 
   const history = normalizeRoomMessages(sourceMessages, sm);
 

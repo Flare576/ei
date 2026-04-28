@@ -225,7 +225,7 @@ export async function queueHeartbeatCheck(sm: StateManager, personaId: string, i
     return;
   }
 
-  const filteredHuman = await filterHumanDataByVisibility(human, persona);
+  const filteredHuman = await filterHumanDataByVisibility(human, persona, []);
   const lastActivity = sm.messages_getLastActivity(persona.id);
   const inactiveDays = lastActivity
     ? Math.floor((Date.now() - lastActivity) / (1000 * 60 * 60 * 24))
