@@ -1,4 +1,4 @@
-import type { PromptOutput, ParticipantContext, PersonaEntitySnapshot } from "./types.js";
+import type { PromptOutput, ParticipantContext } from "./types.js";
 import type { Person, Message } from "../../core/types.js";
 import { formatMessagesAsPlaceholders } from "../message-utils.js";
 
@@ -12,7 +12,6 @@ export interface PersonUpdatePromptData {
   persona_name: string;
   participant_context?: ParticipantContext;
   known_identifier_types?: string[];
-  persona_entity?: PersonaEntitySnapshot;
 }
 
 function participantContextSection(ctx: ParticipantContext | undefined): string {
@@ -121,38 +120,22 @@ Detail you add should:
 **ABSOLUTELY VITAL**: Do **NOT** embellish. Record only what the user actually said or demonstrated.`;
 
   } else if (isEiPersona) {
-    const entityRef = data.persona_entity
-      ? `## This Persona's Defined Identity (for reference)
-
-The following is ${personName}'s current self-definition — their traits, topics, and long description as set in the Persona editor. Use this as a **baseline**, not a ceiling.
-
-**Long description:**
-${data.persona_entity.long_description}
-
-**Traits:**
-${data.persona_entity.traits.map(t => `- **${t.name}**: ${t.description}`).join('\n')}
-
-**Topics:**
-${data.persona_entity.topics.map(t => `- **${t.name}**: ${t.perspective}`).join('\n')}
-
-`
-      : '';
-
-    descriptionSection = `${entityRef}This record is the HUMAN USER's **observed experience** of ${personName} over time — not the Persona's own definition. Think of it as field notes from someone who has been talking with this Persona across many conversations.
+    descriptionSection = `This record is the HUMAN USER's **observed experience** of ${personName} over time. Think of it as field notes from someone who has been talking with this Persona across many conversations.
 
 ## Your job: add, never truncate
 
 The description is allowed to grow. **Never remove or summarize away existing content.**
 
 Add anything from the Most Recent Messages that:
-- Extends or nuances what's already known (new behaviors, new opinions, recurring themes)
-- Agrees with or contradicts the Persona's defined identity — both are worth capturing
-- Reveals how the HUMAN USER experiences or relates to this Persona specifically
+- Records a specific thing ${personName} said, did, or demonstrated in this conversation
+- Captures how the HUMAN USER experienced or related to ${personName} in this specific exchange
+- Notes behavior that stands out — expected or surprising — based on what the existing log already shows
 
 **Do NOT:**
 - Synthesize the existing description down to fewer sentences
 - Replace specific observations with vague summaries
 - Discard detail to "keep it brief" — brevity is wrong here
+- Add anything that isn't directly observed in the Most Recent Messages
 
 If the new messages add nothing meaningful, return \`{}\`. Otherwise, return the **full updated description** — existing content preserved, new observations woven in.`;
 

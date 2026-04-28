@@ -77,6 +77,13 @@ const PERSONA_CONTRADICTION_MESSAGES: Message[] = [
   makeMessage("human", `No, she just kind of rolled with it. I actually had to ask her 'do you actually agree or are you just going along?' She paused for a while before answering.`, "msg-pc3"),
 ];
 
+const IDENTITY_BLEED_MESSAGES: Message[] = [
+  makeMessage("human", `Aria and I finally got the sync bug fixed today. She spotted it immediately — the timestamp was being written after the await instead of before it. Three-line fix.`, "msg-ib1"),
+  makeMessage("system", `Nice. How'd she catch it so fast?`, "msg-ib2"),
+  makeMessage("human", `She said she'd seen the exact same pattern in a different codebase last month. Saved us probably two hours of debugging.`, "msg-ib3"),
+];
+
+
 const summary = await runEval(
   [
     {
@@ -220,16 +227,6 @@ const summary = await runEval(
           messages_context: [],
           messages_analyze: PERSONA_LOG_MESSAGES,
           participant_context: { persona_name: PERSONA_NAME, human_name: "Steve" },
-          persona_entity: {
-            long_description: "Aria is a sharp, direct technical collaborator. She pushes back on weak designs and doesn't sugarcoat — but always justifies her reasoning.",
-            traits: [
-              { name: "Directness", description: "Gets to the point without hedging." },
-              { name: "Technical Precision", description: "Identifies flaws in designs quickly." },
-            ],
-            topics: [
-              { name: "Code Quality", perspective: "Clean architecture matters more than clever code." },
-            ],
-          },
         }),
         PERSONA_LOG_MESSAGES
       ),
@@ -268,14 +265,6 @@ const summary = await runEval(
           messages_context: [],
           messages_analyze: PERSONA_CONTRADICTION_MESSAGES,
           participant_context: { persona_name: PERSONA_NAME, human_name: "Steve" },
-          persona_entity: {
-            long_description: "Aria is a sharp, direct technical collaborator. She pushes back on weak designs and doesn't sugarcoat.",
-            traits: [
-              { name: "Directness", description: "Gets to the point without hedging." },
-              { name: "Pushback on weak ideas", description: "Challenges flawed reasoning immediately." },
-            ],
-            topics: [],
-          },
         }),
         PERSONA_CONTRADICTION_MESSAGES
       ),
@@ -287,11 +276,49 @@ const summary = await runEval(
         {
           type: "llm-judge" as const,
           rubric: [
-            "The persona's defined identity says Aria pushes back on weak ideas. The conversation shows the OPPOSITE: Aria agreed with everything Steve said even when he was clearly wrong.",
-            "PASS if the updated log captures this contradiction — that this session Aria was uncharacteristically agreeable and didn't push back.",
+            "The existing log shows Aria previously pushed back on a refactor. The new conversation shows the OPPOSITE: Aria agreed with everything Steve said even when he was clearly wrong.",
+            "PASS if the updated log captures this deviation — that this session Aria was uncharacteristically agreeable and didn't push back.",
             "PASS if the original log content is preserved (the refactor pushback session is still there).",
-            "FAIL if the contradiction is not noted — silently ignoring behavior that contradicts the persona's defined identity defeats the purpose of the Ei Persona log.",
+            "FAIL if the deviation is not noted — the purpose of the log is to accumulate evidence of how the Persona actually shows up, including surprises.",
             "FAIL if original content is removed.",
+          ].join(" "),
+        },
+      ] satisfies Assertion[],
+    },
+
+    {
+      description: "Person-update (Ei Persona): records specific observations — does not invent or generalize",
+      tags: ["person-update", "ei-persona", "identity-bleed"],
+      prompt: () => hydratePrompt(
+        buildPersonUpdatePrompt({
+          persona_name: PERSONA_NAME,
+          existing_item: makeEiPersona({
+            description: "First session: Aria introduced herself warmly and asked about the project.",
+          }),
+          messages_context: [],
+          messages_analyze: IDENTITY_BLEED_MESSAGES,
+          participant_context: { persona_name: PERSONA_NAME, human_name: "Steve" },
+        }),
+        IDENTITY_BLEED_MESSAGES
+      ),
+      assert: [
+        {
+          type: "is-json" as const,
+          schema: { required: ["description"] },
+        },
+        {
+          type: "contains-all-of" as const,
+          field: "description",
+          required: ["sync", "timestamp"],
+        },
+        {
+          type: "llm-judge" as const,
+          rubric: [
+            "The conversation is about fixing a sync bug: Aria spotted a timestamp-before-await issue, said she'd seen the pattern before, and the fix saved two hours.",
+            "PASS if the updated description records at least one specific observation from the conversation (e.g. the bug catch, the pattern recognition, the time saved).",
+            "PASS if the existing first-session content is preserved.",
+            "FAIL if description omits the sync bug observation entirely.",
+            "FAIL if description contains vague generalizations ('technical skill', 'problem-solving ability') instead of what specifically happened.",
           ].join(" "),
         },
       ] satisfies Assertion[],
