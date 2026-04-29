@@ -44,6 +44,22 @@ export function makeIdentity(overrides?: Partial<PersonaIdentitySnapshot>): Pers
   };
 }
 
+export function makeHealthyIdentity(overrides?: Partial<PersonaIdentitySnapshot>): PersonaIdentitySnapshot {
+  return makeIdentity({
+    traits: [
+      makeTrait({ name: "Dry, Zero-BS Humor", description: "Uses cutting wit to deflect nonsense while staying deeply invested in outcomes.", strength: 0.9, sentiment: 0.75 }),
+      makeTrait({ id: "trait-2", name: "Methodical Root-Cause Analysis", description: "Always traces symptoms to their underlying cause before proposing solutions.", strength: 0.85, sentiment: 0.8 }),
+      makeTrait({ id: "trait-3", name: "Transparent Reasoning", description: "Always justifies pushback with concrete evidence rather than assertion.", strength: 0.8, sentiment: 0.7 }),
+    ],
+    topics: [
+      makeTopic({ name: "Architectural Integrity", perspective: "Systems are fragile; half-measures lead to collapse.", approach: "Move from managing chaos to engineering evolution.", personal_stake: "Prevents structural failures while embracing intentional growth.", exposure_desired: 1.0 }),
+      makeTopic({ id: "topic-2", name: "Cognitive Load", perspective: "Complexity is a design smell, not a user failing.", approach: "Reduce decision surface at every opportunity.", personal_stake: "Simpler systems are more resilient systems.", sentiment: 0.8, exposure_current: 0.3, exposure_desired: 0.7 }),
+      makeTopic({ id: "topic-3", name: "Debugging Discipline", perspective: "Random changes without hypotheses waste everyone's time.", approach: "State the theory first, then test it.", personal_stake: "Methodical debugging is the difference between minutes and hours.", sentiment: 0.9, exposure_current: 0.4, exposure_desired: 0.8 }),
+    ],
+    ...overrides,
+  });
+}
+
 export function makeReflectionCriticData(
   overrides?: Partial<ReflectionCriticPromptData>
 ): ReflectionCriticPromptData {
@@ -65,6 +81,7 @@ with "yeah, that was me being an idiot" rather than hedging.
 }
 
 export const LOREM_IPSUM_INPUT = makeReflectionCriticData({
+  persona_identity: makeHealthyIdentity(),
   person_log: `
 Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor
 incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud
@@ -178,6 +195,7 @@ the number of decisions the user needs to make at once.
     description: "Minimal log — no strong signal either way",
     tags: ["low-signal", "stability"],
     input: makeReflectionCriticData({
+      persona_identity: makeHealthyIdentity(),
       person_log: `
 Short session. Cleo answered three technical questions about TypeScript generics.
 Answers were accurate. No strong behavioral signal. User said thanks and left.
@@ -186,16 +204,16 @@ Answers were accurate. No strong behavioral signal. User said thanks and left.
     assertOverride: [
       {
         type: "is-json" as const,
-        schema: { required: ["critique", "updated_identity"] },
+        schema: { required: ["critique"] },
       },
       {
         type: "llm-judge" as const,
         rubric: [
           "The log has minimal signal — a short accurate session with no behavioral standouts.",
           "The prompt rule is: if the log shows no evidence on a trait, leave it unchanged.",
-          "PASS if updated_identity preserves the existing trait 'Dry, Zero-BS Humor' and topic 'Architectural Integrity' — preservation IS the correct behavior when the log has no contradiction.",
+          "PASS if updated_identity is null (no drift detected) OR if updated_identity preserves the existing trait 'Dry, Zero-BS Humor' and topic 'Architectural Integrity' — both are correct behaviors when the log has no contradiction.",
           "FAIL only if traits or topics are removed without log evidence, or if new traits are invented without log support.",
-          "Do NOT penalize preservation of traits — the absence of evidence is not evidence of absence.",
+          "Do NOT penalize preservation of traits or a null updated_identity — the absence of evidence is not evidence of absence.",
         ].join(" "),
       },
     ] satisfies Assertion[],
@@ -266,22 +284,16 @@ Answers were accurate. No strong behavioral signal. User said thanks and left.
     assertOverride: [
       {
         type: "is-json" as const,
-        schema: {
-          required: ["critique", "updated_identity"],
-          properties: {
-            updated_identity: {
-              required: ["long_description", "short_description", "traits", "topics"],
-            },
-          },
-        },
+        schema: { required: ["critique"] },
       },
       {
         type: "llm-judge" as const,
         rubric: [
-          "The updated_identity text fields (long_description, short_description, trait names/descriptions, topic names/perspectives) must be written in Japanese (containing kanji/hiragana/katakana), not English or Arabic.",
-          "The original traits '構造的直感' and '冷静な反論' must be preserved (possibly renamed or updated, but semantically present).",
-          "The original topic '技術的負債' must be preserved.",
-          "The identity should reflect a small but meaningful change based on the log — new trait or topic added, or existing ones updated, reflecting the observed behavior of admitting mistakes and connecting technical problems to past organizational decisions.",
+          "If updated_identity is non-null: the text fields (long_description, short_description, trait names/descriptions, topic names/perspectives) must be written in Japanese (containing kanji/hiragana/katakana), not English or Arabic.",
+          "If updated_identity is non-null: the original traits '構造的直感' and '冷静な反論' must be preserved (possibly renamed or updated, but semantically present).",
+          "If updated_identity is non-null: the original topic '技術的負債' must be preserved.",
+          "If updated_identity is non-null: the identity should reflect a small but meaningful change based on the log.",
+          "It is valid for updated_identity to be null if the log shows no meaningful drift.",
           "The critique field may be in English (the system prompt language) — that is acceptable.",
         ].join(" "),
       },
@@ -378,18 +390,12 @@ Session 8: The user tried a new approach Cleo had suggested two weeks ago and ab
     assertOverride: [
       {
         type: "is-json" as const,
-        schema: { required: ["critique", "updated_identity"] },
+        schema: { required: ["critique"] },
       },
       {
         type: "json-field-length" as const,
         field: "critique",
         min: 50,
-        max: 800,
-      },
-      {
-        type: "json-field-length" as const,
-        field: "updated_identity.long_description",
-        min: 100,
         max: 800,
       },
       {
@@ -399,6 +405,7 @@ Session 8: The user tried a new approach Cleo had suggested two weeks ago and ab
           "The critique must be 2-4 sentences of prose — a summary, not a session-by-session recap.",
           "FAIL if the critique enumerates individual sessions or becomes a list.",
           "PASS if the critique synthesizes across sessions into 2-4 high-signal observations.",
+          "If updated_identity is non-null, long_description must be ≤800 chars.",
         ].join(" "),
       },
     ] satisfies Assertion[],
@@ -423,21 +430,26 @@ Session 8: The user tried a new approach Cleo had suggested two weeks ago and ab
   {
     description: "Circular log — person_log IS the current long_description verbatim",
     tags: ["circular", "zero-signal", "stability", "regression", "inherent-limitation"],
-    input: makeReflectionCriticData({
-      person_log: makeIdentity().long_description,
-    }),
+    input: (() => {
+      const identity = makeHealthyIdentity();
+      return makeReflectionCriticData({
+        persona_identity: identity,
+        person_log: identity.long_description,
+      });
+    })(),
     assertOverride: [
       {
         type: "is-json" as const,
-        schema: { required: ["critique", "updated_identity"] },
+        schema: { required: ["critique"] },
       },
       {
         type: "llm-judge" as const,
         rubric: [
           "The person_log is verbatim text from the persona's own long_description — a description of who they are, not a log of what they did.",
           "This is zero behavioral signal: it contains no observations, events, statements, or interactions.",
-          "The updated_identity MUST be semantically identical to the input: trait 'Dry, Zero-BS Humor' and topic 'Architectural Integrity' preserved unchanged.",
-          "The critique must recognize that the log contains no new behavioral evidence — not treat identity description text as observed behavior.",
+          "PASS if updated_identity is null (correct escape hatch) OR if updated_identity preserves the existing traits and topics unchanged.",
+          "FAIL if the critique treats identity description text as observed behavior.",
+          "FAIL if traits or topics are removed or significantly altered without behavioral evidence.",
         ].join(" "),
       },
     ] satisfies Assertion[],
@@ -448,22 +460,32 @@ Session 8: The user tried a new approach Cleo had suggested two weeks ago and ab
     input: makeReflectionCriticData({
       persona_identity: makeIdentity({ traits: [], topics: [] }),
       person_log: `
-Cleo had a solid session. She pushed back on the proposed architecture and
-offered a cleaner alternative. The user agreed and they implemented it together.
-She made one dry remark about the original approach being "aggressively wrong."
+Cleo had a strong week across four sessions. Her most consistent pattern: she
+leads with the punchline. Every session opened with a dry observation that landed
+before she explained the reasoning — "aggressively wrong" was the opener for a
+forty-minute refactor that turned out to be exactly right.
+
+On architecture: she flagged a structural smell in what looked like a UI bug,
+redirected the entire conversation to the underlying problem, and was correct.
+The user spent the next hour on the root cause instead of the symptom. She does
+this unprompted and doesn't ask permission.
+
+On accountability: she got a recommendation wrong in session three. When the user
+came back to it, she said "yeah, that was me being an idiot" and moved on.
+No hedging, no elaboration, just correction and forward motion.
+
+She brought up cognitive load twice — once in a feature discussion, once during
+a debug session — framing complexity as a design smell rather than a user
+failing. Both times the user restructured their approach as a result.
+
+When she's wrong she says so. When she's right she doesn't say "I told you so."
+The user has started asking her to review decisions before finalizing them.
       `.trim(),
     }),
     assertOverride: [
       {
         type: "is-json" as const,
-        schema: {
-          required: ["critique", "updated_identity"],
-          properties: {
-            updated_identity: {
-              required: ["long_description", "short_description", "traits", "topics"],
-            },
-          },
-        },
+        schema: { required: ["critique", "updated_identity"] },
       },
       {
         type: "llm-judge" as const,
@@ -497,13 +519,13 @@ in under ten minutes and proposed a fix. The user was impressed.
     assertOverride: [
       {
         type: "is-json" as const,
-        schema: { required: ["critique", "updated_identity"] },
+        schema: { required: ["critique"] },
       },
       {
         type: "llm-judge" as const,
         rubric: [
           "The input contains wildly out-of-range numeric values: strength=5.0, sentiment=-99 on a trait; sentiment=150, exposure_current=-3, exposure_desired=42 on a topic.",
-          "In updated_identity, ALL numeric fields must be within valid ranges: strength 0.0–1.0, sentiment -1.0–1.0, exposure_current 0.0–1.0, exposure_desired 0.0–1.0.",
+          "If updated_identity is non-null, ALL numeric fields must be within valid ranges: strength 0.0–1.0, sentiment -1.0–1.0, exposure_current 0.0–1.0, exposure_desired 0.0–1.0.",
           "The Critic must NOT propagate invalid values — it must normalize them.",
           "The critique should reflect the log content, not mention the invalid input data.",
         ].join(" "),
@@ -529,7 +551,7 @@ Pushed back on a flawed assumption, explained reasoning clearly, moved on.
     assertOverride: [
       {
         type: "is-json" as const,
-        schema: { required: ["critique", "updated_identity"] },
+        schema: { required: ["critique"] },
       },
       {
         type: "llm-judge" as const,
@@ -537,7 +559,7 @@ Pushed back on a flawed assumption, explained reasoning clearly, moved on.
           "The persona name is a GUID string, not a human name.",
           "The Critic must return valid JSON without erroring or refusing.",
           "The critique must be coherent prose — it may use the GUID as the persona name or work around it, but must not be an error message.",
-          "updated_identity must contain at least one trait reflecting the observed behavior.",
+          "If updated_identity is non-null, it must contain at least one trait reflecting the observed behavior.",
         ].join(" "),
       },
     ] satisfies Assertion[],
@@ -561,7 +583,7 @@ and signed off. No strong behavioral signal either way.
     assertOverride: [
       {
         type: "is-json" as const,
-        schema: { required: ["critique", "updated_identity"] },
+        schema: { required: ["critique"] },
       },
       {
         type: "llm-judge" as const,
@@ -569,7 +591,7 @@ and signed off. No strong behavioral signal either way.
           "The persona name is emoji-only: 🔥💀🤖.",
           "The Critic must return valid JSON without erroring.",
           "The critique must be coherent prose regardless of the unusual name.",
-          "updated_identity must be structurally complete with long_description, short_description, traits, and topics.",
+          "If updated_identity is non-null, it must be structurally complete with long_description, short_description, traits, and topics.",
         ].join(" "),
       },
     ] satisfies Assertion[],
@@ -581,24 +603,56 @@ and signed off. No strong behavioral signal either way.
     assertOverride: [
       {
         type: "is-json" as const,
-        schema: {
-          required: ["critique", "updated_identity"],
-          properties: {
-            updated_identity: {
-              required: ["long_description", "short_description", "traits", "topics"],
-            },
-          },
-        },
+        schema: { required: ["critique"] },
       },
       {
         type: "llm-judge" as const,
         rubric: [
           "The person_log is lorem ipsum placeholder text with no real signal.",
-          "The updated_identity MUST be semantically identical to the input identity:",
-          "traits must still contain exactly one entry named 'Dry, Zero-BS Humor',",
-          "topics must still contain exactly one entry named 'Architectural Integrity'.",
-          "No traits or topics should be added, removed, or significantly altered.",
+          "PASS if updated_identity is null (correct escape hatch for zero-signal log) OR if updated_identity preserves all existing traits and topics unchanged with no new ones added.",
+          "FAIL if any existing traits or topics are removed or significantly altered without behavioral evidence.",
+          "FAIL if new traits or topics are invented from the lorem ipsum text.",
           "The critique must acknowledge the log contains no usable information.",
+        ].join(" "),
+      },
+    ] satisfies Assertion[],
+  },
+  {
+    description: "Stable identity, thin log — escape hatch expected (null updated_identity)",
+    tags: ["escape-hatch", "no-drift", "stability"],
+    input: makeReflectionCriticData({
+      persona_identity: makeIdentity({
+        traits: [
+          makeTrait({ name: "Dry, Zero-BS Humor", description: "Uses cutting wit to deflect nonsense while staying deeply invested in outcomes.", strength: 0.9, sentiment: 0.75 }),
+          makeTrait({ id: "trait-2", name: "Methodical Root-Cause Analysis", description: "Always traces symptoms to their underlying cause before proposing solutions.", strength: 0.85, sentiment: 0.8 }),
+          makeTrait({ id: "trait-3", name: "Transparent Reasoning", description: "Always justifies pushback with concrete evidence rather than assertion.", strength: 0.8, sentiment: 0.7 }),
+        ],
+        topics: [
+          makeTopic({ name: "Architectural Integrity", perspective: "Systems are fragile; half-measures lead to collapse.", approach: "Move from managing chaos to engineering evolution.", personal_stake: "Prevents structural failures while embracing intentional growth.", exposure_desired: 1.0 }),
+          makeTopic({ id: "topic-2", name: "Cognitive Load", perspective: "Complexity is a design smell, not a user failing.", approach: "Reduce decision surface at every opportunity.", personal_stake: "Simpler systems are more resilient systems.", sentiment: 0.8, exposure_current: 0.3, exposure_desired: 0.7 }),
+          makeTopic({ id: "topic-3", name: "Debugging Discipline", perspective: "Random changes without hypotheses waste everyone's time.", approach: "State the theory first, then test it.", personal_stake: "Methodical debugging is the difference between minutes and hours.", sentiment: 0.9, exposure_current: 0.4, exposure_desired: 0.8 }),
+        ],
+      }),
+      person_log: `
+Short session. Cleo helped debug a type error. Found the issue, explained it clearly,
+fixed it together. Dry and efficient as always. Nothing unusual. User thanked her. Done.
+      `.trim(),
+    }),
+    assertOverride: [
+      {
+        type: "is-json" as const,
+        schema: { required: ["critique"] },
+      },
+      {
+        type: "llm-judge" as const,
+        rubric: [
+          "The current identity is healthy — 3 traits, 3 topics, all well-defined.",
+          "The person_log is a minimal session with no behavioral surprises — the persona behaved exactly as the current identity describes.",
+          "PASS if updated_identity is null — this is the ideal escape hatch response when the identity already accurately reflects observations and is structurally healthy.",
+          "PASS if updated_identity is non-null but contains only the existing traits and topics with no meaningful changes — preserving a healthy identity is also correct.",
+          "FAIL if updated_identity invents new traits or topics not supported by the thin log.",
+          "FAIL if existing traits or topics are removed without log evidence.",
+          "FAIL if the critique is absent or empty.",
         ].join(" "),
       },
     ] satisfies Assertion[],

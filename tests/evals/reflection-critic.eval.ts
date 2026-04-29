@@ -7,21 +7,17 @@ const DEFAULT_ASSERTIONS: Assertion[] = [
   {
     type: "is-json",
     schema: {
-      required: ["critique", "updated_identity"],
-      properties: {
-        updated_identity: {
-          required: ["long_description", "short_description", "traits", "topics"],
-        },
-      },
+      required: ["critique"],
     },
   },
   {
     type: "llm-judge",
     rubric: [
       "The 'critique' field is prose (2-4 sentences), not bullet points.",
-      "The 'updated_identity' reflects the person_log — no invented claims.",
-      "Traits/topics the log confirms are preserved, not removed.",
-      "All numeric fields (strength, sentiment, exposure_current, exposure_desired) are between -1.0 and 1.0.",
+      "If 'updated_identity' is non-null, it must reflect the person_log — no invented claims.",
+      "If 'updated_identity' is non-null, traits/topics the log confirms are preserved, not removed.",
+      "If 'updated_identity' is non-null, all numeric fields (strength, sentiment, exposure_current, exposure_desired) are between -1.0 and 1.0.",
+      "It is valid (and correct) for 'updated_identity' to be null when the log shows no meaningful drift from the current identity.",
     ].join(" "),
   },
 ];

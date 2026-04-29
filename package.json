@@ -64,6 +64,7 @@
     "test:evals:dedup": "vite-node tests/evals/dedup-tool-calls.eval.ts",
     "test:evals:response-read-memory": "vite-node tests/evals/response-read-memory.eval.ts",
     "test:evals:real-data": "vite-node tests/evals/real-data-example.eval.ts",
+    "test:evals:persona-data-check": "vite-node tests/evals/persona-data-check.eval.ts",
     "test:all": "npm run test && npm run test:e2e && npm run test:e2e:tui",
     "typecheck": "tsc --noEmit",
     "web": "cd web && npm run dev",
