@@ -8,7 +8,7 @@ import {
 import type { PersonIdentifier } from "../types/data-items.js";
 import type { StateManager } from "../state-manager.js";
 import type { ItemMatchResult, ExposureImpact, TopicUpdateResult, PersonUpdateResult } from "../../prompts/human/types.js";
-import { queueTopicUpdate, queuePersonUpdate, queueTopicValidate, type ExtractionContext } from "../orchestrators/index.js";
+import { queueTopicUpdate, queueTopicValidate, type ExtractionContext } from "../orchestrators/index.js";
 import { getEmbeddingService, getTopicEmbeddingText, getPersonEmbeddingText } from "../embedding-service.js";
 import { calculateExposureCurrent } from "../utils/exposure.js";
 
@@ -62,54 +62,6 @@ export function handleTopicMatch(response: LLMResponse, state: StateManager): vo
   queueTopicUpdate(result, context, state, resolvedTopic);
   const matched = matched_guid ? `matched GUID "${matched_guid}"` : "no match (new topic)";
   console.log(`[handleTopicMatch] topic "${context.candidateName}": ${matched}`);
-}
-
-export function handlePersonMatch(response: LLMResponse, state: StateManager): void {
-  const result = response.parsed as ItemMatchResult | undefined;
-  if (!result) {
-    throw new Error("[handlePersonMatch] No parsed result");
-  }
-
-  const personaId = response.request.data.personaId as string;
-  const personaDisplayName = response.request.data.personaDisplayName as string;
-  const roomId = response.request.data.roomId as string | undefined;
-  const { messages_context, messages_analyze } = resolveMessageWindow(response, state);
-
-  let matched_guid = result.matched_guid;
-  let resolvedPerson: import('../types/data-items.js').Person | null = null;
-  if (matched_guid === "new") {
-    matched_guid = null;
-  } else if (matched_guid) {
-    const human = state.getHuman();
-    resolvedPerson = human.people.find(p => p.id === matched_guid) ?? null;
-    if (!resolvedPerson) {
-      console.warn(`[handlePersonMatch] matched_guid "${matched_guid}" not found in people — treating as new`);
-      matched_guid = null;
-    }
-  }
-  result.matched_guid = matched_guid;
-
-  const context: ExtractionContext & {
-    candidateName: string;
-    candidateDescription: string;
-    candidateRelationship: string;
-    extraction_model?: string;
-  } = {
-    personaId,
-    personaDisplayName,
-    roomId,
-    messages_context,
-    messages_analyze,
-    sources: response.request.data.sources as string[] | undefined,
-    candidateName: response.request.data.candidateName as string,
-    candidateDescription: response.request.data.candidateDescription as string,
-    candidateRelationship: response.request.data.candidateRelationship as string,
-    extraction_model: response.request.data.extraction_model as string | undefined,
-  };
-
-  queuePersonUpdate(result, context, state, resolvedPerson);
-  const matched = matched_guid ? `matched GUID "${matched_guid}"` : "no match (new person)";
-  console.log(`[handlePersonMatch] person "${context.candidateName}": ${matched}`);
 }
 
 export async function handleTopicUpdate(response: LLMResponse, state: StateManager): Promise<void> {

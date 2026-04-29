@@ -4,7 +4,7 @@ import {
   type PersonaTopic,
 } from "../types.js";
 import type { StateManager } from "../state-manager.js";
-import type { PersonaGenerationResult, PersonaDescriptionsResult } from "../../prompts/generation/types.js";
+import type { PersonaGenerationResult } from "../../prompts/generation/types.js";
 import type { TraitResult } from "../../prompts/persona/types.js";
 import { orchestratePersonaGeneration, type PartialPersona } from "../orchestrators/index.js";
 
@@ -109,33 +109,6 @@ export function handlePersonaGeneration(response: LLMResponse, state: StateManag
 
   orchestratePersonaGeneration(updatedPartial, state);
   console.log(`[handlePersonaGeneration] Orchestrated: ${personaDisplayName}`);
-}
-
-export function handlePersonaDescriptions(response: LLMResponse, state: StateManager): void {
-  const personaId = response.request.data.personaId as string;
-  const personaDisplayName = response.request.data.personaDisplayName as string;
-  if (!personaId) {
-    console.error("[handlePersonaDescriptions] No personaId in request data");
-    return;
-  }
-
-  const result = response.parsed as PersonaDescriptionsResult | undefined;
-  if (!result) {
-    console.error("[handlePersonaDescriptions] No parsed result");
-    return;
-  }
-
-  if (result.no_change) {
-    console.log(`[handlePersonaDescriptions] No change needed for ${personaDisplayName}`);
-    return;
-  }
-
-  state.persona_update(personaId, {
-    short_description: result.short_description,
-    long_description: result.long_description,
-    last_updated: new Date().toISOString(),
-  });
-  console.log(`[handlePersonaDescriptions] Updated descriptions for ${personaDisplayName}`);
 }
 
 export function handlePersonaTraitExtraction(response: LLMResponse, state: StateManager): void {
