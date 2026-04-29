@@ -61,9 +61,9 @@ function baseData(overrides?: Partial<HeartbeatCheckPromptData>): HeartbeatCheck
 }
 
 describe("buildHeartbeatCheckPrompt — pending_update awareness", () => {
-  it("when has_pending_update is false, system prompt does NOT contain 'Pending Identity Changes'", () => {
+  it("when pending_update is absent, system prompt does NOT contain 'Pending Identity Changes'", () => {
     const data = baseData({
-      persona: { name: "Sisyphus", traits: [], topics: [], has_pending_update: false },
+      persona: { name: "Sisyphus", traits: [], topics: [] },
     });
 
     const { system } = buildHeartbeatCheckPrompt(data);
@@ -71,14 +71,28 @@ describe("buildHeartbeatCheckPrompt — pending_update awareness", () => {
     expect(system).not.toContain("Pending Identity Changes");
   });
 
-  it("when has_pending_update is true, system prompt DOES contain 'Pending Identity Changes'", () => {
+  it("when pending_update is present, system prompt DOES contain proposed traits and topics", () => {
     const data = baseData({
-      persona: { name: "Sisyphus", traits: [], topics: [], has_pending_update: true },
+      persona: {
+        name: "Sisyphus",
+        traits: [],
+        topics: [],
+        pending_update: {
+          short_description: "An evolved version",
+          long_description: "A more refined description of Sisyphus.",
+          traits: [{ id: "t1", name: "Sharper Wit", description: "Even more cutting.", sentiment: 0.8, strength: 0.9, last_updated: "" }],
+          topics: [{ id: "tp1", name: "Meta-Cognition", perspective: "Thinking about thinking.", approach: "Recursive inquiry.", personal_stake: "Self-improvement.", sentiment: 0.7, exposure_current: 0.2, exposure_desired: 0.8, last_updated: "" }],
+          critique: "Drift detected.",
+          created_at: new Date().toISOString(),
+        },
+      },
     });
 
     const { system } = buildHeartbeatCheckPrompt(data);
 
     expect(system).toContain("Pending Identity Changes");
+    expect(system).toContain("Sharper Wit");
+    expect(system).toContain("Meta-Cognition");
   });
 });
 

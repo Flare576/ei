@@ -406,6 +406,89 @@ describe("PersonaState", () => {
     });
   });
 
+  describe("reference isolation — pending_update must not alias entity.traits", () => {
+    it("getById returns a live reference into internal state (not a copy)", () => {
+      const persona = makePersona("RefBot");
+      state.add(persona);
+
+      const ref1 = state.getById(persona.id)!;
+      const ref2 = state.getById(persona.id)!;
+
+      // Both calls return the same object identity
+      expect(ref1).toBe(ref2);
+    });
+
+    it("updating pending_update.traits does not change entity.traits", () => {
+      const persona: PersonaEntity = {
+        ...makePersona("IsolationBot"),
+        traits: [
+          { id: "t1", name: "Original Trait", description: "The real one", sentiment: 0.5, strength: 0.8, last_updated: "" },
+        ],
+      };
+      state.add(persona);
+
+      // Simulate what handleReflectionCritic does: write pending_update with different traits
+      const pendingTraits = [
+        { id: "p1", name: "Proposed Trait", description: "The proposed one", sentiment: 0.7, strength: 0.9, last_updated: "" },
+      ];
+      state.update(persona.id, {
+        pending_update: {
+          short_description: "Proposed short",
+          long_description: "Proposed long",
+          traits: pendingTraits,
+          topics: [],
+          critique: "Some critique",
+          created_at: new Date().toISOString(),
+        },
+      });
+
+      const stored = state.getById(persona.id)!;
+
+      // entity.traits must be the original — untouched by pending_update write
+      expect(stored.traits).toHaveLength(1);
+      expect(stored.traits[0].name).toBe("Original Trait");
+
+      // pending_update.traits must have the proposed values
+      expect(stored.pending_update).toBeDefined();
+      expect(stored.pending_update!.traits).toHaveLength(1);
+      expect(stored.pending_update!.traits[0].name).toBe("Proposed Trait");
+
+      // The two arrays must NOT be the same reference
+      expect(stored.traits).not.toBe(stored.pending_update!.traits);
+    });
+
+    it("mutating pending_update.traits[0].name after update does not affect entity.traits[0].name", () => {
+      const persona: PersonaEntity = {
+        ...makePersona("MutationBot"),
+        traits: [
+          { id: "t1", name: "Stable Name", description: "desc", sentiment: 0, strength: 0.5, last_updated: "" },
+        ],
+      };
+      state.add(persona);
+
+      const pendingTraits = [
+        { id: "t1", name: "Stable Name", description: "desc", sentiment: 0, strength: 0.5, last_updated: "" },
+      ];
+      state.update(persona.id, {
+        pending_update: {
+          short_description: "",
+          long_description: "",
+          traits: pendingTraits,
+          topics: [],
+          critique: "",
+          created_at: new Date().toISOString(),
+        },
+      });
+
+      // Simulate what the UI does: mutate the returned pending_update object directly
+      const stored = state.getById(persona.id)!;
+      stored.pending_update!.traits[0].name = "MUTATED";
+
+      // entity.traits[0].name must still be the original
+      expect(state.getById(persona.id)!.traits[0].name).toBe("Stable Name");
+    });
+  });
+
   describe("load/export", () => {
     it("exports personas to serializable format", () => {
       const bot1 = makePersona("Bot1");
