@@ -189,7 +189,10 @@ export async function handleHumanPersonScan(response: LLMResponse, state: StateM
     return;
   }
 
-  const context = response.request.data as unknown as ExtractionContext;
+  const context = {
+    ...(response.request.data as unknown as ExtractionContext),
+    channelDisplayName: (response.request.data as Record<string, unknown>).personaDisplayName as string,
+  };
   if (!context?.personaId) return;
 
   const { messages_context, messages_analyze } = resolveMessageWindow(response, state);
