@@ -16,7 +16,7 @@ interface EditableSettingsData {
   rewrite_model?: string | null;
   name_display?: string | null;
   default_heartbeat_ms?: string | null;
-  default_context_window_hours?: number | null;
+  default_context_window_ms?: string | null;
   message_min_count?: number | null;
   message_max_age_days?: number | null;
   ceremony?: {
@@ -65,7 +65,7 @@ export function settingsToYAML(settings: HumanSettings | undefined, accounts: Pr
     rewrite_model: guidToDisplay(settings?.rewrite_model),
     name_display: settings?.name_display ?? null,
     default_heartbeat_ms: formatDuration(settings?.default_heartbeat_ms ?? 1800000),
-    default_context_window_hours: settings?.default_context_window_hours ?? 8,
+    default_context_window_ms: formatDuration(settings?.default_context_window_ms ?? 28800000),
     message_min_count: settings?.message_min_count ?? 200,
     message_max_age_days: settings?.message_max_age_days ?? 14,
     ceremony: {
@@ -190,7 +190,7 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
     rewrite_model: displayToGuid(data.rewrite_model),
     name_display: nullToUndefined(data.name_display),
     default_heartbeat_ms: parseMsDuration(data.default_heartbeat_ms, 1800000),
-    default_context_window_hours: nullToUndefined(data.default_context_window_hours),
+    default_context_window_ms: parseMsDuration(data.default_context_window_ms, 28800000),
     message_min_count: nullToUndefined(data.message_min_count),
     message_max_age_days: nullToUndefined(data.message_max_age_days),
     ceremony,

@@ -52,15 +52,15 @@ describe("personaToYAML", () => {
     expect(yaml).not.toContain("300000");
   });
 
-  test("serializes context_window_hours as null when unset", () => {
+  test("serializes context_window_ms as null when unset", () => {
     const yaml = personaToYAML(minimalPersona);
-    expect(yaml).toContain("context_window_hours: null");
+    expect(yaml).toContain("context_window_ms: null");
   });
 
-  test("serializes context_window_hours as number when set", () => {
-    const persona = { ...minimalPersona, context_window_hours: 24 };
+  test("serializes context_window_ms as duration string when set", () => {
+    const persona = { ...minimalPersona, context_window_ms: 8 * 3600000 };
     const yaml = personaToYAML(persona);
-    expect(yaml).toContain("context_window_hours: 24");
+    expect(yaml).toContain("context_window_ms: 8h");
   });
 
   test("serializes persona with traits and topics", () => {
@@ -263,7 +263,7 @@ groups_visible:
   - work: true
   - personal: true
 heartbeat_delay_ms: 10m
-context_window_hours: 48
+context_window_ms: 12h
 traits: []
 topics: []
 `;
@@ -273,20 +273,20 @@ topics: []
     expect(result.updates.group_primary).toBe("work");
     expect(result.updates.groups_visible).toEqual(["work", "personal"]);
     expect(result.updates.heartbeat_delay_ms).toBe(600000);
-    expect(result.updates.context_window_hours).toBe(48);
+    expect(result.updates.context_window_ms).toBe(12 * 3600000);
   });
 
   test("parses null heartbeat_delay_ms as undefined", () => {
     const yaml = `
 display_name: TestBot
 heartbeat_delay_ms: null
-context_window_hours: null
+context_window_ms: null
 traits: []
 topics: []
 `;
     const result = personaFromYAML(yaml, emptyOriginal);
     expect(result.updates.heartbeat_delay_ms).toBeUndefined();
-    expect(result.updates.context_window_hours).toBeUndefined();
+    expect(result.updates.context_window_ms).toBeUndefined();
   });
 
   test("parses groups_visible with mixed true/false values", () => {
@@ -587,7 +587,7 @@ describe("round-trip serialization", () => {
       last_updated: timestamp,
       last_heartbeat: timestamp,
       heartbeat_delay_ms: 300000,
-      context_window_hours: 24,
+      context_window_ms: 24 * 3600000,
     };
 
     const yaml = personaToYAML(original);
@@ -603,7 +603,7 @@ describe("round-trip serialization", () => {
     expect(result.updates.topics).toHaveLength(1);
     expect(result.updates.topics![0].id).toBe("top1");
     expect(result.updates.heartbeat_delay_ms).toBe(original.heartbeat_delay_ms);
-    expect(result.updates.context_window_hours).toBe(original.context_window_hours);
+    expect(result.updates.context_window_ms).toBe(original.context_window_ms);
     expect(result.deletedTraitIds).toEqual([]);
     expect(result.deletedTopicIds).toEqual([]);
   });
@@ -730,7 +730,7 @@ describe("round-trip serialization", () => {
   test("round-trips all new configurable settings fields", () => {
     const settings: HumanSettings = {
       default_heartbeat_ms: 120000,
-      default_context_window_hours: 4,
+      default_context_window_ms: 4 * 3600000,
       message_min_count: 100,
       message_max_age_days: 7,
       ceremony: { time: "09:00", event_window_hours: 2 },
@@ -738,7 +738,7 @@ describe("round-trip serialization", () => {
     const yaml = settingsToYAML(settings, []);
     const result = settingsFromYAML(yaml, settings, []);
     expect(result.default_heartbeat_ms).toBe(120000);
-    expect(result.default_context_window_hours).toBe(4);
+    expect(result.default_context_window_ms).toBe(4 * 3600000);
     expect(result.message_min_count).toBe(100);
     expect(result.message_max_age_days).toBe(7);
     expect(result.ceremony?.event_window_hours).toBe(2);
@@ -759,7 +759,7 @@ describe("round-trip serialization", () => {
     const yaml = settingsToYAML(settings, []);
     const result = settingsFromYAML(yaml, settings, []);
     expect(result.default_heartbeat_ms).toBe(1800000);
-    expect(result.default_context_window_hours).toBe(8);
+    expect(result.default_context_window_ms).toBe(28800000);
     expect(result.message_min_count).toBe(200);
     expect(result.message_max_age_days).toBe(14);
     expect(result.ceremony?.event_window_hours).toBeUndefined();

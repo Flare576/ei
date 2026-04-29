@@ -38,7 +38,7 @@ interface EditablePersonaData {
   traits: YAMLTrait[];
   topics: YAMLPersonaTopic[];
   heartbeat_delay_ms?: string | null;
-  context_window_hours?: number | null;
+  context_window_ms?: string | null;
   is_paused?: boolean;
   pause_until?: string;
   is_static?: boolean;
@@ -179,7 +179,9 @@ export function newPersonaFromYAML(yamlContent: string, allTools?: ToolDefinitio
     heartbeat_delay_ms: data.heartbeat_delay_ms == null
       ? undefined
       : parseDuration(data.heartbeat_delay_ms) ?? undefined,
-    context_window_hours: data.context_window_hours ?? undefined,
+    context_window_ms: data.context_window_ms == null
+      ? undefined
+      : parseDuration(data.context_window_ms) ?? undefined,
     tools: resolvePersonaToolsFromMap(data.tools, allTools ?? [], allProviders ?? []),
   };
 }
@@ -218,7 +220,7 @@ export function personaToYAML(persona: PersonaEntity, allGroups?: string[], allT
           name, perspective, approach, personal_stake, sentiment: sentiment ?? 0, exposure_current, exposure_desired
         })),
     heartbeat_delay_ms: persona.heartbeat_delay_ms ? formatDuration(persona.heartbeat_delay_ms) : null,
-    context_window_hours: persona.context_window_hours ?? null,
+    context_window_ms: persona.context_window_ms ? formatDuration(persona.context_window_ms) : null,
     is_paused: persona.is_paused || undefined,
     pause_until: persona.pause_until,
     is_static: persona.is_static || undefined,
@@ -328,7 +330,9 @@ export function personaFromYAML(yamlContent: string, original: PersonaEntity, al
     heartbeat_delay_ms: data.heartbeat_delay_ms == null
       ? undefined
       : parseDuration(data.heartbeat_delay_ms) ?? undefined,
-    context_window_hours: data.context_window_hours ?? undefined,
+    context_window_ms: data.context_window_ms == null
+      ? undefined
+      : parseDuration(data.context_window_ms) ?? undefined,
     is_paused: data.is_paused ?? false,
     pause_until: data.pause_until,
     is_static: data.is_static ?? false,
