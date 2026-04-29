@@ -15,15 +15,12 @@ export type {
 
 export {
   buildPersonaGenerationPrompt,
-  buildPersonaDescriptionsPrompt,
   buildPersonaFromPersonPrompt,
 } from "./generation/index.js";
 export type {
   PersonaGenerationPromptData,
   PersonaGenerationResult,
   PersonaFromPersonPromptData,
-  PersonaDescriptionsPromptData,
-  PersonaDescriptionsResult,
 } from "./generation/types.js";
 
 export {
@@ -40,14 +37,12 @@ export type {
 
 
 export {
-  buildHumanFactScanPrompt,
   buildHumanTopicScanPrompt,
   buildHumanPersonScanPrompt,
   buildEventScanPrompt,
 } from "./human/index.js";
 export type { EventScanPromptData } from "./human/event-scan.js";
 export type {
-  FactScanPromptData,
   TopicScanPromptData,
   PersonScanPromptData,
   FactScanCandidate,
@@ -62,20 +57,6 @@ export type {
   ExposureImpact,
   ItemUpdateResult,
 } from "./human/types.js";
-
-export {
-  buildPersonaExpirePrompt,
-  buildPersonaExplorePrompt,
-  buildDescriptionCheckPrompt,
-} from "./ceremony/index.js";
-export type {
-  PersonaExpirePromptData,
-  PersonaExpireResult,
-  PersonaExplorePromptData,
-  PersonaExploreResult,
-  DescriptionCheckPromptData,
-  DescriptionCheckResult,
-} from "./ceremony/types.js";
 
 export {
   buildRoomResponsePrompt,

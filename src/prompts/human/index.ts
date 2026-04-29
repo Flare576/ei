@@ -1,4 +1,3 @@
-export { buildHumanFactScanPrompt } from "./fact-scan.js";
 export { buildFactFindPrompt } from "./fact-find.js";
 export { buildHumanTopicScanPrompt } from "./topic-scan.js";
 export { buildHumanPersonScanPrompt } from "./person-scan.js";
@@ -16,7 +15,6 @@ export type {
   PromptOutput,
   ParticipantContext,
   PersonaEntitySnapshot,
-  FactScanPromptData,
   TopicScanPromptData,
   PersonScanPromptData,
   FactFindPromptData,
