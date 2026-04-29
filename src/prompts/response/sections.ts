@@ -138,6 +138,32 @@ ${formatted}
 }
 
 // =============================================================================
+// PENDING UPDATE SECTION
+// =============================================================================
+
+export function buildPendingUpdateSection(pending_update: NonNullable<import("./types.js").ResponsePromptData["persona"]["pending_update"]>): string {
+  const descriptionPart = pending_update.long_description || pending_update.short_description
+    ? `### Proposed Description\n${pending_update.long_description || pending_update.short_description}`
+    : "";
+
+  const traitsPart = pending_update.traits.length > 0
+    ? `### Proposed Traits\n${pending_update.traits.map(t => `- **${t.name}**: ${t.description}`).join("\n")}`
+    : "";
+
+  const topicsPart = pending_update.topics.length > 0
+    ? `### Proposed Interests\n${pending_update.topics.map(t => `- **${t.name}**: ${t.perspective}`).join("\n")}`
+    : "";
+
+  const parts = [descriptionPart, traitsPart, topicsPart].filter(Boolean).join("\n\n");
+
+  return `## Pending Identity Changes
+
+Your human is reviewing proposed updates to your identity. This is yours to be aware of — bring it up if it feels right, or let it sit. Either way, these changes are waiting:
+
+${parts}`;
+}
+
+// =============================================================================
 // HUMAN SECTION
 // =============================================================================
 

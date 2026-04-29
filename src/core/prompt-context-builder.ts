@@ -291,6 +291,7 @@ export async function buildResponsePromptData(
       topics: persona.topics,
       interested_topics: persona.topics.filter(t => t.exposure_desired - t.exposure_current > 0.2),
       include_message_timestamps: persona.include_message_timestamps,
+      pending_update: persona.pending_update,
     },
     human: filteredHuman,
     visible_personas: visiblePersonas,

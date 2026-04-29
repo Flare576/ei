@@ -23,6 +23,7 @@ import {
   buildResponseFormatSection,
   buildToolsSection,
   buildTemporalAnchorsSection,
+  buildPendingUpdateSection,
 } from "./sections.js";
 
 export type { ResponsePromptData, PromptOutput, PersonaResponseResult } from "./types.js";
@@ -46,6 +47,7 @@ Your role is unique among personas:
   const guidelines = buildGuidelinesSection("ei");
   const yourTraits = buildTraitsSection(data.persona.traits, "Your Personality");
   const yourTopics = buildTopicsSection(data.persona.topics, "Your Interests");
+  const pendingUpdate = data.persona.pending_update ? buildPendingUpdateSection(data.persona.pending_update) : "";
   const temporalAnchors = buildTemporalAnchorsSection(data.temporal_anchors, data.human.name);
   const humanSection = buildHumanSection(data.human);
   const quotesSection = buildQuotesSection(data.human.quotes, data.human);
@@ -67,6 +69,7 @@ ${guidelines}
 ${yourTraits}
 
 ${yourTopics}
+${pendingUpdate ? `\n${pendingUpdate}` : ""}
 ${temporalAnchors ? `\n${temporalAnchors}` : ""}
 ${humanSection}
 ${quotesSection}
@@ -93,6 +96,7 @@ function buildStandardSystemPrompt(data: ResponsePromptData): string {
   const guidelines = buildGuidelinesSection(data.persona.name);
   const yourTraits = buildTraitsSection(data.persona.traits, "Your Personality");
   const yourTopics = buildTopicsSection(data.persona.topics, "Your Interests");
+  const pendingUpdate = data.persona.pending_update ? buildPendingUpdateSection(data.persona.pending_update) : "";
   const temporalAnchors = buildTemporalAnchorsSection(data.temporal_anchors, data.human.name);
   const humanSection = buildHumanSection(data.human);
   const quotesSection = buildQuotesSection(data.human.quotes, data.human);
@@ -113,6 +117,7 @@ ${guidelines}
 ${yourTraits}
 
 ${yourTopics}
+${pendingUpdate ? `\n${pendingUpdate}` : ""}
 ${temporalAnchors ? `\n${temporalAnchors}` : ""}
 ${humanSection}
 ${quotesSection}
