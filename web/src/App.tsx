@@ -1134,7 +1134,7 @@ function App() {
 
   const handleHumanUpdate = useCallback(async (updates: Record<string, unknown>) => {
     if (!processor) return;
-    const { default_model, oneshot_model, rewrite_model, queue_paused, name_display, accounts, sync, ceremony_time, default_heartbeat_ms, default_context_window_hours, message_min_count, message_max_age_days, event_window_hours, active_theme, custom_themes, ...rest } = updates;
+    const { default_model, oneshot_model, rewrite_model, queue_paused, name_display, accounts, sync, ceremony_time, default_heartbeat_ms, default_context_window_ms, message_min_count, message_max_age_days, event_window_hours, active_theme, custom_themes, ...rest } = updates;
     
     const settingsUpdates: Record<string, unknown> = {};
     if (default_model !== undefined) settingsUpdates.default_model = default_model;
@@ -1143,7 +1143,7 @@ function App() {
     if (queue_paused !== undefined) settingsUpdates.queue_paused = queue_paused;
     if (name_display !== undefined) settingsUpdates.name_display = name_display;
     if (default_heartbeat_ms !== undefined) settingsUpdates.default_heartbeat_ms = default_heartbeat_ms;
-    if (default_context_window_hours !== undefined) settingsUpdates.default_context_window_hours = default_context_window_hours;
+    if (default_context_window_ms !== undefined) settingsUpdates.default_context_window_ms = default_context_window_ms;
     if (message_min_count !== undefined) settingsUpdates.message_min_count = message_min_count;
     if (message_max_age_days !== undefined) settingsUpdates.message_max_age_days = message_max_age_days;
     if (accounts !== undefined) settingsUpdates.accounts = accounts;
@@ -1835,7 +1835,7 @@ function App() {
             accounts: human.settings?.accounts,
             sync: human.settings?.sync,
             default_heartbeat_ms: human.settings?.default_heartbeat_ms,
-            default_context_window_hours: human.settings?.default_context_window_hours,
+            default_context_window_ms: human.settings?.default_context_window_ms,
             message_min_count: human.settings?.message_min_count,
             message_max_age_days: human.settings?.message_max_age_days,
             event_window_hours: human.settings?.ceremony?.event_window_hours,
@@ -2135,7 +2135,7 @@ function App() {
               human?.facts?.find(f => f.name === "Nickname/Preferred Name")?.description ||
               "You"
             }
-            defaultContextWindowHours={human?.settings?.default_context_window_hours}
+            defaultContextWindowMs={human?.settings?.default_context_window_ms}
             onUpdateRoom={(updates) => processorRef.current?.updateRoom(activeRoom.id, updates) ?? Promise.resolve()}
             onDeleteMessages={(ids) => handleDeleteRoomMessages(activeRoom.id, ids)}
             onSetMessageContextStatus={(msgId, status) =>

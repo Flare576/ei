@@ -107,7 +107,7 @@ export interface HumanSettings {
   skip_quote_delete_confirm?: boolean;
   name_display?: string;
   default_heartbeat_ms?: number;
-  default_context_window_hours?: number;
+  default_context_window_ms?: number;
   message_min_count?: number;
   message_max_age_days?: number;
   accounts?: ProviderAccount[];
@@ -149,7 +149,7 @@ export interface PersonaEntity {
   archived_at?: string;
   is_static: boolean;
   heartbeat_delay_ms?: number;
-  context_window_hours?: number;
+  context_window_ms?: number;
   include_message_timestamps?: boolean; // Prepend ISO timestamp to each message sent to the LLM
   context_boundary?: string;  // ISO timestamp - messages before this excluded from LLM context
   last_updated: string;

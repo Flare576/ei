@@ -31,7 +31,7 @@ function isInContext(
   // For 'default': check if within sliding window
   const now = new Date();
   const messageTime = new Date(message.timestamp);
-  const windowStart = new Date(now.getTime() - (contextWindowHours || 8) * 60 * 60 * 1000);
+  const windowStart = new Date(now.getTime() - (contextWindowHours || 8) * 3600000);
   
   if (contextBoundary && messageTime < new Date(contextBoundary)) return false;
   

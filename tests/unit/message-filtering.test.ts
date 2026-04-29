@@ -19,7 +19,7 @@ const createMessage = (
 });
 
 describe("filterMessagesForContext", () => {
-  const windowHours = 8;
+  const windowMs = 8 * 60 * 60 * 1000;
 
   describe("context_status priority", () => {
     it("includes Always messages regardless of hours window", () => {
@@ -28,7 +28,7 @@ describe("filterMessagesForContext", () => {
         createMessage("default-old", ago(24), ContextStatus.Default),
       ];
 
-      const result = filterMessagesForContext(messages, undefined, windowHours);
+      const result = filterMessagesForContext(messages, undefined, windowMs);
 
       expect(result.map(m => m.id)).toEqual(["always"]);
     });
@@ -40,7 +40,7 @@ describe("filterMessagesForContext", () => {
         createMessage("default", ago(4), ContextStatus.Default),
       ];
 
-      const result = filterMessagesForContext(messages, boundary, windowHours);
+      const result = filterMessagesForContext(messages, boundary, windowMs);
 
       expect(result.some(m => m.id === "always")).toBe(true);
     });
@@ -51,7 +51,7 @@ describe("filterMessagesForContext", () => {
         createMessage("default", ago(1), ContextStatus.Default),
       ];
 
-      const result = filterMessagesForContext(messages, undefined, windowHours);
+      const result = filterMessagesForContext(messages, undefined, windowMs);
 
       expect(result.some(m => m.id === "never")).toBe(false);
       expect(result.some(m => m.id === "default")).toBe(true);
@@ -65,7 +65,7 @@ describe("filterMessagesForContext", () => {
         createMessage("edge", ago(7)),
       ];
 
-      const result = filterMessagesForContext(messages, undefined, windowHours);
+      const result = filterMessagesForContext(messages, undefined, windowMs);
 
       expect(result.length).toBe(2);
     });
@@ -76,7 +76,7 @@ describe("filterMessagesForContext", () => {
         createMessage("old", ago(24)),
       ];
 
-      const result = filterMessagesForContext(messages, undefined, windowHours);
+      const result = filterMessagesForContext(messages, undefined, windowMs);
 
       expect(result.map(m => m.id)).toEqual(["recent"]);
     });
@@ -90,7 +90,7 @@ describe("filterMessagesForContext", () => {
         createMessage("after-boundary", ago(1)),
       ];
 
-      const result = filterMessagesForContext(messages, boundary, windowHours);
+      const result = filterMessagesForContext(messages, boundary, windowMs);
 
       expect(result.map(m => m.id)).toEqual(["after-boundary"]);
     });
@@ -102,7 +102,7 @@ describe("filterMessagesForContext", () => {
         createMessage("after-boundary", ago(1)),
       ];
 
-      const result = filterMessagesForContext(messages, boundary, windowHours);
+      const result = filterMessagesForContext(messages, boundary, windowMs);
 
       expect(result.length).toBe(2);
     });
@@ -116,7 +116,7 @@ describe("filterMessagesForContext", () => {
         createMessage("recent-and-after-boundary", ago(1)),
       ];
 
-      const result = filterMessagesForContext(messages, boundary, windowHours);
+      const result = filterMessagesForContext(messages, boundary, windowMs);
 
       expect(result.map(m => m.id)).toEqual(["recent-and-after-boundary"]);
     });
@@ -128,7 +128,7 @@ describe("filterMessagesForContext", () => {
         createMessage("in-window-after-boundary", ago(1)),
       ];
 
-      const result = filterMessagesForContext(messages, boundary, windowHours);
+      const result = filterMessagesForContext(messages, boundary, windowMs);
 
       expect(result.map(m => m.id)).toEqual(["in-window-after-boundary"]);
     });
@@ -144,7 +144,7 @@ describe("filterMessagesForContext", () => {
         createMessage("never-recent", ago(1), ContextStatus.Never),
       ];
 
-      const result = filterMessagesForContext(messages, boundary, windowHours);
+      const result = filterMessagesForContext(messages, boundary, windowMs);
 
       expect(result.map(m => m.id)).toEqual(["recent-after-boundary", "always-old"]);
     });
@@ -152,7 +152,7 @@ describe("filterMessagesForContext", () => {
 
   describe("edge cases", () => {
     it("returns empty array for empty input", () => {
-      const result = filterMessagesForContext([], undefined, windowHours);
+      const result = filterMessagesForContext([], undefined, windowMs);
       expect(result).toEqual([]);
     });
 
@@ -162,7 +162,7 @@ describe("filterMessagesForContext", () => {
         createMessage("exact", ts),
       ];
 
-      const result = filterMessagesForContext(messages, ts, windowHours);
+      const result = filterMessagesForContext(messages, ts, windowMs);
 
       expect(result.length).toBe(1);
     });
@@ -175,7 +175,7 @@ describe("filterMessagesForContext", () => {
         createMessage("old-never", ago(24), ContextStatus.Never),
       ];
 
-      const result = filterMessagesForContext(messages, boundary, windowHours);
+      const result = filterMessagesForContext(messages, boundary, windowMs);
 
       expect(result.length).toBe(1);
       expect(result[0].id).toBe("old-always");

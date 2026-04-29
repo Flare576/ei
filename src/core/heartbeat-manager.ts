@@ -217,8 +217,8 @@ export async function queueHeartbeatCheck(sm: StateManager, personaId: string, i
   console.log(`[HeartbeatCheck ${persona.display_name}] Queueing heartbeat check (model: ${model})`);
   const human = sm.getHuman();
    const history = sm.messages_get(personaId);
-   const contextWindowHours = persona.context_window_hours ?? human.settings?.default_context_window_hours ?? 8;
-   const contextHistory = filterMessagesForContext(history, persona.context_boundary, contextWindowHours);
+   const contextWindowMs = persona.context_window_ms ?? human.settings?.default_context_window_ms ?? 28800000;
+   const contextHistory = filterMessagesForContext(history, persona.context_boundary, contextWindowMs);
 
   if (personaId === "ei") {
     await queueEiHeartbeat(sm, human, contextHistory, isTUI);

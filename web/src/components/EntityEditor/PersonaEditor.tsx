@@ -254,7 +254,7 @@ export function PersonaEditor({
           personaName={persona.display_name}
           messages={messages}
           contextBoundary={localPersona.context_boundary}
-          contextWindowHours={localPersona.context_window_hours ?? 8}
+          contextWindowHours={Math.round((localPersona.context_window_ms ?? 28800000) / 3600000)}
           onContextStatusChange={onContextStatusChange}
           onBulkContextStatusChange={onBulkContextStatusChange}
           onContextBoundaryChange={onContextBoundaryChange}

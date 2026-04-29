@@ -17,7 +17,7 @@ interface SettingsData {
   accounts?: ProviderAccount[];
   sync?: SyncCredentials;
   default_heartbeat_ms?: number;
-  default_context_window_hours?: number;
+  default_context_window_ms?: number;
   message_min_count?: number;
   message_max_age_days?: number;
   event_window_hours?: number;
@@ -232,8 +232,8 @@ export const SettingsModal = ({
                   type="number"
                   className="ei-input"
                   min="1"
-                  value={settings.default_context_window_hours ?? 8}
-                  onChange={(e) => onUpdate({ default_context_window_hours: Number(e.target.value) })}
+                  value={Math.round((settings.default_context_window_ms ?? 28800000) / 3600000)}
+                  onChange={(e) => onUpdate({ default_context_window_ms: Number(e.target.value) * 3600000 })}
                 />
                 <small className="ei-form-hint">How far back to include conversation history</small>
               </div>

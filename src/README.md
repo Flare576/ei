@@ -148,7 +148,7 @@ This is intentional. Concurrent LLM calls sound appealing until you're watching 
 
 # Context Windows
 
-Personas don't send their entire message history to the LLM. By default, only messages from the last 8 hours are included (`context_window_hours`, configurable per persona). Older messages are still stored — they're just not in the prompt.
+Personas don't send their entire message history to the LLM. By default, only messages from the last 8 hours are included (`context_window_ms`, configurable per persona). Older messages are still stored — they're just not in the prompt.
 
 Message rolloff works differently: messages are kept until there are at least 200 of them _and_ any are older than 14 days. So a persona you chat with daily will roll off old messages gradually; one you chat with twice a year will keep everything.
 

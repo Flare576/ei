@@ -63,7 +63,7 @@ describe("fetchMessagesForLLM — timestamp injection", () => {
   it("calls formatTimestamp once per message when include_message_timestamps is true", () => {
     const persona: Partial<PersonaEntity> = {
       id: "p1",
-      context_window_hours: 999,
+      context_window_ms: 999 * 3600000,
       context_boundary: undefined,
       include_message_timestamps: true,
     };
@@ -82,7 +82,7 @@ describe("fetchMessagesForLLM — timestamp injection", () => {
   it("does NOT call formatTimestamp when include_message_timestamps is false", () => {
     const persona: Partial<PersonaEntity> = {
       id: "p2",
-      context_window_hours: 999,
+      context_window_ms: 999 * 3600000,
       context_boundary: undefined,
       include_message_timestamps: false,
     };
@@ -111,7 +111,7 @@ describe("fetchMessagesForLLM — silence_reason role attribution", () => {
 
   const persona: Partial<PersonaEntity> = {
     id: "p1",
-    context_window_hours: 999,
+    context_window_ms: 999 * 3600000,
     context_boundary: undefined,
     include_message_timestamps: false,
   };

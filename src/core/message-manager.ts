@@ -282,8 +282,8 @@ export function fetchMessagesForLLM(
  
    const human = sm.getHuman();
    const history = sm.messages_get(personaId);
-   const contextWindowHours = persona.context_window_hours ?? human.settings?.default_context_window_hours ?? 8;
-   const filteredHistory = filterMessagesForContext(history, persona.context_boundary, contextWindowHours);
+   const contextWindowMs = persona.context_window_ms ?? human.settings?.default_context_window_ms ?? 28800000;
+   const filteredHistory = filterMessagesForContext(history, persona.context_boundary, contextWindowMs);
 
   const humanName = human.settings?.name_display
     || human.facts?.find(f => f.name === "Nickname/Preferred Name")?.description

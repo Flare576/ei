@@ -24,7 +24,7 @@ export const PersonaSettingsTab: React.FC<PersonaSettingsTabProps> = ({
 }) => {
   
   const heartbeatMinutes = persona.heartbeat_delay_ms ? Math.round(persona.heartbeat_delay_ms / 60000) : 30;
-  const contextHours = persona.context_window_hours ?? 8;
+  const contextHours = Math.round((persona.context_window_ms ?? 28800000) / 3600000);
 
   const handleHeartbeatChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const minutes = parseInt(e.target.value, 10);
@@ -36,7 +36,7 @@ export const PersonaSettingsTab: React.FC<PersonaSettingsTabProps> = ({
   const handleContextWindowChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const hours = parseInt(e.target.value, 10);
     if (!isNaN(hours) && hours > 0) {
-      onChange("context_window_hours", hours);
+      onChange("context_window_ms", hours * 3600000);
     }
   };
 

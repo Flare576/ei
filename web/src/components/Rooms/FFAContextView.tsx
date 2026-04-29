@@ -8,7 +8,7 @@ interface FFAContextViewProps {
   allMessages: RoomMessage[];
   personas: PersonaSummary[];
   humanName: string;
-  defaultContextWindowHours?: number;
+  defaultContextWindowMs?: number;
   onUpdateRoom: (updates: Partial<RoomEntity>) => Promise<void>;
   onDeleteMessages: (messageIds: string[]) => Promise<void>;
   onSetMessageContextStatus: (messageId: string, status: ContextStatus) => Promise<void>;
@@ -72,14 +72,14 @@ export function FFAContextView({
   allMessages,
   personas,
   humanName,
-  defaultContextWindowHours,
+  defaultContextWindowMs,
   onUpdateRoom,
   onDeleteMessages,
   onSetMessageContextStatus,
 }: FFAContextViewProps) {
   const [pendingDelete, setPendingDelete] = useState<DeleteConfirmData | null>(null);
   const [contextHoursInput, setContextHoursInput] = useState<string>(
-    String(room.context_window_hours ?? defaultContextWindowHours ?? 8)
+    String(Math.round((room.context_window_ms ?? defaultContextWindowMs ?? 28800000) / 3600000))
   );
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
@@ -152,7 +152,7 @@ export function FFAContextView({
       const n = parseInt(raw, 10);
       if (!Number.isFinite(n)) return;
       const clamped = Math.max(1, Math.min(168, n));
-      await onUpdateRoom({ context_window_hours: clamped });
+      await onUpdateRoom({ context_window_ms: clamped * 3600000 });
     },
     [onUpdateRoom]
   );
@@ -161,7 +161,7 @@ export function FFAContextView({
     await onUpdateRoom({ context_boundary: undefined });
   }, [onUpdateRoom]);
 
-  const effectiveHours = room.context_window_hours ?? defaultContextWindowHours ?? 8;
+  const effectiveHours = Math.round((room.context_window_ms ?? defaultContextWindowMs ?? 28800000) / 3600000);
 
   return (
     <div className="ei-ffa-context">
@@ -266,7 +266,7 @@ export function FFAContextView({
               }}
             />
             <span className="ei-ffa-context__hours-unit">hours</span>
-            {room.context_window_hours == null && (
+            {room.context_window_ms == null && (
               <span className="ei-ffa-context__hours-default">
                 (default: {effectiveHours}h)
               </span>

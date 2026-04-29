@@ -319,10 +319,10 @@ export async function buildRoomResponsePromptData(
 
   let sourceMessages: RoomMessage[];
   if (room.mode === RoomMode.FreeForAll) {
-    const contextWindowHours = room.context_window_hours
-      ?? human.settings?.default_context_window_hours
-      ?? 8;
-    const windowCutoff = new Date(Date.now() - contextWindowHours * 60 * 60 * 1000).toISOString();
+    const contextWindowMs = room.context_window_ms
+      ?? human.settings?.default_context_window_ms
+      ?? 28800000;
+    const windowCutoff = new Date(Date.now() - contextWindowMs).toISOString();
     const boundaryMs = room.context_boundary ? new Date(room.context_boundary).getTime() : 0;
     sourceMessages = allSourceMessages.filter(m => {
       const msgMs = new Date(m.timestamp).getTime();
@@ -335,8 +335,8 @@ export async function buildRoomResponsePromptData(
     const byCount = allSourceMessages.slice(-MIN_ROOM_MESSAGES);
     if (byCount.length > sourceMessages.length) sourceMessages = byCount;
   } else {
-    const contextWindowHours = human.settings?.default_context_window_hours ?? 8;
-    const windowCutoff = new Date(Date.now() - contextWindowHours * 60 * 60 * 1000).toISOString();
+    const contextWindowMs = human.settings?.default_context_window_ms ?? 28800000;
+    const windowCutoff = new Date(Date.now() - contextWindowMs).toISOString();
     const byTime = allSourceMessages.filter(m => m.timestamp >= windowCutoff);
     const byCount = allSourceMessages.slice(-MIN_ROOM_MESSAGES);
     sourceMessages = byTime.length >= byCount.length ? byTime : byCount;

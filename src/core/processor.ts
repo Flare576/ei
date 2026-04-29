@@ -877,8 +877,8 @@ export class Processor {
       modified = true;
     }
 
-    if (human.settings.default_context_window_hours == null) {
-      human.settings.default_context_window_hours = 8;
+    if (human.settings.default_context_window_ms == null) {
+      human.settings.default_context_window_ms = 28800000;
       modified = true;
     }
 
@@ -1195,14 +1195,14 @@ const toolNextSteps = new Set([
 
         if (timeSinceHeartbeat >= heartbeatDelay) {
            const history = this.stateManager.messages_get(persona.id);
-           const contextWindowHours =
-             persona.context_window_hours 
-             ?? this.stateManager.getHuman().settings?.default_context_window_hours 
-             ?? 8;
+           const contextWindowMs =
+             persona.context_window_ms 
+             ?? this.stateManager.getHuman().settings?.default_context_window_ms 
+             ?? 28800000;
           const contextHistory = filterMessagesForContext(
             history,
             persona.context_boundary,
-            contextWindowHours
+            contextWindowMs
           );
           const trailing = countTrailingPersonaMessages(contextHistory);
           if (trailing < 3) {

@@ -8,12 +8,12 @@ import { ContextStatus as ContextStatusEnum } from "./types.js";
 export function filterMessagesForContext(
   messages: Message[],
   contextBoundary: string | undefined,
-  contextWindowHours: number
+  contextWindowMs: number
 ): Message[] {
   if (messages.length === 0) return [];
 
   const now = Date.now();
-  const windowStartMs = now - contextWindowHours * 60 * 60 * 1000;
+  const windowStartMs = now - contextWindowMs;
   const boundaryMs = contextBoundary ? new Date(contextBoundary).getTime() : 0;
 
   return messages.filter((msg) => {

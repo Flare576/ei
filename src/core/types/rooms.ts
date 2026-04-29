@@ -35,7 +35,7 @@ export interface RoomEntity {
   created_at: string;
   last_updated: string;
   capture_used?: boolean;
-  context_window_hours?: number;  // FFA only; falls back to human.settings.default_context_window_hours
+  context_window_ms?: number;  // FFA only; falls back to human.settings.default_context_window_ms
   context_boundary?: string;      // FFA only; ISO timestamp; same semantics as persona context_boundary
   messages: RoomMessage[];
 }
