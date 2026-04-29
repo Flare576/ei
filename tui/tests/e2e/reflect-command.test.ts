@@ -1,6 +1,6 @@
 import { test, expect } from "@microsoft/tui-test";
 import { MockLLMServerImpl } from "./framework/mock-server.js";
-import { rmSync, mkdirSync, writeFileSync, existsSync } from "fs";
+import { rmSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { createTestSettings, getTestDataPath, BUN_PATH } from "./fixtures.js";
 

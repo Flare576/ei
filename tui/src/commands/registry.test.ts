@@ -1,5 +1,7 @@
 import { test, expect, describe, beforeEach, mock } from "bun:test";
 import { parseCommandLine, registerCommand, parseAndExecute, getAllCommands, type Command, type CommandContext } from "./registry";
+import { type EiContextValue } from "../context/ei";
+import type { CliRenderer } from "@opentui/core";
 
 describe("parseCommandLine", () => {
   test("parses simple command", () => {
@@ -67,13 +69,16 @@ describe("parseAndExecute", () => {
     showOverlay: mock(() => {}),
     hideOverlay: mock(() => {}),
     showNotification: mock(() => {}),
-    exitApp: mock(() => {}),
+    exitApp: mock(async () => {}),
     stopProcessor: mock(async () => {}),
+    renderer: {} as unknown as CliRenderer,
+    setInputText: () => {},
+    getInputText: () => "",
     ei: {
       personas: () => [],
-      activePersona: () => null,
+      activePersonaId: () => null,
       messages: () => [],
-      queueStatus: () => ({ state: "idle" as const, pending_count: 0 }),
+      queueStatus: () => ({ state: "idle" as const, pending_count: 0, dlq_count: 0 }),
       notification: () => null,
       selectPersona: () => {},
       sendMessage: async () => {},
@@ -83,12 +88,12 @@ describe("parseAndExecute", () => {
       resumeQueue: async () => {},
       stopProcessor: async () => {},
       showNotification: () => {},
-      createPersona: async () => {},
+      createPersona: async (_input: { name: string }) => "",
       archivePersona: async () => {},
       unarchivePersona: async () => {},
       setContextBoundary: async () => {},
       updatePersona: async () => {},
-    },
+    } as unknown as EiContextValue,
   };
 
   beforeEach(() => {

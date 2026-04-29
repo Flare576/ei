@@ -10,7 +10,6 @@ import type {
 export class MockLLMServerImpl implements MockLLMServer {
   private app: Express;
   private server: Server | null = null;
-  private port = 0;
   private config: MockServerConfig;
   private requestHistory: MockRequest[] = [];
   private responseOverrides: Map<string, MockResponse> = new Map();
@@ -43,7 +42,6 @@ export class MockLLMServerImpl implements MockLLMServer {
   }
 
   async start(port: number, config: MockServerConfig): Promise<void> {
-    this.port = port;
     this.config = { ...this.config, ...config };
 
     return new Promise((resolve, reject) => {
@@ -225,7 +223,7 @@ export class MockLLMServerImpl implements MockLLMServer {
       res.json({ prompt_id: promptId });
     });
     this.app.get("/history/:promptId", (req: Request, res: Response) => {
-      const { promptId } = req.params;
+      const promptId = String(req.params["promptId"]);
       this.recordComfyRequest(req, `/history/${promptId}`);
       // Return completed workflow with mock image filename
       const mockFilename = `mock_image_${promptId}.png`;

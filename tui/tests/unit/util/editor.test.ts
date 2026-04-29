@@ -10,7 +10,6 @@ mock.module("../../../src/util/logger", () => ({
 }));
 import * as fs from "fs";
 import * as os from "os";
-import * as path from "path";
 import type { CliRenderer } from "@opentui/core";
 
 describe("spawnEditor", () => {
@@ -177,9 +176,7 @@ describe("spawnEditor", () => {
     process.env.EDITOR = "true";
     const options = createOptions({ filename: "unique-test.yaml" });
     
-    const before = Date.now();
     await spawnEditor(options);
-    const after = Date.now();
     
     expect(resumeCalls).toBe(1);
   });

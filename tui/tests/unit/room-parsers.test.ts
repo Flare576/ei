@@ -12,6 +12,7 @@ function makePersona(id: string, display_name: string, is_archived = false): Per
     is_paused: false,
     is_archived,
     unread_count: 0,
+    has_pending_update: false,
   };
 }
 

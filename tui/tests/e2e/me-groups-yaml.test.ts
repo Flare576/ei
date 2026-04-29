@@ -18,6 +18,8 @@ import { rmSync, mkdirSync, writeFileSync, readFileSync, chmodSync, existsSync }
 import { join } from "path";
 import { createTestSettings, BUN_PATH, getTestDataPath } from "./fixtures.js";
 
+type TuiTerminal = Parameters<Parameters<typeof test>[1]>[0]["terminal"];
+
 const MOCK_PORT = 3123;
 const MOCK_SERVER_URL = `http://127.0.0.1:${MOCK_PORT}/v1`;
 const TEST_DATA_PATH = getTestDataPath("me-groups-yaml");
@@ -154,7 +156,7 @@ test.use({
 // Helper
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function runMeTopicsAndCapture(terminal: any): Promise<string> {
+async function runMeTopicsAndCapture(terminal: TuiTerminal): Promise<string> {
   await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 15000 });
 
   if (existsSync(CAPTURE_FILE)) rmSync(CAPTURE_FILE);

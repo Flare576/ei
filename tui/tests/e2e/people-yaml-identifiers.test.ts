@@ -18,6 +18,8 @@
 import { test, expect } from "@microsoft/tui-test";
 import { MockLLMServerImpl } from "./framework/mock-server.js";
 import { rmSync, mkdirSync, writeFileSync, readFileSync, chmodSync, existsSync } from "fs";
+
+type TuiTerminal = Parameters<Parameters<typeof test>[1]>[0]["terminal"];
 import { join } from "path";
 import { createTestSettings, BUN_PATH, getTestDataPath } from "./fixtures.js";
 
@@ -164,7 +166,7 @@ test.use({
 // Tests
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function runMePeopleAndCapture(terminal: any): Promise<string> {
+async function runMePeopleAndCapture(terminal: TuiTerminal): Promise<string> {
   await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 15000 });
 
   terminal.write("/me people");

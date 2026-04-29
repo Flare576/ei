@@ -354,7 +354,6 @@ describe("humanToYAML", () => {
   const minimalHuman: HumanEntity = {
     entity: "human",
     facts: [],
-    traits: [],
     topics: [],
     people: [],
     quotes: [],
@@ -649,6 +648,8 @@ describe("round-trip serialization", () => {
 
     const original: HumanEntity = {
       entity: "human",
+      quotes: [],
+      last_updated: t1,
       facts: [{ id: "f1", name: "Coffee", description: "Old desc", sentiment: 0, last_updated: t1, validated_date: "" }],
       topics: [{ id: "top1", name: "Tech", description: "Old desc", exposure_current: 0.5, exposure_desired: 0.5, sentiment: 0, last_updated: t1 }],
       people: [{ id: "p1", name: "Bob", description: "Old desc", relationship: "friend", sentiment: 0, exposure_current: 0.5, exposure_desired: 0.5, last_updated: t1 }],

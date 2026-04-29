@@ -92,48 +92,6 @@ function createCheckpointWithMessages() {
   };
 }
 
-function createCheckpointNoMessages() {
-  const timestamp = new Date().toISOString();
-  return {
-    version: 1,
-    timestamp,
-    human: {
-      entity: "human",
-      facts: [],
-      traits: [],
-      topics: [],
-      people: [],
-      quotes: [],
-      last_updated: timestamp,
-      settings: createTestSettings(MOCK_SERVER_URL),
-    },
-    personas: {
-      ei: {
-        entity: {
-          entity: "system",
-          aliases: ["Ei"],
-          id: "ei",
-          display_name: "Ei",
-          short_description: "Test companion",
-          long_description: "A test companion",
-          traits: [],
-          topics: [],
-          facts: [],
-          people: [],
-          is_paused: false,
-          is_archived: false,
-          is_static: false,
-          last_updated: timestamp,
-          last_heartbeat: timestamp,
-          heartbeat_delay_ms: 999999999,
-        },
-        messages: [],
-      },
-    },
-    queue: [],
-  };
-}
-
 const mockServer = new MockLLMServerImpl();
 
 rmSync(TEST_DATA_PATH, { recursive: true, force: true });
