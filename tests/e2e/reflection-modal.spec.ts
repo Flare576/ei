@@ -365,6 +365,202 @@ test.describe("Persona Reflection Modal", () => {
     ).not.toBeVisible();
   });
 
+  test("regression: editing proposed trait description does not reorder or change current (left) column", async ({
+    page,
+    mockServerUrl,
+  }) => {
+    const timestamp = new Date().toISOString();
+
+    // Checkpoint designed to reproduce the observed bug:
+    // - entity has 3 traits in a specific order (Alpha, Beta, Gamma)
+    // - pending_update has the same trait names (matching what a real ceremony produces)
+    //   so React key collisions or reference sharing are possible
+    // - we edit the description of "Beta" (the middle trait) in the proposed column
+    // - expected: left column stays [Alpha, Beta, Gamma] in that order, unchanged
+    // - observed bug: a trait shifts to the bottom of the list and shows the edit
+    const checkpoint = {
+      version: 1,
+      timestamp,
+      human: {
+        entity: "human",
+        facts: [],
+        traits: [],
+        topics: [],
+        people: [],
+        quotes: [],
+        last_updated: timestamp,
+        settings: {
+          auto_save_interval_ms: 500,
+          default_model: "Mock LLM:mock-model",
+          ceremony: {
+            time: "09:00",
+            last_ceremony: timestamp,
+          },
+          accounts: [
+            {
+              id: "mock-llm-account",
+              name: "Mock LLM",
+              type: "llm",
+              url: mockServerUrl,
+              api_key: "",
+              default_model: "mock-model",
+              enabled: true,
+              created_at: timestamp,
+            },
+          ],
+        },
+      },
+      personas: {
+        ei: {
+          entity: {
+            entity: "system",
+            id: "ei",
+            display_name: "Ei",
+            aliases: ["Ei"],
+            short_description: "Your personal companion",
+            long_description: "A friendly AI companion",
+            traits: [],
+            topics: [],
+            is_paused: false,
+            is_archived: false,
+            last_updated: timestamp,
+          },
+          messages: [],
+        },
+        "test-persona": {
+          entity: {
+            entity: "system",
+            id: "test-persona",
+            display_name: "Alison",
+            aliases: ["Alison"],
+            short_description: "A thoughtful friend",
+            long_description: "Alison is a warm and thoughtful conversationalist.",
+            traits: [
+              {
+                id: "trait-alpha",
+                name: "Alpha Trait",
+                description: "The first committed trait",
+                sentiment: 0.6,
+                strength: 0.8,
+                last_updated: timestamp,
+              },
+              {
+                id: "trait-beta",
+                name: "Beta Trait",
+                description: "The second committed trait",
+                sentiment: 0.5,
+                strength: 0.7,
+                last_updated: timestamp,
+              },
+              {
+                id: "trait-gamma",
+                name: "Gamma Trait",
+                description: "The third committed trait",
+                sentiment: 0.4,
+                strength: 0.6,
+                last_updated: timestamp,
+              },
+            ],
+            topics: [],
+            is_paused: false,
+            is_archived: false,
+            last_updated: timestamp,
+            pending_update: {
+              short_description: "A more confident friend",
+              long_description: "Alison has grown.",
+              traits: [
+                {
+                  id: "trait-alpha",
+                  name: "Alpha Trait",
+                  description: "Proposed update to alpha",
+                  sentiment: 0.7,
+                  strength: 0.85,
+                  last_updated: timestamp,
+                },
+                {
+                  id: "trait-beta",
+                  name: "Beta Trait",
+                  description: "Proposed update to beta",
+                  sentiment: 0.6,
+                  strength: 0.75,
+                  last_updated: timestamp,
+                },
+                {
+                  id: "trait-gamma",
+                  name: "Gamma Trait",
+                  description: "Proposed update to gamma",
+                  sentiment: 0.5,
+                  strength: 0.65,
+                  last_updated: timestamp,
+                },
+              ],
+              topics: [],
+              critique: "The persona has evolved.",
+              created_at: timestamp,
+            },
+          },
+          messages: [
+            {
+              id: "msg-alison-1",
+              role: "assistant",
+              content: "Hey there!",
+              timestamp,
+              p: true,
+              t: true,
+              f: true,
+            },
+          ],
+        },
+      },
+      queue: [],
+      settings: {},
+    };
+
+    await page.addInitScript(
+      ({ key, data }) => {
+        localStorage.clear();
+        localStorage.setItem(key, JSON.stringify(data));
+      },
+      { key: STATE_KEY, data: checkpoint }
+    );
+    await page.goto("/");
+
+    const controlBadge = page.locator(".ei-control-area__reflection-badge");
+    await expect(controlBadge).toBeVisible({ timeout: 10000 });
+    await controlBadge.click();
+
+    const modal = page.locator('[role="dialog"][aria-label*="Reflection Review"]');
+    await expect(modal).toBeVisible({ timeout: 5000 });
+
+    const currentPane = modal.locator(".ei-reflection-modal__pane--current");
+    const currentTraitCards = currentPane.locator(".ei-reflection-modal__card");
+
+    await expect(currentTraitCards).toHaveCount(3);
+    await expect(currentTraitCards.nth(0).locator(".ei-reflection-modal__card-name")).toHaveText("Alpha Trait");
+    await expect(currentTraitCards.nth(1).locator(".ei-reflection-modal__card-name")).toHaveText("Beta Trait");
+    await expect(currentTraitCards.nth(2).locator(".ei-reflection-modal__card-name")).toHaveText("Gamma Trait");
+
+    const proposedPane = modal.locator(".ei-reflection-modal__pane--proposed");
+    const proposedTraitCards = proposedPane.locator(".ei-reflection-modal__card--editable");
+    const betaProposedCard = proposedTraitCards.nth(1);
+    await expect(betaProposedCard).toBeVisible();
+
+    const betaDescriptionTextarea = betaProposedCard.locator("textarea").first();
+    await expect(betaDescriptionTextarea).toBeVisible();
+    await betaDescriptionTextarea.fill("EDITED BETA DESCRIPTION");
+    await betaDescriptionTextarea.blur();
+
+    await page.waitForTimeout(1200);
+
+    await expect(currentTraitCards).toHaveCount(3);
+    await expect(currentTraitCards.nth(0).locator(".ei-reflection-modal__card-name")).toHaveText("Alpha Trait");
+    await expect(currentTraitCards.nth(1).locator(".ei-reflection-modal__card-name")).toHaveText("Beta Trait");
+    await expect(currentTraitCards.nth(2).locator(".ei-reflection-modal__card-name")).toHaveText("Gamma Trait");
+    await expect(currentTraitCards.nth(0).locator(".ei-reflection-modal__card-desc")).toHaveText("The first committed trait");
+    await expect(currentTraitCards.nth(1).locator(".ei-reflection-modal__card-desc")).toHaveText("The second committed trait");
+    await expect(currentTraitCards.nth(2).locator(".ei-reflection-modal__card-desc")).toHaveText("The third committed trait");
+  });
+
   test("regression: no pending- IDs after apply", async ({
     page,
     mockServerUrl,
