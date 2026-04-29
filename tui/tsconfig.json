@@ -17,7 +17,12 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noImplicitReturns": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    "allowImportingTsExtensions": true
   },
-  "include": ["src/**/*", "tests/**/*", "../src/**/*"]
+  "include": ["src/**/*", "tests/**/*", "../src/**/*"],
+  "exclude": [
+    "../src/storage/indexed.ts",
+    "../src/cli/**/*"
+  ]
 }
