@@ -24,7 +24,6 @@ export {
   runHumanCeremony,
   } from "./ceremony.js";
 export { queueUserDedupRequest } from "./dedup-phase.js";
-export { queuePersonMigration } from "./person-migration.js";
 export {
   queuePersonaTopicRating,
   type PersonaTopicContext,

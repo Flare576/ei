@@ -12,7 +12,6 @@ import {
 } from "./human-extraction.js";
 import { queuePersonaTopicRating, type PersonaTopicContext, type PersonaTopicOptions } from "./persona-topics.js";
 import { getRoomVisibleMessages, queueRoomHumanExtraction } from "./room-extraction.js";
-import { queuePersonMigration } from "./person-migration.js";
 import { buildRewriteScanPrompt, type RewriteItemType } from "../../prompts/ceremony/index.js";
 import { buildReflectionCriticPrompt } from "../../prompts/reflection/index.js";
 import { getModelForPersona } from "../heartbeat-manager.js";
@@ -76,10 +75,6 @@ export function startCeremony(state: StateManager): void {
     },
   });
   
-  // PHASE 1: Person Migration
-  console.log("[ceremony] Starting Phase 1: Person Migration");
-  queuePersonMigration(state);
-
   // Check if migration work was queued
   if (!state.queue_hasPendingCeremonies()) {
     // No migration work found → immediately advance to Expose phase

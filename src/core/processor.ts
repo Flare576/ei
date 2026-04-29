@@ -1044,7 +1044,6 @@ const toolNextSteps = new Set([
   LLMNextStep.HandleEiHeartbeat,
   LLMNextStep.HandleToolContinuation,
   LLMNextStep.HandleDedupCurate,
-  LLMNextStep.HandlePersonIdentifierMigration,
 ]);
             const toolPersonaId =
               personaId ??
@@ -1059,13 +1058,8 @@ const toolNextSteps = new Set([
               (request.next_step === LLMNextStep.HandleToolContinuation &&
                 request.data.originalNextStep === LLMNextStep.HandleDedupCurate);
 
-            const isPersonMigrationRequest =
-              request.next_step === LLMNextStep.HandlePersonIdentifierMigration ||
-              (request.next_step === LLMNextStep.HandleToolContinuation &&
-                request.data.originalNextStep === LLMNextStep.HandlePersonIdentifierMigration);
-
             let tools: ToolDefinition[] = [];
-            if (isDedupRequest || isPersonMigrationRequest) {
+            if (isDedupRequest) {
               const readMemory = this.stateManager.tools_getByName("read_memory");
               if (readMemory?.enabled) {
                 tools = [readMemory];
@@ -1615,13 +1609,6 @@ const toolNextSteps = new Set([
       }
 
       if (response.request.next_step === LLMNextStep.HandlePersonaGeneration) {
-        const personaId = response.request.data.personaId as string;
-        if (personaId) {
-          this.interface.onPersonaUpdated?.(personaId);
-        }
-      }
-
-      if (response.request.next_step === LLMNextStep.HandlePersonaDescriptions) {
         const personaId = response.request.data.personaId as string;
         if (personaId) {
           this.interface.onPersonaUpdated?.(personaId);
