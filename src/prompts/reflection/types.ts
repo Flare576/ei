@@ -20,7 +20,7 @@ export interface ReflectionCriticResult {
     short_description: string;
     traits: PersonaTrait[];
     topics: PersonaTopic[];
-  };
+  } | null;
 }
 
 

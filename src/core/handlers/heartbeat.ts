@@ -126,18 +126,26 @@ export function handleReflectionCritic(response: LLMResponse, state: StateManage
   const personaDisplayName = response.request.data.personaDisplayName as string;
 
   const result = response.parsed as ReflectionCriticResult | undefined;
-  if (!result?.updated_identity || !result.critique) {
+  if (!result?.critique) {
     console.error(`[ReflectionCritic ${personaDisplayName}] Invalid or missing parsed result`);
     return;
   }
 
   const personRecord = state.human_person_getByIdentifier("Ei Persona", personaId);
   if (personRecord) {
+    // TODO: Remove before v1 — debug logging to inspect person log before it's cleared
+    console.log(`[ReflectionCritic ${personaDisplayName}] person_log_snapshot (${personRecord.description?.length ?? 0} chars): ${personRecord.description ?? ""}`);
     state.human_person_upsert({
       ...personRecord,
       description: "",
     });
     console.log(`[ReflectionCritic ${personaDisplayName}] Person record description cleared — ready for fresh evidence after reflection`);
+  }
+
+  // Escape hatch: critic found no meaningful drift — log critique and skip pending_update
+  if (!result.updated_identity) {
+    console.log(`[ReflectionCritic ${personaDisplayName}] No drift detected — skipping pending_update. Critique: ${result.critique}`);
+    return;
   }
 
   const persona = state.persona_getById(personaId);
