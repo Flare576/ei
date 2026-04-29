@@ -47,6 +47,10 @@ function buildCheckpointWithPerson(mockServerUrl: string) {
       settings: {
         auto_save_interval_ms: 5000,
         default_model: "Mock LLM:mock-model",
+        ceremony: {
+          time: "09:00",
+          last_ceremony: ts,
+        },
         accounts: [
           {
             id: "mock-llm-account",
@@ -77,6 +81,8 @@ function buildCheckpointWithPerson(mockServerUrl: string) {
           is_paused: false,
           is_archived: false,
           last_updated: ts,
+          last_heartbeat: ts,
+          heartbeat_delay_ms: 999999999,
         },
         messages: [
           {
