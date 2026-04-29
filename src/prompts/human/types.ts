@@ -25,10 +25,6 @@ interface BaseScanPromptData {
   persona_name: string;
 }
 
-export interface FactScanPromptData extends BaseScanPromptData {}
-
-export interface TraitScanPromptData extends BaseScanPromptData {}
-
 export interface TopicScanPromptData extends BaseScanPromptData {
   participant_context?: ParticipantContext;
 }
@@ -75,18 +71,6 @@ export interface TopicMatchPromptData {
     name: string;
     description: string;
     category?: string;
-  }>;
-}
-
-export interface PersonMatchPromptData {
-  candidate_name: string;
-  candidate_description: string;
-  candidate_relationship: string;
-  existing_people: Array<{
-    id: string;
-    name: string;
-    description: string;
-    relationship?: string;
   }>;
 }
 
