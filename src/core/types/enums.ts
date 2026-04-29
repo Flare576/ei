@@ -26,7 +26,6 @@ export enum LLMPriority {
 export enum LLMNextStep {
   HandlePersonaResponse = "handlePersonaResponse",
   HandlePersonaGeneration = "handlePersonaGeneration",
-  HandlePersonaDescriptions = "handlePersonaDescriptions",
   HandleFactFind = "handleFactFind",
   HandleHumanTopicScan = "handleHumanTopicScan",
   HandleHumanPersonScan = "handleHumanPersonScan",
@@ -51,7 +50,6 @@ export enum LLMNextStep {
   HandleRoomResponse = "handleRoomResponse",
   HandleRoomJudge = "handleRoomJudge",
   HandlePersonaPreview = "handlePersonaPreview",
-  HandlePersonIdentifierMigration = "handlePersonIdentifierMigration",
   HandleTopicValidate = "handleTopicValidate",
   HandleReflectionCritic = "handleReflectionCritic",
 }
