@@ -264,7 +264,7 @@ describe("handleReflectionCritic", () => {
     expect(update.pending_update.topics[0].name).toBe("Padded Topic");
   });
 
-  it("does NOT crash when result is missing critique or updated_identity", () => {
+  it("does NOT crash when result is missing critique (invalid responses)", () => {
     seedPersona(state);
 
     const request = createMockRequest();
@@ -275,14 +275,27 @@ describe("handleReflectionCritic", () => {
 
     vi.clearAllMocks();
 
-    const responseNoIdentity = createMockResponse(request, { critique: "Some critique" });
-    expect(() => handlers[LLMNextStep.HandleReflectionCritic](responseNoIdentity, state as any)).not.toThrow();
-    expect(state.persona_update).not.toHaveBeenCalled();
-
-    vi.clearAllMocks();
-
     const responseEmpty = createMockResponse(request, {});
     expect(() => handlers[LLMNextStep.HandleReflectionCritic](responseEmpty, state as any)).not.toThrow();
+    expect(state.persona_update).not.toHaveBeenCalled();
+  });
+
+  it("escape hatch: updated_identity null skips pending_update but still clears person record", () => {
+    seedPersona(state);
+    seedPersonRecord(state);
+
+    const request = createMockRequest();
+    const response = createMockResponse(request, {
+      critique: "The current identity accurately reflects the observed behavior. No meaningful drift detected.",
+      updated_identity: null,
+    });
+
+    handlers[LLMNextStep.HandleReflectionCritic](response, state as any);
+
+    expect(state.human_person_upsert).toHaveBeenCalledTimes(1);
+    const upsertedPerson = (state.human_person_upsert as any).mock.calls[0][0];
+    expect(upsertedPerson.description).toBe("");
+
     expect(state.persona_update).not.toHaveBeenCalled();
   });
 
