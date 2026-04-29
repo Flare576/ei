@@ -108,7 +108,7 @@ function createMockRequest(overrides: Partial<LLMRequest> = {}): LLMRequest {
     next_step: LLMNextStep.HandleFactFind,
     data: {
       personaId: "ei",
-        personaDisplayName: "Ei",
+        channelDisplayName: "Ei",
       messages_context: [],
       messages_analyze: [],
     },
@@ -154,7 +154,7 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
         next_step: LLMNextStep.HandleFactFind,
         data: {
           personaId: "ei",
-          personaDisplayName: "Ei",
+          channelDisplayName: "Ei",
           messages_context: [],
           messages_analyze: [{ id: "2", role: "human", content: "My name is Jeremy Scherer", timestamp: "", read: true, context_status: "default" }],
         },
@@ -215,7 +215,7 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
         next_step: LLMNextStep.HandleFactFind,
         data: {
           personaId: "ei",
-          personaDisplayName: "Ei",
+          channelDisplayName: "Ei",
           messages_context: [],
           messages_analyze: [],
           message_ids_to_mark: ["msg-1"],
@@ -282,7 +282,7 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
         next_step: LLMNextStep.HandleHumanTopicScan,
         data: {
           personaId: "ei",
-          personaDisplayName: "Ei",
+          channelDisplayName: "Ei",
           messages_context: [],
           messages_analyze: [],
           message_ids_to_mark: ["msg-1"],
@@ -301,7 +301,7 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
         next_step: LLMNextStep.HandleHumanTopicScan,
         data: {
           personaId: "ei",
-        personaDisplayName: "Ei",
+        channelDisplayName: "Ei",
           messages_context: [],
           messages_analyze: [{ id: "1", role: "human", content: "test", timestamp: "", read: true, context_status: "default" }],
         },
@@ -332,7 +332,7 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
         next_step: LLMNextStep.HandleEventScan,
         data: {
           personaId: "ei",
-          personaDisplayName: "Ei",
+          channelDisplayName: "Ei",
           messages_context: [],
           messages_analyze: [{ id: "1", role: "human", content: "test", timestamp: "", read: true, context_status: "default" }],
         },
@@ -360,7 +360,7 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
         next_step: LLMNextStep.HandleEventScan,
         data: {
           personaId: "ei",
-          personaDisplayName: "Ei",
+          channelDisplayName: "Ei",
           messages_context: [],
           messages_analyze: [],
           message_ids_to_mark: ["msg-1"],
@@ -379,7 +379,7 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
         next_step: LLMNextStep.HandleEventScan,
         data: {
           personaId: "ei",
-          personaDisplayName: "Ei",
+          channelDisplayName: "Ei",
           messages_context: [],
           messages_analyze: [],
         },
@@ -399,7 +399,7 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
         next_step: LLMNextStep.HandleHumanPersonScan,
         data: {
           personaId: "ei",
-          personaDisplayName: "Ei",
+          channelDisplayName: "Ei",
           messages_context: [],
           messages_analyze: [],
           message_ids_to_mark: ["msg-1"],
@@ -418,7 +418,7 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
         next_step: LLMNextStep.HandleHumanPersonScan,
         data: {
           personaId: "ei",
-        personaDisplayName: "Ei",
+        channelDisplayName: "Ei",
           messages_context: [],
           messages_analyze: [{ id: "1", role: "human", content: "test", timestamp: "", read: true, context_status: "default" }],
         },
@@ -456,7 +456,7 @@ describe("Extraction Handlers - Step 3 (Update) - interested_personas", () => {
         next_step: LLMNextStep.HandleTopicUpdate,
         data: {
           personaId: "persona-1",
-          personaDisplayName: "TestPersona",
+          channelDisplayName: "TestPersona",
           isNewItem: true,
           existingItemId: undefined,
           candidateCategory: "Interest",
@@ -496,7 +496,7 @@ describe("Extraction Handlers - Step 3 (Update) - interested_personas", () => {
         next_step: LLMNextStep.HandleTopicUpdate,
         data: {
           personaId: "persona-1",
-          personaDisplayName: "TestPersona",
+          channelDisplayName: "TestPersona",
           isNewItem: false,
           existingItemId: "existing-topic",
           candidateCategory: "Interest",
@@ -537,7 +537,7 @@ describe("Extraction Handlers - Step 3 (Update) - interested_personas", () => {
         next_step: LLMNextStep.HandleTopicUpdate,
         data: {
           personaId: "persona-1",
-          personaDisplayName: "TestPersona",
+          channelDisplayName: "TestPersona",
           isNewItem: false,
           existingItemId: "existing-topic",
           candidateCategory: "Interest",
@@ -563,7 +563,7 @@ describe("Extraction Handlers - Step 3 (Update) - interested_personas", () => {
         next_step: LLMNextStep.HandleTopicUpdate,
         data: {
           personaId: "persona-1",
-          personaDisplayName: "TestPersona",
+          channelDisplayName: "TestPersona",
           isNewItem: true,
           existingItemId: undefined,
           candidateCategory: "Interest",
@@ -602,7 +602,7 @@ describe("Extraction Handlers - Step 3 (Update) - interested_personas", () => {
         next_step: LLMNextStep.HandleTopicUpdate,
         data: {
           personaId: "persona-1",
-          personaDisplayName: "TestPersona",
+          channelDisplayName: "TestPersona",
           isNewItem: false,
           existingItemId: "existing-topic",
           candidateCategory: "Interest",
@@ -727,7 +727,7 @@ describe("Extraction Handlers - Step 3 (Update) - interested_personas", () => {
         next_step: LLMNextStep.HandlePersonUpdate,
         data: {
           personaId: "persona-1",
-          personaDisplayName: "TestPersona",
+          channelDisplayName: "TestPersona",
           isNewItem: true,
           existingItemId: undefined,
           candidateName: "New Person",
@@ -772,7 +772,7 @@ describe("Extraction Handlers - Step 3 (Update) - interested_personas", () => {
         next_step: LLMNextStep.HandlePersonUpdate,
         data: {
           personaId: "persona-1",
-          personaDisplayName: "TestPersona",
+          channelDisplayName: "TestPersona",
           isNewItem: false,
           existingItemId: "existing-person",
           candidateRelationship: "colleague",
@@ -800,7 +800,7 @@ describe("Extraction Handlers - Step 3 (Update) - interested_personas", () => {
         next_step: LLMNextStep.HandlePersonUpdate,
         data: {
           personaId: "persona-1",
-          personaDisplayName: "TestPersona",
+          channelDisplayName: "TestPersona",
           isNewItem: true,
           existingItemId: undefined,
           candidateName: "New Person",
@@ -843,7 +843,7 @@ describe("Extraction Handlers - Step 3 (Update) - interested_personas", () => {
         next_step: LLMNextStep.HandlePersonUpdate,
         data: {
           personaId: "persona-1",
-          personaDisplayName: "TestPersona",
+          channelDisplayName: "TestPersona",
           isNewItem: false,
           existingItemId: "existing-person",
           candidateRelationship: "colleague",
@@ -968,7 +968,7 @@ describe("Extraction Handlers - Step 3 (Update) - interested_personas", () => {
         next_step: LLMNextStep.HandlePersonUpdate,
         data: {
           personaId: "persona-1",
-          personaDisplayName: "TestPersona",
+          channelDisplayName: "TestPersona",
           isNewItem,
           existingItemId,
           candidateName: "Someone",
@@ -1062,7 +1062,7 @@ describe("Extraction Handlers - Step 3 (Update) - interested_personas", () => {
         next_step: LLMNextStep.HandlePersonUpdate,
         data: {
           personaId: "persona-1",
-          personaDisplayName: "TestPersona",
+          channelDisplayName: "TestPersona",
           isNewItem: true,
           candidateName: "Jeremy Scherer",
           candidateRelationship: "friend",
@@ -1089,7 +1089,7 @@ describe("Extraction Handlers - Step 3 (Update) - interested_personas", () => {
         next_step: LLMNextStep.HandlePersonUpdate,
         data: {
           personaId: "persona-1",
-          personaDisplayName: "TestPersona",
+          channelDisplayName: "TestPersona",
           isNewItem: true,
           candidateName: "Flare",
           candidateRelationship: "friend",
@@ -1164,7 +1164,7 @@ describe("Extraction Handlers - Step 3 (Update) - interested_personas", () => {
         next_step: LLMNextStep.HandlePersonUpdate,
         data: {
           personaId: "persona-1",
-          personaDisplayName: "TestPersona",
+          channelDisplayName: "TestPersona",
           isNewItem,
           existingItemId,
           candidateName: "Someone",
@@ -1341,7 +1341,7 @@ describe("Extraction Handlers - Step 3 (Update) - interested_personas", () => {
         next_step: LLMNextStep.HandleFactFind,
         data: {
           personaId: "persona-1",
-          personaDisplayName: "TestPersona",
+          channelDisplayName: "TestPersona",
           messages_context: [],
           messages_analyze: [],
         },
@@ -1374,7 +1374,7 @@ describe("Extraction Handlers - Step 3 (Update) - interested_personas", () => {
         next_step: LLMNextStep.HandleFactFind,
         data: {
           personaId: "persona-1",
-          personaDisplayName: "TestPersona",
+          channelDisplayName: "TestPersona",
           messages_context: [],
           messages_analyze: [],
         },
@@ -1407,7 +1407,7 @@ describe("Extraction Handlers - Step 3 (Update) - interested_personas", () => {
         next_step: LLMNextStep.HandleFactFind,
         data: {
           personaId: "persona-1",
-          personaDisplayName: "TestPersona",
+          channelDisplayName: "TestPersona",
           sources: ["opencode:ses_abc123", "cursor:composer-1"],
           messages_context: [],
           messages_analyze: [],
@@ -1441,7 +1441,7 @@ describe("Extraction Handlers - Step 3 (Update) - interested_personas", () => {
         next_step: LLMNextStep.HandleFactFind,
         data: {
           personaId: "persona-1",
-          personaDisplayName: "TestPersona",
+          channelDisplayName: "TestPersona",
           sources: ["claudecode:uuid-xyz"],
           messages_context: [],
           messages_analyze: [],
@@ -1523,7 +1523,7 @@ describe("Human data update handler — partial response contract", () => {
         next_step: LLMNextStep.HandleTopicUpdate,
         data: {
           personaId: "persona-1",
-          personaDisplayName: "Sisyphus",
+          channelDisplayName: "Sisyphus",
           isNewItem: false,
           existingItemId: record.id,
           candidateCategory: "Project",
@@ -1580,7 +1580,7 @@ describe("Human data update handler — partial response contract", () => {
         next_step: LLMNextStep.HandlePersonUpdate,
         data: {
           personaId: "persona-1",
-          personaDisplayName: "Sisyphus",
+          channelDisplayName: "Sisyphus",
           isNewItem: false,
           existingItemId: record.id,
           candidateName: (record as Person).name,

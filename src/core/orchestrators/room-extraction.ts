@@ -78,7 +78,7 @@ function queueRoomTopicScan(
 ): void {
   const context: HumanExtractionContext = {
     personaId: roomId,
-    personaDisplayName: roomDisplayName,
+    channelDisplayName: roomDisplayName,
     messages_context,
     messages_analyze,
     extraction_flag: "t",
@@ -122,7 +122,7 @@ function queueRoomPersonScan(
 ): void {
   const context: HumanExtractionContext = {
     personaId: roomId,
-    personaDisplayName: roomDisplayName,
+    channelDisplayName: roomDisplayName,
     messages_context,
     messages_analyze,
     extraction_flag: "p",
@@ -180,7 +180,7 @@ function queueRoomEventScan(
     );
     const context: HumanExtractionContext = {
       personaId: roomId,
-      personaDisplayName: roomDisplayName,
+      channelDisplayName: roomDisplayName,
       messages_context,
       messages_analyze: windowMessages,
       extraction_flag: "e",
@@ -348,7 +348,7 @@ export function queuePersonaCapture(state: StateManager, personaId: string): voi
     );
     const context: HumanExtractionContext = {
       personaId,
-      personaDisplayName: persona.display_name,
+      channelDisplayName: persona.display_name,
       messages_context,
       messages_analyze: unextractedT,
     };
@@ -362,7 +362,7 @@ export function queuePersonaCapture(state: StateManager, personaId: string): voi
     );
     const context: HumanExtractionContext = {
       personaId,
-      personaDisplayName: persona.display_name,
+      channelDisplayName: persona.display_name,
       messages_context,
       messages_analyze: unextractedP,
     };

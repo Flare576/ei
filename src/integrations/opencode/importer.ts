@@ -245,7 +245,7 @@ export async function importOpenCodeSessions(
 
       const context: ExtractionContext = {
         personaId: persona.id,
-        personaDisplayName: persona.display_name,
+        channelDisplayName: persona.display_name,
         messages_context: contextMsgs,
         messages_analyze: toAnalyze,
         sources: [`opencode:${getMachineId()}:${targetSession.id}`],

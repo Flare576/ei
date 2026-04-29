@@ -96,7 +96,7 @@ function createMockRequest(overrides: Partial<LLMRequest> = {}): LLMRequest {
     next_step: LLMNextStep.HandleReflectionCritic,
     data: {
       personaId: "persona-1",
-      personaDisplayName: "Beta",
+      channelDisplayName: "Beta",
     },
     ...overrides,
   };

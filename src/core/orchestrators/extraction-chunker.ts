@@ -64,7 +64,7 @@ export function chunkExtractionContext(
   context: ExtractionContext,
   maxTokens: number = DEFAULT_MAX_TOKENS
 ): ChunkedContextResult {
-  const { personaId, personaDisplayName, messages_context, messages_analyze } = context;
+  const { personaId, channelDisplayName: personaDisplayName, messages_context, messages_analyze } = context;
 
   if (messages_analyze.length === 0) {
     return {
@@ -85,7 +85,7 @@ export function chunkExtractionContext(
     return {
       chunks: [{
         personaId,
-        personaDisplayName,
+        channelDisplayName: personaDisplayName,
         messages_context: fittedContext,
         messages_analyze,
       }],
@@ -111,7 +111,7 @@ export function chunkExtractionContext(
 
     chunks.push({
       personaId,
-      personaDisplayName,
+      channelDisplayName: personaDisplayName,
       messages_context: currentContext,
       messages_analyze: pulled,
     });

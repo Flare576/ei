@@ -223,7 +223,7 @@ export function checkAndQueueHumanExtraction(
   if (unextractedFacts.length > 0 && unextractedFacts.length >= factsThreshold) {
     const context: ExtractionContext = {
       personaId,
-      personaDisplayName,
+      channelDisplayName: personaDisplayName,
       messages_context: history.filter((m) => m.f === true),
       messages_analyze: unextractedFacts,
       extraction_flag: "f",
@@ -239,7 +239,7 @@ export function checkAndQueueHumanExtraction(
   if (unextractedTopics.length > 0 && unextractedTopics.length >= topicsThreshold) {
     const context: ExtractionContext = {
       personaId,
-      personaDisplayName,
+      channelDisplayName: personaDisplayName,
       messages_context: history.filter((m) => m.t === true),
       messages_analyze: unextractedTopics,
       extraction_flag: "t",
@@ -257,7 +257,7 @@ export function checkAndQueueHumanExtraction(
     const personScanOptions = personaForScan?.pending_update ? { reflection_progress: 1 } : undefined;
     const context: ExtractionContext = {
       personaId,
-      personaDisplayName,
+      channelDisplayName: personaDisplayName,
       messages_context: history.filter((m) => m.p === true),
       messages_analyze: unextractedPeople,
       extraction_flag: "p",

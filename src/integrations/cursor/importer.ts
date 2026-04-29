@@ -221,7 +221,7 @@ export async function importCursorSessions(
 
     const context: ExtractionContext = {
       personaId: persona.id,
-      personaDisplayName: persona.display_name,
+      channelDisplayName: persona.display_name,
       messages_context: contextMsgs,
       messages_analyze: toAnalyze,
       sources: [`cursor:${getMachineId()}:${targetSession.id}`],

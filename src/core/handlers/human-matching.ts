@@ -48,7 +48,7 @@ export function handleTopicMatch(response: LLMResponse, state: StateManager): vo
     extraction_model?: string;
   } = {
     personaId,
-    personaDisplayName,
+    channelDisplayName: personaDisplayName,
     roomId,
     messages_context,
     messages_analyze,
@@ -399,7 +399,7 @@ async function validateAndStoreQuotes(
   candidates: Array<{ text: string; reason: string }> | undefined,
   messages: Message[],
   dataItemId: string,
-  personaName: string,
+  channelDisplayName: string,
   personaGroup: string | null,
   state: StateManager
 ): Promise<void> {
@@ -492,8 +492,8 @@ async function validateAndStoreQuotes(
         data_item_ids: [dataItemId],
         persona_groups: [personaGroup || "General"],
         text: matchText,
-        speaker: message.role === "human" ? "human" : (message.speaker_name ?? personaName),
-        channel: personaName,
+        speaker: message.role === "human" ? "human" : (message.speaker_name ?? channelDisplayName),
+        channel: channelDisplayName,
         timestamp: message.timestamp,
         start: matchStart,
         end: matchEnd,

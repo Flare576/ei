@@ -38,7 +38,7 @@ export function queuePersonaTopicRating(
   const { chunks } = chunkExtractionContext(
     {
       personaId: context.personaId,
-      personaDisplayName: context.personaDisplayName,
+      channelDisplayName: context.personaDisplayName,
       messages_context: context.messages_context,
       messages_analyze: context.messages_analyze,
     },

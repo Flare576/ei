@@ -141,7 +141,7 @@ describe("Scan Orchestrators (Step 1)", () => {
     state = createMockStateManager();
     context = {
       personaId: "ei",
-      personaDisplayName: "Ei",
+      channelDisplayName: "Ei",
       messages_context: [createMessage("1", "Earlier message")],
       messages_analyze: [createMessage("2", "Recent message to analyze")],
     };

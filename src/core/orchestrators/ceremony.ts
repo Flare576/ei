@@ -105,7 +105,7 @@ function queueExposurePhase(personaId: string, state: StateManager, options?: Ex
   if (unextractedFacts.length > 0) {
     const context: ExtractionContext = {
       personaId,
-      personaDisplayName: persona.display_name,
+      channelDisplayName: persona.display_name,
       messages_context: allMessages.filter(m => m.f === true),
       messages_analyze: unextractedFacts,
       extraction_flag: "f",
@@ -118,7 +118,7 @@ function queueExposurePhase(personaId: string, state: StateManager, options?: Ex
   if (unextractedTopics.length > 0) {
     const context: ExtractionContext = {
       personaId,
-      personaDisplayName: persona.display_name,
+      channelDisplayName: persona.display_name,
       messages_context: allMessages.filter(m => m.t === true),
       messages_analyze: unextractedTopics,
       extraction_flag: "t",
@@ -130,7 +130,7 @@ function queueExposurePhase(personaId: string, state: StateManager, options?: Ex
   if (unextractedPeople.length > 0) {
     const context: ExtractionContext = {
       personaId,
-      personaDisplayName: persona.display_name,
+      channelDisplayName: persona.display_name,
       messages_context: allMessages.filter(m => m.p === true),
       messages_analyze: unextractedPeople,
       extraction_flag: "p",
@@ -470,7 +470,7 @@ export function queueReflectionDrain(personaId: string, state: StateManager): vo
 
   const context: ExtractionContext = {
     personaId,
-    personaDisplayName: persona.display_name,
+    channelDisplayName: persona.display_name,
     messages_context: allMessages.filter(m => m.p === true),
     messages_analyze: unextractedPeople,
     extraction_flag: "p",

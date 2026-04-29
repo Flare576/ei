@@ -55,7 +55,7 @@ function buildParticipantContext(personaId: string, state: StateManager): Partic
 
 export interface ExtractionContext {
   personaId: string;
-  personaDisplayName: string;
+  channelDisplayName: string;
   messages_context: Message[];
   messages_analyze: Message[];
   extraction_flag?: "f" | "t" | "p" | "e";
@@ -118,7 +118,7 @@ export function queueFactFind(context: ExtractionContext, state: StateManager, o
 
   for (const chunk of chunks) {
     const prompt = buildFactFindPrompt({
-      persona_name: chunk.personaDisplayName,
+      persona_name: chunk.channelDisplayName,
       missing_fact_names,
       messages_context: chunk.messages_context,
       messages_analyze: chunk.messages_analyze,
@@ -134,7 +134,7 @@ export function queueFactFind(context: ExtractionContext, state: StateManager, o
       data: {
         ...options,
         personaId: chunk.personaId,
-        personaDisplayName: chunk.personaDisplayName,
+        personaDisplayName: chunk.channelDisplayName,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
         extraction_flag: context.extraction_flag,
         message_ids_to_mark: chunk.messages_analyze.map(m => m.id),
@@ -160,7 +160,7 @@ export function queueTopicScan(context: ExtractionContext, state: StateManager, 
 
   for (const chunk of chunks) {
     const prompt = buildHumanTopicScanPrompt({
-      persona_name: chunk.personaDisplayName,
+      persona_name: chunk.channelDisplayName,
       messages_context: chunk.messages_context,
       messages_analyze: chunk.messages_analyze,
       participant_context: buildParticipantContext(context.personaId, state),
@@ -176,7 +176,7 @@ export function queueTopicScan(context: ExtractionContext, state: StateManager, 
       data: {
         ...options,
         personaId: chunk.personaId,
-        personaDisplayName: chunk.personaDisplayName,
+        personaDisplayName: chunk.channelDisplayName,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
         extraction_flag: context.extraction_flag,
         message_ids_to_mark: chunk.messages_analyze.map(m => m.id),
@@ -209,7 +209,7 @@ export function queuePersonScan(context: ExtractionContext, state: StateManager,
 
   for (const chunk of chunks) {
     const prompt = buildHumanPersonScanPrompt({
-      persona_name: chunk.personaDisplayName,
+      persona_name: chunk.channelDisplayName,
       messages_context: chunk.messages_context,
       messages_analyze: chunk.messages_analyze,
       participant_context: buildParticipantContext(context.personaId, state),
@@ -226,7 +226,7 @@ export function queuePersonScan(context: ExtractionContext, state: StateManager,
       data: {
         ...options,
         personaId: chunk.personaId,
-        personaDisplayName: chunk.personaDisplayName,
+        personaDisplayName: chunk.channelDisplayName,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
         extraction_flag: context.extraction_flag,
         message_ids_to_mark: chunk.messages_analyze.map(m => m.id),
@@ -273,7 +273,7 @@ export function queueDirectTopicUpdate(
       existing_item: topic,
       messages_context: chunk.messages_context,
       messages_analyze: chunk.messages_analyze,
-      persona_name: chunk.personaDisplayName,
+      persona_name: chunk.channelDisplayName,
       participant_context: buildParticipantContext(context.personaId, state),
     });
 
@@ -286,7 +286,7 @@ export function queueDirectTopicUpdate(
       next_step: LLMNextStep.HandleTopicUpdate,
       data: {
         personaId: context.personaId,
-        personaDisplayName: context.personaDisplayName,
+        personaDisplayName: context.channelDisplayName,
         isNewItem: false,
         existingItemId: topic.id,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
@@ -423,7 +423,7 @@ export function queueTopicUpdate(
       new_topic_category: isNewItem ? context.candidateCategory : undefined,
       messages_context: chunk.messages_context,
       messages_analyze: chunk.messages_analyze,
-      persona_name: chunk.personaDisplayName,
+      persona_name: chunk.channelDisplayName,
       participant_context: buildParticipantContext(primaryPersonaId, state),
     });
 
@@ -502,7 +502,7 @@ export function queueEventSummary(
 
     const context: ExtractionContext = {
       personaId,
-      personaDisplayName: persona.display_name,
+      channelDisplayName: persona.display_name,
       messages_context,
       messages_analyze: windowMessages,
       extraction_flag: "e",
@@ -512,7 +512,7 @@ export function queueEventSummary(
 
     for (const chunk of chunks) {
       const prompt = buildEventScanPrompt({
-        persona_name: chunk.personaDisplayName,
+        persona_name: chunk.channelDisplayName,
         messages_context: chunk.messages_context,
         messages_analyze: chunk.messages_analyze,
         participant_context: buildParticipantContext(personaId, state),
@@ -528,7 +528,7 @@ export function queueEventSummary(
         data: {
           ...options,
           personaId: chunk.personaId,
-          personaDisplayName: chunk.personaDisplayName,
+          personaDisplayName: chunk.channelDisplayName,
           extraction_flag: "e",
           message_ids_to_mark: chunk.messages_analyze.map(m => m.id),
         },
@@ -595,7 +595,7 @@ export function queuePersonUpdate(
       new_person_relationship: isNewItem ? context.candidateRelationship : undefined,
       messages_context: chunk.messages_context,
       messages_analyze: chunk.messages_analyze,
-      persona_name: chunk.personaDisplayName,
+      persona_name: chunk.channelDisplayName,
       participant_context: buildParticipantContext(primaryPersonaIdForUpdate, state),
       known_identifier_types: userIdentifierTypes,
     });
@@ -609,7 +609,7 @@ export function queuePersonUpdate(
       next_step: LLMNextStep.HandlePersonUpdate,
       data: {
         personaId: context.personaId,
-        personaDisplayName: context.personaDisplayName,
+        personaDisplayName: context.channelDisplayName,
         roomId: context.roomId,
         isNewItem,
         existingItemId: existingItem?.id,
@@ -673,7 +673,7 @@ export function queueTargetedPersonUpdate(
     extraction_model?: string;
   } = {
     personaId: contextPersonaId,
-    personaDisplayName: displayName,
+    channelDisplayName: displayName,
     messages_context: [],
     messages_analyze: allMessages,
     candidateName: existingItem.name,
@@ -728,7 +728,7 @@ export function queueTargetedTopicUpdate(
   const model = state.getHuman().settings?.default_model;
   const context: ExtractionContext = {
     personaId: contextPersonaId,
-    personaDisplayName: displayName,
+    channelDisplayName: displayName,
     messages_context: [],
     messages_analyze: allMessages,
     roomId,
