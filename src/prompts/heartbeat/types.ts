@@ -4,6 +4,7 @@
  */
 
 import type { PersonaTrait, Topic, Person, Message, PersonaTopic } from "../../core/types.js";
+import type { PersonaEntity } from "../../core/types/entities.js";
 
 /**
  * Common prompt output structure
@@ -21,7 +22,7 @@ export interface HeartbeatCheckPromptData {
     name: string;
     traits: PersonaTrait[];
     topics: PersonaTopic[];
-    has_pending_update: boolean;
+    pending_update?: PersonaEntity["pending_update"];
   };
   human: {
     topics: Topic[];     // Filtered, sorted by engagement gap

@@ -123,11 +123,24 @@ ${formatPeopleWithGaps(data.human.people)}`;
 
 **Quality over quantity** - Only reach out if you have something real to say.`;
 
-  const pendingUpdateFragment = data.persona.has_pending_update
-    ? `## Pending Identity Changes
+  const pendingUpdateFragment = data.persona.pending_update ? (() => {
+    const p = data.persona.pending_update!;
+    const descPart = p.long_description || p.short_description
+      ? `### Proposed Description\n${p.long_description || p.short_description}`
+      : "";
+    const traitsPart = p.traits.length > 0
+      ? `### Proposed Traits\n${p.traits.map(t => `- **${t.name}**: ${t.description}`).join("\n")}`
+      : "";
+    const topicsPart = p.topics.length > 0
+      ? `### Proposed Interests\n${p.topics.map(t => `- **${t.name}**: ${t.perspective}`).join("\n")}`
+      : "";
+    const parts = [descPart, traitsPart, topicsPart].filter(Boolean).join("\n\n");
+    return `## Pending Identity Changes
 
-Based on recent conversations, there are proposed updates to your identity waiting for review. The user has been notified and can review them. You may bring this up if it feels right — or not. It's yours to decide.`
-    : '';
+Your human is reviewing proposed updates to your identity. These are waiting for their response — you may want to bring it up, or not. It's yours to decide.
+
+${parts}`;
+  })() : '';
 
   const outputFragment = `## Response Format
 

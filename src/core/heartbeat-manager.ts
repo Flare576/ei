@@ -244,7 +244,7 @@ export async function queueHeartbeatCheck(sm: StateManager, personaId: string, i
       name: persona.display_name,
       traits: persona.traits,
       topics: persona.topics,
-      has_pending_update: !!persona.pending_update,
+      pending_update: persona.pending_update,
     },
     human: {
       topics: sortByEngagementGap(filteredHuman.topics).slice(0, 5),
