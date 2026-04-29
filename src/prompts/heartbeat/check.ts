@@ -74,7 +74,6 @@ function getLastPersonaMessage(history: Message[]): Message | undefined {
  * - Getting recent message history
  */
 export function buildHeartbeatCheckPrompt(data: HeartbeatCheckPromptData): PromptOutput {
-  console.log(`[HeartbeatCheck ${data.persona.name}] Building prompt - topics: ${data.human.topics.length}, people: ${data.human.people.length}, inactive_days: ${data.inactive_days}, history: ${data.recent_history.length} messages`);
   if (!data.persona?.name) {
     throw new Error("buildHeartbeatCheckPrompt: persona.name is required");
   }
