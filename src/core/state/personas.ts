@@ -1,21 +1,5 @@
 import type { PersonaEntity, Message, ContextStatus } from "../types.js";
 
-// TODO(v1.0.0): Remove LegacyMessage migration — verbal_response/action_response no longer written
-type LegacyMessage = Message & { verbal_response?: string; action_response?: string };
-
-function migrateMessage(msg: Message): Message {
-  if (msg.content) return msg;
-  if (msg.silence_reason) return msg;
-  const legacy = msg as LegacyMessage;
-  const hasLegacy = 'verbal_response' in legacy || 'action_response' in legacy;
-  if (!hasLegacy) return msg;
-  const parts: string[] = [];
-  if (legacy.action_response) parts.push(`_${legacy.action_response}_`);
-  if (legacy.verbal_response) parts.push(legacy.verbal_response);
-  const { verbal_response: _vr, action_response: _ar, ...rest } = legacy;
-  return parts.length > 0 ? { ...rest, content: parts.join('\n\n') } : rest as Message;
-}
-
 export interface PersonaData {
   entity: PersonaEntity;
   messages: Message[];
@@ -29,7 +13,7 @@ export class PersonaState {
     this.personas = new Map(
       Object.entries(personas).map(([id, data]) => [
         id,
-        { entity: data.entity, messages: data.messages.map(migrateMessage) },
+        { entity: data.entity, messages: data.messages },
       ])
     );
   }

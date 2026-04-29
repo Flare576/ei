@@ -110,23 +110,6 @@ describe("getMessageContent()", () => {
     ).toBe("content wins");
   });
 
-  it("returns _action_\\n\\nverbal when action_response and verbal_response present but no content", () => {
-    expect(
-      getMessageContent({
-        action_response: "leans forward",
-        verbal_response: "Hello there",
-      })
-    ).toBe("_leans forward_\n\nHello there");
-  });
-
-  it("returns _action_ alone when only action_response present", () => {
-    expect(getMessageContent({ action_response: "waves hand" })).toBe("_waves hand_");
-  });
-
-  it("returns verbal_response when only verbal_response present", () => {
-    expect(getMessageContent({ verbal_response: "Just words" })).toBe("Just words");
-  });
-
   it("returns empty string when nothing is present", () => {
     expect(getMessageContent({})).toBe("");
   });
@@ -280,7 +263,7 @@ describe("handleRoomResponse — ## No Response parsing", () => {
   });
 });
 
-describe("PersonaState.load() — migrateMessage() round-trip", () => {
+describe("PersonaState.load() — message loading", () => {
   const basePersona = {
     id: "p-1",
     display_name: "TestBot",
@@ -303,39 +286,7 @@ describe("PersonaState.load() — migrateMessage() round-trip", () => {
     context_status: ContextStatus.Default,
   };
 
-  it("migrates verbal_response-only message → content field, clears verbal_response", () => {
-    const state = new PersonaState();
-    state.load({
-      "p-1": {
-        entity: basePersona,
-        messages: [{ ...baseMsg, verbal_response: "Hello there" } as any],
-      },
-    });
-
-    const messages = state.messages_get("p-1");
-    expect(messages).toHaveLength(1);
-    expect(messages[0].content).toBe("Hello there");
-    expect(messages[0].verbal_response).toBeUndefined();
-  });
-
-  it("migrates action_response + verbal_response → italic+verbal content, clears both fields", () => {
-    const state = new PersonaState();
-    state.load({
-      "p-1": {
-        entity: basePersona,
-        messages: [
-          { ...baseMsg, action_response: "leans forward", verbal_response: "Hello there" } as any,
-        ],
-      },
-    });
-
-    const messages = state.messages_get("p-1");
-    expect(messages[0].content).toBe("_leans forward_\n\nHello there");
-    expect(messages[0].action_response).toBeUndefined();
-    expect(messages[0].verbal_response).toBeUndefined();
-  });
-
-  it("skips migration for message that already has content", () => {
+  it("loads message with content field", () => {
     const state = new PersonaState();
     state.load({
       "p-1": {
@@ -347,7 +298,7 @@ describe("PersonaState.load() — migrateMessage() round-trip", () => {
     expect(state.messages_get("p-1")[0].content).toBe("Already migrated");
   });
 
-  it("skips migration for silence message (has silence_reason)", () => {
+  it("loads silence message (has silence_reason, no content)", () => {
     const state = new PersonaState();
     state.load({
       "p-1": {
@@ -361,23 +312,7 @@ describe("PersonaState.load() — migrateMessage() round-trip", () => {
     expect(messages[0].silence_reason).toBe("User said goodbye");
   });
 
-  it("migrates human messages with verbal_response to content", () => {
-    const state = new PersonaState();
-    state.load({
-      "p-1": {
-        entity: basePersona,
-        messages: [
-          { ...baseMsg, role: "human" as const, verbal_response: "Human said this" } as any,
-        ],
-      },
-    });
-
-    const messages = state.messages_get("p-1");
-    expect(messages[0].content).toBe("Human said this");
-    expect((messages[0] as any).verbal_response).toBeUndefined();
-  });
-
-  it("skips migration when message has no content fields", () => {
+  it("loads message with no content fields", () => {
     const state = new PersonaState();
     state.load({
       "p-1": {
@@ -389,26 +324,4 @@ describe("PersonaState.load() — migrateMessage() round-trip", () => {
     expect(state.messages_get("p-1")[0].content).toBeUndefined();
   });
 
-  it("handles mixed batch: migrates only messages that need it", () => {
-    const state = new PersonaState();
-    state.load({
-      "p-1": {
-        entity: basePersona,
-        messages: [
-          { ...baseMsg, id: "m1", content: "already has content" } as any,
-          { ...baseMsg, id: "m2", verbal_response: "needs migration" } as any,
-          { ...baseMsg, id: "m3", silence_reason: "gone quiet" } as any,
-          { ...baseMsg, id: "m4", action_response: "gestures", verbal_response: "and speaks" } as any,
-        ],
-      },
-    });
-
-    const messages = state.messages_get("p-1");
-    expect(messages).toHaveLength(4);
-    expect(messages[0].content).toBe("already has content");
-    expect(messages[1].content).toBe("needs migration");
-    expect(messages[2].content).toBeUndefined();
-    expect(messages[2].silence_reason).toBe("gone quiet");
-    expect(messages[3].content).toBe("_gestures_\n\nand speaks");
-  });
 });
