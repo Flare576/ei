@@ -21,7 +21,6 @@ vi.mock("../../../src/core/handlers/index.js", () => ({
   handlers: {
     handlePersonaResponse: vi.fn(),
     handlePersonaGeneration: vi.fn(),
-    handlePersonaDescriptions: vi.fn(),
     handleFactFind: vi.fn(),
     handleHumanTopicScan: vi.fn(),
     handleHumanPersonScan: vi.fn(),
