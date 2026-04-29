@@ -2,30 +2,9 @@ import React from 'react';
 import { SliderControl } from './SliderControl';
 import { GroupChipEditor } from './GroupChipEditor';
 import { BUILT_IN_IDENTIFIER_TYPES } from '../../../../src/core/constants/built-in-identifier-types.js';
+import type { Person, PersonIdentifier } from '../../../../src/core/types';
 
-export interface PersonIdentifier {
-  type: string;
-  value: string;
-  is_primary?: boolean;
-}
-
-interface Person {
-  id: string;
-  name: string;
-  relationship: string;
-  description: string;
-  sentiment: number;
-  exposure_current: number;
-  exposure_desired: number;
-  last_updated: string;
-  learned_on?: string;
-  learned_by?: string;
-  last_mentioned?: string;
-  last_changed_by?: string;
-  persona_groups?: string[];
-  identifiers?: PersonIdentifier[];
-  validated_date?: string;
-}
+export type { PersonIdentifier };
 
 interface SliderConfig {
   field: string;

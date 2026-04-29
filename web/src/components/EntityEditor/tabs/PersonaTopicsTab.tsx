@@ -1,21 +1,10 @@
 import React, { useState } from 'react';
 import { SliderControl } from '../SliderControl';
-
-interface Topic {
-  id: string;
-  name: string;
-  perspective: string;         // Their view/opinion on this topic
-  approach: string;            // How they prefer to engage
-  personal_stake: string;      // Why it matters to them
-  sentiment: number;           // -1 to 1
-  exposure_current: number;    // 0 to 1
-  exposure_desired: number;    // 0 to 1
-  last_updated: string;
-}
+import type { PersonaTopic } from '../../../../../src/core/types';
 
 interface PersonaTopicsTabProps {
-  topics: Topic[];
-  onChange: (id: string, field: keyof Topic, value: Topic[keyof Topic]) => void;
+  topics: PersonaTopic[];
+  onChange: (id: string, field: keyof PersonaTopic, value: PersonaTopic[keyof PersonaTopic]) => void;
   onSave: (id: string) => void;
   onDelete: (id: string) => void;
   onAdd: () => void;
@@ -69,8 +58,8 @@ const PersonaTopicCard = ({
   onAiAssist,
   aiContext,
 }: {
-  topic: Topic;
-  onChange: (field: keyof Topic, value: Topic[keyof Topic]) => void;
+  topic: PersonaTopic;
+  onChange: (field: keyof PersonaTopic, value: PersonaTopic[keyof PersonaTopic]) => void;
   onSave: () => void;
   onDelete: () => void;
   isDirty: boolean;
@@ -121,7 +110,7 @@ const PersonaTopicCard = ({
       `You're improving the **${fieldLabels[field]}** for a topic called **${topic.name}**. This field captures ${fieldHints[field]}. Return only the improved text, nothing else.`,
       negativeClause,
     ].join('');
-    const currentValue = topic[field as keyof Topic] as string || '';
+    const currentValue = topic[field as keyof PersonaTopic] as string || '';
     setAiLoadingField(field);
     try {
       const result = await onAiAssist(systemPrompt, `Current ${fieldLabels[field]}: ${currentValue || '(empty)'}`);
@@ -295,10 +284,10 @@ const PersonaTopicCard = ({
             <SliderControl
               key={slider.field}
               label={slider.label}
-              value={topic[slider.field as keyof Topic] as number}
+              value={topic[slider.field as keyof PersonaTopic] as number}
               min={slider.min}
               max={slider.max}
-              onChange={(value) => onChange(slider.field as keyof Topic, value)}
+              onChange={(value) => onChange(slider.field as keyof PersonaTopic, value)}
               formatValue={(v) => v.toFixed(2)}
               tooltip={slider.tooltip}
             />
@@ -358,7 +347,7 @@ export const PersonaTopicsTab = ({
           <PersonaTopicCard
             key={topic.id}
             topic={topic}
-            onChange={(field: keyof Topic, value: Topic[keyof Topic]) => onChange(topic.id, field, value)}
+            onChange={(field: keyof PersonaTopic, value: PersonaTopic[keyof PersonaTopic]) => onChange(topic.id, field, value)}
             onSave={() => onSave(topic.id)}
             onDelete={() => onDelete(topic.id)}
             isDirty={dirtyIds.has(topic.id)}

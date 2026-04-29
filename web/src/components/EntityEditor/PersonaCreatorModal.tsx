@@ -1,35 +1,18 @@
 import { useState, useRef, useEffect } from 'react';
 import { isReservedPersonaName, RESERVED_PERSONA_NAMES } from '../../../../src/core/types';
-import type { ToolProvider, ToolDefinition, ProviderAccount } from '../../../../src/core/types';
+import type { ToolProvider, ToolDefinition, ProviderAccount, PersonaTrait, PersonaTopic } from '../../../../src/core/types';
 import type { PersonaGenerationResult } from '../../../../src/prompts/generation/types';
 import { PersonaToolsTab } from './tabs/PersonaToolsTab';
 import { ModelPicker } from '../Settings/ModelPicker';
 import { useOverlayClose } from '../../hooks/useOverlayClose';
-
-interface Trait {
-  name: string;
-  description: string;
-  sentiment?: number;
-  strength?: number;
-}
-
-interface Topic {
-  name: string;
-  perspective: string;
-  approach?: string;
-  personal_stake?: string;
-  sentiment?: number;
-  exposure_current?: number;
-  exposure_desired?: number;
-}
 
 interface NewPersonaData {
   name: string;
   aliases: string[];
   description: string;
   short_description?: string;
-  traits: Partial<Trait>[];
-  topics: Partial<Topic>[];
+  traits: Partial<PersonaTrait>[];
+  topics: Partial<PersonaTopic>[];
   model?: string;
   group_primary?: string;
   tools?: string[];
@@ -74,8 +57,8 @@ export function PersonaCreatorModal({
   const [description, setDescription] = useState('');
   const [shortDescription, setShortDescription] = useState('');
   const [model, setModel] = useState('');
-  const [traits, setTraits] = useState<Partial<Trait>[]>([]);
-  const [topics, setTopics] = useState<Partial<Topic>[]>([]);
+  const [traits, setTraits] = useState<Partial<PersonaTrait>[]>([]);
+  const [topics, setTopics] = useState<Partial<PersonaTopic>[]>([]);
   const [assignedToolIds, setAssignedToolIds] = useState<string[]>([]);
   const [expandedSections, setExpandedSections] = useState<Set<ExpandableSection>>(new Set());
   const [aiLoadingField, setAiLoadingField] = useState<string | null>(null);
@@ -261,7 +244,7 @@ export function PersonaCreatorModal({
     setTraits([...traits, { name: '', description: '' }]);
   };
 
-  const updateTrait = (index: number, field: keyof Trait, value: string | number) => {
+  const updateTrait = (index: number, field: keyof PersonaTrait, value: string | number) => {
     const updated = [...traits];
     updated[index] = { ...updated[index], [field]: value };
     setTraits(updated);
@@ -275,7 +258,7 @@ export function PersonaCreatorModal({
     setTopics([...topics, { name: '', perspective: '' }]);
   };
 
-  const updateTopic = (index: number, field: keyof Topic, value: string | number) => {
+  const updateTopic = (index: number, field: keyof PersonaTopic, value: string | number) => {
     const updated = [...topics];
     updated[index] = { ...updated[index], [field]: value };
     setTopics(updated);

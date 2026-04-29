@@ -6,69 +6,7 @@ import { PersonaTopicsTab } from './tabs/PersonaTopicsTab';
 import { ContextWindowTab } from './tabs/ContextWindowTab';
 import { PersonaToolsTab } from './tabs/PersonaToolsTab';
 import { ContextStatus } from '../../../../src/core/types';
-import type { Message, ToolProvider, ToolDefinition, ProviderAccount } from '../../../../src/core/types';
-
-interface Trait {
-  id: string;
-  name: string;
-  description: string;
-  sentiment: number;
-  strength?: number;
-  last_updated: string;
-  learned_by?: string;
-  persona_groups?: string[];
-}
-
-interface Topic {
-  id: string;
-  name: string;
-  perspective: string;
-  approach: string;
-  personal_stake: string;
-  sentiment: number;
-  exposure_current: number;
-  exposure_desired: number;
-  last_updated: string;
-}
-
-interface PersonaEntity {
-  id: string;
-  display_name: string;
-  entity: "system";
-  aliases?: string[];
-  short_description?: string;
-  long_description?: string;
-  model?: string;
-  group_primary?: string | null;
-  groups_visible?: string[];
-  traits: Trait[];
-  topics: Topic[];
-  is_paused: boolean;
-  pause_until?: string;
-  is_archived: boolean;
-  archived_at?: string;
-  is_static: boolean;
-  heartbeat_delay_ms?: number;
-  context_window_hours?: number;
-  context_boundary?: string;
-  last_updated: string;
-  last_heartbeat?: string;
-  last_extraction?: string;
-  last_inactivity_ping?: string;
-  tools?: string[];
-  avatar_emoji?: string;
-  avatar_image?: string;
-  preferred_theme?: string;
-}
-
-type PersonaEntityForSettings = Omit<PersonaEntity, 'traits' | 'topics'> & {
-  traits: unknown[];
-  topics: unknown[];
-};
-
-type PersonaEntityForIdentity = Omit<PersonaEntity, 'topics'> & {
-  topics: unknown[];
-};
+import type { Message, ToolProvider, ToolDefinition, ProviderAccount, PersonaTrait, PersonaTopic, PersonaEntity } from '../../../../src/core/types';
 
 interface PersonaEditorProps {
   isOpen: boolean;
@@ -77,9 +15,9 @@ interface PersonaEditorProps {
   persona: PersonaEntity;
   messages: Message[];
   onUpdate: (updates: Partial<PersonaEntity>) => void;
-  onTraitSave: (trait: Trait) => void;
+  onTraitSave: (trait: PersonaTrait) => void;
   onTraitDelete: (id: string) => void;
-  onTopicSave: (topic: Topic) => void;
+  onTopicSave: (topic: PersonaTopic) => void;
   onTopicDelete: (id: string) => void;
   onContextStatusChange: (messageId: string, status: ContextStatus) => void;
   onBulkContextStatusChange: (messageIds: string[], status: ContextStatus) => void;
@@ -151,8 +89,8 @@ export function PersonaEditor({
   };
   const handleTraitChange = (
     id: string,
-    field: keyof Trait,
-    value: Trait[keyof Trait]
+    field: keyof PersonaTrait,
+    value: PersonaTrait[keyof PersonaTrait]
   ) => {
     setLocalPersona((prev) => ({
       ...prev,
@@ -189,7 +127,7 @@ export function PersonaEditor({
   };
 
   const handleTraitAdd = () => {
-    const newTrait: Trait = {
+    const newTrait: PersonaTrait = {
       id: `trait-${Date.now()}`,
       name: 'New Trait',
       description: '',
@@ -207,8 +145,8 @@ export function PersonaEditor({
 
   const handleTopicChange = (
     id: string,
-    field: keyof Topic,
-    value: Topic[keyof Topic]
+    field: keyof PersonaTopic,
+    value: PersonaTopic[keyof PersonaTopic]
   ) => {
     setLocalPersona((prev) => ({
       ...prev,
@@ -245,7 +183,7 @@ export function PersonaEditor({
   };
 
   const handleTopicAdd = () => {
-    const newTopic: Topic = {
+    const newTopic: PersonaTopic = {
       id: `topic-${Date.now()}`,
       name: 'New Topic',
       perspective: '',
@@ -277,7 +215,7 @@ export function PersonaEditor({
     >
       {activeTab === 'settings' && (
         <PersonaSettingsTab
-          persona={localPersona as PersonaEntityForSettings}
+          persona={localPersona}
           onChange={handlePersonaFieldChange}
           availableGroups={availableGroups}
           accounts={accounts}
@@ -287,7 +225,7 @@ export function PersonaEditor({
 
       {activeTab === 'identity' && (
         <PersonaIdentityTab
-          persona={localPersona as PersonaEntityForIdentity}
+          persona={localPersona}
           onChange={handlePersonaFieldChange}
           onTraitChange={handleTraitChange}
           onTraitSave={handleTraitSave}

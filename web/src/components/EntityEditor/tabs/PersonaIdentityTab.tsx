@@ -2,49 +2,12 @@ import { useState, useRef, useEffect } from 'react';
 import EmojiPicker, { EmojiClickData } from 'emoji-picker-react';
 import { GroupedCardList } from '../GroupedCardList';
 import { PersonaAvatar } from '../../Avatar/PersonaAvatar';
-
-interface Trait {
-  id: string;
-  name: string;
-  description: string;
-  sentiment: number;           // -1 to 1
-  strength?: number;           // 0 to 1
-  last_updated: string;
-  learned_by?: string;
-  persona_groups?: string[];
-}
-
-interface PersonaEntity {
-  id: string;
-  display_name: string;
-  entity: "system";
-  aliases?: string[];
-  short_description?: string;
-  long_description?: string;
-  model?: string;
-  group_primary?: string | null;
-  groups_visible?: string[];
-  traits: Trait[];
-  topics: unknown[];
-  is_paused: boolean;
-  pause_until?: string;
-  is_archived: boolean;
-  archived_at?: string;
-  heartbeat_delay_ms?: number;
-  context_window_hours?: number;
-  context_boundary?: string;
-  last_updated: string;
-  last_heartbeat?: string;
-  last_extraction?: string;
-  last_inactivity_ping?: string;
-  avatar_emoji?: string;
-  avatar_image?: string;
-}
+import type { PersonaTrait, PersonaEntity } from '../../../../../src/core/types';
 
 interface PersonaIdentityTabProps {
   persona: PersonaEntity;
   onChange: (field: keyof PersonaEntity, value: PersonaEntity[keyof PersonaEntity]) => void;
-  onTraitChange: (id: string, field: keyof Trait, value: Trait[keyof Trait]) => void;
+  onTraitChange: (id: string, field: keyof PersonaTrait, value: PersonaTrait[keyof PersonaTrait]) => void;
   onTraitSave: (id: string) => void;
   onTraitDelete: (id: string) => void;
   onTraitAdd: () => void;

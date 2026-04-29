@@ -1,25 +1,8 @@
 import React from 'react';
 import { GroupedCardList } from '../GroupedCardList';
-import { PersonCard, PersonIdentifier } from '../PersonCard';
+import { PersonCard } from '../PersonCard';
 import type { PersonaOption } from '../PersonCard';
-
-interface Person {
-  id: string;
-  name: string;
-  relationship: string;
-  description: string;
-  sentiment: number;
-  exposure_current: number;
-  exposure_desired: number;
-  last_updated: string;
-  learned_on?: string;
-  learned_by?: string;
-  last_mentioned?: string;
-  last_changed_by?: string;
-  persona_groups?: string[];
-  identifiers?: PersonIdentifier[];
-  validated_date?: string;
-}
+import type { Person } from '../../../../../src/core/types';
 
 interface HumanPeopleTabProps {
   people: Person[];

@@ -5,42 +5,11 @@ import { HumanTopicsTab } from './tabs/HumanTopicsTab';
 import { HumanPeopleTab } from './tabs/HumanPeopleTab';
 import { HumanQuotesTab } from './tabs/HumanQuotesTab';
 import { QuoteManagementModal } from '../Quote/QuoteManagementModal';
-import type { Fact, Quote } from '../../../../src/core/types';
-import type { PersonIdentifier, PersonaOption } from './PersonCard';
+import type { Fact, Topic, Person, Quote } from '../../../../src/core/types';
+import type { PersonaOption } from './PersonCard';
 
-interface Topic {
-  id: string;
-  name: string;
-  description: string;
-  sentiment: number;
-  category?: string;
-  exposure_current: number;
-  exposure_desired: number;
-  last_updated: string;
-  learned_by?: string;
-  persona_groups?: string[];
-}
-
-interface Person {
-  id: string;
-  name: string;
-  relationship: string;
-  description: string;
-  sentiment: number;
-  exposure_current: number;
-  exposure_desired: number;
-  last_updated: string;
-  learned_on?: string;
-  learned_by?: string;
-  last_mentioned?: string;
-  last_changed_by?: string;
-  persona_groups?: string[];
-  identifiers?: PersonIdentifier[];
-  validated_date?: string;
-}
-
-interface HumanEntity {
-  id: string;
+interface HumanEditorData {
+  id?: string;
   name_display?: string;
   facts?: Fact[];
   topics?: Topic[];
@@ -51,7 +20,7 @@ interface HumanEntity {
 interface HumanEditorProps {
   isOpen: boolean;
   onClose: () => void;
-  human: HumanEntity & { settings?: { rewrite_model?: string } };
+  human: HumanEditorData & { settings?: { rewrite_model?: string } };
   onFactSave: (fact: Fact) => Promise<void>;
   onFactDelete: (id: string) => void;
   onTopicSave: (topic: Topic) => Promise<void>;

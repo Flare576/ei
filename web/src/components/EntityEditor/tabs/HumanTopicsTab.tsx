@@ -1,19 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { GroupedCardList } from '../GroupedCardList';
 import { DataItemCard } from '../DataItemCard';
-
-interface Topic {
-  id: string;
-  name: string;
-  description: string;
-  sentiment: number;
-  category?: string;
-  exposure_current: number;
-  exposure_desired: number;
-  last_updated: string;
-  learned_by?: string;
-  persona_groups?: string[];
-}
+import type { Topic } from '../../../../../src/core/types';
 
 interface HumanTopicsTabProps {
   topics: Topic[];

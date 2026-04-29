@@ -1,33 +1,7 @@
 import React from "react";
 import { ModelPicker } from "../../Settings/ModelPicker";
 import { GroupChipEditor } from "../GroupChipEditor";
-import type { ProviderAccount } from "../../../../../src/core/types";
-
-interface PersonaEntity {
-  entity: "system";
-  aliases?: string[];
-  short_description?: string;
-  long_description?: string;
-  model?: string;
-  group_primary?: string | null;
-  groups_visible?: string[];
-  traits: unknown[];
-  topics: unknown[];
-  is_paused: boolean;
-  pause_until?: string;
-  is_archived: boolean;
-  archived_at?: string;
-  is_static: boolean;
-  heartbeat_delay_ms?: number;
-  context_window_hours?: number;
-  include_message_timestamps?: boolean;
-  context_boundary?: string;
-  last_updated: string;
-  last_heartbeat?: string;
-  last_extraction?: string;
-  last_inactivity_ping?: string;
-  preferred_theme?: string;
-}
+import type { ProviderAccount, PersonaEntity } from "../../../../../src/core/types";
 
 const isEiPersona = (persona: PersonaEntity): boolean => {
   return persona.aliases?.[0]?.toLowerCase() === "ei";
