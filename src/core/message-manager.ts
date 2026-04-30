@@ -177,25 +177,27 @@ export async function sendMessage(
 
   const history = sm.messages_get(persona.id);
 
-  const traitExtractionData: PersonaTraitExtractionPromptData = {
-    persona_name: persona.display_name,
-    current_traits: persona.traits,
-    messages_context: history.slice(-11, -1),
-    messages_analyze: [message],
-  };
-  const traitPrompt = buildPersonaTraitExtractionPrompt(traitExtractionData);
+  if (!persona.is_static) {
+    const traitExtractionData: PersonaTraitExtractionPromptData = {
+      persona_name: persona.display_name,
+      current_traits: persona.traits,
+      messages_context: history.slice(-11, -1),
+      messages_analyze: [message],
+    };
+    const traitPrompt = buildPersonaTraitExtractionPrompt(traitExtractionData);
 
-  sm.queue_enqueue({
-    type: LLMRequestType.JSON,
-    priority: LLMPriority.Low,
-    system: traitPrompt.system,
-    user: traitPrompt.user,
-    next_step: LLMNextStep.HandlePersonaTraitExtraction,
-    model: getModelForPersona(persona.id),
-    data: { personaId: persona.id, personaDisplayName: persona.display_name },
-  });
+    sm.queue_enqueue({
+      type: LLMRequestType.JSON,
+      priority: LLMPriority.Low,
+      system: traitPrompt.system,
+      user: traitPrompt.user,
+      next_step: LLMNextStep.HandlePersonaTraitExtraction,
+      model: getModelForPersona(persona.id),
+      data: { personaId: persona.id, personaDisplayName: persona.display_name },
+    });
 
-  checkAndQueueHumanExtraction(sm, persona.id, persona.display_name, history);
+    checkAndQueueHumanExtraction(sm, persona.id, persona.display_name, history);
+  }
 }
 
 // =============================================================================

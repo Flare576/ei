@@ -39,7 +39,9 @@ import { ContextStatus as ContextStatusEnum, RoomMode } from "./types.js";
 import { registerReadMemoryExecutor, registerFileReadExecutor } from "./tools/index.js";
 import { createReadMemoryExecutor } from "./tools/builtin/read-memory.js";
 import { EI_WELCOME_MESSAGE, EI_PERSONA_DEFINITION } from "../templates/welcome.js";
+import { EMMETT_PERSONA_DEFINITION } from "../templates/emmett.js";
 import { shouldStartCeremony, startCeremony, handleCeremonyProgress, queueReflectionDrain, queueUserDedupRequest, queueRoomCapture, queuePersonaCapture, checkAndQueueRoomExtraction, queueTargetedPersonUpdate, queueTargetedTopicUpdate } from "./orchestrators/index.js";
+import { finishDocumentBatch } from "./handlers/document-segmentation.js";
 import { BUILT_IN_FACTS } from "./constants/built-in-facts.js";
 import { DEFAULT_SEED_TRAITS } from "./constants/seed-traits.js";
 
@@ -132,6 +134,8 @@ import {
   markAllRoomMessagesRead,
 } from "./room-manager.js";
 import type { RoomCreationInput, RoomEntity, RoomMessage, RoomSummary } from "./types.js";
+import { previewUnsource as _previewUnsource } from "../integrations/document/unsource.js";
+import type { UnsourcePreview, UnsourceResult } from "../integrations/document/unsource.js";
 
 const DEFAULT_LOOP_INTERVAL_MS = 100;
 const DEFAULT_OPENCODE_POLLING_MS = 60000;
@@ -280,6 +284,51 @@ export class Processor {
 
     this.interface.onPersonaAdded?.();
     this.interface.onMessageAdded?.(eiEntity.id);
+  }
+
+  private bootstrapEmmett(): void {
+    const existing = this.stateManager.persona_getById("emmet");
+    if (existing) {
+      if (existing.is_archived) {
+        this.stateManager.persona_unarchive("emmet");
+      }
+      return;
+    }
+    const readMemoryTool = this.stateManager.tools_getByName("read_memory");
+    const emmettEntity: PersonaEntity = {
+      ...EMMETT_PERSONA_DEFINITION,
+      id: "emmet",
+      display_name: "Emmett",
+      last_updated: new Date().toISOString(),
+      tools: readMemoryTool ? [readMemoryTool.id] : [],
+    };
+    this.stateManager.persona_add(emmettEntity);
+    this.interface.onPersonaAdded?.();
+  }
+
+  async importDocument(filePath: string): Promise<import("../integrations/document/types.js").DocumentImportResult> {
+    this.bootstrapEmmett();
+    const { importDocument } = await import("../integrations/document/importer.js");
+    return importDocument({
+      stateManager: this.stateManager,
+      interface: this.interface,
+      filePath,
+    });
+  }
+
+  previewUnsource(sourceTag: string): UnsourcePreview {
+    return _previewUnsource(sourceTag, this.stateManager);
+  }
+
+  async executeUnsource(
+    preview: UnsourcePreview,
+    dataPath: string
+  ): Promise<UnsourceResult> {
+    const { executeUnsource } = await import("../integrations/document/unsource.js");
+    const { writeUnsourceInvoice } = await import("../integrations/document/invoice.js");
+    const result = await executeUnsource(preview, this.stateManager);
+    await writeUnsourceInvoice(preview, result, dataPath);
+    return result;
   }
 
   /**
@@ -1180,7 +1229,7 @@ const toolNextSteps = new Set([
     }
 
     for (const persona of this.stateManager.persona_getAll()) {
-      if (persona.is_paused || persona.is_archived) continue;
+      if (persona.is_paused || persona.is_archived || persona.is_static) continue;
 
       const defaultHeartbeatMs = this.stateManager.getHuman().settings?.default_heartbeat_ms ?? 1800000;
       const heartbeatDelay = persona.heartbeat_delay_ms ?? defaultHeartbeatMs;
@@ -1674,6 +1723,15 @@ const toolNextSteps = new Set([
 
       if (typeof response.request.data.ceremony_progress === "number") {
         handleCeremonyProgress(this.stateManager, response.request.data.ceremony_progress);
+      }
+
+      if (response.request.next_step === LLMNextStep.HandleDocumentSegmentation) {
+        const batchId = response.request.data.batchId as string;
+        const filename = response.request.data.filename as string;
+        if (batchId && !this.stateManager.queue_hasPendingDocumentSegments(batchId)) {
+          finishDocumentBatch(batchId, filename, this.stateManager);
+          this.interface.onMessageAdded?.("emmet");
+        }
       }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);

@@ -1,6 +1,7 @@
 import {
   RESERVED_PERSONA_NAMES,
   isReservedPersonaName,
+  isReservedPersonaId,
   type PersonaSummary,
   type PersonaEntity,
   type PersonaCreationInput,
@@ -110,6 +111,9 @@ export async function deletePersona(
   personaId: string,
   _deleteHumanData: boolean
 ): Promise<boolean> {
+  if (isReservedPersonaId(personaId)) {
+    throw new Error(`Cannot delete reserved persona "${personaId}". Use archive instead.`);
+  }
   const persona = sm.persona_getById(personaId);
   if (!persona) return false;
   sm.persona_delete(personaId);
