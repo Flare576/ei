@@ -15,6 +15,7 @@ import { handleRewriteScan, handleRewriteRewrite } from "./rewrite.js";
 import { handleDedupCurate } from "./dedup.js";
 import { handleRoomResponse, handleRoomJudge } from "./rooms.js";
 import { handlePersonaPreview } from "./persona-preview.js";
+import { handleDocumentSegmentation } from "./document-segmentation.js";
 
 export const handlers: Record<LLMNextStep, ResponseHandler> = {
   handlePersonaResponse,
@@ -41,4 +42,5 @@ export const handlers: Record<LLMNextStep, ResponseHandler> = {
   handlePersonaPreview,
   [LLMNextStep.HandleTopicValidate]: handleDedupCurate,
   [LLMNextStep.HandleReflectionCritic]: handleReflectionCritic,
+  [LLMNextStep.HandleDocumentSegmentation]: handleDocumentSegmentation,
 };
