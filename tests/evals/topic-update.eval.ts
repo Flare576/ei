@@ -48,9 +48,9 @@ const NEW_TOPIC_MESSAGES: Message[] = [
 ];
 
 const EVENT_MESSAGES: Message[] = [
-  makeMessage("human", "We shipped the thing. 26 hours, no sleep, LLM-based outbound call system for Expedia. It worked. Actually worked. Jared from AWS was there, David was there, we just kept going until it was done.", "msg-ev1"),
+  makeMessage("human", "We shipped the thing. 26 hours, no sleep, AI-based booking confirmation system for Acme Corp. It worked. Actually worked. Marcus from Cloudy was there, Ryan was there, we just kept going until it was done.", "msg-ev1"),
   makeMessage("system", "That's the kind of thing you remember forever.", "msg-ev2"),
-  makeMessage("human", "Yeah. At 3am David said 'I can't believe we're actually doing this' and I just laughed. We were so tired. But it worked.", "msg-ev3"),
+  makeMessage("human", "Yeah. At 3am Ryan said 'I can't believe we're actually doing this' and I just laughed. We were so tired. But it worked.", "msg-ev3"),
 ];
 
 const ACCUMULATION_MESSAGES: Message[] = [
@@ -168,7 +168,7 @@ const summary = await runEval(
         buildTopicUpdatePrompt({
           persona_name: PERSONA_NAME,
           existing_item: null,
-          new_topic_name: "26-hour Expedia hackathon",
+          new_topic_name: "26-hour Acme Corp hackathon",
           new_topic_description: "Steve and his team built an LLM-based outbound call system in 26 hours.",
           new_topic_category: "Event",
           messages_context: [],
@@ -186,7 +186,7 @@ const summary = await runEval(
           rubric: [
             "This topic is categorized as 'Event' — a bounded, significant moment, not an ongoing theme.",
             "PASS if the description reads as a narrative memory — specific moment, what happened, what made it significant. Should feel like 'if you described this to someone who wasn't there.'",
-            "PASS if it mentions: 26 hours, Expedia, LLM-based system, it worked, David's quote or the 3am moment.",
+            "PASS if it mentions: 26 hours, Acme Corp, AI-based system, it worked, Ryan's quote or the 3am moment.",
             "FAIL if the description reads as an ongoing summary ('Steve regularly participates in hackathons...').",
             "FAIL if it sounds like a status update rather than a story beat.",
           ].join(" "),
