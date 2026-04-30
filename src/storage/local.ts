@@ -7,6 +7,10 @@ const STATE_KEY = "ei_state";
 const BACKUP_KEY = "ei_state_backup";
 
 export class LocalStorage implements Storage {
+  getDataPath(): string {
+    return "";
+  }
+
   async isAvailable(): Promise<boolean> {
     try {
       const testKey = "__ei_storage_test__";

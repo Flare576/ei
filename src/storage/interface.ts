@@ -1,6 +1,7 @@
 import type { StorageState } from "../core/types.js";
 
 export interface Storage {
+  getDataPath(): string;
   isAvailable(): Promise<boolean>;
   save(state: StorageState): Promise<void>;
   load(): Promise<StorageState | null>;

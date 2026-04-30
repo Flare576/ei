@@ -10,6 +10,10 @@ const PRIMARY_KEY = "primary";
 const BACKUP_KEY = "backup";
 
 export class IndexedDBStorage implements Storage {
+  getDataPath(): string {
+    return "";
+  }
+
   async isAvailable(): Promise<boolean> {
     try {
       const db = await this.openDB();
