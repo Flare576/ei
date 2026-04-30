@@ -1,6 +1,7 @@
 import type { Command } from "./registry";
 import { PersonaListOverlay } from "../components/PersonaListOverlay";
 import { ConfirmOverlay } from "../components/ConfirmOverlay";
+import { isReservedPersonaId } from "../../../src/core/types/entities.js";
 
 export const deleteCommand: Command = {
   name: "delete",
@@ -34,7 +35,7 @@ export const deleteCommand: Command = {
     }
 
     const allPersonas = ctx.ei.personas();
-    const deletable = allPersonas.filter(p => p.id !== ctx.ei.activePersonaId());
+    const deletable = allPersonas.filter(p => p.id !== ctx.ei.activePersonaId() && !isReservedPersonaId(p.id));
     
     const confirmAndDelete = async (personaId: string, displayName: string) => {
       const confirmed = await new Promise<boolean>((resolve) => {
@@ -110,6 +111,11 @@ export const deleteCommand: Command = {
     
     if (personaId === ctx.ei.activePersonaId()) {
       ctx.showNotification("Cannot delete active persona. Switch to another first.", "error");
+      return;
+    }
+
+    if (isReservedPersonaId(personaId)) {
+      ctx.showNotification(`Cannot delete reserved persona. Use /archive instead.`, "error");
       return;
     }
     

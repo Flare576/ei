@@ -146,6 +146,9 @@ export interface EiContextValue {
   humanRoomMessagePending: () => boolean;
   getArchivedRooms: () => RoomSummary[];
   generatePersonaPreview: (name: string, description: string, relationship?: string, personaId?: string) => Promise<import('../../../src/prompts/generation/types.js').PersonaGenerationResult>;
+  importDocument: (filePath: string) => Promise<import('../../../src/integrations/document/types.js').DocumentImportResult>;
+  previewUnsource: (sourceTag: string) => import('../../../src/integrations/document/unsource.js').UnsourcePreview;
+  executeUnsource: (preview: import('../../../src/integrations/document/unsource.js').UnsourcePreview) => Promise<import('../../../src/integrations/document/unsource.js').UnsourceResult>;
 }
 const EiContext = createContext<EiContextValue>();
 
@@ -175,6 +178,7 @@ export const EiProvider: ParentComponent = (props) => {
   let readTimer: Timer | null = null;
   let dwelledPersona: string | null = null;
   let syncConfiguredFromEnv = false;
+  let eiDataPath = "";
 
   const showNotification = (message: string, level: "error" | "warn" | "info") => {
     if (notificationTimer) clearTimeout(notificationTimer);
@@ -318,6 +322,21 @@ export const EiProvider: ParentComponent = (props) => {
   const generatePersonaPreview = async (name: string, description: string, relationship?: string, personaId?: string) => {
     if (!processor) throw new Error("Processor not ready");
     return processor.generatePersonaPreview(name, description, relationship, personaId);
+  };
+
+  const importDocument = async (filePath: string) => {
+    if (!processor) throw new Error("Processor not ready");
+    return processor.importDocument(filePath);
+  };
+
+  const previewUnsource = (sourceTag: string) => {
+    if (!processor) throw new Error("Processor not ready");
+    return processor.previewUnsource(sourceTag);
+  };
+
+  const executeUnsource = async (preview: import('../../../src/integrations/document/unsource.js').UnsourcePreview) => {
+    if (!processor) throw new Error("Processor not ready");
+    return processor.executeUnsource(preview, eiDataPath);
   };
 
   const archivePersona = async (personaId: string) => {
@@ -826,6 +845,7 @@ export const EiProvider: ParentComponent = (props) => {
     logger.info("Ei TUI bootstrap starting");
     try {
       const storage = new FileStorage(Bun.env.EI_DATA_PATH);
+      eiDataPath = storage.getDataPath();
       // Pre-configure remoteSync from env vars BEFORE processor.start()
       // so the processor's sync decision tree can detect remote state
       const syncUsername = Bun.env.EI_SYNC_USERNAME;
@@ -1006,6 +1026,9 @@ export const EiProvider: ParentComponent = (props) => {
     humanRoomMessagePending,
     getArchivedRooms,
     generatePersonaPreview,
+    importDocument,
+    previewUnsource,
+    executeUnsource,
   };
   return (
     <Switch>
