@@ -250,6 +250,15 @@ fi
 
 echo ""
 
+echo "callLLMRaw — only called from queue-processor.ts"
+DIRECT_LLM_CALLS=$(grep -rn "callLLMRaw(" "$ROOT/src/" --include="*.ts" \
+  | grep -v "src/core/queue-processor.ts" \
+  | grep -v "src/core/llm-client.ts" \
+  || true)
+if [ -z "$DIRECT_LLM_CALLS" ]; then pass "callLLMRaw only in queue-processor.ts + llm-client.ts"; else fail "callLLMRaw() called outside queue-processor.ts (bypasses queue system)" "$DIRECT_LLM_CALLS"; fi
+
+echo ""
+
 # ------------------------------------------------------------------
 # Summary
 # ------------------------------------------------------------------
