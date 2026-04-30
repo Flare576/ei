@@ -164,6 +164,7 @@ export function queueTopicScan(context: ExtractionContext, state: StateManager, 
       messages_context: chunk.messages_context,
       messages_analyze: chunk.messages_analyze,
       participant_context: buildParticipantContext(context.personaId, state),
+      technical_context: (context.sources?.length ?? 0) > 0,
     });
 
     state.queue_enqueue({
@@ -275,6 +276,7 @@ export function queueDirectTopicUpdate(
       messages_analyze: chunk.messages_analyze,
       persona_name: chunk.channelDisplayName,
       participant_context: buildParticipantContext(context.personaId, state),
+      technical_context: (context.sources?.length ?? 0) > 0,
     });
 
     state.queue_enqueue({
@@ -291,6 +293,7 @@ export function queueDirectTopicUpdate(
         existingItemId: topic.id,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
         extraction_model: extractionModel,
+        sources: context.sources,
       },
     });
   }
@@ -425,6 +428,7 @@ export function queueTopicUpdate(
       messages_analyze: chunk.messages_analyze,
       persona_name: chunk.channelDisplayName,
       participant_context: buildParticipantContext(primaryPersonaId, state),
+      technical_context: (context.sources?.length ?? 0) > 0,
     });
 
     state.queue_enqueue({
