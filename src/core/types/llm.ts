@@ -27,6 +27,15 @@ export interface Message {
 
   external?: boolean;          // Set by integration importers (OpenCode, Cursor, Claude Code); invisible to LLM context
 
+  /**
+   * Integration source tag. Set ONLY on external: true messages by importers (document, Slack, etc.)
+   * to identify which external source this synthetic message came from.
+   * Format: "import:document:filename" | "slack:channelId" | etc.
+   * Enables quote provenance tracing: quote.message_id → message.source_tag → original source.
+   * Never set on conversational messages.
+   */
+  source_tag?: string;
+
 }
 
 export interface ChatMessage {

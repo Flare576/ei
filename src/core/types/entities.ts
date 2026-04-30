@@ -20,6 +20,12 @@ export interface OpenCodeSettings {
   processed_sessions?: Record<string, string>;  // sessionId → ISO timestamp of last import
 }
 
+export interface DocumentSettings {
+  extraction_model?: string;
+  processed_documents?: Record<string, string>;
+  pending_batches?: Record<string, { filename: string; total: number }>;
+}
+
 export interface CeremonyConfig {
   time: string;  // "HH:MM" format (e.g., "09:00")
   last_ceremony?: string;  // ISO timestamp
@@ -117,6 +123,7 @@ export interface HumanSettings {
   backup?: BackupConfig;
   claudeCode?: import("../../integrations/claude-code/types.js").ClaudeCodeSettings;
   cursor?: import("../../integrations/cursor/types.js").CursorSettings;
+  document?: DocumentSettings;
   active_theme?: string;
   custom_themes?: ThemeDefinition[];
 }
@@ -201,4 +208,12 @@ export type ReservedPersonaName = typeof RESERVED_PERSONA_NAMES[number];
 
 export function isReservedPersonaName(name: string): boolean {
   return RESERVED_PERSONA_NAMES.includes(name.toLowerCase() as ReservedPersonaName);
+}
+
+// Reserved persona IDs (built-in system personas that cannot be deleted)
+export const RESERVED_PERSONA_IDS = ["ei", "emmet"] as const;
+export type ReservedPersonaId = typeof RESERVED_PERSONA_IDS[number];
+
+export function isReservedPersonaId(id: string): boolean {
+  return (RESERVED_PERSONA_IDS as readonly string[]).includes(id);
 }
