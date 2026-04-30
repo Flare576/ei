@@ -917,6 +917,10 @@ export class StateManager {
     return this.queueState.hasPendingCeremonies();
   }
 
+  queue_hasPendingDocumentSegments(batchId: string): boolean {
+    return this.queueState.hasPendingDocumentSegments(batchId);
+  }
+
   queue_clear(): number {
     const result = this.queueState.clear();
     this.scheduleSave();

@@ -200,6 +200,13 @@ export class QueueState {
     return this.queue.some(r => r.state !== "dlq" && typeof r.data.ceremony_progress === "number" && r.data.ceremony_progress > 0);
   }
 
+  hasPendingDocumentSegments(batchId: string): boolean {
+    return this.queue.some(r =>
+      r.state !== "dlq" &&
+      r.data.batchId === batchId
+    );
+  }
+
   clear(): number {
     const count = this.queue.filter(r => r.state !== "dlq").length;
     this.queue = this.queue.filter(r => r.state === "dlq");
