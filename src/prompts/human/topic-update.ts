@@ -24,6 +24,7 @@ export interface TopicUpdatePromptData {
   messages_analyze: Message[];
   persona_name: string;
   participant_context?: ParticipantContext;
+  technical_context?: boolean;
 }
 
 function formatExistingTopic(topic: Topic): string {
@@ -46,6 +47,10 @@ export function buildTopicUpdatePrompt(data: TopicUpdatePromptData): PromptOutpu
   const isEvent =
     data.existing_item?.category === "Event" ||
     data.new_topic_category === "Event";
+
+  const isTechnical =
+    data.existing_item?.category === "Technical" ||
+    (data.technical_context === true && data.new_topic_category === "Technical");
 
   const nameSection = `Should be a short, evocative label for the TOPIC.
 
@@ -76,6 +81,30 @@ The description should NOT:
 - Read like a system log or changelog
 
 **Style**: Write it the way a good friend would tell someone else about a memorable moment. Present tense is fine.`
+    : isTechnical
+    ? `A living knowledge base entry for this technical topic. Personas use this to give genuinely useful technical context — not pleasantries.
+
+## CRITICAL: Accumulate, don't synthesize
+
+Every update must **expand and preserve** detail. Never distill it away.
+
+**Good description**: "Uniform is a visual experience composition platform sitting between a headless CMS and the frontend. Chose it over Contentful's visual editor for CMS-agnostic multi-source composition (pulling from Contentful + Shopify simultaneously). Key gotcha: Canvas preview on Vercel protected environments requires x-vercel-protection-bypass query param due to SameSite=Lax cookie restrictions. Open question: edgehancers (CDN-edge, no-code, built-in caching) vs custom enhancers for Shopify integration — edgehancers are recommended default but custom logic may be needed."
+
+**Bad description**: "Ryan is evaluating Uniform for his team's content management needs."
+
+The description should:
+- Capture specific gotchas encountered and HOW they were resolved (or not)
+- Preserve architectural decisions made and WHY (especially tradeoffs)
+- Surface open questions still unresolved — future Ryan needs these
+- Include key concepts, terminology, and non-obvious behaviors
+- Be useful to someone who needs to do real work with this technology tomorrow
+
+The description should NOT:
+- Replace specific detail with vague summary ("is learning Uniform" is worthless)
+- Drop previously captured gotchas or decisions to make room for new ones
+- Exceed 6-8 sentences — prioritize specificity over completeness
+
+**ABSOLUTELY VITAL**: A description that loses a specific gotcha or decision is strictly worse than the one before it. When in doubt, keep the detail.`
     : `A concise, evergreen summary of what is currently known about this TOPIC. Personas use this to recall context and make meaningful references.
 
 ## CRITICAL: Synthesize, don't accumulate
@@ -112,10 +141,13 @@ The type/category of this TOPIC. Pick the most appropriate:
 - **Plan**: Concrete intentions with steps in mind
 - **Project**: Active undertakings with real progress
 - **Event**: A specific, significant moment that either party might reference later ("remember when...")
+- **Technical**: A tool, platform, framework, library, or technical concept being actively learned, evaluated, or built with
 
 **Event vs. everything else**: An Event is bounded in time — it happened, it meant something, it's now a shared reference point. If you're describing an ongoing relationship or recurring theme, that's not an Event.
 
-If the TOPIC is currently categorized as Event, keep it as Event unless you have strong evidence it should change.`;
+**Technical vs. Project**: A Project is something the human is *building*. Technical is something they are *learning or using as a tool*. Overlap is possible — use the dominant framing.
+
+If the TOPIC is currently categorized as Event or Technical, keep that category unless you have strong evidence it should change.`;
 
   const exposureSection = `## Desired Exposure (\`exposure_desired\`)
 
@@ -155,13 +187,13 @@ You are CREATING a new TOPIC from what was discovered:
 }
 \`\`\`
 
-Return all fields based on what you find in the conversation.`;
+Return all fields based on what you find in the conversation. **Always include \`category\` in your response** — use the candidate category above as the starting point, refine it only if the conversation clearly indicates a better fit.`;
 
   const jsonTemplate = `{
     "name": "...",
     "description": "...",
     "sentiment": 0.0,
-    "category": "Interest|Goal|Dream|Conflict|Concern|Fear|Hope|Plan|Project|Event",
+    "category": "Interest|Goal|Dream|Conflict|Concern|Fear|Hope|Plan|Project|Event|Technical",
     "exposure_desired": 0.5,
     "exposure_impact": "high|medium|low|none",
     "quotes": [
@@ -250,7 +282,7 @@ ONLY ANALYZE the "Most Recent Messages". The "Earlier Conversation" is provided 
 ${jsonTemplate}
 \`\`\`
 
-When returning a record, always include \`sentiment\`. Include \`name\` only if you are changing it; omit it to keep the existing name. Always include \`description\` when returning a record.
+When returning a record, always include \`sentiment\` and \`description\`. Include \`name\` only if you are changing it; omit it to keep the existing name. Always include \`category\` when creating a new TOPIC (existing_item is null).
 
 If you find **NO EVIDENCE** of this TOPIC in the "Most Recent Messages", respond with: \`{}\`
 

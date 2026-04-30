@@ -27,6 +27,7 @@ interface BaseScanPromptData {
 
 export interface TopicScanPromptData extends BaseScanPromptData {
   participant_context?: ParticipantContext;
+  technical_context?: boolean;
 }
 
 export interface PersonScanPromptData extends BaseScanPromptData {
