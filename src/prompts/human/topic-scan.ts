@@ -14,6 +14,17 @@ function participantContextSection(ctx: ParticipantContext | undefined): string 
   return lines.join("\n");
 }
 
+function technicalContextSection(technical_context: boolean | undefined): string {
+  if (!technical_context) return "";
+  return `## Technical Context
+
+This conversation originates from a technical source (coding tool session, developer workflow). The human is likely a developer or technical user.
+
+**Treat Technical as a priority category** for topics that are tools, platforms, frameworks, libraries, or technical concepts being actively learned, evaluated, or built with. Flag these even if they seem like passing mentions — technical knowledge compounds and is worth preserving.
+
+`;
+}
+
 export function buildHumanTopicScanPrompt(data: TopicScanPromptData): PromptOutput {
   if (!data.persona_name) {
     throw new Error("buildHumanTopicScanPrompt: persona_name is required");
@@ -56,8 +67,11 @@ Assign each TOPIC one category. Pick the closest fit:
 - **Plan** — concrete intentions with steps in mind
 - **Project** — active undertakings with real progress
 - **Event** — a specific, significant moment that either party might reference later ("remember when...")
+- **Technical** — a tool, platform, framework, library, or technical concept being actively learned, evaluated, or built with
 
 When in doubt, pick the closest match. The update step will refine it.
+
+${technicalContextSection(data.technical_context)}
 
 ## Output Format
 
@@ -67,7 +81,7 @@ When in doubt, pick the closest match. The update step will refine it.
     {
       "name": "Short label for the topic (10-75 characters)",
       "description": "1-2 sentences: what this topic is and why it matters to the user",
-      "category": "One of the categories above",
+      "category": "One of the categories above (Interest|Goal|Dream|Conflict|Concern|Fear|Hope|Plan|Project|Event|Technical)",
       "reason": "Evidence from the conversation that justified flagging this topic"
     }
   ]
@@ -104,7 +118,7 @@ Scan the "Most Recent Messages" for TOPICS of interest to the human user.
     {
       "name": "Short label for the topic (10-75 characters)",
       "description": "1-2 sentences: what this topic is and why it matters to the user",
-      "category": "Interest|Goal|Dream|Conflict|Concern|Fear|Hope|Plan|Project|Event",
+      "category": "Interest|Goal|Dream|Conflict|Concern|Fear|Hope|Plan|Project|Event|Technical",
       "reason": "Evidence from the conversation that justified flagging this topic"
     }
   ]

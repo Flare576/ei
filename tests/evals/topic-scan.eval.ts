@@ -3,7 +3,7 @@ import type { Message } from "../../src/core/types/llm.js";
 import { runEval, printSummary, hydratePrompt } from "./runner.js";
 
 const PERSONA_NAME = "Aria";
-const CATEGORY_WORDS = ["Interest", "Goal", "Dream", "Conflict", "Concern", "Fear", "Hope", "Plan", "Project", "Event"];
+const CATEGORY_WORDS = ["Interest", "Goal", "Dream", "Conflict", "Concern", "Fear", "Hope", "Plan", "Project", "Event", "Technical"];
 
 const makeMessage = (role: "human" | "system", content: string, id: string): Message => ({
   id,

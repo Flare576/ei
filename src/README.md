@@ -57,39 +57,23 @@ Each Topic will have an "exposure" rating similar to those on Human Data points.
 
 # Ceremony Intent
 
-Every 24 hours, we want to freshen up the system. We do this in 4 parts: Exposure, Decay, Expire, Explore
+Every 24 hours, the system runs a ceremony to keep knowledge fresh and healthy. Phases run sequentially via `ceremony_progress`:
 
-## Exposure
+**Phase 1 → Dedup**: User-triggered only (not automated). Merges confirmed duplicate records.
 
-I also frequently refer to this as "Extract," but this is the first step where we determine what the human and that Persona talked about that day. It serves two purposes:
+**Phase 2 → Expose**: Human extraction catch-up (facts, topics, people) + persona topic rating for any messages that didn't hit the per-send threshold during the day.
 
-### Detail Extraction
+**Phase 3 → EventSummary**: Summarizes significant events from recent conversations.
 
-Since we also pull out details during normal discourse (see above), this is the less-important step at this point, but still vital for catching up with the last few messages, or Personas that only received a few messages during the day and may not have hit the current limit for natural extraction.
+**Decay** (synchronous after Phase 3): Applies exposure decay to persona topics + prunes old messages. Human ceremony (decay for human topics/people) runs here too.
 
-### Exposure Adjustment
+**Phase 4 → Person Rewrite**: Scans bloated Person records (>750 chars) and extracts non-relationship content into Topics. Gated so Topic Rewrite can snapshot the updated Topic list afterward.
 
-Exposure is calculated by two metrics - `desired` and `current`. If an entity REALLY likes talking about a subject, their `desired` will be very high (1.0 max), ranging down to 0.0 for subjects which that entity does NOT wish to discuss. You may have guessed already, but `current` is how much they've recently talked about a topic.
+**Topic Rewrite** (fire-and-forget after Phase 4): Scans bloated Topic records (>750 chars) and splits them into focused sub-topics. Topics created by Person Rewrite are included.
 
-Adjusting the values is different for Human Topics/People than Persona Topics. The Human subjects are actually adjusted during the previous step, while extracting details.
+**Reflection** (fire-and-forget alongside Phase 4): Persona-side critic pass on person records.
 
-The Persona Topic update only happens during the Ceremony, and really this step only increases exposure IF the subject was discussed, bumping the last_updated field accordingly.
-
-## Decay
-
-After we determine if topics were discussed (increasing exposure), we adjust exposure the _other_ way. Based on some heuristics (like current level, desired level, and time-since-discussion), we decrease the current exposure levels down.
-
-## Expire
-
-This and the following step (Explore) are exclusive to Persona Topics right now. In Expire, we analyze the Person Topics to determine if any of them have
-- Lost their meaning to the Persona
-- Been ignored or dismissed by the user
-
-This is largely tracked by exposure, but expiration is dictated by an Agent.
-
-## Explore
-
-After we've removed irrelevant topics, this is the Agent's opportunity to add NEW topics that might be of interest to the Persona (and the user). Again, it's a prompt to an agent if the Persona doesn't have its full capacity of Topics.
+> **Note**: Expire and Explore phases were removed in the Persona Ceremony Simplification (2026-04-05). Persona topics now only update `exposure_current` during ceremony. See CONTRACTS.md changelog for details.
 
 # Opencode Importer
 

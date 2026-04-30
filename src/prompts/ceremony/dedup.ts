@@ -89,7 +89,7 @@ ${buildRecordFormatExamples(data.itemType)}
 
 ### Rules:
 - Do NOT invent information. Only redistribute what exists in the cluster.
-- Descriptions should be concise—ideally under 300 characters, never over 500.
+- Descriptions should be concise — ideally under 300 characters, never over 500 for regular topics. Technical topics (category: "Technical") may go up to 900 characters — preserve their specific gotchas, decisions, and open questions.
 - Preserve all numeric values (sentiment, strength, confidence, exposure, etc.) from source records. When merging, take the HIGHER value for strength/confidence, AVERAGE for sentiment.
 - Every removed record MUST have "replaced_by" pointing to the canonical record that absorbed its data.
 - The "update" array should contain AT LEAST ONE record (the canonical/merged one), even if all others are removed.
@@ -183,7 +183,8 @@ Rules:
 - \`add\` is always empty here. We are not creating new records from this decision.
 - If merging: the merged record goes in \`update\`, the absorbed record goes in \`remove\`.
 - If keeping both: return both in \`update\` exactly as received. Do not modify either.
-- Descriptions must stay concise — under 300 characters, never over 500. Synthesize; don't concatenate.
+- Descriptions must stay concise — under 300 characters, never over 500 for regular topics. **Technical topics** (category: "Technical") may go up to 900 characters — they are knowledge bases, not summaries. Synthesize regular topics; preserve detail in Technical ones.
+- For Technical topics: two records about the same technology but different aspects (e.g., "Uniform composition model" vs "Uniform preview setup") are **NOT duplicates** — keep both. Only merge if they are genuinely the same concept described twice.
 - When merging numeric fields: take the HIGHER value for \`exposure_current\`, \`exposure_desired\`, \`strength\`, \`confidence\`. Average \`sentiment\`.
 - Do NOT invent information. Only what exists in these two records.
 
@@ -297,7 +298,7 @@ function buildTopicExamples(): string {
   "name": "Software Architecture",    // REQUIRED
   "description": "System design patterns, microservices, event-driven architecture. Passionate about scalability and maintainability.", // REQUIRED
   "sentiment": 0.8,                    // -1.0 to 1.0 (average when merging)
-  "category": "Interest",             // REQUIRED - Interest, Goal, Dream, Conflict, Concern, Fear, Hope, Plan, Project (pick most common)
+  "category": "Interest",             // REQUIRED - Interest, Goal, Dream, Conflict, Concern, Fear, Hope, Plan, Project, Event, Technical (pick most common)
   "exposure_current": 0.6,            // 0.0 to 1.0, how recently discussed (take HIGHER when merging)
   "exposure_desired": 0.9,            // 0.0 to 1.0, how much they want to discuss (take HIGHER when merging)
   "last_ei_asked": "2024-03-10T08:00:00Z", // OPTIONAL - ISO timestamp or null
@@ -330,6 +331,7 @@ CATEGORIES explained:
 - Goal: Things they want to achieve
 - Concern/Fear: Things that worry them
 - Plan/Project: Active work or intentions
+- Technical: Tools, platforms, frameworks, or technical concepts being learned or used — knowledge base entries, NOT summaries
 
 GOOD vs BAD descriptions:
 ✅ GOOD: "Functional programming paradigm. Loves immutability and pure functions. Uses in side projects."

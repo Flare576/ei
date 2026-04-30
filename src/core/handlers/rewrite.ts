@@ -14,7 +14,8 @@ import type {
   RewriteResult,
   RewriteSubjectMatch,
 } from "../../prompts/ceremony/types.js";
-import { buildRewritePrompt } from "../../prompts/ceremony/rewrite.js";
+import { buildPersonRewriteSplitPrompt } from "../../prompts/ceremony/people-rewrite.js";
+import { buildTopicRewriteSplitPrompt } from "../../prompts/ceremony/topic-rewrite.js";
 import { getEmbeddingService, getItemEmbeddingText } from "../embedding-service.js";
 
 import { searchHumanData } from "../human-data-manager.js";
@@ -79,12 +80,10 @@ export async function handleRewriteScan(response: LLMResponse, state: StateManag
     }
   }
 
-  // Build Phase 2 prompt and queue it
-  const prompt = buildRewritePrompt({
-    item: currentItem,
-    itemType,
-    subjects: subjectMatches,
-  });
+  const splitData = { item: currentItem, itemType, subjects: subjectMatches };
+  const prompt = itemType === "person"
+    ? buildPersonRewriteSplitPrompt(splitData)
+    : buildTopicRewriteSplitPrompt(splitData);
 
   state.queue_enqueue({
     type: LLMRequestType.JSON,
@@ -124,6 +123,11 @@ export async function handleRewriteRewrite(response: LLMResponse, state: StateMa
 
   const human = state.getHuman();
   const now = new Date().toISOString();
+
+  const originalItem = itemType === "topic"
+    ? human.topics.find(t => t.id === itemId)
+    : human.people.find(p => p.id === itemId);
+  const originalCategory = itemType === "topic" ? (originalItem as Topic | undefined)?.category : undefined;
 
   const allItems: DataItemBase[] = [
     ...human.topics, ...human.people,
@@ -228,11 +232,11 @@ export async function handleRewriteRewrite(response: LLMResponse, state: StateMa
     switch (item.type) {
       case "topic": {
         if (!item.category) {
-          console.warn(`[handleRewriteRewrite] New topic "${item.name}" missing category — defaulting to "Interest"`);
+          console.warn(`[handleRewriteRewrite] New topic "${item.name}" missing category — inheriting from original (${originalCategory ?? "Interest"})`);
         }
         const topic: Topic = {
           ...baseFields,
-          category: item.category ?? "Interest",
+          category: item.category ?? originalCategory ?? "Interest",
           exposure_current: 0.5,
           exposure_desired: 0.5,
         };

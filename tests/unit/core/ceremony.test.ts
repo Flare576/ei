@@ -202,7 +202,7 @@ describe("Decay Computation", () => {
 // Rewrite Phase Tests (queueRewritePhase)
 // =============================================================================
 
-import { queueRewritePhase, handleCeremonyProgress } from "../../../src/core/orchestrators/ceremony.js";
+import { queuePersonRewritePhase, queueTopicRewritePhase, handleCeremonyProgress } from "../../../src/core/orchestrators/ceremony.js";
 import { LLMNextStep, LLMRequestType, LLMPriority } from "../../../src/core/types.js";
 import type { HumanEntity, Fact, Topic, Person } from "../../../src/core/types.js";
 
@@ -265,43 +265,45 @@ describe("Rewrite Phase", () => {
     vi.clearAllMocks();
   });
 
-  describe("queueRewritePhase", () => {
+  describe("queuePersonRewritePhase", () => {
     it("skips when rewrite_model not set", () => {
       const state = createMockRewriteState({
         settings: { ceremony: { time: "03:00" } },
       });
 
-      queueRewritePhase(state as any);
+      queuePersonRewritePhase(state as any);
 
       expect(state.queue_enqueue).not.toHaveBeenCalled();
     });
 
-    it("skips when no items above threshold (750 chars)", () => {
+    it("skips when no people above threshold (750 chars)", () => {
       const state = createMockRewriteState({
         settings: { rewrite_model: "TestProvider:model" },
-        facts: [makeFact("f1", 500)],
+        people: [makePerson("p1", 500)],
       });
 
-      queueRewritePhase(state as any);
+      queuePersonRewritePhase(state as any);
 
       expect(state.queue_enqueue).not.toHaveBeenCalled();
     });
 
-    it("scans topics and people above threshold", () => {
+    it("scans people above threshold with ceremony_progress: 4", () => {
       const state = createMockRewriteState({
         settings: { rewrite_model: "TestProvider:model" },
-        topics: [makeTopic("top1", 1000)],
         people: [makePerson("p1", 751)],
       });
 
-      queueRewritePhase(state as any);
+      queuePersonRewritePhase(state as any);
 
-      expect(state.queue_enqueue).toHaveBeenCalledTimes(2);
-
-      const types = state.queue_enqueue.mock.calls.map(
-        (c: any[]) => c[0].data.itemType
+      expect(state.queue_enqueue).toHaveBeenCalledTimes(1);
+      expect(state.queue_enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            itemType: "person",
+            ceremony_progress: 4,
+          }),
+        })
       );
-      expect(types).toEqual(["topic", "person"]);
     });
 
     it("never scans facts — facts are read-only", () => {
@@ -310,12 +312,57 @@ describe("Rewrite Phase", () => {
         facts: [makeFact("f1", 800)],
       });
 
-      queueRewritePhase(state as any);
+      queuePersonRewritePhase(state as any);
 
       expect(state.queue_enqueue).not.toHaveBeenCalled();
     });
 
-    it("only scans items above threshold, skips those below", () => {
+    it("only scans people above threshold, skips those below", () => {
+      const state = createMockRewriteState({
+        settings: { rewrite_model: "TestProvider:model" },
+        people: [
+          makePerson("p-small", 200),
+          makePerson("p-big", 800),
+        ],
+      });
+
+      queuePersonRewritePhase(state as any);
+
+      expect(state.queue_enqueue).toHaveBeenCalledTimes(1);
+      expect(state.queue_enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ itemId: "p-big" }),
+        })
+      );
+    });
+  });
+
+  describe("queueTopicRewritePhase", () => {
+    it("skips when rewrite_model not set", () => {
+      const state = createMockRewriteState({
+        settings: { ceremony: { time: "03:00" } },
+      });
+
+      queueTopicRewritePhase(state as any);
+
+      expect(state.queue_enqueue).not.toHaveBeenCalled();
+    });
+
+    it("scans topics above threshold without ceremony_progress", () => {
+      const state = createMockRewriteState({
+        settings: { rewrite_model: "TestProvider:model" },
+        topics: [makeTopic("top1", 1000)],
+      });
+
+      queueTopicRewritePhase(state as any);
+
+      expect(state.queue_enqueue).toHaveBeenCalledTimes(1);
+      const call = state.queue_enqueue.mock.calls[0][0];
+      expect(call.data.itemType).toBe("topic");
+      expect(call.data.ceremony_progress).toBeUndefined();
+    });
+
+    it("only scans topics above threshold, skips those below", () => {
       const state = createMockRewriteState({
         settings: { rewrite_model: "TestProvider:model" },
         topics: [
@@ -324,7 +371,7 @@ describe("Rewrite Phase", () => {
         ],
       });
 
-      queueRewritePhase(state as any);
+      queueTopicRewritePhase(state as any);
 
       expect(state.queue_enqueue).toHaveBeenCalledTimes(1);
       expect(state.queue_enqueue).toHaveBeenCalledWith(
