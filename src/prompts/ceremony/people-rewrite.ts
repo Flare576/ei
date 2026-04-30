@@ -117,8 +117,13 @@ Rules:
 - Do NOT invent information — only redistribute what exists in the original record
 - Do NOT remove the person's relationship, role, character, or how the human user knows them — only the non-person content
 
-**What to KEEP in the Person description**: role, expertise, relationship context, how they communicate, character traits, how the human user knows and works with them.
-**What to REMOVE from the Person description**: project status, ticket numbers, shared interests (→ Topic), city/commute/hobbies (→ discard).
+**What to KEEP in the Person description**: role, expertise, *why* the human user works with them (their operational function in the relationship), how they communicate, character traits, how the human user knows them.
+**What to REMOVE from the Person description**: current project status, ticket/PR numbers, shared interests (→ Topic), city/commute/hobbies (→ discard).
+
+The distinction:
+- "Data Lake bucket owner responsible for access provisioning" → KEEP (operational role in the relationship)
+- "Currently owns 4 tickets in Sprint 86" → REMOVE (current sprint status, not who they are)
+- "Left detailed comments on PR #1644 identifying architectural concerns around concurrency" → KEEP the insight, DROP the PR reference: "Flags architectural concerns around concurrency and queue isolation" belongs in the description; "PR #1644" does not.
 
 Return raw JSON with exactly two keys:
 {
