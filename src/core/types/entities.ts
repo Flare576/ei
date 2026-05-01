@@ -23,7 +23,6 @@ export interface OpenCodeSettings {
 export interface DocumentSettings {
   extraction_model?: string;
   processed_documents?: Record<string, string>;
-  pending_batches?: Record<string, { filename: string; total: number }>;
 }
 
 export interface CeremonyConfig {

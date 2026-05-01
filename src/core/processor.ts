@@ -1726,6 +1726,7 @@ const toolNextSteps = new Set([
         if (batchId && !this.stateManager.queue_hasPendingDocumentSegments(batchId)) {
           finishDocumentBatch(batchId, filename, this.stateManager);
           this.interface.onMessageAdded?.("emmet");
+          this.interface.onHumanUpdated?.();
         }
       }
     } catch (err) {

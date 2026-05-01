@@ -1922,7 +1922,7 @@ function App() {
           }}
           availableGroups={availableGroups}
           processedDocuments={human?.settings?.document?.processed_documents ?? {}}
-          pendingBatches={human?.settings?.document?.pending_batches ?? {}}
+          pendingDocuments={queueStatus?.pending_documents ?? []}
           onImport={handleImportDocument}
           onUnsource={handleUnsource}
         />

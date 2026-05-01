@@ -76,21 +76,6 @@ export async function importDocument(options: DocumentImportOptions): Promise<Do
     });
   }
 
-  const updatedHuman = stateManager.getHuman();
-  stateManager.setHuman({
-    ...updatedHuman,
-    settings: {
-      ...updatedHuman.settings,
-      document: {
-        ...updatedHuman.settings?.document,
-        pending_batches: {
-          ...(updatedHuman.settings?.document?.pending_batches ?? {}),
-          [batchId]: { filename, total: preChunks.length },
-        },
-      },
-    },
-  });
-
   result.chunksQueued = preChunks.length;
   result.batchId = batchId;
   return result;

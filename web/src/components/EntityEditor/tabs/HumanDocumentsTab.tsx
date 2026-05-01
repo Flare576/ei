@@ -2,14 +2,14 @@ import { useState, useRef } from 'react';
 
 interface HumanDocumentsTabProps {
   processedDocuments: Record<string, string>;
-  pendingBatches: Record<string, { filename: string; total: number }>;
+  pendingDocuments: Array<{ batchId: string; filename: string; count: number }>;
   onImport: (file: File) => Promise<void>;
   onUnsource: (filename: string) => Promise<void>;
 }
 
 export const HumanDocumentsTab = ({
   processedDocuments,
-  pendingBatches,
+  pendingDocuments,
   onImport,
   onUnsource,
 }: HumanDocumentsTabProps) => {
@@ -48,7 +48,7 @@ export const HumanDocumentsTab = ({
     }
   };
 
-  const pendingEntries = Object.entries(pendingBatches);
+  const pendingEntries = pendingDocuments;
   const processedEntries = Object.entries(processedDocuments).sort(
     ([, a], [, b]) => new Date(b).getTime() - new Date(a).getTime()
   );
@@ -91,14 +91,14 @@ export const HumanDocumentsTab = ({
         <div className="ei-settings-section">
           <h3 className="ei-settings-section__title">Processing...</h3>
           <div className="ei-settings-section">
-            {pendingEntries.map(([batchId, batch]) => (
+            {pendingEntries.map(({ batchId, filename, count }) => (
               <div
                 key={batchId}
                 className="ei-data-card"
                 style={{ opacity: 0.7 }}
               >
                 <span className="ei-form-hint" style={{ fontStyle: 'normal' }}>
-                  {batch.filename} — {batch.total} chunk{batch.total !== 1 ? 's' : ''} remaining
+                  {filename} — {count} chunk{count !== 1 ? 's' : ''} segmenting
                 </span>
               </div>
             ))}
@@ -109,7 +109,7 @@ export const HumanDocumentsTab = ({
       <div className="ei-settings-section">
         <h3 className="ei-settings-section__title">Imported Documents</h3>
 
-        {processedEntries.length === 0 && pendingEntries.length === 0 ? (
+        {processedEntries.length === 0 && pendingDocuments.length === 0 ? (
           <div className="ei-placeholder-card">
             No documents imported yet.
           </div>

@@ -95,16 +95,12 @@ export function finishDocumentBatch(batchId: string, filename: string, state: St
   }
 
   const updatedHuman = state.getHuman();
-  const pending_batches = { ...(updatedHuman.settings?.document?.pending_batches ?? {}) };
-  delete pending_batches[batchId];
-
   state.setHuman({
     ...updatedHuman,
     settings: {
       ...updatedHuman.settings,
       document: {
         ...updatedHuman.settings?.document,
-        pending_batches,
         processed_documents: {
           ...(updatedHuman.settings?.document?.processed_documents ?? {}),
           [filename]: new Date().toISOString(),

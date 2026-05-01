@@ -18,6 +18,27 @@ export async function resumeQueue(sm: StateManager): Promise<void> {
 }
 
 export async function getQueueStatus(sm: StateManager): Promise<QueueStatus> {
+  const activeItems = sm.queue_getAllActiveItems();
+  const segmentationItems = activeItems.filter(
+    r => r.next_step === LLMNextStep.HandleDocumentSegmentation
+  );
+
+  const batchMap = new Map<string, { filename: string; count: number }>();
+  for (const item of segmentationItems) {
+    const { batchId, filename } = item.data as { batchId: string; filename: string };
+    if (!batchId || !filename) continue;
+    const existing = batchMap.get(batchId);
+    if (existing) {
+      existing.count++;
+    } else {
+      batchMap.set(batchId, { filename, count: 1 });
+    }
+  }
+
+  const pending_documents = batchMap.size > 0
+    ? Array.from(batchMap.entries()).map(([batchId, { filename, count }]) => ({ batchId, filename, count }))
+    : undefined;
+
   return {
     state: sm.queue_isPaused()
       ? "paused"
@@ -27,6 +48,7 @@ export async function getQueueStatus(sm: StateManager): Promise<QueueStatus> {
     pending_count: sm.queue_length(),
     dlq_count: sm.queue_dlqLength(),
     embedding_warning: sm.embedding_getWarning() || undefined,
+    pending_documents,
   };
 }
 
