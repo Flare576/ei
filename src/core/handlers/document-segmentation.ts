@@ -79,7 +79,7 @@ export function finishDocumentBatch(batchId: string, filename: string, state: St
   } else {
     const extractionContext: ExtractionContext = {
       personaId: "emmet",
-      channelDisplayName: "Emmett",
+      channelDisplayName: "Document",
       messages_context: [],
       messages_analyze: docMessages,
       sources: [sourceTag],
