@@ -274,7 +274,17 @@ export async function callLLMRaw(
   };
 
   if (modelConfig?.thinking_budget !== undefined) {
-    requestBody.think = { budget_tokens: modelConfig.thinking_budget };
+    if (modelConfig.thinking_budget === 0) {
+      // Universal kill switch — works on Ollama, LM Studio, and all OpenAI-compat providers.
+      requestBody.reasoning_effort = "none";
+    } else {
+      // Pass both signals: providers that honor the token budget get it (Qwen3 via Ollama,
+      // Anthropic), providers that reduce thinking to on/off use reasoning_effort as the
+      // on-signal (Gemma4 via Ollama/LM Studio). Non-conflicting — each provider reads
+      // whichever field it understands.
+      requestBody.reasoning_effort = "high";
+      requestBody.think = { budget_tokens: modelConfig.thinking_budget };
+    }
   }
 
   if (options.tools && options.tools.length > 0) {
