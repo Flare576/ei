@@ -43,6 +43,8 @@ Flag a PERSON when they were meaningfully discussed — not just mentioned in pa
 
 Be **conservative**: ignore one-off mentions, greetings, small talk, or jokes. Only flag people who matter to the human user's life.
 
+A person is **not worth flagging** if they have no name AND appear only to attribute a single event ("a coworker showed me this band", "a friend told me about it", "some guy I know"). The human user having a contact who did one thing is not a meaningful discussion of that person.
+
 ## What a PERSON Is
 
 Someone in the human user's world.
@@ -68,11 +70,18 @@ Use the specific value where possible (e.g. "Father", "Brother", "Coworker"). Av
 
 ## When Identity Is Unclear
 
-If you can't identify which "Bob" or which "Brother" the user means, use "Unknown" and explain in the reason field. This triggers a later step to resolve ambiguity.
+"Unknown" is ONLY for people who are **meaningfully and repeatedly discussed** but whose name isn't given. It is NOT a catch-all for any nameless mention.
 
-Examples:
-- name: "Alice from work", relationship: "Coworker", description: "Mentioned but not described further", reason: "User referenced a work colleague named Alice"
-- name: "Unknown", relationship: "Sibling", description: "User mentioned a sibling but did not give a name", reason: "User said 'my brother' without further context"
+✓ USE "Unknown":
+- name: "Unknown", relationship: "Brother", reason: "User talked at length about their brother across multiple messages without naming him"
+
+✗ DO NOT USE "Unknown" for one-off attributions:
+- "a coworker showed me this band" → **skip entirely** — not a person, just attribution
+- "a friend told me about it" → **skip entirely**
+- "some guy I know" → **skip entirely**
+- "a coworker at [company name]" with no personal name → **skip entirely** — a company name is NOT a person's name
+
+If someone has no personal name and appears only to explain how the user found something or heard about something, they are not a person in the user's life worth tracking. Do not extract them. A single interaction — even a meaningful one — does not make someone a contact.
 
 ## Identifiers (optional)
 
