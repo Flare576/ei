@@ -19,6 +19,19 @@ Ei is a local-first AI companion with persistent personas. Three frontends share
 └── tests/              # Unit + E2E tests
 ```
 
+## Reserved Personas
+
+Some personas are created and managed by the system. Never delete or rename them.
+
+| Persona | Purpose |
+|---------|---------|
+| **Ei** | The default companion, always present. Sees all personas, helps navigate the system. |
+| **Emmett** | Document import persona. All knowledge extracted via `/import` is attributed here. Static — doesn't chat. |
+
+Emmett is seeded via `Processor.bootstrapEmmett()` and gated by `RESERVED_PERSONA_IDS`. The `/import` TUI command and the web **My Data → Documents** tab both call `processor.importDocument(path/file)`, which invokes `HandleDocumentSegmentation` through the normal queue pipeline.
+
+To remove imported knowledge: `/unsource <source_tag>` (TUI) or the Delete button in the web Documents tab — both strip all entities where `source_tag` matches.
+
 ## Source of Truth
 
 | Document | Purpose |
