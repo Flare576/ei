@@ -2,24 +2,15 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { UnsourcePreview, UnsourceResult } from "./unsource.js";
 
-export async function writeUnsourceInvoice(
-  preview: UnsourcePreview,
-  result: UnsourceResult,
-  dataPath: string
-): Promise<string> {
-  const now = new Date();
-  const timestamp = now.toISOString();
-  const sanitizedTag = preview.sourceTag.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const filename = `${timestamp.replace(/[:.]/g, "-")}-${sanitizedTag}.md`;
-  const dir = join(dataPath, "unsourced");
-  const filePath = join(dir, filename);
+/**
+ * Pure function — no filesystem access. Safe to call in any environment.
+ * Returns the invoice as a markdown string.
+ */
+export function generateInvoiceMarkdown(preview: UnsourcePreview, result: UnsourceResult): string {
+  const timestamp = new Date().toISOString();
 
-  await mkdir(dir, { recursive: true });
-
-  const deletedCount =
-    result.deleted.facts + result.deleted.topics + result.deleted.people;
-  const strippedCount =
-    result.stripped.facts + result.stripped.topics + result.stripped.people;
+  const deletedCount = result.deleted.facts + result.deleted.topics + result.deleted.people;
+  const strippedCount = result.stripped.facts + result.stripped.topics + result.stripped.people;
 
   const lines: string[] = [
     `# Unsource: ${preview.sourceTag}`,
@@ -52,6 +43,21 @@ export async function writeUnsourceInvoice(
     lines.push(`Run \`/me topics\` or \`/me people\` to review or delete retained items manually.`);
   }
 
-  await writeFile(filePath, lines.join("\n") + "\n", "utf8");
+  return lines.join("\n") + "\n";
+}
+
+export async function writeUnsourceInvoice(
+  preview: UnsourcePreview,
+  result: UnsourceResult,
+  dataPath: string
+): Promise<string> {
+  const timestamp = new Date().toISOString();
+  const sanitizedTag = preview.sourceTag.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const filename = `${timestamp.replace(/[:.]/g, "-")}-${sanitizedTag}.md`;
+  const dir = join(dataPath, "unsourced");
+  const filePath = join(dir, filename);
+
+  await mkdir(dir, { recursive: true });
+  await writeFile(filePath, generateInvoiceMarkdown(preview, result), "utf8");
   return filePath;
 }

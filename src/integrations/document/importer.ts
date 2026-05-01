@@ -1,12 +1,3 @@
-import { readFile } from "node:fs/promises";
-import { basename, extname } from "node:path";
-import { homedir } from "node:os";
-
-function expandHome(p: string): string {
-  const home = homedir();
-  if (p === "~" || p.startsWith("~/")) return home + p.slice(1);
-  return p.replace(/^\$HOME(?=\/|$)/, home);
-}
 import type { PersonaEntity } from "../../core/types.js";
 import { LLMRequestType, LLMPriority, LLMNextStep } from "../../core/types.js";
 import { EMMETT_PERSONA_DEFINITION } from "../../templates/emmett.js";
@@ -22,20 +13,20 @@ const SEGMENTATION_USER_TEMPLATE = `Split the following document content into co
 {content}`;
 
 export async function importDocument(options: DocumentImportOptions): Promise<DocumentImportResult> {
-  const { stateManager, interface: eiInterface, signal } = options;
-  const filePath = expandHome(options.filePath);
+  const { stateManager, interface: eiInterface, content: rawContent, filename, signal } = options;
 
-  const filename = basename(filePath);
-  const ext = extname(filePath).toLowerCase();
-  const isMarkdown = ext === ".md" || ext === ".markdown";
+  const isMarkdown = filename.toLowerCase().endsWith(".md") || filename.toLowerCase().endsWith(".markdown");
 
   const result: DocumentImportResult = {
     chunksQueued: 0,
     documentName: filename,
   };
 
-  let emmettCreated = false;
   let emmett = stateManager.persona_getById("emmet");
+  if (emmett?.is_archived) {
+    stateManager.persona_unarchive("emmet");
+    emmett = stateManager.persona_getById("emmet")!;
+  }
   if (!emmett) {
     const emmettEntity: PersonaEntity = {
       ...EMMETT_PERSONA_DEFINITION,
@@ -44,10 +35,7 @@ export async function importDocument(options: DocumentImportOptions): Promise<Do
       last_updated: new Date().toISOString(),
     };
     stateManager.persona_add(emmettEntity);
-    emmettCreated = true;
-    emmett = stateManager.persona_getById("emmet")!;
-  } else if (emmett.is_archived) {
-    stateManager.persona_unarchive("emmet");
+    eiInterface.onPersonaAdded?.();
     emmett = stateManager.persona_getById("emmet")!;
   }
 
@@ -59,8 +47,6 @@ export async function importDocument(options: DocumentImportOptions): Promise<Do
   if (staleIds.length > 0) {
     stateManager.messages_remove("emmet", staleIds);
   }
-
-  const rawContent = await readFile(filePath, "utf-8");
 
   if (signal?.aborted) return result;
 
@@ -104,10 +90,6 @@ export async function importDocument(options: DocumentImportOptions): Promise<Do
       },
     },
   });
-
-  if (emmettCreated) {
-    eiInterface.onPersonaAdded?.();
-  }
 
   result.chunksQueued = preChunks.length;
   result.batchId = batchId;

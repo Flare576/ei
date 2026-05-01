@@ -147,7 +147,7 @@ export interface EiContextValue {
   getArchivedRooms: () => RoomSummary[];
   generatePersonaPreview: (name: string, description: string, relationship?: string, personaId?: string) => Promise<import('../../../src/prompts/generation/types.js').PersonaGenerationResult>;
   importDocument: (filePath: string) => Promise<import('../../../src/integrations/document/types.js').DocumentImportResult>;
-  previewUnsource: (sourceTag: string) => import('../../../src/integrations/document/unsource.js').UnsourcePreview;
+  getUnsourcePreview: (sourceTag: string) => import('../../../src/integrations/document/unsource.js').UnsourcePreview;
   executeUnsource: (preview: import('../../../src/integrations/document/unsource.js').UnsourcePreview) => Promise<import('../../../src/integrations/document/unsource.js').UnsourceResult>;
 }
 const EiContext = createContext<EiContextValue>();
@@ -326,17 +326,28 @@ export const EiProvider: ParentComponent = (props) => {
 
   const importDocument = async (filePath: string) => {
     if (!processor) throw new Error("Processor not ready");
-    return processor.importDocument(filePath);
+    const { readFile } = await import("node:fs/promises");
+    const { basename } = await import("node:path");
+    const { homedir } = await import("node:os");
+    const expandedPath = filePath === "~" || filePath.startsWith("~/")
+      ? homedir() + filePath.slice(1)
+      : filePath.replace(/^\$HOME(?=\/|$)/, homedir());
+    const content = await readFile(expandedPath, "utf-8");
+    const filename = basename(expandedPath);
+    return processor.importDocument(content, filename);
   };
 
-  const previewUnsource = (sourceTag: string) => {
+  const getUnsourcePreview = (sourceTag: string) => {
     if (!processor) throw new Error("Processor not ready");
-    return processor.previewUnsource(sourceTag);
+    return processor.getUnsourcePreview(sourceTag);
   };
 
   const executeUnsource = async (preview: import('../../../src/integrations/document/unsource.js').UnsourcePreview) => {
     if (!processor) throw new Error("Processor not ready");
-    return processor.executeUnsource(preview, eiDataPath);
+    const result = await processor.executeUnsource(preview);
+    const { writeUnsourceInvoice } = await import("../../../src/integrations/document/invoice.js");
+    await writeUnsourceInvoice(preview, result, eiDataPath);
+    return result;
   };
 
   const archivePersona = async (personaId: string) => {
@@ -1027,7 +1038,7 @@ export const EiProvider: ParentComponent = (props) => {
     getArchivedRooms,
     generatePersonaPreview,
     importDocument,
-    previewUnsource,
+    getUnsourcePreview,
     executeUnsource,
   };
   return (

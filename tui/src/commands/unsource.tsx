@@ -60,7 +60,7 @@ export const unsourceCommand: Command = {
       }
     }
 
-    const preview = ctx.ei.previewUnsource(sourceTag);
+    const preview = ctx.ei.getUnsourcePreview(sourceTag);
 
     const totalDelete =
       preview.toDelete.facts.length +

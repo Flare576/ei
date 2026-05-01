@@ -306,29 +306,24 @@ export class Processor {
     this.interface.onPersonaAdded?.();
   }
 
-  async importDocument(filePath: string): Promise<import("../integrations/document/types.js").DocumentImportResult> {
+  async importDocument(content: string, filename: string): Promise<import("../integrations/document/types.js").DocumentImportResult> {
     this.bootstrapEmmett();
     const { importDocument } = await import("../integrations/document/importer.js");
     return importDocument({
       stateManager: this.stateManager,
       interface: this.interface,
-      filePath,
+      content,
+      filename,
     });
   }
 
-  previewUnsource(sourceTag: string): UnsourcePreview {
+  getUnsourcePreview(sourceTag: string): UnsourcePreview {
     return _previewUnsource(sourceTag, this.stateManager);
   }
 
-  async executeUnsource(
-    preview: UnsourcePreview,
-    dataPath: string
-  ): Promise<UnsourceResult> {
+  async executeUnsource(preview: UnsourcePreview): Promise<UnsourceResult> {
     const { executeUnsource } = await import("../integrations/document/unsource.js");
-    const { writeUnsourceInvoice } = await import("../integrations/document/invoice.js");
-    const result = await executeUnsource(preview, this.stateManager);
-    await writeUnsourceInvoice(preview, result, dataPath);
-    return result;
+    return executeUnsource(preview, this.stateManager);
   }
 
   /**

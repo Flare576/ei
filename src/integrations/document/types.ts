@@ -4,7 +4,8 @@ import type { Ei_Interface } from "../../core/types.js";
 export interface DocumentImportOptions {
   stateManager: StateManager;
   interface: Ei_Interface;
-  filePath: string;
+  content: string;
+  filename: string;
   signal?: AbortSignal;
 }
 
