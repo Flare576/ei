@@ -76,6 +76,7 @@ export interface QueueStatus {
   /** True when the embedding service failed and topic/person matching fell back to recent items. */
   embedding_warning?: boolean;
   pending_documents?: Array<{ batchId: string; filename: string; count: number }>;
+  extracting_documents?: string[];
 }
 
 export interface EiError {

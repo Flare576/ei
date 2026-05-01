@@ -3,6 +3,7 @@ import { useState, useRef } from 'react';
 interface HumanDocumentsTabProps {
   processedDocuments: Record<string, string>;
   pendingDocuments: Array<{ batchId: string; filename: string; count: number }>;
+  extractingDocuments: string[];
   onImport: (file: File) => Promise<void>;
   onUnsource: (filename: string) => Promise<void>;
 }
@@ -10,6 +11,7 @@ interface HumanDocumentsTabProps {
 export const HumanDocumentsTab = ({
   processedDocuments,
   pendingDocuments,
+  extractingDocuments,
   onImport,
   onUnsource,
 }: HumanDocumentsTabProps) => {
@@ -124,13 +126,18 @@ export const HumanDocumentsTab = ({
                 day: 'numeric',
               });
 
+              const isExtracting = extractingDocuments.includes(filename);
+
               return (
                 <div key={filename} className="ei-data-card">
                   <div className="ei-data-card__header">
                     <span style={{ flex: 1, fontWeight: 500, wordBreak: 'break-all' }}>
                       {filename}
                     </span>
-                    <span className="ei-data-card__meta">imported {date}</span>
+                    {isExtracting
+                      ? <span className="ei-data-card__meta" style={{ color: 'var(--ei-warning, #b58900)' }}>extracting knowledge...</span>
+                      : <span className="ei-data-card__meta">imported {date}</span>
+                    }
                   </div>
 
                   {isConfirming ? (

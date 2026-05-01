@@ -39,6 +39,18 @@ export async function getQueueStatus(sm: StateManager): Promise<QueueStatus> {
     ? Array.from(batchMap.entries()).map(([batchId, { filename, count }]) => ({ batchId, filename, count }))
     : undefined;
 
+  const extractingSet = new Set<string>();
+  for (const item of activeItems) {
+    const sources = item.data.sources as string[] | undefined;
+    if (!Array.isArray(sources)) continue;
+    for (const s of sources) {
+      if (typeof s === "string" && s.startsWith("import:document:")) {
+        extractingSet.add(s.slice("import:document:".length));
+      }
+    }
+  }
+  const extracting_documents = extractingSet.size > 0 ? Array.from(extractingSet) : undefined;
+
   return {
     state: sm.queue_isPaused()
       ? "paused"
@@ -49,6 +61,7 @@ export async function getQueueStatus(sm: StateManager): Promise<QueueStatus> {
     dlq_count: sm.queue_dlqLength(),
     embedding_warning: sm.embedding_getWarning() || undefined,
     pending_documents,
+    extracting_documents,
   };
 }
 

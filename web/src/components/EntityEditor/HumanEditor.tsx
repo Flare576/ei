@@ -38,6 +38,7 @@ interface HumanEditorProps {
   availableGroups?: string[];
   processedDocuments?: Record<string, string>;
   pendingDocuments?: Array<{ batchId: string; filename: string; count: number }>;
+  extractingDocuments?: string[];
   onImport?: (file: File) => Promise<void>;
   onUnsource?: (filename: string) => Promise<void>;
 }
@@ -70,6 +71,7 @@ export const HumanEditor = ({
   availableGroups = [],
   processedDocuments,
   pendingDocuments,
+  extractingDocuments,
   onImport,
   onUnsource,
 }: HumanEditorProps) => {
@@ -422,6 +424,7 @@ export const HumanEditor = ({
            <HumanDocumentsTab
              processedDocuments={processedDocuments ?? {}}
              pendingDocuments={pendingDocuments ?? []}
+             extractingDocuments={extractingDocuments ?? []}
              onImport={onImport ?? (() => Promise.resolve())}
              onUnsource={onUnsource ?? (() => Promise.resolve())}
            />
