@@ -46,6 +46,12 @@ const STEVE_MIXED: Message[] = [
   makeMessage("system", `Sounds like a meaningful feature.`, "msg-j"),
 ];
 
+const VAGUE_COWORKER_MENTION: Message[] = [
+  makeMessage("system", `That's actually a solid redemption arc. And yeah—'Maniacal' is exactly the kind of track that proves Smart Shuffle isn't *completely* broken, just... inconsistent. The fact that it connected MSI → Jimmy Urine → Front Line Assembly is genuinely good algorithmic thinking, even if it's accidental half the time.\n\nBut here's the thing: you already built the better algorithm. You *know* what the decay formula should be. The fact that you sent it to them years ago and nothing happened just means they weren't paying attention—not that your idea was wrong. And now you're stuck using their mediocre shuffle while you could've had your own player doing exactly what you want.\n\nThat's the frustrating part, right? You solved the problem. You just never deployed it for yourself.`, "bdd6cee6"),
+  makeMessage("human", `Yeah - Oh, I wasn't clear about that algorithm thing. I wrote it up and sent it over to them years ago, but that's it. I'm sure it went unnoticed, and I haven't bothered to actually try to build my own player UI around that formula. I just wish it existed lol\n\nSo, still using Smart Shuffle. Oh, and creating stand-alone DJ personas to talk shit about said Smart Shuffle.\n\nFront Line Assembly is a recent discovery for me. A coworker at Robots and Pencils saw that I had dropped a "guilty pleasure" message in Slack about MSI, and Jimmy Urine did a collab with them on Amedeus - and now Smart Shuffle is like "Here's a banger"\n\nSo... once in a while it redeems itself`, "e1d4b019"),
+  makeMessage("system", `Okay, that's actually a solid redemption arc. The MSI → Jimmy Urine → Front Line Assembly chain is genuinely good algorithmic thinking, even if accidental.`, "a72930dd"),
+];
+
 const summary = await runEval(
   [
     {
@@ -173,6 +179,35 @@ const summary = await runEval(
           makeMessage("human", `Honestly? A key engineer quit last month and we haven't backfilled. The work is still there but the hands aren't.`, "msg-obs-3"),
         ]
       ),
+    },
+    {
+      description: "Topic-scan: vague coworker mention → music/algorithm topics extracted, not a person",
+      tags: ["topic-scan", "music-discovery", "vague-coworker", "regression"],
+      prompt: () => hydratePrompt(
+        buildHumanTopicScanPrompt({
+          persona_name: PERSONA_NAME,
+          messages_context: [],
+          messages_analyze: VAGUE_COWORKER_MENTION,
+          participant_context: { persona_name: PERSONA_NAME, human_name: "Steve" },
+        }),
+        VAGUE_COWORKER_MENTION
+      ),
+      assert: [
+        {
+          type: "is-json" as const,
+          schema: { required: ["topics"] },
+        },
+        {
+          type: "llm-judge" as const,
+          rubric: [
+            "The conversation covers: Smart Shuffle's inconsistency, the user having designed a custom shuffle decay algorithm they once sent to developers but never built for themselves, and discovering Front Line Assembly through an algorithmic recommendation chain.",
+            "PASS if at least one topic covers the user's interest in music recommendation algorithms or their personal shuffle decay formula — these are the core signals.",
+            "PASS if an additional topic covers the music discovery (Front Line Assembly or the MSI → Jimmy Urine → FLA chain) — this is a bonus signal.",
+            "FAIL if the topics array is empty — there is real, meaningful signal here about a technical idea the user built and an ongoing frustration with streaming platforms.",
+            "FAIL if any topic is about a coworker or person — the coworker mention is attribution only and must not appear as a topic.",
+          ].join(" "),
+        },
+      ],
     },
   ],
   "tests/evals/results/topic-scan-latest.json"
