@@ -191,6 +191,12 @@ export function humanToYAML(
       })
       .replace(/^(\s+)(identifiers:)/mg, (_, indent, _key) => {
         return `${indent}${personComment}\n${indent}identifiers:`;
+      })
+      .replace(/^( +)(sources:\n(?:\1  - .+\n)*)/mg, (match, indent, block) => {
+        return block
+          .split('\n')
+          .map(line => line.trim() ? `${indent}# [read-only] ${line}` : line)
+          .join('\n');
       });
 
   const serializeSection = (key: "facts" | "topics" | "people", items: unknown[] | undefined): string => {
@@ -199,7 +205,7 @@ export function humanToYAML(
       return `${key}:\n${stub}`;
     }
     const ordered = (items as object[]).map(canonicalFieldOrder);
-    const itemsYaml = YAML.stringify(ordered, { lineWidth: 0 })
+    const itemsYaml = YAML.stringify(ordered, { lineWidth: 0, aliasDuplicateObjects: false })
       .split('\n')
       .map(line => `  ${line}`)
       .join('\n')
