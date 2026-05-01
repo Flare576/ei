@@ -4,6 +4,21 @@ Ei TUI is built with OpenTUI and SolidJS.
 
 Coding tool integrations (OpenCode, Claude Code, Cursor): enable via `/settings` · export data via [CLI](../src/cli/README.md)
 
+## How Ei Handles Configuration
+
+Ei is designed to run consistently across machines and environments, so it keeps its own copy of your settings rather than reading from environment variables on every launch.
+
+**On first run**, Ei reads environment variables like `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, etc. to auto-configure providers for you. After that, those values are saved to Ei's local state (`~/.local/share/ei/state.json` by default) and the env vars are no longer consulted.
+
+This means:
+
+- **Rotating an API key?** Update it in Ei with `/provider`, not just in your shell.
+- **Switching machines?** Your providers and settings travel with your state file (or via Sync), not your shell profile.
+- **Changed your mind about a model?** Use `/provider` to set the model for a persona, or `/settings` to change your global default.
+- **Updated sync credentials?** Use `/setsync <user> <pass>` — env vars won't be re-read.
+
+The one exception is `EI_DATA_PATH` (and `EI_SYNC_USERNAME` / `EI_SYNC_PASSWORD` for bootstrapping sync on a new machine) — those are always read at startup since Ei needs them before it can load its own state.
+
 ## Coding Tool Integrations
 
 Enable any or all three in `/settings`. They work independently and feed into the same knowledge base.
