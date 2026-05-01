@@ -61,6 +61,11 @@ All commands start with `/`. Append `!` to any command as a shorthand for `--for
 | `/pause <duration>` | | Pause for a duration: `2h`, `1d`, `1w`, `30m` |
 | `/resume` | `/unpause` | Resume the current paused persona |
 | `/resume <name>` | `/unpause <name>` | Resume a specific paused persona |
+| `/reflect` | | Review a pending identity reflection (see badge on persona pill) |
+| `/reflect generate` | | Write current + proposed YAML files to disk for editing |
+| `/reflect update` | | Read edited `proposed.yaml` back into Ei |
+| `/reflect apply` | | Apply the proposed identity to the persona |
+| `/reflect dismiss` | | Discard without changing anything |
 
 ### Rooms
 
@@ -110,6 +115,8 @@ Rooms have three modes, set at creation time:
 |---------|---------|-------------|
 | `/me` | | Edit all your data (facts, topics, people) in `$EDITOR` |
 | `/me <type>` | | Edit one type: `facts`, `topics`, or `people` |
+| `/import <path>` | | Import a document (txt, md, pdf, etc.) into Ei — extracted knowledge is attributed to the "Emmett" persona |
+| `/unsource <source_tag>` | | Remove all knowledge extracted from a previously imported document |
 | `/dedupe <person\|topic> <term> [term2 ...]` | | Fuzzy-search and merge duplicate people or topics in `$EDITOR`. Unquoted words are individual OR terms; quoted strings match as exact phrases: `/dedupe person Flare "Jeremy Scherer"` finds records matching `Flare` OR `Jeremy Scherer` |
 | `/settings` | `/set` | Edit your global settings in `$EDITOR` |
 | `/setsync <user> <pass>` | `/ss` | Set sync credentials (triggers restart) |
