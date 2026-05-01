@@ -143,7 +143,7 @@ export async function queueEiHeartbeat(
   }
 
   const activePersonas = personas
-    .filter((p) => !p.is_archived && !p.is_paused && p.id !== "ei")
+    .filter((p) => !p.is_archived && !p.is_paused && !p.is_static && p.id !== "ei")
     .map((p) => {
       const msgs = sm.messages_get(p.id);
       const lastHuman = [...msgs].reverse().find((m) => m.role === "human");
@@ -169,7 +169,7 @@ export async function queueEiHeartbeat(
   }
 
   const personasWithPendingUpdate = personas.filter(
-    (p) => !p.is_archived && !p.is_paused && p.id !== "ei" && p.pending_update?.critique
+    (p) => !p.is_archived && !p.is_paused && !p.is_static && p.id !== "ei" && p.pending_update?.critique
   );
   for (const p of personasWithPendingUpdate) {
     items.push({

@@ -1,5 +1,5 @@
 import type { LLMRequest, QueueFailResult } from "../types.js";
-import { DLQ_MAX_COUNT, DLQ_MAX_AGE_DAYS } from "../types.js";
+import { DLQ_MAX_COUNT, DLQ_MAX_AGE_DAYS, LLMNextStep } from "../types.js";
 
 const BASE_BACKOFF_MS = 2_000;
 const MAX_BACKOFF_MS = 30_000;
@@ -203,6 +203,7 @@ export class QueueState {
   hasPendingDocumentSegments(batchId: string): boolean {
     return this.queue.some(r =>
       r.state !== "dlq" &&
+      r.next_step === LLMNextStep.HandleDocumentSegmentation &&
       r.data.batchId === batchId
     );
   }

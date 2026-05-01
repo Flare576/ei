@@ -143,6 +143,13 @@ export async function executeUnsource(
     stateManager.setHuman(human);
   }
 
+  const sourceMessageIds = stateManager.messages_get("emmet")
+    .filter(m => m.source_tag === preview.sourceTag)
+    .map(m => m.id);
+  if (sourceMessageIds.length > 0) {
+    stateManager.messages_remove("emmet", sourceMessageIds);
+  }
+
   const filename = preview.sourceTag.startsWith("import:document:")
     ? preview.sourceTag.slice("import:document:".length)
     : preview.sourceTag;
