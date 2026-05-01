@@ -119,6 +119,50 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
               </div>
             </dl>
           </section>
+
+          <section className="ei-help-section">
+            <h3>Rooms</h3>
+            <p className="ei-help-text">
+              Rooms let you have a conversation with multiple personas at once.
+              Create one from the persona panel (<kbd>+</kbd> → Room). Three modes:
+            </p>
+            <dl className="ei-shortcut-list">
+              <div className="ei-shortcut">
+                <dt><strong>FFA</strong></dt>
+                <dd>Free For All — every persona responds to every message. Loud. Great for brainstorming.</dd>
+              </div>
+              <div className="ei-shortcut">
+                <dt><strong>CYP</strong></dt>
+                <dd>Choose Your Path — all personas respond, you pick which branch continues. Forks the conversation.</dd>
+              </div>
+              <div className="ei-shortcut">
+                <dt><strong>MAP</strong></dt>
+                <dd>Messages Against Persona — everyone submits a response, a Judge persona picks the winner. The losing responses are discarded.</dd>
+              </div>
+            </dl>
+            <p className="ei-help-text">
+              In CYP and MAP, the <strong>Activate</strong> button appears once all participants have responded.
+              Click it (or press Enter) to reveal the responses and advance the conversation.
+            </p>
+          </section>
+
+          <section className="ei-help-section">
+            <h3>Reflections</h3>
+            <p className="ei-help-text">
+              After enough conversations, Ei notices patterns — things a persona consistently cares about,
+              ways they've grown, traits that have shifted. When that happens, Ei generates a <strong>reflection</strong>:
+              a proposed update to the persona's identity (description, traits, topics).
+            </p>
+            <p className="ei-help-text">
+              A badge (✦) appears on the persona pill in the left panel when a reflection is pending.
+              Click it to open the Reflection Review — you'll see the current identity side-by-side with
+              the proposed changes, a chat window to discuss it with the persona, and the option to
+              apply, edit, or dismiss.
+            </p>
+            <p className="ei-help-text">
+              Nothing changes automatically. You're always in the driver's seat.
+            </p>
+          </section>
         </div>
 
         <div className="ei-help-modal__footer">
