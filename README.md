@@ -83,7 +83,7 @@ Ei can operate with three types of input, and three types of output.
                        ^
                     Sessions
                        |
-                   [OpenCode]
+          [OpenCode / Claude Code / Cursor]
 ```
 
 ```
@@ -169,6 +169,22 @@ All sessions map to a single "Cursor" persona.
 
 Sessions are processed oldest-first, one per queue cycle, so Ei won't overwhelm your LLM provider on first run. See [TUI Readme](tui/README.md)
 
+## Document Import
+
+Got notes, journals, markdown files? You can feed them directly to Ei.
+
+**Web**: Open **☰ menu** → **My Data** → **Documents** tab. Drop a `.txt`, `.md`, or `.markdown` file and Ei gets to work.
+
+**TUI**:
+```bash
+/import ~/notes/my-journal.md
+/import /path/to/report.pdf
+```
+
+Ei splits the document into segments, runs them through the extraction pipeline, and pulls out facts, topics, people, and quotes — exactly like it does with your conversations. The extracted knowledge is attributed to a reserved persona called **Emmett** so it doesn't pollute your chat history.
+
+Both surfaces show you which documents have been imported and let you remove their extracted knowledge (web: Delete button in the Documents tab; TUI: `/unsource <source_tag>`).
+
 ## Built-in Tool Integrations
 
 Personas can use tools. Not just read-from-memory tools — *actual* tools. Web search. Your music. Your filesystem. Here's what ships with Ei out of the box:
@@ -184,6 +200,7 @@ Personas can use tools. Not just read-from-memory tools — *actual* tools. Web 
 | `search_files` | Find files by name pattern *(TUI only)* |
 | `grep` | Search file contents by regex *(TUI only)* |
 | `get_file_info` | File/directory metadata *(TUI only)* |
+| `web_fetch` | Fetch a URL and return its text content *(TUI only — blocked by CORS in browsers)* |
 
 The filesystem tools make Ei a legitimate coding assistant in the TUI. Ask a persona to review a file, understand a project structure, or track down where something is defined — it can actually look.
 
@@ -264,12 +281,14 @@ Tag a version to publish automatically:
 
 ```bash
 # bump version in package.json
-git commit -am "chore: bump to v0.1.4"
-git tag v0.1.4
+git commit -am "chore: bump to v1.0.0"
+git tag v1.0.0
 git push && git push --tags
 ```
 
 GitHub Actions picks up the tag and publishes to npm with provenance via OIDC. No stored secrets.
+
+> **Note**: Run the pre-flight checklist in `AGENTS.md` (or use the `release` skill in OpenCode) before tagging. The v0.1.9 incident is a cautionary tale.
 
 ## Project Structure
 
