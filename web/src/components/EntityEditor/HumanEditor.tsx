@@ -4,6 +4,7 @@ import { HumanFactsTab } from './tabs/HumanFactsTab';
 import { HumanTopicsTab } from './tabs/HumanTopicsTab';
 import { HumanPeopleTab } from './tabs/HumanPeopleTab';
 import { HumanQuotesTab } from './tabs/HumanQuotesTab';
+import { HumanDocumentsTab } from './tabs/HumanDocumentsTab';
 import { QuoteManagementModal } from '../Quote/QuoteManagementModal';
 import type { Fact, Topic, Person, Quote } from '../../../../src/core/types';
 import type { PersonaOption } from './PersonCard';
@@ -35,6 +36,10 @@ interface HumanEditorProps {
   onCreatePersona?: (person: Person) => void;
   onUpdatePersona?: (person: Person) => void;
   availableGroups?: string[];
+  processedDocuments?: Record<string, string>;
+  pendingBatches?: Record<string, { filename: string; total: number }>;
+  onImport?: (file: File) => Promise<void>;
+  onUnsource?: (filename: string) => Promise<void>;
 }
 
 const tabs = [
@@ -42,6 +47,7 @@ const tabs = [
   { id: 'people', label: 'People', icon: '👥' },
   { id: 'topics', label: 'Topics', icon: '💬' },
   { id: 'quotes', label: 'Quotes', icon: '✂️' },
+  { id: 'documents', label: 'Documents', icon: '📄' },
 ];
 
 export const HumanEditor = ({
@@ -62,6 +68,10 @@ export const HumanEditor = ({
   onCreatePersona,
   onUpdatePersona,
   availableGroups = [],
+  processedDocuments,
+  pendingBatches,
+  onImport,
+  onUnsource,
 }: HumanEditorProps) => {
   const [activeTab, setActiveTab] = useState('facts');
   const [localFacts, setLocalFacts] = useState<Fact[]>(human.facts || []);
@@ -405,6 +415,15 @@ export const HumanEditor = ({
              humanDisplayName={human.name_display}
              onEdit={handleQuoteEdit}
              onDelete={handleQuoteDeleteClick}
+           />
+         );
+       case 'documents':
+         return (
+           <HumanDocumentsTab
+             processedDocuments={processedDocuments ?? {}}
+             pendingBatches={pendingBatches ?? {}}
+             onImport={onImport ?? (() => Promise.resolve())}
+             onUnsource={onUnsource ?? (() => Promise.resolve())}
            />
          );
        default:

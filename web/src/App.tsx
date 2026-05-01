@@ -1218,6 +1218,30 @@ function App() {
     processor.getHuman().then(setHuman);
   }, [processor]);
 
+  const handleImportDocument = useCallback(async (file: File) => {
+    if (!processor) return;
+    const content = await file.text();
+    await processor.importDocument(content, file.name);
+    processor.getHuman().then(setHuman);
+  }, [processor]);
+
+  const handleUnsource = useCallback(async (filename: string) => {
+    if (!processor) return;
+    const sourceTag = `import:document:${filename}`;
+    const preview = processor.getUnsourcePreview(sourceTag);
+    const result = await processor.executeUnsource(preview);
+    const { generateInvoiceMarkdown } = await import('../../src/integrations/document/invoice.js');
+    const markdown = generateInvoiceMarkdown(preview, result);
+    const blob = new Blob([markdown], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `unsource-${filename}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+    processor.getHuman().then(setHuman);
+  }, [processor]);
+
   const handlePersonaUpdate = useCallback(async (updates: Partial<PersonaEntity>) => {
     if (!processor || !editingPersonaId) return;
     await processor.updatePersona(editingPersonaId, updates);
@@ -1897,6 +1921,10 @@ function App() {
             setShowPersonaCreator(true);
           }}
           availableGroups={availableGroups}
+          processedDocuments={human?.settings?.document?.processed_documents ?? {}}
+          pendingBatches={human?.settings?.document?.pending_batches ?? {}}
+          onImport={handleImportDocument}
+          onUnsource={handleUnsource}
         />
       </>
     )}
