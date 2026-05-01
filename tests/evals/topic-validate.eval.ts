@@ -214,6 +214,37 @@ const summary = await runEval(
         similarity: 0.88,
       }),
     },
+    {
+      description: "Topic-validate: vocabulary-overlap false positive (Frankenstein bug) → keep both",
+      tags: ["topic-validate", "keep-both", "frankenstein", "vocabulary-overlap"],
+      prompt: () => buildValidatePrompt({
+        established: makeTopic("frankenstein-established", {
+          name: "AWS/Expedia Hack-a-thon Collaboration",
+          description: "Worked with David and Neal on a 26-hour hackathon for Expedia, building an LLM-based outbound call application. An AWS rep named Jared was involved, and the prototype eventually landed the full project for AWS.",
+          sentiment: 0.85,
+          category: "Technical",
+          exposure_current: 0.9,
+          exposure_desired: 0.7,
+        }),
+        newcomer: makeTopic("frankenstein-newcomer", {
+          name: "Ei Local-First Data Architecture",
+          description: "Ei stores all data on-device (LocalStorage or $EI_DATA_PATH). When Sync is enabled, data is encrypted with a key only the user can generate — not even the author can decrypt it. No analytics, tracking, or bug-report buttons.",
+          sentiment: 0.9,
+          category: "Technical",
+          exposure_current: 0.8,
+          exposure_desired: 0.6,
+        }),
+        itemType: "topic",
+        similarity: 0.892,
+      }),
+      assert: keepBothAssertion(
+        "These are completely unrelated topics that share only surface vocabulary ('architecture', 'system', 'data'). " +
+        "One is about a hackathon project for a client (AWS/Expedia), the other is about Ei's privacy and storage design. " +
+        "Different subjects, different contexts, different people involved. " +
+        "High embedding similarity (89.2%) is a known artifact of shared vocabulary in all-MiniLM-L6-v2 — not semantic equivalence. " +
+        "The real-world consequence of merging: the record gets the hackathon name but Ei architecture description, permanently destroying both records."
+      ),
+    },
   ],
   "tests/evals/results/topic-validate-latest.json"
 );

@@ -165,6 +165,8 @@ Similarity of meaning is not the same as identity. "Concern about job security" 
 
 Ask yourself: *If a persona referenced the established record in conversation, would the newcomer feel like a repeat? Or would it feel like something different being said?*
 
+**Default to keeping both.** Merge only when you are certain these describe the same concept — thematic overlap, shared vocabulary, or similar domain are not sufficient. A false merge destroys information permanently; a false keep is harmless.
+
 If they are the same thing: **merge**. Preserve every unique detail from both. The newcomer's description is synthesized and current — weight it, but don't discard what the established record learned first.
 
 If they are distinct: **keep both**. Return them both in \`update\` unchanged. Leave \`remove\` and \`add\` empty.

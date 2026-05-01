@@ -351,7 +351,7 @@ describe("queueTopicValidate", () => {
     const existingTopic = makeTopic("existing-id", "JavaScript");
     const state = makeState([existingTopic, newTopic]);
 
-    mockFindTopK.mockReturnValue([{ item: existingTopic, similarity: 0.9 }]);
+    mockFindTopK.mockReturnValue([{ item: existingTopic, similarity: 0.93 }]);
 
     await queueTopicValidate(newTopic, state as any, "my-model");
 

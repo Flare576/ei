@@ -309,7 +309,7 @@ const EMBEDDING_MIN_SIMILARITY = 0.3;
  * Higher than EMBEDDING_MIN_SIMILARITY (0.3) because we need near-duplicates,
  * not just vague thematic overlap.
  */
-export const VALIDATE_MIN_SIMILARITY = 0.85;
+export const VALIDATE_MIN_SIMILARITY = 0.92;
 
 /**
  * Queue a topic match request using embedding-based similarity (topics only).
