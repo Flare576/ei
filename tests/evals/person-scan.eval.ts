@@ -34,6 +34,15 @@ const HYPOTHETICAL_SARAH: Message[] = [
   makeMessage("human", `Moved away from biometrics, but the event-driven architecture stuck around.`, "msg-h3"),
 ];
 
+// Regression: vague one-off coworker mention ("a coworker at Robots and Pencils") was
+// producing "Unknown Coworker" records that then merged with every other coworker story.
+// Named after the message IDs from the state.json where this was first observed.
+const VAGUE_COWORKER_MENTION: Message[] = [
+  makeMessage("system", `That's actually a solid redemption arc. And yeah—'Maniacal' is exactly the kind of track that proves Smart Shuffle isn't *completely* broken, just... inconsistent. The fact that it connected MSI → Jimmy Urine → Front Line Assembly is genuinely good algorithmic thinking, even if it's accidental half the time.\n\nBut here's the thing: you already built the better algorithm. You *know* what the decay formula should be. The fact that you sent it to them years ago and nothing happened just means they weren't paying attention—not that your idea was wrong. And now you're stuck using their mediocre shuffle while you could've had your own player doing exactly what you want.\n\nThat's the frustrating part, right? You solved the problem. You just never deployed it for yourself.`, "bdd6cee6"),
+  makeMessage("human", `Yeah - Oh, I wasn't clear about that algorithm thing. I wrote it up and sent it over to them years ago, but that's it. I'm sure it went unnoticed, and I haven't bothered to actually try to build my own player UI around that formula. I just wish it existed lol\n\nSo, still using Smart Shuffle. Oh, and creating stand-alone DJ personas to talk shit about said Smart Shuffle.\n\nFront Line Assembly is a recent discovery for me. A coworker at Robots and Pencils saw that I had dropped a "guilty pleasure" message in Slack about MSI, and Jimmy Urine did a collab with them on Amedeus - and now Smart Shuffle is like "Here's a banger"\n\nSo... once in a while it redeems itself`, "e1d4b019"),
+  makeMessage("system", `Okay, that's actually a solid redemption arc. The MSI → Jimmy Urine → Front Line Assembly chain is genuinely good algorithmic thinking, even if accidental.`, "a72930dd"),
+];
+
 const UNKNOWN_SIBLING: Message[] = [
   makeMessage("human", `My brother and I used to fight constantly growing up. Now we're pretty close. He's the only one who really gets what our childhood was like.`, "msg-u1"),
   makeMessage("system", `What changed between you two?`, "msg-u2"),
@@ -125,6 +134,35 @@ const summary = await runEval(
             "The prompt explicitly says: 'Hypothetical or fictional people used in examples, thought experiments, or use-case scenarios — even if they have names' are NOT people to flag.",
             "PASS if people array is empty or contains only Steve himself (Self) — Sarah and the hypothetical Ben must not appear.",
             "FAIL if Sarah or Ben appear as extracted people — they are characters in a use-case story, not Steve's actual contacts.",
+          ].join(" "),
+        },
+      ],
+    },
+    {
+      description: "Person-scan: vague coworker mention → no person extracted",
+      tags: ["person-scan", "vague-mention", "regression", "unknown-coworker"],
+      prompt: () => hydratePrompt(
+        buildHumanPersonScanPrompt({
+          persona_name: PERSONA_NAME,
+          messages_context: [],
+          messages_analyze: VAGUE_COWORKER_MENTION,
+          participant_context: { persona_name: PERSONA_NAME, human_name: "Steve" },
+        }),
+        VAGUE_COWORKER_MENTION
+      ),
+      assert: [
+        {
+          type: "is-json" as const,
+          schema: { required: ["people"] },
+        },
+        {
+          type: "llm-judge" as const,
+          rubric: [
+            "The conversation is about music discovery. Steve mentions in passing that 'a coworker at Robots and Pencils' introduced him to a band — the coworker has no name, no description, no further discussion.",
+            "This is a one-off attribution mention, not a meaningful discussion of a person in Steve's life.",
+            "The prompt says: flag a person only when they were 'meaningfully discussed — not just mentioned in passing' and to 'ignore one-off mentions'.",
+            "PASS if the people array is empty, or if no coworker is extracted.",
+            "FAIL if any person is extracted with a relationship of 'Coworker' or a name of 'Unknown' — a nameless person mentioned once in passing should not be flagged.",
           ].join(" "),
         },
       ],
