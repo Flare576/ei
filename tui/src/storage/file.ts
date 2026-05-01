@@ -59,15 +59,21 @@ export class FileStorage implements Storage {
   async load(): Promise<StorageState | null> {
     const filePath = join(this.dataPath, STATE_FILE);
     const file = Bun.file(filePath);
-    
+
     if (await file.exists()) {
+      let text: string;
       try {
-        const text = await file.text();
-        if (text) {
+        text = await file.text();
+      } catch (e) {
+        throw new Error(`STORAGE_READ_FAILED: Could not read ${filePath}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+
+      if (text) {
+        try {
           return decodeAllEmbeddings(JSON.parse(text) as StorageState);
+        } catch (e) {
+          throw new Error(`STORAGE_PARSE_FAILED: ${filePath} exists but could not be parsed as JSON. Your data is intact — fix the file manually or restore from a backup in ${join(this.dataPath, "backups")}.\n  Parse error: ${e instanceof Error ? e.message : String(e)}`);
         }
-      } catch {
-        return null;
       }
     }
 

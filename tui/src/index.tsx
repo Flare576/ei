@@ -30,6 +30,20 @@ if (!lockResult.acquired) {
 // Release lock when the app exits (keyboard context calls process.exit(0) on normal quit)
 process.on("exit", () => { void lock.release(); });
 
+// Validate state.json is parseable before handing off to the app.
+// A corrupt file must never silently wipe all data — exit cleanly with recovery instructions.
+try {
+  await storage.load();
+} catch (e) {
+  await lock.release();
+  process.stderr.write(
+    `\nEi cannot start: state.json failed to load.\n\n` +
+    `  ${e instanceof Error ? e.message : String(e)}\n\n` +
+    `Fix the file manually, restore from a backup, or delete it to start fresh (all data will be lost).\n\n`
+  );
+  process.exit(1);
+}
+
 render(App, {
   exitOnCtrlC: false,
   targetFps: 30,
