@@ -15,16 +15,19 @@ import { useRenderer } from "@opentui/solid";
 
 function AppContent() {
   const { overlayRenderer, showOverlay } = useOverlay();
-  const { showWelcomeOverlay, dismissWelcomeOverlay, activeRoomId } = useEi();
+  const { showWelcomeOverlay, dismissWelcomeOverlay, activeRoomId, detectedProviders, firstBootDefaultModel } = useEi();
   const renderer = useRenderer();
-  // Show welcome overlay when LLM detection determines no provider is configured
   createEffect(() => {
     if (showWelcomeOverlay()) {
       showOverlay((onDismiss, _hideForEditor) => (
-        <WelcomeOverlay onDismiss={() => {
-          dismissWelcomeOverlay();
-          onDismiss();
-        }} />
+        <WelcomeOverlay
+          onDismiss={() => {
+            dismissWelcomeOverlay();
+            onDismiss();
+          }}
+          detectedProviders={detectedProviders()}
+          defaultModel={firstBootDefaultModel()}
+        />
       ), renderer);
     }
   });

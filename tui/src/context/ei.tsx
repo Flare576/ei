@@ -14,7 +14,13 @@ import { Processor } from "../../../src/core/processor.js";
 import { FileStorage } from "../storage/file.js";
 import { remoteSync } from "../../../src/storage/remote.js";
 import { logger, clearLog, interceptConsole } from "../util/logger.js";
-import { E2E_SKIP_LOCAL_DETECT } from "../util/e2e-flags.js";
+import { E2E_SKIP_LOCAL_DETECT, E2E_SKIP_CLOUD_DETECT } from "../util/e2e-flags.js";
+import {
+  detectProviders,
+  buildProviderAccounts,
+  ALL_PROVIDER_NAMES,
+} from "../util/provider-detection.js";
+import type { ProviderDetectionStatus } from "../util/provider-detection.js";
 import { ConflictOverlay } from "../components/ConflictOverlay.js";
 import type {
   Ei_Interface,
@@ -28,8 +34,6 @@ import type {
   Topic,
   Person,
   Quote,
-  ProviderAccount,
-  ProviderType,
   StateConflictData,
   StateConflictResolution,
   ContextStatus,
@@ -109,6 +113,8 @@ export interface EiContextValue {
   }>;
   showWelcomeOverlay: () => boolean;
   dismissWelcomeOverlay: () => void;
+  detectedProviders: () => ProviderDetectionStatus[];
+  firstBootDefaultModel: () => string | undefined;
   deleteMessages: (personaId: string, messageIds: string[]) => Promise<void>;
   setMessageContextStatus: (personaId: string, messageId: string, status: ContextStatus) => Promise<void>;
   deleteRoomMessages: (roomId: string, messageIds: string[]) => Promise<void>;
@@ -171,6 +177,8 @@ export const EiProvider: ParentComponent = (props) => {
   const [contextBoundarySignal, setContextBoundarySignal] = createSignal<string | undefined>(undefined);
   const [quotesVersion, setQuotesVersion] = createSignal(0);
   const [showWelcomeOverlay, setShowWelcomeOverlay] = createSignal(false);
+  const [detectedProviders, setDetectedProviders] = createSignal<ProviderDetectionStatus[]>([]);
+  const [firstBootDefaultModel, setFirstBootDefaultModel] = createSignal<string | undefined>(undefined);
   const [conflictData, setConflictData] = createSignal<StateConflictData | null>(null);
 
   let processor: Processor | null = null;
@@ -778,64 +786,40 @@ export const EiProvider: ParentComponent = (props) => {
       try {
         const human = await processor!.getHuman();
         const hasAccounts = human.settings?.accounts && human.settings.accounts.length > 0;
-        if (!hasAccounts && E2E_SKIP_LOCAL_DETECT) {
-          logger.info("E2E_SKIP_LOCAL_DETECT active, skipping local LLM check");
-          setShowWelcomeOverlay(true);
-        } else if (!hasAccounts) {
-          logger.info("No LLM accounts configured, checking for local LLMs...");
+        if (hasAccounts) return;
 
-          const candidates = [
-            { name: "LMStudio", url: "http://127.0.0.1:1234/v1" },
-            { name: "Ollama", url: "http://127.0.0.1:11434/v1" },
-          ];
+        const { detected, statuses } = await detectProviders({
+          skipLocalDetect: E2E_SKIP_LOCAL_DETECT,
+          skipCloudDetect: E2E_SKIP_CLOUD_DETECT,
+        });
 
-          const detected = await Promise.all(
-            candidates.map(async (candidate) => {
-              try {
-                const response = await fetch(`${candidate.url}/models`, {
-                  method: "GET",
-                  signal: AbortSignal.timeout(3000),
-                });
-                return response.ok ? candidate : null;
-              } catch {
-                return null;
-              }
-            })
-          );
+        const allStatuses: ProviderDetectionStatus[] = ALL_PROVIDER_NAMES.map((name) => {
+          const found = statuses.find((s) => s.name === name);
+          return found ?? { name, detected: false };
+        });
+        setDetectedProviders(allStatuses);
 
-          const found = detected.filter(Boolean) as typeof candidates;
-
-          if (found.length > 0) {
-            const accounts: ProviderAccount[] = found.map((candidate) => {
-              const defaultModelId = crypto.randomUUID();
-              return {
-                id: crypto.randomUUID(),
-                name: candidate.name,
-                type: "llm" as ProviderType,
-                url: candidate.url,
-                enabled: true,
-                created_at: new Date().toISOString(),
-                default_model: defaultModelId,
-                models: [{ id: defaultModelId, name: "default" }],
-              };
-            });
-            const firstDefaultModelId = accounts[0].default_model!;
-            const currentHuman = await processor!.getHuman();
-            await processor!.updateHuman({
-              settings: {
-                ...currentHuman.settings,
-                accounts,
-                default_model: firstDefaultModelId,
-              },
-            });
-            const names = found.map((c) => c.name).join(" and ");
-            showNotification(`${names} detected and configured!`, "info");
-            logger.info(`Auto-configured: ${names}`);
-          } else {
-            logger.info("No local LLMs found, showing welcome overlay");
-            setShowWelcomeOverlay(true);
-          }
+        if (detected.length > 0) {
+          const accounts = buildProviderAccounts(detected);
+          const topProvider = detected[0];
+          const defaultModel = `${topProvider.name}:${topProvider.selected.extractionModel}`;
+          setFirstBootDefaultModel(defaultModel);
+          const currentHuman = await processor!.getHuman();
+          await processor!.updateHuman({
+            settings: {
+              ...currentHuman.settings,
+              accounts,
+              default_model: defaultModel,
+            },
+          });
+          const names = detected.map((d) => d.name).join(" and ");
+          showNotification(`${names} detected and configured!`, "info");
+          logger.info(`Auto-configured: ${names}`);
+        } else {
+          logger.info("No LLM providers found, showing welcome overlay");
         }
+
+        setShowWelcomeOverlay(true);
       } catch (err: any) {
         logger.warn(`LLM detection failed: ${err?.message || err}`);
       }
@@ -1000,6 +984,8 @@ export const EiProvider: ParentComponent = (props) => {
     searchHumanData,
     showWelcomeOverlay,
     dismissWelcomeOverlay: () => setShowWelcomeOverlay(false),
+    detectedProviders,
+    firstBootDefaultModel,
     deleteMessages,
     setMessageContextStatus,
     deleteRoomMessages,
