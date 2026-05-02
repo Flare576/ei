@@ -3,6 +3,7 @@ import type { Message } from "../../core/types.js";
 import {
   queueTopicScan,
   queuePersonScan,
+  queueFactFind,
   type ExtractionContext,
 } from "../../core/orchestrators/human-extraction.js";
 
@@ -101,11 +102,12 @@ export async function importPersonaHistory(
     };
 
     const extractionModel = settings?.extraction_model;
+    queueFactFind(context, stateManager, { extraction_model: extractionModel });
     queueTopicScan(context, stateManager, { extraction_model: extractionModel });
     queuePersonScan(context, stateManager, { extraction_model: extractionModel });
 
     result.personasProcessed++;
-    result.scansQueued += 2;
+    result.scansQueued += 3;
   }
 
   for (const room of Object.values((stateManager.getStorageState() as any).rooms ?? {})) {
