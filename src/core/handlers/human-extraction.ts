@@ -8,7 +8,7 @@ import type {
   TopicScanCandidate,
   ItemMatchResult,
 } from "../../prompts/human/types.js";
-import { queueTopicMatch, queuePersonUpdate, type ExtractionContext } from "../orchestrators/index.js";
+import { queueTopicMatch, queuePersonUpdate, getBestTopicSimilarity, VALIDATE_MIN_SIMILARITY, type ExtractionContext } from "../orchestrators/index.js";
 import { markMessagesExtracted, resolveMessageWindow } from "./utils.js";
 import { BUILT_IN_FACT_NAMES } from "../constants/built-in-facts.js";
 import { getEmbeddingService, getItemEmbeddingText, cosineSimilarity, getPersonEmbeddingText } from "../embedding-service.js";
@@ -177,14 +177,18 @@ export async function handleHumanTopicScan(response: LLMResponse, state: StateMa
   for (const candidate of result.topics) {
     const density = typeof candidate.density === 'number' ? candidate.density : null;
     if (density !== null && density <= 2) {
-      console.debug(`[handleHumanTopicScan] Skipping low-density topic "${candidate.name}" (density=${density})`);
-      skipped++;
-      continue;
+      const bestSimilarity = await getBestTopicSimilarity(candidate, state);
+      if (bestSimilarity < VALIDATE_MIN_SIMILARITY) {
+        console.debug(`[handleHumanTopicScan] Skipping low-density topic "${candidate.name}" (density=${density}, best_match=${bestSimilarity.toFixed(3)})`);
+        skipped++;
+        continue;
+      }
+      console.debug(`[handleHumanTopicScan] Keeping low-density topic "${candidate.name}" — strong existing match (density=${density}, best_match=${bestSimilarity.toFixed(3)})`);
     }
     await queueTopicMatch(candidate, context, state, extractionModel);
   }
   const queued = result.topics.length - skipped;
-  console.log(`[handleHumanTopicScan] Queued ${queued} topic(s) for matching${skipped > 0 ? ` (skipped ${skipped} low-density)` : ''}`);
+  console.log(`[handleHumanTopicScan] Queued ${queued} topic(s) for matching${skipped > 0 ? ` (skipped ${skipped} low-density, no match)` : ''}`);
 }
 
 export async function handleHumanPersonScan(response: LLMResponse, state: StateManager): Promise<void> {
