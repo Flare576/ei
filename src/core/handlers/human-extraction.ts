@@ -92,7 +92,7 @@ export async function handleFactFind(response: LLMResponse, state: StateManager)
   markMessagesExtracted(response, state, "f");
   
   if (!result?.facts || !Array.isArray(result.facts)) {
-    console.log("[handleFactFind] No facts detected or invalid result");
+    console.debug("[handleFactFind] No facts detected or invalid result");
     return;
   }
 
@@ -106,26 +106,26 @@ export async function handleFactFind(response: LLMResponse, state: StateManager)
   for (const factResult of result.facts) {
     // Only upsert facts that match a built-in name
     if (!BUILT_IN_FACT_NAMES.has(factResult.name)) {
-      console.log(`[handleFactFind] Skipping non-built-in fact: "${factResult.name}"`);
+      console.warn(`[handleFactFind] Skipping non-built-in fact: "${factResult.name}"`);
       continue;
     }
 
     // Find the existing fact in state
     const existingFact = human.facts.find(f => f.name === factResult.name);
     if (!existingFact) {
-      console.log(`[handleFactFind] Skipping unknown fact: "${factResult.name}"`);
+      console.warn(`[handleFactFind] Skipping unknown fact: "${factResult.name}"`);
       continue;
     }
 
     // Skip facts that already have descriptions (only fill empty ones)
     if (existingFact.description && existingFact.description !== "") {
-      console.log(`[handleFactFind] Skipping fact with existing description: "${factResult.name}"`);
+      console.debug(`[handleFactFind] Skipping fact with existing description: "${factResult.name}"`);
       continue;
     }
 
     // Skip if the LLM returned a null/empty/non-string value — don't store booleans or nulls
     if (!factResult.value || typeof factResult.value !== 'string') {
-      console.log(`[handleFactFind] Skipping fact with null/empty/non-string value: "${factResult.name}" (got ${typeof factResult.value})`);
+      console.warn(`[handleFactFind] Skipping fact with null/empty/non-string value: "${factResult.name}" (got ${typeof factResult.value})`);
       continue;
     }
 
@@ -165,7 +165,7 @@ export async function handleHumanTopicScan(response: LLMResponse, state: StateMa
   markMessagesExtracted(response, state, "t");
   
   if (!result?.topics || !Array.isArray(result.topics)) {
-    console.log("[handleHumanTopicScan] No topics detected or invalid result");
+    console.debug("[handleHumanTopicScan] No topics detected or invalid result");
     return;
   }
 
@@ -185,7 +185,7 @@ export async function handleHumanPersonScan(response: LLMResponse, state: StateM
   markMessagesExtracted(response, state, "p");
   
   if (!result?.people || !Array.isArray(result.people)) {
-    console.log("[handleHumanPersonScan] No people detected or invalid result");
+    console.debug("[handleHumanPersonScan] No people detected or invalid result");
     return;
   }
 
@@ -231,7 +231,7 @@ export async function handleHumanPersonScan(response: LLMResponse, state: StateM
           }
         }
         if (!matchedPerson) {
-          console.log(`[handleHumanPersonScan] Multi-match for "${candidate.name}" (${matches.length} hits) — no embedding above threshold, creating new record`);
+          console.debug(`[handleHumanPersonScan] Multi-match for "${candidate.name}" (${matches.length} hits) — no embedding above threshold, creating new record`);
         }
       } catch (err) {
         console.warn(`[handleHumanPersonScan] Multi-match embedding failed for "${candidate.name}", using first match:`, err);
@@ -253,7 +253,7 @@ export async function handleHumanPersonScan(response: LLMResponse, state: StateM
         if (isUnknownPlaceholder || isSingleton) {
           matchedPerson = existing;
           const reason = isUnknownPlaceholder ? 'unnamed placeholder' : 'singleton relationship';
-          console.log(`[handleHumanPersonScan] Relationship unique match: "${candidate.name}" → "${existing.name}" (sole ${candidate.relationship}, ${reason})`);
+          console.debug(`[handleHumanPersonScan] Relationship unique match: "${candidate.name}" → "${existing.name}" (sole ${candidate.relationship}, ${reason})`);
         }
       } else {
         // N>1 same relationship → cosine within that subset.
@@ -267,7 +267,7 @@ export async function handleHumanPersonScan(response: LLMResponse, state: StateM
           : `all ${human.people.length} people`;
 
         if (searchPool.length > 0) {
-          console.log(`[handleHumanPersonScan] "${candidate.name}": cosine against ${searchPool.length} embedded (${poolLabel})`);
+          console.debug(`[handleHumanPersonScan] "${candidate.name}": cosine against ${searchPool.length} embedded (${poolLabel})`);
           try {
             const embeddingService = getEmbeddingService();
             const candidateText = getPersonEmbeddingText({
@@ -288,15 +288,15 @@ export async function handleHumanPersonScan(response: LLMResponse, state: StateM
             }
             const top3 = scores.sort((a, b) => b.sim - a.sim).slice(0, 3).map(s => `"${s.name}"=${s.sim.toFixed(3)}`).join(', ');
             if (matchedPerson) {
-              console.log(`[handleHumanPersonScan] Cosine matched "${candidate.name}" → "${matchedPerson.name}" (${bestSimilarity.toFixed(3)}) | top3: ${top3}`);
+              console.debug(`[handleHumanPersonScan] Cosine matched "${candidate.name}" → "${matchedPerson.name}" (${bestSimilarity.toFixed(3)}) | top3: ${top3}`);
             } else {
-              console.log(`[handleHumanPersonScan] Cosine: no match above ${ZERO_MATCH_COSINE_THRESHOLD} for "${candidate.name}" | top3: ${top3}`);
+              console.debug(`[handleHumanPersonScan] Cosine: no match above ${ZERO_MATCH_COSINE_THRESHOLD} for "${candidate.name}" | top3: ${top3}`);
             }
           } catch (err) {
             console.warn(`[handleHumanPersonScan] Cosine failed for "${candidate.name}":`, err);
           }
         } else {
-          console.log(`[handleHumanPersonScan] "${candidate.name}": no embedded people in pool (${poolLabel}) — new person`);
+          console.debug(`[handleHumanPersonScan] "${candidate.name}": no embedded people in pool (${poolLabel}) — new person`);
         }
       }
     }
@@ -305,7 +305,7 @@ export async function handleHumanPersonScan(response: LLMResponse, state: StateM
       const linkedPersonaId = matchedPerson.identifiers
         ?.find(i => i.type === "Ei Persona")?.value;
       if (linkedPersonaId) {
-        console.log(`[handleHumanPersonScan] Skipping update for "${candidate.name}" — scan marked as reflection drain (reflection_progress=1)`);
+        console.debug(`[handleHumanPersonScan] Skipping update for "${candidate.name}" — scan marked as reflection drain (reflection_progress=1)`);
         continue;
       }
     }
@@ -326,7 +326,7 @@ export async function handleHumanPersonScan(response: LLMResponse, state: StateM
       : matches.length > 1
         ? `multi-match ambiguous (${matches.length} hits) — new record`
         : "no match (new person)";
-    console.log(`[handleHumanPersonScan] person "${candidate.name}": ${matched}`);
+    console.debug(`[handleHumanPersonScan] person "${candidate.name}": ${matched}`);
   }
   console.log(`[handleHumanPersonScan] Processed ${result.people.length} person(s)`);
 }
@@ -337,7 +337,7 @@ export async function handleEventScan(response: LLMResponse, state: StateManager
   const result = response.parsed as { events?: Array<{ name: string; description: string; reason: string }> } | undefined;
 
   if (!result?.events || !Array.isArray(result.events) || result.events.length === 0) {
-    console.log("[handleEventScan] No epic events detected");
+    console.debug("[handleEventScan] No epic events detected");
     return;
   }
 
