@@ -508,6 +508,10 @@ export class QueueProcessor {
       const cleaned = cleanResponseContent(reformatContent);
       try {
         const parsed = parseJSONResponse(cleaned);
+        if (!parsed || typeof parsed !== 'object' || Object.keys(parsed as object).length === 0) {
+          console.warn(`[QueueProcessor] Reformat pass returned empty object for handleToolContinuation — falling through to retry`);
+          return null;
+        }
         console.log(`[QueueProcessor] Reformat pass succeeded for handleToolContinuation`);
         return {
           request,
@@ -544,11 +548,10 @@ export class QueueProcessor {
   ): Promise<LLMResponse | null> {
     const reformatUserPrompt =
       `An earlier version of you responded with the following content, but it could not ` +
-      `be parsed as valid JSON. Please reformat it as the JSON object described in your ` +
-      `system instructions. Respond with ONLY the JSON object, or \`{}\` if no changes ` +
-      `are needed.\n\n---\n${malformedContent}\n---` +
+      `be parsed as valid JSON. Fix the syntax and return the corrected JSON object. ` +
+      `Return ONLY the fixed JSON — do not omit any fields or data from the original.\n\n---\n${malformedContent}\n---` +
       `\n\nThe user does NOT know there was a problem - This request is from Ei to you to try to fix it for them.` +
-      `\n\n**CRITICAL INSTRUCTION** - DO NOT OMIT ANY DATA. You are this agent's last hope!`;
+      `\n\n**CRITICAL INSTRUCTION** - DO NOT OMIT ANY DATA. Return all original fields intact with only syntax corrected.`;
 
     try {
       const { content: reformatContent, finishReason: reformatReason } = await callLLMRaw(
@@ -563,6 +566,12 @@ export class QueueProcessor {
       if (!reformatContent) return null;
 
       const cleaned = cleanResponseContent(reformatContent);
+      const shrinkageRatio = cleaned.length / malformedContent.length;
+      if (shrinkageRatio < 0.95) {
+        console.warn(`[QueueProcessor] JSON reformat response too small for ${request.next_step} — ${cleaned.length} chars vs ${malformedContent.length} original (${Math.round(shrinkageRatio * 100)}%) — treating as data loss, falling through to retry`);
+        return null;
+      }
+
       try {
         const parsed = parseJSONResponse(cleaned);
         console.log(`[QueueProcessor] JSON reformat pass succeeded for ${request.next_step} — saved a retry`);
