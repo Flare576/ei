@@ -22,7 +22,7 @@ const LOG_LEVELS: Record<LogLevel, number> = {
   error: 3,
 };
 
-const currentLevel: LogLevel = (Bun.env.EI_LOG_LEVEL as LogLevel) || "debug";
+const currentLevel: LogLevel = (Bun.env.EI_LOG_LEVEL as LogLevel) || "warn";
 
 function shouldLog(level: LogLevel): boolean {
   return LOG_LEVELS[level] >= LOG_LEVELS[currentLevel];
