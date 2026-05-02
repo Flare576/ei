@@ -200,7 +200,7 @@ export class QueueProcessor {
         hydratedUser,
         messages,
         request.model,
-        { signal: this.abortController?.signal, tools: openAITools, onUsageUpdate: this.currentOnUsageUpdate },
+        { signal: this.abortController?.signal, tools: openAITools, onUsageUpdate: this.currentOnUsageUpdate, nextStep: `${request.data.originalNextStep ?? request.next_step}+tool_continuation` },
         this.currentAccounts
       );
 
@@ -219,7 +219,7 @@ export class QueueProcessor {
             if (!args.should_respond && args.content) {
               args.should_respond = true;
             }
-            console.log(`[QueueProcessor] submit tool "${submitCall.name}" called — returning arguments as parsed response`);
+      console.debug(`[QueueProcessor] submit tool "${submitCall.name}" called — returning arguments as parsed response`);
             return {
               request,
               success: true,
@@ -297,9 +297,9 @@ export class QueueProcessor {
     const isHeartbeat = request.next_step === LLMNextStep.HandleHeartbeatCheck || request.next_step === LLMNextStep.HandleEiHeartbeat;
     if (isHeartbeat) {
       const personaName = request.data.personaDisplayName as string | undefined ?? 'Ei';
-      console.log(`[${personaName} Heartbeat] LLM call - tools offered: ${openAITools.length} (${activeTools.map(t => t.name).join(', ') || 'none'})`);
+      console.debug(`[${personaName} Heartbeat] LLM call - tools offered: ${openAITools.length} (${activeTools.map(t => t.name).join(', ') || 'none'})`);
     } else {
-      console.log(`[QueueProcessor] LLM call for ${request.next_step}, tools=${openAITools.length}`);
+      console.debug(`[QueueProcessor] LLM call for ${request.next_step}, tools=${openAITools.length}`);
     }
 
     const { content, finishReason, rawToolCalls, assistantMessage, thinking } = await callLLMRaw(
@@ -307,18 +307,18 @@ export class QueueProcessor {
       hydratedUser,
       messages,
       request.model,
-      { signal: this.abortController?.signal, tools: openAITools, onUsageUpdate: this.currentOnUsageUpdate },
+      { signal: this.abortController?.signal, tools: openAITools, onUsageUpdate: this.currentOnUsageUpdate, nextStep: request.next_step },
       this.currentAccounts
     );
     if (thinking) {
-      console.log(`[QueueProcessor] Extended thinking on ${request.next_step} (${thinking.length} chars) — TODO(#13): stream to TUI`);
+      console.debug(`[QueueProcessor] Extended thinking on ${request.next_step} (${thinking.length} chars) — TODO(#13): stream to TUI`);
     }
 
     // =========================================================================
     // Tool call path: execute tools, enqueue HandleToolContinuation, done.
     // =========================================================================
     if (finishReason === "tool_calls" && rawToolCalls?.length) {
-      console.log(`[QueueProcessor] finish_reason=tool_calls — executing tools, will enqueue HandleToolContinuation`);
+      console.debug(`[QueueProcessor] finish_reason=tool_calls — executing tools, will enqueue HandleToolContinuation`);
 
       const toolCalls = parseToolCalls(rawToolCalls);
       if (toolCalls.length === 0) {
@@ -364,7 +364,7 @@ export class QueueProcessor {
         });
       }
 
-      console.log(`[QueueProcessor] Tool execution complete: ${results.length} result(s). Enqueueing HandleToolContinuation.`);
+      console.debug(`[QueueProcessor] Tool execution complete: ${results.length} result(s). Enqueueing HandleToolContinuation.`);
 
       if (this.currentOnEnqueue) {
         this.currentOnEnqueue({
@@ -412,7 +412,7 @@ export class QueueProcessor {
     // =========================================================================
     // Normal stop path
     // =========================================================================
-    console.log(`[QueueProcessor] finish_reason="${finishReason}" — normal stop`);
+    console.debug(`[QueueProcessor] finish_reason="${finishReason}" — normal stop`);
     return this.handleResponseType(request, content ?? "", finishReason);
   }
 
@@ -497,9 +497,9 @@ export class QueueProcessor {
       const { content: reformatContent, finishReason: reformatReason } = await callLLMRaw(
         request.system,
         reformatUserPrompt,
-        messages, // existing tool history — gives full context without duplicating the ask
+        messages,
         request.model,
-        { signal: this.abortController?.signal, onUsageUpdate: this.currentOnUsageUpdate },
+        { signal: this.abortController?.signal, onUsageUpdate: this.currentOnUsageUpdate, nextStep: `${request.data.originalNextStep ?? request.next_step}+prose_reformat` },
         this.currentAccounts
       );
 
@@ -554,9 +554,9 @@ export class QueueProcessor {
       const { content: reformatContent, finishReason: reformatReason } = await callLLMRaw(
         request.system,
         reformatUserPrompt,
-        [], // no message history needed — schema is already in the system prompt
+        [],
         request.model,
-        { signal: this.abortController?.signal, onUsageUpdate: this.currentOnUsageUpdate },
+        { signal: this.abortController?.signal, onUsageUpdate: this.currentOnUsageUpdate, nextStep: `${request.next_step}+json_reformat` },
         this.currentAccounts
       );
 
