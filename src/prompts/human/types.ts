@@ -52,14 +52,19 @@ export interface TopicScanCandidate {
   name: string;
   description: string;
   category: string;
+  density?: number;
   reason: string;
 }
+
+export type PersonRelationshipType = "family" | "friend" | "colleague" | "acquaintance" | "transactional" | "unknown";
 
 export interface PersonScanCandidate {
   name: string;
   identifiers?: Array<{ type: string; value: string; is_primary?: boolean }>;
   description: string;
   relationship: string;
+  relationship_type?: PersonRelationshipType;
+  confidence?: number;
   reason: string;
 }
 

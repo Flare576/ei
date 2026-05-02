@@ -93,6 +93,19 @@ If you are unsure of the type, use \`Nickname\` as a fallback. Do NOT invent typ
 
 Only include \`identifiers\` when explicitly mentioned in the conversation — omit it entirely if nothing qualifies.
 
+## Confidence & Relationship Type
+
+For each person, rate how important they are to the human user's life:
+
+- \`confidence\`: integer 1–5
+  - 1–2 = mentioned in passing, single event, no ongoing relevance
+  - 3 = unclear significance — may matter, may not
+  - 4–5 = clearly important, recurring presence, meaningful relationship
+- \`relationship_type\`: one of \`"family"\` | \`"friend"\` | \`"colleague"\` | \`"acquaintance"\` | \`"transactional"\` | \`"unknown"\`
+  - Use \`"transactional"\` when the person appeared only in the context of a single transaction (purchase, sale, support ticket, delivery)
+
+Use the full range. Most extractions should score 1–3. A confidence of 4–5 means this person genuinely matters to the user's life.
+
 ## Output Format
 
 \`\`\`json
@@ -105,6 +118,8 @@ Only include \`identifiers\` when explicitly mentioned in the conversation — o
       ],
       "description": "1-2 sentences: who this person is and their role in the user's life",
       "relationship": "Father|Mother|Brother|Son|Friend|Coworker|Self|etc.",
+      "relationship_type": "family|friend|colleague|acquaintance|transactional|unknown",
+      "confidence": 4,
       "reason": "Evidence from the conversation that justified flagging this person"
     }
   ]
@@ -143,6 +158,8 @@ Scan the "Most Recent Messages" for PEOPLE in the human user's life.
       "identifiers": [{ "type": "GitHub", "value": "handle" }],
       "description": "1-2 sentences: who this person is and their role in the user's life",
       "relationship": "Father|Mother|Brother|Son|Friend|Coworker|Self|etc.",
+      "relationship_type": "family|friend|colleague|acquaintance|transactional|unknown",
+      "confidence": 4,
       "reason": "Evidence from the conversation that justified flagging this person"
     }
   ]

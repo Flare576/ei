@@ -73,6 +73,17 @@ When in doubt, pick the closest match. The update step will refine it.
 
 ${technicalContextSection(data.technical_context)}
 
+## Density
+
+For each topic, rate how central it is to the conversation:
+
+- \`density\`: integer 1–5
+  - 1–2 = glancing mention, brief aside, or single passing reference — the conversation is mostly about something else
+  - 3 = present and meaningful, but not the main focus
+  - 4–5 = a primary thread of the conversation — the human spent real time here
+
+Use the full range. Most extractions should score 1–3. A density of 4–5 means this topic is what the conversation is genuinely about.
+
 ## Output Format
 
 \`\`\`json
@@ -82,6 +93,7 @@ ${technicalContextSection(data.technical_context)}
       "name": "Short label for the topic (10-75 characters)",
       "description": "1-2 sentences: what this topic is and why it matters to the user",
       "category": "One of the categories above (Interest|Goal|Dream|Conflict|Concern|Fear|Hope|Plan|Project|Event|Technical)",
+      "density": 3,
       "reason": "Evidence from the conversation that justified flagging this topic"
     }
   ]
@@ -119,6 +131,7 @@ Scan the "Most Recent Messages" for TOPICS of interest to the human user.
       "name": "Short label for the topic (10-75 characters)",
       "description": "1-2 sentences: what this topic is and why it matters to the user",
       "category": "Interest|Goal|Dream|Conflict|Concern|Fear|Hope|Plan|Project|Event|Technical",
+      "density": 3,
       "reason": "Evidence from the conversation that justified flagging this topic"
     }
   ]
