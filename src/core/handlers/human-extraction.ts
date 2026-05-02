@@ -173,10 +173,18 @@ export async function handleHumanTopicScan(response: LLMResponse, state: StateMa
   if (!context?.personaId) return;
 
   const extractionModel = (response.request.data as Record<string, unknown>).extraction_model as string | undefined;
+  let skipped = 0;
   for (const candidate of result.topics) {
+    const density = typeof candidate.density === 'number' ? candidate.density : null;
+    if (density !== null && density <= 2) {
+      console.debug(`[handleHumanTopicScan] Skipping low-density topic "${candidate.name}" (density=${density})`);
+      skipped++;
+      continue;
+    }
     await queueTopicMatch(candidate, context, state, extractionModel);
   }
-  console.log(`[handleHumanTopicScan] Queued ${result.topics.length} topic(s) for matching`);
+  const queued = result.topics.length - skipped;
+  console.log(`[handleHumanTopicScan] Queued ${queued} topic(s) for matching${skipped > 0 ? ` (skipped ${skipped} low-density)` : ''}`);
 }
 
 export async function handleHumanPersonScan(response: LLMResponse, state: StateManager): Promise<void> {
@@ -308,6 +316,12 @@ export async function handleHumanPersonScan(response: LLMResponse, state: StateM
         console.debug(`[handleHumanPersonScan] Skipping update for "${candidate.name}" — scan marked as reflection drain (reflection_progress=1)`);
         continue;
       }
+    }
+
+    const confidence = typeof candidate.confidence === 'number' ? candidate.confidence : null;
+    if (confidence !== null && confidence <= 2 && !matchedPerson) {
+      console.debug(`[handleHumanPersonScan] Skipping low-confidence new person "${candidate.name}" (confidence=${confidence}, relationship_type=${candidate.relationship_type ?? 'none'})`);
+      continue;
     }
 
     const matchResult: ItemMatchResult = { matched_guid: matchedPerson?.id ?? null };
