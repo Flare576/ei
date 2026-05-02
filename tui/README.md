@@ -168,9 +168,10 @@ Rooms have three modes, set at creation time:
 | `XDG_DATA_HOME` | `~/.local/share` | XDG base directory. Ignored if `EI_DATA_PATH` is set. |
 | `EI_SYNC_USERNAME` | — | Username for remote sync. If set at startup, bootstraps sync credentials automatically (useful for dotfiles/scripts). |
 | `EI_SYNC_PASSPHRASE` | — | Passphrase for remote sync. Paired with `EI_SYNC_USERNAME`. |
-| `EDITOR` / `VISUAL` | `vi` | Editor opened by `/details`, `/me`, `/settings`, `/context`, `/quotes`, etc. Falls back to `VISUAL` if `EDITOR` is unset. |
+| `EI_LOG_LEVEL` | `warn` | Log verbosity written to `tui.log`: `error`, `warn`, `info`, `debug`. |
+| `EI_DEBUG_NETWORK_VERBOSE` | — | Set to `1` to dump full LLM request/response payloads as JSON files under `$EI_DATA_PATH/logs/`. One file per call, named `TIMESTAMP_callN_STEP.json`. |
 
-> **Tip**: `tail -f $EI_DATA_PATH/tui.log` to watch live debug output.
+> **Tip**: `tail -f $EI_DATA_PATH/tui.log` to watch live TUI output. Set `EI_LOG_LEVEL=info` to see LLM call summaries (model, latency, token counts). Set `EI_DEBUG_NETWORK_VERBOSE=1` to dump full request/response payloads to `$EI_DATA_PATH/logs/`.
 
 
 # Development
