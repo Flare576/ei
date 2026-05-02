@@ -151,4 +151,39 @@ describe("repairJSON", () => {
     const result = repairJSON("{\"key\": \"value\" // comment\n}");
     expect(JSON.parse(result)).toEqual({ key: "value" });
   });
+
+  it("Test D: adds missing comma between adjacent string-valued key-value pairs", () => {
+    const input = '{\n  "name": "Topic"\n  "category": "Interest"\n  "density": 3\n}';
+    const result = repairJSON(input);
+    expect(JSON.parse(result)).toEqual({ name: "Topic", category: "Interest", density: 3 });
+  });
+});
+
+describe("parseJSONResponse — trailing extra braces (Gemma pattern)", () => {
+  it("Test A: parses valid JSON with one trailing extra brace", () => {
+    const input = '{"name": "Alice", "score": 42}\n}';
+    expect(parseJSONResponse(input)).toEqual({ name: "Alice", score: 42 });
+  });
+
+  it("Test B: parses valid JSON with two trailing extra braces", () => {
+    const input = '{"status": "ok", "count": 3}}}';
+    expect(parseJSONResponse(input)).toEqual({ status: "ok", count: 3 });
+  });
+
+  it("Test C: still throws on structurally broken JSON even after extra brace stripping", () => {
+    const input = '[{"name": "still_invalid"]}}';
+    expect(() => parseJSONResponse(input)).toThrow();
+  });
+
+  it("parses JSON with nested objects followed by trailing extra brace", () => {
+    const input = '{"outer": {"inner": "value"}}\n}';
+    expect(parseJSONResponse(input)).toEqual({ outer: { inner: "value" } });
+  });
+});
+
+describe("parseJSONResponse — missing comma between key-value pairs (Gemma pattern)", () => {
+  it("Test D: parses JSON with missing commas between fields", () => {
+    const input = '{"name": "Spotify"\n  "category": "Interest"\n  "density": 3}';
+    expect(parseJSONResponse(input)).toEqual({ name: "Spotify", category: "Interest", density: 3 });
+  });
 });

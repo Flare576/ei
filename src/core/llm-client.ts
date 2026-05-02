@@ -450,6 +450,7 @@ const JSON_REPAIR_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
   { pattern: /:\s*(\d{4}-\d{2}-\d{2}T[^"}\],\n]+)/g, replacement: ': "$1"' },
   { pattern: /:\s*0([1-9][0-9]*)([,\s\n\r\]}])/g, replacement: ": 0.$1$2" },
   { pattern: /,(\s*[\]}])/g, replacement: "$1" },
+  { pattern: /"(\s*\n[ \t]+"[a-zA-Z_][a-zA-Z0-9_]*"\s*:)/g, replacement: '",$1' },
 ];
 
 export function repairJSON(jsonStr: string): string {
@@ -529,6 +530,41 @@ export function rescueGemmaToolCalls(content: string): unknown[] {
   return rescued;
 }
 
+function findOutermostObject(str: string): string | null {
+  const start = str.indexOf('{');
+  if (start === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < str.length; i++) {
+    const ch = str[i];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === '\\' && inString) {
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+
+    if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) return str.slice(start, i + 1);
+    }
+  }
+
+  return null;
+}
+
 export function parseJSONResponse(content: string): unknown {
   const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
   const jsonStr = jsonMatch ? jsonMatch[1].trim() : content.trim();
@@ -541,10 +577,10 @@ export function parseJSONResponse(content: string): unknown {
       return JSON.parse(repaired);
     } catch {
       // Last resort: extract the outermost {...} block from mixed prose/JSON content.
-      // Handles 'thinking prose...\n{...json...}' responses from extended-thinking models.
-      const outerMatch = jsonStr.match(/\{[\s\S]*\}/);
-      if (outerMatch) {
-        const extracted = outerMatch[0];
+      // Bracket-depth scan (not greedy regex) stops at the first valid close so extra
+      // trailing braces from models like Gemma are excluded from the extracted slice.
+      const extracted = findOutermostObject(jsonStr);
+      if (extracted) {
         try {
           return JSON.parse(extracted);
         } catch {
