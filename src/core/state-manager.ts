@@ -1054,7 +1054,7 @@ export class StateManager {
   tools_getForPersona(personaId: string, isTUI: boolean): ToolDefinition[] {
     const persona = this.personaState.getById(personaId);
     if (!persona?.tools?.length) {
-      console.log(`[Tools] tools_getForPersona(${personaId}): persona has no assigned tools`);
+      console.debug(`[Tools] tools_getForPersona(${personaId}): persona has no assigned tools`);
       return [];
     }
     const assignedIds = new Set(persona.tools);
@@ -1077,13 +1077,13 @@ export class StateManager {
     if (result.length < assignedIds.size) {
       for (const id of assignedIds) {
         const tool = this.tools.find(t => t.id === id);
-        if (!tool) { console.log(`[Tools] tools_getForPersona: assigned tool id=${id} not found in registry`); continue; }
-        if (!tool.enabled) { console.log(`[Tools] tools_getForPersona: tool "${tool.name}" is disabled`); continue; }
-        if (!enabledProviderIds.has(tool.provider_id)) { console.log(`[Tools] tools_getForPersona: tool "${tool.name}" provider is disabled`); continue; }
-        if (!(tool.runtime === "any" || (tool.runtime === "node" && isTUI))) { console.log(`[Tools] tools_getForPersona: tool "${tool.name}" runtime "${tool.runtime}" not available (isTUI=${isTUI})`); continue; }
+        if (!tool) { console.debug(`[Tools] tools_getForPersona: assigned tool id=${id} not found in registry`); continue; }
+        if (!tool.enabled) { console.debug(`[Tools] tools_getForPersona: tool "${tool.name}" is disabled`); continue; }
+        if (!enabledProviderIds.has(tool.provider_id)) { console.debug(`[Tools] tools_getForPersona: tool "${tool.name}" provider is disabled`); continue; }
+        if (!(tool.runtime === "any" || (tool.runtime === "node" && isTUI))) { console.debug(`[Tools] tools_getForPersona: tool "${tool.name}" runtime "${tool.runtime}" not available (isTUI=${isTUI})`); continue; }
       }
     }
-    console.log(`[Tools] tools_getForPersona(${personaId}): resolved ${result.length}/${assignedIds.size} tools: [${result.map(t => t.name).join(", ")}]`);
+    console.debug(`[Tools] tools_getForPersona(${personaId}): resolved ${result.length}/${assignedIds.size} tools: [${result.map(t => t.name).join(", ")}]`);
     return result;
   }
 

@@ -117,6 +117,8 @@ The Processor is responsible for fetching, filtering, and formatting data before
 | `EI_DATA_PATH` | Path to Ei's persistent data directory |
 | `EI_SYNC_USERNAME` | Username for remote sync API |
 | `EI_SYNC_PASSPHRASE` | Passphrase for remote sync API |
+| `EI_LOG_LEVEL` | TUI log verbosity: `error`, `warn` (default), `info`, `debug` |
+| `EI_DEBUG_NETWORK_VERBOSE` | Set to `1` to dump full LLM request/response payloads to `$EI_DATA_PATH/logs/` |
 
 ### Provider Setup
 

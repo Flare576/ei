@@ -2,6 +2,36 @@ import type { ChatMessage, ProviderAccount, ModelConfig } from "./types.js";
 const DEFAULT_TOKEN_LIMIT = 8192;
 const DEFAULT_MAX_OUTPUT_TOKENS = 8000;
 
+// Lazy verbose network dump — only active when EI_DEBUG_NETWORK_VERBOSE=1.
+// Uses dynamic import so the web bundle never pulls in node:fs.
+async function writeNetworkDump(
+  callNumber: number,
+  nextStep: string,
+  meta: { model: string; provider: string; latency_ms: number; status_code: number; tokens_in: number; tokens_out: number },
+  request: unknown,
+  response: unknown
+): Promise<void> {
+  const dataPath = (typeof process !== "undefined" && process.env?.EI_DATA_PATH) ||
+    (typeof Bun !== "undefined" && (Bun as Record<string, unknown>).env && ((Bun as { env: Record<string, string> }).env.EI_DATA_PATH));
+  if (!dataPath) return;
+
+  try {
+    const { mkdirSync, writeFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const logsDir = join(dataPath as string, "logs");
+    mkdirSync(logsDir, { recursive: true });
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const safeName = nextStep.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const filename = join(logsDir, `${timestamp}_call${callNumber}_${safeName}.json`);
+
+    const payload = JSON.stringify({ meta, request, response }, null, 2);
+    writeFileSync(filename, payload);
+  } catch {
+    // Silent — verbose dump failures must never crash the main path
+  }
+}
+
 export interface ProviderConfig {
   baseURL: string;
   apiKey: string;
@@ -22,6 +52,8 @@ export interface LLMCallOptions {
   tools?: Record<string, unknown>[];
   /** Fire-and-forget callback invoked after a successful response to increment usage counters. */
   onUsageUpdate?: (modelId: string, usage: { calls: number; tokens_in: number; tokens_out: number }) => void;
+  /** Queue step name passed through to EI_DEBUG_NETWORK_VERBOSE file dumps. */
+  nextStep?: string;
 }
 
 export interface LLMRawResponse {
@@ -212,7 +244,7 @@ function logTokenLimit(model: string, source: string, tokens: number): void {
   if (source === "default") {
     console.warn(`[TokenLimit] Unknown model "${model}" — using conservative default (${DEFAULT_TOKEN_LIMIT})`);
   } else {
-    console.log(`[TokenLimit] ${model}: ${source} → ${tokens} tokens (extraction budget: ${budget})`);
+    console.debug(`[TokenLimit] ${model}: ${source} → ${tokens} tokens (extraction budget: ${budget})`);
   }
 }
 
@@ -226,7 +258,7 @@ export async function callLLMRaw(
 ): Promise<LLMRawResponse> {
   llmCallCount++;
   
-  const { signal, temperature = 0.7, onUsageUpdate } = options;
+  const { signal, temperature = 0.7, onUsageUpdate, nextStep = "unknown" } = options;
   
   if (signal?.aborted) {
     throw new Error("LLM call aborted");
@@ -251,7 +283,9 @@ export async function callLLMRaw(
   
   const totalChars = finalMessages.reduce((sum, m) => sum + (m.content?.length ?? 0), 0);
   const estimatedTokens = Math.ceil(totalChars / 4);
-  console.log(`[LLM] Call #${llmCallCount} - ~${estimatedTokens} tokens (${totalChars} chars)`);
+  const modelLabel = model ?? "default";
+  console.log(`[LLM] Call #${llmCallCount} — ${config.name}:${modelLabel}, ~${estimatedTokens} tokens est.`);
+  const _llmCallStart = Date.now();
   
   const normalizedBaseURL = config.baseURL.replace(/\/+$/, "");
   
@@ -307,9 +341,24 @@ export async function callLLMRaw(
   
   const data = await response.json();
 
+  const _llmLatency = Date.now() - _llmCallStart;
+  const tokensIn = data.usage?.prompt_tokens ?? data.usage?.input_tokens ?? 0;
+  const tokensOut = data.usage?.completion_tokens ?? data.usage?.output_tokens ?? 0;
+  console.log(`[LLM] Response #${llmCallCount} — ${response.status} ${_llmLatency}ms | in: ${tokensIn} out: ${tokensOut}`);
+
+  const isVerbose = (typeof process !== "undefined" && process.env?.EI_DEBUG_NETWORK_VERBOSE === "1") ||
+    (typeof Bun !== "undefined" && (Bun as { env: Record<string, string> }).env?.EI_DEBUG_NETWORK_VERBOSE === "1");
+  if (isVerbose) {
+    void writeNetworkDump(
+      llmCallCount,
+      nextStep,
+      { model: modelLabel, provider: config.name, latency_ms: _llmLatency, status_code: response.status, tokens_in: tokensIn, tokens_out: tokensOut },
+      requestBody,
+      data
+    );
+  }
+
   if (onUsageUpdate && modelConfig) {
-    const tokensIn = data.usage?.prompt_tokens ?? data.usage?.input_tokens ?? 0;
-    const tokensOut = data.usage?.completion_tokens ?? data.usage?.output_tokens ?? 0;
     onUsageUpdate(modelConfig.id, { calls: 1, tokens_in: tokensIn, tokens_out: tokensOut });
   }
 
