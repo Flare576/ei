@@ -1128,6 +1128,156 @@ describe("Extraction Handlers - Step 3 (Update) - interested_personas", () => {
     });
   });
 
+  describe("handlePersonUpdate — Ei Persona identifier gets Nickname companion", () => {
+    const EI_PERSONA_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+
+    beforeEach(() => {
+      state.persona_add({
+        id: EI_PERSONA_ID,
+        display_name: "Beta",
+        aliases: [],
+        short_description: "test persona",
+        long_description: "",
+        traits: [],
+        topics: [],
+        group_primary: null,
+      } as any);
+    });
+
+    it("injects Nickname with display_name when Ei Persona identifier is primary on new person", async () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandlePersonUpdate,
+        data: {
+          personaId: "persona-1",
+          channelDisplayName: "TestPersona",
+          isNewItem: true,
+          candidateName: EI_PERSONA_ID,
+          candidateRelationship: "AI Persona",
+          messages_context: [],
+          messages_analyze: [],
+        },
+      });
+      const response = createMockResponse(request, {
+        description: "An AI persona",
+        sentiment: 0,
+        relationship: "AI Persona",
+        identifiers: [{ type: "Ei Persona", value: EI_PERSONA_ID, is_primary: true }],
+      });
+
+      await handlers[LLMNextStep.HandlePersonUpdate](response, state as any);
+
+      const upserted = (state.human_person_upsert as any).mock.calls[0][0];
+      expect(upserted.name).toBe("Beta");
+      expect(upserted.identifiers).toContainEqual(
+        expect.objectContaining({ type: "Nickname", value: "Beta", is_primary: true })
+      );
+      expect(upserted.identifiers).toContainEqual(
+        expect.objectContaining({ type: "Ei Persona", value: EI_PERSONA_ID })
+      );
+      const eiPersonaEntry = upserted.identifiers.find((i: any) => i.type === "Ei Persona");
+      expect(eiPersonaEntry?.is_primary).toBeFalsy();
+    });
+
+    it("injects Nickname when Ei Persona added via identifiers_to_add on existing person", async () => {
+      state._human.people.push({
+        id: "existing-persona-person",
+        name: "Unknown",
+        description: "An AI persona",
+        relationship: "AI Persona",
+        sentiment: 0,
+        exposure_current: 0,
+        exposure_desired: 0.5,
+        last_updated: "",
+        identifiers: [],
+        interested_personas: [],
+        validated_date: "",
+      });
+
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandlePersonUpdate,
+        data: {
+          personaId: "persona-1",
+          channelDisplayName: "TestPersona",
+          isNewItem: false,
+          existingItemId: "existing-persona-person",
+          candidateName: "Unknown",
+          candidateRelationship: "AI Persona",
+          messages_context: [],
+          messages_analyze: [],
+        },
+      });
+      const response = createMockResponse(request, {
+        description: "Updated",
+        sentiment: 0,
+        identifiers_to_add: [{ type: "Ei Persona", value: EI_PERSONA_ID, is_primary: true }],
+      });
+
+      await handlers[LLMNextStep.HandlePersonUpdate](response, state as any);
+
+      const upserted = (state.human_person_upsert as any).mock.calls[0][0];
+      expect(upserted.name).toBe("Beta");
+      expect(upserted.identifiers).toContainEqual(
+        expect.objectContaining({ type: "Nickname", value: "Beta", is_primary: true })
+      );
+    });
+
+    it("does not duplicate Nickname if already present", async () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandlePersonUpdate,
+        data: {
+          personaId: "persona-1",
+          channelDisplayName: "TestPersona",
+          isNewItem: true,
+          candidateName: "Beta",
+          candidateRelationship: "AI Persona",
+          messages_context: [],
+          messages_analyze: [],
+        },
+      });
+      const response = createMockResponse(request, {
+        description: "An AI persona",
+        sentiment: 0,
+        relationship: "AI Persona",
+        identifiers: [
+          { type: "Nickname", value: "Beta", is_primary: true },
+          { type: "Ei Persona", value: EI_PERSONA_ID },
+        ],
+      });
+
+      await handlers[LLMNextStep.HandlePersonUpdate](response, state as any);
+
+      const upserted = (state.human_person_upsert as any).mock.calls[0][0];
+      const nicknames = upserted.identifiers.filter((i: any) => i.type === "Nickname" && i.value === "Beta");
+      expect(nicknames).toHaveLength(1);
+    });
+
+    it("leaves identifiers unchanged when no Ei Persona identifier present", async () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandlePersonUpdate,
+        data: {
+          personaId: "persona-1",
+          channelDisplayName: "TestPersona",
+          isNewItem: true,
+          candidateName: "Alice",
+          candidateRelationship: "Friend",
+          messages_context: [],
+          messages_analyze: [],
+        },
+      });
+      const response = createMockResponse(request, {
+        description: "A friend",
+        sentiment: 0,
+        identifiers: [{ type: "Nickname", value: "Alice", is_primary: true }],
+      });
+
+      await handlers[LLMNextStep.HandlePersonUpdate](response, state as any);
+
+      const upserted = (state.human_person_upsert as any).mock.calls[0][0];
+      expect(upserted.identifiers).toHaveLength(1);
+      expect(upserted.identifiers[0]).toMatchObject({ type: "Nickname", value: "Alice" });
+    });
+  });
+
   describe("handlePersonUpdate — learned_on preservation", () => {
     it("sets learned_on on new person", async () => {
       const request = createMockRequest({

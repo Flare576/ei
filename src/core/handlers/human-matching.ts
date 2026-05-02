@@ -172,6 +172,26 @@ export async function handleTopicUpdate(response: LLMResponse, state: StateManag
   console.log(`[handleTopicUpdate] ${isNewItem ? "Created" : "Updated"} topic "${resolvedName}"`);
 }
 
+function ensureEiPersonaHasNickname(identifiers: PersonIdentifier[], state: StateManager): PersonIdentifier[] {
+  const eiPersonaId = identifiers.find(i => i.type === 'Ei Persona')?.value;
+  if (!eiPersonaId) return identifiers;
+
+  const persona = state.persona_getById(eiPersonaId);
+  if (!persona) return identifiers;
+
+  const hasNickname = identifiers.some(i => i.type === 'Nickname' && i.value === persona.display_name);
+  if (hasNickname) return identifiers;
+
+  const withoutPrimary = identifiers.map(i =>
+    i.type === 'Ei Persona' ? { ...i, is_primary: undefined } : i
+  ).map(({ is_primary, ...rest }) => is_primary ? { ...rest, is_primary } : rest);
+
+  return [
+    { type: 'Nickname', value: persona.display_name, is_primary: true as const },
+    ...withoutPrimary.map(i => i.type === 'Ei Persona' ? { type: i.type, value: i.value } : i),
+  ];
+}
+
 export async function handlePersonUpdate(response: LLMResponse, state: StateManager): Promise<void> {
   const result = response.parsed as (PersonUpdateResult & {
     identifiers?: PersonIdentifier[];
@@ -272,7 +292,7 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
         deduped.push(id);
       }
     }
-    resolvedIdentifiers = deduped;
+    resolvedIdentifiers = ensureEiPersonaHasNickname(deduped, state);
   } else {
     const base = [...(existingPerson?.identifiers ?? [])];
     const sanitizedToAdd = sanitizeEiPersonaIdentifiers(
@@ -287,12 +307,16 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
         base.push({ type: id.type, value: id.value, ...(id.is_primary ? { is_primary: id.is_primary } : {}) });
       }
     }
-    resolvedIdentifiers = base;
+    resolvedIdentifiers = ensureEiPersonaHasNickname(base, state);
   }
+
+  const personName = resolvedIdentifiers.find(i => i.is_primary && i.type !== 'Ei Persona')?.value
+    ?? resolvedIdentifiers.find(i => i.type !== 'Ei Persona')?.value
+    ?? candidateName;
 
   const person: Person = {
     id: itemId,
-    name: candidateName,
+    name: personName,
     description: resolvedDescription,
     sentiment: resolvedSentiment,
     relationship: result.relationship ?? candidateRelationship ?? existingPerson?.relationship ?? "Unknown",
