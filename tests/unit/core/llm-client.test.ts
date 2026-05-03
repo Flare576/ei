@@ -153,9 +153,9 @@ describe("repairJSON", () => {
   });
 
   it("Test D: adds missing comma between adjacent string-valued key-value pairs", () => {
-    const input = '{\n  "name": "Topic"\n  "category": "Interest"\n  "density": 3\n}';
+    const input = '{\n  "name": "Topic"\n  "category": "Interest"\n  "duration": 3\n}';
     const result = repairJSON(input);
-    expect(JSON.parse(result)).toEqual({ name: "Topic", category: "Interest", density: 3 });
+    expect(JSON.parse(result)).toEqual({ name: "Topic", category: "Interest", duration: 3 });
   });
 });
 
@@ -183,7 +183,7 @@ describe("parseJSONResponse — trailing extra braces (Gemma pattern)", () => {
 
 describe("parseJSONResponse — missing comma between key-value pairs (Gemma pattern)", () => {
   it("Test D: parses JSON with missing commas between fields", () => {
-    const input = '{"name": "Spotify"\n  "category": "Interest"\n  "density": 3}';
-    expect(parseJSONResponse(input)).toEqual({ name: "Spotify", category: "Interest", density: 3 });
+    const input = '{"name": "Spotify"\n  "category": "Interest"\n  "duration": 3}';
+    expect(parseJSONResponse(input)).toEqual({ name: "Spotify", category: "Interest", duration: 3 });
   });
 });

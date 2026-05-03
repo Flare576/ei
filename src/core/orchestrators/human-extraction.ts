@@ -313,8 +313,8 @@ export const VALIDATE_MIN_SIMILARITY = 0.92;
 
 /**
  * Returns the best cosine similarity between a topic candidate and any existing
- * topic in state. Used to decide whether a low-density candidate is an update
- * to a known topic (keep) or genuinely new noise (skip).
+ * topic in state. Used by queueTopicValidate to detect near-duplicates after
+ * a new topic is created.
  * Returns 0 if no topics exist or embedding fails.
  */
 export async function getBestTopicSimilarity(
