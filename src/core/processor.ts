@@ -36,7 +36,7 @@ import { handlers } from "./handlers/index.js";
 import { normalizeRoomMessages, getMessageContent } from "./handlers/utils.js";
 import { sanitizeEiPersonaIdentifiers } from "./utils/identifier-utils.js";
 import { ContextStatus as ContextStatusEnum, RoomMode } from "./types.js";
-import { registerFindMemoryExecutor, registerFetchMemoryExecutor, registerFetchMessageExecutor, registerFileReadExecutor } from "./tools/index.js";
+import { registerFindMemoryExecutor, registerFetchMemoryExecutor, registerFetchMessageExecutor, registerFileReadExecutor, SYSTEM_TOOLS } from "./tools/index.js";
 import { createFindMemoryExecutor } from "./tools/builtin/find-memory.js";
 import { createFetchMemoryExecutor } from "./tools/builtin/fetch-memory.js";
 import { createFetchMessageExecutor } from "./tools/builtin/fetch-message.js";
@@ -304,13 +304,12 @@ export class Processor {
       }
       return;
     }
-    const readMemoryTool = this.stateManager.tools_getByName("find_memory");
     const emmettEntity: PersonaEntity = {
       ...EMMETT_PERSONA_DEFINITION,
       id: "emmet",
       display_name: "Emmett",
       last_updated: new Date().toISOString(),
-      tools: readMemoryTool ? [readMemoryTool.id] : [],
+      tools: [],
     };
     this.stateManager.persona_add(emmettEntity);
     this.interface.onPersonaAdded?.();
@@ -344,6 +343,11 @@ export class Processor {
   private bootstrapTools(): void {
     const now = new Date().toISOString();
 
+    for (const name of ["find_memory", "fetch_memory", "fetch_message", "read_memory"]) {
+      const tool = this.stateManager.tools_getByName(name);
+      if (tool) this.stateManager.tools_remove(tool.id);
+    }
+
     // --- Ei built-in provider ---
     if (!this.stateManager.tools_getProviderById("ei")) {
       const eiProvider: ToolProvider = {
@@ -358,36 +362,6 @@ export class Processor {
       };
       this.stateManager.tools_addProvider(eiProvider);
     }
-
-    // find_memory tool
-    this.stateManager.tools_upsertBuiltin({
-        id: crypto.randomUUID(),
-        provider_id: "ei",
-        name: "find_memory",
-        display_name: "Find Memory",
-        description:
-          "Search Ei's persistent knowledge base — facts, topics, people, and quotes learned across ALL conversations over time, not just this one. Use this when you need context about the user, their life, relationships, or interests that may not be visible in the current exchange. Use `recent: true` to retrieve what's been discussed recently.",
-        input_schema: {
-          type: "object",
-          properties: {
-            query: { type: "string", description: "What to search for — a person, topic, fact, or anything Ei has learned about the user" },
-            types: {
-              type: "array",
-              items: { type: "string", enum: ["facts", "topics", "people", "quotes"] },
-              description: "Limit search to specific memory types (default: all types)",
-            },
-            limit: { type: "number", description: "Max results to return (default: 10, max: 20)" },
-            recent: { type: "boolean", description: "If true, return recently-mentioned results sorted by last_mentioned date instead of relevance. Combine with a query to filter recent results by topic." },
-            persona: { type: "string", description: "Filter results to what a specific persona has learned. Use the persona's display name." },
-          },
-          required: [],
-        },
-        runtime: "any",
-        builtin: true,
-        enabled: true,
-        created_at: now,
-        max_calls_per_interaction: 6,  // Dedup needs to verify relationships before irreversible merges. Typical cluster (3-8 items) requires: parent concept lookup + 2 relationship verifications + context validation. Still under HARD_TOOL_CALL_LIMIT (10).
-    });
 
     // file_read tool (TUI only)
     this.stateManager.tools_upsertBuiltin({
@@ -546,50 +520,6 @@ export class Processor {
         enabled: true,
         created_at: now,
         max_calls_per_interaction: 3,
-    });
-
-    this.stateManager.tools_upsertBuiltin({
-        id: crypto.randomUUID(),
-        provider_id: "ei",
-        name: "fetch_memory",
-        display_name: "Fetch Memory",
-        description:
-          "Retrieve the full record for a specific memory by its ID. Use when find_memory returns an item and you need its complete details, or when a system prompt references a memory ID. Returns the full Fact, Topic, Person, or Quote record.",
-        input_schema: {
-          type: "object",
-          properties: {
-            id: { type: "string", description: "The ID of the memory record to retrieve" },
-          },
-          required: ["id"],
-        },
-        runtime: "any",
-        builtin: true,
-        enabled: true,
-        created_at: now,
-        max_calls_per_interaction: 5,
-    });
-
-    this.stateManager.tools_upsertBuiltin({
-        id: crypto.randomUUID(),
-        provider_id: "ei",
-        name: "fetch_message",
-        display_name: "Fetch Message",
-        description:
-          "Retrieve a specific message by its ID, with optional surrounding context. Use when find_memory returns a quote with a message_id and you want to read the original conversation. The 'before' and 'after' parameters return that many additional messages for context (default 0).",
-        input_schema: {
-          type: "object",
-          properties: {
-            id: { type: "string", description: "The ID of the message to retrieve" },
-            before: { type: "number", description: "Number of preceding messages to include (default 0)" },
-            after: { type: "number", description: "Number of following messages to include (default 0)" },
-          },
-          required: ["id"],
-        },
-        runtime: "any",
-        builtin: true,
-        enabled: true,
-        created_at: now,
-        max_calls_per_interaction: 5,
     });
 
     // --- Tavily Search provider ---
@@ -1148,7 +1078,7 @@ const toolNextSteps = new Set([
               personaId ??
               (request.next_step === LLMNextStep.HandleEiHeartbeat ? "ei" : undefined);
             
-            // Dedup operates on Human data, not persona data - provide find_memory directly.
+            // Dedup operates on Human data, not persona data — provide find_memory from SYSTEM_TOOLS directly.
             // Also covers HandleToolContinuation originating from a dedup request: the
             // continuation rebuilds tool lists from scratch and has no personaId, so without
             // this check Opus loses find_memory access after round 1.
@@ -1159,12 +1089,9 @@ const toolNextSteps = new Set([
 
             let tools: ToolDefinition[] = [];
             if (isDedupRequest) {
-              const readMemory = this.stateManager.tools_getByName("find_memory");
-              if (readMemory?.enabled) {
-                tools = [readMemory];
-              }
+              tools = SYSTEM_TOOLS.filter(t => t.name === "find_memory");
             } else if (toolNextSteps.has(request.next_step) && toolPersonaId) {
-              tools = this.stateManager.tools_getForPersona(toolPersonaId, this.isTUI);
+              tools = [...SYSTEM_TOOLS, ...this.stateManager.tools_getForPersona(toolPersonaId, this.isTUI)];
             }
 
             // Auto-inject each handler's dedicated submit tool — infrastructure, not user-visible.

@@ -18,6 +18,77 @@ import { webFetchExecutor } from "./builtin/web-fetch.js";
 /** Hard upper limit on total tool calls per interaction, regardless of individual limits. */
 export const HARD_TOOL_CALL_LIMIT = 10;
 
+/**
+ * System tools — injected unconditionally into every LLM call that uses tools.
+ * NOT stored in state.json. NOT user-configurable. Do NOT count against HARD_TOOL_CALL_LIMIT.
+ * Enforce their own per-tool limits via max_calls_per_interaction.
+ */
+export const SYSTEM_TOOLS: ToolDefinition[] = [
+  {
+    id: "builtin-find-memory",
+    provider_id: "ei",
+    name: "find_memory",
+    display_name: "Find Memory",
+    description: "Semantic search of your personal memory — facts, topics, people, and quotes learned across ALL conversations over time, not just this one. Use when the human references something from the past, mentions a person, or asks about a topic you might have learned about. Supports optional filters: types (array of 'facts', 'topics', 'people', 'quotes'), limit (1-20, default 10), recent (true = sort by recency), persona (filter to what a specific persona has learned — use display name).",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "What to search for" },
+        types: { type: "array", items: { type: "string", enum: ["facts", "topics", "people", "quotes"] }, description: "Filter to specific types" },
+        limit: { type: "number", description: "Max results (1-20, default 10)" },
+        recent: { type: "boolean", description: "Sort by most recently mentioned instead of relevance" },
+        persona: { type: "string", description: "Filter to what a specific persona has learned. Use their display name." },
+      },
+      required: ["query"],
+    },
+    runtime: "any",
+    builtin: true,
+    enabled: true,
+    created_at: new Date(0).toISOString(),
+    max_calls_per_interaction: 3,
+  },
+  {
+    id: "builtin-fetch-memory",
+    provider_id: "ei",
+    name: "fetch_memory",
+    display_name: "Fetch Memory",
+    description: "Retrieve the full record for a specific memory by its ID. Use when find_memory returns an item and you need its complete details, or when a system prompt references a memory ID. Returns the full Fact, Topic, Person, or Quote record.",
+    input_schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "The ID of the memory to retrieve" },
+      },
+      required: ["id"],
+    },
+    runtime: "any",
+    builtin: true,
+    enabled: true,
+    created_at: new Date(0).toISOString(),
+    max_calls_per_interaction: 3,
+  },
+  {
+    id: "builtin-fetch-message",
+    provider_id: "ei",
+    name: "fetch_message",
+    display_name: "Fetch Message",
+    description: "Retrieve a specific message by its ID, with optional surrounding context. Use when find_memory returns a quote with a message_id and you want to read the original conversation, or when a temporal anchor references a message ID. The 'before' and 'after' parameters return that many additional messages for context (default 0).",
+    input_schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "The message ID to retrieve" },
+        before: { type: "number", description: "Number of preceding messages to include for context (default 0)" },
+        after: { type: "number", description: "Number of following messages to include for context (default 0)" },
+      },
+      required: ["id"],
+    },
+    runtime: "any",
+    builtin: true,
+    enabled: true,
+    created_at: new Date(0).toISOString(),
+    max_calls_per_interaction: 5,
+  },
+];
+
 /** Default max calls per tool if not set on the ToolDefinition. */
 const DEFAULT_MAX_CALLS = 3;
 
@@ -130,7 +201,9 @@ export async function executeToolCalls(
   const toolsByName = new Map(tools.map(t => [t.name, t]));
 
   for (const call of calls) {
-    if (totalCalls.count >= HARD_TOOL_CALL_LIMIT) {
+    const isSystemTool = SYSTEM_TOOLS.some(t => t.name === call.name);
+
+    if (!isSystemTool && totalCalls.count >= HARD_TOOL_CALL_LIMIT) {
       console.log(`[Tools] Hard limit (${HARD_TOOL_CALL_LIMIT}) reached — skipping remaining tool calls`);
       break;
     }
@@ -176,7 +249,9 @@ export async function executeToolCalls(
     }
 
     callCounts.set(call.name, currentCount + 1);
-    totalCalls.count++;
+    if (!isSystemTool) {
+      totalCalls.count++;
+    }
 
     const newCount = currentCount + 1;
     if (newCount >= maxCalls) {
