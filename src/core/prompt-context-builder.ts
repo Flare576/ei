@@ -274,6 +274,7 @@ export async function buildResponsePromptData(
 
   const alwaysMessages = sm.messages_getAlways(persona.id);
   const temporalAnchors = alwaysMessages.map(m => ({
+    id: m.id,
     role: m.role === "human" ? "human" as const : "system" as const,
     content: m.content,
     silence_reason: m.silence_reason,

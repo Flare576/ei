@@ -464,21 +464,28 @@ export function buildTemporalAnchorsSection(anchors: TemporalAnchor[], humanName
 
   const formatted = anchors.map(a => {
     const speaker = a.role === "human" ? humanName : "You";
-    let text: string;
-    if (a._synthesis && a.content) {
-      text = `[${humanName} used your conversation to generate an image. The full prompt was: "${a.content}"]`;
+    let preview: string;
+    if (a._synthesis) {
+      const raw = a.content ?? "";
+      const firstSentenceEnd = raw.search(/\.\s/);
+      const snippet = firstSentenceEnd > 0 && firstSentenceEnd <= 120
+        ? raw.slice(0, firstSentenceEnd + 1)
+        : raw.slice(0, 100);
+      preview = `[${humanName} generated an image: "${snippet}…"]`;
     } else if (a.silence_reason) {
       const silentParty = a.role === "human" ? humanName : "You";
-      text = `${silentParty} chose not to respond because: ${a.silence_reason}`;
+      const truncated = a.silence_reason.length > 80 ? `${a.silence_reason.slice(0, 80)}…` : a.silence_reason;
+      preview = `${silentParty} chose not to respond: "${truncated}"`;
     } else {
-      text = a.content ?? "";
+      const raw = a.content ?? "";
+      preview = raw.length > 80 ? `${raw.slice(0, 80)}…` : raw;
     }
-    return `[${formatTimestamp(a.timestamp)}] ${speaker}: ${text}`;
+    return `[${formatTimestamp(a.timestamp)}] ${speaker}: ${preview}\n  → fetch_message("${a.id}") for full content`;
   }).join("\n\n");
 
   return `## Temporal Anchors
 
-These are pinned moments from your shared history — preserved across context windows as part of who you are:
+Pinned moments from your shared history. These are snapshots — use fetch_message(id) if one feels relevant to pull the full memory:
 
 ${formatted}`;
 }

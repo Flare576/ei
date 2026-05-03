@@ -8,6 +8,7 @@ import type { ToolDefinition } from "../../core/types.js";
 import type { PersonaEntity } from "../../core/types/entities.js";
 
 export interface TemporalAnchor {
+  id: string;
   role: "human" | "system";
   content?: string;
   silence_reason?: string;
