@@ -373,7 +373,9 @@ Seeded on every startup via `Processor.bootstrapTools()`. Safe to call repeatedl
 
 | Tool name | Runtime | Description |
 |-----------|---------|-------------|
-| `read_memory` | `any` | Semantic embedding search of `StateManager.searchHumanData()` — no external call. Supports optional `persona` filter for scoping to a specific persona's learned data. |
+| `find_memory` | `any` | Semantic embedding search of `StateManager.searchHumanData()` — no external call. Supports optional `persona` filter for scoping to a specific persona's learned data. |
+| `fetch_memory` | `any` | Full-record lookup for a human entity (Fact, Topic, Person, or Quote) by ID. Use after `find_memory` to retrieve complete details. |
+| `fetch_message` | `any` | Retrieve a specific message by ID with optional `before`/`after` context window. Searches persona conversations and room messages. |
 | `file_read` | `node` | Read a file from local filesystem (TUI only) |
 | `list_directory` | `node` | List directory contents (TUI only) |
 | `directory_tree` | `node` | Recursive directory tree up to configurable depth (TUI only) |
