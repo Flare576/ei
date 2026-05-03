@@ -68,7 +68,7 @@ Options:
   --persona, -p    Filter to entities a specific persona has learned about
   --source, -s     Filter to entities from a specific source (prefix match, e.g. "cursor", "opencode:my-machine", "opencode:my-machine:ses_abc123")
   --id             Look up entity by ID (accepts value or stdin)
-  --install        Register Ei with OpenCode, Claude Code, and Cursor
+  --install        Register Ei with Claude Code and Cursor via MCP
   --help, -h       Show this help message
 
 Examples:
@@ -85,50 +85,9 @@ Examples:
 }
 
 
-async function installOpenCodeMcp(): Promise<void> {
-  const home = process.env.HOME || "~";
-  const opencodeDir = join(home, ".config", "opencode");
-  const opencodeJsoncPath = join(opencodeDir, "opencode.jsonc");
-
-  const eiDataPath = process.env.EI_DATA_PATH ?? (() => {
-    const xdgData = process.env.XDG_DATA_HOME || join(home, ".local", "share");
-    return join(xdgData, "ei");
-  })();
-
-  const mcpEntry = {
-    type: "local",
-    command: ["bunx", "ei-tui", "mcp"],
-    enabled: true,
-    environment: {
-      EI_DATA_PATH: eiDataPath,
-    },
-  };
-
-  let config: Record<string, unknown> = {};
-  try {
-    const rawText = await Bun.file(opencodeJsoncPath).text();
-    // Strip // line comments before parsing — opencode.jsonc uses line comments only
-    const stripped = rawText
-      .split("\n")
-      .map(line => line.replace(/\/\/.*$/, ""))
-      .join("\n");
-    config = JSON.parse(stripped) as Record<string, unknown>;
-  } catch {
-    // File doesn't exist or isn't valid — start fresh
-  }
-
-  const mcp = (config.mcp ?? {}) as Record<string, unknown>;
-  mcp["ei"] = mcpEntry;
-  config.mcp = mcp;
-
-  await Bun.$`mkdir -p ${opencodeDir}`;
-  const tmpPath = `${opencodeJsoncPath}.ei-install.tmp`;
-  await Bun.write(tmpPath, JSON.stringify(config, null, 2) + "\n");
-  const { rename } = await import(/* @vite-ignore */ "fs/promises");
-  await rename(tmpPath, opencodeJsoncPath);
-
-  console.log(`✓ Installed Ei MCP server to ~/.config/opencode/opencode.jsonc`);
-  console.log(`  Restart OpenCode to activate.`);
+async function installMcpClients(): Promise<void> {
+  await installClaudeCode();
+  await installCursor();
 }
 
 async function installClaudeCode(): Promise<void> {
@@ -202,11 +161,6 @@ async function installCursor(): Promise<void> {
   console.log(`  Restart Cursor to activate.`);
 }
 
-async function installMcpClients(): Promise<void> {
-  await installClaudeCode();
-  await installCursor();
-}
-
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
 
@@ -228,9 +182,21 @@ async function main(): Promise<void> {
   }
 
   if (args[0] === "--install") {
-    await installOpenCodeMcp();
     await installMcpClients();
     console.log(`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  OpenCode: add to ~/.config/opencode/opencode.jsonc
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  "mcp": {
+    "ei": {
+      "type": "local",
+      "command": ["bunx", "ei-tui", "mcp"],
+      "enabled": true,
+      "environment": { "EI_DATA_PATH": "${process.env.EI_DATA_PATH ?? "~/.local/share/ei"}" }
+    }
+  }
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   Add this to ~/.config/opencode/AGENTS.md
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
