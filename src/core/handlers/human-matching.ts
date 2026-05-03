@@ -355,14 +355,13 @@ function normalizeText(text: string): string {
     .replace(/[\u2018\u2019\u0060\u00B4]/g, "'")  // curly single, backtick, acute accent
     .replace(/[\u2014\u2013\u2012]/g, '-')         // em-dash, en-dash, figure dash
     .replace(/\u00A0/g, ' ')                       // non-breaking space
-    .replace(/[\u2000-\u200F]/g, ' ');              // unicode space variants
+    .replace(/[\u2000-\u200F]/g, ' ')              // unicode space variants
+    .replace(/[*_`~]/g, '');                       // Markdown emphasis/code chars
 }
 
 function stripPunctuation(text: string): string {
-  // Remove characters LLMs commonly mangle, keep spaces and alphanumeric
-  // Strip: punctuation, unicode punctuation variants, curly quotes, dashes, etc.
-  // Keep: letters, digits, spaces
   return text
+    .replace(/[*_`~]/g, ' ')     // Markdown chars (kept by \w, must strip explicitly)
     .replace(/[^\w\s]/gu, ' ')   // replace non-word, non-space with space
     .replace(/\s+/g, ' ')        // collapse multiple spaces
     .trim()
@@ -438,6 +437,10 @@ async function validateAndStoreQuotes(
   if (!candidates || candidates.length === 0) return;
   
   for (const candidate of candidates) {
+    if (!candidate.text) {
+      console.warn('[extraction] Skipping quote candidate with missing text field');
+      continue;
+    }
     let found = false;
     for (const message of messages) {
       const msgText = getMessageText(message);
@@ -543,7 +546,7 @@ async function validateAndStoreQuotes(
       break;
     }
     if (!found) {
-      console.warn(`[extraction] Quote not found in messages (both levels), skipping: "${candidate.text?.slice(0, 50)}..."`);
+      console.warn(`[extraction] Quote not found in messages (both levels), skipping: "${candidate.text}"`);
     }
   }
 }
