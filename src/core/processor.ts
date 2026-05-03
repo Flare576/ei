@@ -802,6 +802,20 @@ export class Processor {
         max_calls_per_interaction: 1,
         created_at: now,
     });
+
+    // --- Reconcile pass: prune stale tool references from persona tool lists ---
+    // Build manifest of all tool IDs currently in state (everything seeded above).
+    const manifestIds = new Set(this.stateManager.tools_getAll().map(t => t.id));
+
+    for (const persona of this.stateManager.persona_getAll()) {
+      if (!persona.tools?.length) continue;
+      const pruned = persona.tools.filter(id => manifestIds.has(id));
+      if (pruned.length !== persona.tools.length) {
+        const removed = persona.tools.length - pruned.length;
+        this.stateManager.persona_update(persona.id, { tools: pruned });
+        console.log(`[Processor] Pruned ${removed} stale tool reference(s) from persona "${persona.display_name}"`);
+      }
+    }
   }
 
   /**
