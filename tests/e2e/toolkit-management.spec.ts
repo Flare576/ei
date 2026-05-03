@@ -16,99 +16,24 @@ test.describe("Toolkit Management", () => {
     mockServer.clearResponseQueue();
   });
 
-  test("can enable a built-in tool (Read Memory)", async ({ page, mockServerUrl }) => {
+  test("system tools do not appear in Ei Built-ins editor", async ({ page, mockServerUrl }) => {
     await seedCheckpoint(page, mockServerUrl);
     await page.goto("/");
     await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
 
-    // Open settings and navigate to Toolkits
     await openSettingsModal(page);
     await navigateToToolkitsTab(page);
 
-    // Find the Ei Built-ins provider card
-    const eiBuiltinsCard = page.locator('.ei-provider-card:has-text("Ei Built-ins")');
-    await expect(eiBuiltinsCard).toBeVisible();
-
-    // Click Edit to open the toolkit editor
-    await eiBuiltinsCard.locator('button:has-text("Edit")').click();
-
-    // Verify editor modal is open
-    await expect(page.locator('.ei-provider-editor')).toBeVisible({ timeout: 5000 });
-    await expect(page.locator('.ei-provider-editor__title')).toContainText('Edit Tool Kit: Ei Built-ins');
-
-    // Find Read Memory tool and verify it's in the list
-    const readMemoryTool = page.locator('.ei-toolkit-tool-readonly:has-text("Read Memory")');
-    await expect(readMemoryTool).toBeVisible();
-
-    // Get the checkbox (it should be checked by default based on bootstrapTools)
-    const readMemoryCheckbox = readMemoryTool.locator('input[type="checkbox"]');
-    const initialState = await readMemoryCheckbox.isChecked();
-
-    // If it's enabled, disable it first so we can test enabling
-    if (initialState) {
-      await readMemoryCheckbox.uncheck();
-      await page.locator('.ei-provider-editor .ei-btn--primary:has-text("Save Changes")').click();
-      await expect(page.locator('.ei-provider-editor')).not.toBeVisible();
-
-      // Re-open editor to enable it
-      await eiBuiltinsCard.locator('button:has-text("Edit")').click();
-      await expect(page.locator('.ei-provider-editor')).toBeVisible({ timeout: 5000 });
-    }
-
-    // Now enable the tool
-    const checkbox = page.locator('.ei-toolkit-tool-readonly:has-text("Read Memory")').locator('input[type="checkbox"]');
-    await checkbox.check();
-
-    // Save changes
-    await page.locator('.ei-provider-editor .ei-btn--primary:has-text("Save Changes")').click();
-
-    // Verify modal closed
-    await expect(page.locator('.ei-provider-editor')).not.toBeVisible();
-
-    // Re-open editor to verify persistence
-    await eiBuiltinsCard.locator('button:has-text("Edit")').click();
-    await expect(page.locator('.ei-provider-editor')).toBeVisible({ timeout: 5000 });
-    
-    const verifyCheckbox = page.locator('.ei-toolkit-tool-readonly:has-text("Read Memory")').locator('input[type="checkbox"]');
-    await expect(verifyCheckbox).toBeChecked();
-  });
-
-  test("can disable a built-in tool (Read Memory)", async ({ page, mockServerUrl }) => {
-    await seedCheckpoint(page, mockServerUrl);
-    await page.goto("/");
-    await expect(page.locator(".ei-persona-pill").first()).toContainText("Ei", { timeout: 10000 });
-
-    // Open settings and navigate to Toolkits
-    await openSettingsModal(page);
-    await navigateToToolkitsTab(page);
-
-    // Find the Ei Built-ins provider card and open editor
     const eiBuiltinsCard = page.locator('.ei-provider-card:has-text("Ei Built-ins")');
     await expect(eiBuiltinsCard).toBeVisible();
     await eiBuiltinsCard.locator('button:has-text("Edit")').click();
-
-    // Verify editor modal is open
     await expect(page.locator('.ei-provider-editor')).toBeVisible({ timeout: 5000 });
 
-    // Find Read Memory tool and disable it
-    const readMemoryTool = page.locator('.ei-toolkit-tool-readonly:has-text("Read Memory")');
-    await expect(readMemoryTool).toBeVisible();
-    
-    const checkbox = readMemoryTool.locator('input[type="checkbox"]');
-    await checkbox.uncheck();
-
-    // Save changes
-    await page.locator('.ei-provider-editor .ei-btn--primary:has-text("Save Changes")').click();
-
-    // Verify modal closed
-    await expect(page.locator('.ei-provider-editor')).not.toBeVisible();
-
-    // Re-open editor to verify persistence
-    await eiBuiltinsCard.locator('button:has-text("Edit")').click();
-    await expect(page.locator('.ei-provider-editor')).toBeVisible({ timeout: 5000 });
-    
-    const verifyCheckbox = page.locator('.ei-toolkit-tool-readonly:has-text("Read Memory")').locator('input[type="checkbox"]');
-    await expect(verifyCheckbox).not.toBeChecked();
+    // System tools are injected at queue time and must never appear as toggleable UI elements
+    await expect(page.locator('.ei-toolkit-tool-readonly:has-text("Find Memory")')).not.toBeVisible();
+    await expect(page.locator('.ei-toolkit-tool-readonly:has-text("Fetch Memory")')).not.toBeVisible();
+    await expect(page.locator('.ei-toolkit-tool-readonly:has-text("Fetch Message")')).not.toBeVisible();
+    await expect(page.locator('.ei-toolkit-tool-readonly:has-text("Read Memory")')).not.toBeVisible();
   });
 
   test("can add API key to Tavily", async ({ page, mockServerUrl }) => {
