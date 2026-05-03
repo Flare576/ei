@@ -30,17 +30,17 @@ function cleanQuote(
   const { embedding, persona_groups, data_item_ids, ...rest } = q;
   void embedding; void persona_groups;
 
-  const related_items: Array<{ id: string; name: string; type: string }> = [];
+  const linked_items: Array<{ id: string; name: string; type: string }> = [];
   for (const id of data_item_ids) {
     const fact = facts.find(f => f.id === id);
-    if (fact) { related_items.push({ id: fact.id, name: fact.name, type: "fact" }); continue; }
+    if (fact) { linked_items.push({ id: fact.id, name: fact.name, type: "fact" }); continue; }
     const topic = topics.find(t => t.id === id);
-    if (topic) { related_items.push({ id: topic.id, name: topic.name, type: "topic" }); continue; }
+    if (topic) { linked_items.push({ id: topic.id, name: topic.name, type: "topic" }); continue; }
     const person = people.find(p => p.id === id);
-    if (person) { related_items.push({ id: person.id, name: person.name, type: "person" }); continue; }
+    if (person) { linked_items.push({ id: person.id, name: person.name, type: "person" }); continue; }
   }
 
-  return { ...rest, related_items };
+  return { ...rest, linked_items };
 }
 
 export function createFetchMemoryExecutor(getHuman: GetHuman): ToolExecutor {

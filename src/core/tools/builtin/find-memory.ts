@@ -74,18 +74,18 @@ export function createFindMemoryExecutor(searchHumanData: SearchHumanData, getPe
       if (results.quotes.length > 0) {
         const human = getHuman ? getHuman() : null;
         output.quotes = results.quotes.map(q => {
-          const related_items: Array<{ id: string; name: string; type: string }> = [];
+          const linked_items: Array<{ id: string; name: string; type: string }> = [];
           if (human && q.data_item_ids.length > 0) {
             for (const itemId of q.data_item_ids) {
               const fact = human.facts.find(f => f.id === itemId);
-              if (fact) { related_items.push({ id: fact.id, name: fact.name, type: "fact" }); continue; }
+              if (fact) { linked_items.push({ id: fact.id, name: fact.name, type: "fact" }); continue; }
               const topic = human.topics.find(t => t.id === itemId);
-              if (topic) { related_items.push({ id: topic.id, name: topic.name, type: "topic" }); continue; }
+              if (topic) { linked_items.push({ id: topic.id, name: topic.name, type: "topic" }); continue; }
               const person = human.people.find(p => p.id === itemId);
-              if (person) { related_items.push({ id: person.id, name: person.name, type: "person" }); }
+              if (person) { linked_items.push({ id: person.id, name: person.name, type: "person" }); }
             }
           }
-          return { id: q.id, text: q.text, speaker: q.speaker, related_items };
+          return { id: q.id, text: q.text, speaker: q.speaker, linked_items };
         });
       }
 

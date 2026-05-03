@@ -75,8 +75,8 @@ describe("find_memory — people results", () => {
   });
 });
 
-describe("find_memory — quotes with related_items", () => {
-  it("includes related_items on quotes when getHuman is provided", async () => {
+describe("find_memory — quotes with linked_items", () => {
+  it("includes linked_items on quotes when getHuman is provided", async () => {
     const quote: Quote = {
       id: "quote-1",
       text: "Birthday cake is the best",
@@ -101,6 +101,6 @@ describe("find_memory — quotes with related_items", () => {
     const result = JSON.parse(await executor.execute({ query: "cake" }));
 
     expect(result.quotes[0]).toHaveProperty("id", "quote-1");
-    expect(result.quotes[0].related_items).toContainEqual({ id: "topic-1", name: "Birthday Cake", type: "topic" });
+    expect(result.quotes[0].linked_items).toContainEqual({ id: "topic-1", name: "Birthday Cake", type: "topic" });
   });
 });
