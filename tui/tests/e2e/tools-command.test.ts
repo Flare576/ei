@@ -257,7 +257,7 @@ test.describe("/tools command", () => {
     terminal.submit();
 
     await expect(terminal.getByText("Toolkits")).toBeVisible({ timeout: 5000 });
-    await expect(terminal.getByText(/Ei Built-ins \(8 tools\)/g)).toBeVisible({ timeout: 3000 });
+    await expect(terminal.getByText(/Ei Built-ins \(7 tools\)/g)).toBeVisible({ timeout: 3000 });
 
     terminal.keyEscape();
     await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 5000 });
