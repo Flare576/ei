@@ -94,7 +94,7 @@ ${buildRecordFormatExamples(data.itemType)}
 - Every removed record MUST have "replaced_by" pointing to the canonical record that absorbed its data.
 - The "update" array should contain AT LEAST ONE record (the canonical/merged one), even if all others are removed.
 - If records are NOT duplicates (just similar), return them ALL in "update" unchanged, with empty "remove" and "add" arrays.
-- Use \`find_memory\` strategically (6 calls max) to check for related records or gather context before making irreversible merge decisions.\`;
+- Use \`find_memory\` strategically (6 calls max) to check for related records or gather context before making irreversible merge decisions.`;
 
   const payload = JSON.stringify({
     cluster: data.cluster.map(stripEmbedding),
