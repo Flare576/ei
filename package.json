@@ -65,6 +65,7 @@
     "test:evals:person-scan": "vite-node tests/evals/person-scan.eval.ts",
     "test:evals:person-scan-confidence": "vite-node tests/evals/person-scan-confidence.eval.ts",
     "test:evals:topic-scan-density": "vite-node tests/evals/topic-scan-density.eval.ts",
+    "test:evals:topic-scan-duration": "vite-node tests/evals/topic-scan-duration.eval.ts",
     "test:evals:person-update": "vite-node tests/evals/person-update.eval.ts",
     "test:evals:persona-trait": "vite-node tests/evals/persona-trait-extraction.eval.ts",
     "test:evals:dedup": "vite-node tests/evals/dedup-tool-calls.eval.ts",
