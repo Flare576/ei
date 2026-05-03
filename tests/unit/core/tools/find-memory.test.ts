@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
-import { createReadMemoryExecutor } from "../../../../src/core/tools/builtin/read-memory.js";
-import type { Person } from "../../../../src/core/types.js";
+import { createFindMemoryExecutor } from "../../../../src/core/tools/builtin/find-memory.js";
+import type { Person, Quote } from "../../../../src/core/types.js";
 
 function makePerson(overrides: Partial<Person> = {}): Person {
   return {
@@ -31,9 +31,16 @@ function makeSearchHumanData(person: Person) {
   });
 }
 
-describe("read_memory — identifiers in people results", () => {
+describe("find_memory — people results", () => {
+  it("includes id in people output", async () => {
+    const executor = createFindMemoryExecutor(makeSearchHumanData(makePerson()));
+    const result = JSON.parse(await executor.execute({ query: "Flare" }));
+
+    expect(result.people[0]).toHaveProperty("id", "person-1");
+  });
+
   it("includes identifiers array in people output", async () => {
-    const executor = createReadMemoryExecutor(makeSearchHumanData(makePerson()));
+    const executor = createFindMemoryExecutor(makeSearchHumanData(makePerson()));
     const result = JSON.parse(await executor.execute({ query: "Flare" }));
 
     expect(result.people).toBeDefined();
@@ -42,7 +49,7 @@ describe("read_memory — identifiers in people results", () => {
   });
 
   it("identifiers contain type and value fields", async () => {
-    const executor = createReadMemoryExecutor(makeSearchHumanData(makePerson()));
+    const executor = createFindMemoryExecutor(makeSearchHumanData(makePerson()));
     const result = JSON.parse(await executor.execute({ query: "Flare" }));
 
     expect(result.people[0].identifiers).toContainEqual({ type: "GitHub", value: "flare576" });
@@ -50,14 +57,14 @@ describe("read_memory — identifiers in people results", () => {
   });
 
   it("person with no identifiers returns empty array (not undefined)", async () => {
-    const executor = createReadMemoryExecutor(makeSearchHumanData(makePerson({ identifiers: undefined as any })));
+    const executor = createFindMemoryExecutor(makeSearchHumanData(makePerson({ identifiers: undefined as any })));
     const result = JSON.parse(await executor.execute({ query: "Flare" }));
 
     expect(result.people[0].identifiers).toEqual([]);
   });
 
   it("still returns name, relationship, description alongside identifiers", async () => {
-    const executor = createReadMemoryExecutor(makeSearchHumanData(makePerson()));
+    const executor = createFindMemoryExecutor(makeSearchHumanData(makePerson()));
     const result = JSON.parse(await executor.execute({ query: "Flare" }));
 
     const person = result.people[0];
@@ -65,5 +72,35 @@ describe("read_memory — identifiers in people results", () => {
     expect(person).toHaveProperty("relationship", "Self");
     expect(person).toHaveProperty("description", "A developer");
     expect(person).toHaveProperty("identifiers");
+  });
+});
+
+describe("find_memory — quotes with related_items", () => {
+  it("includes related_items on quotes when getHuman is provided", async () => {
+    const quote: Quote = {
+      id: "quote-1",
+      text: "Birthday cake is the best",
+      speaker: "human",
+      timestamp: "2026-01-15T10:00:00Z",
+      message_id: "msg-1",
+      data_item_ids: ["topic-1"],
+      persona_groups: [],
+      start: null,
+      end: null,
+      created_at: "2026-01-15T10:00:00Z",
+      created_by: "extraction",
+    };
+    const searchFn = vi.fn().mockResolvedValue({ facts: [], topics: [], people: [], quotes: [quote] });
+    const getHuman = vi.fn().mockReturnValue({
+      facts: [],
+      topics: [{ id: "topic-1", name: "Birthday Cake" }],
+      people: [],
+      quotes: [],
+    });
+    const executor = createFindMemoryExecutor(searchFn, undefined, getHuman);
+    const result = JSON.parse(await executor.execute({ query: "cake" }));
+
+    expect(result.quotes[0]).toHaveProperty("id", "quote-1");
+    expect(result.quotes[0].related_items).toContainEqual({ id: "topic-1", name: "Birthday Cake", type: "topic" });
   });
 });

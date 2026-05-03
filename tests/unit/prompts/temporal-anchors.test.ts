@@ -6,6 +6,7 @@ const HUMAN_NAME = "Flare";
 
 function makeAnchor(overrides: Partial<TemporalAnchor> & { role: "human" | "system" }): TemporalAnchor {
   return {
+    id: "anchor-test-id",
     content: "some message",
     timestamp: "2026-01-15T10:00:00.000Z",
     ...overrides,
@@ -57,15 +58,17 @@ describe("buildTemporalAnchorsSection", () => {
     const secondIdx = lines.findIndex(l => l.includes("second"));
     expect(firstIdx).toBeGreaterThanOrEqual(0);
     expect(secondIdx).toBeGreaterThan(firstIdx);
-    expect(lines[firstIdx + 1]).toBe("");
+    const betweenLines = lines.slice(firstIdx + 1, secondIdx);
+    expect(betweenLines.some(l => l === "")).toBe(true);
   });
 
-  it("renders synthesis messages with image wrapper", () => {
-    const anchors = [makeAnchor({ role: "human", content: "a glowing city at dusk", _synthesis: true })];
+  it("renders synthesis messages with image wrapper and snippet", () => {
+    const anchors = [makeAnchor({ role: "human", content: "a glowing city at dusk. With dramatic lighting.", _synthesis: true })];
     const result = buildTemporalAnchorsSection(anchors, HUMAN_NAME);
 
-    expect(result).toContain(`${HUMAN_NAME} used your conversation to generate an image`);
-    expect(result).toContain("a glowing city at dusk");
+    expect(result).toContain(`${HUMAN_NAME} generated an image:`);
+    expect(result).toContain("a glowing city at dusk.");
+    expect(result).toContain(`fetch_message("anchor-test-id")`);
     expect(result).not.toContain(`${HUMAN_NAME}: a glowing city at dusk`);
   });
 
@@ -73,7 +76,7 @@ describe("buildTemporalAnchorsSection", () => {
     const anchors = [makeAnchor({ role: "human", content: undefined, silence_reason: "needed space" })];
     const result = buildTemporalAnchorsSection(anchors, HUMAN_NAME);
 
-    expect(result).toContain(`${HUMAN_NAME} chose not to respond because: needed space`);
+    expect(result).toContain(`${HUMAN_NAME} chose not to respond: "needed space"`);
     expect(result).not.toContain("You chose not to respond");
   });
 
@@ -81,7 +84,7 @@ describe("buildTemporalAnchorsSection", () => {
     const anchors = [makeAnchor({ role: "system", content: undefined, silence_reason: "nothing to add" })];
     const result = buildTemporalAnchorsSection(anchors, HUMAN_NAME);
 
-    expect(result).toContain("You chose not to respond because: nothing to add");
+    expect(result).toContain(`You chose not to respond: "nothing to add"`);
     expect(result).not.toContain(`${HUMAN_NAME} chose not to respond`);
   });
 });
