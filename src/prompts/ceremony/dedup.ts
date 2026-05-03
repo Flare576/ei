@@ -20,7 +20,7 @@ export function buildDedupPrompt(data: DedupPromptData): { system: string; user:
 You are working with Opus 4.6 constraints. These rules prevent overthinking and ensure decisive action:
 
 ### 1. TOOL BUDGET
-- You have **6 \`read_memory\` calls** for this cluster
+- You have **6 \`find_memory\` calls** for this cluster
 - Prioritize: verify ambiguous relationships > check parent concepts > validate new entities
 - After 6 calls, make decisions with available information
 - Do NOT waste calls re-checking pairs you already examined
@@ -55,7 +55,7 @@ You are acting as the curator for a user's internal database. You have been give
 
 Your secondary directive is to ORGANIZE IT into small, non-repetitive components. The user NEEDS the data, but the data is used by AI agents, so duplication limits usefulness—agents waste tokens re-reading the same information under different names.
 
-You have access to a tool called \`read_memory\` (6 calls max — see HARD RULES above). Use it strategically to verify relationships, check for related records, or gather context before making merge decisions.
+You have access to a tool called \`find_memory\` (6 calls max — see HARD RULES above). Use it strategically to verify relationships, check for related records, or gather context before making merge decisions.
 
 ### Decision Process:
 1. **Identify true duplicates**: Examine each record. Are these genuinely the same thing with different wording (85%+ core meaning overlap), or are they distinct but related concepts?
@@ -94,7 +94,7 @@ ${buildRecordFormatExamples(data.itemType)}
 - Every removed record MUST have "replaced_by" pointing to the canonical record that absorbed its data.
 - The "update" array should contain AT LEAST ONE record (the canonical/merged one), even if all others are removed.
 - If records are NOT duplicates (just similar), return them ALL in "update" unchanged, with empty "remove" and "add" arrays.
-- Use \`read_memory\` strategically (6 calls max) to check for related records or gather context before making irreversible merge decisions.`;
+- Use \`find_memory\` strategically (6 calls max) to check for related records or gather context before making irreversible merge decisions.\`;
 
   const payload = JSON.stringify({
     cluster: data.cluster.map(stripEmbedding),

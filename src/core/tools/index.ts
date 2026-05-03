@@ -32,7 +32,7 @@ export function registerExecutor(executor: ToolExecutor): void {
   executorRegistry.set(executor.name, executor);
 }
 
-// Register builtins. read_memory is registered lazily via registerReadMemoryExecutor()
+// Register builtins. find_memory is registered lazily via registerFindMemoryExecutor()
 // because it requires Processor.searchHumanData injection.
 registerExecutor(tavilyWebSearchExecutor);
 registerExecutor(tavilyNewsSearchExecutor);
@@ -42,10 +42,18 @@ registerExecutor(webFetchExecutor);
 // file_read and list_directory are registered lazily via registerFileReadExecutor() — Node/TUI only.
 
 /**
- * Register the read_memory executor — called by Processor after it's initialized,
+ * Register the find_memory executor — called by Processor after it's initialized,
  * injecting its own searchHumanData method to avoid circular imports.
  */
-export function registerReadMemoryExecutor(executor: ToolExecutor): void {
+export function registerFindMemoryExecutor(executor: ToolExecutor): void {
+  executorRegistry.set(executor.name, executor);
+}
+
+export function registerFetchMemoryExecutor(executor: ToolExecutor): void {
+  executorRegistry.set(executor.name, executor);
+}
+
+export function registerFetchMessageExecutor(executor: ToolExecutor): void {
   executorRegistry.set(executor.name, executor);
 }
 

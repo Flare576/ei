@@ -15,7 +15,7 @@ export interface RewriteScanPromptData {
 /** Phase 1 output: array of subject strings (parsed from LLM JSON response). */
 export type RewriteScanResult = string[];
 
-/** A single subject and the read_memory matches found for it. */
+/** A single subject and the find_memory matches found for it. */
 export interface RewriteSubjectMatch {
   searchTerm: string;
   matches: DataItemBase[];  // Top 3 from searchHumanData, may be empty
