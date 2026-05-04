@@ -345,18 +345,71 @@ export class Processor {
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const slug = `${slugBase}_${timestamp}`;
 
-    const results = await this.searchHumanData(subject, { limit: 20 });
+    const primary = await this.searchHumanData(subject, { limit: 20 });
     if (
-      results.facts.length === 0 &&
-      results.topics.length === 0 &&
-      results.people.length === 0 &&
-      results.quotes.length === 0
+      primary.facts.length === 0 &&
+      primary.topics.length === 0 &&
+      primary.people.length === 0 &&
+      primary.quotes.length === 0
     ) {
       throw new Error(`No knowledge found about '${subject}'`);
     }
 
-    const prompt = buildSynthesisPrompt({ subject, ...results });
-    const model = this.stateManager.getHuman().settings?.rewrite_model;
+    const seenQuoteIds = new Set<string>();
+    const seenItemIds = new Set<string>(
+      [...primary.topics, ...primary.people, ...primary.facts].map(i => i.id)
+    );
+
+    const enrichTopic = (topic: import("../prompts/synthesis/types.js").EnrichedTopic["topic"]) => {
+      const linked = this.stateManager.human_quote_getForDataItem(topic.id);
+      linked.forEach(q => seenQuoteIds.add(q.id));
+      return { topic, quotes: linked };
+    };
+
+    const enrichPerson = (person: import("../prompts/synthesis/types.js").EnrichedPerson["person"]) => {
+      const linked = this.stateManager.human_quote_getForDataItem(person.id);
+      linked.forEach(q => seenQuoteIds.add(q.id));
+      return { person, quotes: linked };
+    };
+
+    const enrichedTopics = primary.topics.map(enrichTopic);
+    const enrichedPeople = primary.people.map(enrichPerson);
+
+    const human = this.stateManager.getHuman();
+    const allItems = [...human.facts, ...human.topics, ...human.people];
+
+    const secondaryTopics: typeof enrichedTopics = [];
+    const secondaryPeople: typeof enrichedPeople = [];
+    const secondaryFacts: typeof primary.facts = [];
+
+    for (const quote of [...enrichedTopics.flatMap(e => e.quotes), ...enrichedPeople.flatMap(e => e.quotes)]) {
+      for (const itemId of quote.data_item_ids) {
+        if (seenItemIds.has(itemId)) continue;
+        seenItemIds.add(itemId);
+        const item = allItems.find(i => i.id === itemId);
+        if (!item) continue;
+        if (human.topics.find(t => t.id === itemId)) {
+          secondaryTopics.push(enrichTopic(item as typeof primary.topics[0]));
+        } else if (human.people.find(p => p.id === itemId)) {
+          secondaryPeople.push(enrichPerson(item as typeof primary.people[0]));
+        } else if (human.facts.find(f => f.id === itemId)) {
+          secondaryFacts.push(item as typeof primary.facts[0]);
+        }
+      }
+    }
+
+    const standaloneQuotes = primary.quotes.filter(q => !seenQuoteIds.has(q.id));
+
+    const prompt = buildSynthesisPrompt({
+      subject,
+      facts: [...primary.facts, ...secondaryFacts],
+      topics: [...enrichedTopics, ...secondaryTopics],
+      people: [...enrichedPeople, ...secondaryPeople],
+      standaloneQuotes,
+    });
+
+    const model = this.stateManager.getHuman().settings?.rewrite_model
+      ?? this.stateManager.getHuman().settings?.default_model;
 
     this.stateManager.queue_enqueue({
       type: LLMRequestType.Raw,
@@ -1150,6 +1203,7 @@ const toolNextSteps = new Set([
   LLMNextStep.HandleEiHeartbeat,
   LLMNextStep.HandleToolContinuation,
   LLMNextStep.HandleDedupCurate,
+  LLMNextStep.HandleKnowledgeSynthesis,
 ]);
             const toolPersonaId =
               personaId ??
@@ -1164,9 +1218,17 @@ const toolNextSteps = new Set([
               (request.next_step === LLMNextStep.HandleToolContinuation &&
                 request.data.originalNextStep === LLMNextStep.HandleDedupCurate);
 
+            const isSynthesisRequest = request.next_step === LLMNextStep.HandleKnowledgeSynthesis ||
+              (request.next_step === LLMNextStep.HandleToolContinuation &&
+                request.data.originalNextStep === LLMNextStep.HandleKnowledgeSynthesis);
+
             let tools: ToolDefinition[] = [];
             if (isDedupRequest) {
               tools = SYSTEM_TOOLS.filter(t => t.name === "find_memory");
+            } else if (isSynthesisRequest) {
+              tools = SYSTEM_TOOLS.filter(t =>
+                t.name === "find_memory" || t.name === "fetch_memory" || t.name === "fetch_message"
+              );
             } else if (toolNextSteps.has(request.next_step) && toolPersonaId) {
               tools = [...SYSTEM_TOOLS, ...this.stateManager.tools_getForPersona(toolPersonaId, this.isTUI)];
             }

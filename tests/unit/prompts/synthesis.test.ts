@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildSynthesisPrompt } from "../../../src/prompts/synthesis/index.js";
-import type { SynthesisPromptData } from "../../../src/prompts/synthesis/types.js";
+import type { SynthesisPromptData, EnrichedTopic, EnrichedPerson } from "../../../src/prompts/synthesis/types.js";
 import type { Fact, Topic, Person, Quote } from "../../../src/core/types.js";
 
 function makeFact(overrides?: Partial<Fact>): Fact {
@@ -33,6 +33,7 @@ function makePerson(overrides?: Partial<Person>): Person {
     id: "person-1",
     name: "Alice",
     description: "A close friend.",
+    relationship: "Friend",
     sentiment: 0.9,
     exposure_current: 0.4,
     exposure_desired: 0.6,
@@ -44,12 +45,26 @@ function makePerson(overrides?: Partial<Person>): Person {
 function makeQuote(overrides?: Partial<Quote>): Quote {
   return {
     id: "quote-1",
-    name: "Life is short.",
-    description: "Said during a reflective moment.",
-    sentiment: 0.7,
-    last_updated: "2026-01-01T00:00:00Z",
+    message_id: "msg-1",
+    data_item_ids: [],
+    persona_groups: [],
+    text: "Life is short.",
+    speaker: "human",
+    timestamp: "2026-01-01T00:00:00Z",
+    start: null,
+    end: null,
+    created_at: "2026-01-01T00:00:00Z",
+    created_by: "extraction",
     ...overrides,
   };
+}
+
+function makeEnrichedTopic(topicOverrides?: Partial<Topic>, quotes: Quote[] = []): EnrichedTopic {
+  return { topic: makeTopic(topicOverrides), quotes };
+}
+
+function makeEnrichedPerson(personOverrides?: Partial<Person>, quotes: Quote[] = []): EnrichedPerson {
+  return { person: makePerson(personOverrides), quotes };
 }
 
 function baseData(overrides?: Partial<SynthesisPromptData>): SynthesisPromptData {
@@ -58,7 +73,7 @@ function baseData(overrides?: Partial<SynthesisPromptData>): SynthesisPromptData
     facts: [],
     topics: [],
     people: [],
-    quotes: [],
+    standaloneQuotes: [],
     ...overrides,
   };
 }
@@ -82,15 +97,15 @@ describe("buildSynthesisPrompt", () => {
       baseData({
         subject: "Full Test",
         facts: [makeFact()],
-        topics: [makeTopic()],
-        people: [makePerson()],
-        quotes: [makeQuote()],
+        topics: [makeEnrichedTopic()],
+        people: [makeEnrichedPerson()],
+        standaloneQuotes: [makeQuote()],
       })
     );
     expect(result.user).toContain("## Facts");
     expect(result.user).toContain("## Topics");
     expect(result.user).toContain("## People");
-    expect(result.user).toContain("## Quotes");
+    expect(result.user).toContain("## Additional Quotes");
   });
 
   it("empty types are omitted — headings not present for empty arrays", () => {
@@ -100,12 +115,59 @@ describe("buildSynthesisPrompt", () => {
         facts: [makeFact()],
         topics: [],
         people: [],
-        quotes: [],
+        standaloneQuotes: [],
       })
     );
     expect(result.user).toContain("## Facts");
     expect(result.user).not.toContain("## Topics");
     expect(result.user).not.toContain("## People");
-    expect(result.user).not.toContain("## Quotes");
+    expect(result.user).not.toContain("## Additional Quotes");
+  });
+
+  it("topic id and category are rendered in user prompt", () => {
+    const result = buildSynthesisPrompt(
+      baseData({
+        topics: [makeEnrichedTopic({ id: "topic-42", category: "Technical" })],
+      })
+    );
+    expect(result.user).toContain("topic-42");
+    expect(result.user).toContain("Technical");
+  });
+
+  it("person relationship is rendered in user prompt", () => {
+    const result = buildSynthesisPrompt(
+      baseData({
+        people: [makeEnrichedPerson({ relationship: "Colleague" })],
+      })
+    );
+    expect(result.user).toContain("Colleague");
+  });
+
+  it("linked quotes appear under their topic with message_id", () => {
+    const q = makeQuote({ message_id: "msg-xyz", text: "This is important.", speaker: "Sisyphus", channel: "OpenCode" });
+    const result = buildSynthesisPrompt(
+      baseData({
+        topics: [makeEnrichedTopic({}, [q])],
+      })
+    );
+    expect(result.user).toContain("msg-xyz");
+    expect(result.user).toContain("This is important.");
+    expect(result.user).toContain("Sisyphus");
+    expect(result.user).toContain("OpenCode");
+  });
+
+  it("standalone quotes section appears with message_id", () => {
+    const q = makeQuote({ message_id: "msg-standalone", text: "Standalone quote." });
+    const result = buildSynthesisPrompt(
+      baseData({ standaloneQuotes: [q] })
+    );
+    expect(result.user).toContain("## Additional Quotes");
+    expect(result.user).toContain("msg-standalone");
+    expect(result.user).toContain("Standalone quote.");
+  });
+
+  it("system prompt mentions fetch_message for quote context", () => {
+    const result = buildSynthesisPrompt(baseData());
+    expect(result.system).toContain("fetch_message");
   });
 });
