@@ -35,7 +35,7 @@ export function buildSynthesisPrompt(data: SynthesisPromptData): PromptOutput {
   if (data.quotes.length > 0) {
     lines.push("## Quotes");
     for (const quote of data.quotes) {
-      lines.push(`- "${quote.name}"`);
+      lines.push(`- "${quote.text}"`);
     }
     lines.push("");
   }

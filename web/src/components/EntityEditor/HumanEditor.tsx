@@ -40,7 +40,12 @@ interface HumanEditorProps {
   pendingDocuments?: Array<{ batchId: string; filename: string; count: number }>;
   extractingDocuments?: string[];
   onImport?: (file: File) => Promise<void>;
-  onUnsource?: (filename: string) => Promise<void>;
+  onUnsource?: (sourceOrFilename: string) => Promise<void>;
+  generatedDocuments?: Record<string, { subject: string; created_at: string }>;
+  generatingDocuments?: string[];
+  onGenerate?: (subject: string) => Promise<void>;
+  onDownloadGenerated?: (slug: string) => Promise<void>;
+  checkGenerationModel?: () => { model: string; isRewriteModel: boolean };
 }
 
 const tabs = [
@@ -74,6 +79,11 @@ export const HumanEditor = ({
   extractingDocuments,
   onImport,
   onUnsource,
+  generatedDocuments,
+  generatingDocuments,
+  onGenerate,
+  onDownloadGenerated,
+  checkGenerationModel,
 }: HumanEditorProps) => {
   const [activeTab, setActiveTab] = useState('facts');
   const [localFacts, setLocalFacts] = useState<Fact[]>(human.facts || []);
@@ -427,6 +437,11 @@ export const HumanEditor = ({
              extractingDocuments={extractingDocuments ?? []}
              onImport={onImport ?? (() => Promise.resolve())}
              onUnsource={onUnsource ?? (() => Promise.resolve())}
+             generatedDocuments={generatedDocuments ?? {}}
+             generatingDocuments={generatingDocuments ?? []}
+             onGenerate={onGenerate ?? (() => Promise.resolve())}
+             onDownloadGenerated={onDownloadGenerated ?? (() => Promise.resolve())}
+             checkGenerationModel={checkGenerationModel ?? (() => ({ model: 'unknown', isRewriteModel: false }))}
            />
          );
        default:

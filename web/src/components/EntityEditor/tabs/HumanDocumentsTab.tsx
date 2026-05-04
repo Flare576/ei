@@ -5,8 +5,19 @@ interface HumanDocumentsTabProps {
   pendingDocuments: Array<{ batchId: string; filename: string; count: number }>;
   extractingDocuments: string[];
   onImport: (file: File) => Promise<void>;
-  onUnsource: (filename: string) => Promise<void>;
+  onUnsource: (sourceOrFilename: string) => Promise<void>;
+  generatedDocuments: Record<string, { subject: string; created_at: string }>;
+  generatingDocuments: string[];
+  onGenerate: (subject: string) => Promise<void>;
+  onDownloadGenerated: (slug: string) => Promise<void>;
+  checkGenerationModel: () => { model: string; isRewriteModel: boolean };
 }
+
+const slugToSubject = (slug: string): string => {
+  const underscoreIdx = slug.lastIndexOf('_');
+  const base = underscoreIdx >= 0 ? slug.slice(0, underscoreIdx) : slug;
+  return base.replace(/-/g, ' ');
+};
 
 export const HumanDocumentsTab = ({
   processedDocuments,
@@ -14,6 +25,11 @@ export const HumanDocumentsTab = ({
   extractingDocuments,
   onImport,
   onUnsource,
+  generatedDocuments,
+  generatingDocuments,
+  onGenerate,
+  onDownloadGenerated,
+  checkGenerationModel,
 }: HumanDocumentsTabProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
@@ -21,6 +37,13 @@ export const HumanDocumentsTab = ({
   const [confirmingFilename, setConfirmingFilename] = useState<string | null>(null);
   const [unsourcing, setUnsourcing] = useState<string | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
+
+  const [generateInput, setGenerateInput] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [showModelWarning, setShowModelWarning] = useState(false);
+  const [pendingGenerateSubject, setPendingGenerateSubject] = useState<string | null>(null);
+  const [confirmingGeneratedSlug, setConfirmingGeneratedSlug] = useState<string | null>(null);
+  const [deletingGeneratedSlug, setDeletingGeneratedSlug] = useState<string | null>(null);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -50,13 +73,192 @@ export const HumanDocumentsTab = ({
     }
   };
 
+  const doGenerate = async (subject: string) => {
+    setIsGenerating(true);
+    setShowModelWarning(false);
+    setPendingGenerateSubject(null);
+    try {
+      await onGenerate(subject);
+      setGenerateInput('');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleGenerateClick = () => {
+    const subject = generateInput.trim();
+    if (!subject) return;
+    const { isRewriteModel } = checkGenerationModel();
+    if (!isRewriteModel) {
+      setPendingGenerateSubject(subject);
+      setShowModelWarning(true);
+      return;
+    }
+    doGenerate(subject);
+  };
+
+  const handleDeleteGeneratedConfirm = async (slug: string) => {
+    setDeletingGeneratedSlug(slug);
+    setConfirmingGeneratedSlug(null);
+    try {
+      await onUnsource(`generate:document:${slug}`);
+      setNotification('Generated document removed.');
+      setTimeout(() => setNotification(null), 4000);
+    } finally {
+      setDeletingGeneratedSlug(null);
+    }
+  };
+
   const pendingEntries = pendingDocuments;
   const processedEntries = Object.entries(processedDocuments).sort(
     ([, a], [, b]) => new Date(b).getTime() - new Date(a).getTime()
   );
+  const generatedEntries = Object.entries(generatedDocuments).sort(
+    ([, a], [, b]) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
 
   return (
     <div className="ei-settings-form">
+
+      <div className="ei-settings-section">
+        <h3 className="ei-settings-section__title">Generate Document</h3>
+        <div className="ei-form-group">
+          <p className="ei-form-hint">
+            Generate a markdown document from your knowledge base about a specific topic.
+          </p>
+          <div style={{ display: 'flex', gap: 'var(--ei-space-2, 8px)', alignItems: 'flex-start' }}>
+            <input
+              className="ei-input"
+              type="text"
+              value={generateInput}
+              onChange={e => setGenerateInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && generateInput.trim()) handleGenerateClick(); }}
+              placeholder="Describe what to generate (e.g. 'everything about the Uniform service')"
+              disabled={isGenerating}
+              style={{ flex: 1 }}
+            />
+            <button
+              className="ei-btn ei-btn--primary"
+              onClick={handleGenerateClick}
+              disabled={!generateInput.trim() || isGenerating}
+              style={{ alignSelf: 'flex-start', flexShrink: 0 }}
+            >
+              {isGenerating ? 'Queued...' : 'Generate'}
+            </button>
+          </div>
+          {showModelWarning && pendingGenerateSubject && (
+            <div className="ei-data-card" style={{ marginTop: 'var(--ei-space-3, 12px)' }}>
+              <div className="ei-data-card__header">
+                <span className="ei-data-card__meta" style={{ color: 'var(--ei-warning, #b58900)' }}>
+                  ⚠ No rewrite model configured. Generation will use the default model ({checkGenerationModel().model}), which may produce lower-quality results.
+                </span>
+              </div>
+              <div className="ei-data-card__footer">
+                <div />
+                <div className="ei-data-card__actions">
+                  <button
+                    className="ei-btn ei-btn--secondary"
+                    onClick={() => { setShowModelWarning(false); setPendingGenerateSubject(null); }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="ei-btn ei-btn--primary"
+                    onClick={() => doGenerate(pendingGenerateSubject)}
+                  >
+                    Generate Anyway
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {generatingDocuments.length > 0 && (
+        <div className="ei-settings-section">
+          <h3 className="ei-settings-section__title">Generating...</h3>
+          <div className="ei-settings-section">
+            {generatingDocuments.map(slug => (
+              <div key={slug} className="ei-data-card" style={{ opacity: 0.7 }}>
+                <span className="ei-form-hint" style={{ fontStyle: 'normal' }}>
+                  {slugToSubject(slug)} — generating...
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {generatedEntries.length > 0 && (
+        <div className="ei-settings-section">
+          <h3 className="ei-settings-section__title">Generated Documents</h3>
+          <div className="ei-settings-section">
+            {generatedEntries.map(([slug, { subject, created_at }]) => {
+              const isConfirming = confirmingGeneratedSlug === slug;
+              const isDeleting = deletingGeneratedSlug === slug;
+              const date = new Date(created_at).toLocaleDateString(undefined, {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+              });
+
+              return (
+                <div key={slug} className="ei-data-card">
+                  <div className="ei-data-card__header">
+                    <span style={{ flex: 1, fontWeight: 500, wordBreak: 'break-all' }}>
+                      {subject}
+                    </span>
+                    <span className="ei-data-card__meta">generated {date}</span>
+                  </div>
+
+                  {isConfirming ? (
+                    <div className="ei-data-card__footer">
+                      <span className="ei-data-card__meta" style={{ color: 'var(--ei-danger)' }}>
+                        Remove this generated document? This cannot be undone.
+                      </span>
+                      <div className="ei-data-card__actions">
+                        <button
+                          className="ei-btn ei-btn--secondary"
+                          onClick={() => setConfirmingGeneratedSlug(null)}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          className="ei-btn ei-btn--danger"
+                          onClick={() => handleDeleteGeneratedConfirm(slug)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="ei-data-card__footer">
+                      <div />
+                      <div className="ei-data-card__actions">
+                        <button
+                          className="ei-btn ei-btn--secondary"
+                          onClick={() => onDownloadGenerated(slug)}
+                          disabled={isDeleting}
+                        >
+                          Download .md
+                        </button>
+                        <button
+                          className="ei-btn ei-btn--danger"
+                          onClick={() => setConfirmingGeneratedSlug(slug)}
+                          disabled={isDeleting}
+                        >
+                          {isDeleting ? 'Removing...' : 'Delete'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="ei-settings-section">
         <h3 className="ei-settings-section__title">Import Document</h3>
