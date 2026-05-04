@@ -337,6 +337,11 @@ export const ProviderEditor: React.FC<ProviderEditorProps> = ({
               placeholder="Leave blank if not required"
               autoComplete="off"
             />
+            {apiKey.startsWith('$') && (
+              <small className="ei-form-hint" style={{ color: 'var(--color-warning, #f59e0b)' }}>
+                This looks like an env var reference — it won't resolve in the browser. Paste your actual key here.
+              </small>
+            )}
           </div>
 
           {type === ProviderType.LLM && (

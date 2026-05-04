@@ -35,12 +35,6 @@ export interface ProviderYAMLResult {
   _delete: boolean;
 }
 
-function resolveEnvVar(value: string | undefined): string | undefined {
-  if (!value || !value.startsWith("$")) return value;
-  const varName = value.slice(1);
-  return process.env[varName] || value;
-}
-
 const PLACEHOLDER_PROVIDER_NAME = "My Provider";
 const PLACEHOLDER_PROVIDER_URL = "https://api.example.com/v1";
 const PLACEHOLDER_PROVIDER_API_KEY = "your-api-key-or-$ENVAR";
@@ -120,7 +114,7 @@ export function newProviderFromYAML(yamlContent: string): ProviderAccount {
     name: data.name,
     type: (data.type === "storage" ? "storage" : "llm") as ProviderType,
     url: data.url,
-    api_key: resolveEnvVar(data.api_key),
+    api_key: data.api_key,
     default_model: data.default_model,
     token_limit: data.token_limit ?? undefined,
     extra_headers: data.extra_headers && Object.keys(data.extra_headers).length > 0 ? data.extra_headers : undefined,
@@ -227,7 +221,7 @@ export function providerFromYAML(yamlContent: string, original: ProviderAccount)
     name: data.name,
     type: (data.type === "storage" ? "storage" : "llm") as ProviderType,
     url: data.url,
-    api_key: resolveEnvVar(data.api_key),
+    api_key: data.api_key,
     default_model: data.default_model,
     token_limit: data.token_limit ?? undefined,
     extra_headers: data.extra_headers && Object.keys(data.extra_headers).length > 0 ? data.extra_headers : undefined,

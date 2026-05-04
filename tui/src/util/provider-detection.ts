@@ -158,7 +158,7 @@ export async function detectProviders(
   detected: ProviderDetectionResult[];
   statuses: ProviderDetectionStatus[];
 }> {
-  const env = options.env ?? (process.env as Record<string, string | undefined>);
+  const env = options.env ?? (Bun.env as Record<string, string | undefined>);
   const detected: ProviderDetectionResult[] = [];
   const statuses: ProviderDetectionStatus[] = [];
 
@@ -236,12 +236,15 @@ export function buildProviderAccounts(
     if (d.selected.bonusModel) pushIfNew(d.selected.bonusModel);
     for (const id of d.modelIds) pushIfNew(id);
 
+    const cloudConfig = CLOUD_PROVIDERS.find((p) => p.name === d.name);
+    const apiKey = cloudConfig ? `$${cloudConfig.envVar}` : d.apiKey;
+
     return {
       id: crypto.randomUUID(),
       name: d.name,
       type: "llm" as ProviderType,
       url: d.url,
-      api_key: d.apiKey,
+      api_key: apiKey,
       enabled: true,
       created_at: new Date().toISOString(),
       default_model: d.selected.chatModel,
