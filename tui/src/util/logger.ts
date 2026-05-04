@@ -1,7 +1,9 @@
 /** File-based logger for TUI debugging. Usage: tail -f $EI_DATA_PATH/tui.log */
 
-import { appendFileSync, mkdirSync } from "node:fs";
+import { appendFileSync, mkdirSync, existsSync, readdirSync, unlinkSync, renameSync } from "node:fs";
 import { join } from "node:path";
+
+const MAX_ROLLED_LOGS = 10;
 
 function getDataPath(): string {
   if (Bun.env.EI_DATA_PATH) return Bun.env.EI_DATA_PATH;
@@ -59,14 +61,32 @@ export const logger = {
   error: (message: string, data?: unknown) => writeLogSync("error", message, data),
 };
 
-export function clearLog(): void {
+export function rotateLog(): void {
   try {
     const logPath = getLogPath();
     const dataDir = logPath.substring(0, logPath.lastIndexOf("/"));
     mkdirSync(dataDir, { recursive: true });
+
+    if (existsSync(logPath)) {
+      const ts = new Date().toISOString().replace(/[:.]/g, "-").replace("T", "_").slice(0, 19);
+      renameSync(logPath, join(dataDir, `tui-${ts}.log`));
+    }
+
+    const rolled = readdirSync(dataDir)
+      .filter(f => /^tui-\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.log$/.test(f))
+      .sort();
+    for (const old of rolled.slice(0, Math.max(0, rolled.length - MAX_ROLLED_LOGS))) {
+      unlinkSync(join(dataDir, old));
+    }
+
     const header = `--- TUI Started at ${new Date().toISOString()} ---\n`;
     Bun.write(logPath, header);
   } catch {}
+}
+
+/** @deprecated Use rotateLog() instead */
+export function clearLog(): void {
+  rotateLog();
 }
 
 export function interceptConsole(): void {
