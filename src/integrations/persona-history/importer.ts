@@ -6,6 +6,10 @@ import {
   queueFactFind,
   type ExtractionContext,
 } from "../../core/orchestrators/human-extraction.js";
+import {
+  queuePersonRewritePhase,
+  queueTopicRewritePhase,
+} from "../../core/orchestrators/ceremony.js";
 
 export interface PersonaHistoryImportResult {
   daysQueued: number;
@@ -140,6 +144,11 @@ export async function importPersonaHistory(
   }
 
   result.daysQueued = 1;
+
+  if (result.scansQueued > 0) {
+    queuePersonRewritePhase(stateManager);
+    queueTopicRewritePhase(stateManager);
+  }
 
   const isLastDay = currentDate >= today;
   advanceProgress(stateManager, currentDate, isLastDay);
