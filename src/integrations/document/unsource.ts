@@ -160,5 +160,14 @@ export async function executeUnsource(
     stateManager.setHuman(human);
   }
 
+  if (preview.sourceTag.startsWith("generate:document:")) {
+    const slug = preview.sourceTag.slice("generate:document:".length);
+    const human2 = stateManager.getHuman();
+    if (human2.settings?.document?.generated_documents) {
+      delete human2.settings.document.generated_documents[slug];
+      stateManager.setHuman(human2);
+    }
+  }
+
   return result;
 }
