@@ -6,7 +6,7 @@
 /** A single tool call the LLM wants to make (from the API response). */
 export interface ToolCall {
   id: string;           // call_abc123 — must be echoed back in tool result message
-  name: string;         // snake_case tool name ("web_search", "read_memory")
+  name: string;         // snake_case tool name ("web_search", "find_memory")
   arguments: Record<string, unknown>;  // Parsed from JSON string in the API response
 }
 

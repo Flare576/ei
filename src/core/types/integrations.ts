@@ -29,7 +29,7 @@ export interface ToolProvider {
 export interface ToolDefinition {
   id: string;                          // UUID
   provider_id: string;                 // FK → ToolProvider.id (required)
-  name: string;                        // Snake_case machine name ("web_search", "read_memory")
+  name: string;                        // Snake_case machine name ("web_search", "find_memory")
   display_name: string;                // Human label
   description: string;                 // What the LLM reads to decide whether to call this tool
   input_schema: Record<string, unknown>; // JSON Schema for parameters the LLM can pass

@@ -94,10 +94,10 @@ function createCheckpointWithToolkit(mockServerUrl: string) {
     ],
     tools: [
       {
-        id: "tool-read-memory",
+        id: "tool-find-memory",
         provider_id: "ei",
-        name: "read_memory",
-        display_name: "Read Memory",
+        name: "find_memory",
+        display_name: "Find Memory",
         description: "Search memory.",
         input_schema: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
         runtime: "any",
