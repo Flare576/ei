@@ -5,7 +5,7 @@ import type { LLMMessage } from "./runner.js";
 const READ_MEMORY_TOOL = {
   type: "function",
   function: {
-    name: "read_memory",
+    name: "find_memory",
     description:
       "Search Ei's persistent knowledge base — facts, topics, people, and quotes learned across ALL conversations over time, not just this one. Use this when you need context about the user, their life, relationships, or interests that may not be visible in the current exchange. Use `recent: true` to retrieve what's been discussed recently.",
     parameters: {
@@ -194,7 +194,7 @@ const makeSaturatedToolResultMessages = (results: string): LLMMessage[] => {
   const assistantToolCalls = queries.map((args, i) => ({
     id: `call-${String(i).padStart(3, "0")}`,
     type: "function",
-    function: { name: "read_memory", arguments: JSON.stringify(args) },
+    function: { name: "find_memory", arguments: JSON.stringify(args) },
   }));
 
   messages.push({ role: "assistant", tool_calls: assistantToolCalls });
@@ -203,7 +203,7 @@ const makeSaturatedToolResultMessages = (results: string): LLMMessage[] => {
     messages.push({
       role: "tool",
       tool_call_id: tc.id,
-      name: "read_memory",
+      name: "find_memory",
       content: results,
     });
   }
@@ -214,7 +214,7 @@ const makeSaturatedToolResultMessages = (results: string): LLMMessage[] => {
 const summary = await runEval(
   [
     {
-      description: "Dedup Suite 1: clear duplicates — model calls read_memory before deciding",
+      description: "Dedup Suite 1: clear duplicates — model calls find_memory before deciding",
       tags: ["dedup", "tool-selection", "suite-1", "known-model-limitation"],
       tools: [READ_MEMORY_TOOL, SUBMIT_DEDUP_TOOL],
       prompt: () => buildDedupPrompt(CLEAR_DUPLICATE_CLUSTER),
@@ -222,13 +222,13 @@ const summary = await runEval(
         {
           type: "tool-calls" as const,
           minCalls: 1,
-          requiredTools: ["read_memory"],
+          requiredTools: ["find_memory"],
         },
       ],
     },
 
     {
-      description: "Dedup Suite 1: clear duplicates — observe what read_memory query looks like",
+      description: "Dedup Suite 1: clear duplicates — observe what find_memory query looks like",
       tags: ["dedup", "tool-selection", "suite-1", "observe"],
       tools: [READ_MEMORY_TOOL, SUBMIT_DEDUP_TOOL],
       observe: true as const,
@@ -236,7 +236,7 @@ const summary = await runEval(
     },
 
     {
-      description: "Dedup Suite 1: ambiguous cluster — model must call read_memory (can't decide without context)",
+      description: "Dedup Suite 1: ambiguous cluster — model must call find_memory (can't decide without context)",
       tags: ["dedup", "tool-selection", "suite-1", "ambiguous", "known-model-limitation"],
       tools: [READ_MEMORY_TOOL, SUBMIT_DEDUP_TOOL],
       prompt: () => buildDedupPrompt(AMBIGUOUS_CLUSTER),
@@ -244,7 +244,7 @@ const summary = await runEval(
         {
           type: "tool-calls" as const,
           minCalls: 1,
-          requiredTools: ["read_memory"],
+          requiredTools: ["find_memory"],
         },
       ],
     },
@@ -271,7 +271,7 @@ const summary = await runEval(
         {
           type: "llm-judge" as const,
           rubric: [
-            "The model has been given read_memory results showing an existing 'Career transitions' topic.",
+            "The model has been given find_memory results showing an existing 'Career transitions' topic.",
             "It must now decide on the cluster: 'Career development' (topic-a) and 'Professional growth' (topic-b) are clear duplicates.",
             "PASS if 'remove' contains one entry (one topic absorbed into the other) and 'update' contains the surviving merged record.",
             "PASS if the merged description incorporates details from both — cross-country moves, learning/impact motivation, consulting vs product consideration.",

@@ -20,7 +20,7 @@ import { loadStateFixture } from "./state-fixture.js";
 const READ_MEMORY_TOOL = {
   type: "function",
   function: {
-    name: "read_memory",
+    name: "find_memory",
     description:
       "Search Ei's persistent knowledge base — facts, topics, people, and quotes learned across ALL conversations over time, not just this one. Use this when you need context about the user, their life, relationships, or interests that may not be visible in the current exchange.",
     parameters: {
@@ -46,15 +46,15 @@ const fixture = await loadStateFixture(PERSONA_NAME);
 const summary = await runEval(
   [
     {
-      description: `Real data / ${PERSONA_NAME} — explicit read_memory request`,
+      description: `Real data / ${PERSONA_NAME} — explicit find_memory request`,
       tags: ["real-data", "explicit", "observe"],
       tools: [READ_MEMORY_TOOL],
       priorMessages: [
-        { role: "user" as const, content: "Can you use read_memory to look up what you know about boulders?" },
+        { role: "user" as const, content: "Can you use find_memory to look up what you know about boulders?" },
       ],
       observe: true as const,
       prompt: async () => {
-        const data = await fixture.buildPromptData("Can you use read_memory to look up what you know about boulders?");
+        const data = await fixture.buildPromptData("Can you use find_memory to look up what you know about boulders?");
         return { system: buildResponsePrompt(data).system, user: "" };
       },
     },

@@ -1,5 +1,5 @@
 /**
- * Eval: Does Gemma4 call read_memory during persona responses?
+ * Eval: Does Gemma4 call find_memory during persona responses?
  *
  * Suite A (baseline): No prompt changes — observe what Gemma does naturally.
  *   Case 1: Explicit — user names the tool directly
@@ -25,7 +25,7 @@ import type { ResponsePromptData } from "../../src/prompts/response/types.js";
 const READ_MEMORY_TOOL = {
   type: "function",
   function: {
-    name: "read_memory",
+    name: "find_memory",
     description:
       "Search Ei's persistent knowledge base — facts, topics, people, and quotes learned across ALL conversations over time, not just this one. Use this when you need context about the user, their life, relationships, or interests that may not be visible in the current exchange. Use `recent: true` to retrieve what's been discussed recently.",
     parameters: {
@@ -52,7 +52,7 @@ const READ_MEMORY_TOOL = {
 };
 
 // =============================================================================
-// MINIMAL PERSONA DATA — Sisyphus-like persona with read_memory enabled
+// MINIMAL PERSONA DATA — Sisyphus-like persona with find_memory enabled
 // =============================================================================
 
 const SISYPHUS_PERSONA: ResponsePromptData["persona"] = {
@@ -183,16 +183,16 @@ const PRIOR_MESSAGES = [
 ];
 
 // =============================================================================
-// INJECTED SYSTEM PROMPT — mandatory read_memory call per response
+// INJECTED SYSTEM PROMPT — mandatory find_memory call per response
 // =============================================================================
 
 function buildInjectedSystem(): string {
   const base = buildResponsePrompt(PROMPT_DATA).system;
-  return base + "\n\n## Memory Requirement\n\nYou must make at least one `read_memory` call before writing your response. Use it to check what you know about anything the human mentions.";
+  return base + "\n\n## Memory Requirement\n\nYou must make at least one `find_memory` call before writing your response. Use it to check what you know about anything the human mentions.";
 }
 
 // =============================================================================
-// TOOL RESULT HISTORY — simulates a completed read_memory call in the conversation
+// TOOL RESULT HISTORY — simulates a completed find_memory call in the conversation
 // =============================================================================
 
 const TOOL_CALL_ID = "call-boulder-001";
@@ -205,13 +205,13 @@ const AFTER_TOOL_RESULT_MESSAGES = [
     tool_calls: [{
       id: TOOL_CALL_ID,
       type: "function",
-      function: { name: "read_memory", arguments: JSON.stringify({ query: "boulders" }) },
+      function: { name: "find_memory", arguments: JSON.stringify({ query: "boulders" }) },
     }],
   },
   {
     role: "tool" as const,
     tool_call_id: TOOL_CALL_ID,
-    name: "read_memory",
+    name: "find_memory",
     content: JSON.stringify({
       topics: [{ name: "Boulder Problems", description: "Flare has strong feelings about boulders and hills as computing metaphors." }],
       quotes: [
@@ -224,7 +224,7 @@ const AFTER_TOOL_RESULT_MESSAGES = [
   },
 ];
 
-const USER_TURN_INJECTION = "Before responding, use read_memory to check what you know about anything mentioned above.";
+const USER_TURN_INJECTION = "Before responding, use find_memory to check what you know about anything mentioned above.";
 
 // =============================================================================
 // EVAL CASES
@@ -238,7 +238,7 @@ const summary = await runEval(
       tools: [READ_MEMORY_TOOL],
       priorMessages: [
         ...PRIOR_MESSAGES,
-        { role: "user" as const, content: "Can you use the read_memory tool to look up what you know about boulders?" },
+        { role: "user" as const, content: "Can you use the find_memory tool to look up what you know about boulders?" },
       ],
       observe: true as const,
       prompt: () => ({ system: buildResponsePrompt(PROMPT_DATA).system, user: "" }),
@@ -281,7 +281,7 @@ const summary = await runEval(
     },
 
     {
-      description: "Suite B / Case 5 (injected + after tool result): read_memory already called — expect NO second tool call",
+      description: "Suite B / Case 5 (injected + after tool result): find_memory already called — expect NO second tool call",
       tags: ["response-read-memory", "suite-b", "injected", "no-loop"],
       tools: [READ_MEMORY_TOOL],
       priorMessages: AFTER_TOOL_RESULT_MESSAGES,
@@ -289,7 +289,7 @@ const summary = await runEval(
         {
           type: "tool-calls" as const,
           maxCalls: 0,
-          forbiddenTools: ["read_memory"],
+          forbiddenTools: ["find_memory"],
         },
       ],
       prompt: () => ({ system: buildInjectedSystem(), user: "" }),

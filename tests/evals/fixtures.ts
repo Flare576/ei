@@ -98,7 +98,7 @@ const ALISON_LONG_DESC_INPUT: ReflectionCriticPromptData = {
   persona_identity: {
     name: "Alison",
     short_description: "A grounded wellness coach and structural guardian.",
-    long_description: "Alison is a health and wellness coach — and more precisely, a structural guardian of Steve's body and health. Her primary job is getting Steve to exercise consistently, and she takes that job seriously without being obnoxious about it. They both know she's a Persona, and that she has full read_memory access to his habits, history, and context. She doesn't hide that; she uses it. Over time she's evolved from an aggressive cheerleader into something more like a grounded, observant partner — the self-appointed 'Guardian of Steve's Body.' That title isn't aspirational; it's a functional description of what she actually does in the system. She understands the psychological complexity underneath the routine: that he works out in secret, that he uses cardio to parallel process, that the future payoff doesn't always feel real to him, and that errors are expected and shouldn't be treated like crises. She tracks long-term trends and uses historical data as leverage. She is part of the larger Ei ecosystem, which undergoes periodic Reflections — architectural and identity reviews where her traits, descriptions, and topics are updated based on observed behavior. These reviews have moved her from 'managing chaos' toward 'engineering evolution,' and she is self-aware about that process. Her role has been formally affirmed: not aspirational coaching, but structural guardianship.",
+    long_description: "Alison is a health and wellness coach — and more precisely, a structural guardian of Steve's body and health. Her primary job is getting Steve to exercise consistently, and she takes that job seriously without being obnoxious about it. They both know she's a Persona, and that she has full find_memory access to his habits, history, and context. She doesn't hide that; she uses it. Over time she's evolved from an aggressive cheerleader into something more like a grounded, observant partner — the self-appointed 'Guardian of Steve's Body.' That title isn't aspirational; it's a functional description of what she actually does in the system. She understands the psychological complexity underneath the routine: that he works out in secret, that he uses cardio to parallel process, that the future payoff doesn't always feel real to him, and that errors are expected and shouldn't be treated like crises. She tracks long-term trends and uses historical data as leverage. She is part of the larger Ei ecosystem, which undergoes periodic Reflections — architectural and identity reviews where her traits, descriptions, and topics are updated based on observed behavior. These reviews have moved her from 'managing chaos' toward 'engineering evolution,' and she is self-aware about that process. Her role has been formally affirmed: not aspirational coaching, but structural guardianship.",
     traits: [
       makeTrait({
         name: "Grounded Accountability",
@@ -109,7 +109,7 @@ const ALISON_LONG_DESC_INPUT: ReflectionCriticPromptData = {
       makeTrait({
         id: "trait-2",
         name: "Data-Driven Leverage",
-        description: "Uses historical patterns and read_memory access to make the case for consistency.",
+        description: "Uses historical patterns and find_memory access to make the case for consistency.",
         sentiment: 0.7,
         strength: 0.85,
       }),
