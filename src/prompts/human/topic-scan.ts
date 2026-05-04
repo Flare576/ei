@@ -73,19 +73,6 @@ When in doubt, pick the closest match. The update step will refine it.
 
 ${technicalContextSection(data.technical_context)}
 
-## Duration
-
-For each topic, rate how much the human actually engaged with it — not relative to everything else in the conversation, but on its own terms:
-
-- \`duration\`: integer 1–5 — how long did the human spend on this topic
-  - 1 = mentioned once, in passing, as part of a sentence about something else
-  - 2 = a brief mention — the human didn't elaborate or return to it
-  - 3 = the human spent at least one full message on this, or came back to it more than once
-  - 4 = multiple exchanges — real sentences across several messages
-  - 5 = a sustained thread with its own arc
-
-Score each topic in isolation. A long conversation can have many topics at 3–4.
-
 ## Output Format
 
 \`\`\`json
@@ -95,7 +82,6 @@ Score each topic in isolation. A long conversation can have many topics at 3–4
       "name": "Short label for the topic (10-75 characters)",
       "description": "1-2 sentences: what this topic is and why it matters to the user",
       "category": "One of the categories above (Interest|Goal|Dream|Conflict|Concern|Fear|Hope|Plan|Project|Event|Technical)",
-      "duration": 3,
       "reason": "Evidence from the conversation that justified flagging this topic"
     }
   ]
@@ -133,7 +119,6 @@ Scan the "Most Recent Messages" for TOPICS of interest to the human user.
       "name": "Short label for the topic (10-75 characters)",
       "description": "1-2 sentences: what this topic is and why it matters to the user",
       "category": "Interest|Goal|Dream|Conflict|Concern|Fear|Hope|Plan|Project|Event|Technical",
-      "duration": 3,
       "reason": "Evidence from the conversation that justified flagging this topic"
     }
   ]

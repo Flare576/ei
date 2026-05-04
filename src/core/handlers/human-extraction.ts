@@ -174,10 +174,6 @@ export async function handleHumanTopicScan(response: LLMResponse, state: StateMa
 
   const extractionModel = (response.request.data as Record<string, unknown>).extraction_model as string | undefined;
   for (const candidate of result.topics) {
-    const duration = typeof candidate.duration === 'number' ? candidate.duration : null;
-    if (duration !== null && duration <= 2) {
-      console.debug(`[handleHumanTopicScan] Low-duration topic "${candidate.name}" (duration=${duration}) — passing through`);
-    }
     await queueTopicMatch(candidate, context, state, extractionModel);
   }
   console.log(`[handleHumanTopicScan] Queued ${result.topics.length} topic(s) for matching`);

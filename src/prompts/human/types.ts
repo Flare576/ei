@@ -52,7 +52,6 @@ export interface TopicScanCandidate {
   name: string;
   description: string;
   category: string;
-  duration?: number;
   reason: string;
 }
 
