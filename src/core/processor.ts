@@ -386,6 +386,18 @@ export class Processor {
     return message?.content ?? null;
   }
 
+  async reRunDocument(slug: string): Promise<{ slug: string }> {
+    const docs = this.stateManager.getHuman().settings?.document?.processed_documents ?? {};
+    const entry = docs[slug];
+    if (!entry || entry.type !== "generated" || !entry.subject) {
+      throw new Error(`No generated document found for slug "${slug}"`);
+    }
+    const subject = entry.subject;
+    const preview = this.getUnsourcePreview(`generate:document:${slug}`);
+    await this.executeUnsource(preview);
+    return this.generateDocument(subject);
+  }
+
   /**
    * Seed built-in tool providers and tools if they don't exist yet.
    * Called on every startup (after state load/restore) — safe to call repeatedly.
