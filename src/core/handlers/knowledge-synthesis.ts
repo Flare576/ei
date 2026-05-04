@@ -50,5 +50,4 @@ export function handleKnowledgeSynthesis(response: LLMResponse, state: StateMana
     },
   });
 
-  console.log(`[handleKnowledgeSynthesis] Wrote synthesis document for slug "${slug}"`);
 }

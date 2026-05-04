@@ -40,10 +40,7 @@ export const generateCommand: Command = {
       }
     }
 
-    const dataPath = process.env.EI_DATA_PATH || "~/.local/share/ei";
-    const outputPath = `${dataPath}/docs/${subject.slice(0, 40).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}_${new Date().toISOString().replace(/[:.]/g, "-")}.md`;
-
-    ctx.showNotification(`Generating — will write to ${outputPath} when complete`, "info");
+    ctx.showNotification(`Generating knowledge document about: ${subject.slice(0, 60)}`, "info");
 
     try {
       await ctx.ei.generateDocument(subject);
