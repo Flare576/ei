@@ -102,7 +102,54 @@ grep -E "(passed|failed|FAILED)" ../.sisyphus/evidence/tui-e2e-pre-release.txt |
 ```
 If any test fails: STOP.
 
-**After all 9 checks pass, report a clean summary to Flare and ask for explicit go-ahead before cutting the release.**
+### Check 10 — Prompt eval coverage
+
+Only runs if prompt files changed since the last tag. First, check:
+
+```bash
+git diff $(git describe --tags --abbrev=0)..HEAD --name-only -- src/prompts/
+```
+
+**If nothing changed in `src/prompts/`: skip this check entirely.**
+
+If prompts did change:
+
+**10a — Identify changed prompts and their evals**
+
+Show Flare:
+1. Which prompt files changed (from the diff above)
+2. Which eval files exist for those prompts — convention is `tests/evals/<prompt-name>.eval.ts` matching the prompt filename (e.g. `topic-scan.ts` → `topic-scan.eval.ts`)
+3. The actual diff of each changed prompt section so Flare can see what moved
+
+```bash
+git diff $(git describe --tags --abbrev=0)..HEAD -- src/prompts/
+```
+
+**10b — Human adequacy review (mandatory pause)**
+
+Present the mapping and ask Flare:
+
+> "These prompts changed: [list]. These evals cover them: [list]. Any gaps or evals that don't cover the actual change? Say yes to continue, no to stop and write more evals first."
+
+**Do not proceed past this point without an explicit yes from Flare.** This is intentionally a human judgment call — eval adequacy is too contextual to automate reliably right now.
+
+**10c — Run the relevant evals**
+
+Run only the evals that map to changed prompts:
+
+```bash
+npm run test:evals:<eval-name> > .sisyphus/evidence/evals-pre-release.txt 2>&1; echo "EXIT: $?"
+```
+
+If multiple evals need to run, run them sequentially and save all output to the same file. Check results:
+
+```bash
+grep -E "(passed|failed|FAILED|✓|✗)" .sisyphus/evidence/evals-pre-release.txt | tail -20
+```
+
+These run against local Gemma (with thinking enabled by default) and take roughly as long as both E2E suites combined — budget 10-15 minutes. If any eval fails: STOP.
+
+**After all 10 checks pass, report a clean summary to Flare and ask for explicit go-ahead before cutting the release.**
 
 ---
 
@@ -187,7 +234,7 @@ The publish job gates on CI — if tests fail, npm doesn't get updated even thou
 
 ## Hard Rules
 
-- Never skip a preflight check, even if "we just ran tests" — this includes Check 9 (TUI E2E), which CI cannot run
+- Never skip a preflight check, even if "we just ran tests" — this includes Check 9 (TUI E2E) and Check 10 (prompt evals), neither of which CI runs
 - Never tag from a branch — must be on `main`
 - Never tag with uncommitted changes unrelated to the version bump
 - Always confirm the target version with Flare before bumping `package.json`
