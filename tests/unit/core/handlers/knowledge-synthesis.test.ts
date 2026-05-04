@@ -103,7 +103,7 @@ describe("handleKnowledgeSynthesis", () => {
     expect(message.timestamp).toBeDefined();
   });
 
-  it("updates generated_documents in human settings with slug, subject, and created_at", () => {
+  it("updates processed_documents with type=generated, slug, subject, and created_at", () => {
     const request = createMockRequest({ slug: "test-slug_ts", subject: "Test Subject" });
     const response = createMockResponse(request, "Some synthesized markdown content.");
 
@@ -111,18 +111,20 @@ describe("handleKnowledgeSynthesis", () => {
 
     expect(state.setHuman).toHaveBeenCalledOnce();
     const updatedHuman: HumanEntity = (state.setHuman as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const entry = updatedHuman.settings?.document?.processed_documents?.["test-slug_ts"];
 
-    expect(updatedHuman.settings?.document?.generated_documents?.["test-slug_ts"]).toBeDefined();
-    expect(updatedHuman.settings?.document?.generated_documents?.["test-slug_ts"].subject).toBe("Test Subject");
-    expect(updatedHuman.settings?.document?.generated_documents?.["test-slug_ts"].created_at).toBeDefined();
+    expect(entry).toBeDefined();
+    expect(entry?.type).toBe("generated");
+    expect(entry?.subject).toBe("Test Subject");
+    expect(entry?.created_at).toBeDefined();
   });
 
-  it("preserves existing generated_documents when adding a new entry", () => {
+  it("preserves existing processed_documents entries when adding a new generated entry", () => {
     const existingState = createMockStateManager({
       settings: {
         document: {
-          generated_documents: {
-            "existing-slug_ts": { subject: "Existing Subject", created_at: "2025-01-01T00:00:00.000Z" },
+          processed_documents: {
+            "existing-slug_ts": { created_at: "2025-01-01T00:00:00.000Z", type: "generated", subject: "Existing Subject" },
           },
         },
       } as any,
@@ -134,12 +136,12 @@ describe("handleKnowledgeSynthesis", () => {
     handleKnowledgeSynthesis(response, existingState as any);
 
     const updatedHuman: HumanEntity = (existingState.setHuman as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    const docs = updatedHuman.settings?.document?.generated_documents;
+    const docs = updatedHuman.settings?.document?.processed_documents;
 
     expect(docs?.["existing-slug_ts"]).toBeDefined();
-    expect(docs?.["existing-slug_ts"].subject).toBe("Existing Subject");
+    expect(docs?.["existing-slug_ts"]?.subject).toBe("Existing Subject");
     expect(docs?.["new-slug_ts"]).toBeDefined();
-    expect(docs?.["new-slug_ts"].subject).toBe("New Subject");
+    expect(docs?.["new-slug_ts"]?.subject).toBe("New Subject");
   });
 
   it("empty response content: does NOT write message and does NOT update settings", () => {

@@ -1,12 +1,17 @@
 import { useState, useRef } from 'react';
 
+interface DocumentRecord {
+  created_at: string;
+  type: "imported" | "generated";
+  subject?: string;
+}
+
 interface HumanDocumentsTabProps {
-  processedDocuments: Record<string, string>;
+  allDocuments: Record<string, DocumentRecord>;
   pendingDocuments: Array<{ batchId: string; filename: string; count: number }>;
   extractingDocuments: string[];
   onImport: (file: File) => Promise<void>;
   onUnsource: (sourceOrFilename: string) => Promise<void>;
-  generatedDocuments: Record<string, { subject: string; created_at: string }>;
   generatingDocuments: string[];
   onGenerate: (subject: string) => Promise<void>;
   onDownloadGenerated: (slug: string) => Promise<void>;
@@ -20,12 +25,11 @@ const slugToSubject = (slug: string): string => {
 };
 
 export const HumanDocumentsTab = ({
-  processedDocuments,
+  allDocuments,
   pendingDocuments,
   extractingDocuments,
   onImport,
   onUnsource,
-  generatedDocuments,
   generatingDocuments,
   onGenerate,
   onDownloadGenerated,
@@ -110,12 +114,11 @@ export const HumanDocumentsTab = ({
   };
 
   const pendingEntries = pendingDocuments;
-  const processedEntries = Object.entries(processedDocuments).sort(
-    ([, a], [, b]) => new Date(b).getTime() - new Date(a).getTime()
-  );
-  const generatedEntries = Object.entries(generatedDocuments).sort(
+  const sortedDocs = Object.entries(allDocuments).sort(
     ([, a], [, b]) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
+  const processedEntries = sortedDocs.filter(([, r]) => r.type === "imported");
+  const generatedEntries = sortedDocs.filter(([, r]) => r.type === "generated");
 
   return (
     <div className="ei-settings-form">
@@ -319,10 +322,10 @@ export const HumanDocumentsTab = ({
           </div>
         ) : processedEntries.length === 0 ? null : (
           <div className="ei-settings-section">
-            {processedEntries.map(([filename, timestamp]) => {
+            {processedEntries.map(([filename, record]) => {
               const isConfirming = confirmingFilename === filename;
               const isUnsourcing = unsourcing === filename;
-              const date = new Date(timestamp).toLocaleDateString(undefined, {
+              const date = new Date(record.created_at).toLocaleDateString(undefined, {
                 year: 'numeric',
                 month: 'short',
                 day: 'numeric',

@@ -20,10 +20,15 @@ export interface OpenCodeSettings {
   processed_sessions?: Record<string, string>;  // sessionId → ISO timestamp of last import
 }
 
+export interface DocumentRecord {
+  created_at: string;
+  type: "imported" | "generated";
+  subject?: string;
+}
+
 export interface DocumentSettings {
   extraction_model?: string;
-  processed_documents?: Record<string, string>;
-  generated_documents?: Record<string, { subject: string; created_at: string }>;
+  processed_documents?: Record<string, DocumentRecord>;
 }
 
 export interface CeremonyConfig {

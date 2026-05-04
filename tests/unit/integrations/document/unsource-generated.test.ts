@@ -32,14 +32,14 @@ function makeMockStateManager(human: HumanEntity) {
   };
 }
 
-describe("executeUnsource - generated_documents cleanup", () => {
-  it("removes generated_documents[slug] when sourceTag starts with generate:document:", async () => {
+describe("executeUnsource - processed_documents cleanup", () => {
+  it("removes processed_documents[slug] when sourceTag starts with generate:document:", async () => {
     const human = makeHuman({
       settings: {
         document: {
-          generated_documents: {
-            "test-slug": { subject: "Test Subject", created_at: "2026-01-01T00:00:00Z" },
-            "other-slug": { subject: "Other Subject", created_at: "2026-01-02T00:00:00Z" },
+          processed_documents: {
+            "test-slug": { created_at: "2026-01-01T00:00:00Z", type: "generated", subject: "Test Subject" },
+            "other-slug": { created_at: "2026-01-02T00:00:00Z", type: "generated", subject: "Other Subject" },
           },
         },
       },
@@ -56,19 +56,17 @@ describe("executeUnsource - generated_documents cleanup", () => {
     await executeUnsource(preview, state as any);
 
     const updated = state.getHuman();
-    expect(updated.settings?.document?.generated_documents?.["test-slug"]).toBeUndefined();
-    expect(updated.settings?.document?.generated_documents?.["other-slug"]).toBeDefined();
+    expect(updated.settings?.document?.processed_documents?.["test-slug"]).toBeUndefined();
+    expect(updated.settings?.document?.processed_documents?.["other-slug"]).toBeDefined();
   });
 
-  it("does not touch generated_documents when sourceTag is import:document:", async () => {
+  it("removes only the targeted import entry, leaving generated entries untouched", async () => {
     const human = makeHuman({
       settings: {
         document: {
           processed_documents: {
-            "myfile.md": { imported_at: "2026-01-01T00:00:00Z", source_tag: "import:document:myfile.md" },
-          },
-          generated_documents: {
-            "keep-me": { subject: "Keep", created_at: "2026-01-01T00:00:00Z" },
+            "myfile.md": { created_at: "2026-01-01T00:00:00Z", type: "imported" },
+            "keep-me": { created_at: "2026-01-01T00:00:00Z", type: "generated", subject: "Keep" },
           },
         },
       },
@@ -86,6 +84,6 @@ describe("executeUnsource - generated_documents cleanup", () => {
 
     const updated = state.getHuman();
     expect(updated.settings?.document?.processed_documents?.["myfile.md"]).toBeUndefined();
-    expect(updated.settings?.document?.generated_documents?.["keep-me"]).toBeDefined();
+    expect(updated.settings?.document?.processed_documents?.["keep-me"]).toBeDefined();
   });
 });

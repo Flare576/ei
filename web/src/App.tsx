@@ -1953,12 +1953,11 @@ function App() {
             setShowPersonaCreator(true);
           }}
           availableGroups={availableGroups}
-          processedDocuments={human?.settings?.document?.processed_documents ?? {}}
+          allDocuments={human?.settings?.document?.processed_documents ?? {}}
           pendingDocuments={queueStatus?.pending_documents ?? []}
           extractingDocuments={queueStatus?.extracting_documents ?? []}
           onImport={handleImportDocument}
           onUnsource={handleUnsource}
-          generatedDocuments={human?.settings?.document?.generated_documents ?? {}}
           generatingDocuments={queueStatus?.generating_documents ?? []}
           onGenerate={handleGenerateDocument}
           onDownloadGenerated={handleDownloadGenerated}

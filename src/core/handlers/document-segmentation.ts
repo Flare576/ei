@@ -103,7 +103,7 @@ export function finishDocumentBatch(batchId: string, filename: string, state: St
         ...updatedHuman.settings?.document,
         processed_documents: {
           ...(updatedHuman.settings?.document?.processed_documents ?? {}),
-          [filename]: new Date().toISOString(),
+          [filename]: { created_at: new Date().toISOString(), type: "imported" },
         },
       },
     },

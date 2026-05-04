@@ -42,12 +42,11 @@ export function handleKnowledgeSynthesis(response: LLMResponse, state: StateMana
       ...updatedHuman.settings,
       document: {
         ...updatedHuman.settings?.document,
-        generated_documents: {
-          ...(updatedHuman.settings?.document?.generated_documents ?? {}),
-          [slug]: { subject, created_at: now },
+        processed_documents: {
+          ...(updatedHuman.settings?.document?.processed_documents ?? {}),
+          [slug]: { created_at: now, type: "generated", subject },
         },
       },
     },
   });
-
 }
