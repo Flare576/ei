@@ -135,13 +135,19 @@ Present the mapping and ask Flare:
 
 **10c — Run the relevant evals**
 
-Run only the evals that map to changed prompts:
+Run only the evals that map to changed prompts. Use the file-match argument to target specific suites:
 
 ```bash
-npm run test:evals:<eval-name> > .sisyphus/evidence/evals-pre-release.txt 2>&1; echo "EXIT: $?"
+npm run test:evals -- <file-match> > .sisyphus/evidence/evals-pre-release.txt 2>&1; echo "EXIT: $?"
 ```
 
-If multiple evals need to run, run them sequentially and save all output to the same file. Check results:
+For example, if `person-scan.ts` and `topic-scan.ts` changed:
+```bash
+npm run test:evals -- person-scan >> .sisyphus/evidence/evals-pre-release.txt 2>&1
+npm run test:evals -- topic-scan >> .sisyphus/evidence/evals-pre-release.txt 2>&1
+```
+
+Check results:
 
 ```bash
 grep -E "(passed|failed|FAILED|✓|✗)" .sisyphus/evidence/evals-pre-release.txt | tail -20

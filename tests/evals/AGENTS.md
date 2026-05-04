@@ -6,7 +6,7 @@ Eval suites make live LLM calls against a local model. Each case takes 10–60 s
 
 ```typescript
 task(category="quick", load_skills=[], run_in_background=true, description="Run person-update evals",
-  prompt="Run: cd /Users/flare576/Projects/Personal/ei && npx vite-node tests/evals/person-update.eval.ts --filter=identity-bleed\nReport the full output.")
+  prompt="Run: cd /Users/flare576/Projects/Personal/ei && npm run test:evals -- person-update --filter=identity-bleed\nReport the full output.")
 ```
 
 Use `--filter=<tag-or-substring>` to run a single case while iterating on a prompt. Full suite only when you need to check for regressions.
@@ -14,13 +14,25 @@ Use `--filter=<tag-or-substring>` to run a single case while iterating on a prom
 ## Running evals
 
 ```bash
-npm run test:evals:person-update              # full suite (~5 min)
-npm run test:evals:person-update -- --filter=identity-bleed  # single case (~1 min)
+npm run test:evals                                      # all 20 suites
+npm run test:evals -- person-update                     # person-update.eval.ts only (~5 min)
+npm run test:evals -- person                            # all person-*.eval.ts files
+npm run test:evals -- person-update --filter=identity-bleed  # file match + case filter (~1 min)
+npm run test:evals -- --filter=regression               # case filter across ALL files
 
-EVAL_FILTER=identity-bleed npm run test:evals:person-update  # same via env var
+EVAL_FILTER=identity-bleed npm run test:evals -- person-update  # same via env var
+npm run test:evals -- --help                            # show full usage
 ```
 
-All `test:evals:*` scripts are in `package.json`. The runner writes results to `tests/evals/results/`.
+The runner (`tests/evals/run.ts`) discovers all `*.eval.ts` files automatically — no package.json entry needed when you add a new eval file. Results are written to `tests/evals/results/`.
+
+## Observe scripts
+
+Observe scripts (`*.observe.ts`) are dev tools for watching model behavior — they don't assert pass/fail and aren't part of the test gate. Run them directly:
+
+```bash
+npx vite-node tests/evals/reflection-critic.observe.ts
+```
 
 ## Filter syntax
 
@@ -34,14 +46,15 @@ Every eval case has a `tags` array — use those for precise targeting. Tag conv
 | `ei-persona` | Ei Persona log path cases |
 | `identity-bleed` | The identity restatement regression test |
 | `no-signal` | Cases that should return `{}` |
+| `known-model-limitation` | Expected failures — model behavior, not a bug |
 
 ## Eval provider
 
 By default, evals run against the local LLM at `http://localhost:1234/v1` (LM Studio).
 
 ```bash
-EVAL_PROVIDER=anthropic ANTHROPIC_API_KEY=sk-... npm run test:evals:person-update
-EVAL_PROVIDER=openai OPENAI_API_KEY=sk-... EVAL_MODEL=gpt-4o npm run test:evals:person-update
+EVAL_PROVIDER=anthropic ANTHROPIC_API_KEY=sk-... npm run test:evals -- person-update
+EVAL_PROVIDER=openai OPENAI_API_KEY=sk-... EVAL_MODEL=gpt-4o npm run test:evals -- topic-scan
 ```
 
 ## Adding a new eval case
@@ -51,6 +64,7 @@ EVAL_PROVIDER=openai OPENAI_API_KEY=sk-... EVAL_MODEL=gpt-4o npm run test:evals:
 3. Run `--filter=<your-new-tag>` to confirm it fails before touching the prompt
 4. Fix the prompt, re-run to confirm it passes
 5. Run the full suite to check for regressions — **delegate this to a subagent**
+6. No package.json update needed — the runner auto-discovers `*.eval.ts` files
 
 ## Testing with real persona data ("something felt wrong")
 
