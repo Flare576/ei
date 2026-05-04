@@ -282,7 +282,7 @@ describe("buildProviderAccounts", () => {
     expect(accounts[0].default_model).toBe("claude-sonnet-4-5");
   });
 
-  test("sets api_key on cloud providers", () => {
+  test("sets api_key to env var reference on known cloud providers", () => {
     const accounts = buildProviderAccounts([{
       name: "Anthropic",
       url: "https://api.anthropic.com/v1",
@@ -292,7 +292,20 @@ describe("buildProviderAccounts", () => {
       status: "detected",
     }]);
 
-    expect(accounts[0].api_key).toBe("sk-test");
+    expect(accounts[0].api_key).toBe("$ANTHROPIC_API_KEY");
+  });
+
+  test("passes api_key through for unknown providers", () => {
+    const accounts = buildProviderAccounts([{
+      name: "MyCustomProvider",
+      url: "https://my-llm.example.com/v1",
+      apiKey: "sk-custom-key",
+      modelIds: ["my-model"],
+      selected: { extractionModel: "my-model", chatModel: "my-model" },
+      status: "detected",
+    }]);
+
+    expect(accounts[0].api_key).toBe("sk-custom-key");
   });
 
   test("no duplicate model entries when modelIds overlap with selected", () => {
