@@ -76,7 +76,17 @@ export interface LLMRawResponse {
 
 let llmCallCount = 0;
 
-
+function resolveApiKey(raw: string | undefined): string {
+  if (!raw || !raw.startsWith("$")) return raw ?? "";
+  const varName = raw.slice(1);
+  const resolved =
+    (typeof Bun !== "undefined" && (Bun as { env: Record<string, string> }).env?.[varName]) ||
+    (typeof process !== "undefined" && process.env?.[varName]);
+  if (!resolved) {
+    throw new Error(`Provider API key references env var $${varName}, but it is not set.`);
+  }
+  return resolved;
+}
 
 function isGuid(str: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
@@ -90,7 +100,7 @@ function buildResolvedModel(account: ProviderAccount, model: ModelConfig): Resol
     config: {
       name: account.name,
       baseURL: account.url,
-      apiKey: account.api_key || "",
+      apiKey: resolveApiKey(account.api_key),
     },
     extraHeaders: account.extra_headers,
   };
@@ -171,7 +181,7 @@ export function resolveModel(modelSpec?: string, accounts?: ProviderAccount[]): 
         config: {
           name: matchingAccount.name,
           baseURL: matchingAccount.url,
-          apiKey: matchingAccount.api_key || "",
+          apiKey: resolveApiKey(matchingAccount.api_key),
         },
         extraHeaders: matchingAccount.extra_headers,
       };
