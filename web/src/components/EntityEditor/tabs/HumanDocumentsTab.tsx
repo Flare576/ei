@@ -15,6 +15,7 @@ interface HumanDocumentsTabProps {
   generatingDocuments: string[];
   onGenerate: (subject: string) => Promise<void>;
   onDownloadGenerated: (slug: string) => Promise<void>;
+  onReRunDocument: (slug: string) => Promise<void>;
   checkGenerationModel: () => { model: string; isRewriteModel: boolean };
 }
 
@@ -33,6 +34,7 @@ export const HumanDocumentsTab = ({
   generatingDocuments,
   onGenerate,
   onDownloadGenerated,
+  onReRunDocument,
   checkGenerationModel,
 }: HumanDocumentsTabProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -245,6 +247,14 @@ export const HumanDocumentsTab = ({
                           disabled={isDeleting}
                         >
                           Download .md
+                        </button>
+                        <button
+                          className="ei-btn ei-btn--secondary"
+                          onClick={() => onReRunDocument(slug)}
+                          disabled={isDeleting}
+                          title="Re-run synthesis with the same subject — replaces this document"
+                        >
+                          Re-run
                         </button>
                         <button
                           className="ei-btn ei-btn--danger"

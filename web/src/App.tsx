@@ -1252,6 +1252,11 @@ function App() {
     URL.revokeObjectURL(url);
   }, [processor]);
 
+  const handleReRunDocument = useCallback(async (slug: string) => {
+    if (!processor) return;
+    await processor.reRunDocument(slug);
+  }, [processor]);
+
   const handleUnsource = useCallback(async (sourceOrFilename: string) => {
     if (!processor) return;
     const isFullSourceTag = sourceOrFilename.includes(':');
@@ -1961,6 +1966,7 @@ function App() {
           generatingDocuments={queueStatus?.generating_documents ?? []}
           onGenerate={handleGenerateDocument}
           onDownloadGenerated={handleDownloadGenerated}
+          onReRunDocument={handleReRunDocument}
           checkGenerationModel={() => processor?.checkGenerationModel() ?? { model: 'unknown', isRewriteModel: false }}
         />
       </>

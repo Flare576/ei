@@ -44,6 +44,7 @@ interface HumanEditorProps {
   generatingDocuments?: string[];
   onGenerate?: (subject: string) => Promise<void>;
   onDownloadGenerated?: (slug: string) => Promise<void>;
+  onReRunDocument?: (slug: string) => Promise<void>;
   checkGenerationModel?: () => { model: string; isRewriteModel: boolean };
 }
 
@@ -81,6 +82,7 @@ export const HumanEditor = ({
   generatingDocuments,
   onGenerate,
   onDownloadGenerated,
+  onReRunDocument,
   checkGenerationModel,
 }: HumanEditorProps) => {
   const [activeTab, setActiveTab] = useState('facts');
@@ -438,6 +440,7 @@ export const HumanEditor = ({
               generatingDocuments={generatingDocuments ?? []}
               onGenerate={onGenerate ?? (() => Promise.resolve())}
               onDownloadGenerated={onDownloadGenerated ?? (() => Promise.resolve())}
+              onReRunDocument={onReRunDocument ?? (() => Promise.resolve())}
               checkGenerationModel={checkGenerationModel ?? (() => ({ model: 'unknown', isRewriteModel: false }))}
             />
          );
