@@ -24,6 +24,12 @@ export interface EvalCase {
   assert?: Assertion[];
   observe?: true;
   repeat?: number;
+  /**
+   * Minimum pass rate across repeated runs (0.0–1.0). Default: 1.0 (all runs must pass).
+   * Use for cases with known nondeterminism — tag with "borderline" when setting below 1.0.
+   * Example: pass_threshold: 0.67 means 2 of 3 runs must pass.
+   */
+  pass_threshold?: number;
 }
 
 export interface ExtractionExpected {
@@ -67,6 +73,8 @@ export interface EvalResult {
   tags: string[];
   runs: EvalRun[];
   passRate: number;
+  passed: boolean;
+  pass_threshold: number;
 }
 
 export interface EvalRunSummary {
@@ -430,16 +438,21 @@ export async function runEval(
     process.stdout.write("\n");
 
     const passCount = runs.filter((r) => r.passed).length;
+    const passRate = passCount / runs.length;
+    const threshold = c.pass_threshold ?? 1.0;
     results.push({
       description: c.description,
       tags: c.tags ?? [],
       runs,
-      passRate: passCount / runs.length,
+      passRate,
+      passed: c.observe ? true : passRate >= threshold,
+      pass_threshold: threshold,
     });
   }
 
-  const overallPassRate =
-    results.reduce((sum, r) => sum + r.passRate, 0) / results.length;
+  const overallPassRate = results.length > 0
+    ? results.filter(r => r.passed).length / results.length
+    : 1;
   const totalElapsedMs = Date.now() - suiteStart;
 
   const summary: EvalRunSummary = {
@@ -469,13 +482,14 @@ export function printSummary(summary: EvalRunSummary): void {
   console.log(`Ran: ${summary.ranAt} (total: ${elapsed})`);
 
   if (assertCases.length > 0) {
-    const fullyPassed = assertCases.filter((r) => r.passRate === 1).length;
-    console.log(`\nAssertions: ${fullyPassed}/${assertCases.length} fully passed\n`);
+    const fullyPassed = assertCases.filter((r) => r.passed).length;
+    console.log(`\nAssertions: ${fullyPassed}/${assertCases.length} passed\n`);
     for (const r of assertCases) {
       const isRepeated = r.runs.length > 1;
-      const icon = r.passRate === 1 ? "✓" : r.passRate === 0 ? "✗" : "~";
+      const icon = r.passed ? "✓" : "✗";
+      const thresholdLabel = r.pass_threshold < 1.0 ? ` (threshold: ${Math.round(r.pass_threshold * 100)}%)` : "";
       const repeatLabel = isRepeated
-        ? ` [${Math.round(r.passRate * 100)}% over ${r.runs.length} runs]`
+        ? ` [${Math.round(r.passRate * 100)}% over ${r.runs.length} runs${thresholdLabel}]`
         : ` (${r.runs[0].durationMs}ms)`;
       console.log(`  ${icon} ${r.description}${repeatLabel}`);
 

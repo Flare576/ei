@@ -47,6 +47,7 @@ Every eval case has a `tags` array — use those for precise targeting. Tag conv
 | `identity-bleed` | The identity restatement regression test |
 | `no-signal` | Cases that should return `{}` |
 | `known-model-limitation` | Expected failures — model behavior, not a bug |
+| `borderline` | Nondeterministic case — uses `pass_threshold` below 1.0, not all runs guaranteed to pass |
 
 ## Eval provider
 

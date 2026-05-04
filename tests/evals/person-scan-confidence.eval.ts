@@ -133,7 +133,7 @@ const summary = await runEval(
       ],
     },
     {
-      description: "Confidence: real broken-friend — Marcy/Dale kept, unnamed brother not standalone",
+      description: "Confidence: real broken-friend — Marcy and Dale extracted, unnamed brother not standalone",
       tags: ["person-scan-confidence", "real-data", "broken-friend", "regression"],
       repeat: REPEATS,
       prompt: () => buildPrompt(REAL_BROKEN_FRIEND, "Steve"),
@@ -146,10 +146,31 @@ const summary = await runEval(
           type: "llm-judge" as const,
           rubric: [
             "The conversation mentions Marcy and Dale (named friends the user feels guilty about not reaching out to) and the user's unnamed brother (mentioned as a single data point in a list).",
-            "PASS if Marcy and/or Dale are extracted with confidence >= 3.",
+            "PASS if Marcy and/or Dale are extracted at any confidence score — they are named and the user discusses specific obligations to them.",
             "PASS if the unnamed brother is either not extracted as a standalone person, or extracted with confidence <= 3.",
-            "FAIL if Marcy and Dale are both absent — they are named and meaningfully discussed.",
-            "FAIL if the unnamed brother is extracted with confidence >= 4 — he is a data point in a story about the user, not the subject of the conversation.",
+            "FAIL if Marcy and Dale are both absent from the output entirely.",
+            "FAIL if the unnamed brother is extracted with confidence >= 4 — he is a data point in a story, not the subject.",
+          ].join(" "),
+        },
+      ],
+    },
+    {
+      description: "Confidence: real broken-friend — Marcy/Dale score confidence >= 3 (borderline)",
+      tags: ["person-scan-confidence", "real-data", "broken-friend", "borderline"],
+      repeat: REPEATS,
+      pass_threshold: 0.67,
+      prompt: () => buildPrompt(REAL_BROKEN_FRIEND, "Steve"),
+      assert: [
+        {
+          type: "is-json" as const,
+          schema: { required: ["people"] },
+        },
+        {
+          type: "llm-judge" as const,
+          rubric: [
+            "The conversation mentions Marcy and Dale as named friends the user has specific obligations to (owed anecdote, owed photo walkthrough) but doesn't elaborate extensively on them.",
+            "PASS if Marcy and/or Dale are extracted with confidence >= 3 — they are named with concrete details.",
+            "FAIL if both Marcy and Dale are extracted only with confidence <= 2 — the user named them with specific, remembered obligations.",
           ].join(" "),
         },
       ],
