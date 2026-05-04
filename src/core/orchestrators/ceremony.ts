@@ -137,10 +137,7 @@ function queueExposurePhase(personaId: string, state: StateManager, options?: Ex
       messages_analyze: unextractedPeople,
       extraction_flag: "p",
     };
-    const personScanOptions = persona.pending_update
-      ? { ...options, reflection_progress: 1 }
-      : options;
-    queuePersonScan(context, state, personScanOptions);
+    queuePersonScan(context, state, options);
   }
   
   const totalUnextracted = unextractedFacts.length + unextractedTopics.length + unextractedPeople.length;
@@ -482,7 +479,7 @@ export function queueReflectionDrain(personaId: string, state: StateManager): vo
     messages_analyze: unextractedPeople,
     extraction_flag: "p",
   };
-  queuePersonScan(context, state, { reflection_progress: 1 });
+  queuePersonScan(context, state);
   console.log(`[reflection:drain] Queued Person scan for ${persona.display_name} (${unextractedPeople.length} messages) — clears on completion`);
 }
 

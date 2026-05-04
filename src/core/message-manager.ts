@@ -255,8 +255,6 @@ export function checkAndQueueHumanExtraction(
   const unextractedPeople = sm.messages_getUnextracted(personaId, "p", undefined, "exclude");
   const peopleThreshold = Math.min(EXTRACTION_TAPER_CAP, human.people.length);
   if (unextractedPeople.length > 0 && unextractedPeople.length >= peopleThreshold) {
-    const personaForScan = sm.persona_getById(personaId);
-    const personScanOptions = personaForScan?.pending_update ? { reflection_progress: 1 } : undefined;
     const context: ExtractionContext = {
       personaId,
       channelDisplayName: personaDisplayName,
@@ -264,9 +262,9 @@ export function checkAndQueueHumanExtraction(
       messages_analyze: unextractedPeople,
       extraction_flag: "p",
     };
-    queuePersonScan(context, sm, personScanOptions);
+    queuePersonScan(context, sm);
     console.log(
-      `[Processor] Human Seed extraction: people (threshold: ${peopleThreshold}, unextracted: ${unextractedPeople.length}${personScanOptions ? ", reflection_progress=1" : ""})`
+      `[Processor] Human Seed extraction: people (threshold: ${peopleThreshold}, unextracted: ${unextractedPeople.length})`
     );
   }
 }

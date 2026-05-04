@@ -195,6 +195,15 @@ export function queuePersonScan(context: ExtractionContext, state: StateManager,
   
   if (chunks.length === 0) return 0;
 
+  // If the persona has a pending_update (reflection in progress), gate person
+  // scans so handleHumanPersonScan won't queue updates for persona-linked people.
+  // This prevents importers and other callers from bypassing the reflection lock
+  // — they don't know about pending_update, so we enforce it here centrally.
+  const persona = state.persona_getById(context.personaId);
+  const effectiveOptions: ExtractionOptions | undefined = persona?.pending_update
+    ? { ...options, reflection_progress: 1 }
+    : options;
+
   // Pre-mark messages before enqueuing — prevents duplicate scans if the
   // queue check fires again during LLM latency (100ms loop × 5s call = 50 dupes)
   for (const chunk of chunks) {
@@ -225,7 +234,7 @@ export function queuePersonScan(context: ExtractionContext, state: StateManager,
       user: prompt.user,
       next_step: LLMNextStep.HandleHumanPersonScan,
       data: {
-        ...options,
+        ...effectiveOptions,
         personaId: chunk.personaId,
         personaDisplayName: chunk.channelDisplayName,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
