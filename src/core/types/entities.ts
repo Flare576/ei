@@ -23,6 +23,7 @@ export interface OpenCodeSettings {
 export interface DocumentSettings {
   extraction_model?: string;
   processed_documents?: Record<string, string>;
+  generated_documents?: Record<string, { subject: string; created_at: string }>;
 }
 
 export interface CeremonyConfig {
