@@ -153,9 +153,29 @@ Check results:
 grep -E "(passed|failed|FAILED|✓|✗)" .sisyphus/evidence/evals-pre-release.txt | tail -20
 ```
 
-These run against local Gemma (with thinking enabled by default) and take roughly as long as both E2E suites combined — budget 10-15 minutes. If any eval fails: STOP.
+These run against local Gemma (with thinking enabled by default) and take roughly as long as both E2E suites combined — budget 10-15 minutes.
 
-**After all 10 checks pass, report a clean summary to Flare and ask for explicit go-ahead before cutting the release.**
+**Interpreting failures — three categories:**
+
+**❌ Unexpected failure** (no special tag, not `borderline`): STOP. Something regressed.
+
+**⚠️ `borderline` failure** (tagged `borderline`, has `pass_threshold`): Check the pass rate against the threshold. If it met the threshold → continue. If it fell below → treat as unexpected failure and STOP.
+
+**💬 `known-model-limitation` failure**: Do NOT block. But cross-reference against the changed prompts from 10a:
+
+```bash
+# Which known-limitation cases failed?
+grep -B2 "known-model-limitation\|✗" .sisyphus/evidence/evals-pre-release.txt | grep "✗"
+```
+
+- If the failing `known-model-limitation` case maps to a prompt that **did NOT change** this release → note it, continue.
+- If the failing `known-model-limitation` case maps to a prompt that **DID change** this release → **pause and surface to Flare**:
+
+  > "The `[case name]` case is a known model limitation but its prompt changed this release. It still fails. Is that expected given the change, or does it warrant investigation before we ship?"
+
+  This is not a blocker — Flare decides. But it's worth the conversation.
+
+**After all 10 checks pass (with known-limitation failures noted and discussed as needed), report a clean summary to Flare and ask for explicit go-ahead before cutting the release.**
 
 ---
 
