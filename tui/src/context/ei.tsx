@@ -155,6 +155,8 @@ export interface EiContextValue {
   importDocument: (filePath: string) => Promise<import('../../../src/integrations/document/types.js').DocumentImportResult>;
   getUnsourcePreview: (sourceTag: string) => import('../../../src/integrations/document/unsource.js').UnsourcePreview;
   executeUnsource: (preview: import('../../../src/integrations/document/unsource.js').UnsourcePreview) => Promise<import('../../../src/integrations/document/unsource.js').UnsourceResult>;
+  generateDocument: (subject: string) => Promise<{ slug: string }>;
+  checkGenerationModel: () => { model: string; isRewriteModel: boolean };
 }
 const EiContext = createContext<EiContextValue>();
 
@@ -356,6 +358,16 @@ export const EiProvider: ParentComponent = (props) => {
     const { writeUnsourceInvoice } = await import("../../../src/integrations/document/invoice.js");
     await writeUnsourceInvoice(preview, result, eiDataPath);
     return result;
+  };
+
+  const generateDocument = async (subject: string): Promise<{ slug: string }> => {
+    if (!processor) throw new Error("Processor not ready");
+    return processor.generateDocument(subject);
+  };
+
+  const checkGenerationModel = (): { model: string; isRewriteModel: boolean } => {
+    if (!processor) throw new Error("Processor not ready");
+    return processor.checkGenerationModel();
   };
 
   const archivePersona = async (personaId: string) => {
@@ -909,6 +921,17 @@ export const EiProvider: ParentComponent = (props) => {
         onRoomMessageProcessing: (roomId) => {
           if (roomId === store.activeRoomId) setStore("isRoomProcessing", true);
         },
+        onDocumentGenerated: async (slug) => {
+          const { join } = await import("node:path");
+          const { mkdirSync, writeFileSync } = await import("node:fs");
+          const content = await processor!.getGeneratedDocumentContent(slug);
+          if (content) {
+            const dir = join(eiDataPath, "docs");
+            mkdirSync(dir, { recursive: true });
+            writeFileSync(join(dir, `${slug}.md`), content);
+            showNotification(`Document ready: ${join(dir, `${slug}.md`)}`, "info");
+          }
+        },
       };
       processor = new Processor(eiInterface);
       logger.debug("Processor created, calling start()");
@@ -1026,6 +1049,8 @@ export const EiProvider: ParentComponent = (props) => {
     importDocument,
     getUnsourcePreview,
     executeUnsource,
+    generateDocument,
+    checkGenerationModel,
   };
   return (
     <Switch>
