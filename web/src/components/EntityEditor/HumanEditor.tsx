@@ -36,12 +36,11 @@ interface HumanEditorProps {
   onCreatePersona?: (person: Person) => void;
   onUpdatePersona?: (person: Person) => void;
   availableGroups?: string[];
-  processedDocuments?: Record<string, string>;
+  allDocuments?: Record<string, { created_at: string; type: "imported" | "generated"; subject?: string }>;
   pendingDocuments?: Array<{ batchId: string; filename: string; count: number }>;
   extractingDocuments?: string[];
   onImport?: (file: File) => Promise<void>;
   onUnsource?: (sourceOrFilename: string) => Promise<void>;
-  generatedDocuments?: Record<string, { subject: string; created_at: string }>;
   generatingDocuments?: string[];
   onGenerate?: (subject: string) => Promise<void>;
   onDownloadGenerated?: (slug: string) => Promise<void>;
@@ -74,12 +73,11 @@ export const HumanEditor = ({
   onCreatePersona,
   onUpdatePersona,
   availableGroups = [],
-  processedDocuments,
+  allDocuments,
   pendingDocuments,
   extractingDocuments,
   onImport,
   onUnsource,
-  generatedDocuments,
   generatingDocuments,
   onGenerate,
   onDownloadGenerated,
@@ -431,18 +429,17 @@ export const HumanEditor = ({
          );
        case 'documents':
          return (
-           <HumanDocumentsTab
-             processedDocuments={processedDocuments ?? {}}
-             pendingDocuments={pendingDocuments ?? []}
-             extractingDocuments={extractingDocuments ?? []}
-             onImport={onImport ?? (() => Promise.resolve())}
-             onUnsource={onUnsource ?? (() => Promise.resolve())}
-             generatedDocuments={generatedDocuments ?? {}}
-             generatingDocuments={generatingDocuments ?? []}
-             onGenerate={onGenerate ?? (() => Promise.resolve())}
-             onDownloadGenerated={onDownloadGenerated ?? (() => Promise.resolve())}
-             checkGenerationModel={checkGenerationModel ?? (() => ({ model: 'unknown', isRewriteModel: false }))}
-           />
+            <HumanDocumentsTab
+              allDocuments={allDocuments ?? {}}
+              pendingDocuments={pendingDocuments ?? []}
+              extractingDocuments={extractingDocuments ?? []}
+              onImport={onImport ?? (() => Promise.resolve())}
+              onUnsource={onUnsource ?? (() => Promise.resolve())}
+              generatingDocuments={generatingDocuments ?? []}
+              onGenerate={onGenerate ?? (() => Promise.resolve())}
+              onDownloadGenerated={onDownloadGenerated ?? (() => Promise.resolve())}
+              checkGenerationModel={checkGenerationModel ?? (() => ({ model: 'unknown', isRewriteModel: false }))}
+            />
          );
        default:
          return null;
