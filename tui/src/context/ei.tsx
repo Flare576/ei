@@ -13,7 +13,7 @@ import { createStore } from "solid-js/store";
 import { Processor } from "../../../src/core/processor.js";
 import { FileStorage } from "../storage/file.js";
 import { remoteSync } from "../../../src/storage/remote.js";
-import { logger, clearLog, interceptConsole } from "../util/logger.js";
+import { logger, rotateLog, interceptConsole } from "../util/logger.js";
 import { E2E_SKIP_LOCAL_DETECT, E2E_SKIP_CLOUD_DETECT } from "../util/e2e-flags.js";
 import {
   detectProviders,
@@ -835,7 +835,7 @@ export const EiProvider: ParentComponent = (props) => {
     await finishBootstrap();
   };
   async function bootstrap() {
-    clearLog();
+    rotateLog();
     interceptConsole();
     logger.info("Ei TUI bootstrap starting");
     try {
