@@ -44,6 +44,7 @@ import { EI_WELCOME_MESSAGE, EI_PERSONA_DEFINITION } from "../templates/welcome.
 import { EMMETT_PERSONA_DEFINITION } from "../templates/emmett.js";
 import { shouldStartCeremony, startCeremony, handleCeremonyProgress, queueReflectionDrain, queueUserDedupRequest, queueRoomCapture, queuePersonaCapture, checkAndQueueRoomExtraction, queueTargetedPersonUpdate, queueTargetedTopicUpdate } from "./orchestrators/index.js";
 import { finishDocumentBatch } from "./handlers/document-segmentation.js";
+import { buildSynthesisPrompt } from "../prompts/synthesis/index.js";
 import { BUILT_IN_FACTS } from "./constants/built-in-facts.js";
 import { DEFAULT_SEED_TRAITS } from "./constants/seed-traits.js";
 
@@ -333,6 +334,56 @@ export class Processor {
   async executeUnsource(preview: UnsourcePreview): Promise<UnsourceResult> {
     const { executeUnsource } = await import("../integrations/document/unsource.js");
     return executeUnsource(preview, this.stateManager);
+  }
+
+  async generateDocument(subject: string): Promise<{ slug: string }> {
+    this.bootstrapEmmett();
+    const slugBase = subject
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .slice(0, 40);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const slug = `${slugBase}_${timestamp}`;
+
+    const results = await this.searchHumanData(subject, { limit: 20 });
+    if (
+      results.facts.length === 0 &&
+      results.topics.length === 0 &&
+      results.people.length === 0 &&
+      results.quotes.length === 0
+    ) {
+      throw new Error(`No knowledge found about '${subject}'`);
+    }
+
+    const prompt = buildSynthesisPrompt({ subject, ...results });
+    const model = this.stateManager.getHuman().settings?.rewrite_model;
+
+    this.stateManager.queue_enqueue({
+      type: LLMRequestType.Raw,
+      priority: LLMPriority.Normal,
+      system: prompt.system,
+      user: prompt.user,
+      next_step: LLMNextStep.HandleKnowledgeSynthesis,
+      model,
+      data: { slug, subject },
+    });
+
+    return { slug };
+  }
+
+  checkGenerationModel(): { model: string; isRewriteModel: boolean } {
+    const settings = this.stateManager.getHuman().settings;
+    if (settings?.rewrite_model) {
+      return { model: settings.rewrite_model, isRewriteModel: true };
+    }
+    return { model: settings?.default_model ?? "unknown", isRewriteModel: false };
+  }
+
+  async getGeneratedDocumentContent(slug: string): Promise<string | null> {
+    const messages = this.stateManager.messages_get("emmet");
+    const target = `generate:document:${slug}`;
+    const message = messages.find(m => m.source_tag === target);
+    return message?.content ?? null;
   }
 
   /**
@@ -1759,6 +1810,11 @@ const toolNextSteps = new Set([
           this.interface.onMessageAdded?.("emmet");
           this.interface.onHumanUpdated?.();
         }
+      }
+
+      if (response.request.next_step === LLMNextStep.HandleKnowledgeSynthesis) {
+        const slug = response.request.data.slug as string;
+        if (slug) this.interface.onDocumentGenerated?.(slug);
       }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);

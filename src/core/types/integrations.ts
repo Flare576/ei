@@ -77,6 +77,7 @@ export interface QueueStatus {
   embedding_warning?: boolean;
   pending_documents?: Array<{ batchId: string; filename: string; count: number }>;
   extracting_documents?: string[];
+  generating_documents?: string[];
 }
 
 export interface EiError {
@@ -121,6 +122,7 @@ export interface Ei_Interface {
   onRoomMessageAdded?: (roomId: string) => void;
   onRoomMessageQueued?: (roomId: string) => void;
   onRoomMessageProcessing?: (roomId: string) => void;
+  onDocumentGenerated?: (slug: string) => void;
 }
 
 // =============================================================================
