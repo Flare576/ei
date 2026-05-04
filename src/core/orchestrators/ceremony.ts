@@ -287,7 +287,7 @@ export function handleCeremonyProgress(state: StateManager, lastPhase: number): 
   // Person Rewrite phase (phase 4): scan bloated Person records, extract Topics from them.
   // Gated via ceremony_progress so Topic Rewrite can run after — Topics created here
   // need to be visible before Topic Rewrite snapshots the threshold.
-  queuePersonRewritePhase(state);
+  queuePersonRewritePhase(state, { ceremonyProgress: 4 });
 
   // Zero-work guard: if no person rewrites queued, advance to topic rewrite immediately
   if (!state.queue_hasPendingCeremonies()) {
@@ -490,7 +490,7 @@ function getRewriteModel(state: StateManager): string | undefined {
   return state.getHuman().settings?.rewrite_model;
 }
 
-export function queuePersonRewritePhase(state: StateManager): void {
+export function queuePersonRewritePhase(state: StateManager, options?: { ceremonyProgress?: number }): void {
   const rewriteModel = getRewriteModel(state);
   if (!rewriteModel) {
     console.log("[ceremony:rewrite] rewrite_model not set — skipping person rewrite phase");
@@ -498,14 +498,25 @@ export function queuePersonRewritePhase(state: StateManager): void {
   }
 
   const human = state.getHuman();
-  const personsToScan = human.people.filter(person => {
+  const allCandidates = human.people.filter(person => {
     const isPersonaLinked = (person.identifiers ?? []).some(
       i => i.type.toLowerCase() === 'ei persona'
     );
     return !isPersonaLinked
-      && (person.description?.length ?? 0) > REWRITE_DESCRIPTION_THRESHOLD
-      && !person.rewrite_checked;
+      && (person.description?.length ?? 0) > REWRITE_DESCRIPTION_THRESHOLD;
   });
+
+  const alreadyChecked = allCandidates.filter(p => p.rewrite_checked);
+  if (alreadyChecked.length > 0) {
+    for (const person of alreadyChecked) {
+      console.log(
+        `[ceremony:rewrite] Person "${person.name}" is ${person.description?.length ?? 0} chars ` +
+        `but rewrite_checked=true — already reviewed, skipping`
+      );
+    }
+  }
+
+  const personsToScan = allCandidates.filter(p => !p.rewrite_checked);
 
   if (personsToScan.length === 0) {
     console.log("[ceremony:rewrite] No persons above threshold — skipping person rewrite phase");
@@ -527,7 +538,7 @@ export function queuePersonRewritePhase(state: StateManager): void {
         itemId: person.id,
         itemType: "person" as RewriteItemType,
         rewriteModel,
-        ceremony_progress: 4,
+        ...(options?.ceremonyProgress !== undefined && { ceremony_progress: options.ceremonyProgress }),
       },
     });
   }
@@ -543,10 +554,21 @@ export function queueTopicRewritePhase(state: StateManager): void {
   }
 
   const human = state.getHuman();
-  const topicsToScan = human.topics.filter(topic =>
+  const allCandidateTopics = human.topics.filter(topic =>
     (topic.description?.length ?? 0) > REWRITE_DESCRIPTION_THRESHOLD
-    && !topic.rewrite_checked
   );
+
+  const alreadyCheckedTopics = allCandidateTopics.filter(t => t.rewrite_checked);
+  if (alreadyCheckedTopics.length > 0) {
+    for (const topic of alreadyCheckedTopics) {
+      console.log(
+        `[ceremony:rewrite] Topic "${topic.name}" is ${topic.description?.length ?? 0} chars ` +
+        `but rewrite_checked=true — already reviewed, skipping`
+      );
+    }
+  }
+
+  const topicsToScan = allCandidateTopics.filter(t => !t.rewrite_checked);
 
   if (topicsToScan.length === 0) {
     console.log("[ceremony:rewrite] No topics above threshold — skipping topic rewrite phase");

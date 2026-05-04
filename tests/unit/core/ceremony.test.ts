@@ -287,13 +287,13 @@ describe("Rewrite Phase", () => {
       expect(state.queue_enqueue).not.toHaveBeenCalled();
     });
 
-    it("scans people above threshold with ceremony_progress: 4", () => {
+    it("scans people above threshold with ceremony_progress: 4 when ceremonyProgress option is passed", () => {
       const state = createMockRewriteState({
         settings: { rewrite_model: "TestProvider:model" },
         people: [makePerson("p1", 751)],
       });
 
-      queuePersonRewritePhase(state as any);
+      queuePersonRewritePhase(state as any, { ceremonyProgress: 4 });
 
       expect(state.queue_enqueue).toHaveBeenCalledTimes(1);
       expect(state.queue_enqueue).toHaveBeenCalledWith(
@@ -304,6 +304,19 @@ describe("Rewrite Phase", () => {
           }),
         })
       );
+    });
+
+    it("scans people above threshold without ceremony_progress when no options passed", () => {
+      const state = createMockRewriteState({
+        settings: { rewrite_model: "TestProvider:model" },
+        people: [makePerson("p1", 751)],
+      });
+
+      queuePersonRewritePhase(state as any);
+
+      expect(state.queue_enqueue).toHaveBeenCalledTimes(1);
+      const call = (state.queue_enqueue as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(call.data.ceremony_progress).toBeUndefined();
     });
 
     it("never scans facts — facts are read-only", () => {
