@@ -13,6 +13,10 @@ import {
   queueAllScans,
   type ExtractionContext,
 } from "../../core/orchestrators/human-extraction.js";
+import {
+  queuePersonRewritePhase,
+  queueTopicRewritePhase,
+} from "../../core/orchestrators/ceremony.js";
 
 export interface CursorImportResult {
   sessionsProcessed: number;
@@ -227,6 +231,8 @@ export async function importCursorSessions(
       sources: [`cursor:${getMachineId()}:${targetSession.id}`],
     };
 
+    queuePersonRewritePhase(stateManager);
+    queueTopicRewritePhase(stateManager);
     queueAllScans(context, stateManager, { external_filter: "only" });
     result.extractionScansQueued += 4;
   }

@@ -11,6 +11,10 @@ import {
   queueAllScans,
   type ExtractionContext,
 } from "../../core/orchestrators/human-extraction.js";
+import {
+  queuePersonRewritePhase,
+  queueTopicRewritePhase,
+} from "../../core/orchestrators/ceremony.js";
 import { isProcessRunning } from "../process-check.js";
 import { getMachineId } from "../machine-id.js";
 
@@ -268,6 +272,8 @@ export async function importClaudeCodeSessions(
       sources: [`claudecode:${getMachineId()}:${targetSession.id}`],
     };
 
+    queuePersonRewritePhase(stateManager);
+    queueTopicRewritePhase(stateManager);
     const ccSettings = stateManager.getHuman().settings?.claudeCode;
     queueAllScans(context, stateManager, {
       extraction_model: ccSettings?.extraction_model,

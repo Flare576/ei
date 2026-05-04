@@ -8,6 +8,10 @@ import {
   queueAllScans,
   type ExtractionContext,
 } from "../../core/orchestrators/human-extraction.js";
+import {
+  queuePersonRewritePhase,
+  queueTopicRewritePhase,
+} from "../../core/orchestrators/ceremony.js";
 import { isProcessRunning } from "../process-check.js";
 import { getMachineId } from "../machine-id.js";
 
@@ -195,6 +199,7 @@ export async function importOpenCodeSessions(
 
   const cutoffIso = processedSessions[targetSession.id] ?? null;
   const cutoffMs = cutoffIso ? new Date(cutoffIso).getTime() : null;
+  let anyPersonaHasChanges = false;
 
   for (const [, { persona, msgs: agentMsgs, isNew, agentName }] of byPersonaId) {
     if (isNew) {
@@ -252,6 +257,7 @@ export async function importOpenCodeSessions(
       };
 
       if (!signal?.aborted) {
+        anyPersonaHasChanges = true;
         const openCodeSettings = stateManager.getHuman().settings?.opencode;
         queueAllScans(context, stateManager, {
           extraction_model: openCodeSettings?.extraction_model,
@@ -264,7 +270,13 @@ export async function importOpenCodeSessions(
 
   result.sessionsProcessed = 1;
 
-  // ─── Step 6: Advance extraction state ────────────────────────────────
+  // ─── Step 6: Queue rewrite checks if any persona had new messages ─────
+  if (anyPersonaHasChanges && !signal?.aborted) {
+    queuePersonRewritePhase(stateManager);
+    queueTopicRewritePhase(stateManager);
+  }
+
+  // ─── Step 7: Advance extraction state ────────────────────────────────
   updateExtractionState(stateManager, targetSession);
 
   console.log(
