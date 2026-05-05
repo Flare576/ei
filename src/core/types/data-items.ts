@@ -19,6 +19,7 @@ export interface DataItemBase {
   persona_groups?: string[];
   embedding?: number[];
   rewrite_checked?: boolean;     // True after rewrite scan finds no changes. Cleared automatically when extraction upserts a fresh item.
+  rewrite_length_floor?: number; // Set when rewrite_checked becomes true: description.length * 1.1. Re-scan is skipped until description grows past this floor. Cleared alongside rewrite_checked when extraction upserts.
 }
 
 export interface Fact extends DataItemBase {

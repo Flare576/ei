@@ -41,10 +41,18 @@ export async function handleRewriteScan(response: LLMResponse, state: StateManag
     const human = state.getHuman();
     if (itemType === "topic") {
       const topic = human.topics.find(t => t.id === itemId);
-      if (topic) state.human_topic_upsert({ ...topic, rewrite_checked: true });
+      if (topic) state.human_topic_upsert({
+        ...topic,
+        rewrite_checked: true,
+        rewrite_length_floor: Math.ceil((topic.description?.length ?? 0) * 1.1),
+      });
     } else if (itemType === "person") {
       const person = human.people.find(p => p.id === itemId);
-      if (person) state.human_person_upsert({ ...person, rewrite_checked: true });
+      if (person) state.human_person_upsert({
+        ...person,
+        rewrite_checked: true,
+        rewrite_length_floor: Math.ceil((person.description?.length ?? 0) * 1.1),
+      });
     }
     return;
   }
@@ -267,10 +275,18 @@ export async function handleRewriteRewrite(response: LLMResponse, state: StateMa
   const updatedHuman = state.getHuman();
   if (itemType === "topic") {
     const original = updatedHuman.topics.find(t => t.id === itemId);
-    if (original) state.human_topic_upsert({ ...original, rewrite_checked: true });
+    if (original) state.human_topic_upsert({
+      ...original,
+      rewrite_checked: true,
+      rewrite_length_floor: Math.ceil((original.description?.length ?? 0) * 1.1),
+    });
   } else if (itemType === "person") {
     const original = updatedHuman.people.find(p => p.id === itemId);
-    if (original) state.human_person_upsert({ ...original, rewrite_checked: true });
+    if (original) state.human_person_upsert({
+      ...original,
+      rewrite_checked: true,
+      rewrite_length_floor: Math.ceil((original.description?.length ?? 0) * 1.1),
+    });
   }
 
   console.log(`[handleRewriteRewrite] Complete for ${itemType} "${itemId}": ${existingCount} existing updated, ${newCount} new created`);
