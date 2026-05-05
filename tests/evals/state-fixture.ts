@@ -12,6 +12,7 @@ const NULL_STORAGE: Storage = {
   moveToBackup: async () => {},
   loadBackup: async () => null,
   saveRollingBackup: async () => {},
+  getDataPath: () => "",
 };
 
 export interface StateFixture {

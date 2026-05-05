@@ -360,14 +360,20 @@ export class Processor {
       [...primary.topics, ...primary.people, ...primary.facts].map(i => i.id)
     );
 
+    const MAX_QUOTES_PER_ENTITY = 3;
+
     const enrichTopic = (topic: import("../prompts/synthesis/types.js").EnrichedTopic["topic"]) => {
-      const linked = this.stateManager.human_quote_getForDataItem(topic.id);
+      const linked = this.stateManager.human_quote_getForDataItem(topic.id)
+        .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+        .slice(0, MAX_QUOTES_PER_ENTITY);
       linked.forEach(q => seenQuoteIds.add(q.id));
       return { topic, quotes: linked };
     };
 
     const enrichPerson = (person: import("../prompts/synthesis/types.js").EnrichedPerson["person"]) => {
-      const linked = this.stateManager.human_quote_getForDataItem(person.id);
+      const linked = this.stateManager.human_quote_getForDataItem(person.id)
+        .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+        .slice(0, MAX_QUOTES_PER_ENTITY);
       linked.forEach(q => seenQuoteIds.add(q.id));
       return { person, quotes: linked };
     };
@@ -378,12 +384,15 @@ export class Processor {
     const human = this.stateManager.getHuman();
     const allItems = [...human.facts, ...human.topics, ...human.people];
 
+    const MAX_SECONDARY_ENTITIES = 10;
+
     const secondaryTopics: typeof enrichedTopics = [];
     const secondaryPeople: typeof enrichedPeople = [];
     const secondaryFacts: typeof primary.facts = [];
 
-    for (const quote of [...enrichedTopics.flatMap(e => e.quotes), ...enrichedPeople.flatMap(e => e.quotes)]) {
+    outer: for (const quote of [...enrichedTopics.flatMap(e => e.quotes), ...enrichedPeople.flatMap(e => e.quotes)]) {
       for (const itemId of quote.data_item_ids) {
+        if (secondaryTopics.length + secondaryPeople.length + secondaryFacts.length >= MAX_SECONDARY_ENTITIES) break outer;
         if (seenItemIds.has(itemId)) continue;
         seenItemIds.add(itemId);
         const item = allItems.find(i => i.id === itemId);
@@ -400,12 +409,22 @@ export class Processor {
 
     const standaloneQuotes = primary.quotes.filter(q => !seenQuoteIds.has(q.id));
 
+    const allLoadedFacts = [...primary.facts, ...secondaryFacts];
+    const allLoadedTopics = [...enrichedTopics, ...secondaryTopics];
+    const allLoadedPeople = [...enrichedPeople, ...secondaryPeople];
+
+    const loadedEntityNames = new Map<string, string>();
+    for (const f of allLoadedFacts) loadedEntityNames.set(f.id, f.name);
+    for (const { topic } of allLoadedTopics) loadedEntityNames.set(topic.id, topic.name);
+    for (const { person } of allLoadedPeople) loadedEntityNames.set(person.id, person.name);
+
     const prompt = buildSynthesisPrompt({
       subject,
-      facts: [...primary.facts, ...secondaryFacts],
-      topics: [...enrichedTopics, ...secondaryTopics],
-      people: [...enrichedPeople, ...secondaryPeople],
+      facts: allLoadedFacts,
+      topics: allLoadedTopics,
+      people: allLoadedPeople,
       standaloneQuotes,
+      loadedEntityNames,
     });
 
     const model = this.stateManager.getHuman().settings?.rewrite_model
@@ -1886,9 +1905,15 @@ const toolNextSteps = new Set([
         }
       }
 
-      if (response.request.next_step === LLMNextStep.HandleKnowledgeSynthesis) {
+      const isSynthesisCompletion =
+        response.request.next_step === LLMNextStep.HandleKnowledgeSynthesis ||
+        (response.request.next_step === LLMNextStep.HandleToolContinuation &&
+          response.request.data.originalNextStep === LLMNextStep.HandleKnowledgeSynthesis);
+      if (isSynthesisCompletion) {
         const slug = response.request.data.slug as string;
-        if (slug) this.interface.onDocumentGenerated?.(slug);
+        const hasContent = slug && this.stateManager.messages_get("emmet")
+          .some(m => m.source_tag === `generate:document:${slug}`);
+        if (hasContent) this.interface.onDocumentGenerated?.(slug);
       }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);

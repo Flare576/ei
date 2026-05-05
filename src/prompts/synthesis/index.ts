@@ -4,31 +4,36 @@ import type { PromptOutput } from "../response/types.js";
 export type { SynthesisPromptData, EnrichedTopic, EnrichedPerson } from "./types.js";
 
 export function buildSynthesisPrompt(data: SynthesisPromptData): PromptOutput {
+  const hasEntityMap = data.loadedEntityNames !== undefined;
+
   const system = `You are synthesizing a knowledge document from a personal knowledge base called Ei.
 
 Your goal is to produce a well-structured markdown document that a human could share with a teammate, hand to their future self, or use as a reference. Write as if you are distilling what someone actually knows — not restating a list of facts, but synthesizing relationships, context, and meaning.
 
 ## What you have been given
 
-- **Facts**: Ground-truth statements. Complete as given.
-- **Topics**: Areas of interest, work, or concern with descriptions. Complete as given — you do not need to fetch them.
-- **People**: Individuals with relationship context. Complete as given — you do not need to fetch them.
-- **Quotes**: Verbatim things said, with a \`message_id\`. The quote text is complete. Use \`fetch_message\` with the \`message_id\` if you want the surrounding conversation for additional context.
+Everything below is complete as provided — do not use tools to re-fetch records already present here. Only use tools to fill genuine gaps not covered by the data below.
 
-## Tools
-
-You have tools available. Use them when the provided data leaves a clear gap:
-- \`find_memory\` — search for related topics, people, or facts not already provided
-- \`fetch_memory\` — retrieve a full record by ID (only useful for records not already given to you)
-- \`fetch_message\` — retrieve the original conversation around a quote's \`message_id\`
-
-Do not fetch records that are already present in this prompt. Use tools to fill genuine gaps, not to re-retrieve what you already have.
+- **Facts**: Ground-truth statements.
+- **Topics**: Areas of interest, work, or concern with descriptions.
+- **People**: Individuals with relationship context.
+- **Quotes**: Verbatim things said, with a \`message_id\`. Use \`fetch_message\` with the \`message_id\` if you want the surrounding conversation for additional context.${hasEntityMap ? `
+- **Quote links**: Each quote lists the entities it was extracted from. Entities marked \`(not loaded)\` were referenced by that quote but are not present in this payload — use \`fetch_memory\` with the entity ID to retrieve them if the gap is relevant to your synthesis.` : ""}
 
 ## Output
 
 Write clean, structured markdown. Use headings. Synthesize — do not just restate the bullets. Where the data tells a story or shows a pattern, say so. Where something is uncertain or a work-in-progress, reflect that. Aim for the document a thoughtful person would write after reviewing all of this, not a formatted dump.`;
 
   const lines: string[] = [`# ${data.subject}`, ""];
+
+  const formatQuoteLinks = (dataItemIds: string[]): string | null => {
+    if (!hasEntityMap || dataItemIds.length === 0) return null;
+    const labels = dataItemIds.map(id => {
+      const name = data.loadedEntityNames!.get(id);
+      return name ? `[id:${id}] ${name}` : `[id:${id}] (not loaded)`;
+    });
+    return `  _Links: ${labels.join(", ")}_`;
+  };
 
   if (data.facts.length > 0) {
     lines.push("## Facts");
@@ -50,6 +55,8 @@ Write clean, structured markdown. Use headings. Synthesize — do not just resta
         for (const q of quotes) {
           const attribution = q.channel ? `${q.speaker} in ${q.channel}` : q.speaker;
           lines.push(`- [message_id:${q.message_id ?? "none"}] "${q.text}" — ${attribution}`);
+          const linkLine = formatQuoteLinks(q.data_item_ids);
+          if (linkLine) lines.push(linkLine);
         }
       }
       lines.push("");
@@ -69,6 +76,8 @@ Write clean, structured markdown. Use headings. Synthesize — do not just resta
         for (const q of quotes) {
           const attribution = q.channel ? `${q.speaker} in ${q.channel}` : q.speaker;
           lines.push(`- [message_id:${q.message_id ?? "none"}] "${q.text}" — ${attribution}`);
+          const linkLine = formatQuoteLinks(q.data_item_ids);
+          if (linkLine) lines.push(linkLine);
         }
       }
       lines.push("");
@@ -80,6 +89,8 @@ Write clean, structured markdown. Use headings. Synthesize — do not just resta
     for (const q of data.standaloneQuotes) {
       const attribution = q.channel ? `${q.speaker} in ${q.channel}` : q.speaker;
       lines.push(`- [message_id:${q.message_id ?? "none"}] "${q.text}" — ${attribution}`);
+      const linkLine = formatQuoteLinks(q.data_item_ids);
+      if (linkLine) lines.push(linkLine);
     }
     lines.push("");
   }

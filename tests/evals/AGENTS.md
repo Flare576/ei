@@ -34,6 +34,35 @@ Observe scripts (`*.observe.ts`) are dev tools for watching model behavior — t
 npx vite-node tests/evals/reflection-critic.observe.ts
 ```
 
+### knowledge-synthesis.observe.ts — Real-data synthesis pipeline
+
+Runs the full `/generate` synthesis pipeline against a real `state.json` and prints the assembled prompt + model output. Useful for evaluating synthesis quality on real knowledge before committing prompt changes.
+
+**Requires Bun** (embedding service uses native Zig module — vite-node won't work):
+
+```bash
+# Search by subject (requires current 384-dim embeddings in state):
+EXTERNAL_STATE_FILE=~/.local/share/ei/state.json \
+bun tests/evals/knowledge-synthesis.observe.ts "your subject here"
+
+# Pass IDs directly (use when state has stale 2048-dim embeddings):
+# Get IDs: EI_DATA_PATH=~/.local/share/ei bunx ei-tui topics -n 10 "your subject" | jq '.[].id'
+EXTERNAL_STATE_FILE=~/.local/share/ei/state.json \
+bun tests/evals/knowledge-synthesis.observe.ts "your subject here" \
+  id1 id2 id3 ...
+
+# Against Anthropic (Opus):
+EXTERNAL_STATE_FILE=~/.local/share/ei/state.json \
+EVAL_PROVIDER=anthropic ANTHROPIC_API_KEY=sk-... \
+bun tests/evals/knowledge-synthesis.observe.ts "your subject here"
+```
+
+**Notes:**
+- If TopK returns 0 results, your state embeddings may be stale (dimension mismatch) — use explicit IDs instead
+- Rich topics with many linked quotes can explode prompt size; the script caps quotes per entity at 3 (configurable via `MAX_QUOTES=N`)
+- Pass `MAX_QUOTES=1` if token estimate exceeds 60k
+- The subject line is the steering wheel — "comprehensive runbook for issues found in X" vs "X" produces completely different synthesis shapes from the same data
+
 ## Filter syntax
 
 `--filter=<string>` matches against `description` (substring) or `tags` (exact tag name). Case-insensitive.

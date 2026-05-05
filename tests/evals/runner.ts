@@ -96,7 +96,7 @@ function resolveProvider(): { baseURL: string; model: string; authHeader: string
     if (!apiKey) throw new Error("EVAL_PROVIDER=anthropic requires ANTHROPIC_API_KEY");
     return {
       baseURL: "https://api.anthropic.com/v1",
-      model: process.env.EVAL_MODEL ?? "claude-opus-4-6-20251201",
+      model: process.env.EVAL_MODEL ?? "claude-opus-4-6",
       authHeader: `x-api-key: ${apiKey}`,
     };
   }

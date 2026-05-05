@@ -135,6 +135,7 @@ tui/tests/e2e/
 ├── provider-command.test.ts     # /provider overlay, direct set, /model inference (port 3107)
 ├── provider-editor.test.ts      # /provider new via $EDITOR (port 3108)
 ├── tools-command.test.ts        # /tools overlay, toolkit list (port 3115)
+├── generate-synthesis.test.ts  # /generate full loop against real state.json (opt-in, requires EXTERNAL_STATE_FILE)
 ├── fixtures.ts                  # Shared test utilities and checkpoint factory
 ├── framework/
 │   └── mock-server.ts           # Re-export shim (see file for why)
@@ -152,3 +153,29 @@ Since tui-test doesn't support running test subsets, tests are split into separa
 npx @microsoft/tui-test tests/e2e/basic-commands.test.ts
 npx @microsoft/tui-test tests/e2e/context-boundary.test.ts
 ```
+
+## Real-Data Synthesis Test (Opt-In)
+
+`generate-synthesis.test.ts` exercises the full `/generate` pipeline against your real `state.json`. It is **excluded from the normal test run** because it requires live Anthropic API access and your personal state file.
+
+```bash
+# Requires: EXTERNAL_STATE_FILE pointing to your state.json
+# Uses rewrite_model from your state (should be Opus-class)
+# Takes 2-4 minutes depending on knowledge base size
+
+EXTERNAL_STATE_FILE=~/.local/share/ei/state.json \
+npm run test:e2e -- tests/e2e/generate-synthesis.test.ts
+
+# Override the synthesis subject:
+SYNTHESIS_SUBJECT="your topic here" \
+EXTERNAL_STATE_FILE=~/.local/share/ei/state.json \
+npm run test:e2e -- tests/e2e/generate-synthesis.test.ts
+
+# Assert on specific domain terms in the output:
+SYNTHESIS_SUBJECT="your topic" \
+SYNTHESIS_EXPECTED_TERMS="term1,term2,term3" \
+EXTERNAL_STATE_FILE=~/.local/share/ei/state.json \
+npm run test:e2e -- tests/e2e/generate-synthesis.test.ts
+```
+
+The generated document lands in the test's temp dir (`/tmp/ei-test-generate-synthesis-*/docs/*.md`) and is also stored in Emmett's messages in the isolated test state — it does not affect your real `state.json`.
