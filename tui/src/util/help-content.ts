@@ -109,6 +109,17 @@ EXTENDED COMMANDS
         document. Use the source tag shown when the import completed.
         /unsource my-journal-2024
 
+    /generate <subject>
+        Synthesize everything Ei knows about a subject into a clean markdown
+        document. Uses your rewrite_model (Opus-class recommended). The file
+        lands in $EI_DATA_PATH/docs/ automatically.
+        /generate everything about the Uniform project
+        /generate comprehensive runbook for the IDP deployment issues
+
+    /generate
+        (no args) — Open your generated documents. Re-run, re-export, or
+        delete from here.
+
     /tools
         Manage tool providers — enable or disable tools per persona.
 

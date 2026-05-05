@@ -32,6 +32,8 @@ Emmett is seeded via `Processor.bootstrapEmmett()` and gated by `RESERVED_PERSON
 
 To remove imported knowledge: `/unsource <source_tag>` (TUI) or the Delete button in the web Documents tab — both strip all entities where `source_tag` matches.
 
+Generated documents (from `/generate`) are also attributed to Emmett — written as `role: "system"` messages with `source_tag: "generate:document:<slug>"`. The `onDocumentGenerated` callback writes the markdown file to `$EI_DATA_PATH/docs/<slug>.md` automatically after the synthesis loop completes.
+
 ## Source of Truth
 
 | Document | Purpose |

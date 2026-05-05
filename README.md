@@ -185,6 +185,22 @@ Ei splits the document into segments, runs them through the extraction pipeline,
 
 Both surfaces show you which documents have been imported and let you remove their extracted knowledge (web: Delete button in the Documents tab; TUI: `/unsource <source_tag>`).
 
+## Knowledge Share
+
+Sometimes you want to take what Ei knows and turn it into something you can hand to another human. A new teammate joining a project. A briefing doc before a meeting. A brain dump before a vacation.
+
+**TUI**:
+```bash
+/generate everything about the Uniform project
+/generate comprehensive runbook for the IDP deployment issues
+```
+
+Give it a subject description and Ei searches its memory, chases down related entities, and synthesizes a clean markdown document using your `rewrite_model` (an Opus-class model is recommended — it'll warn you if you're about to use something less capable). The document lands in `$EI_DATA_PATH/docs/` automatically.
+
+`/generate` with no args opens a list of your existing generated documents where you can re-run, re-export, or delete them.
+
+**Web**: Open **☰ menu** → **My Data** → **Documents** tab. Click **Generate**, enter a subject, and Ei does the rest. Generated docs appear in the same list as imported ones.
+
 ## Built-in Tool Integrations
 
 Personas can use tools. Not just read-from-memory tools — *actual* tools. Web search. Your music. Your filesystem. Here's what ships with Ei out of the box:
