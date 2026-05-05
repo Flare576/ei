@@ -177,6 +177,7 @@ export async function handleRewriteRewrite(response: LLMResponse, state: StateMa
       console.warn(`[handleRewriteRewrite] Failed to compute embedding for existing ${resolvedType} "${item.name}":`, err);
     }
 
+    const existingFloor = Math.max(MIN_REWRITE_FLOOR, Math.ceil(item.description.length * 1.1));
     switch (resolvedType) {
       case "topic": {
         const existing = human.topics.find(t => t.id === item.id)!;
@@ -187,6 +188,7 @@ export async function handleRewriteRewrite(response: LLMResponse, state: StateMa
           sentiment: item.sentiment ?? existing.sentiment,
           last_updated: now,
           embedding,
+          rewrite_length_floor: existingFloor,
         });
         break;
       }
@@ -199,6 +201,7 @@ export async function handleRewriteRewrite(response: LLMResponse, state: StateMa
           sentiment: item.sentiment ?? existing.sentiment,
           last_updated: now,
           embedding,
+          rewrite_length_floor: existingFloor,
         });
         break;
       }
@@ -222,6 +225,7 @@ export async function handleRewriteRewrite(response: LLMResponse, state: StateMa
       console.warn(`[handleRewriteRewrite] Failed to compute embedding for new ${item.type} "${item.name}":`, err);
     }
 
+    const newFloor = Math.max(MIN_REWRITE_FLOOR, Math.ceil(item.description.length * 1.1));
     const baseFields = {
       id: crypto.randomUUID(),
       name: item.name,
@@ -233,6 +237,7 @@ export async function handleRewriteRewrite(response: LLMResponse, state: StateMa
       persona_groups: unionGroups,
       interested_personas: unionPersonas,
       embedding,
+      rewrite_length_floor: newFloor,
     };
 
     switch (item.type) {
