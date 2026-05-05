@@ -30,8 +30,7 @@ export function handleDocumentSegmentation(response: LLMResponse, state: StateMa
   };
 
   if (!batchId || !filename) {
-    console.error("[handleDocumentSegmentation] Missing batchId or filename in request data");
-    return;
+    throw new Error("[handleDocumentSegmentation] Missing batchId or filename in request data");
   }
 
   let segments: string[];
@@ -103,7 +102,7 @@ export function finishDocumentBatch(batchId: string, filename: string, state: St
         ...updatedHuman.settings?.document,
         processed_documents: {
           ...(updatedHuman.settings?.document?.processed_documents ?? {}),
-          [filename]: new Date().toISOString(),
+          [filename]: { created_at: new Date().toISOString(), type: "imported" },
         },
       },
     },

@@ -468,6 +468,10 @@ function App() {
       onRoomMessageProcessing: (roomId) => {
         setProcessingRoomId(roomId);
       },
+      onDocumentGenerated: () => {
+        processorRef.current?.getHuman().then(setHuman);
+        processorRef.current?.getQueueStatus().then(setQueueStatus);
+      },
     };
 
     const p = new Processor(eiInterface);
@@ -1225,20 +1229,53 @@ function App() {
     processor.getHuman().then(setHuman);
   }, [processor]);
 
-  const handleUnsource = useCallback(async (filename: string) => {
+  const handleGenerateDocument = useCallback(async (subject: string) => {
     if (!processor) return;
-    const sourceTag = `import:document:${filename}`;
-    const preview = processor.getUnsourcePreview(sourceTag);
-    const result = await processor.executeUnsource(preview);
-    const { generateInvoiceMarkdown } = await import('../../src/integrations/document/invoice.js');
-    const markdown = generateInvoiceMarkdown(preview, result);
-    const blob = new Blob([markdown], { type: 'text/markdown' });
+    try {
+      await processor.generateDocument(subject);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[Generate] ${message}`);
+    }
+  }, [processor]);
+
+  const handleDownloadGenerated = useCallback(async (slug: string) => {
+    if (!processor) return;
+    const content = await processor.getGeneratedDocumentContent(slug);
+    if (!content) return;
+    const blob = new Blob([content], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `unsource-${filename}.md`;
+    a.download = `${slug}.md`;
     a.click();
     URL.revokeObjectURL(url);
+  }, [processor]);
+
+  const handleReRunDocument = useCallback(async (slug: string) => {
+    if (!processor) return;
+    await processor.reRunDocument(slug);
+  }, [processor]);
+
+  const handleUnsource = useCallback(async (sourceOrFilename: string) => {
+    if (!processor) return;
+    const isFullSourceTag = sourceOrFilename.includes(':');
+    const sourceTag = isFullSourceTag
+      ? sourceOrFilename
+      : `import:document:${sourceOrFilename}`;
+    const preview = processor.getUnsourcePreview(sourceTag);
+    const result = await processor.executeUnsource(preview);
+    if (!sourceOrFilename.startsWith('generate:')) {
+      const { generateInvoiceMarkdown } = await import('../../src/integrations/document/invoice.js');
+      const markdown = generateInvoiceMarkdown(preview, result);
+      const blob = new Blob([markdown], { type: 'text/markdown' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `unsource-${sourceOrFilename}.md`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
     processor.getHuman().then(setHuman);
   }, [processor]);
 
@@ -1921,11 +1958,16 @@ function App() {
             setShowPersonaCreator(true);
           }}
           availableGroups={availableGroups}
-          processedDocuments={human?.settings?.document?.processed_documents ?? {}}
+          allDocuments={human?.settings?.document?.processed_documents ?? {}}
           pendingDocuments={queueStatus?.pending_documents ?? []}
           extractingDocuments={queueStatus?.extracting_documents ?? []}
           onImport={handleImportDocument}
           onUnsource={handleUnsource}
+          generatingDocuments={queueStatus?.generating_documents ?? []}
+          onGenerate={handleGenerateDocument}
+          onDownloadGenerated={handleDownloadGenerated}
+          onReRunDocument={handleReRunDocument}
+          checkGenerationModel={() => processor?.checkGenerationModel() ?? { model: 'unknown', isRewriteModel: false }}
         />
       </>
     )}

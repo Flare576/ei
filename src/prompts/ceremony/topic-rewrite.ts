@@ -35,7 +35,7 @@ Rules:
 - Be specific: "TypeScript coding conventions" beats "technical preferences"
 - If the record is cohesive and on-topic despite its length, return an empty array
 ${technicalGuidance}
-Return a raw JSON array of strings. No markdown fencing, no commentary.
+Return a raw JSON array of strings. No markdown fencing, no commentary. Thinking text WILL break the parser.
 
 Example — a Topic named "Software Engineering" whose description also discusses vim keybindings, git conventions, and AI tooling:
 ["vim keybindings and editor configuration", "git and GitHub workflow conventions", "AI coding assistant preferences"]`;
@@ -51,7 +51,7 @@ Example — a Topic named "Software Engineering" whose description also discusse
 ]
 \`\`\`
 
-Respond with raw JSON array only.`;
+Respond with raw JSON array only. Thinking text WILL break the parser.`;
 
   const user = `${payload}
 

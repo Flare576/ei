@@ -145,27 +145,29 @@ describe("Rewrite Handlers - Phase 1 (Scan)", () => {
   })
 
   describe("handleRewriteScan", () => {
-    it("returns early when missing itemId", async () => {
+    it("throws when missing itemId", async () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleRewriteScan,
         data: { itemType: "fact", rewriteModel: "TestProvider:test-model" },
       });
       const response = createMockResponse(request, ["subject1"]);
 
-      await handlers.handleRewriteScan(response, state as any);
-
+      await expect(handlers.handleRewriteScan(response, state as any)).rejects.toThrow(
+        "Missing itemId or itemType in request data"
+      );
       expect(state.queue_enqueue).not.toHaveBeenCalled();
     });
 
-    it("returns early when missing itemType", async () => {
+    it("throws when missing itemType", async () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleRewriteScan,
         data: { itemId: "bloated-fact-1", rewriteModel: "TestProvider:test-model" },
       });
       const response = createMockResponse(request, ["subject1"]);
 
-      await handlers.handleRewriteScan(response, state as any);
-
+      await expect(handlers.handleRewriteScan(response, state as any)).rejects.toThrow(
+        "Missing itemId or itemType in request data"
+      );
       expect(state.queue_enqueue).not.toHaveBeenCalled();
     });
 
@@ -180,7 +182,7 @@ describe("Rewrite Handlers - Phase 1 (Scan)", () => {
       expect(state.queue_enqueue).not.toHaveBeenCalled();
     });
 
-    it("marks rewrite_checked=true on topic when no subjects found", async () => {
+    it("sets rewrite_length_floor on topic when no subjects found", async () => {
       seedBloatedTopic(state);
       const request = createMockRequest();
       const response = createMockResponse(request, []);
@@ -189,12 +191,12 @@ describe("Rewrite Handlers - Phase 1 (Scan)", () => {
 
       expect(state.human_topic_upsert).toHaveBeenCalledTimes(1);
       expect(state.human_topic_upsert).toHaveBeenCalledWith(
-        expect.objectContaining({ id: "bloated-topic-1", rewrite_checked: true })
+        expect.objectContaining({ id: "bloated-topic-1", rewrite_length_floor: Math.ceil(800 * 1.1) })
       );
       expect(state.queue_enqueue).not.toHaveBeenCalled();
     });
 
-    it("marks rewrite_checked=true on person when no subjects found", async () => {
+    it("sets rewrite_length_floor on person when no subjects found", async () => {
       const person: Person = {
         id: "bloated-person-1",
         name: "Alice",
@@ -215,7 +217,7 @@ describe("Rewrite Handlers - Phase 1 (Scan)", () => {
 
       expect(state.human_person_upsert).toHaveBeenCalledTimes(1);
       expect(state.human_person_upsert).toHaveBeenCalledWith(
-        expect.objectContaining({ id: "bloated-person-1", rewrite_checked: true })
+        expect.objectContaining({ id: "bloated-person-1", rewrite_length_floor: Math.ceil(800 * 1.1) })
       );
       expect(state.queue_enqueue).not.toHaveBeenCalled();
     });
@@ -360,7 +362,7 @@ describe("Rewrite Handlers - Phase 2 (Rewrite)", () => {
   });
 
   describe("handleRewriteRewrite", () => {
-    it("returns early when missing itemId", async () => {
+    it("throws when missing itemId", async () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleRewriteRewrite,
         data: { itemType: "fact" },
@@ -370,8 +372,9 @@ describe("Rewrite Handlers - Phase 2 (Rewrite)", () => {
         new: [],
       });
 
-      await handlers.handleRewriteRewrite(response, state as any);
-
+      await expect(handlers.handleRewriteRewrite(response, state as any)).rejects.toThrow(
+        "Missing itemId or itemType in request data"
+      );
       expect(state.human_fact_upsert).not.toHaveBeenCalled();
     });
 
@@ -647,14 +650,14 @@ describe("Rewrite Handlers - Phase 2 (Rewrite)", () => {
       expect(updatedTopic.name).toBe("Software Engineering (Focused)");
 
       const markingCall = state.human_topic_upsert.mock.calls[1][0];
-      expect(markingCall.rewrite_checked).toBe(true);
+      expect(markingCall.rewrite_length_floor).toBeDefined();
 
       const newPerson = state.human_person_upsert.mock.calls[0][0];
       expect(newPerson.name).toBe("New Person From Rewrite");
       expect(newPerson.relationship).toBe("coworker");
     });
 
-    it("marks rewrite_checked=true on original topic after processing completes", async () => {
+    it("sets rewrite_length_floor on original topic after processing completes", async () => {
       seedBloatedTopic(state);
       const request = createMockRequest({
         next_step: LLMNextStep.HandleRewriteRewrite,
@@ -674,12 +677,13 @@ describe("Rewrite Handlers - Phase 2 (Rewrite)", () => {
       await handlers.handleRewriteRewrite(response, state as any);
 
       const markingCall = state.human_topic_upsert.mock.calls.find(
-        ([t]: [Topic]) => t.id === "bloated-topic-1" && t.rewrite_checked === true
+        ([t]: [Topic]) => t.id === "bloated-topic-1" && t.rewrite_length_floor !== undefined
       );
       expect(markingCall).toBeDefined();
+      expect(markingCall![0].rewrite_length_floor).toBe(Math.ceil(800 * 1.1));
     });
 
-    it("marks rewrite_checked=true on original person after processing completes", async () => {
+    it("sets rewrite_length_floor on original person after processing completes", async () => {
       const person: Person = {
         id: "bloated-person-1",
         name: "Alice",
@@ -709,9 +713,10 @@ describe("Rewrite Handlers - Phase 2 (Rewrite)", () => {
       await handlers.handleRewriteRewrite(response, state as any);
 
       const markingCall = state.human_person_upsert.mock.calls.find(
-        ([p]: [Person]) => p.id === "bloated-person-1" && p.rewrite_checked === true
+        ([p]: [Person]) => p.id === "bloated-person-1" && p.rewrite_length_floor !== undefined
       );
       expect(markingCall).toBeDefined();
+      expect(markingCall![0].rewrite_length_floor).toBe(Math.ceil(800 * 1.1));
     });
   });
 });

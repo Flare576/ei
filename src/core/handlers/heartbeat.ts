@@ -13,14 +13,12 @@ export function handleHeartbeatCheck(response: LLMResponse, state: StateManager)
   const personaId = response.request.data.personaId as string;
   const personaDisplayName = response.request.data.personaDisplayName as string;
   if (!personaId) {
-    console.error("[handleHeartbeatCheck] No personaId in request data");
-    return;
+    throw new Error("[handleHeartbeatCheck] No personaId in request data");
   }
 
   const result = response.parsed as HeartbeatCheckResult | undefined;
   if (!result) {
-    console.error(`[HeartbeatCheck ${personaDisplayName}] No parsed result`);
-    return;
+    throw new Error(`[HeartbeatCheck ${personaDisplayName}] No parsed result`);
   }
   console.log(`[HeartbeatCheck ${personaDisplayName}] Parsed result - should_respond: ${result.should_respond}, topic: ${result.topic ?? '(none)'}, message: ${result.message ? '(present)' : '(none)'}`);
 
@@ -52,8 +50,7 @@ export function handleHeartbeatCheck(response: LLMResponse, state: StateManager)
 export function handleEiHeartbeat(response: LLMResponse, state: StateManager): void {
   const result = response.parsed as EiHeartbeatResult | undefined;
   if (!result) {
-    console.error("[EiHeartbeat] No parsed result");
-    return;
+    throw new Error("[EiHeartbeat] No parsed result");
   }
   console.log(`[EiHeartbeat] Parsed result - should_respond: ${result.should_respond}, id: ${result.id ?? '(none)'}, my_response: ${result.my_response ? '(present)' : '(none)'}`);
   const now = new Date().toISOString();
@@ -127,8 +124,7 @@ export function handleReflectionCritic(response: LLMResponse, state: StateManage
 
   const result = response.parsed as ReflectionCriticResult | undefined;
   if (!result?.critique) {
-    console.error(`[ReflectionCritic ${personaDisplayName}] Invalid or missing parsed result`);
-    return;
+    throw new Error(`[ReflectionCritic ${personaDisplayName}] Invalid or missing parsed result`);
   }
 
   const personRecord = state.human_person_getByIdentifier("Ei Persona", personaId);
@@ -150,8 +146,7 @@ export function handleReflectionCritic(response: LLMResponse, state: StateManage
 
   const persona = state.persona_getById(personaId);
   if (!persona) {
-    console.error(`[ReflectionCritic ${personaDisplayName}] Persona not found after critic`);
-    return;
+    throw new Error(`[ReflectionCritic ${personaDisplayName}] Persona not found after critic`);
   }
 
   const mergedTopics = result.updated_identity.topics.map(updatedTopic => {

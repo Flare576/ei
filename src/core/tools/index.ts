@@ -64,7 +64,7 @@ export const SYSTEM_TOOLS: ToolDefinition[] = [
     builtin: true,
     enabled: true,
     created_at: new Date(0).toISOString(),
-    max_calls_per_interaction: 3,
+    max_calls_per_interaction: 10,
   },
   {
     id: "builtin-fetch-message",

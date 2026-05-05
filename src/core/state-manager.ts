@@ -71,6 +71,7 @@ export class StateManager {
     this.migrateProviderModel();
     this.migrateThemes();
     this.migrateFfaParentIds();
+    this.migrateDocumentSettings();
   }
 
   /**
@@ -583,6 +584,40 @@ export class StateManager {
     if (migratedCount > 0) {
       this.scheduleSave();
       console.log(`[StateManager] Migrated ${migratedCount} FFA human messages to root parent_id`);
+    }
+  }
+
+  private migrateDocumentSettings(): void {
+    const human = this.humanState.get();
+    const doc = human.settings?.document;
+    if (!doc) return;
+
+    let migrated = false;
+
+    const existing = doc.processed_documents ?? {};
+    for (const [key, value] of Object.entries(existing)) {
+      if (typeof value === "string") {
+        (existing as Record<string, unknown>)[key] = { created_at: value, type: "imported" };
+        migrated = true;
+      }
+    }
+
+    const legacy = (doc as Record<string, unknown>).generated_documents as
+      | Record<string, { subject: string; created_at: string }>
+      | undefined;
+    if (legacy) {
+      for (const [slug, record] of Object.entries(legacy)) {
+        existing[slug] = { created_at: record.created_at, type: "generated", subject: record.subject };
+      }
+      delete (doc as Record<string, unknown>).generated_documents;
+      migrated = true;
+    }
+
+    if (migrated) {
+      doc.processed_documents = existing as import("./types/entities.js").DocumentSettings["processed_documents"];
+      this.humanState.set(human);
+      this.scheduleSave();
+      console.log("[StateManager] Migrated document settings to unified processed_documents schema");
     }
   }
 

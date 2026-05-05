@@ -15,8 +15,7 @@ export function handlePersonaResponse(response: LLMResponse, state: StateManager
   const personaId = response.request.data.personaId as string;
   const personaDisplayName = response.request.data.personaDisplayName as string;
   if (!personaId) {
-    console.error("[handlePersonaResponse] No personaId in request data");
-    return;
+    throw new Error("[handlePersonaResponse] No personaId in request data");
   }
 
   state.messages_markPendingAsRead(personaId);
@@ -108,7 +107,7 @@ export function handleToolContinuation(response: LLMResponse, state: StateManage
   const originalStep = response.request.data.originalNextStep as LLMNextStep | undefined;
   
   if (!originalStep) {
-    console.error(`[handleToolContinuation] No originalNextStep in data, falling back to handlePersonaResponse`);
+    console.warn(`[handleToolContinuation] No originalNextStep in data, falling back to handlePersonaResponse`);
     handlePersonaResponse(response, state);
     return;
   }
@@ -118,7 +117,7 @@ export function handleToolContinuation(response: LLMResponse, state: StateManage
   const handler = handlers[originalStep];
   
   if (!handler) {
-    console.error(`[handleToolContinuation] No handler found for ${originalStep}, falling back to handlePersonaResponse`);
+    console.warn(`[handleToolContinuation] No handler found for ${originalStep}, falling back to handlePersonaResponse`);
     handlePersonaResponse(response, state);
     return;
   }

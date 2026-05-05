@@ -51,6 +51,15 @@ export async function getQueueStatus(sm: StateManager): Promise<QueueStatus> {
   }
   const extracting_documents = extractingSet.size > 0 ? Array.from(extractingSet) : undefined;
 
+  const generatingSet: string[] = [];
+  for (const item of activeItems) {
+    if (item.next_step === LLMNextStep.HandleKnowledgeSynthesis) {
+      const slug = (item.data as { slug?: string }).slug;
+      if (slug) generatingSet.push(slug);
+    }
+  }
+  const generating_documents = generatingSet.length > 0 ? generatingSet : undefined;
+
   return {
     state: sm.queue_isPaused()
       ? "paused"
@@ -62,6 +71,7 @@ export async function getQueueStatus(sm: StateManager): Promise<QueueStatus> {
     embedding_warning: sm.embedding_getWarning() || undefined,
     pending_documents,
     extracting_documents,
+    generating_documents,
   };
 }
 

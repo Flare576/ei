@@ -19,15 +19,19 @@ export const unsourceCommand: Command = {
         return;
       }
 
-      const items = sources.map(f => ({
-        id: `import:document:${f}`,
-        display_name: `import:document:${f}`,
-        aliases: [] as string[],
-        is_paused: false,
-        is_archived: false,
-        unread_count: 0,
-        has_pending_update: false,
-      }));
+      const items = sources.map(f => {
+        const prefix = docs[f]?.type === "generated" ? "generate:document:" : "import:document:";
+        const tag = `${prefix}${f}`;
+        return {
+          id: tag,
+          display_name: tag,
+          aliases: [] as string[],
+          is_paused: false,
+          is_archived: false,
+          unread_count: 0,
+          has_pending_update: false,
+        };
+      });
 
       ctx.showOverlay((hideOverlay) => (
         <PersonaListOverlay
@@ -50,7 +54,10 @@ export const unsourceCommand: Command = {
     if (!rawArg.includes(":")) {
       const human = await ctx.ei.getHuman();
       const docs = human.settings?.document?.processed_documents ?? {};
-      const allSources = Object.keys(docs).map(f => `import:document:${f}`);
+      const allSources = Object.keys(docs).map(f => {
+        const prefix = docs[f]?.type === "generated" ? "generate:document:" : "import:document:";
+        return `${prefix}${f}`;
+      });
       const matches = allSources.filter(s => s.endsWith(rawArg) || s.includes(rawArg));
       if (matches.length === 1) {
         sourceTag = matches[0];

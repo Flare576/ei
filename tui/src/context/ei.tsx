@@ -155,6 +155,10 @@ export interface EiContextValue {
   importDocument: (filePath: string) => Promise<import('../../../src/integrations/document/types.js').DocumentImportResult>;
   getUnsourcePreview: (sourceTag: string) => import('../../../src/integrations/document/unsource.js').UnsourcePreview;
   executeUnsource: (preview: import('../../../src/integrations/document/unsource.js').UnsourcePreview) => Promise<import('../../../src/integrations/document/unsource.js').UnsourceResult>;
+  generateDocument: (subject: string) => Promise<{ slug: string }>;
+  reRunDocument: (slug: string) => Promise<{ slug: string }>;
+  writeGeneratedDocument: (slug: string) => Promise<string | null>;
+  checkGenerationModel: () => { model: string; isRewriteModel: boolean };
 }
 const EiContext = createContext<EiContextValue>();
 
@@ -356,6 +360,34 @@ export const EiProvider: ParentComponent = (props) => {
     const { writeUnsourceInvoice } = await import("../../../src/integrations/document/invoice.js");
     await writeUnsourceInvoice(preview, result, eiDataPath);
     return result;
+  };
+
+  const generateDocument = async (subject: string): Promise<{ slug: string }> => {
+    if (!processor) throw new Error("Processor not ready");
+    return processor.generateDocument(subject);
+  };
+
+  const reRunDocument = async (slug: string): Promise<{ slug: string }> => {
+    if (!processor) throw new Error("Processor not ready");
+    return processor.reRunDocument(slug);
+  };
+
+  const writeGeneratedDocument = async (slug: string): Promise<string | null> => {
+    if (!processor) throw new Error("Processor not ready");
+    const content = await processor.getGeneratedDocumentContent(slug);
+    if (!content) return null;
+    const { join } = await import("node:path");
+    const { mkdirSync, writeFileSync } = await import("node:fs");
+    const dir = join(eiDataPath, "docs");
+    mkdirSync(dir, { recursive: true });
+    const outPath = join(dir, `${slug}.md`);
+    writeFileSync(outPath, content);
+    return outPath;
+  };
+
+  const checkGenerationModel = (): { model: string; isRewriteModel: boolean } => {
+    if (!processor) throw new Error("Processor not ready");
+    return processor.checkGenerationModel();
   };
 
   const archivePersona = async (personaId: string) => {
@@ -909,6 +941,17 @@ export const EiProvider: ParentComponent = (props) => {
         onRoomMessageProcessing: (roomId) => {
           if (roomId === store.activeRoomId) setStore("isRoomProcessing", true);
         },
+        onDocumentGenerated: async (slug) => {
+          const { join } = await import("node:path");
+          const { mkdirSync, writeFileSync } = await import("node:fs");
+          const content = await processor!.getGeneratedDocumentContent(slug);
+          if (content) {
+            const dir = join(eiDataPath, "docs");
+            mkdirSync(dir, { recursive: true });
+            writeFileSync(join(dir, `${slug}.md`), content);
+            showNotification(`Document ready: ${join(dir, `${slug}.md`)}`, "info");
+          }
+        },
       };
       processor = new Processor(eiInterface);
       logger.debug("Processor created, calling start()");
@@ -1026,6 +1069,10 @@ export const EiProvider: ParentComponent = (props) => {
     importDocument,
     getUnsourcePreview,
     executeUnsource,
+    generateDocument,
+    reRunDocument,
+    writeGeneratedDocument,
+    checkGenerationModel,
   };
   return (
     <Switch>

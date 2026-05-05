@@ -150,13 +150,15 @@ export async function executeUnsource(
     stateManager.messages_remove("emmet", sourceMessageIds);
   }
 
-  const filename = preview.sourceTag.startsWith("import:document:")
+  const key = preview.sourceTag.startsWith("import:document:")
     ? preview.sourceTag.slice("import:document:".length)
-    : preview.sourceTag;
+    : preview.sourceTag.startsWith("generate:document:")
+      ? preview.sourceTag.slice("generate:document:".length)
+      : preview.sourceTag;
 
   const human = stateManager.getHuman();
   if (human.settings?.document?.processed_documents) {
-    delete human.settings.document.processed_documents[filename];
+    delete human.settings.document.processed_documents[key];
     stateManager.setHuman(human);
   }
 

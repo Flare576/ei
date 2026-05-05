@@ -17,8 +17,7 @@ export function handleRoomResponse(response: LLMResponse, state: StateManager): 
   const parentMessageId = response.request.data.parentMessageId as string | null ?? null;
 
   if (!roomId || !personaId) {
-    console.error("[handleRoomResponse] Missing roomId or personaId in request data");
-    return;
+    throw new Error("[handleRoomResponse] Missing roomId or personaId in request data");
   }
 
   const now = new Date().toISOString();
@@ -111,19 +110,16 @@ export async function handleRoomJudge(response: LLMResponse, state: StateManager
   const judgeDisplayName = response.request.data.judgePersonaDisplayName as string;
 
   if (!roomId) {
-    console.error("[handleRoomJudge] Missing roomId in request data");
-    return;
+    throw new Error("[handleRoomJudge] Missing roomId in request data");
   }
 
   if (!response.parsed) {
-    console.error(`[handleRoomJudge] No parsed result from judge ${judgeDisplayName}`);
-    return;
+    throw new Error(`[handleRoomJudge] No parsed result from judge ${judgeDisplayName}`);
   }
 
   const result = response.parsed as RoomJudgeResult;
   if (!result.winner_message_id) {
-    console.error(`[handleRoomJudge] Judge ${judgeDisplayName} returned no winner_message_id`);
-    return;
+    throw new Error(`[handleRoomJudge] Judge ${judgeDisplayName} returned no winner_message_id`);
   }
 
   const judgePersonaId = response.request.data.judgePersonaId as string;
@@ -131,16 +127,14 @@ export async function handleRoomJudge(response: LLMResponse, state: StateManager
   const allMessages = state.getRoomMessages(roomId);
   const winner = allMessages.find(m => m.id === result.winner_message_id);
   if (!winner) {
-    console.error(`[handleRoomJudge] Winner message ${result.winner_message_id} not found in room ${roomId}`);
-    return;
+    throw new Error(`[handleRoomJudge] Winner message ${result.winner_message_id} not found in room ${roomId}`);
   }
 
   const verdictParentId = winner.parent_id;
 
   const ok = state.setRoomActiveNode(roomId, result.winner_message_id);
   if (!ok) {
-    console.error(`[handleRoomJudge] Could not set active node ${result.winner_message_id} in room ${roomId}`);
-    return;
+    throw new Error(`[handleRoomJudge] Could not set active node ${result.winner_message_id} in room ${roomId}`);
   }
 
   const losers = allMessages

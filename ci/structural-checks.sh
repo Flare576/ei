@@ -82,11 +82,12 @@ echo ""
 #    when result.name was missing after prompt schema change.)
 # ------------------------------------------------------------------
 echo "Handlers — no silent drops (console.error + return without throw)"
-# Only check extraction handlers — these process LLM-extracted user data.
-# Losing a result here means data is gone. Heartbeat/dedup/rewrite returning
-# on error is fine (no user data at stake).
-EXTRACTION_HANDLERS="$ROOT/src/core/handlers/human-extraction.ts $ROOT/src/core/handlers/human-matching.ts"
-SILENT_DROPS=$(for file in $EXTRACTION_HANDLERS; do
+# All handlers must throw on unrecoverable error — no queue item is ok to drop silently.
+# The processor's error path surfaces failures to the user via onError.
+# Legitimate flow-control returns (e.g. should_respond=false, no changes needed) use
+# console.log, not console.error — this check only flags console.error + return pairs.
+ALL_HANDLERS=$(ls "$ROOT"/src/core/handlers/*.ts | grep -v 'index\.ts\|utils\.ts')
+SILENT_DROPS=$(for file in $ALL_HANDLERS; do
     python3 - "$file" <<'PYEOF'
 import sys, re
 content = open(sys.argv[1]).read()
@@ -143,7 +144,8 @@ for i, line in enumerate(lines):
             has_literal = 'extraction_model' in data_content
             has_options_spread = '...options' in data_content
             has_context_spread = '...context' in data_content
-            if not (has_literal or has_options_spread or has_context_spread):
+            has_effective_options_spread = '...effectiveOptions' in data_content
+            if not (has_literal or has_options_spread or has_context_spread or has_effective_options_spread):
                 next_step = re.search(r'next_step:\s*LLMNextStep\.(\w+)', block)
                 ns = next_step.group(1) if next_step else '?'
                 violations.append(f"  line {i+1}: {ns}")

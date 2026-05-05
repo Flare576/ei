@@ -79,3 +79,6 @@ export type {
   RoomHistoryMessage,
   RoomJudgeCandidate,
 } from "./room/types.js";
+
+export { buildSynthesisPrompt } from "./synthesis/index.js";
+export type { SynthesisPromptData } from "./synthesis/types.js";

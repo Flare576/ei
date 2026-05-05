@@ -44,6 +44,7 @@ import { EI_WELCOME_MESSAGE, EI_PERSONA_DEFINITION } from "../templates/welcome.
 import { EMMETT_PERSONA_DEFINITION } from "../templates/emmett.js";
 import { shouldStartCeremony, startCeremony, handleCeremonyProgress, queueReflectionDrain, queueUserDedupRequest, queueRoomCapture, queuePersonaCapture, checkAndQueueRoomExtraction, queueTargetedPersonUpdate, queueTargetedTopicUpdate } from "./orchestrators/index.js";
 import { finishDocumentBatch } from "./handlers/document-segmentation.js";
+import { buildSynthesisPrompt } from "../prompts/synthesis/index.js";
 import { BUILT_IN_FACTS } from "./constants/built-in-facts.js";
 import { DEFAULT_SEED_TRAITS } from "./constants/seed-traits.js";
 
@@ -333,6 +334,140 @@ export class Processor {
   async executeUnsource(preview: UnsourcePreview): Promise<UnsourceResult> {
     const { executeUnsource } = await import("../integrations/document/unsource.js");
     return executeUnsource(preview, this.stateManager);
+  }
+
+  async generateDocument(subject: string): Promise<{ slug: string }> {
+    this.bootstrapEmmett();
+    const slugBase = subject
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .slice(0, 40);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const slug = `${slugBase}_${timestamp}`;
+
+    const primary = await this.searchHumanData(subject, { limit: 20 });
+    if (
+      primary.facts.length === 0 &&
+      primary.topics.length === 0 &&
+      primary.people.length === 0 &&
+      primary.quotes.length === 0
+    ) {
+      throw new Error(`No knowledge found about '${subject}'`);
+    }
+
+    const seenQuoteIds = new Set<string>();
+    const seenItemIds = new Set<string>(
+      [...primary.topics, ...primary.people, ...primary.facts].map(i => i.id)
+    );
+
+    const MAX_QUOTES_PER_ENTITY = 3;
+
+    const enrichTopic = (topic: import("../prompts/synthesis/types.js").EnrichedTopic["topic"]) => {
+      const linked = this.stateManager.human_quote_getForDataItem(topic.id)
+        .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+        .slice(0, MAX_QUOTES_PER_ENTITY);
+      linked.forEach(q => seenQuoteIds.add(q.id));
+      return { topic, quotes: linked };
+    };
+
+    const enrichPerson = (person: import("../prompts/synthesis/types.js").EnrichedPerson["person"]) => {
+      const linked = this.stateManager.human_quote_getForDataItem(person.id)
+        .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+        .slice(0, MAX_QUOTES_PER_ENTITY);
+      linked.forEach(q => seenQuoteIds.add(q.id));
+      return { person, quotes: linked };
+    };
+
+    const enrichedTopics = primary.topics.map(enrichTopic);
+    const enrichedPeople = primary.people.map(enrichPerson);
+
+    const human = this.stateManager.getHuman();
+    const allItems = [...human.facts, ...human.topics, ...human.people];
+
+    const MAX_SECONDARY_ENTITIES = 10;
+
+    const secondaryTopics: typeof enrichedTopics = [];
+    const secondaryPeople: typeof enrichedPeople = [];
+    const secondaryFacts: typeof primary.facts = [];
+
+    outer: for (const quote of [...enrichedTopics.flatMap(e => e.quotes), ...enrichedPeople.flatMap(e => e.quotes)]) {
+      for (const itemId of quote.data_item_ids) {
+        if (secondaryTopics.length + secondaryPeople.length + secondaryFacts.length >= MAX_SECONDARY_ENTITIES) break outer;
+        if (seenItemIds.has(itemId)) continue;
+        seenItemIds.add(itemId);
+        const item = allItems.find(i => i.id === itemId);
+        if (!item) continue;
+        if (human.topics.find(t => t.id === itemId)) {
+          secondaryTopics.push(enrichTopic(item as typeof primary.topics[0]));
+        } else if (human.people.find(p => p.id === itemId)) {
+          secondaryPeople.push(enrichPerson(item as typeof primary.people[0]));
+        } else if (human.facts.find(f => f.id === itemId)) {
+          secondaryFacts.push(item as typeof primary.facts[0]);
+        }
+      }
+    }
+
+    const standaloneQuotes = primary.quotes.filter(q => !seenQuoteIds.has(q.id));
+
+    const allLoadedFacts = [...primary.facts, ...secondaryFacts];
+    const allLoadedTopics = [...enrichedTopics, ...secondaryTopics];
+    const allLoadedPeople = [...enrichedPeople, ...secondaryPeople];
+
+    const loadedEntityNames = new Map<string, string>();
+    for (const f of allLoadedFacts) loadedEntityNames.set(f.id, f.name);
+    for (const { topic } of allLoadedTopics) loadedEntityNames.set(topic.id, topic.name);
+    for (const { person } of allLoadedPeople) loadedEntityNames.set(person.id, person.name);
+
+    const prompt = buildSynthesisPrompt({
+      subject,
+      facts: allLoadedFacts,
+      topics: allLoadedTopics,
+      people: allLoadedPeople,
+      standaloneQuotes,
+      loadedEntityNames,
+    });
+
+    const model = this.stateManager.getHuman().settings?.rewrite_model
+      ?? this.stateManager.getHuman().settings?.default_model;
+
+    this.stateManager.queue_enqueue({
+      type: LLMRequestType.Raw,
+      priority: LLMPriority.Normal,
+      system: prompt.system,
+      user: prompt.user,
+      next_step: LLMNextStep.HandleKnowledgeSynthesis,
+      model,
+      data: { slug, subject },
+    });
+
+    return { slug };
+  }
+
+  checkGenerationModel(): { model: string; isRewriteModel: boolean } {
+    const settings = this.stateManager.getHuman().settings;
+    if (settings?.rewrite_model) {
+      return { model: settings.rewrite_model, isRewriteModel: true };
+    }
+    return { model: settings?.default_model ?? "unknown", isRewriteModel: false };
+  }
+
+  async getGeneratedDocumentContent(slug: string): Promise<string | null> {
+    const messages = this.stateManager.messages_get("emmet");
+    const target = `generate:document:${slug}`;
+    const message = messages.find(m => m.source_tag === target);
+    return message?.content ?? null;
+  }
+
+  async reRunDocument(slug: string): Promise<{ slug: string }> {
+    const docs = this.stateManager.getHuman().settings?.document?.processed_documents ?? {};
+    const entry = docs[slug];
+    if (!entry || entry.type !== "generated" || !entry.subject) {
+      throw new Error(`No generated document found for slug "${slug}"`);
+    }
+    const subject = entry.subject;
+    const preview = this.getUnsourcePreview(`generate:document:${slug}`);
+    await this.executeUnsource(preview);
+    return this.generateDocument(subject);
   }
 
   /**
@@ -1087,6 +1222,7 @@ const toolNextSteps = new Set([
   LLMNextStep.HandleEiHeartbeat,
   LLMNextStep.HandleToolContinuation,
   LLMNextStep.HandleDedupCurate,
+  LLMNextStep.HandleKnowledgeSynthesis,
 ]);
             const toolPersonaId =
               personaId ??
@@ -1101,9 +1237,17 @@ const toolNextSteps = new Set([
               (request.next_step === LLMNextStep.HandleToolContinuation &&
                 request.data.originalNextStep === LLMNextStep.HandleDedupCurate);
 
+            const isSynthesisRequest = request.next_step === LLMNextStep.HandleKnowledgeSynthesis ||
+              (request.next_step === LLMNextStep.HandleToolContinuation &&
+                request.data.originalNextStep === LLMNextStep.HandleKnowledgeSynthesis);
+
             let tools: ToolDefinition[] = [];
             if (isDedupRequest) {
               tools = SYSTEM_TOOLS.filter(t => t.name === "find_memory");
+            } else if (isSynthesisRequest) {
+              tools = SYSTEM_TOOLS.filter(t =>
+                t.name === "find_memory" || t.name === "fetch_memory" || t.name === "fetch_message"
+              );
             } else if (toolNextSteps.has(request.next_step) && toolPersonaId) {
               tools = [...SYSTEM_TOOLS, ...this.stateManager.tools_getForPersona(toolPersonaId, this.isTUI)];
             }
@@ -1759,6 +1903,17 @@ const toolNextSteps = new Set([
           this.interface.onMessageAdded?.("emmet");
           this.interface.onHumanUpdated?.();
         }
+      }
+
+      const isSynthesisCompletion =
+        response.request.next_step === LLMNextStep.HandleKnowledgeSynthesis ||
+        (response.request.next_step === LLMNextStep.HandleToolContinuation &&
+          response.request.data.originalNextStep === LLMNextStep.HandleKnowledgeSynthesis);
+      if (isSynthesisCompletion) {
+        const slug = response.request.data.slug as string;
+        const hasContent = slug && this.stateManager.messages_get("emmet")
+          .some(m => m.source_tag === `generate:document:${slug}`);
+        if (hasContent) this.interface.onDocumentGenerated?.(slug);
       }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);

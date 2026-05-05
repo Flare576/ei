@@ -18,7 +18,7 @@ export interface DataItemBase {
   sources?: string[];            // Namespaced source identifiers — where items were learned from. Format: "provider:id" (e.g., "opencode:ses_abc123", "cursor:composerId"). Grow-only union.
   persona_groups?: string[];
   embedding?: number[];
-  rewrite_checked?: boolean;     // True after rewrite scan finds no changes. Cleared automatically when extraction upserts a fresh item.
+  rewrite_length_floor?: number; // Set after every rewrite scan: ceil(description.length * 1.1). Item is skipped by ceremony until description grows past this floor. Preserved across extraction upserts — only cleared when description exceeds it.
 }
 
 export interface Fact extends DataItemBase {

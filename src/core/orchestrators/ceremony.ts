@@ -503,17 +503,23 @@ export function queuePersonRewritePhase(state: StateManager, options?: { ceremon
       && (person.description?.length ?? 0) > REWRITE_DESCRIPTION_THRESHOLD;
   });
 
-  const alreadyChecked = allCandidates.filter(p => p.rewrite_checked);
+  const alreadyChecked = allCandidates.filter(p => {
+    const descLen = p.description?.length ?? 0;
+    return p.rewrite_length_floor !== undefined && descLen < p.rewrite_length_floor;
+  });
   if (alreadyChecked.length > 0) {
     for (const person of alreadyChecked) {
       console.log(
         `[ceremony:rewrite] Person "${person.name}" is ${person.description?.length ?? 0} chars ` +
-        `but rewrite_checked=true — already reviewed, skipping`
+        `(floor: ${person.rewrite_length_floor}) — already reviewed, skipping`
       );
     }
   }
 
-  const personsToScan = allCandidates.filter(p => !p.rewrite_checked);
+  const personsToScan = allCandidates.filter(p => {
+    if (p.rewrite_length_floor === undefined) return true;
+    return (p.description?.length ?? 0) >= p.rewrite_length_floor;
+  });
 
   if (personsToScan.length === 0) {
     console.log("[ceremony:rewrite] No persons above threshold — skipping person rewrite phase");
@@ -555,17 +561,23 @@ export function queueTopicRewritePhase(state: StateManager): void {
     (topic.description?.length ?? 0) > REWRITE_DESCRIPTION_THRESHOLD
   );
 
-  const alreadyCheckedTopics = allCandidateTopics.filter(t => t.rewrite_checked);
+  const alreadyCheckedTopics = allCandidateTopics.filter(t => {
+    const descLen = t.description?.length ?? 0;
+    return t.rewrite_length_floor !== undefined && descLen < t.rewrite_length_floor;
+  });
   if (alreadyCheckedTopics.length > 0) {
     for (const topic of alreadyCheckedTopics) {
       console.log(
         `[ceremony:rewrite] Topic "${topic.name}" is ${topic.description?.length ?? 0} chars ` +
-        `but rewrite_checked=true — already reviewed, skipping`
+        `(floor: ${topic.rewrite_length_floor}) — already reviewed, skipping`
       );
     }
   }
 
-  const topicsToScan = allCandidateTopics.filter(t => !t.rewrite_checked);
+  const topicsToScan = allCandidateTopics.filter(t => {
+    if (t.rewrite_length_floor === undefined) return true;
+    return (t.description?.length ?? 0) >= t.rewrite_length_floor;
+  });
 
   if (topicsToScan.length === 0) {
     console.log("[ceremony:rewrite] No topics above threshold — skipping topic rewrite phase");
