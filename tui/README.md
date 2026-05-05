@@ -132,6 +132,8 @@ Rooms have three modes, set at creation time:
 | `/me <type>` | | Edit one type: `facts`, `topics`, or `people` |
 | `/import <path>` | | Import a document (txt, md, pdf, etc.) into Ei — extracted knowledge is attributed to the "Emmett" persona |
 | `/unsource <source_tag>` | | Remove all knowledge extracted from a previously imported document |
+| `/generate <subject>` | | Synthesize everything Ei knows about a subject into a markdown document — lands in `$EI_DATA_PATH/docs/` automatically |
+| `/generate` | | (no args) Manage your generated documents — re-run, re-export, or delete |
 | `/dedupe <person\|topic> <term> [term2 ...]` | | Fuzzy-search and merge duplicate people or topics in `$EDITOR`. Unquoted words are individual OR terms; quoted strings match as exact phrases: `/dedupe person Flare "Jeremy Scherer"` finds records matching `Flare` OR `Jeremy Scherer` |
 | `/settings` | `/set` | Edit your global settings in `$EDITOR` |
 | `/setsync <user> <pass>` | `/ss` | Set sync credentials (triggers restart) |
