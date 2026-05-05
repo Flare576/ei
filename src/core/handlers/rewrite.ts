@@ -20,6 +20,8 @@ import { getEmbeddingService, getItemEmbeddingText } from "../embedding-service.
 
 import { searchHumanData } from "../human-data-manager.js";
 
+const MIN_REWRITE_FLOOR = 750;
+
 /**
  * handleRewriteScan — Phase 1 of Rewrite.
  * LLM returns an array of subject strings found in the bloated item.
@@ -43,13 +45,13 @@ export async function handleRewriteScan(response: LLMResponse, state: StateManag
       const topic = human.topics.find(t => t.id === itemId);
       if (topic) state.human_topic_upsert({
         ...topic,
-        rewrite_length_floor: Math.ceil((topic.description?.length ?? 0) * 1.1),
+        rewrite_length_floor: Math.max(MIN_REWRITE_FLOOR, Math.ceil((topic.description?.length ?? 0) * 1.1)),
       });
     } else if (itemType === "person") {
       const person = human.people.find(p => p.id === itemId);
       if (person) state.human_person_upsert({
         ...person,
-        rewrite_length_floor: Math.ceil((person.description?.length ?? 0) * 1.1),
+        rewrite_length_floor: Math.max(MIN_REWRITE_FLOOR, Math.ceil((person.description?.length ?? 0) * 1.1)),
       });
     }
     return;
@@ -275,13 +277,13 @@ export async function handleRewriteRewrite(response: LLMResponse, state: StateMa
     const original = updatedHuman.topics.find(t => t.id === itemId);
     if (original) state.human_topic_upsert({
       ...original,
-      rewrite_length_floor: Math.ceil((original.description?.length ?? 0) * 1.1),
+      rewrite_length_floor: Math.max(MIN_REWRITE_FLOOR, Math.ceil((original.description?.length ?? 0) * 1.1)),
     });
   } else if (itemType === "person") {
     const original = updatedHuman.people.find(p => p.id === itemId);
     if (original) state.human_person_upsert({
       ...original,
-      rewrite_length_floor: Math.ceil((original.description?.length ?? 0) * 1.1),
+      rewrite_length_floor: Math.max(MIN_REWRITE_FLOOR, Math.ceil((original.description?.length ?? 0) * 1.1)),
     });
   }
 
