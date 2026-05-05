@@ -143,7 +143,8 @@ for i, line in enumerate(lines):
             has_literal = 'extraction_model' in data_content
             has_options_spread = '...options' in data_content
             has_context_spread = '...context' in data_content
-            if not (has_literal or has_options_spread or has_context_spread):
+            has_effective_options_spread = '...effectiveOptions' in data_content
+            if not (has_literal or has_options_spread or has_context_spread or has_effective_options_spread):
                 next_step = re.search(r'next_step:\s*LLMNextStep\.(\w+)', block)
                 ns = next_step.group(1) if next_step else '?'
                 violations.append(f"  line {i+1}: {ns}")
