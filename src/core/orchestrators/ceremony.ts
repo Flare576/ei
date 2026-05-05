@@ -504,27 +504,21 @@ export function queuePersonRewritePhase(state: StateManager, options?: { ceremon
   });
 
   const alreadyChecked = allCandidates.filter(p => {
-    if (!p.rewrite_checked) return false;
     const descLen = p.description?.length ?? 0;
-    const floor = p.rewrite_length_floor ?? Math.ceil(descLen * 1.1);
-    return descLen < floor;
+    return p.rewrite_length_floor !== undefined && descLen < p.rewrite_length_floor;
   });
   if (alreadyChecked.length > 0) {
     for (const person of alreadyChecked) {
-      const descLen = person.description?.length ?? 0;
-      const floor = person.rewrite_length_floor ?? Math.ceil(descLen * 1.1);
       console.log(
-        `[ceremony:rewrite] Person "${person.name}" is ${descLen} chars ` +
-        `but rewrite_checked=true (floor: ${floor}) — already reviewed, skipping`
+        `[ceremony:rewrite] Person "${person.name}" is ${person.description?.length ?? 0} chars ` +
+        `(floor: ${person.rewrite_length_floor}) — already reviewed, skipping`
       );
     }
   }
 
   const personsToScan = allCandidates.filter(p => {
-    if (!p.rewrite_checked) return true;
-    const descLen = p.description?.length ?? 0;
-    const floor = p.rewrite_length_floor ?? Math.ceil(descLen * 1.1);
-    return descLen >= floor;
+    if (p.rewrite_length_floor === undefined) return true;
+    return (p.description?.length ?? 0) >= p.rewrite_length_floor;
   });
 
   if (personsToScan.length === 0) {
@@ -568,27 +562,21 @@ export function queueTopicRewritePhase(state: StateManager): void {
   );
 
   const alreadyCheckedTopics = allCandidateTopics.filter(t => {
-    if (!t.rewrite_checked) return false;
     const descLen = t.description?.length ?? 0;
-    const floor = t.rewrite_length_floor ?? Math.ceil(descLen * 1.1);
-    return descLen < floor;
+    return t.rewrite_length_floor !== undefined && descLen < t.rewrite_length_floor;
   });
   if (alreadyCheckedTopics.length > 0) {
     for (const topic of alreadyCheckedTopics) {
-      const descLen = topic.description?.length ?? 0;
-      const floor = topic.rewrite_length_floor ?? Math.ceil(descLen * 1.1);
       console.log(
-        `[ceremony:rewrite] Topic "${topic.name}" is ${descLen} chars ` +
-        `but rewrite_checked=true (floor: ${floor}) — already reviewed, skipping`
+        `[ceremony:rewrite] Topic "${topic.name}" is ${topic.description?.length ?? 0} chars ` +
+        `(floor: ${topic.rewrite_length_floor}) — already reviewed, skipping`
       );
     }
   }
 
   const topicsToScan = allCandidateTopics.filter(t => {
-    if (!t.rewrite_checked) return true;
-    const descLen = t.description?.length ?? 0;
-    const floor = t.rewrite_length_floor ?? Math.ceil(descLen * 1.1);
-    return descLen >= floor;
+    if (t.rewrite_length_floor === undefined) return true;
+    return (t.description?.length ?? 0) >= t.rewrite_length_floor;
   });
 
   if (topicsToScan.length === 0) {

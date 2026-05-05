@@ -139,6 +139,8 @@ export async function handleTopicUpdate(response: LLMResponse, state: StateManag
     ? incomingSources
     : [...new Set([...(existingTopic?.sources ?? []), ...incomingSources])];
 
+  const newDescLen = resolvedDescription?.length ?? 0;
+  const existingFloor = existingTopic?.rewrite_length_floor;
   const topic: Topic = {
     id: itemId,
     name: resolvedName,
@@ -156,6 +158,7 @@ export async function handleTopicUpdate(response: LLMResponse, state: StateManag
     sources: sources.length > 0 ? sources : undefined,
     persona_groups: personaGroupsMerged,
     embedding,
+    rewrite_length_floor: existingFloor !== undefined && newDescLen < existingFloor ? existingFloor : undefined,
   };
   state.human_topic_upsert(topic);
 
@@ -333,6 +336,11 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
     sources: personSources.length > 0 ? personSources : undefined,
     persona_groups: personaGroupsMerged,
     embedding,
+    rewrite_length_floor: (() => {
+      const floor = existingPerson?.rewrite_length_floor;
+      const newLen = resolvedDescription?.length ?? 0;
+      return floor !== undefined && newLen < floor ? floor : undefined;
+    })(),
   };
   state.human_person_upsert(person);
 

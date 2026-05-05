@@ -4,20 +4,20 @@ import type { Fact, Topic, Person, Quote, HumanEntity } from "../../types.js";
 type GetHuman = () => HumanEntity;
 
 function cleanFact(f: Fact): Record<string, unknown> {
-  const { embedding, rewrite_checked, persona_groups, ...rest } = f;
-  void embedding; void rewrite_checked; void persona_groups;
+  const { embedding, persona_groups, ...rest } = f;
+  void embedding; void persona_groups;
   return rest;
 }
 
 function cleanTopic(t: Topic): Record<string, unknown> {
-  const { embedding, rewrite_checked, persona_groups, last_ei_asked, ...rest } = t;
-  void embedding; void rewrite_checked; void persona_groups; void last_ei_asked;
+  const { embedding, rewrite_length_floor, persona_groups, last_ei_asked, ...rest } = t;
+  void embedding; void rewrite_length_floor; void persona_groups; void last_ei_asked;
   return rest;
 }
 
 function cleanPerson(p: Person): Record<string, unknown> {
-  const { embedding, rewrite_checked, persona_groups, last_ei_asked, ...rest } = p;
-  void embedding; void rewrite_checked; void persona_groups; void last_ei_asked;
+  const { embedding, rewrite_length_floor, persona_groups, last_ei_asked, ...rest } = p;
+  void embedding; void rewrite_length_floor; void persona_groups; void last_ei_asked;
   return rest;
 }
 
