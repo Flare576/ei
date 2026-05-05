@@ -135,7 +135,7 @@ tui/tests/e2e/
 ├── provider-command.test.ts     # /provider overlay, direct set, /model inference (port 3107)
 ├── provider-editor.test.ts      # /provider new via $EDITOR (port 3108)
 ├── tools-command.test.ts        # /tools overlay, toolkit list (port 3115)
-├── generate-synthesis.test.ts  # /generate full loop against real state.json (opt-in, requires EXTERNAL_STATE_FILE)
+├── generate-synthesis.real-data.ts  # /generate full loop against real state.json (opt-in, see below)
 ├── fixtures.ts                  # Shared test utilities and checkpoint factory
 ├── framework/
 │   └── mock-server.ts           # Re-export shim (see file for why)
@@ -164,18 +164,18 @@ npx @microsoft/tui-test tests/e2e/context-boundary.test.ts
 # Takes 2-4 minutes depending on knowledge base size
 
 EXTERNAL_STATE_FILE=~/.local/share/ei/state.json \
-npm run test:e2e -- tests/e2e/generate-synthesis.test.ts
+npx @microsoft/tui-test tests/e2e/generate-synthesis.real-data.ts
 
 # Override the synthesis subject:
 SYNTHESIS_SUBJECT="your topic here" \
 EXTERNAL_STATE_FILE=~/.local/share/ei/state.json \
-npm run test:e2e -- tests/e2e/generate-synthesis.test.ts
+npx @microsoft/tui-test tests/e2e/generate-synthesis.real-data.ts
 
 # Assert on specific domain terms in the output:
 SYNTHESIS_SUBJECT="your topic" \
 SYNTHESIS_EXPECTED_TERMS="term1,term2,term3" \
 EXTERNAL_STATE_FILE=~/.local/share/ei/state.json \
-npm run test:e2e -- tests/e2e/generate-synthesis.test.ts
+npx @microsoft/tui-test tests/e2e/generate-synthesis.real-data.ts
 ```
 
 The generated document lands in the test's temp dir (`/tmp/ei-test-generate-synthesis-*/docs/*.md`) and is also stored in Emmett's messages in the isolated test state — it does not affect your real `state.json`.

@@ -13,7 +13,7 @@
  *
  * Run:
  *   EXTERNAL_STATE_FILE=~/.local/share/ei/state.json \
- *   npm run test:e2e -- tests/e2e/generate-synthesis.test.ts
+ *   npx @microsoft/tui-test tests/e2e/generate-synthesis.real-data.ts
  */
 
 import { test, expect } from "@microsoft/tui-test";
