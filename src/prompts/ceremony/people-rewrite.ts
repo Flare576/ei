@@ -45,7 +45,7 @@ Rules:
 - Be specific: "React performance patterns" beats "technical stuff"
 - If the record is clean — everything in it passes the test — return an empty array
 
-Return a raw JSON array of strings. No markdown fencing, no commentary.
+Return a raw JSON array of strings. No markdown fencing, no commentary. Thinking text WILL break the parser.
 
 Example — a Person named "Nicholas" whose description includes sprint ticket numbers:
 ["CMIDP sprint ticket assignments", "ASU Data Lake access provisioning details"]`;
@@ -60,7 +60,7 @@ Example — a Person named "Nicholas" whose description includes sprint ticket n
 
 ---
 
-Return a raw JSON array of subject phrases found in this Person record that don't belong there. Return [] if the record is clean.`;
+Return a raw JSON array of subject phrases found in this Person record that don't belong there. Return [] if the record is clean. Thinking text WILL break the parser.`;
 
   return { system, user };
 }
