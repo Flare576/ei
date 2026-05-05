@@ -33,8 +33,7 @@ export async function handleRewriteScan(response: LLMResponse, state: StateManag
   const rewriteModel = response.request.data.rewriteModel as string;
 
   if (!itemId || !itemType) {
-    console.error("[handleRewriteScan] Missing itemId or itemType in request data");
-    return;
+    throw new Error("[handleRewriteScan] Missing itemId or itemType in request data");
   }
 
   const subjects = response.parsed as RewriteScanResult | undefined;
@@ -119,8 +118,7 @@ export async function handleRewriteRewrite(response: LLMResponse, state: StateMa
   const itemType = response.request.data.itemType as RewriteItemType;
 
   if (!itemId || !itemType) {
-    console.error("[handleRewriteRewrite] Missing itemId or itemType in request data");
-    return;
+    throw new Error("[handleRewriteRewrite] Missing itemId or itemType in request data");
   }
 
   const result = response.parsed as RewriteResult | undefined;

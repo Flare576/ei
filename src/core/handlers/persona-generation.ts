@@ -12,8 +12,7 @@ export function handlePersonaGeneration(response: LLMResponse, state: StateManag
   const personaId = response.request.data.personaId as string;
   const personaDisplayName = response.request.data.personaDisplayName as string;
   if (!personaId) {
-    console.error("[handlePersonaGeneration] No personaId in request data");
-    return;
+    throw new Error("[handlePersonaGeneration] No personaId in request data");
   }
 
   const result = response.parsed as PersonaGenerationResult | undefined;
@@ -115,14 +114,12 @@ export function handlePersonaTraitExtraction(response: LLMResponse, state: State
   const personaId = response.request.data.personaId as string;
   const personaDisplayName = response.request.data.personaDisplayName as string;
   if (!personaId) {
-    console.error("[handlePersonaTraitExtraction] No personaId in request data");
-    return;
+    throw new Error("[handlePersonaTraitExtraction] No personaId in request data");
   }
 
   const result = response.parsed as TraitResult[] | undefined;
   if (!result || !Array.isArray(result)) {
-    console.error("[handlePersonaTraitExtraction] Invalid parsed result");
-    return;
+    throw new Error("[handlePersonaTraitExtraction] Invalid parsed result");
   }
 
   if (result.length === 0) {
@@ -131,8 +128,7 @@ export function handlePersonaTraitExtraction(response: LLMResponse, state: State
 
   const persona = state.persona_getById(personaId);
   if (!persona) {
-    console.error(`[handlePersonaTraitExtraction] Persona ${personaId} not found`);
-    return;
+    throw new Error(`[handlePersonaTraitExtraction] Persona ${personaId} not found`);
   }
 
   const now = new Date().toISOString();

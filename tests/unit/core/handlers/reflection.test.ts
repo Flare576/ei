@@ -264,19 +264,19 @@ describe("handleReflectionCritic", () => {
     expect(update.pending_update.topics[0].name).toBe("Padded Topic");
   });
 
-  it("does NOT crash when result is missing critique (invalid responses)", () => {
+  it("throws when result is missing critique (invalid responses)", () => {
     seedPersona(state);
 
     const request = createMockRequest();
 
     const responseNoCritique = createMockResponse(request, { updated_identity: makeReflectionResult().updated_identity });
-    expect(() => handlers[LLMNextStep.HandleReflectionCritic](responseNoCritique, state as any)).not.toThrow();
+    expect(() => handlers[LLMNextStep.HandleReflectionCritic](responseNoCritique, state as any)).toThrow("Invalid or missing parsed result");
     expect(state.persona_update).not.toHaveBeenCalled();
 
     vi.clearAllMocks();
 
     const responseEmpty = createMockResponse(request, {});
-    expect(() => handlers[LLMNextStep.HandleReflectionCritic](responseEmpty, state as any)).not.toThrow();
+    expect(() => handlers[LLMNextStep.HandleReflectionCritic](responseEmpty, state as any)).toThrow("Invalid or missing parsed result");
     expect(state.persona_update).not.toHaveBeenCalled();
   });
 

@@ -98,8 +98,8 @@ function createMockRequest(overrides: Partial<LLMRequest> = {}): LLMRequest {
     user: "user",
     next_step: LLMNextStep.HandleDedupCurate,
     data: {
-      entity_type: "fact",
-      entity_ids: ["fact-1", "fact-2"],
+      entity_type: "topic",
+      entity_ids: ["topic-1", "topic-2"],
       ceremony_progress: 1,
     },
     ...overrides,
@@ -172,7 +172,7 @@ describe("Dedup Handler - handleDedupCurate", () => {
     vi.clearAllMocks();
   });
 
-  it("handles missing entities gracefully", async () => {
+  it("throws on invalid entity_type", async () => {
     const request = createMockRequest({
       data: {
         entity_type: "fact",
@@ -189,12 +189,9 @@ describe("Dedup Handler - handleDedupCurate", () => {
 
     const response = createMockResponse(request, dedupResult);
 
-    // Execute handler
-    await handlers[LLMNextStep.HandleDedupCurate](response, state as unknown as StateManager);
-
-    // Should not crash, just log warnings
-    expect(state.human_fact_upsert).not.toHaveBeenCalled();
-    expect(state.human_fact_remove).not.toHaveBeenCalled();
+    await expect(
+      handlers[LLMNextStep.HandleDedupCurate](response, state as unknown as StateManager)
+    ).rejects.toThrow('[Dedup] Invalid entity_type: "fact"');
   });
 
   it("updates entity descriptions with embedding recalculation", async () => {
@@ -390,15 +387,13 @@ describe("Dedup Handler - handleDedupCurate", () => {
     expect(state.human_quote_update).toHaveBeenCalledTimes(2);
   });
 
-  it("handles parsing errors gracefully", async () => {
+  it("throws on parsing errors", async () => {
     const request = createMockRequest();
     const response = createMockResponse(request, null, false);
 
-    await handlers[LLMNextStep.HandleDedupCurate](response, state as unknown as StateManager);
-
-    // Should not crash or call any state methods
-    expect(state.human_fact_upsert).not.toHaveBeenCalled();
-    expect(state.human_fact_remove).not.toHaveBeenCalled();
+    await expect(
+      handlers[LLMNextStep.HandleDedupCurate](response, state as unknown as StateManager)
+    ).rejects.toThrow("[Dedup] Failed to parse Opus response");
   });
 
   it("handles empty dedup result gracefully", async () => {

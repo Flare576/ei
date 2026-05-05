@@ -12,8 +12,7 @@ export function handlePersonaTopicRating(response: LLMResponse, state: StateMana
   const personaId = response.request.data.personaId as string;
   const personaDisplayName = response.request.data.personaDisplayName as string;
   if (!personaId || !personaDisplayName) {
-    console.error("[handlePersonaTopicRating] Missing personaId or personaDisplayName in request data");
-    return;
+    throw new Error("[handlePersonaTopicRating] Missing personaId or personaDisplayName in request data");
   }
 
   const result = response.parsed as PersonaTopicRatingResult | undefined;
@@ -35,8 +34,7 @@ export function handlePersonaTopicRating(response: LLMResponse, state: StateMana
 
   const persona = state.persona_getById(personaId);
   if (!persona) {
-    console.error(`[handlePersonaTopicRating] Persona not found: ${personaDisplayName}`);
-    return;
+    throw new Error(`[handlePersonaTopicRating] Persona not found: ${personaDisplayName}`);
   }
 
   const now = new Date().toISOString();

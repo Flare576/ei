@@ -145,27 +145,29 @@ describe("Rewrite Handlers - Phase 1 (Scan)", () => {
   })
 
   describe("handleRewriteScan", () => {
-    it("returns early when missing itemId", async () => {
+    it("throws when missing itemId", async () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleRewriteScan,
         data: { itemType: "fact", rewriteModel: "TestProvider:test-model" },
       });
       const response = createMockResponse(request, ["subject1"]);
 
-      await handlers.handleRewriteScan(response, state as any);
-
+      await expect(handlers.handleRewriteScan(response, state as any)).rejects.toThrow(
+        "Missing itemId or itemType in request data"
+      );
       expect(state.queue_enqueue).not.toHaveBeenCalled();
     });
 
-    it("returns early when missing itemType", async () => {
+    it("throws when missing itemType", async () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleRewriteScan,
         data: { itemId: "bloated-fact-1", rewriteModel: "TestProvider:test-model" },
       });
       const response = createMockResponse(request, ["subject1"]);
 
-      await handlers.handleRewriteScan(response, state as any);
-
+      await expect(handlers.handleRewriteScan(response, state as any)).rejects.toThrow(
+        "Missing itemId or itemType in request data"
+      );
       expect(state.queue_enqueue).not.toHaveBeenCalled();
     });
 
@@ -360,7 +362,7 @@ describe("Rewrite Handlers - Phase 2 (Rewrite)", () => {
   });
 
   describe("handleRewriteRewrite", () => {
-    it("returns early when missing itemId", async () => {
+    it("throws when missing itemId", async () => {
       const request = createMockRequest({
         next_step: LLMNextStep.HandleRewriteRewrite,
         data: { itemType: "fact" },
@@ -370,8 +372,9 @@ describe("Rewrite Handlers - Phase 2 (Rewrite)", () => {
         new: [],
       });
 
-      await handlers.handleRewriteRewrite(response, state as any);
-
+      await expect(handlers.handleRewriteRewrite(response, state as any)).rejects.toThrow(
+        "Missing itemId or itemType in request data"
+      );
       expect(state.human_fact_upsert).not.toHaveBeenCalled();
     });
 

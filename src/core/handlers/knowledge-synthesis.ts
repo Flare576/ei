@@ -9,14 +9,12 @@ export function handleKnowledgeSynthesis(response: LLMResponse, state: StateMana
   };
 
   if (!slug || !subject) {
-    console.error("[handleKnowledgeSynthesis] Missing slug or subject in request data");
-    return;
+    throw new Error("[handleKnowledgeSynthesis] Missing slug or subject in request data");
   }
 
   const content = response.content?.trim() ?? "";
   if (!content) {
-    console.error(`[handleKnowledgeSynthesis] Empty or null response content for slug "${slug}" — skipping message write`);
-    return;
+    throw new Error(`[handleKnowledgeSynthesis] Empty or null response content for slug "${slug}"`);
   }
 
   const now = new Date().toISOString();

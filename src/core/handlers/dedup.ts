@@ -25,8 +25,7 @@ export async function handleDedupCurate(
   
   // Validate entity_type
   if (!entity_type || !['topic', 'person'].includes(entity_type)) {
-    console.error(`[Dedup] Invalid entity_type: "${entity_type}" (from request data)`, response.request.data);
-    return;
+    throw new Error(`[Dedup] Invalid entity_type: "${entity_type}" (from request data)`);
   }
   
   // Parse Opus response
@@ -37,14 +36,12 @@ export async function handleDedupCurate(
       throw new Error("Invalid response format");
     }
   } catch (err) {
-    console.error(`[Dedup] Failed to parse Opus response:`, err);
-    return;
+    throw new Error(`[Dedup] Failed to parse Opus response: ${err instanceof Error ? err.message : String(err)}`);
   }
   
   // Validate response structure
   if (!Array.isArray(decisions.update) || !Array.isArray(decisions.remove) || !Array.isArray(decisions.add)) {
-    console.error(`[Dedup] Invalid response structure - missing update/remove/add arrays`);
-    return;
+    throw new Error(`[Dedup] Invalid response structure - missing update/remove/add arrays`);
   }
   
   console.log(`[Dedup] Processing cluster: ${decisions.update.length} updates, ${decisions.remove.length} removals, ${decisions.add.length} additions`);
@@ -63,15 +60,7 @@ export async function handleDedupCurate(
   
   // Validate entityList exists
   if (!entityList || !Array.isArray(entityList)) {
-    console.error(`[Dedup] entityList is ${entityList === undefined ? 'undefined' : 'not an array'} for entity_type="${entity_type}" (looking for state.${entity_type}s)`, {
-      entity_type,
-      entity_ids,
-      stateKeys: Object.keys(state),
-      factsExists: !!state.facts,
-      topicsExists: !!state.topics,
-      peopleExists: !!state.people
-    });
-    return;
+    throw new Error(`[Dedup] entityList is ${entityList === undefined ? 'undefined' : 'not an array'} for entity_type="${entity_type}" (looking for state.${entity_type}s)`);
   }
   const entities = entity_ids
     .map((id: string) => entityList.find((e: Fact | Topic | Person) => e.id === id))

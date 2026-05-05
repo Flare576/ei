@@ -144,34 +144,26 @@ describe("handleKnowledgeSynthesis", () => {
     expect(docs?.["new-slug_ts"]?.subject).toBe("New Subject");
   });
 
-  it("empty response content: does NOT write message and does NOT update settings", () => {
+  it("throws on empty response content", () => {
     const request = createMockRequest();
     const response = createMockResponse(request, "   ");
 
-    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-
-    handleKnowledgeSynthesis(response, state as any);
-
+    expect(() => handleKnowledgeSynthesis(response, state as any)).toThrow(
+      "Empty or null response content"
+    );
     expect(state.messages_append).not.toHaveBeenCalled();
     expect(state.setHuman).not.toHaveBeenCalled();
-    expect(consoleSpy).toHaveBeenCalled();
-
-    consoleSpy.mockRestore();
   });
 
-  it("null response content: does NOT write message and does NOT update settings", () => {
+  it("throws on null response content", () => {
     const request = createMockRequest();
     const response = createMockResponse(request, null);
 
-    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-
-    handleKnowledgeSynthesis(response, state as any);
-
+    expect(() => handleKnowledgeSynthesis(response, state as any)).toThrow(
+      "Empty or null response content"
+    );
     expect(state.messages_append).not.toHaveBeenCalled();
     expect(state.setHuman).not.toHaveBeenCalled();
-    expect(consoleSpy).toHaveBeenCalled();
-
-    consoleSpy.mockRestore();
   });
 
   it("message source_tag follows generate:document:{slug} format", () => {
