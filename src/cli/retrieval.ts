@@ -86,6 +86,7 @@ export interface QuoteResult {
   text: string;
   speaker: string;
   timestamp: string;
+  message_id: string | null;
   linked_items: LinkedItem[];
 }
 
@@ -164,6 +165,7 @@ export function mapQuote(quote: Quote, state: StorageState): QuoteResult {
     text: quote.text,
     speaker: quote.speaker,
     timestamp: quote.timestamp,
+    message_id: quote.message_id,
     linked_items: resolveLinkedItems(quote.data_item_ids, state),
   };
 }
@@ -392,6 +394,32 @@ export async function retrieveBalanced(
     return combined.slice(0, limit);
   }
   return embeddingFinal;
+}
+
+const OPENCODE_MESSAGE_ID = /^msg_[a-zA-Z0-9]+$/;
+
+export async function resolveOpenCodeMessage(
+  id: string,
+  before = 0,
+  after = 0
+): Promise<Record<string, unknown> | null> {
+  if (!OPENCODE_MESSAGE_ID.test(id)) return null;
+  try {
+    const { createOpenCodeReader } = await import("../integrations/opencode/reader-factory.js");
+    const reader = await createOpenCodeReader();
+    const window = await reader.getMessageById(id, before, after);
+    if (!window) return null;
+    return {
+      type: "opencode_message",
+      message: { id: window.message.id, role: window.message.role, content: window.message.content, timestamp: window.message.timestamp, agent: window.message.agent },
+      before: window.before.map(m => ({ id: m.id, role: m.role, content: m.content, timestamp: m.timestamp, agent: m.agent })),
+      after: window.after.map(m => ({ id: m.id, role: m.role, content: m.content, timestamp: m.timestamp, agent: m.agent })),
+      session: { id: window.session.id, title: window.session.title, directory: window.session.directory },
+      source: "opencode",
+    };
+  } catch {
+    return null;
+  }
 }
 
 export async function lookupById(id: string): Promise<({ type: string } & Record<string, unknown>) | null> {

@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { retrieveBalanced, lookupById, loadLatestState, type BalancedResult } from "./retrieval.js";
+import { retrieveBalanced, lookupById, resolveOpenCodeMessage, loadLatestState, type BalancedResult } from "./retrieval.js";
 import type { StorageState } from "../core/types.js";
 import type { Message } from "../core/types.js";
 import type { RoomMessage } from "../core/types/rooms.js";
@@ -270,15 +270,20 @@ export function createMcpServer(): McpServer {
       },
     },
     async ({ id, before: beforeCount, after: afterCount }) => {
+      const beforeN = Math.max(0, Math.floor(beforeCount ?? 0));
+      const afterN = Math.max(0, Math.floor(afterCount ?? 0));
+
+      const ocMessage = await resolveOpenCodeMessage(id, beforeN, afterN);
+      if (ocMessage) {
+        return { content: [{ type: "text" as const, text: JSON.stringify(ocMessage, null, 2) }] };
+      }
+
       const state = await loadLatestState();
       if (!state) {
         return {
           content: [{ type: "text" as const, text: "No saved state found. Is EI_DATA_PATH set correctly?" }],
         };
       }
-
-      const beforeN = Math.max(0, Math.floor(beforeCount ?? 0));
-      const afterN = Math.max(0, Math.floor(afterCount ?? 0));
 
       const stripPersonaMessage = (m: Message) => ({
         id: m.id,
