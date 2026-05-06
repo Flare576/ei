@@ -14,7 +14,7 @@ Use `--filter=<tag-or-substring>` to run a single case while iterating on a prom
 ## Running evals
 
 ```bash
-npm run test:evals                                      # all 20 suites
+npm run test:evals                                      # all suites (auto-discovered)
 npm run test:evals -- person-update                     # person-update.eval.ts only (~5 min)
 npm run test:evals -- person                            # all person-*.eval.ts files
 npm run test:evals -- person-update --filter=identity-bleed  # file match + case filter (~1 min)
@@ -158,6 +158,80 @@ EVAL_PERSONA=Lena EXTERNAL_STATE_FILE=~/.local/share/ei/state.json npm run test:
 ### What NOT to commit
 
 State files contain personal data. Never commit them. The `EXTERNAL_STATE_FILE` env var exists specifically so the path stays on your filesystem and out of the repo. If you write an eval that captures a specific real-world failure scenario, either use sanitized synthetic fixtures or delete the eval file after the fix is validated — the infrastructure is what needs to survive, not the specific test case.
+
+## Assertion design: two-phase pattern
+
+Eval cases test one thing at a time. Tools and LLM judgment are separate concerns — mixing them in a single case stacks two independent sources of nondeterminism.
+
+### Phase 1 — Did the right tools fire?
+
+Give `tools: [...]` and assert with `tool-calls`. No LLM judge.
+
+```typescript
+{
+  tools: [FIND_MEMORY_TOOL, FETCH_MESSAGE_TOOL],
+  priorMessages: [...],
+  assert: [{ type: "tool-calls", minCalls: 1, requiredTools: ["fetch_message"] }],
+  prompt: () => ({ system, user: "" }),
+}
+```
+
+### Phase 2 — Did the model use the results well?
+
+Inject the tool exchange into `priorMessages`. No live tools. Assert with `llm-judge`.
+
+```typescript
+{
+  // No tools: [] here — results are already in history
+  priorMessages: [
+    { role: "user", content: "Tell me about Dana." },
+    { role: "assistant", tool_calls: [{ id: "call-1", type: "function", function: { name: "find_memory", arguments: '{"query":"Dana"}' } }] },
+    { role: "tool", tool_call_id: "call-1", name: "find_memory", content: JSON.stringify({ people: [{ name: "Dana Reyes", ... }] }) },
+  ],
+  assert: [{ type: "llm-judge", rubric: "..." }],
+  prompt: () => ({ system, user: "" }),
+}
+```
+
+### When combining tools + llm-judge is legitimate
+
+One valid exception: **terminal submit actions**. When the model's only remaining tool is a structured submit (e.g. `submit_dedup_decisions`), giving it that tool and judging the decision quality is correct — the judge is evaluating the *decision*, not prose, and there's no loop risk since the submit tool ends the interaction.
+
+```typescript
+{
+  tools: [SUBMIT_TOOL],           // find_memory budget already exhausted in priorMessages
+  priorMessages: saturatedHistory,
+  assert: [
+    { type: "is-json", schema: { required: ["update", "remove", "add"] } },
+    { type: "llm-judge", rubric: "PASS if merge decision is correct..." },
+  ],
+}
+```
+
+---
+
+## Controlling thinking (reasoning_effort)
+
+The runner supports `extraBody` on any case — extra fields merged directly into the LLM request body. Use this to toggle extended thinking per-case without changing global runner settings.
+
+```typescript
+{
+  extraBody: { reasoning_effort: "none" },  // disable thinking (LM Studio + Gemma)
+  // ... rest of case
+}
+```
+
+**When to disable thinking:**
+- Extraction prompts (fact-find, topic-scan, person-scan, etc.) — deterministic JSON output, thinking adds latency without quality gain
+- High-repeat borderline cases where you want faster iteration
+
+**When to keep thinking on (the default):**
+- Response prompts (persona behavior, silence, trait strength, tool use) — these benefit from reasoning about context and tone
+- Any case where the model needs to weigh competing signals
+
+The `reasoning_effort: "none"` field works with LM Studio + Gemma via the OpenAI-compat API. It's a no-op on providers that don't support it.
+
+---
 
 ## LLM judge rubric guidelines
 

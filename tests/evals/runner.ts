@@ -30,6 +30,12 @@ export interface EvalCase {
    * Example: pass_threshold: 0.67 means 2 of 3 runs must pass.
    */
   pass_threshold?: number;
+  /**
+   * Extra fields merged into the LLM request body. Use to set provider-specific params
+   * without touching the global runner. Example:
+   *   extraBody: { reasoning_effort: "none" }  // disable thinking for Gemma via LM Studio
+   */
+  extraBody?: Record<string, unknown>;
 }
 
 export interface ExtractionExpected {
@@ -121,6 +127,7 @@ const PROVIDER = resolveProvider();
 interface LLMCallOptions {
   tools?: unknown[];
   priorMessages?: LLMMessage[];
+  extraBody?: Record<string, unknown>;
 }
 
 interface LLMCallResult {
@@ -147,6 +154,7 @@ async function callLLM(system: string, user: string, options: LLMCallOptions = {
     model: PROVIDER.model,
     messages,
     temperature: 0.7,
+    ...options.extraBody,
   };
   if (options.tools?.length) body.tools = options.tools;
 
@@ -368,6 +376,7 @@ async function runOnce(c: EvalCase): Promise<EvalRun> {
     const result = await callLLM(system, user, {
       tools: c.tools,
       priorMessages: c.priorMessages,
+      extraBody: c.extraBody,
     });
     response = result.content;
     toolCalls = result.toolCalls;
