@@ -42,7 +42,7 @@ export async function importDocument(options: DocumentImportOptions): Promise<Do
   const sourceTag = `import:document:${filename}`;
   const existingMsgs = stateManager.messages_get("emmet");
   const staleIds = existingMsgs
-    .filter(m => m.external === true && m.source_tag === sourceTag)
+    .filter(m => m.external === true && m.id.startsWith(`${sourceTag}:`))
     .map(m => m.id);
   if (staleIds.length > 0) {
     stateManager.messages_remove("emmet", staleIds);

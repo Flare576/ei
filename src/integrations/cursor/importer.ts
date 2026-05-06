@@ -9,6 +9,7 @@ import {
 import { CursorReader } from "./reader.js";
 import { isProcessRunning } from "../process-check.js";
 import { getMachineId } from "../machine-id.js";
+import { qualifyCursorMessage } from "../../core/utils/message-id.js";
 import {
   queueAllScans,
   type ExtractionContext,
@@ -35,9 +36,9 @@ export interface CursorImporterOptions {
 const TWELVE_HOURS_MS = 43_200_000;
 const CURSOR_GROUP = "Cursor";
 
-function convertToEiMessage(msg: CursorMessage): Message {
+function convertToEiMessage(msg: CursorMessage, sessionId: string): Message {
   return {
-    id: msg.id,
+    id: qualifyCursorMessage(getMachineId(), sessionId, msg.id),
     role: msg.type === 1 ? "human" : "system",
     content: msg.text,
     timestamp: msg.timestamp,
@@ -47,9 +48,9 @@ function convertToEiMessage(msg: CursorMessage): Message {
   };
 }
 
-function convertToPreMarkedEiMessage(msg: CursorMessage): Message {
+function convertToPreMarkedEiMessage(msg: CursorMessage, sessionId: string): Message {
   return {
-    ...convertToEiMessage(msg),
+    ...convertToEiMessage(msg, sessionId),
     f: true,
     t: true,
     p: true,
@@ -208,7 +209,7 @@ export async function importCursorSessions(
   for (const msg of messages) {
     const msgMs = new Date(msg.timestamp).getTime();
     const isOld = cutoffMs !== null && msgMs < cutoffMs;
-    const eiMsg = isOld ? convertToPreMarkedEiMessage(msg) : convertToEiMessage(msg);
+    const eiMsg = isOld ? convertToPreMarkedEiMessage(msg, targetSession.id) : convertToEiMessage(msg, targetSession.id);
     stateManager.messages_append(persona.id, eiMsg);
     result.messagesImported++;
     if (!isOld) toAnalyze.push(eiMsg);

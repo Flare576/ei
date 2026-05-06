@@ -63,15 +63,10 @@ export function previewUnsource(sourceTag: string, stateManager: StateManager): 
     }
   }
 
-  const emmettMessages = stateManager.messages_get("emmet");
-  const sourceMessageIds = new Set(
-    emmettMessages
-      .filter(m => m.source_tag === sourceTag)
-      .map(m => m.id)
-  );
+  const msgIdPrefix = `${sourceTag}:`;
 
   for (const quote of human.quotes) {
-    if (quote.message_id && sourceMessageIds.has(quote.message_id)) {
+    if (quote.message_id?.startsWith(msgIdPrefix)) {
       preview.toDelete.quotes.push({ id: quote.id, text: quote.text });
     }
   }
@@ -143,11 +138,11 @@ export async function executeUnsource(
     stateManager.setHuman(human);
   }
 
-  const sourceMessageIds = stateManager.messages_get("emmet")
-    .filter(m => m.source_tag === preview.sourceTag)
+  const idsToRemove = stateManager.messages_get("emmet")
+    .filter(m => m.id.startsWith(`${preview.sourceTag}:`))
     .map(m => m.id);
-  if (sourceMessageIds.length > 0) {
-    stateManager.messages_remove("emmet", sourceMessageIds);
+  if (idsToRemove.length > 0) {
+    stateManager.messages_remove("emmet", idsToRemove);
   }
 
   const key = preview.sourceTag.startsWith("import:document:")

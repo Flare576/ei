@@ -257,7 +257,7 @@ describe("importOpenCodeSessions", () => {
     const stored = messageStore.get("persona-build") ?? [];
     expect(stored.some(m => m.id === "ext_msg")).toBe(false);
     expect(stored.some(m => m.id === "chat_msg")).toBe(true);
-    expect(stored.some(m => m.id === "msg_new")).toBe(true);
+    expect(stored.some(m => m.id.endsWith(":msg_new"))).toBe(true);
   });
 
   it("preserves non-external messages when persona exists", async () => {
@@ -352,8 +352,10 @@ describe("importOpenCodeSessions", () => {
 
     const stored = messageStore.get(buildPersona!.id) ?? [];
     expect(stored).toHaveLength(2);
-    expect(stored[0]).toMatchObject({ id: "msg_user1", role: "human", content: "User message" });
-    expect(stored[1]).toMatchObject({ id: "msg_assist1", role: "system", content: "Assistant response" });
+    expect(stored[0]).toMatchObject({ role: "human", content: "User message" });
+    expect(stored[0].id).toContain("msg_user1");
+    expect(stored[1]).toMatchObject({ role: "system", content: "Assistant response" });
+    expect(stored[1].id).toContain("msg_assist1");
   });
 
   it("maps user role to human and assistant to system", async () => {
@@ -434,8 +436,8 @@ describe("importOpenCodeSessions", () => {
     });
 
     const stored = messageStore.get("persona-build") ?? [];
-    const oldMsg = stored.find(m => m.id === "msg_old");
-    const newMsg = stored.find(m => m.id === "msg_new");
+    const oldMsg = stored.find(m => m.id.endsWith(":msg_old"));
+    const newMsg = stored.find(m => m.id.endsWith(":msg_new"));
 
     expect(oldMsg).toMatchObject({ f: true, t: true, p: true });
     expect(newMsg?.f).toBeFalsy();

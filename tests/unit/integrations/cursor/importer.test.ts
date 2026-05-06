@@ -326,8 +326,8 @@ describe("importCursorSessions", () => {
     });
 
     const stored = messageStore.get("cursor-id") ?? [];
-    const oldMsg = stored.find((m) => m.id === "msg-old");
-    const newMsg = stored.find((m) => m.id === "msg-new");
+    const oldMsg = stored.find((m) => m.id.endsWith(":msg-old"));
+    const newMsg = stored.find((m) => m.id.endsWith(":msg-new"));
 
     expect(oldMsg).toMatchObject({ f: true, t: true, p: true, e: true });
     expect(newMsg?.f).toBeFalsy();

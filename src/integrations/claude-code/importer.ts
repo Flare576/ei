@@ -17,6 +17,7 @@ import {
 } from "../../core/orchestrators/ceremony.js";
 import { isProcessRunning } from "../process-check.js";
 import { getMachineId } from "../machine-id.js";
+import { qualifyClaudeCodeMessage } from "../../core/utils/message-id.js";
 
 // =============================================================================
 // Export Types
@@ -43,9 +44,9 @@ export interface ClaudeCodeImporterOptions {
 const TWELVE_HOURS_MS = 43_200_000;
 const CLAUDE_CODE_GROUP = "Claude Code";
 
-function convertToEiMessage(msg: ClaudeCodeMessage): Message {
+function convertToEiMessage(msg: ClaudeCodeMessage, sessionId: string): Message {
   return {
-    id: msg.id,
+    id: qualifyClaudeCodeMessage(getMachineId(), sessionId, msg.id),
     role: msg.role === "user" ? "human" : "system",
     content: msg.content,
     timestamp: msg.timestamp,
@@ -55,9 +56,9 @@ function convertToEiMessage(msg: ClaudeCodeMessage): Message {
   };
 }
 
-function convertToPreMarkedEiMessage(msg: ClaudeCodeMessage): Message {
+function convertToPreMarkedEiMessage(msg: ClaudeCodeMessage, sessionId: string): Message {
   return {
-    ...convertToEiMessage(msg),
+    ...convertToEiMessage(msg, sessionId),
     f: true,
     t: true,
     p: true,
@@ -248,7 +249,7 @@ export async function importClaudeCodeSessions(
   for (const msg of messages) {
     const msgMs = new Date(msg.timestamp).getTime();
     const isOld = cutoffMs !== null && msgMs < cutoffMs;
-    const eiMsg = isOld ? convertToPreMarkedEiMessage(msg) : convertToEiMessage(msg);
+    const eiMsg = isOld ? convertToPreMarkedEiMessage(msg, targetSession.id) : convertToEiMessage(msg, targetSession.id);
     stateManager.messages_append(persona.id, eiMsg);
     result.messagesImported++;
     if (!isOld) toAnalyze.push(eiMsg);

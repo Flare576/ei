@@ -14,6 +14,7 @@ import {
 } from "../../core/orchestrators/ceremony.js";
 import { isProcessRunning } from "../process-check.js";
 import { getMachineId } from "../machine-id.js";
+import { qualifyOpenCodeMessage } from "../../core/utils/message-id.js";
 
 // =============================================================================
 // Constants
@@ -47,9 +48,9 @@ function isAgentToAgentMessage(content: string): boolean {
   return AGENT_TO_AGENT_PREFIXES.some(prefix => trimmed.startsWith(prefix));
 }
 
-function convertToEiMessage(ocMsg: OpenCodeMessage): Message {
+function convertToEiMessage(ocMsg: OpenCodeMessage, sessionId: string): Message {
   return {
-    id: ocMsg.id,
+    id: qualifyOpenCodeMessage(getMachineId(), sessionId, ocMsg.id),
     role: ocMsg.role === "user" ? "human" : "system",
     content: ocMsg.content,
     timestamp: ocMsg.timestamp,
@@ -59,9 +60,9 @@ function convertToEiMessage(ocMsg: OpenCodeMessage): Message {
   };
 }
 
-function convertToPreMarkedEiMessage(ocMsg: OpenCodeMessage): Message {
+function convertToPreMarkedEiMessage(ocMsg: OpenCodeMessage, sessionId: string): Message {
   return {
-    ...convertToEiMessage(ocMsg),
+    ...convertToEiMessage(ocMsg, sessionId),
     f: true,
     t: true,
     p: true,
@@ -232,7 +233,7 @@ export async function importOpenCodeSessions(
     for (const ocMsg of agentMsgs) {
       const msgMs = new Date(ocMsg.timestamp).getTime();
       const isOld = cutoffMs !== null && msgMs < cutoffMs;
-      const eiMsg = isOld ? convertToPreMarkedEiMessage(ocMsg) : convertToEiMessage(ocMsg);
+      const eiMsg = isOld ? convertToPreMarkedEiMessage(ocMsg, targetSession.id) : convertToEiMessage(ocMsg, targetSession.id);
       stateManager.messages_append(persona.id, eiMsg);
       result.messagesImported++;
       if (!isOld) toAnalyze.push(eiMsg);
