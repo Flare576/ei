@@ -41,6 +41,12 @@ function formatItem(item: EiHeartbeatItem): string {
         `  ${item.critique}`,
       ].join("\n");
 
+    case "Self Reflection Alert":
+      return [
+        `- **${item.id}** Self Reflection Alert (your own identity)`,
+        `  ${item.critique}`,
+      ].join("\n");
+
     default:
       return '';
   }
@@ -86,6 +92,7 @@ ${itemsSection}
 - **Low-Engagement Person / Topic**: Write a natural, warm message that naturally brings up this person or topic. Set the id and my_response.
 - **Inactive Persona**: Write a message that gently mentions the persona might be worth checking in with. Set the id and my_response.
 - **Persona Reflection Alert**: The nightly review proposed identity changes for this persona. Mention it naturally — the user can talk to the persona and then use the command shown in the status bar to review the changes. Set the id and my_response.
+- **Self Reflection Alert**: The nightly review proposed changes to *your own* identity. Mention it naturally — you've grown and the system noticed. The user can review your proposed changes using the command shown in the status bar. Set the id and my_response.
 
 ## When NOT to Reach Out
 

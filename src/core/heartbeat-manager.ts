@@ -168,6 +168,16 @@ export async function queueEiHeartbeat(
     });
   }
 
+  // Ei's own pending reflection — separate item type so she can introspect on herself
+  const eiPersona = personas.find((p) => p.id === "ei");
+  if (eiPersona?.pending_update?.critique) {
+    items.push({
+      id: eiPersona.id,
+      type: "Self Reflection Alert",
+      critique: eiPersona.pending_update.critique,
+    });
+  }
+
   const personasWithPendingUpdate = personas.filter(
     (p) => !p.is_archived && !p.is_paused && !p.is_static && p.id !== "ei" && p.pending_update?.critique
   );
