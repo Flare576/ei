@@ -1,7 +1,7 @@
 import type { Message } from "../core/types.js";
 import { getMessageContent } from "../core/handlers/utils.js";
 
-const MESSAGE_PLACEHOLDER_REGEX = /\[mid:([a-zA-Z0-9_-]+):([^\]]+)\]/g;
+const MESSAGE_PLACEHOLDER_REGEX = /\[mid:([a-zA-Z0-9_:-]+):([^:\]]+)\]/g;
 
 export function getMessageDisplayText(message: Message): string | null {
   const parts: string[] = [];
