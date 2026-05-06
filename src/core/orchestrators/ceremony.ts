@@ -264,14 +264,6 @@ export function handleCeremonyProgress(state: StateManager, lastPhase: number): 
     !p.is_static
   );
   
-  const eiIndex = activePersonas.findIndex(p => 
-    (p.aliases?.[0] ?? "").toLowerCase() === "ei"
-  );
-  
-  // Ei's topics don't change
-  if (eiIndex > -1) {
-    activePersonas.splice(eiIndex, 1);
-  }
   // Decay phase: apply decay + prune for ALL active personas
   for (const persona of activePersonas) {
     applyDecayPhase(persona.id, state);
@@ -623,7 +615,7 @@ function queueEventSummaryForAll(state: StateManager, options?: ExtractionOption
 
 function queueReflectionPhase(state: StateManager): void {
   const personas = state.persona_getAll().filter(p =>
-    !p.is_paused && !p.is_archived && !p.is_static && p.id !== "ei"
+    !p.is_paused && !p.is_archived && !p.is_static
   );
 
   let queued = 0;
