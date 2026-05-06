@@ -4,6 +4,7 @@ import {
   detectProviders,
   buildProviderAccounts,
   ALL_PROVIDER_NAMES,
+  KNOWN_MODEL_LIMITS,
 } from "../../src/util/provider-detection";
 
 describe("selectModelsForProvider — Anthropic", () => {
@@ -36,11 +37,17 @@ describe("selectModelsForProvider — Anthropic", () => {
   });
 });
 
-describe("selectModelsForProvider — latest selection (lexicographic descending)", () => {
-  test("multiple haiku versions — picks latest by lexicographic sort desc", () => {
+describe("selectModelsForProvider — latest selection (numeric descending)", () => {
+  test("multiple haiku versions — picks latest by numeric sort desc", () => {
     const models = ["claude-haiku-3", "claude-haiku-4-5", "claude-haiku-4-0"];
     const result = selectModelsForProvider("Anthropic", models);
     expect(result.extractionModel).toBe("claude-haiku-4-5");
+  });
+
+  test("numeric sort: 4-6 beats 4-5 alphabetically ambiguous case", () => {
+    const models = ["claude-sonnet-4-5-20250929", "claude-sonnet-4-6"];
+    const result = selectModelsForProvider("Anthropic", models);
+    expect(result.chatModel).toBe("claude-sonnet-4-6");
   });
 
   test("single haiku version — selects it", () => {
@@ -112,16 +119,27 @@ describe("selectModelsForProvider — empty model list", () => {
 });
 
 describe("selectModelsForProvider — OpenAI", () => {
-  const openaiModels = ["gpt-4o", "gpt-4o-mini", "gpt-4o-2024-11-20"];
+  const realWorldModels = [
+    "gpt-4o", "gpt-4o-mini", "gpt-4o-2024-11-20",
+    "tts-1", "dall-e-3", "whisper-1", "text-embedding-ada-002",
+    "gpt-4.1", "gpt-4.1-mini", "gpt-5", "gpt-5-mini",
+    "o3", "o4-mini", "gpt-3.5-turbo",
+  ];
 
-  test("selects latest mini as extraction", () => {
-    const result = selectModelsForProvider("OpenAI", openaiModels);
-    expect(result.extractionModel).toBe("gpt-4o-mini");
+  test("selects a mini model as extraction", () => {
+    const result = selectModelsForProvider("OpenAI", realWorldModels);
+    expect(result.extractionModel.toLowerCase()).toContain("mini");
   });
 
-  test("selects latest gpt-4o (non-mini) as chat", () => {
-    const result = selectModelsForProvider("OpenAI", openaiModels);
-    expect(result.chatModel).toBe("gpt-4o-2024-11-20");
+  test("selects a non-mini chat model", () => {
+    const result = selectModelsForProvider("OpenAI", realWorldModels);
+    expect(result.chatModel.toLowerCase()).not.toContain("mini");
+  });
+
+  test("drops non-chat models (tts, dall-e, whisper, embeddings)", () => {
+    const result = selectModelsForProvider("OpenAI", realWorldModels);
+    expect(result.chatModel).not.toMatch(/tts|dall-e|whisper|embedding/i);
+    expect(result.extractionModel).not.toMatch(/tts|dall-e|whisper|embedding/i);
   });
 });
 
@@ -135,11 +153,32 @@ describe("selectModelsForProvider — Mistral", () => {
 });
 
 describe("selectModelsForProvider — Gemini", () => {
-  test("selects flash as extraction, pro as chat", () => {
-    const models = ["gemini-2.0-flash", "gemini-1.5-pro"];
-    const result = selectModelsForProvider("Gemini", models);
-    expect(result.extractionModel).toBe("gemini-2.0-flash");
-    expect(result.chatModel).toBe("gemini-1.5-pro");
+  const realWorldModels = [
+    "models/gemini-2.5-flash", "models/gemini-2.5-pro",
+    "models/gemini-2.0-flash", "models/gemini-2.0-flash-001",
+    "models/gemini-embedding-001", "models/imagen-4.0-generate-001",
+    "models/veo-3.0-generate-001", "models/lyria-3-pro-preview",
+    "models/gemini-2.5-flash-preview-tts", "models/gemini-robotics-er-1.5-preview",
+    "models/gemma-4-26b-a4b-it", "models/aqa",
+  ];
+
+  test("selects latest flash as extraction", () => {
+    const result = selectModelsForProvider("Gemini", realWorldModels);
+    expect(result.extractionModel.toLowerCase()).toContain("flash");
+    expect(result.extractionModel).not.toMatch(/tts|embedding|imagen|veo|lyria|robotics/i);
+  });
+
+  test("selects latest pro as chat", () => {
+    const result = selectModelsForProvider("Gemini", realWorldModels);
+    expect(result.chatModel.toLowerCase()).toContain("pro");
+    expect(result.chatModel).not.toMatch(/tts|embedding|imagen|veo|lyria|robotics/i);
+  });
+
+  test("drops non-chat models (embedding, imagen, veo, lyria, tts, robotics)", () => {
+    const result = selectModelsForProvider("Gemini", realWorldModels);
+    for (const model of [result.chatModel, result.extractionModel]) {
+      expect(model).not.toMatch(/embedding|imagen|veo|lyria|robotics|gemma/i);
+    }
   });
 });
 
@@ -268,7 +307,7 @@ describe("detectProviders — mock fetch integration", () => {
 
 describe("buildProviderAccounts", () => {
   test("chat model appears first in models array", () => {
-    const accounts = buildProviderAccounts([{
+    const { accounts } = buildProviderAccounts([{
       name: "Anthropic",
       url: "https://api.anthropic.com/v1",
       apiKey: "sk-test",
@@ -283,7 +322,7 @@ describe("buildProviderAccounts", () => {
   });
 
   test("sets api_key to env var reference on known cloud providers", () => {
-    const accounts = buildProviderAccounts([{
+    const { accounts } = buildProviderAccounts([{
       name: "Anthropic",
       url: "https://api.anthropic.com/v1",
       apiKey: "sk-test",
@@ -296,7 +335,7 @@ describe("buildProviderAccounts", () => {
   });
 
   test("passes api_key through for unknown providers", () => {
-    const accounts = buildProviderAccounts([{
+    const { accounts } = buildProviderAccounts([{
       name: "MyCustomProvider",
       url: "https://my-llm.example.com/v1",
       apiKey: "sk-custom-key",
@@ -308,8 +347,60 @@ describe("buildProviderAccounts", () => {
     expect(accounts[0].api_key).toBe("sk-custom-key");
   });
 
+  test("suggestedRewriteModelId is set to bonus model GUID when bonus model present", () => {
+    const { accounts, suggestedRewriteModelId } = buildProviderAccounts([{
+      name: "Anthropic",
+      url: "https://api.anthropic.com/v1",
+      apiKey: "sk-test",
+      modelIds: ["claude-haiku-4-5", "claude-sonnet-4-5", "claude-opus-4-7"],
+      selected: { extractionModel: "claude-haiku-4-5", chatModel: "claude-sonnet-4-5", bonusModel: "claude-opus-4-7" },
+      status: "detected",
+    }]);
+
+    const opusModel = accounts[0].models!.find((m) => m.name === "claude-opus-4-7");
+    expect(suggestedRewriteModelId).toBeDefined();
+    expect(suggestedRewriteModelId).toBe(opusModel!.id);
+  });
+
+  test("suggestedRewriteModelId is undefined when no bonus model", () => {
+    const { suggestedRewriteModelId } = buildProviderAccounts([{
+      name: "Anthropic",
+      url: "https://api.anthropic.com/v1",
+      apiKey: "sk-test",
+      modelIds: ["claude-haiku-4-5", "claude-sonnet-4-5"],
+      selected: { extractionModel: "claude-haiku-4-5", chatModel: "claude-sonnet-4-5" },
+      status: "detected",
+    }]);
+
+    expect(suggestedRewriteModelId).toBeUndefined();
+  });
+
+  test("suggestedRewriteModelId uses first provider with a bonus model", () => {
+    const { suggestedRewriteModelId, accounts } = buildProviderAccounts([
+      {
+        name: "Anthropic",
+        url: "https://api.anthropic.com/v1",
+        apiKey: "sk-test",
+        modelIds: ["claude-haiku-4-5", "claude-sonnet-4-5", "claude-opus-4-7"],
+        selected: { extractionModel: "claude-haiku-4-5", chatModel: "claude-sonnet-4-5", bonusModel: "claude-opus-4-7" },
+        status: "detected",
+      },
+      {
+        name: "OpenAI",
+        url: "https://api.openai.com/v1",
+        apiKey: "sk-oai",
+        modelIds: ["gpt-4o", "o3"],
+        selected: { extractionModel: "gpt-4o-mini", chatModel: "o3", bonusModel: "o3" },
+        status: "detected",
+      },
+    ]);
+
+    const anthropicOpus = accounts[0].models!.find((m) => m.name === "claude-opus-4-7");
+    expect(suggestedRewriteModelId).toBe(anthropicOpus!.id);
+  });
+
   test("no duplicate model entries when modelIds overlap with selected", () => {
-    const accounts = buildProviderAccounts([{
+    const { accounts } = buildProviderAccounts([{
       name: "Anthropic",
       url: "https://api.anthropic.com/v1",
       modelIds: ["claude-haiku-4-5", "claude-sonnet-4-5"],
@@ -320,6 +411,167 @@ describe("buildProviderAccounts", () => {
     const names = accounts[0].models!.map((m) => m.name);
     const uniqueNames = [...new Set(names)];
     expect(names).toHaveLength(uniqueNames.length);
+  });
+});
+
+describe("selectModelsForProvider — Anthropic filters to latest per tier", () => {
+  const realWorldModels = [
+    "claude-haiku-4-5-20251001",
+    "claude-opus-4-1-20250805",
+    "claude-opus-4-20250514",
+    "claude-opus-4-5-20251101",
+    "claude-opus-4-6",
+    "claude-opus-4-7",
+    "claude-sonnet-4-20250514",
+    "claude-sonnet-4-5-20250929",
+    "claude-sonnet-4-6",
+  ];
+
+  test("selects only the single latest haiku as extraction model", () => {
+    const result = selectModelsForProvider("Anthropic", realWorldModels);
+    expect(result.extractionModel).toBe("claude-haiku-4-5-20251001");
+  });
+
+  test("selects only the single latest sonnet as chat model", () => {
+    const result = selectModelsForProvider("Anthropic", realWorldModels);
+    expect(result.chatModel).toBe("claude-sonnet-4-6");
+  });
+
+  test("selects only the single latest opus as bonus model", () => {
+    const result = selectModelsForProvider("Anthropic", realWorldModels);
+    expect(result.bonusModel).toBe("claude-opus-4-7");
+  });
+});
+
+describe("KNOWN_MODEL_LIMITS", () => {
+  test("haiku-4-5 has conservative token_limit of 100k", () => {
+    expect(KNOWN_MODEL_LIMITS["claude-haiku-4-5-20251001"]?.token_limit).toBe(100000);
+  });
+
+  test("opus-4-7 has max_output_tokens of 128k", () => {
+    expect(KNOWN_MODEL_LIMITS["claude-opus-4-7"]?.max_output_tokens).toBe(128000);
+  });
+
+  test("opus-4-6 has max_output_tokens of 128k", () => {
+    expect(KNOWN_MODEL_LIMITS["claude-opus-4-6"]?.max_output_tokens).toBe(128000);
+  });
+
+  test("sonnet-4-6 has max_output_tokens of 64k", () => {
+    expect(KNOWN_MODEL_LIMITS["claude-sonnet-4-6"]?.max_output_tokens).toBe(64000);
+  });
+});
+
+describe("buildProviderAccounts — known model limits", () => {
+  test("populates token_limit and max_output_tokens for known Anthropic models", () => {
+    const { accounts } = buildProviderAccounts([{
+      name: "Anthropic",
+      url: "https://api.anthropic.com/v1",
+      apiKey: "sk-test",
+      modelIds: ["claude-haiku-4-5-20251001", "claude-sonnet-4-6"],
+      selected: { extractionModel: "claude-haiku-4-5-20251001", chatModel: "claude-sonnet-4-6" },
+      status: "detected",
+    }]);
+
+    const haiku = accounts[0].models!.find((m) => m.name === "claude-haiku-4-5-20251001");
+    expect(haiku?.token_limit).toBe(100000);
+    expect(haiku?.max_output_tokens).toBe(64000);
+
+    const sonnet = accounts[0].models!.find((m) => m.name === "claude-sonnet-4-6");
+    expect(sonnet?.max_output_tokens).toBe(64000);
+  });
+
+  test("unknown models get no token_limit or max_output_tokens", () => {
+    const { accounts } = buildProviderAccounts([{
+      name: "Anthropic",
+      url: "https://api.anthropic.com/v1",
+      apiKey: "sk-test",
+      modelIds: ["claude-future-model-99"],
+      selected: { extractionModel: "claude-future-model-99", chatModel: "claude-future-model-99" },
+      status: "detected",
+    }]);
+
+    const model = accounts[0].models!.find((m) => m.name === "claude-future-model-99");
+    expect(model?.token_limit).toBeUndefined();
+    expect(model?.max_output_tokens).toBeUndefined();
+  });
+
+  test("Anthropic: only latest-per-tier models appear in accounts — older snapshots dropped", () => {
+    const { accounts } = buildProviderAccounts([{
+      name: "Anthropic",
+      url: "https://api.anthropic.com/v1",
+      apiKey: "sk-test",
+      modelIds: [
+        "claude-opus-4-20250514",
+        "claude-opus-4-6",
+        "claude-opus-4-7",
+        "claude-sonnet-4-20250514",
+        "claude-sonnet-4-5-20250929",
+        "claude-sonnet-4-6",
+        "claude-haiku-4-5-20251001",
+      ],
+      selected: { extractionModel: "claude-haiku-4-5-20251001", chatModel: "claude-sonnet-4-6", bonusModel: "claude-opus-4-7" },
+      status: "detected",
+    }]);
+
+    const names = accounts[0].models!.map((m) => m.name);
+    expect(names).not.toContain("claude-opus-4-20250514");
+    expect(names).not.toContain("claude-sonnet-4-20250514");
+    expect(names).not.toContain("claude-sonnet-4-5-20250929");
+    expect(names).not.toContain("claude-opus-4-6");
+    expect(names).toContain("claude-haiku-4-5-20251001");
+    expect(names).toContain("claude-sonnet-4-6");
+    expect(names).toContain("claude-opus-4-7");
+  });
+
+  test("OpenAI: drops non-chat models, keeps chat families", () => {
+    const { accounts } = buildProviderAccounts([{
+      name: "OpenAI",
+      url: "https://api.openai.com/v1",
+      apiKey: "sk-test",
+      modelIds: ["gpt-4o-2024-11-20", "gpt-4o-mini", "tts-1", "dall-e-3", "whisper-1", "text-embedding-ada-002"],
+      selected: { extractionModel: "gpt-4o-mini", chatModel: "gpt-4o-2024-11-20" },
+      status: "detected",
+    }]);
+
+    const names = accounts[0].models!.map((m) => m.name);
+    expect(names).toContain("gpt-4o-2024-11-20");
+    expect(names).toContain("gpt-4o-mini");
+    expect(names).not.toContain("tts-1");
+    expect(names).not.toContain("dall-e-3");
+    expect(names).not.toContain("whisper-1");
+    expect(names).not.toContain("text-embedding-ada-002");
+  });
+
+  test("Gemini: drops non-chat models, keeps flash/pro", () => {
+    const { accounts } = buildProviderAccounts([{
+      name: "Gemini",
+      url: "https://generativelanguage.googleapis.com/v1beta/openai",
+      apiKey: "gai-test",
+      modelIds: ["models/gemini-2.5-flash", "models/gemini-2.5-pro", "models/gemini-embedding-001", "models/imagen-4.0-generate-001"],
+      selected: { extractionModel: "models/gemini-2.5-flash", chatModel: "models/gemini-2.5-pro" },
+      status: "detected",
+    }]);
+
+    const names = accounts[0].models!.map((m) => m.name);
+    expect(names).toContain("models/gemini-2.5-flash");
+    expect(names).toContain("models/gemini-2.5-pro");
+    expect(names).not.toContain("models/gemini-embedding-001");
+    expect(names).not.toContain("models/imagen-4.0-generate-001");
+  });
+
+  test("local providers (LMStudio) keep all modelIds unfiltered", () => {
+    const { accounts } = buildProviderAccounts([{
+      name: "LMStudio",
+      url: "http://127.0.0.1:1234/v1",
+      modelIds: ["google/gemma-4-26b-a4b", "qwen/qwen3.5-35b-a3b", "text-embedding-nomic-embed-text-v1.5"],
+      selected: { extractionModel: "google/gemma-4-26b-a4b", chatModel: "google/gemma-4-26b-a4b" },
+      status: "detected",
+    }]);
+
+    const names = accounts[0].models!.map((m) => m.name);
+    expect(names).toContain("google/gemma-4-26b-a4b");
+    expect(names).toContain("qwen/qwen3.5-35b-a3b");
+    expect(names).toContain("text-embedding-nomic-embed-text-v1.5");
   });
 });
 

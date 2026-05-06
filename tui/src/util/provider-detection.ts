@@ -58,10 +58,141 @@ export const ALL_PROVIDER_NAMES: ReadonlyArray<string> = [
   ...CLOUD_PROVIDERS.map((p) => p.name),
 ];
 
+// Ei-curated effective limits for known models.
+// These are NOT the provider's advertised maximums — they're the limits Ei uses in practice.
+// For example, Haiku's advertised context is 200k but real-world extraction quality degrades
+// above ~100k, so we cap it there. When adding new models, prefer conservative values based
+// on actual usage over marketing specs.
+export const KNOWN_MODEL_LIMITS: Readonly<Record<string, { token_limit?: number; max_output_tokens?: number }>> = {
+  // Anthropic — claude-opus-4.x
+  "claude-opus-4-7":              { token_limit: 200000, max_output_tokens: 128000 },
+  "claude-opus-4-6":              { token_limit: 200000, max_output_tokens: 128000 },
+  "claude-opus-4-5-20251101":     { token_limit: 200000, max_output_tokens: 64000 },
+  "claude-opus-4-1-20250805":     { token_limit: 200000, max_output_tokens: 32000 },
+  // Anthropic — claude-sonnet-4.x
+  "claude-sonnet-4-6":            { token_limit: 200000, max_output_tokens: 64000 },
+  "claude-sonnet-4-5-20250929":   { token_limit: 200000, max_output_tokens: 64000 },
+  // Anthropic — claude-haiku-4.x
+  // Note: advertised context is 200k but extraction quality degrades above ~100k in practice
+  "claude-haiku-4-5-20251001":    { token_limit: 100000, max_output_tokens: 64000 },
+};
+
+// Sort model IDs by version numerically descending so "4-6" correctly beats "4-5".
+// Snapshot date suffixes (8-digit YYYYMMDD) are stripped before comparison so that
+// "claude-sonnet-4-6" sorts higher than "claude-sonnet-4-5-20250929".
+function sortModelsDesc(modelIds: string[]): string[] {
+  const stripDate = (id: string) => id.replace(/-\d{8}$/, "");
+  return [...modelIds].sort((a, b) => {
+    const aParts = stripDate(a).split(/[-.]/).map((p) => (isNaN(Number(p)) ? p : Number(p)));
+    const bParts = stripDate(b).split(/[-.]/).map((p) => (isNaN(Number(p)) ? p : Number(p)));
+    for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
+      const av = aParts[i] ?? 0;
+      const bv = bParts[i] ?? 0;
+      if (av < bv) return 1;
+      if (av > bv) return -1;
+    }
+    return 0;
+  });
+}
+
 function latestMatch(modelIds: string[], pattern: string): string | undefined {
   const matches = modelIds.filter((id) => id.toLowerCase().includes(pattern));
   if (matches.length === 0) return undefined;
-  return [...matches].sort().reverse()[0];
+  return sortModelsDesc(matches)[0];
+}
+
+// For Anthropic: keep only the single latest model per tier (haiku/sonnet/opus).
+// Drops older snapshots and deprecated models (e.g. claude-opus-4-20250514) so the
+// initial provider config stays clean. Users can add older models manually if needed.
+function filterAnthropicModels(modelIds: string[]): string[] {
+  const tiers = ["haiku", "sonnet", "opus"];
+  const kept: string[] = [];
+  for (const tier of tiers) {
+    const latest = latestMatch(modelIds, tier);
+    if (latest) kept.push(latest);
+  }
+  // Preserve any models that don't match a known tier (future-proofing)
+  const unknowns = modelIds.filter((id) => !tiers.some((t) => id.toLowerCase().includes(t)));
+  return [...kept, ...unknowns];
+}
+
+// For OpenAI: the /models endpoint returns everything — TTS, image generation, audio,
+// embeddings, moderation, legacy completions, etc. Keep only chat-capable model families
+// and trim to one latest per tier so the provider config stays useful.
+function filterOpenAIModels(modelIds: string[]): string[] {
+  const NON_CHAT_PATTERNS = [
+    "tts", "whisper", "dall-e", "embedding", "davinci", "babbage",
+    "moderation", "audio", "realtime", "transcribe", "image", "sora",
+    "chat-latest", "codex",
+  ];
+  const isNonChat = (id: string) => {
+    const lower = id.toLowerCase();
+    return NON_CHAT_PATTERNS.some((p) => lower.includes(p));
+  };
+
+  const chatModels = modelIds.filter((id) => !isNonChat(id));
+
+  // Tiers in priority order. Mini variants are their own tier for extraction use.
+  const tiers = [
+    { name: "o-series",  match: (id: string) => /^o\d/.test(id.toLowerCase()) && !id.toLowerCase().includes("mini") },
+    { name: "gpt-5",     match: (id: string) => id.toLowerCase().includes("gpt-5") && !id.toLowerCase().includes("mini") },
+    { name: "gpt-4.1",   match: (id: string) => id.toLowerCase().includes("gpt-4.1") && !id.toLowerCase().includes("mini") },
+    { name: "gpt-4o",    match: (id: string) => id.toLowerCase().includes("gpt-4o") && !id.toLowerCase().includes("mini") },
+    { name: "mini",      match: (id: string) => id.toLowerCase().includes("mini") },
+  ];
+
+  const kept: string[] = [];
+  const consumed = new Set<string>();
+
+  for (const tier of tiers) {
+    const matches = chatModels.filter((id) => tier.match(id) && !consumed.has(id));
+    const latest = sortModelsDesc(matches)[0];
+    if (latest) {
+      kept.push(latest);
+      consumed.add(latest);
+    }
+  }
+
+  return kept;
+}
+
+// For Gemini: the /models endpoint returns chat models, embedding models, image/video
+// generation (Imagen, Veo), audio (Lyria), TTS variants, robotics previews, and research
+// models. Keep only plain gemini-N.N-flash and gemini-N.N-pro chat families, latest per tier.
+function filterGeminiModels(modelIds: string[]): string[] {
+  const NON_CHAT_PATTERNS = [
+    "embedding", "imagen", "veo", "lyria", "robotics", "tts", "audio",
+    "native-audio", "computer-use", "deep-research", "aqa", "live",
+    "-image-", "gemma",
+  ];
+  const isNonChat = (id: string) => {
+    const lower = id.toLowerCase();
+    return NON_CHAT_PATTERNS.some((p) => lower.includes(p));
+  };
+
+  const chatModels = modelIds.filter((id) => !isNonChat(id));
+
+  const tiers = ["pro", "flash"];
+  const kept: string[] = [];
+  const consumed = new Set<string>();
+
+  for (const tier of tiers) {
+    const latest = latestMatch(chatModels.filter((id) => !consumed.has(id)), tier);
+    if (latest) {
+      kept.push(latest);
+      consumed.add(latest);
+    }
+  }
+
+  return kept;
+}
+
+function filterModelsForProvider(providerName: string, modelIds: string[]): string[] {
+  const name = providerName.toLowerCase();
+  if (name === "anthropic") return filterAnthropicModels(modelIds);
+  if (name === "openai")    return filterOpenAIModels(modelIds);
+  if (name === "gemini")    return filterGeminiModels(modelIds);
+  return modelIds;
 }
 
 export function selectModelsForProvider(
@@ -82,22 +213,20 @@ export function selectModelsForProvider(
   }
 
   if (name === "anthropic") {
+    const filtered = filterAnthropicModels(modelIds);
     return {
-      extractionModel: latestMatch(modelIds, "haiku") ?? modelIds[0],
-      chatModel:       latestMatch(modelIds, "sonnet") ?? modelIds[0],
-      bonusModel:      latestMatch(modelIds, "opus"),
+      extractionModel: latestMatch(filtered, "haiku") ?? filtered[0],
+      chatModel:       latestMatch(filtered, "sonnet") ?? filtered[0],
+      bonusModel:      latestMatch(filtered, "opus"),
     };
   }
 
   if (name === "openai") {
-    const gpt4oNonMini = modelIds.filter(
-      (id) => id.toLowerCase().includes("gpt-4o") && !id.toLowerCase().includes("mini")
-    );
+    const filtered = filterOpenAIModels(modelIds);
+    const list = filtered.length > 0 ? filtered : modelIds;
     return {
-      extractionModel: latestMatch(modelIds, "mini") ?? modelIds[0],
-      chatModel: gpt4oNonMini.length > 0
-        ? [...gpt4oNonMini].sort().reverse()[0]
-        : modelIds[0],
+      extractionModel: latestMatch(list, "mini") ?? list[0],
+      chatModel:       list[0],
     };
   }
 
@@ -109,9 +238,11 @@ export function selectModelsForProvider(
   }
 
   if (name === "gemini") {
+    const filtered = filterGeminiModels(modelIds);
+    const list = filtered.length > 0 ? filtered : modelIds;
     return {
-      extractionModel: latestMatch(modelIds, "flash") ?? modelIds[0],
-      chatModel:       latestMatch(modelIds, "pro")   ?? modelIds[0],
+      extractionModel: latestMatch(list, "flash") ?? list[0],
+      chatModel:       latestMatch(list, "pro")   ?? list[0],
     };
   }
 
@@ -212,29 +343,50 @@ export async function detectProviders(
   return { detected, statuses };
 }
 
+export interface ProviderBootstrapResult {
+  accounts: ProviderAccount[];
+  suggestedRewriteModelId?: string;
+}
+
 export function buildProviderAccounts(
   detected: ProviderDetectionResult[]
-): ProviderAccount[] {
-  return detected.map((d) => {
-    const makeModel = (modelName: string): ModelConfig => ({
-      id: crypto.randomUUID(),
-      name: modelName,
-    });
+): ProviderBootstrapResult {
+  let suggestedRewriteModelId: string | undefined;
+
+  const accounts = detected.map((d) => {
+    const makeModel = (modelName: string): ModelConfig => {
+      const limits = KNOWN_MODEL_LIMITS[modelName];
+      return {
+        id: crypto.randomUUID(),
+        name: modelName,
+        ...(limits?.token_limit !== undefined && { token_limit: limits.token_limit }),
+        ...(limits?.max_output_tokens !== undefined && { max_output_tokens: limits.max_output_tokens }),
+      };
+    };
 
     const seenNames = new Set<string>();
     const models: ModelConfig[] = [];
 
-    const pushIfNew = (name: string) => {
+    const pushIfNew = (name: string): ModelConfig => {
       if (!seenNames.has(name)) {
         seenNames.add(name);
-        models.push(makeModel(name));
+        const model = makeModel(name);
+        models.push(model);
+        return model;
       }
+      return models.find((m) => m.name === name)!;
     };
 
     pushIfNew(d.selected.chatModel);
     pushIfNew(d.selected.extractionModel);
-    if (d.selected.bonusModel) pushIfNew(d.selected.bonusModel);
-    for (const id of d.modelIds) pushIfNew(id);
+    if (d.selected.bonusModel) {
+      const bonusConfig = pushIfNew(d.selected.bonusModel);
+      if (!suggestedRewriteModelId) {
+        suggestedRewriteModelId = bonusConfig.id;
+      }
+    }
+    const modelList = filterModelsForProvider(d.name, d.modelIds);
+    for (const id of modelList) pushIfNew(id);
 
     const cloudConfig = CLOUD_PROVIDERS.find((p) => p.name === d.name);
     const apiKey = cloudConfig ? `$${cloudConfig.envVar}` : d.apiKey;
@@ -251,4 +403,6 @@ export function buildProviderAccounts(
       models,
     };
   });
+
+  return { accounts, suggestedRewriteModelId };
 }

@@ -832,7 +832,7 @@ export const EiProvider: ParentComponent = (props) => {
         setDetectedProviders(allStatuses);
 
         if (detected.length > 0) {
-          const accounts = buildProviderAccounts(detected);
+          const { accounts, suggestedRewriteModelId } = buildProviderAccounts(detected);
           const topProvider = detected[0];
           const defaultModel = `${topProvider.name}:${topProvider.selected.extractionModel}`;
           setFirstBootDefaultModel(defaultModel);
@@ -842,6 +842,9 @@ export const EiProvider: ParentComponent = (props) => {
               ...currentHuman.settings,
               accounts,
               default_model: defaultModel,
+              ...(!currentHuman.settings?.rewrite_model && suggestedRewriteModelId && {
+                rewrite_model: suggestedRewriteModelId,
+              }),
             },
           });
           const names = detected.map((d) => d.name).join(" and ");
