@@ -9,6 +9,7 @@ import type { HeartbeatCheckPromptData, PromptOutput } from "./types.js";
 import { type Message, type Topic, type Person } from "../../core/types.js";
 import { formatMessagesAsPlaceholders, getMessageDisplayText } from "../message-utils.js";
 import { getMessageContent } from "../../core/handlers/utils.js";
+import { partitionTraits } from "../trait-utils.js";
 function formatTopicsWithGaps(topics: Topic[]): string {
   if (topics.length === 0) return "(No topics with engagement gaps)";
   
@@ -85,7 +86,7 @@ export function buildHeartbeatCheckPrompt(data: HeartbeatCheckPromptData): Promp
 
 You are NOT having a conversation right now - you are deciding IF you should start one.`;
 
-  const activeTraits = data.persona.traits.filter(t => (t.strength ?? 0.5) > 0);
+  const { active: activeTraits } = partitionTraits(data.persona.traits);
 
   const contextFragment = `## Context
 

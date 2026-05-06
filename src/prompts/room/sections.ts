@@ -5,6 +5,7 @@
 import type { RoomParticipantIdentity, RoomHistoryMessage, RoomJudgeCandidate } from "./types.js";
 import type { PersonaTrait, PersonaTopic } from "../../core/types.js";
 import { RoomMode } from "../../core/types.js";
+import { partitionTraits, bucketTraits } from "../trait-utils.js";
 
 const DESCRIPTION_MAX_CHARS = 500;
 
@@ -81,9 +82,7 @@ export function buildRoomTraitsSection(traits: PersonaTrait[]): string {
   if (traits.length === 0) return "";
 
   const capped = [...traits].sort((a, b) => (b.strength ?? 0.5) - (a.strength ?? 0.5)).slice(0, 12);
-
-  const guardrails = capped.filter(t => (t.strength ?? 0.5) === 0);
-  const active = capped.filter(t => (t.strength ?? 0.5) > 0);
+  const { guardrails, active } = partitionTraits(capped);
 
   const sections: string[] = [];
 
@@ -92,11 +91,7 @@ export function buildRoomTraitsSection(traits: PersonaTrait[]): string {
     sections.push(`### Must NEVER Do — User Explicitly Asked You To Stop\n${lines}`);
   }
 
-  for (const bucket of ROOM_TRAIT_BUCKETS) {
-    const inBucket = active.filter(t => {
-      const pct = Math.round((t.strength ?? 0.5) * 100);
-      return pct >= bucket.min && pct <= bucket.max;
-    });
+  for (const { bucket, traits: inBucket } of bucketTraits(active, ROOM_TRAIT_BUCKETS)) {
     if (inBucket.length === 0) continue;
     const lines = inBucket.map(t => `**${t.name}**: ${truncate(t.description)}`).join("\n");
     sections.push(`${bucket.header}\n${lines}`);

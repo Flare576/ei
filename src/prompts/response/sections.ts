@@ -6,6 +6,7 @@
 import type { PersonaTrait, Quote, PersonaTopic } from "../../core/types.js";
 import type { ResponsePromptData, TemporalAnchor } from "./types.js";
 import { formatTimestamp } from "../../core/format-utils.js";
+import { partitionTraits, bucketTraits } from "../trait-utils.js";
 
 const DESCRIPTION_MAX_CHARS = 500;
 
@@ -80,9 +81,7 @@ export function buildTraitsSection(traits: PersonaTrait[], header: string): stri
   if (traits.length === 0) return "";
 
   const capped = [...traits].sort((a, b) => (b.strength ?? 0.5) - (a.strength ?? 0.5)).slice(0, 15);
-
-  const guardrails = capped.filter(t => (t.strength ?? 0.5) === 0);
-  const active = capped.filter(t => (t.strength ?? 0.5) > 0);
+  const { guardrails, active } = partitionTraits(capped);
 
   const sections: string[] = [];
 
@@ -91,11 +90,7 @@ export function buildTraitsSection(traits: PersonaTrait[], header: string): stri
     sections.push(`### Must NEVER Do — User Explicitly Asked You To Stop\n${lines}`);
   }
 
-  for (const bucket of TRAIT_BUCKETS) {
-    const inBucket = active.filter(t => {
-      const pct = Math.round((t.strength ?? 0.5) * 100);
-      return pct >= bucket.min && pct <= bucket.max;
-    });
+  for (const { bucket, traits: inBucket } of bucketTraits(active, TRAIT_BUCKETS)) {
     if (inBucket.length === 0) continue;
     const lines = inBucket.map(t => `**${t.name}**: ${truncateDescription(t.description)}`).join("\n");
     sections.push(`${bucket.header}\n${lines}`);

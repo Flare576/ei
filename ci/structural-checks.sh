@@ -35,6 +35,7 @@ echo "Prompt builders — pure (no computation)"
 COMPUTE=$(grep -rn "\.filter(\|\.reduce(" "$ROOT/src/prompts/" --include="*.ts" 2>/dev/null \
   | grep -v "filter(Boolean)" \
   | grep -v "filter((name)" \
+  | grep -v "src/prompts/trait-utils.ts" \
   || true)
 if [ -z "$COMPUTE" ]; then pass "no data computation in src/prompts/"; else fail "computation found in src/prompts/ (move logic to Processor)" "$COMPUTE"; fi
 
@@ -252,12 +253,97 @@ fi
 
 echo ""
 
+# ------------------------------------------------------------------
+# 11. callLLMRaw — only called from queue-processor.ts
+#     Direct calls from elsewhere bypass the queue system, priority
+#     ordering, and the DLQ — any new caller must go through the queue.
+# ------------------------------------------------------------------
 echo "callLLMRaw — only called from queue-processor.ts"
 DIRECT_LLM_CALLS=$(grep -rn "callLLMRaw(" "$ROOT/src/" --include="*.ts" \
   | grep -v "src/core/queue-processor.ts" \
   | grep -v "src/core/llm-client.ts" \
   || true)
 if [ -z "$DIRECT_LLM_CALLS" ]; then pass "callLLMRaw only in queue-processor.ts + llm-client.ts"; else fail "callLLMRaw() called outside queue-processor.ts (bypasses queue system)" "$DIRECT_LLM_CALLS"; fi
+
+echo ""
+
+# ------------------------------------------------------------------
+# 12. Test isolation — unit tests must not call real callLLMRaw
+#     callLLMRaw has a real side effect: writeNetworkDump writes to
+#     EI_DATA_PATH/logs/ when EI_DEBUG_NETWORK_VERBOSE=1. Unit tests
+#     that import and call it directly (instead of mocking it) will
+#     bleed log files into the developer's real profile directory.
+#     Required pattern: vi.mock('...llm-client...') OR no import at all.
+#     Exception: src/core/llm-client.ts itself and the dedicated
+#     call-llm-raw.test.ts which tests callLLMRaw directly — that file
+#     must instead guard by mocking writeNetworkDump or clearing the env.
+# ------------------------------------------------------------------
+echo "Test isolation — unit tests must mock llm-client (no real callLLMRaw)"
+IMPORTS_LLM_CLIENT=$(grep -rln "llm-client" \
+  "$ROOT/tests/unit/" \
+  "$ROOT/tui/src/" \
+  --include="*.test.ts" --include="*.test.tsx" 2>/dev/null \
+  | grep -v "tests/unit/core/call-llm-raw.test.ts" \
+  | grep -v "tests/unit/core/llm-client.test.ts" \
+  | grep -v "tests/unit/core/resolve-model.test.ts" \
+  | grep -v "tests/unit/core/resolve-token-limit.test.ts" \
+  || true)
+LLM_WITHOUT_MOCK=""
+for f in $IMPORTS_LLM_CLIENT; do
+  if ! grep -q "vi\.mock.*llm-client" "$f"; then
+    LLM_WITHOUT_MOCK="$LLM_WITHOUT_MOCK  $f"
+  fi
+done
+if [ -z "$LLM_WITHOUT_MOCK" ]; then
+  pass "all unit tests that import llm-client mock it with vi.mock"
+else
+  fail "unit tests import llm-client without vi.mock — writeNetworkDump will write to real EI_DATA_PATH" "$LLM_WITHOUT_MOCK"
+fi
+
+echo ""
+
+# ------------------------------------------------------------------
+# 13. Test isolation — unit tests must not use real FileStorage
+#     FileStorage reads/writes EI_DATA_PATH on disk. Unit tests that
+#     instantiate FileStorage directly (rather than using the
+#     createMockStorage() helper) will bleed into the developer's
+#     real profile or require a real filesystem. The only allowed
+#     exception is tests/tui/storage/file.test.ts and
+#     tests/unit/cli/retrieval.test.ts — those are intentional
+#     integration tests for the storage layer itself.
+# ------------------------------------------------------------------
+echo "Test isolation — unit tests must not instantiate real FileStorage"
+REAL_FILE_STORAGE=$(grep -rn "new FileStorage(" \
+  "$ROOT/tests/unit/" \
+  "$ROOT/tui/src/" \
+  --include="*.test.ts" --include="*.test.tsx" 2>/dev/null \
+  | grep -v "tests/tui/storage/file.test.ts" \
+  | grep -v "tests/unit/cli/retrieval.test.ts" \
+  || true)
+if [ -z "$REAL_FILE_STORAGE" ]; then
+  pass "no unit tests instantiate real FileStorage (use createMockStorage)"
+else
+  fail "unit tests use real FileStorage — use createMockStorage() helper instead" "$REAL_FILE_STORAGE"
+fi
+
+echo ""
+
+# ------------------------------------------------------------------
+# 14. Test isolation — all TUI E2E tests must set EI_DATA_PATH
+#     If EI_DATA_PATH is missing, the TUI process falls back to
+#     ~/.local/share/ei and writes test artifacts into the real profile.
+# ------------------------------------------------------------------
+echo "TUI E2E tests — EI_DATA_PATH set"
+TUI_E2E_DIR="$ROOT/tui/tests/e2e"
+MISSING_DATA_PATH=""
+while IFS= read -r -d '' f; do
+  MISSING_DATA_PATH="$MISSING_DATA_PATH  $(basename "$f")"
+done < <(grep -rLZ "EI_DATA_PATH" "$TUI_E2E_DIR" --include="*.test.ts" 2>/dev/null || true)
+if [ -z "$MISSING_DATA_PATH" ]; then
+  pass "all TUI E2E test files set EI_DATA_PATH"
+else
+  fail "TUI E2E test files missing EI_DATA_PATH in env block" "$MISSING_DATA_PATH"
+fi
 
 echo ""
 
