@@ -98,8 +98,7 @@ describe("handleKnowledgeSynthesis", () => {
     expect(message.external).toBe(true);
     expect(message.read).toBe(true);
     expect(message.context_status).toBe(ContextStatus.Always);
-    expect(message.source_tag).toBe("generate:document:my-topic_2026-01-01T00-00-00-000Z");
-    expect(message.id).toBeDefined();
+    expect(message.id).toMatch(/^generate:document:my-topic_2026-01-01T00-00-00-000Z:/);
     expect(message.timestamp).toBeDefined();
   });
 
@@ -173,6 +172,6 @@ describe("handleKnowledgeSynthesis", () => {
     handleKnowledgeSynthesis(response, state as any);
 
     const [, message] = (state.messages_append as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(message.source_tag).toBe("generate:document:philosophy-of-mind_2026-05-04T12-00-00-000Z");
+    expect(message.id).toMatch(/^generate:document:philosophy-of-mind_2026-05-04T12-00-00-000Z:/);
   });
 });

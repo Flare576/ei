@@ -18,17 +18,15 @@ export function handleKnowledgeSynthesis(response: LLMResponse, state: StateMana
   }
 
   const now = new Date().toISOString();
-  const sourceTag = `generate:document:${slug}`;
 
   const message: Message = {
-    id: crypto.randomUUID(),
+    id: `generate:document:${slug}:${crypto.randomUUID()}`,
     role: "system",
     content,
     timestamp: now,
     read: true,
     context_status: ContextStatus.Always,
     external: true,
-    source_tag: sourceTag,
   };
 
   state.messages_append("emmet", message);

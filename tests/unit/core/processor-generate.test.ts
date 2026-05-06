@@ -284,11 +284,10 @@ describe("Processor.getGeneratedDocumentContent()", () => {
     const sm = processor.getStateManager();
     const slug = "test-slug_2026-05-04T00-00-00-000Z";
     sm.messages_append("emmet", {
-      id: "msg-1",
+      id: `generate:document:${slug}:msg-1`,
       role: "assistant",
       content: "# Generated Document\n\nSome content here.",
       timestamp: new Date().toISOString(),
-      source_tag: `generate:document:${slug}`,
     });
 
     const result = await processor.getGeneratedDocumentContent(slug);

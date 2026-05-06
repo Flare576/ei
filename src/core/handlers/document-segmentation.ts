@@ -5,6 +5,7 @@ import {
   queueAllScans,
   type ExtractionContext,
 } from "../orchestrators/human-extraction.js";
+import { qualifyDocumentMessage } from "../utils/message-id.js";
 
 function parseSegmentArray(content: string): string[] | null {
   const jsonMatch = content.match(/```json\s*([\s\S]*?)```/) ?? content.match(/```\s*([\s\S]*?)```/);
@@ -52,14 +53,13 @@ export function handleDocumentSegmentation(response: LLMResponse, state: StateMa
 
   for (const segment of segments) {
     const message: Message = {
-      id: crypto.randomUUID(),
+      id: qualifyDocumentMessage(filename, crypto.randomUUID()),
       role: "system",
       content: segment,
       timestamp: now,
       read: true,
       context_status: ContextStatus.Always,
       external: true,
-      source_tag: sourceTag,
     };
     state.messages_append("emmet", message);
   }
@@ -71,7 +71,7 @@ export function finishDocumentBatch(batchId: string, filename: string, state: St
   const sourceTag = `import:document:${filename}`;
 
   const emmettMessages = state.messages_get("emmet");
-  const docMessages = emmettMessages.filter(m => m.external === true && m.source_tag === sourceTag);
+  const docMessages = emmettMessages.filter(m => m.external === true && m.id.startsWith(`${sourceTag}:`));
 
   if (docMessages.length === 0) {
     console.warn(`[finishDocumentBatch] No messages found for ${sourceTag} — skipping extraction`);
