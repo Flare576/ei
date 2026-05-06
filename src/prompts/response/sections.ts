@@ -69,25 +69,41 @@ export function buildGuidelinesSection(personaName: string): string {
 // TRAITS SECTION
 // =============================================================================
 
+const TRAIT_BUCKETS = [
+  { min: 90, max: 100, header: "### Core Expression\nThese define you. They should be evident in every response." },
+  { min: 66, max: 89,  header: "### Strong Tendencies\nFrequent and traceable, but not in every sentence." },
+  { min: 36, max: 65,  header: "### Noticeable in Casual Messages\nPresent but not dominating — surfaces naturally, not constantly." },
+  { min: 1,  max: 35,  header: "### Subtle Undercurrents\nBackground texture only. Use sparingly or subtly." },
+] as const;
+
 export function buildTraitsSection(traits: PersonaTrait[], header: string): string {
   if (traits.length === 0) return "";
-  
-  const sorted = [...traits].sort((a, b) => (b.strength ?? 0.5) - (a.strength ?? 0.5)).slice(0, 15);
-  const formatted = sorted.map(t => {
-    const strength = t.strength !== undefined ? ` (${Math.round(t.strength * 100)}%)` : "";
-    return `- **${t.name}**${strength}: ${truncateDescription(t.description)}`;
-  }).join("\n");
-  
-  return `## ${header}
 
-> NOTE: Strength of a trait should guide you to your response style, meaning a Strength of:
-> - 0% should never be used - the user has asked you to stop
-> - 25% should be used sparingly or subtly
-> - 50% should be noticable in casual messages, but not dominating
-> - 75% should be frequently used, but not in every resposne or throughout the entire conversation
-> - 100% should be tracable throughout every response
+  const capped = [...traits].sort((a, b) => (b.strength ?? 0.5) - (a.strength ?? 0.5)).slice(0, 15);
 
-${formatted}`;
+  const guardrails = capped.filter(t => (t.strength ?? 0.5) === 0);
+  const active = capped.filter(t => (t.strength ?? 0.5) > 0);
+
+  const sections: string[] = [];
+
+  if (guardrails.length > 0) {
+    const lines = guardrails.map(t => `**${t.name}**`).join("\n");
+    sections.push(`### Must NEVER Do — User Explicitly Asked You To Stop\n${lines}`);
+  }
+
+  for (const bucket of TRAIT_BUCKETS) {
+    const inBucket = active.filter(t => {
+      const pct = Math.round((t.strength ?? 0.5) * 100);
+      return pct >= bucket.min && pct <= bucket.max;
+    });
+    if (inBucket.length === 0) continue;
+    const lines = inBucket.map(t => `**${t.name}**: ${truncateDescription(t.description)}`).join("\n");
+    sections.push(`${bucket.header}\n${lines}`);
+  }
+
+  if (sections.length === 0) return "";
+
+  return `## ${header}\n\n${sections.join("\n\n")}`;
 }
 
 // =============================================================================
@@ -310,6 +326,9 @@ export function buildQuotesSection(quotes: Quote[], human: ResponsePromptData["h
       .filter((name): name is string => name !== undefined);
     
     let line = `- "${q.text}" — ${speaker} (${date})`;
+    if (q.message_id) {
+      line += `\n  → fetch_message("${q.message_id}") for surrounding context`;
+    }
     if (linkedNames.length > 0) {
       line += `\n  Related to: ${linkedNames.join(", ")}`;
     }
@@ -318,7 +337,7 @@ export function buildQuotesSection(quotes: Quote[], human: ResponsePromptData["h
   
   return `## Memorable Moments
 
-These are quotes the human or the system found worth preserving:
+These are quotes the human or the system found worth preserving. If one feels relevant, use fetch_message(message_id) to pull the surrounding conversation:
 
 ${formatted}`;
 }

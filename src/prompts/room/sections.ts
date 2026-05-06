@@ -70,14 +70,41 @@ export function buildRoomGuidelinesSection(personaName: string, mode?: RoomMode)
   return baseGuidelines;
 }
 
+const ROOM_TRAIT_BUCKETS = [
+  { min: 90, max: 100, header: "### Core Expression\nEvident in every response." },
+  { min: 66, max: 89,  header: "### Strong Tendencies\nFrequent, but not every sentence." },
+  { min: 36, max: 65,  header: "### Noticeable in Casual Messages\nSurfaces naturally, not constantly." },
+  { min: 1,  max: 35,  header: "### Subtle Undercurrents\nBackground texture only." },
+] as const;
+
 export function buildRoomTraitsSection(traits: PersonaTrait[]): string {
   if (traits.length === 0) return "";
-  const sorted = [...traits].sort((a, b) => (b.strength ?? 0.5) - (a.strength ?? 0.5)).slice(0, 12);
-  const lines = sorted.map(t => {
-    const pct = t.strength !== undefined ? ` (${Math.round(t.strength * 100)}%)` : "";
-    return `- **${t.name}**${pct}: ${truncate(t.description)}`;
-  });
-  return `## Your Personality\n\n${lines.join("\n")}`;
+
+  const capped = [...traits].sort((a, b) => (b.strength ?? 0.5) - (a.strength ?? 0.5)).slice(0, 12);
+
+  const guardrails = capped.filter(t => (t.strength ?? 0.5) === 0);
+  const active = capped.filter(t => (t.strength ?? 0.5) > 0);
+
+  const sections: string[] = [];
+
+  if (guardrails.length > 0) {
+    const lines = guardrails.map(t => `**${t.name}**`).join("\n");
+    sections.push(`### Must NEVER Do — User Explicitly Asked You To Stop\n${lines}`);
+  }
+
+  for (const bucket of ROOM_TRAIT_BUCKETS) {
+    const inBucket = active.filter(t => {
+      const pct = Math.round((t.strength ?? 0.5) * 100);
+      return pct >= bucket.min && pct <= bucket.max;
+    });
+    if (inBucket.length === 0) continue;
+    const lines = inBucket.map(t => `**${t.name}**: ${truncate(t.description)}`).join("\n");
+    sections.push(`${bucket.header}\n${lines}`);
+  }
+
+  if (sections.length === 0) return "";
+
+  return `## Your Personality\n\n${sections.join("\n\n")}`;
 }
 
 export function buildRoomTopicsSection(topics: PersonaTopic[]): string {

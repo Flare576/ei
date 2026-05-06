@@ -85,13 +85,15 @@ export function buildHeartbeatCheckPrompt(data: HeartbeatCheckPromptData): Promp
 
 You are NOT having a conversation right now - you are deciding IF you should start one.`;
 
+  const activeTraits = data.persona.traits.filter(t => (t.strength ?? 0.5) > 0);
+
   const contextFragment = `## Context
 
 It has been ${data.inactive_days} day${data.inactive_days !== 1 ? 's' : ''} since your last interaction.
 
 ### Your Personality
-${data.persona.traits.length > 0 
-  ? data.persona.traits.map(t => `- **${t.name}**: ${t.description}`).join('\n')
+${activeTraits.length > 0
+  ? activeTraits.map(t => `- **${t.name}**: ${t.description}`).join('\n')
   : "(No specific traits defined)"}
 
 ### Topics You Care About
