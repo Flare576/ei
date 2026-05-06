@@ -139,6 +139,9 @@ import {
 import type { RoomCreationInput, RoomEntity, RoomMessage, RoomSummary } from "./types.js";
 import { previewUnsource as _previewUnsource } from "../integrations/document/unsource.js";
 import type { UnsourcePreview, UnsourceResult } from "../integrations/document/unsource.js";
+import { isQualifiedMessageId, qualifyEiMessage, qualifyOpenCodeMessage } from "./utils/message-id.js";
+import { getMachineId } from "../integrations/machine-id.js";
+import type { IOpenCodeReader } from "../integrations/opencode/types.js";
 
 const DEFAULT_LOOP_INTERVAL_MS = 100;
 const DEFAULT_OPENCODE_POLLING_MS = 60000;
@@ -242,6 +245,7 @@ export class Processor {
     this.bootstrapTools();
     this.seedBuiltinFacts();
     this.migrateLearnedOn();
+    await this.migrateMessageIds();
     this.seedSettings();
     registerFindMemoryExecutor(createFindMemoryExecutor(this.searchHumanData.bind(this), this.getPersonaList.bind(this), this.stateManager.getHuman.bind(this.stateManager)));
     registerFetchMemoryExecutor(createFetchMemoryExecutor(this.stateManager.getHuman.bind(this.stateManager)));
@@ -465,7 +469,7 @@ export class Processor {
   async getGeneratedDocumentContent(slug: string): Promise<string | null> {
     const messages = this.stateManager.messages_get("emmet");
     const target = `generate:document:${slug}`;
-    const message = messages.find(m => m.source_tag === target);
+    const message = messages.find(m => m.id.startsWith(`${target}:`));
     return message?.content ?? null;
   }
 
@@ -1017,6 +1021,103 @@ export class Processor {
     if (changed) {
       this.stateManager.setHuman({ ...human, facts, topics, people });
       console.log("[Processor] Backfilled learned_on for existing data items");
+    }
+  }
+
+  private async migrateMessageIds(): Promise<void> {
+    try {
+      let msgRewrites = 0;
+      let quoteRewrites = 0;
+
+      const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+      const personas = this.stateManager.persona_getAll();
+      for (const persona of personas) {
+        for (const msg of this.stateManager.messages_get(persona.id)) {
+          if (!msg.external && UUID_PATTERN.test(msg.id)) {
+            this.stateManager.messages_update(persona.id, msg.id, { id: qualifyEiMessage(msg.id) });
+            msgRewrites++;
+          }
+        }
+      }
+
+      const rooms = this.stateManager.getRoomList();
+      for (const room of rooms) {
+        for (const msg of this.stateManager.getRoomMessages(room.id).slice()) {
+          if (!msg.external && UUID_PATTERN.test(msg.id)) {
+            this.stateManager.updateRoomMessage(room.id, msg.id, { id: qualifyEiMessage(msg.id) });
+            msgRewrites++;
+          }
+        }
+      }
+
+      const human = this.stateManager.getHuman();
+      const quotes = human.quotes ?? [];
+
+      const eiUuidMap = new Map<string, string>();
+      for (const persona of personas) {
+        for (const msg of this.stateManager.messages_get(persona.id)) {
+          if (msg.id.startsWith("ei:")) eiUuidMap.set(msg.id.slice(3), msg.id);
+        }
+      }
+      for (const room of rooms) {
+        for (const msg of this.stateManager.getRoomMessages(room.id)) {
+          if (msg.id.startsWith("ei:")) eiUuidMap.set(msg.id.slice(3), msg.id);
+        }
+      }
+
+      const MSG_PATTERN = /^msg_[a-zA-Z0-9]+$/;
+
+      let openCodeReader: IOpenCodeReader | null = null;
+      if (this.isTUI) {
+        const { createOpenCodeReader } = await import("../integrations/opencode/reader-factory.js");
+        openCodeReader = await createOpenCodeReader().catch(() => null);
+      }
+
+      const updatedQuotes: typeof quotes = [];
+      for (const quote of quotes) {
+        const mid = quote.message_id;
+        if (!mid || isQualifiedMessageId(mid)) {
+          updatedQuotes.push(quote);
+          continue;
+        }
+
+        if (MSG_PATTERN.test(mid)) {
+          if (openCodeReader) {
+            const ocWindow = await openCodeReader.getMessageById(mid).catch(() => null);
+            if (ocWindow) {
+              updatedQuotes.push({ ...quote, message_id: qualifyOpenCodeMessage(getMachineId(), ocWindow.session.id, mid) });
+              quoteRewrites++;
+              continue;
+            }
+          }
+          updatedQuotes.push(quote);
+          continue;
+        }
+
+        if (UUID_PATTERN.test(mid)) {
+          const fqId = eiUuidMap.get(mid);
+          if (fqId) {
+            updatedQuotes.push({ ...quote, message_id: fqId });
+            quoteRewrites++;
+            continue;
+          }
+          updatedQuotes.push(quote);
+          continue;
+        }
+
+        updatedQuotes.push(quote);
+      }
+
+      if (quoteRewrites > 0) {
+        this.stateManager.setHuman({ ...human, quotes: updatedQuotes });
+      }
+
+      if (msgRewrites > 0 || quoteRewrites > 0) {
+        console.log(`[Processor] migrateMessageIds: rewrote ${msgRewrites} message IDs, ${quoteRewrites} quote message_ids`);
+      }
+    } catch (err) {
+      console.error("[Processor] migrateMessageIds failed, continuing:", err);
     }
   }
 
@@ -1923,7 +2024,7 @@ const toolNextSteps = new Set([
       if (isSynthesisCompletion) {
         const slug = response.request.data.slug as string;
         const hasContent = slug && this.stateManager.messages_get("emmet")
-          .some(m => m.source_tag === `generate:document:${slug}`);
+          .some(m => m.id.startsWith(`generate:document:${slug}:`));
         if (hasContent) this.interface.onDocumentGenerated?.(slug);
       }
     } catch (err) {
