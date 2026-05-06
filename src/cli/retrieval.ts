@@ -6,6 +6,8 @@ import { crossFind } from "../core/utils/index.ts";
 import { join } from "path";
 import { readFile } from "fs/promises";
 import { getEmbeddingService, findTopK } from "../core/embedding-service";
+import { parseMessageId } from "../core/utils/message-id.js";
+import { getMachineId } from "../integrations/machine-id.js";
 
 const STATE_FILE = "state.json";
 const BACKUP_FILE = "state.backup.json";
@@ -398,27 +400,159 @@ export async function retrieveBalanced(
 
 const OPENCODE_MESSAGE_ID = /^msg_[a-zA-Z0-9]+$/;
 
+/** @deprecated Use resolveExternalMessage */
 export async function resolveOpenCodeMessage(
   id: string,
   before = 0,
   after = 0
 ): Promise<Record<string, unknown> | null> {
-  if (!OPENCODE_MESSAGE_ID.test(id)) return null;
-  try {
-    const { createOpenCodeReader } = await import("../integrations/opencode/reader-factory.js");
-    const reader = await createOpenCodeReader();
-    const window = await reader.getMessageById(id, before, after);
-    if (!window) return null;
-    return {
-      type: "opencode_message",
-      message: { id: window.message.id, role: window.message.role, content: window.message.content, timestamp: window.message.timestamp, agent: window.message.agent },
-      before: window.before.map(m => ({ id: m.id, role: m.role, content: m.content, timestamp: m.timestamp, agent: m.agent })),
-      after: window.after.map(m => ({ id: m.id, role: m.role, content: m.content, timestamp: m.timestamp, agent: m.agent })),
-      session: { id: window.session.id, title: window.session.title, directory: window.session.directory },
-      source: "opencode",
-    };
-  } catch {
-    return null;
+  return resolveExternalMessage(id, before, after);
+}
+
+export async function resolveExternalMessage(
+  id: string,
+  before = 0,
+  after = 0
+): Promise<Record<string, unknown> | null> {
+  const parsed = parseMessageId(id);
+
+  switch (parsed.integration) {
+    case "ei": {
+      const state = await loadLatestState();
+      if (!state) return null;
+
+      for (const { entity: persona, messages } of Object.values(state.personas)) {
+        const idx = messages.findIndex(m => m.id === id);
+        if (idx === -1) continue;
+        const msg = messages[idx];
+        return {
+          type: "opencode_message",
+          message: { id: msg.id, role: msg.role, content: msg.content ?? "", timestamp: msg.timestamp },
+          before: messages.slice(Math.max(0, idx - before), idx).map(m => ({ id: m.id, role: m.role, content: m.content ?? "", timestamp: m.timestamp })),
+          after: messages.slice(idx + 1, idx + 1 + after).map(m => ({ id: m.id, role: m.role, content: m.content ?? "", timestamp: m.timestamp })),
+          session: { id: persona.id, title: persona.display_name, directory: "" },
+          source: "ei",
+        };
+      }
+
+      for (const room of Object.values(state.rooms ?? {})) {
+        const idx = room.messages.findIndex(m => m.id === id);
+        if (idx === -1) continue;
+        const msg = room.messages[idx];
+        return {
+          type: "opencode_message",
+          message: { id: msg.id, role: msg.role, content: msg.content ?? "", timestamp: msg.timestamp },
+          before: room.messages.slice(Math.max(0, idx - before), idx).map(m => ({ id: m.id, role: m.role, content: m.content ?? "", timestamp: m.timestamp })),
+          after: room.messages.slice(idx + 1, idx + 1 + after).map(m => ({ id: m.id, role: m.role, content: m.content ?? "", timestamp: m.timestamp })),
+          session: { id: room.id, title: room.display_name, directory: "" },
+          source: "ei",
+        };
+      }
+
+      return null;
+    }
+
+    case "opencode": {
+      if (parsed.machine !== getMachineId()) {
+        return { error: `Message is from machine '${parsed.machine}', not available on this machine (${getMachineId()})` };
+      }
+      try {
+        const { createOpenCodeReader } = await import("../integrations/opencode/reader-factory.js");
+        const reader = await createOpenCodeReader();
+        const win = await reader.getMessageById(parsed.nativeId, before, after);
+        if (!win) return null;
+        return {
+          type: "opencode_message",
+          message: { id: win.message.id, role: win.message.role, content: win.message.content, timestamp: win.message.timestamp, agent: win.message.agent },
+          before: win.before.map(m => ({ id: m.id, role: m.role, content: m.content, timestamp: m.timestamp, agent: m.agent })),
+          after: win.after.map(m => ({ id: m.id, role: m.role, content: m.content, timestamp: m.timestamp, agent: m.agent })),
+          session: { id: win.session.id, title: win.session.title, directory: win.session.directory },
+          source: "opencode",
+        };
+      } catch {
+        return null;
+      }
+    }
+
+    case "claudecode": {
+      if (parsed.machine !== getMachineId()) {
+        return { error: `Message is from machine '${parsed.machine}', not available on this machine (${getMachineId()})` };
+      }
+      try {
+        const { ClaudeCodeReader } = await import("../integrations/claude-code/reader.js");
+        const reader = new ClaudeCodeReader();
+        const messages = await reader.getMessagesForSession(parsed.session!);
+        const idx = messages.findIndex(m => m.id === parsed.nativeId);
+        if (idx === -1) return null;
+        const msg = messages[idx];
+        return {
+          type: "opencode_message",
+          message: { id: msg.id, role: msg.role, content: msg.content, timestamp: msg.timestamp },
+          before: messages.slice(Math.max(0, idx - before), idx).map(m => ({ id: m.id, role: m.role, content: m.content, timestamp: m.timestamp })),
+          after: messages.slice(idx + 1, idx + 1 + after).map(m => ({ id: m.id, role: m.role, content: m.content, timestamp: m.timestamp })),
+          session: { id: parsed.session!, title: parsed.session!, directory: "" },
+          source: "claudecode",
+        };
+      } catch {
+        return null;
+      }
+    }
+
+    case "cursor": {
+      if (parsed.machine !== getMachineId()) {
+        return { error: `Message is from machine '${parsed.machine}', not available on this machine (${getMachineId()})` };
+      }
+      try {
+        const { CursorReader } = await import("../integrations/cursor/reader.js");
+        const reader = new CursorReader();
+        const sessions = await reader.getSessions();
+        const session = sessions.find(s => s.id === parsed.session);
+        if (!session) return null;
+        const idx = session.messages.findIndex(m => m.id === parsed.nativeId);
+        if (idx === -1) return null;
+        const msg = session.messages[idx];
+        const mapCursor = (m: { id: string; type: 1 | 2; text: string; timestamp: string }) => ({
+          id: m.id,
+          role: (m.type === 1 ? "user" : "assistant") as "user" | "assistant",
+          content: m.text,
+          timestamp: m.timestamp,
+        });
+        return {
+          type: "opencode_message",
+          message: mapCursor(msg),
+          before: session.messages.slice(Math.max(0, idx - before), idx).map(mapCursor),
+          after: session.messages.slice(idx + 1, idx + 1 + after).map(mapCursor),
+          session: { id: session.id, title: session.name, directory: session.workspacePath },
+          source: "cursor",
+        };
+      } catch {
+        return null;
+      }
+    }
+
+    case "unknown":
+    default: {
+      // Backward compat: bare msg_xxx → treat as opencode (no machine qualifier)
+      if (OPENCODE_MESSAGE_ID.test(id)) {
+        try {
+          const { createOpenCodeReader } = await import("../integrations/opencode/reader-factory.js");
+          const reader = await createOpenCodeReader();
+          const win = await reader.getMessageById(id, before, after);
+          if (!win) return null;
+          return {
+            type: "opencode_message",
+            message: { id: win.message.id, role: win.message.role, content: win.message.content, timestamp: win.message.timestamp, agent: win.message.agent },
+            before: win.before.map(m => ({ id: m.id, role: m.role, content: m.content, timestamp: m.timestamp, agent: m.agent })),
+            after: win.after.map(m => ({ id: m.id, role: m.role, content: m.content, timestamp: m.timestamp, agent: m.agent })),
+            session: { id: win.session.id, title: win.session.title, directory: win.session.directory },
+            source: "opencode",
+          };
+        } catch {
+          return null;
+        }
+      }
+      return null;
+    }
   }
 }
 
