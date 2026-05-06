@@ -140,7 +140,7 @@ import type { RoomCreationInput, RoomEntity, RoomMessage, RoomSummary } from "./
 import { previewUnsource as _previewUnsource } from "../integrations/document/unsource.js";
 import type { UnsourcePreview, UnsourceResult } from "../integrations/document/unsource.js";
 import { isQualifiedMessageId, qualifyEiMessage, qualifyOpenCodeMessage } from "./utils/message-id.js";
-import { getMachineId } from "../integrations/machine-id.js";
+
 import type { IOpenCodeReader } from "../integrations/opencode/types.js";
 
 const DEFAULT_LOOP_INTERVAL_MS = 100;
@@ -1086,6 +1086,7 @@ export class Processor {
           if (openCodeReader) {
             const ocWindow = await openCodeReader.getMessageById(mid).catch(() => null);
             if (ocWindow) {
+              const { getMachineId } = await import("../integrations/machine-id.js");
               updatedQuotes.push({ ...quote, message_id: qualifyOpenCodeMessage(getMachineId(), ocWindow.session.id, mid) });
               quoteRewrites++;
               continue;
