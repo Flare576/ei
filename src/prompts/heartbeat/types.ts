@@ -94,6 +94,11 @@ export type EiHeartbeatItem =
       type: "Persona Reflection Alert";
       persona_name: string;
       critique: string;
+    }
+  | {
+      id: string;
+      type: "Self Reflection Alert";
+      critique: string;
     };
 
 /**

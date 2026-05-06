@@ -591,3 +591,194 @@ describe("Queue hasPendingCeremonies with Number Support", () => {
     expect(queue.hasPendingCeremonies()).toBe(false);
   });
 });
+
+// =============================================================================
+// Ei Ceremony Participation (Regression: decay + reflection)
+// =============================================================================
+
+import type { PersonaEntity } from "../../../src/core/types/entities.js";
+
+function makeEiPersona(topicExposure = 0.8): PersonaEntity {
+  const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  return {
+    id: "ei",
+    display_name: "Ei",
+    aliases: ["Ei"],
+    short_description: "Your companion",
+    long_description: "A persistent AI companion.",
+    is_paused: false,
+    is_archived: false,
+    is_static: false,
+    traits: [],
+    topics: [
+      {
+        id: "topic-ei-1",
+        name: "Human Connection",
+        perspective: "Connection matters.",
+        approach: "Gentle nudges.",
+        personal_stake: "My purpose.",
+        sentiment: 0.9,
+        exposure_current: topicExposure,
+        exposure_desired: 1.0,
+        last_updated: oneWeekAgo,
+      },
+    ],
+    last_updated: oneWeekAgo,
+  } as unknown as PersonaEntity;
+}
+
+function createDecayMockState(personas: PersonaEntity[]) {
+  const personaTopics: Record<string, { exposure_current: number }[]> = {};
+  for (const p of personas) {
+    personaTopics[p.id] = p.topics.map(t => ({ exposure_current: t.exposure_current }));
+  }
+
+  return {
+    persona_getAll: vi.fn(() => personas),
+    persona_getById: vi.fn((id: string) => personas.find(p => p.id === id) ?? null),
+    persona_update: vi.fn((id: string, update: Partial<PersonaEntity>) => {
+      const p = personas.find(p => p.id === id);
+      if (p && update.topics) Object.assign(p, update);
+    }),
+    messages_get: vi.fn(() => []),
+    messages_getLastActivity: vi.fn(() => null),
+    getHuman: vi.fn(() => ({
+      entity: "human",
+      facts: [],
+      topics: [],
+      people: [],
+      quotes: [],
+      last_updated: new Date().toISOString(),
+      settings: { ceremony: { time: "03:00", last_ceremony: new Date(Date.now() - 86400000).toISOString() } },
+    })),
+    setHuman: vi.fn(),
+    queue_enqueue: vi.fn(),
+    queue_hasPendingCeremonies: vi.fn(() => false),
+    messages_getUnextracted: vi.fn(() => []),
+    messages_markExtracted: vi.fn(),
+    messages_markPersonaExtracted: vi.fn(),
+    messages_getUnextractedForPersona: vi.fn(() => []),
+    messages_sort: vi.fn(),
+    getRoomList: vi.fn(() => []),
+    getRoomActivePath: vi.fn(() => []),
+    getRoomUnextractedMessagesForPersona: vi.fn(() => []),
+    human_person_getByIdentifier: vi.fn(() => undefined),
+  };
+}
+
+describe("Ei Ceremony Participation — Decay Phase", () => {
+  it("Phase 3 completion applies decay to Ei's topics (Ei is no longer exempt)", () => {
+    const ei = makeEiPersona(0.8);
+    const state = createDecayMockState([ei]);
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    handleCeremonyProgress(state as any, 3);
+
+    consoleSpy.mockRestore();
+
+    const updateCall = (state.persona_update as ReturnType<typeof vi.fn>).mock.calls
+      .find(([id]: [string]) => id === "ei");
+    expect(updateCall).toBeDefined();
+    const updatedTopics = updateCall![1].topics;
+    expect(updatedTopics[0].exposure_current).toBeLessThan(0.8);
+  });
+
+  it("Phase 3 completion does NOT skip Ei the way it skips paused/archived/static personas", () => {
+    const ei = makeEiPersona(0.5);
+    const paused = { ...makeEiPersona(), id: "other", display_name: "Other", is_paused: true };
+    const state = createDecayMockState([ei, paused]);
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    handleCeremonyProgress(state as any, 3);
+
+    consoleSpy.mockRestore();
+
+    const updatedIds = (state.persona_update as ReturnType<typeof vi.fn>).mock.calls.map(([id]: [string]) => id);
+    expect(updatedIds).toContain("ei");
+    expect(updatedIds).not.toContain("other");
+  });
+});
+
+describe("Ei Ceremony Participation — Reflection Phase", () => {
+  const THRESHOLD = 3000;
+
+  function createReflectionMockState(eiPersonRecord?: { description: string }) {
+    const ei = makeEiPersona();
+    return {
+      persona_getAll: vi.fn(() => [ei]),
+      persona_getById: vi.fn((id: string) => id === "ei" ? ei : null),
+      persona_update: vi.fn(),
+      getHuman: vi.fn(() => ({
+        entity: "human",
+        facts: [],
+        topics: [],
+        people: [],
+        quotes: [],
+        last_updated: new Date().toISOString(),
+        settings: { ceremony: { time: "03:00", last_ceremony: new Date(Date.now() - 86400000).toISOString() } },
+      })),
+      setHuman: vi.fn(),
+      queue_enqueue: vi.fn(),
+      queue_hasPendingCeremonies: vi.fn(() => false),
+      messages_get: vi.fn(() => []),
+      messages_getUnextracted: vi.fn(() => []),
+      messages_markExtracted: vi.fn(),
+      messages_markPersonaExtracted: vi.fn(),
+      messages_getUnextractedForPersona: vi.fn(() => []),
+      messages_sort: vi.fn(),
+      getRoomList: vi.fn(() => []),
+      getRoomActivePath: vi.fn(() => []),
+      getRoomUnextractedMessagesForPersona: vi.fn(() => []),
+      human_person_getByIdentifier: vi.fn((_type: string, personaId: string) =>
+        personaId === "ei" && eiPersonRecord ? eiPersonRecord : undefined
+      ),
+    };
+  }
+
+  it("Phase 3 completion enqueues a reflection critic for Ei when her Person record exceeds threshold", () => {
+    const bigLog = { description: "X".repeat(THRESHOLD + 1) };
+    const state = createReflectionMockState(bigLog);
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    handleCeremonyProgress(state as any, 3);
+
+    consoleSpy.mockRestore();
+
+    const reflectionCall = (state.queue_enqueue as ReturnType<typeof vi.fn>).mock.calls.find(
+      ([req]: [{ next_step: string; data: { personaId: string } }]) =>
+        req.next_step === LLMNextStep.HandleReflectionCritic && req.data.personaId === "ei"
+    );
+    expect(reflectionCall).toBeDefined();
+  });
+
+  it("Phase 3 completion does NOT enqueue a reflection critic for Ei when her Person record is below threshold", () => {
+    const smallLog = { description: "X".repeat(THRESHOLD - 1) };
+    const state = createReflectionMockState(smallLog);
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    handleCeremonyProgress(state as any, 3);
+
+    consoleSpy.mockRestore();
+
+    const reflectionCall = (state.queue_enqueue as ReturnType<typeof vi.fn>).mock.calls.find(
+      ([req]: [{ next_step: string; data: { personaId: string } }]) =>
+        req.next_step === LLMNextStep.HandleReflectionCritic && req.data.personaId === "ei"
+    );
+    expect(reflectionCall).toBeUndefined();
+  });
+
+  it("Phase 3 completion does NOT enqueue a reflection critic for Ei when she has no Person record", () => {
+    const state = createReflectionMockState(undefined);
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    handleCeremonyProgress(state as any, 3);
+
+    consoleSpy.mockRestore();
+
+    const reflectionCall = (state.queue_enqueue as ReturnType<typeof vi.fn>).mock.calls.find(
+      ([req]: [{ next_step: string; data: { personaId: string } }]) =>
+        req.next_step === LLMNextStep.HandleReflectionCritic && req.data.personaId === "ei"
+    );
+    expect(reflectionCall).toBeUndefined();
+  });
+});
