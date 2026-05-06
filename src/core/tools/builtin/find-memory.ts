@@ -15,6 +15,14 @@ type GetPersonaList = () => Promise<PersonaSummary[]>;
 
 type GetHuman = () => HumanEntity;
 
+function formatSentiment(s: number): string {
+  const pct = Math.round(Math.abs(s) * 100);
+  const direction = s > 0.2 ? "positive" : s < -0.2 ? "negative" : "neutral";
+  if (direction === "neutral") return "neutral";
+  const intensity = pct >= 80 ? "strongly " : pct >= 50 ? "" : "slightly ";
+  return `${pct}% ${intensity}${direction}`;
+}
+
 export function createFindMemoryExecutor(searchHumanData: SearchHumanData, getPersonaList?: GetPersonaList, getHuman?: GetHuman): ToolExecutor {
   return {
     name: "find_memory",
@@ -68,8 +76,8 @@ export function createFindMemoryExecutor(searchHumanData: SearchHumanData, getPe
 
       const output: Record<string, unknown[]> = {};
       if (results.facts.length > 0) output.facts = results.facts.map(f => ({ id: f.id, name: f.name, description: f.description }));
-      if (results.topics.length > 0) output.topics = results.topics.map(t => ({ id: t.id, name: t.name, description: t.description }));
-      if (results.people.length > 0) output.people = results.people.map(p => ({ id: p.id, name: p.name, relationship: p.relationship, description: p.description, identifiers: p.identifiers ?? [] }));
+      if (results.topics.length > 0) output.topics = results.topics.map(t => ({ id: t.id, name: t.name, description: t.description, sentiment: formatSentiment(t.sentiment) }));
+      if (results.people.length > 0) output.people = results.people.map(p => ({ id: p.id, name: p.name, relationship: p.relationship, description: p.description, identifiers: p.identifiers ?? [], sentiment: formatSentiment(p.sentiment) }));
 
       if (results.quotes.length > 0) {
         const human = getHuman ? getHuman() : null;
@@ -85,7 +93,7 @@ export function createFindMemoryExecutor(searchHumanData: SearchHumanData, getPe
               if (person) { linked_items.push({ id: person.id, name: person.name, type: "person" }); }
             }
           }
-          return { id: q.id, text: q.text, speaker: q.speaker, linked_items };
+          return { id: q.id, text: q.text, speaker: q.speaker, message_id: q.message_id, linked_items };
         });
       }
 

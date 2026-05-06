@@ -29,7 +29,7 @@ export const SYSTEM_TOOLS: ToolDefinition[] = [
     provider_id: "ei",
     name: "find_memory",
     display_name: "Find Memory",
-    description: "Semantic search of your personal memory — facts, topics, people, and quotes learned across ALL conversations over time, not just this one. Use when the human references something from the past, mentions a person, or asks about a topic you might have learned about. Supports optional filters: types (array of 'facts', 'topics', 'people', 'quotes'), limit (1-20, default 10), recent (true = sort by recency), persona (filter to what a specific persona has learned — use display name).",
+    description: "Semantic search of your personal memory — facts, topics, people, and quotes learned across ALL conversations over time, not just this one. Use when the human references something from the past, mentions a person, or asks about a topic you might have learned about. People and topic results include a sentiment field (e.g. '72% positive', 'neutral', '45% slightly negative') indicating how the human generally feels about that person or subject. Supports optional filters: types (array of 'facts', 'topics', 'people', 'quotes'), limit (1-20, default 10), recent (true = sort by recency), persona (filter to what a specific persona has learned — use display name).",
     input_schema: {
       type: "object",
       properties: {
@@ -52,7 +52,7 @@ export const SYSTEM_TOOLS: ToolDefinition[] = [
     provider_id: "ei",
     name: "fetch_memory",
     display_name: "Fetch Memory",
-    description: "Retrieve the full record for a specific memory by its ID. Use when find_memory returns an item and you need its complete details, or when a system prompt references a memory ID. Returns the full Fact, Topic, Person, or Quote record.",
+    description: "Retrieve the full record for a specific memory by its ID. For most conversational use, find_memory results are sufficient. Use fetch_memory when you need provenance details (which sessions or documents the memory came from) or the raw sentiment score. Returns the complete Fact, Topic, Person, or Quote record including all fields.",
     input_schema: {
       type: "object",
       properties: {
