@@ -1044,7 +1044,7 @@ export class Processor {
       const rooms = this.stateManager.getRoomList();
       for (const room of rooms) {
         for (const msg of this.stateManager.getRoomMessages(room.id).slice()) {
-          if (!msg.external && UUID_PATTERN.test(msg.id)) {
+          if (UUID_PATTERN.test(msg.id)) {
             this.stateManager.updateRoomMessage(room.id, msg.id, { id: qualifyEiMessage(msg.id) });
             msgRewrites++;
           }

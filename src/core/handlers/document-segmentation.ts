@@ -49,7 +49,6 @@ export function handleDocumentSegmentation(response: LLMResponse, state: StateMa
   }
 
   const now = new Date().toISOString();
-  const sourceTag = `import:document:${filename}`;
 
   for (const segment of segments) {
     const message: Message = {
