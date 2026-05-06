@@ -13,7 +13,7 @@ ei personas -n 5 "query string"   # Return up to 5 personas (name match)
 ei --persona "Beta" "query string"    # Filter results to what Beta has learned
 ei --recent                            # Most recently mentioned items (no query needed)
 ei --persona "Beta" --recent           # Most recently mentioned items Beta has learned
-ei --id <id>                   # Look up a specific entity by ID
+ei --id <id>                   # Look up entity by ID — or fetch a message by FQ ID
 echo <id> | ei --id            # Look up entity by ID from stdin
 ei --install                   # Register Ei with OpenCode, Claude Code, and Cursor
 ei mcp                         # Start the Ei MCP stdio server (for Cursor/Claude Desktop)
@@ -28,6 +28,16 @@ The `--id` flag is designed for piping. For example, search for a topic and then
 ```sh
 ei "memory leak" | jq '.[0].id' | ei --id
 ```
+
+It also resolves fully-qualified message IDs from any supported integration, returning the original message content and session context:
+
+```sh
+ei --id "opencode:jeremys-macbook-pro:ses_38a7...:msg_c75b..."
+ei --id "claudecode:my-machine:session-uuid:message-uuid"
+ei --id "cursor:my-machine:composer-uuid:bubble-uuid"
+```
+
+Quotes surfaced by `ei_search` or `ei_find_memory` include a `message_id` field in this format — pipe it to `ei --id` to read the original conversation.
 
 # OpenCode Integration
 
@@ -156,7 +166,7 @@ The MCP server exposes these tools to Claude Code, Cursor, and OpenCode:
 | `ei_lookup` | Full-record lookup for any entity by ID (facts, topics, people, quotes, personas). |
 | `ei_find_memory` | Grouped human-data search — facts, topics, people, quotes. Returns results grouped by type. Mirrors the persona `find_memory` tool interface. |
 | `ei_fetch_memory` | Full-record lookup for a human entity (Fact, Topic, Person, or Quote) by ID. Returns the complete record including all fields. |
-| `ei_fetch_message` | Retrieve a specific message by ID with optional `before`/`after` context window. Searches persona conversations and room messages. |
+| `ei_fetch_message` | Retrieve a specific message by fully-qualified ID with optional `before`/`after` context window. Routes to the correct source: `ei:uuid` searches Ei state, `opencode:machine:session:id` queries the OpenCode SQLite DB, `claudecode:...` scans Claude Code JSONL files, `cursor:...` reads the Cursor global DB. Returns message content, surrounding context, and session metadata. |
 
 ### `ei_search` / `ei_find_memory` arguments
 

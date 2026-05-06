@@ -42,6 +42,14 @@ git status --short
 ```
 If anything shows up: STOP. Ask Flare how to handle the uncommitted changes before proceeding.
 
+### Check 2.5 — Did you update the docs?
+
+**Mandatory human pause.** Ask Flare:
+
+> "Did you update the docs? Check README.md, AGENTS.md, src/cli/README.md, tui/README.md for anything stale — new tools, changed behavior, removed fields. If a human would be confused without knowing, update it now."
+
+Do not proceed until Flare explicitly confirms docs are current.
+
 ### Check 3 — On main, up to date
 ```bash
 git branch --show-current

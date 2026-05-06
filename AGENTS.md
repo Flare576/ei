@@ -30,9 +30,9 @@ Some personas are created and managed by the system. Never delete or rename them
 
 Emmett is seeded via `Processor.bootstrapEmmett()` and gated by `RESERVED_PERSONA_IDS`. The `/import` TUI command and the web **My Data → Documents** tab both call `processor.importDocument(path/file)`, which invokes `HandleDocumentSegmentation` through the normal queue pipeline.
 
-To remove imported knowledge: `/unsource <source_tag>` (TUI) or the Delete button in the web Documents tab — both strip all entities where `source_tag` matches.
+To remove imported knowledge: `/unsource <source_tag>` (TUI) or the Delete button in the web Documents tab — both strip all entities where the message ID prefix matches the source tag.
 
-Generated documents (from `/generate`) are also attributed to Emmett — written as `role: "system"` messages with `source_tag: "generate:document:<slug>"`. The `onDocumentGenerated` callback writes the markdown file to `$EI_DATA_PATH/docs/<slug>.md` automatically after the synthesis loop completes.
+Generated documents (from `/generate`) are also attributed to Emmett — written as `role: "system"` messages with IDs in the format `generate:document:<slug>:<uuid>`. The `onDocumentGenerated` callback writes the markdown file to `$EI_DATA_PATH/docs/<slug>.md` automatically after the synthesis loop completes.
 
 ## Source of Truth
 
@@ -300,6 +300,10 @@ preload = ["@opentui/solid/preload"]
 preload = ["@opentui/solid/preload"]
 ```
 
+### First-Launch Startup Note
+
+On first launch after upgrading, `migrateMessageIds()` rewrites all existing `Quote.message_id` and persona/room message IDs to the fully-qualified format. For users with large OpenCode histories (20MB+ state.json), this can take 45–60 seconds. The TUI will appear to hang during this time — it hasn't. Subsequent launches are instant. Do not add a timeout or skip logic; the migration only runs once per ID and is idempotent.
+
 ---
 
 ## Release Protocol
@@ -313,10 +317,11 @@ All 34 E2E tests failed. The tag pointed to a broken commit. Don't repeat this.
 
 1. `git status` — working tree must be clean
 2. `git branch --show-current` — must be `main`
-3. `git pull` — must be up to date with origin
-4. `npm test` — all unit tests must pass (runs core + TUI)
-5. `cd web && npx tsc --noEmit && npx vite build` — **Both must succeed**: `tsc --noEmit` catches `noUnusedLocals` and dead-code errors that Vite's lenient bundler misses; Vite catches bundler/JSX errors that `tsc` misses. This is what CI runs. (v0.1.9 incident = vite; v0.1.18 deploy failure = tsc)
-6. `npm run test:e2e` — all web E2E tests must pass
+3. **Did you update the docs?** — Check README.md, AGENTS.md, src/cli/README.md, tui/README.md for anything stale. New tools, changed behavior, removed fields — if a human would be confused without knowing, update it now.
+4. `git pull` — must be up to date with origin
+5. `npm test` — all unit tests must pass (runs core + TUI)
+6. `cd web && npx tsc --noEmit && npx vite build` — **Both must succeed**: `tsc --noEmit` catches `noUnusedLocals` and dead-code errors that Vite's lenient bundler misses; Vite catches bundler/JSX errors that `tsc` misses. This is what CI runs. (v0.1.9 incident = vite; v0.1.18 deploy failure = tsc)
+7. `npm run test:e2e` — all web E2E tests must pass
 
 If **any step fails**: STOP. Fix before tagging.
 
@@ -377,7 +382,7 @@ Seeded on every startup via `Processor.bootstrapTools()`. Safe to call repeatedl
 |-----------|---------|-------------|
 | `find_memory` | `any` | Semantic embedding search of `StateManager.searchHumanData()` — no external call. Supports optional `persona` filter for scoping to a specific persona's learned data. |
 | `fetch_memory` | `any` | Full-record lookup for a human entity (Fact, Topic, Person, or Quote) by ID. Use after `find_memory` to retrieve complete details. |
-| `fetch_message` | `any` | Retrieve a specific message by ID with optional `before`/`after` context window. Searches persona conversations and room messages. |
+| `fetch_message` | `any` | Retrieve a specific message by its fully-qualified ID with optional `before`/`after` context window. Accepts FQ IDs (`opencode:machine:session:id`, `ei:uuid`, `claudecode:...`, `cursor:...`) and routes to the correct source DB. Returns message content, surrounding context, and session metadata. |
 | `file_read` | `node` | Read a file from local filesystem (TUI only) |
 | `list_directory` | `node` | List directory contents (TUI only) |
 | `directory_tree` | `node` | Recursive directory tree up to configurable depth (TUI only) |
