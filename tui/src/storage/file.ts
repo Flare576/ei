@@ -3,6 +3,7 @@ import type { Storage } from "../../../src/storage/interface";
 import { encodeAllEmbeddings, decodeAllEmbeddings } from "../../../src/storage/embeddings";
 import { join } from "path";
 import { mkdir, rename, unlink, readdir } from "fs/promises";
+import { resolveDataPath } from "../util/resolve-data-path.js";
 
 const STATE_FILE = "state.json";
 const BACKUP_FILE = "state.backup.json";
@@ -14,13 +15,7 @@ export class FileStorage implements Storage {
   private readonly dataPath: string;
 
   constructor(dataPath?: string) {
-    const raw = dataPath ?? process.env.EI_DATA_PATH;
-    if (raw) {
-      this.dataPath = raw.replace(/\/+$/, "");
-    } else {
-      const xdgData = process.env.XDG_DATA_HOME || join(process.env.HOME || "~", ".local", "share");
-      this.dataPath = join(xdgData, "ei");
-    }
+    this.dataPath = resolveDataPath(dataPath);
   }
 
   getDataPath(): string {

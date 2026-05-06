@@ -11,6 +11,7 @@ import {
   personaPreviewFromYAML,
 } from "../util/yaml-serializers.js";
 import { useKeyboardNav } from "../context/keyboard.js";
+import { resolveDataPath } from "../util/resolve-data-path.js";
 
 function wrapComment(text: string, width = 78): string {
   const words = text.split(/\s+/);
@@ -28,16 +29,10 @@ function wrapComment(text: string, width = 78): string {
   return lines.join("\n");
 }
 
-function getDataPath(): string {
-  const raw = process.env.EI_DATA_PATH ??
-    join(process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"), "ei");
-  return raw.replace(/\/+$/, "");
-}
-
 function getReflectFolder(persona: PersonaEntity): string {
   const datePrefix = persona.pending_update!.created_at.slice(0, 10);
   const safeName = persona.display_name.replace(/\s+/g, "_");
-  return join(getDataPath(), "reflect", `${datePrefix}_${safeName}`);
+  return join(resolveDataPath(), "reflect", `${datePrefix}_${safeName}`);
 }
 
 async function resolveReflectionPersona(
@@ -102,7 +97,7 @@ export const reflectCommand: Command = {
 
       const headerName = hasPending ? activePersona!.display_name : undefined;
       const pendingNames = pendingPersonas.map(p => p.display_name);
-      const dataPath = getDataPath();
+      const dataPath = resolveDataPath();
 
       ctx.showOverlay((hideOverlay, _hideForEditor) => {
         const { setOverlayActive } = useKeyboardNav();

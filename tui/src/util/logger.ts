@@ -2,17 +2,12 @@
 
 import { appendFileSync, mkdirSync, existsSync, readdirSync, unlinkSync, renameSync } from "node:fs";
 import { join } from "node:path";
+import { resolveDataPath } from "./resolve-data-path.js";
 
 const MAX_ROLLED_LOGS = 10;
 
-function getDataPath(): string {
-  if (Bun.env.EI_DATA_PATH) return Bun.env.EI_DATA_PATH;
-  const xdgData = Bun.env.XDG_DATA_HOME || join(Bun.env.HOME || "~", ".local", "share");
-  return join(xdgData, "ei");
-}
-
 function getLogPath(): string {
-  return join(getDataPath(), "tui.log");
+  return join(resolveDataPath(), "tui.log");
 }
 
 type LogLevel = "debug" | "info" | "warn" | "error";
