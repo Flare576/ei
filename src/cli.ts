@@ -13,7 +13,7 @@
 
 import { parseArgs } from "util";
 import { join } from "path";
-import { retrieveBalanced, lookupById, loadLatestState } from "./cli/retrieval";
+import { retrieveBalanced, lookupById, resolveOpenCodeMessage, loadLatestState } from "./cli/retrieval";
 import type { StorageState } from "./core/types";
 import { resolvePersonaId, filterByPersona, filterTypeSpecificByPersona, filterBySource, filterTypeSpecificBySource } from "./cli/persona-filter.js";
 import pkg from "../package.json" assert { type: "json" };
@@ -246,6 +246,12 @@ mentions a person, or corrects something you assumed.
 
     // Strip surrounding quotes (from jq output or shell quoting)
     id = id.replace(/^["']|["']$/g, "");
+
+    const ocMessage = await resolveOpenCodeMessage(id);
+    if (ocMessage) {
+      console.log(JSON.stringify(ocMessage, null, 2));
+      process.exit(0);
+    }
 
     const entity = await lookupById(id);
     if (!entity) {

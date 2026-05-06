@@ -4,6 +4,7 @@ import type {
   OpenCodeSessionRaw,
   OpenCodeMessage,
   OpenCodeMessageRaw,
+  OpenCodeMessageWindow,
   OpenCodePartRaw,
   OpenCodeAgent,
 } from "./types.js";
@@ -206,6 +207,70 @@ export class JsonReader implements IOpenCodeReader {
     return messages.sort(
       (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );
+  }
+
+  async getMessageById(messageId: string, before = 0, after = 0): Promise<OpenCodeMessageWindow | null> {
+    if (!(await this.init())) return null;
+
+    const messageBaseDir = _join(this.storagePath!, "message");
+    let sessionDirs: string[];
+    try {
+      sessionDirs = await _readdir(messageBaseDir);
+    } catch {
+      return null;
+    }
+
+    for (const sessionId of sessionDirs) {
+      if (sessionId.startsWith(".")) continue;
+      const sessionMsgDir = _join(messageBaseDir, sessionId);
+      let files: string[];
+      try {
+        files = await _readdir(sessionMsgDir);
+      } catch {
+        continue;
+      }
+      if (!files.includes(`${messageId}.json`)) continue;
+
+      const allMessages = await this.getMessagesForSession(sessionId);
+      const idx = allMessages.findIndex(m => m.id === messageId);
+      if (idx === -1) return null;
+
+      const sessionFilePath = await this.findSessionFile(sessionId);
+      const sessionRaw = sessionFilePath ? await this.readJsonFile<OpenCodeSessionRaw>(sessionFilePath) : null;
+      const session: OpenCodeSession = sessionRaw
+        ? { id: sessionRaw.id, title: sessionRaw.title, directory: sessionRaw.directory, projectId: sessionRaw.projectID, parentId: sessionRaw.parentID, time: { created: sessionRaw.time.created, updated: sessionRaw.time.updated } }
+        : { id: sessionId, title: "", directory: "", projectId: "", time: { created: 0, updated: 0 } };
+
+      return {
+        message: allMessages[idx],
+        before: allMessages.slice(Math.max(0, idx - before), idx),
+        after: allMessages.slice(idx + 1, idx + 1 + after),
+        session,
+      };
+    }
+
+    return null;
+  }
+
+  private async findSessionFile(sessionId: string): Promise<string | null> {
+    const sessionDir = _join(this.storagePath!, "session");
+    let projectDirs: string[];
+    try {
+      projectDirs = await _readdir(sessionDir);
+    } catch {
+      return null;
+    }
+    for (const projectHash of projectDirs) {
+      if (projectHash.startsWith(".")) continue;
+      const candidate = _join(sessionDir, projectHash, `${sessionId}.json`);
+      try {
+        await _readFile(candidate, "utf-8");
+        return candidate;
+      } catch {
+        continue;
+      }
+    }
+    return null;
   }
 
   async getAgentInfo(agentName: string): Promise<OpenCodeAgent | null> {

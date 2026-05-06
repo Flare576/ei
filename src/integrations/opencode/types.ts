@@ -14,10 +14,18 @@
  * Common interface for reading OpenCode data.
  * Implemented by both JsonReader (legacy) and SqliteReader (1.2+).
  */
+export interface OpenCodeMessageWindow {
+  message: OpenCodeMessage;
+  before: OpenCodeMessage[];
+  after: OpenCodeMessage[];
+  session: OpenCodeSession;
+}
+
 export interface IOpenCodeReader {
   getSessionsUpdatedSince(since: Date): Promise<OpenCodeSession[]>;
   getSessionsInRange(from: Date, to: Date): Promise<OpenCodeSession[]>;
   getMessagesForSession(sessionId: string, since?: Date): Promise<OpenCodeMessage[]>;
+  getMessageById(messageId: string, before?: number, after?: number): Promise<OpenCodeMessageWindow | null>;
   getAgentInfo(agentName: string): Promise<OpenCodeAgent | null>;
   getAllUniqueAgents(sessionId: string): Promise<string[]>;
   getFirstAgent(sessionId: string): Promise<string | null>;

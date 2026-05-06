@@ -245,15 +245,26 @@ export class Processor {
     this.seedSettings();
     registerFindMemoryExecutor(createFindMemoryExecutor(this.searchHumanData.bind(this), this.getPersonaList.bind(this), this.stateManager.getHuman.bind(this.stateManager)));
     registerFetchMemoryExecutor(createFetchMemoryExecutor(this.stateManager.getHuman.bind(this.stateManager)));
-    registerFetchMessageExecutor(createFetchMessageExecutor(
-      this.stateManager.persona_getAll.bind(this.stateManager),
-      this.stateManager.messages_get.bind(this.stateManager),
-      this.stateManager.getRoomList.bind(this.stateManager),
-      this.stateManager.getRoomMessages.bind(this.stateManager),
-      (roomId: string) => this.stateManager.getRoom(roomId)?.display_name ?? null
-    ));
     if (this.isTUI) {
       await registerFileReadExecutor();
+      const { createOpenCodeReader } = await import("../integrations/opencode/reader-factory.js");
+      const openCodeReader = await createOpenCodeReader().catch(() => null);
+      registerFetchMessageExecutor(createFetchMessageExecutor(
+        this.stateManager.persona_getAll.bind(this.stateManager),
+        this.stateManager.messages_get.bind(this.stateManager),
+        this.stateManager.getRoomList.bind(this.stateManager),
+        this.stateManager.getRoomMessages.bind(this.stateManager),
+        (roomId: string) => this.stateManager.getRoom(roomId)?.display_name ?? null,
+        openCodeReader ? (id, before, after) => openCodeReader.getMessageById(id, before, after) : undefined
+      ));
+    } else {
+      registerFetchMessageExecutor(createFetchMessageExecutor(
+        this.stateManager.persona_getAll.bind(this.stateManager),
+        this.stateManager.messages_get.bind(this.stateManager),
+        this.stateManager.getRoomList.bind(this.stateManager),
+        this.stateManager.getRoomMessages.bind(this.stateManager),
+        (roomId: string) => this.stateManager.getRoom(roomId)?.display_name ?? null
+      ));
     }
     this.running = true;
     console.log(`[Processor ${this.instanceId}] initialized, starting loop`);

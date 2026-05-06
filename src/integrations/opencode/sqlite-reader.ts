@@ -3,6 +3,7 @@ import type {
   IOpenCodeReader,
   OpenCodeSession,
   OpenCodeMessage,
+  OpenCodeMessageWindow,
   OpenCodeAgent,
 } from "./types.js";
 import { BUILTIN_AGENTS } from "./types.js";
@@ -151,6 +152,38 @@ export class SqliteReader implements IOpenCodeReader {
     }
 
     return textParts.length > 0 ? textParts.join("\n\n") : null;
+  }
+
+  async getMessageById(messageId: string, before = 0, after = 0): Promise<OpenCodeMessageWindow | null> {
+    const row = this.db
+      .query(`SELECT session_id FROM message WHERE id = ?1 LIMIT 1`)
+      .get(messageId) as { session_id: string } | null;
+    if (!row) return null;
+
+    const sessionRow = this.db
+      .query(`SELECT id, title, directory, project_id, parent_id, time_created, time_updated FROM session WHERE id = ?1 LIMIT 1`)
+      .get(row.session_id) as { id: string; title: string; directory: string; project_id: string; parent_id: string | null; time_created: number; time_updated: number } | null;
+    if (!sessionRow) return null;
+
+    const session: OpenCodeSession = {
+      id: sessionRow.id,
+      title: sessionRow.title,
+      directory: sessionRow.directory,
+      projectId: sessionRow.project_id,
+      parentId: sessionRow.parent_id ?? undefined,
+      time: { created: sessionRow.time_created, updated: sessionRow.time_updated },
+    };
+
+    const allMessages = await this.getMessagesForSession(row.session_id);
+    const idx = allMessages.findIndex(m => m.id === messageId);
+    if (idx === -1) return null;
+
+    return {
+      message: allMessages[idx],
+      before: allMessages.slice(Math.max(0, idx - before), idx),
+      after: allMessages.slice(idx + 1, idx + 1 + after),
+      session,
+    };
   }
 
   async getAgentInfo(agentName: string): Promise<OpenCodeAgent | null> {
