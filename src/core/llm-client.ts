@@ -1,4 +1,5 @@
 import type { ChatMessage, ProviderAccount, ModelConfig } from "./types.js";
+import { resolveDataPath } from "./utils/resolve-data-path.js";
 const DEFAULT_TOKEN_LIMIT = 8192;
 const DEFAULT_MAX_OUTPUT_TOKENS = 8000;
 
@@ -11,8 +12,7 @@ async function writeNetworkDump(
   request: unknown,
   response: unknown
 ): Promise<void> {
-  const dataPath = (typeof process !== "undefined" && process.env?.EI_DATA_PATH) ||
-    (typeof Bun !== "undefined" && (Bun as Record<string, unknown>).env && ((Bun as { env: Record<string, string> }).env.EI_DATA_PATH));
+  const dataPath = resolveDataPath();
   if (!dataPath) return;
 
   try {
