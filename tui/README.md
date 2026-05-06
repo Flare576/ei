@@ -10,6 +10,14 @@ Ei is designed to run consistently across machines and environments, so it keeps
 
 **On first run**, Ei reads environment variables like `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, etc. to auto-configure providers for you. After that, those values are saved to Ei's local state (`~/.local/share/ei/state.json` by default) and the env vars are no longer consulted.
 
+Detected providers are configured with sensible defaults out of the box:
+
+- **Models**: Only chat-capable models are included — TTS, image generation, embeddings, and other non-chat model families are filtered out. You get one model per tier (e.g. fast/mini for extraction, capable for chat, powerful for complex work) rather than a wall of 100+ options.
+- **Token limits**: Known models get pre-configured `token_limit` and `max_output_tokens` values based on real-world Ei usage, not just the provider's advertised maximums.
+- **Rewrite model**: If a high-capability model is detected (Anthropic Opus, OpenAI o-series), it's automatically set as your `rewrite_model` — used by `/generate` and `/dedupe`. No manual `/settings` step needed.
+
+All of this only applies on first run. Existing profiles are never modified by detection.
+
 This means:
 
 - **Rotating an API key?** Update it in Ei with `/provider`, not just in your shell.
