@@ -2,7 +2,6 @@ import type { ToolExecutor } from "../types.js";
 import type { Message } from "../../types.js";
 import type { RoomMessage, RoomSummary } from "../../types/rooms.js";
 import type { PersonaEntity } from "../../types/entities.js";
-import type { OpenCodeMessageWindow } from "../../../integrations/opencode/types.js";
 
 interface CleanMessage {
   id: string;
@@ -18,9 +17,7 @@ type GetPersonaMessages = (personaId: string) => Message[];
 type GetRoomList = () => RoomSummary[];
 type GetRoomMessages = (roomId: string) => RoomMessage[];
 type GetRoomDisplayName = (roomId: string) => string | null;
-type GetOpenCodeMessage = (id: string, before: number, after: number) => Promise<OpenCodeMessageWindow | null>;
-
-const OPENCODE_MESSAGE_ID = /^msg_[a-zA-Z0-9]+$/;
+type ResolveExternalMessage = (id: string, before: number, after: number) => Promise<Record<string, unknown> | null>;
 
 function stripMessage(m: Message): CleanMessage {
   return {
@@ -50,7 +47,7 @@ export function createFetchMessageExecutor(
   getRoomList: GetRoomList,
   getRoomMessages: GetRoomMessages,
   getRoomDisplayName: GetRoomDisplayName,
-  getOpenCodeMessage?: GetOpenCodeMessage
+  resolveExternalMessage?: ResolveExternalMessage
 ): ToolExecutor {
   return {
     name: "fetch_message",
@@ -65,27 +62,6 @@ export function createFetchMessageExecutor(
       if (!id) {
         console.warn("[fetch_message] missing id argument");
         return JSON.stringify({ error: "Missing required argument: id" });
-      }
-
-      if (OPENCODE_MESSAGE_ID.test(id)) {
-        if (!getOpenCodeMessage) {
-          return JSON.stringify({ error: "OpenCode message lookup not available in this runtime", id });
-        }
-        const window = await getOpenCodeMessage(id, before, after);
-        if (!window) {
-          return JSON.stringify({
-            error: "OpenCode message not found on this machine. It may exist on another device.",
-            id,
-            hint: "Check the linked topic's sources for the originating machine and session.",
-          });
-        }
-        return JSON.stringify({
-          message: { id: window.message.id, role: window.message.role, content: window.message.content, timestamp: window.message.timestamp, agent: window.message.agent },
-          before: window.before.map(m => ({ id: m.id, role: m.role, content: m.content, timestamp: m.timestamp, agent: m.agent })),
-          after: window.after.map(m => ({ id: m.id, role: m.role, content: m.content, timestamp: m.timestamp, agent: m.agent })),
-          session: { id: window.session.id, title: window.session.title, directory: window.session.directory },
-          source: "opencode",
-        });
       }
 
       const personas = getAllPersonas();
@@ -140,6 +116,14 @@ export function createFetchMessageExecutor(
           after: afterMsgs,
           persona: roomDisplayName,
         });
+      }
+
+      if (resolveExternalMessage) {
+        const external = await resolveExternalMessage(id, before, after);
+        if (external) {
+          if ("error" in external) return JSON.stringify(external);
+          return JSON.stringify(external);
+        }
       }
 
       console.log(`[fetch_message] message not found for id="${id}"`);

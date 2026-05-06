@@ -251,15 +251,15 @@ export class Processor {
     registerFetchMemoryExecutor(createFetchMemoryExecutor(this.stateManager.getHuman.bind(this.stateManager)));
     if (this.isTUI) {
       await registerFileReadExecutor();
-      const { createOpenCodeReader } = await import("../integrations/opencode/reader-factory.js");
-      const openCodeReader = await createOpenCodeReader().catch(() => null);
+      const retrievalPath = "../cli/retrieval.js";
+      const { resolveExternalMessage } = await import(/* @vite-ignore */ retrievalPath);
       registerFetchMessageExecutor(createFetchMessageExecutor(
         this.stateManager.persona_getAll.bind(this.stateManager),
         this.stateManager.messages_get.bind(this.stateManager),
         this.stateManager.getRoomList.bind(this.stateManager),
         this.stateManager.getRoomMessages.bind(this.stateManager),
         (roomId: string) => this.stateManager.getRoom(roomId)?.display_name ?? null,
-        openCodeReader ? (id, before, after) => openCodeReader.getMessageById(id, before, after) : undefined
+        resolveExternalMessage
       ));
     } else {
       registerFetchMessageExecutor(createFetchMessageExecutor(
