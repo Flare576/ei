@@ -272,15 +272,24 @@ export async function buildResponsePromptData(
   const filteredHuman = await filterHumanDataByVisibility(human, persona, queries);
   const visiblePersonas = getVisiblePersonas(sm, persona);
 
+  const contextWindowMs = persona.context_window_ms ?? human.settings?.default_context_window_ms ?? 28800000;
+  const contextBoundaryMs = persona.context_boundary ? new Date(persona.context_boundary).getTime() : 0;
+  const windowStartMs = Date.now() - contextWindowMs;
+
   const alwaysMessages = sm.messages_getAlways(persona.id);
-  const temporalAnchors = alwaysMessages.map(m => ({
-    id: m.id,
-    role: m.role === "human" ? "human" as const : "system" as const,
-    content: m.content,
-    silence_reason: m.silence_reason,
-    timestamp: m.timestamp,
-    _synthesis: m._synthesis,
-  }));
+  const temporalAnchors = alwaysMessages
+    .filter(m => {
+      const msgMs = new Date(m.timestamp).getTime();
+      return msgMs < windowStartMs || (contextBoundaryMs > 0 && msgMs < contextBoundaryMs);
+    })
+    .map(m => ({
+      id: m.id,
+      role: m.role === "human" ? "human" as const : "system" as const,
+      content: m.content,
+      silence_reason: m.silence_reason,
+      timestamp: m.timestamp,
+      _synthesis: m._synthesis,
+    }));
 
   return {
     persona: {
