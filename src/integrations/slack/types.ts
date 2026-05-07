@@ -6,14 +6,13 @@ export interface SlackAuth {
 
 export interface SlackChannelState {
   spine_last_extracted?: string;
-  threads: Record<string, string>;
+  name?: string;
 }
 
 export interface SlackSettings {
   integration?: boolean;
   polling_interval_ms?: number;
   extraction_model?: string;
-  extraction_point?: string;
   last_sync?: string;
   auth?: SlackAuth;
   backfill_days?: {
