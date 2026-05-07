@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const originalFetch = globalThis.fetch;
+const originalVerbose = process.env.EI_DEBUG_NETWORK_VERBOSE;
 import { callLLMRaw } from "../../../src/core/llm-client.js";
 import { ProviderType } from "../../../src/core/types.js";
 import type { ProviderAccount, ModelConfig } from "../../../src/core/types.js";
@@ -48,8 +49,14 @@ function makeLLMResponse(usage?: { prompt_tokens?: number; completion_tokens?: n
   };
 }
 
+beforeEach(() => {
+  delete process.env.EI_DEBUG_NETWORK_VERBOSE;
+});
+
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  if (originalVerbose === undefined) delete process.env.EI_DEBUG_NETWORK_VERBOSE;
+  else process.env.EI_DEBUG_NETWORK_VERBOSE = originalVerbose;
 });
 
 describe("callLLMRaw — max_tokens resolution", () => {

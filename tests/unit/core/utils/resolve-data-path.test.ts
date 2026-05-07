@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest"
 import { resolveDataPath } from "../../../../src/core/utils/resolve-data-path.js"
 
-const ENV_KEYS = ["EI_DATA_PATH", "XDG_DATA_HOME", "HOME"] as const
+const ENV_KEYS = ["EI_DATA_PATH", "XDG_DATA_HOME", "HOME", "EI_DEBUG_NETWORK_VERBOSE"] as const
 
 let saved: Record<string, string | undefined> = {}
 

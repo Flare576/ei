@@ -300,6 +300,15 @@ else
   fail "unit tests import llm-client without vi.mock — writeNetworkDump will write to real EI_DATA_PATH" "$LLM_WITHOUT_MOCK"
 fi
 
+CALL_LLM_RAW_TEST="$ROOT/tests/unit/core/call-llm-raw.test.ts"
+if [ -f "$CALL_LLM_RAW_TEST" ]; then
+  if grep -q "EI_DEBUG_NETWORK_VERBOSE" "$CALL_LLM_RAW_TEST"; then
+    pass "call-llm-raw.test.ts suppresses EI_DEBUG_NETWORK_VERBOSE"
+  else
+    fail "call-llm-raw.test.ts must clear EI_DEBUG_NETWORK_VERBOSE to prevent log bleed into real EI_DATA_PATH" "$CALL_LLM_RAW_TEST"
+  fi
+fi
+
 echo ""
 
 # ------------------------------------------------------------------
