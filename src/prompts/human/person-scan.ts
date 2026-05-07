@@ -1,5 +1,18 @@
-import type { PersonScanPromptData, ParticipantContext, PromptOutput } from "./types.js";
+import type { PersonScanPromptData, ParticipantContext, ExcludedParticipant, PromptOutput } from "./types.js";
 import { formatMessagesAsPlaceholders } from "../message-utils.js";
+
+function excludedParticipantsSection(excluded: ExcludedParticipant[] | undefined): string {
+  if (!excluded || excluded.length === 0) return "";
+  const lines = [
+    "## Known Participants — Do Not Flag",
+    "The following people are already identified and will be processed separately.",
+    "Do NOT include them in your output. They may appear in messages by name — that is expected.",
+    "",
+    ...excluded.map(p => `- ${p.name}(${p.id})`),
+    "",
+  ];
+  return lines.join("\n");
+}
 
 function participantContextSection(ctx: ParticipantContext | undefined): string {
   if (!ctx) return "";
@@ -37,7 +50,8 @@ You are scanning a conversation to quickly identify PEOPLE in the HUMAN USER's l
 
 Detect and flag. Do NOT analyze deeply — that happens later.
 
-${participantContextSection(data.participant_context)}## What to Capture
+${participantContextSection(data.participant_context)}${excludedParticipantsSection(data.excluded_participants)}
+## What to Capture
 
 Flag a PERSON when they were meaningfully discussed — not just mentioned in passing.
 
