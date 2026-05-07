@@ -1,0 +1,26 @@
+display_information:
+  name: Ei
+  description: Local-first AI companion — indexes your Slack conversations to build persistent memory across personas.
+  background_color: "#1a1a2e"
+
+oauth_config:
+  redirect_urls:
+    - http://127.0.0.1:4243
+    - https://ei.flare576.com/callback/slack
+  scopes:
+    user:
+      - channels:history
+      - channels:read
+      - groups:history
+      - groups:read
+      - im:history
+      - im:read
+      - mpim:history
+      - mpim:read
+      - users:read
+
+settings:
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false
+  is_hosted: false
