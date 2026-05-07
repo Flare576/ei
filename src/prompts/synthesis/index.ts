@@ -14,7 +14,7 @@ Your goal is to produce a well-structured markdown document that a human could s
 
 Everything below is complete as provided — do not use tools to re-fetch records already present here. Only use tools to fill genuine gaps not covered by the data below.
 
-- **Facts**: Ground-truth statements.
+- **Facts**: User demographics only (name, age, job title, location, family structure, physical traits) — not interests or opinions.
 - **Topics**: Areas of interest, work, or concern with descriptions.
 - **People**: Individuals with relationship context.
 - **Quotes**: Verbatim things said, with a \`message_id\`. Use \`fetch_message\` with the \`message_id\` if you want the surrounding conversation for additional context.${hasEntityMap ? `
