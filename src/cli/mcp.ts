@@ -134,7 +134,7 @@ export function createMcpServer(): McpServer {
     "ei_find_memory",
     {
       description:
-        "Search Ei's persistent knowledge base — facts, topics, people, and quotes learned across ALL conversations over time. Use when you need context about the user, their life, relationships, or interests that may not be visible in the current exchange. Returns results grouped by type. Use `recent: true` to retrieve what's been discussed recently.",
+        "Search Ei's persistent knowledge base — facts, topics, people, and quotes learned across ALL conversations over time. Use when you need context about the user, their life, relationships, or interests that may not be visible in the current exchange. Returns results grouped by type. Use `recent: true` to retrieve what's been discussed recently. TYPE GUIDANCE: 'facts' are ONLY user demographics — name, age, job title, location, family structure, physical traits. For interests, opinions, hobbies, or anything the human cares about, use 'topics'. For named individuals, use 'people'. For verbatim things said, use 'quotes'.",
       inputSchema: {
         query: z
           .string()
@@ -145,7 +145,7 @@ export function createMcpServer(): McpServer {
         types: z
           .array(z.enum(["facts", "topics", "people", "quotes"]))
           .optional()
-          .describe("Limit search to specific memory types (default: all types)"),
+          .describe("Limit search to specific memory types (default: all types). Use 'facts' ONLY for user demographics (name, age, job, location, family). Use 'topics' for interests, opinions, and anything the human cares about."),
         limit: z
           .number()
           .optional()
