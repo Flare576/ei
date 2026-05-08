@@ -222,7 +222,31 @@ export async function importSlackChannel(opts: {
   if (signal?.aborted) return result;
 
   // Determine window
-  const startTs = (new Date(channelState.extraction_point ?? new Date(nowMs - (slackSettings.backfill_days?.public ?? 30) * 86400_000).toISOString()).getTime() / 1000).toFixed(6);
+  const extractionPointMs = new Date(channelState.extraction_point ?? new Date(nowMs - (slackSettings.backfill_days?.public ?? 30) * 86400_000).toISOString()).getTime();
+  const extractionPointTs = (extractionPointMs / 1000).toFixed(6);
+
+  // Probe for the next actual message — skips silent periods instantly
+  // rather than advancing 24h at a time through months of inactivity.
+  const nextMessageTs = await reader.probeNextMessageTs(channelId, extractionPointTs);
+
+  if (!nextMessageTs) {
+    // Channel fully caught up — no messages after extraction point
+    updatedState.extraction_point = now;
+    const updatedHuman = stateManager.getHuman();
+    stateManager.setHuman({
+      ...updatedHuman,
+      settings: {
+        ...updatedHuman.settings,
+        slack: {
+          ...updatedHuman.settings?.slack,
+          channels: { ...updatedHuman.settings?.slack?.channels, [channelId]: updatedState },
+        },
+      },
+    });
+    return result;
+  }
+
+  const startTs = nextMessageTs;
   const endMs = Math.min(parseFloat(startTs) * 1000 + WINDOW_MS, nowMs);
   const endTs = (endMs / 1000).toFixed(6);
 

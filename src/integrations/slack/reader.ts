@@ -217,6 +217,26 @@ export class SlackReader {
   }
 
   // ---------------------------------------------------------------------------
+  // Probe for the next message after a timestamp
+  //
+  // Returns the ts of the first message strictly after sinceTs, or null if
+  // the channel has no more messages. Used to skip silent periods instantly
+  // instead of advancing 24h at a time through months of inactivity.
+  // ---------------------------------------------------------------------------
+
+  async probeNextMessageTs(channelId: string, sinceTs: string): Promise<string | null> {
+    const data = await this.slackFetch("conversations.history", {
+      channel: channelId,
+      oldest: sinceTs,
+      inclusive: false,
+      limit: 1,
+    });
+    const messages = data.messages as SlackMessage[];
+    const first = messages.find(m => this.isUserMessage(m));
+    return first?.ts ?? null;
+  }
+
+  // ---------------------------------------------------------------------------
   // Spine messages for a channel window
   //
   // Returns messages between start and end (exclusive of thread replies).
