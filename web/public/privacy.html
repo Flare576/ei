@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy — Ei</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      max-width: 720px;
+      margin: 60px auto;
+      padding: 0 24px;
+      color: #e0e0e0;
+      background: #1a1a2e;
+      line-height: 1.7;
+    }
+    h1 { color: #ffffff; margin-bottom: 4px; }
+    h2 { color: #a0a0c0; margin-top: 40px; font-size: 1.1rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    p  { color: #c0c0d8; }
+    a  { color: #7878d8; }
+    .updated { color: #606080; font-size: 0.9rem; margin-top: 0; }
+    code { background: #2a2a3e; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
+  </style>
+</head>
+<body>
+
+<h1>Privacy Policy</h1>
+<p class="updated">Last updated: May 2026</p>
+
+<h2>The Short Version</h2>
+<p>
+  Ei is local-first. Your data stays on your machine. I receive none of it.
+  There's nothing to request access to, nothing to delete from my servers, and
+  nothing I could hand over even if someone asked me to.
+</p>
+
+<h2>What Data Is Collected</h2>
+<p>
+  When you connect Slack (or other integrations), Ei reads your messages,
+  channel history, and user profiles via OAuth on your device. That data is
+  processed locally and stored in <code>$EI_DATA_PATH</code> on your machine.
+  None of it is transmitted to me.
+</p>
+<p>
+  Ei may also receive transient data as part of normal API interactions —
+  for example, user IDs in OAuth payloads. This data is not logged or stored
+  by the developer.
+</p>
+
+<h2>The One Exception: Sync</h2>
+<p>
+  If you explicitly enable the optional Sync feature, your Ei data is
+  <strong>encrypted on your device</strong> before it leaves. The encryption
+  key is derived from your username and passphrase and never transmitted.
+  I store an encrypted blob I cannot read, even if I wanted to.
+  Sync exists only to let you move between devices. It is off by default.
+</p>
+
+<h2>How Data Is Used</h2>
+<p>
+  Locally: to power Ei's features on your device. Full stop.<br>
+  Synced: to let you restore your local Ei state on another device. That's it.
+</p>
+
+<h2>How Long Data Is Kept</h2>
+<p>
+  Local data lives on your device until you delete it or clear
+  <code>$EI_DATA_PATH</code>. Synced (encrypted) data on my servers is
+  retained until you request deletion.
+</p>
+
+<h2>Access, Transfer, and Deletion</h2>
+<p>
+  Local data: delete <code>$EI_DATA_PATH</code> and it's gone.<br>
+  Synced data: email me and I'll delete it. It's an encrypted blob —
+  I can't read it, but I can remove it.
+</p>
+
+<h2>Contact</h2>
+<p>
+  Questions, deletion requests, or general curiosity:
+  <a href="mailto:flare576@gmail.com">flare576@gmail.com</a>
+</p>
+
+<p style="margin-top: 60px; color: #404060; font-size: 0.85rem;">
+  Ei is open source. <a href="https://github.com/Flare576/ei">github.com/Flare576/ei</a>
+</p>
+
+</body>
+</html>
