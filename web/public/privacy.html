@@ -71,9 +71,23 @@
 
 <h2>Access, Transfer, and Deletion</h2>
 <p>
-  Local data: delete <code>$EI_DATA_PATH</code> and it's gone.<br>
-  Synced data: email me and I'll delete it. It's an encrypted blob —
-  I can't read it, but I can remove it.
+  Local data: delete <code>$EI_DATA_PATH</code> and it's gone.
+</p>
+<p>
+  Synced data: your sync ID is derived from your username and passphrase
+  on your device and transmitted as an opaque identifier. I store it
+  alongside your encrypted blob, but I cannot map it back to you —
+  the same credentials always produce the same ID, which is the only
+  "key" I have. To delete your synced data, use the Delete button in
+  the app's Sync settings, which regenerates your ID locally and sends
+  a delete request to the server.
+</p>
+<p>
+  If you lose your credentials, your synced data is unrecoverable —
+  by design. That's the tradeoff for the privacy guarantee. If you
+  still have access to a machine you synced from, there may be a
+  recovery path; email <a href="mailto:flare576@gmail.com">flare576@gmail.com</a>
+  and I'll try to help.
 </p>
 
 <h2>Contact</h2>
