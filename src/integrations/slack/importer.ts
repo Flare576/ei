@@ -6,7 +6,7 @@ import { queueAllScans, queuePersonScan, queuePersonUpdate, type ExtractionConte
 import type { ItemMatchResult } from "../../prompts/human/types.js";
 import { qualifySlackMessage } from "../../core/utils/message-id.js";
 import { SLACK_PERSONA_DEFINITION } from "../../templates/slack.js";
-import { SlackReader, type ResolvedMessage } from "./reader.js";
+import { SlackReader, SlackRateLimitError, type ResolvedMessage } from "./reader.js";
 import type { SlackChannelState } from "./types.js";
 
 const SLACK_USER_ID_KEY = "Slack User ID";
@@ -230,7 +230,16 @@ export async function importSlackChannel(opts: {
 
     // Probe for the next actual message — skips silent periods instantly
     // rather than advancing 24h at a time through months of inactivity.
-    const nextMessageTs = await reader.probeNextMessageTs(channelId, extractionPointTs);
+    let nextMessageTs: string | null;
+    try {
+      nextMessageTs = await reader.probeNextMessageTs(channelId, extractionPointTs);
+    } catch (err) {
+      if (err instanceof SlackRateLimitError) {
+        console.log(`[Slack] Rate limited during channel probe — stopping this cycle`);
+        return result;
+      }
+      throw err;
+    }
 
     if (!nextMessageTs) {
       // Channel fully caught up — mark it and try the next candidate

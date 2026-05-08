@@ -1,5 +1,12 @@
 import type { SlackChannelState, SlackSettings } from "./types.js";
 
+export class SlackRateLimitError extends Error {
+  constructor(method: string) {
+    super(`Slack rate limited on ${method} (429) — will retry next cycle`);
+    this.name = "SlackRateLimitError";
+  }
+}
+
 // =============================================================================
 // Slack API types
 // =============================================================================
@@ -88,6 +95,7 @@ export class SlackReader {
     const resp = await fetch(url.toString(), {
       headers: { Authorization: `Bearer ${this.token}` },
     });
+    if (resp.status === 429) throw new SlackRateLimitError(method);
     if (!resp.ok) throw new Error(`Slack API ${method} failed: ${resp.status}`);
     const data = await resp.json() as Record<string, unknown>;
     if (!data.ok) throw new Error(`Slack API ${method} error: ${data.error ?? "unknown"}`);
