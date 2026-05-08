@@ -1,6 +1,6 @@
 /** File-based logger for TUI debugging. Usage: tail -f $EI_DATA_PATH/tui.log */
 
-import { appendFileSync, mkdirSync, existsSync, readdirSync, unlinkSync, renameSync } from "node:fs";
+import { appendFileSync, mkdirSync, existsSync, readdirSync, unlinkSync, copyFileSync, truncateSync } from "node:fs";
 import { join } from "node:path";
 import { resolveDataPath } from "./resolve-data-path.js";
 
@@ -64,7 +64,8 @@ export function rotateLog(): void {
 
     if (existsSync(logPath)) {
       const ts = new Date().toISOString().replace(/[:.]/g, "-").replace("T", "_").slice(0, 19);
-      renameSync(logPath, join(dataDir, `tui-${ts}.log`));
+      copyFileSync(logPath, join(dataDir, `tui-${ts}.log`));
+      truncateSync(logPath, 0);
     }
 
     const rolled = readdirSync(dataDir)
