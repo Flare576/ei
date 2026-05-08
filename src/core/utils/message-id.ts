@@ -112,3 +112,7 @@ export function qualifyCursorMessage(machine: string, sessionId: string, nativeI
 export function qualifyDocumentMessage(slug: string, uuid: string): string {
   return `import:document:${slug}:${uuid}`
 }
+
+export function qualifySlackMessage(workspaceId: string, channelId: string, ts: string): string {
+  return `slack:${workspaceId}:${channelId}:${ts}`
+}
