@@ -5,6 +5,7 @@ import { HumanTopicsTab } from './tabs/HumanTopicsTab';
 import { HumanPeopleTab } from './tabs/HumanPeopleTab';
 import { HumanQuotesTab } from './tabs/HumanQuotesTab';
 import { HumanDocumentsTab } from './tabs/HumanDocumentsTab';
+import { HumanExternalTab } from './tabs/HumanExternalTab';
 import { QuoteManagementModal } from '../Quote/QuoteManagementModal';
 import type { Fact, Topic, Person, Quote } from '../../../../src/core/types';
 import type { PersonaOption } from './PersonCard';
@@ -46,6 +47,9 @@ interface HumanEditorProps {
   onDownloadGenerated?: (slug: string) => Promise<void>;
   onReRunDocument?: (slug: string) => Promise<void>;
   checkGenerationModel?: () => { model: string; isRewriteModel: boolean };
+  slackAuth?: { token?: string; workspace_name?: string };
+  onSlackConnect?: () => void;
+  onSlackDisconnect?: () => void;
 }
 
 const tabs = [
@@ -54,6 +58,7 @@ const tabs = [
   { id: 'topics', label: 'Topics', icon: '💬' },
   { id: 'quotes', label: 'Quotes', icon: '✂️' },
   { id: 'documents', label: 'Documents', icon: '📄' },
+  { id: 'external', label: 'External', icon: '🔗' },
 ];
 
 export const HumanEditor = ({
@@ -84,6 +89,9 @@ export const HumanEditor = ({
   onDownloadGenerated,
   onReRunDocument,
   checkGenerationModel,
+  slackAuth,
+  onSlackConnect,
+  onSlackDisconnect,
 }: HumanEditorProps) => {
   const [activeTab, setActiveTab] = useState('facts');
   const [localFacts, setLocalFacts] = useState<Fact[]>(human.facts || []);
@@ -443,6 +451,14 @@ export const HumanEditor = ({
               onReRunDocument={onReRunDocument ?? (() => Promise.resolve())}
               checkGenerationModel={checkGenerationModel ?? (() => ({ model: 'unknown', isRewriteModel: false }))}
             />
+         );
+       case 'external':
+         return (
+           <HumanExternalTab
+             slackAuth={slackAuth}
+             onSlackConnect={onSlackConnect ?? (() => {})}
+             onSlackDisconnect={onSlackDisconnect ?? (() => {})}
+           />
          );
        default:
          return null;

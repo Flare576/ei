@@ -82,6 +82,7 @@ import { generateImage, type GenerationResult } from "./comfyui";
 import { exchangeCode } from '../../src/core/tools/builtin/pkce.js';
 import { SPOTIFY_CLIENT_ID, SPOTIFY_WEB_REDIRECT_URI, clearTokenCache } from '../../src/core/tools/builtin/spotify-auth.js';
 import { clearLikedSongsCache } from '../../src/core/tools/builtin/spotify-liked-songs.js';
+import { SLACK_CLIENT_ID, SLACK_WEB_REDIRECT_URI, clearSlackTokenCache } from '../../src/core/tools/builtin/slack-auth.js';
 
 import "./styles/index.css";
 import "./styles/entity-editor.css";
@@ -558,6 +559,59 @@ function App() {
         window.history.replaceState({}, '', '/');
         console.error('[Spotify] Token exchange failed:', err);
         setSpotifyAuthError(`Spotify auth failed: ${err instanceof Error ? err.message : String(err)}`);
+      });
+    }
+    else if (provider === 'slack') {
+      const verifier = sessionStorage.getItem('slack_pkce_verifier');
+      if (!verifier) {
+        window.history.replaceState({}, '', '/');
+        return;
+      }
+      sessionStorage.removeItem('slack_pkce_verifier');
+
+      exchangeCode({
+        code,
+        verifier,
+        redirectUri: SLACK_WEB_REDIRECT_URI,
+        clientId: SLACK_CLIENT_ID,
+        tokenEndpoint: 'https://slack.com/api/oauth.v2.access',
+        tokenResponsePath: ['authed_user'],
+      }).then((tokens) => {
+        window.history.replaceState({}, '', '/');
+        clearSlackTokenCache();
+        const team = tokens._raw.team as Record<string, string> | undefined;
+        let elapsed = 0;
+        const MAX_WAIT_MS = 10_000;
+        const checkReady = setInterval(() => {
+          elapsed += 100;
+          if (processorRef.current) {
+            clearInterval(checkReady);
+            const proc = processorRef.current;
+            proc.getHuman().then((human) => {
+              proc.updateHuman({
+                settings: {
+                  ...human.settings,
+                  slack: {
+                    ...human.settings?.slack,
+                    auth: {
+                      type: 'pkce',
+                      token: tokens.access_token,
+                      refresh_token: tokens.refresh_token,
+                      workspace_id: team?.id,
+                      workspace_name: team?.name,
+                    },
+                  },
+                },
+              });
+            });
+          } else if (elapsed >= MAX_WAIT_MS) {
+            clearInterval(checkReady);
+            console.error('[Slack] Processor never initialized; token not stored.');
+          }
+        }, 100);
+      }).catch((err) => {
+        window.history.replaceState({}, '', '/');
+        console.error('[Slack] Token exchange failed:', err);
       });
     }
     // Future providers: add `else if (provider === 'github') { ... }` here
