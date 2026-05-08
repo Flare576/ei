@@ -198,10 +198,7 @@ export async function importSlackChannel(opts: {
     if (state.name) reader.seedChannelCache(id, state.name);
   }
 
-  // Find the workspace ID from auth (stored at connection time or derive from a DM)
-  // For now, use the team_id from the first channel's context_team_id if available
-  // TODO: store workspace ID at auth time in SlackAuth
-  const workspaceId = (channels[0] as unknown as Record<string, string>)?.context_team_id ?? "unknown";
+  const workspaceId = slackSettings.auth?.workspace_id ?? "unknown";
 
   const candidate = reader.selectCandidateChannel(channels, channelStates, slackSettings, now);
   if (!candidate) return result; // all channels caught up

@@ -25,7 +25,7 @@ export async function exchangeCode(params: {
   clientId: string;
   tokenEndpoint?: string;
   tokenResponsePath?: string[];
-}): Promise<{ access_token: string; refresh_token: string; expires_in: number }> {
+}): Promise<{ access_token: string; refresh_token: string; expires_in: number; _raw: Record<string, unknown> }> {
   const {
     code,
     verifier,
@@ -63,7 +63,7 @@ export async function exchangeCode(params: {
       }, json)
     : json;
 
-  return payload as { access_token: string; refresh_token: string; expires_in: number };
+  return { ...(payload as { access_token: string; refresh_token: string; expires_in: number }), _raw: json };
 }
 
 export function buildAuthUrl(params: {

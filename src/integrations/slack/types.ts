@@ -2,6 +2,8 @@ export interface SlackAuth {
   type: "pkce" | "xoxp";
   token: string;
   refresh_token?: string;
+  workspace_id?: string;
+  workspace_name?: string;
 }
 
 export interface SlackChannelState {
