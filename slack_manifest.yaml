@@ -18,6 +18,7 @@ oauth_config:
       - mpim:history
       - mpim:read
       - users:read
+      - users:read.email
 
 settings:
   org_deploy_enabled: false

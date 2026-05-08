@@ -24,6 +24,7 @@ export const SLACK_USER_SCOPES = [
   "mpim:history",
   "mpim:read",
   "users:read",
+  "users:read.email",
 ];
 
 // TUI redirect URI — must match slack_manifest.yaml
