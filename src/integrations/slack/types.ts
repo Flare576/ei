@@ -5,8 +5,10 @@ export interface SlackAuth {
 }
 
 export interface SlackChannelState {
-  spine_last_extracted?: string;
-  name?: string;
+  extraction_point?: string;         // ISO — how far we've advanced in the timeline (spine cursor)
+  last_run?: string;                 // ISO — when we last checked for updates (necro reply detection)
+  name?: string;                     // cached display name
+  threads?: Record<string, string>;  // threadTs → latest reply ts seen (reply cursor per thread)
 }
 
 export interface SlackSettings {
