@@ -186,8 +186,8 @@ export class SlackReader {
     const userIds = new Set<string>();
     const channelIds = new Set<string>();
 
-    for (const [, id] of text.matchAll(/<@([A-Z0-9]+)(?:\|[^>]*)?>/)  ) userIds.add(id);
-    for (const [, id] of text.matchAll(/<#([A-Z0-9]+)(?:\|[^>]*)?>/)  ) channelIds.add(id);
+    for (const [, id] of text.matchAll(/<@([A-Z0-9]+)(?:\|[^>]*)?>/g)) userIds.add(id);
+    for (const [, id] of text.matchAll(/<#([A-Z0-9]+)(?:\|[^>]*)?>/g)) channelIds.add(id);
 
     // Resolve unknowns in parallel
     await Promise.all([
