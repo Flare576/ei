@@ -169,6 +169,8 @@ export class Processor {
   private claudeCodeImportInProgress = false;
   private lastCursorSync = 0;
   private cursorImportInProgress = false;
+  private lastSlackSync = 0;
+  private slackImportInProgress = false;
   private pendingConflict: StateConflictData | null = null;
   private storage: Storage | null = null;
   private importAbortController = new AbortController();
@@ -1224,6 +1226,10 @@ export class Processor {
       console.log(`[Processor ${this.instanceId}] Clearing claudeCodeImportInProgress flag`);
       this.claudeCodeImportInProgress = false;
     }
+    if (this.slackImportInProgress) {
+      console.log(`[Processor ${this.instanceId}] Clearing slackImportInProgress flag`);
+      this.slackImportInProgress = false;
+    }
     await this.stateManager.flush();
     console.log(`[Processor ${this.instanceId}] pause() complete (main loop stopped, state flushed)`);
   }
@@ -1474,6 +1480,15 @@ const toolNextSteps = new Set([
       await this.checkAndSyncPersonaHistory(human);
     }
 
+    if (
+      this.isTUI &&
+      human.settings?.slack?.integration &&
+      human.settings?.slack?.auth?.token &&
+      this.stateManager.queue_length() === 0
+    ) {
+      await this.checkAndSyncSlack(human, now);
+    }
+
     if (human.settings?.ceremony && shouldStartCeremony(human.settings.ceremony, this.stateManager)) {
       if (human.settings?.sync && remoteSync.isConfigured()) {
         const state = this.stateManager.getStorageState();
@@ -1711,6 +1726,52 @@ const toolNextSteps = new Set([
       })
       .finally(() => {
         this.cursorImportInProgress = false;
+      });
+  }
+
+  private async checkAndSyncSlack(human: HumanEntity, now: number): Promise<void> {
+    if (this.slackImportInProgress) return;
+
+    const slack = human.settings?.slack;
+    const pollingInterval = slack?.polling_interval_ms ?? 60_000;
+    const lastSync = slack?.last_sync ? new Date(slack.last_sync).getTime() : 0;
+
+    if (now - lastSync < pollingInterval && this.lastSlackSync > 0) return;
+
+    this.lastSlackSync = now;
+    this.stateManager.setHuman({
+      ...this.stateManager.getHuman(),
+      settings: {
+        ...this.stateManager.getHuman().settings,
+        slack: { ...slack, last_sync: new Date(now).toISOString() },
+      },
+    });
+
+    this.slackImportInProgress = true;
+    import("../integrations/slack/importer.js")
+      .then(({ importSlackChannel }) =>
+        importSlackChannel({
+          stateManager: this.stateManager,
+          interface: this.interface,
+          signal: this.importAbortController.signal,
+        })
+      )
+      .then((result) => {
+        if (result.channelProcessed) {
+          console.log(
+            `[Processor] Slack sync: #${result.channelProcessed} — ` +
+            `${result.messagesImported} messages, ${result.threadsProcessed} threads, ` +
+            `${result.scansQueued} scans queued`
+          );
+        }
+      })
+      .catch((err) => {
+        const msg = err instanceof Error ? err.message : JSON.stringify(err);
+        const stack = err instanceof Error ? err.stack : undefined;
+        console.warn(`[Processor] Slack sync failed: ${msg}${stack ? `\n${stack}` : ''}`);
+      })
+      .finally(() => {
+        this.slackImportInProgress = false;
       });
   }
 

@@ -132,6 +132,7 @@ export interface HumanSettings {
   active_theme?: string;
   custom_themes?: ThemeDefinition[];
   personaHistory?: import("../../integrations/persona-history/types.js").PersonaHistorySettings;
+  slack?: import("../../integrations/slack/types.js").SlackSettings;
 }
 
 export interface HumanEntity {

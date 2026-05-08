@@ -61,6 +61,7 @@ export interface ExtractionContext {
   extraction_flag?: "f" | "t" | "p" | "e";
   roomId?: string;
   sources?: string[];
+  excluded_participants?: import("../../prompts/human/types.js").ExcludedParticipant[];
 }
 
 export interface ExtractionOptions {
@@ -224,6 +225,7 @@ export function queuePersonScan(context: ExtractionContext, state: StateManager,
       messages_analyze: chunk.messages_analyze,
       participant_context: buildParticipantContext(context.personaId, state),
       known_identifier_types: userIdentifierTypesForScan,
+      excluded_participants: context.excluded_participants,
     });
 
     state.queue_enqueue({

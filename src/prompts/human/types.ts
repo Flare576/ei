@@ -30,9 +30,15 @@ export interface TopicScanPromptData extends BaseScanPromptData {
   technical_context?: boolean;
 }
 
+export interface ExcludedParticipant {
+  name: string;
+  id: string;
+}
+
 export interface PersonScanPromptData extends BaseScanPromptData {
   participant_context?: ParticipantContext;
   known_identifier_types?: string[];
+  excluded_participants?: ExcludedParticipant[];
 }
 
 export interface FactFindPromptData {

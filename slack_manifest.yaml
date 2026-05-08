@@ -1,0 +1,47 @@
+display_information:
+  name: Ei
+  description: Local-first AI companion — indexes your Slack conversations to build persistent memory across AI personas and coding agents.
+  background_color: "#1a1a2e"
+  long_description: |-
+    *_Ei — Slack Integration_*
+
+    Ei is a local-first AI companion that gives your AI personas and coding agents persistent memory across conversations. This Slack integration lets Ei index your workspace conversations so your personas know what's been going on without you having to explain it.
+
+    *What this app does:*
+    - Reads your channel history, DMs, and threads using Slack's official OAuth API
+    - Extracts topics, people, and context and stores them locally on your machine
+    - Runs entirely on your device — no data is sent to Ei's servers
+
+    *What this app does NOT do:*
+    - Post messages, react to messages, or take any actions in Slack
+    - Send your conversations anywhere except your local Ei installation
+    - Store anything server-side (Ei is local-first by design)
+
+    *Permissions requested:*
+    Read-only access to channels, DMs, and user profiles. No write scopes.
+
+    More information:
+
+    GitHub: https://github.com/Flare576/ei
+oauth_config:
+  redirect_urls:
+    - https://ei.flare576.com/callback/slack
+    - https://ei.flare576.com/callback/slack/tui
+  scopes:
+    user:
+      - users:read.email
+      - channels:history
+      - channels:read
+      - groups:history
+      - groups:read
+      - im:history
+      - im:read
+      - mpim:history
+      - mpim:read
+      - users:read
+  pkce_enabled: true
+settings:
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false
+  is_mcp_enabled: false
