@@ -7,6 +7,7 @@ import type {
 } from "../../../src/core/types.js";
 import type { ClaudeCodeSettings } from "../../../src/integrations/claude-code/types.js";
 import type { CursorSettings } from "../../../src/integrations/cursor/types.js";
+import type { SlackSettings } from "../../../src/integrations/slack/types.js";
 import { modelGuidToDisplay, displayToModelGuid } from "./yaml-shared.js";
 import { parseDuration, formatDuration } from "./duration.js";
 
@@ -45,6 +46,12 @@ interface EditableSettingsData {
     polling_interval_ms?: string | null;
     last_sync?: string | null;
     extraction_point?: string | null;
+  };
+  slack?: {
+    integration?: boolean | null;
+    polling_interval_ms?: string | null;
+    last_sync?: string | null;
+    extraction_model?: string | null;
   };
   backup?: {
     enabled?: boolean | null;
@@ -94,6 +101,12 @@ export function settingsToYAML(settings: HumanSettings | undefined, accounts: Pr
       polling_interval_ms: formatDuration(settings?.cursor?.polling_interval_ms ?? 60000),
       last_sync: settings?.cursor?.last_sync ?? null,
       extraction_point: settings?.cursor?.extraction_point ?? null,
+    },
+    slack: {
+      integration: settings?.slack?.integration ?? false,
+      polling_interval_ms: formatDuration(settings?.slack?.polling_interval_ms ?? 60000),
+      last_sync: settings?.slack?.last_sync ?? null,
+      extraction_model: guidToDisplay(settings?.slack?.extraction_model) ?? 'default',
     },
     backup: {
       enabled: settings?.backup?.enabled ?? false,
@@ -173,6 +186,17 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
     };
   }
 
+  let slack: SlackSettings | undefined;
+  if (data.slack) {
+    slack = {
+      ...original?.slack,
+      integration: nullToUndefined(data.slack.integration),
+      polling_interval_ms: parseMsDuration(data.slack.polling_interval_ms, 60000),
+      last_sync: original?.slack?.last_sync,
+      extraction_model: displayToGuid(data.slack.extraction_model),
+    };
+  }
+
   let backup: import('../../../src/core/types.js').BackupConfig | undefined;
   if (data.backup) {
     backup = {
@@ -197,6 +221,7 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
     opencode,
     claudeCode,
     cursor,
+    slack,
     backup,
   };
 }
