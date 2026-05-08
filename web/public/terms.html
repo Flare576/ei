@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Terms of Service — Ei</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      max-width: 720px;
+      margin: 60px auto;
+      padding: 0 24px;
+      color: #e0e0e0;
+      background: #1a1a2e;
+      line-height: 1.7;
+    }
+    h1 { color: #ffffff; margin-bottom: 4px; }
+    h2 { color: #a0a0c0; margin-top: 40px; font-size: 1.1rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    p  { color: #c0c0d8; }
+    a  { color: #7878d8; }
+    .updated { color: #606080; font-size: 0.9rem; margin-top: 0; }
+    code { background: #2a2a3e; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
+  </style>
+</head>
+<body>
+
+<h1>Terms of Service</h1>
+<p class="updated">Last updated: May 2026</p>
+
+<h2>What Ei Is</h2>
+<p>
+  Ei is a local-first AI companion. The application runs on your device.
+  Your data lives on your device. The developer (Jeremy Scherer,
+  <a href="mailto:flare576@gmail.com">flare576@gmail.com</a>) provides
+  the web interface at <code>ei.flare576.com</code> and an optional
+  encrypted sync service as a convenience — not as a data custodian.
+</p>
+
+<h2>Your Data Is Yours</h2>
+<p>
+  Everything Ei learns about you is stored locally in
+  <code>$EI_DATA_PATH</code> on your machine. I have no access to it.
+  If you use the optional Sync feature, your data is encrypted on your
+  device before it ever leaves — I store a blob I cannot read.
+</p>
+<p>
+  The web app uses your browser's localStorage. The TUI stores everything
+  in your local filesystem. Either way: your machine, your data.
+</p>
+
+<h2>What I'm Actually Providing</h2>
+<p>
+  Three things, all optional depending on how you use Ei:
+</p>
+<p>
+  <strong>The web interface</strong> at <code>ei.flare576.com</code> —
+  a static app served to your browser. If it goes down, the TUI still works
+  and your data is untouched.
+</p>
+<p>
+  <strong>The sync API</strong> — stores your encrypted backup between
+  devices. If it goes down, your local copy is unaffected.
+</p>
+<p>
+  <strong>OAuth relay endpoints</strong> — used during initial app
+  authorization (e.g. <code>/callback/slack/tui</code>). These are
+  one-time flows; existing tokens are unaffected if they go down.
+</p>
+
+<h2>If I Ever Shut It Down</h2>
+<p>
+  I'll give at least <strong>30 days notice</strong> before discontinuing
+  <code>ei.flare576.com</code> or the sync service. That's enough time to:
+</p>
+<p>
+  — Download your data via Backup &amp; Restore (web)<br>
+  — Switch to the TUI, which has no dependency on my server<br>
+  — Export your sync blob before the API goes dark
+</p>
+<p>
+  The source code is open. If I disappear, someone can host it.
+  <a href="https://github.com/Flare576/ei">github.com/Flare576/ei</a>
+</p>
+
+<h2>No Warranty</h2>
+<p>
+  Ei is provided as-is. I make no guarantees about uptime, data integrity,
+  or fitness for any particular purpose. It's a personal project I use
+  daily and care about — but it's not a commercial service with an SLA.
+</p>
+
+<h2>Changes to These Terms</h2>
+<p>
+  If something significant changes, I'll update this page and note the date.
+  Continued use after changes means you're OK with them. If you're not,
+  your data is already on your machine — you can walk away cleanly.
+</p>
+
+<h2>Contact</h2>
+<p>
+  <a href="mailto:flare576@gmail.com">flare576@gmail.com</a>
+</p>
+
+<p style="margin-top: 60px; color: #404060; font-size: 0.85rem;">
+  <a href="/privacy">Privacy Policy</a> &nbsp;·&nbsp;
+  <a href="https://github.com/Flare576/ei">Source Code</a>
+</p>
+
+</body>
+</html>
