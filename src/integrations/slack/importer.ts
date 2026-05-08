@@ -307,7 +307,7 @@ export async function importSlackChannel(opts: {
       );
     }
 
-    const latestReplyTs = allReplies.at(-1)?.ts ?? parent.ts;
+    const latestReplyTs = allReplies[allReplies.length - 1]?.ts ?? parent.ts;
     updatedState.threads = { ...updatedState.threads, [parent.ts]: latestReplyTs };
     result.threadsProcessed++;
   }
@@ -335,7 +335,7 @@ export async function importSlackChannel(opts: {
       );
     }
 
-    const latestReplyTs = allReplies.at(-1)?.ts ?? lastSeen;
+    const latestReplyTs = allReplies[allReplies.length - 1]?.ts ?? lastSeen;
     updatedState.threads = { ...updatedState.threads, [threadTs]: latestReplyTs };
     result.threadsProcessed++;
   }
