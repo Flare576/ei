@@ -41,6 +41,32 @@ Sessions are processed oldest-first, one per queue cycle. On first run Ei works 
 
 OpenCode also supports reading Ei's extracted knowledge back out via the [CLI tool](../src/cli/README.md), giving it persistent memory across sessions.
 
+## Slack Integration
+
+Slack is different from the coding tool integrations — it reads human conversations rather than coding sessions, and requires OAuth instead of local file access.
+
+**Setup:**
+
+```
+/auth slack
+```
+
+This opens a browser, walks you through OAuth, and stores your token. Then enable in `/settings`:
+
+```yaml
+slack:
+  integration: true
+  extraction_model: default  # optional override
+```
+
+Ei will index channels and DMs you're a member of, extracting topics, people, and context. Everything is processed locally — nothing is sent to the developer.
+
+**Notes:**
+- Ei uses a [published Slack app](https://github.com/Flare576/ei) — your workspace admin may need to approve it
+- Non-Marketplace apps are subject to Slack's rate limits on `conversations.history` (1 req/min). Backfill is gradual; steady-state is fast.
+- Your workspace admin may need to approve the [Ei Slack app](https://slack.com/oauth/v2/authorize?client_id=11080256060354.11080294064034&scope=&user_scope=channels:history,channels:read,groups:history,groups:read,im:history,im:read,mpim:history,mpim:read,users:read,users:read.email) — that link goes directly to the install flow
+- The Slack app is read-only — Ei never posts, reacts, or takes any action in your workspace
+
 # Installation
 
 ```bash
@@ -146,6 +172,7 @@ Rooms have three modes, set at creation time:
 | `/settings` | `/set` | Edit your global settings in `$EDITOR` |
 | `/setsync <user> <pass>` | `/ss` | Set sync credentials (triggers restart) |
 | `/tools` | | Manage tool providers — enable/disable tools per persona |
+| `/auth <service>` | | Authenticate with an external service via OAuth. Supported: `spotify`, `slack` |
 
 ### Editor
 

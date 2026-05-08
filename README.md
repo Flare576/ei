@@ -185,6 +185,28 @@ Ei splits the document into segments, runs them through the extraction pipeline,
 
 Both surfaces show you which documents have been imported and let you remove their extracted knowledge (web: Delete button in the Documents tab; TUI: `/unsource <source_tag>`).
 
+## Slack Integration
+
+Ei can index your Slack workspace — channels, DMs, and threads — and extract the same topics, people, and context it pulls from your conversations. Your personas end up knowing what's been going on at work without you having to explain it.
+
+**TUI** (requires setup):
+```bash
+/auth slack
+```
+
+Opens a browser OAuth flow. Once authenticated, enable in `/settings`:
+
+```yaml
+slack:
+  integration: true
+```
+
+**Web**: Open **☰ menu** → **My Data** → **External** tab → **Connect Slack**.
+
+Ei is read-only — it never posts, reacts, or takes any action in your workspace. All processing happens locally. Your workspace admin may need to approve the [Ei Slack app](https://slack.com/oauth/v2/authorize?client_id=11080256060354.11080294064034&scope=&user_scope=channels:history,channels:read,groups:history,groups:read,im:history,im:read,mpim:history,mpim:read,users:read,users:read.email) before you can connect.
+
+> **Note on backfill speed**: Slack limits non-Marketplace apps to 1 request/minute on message history. Backfill through a large workspace is gradual — steady-state (indexing new messages) is fast once you're caught up.
+
 ## Knowledge Share
 
 Sometimes you want to take what Ei knows and turn it into something you can hand to another human. A new teammate joining a project. A briefing doc before a meeting. A brain dump before a vacation.

@@ -126,6 +126,7 @@ EXTENDED COMMANDS
     /auth
         Authenticate with an external service.
         /auth spotify   Connect your Spotify account
+        /auth slack     Connect your Slack workspace
 
     /queue
         Pause the queue and inspect or edit active items in $EDITOR.
