@@ -199,55 +199,63 @@ export async function importSlackChannel(opts: {
 
   const workspaceId = slackSettings.auth?.workspace_id ?? "unknown";
 
-  const candidate = reader.selectCandidateChannel(channels, channelStates, slackSettings, now);
-  if (!candidate) return result; // all channels caught up
+  // Loop through candidate channels until we find one with messages to process,
+  // or exhaust all candidates. Empty channels are marked caught up and skipped
+  // so the next cycle doesn't re-examine them.
+  let startTs: string | null = null;
+  let channelId: string | null = null;
+  let channelName: string = "";
+  let channelState: SlackChannelState = {};
+  let updatedState: SlackChannelState = {};
 
-  const { channel, state: channelState } = candidate;
-  const channelId = channel.id;
-  const sourceTag = `slack:${channelId}`;
+  while (true) {
+    if (signal?.aborted) return result;
 
-  // Write last_run BEFORE API calls (anti-duplicate guard for necro detection)
-  const updatedState: SlackChannelState = {
-    ...channelState,
-    last_run: now,
-  };
+    const candidate = reader.selectCandidateChannel(channels, channelStates, slackSettings, now);
+    if (!candidate) return result; // all channels caught up
 
-  // Resolve channel name if not cached
-  if (!updatedState.name) {
-    updatedState.name = await reader.resolveChannelName(channelId);
-  }
-  const channelName = updatedState.name ?? channelId;
-  reader.seedChannelCache(channelId, channelName);
+    const { channel, state } = candidate;
+    channelId = channel.id;
+    channelState = state;
+    updatedState = { ...channelState, last_run: now };
 
-  if (signal?.aborted) return result;
+    if (!updatedState.name) {
+      updatedState.name = await reader.resolveChannelName(channelId);
+    }
+    channelName = updatedState.name ?? channelId;
+    reader.seedChannelCache(channelId, channelName);
 
-  // Determine window
-  const extractionPointMs = new Date(channelState.extraction_point ?? new Date(nowMs - (slackSettings.backfill_days?.public ?? 30) * 86400_000).toISOString()).getTime();
-  const extractionPointTs = (extractionPointMs / 1000).toFixed(6);
+    const extractionPointMs = new Date(channelState.extraction_point ?? new Date(nowMs - (slackSettings.backfill_days?.public ?? 30) * 86400_000).toISOString()).getTime();
+    const extractionPointTs = (extractionPointMs / 1000).toFixed(6);
 
-  // Probe for the next actual message — skips silent periods instantly
-  // rather than advancing 24h at a time through months of inactivity.
-  const nextMessageTs = await reader.probeNextMessageTs(channelId, extractionPointTs);
+    // Probe for the next actual message — skips silent periods instantly
+    // rather than advancing 24h at a time through months of inactivity.
+    const nextMessageTs = await reader.probeNextMessageTs(channelId, extractionPointTs);
 
-  if (!nextMessageTs) {
-    // Channel fully caught up — no messages after extraction point
-    updatedState.extraction_point = now;
-    const updatedHuman = stateManager.getHuman();
-    stateManager.setHuman({
-      ...updatedHuman,
-      settings: {
-        ...updatedHuman.settings,
-        slack: {
-          ...updatedHuman.settings?.slack,
-          channels: { ...updatedHuman.settings?.slack?.channels, [channelId]: updatedState },
+    if (!nextMessageTs) {
+      // Channel fully caught up — mark it and try the next candidate
+      updatedState.extraction_point = now;
+      channelStates[channelId] = updatedState;
+      const updatedHuman = stateManager.getHuman();
+      stateManager.setHuman({
+        ...updatedHuman,
+        settings: {
+          ...updatedHuman.settings,
+          slack: {
+            ...updatedHuman.settings?.slack,
+            channels: { ...updatedHuman.settings?.slack?.channels, [channelId]: updatedState },
+          },
         },
-      },
-    });
-    return result;
+      });
+      continue;
+    }
+
+    startTs = nextMessageTs;
+    break;
   }
 
-  const startTs = nextMessageTs;
-  const endMs = Math.min(parseFloat(startTs) * 1000 + WINDOW_MS, nowMs);
+  const sourceTag = `slack:${channelId}`;
+  const endMs = Math.min(parseFloat(startTs!) * 1000 + WINDOW_MS, nowMs);
   const endTs = (endMs / 1000).toFixed(6);
 
   // Phase 1: spine messages in window
