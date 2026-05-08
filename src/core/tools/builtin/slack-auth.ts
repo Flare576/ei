@@ -27,8 +27,9 @@ export const SLACK_USER_SCOPES = [
   "users:read.email",
 ];
 
-// TUI redirect URI — must match slack_manifest.yaml
-export const SLACK_TUI_REDIRECT_URI = "http://127.0.0.1:4243";
+// TUI redirect URI — Slack requires HTTPS for distributed apps, so we relay
+// through ei.flare576.com/callback/slack/tui which does a 302 to localhost.
+export const SLACK_TUI_REDIRECT_URI = "https://ei.flare576.com/callback/slack/tui";
 export const SLACK_TUI_PORT = 4243;
 
 // Web redirect URI — must match slack_manifest.yaml
