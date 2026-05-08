@@ -1,6 +1,6 @@
 display_information:
   name: Ei
-  description: Local-first AI companion — indexes your Slack conversations to build persistent memory across personas.
+  description: Local-first AI companion — indexes your Slack conversations to build persistent memory across AI personas and coding agents.
   background_color: "#1a1a2e"
 
 oauth_config:
