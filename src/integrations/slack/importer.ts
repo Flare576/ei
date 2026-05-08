@@ -202,11 +202,14 @@ export async function importSlackChannel(opts: {
   // Loop through candidate channels until we find one with messages to process,
   // or exhaust all candidates. Empty channels are marked caught up and skipped
   // so the next cycle doesn't re-examine them.
+  console.log(`[Slack] Starting ingestion — ${channels.length} member channels`);
+
   let startTs: string | null = null;
   let channelId: string | null = null;
   let channelName: string = "";
   let channelState: SlackChannelState = {};
   let updatedState: SlackChannelState = {};
+  let channelsProbed = 0;
 
   while (true) {
     if (signal?.aborted) return result;
@@ -230,12 +233,13 @@ export async function importSlackChannel(opts: {
 
     // Probe for the next actual message — skips silent periods instantly
     // rather than advancing 24h at a time through months of inactivity.
+    channelsProbed++;
     let nextMessageTs: string | null;
     try {
       nextMessageTs = await reader.probeNextMessageTs(channelId, extractionPointTs);
     } catch (err) {
       if (err instanceof SlackRateLimitError) {
-        console.log(`[Slack] Rate limited during channel probe — stopping this cycle`);
+        console.log(`[Slack] Rate limited after probing ${channelsProbed} channel(s) — stopping this cycle`);
         return result;
       }
       throw err;
