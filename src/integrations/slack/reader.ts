@@ -98,21 +98,21 @@ export class SlackReader {
   // Channel list
   // ---------------------------------------------------------------------------
 
-  async listChannels(types: string = "public_channel,private_channel,im,mpim"): Promise<SlackChannel[]> {
-    const channels: SlackChannel[] = [];
+  async listChannels(): Promise<SlackChannel[]> {
+    const allChannels: SlackChannel[] = [];
     let cursor = "";
     do {
       const params: Record<string, string | number | boolean> = {
-        types,
+        types: "public_channel,private_channel,im,mpim",
         limit: 200,
         exclude_archived: true,
       };
       if (cursor) params.cursor = cursor;
-      const data = await this.slackFetch("conversations.list", params);
-      channels.push(...(data.channels as SlackChannel[]));
+      const data = await this.slackFetch("users.conversations", params);
+      allChannels.push(...(data.channels as SlackChannel[]));
       cursor = (data.response_metadata as Record<string, string>)?.next_cursor ?? "";
     } while (cursor);
-    return channels;
+    return allChannels;
   }
 
   classifyChannel(ch: SlackChannel, settings: SlackSettings): ChannelTier {

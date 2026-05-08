@@ -187,7 +187,6 @@ export async function importSlackChannel(opts: {
   const now = new Date().toISOString();
   const nowMs = new Date(now).getTime();
 
-  // Refresh channel list and write last_run before API work begins
   if (signal?.aborted) return result;
 
   let channels = await reader.listChannels();
