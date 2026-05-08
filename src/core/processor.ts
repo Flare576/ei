@@ -1766,7 +1766,9 @@ const toolNextSteps = new Set([
         }
       })
       .catch((err) => {
-        console.warn(`[Processor] Slack sync failed:`, err);
+        const msg = err instanceof Error ? err.message : JSON.stringify(err);
+        const stack = err instanceof Error ? err.stack : undefined;
+        console.warn(`[Processor] Slack sync failed: ${msg}${stack ? `\n${stack}` : ''}`);
       })
       .finally(() => {
         this.slackImportInProgress = false;
