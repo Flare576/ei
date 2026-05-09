@@ -1,6 +1,9 @@
 RewriteEngine On
 RewriteBase /
 
+# TUI OAuth relay — Slack requires HTTPS, so we bounce through here to localhost
+RewriteRule ^callback/slack/tui$ /callback/slack/tui.php [L]
+
 # Don't rewrite real files or directories
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
