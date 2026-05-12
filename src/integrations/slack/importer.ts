@@ -3,6 +3,7 @@ import type { Ei_Interface, Message, PersonaEntity, Person } from "../../core/ty
 import type { PersonIdentifier } from "../../core/types/data-items.js";
 import { ContextStatus } from "../../core/types/enums.js";
 import { queueAllScans, queuePersonScan, queuePersonUpdate, type ExtractionContext } from "../../core/orchestrators/human-extraction.js";
+import { queueTopicRewritePhase } from "../../core/orchestrators/ceremony.js";
 import type { ItemMatchResult } from "../../prompts/human/types.js";
 import { qualifySlackMessage } from "../../core/utils/message-id.js";
 import { SLACK_PERSONA_DEFINITION } from "../../templates/slack.js";
@@ -418,6 +419,10 @@ export async function importSlackChannel(opts: {
       },
     },
   });
+
+  if (result.messagesImported > 0) {
+    queueTopicRewritePhase(stateManager);
+  }
 
   result.channelProcessed = channelName;
   return result;
