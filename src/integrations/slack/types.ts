@@ -1,10 +1,24 @@
-export interface SlackAuth {
-  type: "pkce" | "xoxp";
-  token: string;
-  refresh_token?: string;
-  workspace_id?: string;
+export type ChannelTier = "dm" | "private" | "public" | "broadcast" | "skip";
+
+// OAuth flow (PKCE) — produces a real xoxp token with auto-refresh
+export interface SlackAuthOAuth {
+  type: "oauth";
+  token: string;           // xoxp-... user token
+  refresh_token?: string;  // xoxe-xoxp-... rotating refresh token
   workspace_name?: string;
 }
+
+// Browser session tokens — extracted from Slack desktop app or DevTools.
+// xoxc and xoxd may be literal token strings or env var references (e.g. $RNP_SLACK_XOXC_TOKEN).
+// Env vars are resolved at call time so rotating them in the shell updates Ei automatically.
+export interface SlackAuthBrowser {
+  type: "browser";
+  xoxc: string;
+  xoxd: string;
+  workspace_name?: string;
+}
+
+export type SlackAuth = SlackAuthOAuth | SlackAuthBrowser;
 
 export interface SlackChannelState {
   extraction_point?: string;         // ISO — how far we've advanced in the timeline (spine cursor)
@@ -13,18 +27,22 @@ export interface SlackChannelState {
   threads?: Record<string, string>;  // threadTs → latest reply ts seen (reply cursor per thread)
 }
 
-export interface SlackSettings {
+export interface SlackWorkspaceConfig {
+  auth: SlackAuth;
   integration?: boolean;
-  polling_interval_ms?: number;
   extraction_model?: string;
   last_sync?: string;
-  auth?: SlackAuth;
   backfill_days?: {
     dm: number;
     private: number;
     public: number;
   };
   broadcast_threshold?: number;
-  channel_overrides?: Record<string, "dm" | "private" | "public" | "skip">;
+  channel_overrides?: Record<string, ChannelTier>;
   channels?: Record<string, SlackChannelState>;
+}
+
+export interface SlackSettings {
+  polling_interval_ms?: number;
+  workspaces?: Record<string, SlackWorkspaceConfig>;  // keyed by workspace_id (e.g. "T024GE9EL")
 }

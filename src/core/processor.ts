@@ -248,6 +248,7 @@ export class Processor {
     this.seedBuiltinFacts();
     this.migrateLearnedOn();
     await this.migrateMessageIds();
+    this.migrateSlackToMultiWorkspace();
     this.seedSettings();
     registerFindMemoryExecutor(createFindMemoryExecutor(this.searchHumanData.bind(this), this.getPersonaList.bind(this), this.stateManager.getHuman.bind(this.stateManager)));
     registerFetchMemoryExecutor(createFetchMemoryExecutor(this.stateManager.getHuman.bind(this.stateManager)));
@@ -1124,6 +1125,51 @@ export class Processor {
     }
   }
 
+  private migrateSlackToMultiWorkspace(): void {
+    const human = this.stateManager.getHuman();
+    const slack = human.settings?.slack as Record<string, unknown> | undefined;
+    if (!slack) return;
+
+    const hasLegacyAuth = "auth" in slack && slack.auth != null;
+    const hasLegacyIntegration = "integration" in slack;
+    if (!hasLegacyAuth && !hasLegacyIntegration) return;
+
+    const legacyAuth = slack.auth as Record<string, unknown> | undefined;
+    const workspaceId = (legacyAuth?.workspace_id as string | undefined) ?? "unknown";
+
+    const migratedWorkspace: Record<string, unknown> = {
+      integration: slack.integration,
+      extraction_model: slack.extraction_model,
+      last_sync: slack.last_sync,
+      backfill_days: slack.backfill_days,
+      broadcast_threshold: slack.broadcast_threshold,
+      channel_overrides: slack.channel_overrides,
+      channels: slack.channels,
+    };
+
+    if (legacyAuth) {
+      migratedWorkspace.auth = {
+        type: "oauth",
+        token: legacyAuth.token,
+        refresh_token: legacyAuth.refresh_token,
+        workspace_name: legacyAuth.workspace_name,
+      };
+    }
+
+    this.stateManager.setHuman({
+      ...human,
+      settings: {
+        ...human.settings,
+        slack: {
+          polling_interval_ms: slack.polling_interval_ms as number | undefined,
+          workspaces: { [workspaceId]: migratedWorkspace } as unknown as import("../integrations/slack/types.js").SlackSettings["workspaces"],
+        },
+      },
+    });
+
+    console.log(`[Processor] migrateSlackToMultiWorkspace: migrated legacy slack settings to workspaces[${workspaceId}]`);
+  }
+
   private seedSettings(): void {
     const human = this.stateManager.getHuman();
     let modified = false;
@@ -1482,8 +1528,7 @@ const toolNextSteps = new Set([
 
     if (
       this.isTUI &&
-      human.settings?.slack?.integration &&
-      human.settings?.slack?.auth?.token &&
+      Object.values(human.settings?.slack?.workspaces ?? {}).some(ws => ws.integration && ws.auth) &&
       this.stateManager.queue_length() === 0
     ) {
       await this.checkAndSyncSlack(human, now);
@@ -1734,18 +1779,10 @@ const toolNextSteps = new Set([
 
     const slack = human.settings?.slack;
     const pollingInterval = slack?.polling_interval_ms ?? 60_000;
-    const lastSync = slack?.last_sync ? new Date(slack.last_sync).getTime() : 0;
 
-    if (now - lastSync < pollingInterval && this.lastSlackSync > 0) return;
+    if (now - this.lastSlackSync < pollingInterval && this.lastSlackSync > 0) return;
 
     this.lastSlackSync = now;
-    this.stateManager.setHuman({
-      ...this.stateManager.getHuman(),
-      settings: {
-        ...this.stateManager.getHuman().settings,
-        slack: { ...slack, last_sync: new Date(now).toISOString() },
-      },
-    });
 
     this.slackImportInProgress = true;
     import("../integrations/slack/importer.js")

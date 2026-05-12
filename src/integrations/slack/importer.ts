@@ -7,7 +7,7 @@ import type { ItemMatchResult } from "../../prompts/human/types.js";
 import { qualifySlackMessage } from "../../core/utils/message-id.js";
 import { SLACK_PERSONA_DEFINITION } from "../../templates/slack.js";
 import { SlackReader, SlackRateLimitError, type ResolvedMessage } from "./reader.js";
-import type { SlackChannelState } from "./types.js";
+import type { SlackChannelState, SlackWorkspaceConfig } from "./types.js";
 
 const SLACK_USER_ID_KEY = "Slack User ID";
 const WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -170,10 +170,19 @@ export async function importSlackChannel(opts: {
 
   const human = stateManager.getHuman();
   const slackSettings = human.settings?.slack;
-  if (!slackSettings?.auth?.token) return result;
+  const workspaces = slackSettings?.workspaces ?? {};
+
+  // Find the workspace with the oldest unprocessed channel that has integration enabled
+  const enabledWorkspaces = Object.entries(workspaces).filter(([, ws]) => ws.integration);
+  if (enabledWorkspaces.length === 0) return result;
+
+  // We'll pick the right workspace after channel discovery — for now grab the first enabled one
+  // to bootstrap the reader. Multi-workspace candidate selection happens below.
+  // TODO: proper cross-workspace oldest-channel selection in a future pass
+  const [workspaceId, workspaceConfig] = enabledWorkspaces[0] as [string, SlackWorkspaceConfig];
 
   const persona = ensureSlackPersona(stateManager, opts.interface);
-  const reader = new SlackReader(slackSettings.auth.token);
+  const reader = new SlackReader(workspaceConfig.auth);
 
   // Seed caches from known people identifiers
   for (const person of human.people) {
@@ -190,14 +199,12 @@ export async function importSlackChannel(opts: {
   if (signal?.aborted) return result;
 
   let channels = await reader.listChannels();
-  const channelStates: Record<string, SlackChannelState> = { ...slackSettings.channels };
+  const channelStates: Record<string, SlackChannelState> = { ...workspaceConfig.channels };
 
   // Seed channel name cache from saved state
   for (const [id, state] of Object.entries(channelStates)) {
     if (state.name) reader.seedChannelCache(id, state.name);
   }
-
-  const workspaceId = slackSettings.auth?.workspace_id ?? "unknown";
 
   // Loop through candidate channels until we find one with messages to process,
   // or exhaust all candidates. Empty channels are marked caught up and skipped
@@ -214,7 +221,7 @@ export async function importSlackChannel(opts: {
   while (true) {
     if (signal?.aborted) return result;
 
-    const candidate = reader.selectCandidateChannel(channels, channelStates, slackSettings, now);
+    const candidate = reader.selectCandidateChannel(channels, channelStates, workspaceConfig, now);
     if (!candidate) return result; // all channels caught up
 
     const { channel, state } = candidate;
@@ -228,7 +235,7 @@ export async function importSlackChannel(opts: {
     channelName = updatedState.name ?? channelId;
     reader.seedChannelCache(channelId, channelName);
 
-    const extractionPointMs = new Date(channelState.extraction_point ?? new Date(nowMs - (slackSettings.backfill_days?.public ?? 30) * 86400_000).toISOString()).getTime();
+    const extractionPointMs = new Date(channelState.extraction_point ?? new Date(nowMs - (workspaceConfig.backfill_days?.public ?? 30) * 86400_000).toISOString()).getTime();
     const extractionPointTs = (extractionPointMs / 1000).toFixed(6);
 
     // Probe for the next actual message — skips silent periods instantly
@@ -256,7 +263,13 @@ export async function importSlackChannel(opts: {
           ...updatedHuman.settings,
           slack: {
             ...updatedHuman.settings?.slack,
-            channels: { ...updatedHuman.settings?.slack?.channels, [channelId]: updatedState },
+            workspaces: {
+              ...updatedHuman.settings?.slack?.workspaces,
+              [workspaceId]: {
+                ...workspaceConfig,
+                channels: { ...workspaceConfig.channels, [channelId]: updatedState },
+              },
+            },
           },
         },
       });
@@ -323,7 +336,7 @@ export async function importSlackChannel(opts: {
       sourceTag,
       workspaceId,
       stateManager,
-      slackSettings.extraction_model,
+      workspaceConfig.extraction_model,
     );
   }
 
@@ -347,7 +360,7 @@ export async function importSlackChannel(opts: {
       result.scansQueued += queueScansForMessages(
         contextMsgs, analyzeMsgs, participants,
         persona.id, channelName, sourceTag, workspaceId,
-        stateManager, slackSettings.extraction_model,
+        stateManager, workspaceConfig.extraction_model,
       );
     }
 
@@ -375,7 +388,7 @@ export async function importSlackChannel(opts: {
       result.scansQueued += queueScansForMessages(
         contextMsgs, analyzeMsgs, participants,
         persona.id, channelName, sourceTag, workspaceId,
-        stateManager, slackSettings.extraction_model,
+        stateManager, workspaceConfig.extraction_model,
       );
     }
 
@@ -395,9 +408,12 @@ export async function importSlackChannel(opts: {
       ...updatedHuman.settings,
       slack: {
         ...updatedHuman.settings?.slack,
-        channels: {
-          ...updatedHuman.settings?.slack?.channels,
-          [channelId]: updatedState,
+        workspaces: {
+          ...updatedHuman.settings?.slack?.workspaces,
+          [workspaceId]: {
+            ...workspaceConfig,
+            channels: { ...workspaceConfig.channels, [channelId]: updatedState },
+          },
         },
       },
     },

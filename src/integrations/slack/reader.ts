@@ -1,10 +1,18 @@
-import type { SlackChannelState, SlackSettings } from "./types.js";
+import type { SlackAuth, SlackChannelState, SlackWorkspaceConfig } from "./types.js";
 
 export class SlackRateLimitError extends Error {
   constructor(method: string) {
     super(`Slack rate limited on ${method} (429) — will retry next cycle`);
     this.name = "SlackRateLimitError";
   }
+}
+
+function resolveEnvVar(value: string): string {
+  if (value.startsWith("$")) {
+    const name = value.slice(1);
+    return process.env[name] ?? value;
+  }
+  return value;
 }
 
 // =============================================================================
@@ -75,12 +83,12 @@ export interface ResolvedMessage {
 // =============================================================================
 
 export class SlackReader {
-  private token: string;
+  private auth: SlackAuth;
   private userCache: Map<string, string> = new Map();   // userId → displayName
   private channelCache: Map<string, string> = new Map(); // channelId → name
 
-  constructor(token: string) {
-    this.token = token;
+  constructor(auth: SlackAuth) {
+    this.auth = auth;
   }
 
   // ---------------------------------------------------------------------------
@@ -92,9 +100,14 @@ export class SlackReader {
     for (const [k, v] of Object.entries(params)) {
       url.searchParams.set(k, String(v));
     }
-    const resp = await fetch(url.toString(), {
-      headers: { Authorization: `Bearer ${this.token}` },
-    });
+    const headers: Record<string, string> = {};
+    if (this.auth.type === "browser") {
+      headers["Authorization"] = `Bearer ${resolveEnvVar(this.auth.xoxc)}`;
+      headers["Cookie"] = `d=${resolveEnvVar(this.auth.xoxd)}`;
+    } else {
+      headers["Authorization"] = `Bearer ${this.auth.token}`;
+    }
+    const resp = await fetch(url.toString(), { headers });
     if (resp.status === 429) throw new SlackRateLimitError(method);
     if (!resp.ok) throw new Error(`Slack API ${method} failed: ${resp.status}`);
     const data = await resp.json() as Record<string, unknown>;
@@ -123,7 +136,7 @@ export class SlackReader {
     return allChannels;
   }
 
-  classifyChannel(ch: SlackChannel, settings: SlackSettings): ChannelTier {
+  classifyChannel(ch: SlackChannel, settings: SlackWorkspaceConfig): ChannelTier {
     const override = settings.channel_overrides?.[ch.id];
     if (override) return override === "skip" ? "skip" : override;
     if (ch.is_im || ch.is_mpim) return "dm";
@@ -133,7 +146,7 @@ export class SlackReader {
     return "public";
   }
 
-  backfillDaysForTier(tier: ChannelTier, settings: SlackSettings): number {
+  backfillDaysForTier(tier: ChannelTier, settings: SlackWorkspaceConfig): number {
     const defaults = { dm: 90, private: 90, public: 30 };
     if (tier === "dm" || tier === "private") return settings.backfill_days?.dm ?? defaults[tier];
     if (tier === "public") return settings.backfill_days?.public ?? defaults.public;
@@ -387,7 +400,7 @@ export class SlackReader {
   selectCandidateChannel(
     channels: SlackChannel[],
     channelStates: Record<string, SlackChannelState>,
-    settings: SlackSettings,
+    settings: SlackWorkspaceConfig,
     now: string,
   ): { channel: SlackChannel; state: SlackChannelState; tier: ChannelTier } | null {
     const nowMs = new Date(now).getTime();
