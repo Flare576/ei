@@ -2,6 +2,7 @@ import {
   LLMRequestType,
   LLMPriority,
   LLMNextStep,
+  ContextStatus,
   type HumanEntity,
   type Message,
 } from "./types.js";
@@ -13,6 +14,7 @@ import {
   type HeartbeatCheckPromptData,
   type EiHeartbeatPromptData,
   type EiHeartbeatItem,
+  type TemporalAnchor,
 } from "../prompts/index.js";
 import { filterMessagesForContext } from "./context-utils.js";
 import { filterHumanDataByVisibility } from "./prompt-context-builder.js";
@@ -33,6 +35,43 @@ export function getModelForPersona(sm: StateManager, personaId?: string): string
 export function getOneshotModel(sm: StateManager): string | undefined {
   const human = sm.getHuman();
   return human.settings?.oneshot_model || human.settings?.default_model;
+}
+
+// =============================================================================
+// TEMPORAL ANCHOR HELPERS
+// =============================================================================
+
+function buildTemporalAnchorsFromHistory(
+  history: Message[],
+  contextWindowMs: number,
+  contextBoundary: string | undefined
+): { temporalAnchors: TemporalAnchor[]; prunedHistory: Message[] } {
+  const windowStartMs = Date.now() - contextWindowMs;
+  const contextBoundaryMs = contextBoundary ? new Date(contextBoundary).getTime() : 0;
+
+  const temporalAnchors: TemporalAnchor[] = [];
+  const prunedHistory: Message[] = [];
+
+  for (const m of history) {
+    if (
+      m.context_status === ContextStatus.Always &&
+      (new Date(m.timestamp).getTime() < windowStartMs ||
+        (contextBoundaryMs > 0 && new Date(m.timestamp).getTime() < contextBoundaryMs))
+    ) {
+      temporalAnchors.push({
+        id: m.id,
+        role: m.role === "human" ? "human" : "system",
+        content: m.content,
+        silence_reason: m.silence_reason,
+        timestamp: m.timestamp,
+        _synthesis: m._synthesis,
+      });
+    } else {
+      prunedHistory.push(m);
+    }
+  }
+
+  return { temporalAnchors, prunedHistory };
 }
 
 // =============================================================================
@@ -59,7 +98,9 @@ export async function queueEiHeartbeat(
   sm: StateManager,
   human: HumanEntity,
   history: Message[],
-  isTUI: boolean
+  isTUI: boolean,
+  contextWindowMs: number,
+  contextBoundary: string | undefined
 ): Promise<void> {
   const now = Date.now();
   const engagementGapThreshold = 0.2;
@@ -195,11 +236,17 @@ export async function queueEiHeartbeat(
     return;
   }
 
-  const recentHistory = history.slice(-10);
+  const { temporalAnchors, prunedHistory } = buildTemporalAnchorsFromHistory(
+    history,
+    contextWindowMs,
+    contextBoundary
+  );
+  const recentHistory = prunedHistory.slice(-10);
   const promptData: EiHeartbeatPromptData = {
     items,
     recent_history: recentHistory,
     system_messages: recentHistory.filter(m => m.role === "system"),
+    temporal_anchors: temporalAnchors,
   };
 
   const prompt = buildEiHeartbeatPrompt(promptData);
@@ -231,7 +278,7 @@ export async function queueHeartbeatCheck(sm: StateManager, personaId: string, i
    const contextHistory = filterMessagesForContext(history, persona.context_boundary, contextWindowMs);
 
   if (personaId === "ei") {
-    await queueEiHeartbeat(sm, human, contextHistory, isTUI);
+    await queueEiHeartbeat(sm, human, contextHistory, isTUI, contextWindowMs, persona.context_boundary);
     return;
   }
 
@@ -249,6 +296,12 @@ export async function queueHeartbeatCheck(sm: StateManager, personaId: string, i
         b.exposure_desired - b.exposure_current - (a.exposure_desired - a.exposure_current)
     );
 
+  const { temporalAnchors, prunedHistory } = buildTemporalAnchorsFromHistory(
+    contextHistory,
+    contextWindowMs,
+    persona.context_boundary
+  );
+
   const promptData: HeartbeatCheckPromptData = {
     persona: {
       name: persona.display_name,
@@ -260,7 +313,8 @@ export async function queueHeartbeatCheck(sm: StateManager, personaId: string, i
       topics: sortByEngagementGap(filteredHuman.topics).slice(0, 5),
       people: sortByEngagementGap(filteredHuman.people).slice(0, 5),
     },
-    recent_history: contextHistory.slice(-10),
+    recent_history: prunedHistory.slice(-10),
+    temporal_anchors: temporalAnchors,
     inactive_days: inactiveDays,
   };
 

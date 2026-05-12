@@ -13,3 +13,4 @@ export type {
   EiHeartbeatResult,
   PromptOutput,
 } from "./types.js";
+export type { TemporalAnchor } from "../response/types.js";

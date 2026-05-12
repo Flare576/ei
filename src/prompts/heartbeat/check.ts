@@ -10,6 +10,7 @@ import { type Message, type Topic, type Person } from "../../core/types.js";
 import { formatMessagesAsPlaceholders, getMessageDisplayText } from "../message-utils.js";
 import { getMessageContent } from "../../core/handlers/utils.js";
 import { partitionTraits } from "../trait-utils.js";
+import { buildTemporalAnchorsSection } from "../response/sections.js";
 function formatTopicsWithGaps(topics: Topic[]): string {
   if (topics.length === 0) return "(No topics with engagement gaps)";
   
@@ -115,12 +116,13 @@ ${formatPeopleWithGaps(data.human.people)}`;
 **Reasons TO reach out:**
 - It's been several days and you have something meaningful to discuss
 - There's a topic with a large engagement gap that you can naturally bring up
-- Something in your recent conversation was left hanging
+- A Temporal Anchor shows something unresolved — you can reference it naturally ("Hey, how did that interview go?")
 - You have genuine interest in checking in (not just "being helpful")
 
 **Reasons NOT to reach out:**
-- Recent conversation ended naturally with closure
+- Recent conversation ended naturally with closure ("talk soon", "gotta run", "later")
 - Less than 24 hours have passed (unless something urgent)
+- A Temporal Anchor describes a worry or question that the recent history already answers — check before using it as a reason to reach out
 - You can't think of something specific and genuine to say
 - It would feel forced or performative
 
@@ -164,9 +166,12 @@ If you decide NOT to reach out:
 }
 \`\`\``;
 
+  const temporalAnchorsFragment = buildTemporalAnchorsSection(data.temporal_anchors, "your human");
+
   const system = [
     roleFragment,
     contextFragment,
+    temporalAnchorsFragment,
     opportunitiesFragment,
     guidelinesFragment,
     pendingUpdateFragment,

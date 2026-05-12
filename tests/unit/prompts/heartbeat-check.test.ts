@@ -48,13 +48,13 @@ function baseData(overrides?: Partial<HeartbeatCheckPromptData>): HeartbeatCheck
       name: "Sisyphus",
       traits: [makeTrait()],
       topics: [makeTopic()],
-      has_pending_update: false,
     },
     human: {
       topics: [],
       people: [],
     },
     recent_history: [makeMessage()],
+    temporal_anchors: [],
     inactive_days: 2,
     ...overrides,
   };

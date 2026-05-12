@@ -98,6 +98,7 @@ const SYNTHETIC_PENDING: HeartbeatCheckPromptData = {
     people: [],
   },
   recent_history: [],
+  temporal_anchors: [],
   inactive_days: 3,
 };
 
@@ -148,6 +149,7 @@ if (BACKUP_FILE) {
         people: [],
       },
       recent_history: [],
+      temporal_anchors: [],
       inactive_days: 2,
     };
 

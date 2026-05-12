@@ -21,6 +21,7 @@ function baseData(items: EiHeartbeatItem[] = []): EiHeartbeatPromptData {
     items,
     recent_history: history,
     system_messages: history.filter(m => m.role === "system"),
+    temporal_anchors: [],
   };
 }
 

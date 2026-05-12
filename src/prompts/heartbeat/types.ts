@@ -5,6 +5,7 @@
 
 import type { PersonaTrait, Topic, Person, Message, PersonaTopic } from "../../core/types.js";
 import type { PersonaEntity } from "../../core/types/entities.js";
+import type { TemporalAnchor } from "../response/types.js";
 
 /**
  * Common prompt output structure
@@ -28,8 +29,9 @@ export interface HeartbeatCheckPromptData {
     topics: Topic[];     // Filtered, sorted by engagement gap
     people: Person[];    // Filtered, sorted by engagement gap
   };
-  recent_history: Message[];  // Last N messages for context
-  inactive_days: number;      // Days since last activity
+  recent_history: Message[];        // Last N messages for context (Always-within-window only)
+  temporal_anchors: TemporalAnchor[]; // Always messages that fell outside the context window
+  inactive_days: number;            // Days since last activity
 }
 
 /**
@@ -107,7 +109,8 @@ export type EiHeartbeatItem =
 export interface EiHeartbeatPromptData {
   items: EiHeartbeatItem[];
   recent_history: Message[];
-  system_messages: Message[];  // Pre-filtered system messages from recent_history
+  system_messages: Message[];
+  temporal_anchors: TemporalAnchor[];
 }
 
 /**
