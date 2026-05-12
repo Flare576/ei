@@ -66,19 +66,25 @@ export async function runSlackAuth(ctx: CommandContext): Promise<void> {
     clearSlackTokenCache();
 
     const team = tokens._raw.team as Record<string, string> | undefined;
-    const workspaceId = team?.id;
+    const workspaceId = team?.id ?? "unknown";
     const workspaceName = team?.name;
 
     const human = await ctx.ei.getHuman();
+    const existingWorkspace = human.settings?.slack?.workspaces?.[workspaceId] ?? {};
     await ctx.ei.updateSettings({
       slack: {
         ...human.settings?.slack,
-        auth: {
-          type: "pkce",
-          token: tokens.access_token,
-          refresh_token: tokens.refresh_token,
-          workspace_id: workspaceId,
-          workspace_name: workspaceName,
+        workspaces: {
+          ...human.settings?.slack?.workspaces,
+          [workspaceId]: {
+            ...existingWorkspace,
+            auth: {
+              type: "oauth",
+              token: tokens.access_token,
+              refresh_token: tokens.refresh_token,
+              workspace_name: workspaceName,
+            },
+          },
         },
       },
     });

@@ -588,17 +588,24 @@ function App() {
             clearInterval(checkReady);
             const proc = processorRef.current;
             proc.getHuman().then((human) => {
+              const workspaceId = team?.id ?? 'unknown';
+              const existingWorkspace = human.settings?.slack?.workspaces?.[workspaceId] ?? {};
               proc.updateHuman({
                 settings: {
                   ...human.settings,
                   slack: {
                     ...human.settings?.slack,
-                    auth: {
-                      type: 'pkce',
-                      token: tokens.access_token,
-                      refresh_token: tokens.refresh_token,
-                      workspace_id: team?.id,
-                      workspace_name: team?.name,
+                    workspaces: {
+                      ...human.settings?.slack?.workspaces,
+                      [workspaceId]: {
+                        ...existingWorkspace,
+                        auth: {
+                          type: 'oauth',
+                          token: tokens.access_token,
+                          refresh_token: tokens.refresh_token,
+                          workspace_name: team?.name,
+                        },
+                      },
                     },
                   },
                 },
@@ -2022,6 +2029,21 @@ function App() {
           onDownloadGenerated={handleDownloadGenerated}
           onReRunDocument={handleReRunDocument}
           checkGenerationModel={() => processor?.checkGenerationModel() ?? { model: 'unknown', isRewriteModel: false }}
+          slackAuth={(() => {
+            const workspaces = human?.settings?.slack?.workspaces ?? {};
+            const connected = Object.values(workspaces).find(ws => ws.auth);
+            if (!connected) return undefined;
+            const name = connected.auth.type === 'oauth' ? connected.auth.workspace_name :
+                         connected.auth.type === 'browser' ? connected.auth.workspace_name : undefined;
+            return { isConnected: true, workspace_name: name };
+          })()}
+          onSlackConnect={() => { window.location.href = `https://slack.com/oauth/v2/authorize?client_id=${SLACK_CLIENT_ID}&scope=&user_scope=${['channels:history','channels:read','groups:history','groups:read','im:history','im:read','mpim:history','mpim:read','users:read','users:read.email'].join(',')}&redirect_uri=${encodeURIComponent(SLACK_WEB_REDIRECT_URI)}`; }}
+          onSlackDisconnect={() => {
+            if (!processor || !human) return;
+            const updated = { ...human.settings?.slack };
+            updated.workspaces = {};
+            processor.updateHuman({ settings: { ...human.settings, slack: updated } });
+          }}
         />
       </>
     )}

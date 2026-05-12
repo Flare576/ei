@@ -47,7 +47,7 @@ interface HumanEditorProps {
   onDownloadGenerated?: (slug: string) => Promise<void>;
   onReRunDocument?: (slug: string) => Promise<void>;
   checkGenerationModel?: () => { model: string; isRewriteModel: boolean };
-  slackAuth?: { token?: string; workspace_name?: string };
+  slackAuth?: { isConnected: boolean; workspace_name?: string };
   onSlackConnect?: () => void;
   onSlackDisconnect?: () => void;
 }

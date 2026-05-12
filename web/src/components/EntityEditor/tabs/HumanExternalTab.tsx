@@ -1,7 +1,7 @@
 import { SlackAuthButton } from '../../Settings/SlackAuthButton';
 
 interface HumanExternalTabProps {
-  slackAuth?: { token?: string; workspace_name?: string };
+  slackAuth?: { isConnected: boolean; workspace_name?: string };
   onSlackConnect: () => void;
   onSlackDisconnect: () => void;
 }
@@ -11,7 +11,7 @@ export const HumanExternalTab = ({
   onSlackConnect: _onSlackConnect,
   onSlackDisconnect,
 }: HumanExternalTabProps) => {
-  const isConnected = Boolean(slackAuth?.token);
+  const isConnected = slackAuth?.isConnected ?? false;
 
   return (
     <div className="ei-settings-form">

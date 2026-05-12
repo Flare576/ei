@@ -7,7 +7,7 @@ import type {
 } from "../../../src/core/types.js";
 import type { ClaudeCodeSettings } from "../../../src/integrations/claude-code/types.js";
 import type { CursorSettings } from "../../../src/integrations/cursor/types.js";
-import type { SlackSettings } from "../../../src/integrations/slack/types.js";
+import type { SlackSettings, SlackAuth } from "../../../src/integrations/slack/types.js";
 import { modelGuidToDisplay, displayToModelGuid } from "./yaml-shared.js";
 import { parseDuration, formatDuration } from "./duration.js";
 
@@ -48,10 +48,20 @@ interface EditableSettingsData {
     extraction_point?: string | null;
   };
   slack?: {
-    integration?: boolean | null;
     polling_interval_ms?: string | null;
-    last_sync?: string | null;
-    extraction_model?: string | null;
+    workspaces?: Record<string, {
+      auth?: {
+        type?: string | null;
+        token?: string | null;
+        refresh_token?: string | null;
+        xoxc?: string | null;
+        xoxd?: string | null;
+        workspace_name?: string | null;
+      } | null;
+      integration?: boolean | null;
+      extraction_model?: string | null;
+      last_sync?: string | null;
+    } | null>;
   };
   backup?: {
     enabled?: boolean | null;
@@ -103,10 +113,18 @@ export function settingsToYAML(settings: HumanSettings | undefined, accounts: Pr
       extraction_point: settings?.cursor?.extraction_point ?? null,
     },
     slack: {
-      integration: settings?.slack?.integration ?? false,
       polling_interval_ms: formatDuration(settings?.slack?.polling_interval_ms ?? 60000),
-      last_sync: settings?.slack?.last_sync ?? null,
-      extraction_model: guidToDisplay(settings?.slack?.extraction_model) ?? 'default',
+      workspaces: Object.fromEntries(
+        Object.entries(settings?.slack?.workspaces ?? {}).map(([wsId, ws]) => [
+          wsId,
+          {
+            auth: ws.auth,
+            integration: ws.integration ?? false,
+            extraction_model: guidToDisplay(ws.extraction_model) ?? 'default',
+            last_sync: ws.last_sync ?? null,
+          },
+        ])
+      ),
     },
     backup: {
       enabled: settings?.backup?.enabled ?? false,
@@ -188,12 +206,22 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
 
   let slack: SlackSettings | undefined;
   if (data.slack) {
+    const parsedWorkspaces: SlackSettings["workspaces"] = {};
+    for (const [wsId, wsData] of Object.entries(data.slack.workspaces ?? {})) {
+      if (!wsData) continue;
+      const originalWs = original?.slack?.workspaces?.[wsId] ?? {};
+      parsedWorkspaces[wsId] = {
+        ...originalWs,
+        auth: (wsData.auth ?? originalWs.auth) as SlackAuth,
+        integration: nullToUndefined(wsData.integration),
+        extraction_model: displayToGuid(wsData.extraction_model),
+        last_sync: originalWs.last_sync,
+      };
+    }
     slack = {
       ...original?.slack,
-      integration: nullToUndefined(data.slack.integration),
       polling_interval_ms: parseMsDuration(data.slack.polling_interval_ms, 60000),
-      last_sync: original?.slack?.last_sync,
-      extraction_model: displayToGuid(data.slack.extraction_model),
+      workspaces: Object.keys(parsedWorkspaces).length > 0 ? parsedWorkspaces : original?.slack?.workspaces,
     };
   }
 
