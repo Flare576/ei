@@ -1,5 +1,5 @@
 export { buildResponsePrompt } from "./response/index.js";
-export type { ResponsePromptData, PromptOutput } from "./response/types.js";
+export type { ResponsePromptData, PromptOutput, TemporalAnchor } from "./response/types.js";
 
 export {
   buildHeartbeatCheckPrompt,
