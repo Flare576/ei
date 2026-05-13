@@ -411,7 +411,7 @@ const summary = await runEval(
     // -------------------------------------------------------------------------
     {
       description: "Suite A / Case 2 (dangling ref): quote link marked (not loaded) in prompt → expect tool call to fetch missing entity",
-      tags: ["knowledge-synthesis", "suite-a", "dangling-ref", "tool-call-expected", "known-model-limitation"],
+      tags: ["knowledge-synthesis", "suite-a", "dangling-ref", "tool-call-expected", "known-model-limitation:gemma4_MoE"],
       tools: ALL_TOOLS,
       observe: true as const,
       prompt: () => {
@@ -639,11 +639,11 @@ const summary = await runEval(
     // when the model already has everything it needs?
     // Answer as of 2026-05: No. Today is not that day. Tomorrow isn't looking
     // great either. This is an observe case — data, not a gate.
-    // Tags: known-model-limitation, borderline — do not assert, ever.
+    // Tags: known-model-limitation:gemma4_MoE, borderline — do not assert, ever.
     // -------------------------------------------------------------------------
     {
       description: "Suite B / Case 3 (eternal question): tools kept after complete data — observe whether model re-calls or synthesizes",
-      tags: ["knowledge-synthesis", "suite-b", "observe", "known-model-limitation", "borderline"],
+      tags: ["knowledge-synthesis", "suite-b", "observe", "known-model-limitation:gemma4_MoE", "borderline"],
       tools: ALL_TOOLS,
       observe: true as const,
       priorMessages: [

@@ -215,7 +215,7 @@ const summary = await runEval(
   [
     {
       description: "Dedup Suite 1: clear duplicates — model calls find_memory before deciding",
-      tags: ["dedup", "tool-selection", "suite-1", "known-model-limitation"],
+      tags: ["dedup", "tool-selection", "suite-1", "known-model-limitation:gemma4_MoE"],
       tools: [READ_MEMORY_TOOL, SUBMIT_DEDUP_TOOL],
       prompt: () => buildDedupPrompt(CLEAR_DUPLICATE_CLUSTER),
       assert: [
@@ -237,7 +237,7 @@ const summary = await runEval(
 
     {
       description: "Dedup Suite 1: ambiguous cluster — model must call find_memory (can't decide without context)",
-      tags: ["dedup", "tool-selection", "suite-1", "ambiguous", "known-model-limitation"],
+      tags: ["dedup", "tool-selection", "suite-1", "ambiguous", "known-model-limitation:gemma4_MoE"],
       tools: [READ_MEMORY_TOOL, SUBMIT_DEDUP_TOOL],
       prompt: () => buildDedupPrompt(AMBIGUOUS_CLUSTER),
       assert: [
