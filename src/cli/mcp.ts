@@ -18,7 +18,7 @@ export function createMcpServer(): McpServer {
     "ei_search",
     {
       description:
-        "Search the user's Ei knowledge base — a persistent memory store built from conversations. Returns facts, people, topics of interest, quotes, and personas. People results include an identifiers array (e.g. GitHub username, Discord handle, email, nickname) — query by any name or handle to find what Ei knows about that person. Persona results include traits and topics that define the persona's identity and working style — use type='personas' with the persona's name OR a natural-language description of what they do to load a persona's character sheet. Results include entity IDs that can be passed back to ei_lookup for full detail. Omit query to browse by recency (use with recent=true or persona filter).",
+        "Search the user's Ei knowledge base — a persistent memory store built from conversations. Use at session start to load user context, and mid-session whenever the user references past work, preferences, or people. Returns facts, people, topics of interest, quotes, and personas. TYPE GUIDANCE: 'facts' are ONLY user demographics (name, age, job title, location, family structure, physical traits). For interests, opinions, hobbies, or anything the human cares about, use 'topics'. For named individuals, use 'people'. For verbatim things said, use 'quotes'. For AI agent identities with traits and working style, use 'personas'. People results include an identifiers array (e.g. GitHub username, Discord handle, email, nickname) — query by any name or handle to find what Ei knows about that person. Persona results include traits and topics — use type='personas' with the persona's name OR a natural-language description of their role to load a persona's character sheet. Results include entity IDs that can be passed to ei_lookup for full detail. Omit query with recent=true to browse the most recently discussed items.",
       inputSchema: {
         query: z.string().optional().describe("Search text. Supports natural language. Omit to browse without semantic filtering — useful with recent=true or persona filter."),
         type: z
@@ -99,7 +99,7 @@ export function createMcpServer(): McpServer {
     "ei_lookup",
     {
       description:
-        "Look up a specific entity in the Ei knowledge base by ID. Returns the full entity record. Use IDs from ei_search results.",
+        "Retrieve the full record for any Ei entity by ID — facts, topics, people, quotes, or personas. Use when ei_search returns an item and you need its complete details (all fields, traits, topics, identifiers, etc.). Pass the entity id from ei_search results.",
       inputSchema: {
         id: z.string().describe("The entity ID to look up."),
         source: z
@@ -131,130 +131,10 @@ export function createMcpServer(): McpServer {
   );
 
   server.registerTool(
-    "ei_find_memory",
-    {
-      description:
-        "Search Ei's persistent knowledge base — facts, topics, people, and quotes learned across ALL conversations over time. Use when you need context about the user, their life, relationships, or interests that may not be visible in the current exchange. Returns results grouped by type. Use `recent: true` to retrieve what's been discussed recently. TYPE GUIDANCE: 'facts' are ONLY user demographics — name, age, job title, location, family structure, physical traits. For interests, opinions, hobbies, or anything the human cares about, use 'topics'. For named individuals, use 'people'. For verbatim things said, use 'quotes'.",
-      inputSchema: {
-        query: z
-          .string()
-          .optional()
-          .describe(
-            "What to search for — a person, topic, fact, or anything Ei has learned about the user. Omit with recent: true to browse recent items."
-          ),
-        types: z
-          .array(z.enum(["facts", "topics", "people", "quotes"]))
-          .optional()
-          .describe("Limit search to specific memory types (default: all types). Use 'facts' ONLY for user demographics (name, age, job, location, family). Use 'topics' for interests, opinions, and anything the human cares about."),
-        limit: z
-          .number()
-          .optional()
-          .default(10)
-          .describe("Max results per type to return (default: 10, max: 20)"),
-        recent: z
-          .boolean()
-          .optional()
-          .describe(
-            "If true, return recently-mentioned results sorted by last_mentioned date instead of relevance. Combine with a query to filter recent results by topic."
-          ),
-        persona: z
-          .string()
-          .optional()
-          .describe(
-            "Filter results to what a specific persona has learned. Use the persona display name."
-          ),
-      },
-    },
-    async ({ query: rawQuery, types, limit, recent, persona }) => {
-      const query = rawQuery ?? "";
-      const effectiveLimit = Math.min(limit ?? 10, 20);
-      const options = { recent: recent ?? false };
-
-      const humanTypes = ["facts", "topics", "people", "quotes"] as const;
-      type HumanType = (typeof humanTypes)[number];
-      const requestedTypes: HumanType[] =
-        types && types.length > 0
-          ? (types as HumanType[])
-          : [...humanTypes];
-
-      let state: StorageState | null = null;
-      let personaId: string | undefined;
-      if (persona) {
-        state = await loadLatestState();
-        if (state) {
-          personaId = resolvePersonaId(state, persona) ?? undefined;
-          if (!personaId) {
-            return {
-              content: [{ type: "text" as const, text: `Persona "${persona}" not found.` }],
-            };
-          }
-        }
-      }
-
-      const grouped: Record<string, unknown[]> = {};
-      for (const t of requestedTypes) {
-        const module = await import(`./commands/${t}.js`);
-        let results = await (
-          module.execute as (
-            q: string,
-            l: number,
-            o: { recent: boolean }
-          ) => Promise<{ id: string }[]>
-        )(query, effectiveLimit, options);
-        if (personaId && state) {
-          results = filterTypeSpecificByPersona(results, state, personaId, t);
-        }
-        if (results.length > 0) {
-          grouped[t] = results;
-        }
-      }
-
-      if (Object.keys(grouped).length === 0) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify({ result: "No relevant memories found for this query." }),
-            },
-          ],
-        };
-      }
-
-      return {
-        content: [{ type: "text" as const, text: JSON.stringify(grouped, null, 2) }],
-      };
-    }
-  );
-
-  server.registerTool(
-    "ei_fetch_memory",
-    {
-      description:
-        "Retrieve the full record for a specific memory by its ID. Use when ei_find_memory or ei_search returns an item and you need its complete details. Returns the full Fact, Topic, Person, or Quote record.",
-      inputSchema: {
-        id: z.string().describe("The ID of the memory record to retrieve"),
-      },
-    },
-    async ({ id }) => {
-      const result = await lookupById(id);
-
-      if (result === null || result.type === "persona") {
-        return {
-          content: [{ type: "text" as const, text: `No memory record found with ID: ${id}` }],
-        };
-      }
-
-      return {
-        content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
-      };
-    }
-  );
-
-  server.registerTool(
     "ei_fetch_message",
     {
       description:
-        "Retrieve a specific message by its ID, with optional surrounding context. Use when ei_find_memory returns a quote with a message_id and you want to read the original conversation. The 'before' and 'after' parameters return that many additional messages for context (default 0).",
+        "Retrieve a specific message by its fully-qualified ID, with optional surrounding conversation context. Use when ei_search returns a quote with a message_id and you want to read the original exchange. The 'before' and 'after' parameters expand the context window in either direction (default 0). Accepts IDs from any integrated source: 'ei:uuid' searches Ei state, 'opencode:machine:session:id' queries OpenCode SQLite, 'claudecode:...' scans Claude Code JSONL files, 'cursor:...' reads the Cursor DB.",
       inputSchema: {
         id: z.string().describe("The ID of the message to retrieve"),
         before: z

@@ -68,7 +68,7 @@ Options:
   --persona, -p    Filter to entities a specific persona has learned about
   --source, -s     Filter to entities from a specific source (prefix match, e.g. "cursor", "opencode:my-machine", "opencode:my-machine:ses_abc123")
   --id             Look up entity by ID (accepts value or stdin)
-  --install        Register Ei with Claude Code and Cursor via MCP
+  --install        Register Ei with Claude Code, Cursor, and OpenCode (MCP + context hooks)
   --help, -h       Show this help message
 
 Examples:
@@ -88,6 +88,7 @@ Examples:
 async function installMcpClients(): Promise<void> {
   await installClaudeCode();
   await installCursor();
+  await installOpenCodePlugin();
 }
 
 async function installClaudeCode(): Promise<void> {
@@ -125,6 +126,68 @@ async function installClaudeCode(): Promise<void> {
 
   console.log(`✓ Installed Ei MCP server to ${claudeJsonPath}`);
   console.log(`  Restart Claude Code to activate.`);
+
+  await installClaudeCodeHooks();
+}
+
+async function installClaudeCodeHooks(): Promise<void> {
+  const home = process.env.HOME || "~";
+  const hooksDir = join(home, ".claude", "hooks");
+  const scriptPath = join(hooksDir, "ei-inject.sh");
+  const settingsPath = join(home, ".claude", "settings.json");
+
+  await Bun.$`mkdir -p ${hooksDir}`;
+
+  const scriptContent = `#!/usr/bin/env bash
+# Ei memory context injection for Claude Code
+# Runs before every prompt — injects recent Ei context into Claude's window
+
+if ! command -v ei >/dev/null 2>&1; then
+  # ei not found — exit silently so Claude Code is not blocked
+  exit 0
+fi
+
+output=$(ei --recent -n 5 2>/dev/null) || exit 0
+
+if [ -n "$output" ]; then
+  printf "\\n[Ei Memory Context]\\n%s\\n" "$output"
+fi
+
+exit 0
+`;
+
+  await Bun.write(scriptPath, scriptContent);
+  await Bun.$`chmod +x ${scriptPath}`;
+
+  let settings: Record<string, unknown> = {};
+  try {
+    const text = await Bun.file(settingsPath).text();
+    settings = JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    // File doesn't exist or isn't valid JSON — start fresh
+  }
+
+  const hooks = (settings.hooks ?? {}) as Record<string, unknown>;
+  const userPromptSubmit = (hooks.UserPromptSubmit ?? []) as unknown[];
+
+  const hookEntry = { hooks: [{ type: "command", command: "~/.claude/hooks/ei-inject.sh" }] };
+  const alreadyInstalled = userPromptSubmit.some(
+    (entry) => JSON.stringify(entry) === JSON.stringify(hookEntry)
+  );
+  if (!alreadyInstalled) {
+    userPromptSubmit.push(hookEntry);
+  }
+
+  hooks.UserPromptSubmit = userPromptSubmit;
+  settings.hooks = hooks;
+
+  // Atomic write: write to temp file then rename to avoid partial writes
+  const tmpPath = `${settingsPath}.ei-install.tmp`;
+  await Bun.write(tmpPath, JSON.stringify(settings, null, 2) + "\n");
+  const { rename } = await import(/* @vite-ignore */ "fs/promises");
+  await rename(tmpPath, settingsPath);
+
+  console.log(`✓ Installed Ei context hook to ~/.claude/hooks/ei-inject.sh`);
 }
 
 async function installCursor(): Promise<void> {
@@ -159,6 +222,108 @@ async function installCursor(): Promise<void> {
 
   console.log(`✓ Installed Ei MCP server to ${cursorJsonPath}`);
   console.log(`  Restart Cursor to activate.`);
+
+  await installCursorHooks();
+}
+
+async function installCursorHooks(): Promise<void> {
+  const home = process.env.HOME || "~";
+  const hooksDir = join(home, ".cursor", "hooks");
+  const rulesDir = join(home, ".cursor", "rules");
+  const hookScriptPath = join(hooksDir, "ei-inject.sh");
+  const hooksJsonPath = join(home, ".cursor", "hooks.json");
+
+  await Bun.$`mkdir -p ${hooksDir}`;
+  await Bun.$`mkdir -p ${rulesDir}`;
+
+  const hookScript = `#!/bin/bash
+# Ei memory context injection hook for Cursor
+# Writes recent Ei context to ~/.cursor/rules/ei-context.mdc (alwaysApply)
+# so Cursor includes it automatically on the next prompt.
+
+RULES_FILE="$HOME/.cursor/rules/ei-context.mdc"
+CONTEXT=$(ei --recent -n 10 2>/dev/null)
+
+if [ -n "$CONTEXT" ]; then
+  cat > "$RULES_FILE" << 'RULE'
+---
+description: Ei persistent memory context (auto-updated before each prompt)
+alwaysApply: true
+---
+RULE
+  echo "## Ei Memory (recent context)" >> "$RULES_FILE"
+  echo "$CONTEXT" >> "$RULES_FILE"
+fi
+
+# Always exit 0 — never block Cursor
+exit 0
+`;
+
+  await Bun.write(hookScriptPath, hookScript);
+  await Bun.$`chmod +x ${hookScriptPath}`;
+
+  interface HooksConfig {
+    version: number;
+    hooks: {
+      beforeSubmitPrompt?: Array<{ command: string }>;
+      [key: string]: unknown;
+    };
+  }
+
+  let hooksConfig: HooksConfig = { version: 1, hooks: {} };
+  try {
+    const text = await Bun.file(hooksJsonPath).text();
+    hooksConfig = JSON.parse(text) as HooksConfig;
+  } catch {
+    // File doesn't exist or isn't valid JSON — start fresh
+  }
+
+  const beforeSubmit = (hooksConfig.hooks.beforeSubmitPrompt ?? []) as Array<{ command: string }>;
+  const eiEntry = { command: "~/.cursor/hooks/ei-inject.sh" };
+  const alreadyPresent = beforeSubmit.some((entry) => entry.command === eiEntry.command);
+  if (!alreadyPresent) {
+    beforeSubmit.push(eiEntry);
+  }
+  hooksConfig.hooks.beforeSubmitPrompt = beforeSubmit;
+
+  const tmpPath = `${hooksJsonPath}.ei-install.tmp`;
+  await Bun.write(tmpPath, JSON.stringify(hooksConfig, null, 2) + "\n");
+  const { rename } = await import(/* @vite-ignore */ "fs/promises");
+  await rename(tmpPath, hooksJsonPath);
+
+  console.log(`✓ Installed Ei context hook to ~/.cursor/hooks/ei-inject.sh`);
+}
+
+async function installOpenCodePlugin(): Promise<void> {
+  const home = process.env.HOME || "~";
+  const pluginsDir = join(home, ".config", "opencode", "plugins");
+  const pluginPath = join(pluginsDir, "ei-memory.ts");
+
+  await Bun.$`mkdir -p ${pluginsDir}`;
+
+  const pluginContent = `// Ei memory context injection plugin for OpenCode
+// Automatically injects recent Ei context into every LLM system prompt.
+import { $ } from "bun";
+
+export default async function() {
+  return {
+    "experimental.chat.system.transform": async (_input: unknown, output: { system: string }) => {
+      try {
+        const result = await $\`ei --recent -n 10\`.quiet().text();
+        if (result.trim()) {
+          output.system += \`\\n\\n## Ei Memory (recent context)\\n\${result.trim()}\`;
+        }
+      } catch {
+        // ei not available or failed — continue without context
+      }
+    },
+  };
+}
+`;
+
+  await Bun.write(pluginPath, pluginContent);
+
+  console.log(`✓ Installed Ei context plugin to ~/.config/opencode/plugins/ei-memory.ts`);
 }
 
 async function main(): Promise<void> {
@@ -197,23 +362,6 @@ async function main(): Promise<void> {
     }
   }
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Add this to ~/.config/opencode/AGENTS.md
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-**BEFORE YOU DO ANYTHING**: load your Identity from Ei.
-
-Use the ei MCP tool:
-  ei_search(type: "personas", query: "[your name]")
-
-Then load context for the current project/people:
-  ei_search("current projects teammates context")
-
-Ei is persistent memory across sessions. Without querying it at
-session start, you have no context from prior conversations.
-
-**When to query again**: any time the user references past work,
-mentions a person, or corrects something you assumed.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `);
     process.exit(0);
