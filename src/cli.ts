@@ -156,7 +156,14 @@ if ! command -v ei >/dev/null 2>&1; then
   exit 0
 fi
 
-output=$(ei --recent -n 5 2>/dev/null) || exit 0
+INPUT=$(cat)
+PROMPT=$(echo "$INPUT" | jq -r '.prompt // empty' 2>/dev/null | sed 's/<[^>]*>//g')
+
+if [ -n "$PROMPT" ]; then
+  output=$(ei "$PROMPT" -n 5 2>/dev/null) || exit 0
+else
+  output=$(ei --recent -n 5 2>/dev/null) || exit 0
+fi
 
 if [ -n "$output" ]; then
   printf "\\n[Ei Memory Context]\\n%s\\n" "$output"
