@@ -285,16 +285,11 @@ export async function retrieveBalanced(
   const recentDate = (item: AnyItem): string => item.last_mentioned ?? item.last_updated ?? "";
 
   if (recent && !query) {
-    const allItems: Array<{ type: DataType; item: AnyItem; mapped: QuoteResult | FactResult | PersonResult | TopicResult | PersonaResult }> = [
+    const allItems: Array<{ type: DataType; item: AnyItem; mapped: QuoteResult | FactResult | PersonResult | TopicResult }> = [
       ...state.human.quotes.map(q => ({ type: "quote" as DataType, item: q as AnyItem, mapped: mapQuote(q, state) })),
       ...state.human.facts.map(f => ({ type: "fact" as DataType, item: f as AnyItem, mapped: mapFact(f) })),
       ...state.human.people.map(p => ({ type: "person" as DataType, item: p as AnyItem, mapped: mapPerson(p) })),
       ...state.human.topics.map(t => ({ type: "topic" as DataType, item: t as AnyItem, mapped: mapTopic(t) })),
-      ...Object.values(state.personas).map(({ entity: p }) => ({
-        type: "persona" as DataType,
-        item: { id: p.id, last_updated: p.last_updated } as AnyItem,
-        mapped: mapPersona(p),
-      })),
     ];
     return allItems
       .sort((a, b) => recentDate(b.item).localeCompare(recentDate(a.item)))
@@ -328,22 +323,10 @@ export async function retrieveBalanced(
         }
       }
     }
-    const embeddingResults = allScored
+    return allScored
       .sort((a, b) => recentDate(b.mapped as AnyItem).localeCompare(recentDate(a.mapped as AnyItem)))
       .slice(0, limit)
       .map(({ type, mapped }) => ({ type, ...mapped }) as BalancedResult);
-    const personaMatches = [
-      ...retrievePersonas(query, state, limit, { recent: true }),
-      ...await retrievePersonasSemantic(queryVector, state, limit),
-    ].filter((p, i, arr) => arr.findIndex(x => x.id === p.id) === i);
-    if (personaMatches.length > 0) {
-      const combined = [
-        ...personaMatches.map((p) => ({ type: "persona" as const, ...p }) as BalancedResult),
-        ...embeddingResults,
-      ];
-      return combined.slice(0, limit);
-    }
-    return embeddingResults;
   }
 
   for (const { type, items, mapper } of typeConfigs) {
@@ -381,19 +364,7 @@ export async function retrieveBalanced(
 
   result.sort((a, b) => b.similarity - a.similarity);
 
-  const embeddingFinal = result.map(({ type, mapped }) => ({ type, ...mapped }) as BalancedResult);
-  const personaFinal = [
-    ...retrievePersonas(query, state, limit),
-    ...await retrievePersonasSemantic(queryVector, state, limit),
-  ].filter((p, i, arr) => arr.findIndex(x => x.id === p.id) === i);
-  if (personaFinal.length > 0) {
-    const combined = [
-      ...personaFinal.map((p) => ({ type: "persona" as const, ...p }) as BalancedResult),
-      ...embeddingFinal,
-    ];
-    return combined.slice(0, limit);
-  }
-  return embeddingFinal;
+  return result.map(({ type, mapped }) => ({ type, ...mapped }) as BalancedResult);
 }
 
 const OPENCODE_MESSAGE_ID = /^msg_[a-zA-Z0-9]+$/;
