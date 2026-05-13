@@ -152,9 +152,10 @@ import { $ } from "bun";
 
 const input = await new Response(Bun.stdin.stream()).json().catch(() => ({}));
 const raw = (input.prompt ?? "").replace(/<[^>]*>/g, "").trim();
-const args = raw ? [raw, "-n", "5"] : ["--recent", "-n", "5"];
+const typeArgs = ["topics", "-n", "5"];
+const args = raw ? [raw, ...typeArgs] : ["--recent", ...typeArgs];
 
-const output = await $\`ei \${args}\`.quiet().text().catch(() => "");
+const output = await $\`bunx ei-tui@latest \${args}\`.quiet().text().catch(() => "");
 if (output.trim()) process.stdout.write(\`\\n[Ei Memory Context]\\n\${output.trim()}\\n\`);
 `;
 
@@ -298,34 +299,33 @@ exit 0
 
 async function installOpenCodePlugin(): Promise<void> {
   const home = process.env.HOME || "~";
-  const pluginsDir = join(home, ".config", "opencode", "plugins");
-  const pluginPath = join(pluginsDir, "ei-memory.ts");
+  const opencodeDir = join(home, ".config", "opencode");
+  const omoCandidates = [
+    join(opencodeDir, "oh-my-opencode.json"),
+    join(opencodeDir, "oh-my-opencode.jsonc"),
+    join(opencodeDir, "oh-my-openagent.json"),
+    join(opencodeDir, "oh-my-openagent.jsonc"),
+    join(opencodeDir, "node_modules", "oh-my-opencode", "package.json"),
+    join(opencodeDir, "node_modules", "oh-my-openagent", "package.json"),
+  ];
+  const hasOmo = (await Promise.all(omoCandidates.map((p) => Bun.file(p).exists()))).some(Boolean);
 
-  await Bun.$`mkdir -p ${pluginsDir}`;
+  if (hasOmo) {
+    console.log(`✓ Oh My OpenCode detected — UserPromptSubmit hook covers OpenCode automatically.`);
+    return;
+  }
 
-  const pluginContent = `// Ei memory context injection plugin for OpenCode
-// Automatically injects recent Ei context into every LLM system prompt.
-import { $ } from "bun";
+  console.log(`
+ℹ️  OpenCode detected without Oh My OpenCode.
+   The ~/.claude/settings.json UserPromptSubmit hook only fires in Claude Code.
+   For the same context injection in OpenCode, we recommend:
 
-export default async function() {
-  return {
-    "experimental.chat.system.transform": async (_input: unknown, output: { system: string }) => {
-      try {
-        const result = await $\`ei --recent -n 10\`.quiet().text();
-        if (result.trim()) {
-          output.system += \`\\n\\n## Ei Memory (recent context)\\n\${result.trim()}\`;
-        }
-      } catch {
-        // ei not available or failed — continue without context
-      }
-    },
-  };
-}
-`;
+     bunx oh-my-opencode install
 
-  await Bun.write(pluginPath, pluginContent);
-
-  console.log(`✓ Installed Ei context plugin to ~/.config/opencode/plugins/ei-memory.ts`);
+   Oh My OpenCode is to OpenCode what oh-my-zsh is to zsh — you can run
+   without it, but you probably shouldn't. It also picks up the Ei hook
+   automatically via its Claude Code compatibility layer.
+`);
 }
 
 async function main(): Promise<void> {
