@@ -161,7 +161,7 @@ MCP tools for targeted queries.
 const input = await new Response(Bun.stdin.stream()).json().catch(() => ({}));
 const raw = (input.prompt ?? "").replace(/<[^>]*>/g, "").trim();
 const typeArgs = ["topics", "-n", "5"];
-const args = raw ? [raw, ...typeArgs] : ["--recent", ...typeArgs];
+const args = raw ? [...typeArgs, raw] : ["--recent", ...typeArgs];
 
 const output = await $\`bunx ei-tui@latest \${args}\`.quiet().text().catch(() => "");
 if (output.trim()) process.stdout.write(\`\\n\${heading}\\n\${output.trim()}\\n\`);
