@@ -150,13 +150,21 @@ async function installClaudeCodeHooks(): Promise<void> {
   const scriptContent = `#!/usr/bin/env bun
 import { $ } from "bun";
 
+const heading = \`
+## Ei Memory Context
+
+Ei is a personal knowledge base built from coding sessions, Slack, documents, and conversations.
+The following topics MAY be relevant to your current task — use the \\\`ei_search\\\` and \\\`ei_lookup\\\`
+MCP tools for targeted queries.
+\`;
+
 const input = await new Response(Bun.stdin.stream()).json().catch(() => ({}));
 const raw = (input.prompt ?? "").replace(/<[^>]*>/g, "").trim();
 const typeArgs = ["topics", "-n", "5"];
 const args = raw ? [raw, ...typeArgs] : ["--recent", ...typeArgs];
 
 const output = await $\`bunx ei-tui@latest \${args}\`.quiet().text().catch(() => "");
-if (output.trim()) process.stdout.write(\`\\n[Ei Memory Context]\\n\${output.trim()}\\n\`);
+if (output.trim()) process.stdout.write(\`\\n\${heading}\\n\${output.trim()}\\n\`);
 `;
 
   await Bun.write(scriptPath, scriptContent);
