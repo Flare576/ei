@@ -75,6 +75,7 @@ export interface Person extends DataItemBase {
 }
 
 export interface Quote {
+  /** @deprecated Remove in v1.6 — use message_id for retrieval */
   id: string;                    // UUID (use crypto.randomUUID())
   message_id: string | null;     // FK to Message.id (nullable for manual quotes)
   data_item_ids: string[];       // FK[] to DataItemBase.id

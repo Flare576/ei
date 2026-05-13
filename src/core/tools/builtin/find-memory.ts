@@ -93,7 +93,7 @@ export function createFindMemoryExecutor(searchHumanData: SearchHumanData, getPe
               if (person) { linked_items.push({ id: person.id, name: person.name, type: "person" }); }
             }
           }
-          return { id: q.id, text: q.text, speaker: q.speaker, message_id: q.message_id, linked_items };
+          return { text: q.text, speaker: q.speaker, message_id: q.message_id, linked_items };
         });
       }
 
