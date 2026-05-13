@@ -138,6 +138,15 @@ async function installClaudeCodeHooks(): Promise<void> {
 
   await Bun.$`mkdir -p ${hooksDir}`;
 
+  try {
+    await Bun.$`test -w ${hooksDir}`.quiet();
+  } catch {
+    console.warn(`⚠️  Cannot write to ${hooksDir} (permission denied).`);
+    console.warn(`   Fix with: sudo chown ${process.env.USER ?? "$(whoami)"} ${hooksDir}`);
+    console.warn(`   Then re-run: ei --install`);
+    return;
+  }
+
   const scriptContent = `#!/usr/bin/env bash
 # Ei memory context injection for Claude Code
 # Runs before every prompt — injects recent Ei context into Claude's window
