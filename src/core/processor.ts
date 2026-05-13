@@ -1222,12 +1222,12 @@ export class Processor {
     }
 
     if (human.settings.message_min_count == null) {
-      human.settings.message_min_count = 200;
+      human.settings.message_min_count = 0;
       modified = true;
     }
 
     if (human.settings.message_max_age_days == null) {
-      human.settings.message_max_age_days = 14;
+      human.settings.message_max_age_days = 0;
       modified = true;
     }
 
