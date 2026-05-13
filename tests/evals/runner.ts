@@ -72,6 +72,8 @@ export interface EvalRun {
   toolCalls: ToolCallResult[];
   assertions: { type: string; passed: boolean; reason: string }[];
   durationMs: number;
+  modelDurationMs: number;
+  usage: LLMUsage;
 }
 
 export interface EvalResult {
@@ -94,6 +96,7 @@ export interface EvalRunSummary {
 
 const LOCAL_LLM_BASE_URL = process.env.LOCAL_LLM_BASE_URL ?? "http://localhost:1234/v1";
 const LOCAL_LLM_MODEL = process.env.LOCAL_LLM_MODEL ?? "google/gemma-4-26b-a4b";
+const EVAL_NO_THINKING = process.env.EVAL_NO_THINKING === "1";
 
 function resolveProvider(): { baseURL: string; model: string; authHeader: string } {
   const provider = process.env.EVAL_PROVIDER;
@@ -130,15 +133,22 @@ interface LLMCallOptions {
   extraBody?: Record<string, unknown>;
 }
 
+interface LLMUsage {
+  promptTokens: number;
+  completionTokens: number;
+  reasoningTokens: number;
+}
+
 interface LLMCallResult {
   content: string;
   toolCalls: ToolCallResult[];
+  usage: LLMUsage;
 }
 
 async function callLLM(system: string, user: string, options: LLMCallOptions = {}): Promise<LLMCallResult> {
   const messages: LLMMessage[] = [
     { role: "system", content: system },
-    { role: "user", content: user },
+    ...(user ? [{ role: "user" as const, content: user }] : []),
     ...(options.priorMessages ?? []),
   ];
 
@@ -172,6 +182,11 @@ async function callLLM(system: string, user: string, options: LLMCallOptions = {
         tool_calls?: Array<{ id: string; type: string; function: { name: string; arguments: string } }>;
       };
     }>;
+    usage?: {
+      prompt_tokens?: number;
+      completion_tokens?: number;
+      completion_tokens_details?: { reasoning_tokens?: number };
+    };
   };
 
   const message = data.choices[0].message;
@@ -184,6 +199,11 @@ async function callLLM(system: string, user: string, options: LLMCallOptions = {
   return {
     content: message.content?.trim() ?? "",
     toolCalls,
+    usage: {
+      promptTokens: data.usage?.prompt_tokens ?? 0,
+      completionTokens: data.usage?.completion_tokens ?? 0,
+      reasoningTokens: data.usage?.completion_tokens_details?.reasoning_tokens ?? 0,
+    },
   };
 }
 
@@ -371,15 +391,22 @@ async function runOnce(c: EvalCase): Promise<EvalRun> {
   let response = "";
   let toolCalls: ToolCallResult[] = [];
   let assertionResults: EvalRun["assertions"] = [];
+  let modelDurationMs = 0;
+  let usage: LLMUsage = { promptTokens: 0, completionTokens: 0, reasoningTokens: 0 };
 
   try {
+    const modelStart = Date.now();
     const result = await callLLM(system, user, {
       tools: c.tools,
       priorMessages: c.priorMessages,
-      extraBody: c.extraBody,
+      extraBody: EVAL_NO_THINKING
+        ? { ...c.extraBody, reasoning_effort: "none" }
+        : c.extraBody,
     });
+    modelDurationMs = Date.now() - modelStart;
     response = result.content;
     toolCalls = result.toolCalls;
+    usage = result.usage;
 
     const responseForAssertions = toolCalls.length > 0 && !response
       ? JSON.stringify(toolCalls)
@@ -408,6 +435,8 @@ async function runOnce(c: EvalCase): Promise<EvalRun> {
     toolCalls,
     assertions: assertionResults,
     durationMs: Date.now() - start,
+    modelDurationMs,
+    usage,
   };
 }
 
@@ -497,15 +526,24 @@ export function printSummary(summary: EvalRunSummary): void {
       const isRepeated = r.runs.length > 1;
       const icon = r.passed ? "✓" : "✗";
       const thresholdLabel = r.pass_threshold < 1.0 ? ` (threshold: ${Math.round(r.pass_threshold * 100)}%)` : "";
+      const formatTokens = (run: EvalRun) => {
+        const { promptTokens, completionTokens, reasoningTokens } = run.usage;
+        if (completionTokens === 0) return "";
+        const contentTokens = completionTokens - reasoningTokens;
+        const tps = run.modelDurationMs > 0 ? (completionTokens / (run.modelDurationMs / 1000)).toFixed(0) : "?";
+        const reasoningPct = reasoningTokens > 0 ? ` reason=${reasoningTokens}` : "";
+        return ` | model=${run.modelDurationMs}ms ${tps}tok/s in=${promptTokens} out=${contentTokens}${reasoningPct}`;
+      };
+
       const repeatLabel = isRepeated
         ? ` [${Math.round(r.passRate * 100)}% over ${r.runs.length} runs${thresholdLabel}]`
-        : ` (${r.runs[0].durationMs}ms)`;
+        : ` (${r.runs[0].durationMs}ms${formatTokens(r.runs[0])})`;
       console.log(`  ${icon} ${r.description}${repeatLabel}`);
 
       if (isRepeated) {
         r.runs.forEach((run, i) => {
           const runIcon = run.passed ? "✓" : "✗";
-          console.log(`      run ${i + 1}: ${runIcon} (${run.durationMs}ms)`);
+          console.log(`      run ${i + 1}: ${runIcon} (${run.durationMs}ms${formatTokens(run)})`);
           for (const a of run.assertions) {
             if (!a.passed) console.log(`           ↳ [${a.type}] ${a.reason}`);
           }
@@ -522,13 +560,24 @@ export function printSummary(summary: EvalRunSummary): void {
   if (observeCases.length > 0) {
     console.log(`\nObservations (${observeCases.length}):\n`);
     for (const r of observeCases) {
-      const run = r.runs[0];
-      console.log(`  ── ${r.description} (${run.durationMs}ms)`);
-      if (run.toolCalls.length > 0) {
-        console.log(`     tool_calls: ${JSON.stringify(run.toolCalls, null, 2).replace(/\n/g, "\n     ")}`);
-      }
-      if (run.response) {
-        console.log(`     ${run.response.replace(/\n/g, "\n     ")}`);
+      const isRepeated = r.runs.length > 1;
+      const toolCallCount = r.runs.filter(run => run.toolCalls.length > 0).length;
+      const repeatLabel = isRepeated ? ` [${toolCallCount}/${r.runs.length} called tool]` : "";
+      console.log(`  ── ${r.description}${repeatLabel}`);
+      for (const [i, run] of r.runs.entries()) {
+        const { promptTokens, completionTokens, reasoningTokens } = run.usage;
+        const contentTokens = completionTokens - reasoningTokens;
+        const tps = run.modelDurationMs > 0 && completionTokens > 0 ? ` ${(completionTokens / (run.modelDurationMs / 1000)).toFixed(0)}tok/s` : "";
+        const tokenLabel = completionTokens > 0 ? ` in=${promptTokens} out=${contentTokens}${reasoningTokens > 0 ? ` reason=${reasoningTokens}` : ""}${tps}` : "";
+        const timeLabel = `model=${run.modelDurationMs}ms total=${run.durationMs}ms${tokenLabel}`;
+        const runLabel = isRepeated ? `     run ${i + 1} (${timeLabel})` : `     (${timeLabel})`;
+        console.log(runLabel);
+        if (run.toolCalls.length > 0) {
+          console.log(`     tool_calls: ${JSON.stringify(run.toolCalls, null, 2).replace(/\n/g, "\n     ")}`);
+        }
+        if (run.response) {
+          console.log(`     ${run.response.replace(/\n/g, "\n     ")}`);
+        }
       }
     }
   }
