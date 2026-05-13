@@ -85,6 +85,16 @@ By default, evals run against the local LLM at `http://localhost:1234/v1` (LM St
 ```bash
 EVAL_PROVIDER=anthropic ANTHROPIC_API_KEY=sk-... npm run test:evals -- person-update
 EVAL_PROVIDER=openai OPENAI_API_KEY=sk-... EVAL_MODEL=gpt-4o npm run test:evals -- topic-scan
+
+# Point at a different local server (e.g. second machine on LAN):
+LOCAL_LLM_BASE_URL=http://192.168.68.117:1234/v1 EVAL_MODEL=google/gemma-4-26b-a4b npm run test:evals -- topic-scan
+
+# Disable thinking for extraction evals (faster, deterministic output — not for response evals):
+EVAL_NO_THINKING=1 npm run test:evals -- fact-find
+
+# Run the same suite against both local models back-to-back:
+EVAL_MODEL=qwen/qwen3.6-35b-a3b EVAL_NO_THINKING=1 npm run test:evals -- topic-scan
+LOCAL_LLM_BASE_URL=http://192.168.68.117:1234/v1 EVAL_MODEL=google/gemma-4-26b-a4b EVAL_NO_THINKING=1 npm run test:evals -- topic-scan
 ```
 
 ## Adding a new eval case
