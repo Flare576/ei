@@ -37,7 +37,7 @@ ei --id "claudecode:my-machine:session-uuid:message-uuid"
 ei --id "cursor:my-machine:composer-uuid:bubble-uuid"
 ```
 
-Quotes surfaced by `ei_search` or `ei_find_memory` include a `message_id` field in this format — pipe it to `ei --id` to read the original conversation.
+Quotes surfaced by `ei_search` include a `message_id` field in this format — pipe it to `ei --id` to read the original conversation.
 
 # OpenCode Integration
 
@@ -47,12 +47,15 @@ Quotes surfaced by `ei_search` or `ei_find_memory` include a `message_id` field 
 ei --install
 ```
 
-This registers Ei with Claude Code and Cursor via MCP:
+This registers Ei with Claude Code, Cursor, and OpenCode — MCP server config **and** context injection hooks so agents get Ei memory automatically without needing to call a tool:
 
-- **Claude Code**: writes `~/.claude.json` with an MCP server entry
-- **Cursor**: writes `~/.cursor/mcp.json` with an MCP server entry
+| Tool | MCP | Context Hook |
+|------|-----|-------------|
+| **Claude Code** | `~/.claude.json` | `~/.claude/settings.json` (`UserPromptSubmit`) + `~/.claude/hooks/ei-inject.sh` |
+| **Cursor** | `~/.cursor/mcp.json` | `~/.cursor/hooks.json` (`beforeSubmitPrompt`) + `~/.cursor/hooks/ei-inject.sh` |
+| **OpenCode** | manual (see below) | `~/.config/opencode/plugins/ei-memory.ts` (`system.transform`) |
 
-**OpenCode**: add the MCP server manually to `~/.config/opencode/opencode.jsonc`:
+**OpenCode MCP**: add manually to `~/.config/opencode/opencode.jsonc`:
 
 ```json
 {
@@ -81,9 +84,9 @@ ei mcp
 
 ## Activating Ei in Your Agent
 
-`ei --install` handles the technical wiring. This step tells your agent *when* and *how* to reach for it.
+`ei --install` handles both the technical wiring **and** context injection. After running it, your agent will automatically receive recent Ei memory before every message — no tool calls required.
 
-Without this, your agent has Ei available but may never call it. Add a snippet to your tool's config and it'll start querying Ei at the start of each session — and whenever you reference past context.
+The snippets below are optional manual overrides if you want to customize the behavior or add targeted mid-session queries.
 
 ### OpenCode
 
@@ -149,9 +152,8 @@ conversations (facts, people, topics, quotes, personas).
 
 **How to use:**
 1. Call `ei_search` (server `user-ei`) with a natural-language query (or omit query and use `recent: true` to browse); optionally filter by `type` (facts, people, topics, quotes, personas) or `persona` display_name.
-2. If you need full detail for a human entity (fact, topic, person, quote), call `ei_fetch_memory` with the entity `id`.
-3. If you need full detail for a result including personas, call `ei_lookup` with the entity `id` from step 1.
-4. To fetch a specific message with surrounding context, call `ei_fetch_message` with the message `id` and optional `before`/`after` counts.
+2. If you need the full record for any result, call `ei_lookup` with the entity `id` from step 1 — works for all types including personas.
+3. If a quote result has a `message_id`, call `ei_fetch_message` with that ID and optional `before`/`after` counts to read the original conversation with context.
 
 Prefer querying Ei before asking the user for context they may have already shared.
 ```
@@ -162,20 +164,18 @@ The MCP server exposes these tools to Claude Code, Cursor, and OpenCode:
 
 | Tool | Description |
 |------|-------------|
-| `ei_search` | Balanced search across all five data types (facts, topics, people, quotes, personas). Supports `type`, `persona`, `source`, `recent`, `limit` filters. |
-| `ei_lookup` | Full-record lookup for any entity by ID (facts, topics, people, quotes, personas). |
-| `ei_find_memory` | Grouped human-data search — facts, topics, people, quotes. Returns results grouped by type. Mirrors the persona `find_memory` tool interface. |
-| `ei_fetch_memory` | Full-record lookup for a human entity (Fact, Topic, Person, or Quote) by ID. Returns the complete record including all fields. |
-| `ei_fetch_message` | Retrieve a specific message by fully-qualified ID with optional `before`/`after` context window. Routes to the correct source: `ei:uuid` searches Ei state, `opencode:machine:session:id` queries the OpenCode SQLite DB, `claudecode:...` scans Claude Code JSONL files, `cursor:...` reads the Cursor global DB. Returns message content, surrounding context, and session metadata. |
+| `ei_search` | Search across all five data types (facts, topics, people, quotes, personas). Supports `type`, `persona`, `source`, `recent`, `limit` filters. Start here. |
+| `ei_lookup` | Full-record lookup for any entity by ID — facts, topics, people, quotes, or personas. Use when you need complete details beyond the search summary. |
+| `ei_fetch_message` | Retrieve a specific message by fully-qualified ID with optional `before`/`after` context window. Use when a quote result has a `message_id` and you want the original conversation. Routes to the correct source automatically. |
 
-### `ei_search` / `ei_find_memory` arguments
+### `ei_search` arguments
 
 | Arg | Type | Description |
 |-----|------|-------------|
 | `query` | string (optional) | Search text. Omit to browse by recency. |
+| `type` | enum (optional) | `facts` \| `people` \| `topics` \| `quotes` \| `personas` — omit for balanced results across all types |
 | `persona` | string (optional) | Persona display_name to scope results to what that persona has learned |
-| `type` | enum (optional, `ei_search` only) | `facts` \| `people` \| `topics` \| `quotes` \| `personas` — omit for balanced results |
-| `types` | array (optional, `ei_find_memory` only) | `["facts", "topics", "people", "quotes"]` — omit for all human types |
+| `source` | string (optional) | Prefix match against source identifiers (e.g. `opencode`, `cursor:my-machine`) |
 | `limit` | number (optional) | Max results, default 10 |
 | `recent` | boolean (optional) | Sort by most recently mentioned instead of relevance |
 
