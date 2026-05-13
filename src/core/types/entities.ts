@@ -119,7 +119,9 @@ export interface HumanSettings {
   name_display?: string;
   default_heartbeat_ms?: number;
   default_context_window_ms?: number;
+  /** Minimum messages to retain during rolloff. 0 = never prune (default). */
   message_min_count?: number;
+  /** Maximum age in days before messages are eligible for rolloff. 0 = no age limit, never prune (default). */
   message_max_age_days?: number;
   accounts?: ProviderAccount[];
   sync?: SyncCredentials;

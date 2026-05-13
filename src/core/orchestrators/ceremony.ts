@@ -347,9 +347,11 @@ export function prunePersonaMessages(personaId: string, state: StateManager): vo
   state.messages_sort(personaId);
   const messages = state.messages_get(personaId);
   const human = state.getHuman();
-  const minCount = human.settings?.message_min_count ?? 200;
-  const maxAgeDays = human.settings?.message_max_age_days ?? 14;
-  if (messages.length <= minCount) return;
+  const minCount = human.settings?.message_min_count ?? 0;
+  const maxAgeDays = human.settings?.message_max_age_days ?? 0;
+  // 0 means disabled. Without an age cutoff there's nothing to prune.
+  if (maxAgeDays === 0) return;
+  if (minCount > 0 && messages.length <= minCount) return;
   
   const cutoffMs = Date.now() - (maxAgeDays * 24 * 60 * 60 * 1000);
   
