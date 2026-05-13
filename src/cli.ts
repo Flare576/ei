@@ -133,7 +133,7 @@ async function installClaudeCode(): Promise<void> {
 async function installClaudeCodeHooks(): Promise<void> {
   const home = process.env.HOME || "~";
   const hooksDir = join(home, ".claude", "hooks");
-  const scriptPath = join(hooksDir, "ei-inject.sh");
+  const scriptPath = join(hooksDir, "ei-inject.ts");
   const settingsPath = join(home, ".claude", "settings.json");
 
   await Bun.$`mkdir -p ${hooksDir}`;
@@ -147,29 +147,15 @@ async function installClaudeCodeHooks(): Promise<void> {
     return;
   }
 
-  const scriptContent = `#!/usr/bin/env bash
-# Ei memory context injection for Claude Code
-# Runs before every prompt — injects recent Ei context into Claude's window
+  const scriptContent = `#!/usr/bin/env bun
+import { $ } from "bun";
 
-if ! command -v ei >/dev/null 2>&1; then
-  # ei not found — exit silently so Claude Code is not blocked
-  exit 0
-fi
+const input = await new Response(Bun.stdin.stream()).json().catch(() => ({}));
+const raw = (input.prompt ?? "").replace(/<[^>]*>/g, "").trim();
+const args = raw ? [raw, "-n", "5"] : ["--recent", "-n", "5"];
 
-INPUT=$(cat)
-PROMPT=$(echo "$INPUT" | jq -r '.prompt // empty' 2>/dev/null | sed 's/<[^>]*>//g')
-
-if [ -n "$PROMPT" ]; then
-  output=$(ei "$PROMPT" -n 5 2>/dev/null) || exit 0
-else
-  output=$(ei --recent -n 5 2>/dev/null) || exit 0
-fi
-
-if [ -n "$output" ]; then
-  printf "\\n[Ei Memory Context]\\n%s\\n" "$output"
-fi
-
-exit 0
+const output = await $\`ei \${args}\`.quiet().text().catch(() => "");
+if (output.trim()) process.stdout.write(\`\\n[Ei Memory Context]\\n\${output.trim()}\\n\`);
 `;
 
   await Bun.write(scriptPath, scriptContent);
@@ -186,7 +172,7 @@ exit 0
   const hooks = (settings.hooks ?? {}) as Record<string, unknown>;
   const userPromptSubmit = (hooks.UserPromptSubmit ?? []) as unknown[];
 
-  const hookEntry = { hooks: [{ type: "command", command: "~/.claude/hooks/ei-inject.sh" }] };
+  const hookEntry = { hooks: [{ type: "command", command: "~/.claude/hooks/ei-inject.ts" }] };
   const alreadyInstalled = userPromptSubmit.some(
     (entry) => JSON.stringify(entry) === JSON.stringify(hookEntry)
   );
@@ -203,7 +189,7 @@ exit 0
   const { rename } = await import(/* @vite-ignore */ "fs/promises");
   await rename(tmpPath, settingsPath);
 
-  console.log(`✓ Installed Ei context hook to ~/.claude/hooks/ei-inject.sh`);
+  console.log(`✓ Installed Ei context hook to ~/.claude/hooks/ei-inject.ts`);
 }
 
 async function installCursor(): Promise<void> {
