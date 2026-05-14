@@ -51,9 +51,9 @@ This registers Ei with Claude Code, Cursor, and OpenCode — MCP server config *
 
 | Tool | MCP | Context Hook |
 |------|-----|-------------|
-| **Claude Code** | `~/.claude.json` | `~/.claude/settings.json` (`UserPromptSubmit`) + `~/.claude/hooks/ei-inject.sh` |
+| **Claude Code** | `~/.claude.json` | `~/.claude/settings.json` (`UserPromptSubmit`) + `~/.claude/hooks/ei-inject.ts` |
 | **Cursor** | `~/.cursor/mcp.json` | `~/.cursor/hooks.json` (`beforeSubmitPrompt`) + `~/.cursor/hooks/ei-inject.sh` |
-| **OpenCode** | manual (see below) | `~/.config/opencode/plugins/ei-memory.ts` (`system.transform`) |
+| **OpenCode** | manual (see below) | Detected automatically via Oh My OpenCode compatibility layer (reads `~/.claude/settings.json`) |
 
 **OpenCode MCP**: add manually to `~/.config/opencode/opencode.jsonc`:
 
@@ -90,22 +90,14 @@ The snippets below are optional manual overrides if you want to customize the be
 
 ### OpenCode
 
-Add to `~/.config/opencode/AGENTS.md` (applies to all projects):
+If you're using [Oh My OpenCode](https://github.com/code-yeongyu/oh-my-opencode), the `UserPromptSubmit` hook installed by `ei --install` is picked up automatically via its Claude Code compatibility layer — no additional config needed.
+
+If you're running vanilla OpenCode without Oh My OpenCode, add to `~/.config/opencode/AGENTS.md`:
 
 ```markdown
-At session start, query Ei for user context:
-
-\```bash
-ei "What are the user's current preferences, active projects, and workflow?"
-\```
-
-Ei is a persistent knowledge base built from the user's conversations — facts, preferences,
-people, topics, personas. Use it when the user references past work, mentions how they like things done,
-asks "how did we do X," or needs to look up a person by any name, handle, or account (GitHub username,
-Discord handle, email, nickname, etc.) — people results include an `identifiers` array covering all
-known accounts and aliases for that person. Use `ei --persona "Beta" "walruses"` to scope results to
-what a specific persona has learned. Use `ei personas "name"` to find personas by name. Query again
-mid-session when they correct you or reference something from a previous session.
+Use the **ei** MCP to pull user context when the user references past work, mentions people
+or preferences, or asks "how did we do X." Call `ei_search` with a natural-language query.
+Use `ei --persona "Beta" "topic"` to scope results to what a specific persona has learned.
 ```
 
 ### Claude Code
@@ -187,7 +179,7 @@ All search commands return arrays. Each result includes a `type` field.
 
 **Person**: `{ type, id, name, description, relationship, sentiment, identifiers[] }` — `identifiers` contains all known accounts and aliases (e.g. `{ type: "GitHub", value: "flare576" }`)
 
-**Quote**: `{ type, id, text, speaker, timestamp, linked_items[] }`
+**Quote**: `{ type, text, speaker, message_id, timestamp, linked_items[] }` — note: `id` is intentionally omitted; use `message_id` with `ei_fetch_message` to retrieve the original conversation
 
 **Persona**: `{ type, id, display_name, short_description, model, base_prompt, traits[], topics[] }`
 
