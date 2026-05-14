@@ -178,11 +178,11 @@ import { $ } from "bun";
 
 const heading = \`
 ## Ei Memory Context
-*(Injected automatically — visible to the agent, not shown in your chat view)*
+*(The user cannot see this block. It is injected automatically before their message.)*
+*(If you reference anything from it, briefly explain where it came from — e.g. "Ei shows you've been working on X" — so the user isn't confused by knowledge that appeared from nowhere.)*
 
-Ei is a personal knowledge base built from coding sessions, Slack, documents, and conversations.
-The following topics MAY be relevant to your current task — use the \\\`ei_search\\\` and \\\`ei_lookup\\\`
-MCP tools for targeted queries.
+Ei is a personal knowledge base built from the user's coding sessions, Slack, documents, and conversations.
+The following topics MAY be relevant to your current task — use \\\`ei_search\\\` or \\\`ei_lookup\\\` for targeted queries.
 \`;
 
 const input = await new Response(Bun.stdin.stream()).json().catch(() => ({}));
