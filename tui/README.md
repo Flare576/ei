@@ -39,7 +39,7 @@ Enable any or all three in `/settings`. They work independently and feed into th
 
 Sessions are processed oldest-first, one per queue cycle. On first run Ei works through your backlog gradually — it won't flood your LLM provider.
 
-OpenCode also supports reading Ei's extracted knowledge back out via the [CLI tool](../src/cli/README.md), giving it persistent memory across sessions.
+All three tools also support reading Ei's knowledge back out via the [CLI tool](../src/cli/README.md) — run `ei --install` to wire up automatic context injection (hooks + persona plugin) so your coding agents receive relevant Ei memory before every message without any manual tool calls.
 
 ## Slack Integration
 

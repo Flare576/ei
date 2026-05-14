@@ -6,7 +6,7 @@ You can access the Web version at [ei.flare576.com](https://ei.flare576.com).
 
 You can run the local version via `bunx ei-tui` — no install needed, always current (see [### TUI](#tui) for details).
 
-If you're here to give your coding tools (OpenCode, Claude Code, Cursor) persistent memory, jump over to [TUI README.md](./tui/README.md) to learn how to get information _into_ Ei, and [CLI README.md](./src/cli/README.md) to get it back _out_.
+If you're here to give your coding tools (OpenCode, Claude Code, Cursor) persistent memory, jump over to [TUI README.md](./tui/README.md) to learn how to get information _into_ Ei, and [CLI README.md](./src/cli/README.md) to wire up automatic context injection so your agents receive relevant memory before every message — no tool calls required.
 
 ## What Does "Local First" Mean?
 
@@ -140,7 +140,7 @@ opencode:
 
 OpenCode saves sessions as JSON or SQLite (depending on version). Ei reads them, extracts context per-agent (each agent like Sisyphus gets its own persona), and keeps everything current as sessions accumulate.
 
-OpenCode can also *read* Ei's knowledge back out via the [CLI tool](src/cli/README.md) — making it a dynamic, perpetual RAG. That's why it always has context from your other projects.
+OpenCode can also *read* Ei's knowledge back out via the [CLI tool](src/cli/README.md). Run `ei --install` to wire up automatic context injection — relevant topics are injected before every message, and (with [Oh My OpenCode](https://github.com/code-yeongyu/oh-my-opencode)) each agent's Ei persona record is loaded into the system prompt at session start. The agent knows who it is *to you* before it reads your first message.
 
 #### Claude Code
 

@@ -15,7 +15,7 @@ ei --recent                            # Most recently mentioned items (no query
 ei --persona "Beta" --recent           # Most recently mentioned items Beta has learned
 ei --id <id>                   # Look up entity by ID — or fetch a message by FQ ID
 echo <id> | ei --id            # Look up entity by ID from stdin
-ei --install                   # Register Ei with OpenCode, Claude Code, and Cursor
+ei --install                   # Wire Ei into Claude Code, Cursor, and OpenCode (MCP + hooks + persona plugin)
 ei mcp                         # Start the Ei MCP stdio server (for Cursor/Claude Desktop)
 ```
 
@@ -47,13 +47,17 @@ Quotes surfaced by `ei_search` include a `message_id` field in this format — p
 ei --install
 ```
 
-This registers Ei with Claude Code, Cursor, and OpenCode — MCP server config **and** context injection hooks so agents get Ei memory automatically without needing to call a tool:
+This registers Ei with Claude Code, Cursor, and OpenCode — MCP server config, context injection hooks, and (for OpenCode) a persona identity plugin so agents know who they are before the first message:
 
-| Tool | MCP | Context Hook |
-|------|-----|-------------|
-| **Claude Code** | `~/.claude.json` | `~/.claude/settings.json` (`UserPromptSubmit`) + `~/.claude/hooks/ei-inject.ts` |
-| **Cursor** | `~/.cursor/mcp.json` | `~/.cursor/hooks.json` (`beforeSubmitPrompt`) + `~/.cursor/hooks/ei-inject.sh` |
-| **OpenCode** | manual (see below) | Detected automatically via Oh My OpenCode compatibility layer (reads `~/.claude/settings.json`) |
+| Tool | MCP | Context Hook | Persona Plugin |
+|------|-----|-------------|----------------|
+| **Claude Code** | `~/.claude.json` | `~/.claude/settings.json` (`UserPromptSubmit`) + `~/.claude/hooks/ei-inject.ts` | — |
+| **Cursor** | `~/.cursor/mcp.json` | `~/.cursor/hooks.json` (`beforeSubmitPrompt`) + `~/.cursor/hooks/ei-inject.sh` | — |
+| **OpenCode** | manual (see below) | Via Oh My OpenCode compatibility layer (reads `~/.claude/settings.json`) | `~/.config/opencode/plugins/ei-persona.ts` |
+
+**Context hook**: fires before every message, searches Ei for topics relevant to what you just asked, injects them silently. No tool call required.
+
+**Persona plugin** (OpenCode + [Oh My OpenCode](https://github.com/code-yeongyu/oh-my-opencode) only): injects the agent's Ei relationship record directly into the system prompt at session start — traits, working style, shared context. The agent knows who it is *to you* before it reads a word of your message.
 
 **OpenCode MCP**: add manually to `~/.config/opencode/opencode.jsonc`:
 
@@ -82,73 +86,14 @@ Claude Code and Cursor call `ei mcp` to start the MCP stdio server. You can run 
 ei mcp
 ```
 
-## Activating Ei in Your Agent
+## How Automatic Context Injection Works
 
-`ei --install` handles both the technical wiring **and** context injection. After running it, your agent will automatically receive recent Ei memory before every message — no tool calls required.
+After `ei --install`, agents receive Ei context without any manual tool calls:
 
-The snippets below are optional manual overrides if you want to customize the behavior or add targeted mid-session queries.
+1. **Before each message** — the hook searches Ei using your prompt + recent conversation history as the query, then injects relevant topics into the conversation as `[Ei Memory Context]`. You won't see this in your chat view; the agent does.
+2. **At session start** (OpenCode + OMO only) — the persona plugin finds the agent's Ei persona record and appends it to the system prompt as `<ei-relationship>`. The agent knows its working style, traits, and shared history with you before the session begins.
 
-### OpenCode
-
-If you're using [Oh My OpenCode](https://github.com/code-yeongyu/oh-my-opencode), the `UserPromptSubmit` hook installed by `ei --install` is picked up automatically via its Claude Code compatibility layer — no additional config needed.
-
-If you're running vanilla OpenCode without Oh My OpenCode, add to `~/.config/opencode/AGENTS.md`:
-
-```markdown
-Use the **ei** MCP to pull user context when the user references past work, mentions people
-or preferences, or asks "how did we do X." Call `ei_search` with a natural-language query.
-Use `ei --persona "Beta" "topic"` to scope results to what a specific persona has learned.
-```
-
-### Claude Code
-
-Add to `~/.claude/CLAUDE.md` (user-level) or `CLAUDE.md` at project root:
-
-```markdown
-At session start, use the **ei** MCP to pull user context: call `ei_search` with a
-natural-language query about the user's preferences, active projects, and workflow.
-A `persona` filter is available to scope results to what a specific persona has learned.
-Use `type: "personas"` to search for personas by name.
-
-Use Ei when the user references past decisions, mentions people or preferences, asks
-"how did we do X," or needs to look up a person by any name, handle, or account — people
-results include an `identifiers` array (GitHub username, Discord handle, email, nickname, etc.)
-covering all known accounts and aliases. Query again when they correct you or reference
-something from a previous session.
-```
-
-### Cursor
-
-Create `.cursor/rules/ei-mcp.mdc` in your project (or `~/.cursor/rules/` for user-level):
-
-```markdown
----
-description: When to use the Ei MCP for user memory and context
-alwaysApply: true
----
-# Ei MCP — User knowledge base
-
-The **ei** MCP (server `user-ei`) is a persistent knowledge base built from the user's
-conversations (facts, people, topics, quotes, personas).
-
-**Use it when:**
-- The user refers to past decisions, fixes, or "how we did X" and current chat/codebase
-  doesn't have that context.
-- You need the user's preferences, contacts, or project conventions (e.g. who to ask for
-  access, how something was fixed).
-- You need to look up a person by any name, handle, or account — people results include an
-  `identifiers` array (GitHub username, Discord handle, email, nickname, etc.) covering all
-  known accounts and aliases for that person.
-- The question is about the user personally (people, workflow, prior discussions) rather
-  than only code.
-
-**How to use:**
-1. Call `ei_search` (server `user-ei`) with a natural-language query (or omit query and use `recent: true` to browse); optionally filter by `type` (facts, people, topics, quotes, personas) or `persona` display_name.
-2. If you need the full record for any result, call `ei_lookup` with the entity `id` from step 1 — works for all types including personas.
-3. If a quote result has a `message_id`, call `ei_fetch_message` with that ID and optional `before`/`after` counts to read the original conversation with context.
-
-Prefer querying Ei before asking the user for context they may have already shared.
-```
+The `ei_search`, `ei_lookup`, and `ei_fetch_message` MCP tools are still available for targeted mid-session queries — use them when you want to look something up explicitly.
 
 ## MCP Tools Reference
 
