@@ -90,8 +90,31 @@ Examples:
 
 async function installMcpClients(): Promise<void> {
   await installClaudeCode();
-  await installCursor();
-  await installOpenCodePlugin();
+
+  const home = process.env.HOME || "~";
+
+  const cursorDataDirs = [
+    join(home, "Library", "Application Support", "Cursor"),
+    join(home, ".config", "Cursor"),
+    join(home, "AppData", "Roaming", "Cursor"),
+  ];
+  const hasCursor = (await Promise.all(cursorDataDirs.map((p) => Bun.file(join(p, "User")).exists()))).some(Boolean);
+  if (hasCursor) {
+    await installCursor();
+  } else {
+    console.log(`ℹ️  Cursor not detected — skipping Cursor install.`);
+  }
+
+  const opencodeDir = join(home, ".config", "opencode");
+  const hasOpenCode = await Bun.file(join(opencodeDir, "opencode.jsonc")).exists() ||
+    await Bun.file(join(opencodeDir, "opencode.json")).exists() ||
+    await Bun.file(join(opencodeDir, "opencode.db")).exists();
+
+  if (hasOpenCode) {
+    await installOpenCodePlugin();
+  } else {
+    console.log(`ℹ️  OpenCode not detected — skipping OpenCode plugin install.`);
+  }
 }
 
 async function installClaudeCode(): Promise<void> {
