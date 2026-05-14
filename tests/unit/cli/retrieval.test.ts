@@ -396,36 +396,18 @@ describe("person identifiers in retrieval results", () => {
 });
 
 describe("retrieveBalanced with personas", () => {
-  it("includes personas in recent && !query path", async () => {
+  it("does not include personas in recent && !query path", async () => {
     writeTestState(createTestState({ facts: 2, personas: 2 }));
     const result = await retrieveBalanced("", 10, { recent: true });
     const personaResults = result.filter(r => r.type === "persona");
-    expect(personaResults.length).toBeGreaterThan(0);
+    expect(personaResults.length).toBe(0);
   });
 
-  it("includes matching personas in query path", async () => {
+  it("does not include personas in query path (use explicit personas subcommand instead)", async () => {
     writeTestState(createTestState({ facts: 2, personas: 2, personaNamePrefix: "SpecialBot" }));
     const result = await retrieveBalanced("SpecialBot", 10);
     const personaResults = result.filter(r => r.type === "persona");
-    expect(personaResults.length).toBeGreaterThan(0);
-    expect((personaResults[0] as any).display_name).toContain("SpecialBot");
-  });
-
-  it("persona results include type field", async () => {
-    writeTestState(createTestState({ personas: 1, personaNamePrefix: "TestPersona" }));
-    const result = await retrieveBalanced("TestPersona", 10);
-    const personaResult = result.find(r => r.type === "persona");
-    expect(personaResult).toBeDefined();
-    expect(personaResult!.type).toBe("persona");
-  });
-
-  it("finds personas via semantic search when query does not match display_name", async () => {
-    writeTestState(createTestState({ facts: 1, personas: 2, personaNamePrefix: "UniqueBot", personaWithEmbeddings: true }));
-    // Query that won't match "UniqueBot 0" or "UniqueBot 1" by name
-    const result = await retrieveBalanced("technical co-architect", 10);
-    const personaResults = result.filter(r => r.type === "persona");
-    // With identical embeddings (all 1s) and threshold 0.3, similarity will be 1.0 — should match
-    expect(personaResults.length).toBeGreaterThan(0);
+    expect(personaResults.length).toBe(0);
   });
 });
 

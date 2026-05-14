@@ -45,9 +45,9 @@ function makeState(messages: Message[], settings?: HumanEntity["settings"]) {
 describe("prunePersonaMessages — HumanSettings overrides", () => {
   it("respects custom message_min_count: keeps at least 5 when set to 5", () => {
     // 10 messages, all old (30 days), all fully extracted
-    // With min_count=5, should remove 5 (keep 5)
+    // With min_count=5 and max_age_days=14, should remove 5 (keep 5)
     const messages = Array.from({ length: 10 }, (_, i) => makeMsg(`msg-${i}`, 30));
-    const { state, removed } = makeState(messages, { message_min_count: 5 });
+    const { state, removed } = makeState(messages, { message_min_count: 5, message_max_age_days: 14 });
 
     prunePersonaMessages("persona-1", state);
 

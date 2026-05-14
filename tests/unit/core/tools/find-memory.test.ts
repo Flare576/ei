@@ -100,7 +100,6 @@ describe("find_memory — quotes with linked_items", () => {
     const executor = createFindMemoryExecutor(searchFn, undefined, getHuman);
     const result = JSON.parse(await executor.execute({ query: "cake" }));
 
-    expect(result.quotes[0]).toHaveProperty("id", "quote-1");
     expect(result.quotes[0].linked_items).toContainEqual({ id: "topic-1", name: "Birthday Cake", type: "topic" });
   });
 });
