@@ -155,6 +155,7 @@ import { $ } from "bun";
 
 const heading = \`
 ## Ei Memory Context
+*(Injected automatically — visible to the agent, not shown in your chat view)*
 
 Ei is a personal knowledge base built from coding sessions, Slack, documents, and conversations.
 The following topics MAY be relevant to your current task — use the \\\`ei_search\\\` and \\\`ei_lookup\\\`
