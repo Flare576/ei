@@ -63,13 +63,16 @@ Types:
   persona / personas  Personas in this Ei instance
 
 Options:
-  --number, -n     Maximum number of results (default: 10)
-  --recent, -r     Sort by last_mentioned date (most recent first)
-  --persona, -p    Filter to entities a specific persona has learned about
-  --source, -s     Filter to entities from a specific source (prefix match, e.g. "cursor", "opencode:my-machine", "opencode:my-machine:ses_abc123")
-  --id             Look up entity by ID (accepts value or stdin)
-  --install        Register Ei with Claude Code, Cursor, and OpenCode (MCP + context hooks)
-  --help, -h       Show this help message
+  --number, -n        Maximum number of results (default: 10)
+  --recent, -r        Sort by last_mentioned date (most recent first)
+  --persona, -p       Filter to entities a specific persona has learned about
+  --source, -s        Filter to entities from a specific source (prefix match, e.g. "cursor", "opencode:my-machine", "opencode:my-machine:ses_abc123")
+  --id                Look up entity by ID (accepts value or stdin)
+  --install           Register Ei with Claude Code, Cursor, and OpenCode (MCP + context hooks)
+  --session <id>      Session ID to enrich the query with recent context (use with --hook-source)
+  --hook-source <src> Source of the hook: "opencode-plugin" (OpenCode SQLite) or "cursor"
+  --transcript <path> Path to a Claude Code JSONL transcript file for context enrichment
+  --help, -h          Show this help message
 
 Examples:
   ei "debugging"                         # Search everything
@@ -161,7 +164,15 @@ MCP tools for targeted queries.
 const input = await new Response(Bun.stdin.stream()).json().catch(() => ({}));
 const raw = (input.prompt ?? "").replace(/<[^>]*>/g, "").trim();
 const typeArgs = ["topics", "-n", "5"];
-const args = raw ? [...typeArgs, raw] : ["--recent", ...typeArgs];
+
+const sessionArgs = [];
+if (input.session_id && input.hook_source) {
+  sessionArgs.push("--session", input.session_id, "--hook-source", input.hook_source);
+} else if (input.transcript_path) {
+  sessionArgs.push("--transcript", input.transcript_path);
+}
+
+const args = raw ? [...typeArgs, ...sessionArgs, raw] : ["--recent", ...typeArgs];
 
 const output = await $\`bunx ei-tui@latest \${args}\`.quiet().text().catch(() => "");
 if (output.trim()) process.stdout.write(\`\\n\${heading}\\n\${output.trim()}\\n\`);
@@ -336,6 +347,83 @@ async function installOpenCodePlugin(): Promise<void> {
 `);
 }
 
+async function getRecentSessionMessages(
+  sessionId: string | undefined,
+  hookSource: string | undefined,
+  transcriptPath: string | undefined
+): Promise<string[]> {
+  if (transcriptPath) {
+    try {
+      const text = await Bun.file(transcriptPath).text();
+      const messages: Array<{ content: string }> = [];
+
+      for (const line of text.split("\n")) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        let record: Record<string, unknown>;
+        try {
+          record = JSON.parse(trimmed) as Record<string, unknown>;
+        } catch {
+          continue;
+        }
+
+        if (record.type === "user") {
+          const msgContent = (record.message as Record<string, unknown>)?.content;
+          if (typeof msgContent === "string" && msgContent.trim()) {
+            messages.push({ content: msgContent.trim() });
+          }
+        } else if (record.type === "assistant") {
+          const msgContent = (record.message as Record<string, unknown>)?.content;
+          if (Array.isArray(msgContent)) {
+            const extracted = (msgContent as Array<Record<string, unknown>>)
+              .filter((b) => b.type === "text" && typeof b.text === "string")
+              .map((b) => b.text as string)
+              .join("\n\n")
+              .trim();
+            if (extracted) {
+              messages.push({ content: extracted });
+            }
+          }
+        }
+      }
+
+      return messages.slice(-4).map((m) => m.content);
+    } catch {
+      return [];
+    }
+  }
+
+  if (!sessionId || !hookSource) return [];
+
+  try {
+    if (hookSource === "opencode-plugin") {
+      const { createOpenCodeReader } = await import(
+        /* @vite-ignore */ "./integrations/opencode/reader-factory.js"
+      );
+      const reader = await createOpenCodeReader();
+      const messages = await reader.getMessagesForSession(sessionId);
+      return messages.slice(-4).map((m) => m.content);
+    }
+
+    if (hookSource === "cursor") {
+      const { CursorReader } = await import(
+        /* @vite-ignore */ "./integrations/cursor/reader.js"
+      );
+      const reader = new CursorReader();
+      const sessions = await reader.getSessions();
+      const session =
+        sessions.find((s) => s.id === sessionId) ?? sessions[sessions.length - 1];
+      if (session) {
+        return session.messages.slice(-4).map((m) => m.text);
+      }
+    }
+  } catch {
+    return [];
+  }
+
+  return [];
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
 
@@ -437,6 +525,9 @@ async function main(): Promise<void> {
         persona: { type: "string", short: "p" },
         source: { type: "string", short: "s" },
         help: { type: "boolean", short: "h" },
+        session: { type: "string" },
+        "hook-source": { type: "string" },
+        transcript: { type: "string" },
       },
       allowPositionals: true,
       strict: true,
@@ -457,6 +548,9 @@ async function main(): Promise<void> {
   const recent = parsed.values.recent === true || !query;
   const personaName = parsed.values.persona?.trim();
   const sourcePrefix = parsed.values.source?.trim();
+  const sessionId = parsed.values.session?.trim();
+  const hookSource = parsed.values["hook-source"]?.trim();
+  const transcriptPath = parsed.values.transcript?.trim();
 
   if (isNaN(limit) || limit < 1) {
     console.error("--number must be a positive integer");
@@ -482,10 +576,15 @@ async function main(): Promise<void> {
 
   const options = { recent };
 
+  const recentMessages = await getRecentSessionMessages(sessionId, hookSource, transcriptPath);
+  const enrichedQuery = recentMessages.length > 0
+    ? [...recentMessages, query].join(" ").trim()
+    : query;
+
   let result;
   if (targetType) {
     const module = await import(`./cli/commands/${targetType}.js`);
-    result = await module.execute(query, limit, options);
+    result = await module.execute(enrichedQuery, limit, options);
     if (personaId && state) {
       result = filterTypeSpecificByPersona(result, state, personaId, targetType);
     }
@@ -493,7 +592,7 @@ async function main(): Promise<void> {
       result = filterTypeSpecificBySource(result, state, sourcePrefix, targetType);
     }
   } else {
-    result = await retrieveBalanced(query, limit, options);
+    result = await retrieveBalanced(enrichedQuery, limit, options);
     if (personaId && state) {
       result = filterByPersona(result, state, personaId);
     }
