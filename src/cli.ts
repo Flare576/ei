@@ -322,7 +322,6 @@ async function installOpenCodePlugin(): Promise<void> {
   const opencodeDir = join(home, ".config", "opencode");
   const pluginsDir = join(opencodeDir, "plugins");
   const pluginPath = join(pluginsDir, "ei-persona.ts");
-  const pluginFileUrl = `file://${pluginPath}`;
 
   await Bun.$`mkdir -p ${pluginsDir}`;
 
@@ -441,27 +440,6 @@ export default async function EiPersonaPlugin() {
 
   await Bun.write(pluginPath, pluginContent);
   console.log(`✓ Installed Ei persona plugin to ${pluginPath}`);
-
-  // Register plugin in a separate ei-plugin.json alongside opencode.jsonc.
-  // OpenCode merges all three config files (config.json, opencode.json, opencode.jsonc)
-  // and concatenates plugin arrays — so we don't need to touch the user's existing config.
-  const eiConfigPath = join(opencodeDir, "ei-plugin.json");
-  let eiConfig: Record<string, unknown> = {};
-  try {
-    eiConfig = JSON.parse(await Bun.file(eiConfigPath).text()) as Record<string, unknown>;
-  } catch { }
-
-  const plugins = (eiConfig.plugin ?? []) as string[];
-  if (!plugins.includes(pluginFileUrl)) {
-    plugins.push(pluginFileUrl);
-  }
-  eiConfig.plugin = plugins;
-
-  const tmpPath = `${eiConfigPath}.ei-install.tmp`;
-  await Bun.write(tmpPath, JSON.stringify(eiConfig, null, 2) + "\n");
-  const { rename } = await import(/* @vite-ignore */ "fs/promises");
-  await rename(tmpPath, eiConfigPath);
-  console.log(`✓ Registered plugin in ${eiConfigPath}`);
 
   const omoCandidates = [
     join(opencodeDir, "oh-my-opencode.json"),
