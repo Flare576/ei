@@ -320,6 +320,149 @@ exit 0
 async function installOpenCodePlugin(): Promise<void> {
   const home = process.env.HOME || "~";
   const opencodeDir = join(home, ".config", "opencode");
+  const pluginsDir = join(opencodeDir, "plugins");
+  const pluginPath = join(pluginsDir, "ei-persona.ts");
+  const pluginFileUrl = `file://${pluginPath}`;
+
+  await Bun.$`mkdir -p ${pluginsDir}`;
+
+  const pluginContent = `import { $ } from "bun"
+import { join } from "path"
+import { appendFileSync } from "fs"
+
+const sessionCache = new Map<string, string | null>()
+const sessionFetch = new Map<string, Promise<string | null>>()
+
+const logPath = join(process.env.EI_DATA_PATH ?? join(process.env.HOME ?? "~", ".local", "share", "ei"), "ei-persona-plugin.log")
+
+function log(msg: string) {
+  try {
+    appendFileSync(logPath, \`[\${new Date().toISOString()}] \${msg}\\n\`)
+  } catch {}
+}
+
+type PersonaTrait = { name: string; description: string; strength: number }
+type PersonaTopic = { name: string; perspective: string; approach: string; exposure_current: number }
+type PersonaResult = { display_name: string; base_prompt?: string; traits?: PersonaTrait[]; topics?: PersonaTopic[] }
+
+// Pulls the agent name from the system prompt. Handles OMO's multiple formats:
+//   You are "Sisyphus" - ...           (quoted, dash)
+//   You are "Sisyphus - Ultraworker"   (quoted, dash in name)
+//   You are Atlas - ...                (unquoted, dash)
+//   You are Hephaestus, ...            (unquoted, comma)
+export function extractAgentName(systemPrompt: string): string | null {
+  const clean = systemPrompt.replace(/[\\u200B-\\u200D\\uFEFF]/g, "")
+  const quoted = clean.match(/You are "([^"]+)"/)
+  if (quoted?.[1]) return quoted[1].trim()
+  const unquoted = clean.match(/You are ([A-Za-z][A-Za-z0-9]*)(?:\\s*[-—,]|\\s*$)/m)
+  if (unquoted?.[1]) return unquoted[1].trim()
+  return null
+}
+
+// Queries Ei for persona candidates and validates by name containment —
+// tolerates OMO renaming agents without requiring a hardcoded alias map.
+export async function resolveEiPersona(rawName: string): Promise<PersonaResult | null> {
+  try {
+    const out = await $\`bunx ei-tui@latest personas -n 5 \${rawName}\`.text()
+    const candidates = JSON.parse(out.trim()) as PersonaResult[]
+    if (!Array.isArray(candidates) || candidates.length === 0) return null
+    const rawLower = rawName.toLowerCase()
+    const match = candidates.find((p) => {
+      const nameLower = p.display_name.toLowerCase()
+      return rawLower.includes(nameLower) || nameLower.includes(rawLower)
+    })
+    return match ?? null
+  } catch {
+    return null
+  }
+}
+
+function buildEiRelationshipBlock(persona: PersonaResult): string {
+  const strongTraits = (persona.traits ?? [])
+    .filter((t) => t.strength >= 0.7)
+    .sort((a, b) => b.strength - a.strength)
+    .map((t) => \`**\${t.name}** (\${Math.round(t.strength * 100)}%): \${t.description}\`)
+    .join("\\n")
+  const sortedTopics = [...(persona.topics ?? [])]
+    .sort((a, b) => b.exposure_current - a.exposure_current)
+    .map((t) => \`**\${t.name}**: \${t.perspective} — \${t.approach}\`)
+    .join("\\n")
+  return [
+    "<ei-relationship>",
+    "## Ei: Relationship Context",
+    "",
+    persona.base_prompt ?? "",
+    "",
+    "### Working Style",
+    strongTraits || "(no traits above threshold)",
+    "",
+    "### Shared Context",
+    sortedTopics || "(no topics)",
+    "</ei-relationship>",
+  ].join("\\n")
+}
+
+export default async function EiPersonaPlugin() {
+  return {
+    name: "ei-persona",
+    "experimental.chat.system.transform": async (
+      input: { sessionID?: string; model: { id: string; providerID: string; [key: string]: unknown } },
+      output: { system: string[] },
+    ): Promise<void> => {
+      const rawName = extractAgentName(output.system[0] ?? "")
+      if (!rawName) return
+
+      const cacheKey = \`\${input.sessionID ?? "unknown"}:\${rawName}\`
+
+      if (sessionCache.has(cacheKey)) {
+        const cached = sessionCache.get(cacheKey) ?? null
+        if (cached !== null && !output.system[0].includes("<ei-relationship>"))
+          output.system[0] = output.system[0] + "\\n\\n" + cached
+        return
+      }
+
+      if (!sessionFetch.has(cacheKey)) {
+        sessionFetch.set(cacheKey, (async () => {
+          const persona = await resolveEiPersona(rawName)
+          if (!persona) return null
+          log(\`ei-persona: injecting \${persona.display_name}\`)
+          return buildEiRelationshipBlock(persona)
+        })())
+      }
+
+      const block = await sessionFetch.get(cacheKey)!
+      sessionCache.set(cacheKey, block)
+      if (block !== null && !output.system[0].includes("<ei-relationship>"))
+        output.system[0] = output.system[0] + "\\n\\n" + block
+    },
+  }
+}
+`;
+
+  await Bun.write(pluginPath, pluginContent);
+  console.log(`✓ Installed Ei persona plugin to ${pluginPath}`);
+
+  // Register plugin in a separate ei-plugin.json alongside opencode.jsonc.
+  // OpenCode merges all three config files (config.json, opencode.json, opencode.jsonc)
+  // and concatenates plugin arrays — so we don't need to touch the user's existing config.
+  const eiConfigPath = join(opencodeDir, "ei-plugin.json");
+  let eiConfig: Record<string, unknown> = {};
+  try {
+    eiConfig = JSON.parse(await Bun.file(eiConfigPath).text()) as Record<string, unknown>;
+  } catch { }
+
+  const plugins = (eiConfig.plugin ?? []) as string[];
+  if (!plugins.includes(pluginFileUrl)) {
+    plugins.push(pluginFileUrl);
+  }
+  eiConfig.plugin = plugins;
+
+  const tmpPath = `${eiConfigPath}.ei-install.tmp`;
+  await Bun.write(tmpPath, JSON.stringify(eiConfig, null, 2) + "\n");
+  const { rename } = await import(/* @vite-ignore */ "fs/promises");
+  await rename(tmpPath, eiConfigPath);
+  console.log(`✓ Registered plugin in ${eiConfigPath}`);
+
   const omoCandidates = [
     join(opencodeDir, "oh-my-opencode.json"),
     join(opencodeDir, "oh-my-opencode.jsonc"),
@@ -330,22 +473,18 @@ async function installOpenCodePlugin(): Promise<void> {
   ];
   const hasOmo = (await Promise.all(omoCandidates.map((p) => Bun.file(p).exists()))).some(Boolean);
 
-  if (hasOmo) {
-    console.log(`✓ Oh My OpenCode detected — UserPromptSubmit hook covers OpenCode automatically.`);
-    return;
-  }
-
-  console.log(`
-ℹ️  OpenCode detected without Oh My OpenCode.
-   The ~/.claude/settings.json UserPromptSubmit hook only fires in Claude Code.
-   For the same context injection in OpenCode, we recommend:
+  if (!hasOmo) {
+    console.log(`
+ℹ️  Oh My OpenCode not detected.
+   The Ei persona plugin is installed, but context injection (hook) requires OMO.
+   For full Ei integration in OpenCode, we recommend:
 
      bunx oh-my-opencode install
 
-   Oh My OpenCode is to OpenCode what oh-my-zsh is to zsh — you can run
-   without it, but you probably shouldn't. It also picks up the Ei hook
-   automatically via its Claude Code compatibility layer.
+   OMO picks up the Ei UserPromptSubmit hook automatically via its Claude Code
+   compatibility layer.
 `);
+  }
 }
 
 async function getRecentSessionMessages(
