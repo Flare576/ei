@@ -2108,7 +2108,10 @@ const toolNextSteps = new Set([
       }
 
       if (typeof response.request.data.ceremony_progress === "number") {
-        handleCeremonyProgress(this.stateManager, response.request.data.ceremony_progress);
+        const ceremonyResult = handleCeremonyProgress(this.stateManager, response.request.data.ceremony_progress);
+        if (ceremonyResult.wroteEiWarning) {
+          this.interface.onMessageAdded?.("ei");
+        }
       }
 
       if (response.request.next_step === LLMNextStep.HandleDocumentSegmentation) {

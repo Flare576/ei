@@ -704,6 +704,9 @@ describe("Ei Ceremony Participation — Reflection Phase", () => {
 
   function createReflectionMockState(eiPersonRecord?: { description: string }) {
     const ei = makeEiPersona();
+    const people = eiPersonRecord
+      ? [{ id: "person-ei", name: "Ei", ...eiPersonRecord, identifiers: [{ type: "Ei Persona", value: "ei" }] }]
+      : [];
     return {
       persona_getAll: vi.fn(() => [ei]),
       persona_getById: vi.fn((id: string) => id === "ei" ? ei : null),
@@ -712,7 +715,7 @@ describe("Ei Ceremony Participation — Reflection Phase", () => {
         entity: "human",
         facts: [],
         topics: [],
-        people: [],
+        people,
         quotes: [],
         last_updated: new Date().toISOString(),
         settings: { ceremony: { time: "03:00", last_ceremony: new Date(Date.now() - 86400000).toISOString() } },
@@ -732,6 +735,7 @@ describe("Ei Ceremony Participation — Reflection Phase", () => {
       human_person_getByIdentifier: vi.fn((_type: string, personaId: string) =>
         personaId === "ei" && eiPersonRecord ? eiPersonRecord : undefined
       ),
+      messages_append: vi.fn(),
     };
   }
 
@@ -763,6 +767,51 @@ describe("Ei Ceremony Participation — Reflection Phase", () => {
     const reflectionCall = (state.queue_enqueue as ReturnType<typeof vi.fn>).mock.calls.find(
       ([req]: [{ next_step: string; data: { personaId: string } }]) =>
         req.next_step === LLMNextStep.HandleReflectionCritic && req.data.personaId === "ei"
+    );
+    expect(reflectionCall).toBeUndefined();
+  });
+
+  it("Phase 3 completion writes an Ei warning and skips reflection when persona is linked to multiple Person records above threshold", () => {
+    const ei = makeEiPersona();
+    const bigDesc = "X".repeat(THRESHOLD + 1);
+    const people = [
+      { id: "person-real", name: "Ei", description: bigDesc, identifiers: [{ type: "Ei Persona", value: "ei" }] },
+      { id: "person-accident", name: "Juliet", description: bigDesc, identifiers: [{ type: "Ei Persona", value: "ei" }] },
+    ];
+    const state = {
+      persona_getAll: vi.fn(() => [ei]),
+      persona_getById: vi.fn((id: string) => id === "ei" ? ei : null),
+      persona_update: vi.fn(),
+      getHuman: vi.fn(() => ({
+        entity: "human", facts: [], topics: [], people, quotes: [],
+        last_updated: new Date().toISOString(),
+        settings: { ceremony: { time: "03:00", last_ceremony: new Date(Date.now() - 86400000).toISOString() } },
+      })),
+      setHuman: vi.fn(),
+      queue_enqueue: vi.fn(),
+      queue_hasPendingCeremonies: vi.fn(() => false),
+      messages_get: vi.fn(() => []),
+      messages_getUnextracted: vi.fn(() => []),
+      messages_markExtracted: vi.fn(),
+      messages_markPersonaExtracted: vi.fn(),
+      messages_getUnextractedForPersona: vi.fn(() => []),
+      messages_sort: vi.fn(),
+      getRoomList: vi.fn(() => []),
+      getRoomActivePath: vi.fn(() => []),
+      getRoomUnextractedMessagesForPersona: vi.fn(() => []),
+      human_person_getByIdentifier: vi.fn(() => undefined),
+      messages_append: vi.fn(),
+    };
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const result = handleCeremonyProgress(state as any, 3);
+
+    consoleSpy.mockRestore();
+
+    expect(result.wroteEiWarning).toBe(true);
+    expect(state.messages_append).toHaveBeenCalledWith("ei", expect.objectContaining({ role: "system" }));
+    const reflectionCall = (state.queue_enqueue as ReturnType<typeof vi.fn>).mock.calls.find(
+      ([req]: [{ next_step: string }]) => req.next_step === LLMNextStep.HandleReflectionCritic
     );
     expect(reflectionCall).toBeUndefined();
   });

@@ -1,4 +1,4 @@
-import { LLMRequestType, LLMPriority, LLMNextStep, RoomMode, ContextStatus, type CeremonyConfig, type PersonaTopic, type Topic } from "../types.js";
+import { LLMRequestType, LLMPriority, LLMNextStep, RoomMode, ContextStatus, type CeremonyConfig, type PersonaTopic, type Topic, type Message } from "../types.js";
 import type { StateManager } from "../state-manager.js";
 import { normalizeRoomMessages } from "../handlers/utils.js";
 import { applyDecayToValue } from "../utils/index.js";
@@ -168,9 +168,9 @@ function queueExposurePhase(personaId: string, state: StateManager, options?: Ex
  * If any ceremony_progress items remain in the queue, does nothing — more work pending.
  * Phase 1: Dedup → Phase 2: Expose → Phase 3: EventSummary → Decay → Phase 4: Person Rewrite → Topic Rewrite (fire-and-forget)
  */
-export function handleCeremonyProgress(state: StateManager, lastPhase: number): void {
+export function handleCeremonyProgress(state: StateManager, lastPhase: number): { wroteEiWarning: boolean } {
   if (state.queue_hasPendingCeremonies()) {
-    return; // Still processing ceremony items
+    return { wroteEiWarning: false }; // Still processing ceremony items
   }
   
   if (lastPhase === 1) {
@@ -232,13 +232,13 @@ export function handleCeremonyProgress(state: StateManager, lastPhase: number): 
         console.log(`[ceremony:expose] Queued room persona topic rating: ${personaForRoom.display_name} in "${room.display_name}" (${unprocessedRaw.length} messages)`);
       }
     }
-    return;
+    return { wroteEiWarning: false };
   }
 
   if (lastPhase === 4) {
     console.log("[ceremony:progress] Person Rewrite complete, starting Topic Rewrite");
     queueTopicRewritePhase(state);
-    return;
+    return { wroteEiWarning: false };
   }
 
   if (lastPhase === 2) {
@@ -251,7 +251,7 @@ export function handleCeremonyProgress(state: StateManager, lastPhase: number): 
       console.log("[ceremony:progress] No event summary work, advancing to Decay");
       handleCeremonyProgress(state, 3);
     }
-    return;
+    return { wroteEiWarning: false };
   }
   
   // Phase 3 (EventSummary) complete → advance to Decay/Prune then Person Rewrite (phase 4)
@@ -285,9 +285,10 @@ export function handleCeremonyProgress(state: StateManager, lastPhase: number): 
   }
 
   // Reflection phase: fire-and-forget critic calls for persona person records above threshold
-  queueReflectionPhase(state);
+  const wroteEiWarning = queueReflectionPhase(state);
 
   console.log("[ceremony:progress] Ceremony Decay complete");
+  return { wroteEiWarning };
 }
 
 // =============================================================================
@@ -616,16 +617,43 @@ function queueEventSummaryForAll(state: StateManager, options?: ExtractionOption
   console.log(`[ceremony:event] Queued event summary scans for ${activePersonas.length} personas (${totalQueued} total chunks)`);
 }
 
-function queueReflectionPhase(state: StateManager): void {
+function queueReflectionPhase(state: StateManager): boolean {
   const personas = state.persona_getAll().filter(p =>
     !p.is_paused && !p.is_archived && !p.is_static
   );
 
+  const human = state.getHuman();
   let queued = 0;
-  for (const persona of personas) {
-    const personRecord = state.human_person_getByIdentifier("Ei Persona", persona.id);
-    if (!personRecord || (personRecord.description?.length ?? 0) <= PERSON_LOG_REFLECTION_THRESHOLD) continue;
+  let wroteEiWarning = false;
 
+  for (const persona of personas) {
+    const linkedRecords = human.people.filter(p =>
+      p.identifiers?.some(i => i.type.toLowerCase() === 'ei persona' && i.value === persona.id)
+    );
+
+    if (linkedRecords.length === 0) continue;
+
+    const overThreshold = linkedRecords.filter(p => (p.description?.length ?? 0) > PERSON_LOG_REFLECTION_THRESHOLD);
+    if (overThreshold.length === 0) continue;
+
+    if (linkedRecords.length > 1) {
+      const names = linkedRecords.map(p => `"${p.name}"`).join(" and ");
+      console.log(`[ceremony:reflection] ${persona.display_name} is linked to multiple person records (${names}) — skipping reflection, writing Ei warning`);
+
+      const warning: Message = {
+        id: crypto.randomUUID(),
+        role: "system",
+        content: `During today's ceremony, I noticed that **${persona.display_name}** is connected to multiple person records: ${names}. This might be intentional — if you created a composite persona — but if not, you may want to check the identifiers on those records. Reflection for ${persona.display_name} has been paused until this is resolved.`,
+        timestamp: new Date().toISOString(),
+        read: false,
+        context_status: ContextStatus.Always,
+      };
+      state.messages_append("ei", warning);
+      wroteEiWarning = true;
+      continue;
+    }
+
+    const personRecord = linkedRecords[0];
     const prompt = buildReflectionCriticPrompt({
       persona_identity: {
         name: persona.display_name,
@@ -651,7 +679,9 @@ function queueReflectionPhase(state: StateManager): void {
     console.log(`[ceremony:reflection] Queued critic for ${persona.display_name} (person log: ${personRecord.description?.length} chars)`);
   }
 
-  if (queued === 0) {
+  if (queued === 0 && !wroteEiWarning) {
     console.log("[ceremony:reflection] No persona person records above threshold — skipping");
   }
+
+  return wroteEiWarning;
 }
