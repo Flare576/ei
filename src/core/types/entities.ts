@@ -185,6 +185,7 @@ export interface PersonaEntity {
   avatar_emoji?: string;            // Single emoji character used as avatar in place of initials.
   avatar_image?: string;            // Base64-encoded 64×64 image used as avatar (takes priority over avatar_emoji).
   preferred_theme?: string;         // Theme ID (built-in name or ThemeDefinition.id). Applied to chat panel when this persona is active.
+  notes?: string[];                 // Private scratchpad — up to 20 short-term notes visible in the system prompt. Oldest evicted when full.
 }
 
 export interface PersonaCreationInput {
