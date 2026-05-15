@@ -276,7 +276,7 @@ describe("Rewrite Phase", () => {
       expect(state.queue_enqueue).not.toHaveBeenCalled();
     });
 
-    it("skips when no people above threshold (750 chars)", () => {
+    it("skips when no people above threshold (1000 chars)", () => {
       const state = createMockRewriteState({
         settings: { rewrite_model: "TestProvider:model" },
         people: [makePerson("p1", 500)],
@@ -290,7 +290,7 @@ describe("Rewrite Phase", () => {
     it("scans people above threshold with ceremony_progress: 4 when ceremonyProgress option is passed", () => {
       const state = createMockRewriteState({
         settings: { rewrite_model: "TestProvider:model" },
-        people: [makePerson("p1", 751)],
+        people: [makePerson("p1", 1001)],
       });
 
       queuePersonRewritePhase(state as any, { ceremonyProgress: 4 });
@@ -309,7 +309,7 @@ describe("Rewrite Phase", () => {
     it("scans people above threshold without ceremony_progress when no options passed", () => {
       const state = createMockRewriteState({
         settings: { rewrite_model: "TestProvider:model" },
-        people: [makePerson("p1", 751)],
+        people: [makePerson("p1", 1001)],
       });
 
       queuePersonRewritePhase(state as any);
@@ -335,7 +335,7 @@ describe("Rewrite Phase", () => {
         settings: { rewrite_model: "TestProvider:model" },
         people: [
           makePerson("p-small", 200),
-          makePerson("p-big", 800),
+          makePerson("p-big", 1001),
         ],
       });
 

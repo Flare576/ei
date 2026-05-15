@@ -446,7 +446,8 @@ export function runHumanCeremony(state: StateManager): void {
 // REWRITE PHASE (fire-and-forget — queues Low-priority Phase 1 scans)
 // =============================================================================
 
-const REWRITE_DESCRIPTION_THRESHOLD = 750;
+const PERSON_REWRITE_DESCRIPTION_THRESHOLD = 1000;
+const TOPIC_REWRITE_DESCRIPTION_THRESHOLD = 750;
 
 /**
  * Forces an unconditional, threshold-bypassing Person scan on Apply/Dismiss.
@@ -494,7 +495,7 @@ export function queuePersonRewritePhase(state: StateManager, options?: { ceremon
       i => i.type.toLowerCase() === 'ei persona'
     );
     return !isPersonaLinked
-      && (person.description?.length ?? 0) > REWRITE_DESCRIPTION_THRESHOLD;
+      && (person.description?.length ?? 0) > PERSON_REWRITE_DESCRIPTION_THRESHOLD;
   });
 
   const alreadyChecked = allCandidates.filter(p => {
@@ -520,7 +521,7 @@ export function queuePersonRewritePhase(state: StateManager, options?: { ceremon
     return;
   }
 
-  console.log(`[ceremony:rewrite] Found ${personsToScan.length} person(s) above ${REWRITE_DESCRIPTION_THRESHOLD} chars — queueing person rewrite scans`);
+  console.log(`[ceremony:rewrite] Found ${personsToScan.length} person(s) above ${PERSON_REWRITE_DESCRIPTION_THRESHOLD} chars — queueing person rewrite scans`);
 
   for (const person of personsToScan) {
     const prompt = buildPersonRewriteScanPrompt({ item: person, itemType: "person" });
@@ -552,7 +553,7 @@ export function queueTopicRewritePhase(state: StateManager): void {
 
   const human = state.getHuman();
   const allCandidateTopics = human.topics.filter(topic =>
-    (topic.description?.length ?? 0) > REWRITE_DESCRIPTION_THRESHOLD
+    (topic.description?.length ?? 0) > TOPIC_REWRITE_DESCRIPTION_THRESHOLD
   );
 
   const alreadyCheckedTopics = allCandidateTopics.filter(t => {
@@ -578,7 +579,7 @@ export function queueTopicRewritePhase(state: StateManager): void {
     return;
   }
 
-  console.log(`[ceremony:rewrite] Found ${topicsToScan.length} topic(s) above ${REWRITE_DESCRIPTION_THRESHOLD} chars — queueing topic rewrite scans`);
+  console.log(`[ceremony:rewrite] Found ${topicsToScan.length} topic(s) above ${TOPIC_REWRITE_DESCRIPTION_THRESHOLD} chars — queueing topic rewrite scans`);
 
   for (const topic of topicsToScan) {
     const prompt = buildTopicRewriteScanPrompt({ item: topic, itemType: "topic" });

@@ -86,7 +86,7 @@ function seedBloatedTopic(state: ReturnType<typeof createMockStateManager>, id =
   const topic: Topic = {
     id,
     name: "Software Engineering",
-    description: "A".repeat(800), // over 750 threshold
+    description: "A".repeat(800), // over 750 topic threshold
     sentiment: 0.7,
     category: "Interest",
     exposure_current: 0.5,
