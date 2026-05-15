@@ -27,7 +27,6 @@ export interface SlackImportResult {
 function ensureSlackPersona(stateManager: StateManager, eiInterface: Ei_Interface): PersonaEntity {
   const existing = stateManager.persona_getAll().find(p => p.display_name === "Slack");
   if (existing) {
-    if (existing.is_archived) stateManager.persona_unarchive(existing.id);
     return existing;
   }
   const persona: PersonaEntity = {
