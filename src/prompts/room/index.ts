@@ -21,6 +21,7 @@ import {
   buildHumanSection,
   buildQuotesSection,
   buildToolsSection,
+  buildNotesSection,
 } from "../response/sections.js";
 
 export type {
@@ -42,6 +43,7 @@ export function buildRoomResponsePrompt(data: RoomResponsePromptData): PromptOut
   const aliasText = persona.aliases.length > 0 ? ` (also known as: ${persona.aliases.join(", ")})` : "";
 
   const identity = `You are ${name}${aliasText}.\n\n${desc}`;
+  const notesSection = buildNotesSection(persona.notes);
   const traits = buildRoomTraitsSection(persona.traits);
   const topics = buildRoomTopicsSection(persona.topics);
   const humanSection = buildHumanSection(human);
@@ -57,6 +59,7 @@ export function buildRoomResponsePrompt(data: RoomResponsePromptData): PromptOut
 
   const system = [
     identity,
+    notesSection,
     traits,
     topics,
     humanSection,
