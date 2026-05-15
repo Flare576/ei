@@ -410,6 +410,7 @@ function buildEiRelationshipBlock(persona: PersonaResult): string {
     .map((t) => \`**\${t.name}**: \${t.perspective} — \${t.approach}\`)
     .join("\\n")
   return [
+    "<!-- ei-relationship-injected -->",
     "<ei-relationship>",
     "## Ei: Relationship Context",
     "",
@@ -438,7 +439,7 @@ export default async function EiPersonaPlugin() {
 
       if (sessionCache.has(cacheKey)) {
         const cached = sessionCache.get(cacheKey) ?? null
-        if (cached !== null && !output.system[0].includes("<ei-relationship>"))
+        if (cached !== null && !output.system[0].includes("<!-- ei-relationship-injected -->"))
           output.system[0] = output.system[0] + "\\n\\n" + cached
         return
       }
@@ -454,7 +455,7 @@ export default async function EiPersonaPlugin() {
 
       const block = await sessionFetch.get(cacheKey)!
       sessionCache.set(cacheKey, block)
-      if (block !== null && !output.system[0].includes("<ei-relationship>"))
+      if (block !== null && !output.system[0].includes("<!-- ei-relationship-injected -->"))
         output.system[0] = output.system[0] + "\\n\\n" + block
     },
   }

@@ -35,6 +35,7 @@ export interface RoomResponsePromptData {
     traits: PersonaTrait[];
     topics: PersonaTopic[];
     include_message_timestamps?: boolean;
+    notes?: string[];
   };
   other_participants: RoomParticipantIdentity[];
   human: {

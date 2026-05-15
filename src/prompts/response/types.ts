@@ -33,6 +33,7 @@ export interface ResponsePromptData {
     include_message_timestamps?: boolean;
     /** Proposed identity revision pending human review. Persona carries this as ambient self-awareness — no critique, just the proposed changes. */
     pending_update?: PersonaEntity["pending_update"];
+    notes?: string[];
   };
   human: {
     name: string;

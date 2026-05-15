@@ -36,7 +36,8 @@ import { handlers } from "./handlers/index.js";
 import { normalizeRoomMessages, getMessageContent } from "./handlers/utils.js";
 import { sanitizeEiPersonaIdentifiers } from "./utils/identifier-utils.js";
 import { ContextStatus as ContextStatusEnum, RoomMode } from "./types.js";
-import { registerFindMemoryExecutor, registerFetchMemoryExecutor, registerFetchMessageExecutor, registerFileReadExecutor, SYSTEM_TOOLS } from "./tools/index.js";
+import { registerFindMemoryExecutor, registerFetchMemoryExecutor, registerFetchMessageExecutor, registerFileReadExecutor, registerPersonaNoteExecutors, buildPersonaNoteTools, SYSTEM_TOOLS } from "./tools/index.js";
+import { createAddNoteExecutor, createClearNoteExecutor } from "./tools/builtin/persona-notes.js";
 import { createFindMemoryExecutor } from "./tools/builtin/find-memory.js";
 import { createFetchMemoryExecutor } from "./tools/builtin/fetch-memory.js";
 import { createFetchMessageExecutor } from "./tools/builtin/fetch-message.js";
@@ -252,6 +253,10 @@ export class Processor {
     this.seedSettings();
     registerFindMemoryExecutor(createFindMemoryExecutor(this.searchHumanData.bind(this), this.getPersonaList.bind(this), this.stateManager.getHuman.bind(this.stateManager)));
     registerFetchMemoryExecutor(createFetchMemoryExecutor(this.stateManager.getHuman.bind(this.stateManager)));
+    registerPersonaNoteExecutors(
+      createAddNoteExecutor(this.stateManager.persona_getById.bind(this.stateManager), this.stateManager.persona_update.bind(this.stateManager)),
+      createClearNoteExecutor(this.stateManager.persona_getById.bind(this.stateManager), this.stateManager.persona_update.bind(this.stateManager))
+    );
     if (this.isTUI) {
       await registerFileReadExecutor();
       const retrievalPath = "../cli/retrieval.js";
@@ -1414,7 +1419,7 @@ const toolNextSteps = new Set([
                 t.name === "find_memory" || t.name === "fetch_memory" || t.name === "fetch_message"
               );
             } else if (toolNextSteps.has(request.next_step) && toolPersonaId) {
-              tools = [...SYSTEM_TOOLS, ...this.stateManager.tools_getForPersona(toolPersonaId, this.isTUI)];
+              tools = [...SYSTEM_TOOLS, ...buildPersonaNoteTools(toolPersonaId), ...this.stateManager.tools_getForPersona(toolPersonaId, this.isTUI)];
             }
 
             // Auto-inject each handler's dedicated submit tool — infrastructure, not user-visible.

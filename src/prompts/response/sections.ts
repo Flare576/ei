@@ -34,6 +34,16 @@ ${description}`;
 }
 
 // =============================================================================
+// NOTES SECTION
+// =============================================================================
+
+export function buildNotesSection(notes: string[] | undefined): string {
+  if (!notes || notes.length === 0) return "";
+  const list = notes.map((n, i) => `${i + 1}. ${n}`).join("\n");
+  return `## Your Notes\n\nThings you've chosen to remember. Use \`clear_note\` once you've addressed something.\n\n${list}`;
+}
+
+// =============================================================================
 // GUIDELINES SECTION
 // =============================================================================
 

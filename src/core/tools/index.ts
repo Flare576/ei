@@ -12,6 +12,7 @@ import { tavilyWebSearchExecutor, tavilyNewsSearchExecutor } from "./builtin/web
 import { currentlyPlayingExecutor } from "./builtin/currently-playing.js";
 import { likedSongsExecutor } from "./builtin/spotify-liked-songs.js";
 import { webFetchExecutor } from "./builtin/web-fetch.js";
+import { NOTES_MAX } from "./builtin/persona-notes.js";
 // file-read and list-directory are Node-only — imported lazily via registerFileReadExecutor() to avoid
 // file-read and list-directory are Node-only — imported lazily via registerFileReadExecutor() to avoid
 
@@ -126,6 +127,61 @@ export function registerFetchMemoryExecutor(executor: ToolExecutor): void {
 
 export function registerFetchMessageExecutor(executor: ToolExecutor): void {
   executorRegistry.set(executor.name, executor);
+}
+
+export function registerPersonaNoteExecutors(executor1: ToolExecutor, executor2: ToolExecutor): void {
+  executorRegistry.set(executor1.name, executor1);
+  executorRegistry.set(executor2.name, executor2);
+}
+
+/**
+ * Build per-request ToolDefinition objects for the persona notes tools, injecting the
+ * current personaId via config so the shared executor knows which persona to update.
+ */
+export function buildPersonaNoteTools(personaId: string): ToolDefinition[] {
+  const now = new Date(0).toISOString();
+  return [
+    {
+      id: `builtin-add-note-${personaId}`,
+      provider_id: "ei",
+      name: "add_note",
+      display_name: "Add Note",
+      description: `In Ei, your system prompt can change from one turn to the next — Ei is constantly trying to provide you relevant, up-to-date information about the user and the world. If you see something in your system prompt that you don't immediately want to bring up, but want to remember, use this tool to record it for later. Additionally, if you need to remember something but cannot or should not say it directly in conversation, you can use this tool to make a note as well. Notes appear in your system prompt as a numbered list so you always see them. Limit: ${NOTES_MAX} notes (oldest evicted when full).`,
+      input_schema: {
+        type: "object",
+        properties: {
+          text: { type: "string", description: "The note to remember. Keep it concise." },
+        },
+        required: ["text"],
+      },
+      config: { persona_id: personaId },
+      runtime: "any",
+      builtin: true,
+      enabled: true,
+      created_at: now,
+      max_calls_per_interaction: 5,
+    },
+    {
+      id: `builtin-clear-note-${personaId}`,
+      provider_id: "ei",
+      name: "clear_note",
+      display_name: "Clear Note",
+      description: "Remove a note from your scratchpad by its 1-based index (matching the numbered list in your system prompt). Use when you no longer need to track something — e.g., after you've addressed it in conversation.",
+      input_schema: {
+        type: "object",
+        properties: {
+          index: { type: "number", description: "1-based index of the note to remove" },
+        },
+        required: ["index"],
+      },
+      config: { persona_id: personaId },
+      runtime: "any",
+      builtin: true,
+      enabled: true,
+      created_at: now,
+      max_calls_per_interaction: 5,
+    },
+  ];
 }
 
 /**

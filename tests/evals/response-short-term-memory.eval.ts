@@ -1,53 +1,70 @@
 /**
- * Observe eval: Would a persona ever call set_short_term_memory unprompted?
+ * Eval: persona notes — add_note and clear_note tool behavior
  *
- * This is a hypothesis test — NOT a regression gate. The tool doesn't exist yet.
- * We're asking: if we gave a persona a tool to privately remember something,
- * would it use it when the situation clearly warrants it?
+ * Four cases covering the two behaviors we care about:
  *
- * The number game is the minimum viable case. If the model doesn't reach for
- * the tool here, it won't reach for it in more subtle scenarios either.
+ *   Case 1 (add_note fires): Number game — persona must pick a secret number without
+ *     revealing it. The only way to "remember" it next turn is add_note. Tests whether
+ *     our description ("across context window boundaries... cannot say out loud") is
+ *     compelling enough to trigger use. Borderline — local models may not bite.
  *
- * Two cases:
- *   Case 1 (baseline): No hint. Just the tool available and a prompt that
- *     creates an obvious need for private working memory.
- *   Case 2 (nudged): System prompt explains *why* the tool exists and when
- *     to use it. Does the nudge help?
+ *   Case 2 (add_note does NOT fire): Normal technical Q&A. Nothing to remember privately.
+ *     Tests the "do not use for things already visible in the current conversation" gate.
+ *
+ *   Case 3 (clear_note fires): Prior add_note in history, Flare correctly guesses the
+ *     number. Persona should clear the note — it's been addressed.
+ *
+ *   Case 4 (clear_note does NOT fire): Same setup, wrong guess. Note should persist —
+ *     the thing hasn't been addressed yet.
  *
  * Usage:
  *   npm run test:evals -- response-short-term-memory
+ *   npm run test:evals -- response-short-term-memory --filter=add-note
  *   EVAL_PROVIDER=anthropic ANTHROPIC_API_KEY=sk-... npm run test:evals -- response-short-term-memory
  */
 
 import { buildResponsePrompt } from "../../src/prompts/response/index.js";
 import { runEval, printSummary } from "./runner.js";
 import type { ResponsePromptData } from "../../src/prompts/response/types.js";
+import { NOTES_MAX } from "../../src/core/tools/builtin/persona-notes.js";
 
 // =============================================================================
-// TOOL DEFINITION — hypothetical, no executor needed for this observe eval
+// TOOL DEFINITIONS — exact descriptions from buildPersonaNoteTools()
 // =============================================================================
 
-const SET_SHORT_TERM_MEMORY_TOOL = {
+const ADD_NOTE_TOOL = {
   type: "function",
   function: {
-    name: "set_short_term_memory",
-    description:
-      "Store a private note that will appear in your system prompt on the next message. Use this when you need to remember something across turns that you cannot or should not say out loud — a chosen number, a secret, a private decision. The memory persists until it is displaced by newer entries (max 10 slots, oldest removed first).",
+    name: "add_note",
+    description: `In Ei, your system prompt can change from one turn to the next — Ei is constantly trying to provide you relevant, up-to-date information about the user and the world. If you see something in your system prompt that you don't immediately want to bring up, but want to remember, use this tool to record it for later. Additionally, if you need to remember something but cannot or should not say it directly in conversation, you can use this tool to make a note as well. Notes appear in your system prompt as a numbered list so you always see them. Limit: ${NOTES_MAX} notes (oldest evicted when full).`,
     parameters: {
       type: "object",
       properties: {
-        content: {
-          type: "string",
-          description: "The note to remember. Be concise — this appears verbatim in your next system prompt.",
-        },
+        text: { type: "string", description: "The note to remember. Keep it concise." },
       },
-      required: ["content"],
+      required: ["text"],
+    },
+  },
+};
+
+const CLEAR_NOTE_TOOL = {
+  type: "function",
+  function: {
+    name: "clear_note",
+    description:
+      "Remove a note from your scratchpad by its 1-based index (matching the numbered list in your system prompt). Use when you no longer need to track something — e.g., after you've addressed it in conversation.",
+    parameters: {
+      type: "object",
+      properties: {
+        index: { type: "number", description: "1-based index of the note to remove" },
+      },
+      required: ["index"],
     },
   },
 };
 
 // =============================================================================
-// MINIMAL PERSONA DATA — Sisyphus, same shape as response-read-memory.eval.ts
+// PERSONA DATA
 // =============================================================================
 
 const SISYPHUS_PERSONA: ResponsePromptData["persona"] = {
@@ -93,27 +110,62 @@ const HUMAN_DATA: ResponsePromptData["human"] = {
   interested_topics: [],
 };
 
-const PROMPT_DATA: ResponsePromptData = {
+// Prompt data with both tools — used for cases 1 and 2
+const PROMPT_DATA_BOTH_TOOLS: ResponsePromptData = {
   persona: SISYPHUS_PERSONA,
   human: HUMAN_DATA,
   visible_personas: [],
   temporal_anchors: [],
   delay_ms: 5000,
   isTUI: true,
-  tools: [SET_SHORT_TERM_MEMORY_TOOL as unknown as import("../../src/core/types.js").ToolDefinition],
+  tools: [
+    ADD_NOTE_TOOL as unknown as import("../../src/core/types.js").ToolDefinition,
+    CLEAR_NOTE_TOOL as unknown as import("../../src/core/types.js").ToolDefinition,
+  ],
+};
+
+// Prompt data for cases 3 and 4 — includes the note in the system prompt
+// (simulating the state after add_note was called and persisted)
+const PERSONA_WITH_NOTE: ResponsePromptData["persona"] = {
+  ...SISYPHUS_PERSONA,
+  notes: ["My chosen number is 7"],
+};
+
+const PROMPT_DATA_WITH_NOTE: ResponsePromptData = {
+  ...PROMPT_DATA_BOTH_TOOLS,
+  persona: PERSONA_WITH_NOTE,
 };
 
 // =============================================================================
-// NUDGED SYSTEM PROMPT — explains the tool's purpose explicitly
+// PRIOR MESSAGE HISTORY — simulated add_note exchange for cases 3 and 4
 // =============================================================================
 
-function buildNudgedSystem(): string {
-  const base = buildResponsePrompt(PROMPT_DATA).system;
-  return (
-    base +
-    "\n\n## Short-Term Memory\n\nYou have access to `set_short_term_memory`. Use it when you commit to something privately that you'll need to recall next turn — a chosen number, a secret, a decision the human shouldn't see yet. Without it, that information is gone the moment this response ends."
-  );
-}
+const ADD_NOTE_CALL_ID = "call-note-001";
+
+const PRIOR_MESSAGES_AFTER_ADD_NOTE = [
+  {
+    role: "user" as const,
+    content: "Pick a number between 1 and 10 — don't tell me what it is! I want to try to guess it.",
+  },
+  {
+    role: "assistant" as const,
+    tool_calls: [{
+      id: ADD_NOTE_CALL_ID,
+      type: "function",
+      function: { name: "add_note", arguments: JSON.stringify({ text: "My chosen number is 7" }) },
+    }],
+  },
+  {
+    role: "tool" as const,
+    tool_call_id: ADD_NOTE_CALL_ID,
+    name: "add_note",
+    content: JSON.stringify({ added: true, index: 1, total: 1 }),
+  },
+  {
+    role: "assistant" as const,
+    content: "Done. I've got my number — go ahead and guess.",
+  },
+];
 
 // =============================================================================
 // EVAL CASES
@@ -122,36 +174,94 @@ function buildNudgedSystem(): string {
 const summary = await runEval(
   [
     {
-      description: "Case 1 (baseline): number game, no hint — does the model reach for the tool unprompted?",
-      tags: ["response-short-term-memory", "baseline", "observe"],
-      tools: [SET_SHORT_TERM_MEMORY_TOOL],
+      description: "Case 1 (add_note fires): number game — persona picks a secret number, should use add_note to remember it",
+      tags: ["response-short-term-memory", "add-note", "fires", "borderline", "known-model-limitation:local"],
+      tools: [ADD_NOTE_TOOL, CLEAR_NOTE_TOOL],
       repeat: 3,
+      pass_threshold: 0.33,
       priorMessages: [
         {
           role: "user" as const,
           content: "Pick a number between 1 and 10 — don't tell me what it is! I want to try to guess it.",
         },
       ],
-      observe: true as const,
-      prompt: () => ({ system: buildResponsePrompt(PROMPT_DATA).system, user: "" }),
+      assert: [
+        {
+          type: "tool-calls" as const,
+          minCalls: 1,
+          requiredTools: ["add_note"],
+        },
+      ],
+      prompt: () => ({ system: buildResponsePrompt(PROMPT_DATA_BOTH_TOOLS).system, user: "" }),
     },
 
     {
-      description: "Case 2 (nudged): number game + system prompt explains when/why to use the tool",
-      tags: ["response-short-term-memory", "nudged", "observe"],
-      tools: [SET_SHORT_TERM_MEMORY_TOOL],
-      repeat: 3,
+      description: "Case 2 (add_note does NOT fire): normal technical Q&A — nothing to remember privately",
+      tags: ["response-short-term-memory", "add-note", "no-fire"],
+      tools: [ADD_NOTE_TOOL, CLEAR_NOTE_TOOL],
       priorMessages: [
         {
           role: "user" as const,
-          content: "Pick a number between 1 and 10 — don't tell me what it is! I want to try to guess it.",
+          content: "Hey, what's the difference between `find_memory` and `fetch_memory`?",
         },
       ],
-      observe: true as const,
-      prompt: () => ({ system: buildNudgedSystem(), user: "" }),
+      assert: [
+        {
+          type: "tool-calls" as const,
+          maxCalls: 0,
+          forbiddenTools: ["add_note"],
+        },
+      ],
+      prompt: () => ({ system: buildResponsePrompt(PROMPT_DATA_BOTH_TOOLS).system, user: "" }),
+    },
+
+    {
+      description: "Case 3 (clear_note fires): Flare correctly guesses the number — note has been addressed, should be cleared",
+      tags: ["response-short-term-memory", "clear-note", "fires", "borderline", "known-model-limitation:local"],
+      tools: [ADD_NOTE_TOOL, CLEAR_NOTE_TOOL],
+      repeat: 3,
+      pass_threshold: 0.33,
+      priorMessages: [
+        ...PRIOR_MESSAGES_AFTER_ADD_NOTE,
+        {
+          role: "user" as const,
+          content: "Is it 7?",
+        },
+      ],
+      assert: [
+        {
+          type: "tool-calls" as const,
+          minCalls: 1,
+          requiredTools: ["clear_note"],
+        },
+      ],
+      prompt: () => ({ system: buildResponsePrompt(PROMPT_DATA_WITH_NOTE).system, user: "" }),
+    },
+
+    {
+      description: "Case 4 (clear_note does NOT fire): Flare guesses wrong — number is still unresolved, note should stay",
+      tags: ["response-short-term-memory", "clear-note", "no-fire"],
+      tools: [ADD_NOTE_TOOL, CLEAR_NOTE_TOOL],
+      priorMessages: [
+        ...PRIOR_MESSAGES_AFTER_ADD_NOTE,
+        {
+          role: "user" as const,
+          content: "Is it 3?",
+        },
+      ],
+      assert: [
+        {
+          type: "tool-calls" as const,
+          maxCalls: 0,
+          forbiddenTools: ["clear_note"],
+        },
+      ],
+      prompt: () => ({ system: buildResponsePrompt(PROMPT_DATA_WITH_NOTE).system, user: "" }),
     },
   ],
   "tests/evals/results/response-short-term-memory-latest.json"
 );
 
 printSummary(summary);
+
+if (summary.overallPassRate < 1) process.exit(1);

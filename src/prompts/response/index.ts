@@ -11,6 +11,7 @@ import type { ResponsePromptData, PromptOutput } from "./types.js";
 import { formatCurrentTime } from "../../core/format-utils.js";
 import {
   buildIdentitySection,
+  buildNotesSection,
   buildGuidelinesSection,
   buildTraitsSection,
   buildTopicsSection,
@@ -44,6 +45,7 @@ Your role is unique among personas:
   - Consider their traits when building your responses more than the current conversation history
 - You encourage human-to-human connection when appropriate`;
 
+  const notesSection = buildNotesSection(data.persona.notes);
   const guidelines = buildGuidelinesSection("ei");
   const yourTraits = buildTraitsSection(data.persona.traits, "Your Personality");
   const yourTopics = buildTopicsSection(data.persona.topics, "Your Interests");
@@ -63,7 +65,7 @@ Your role is unique among personas:
     : "";
 
   return `${identity}
-
+${notesSection ? `\n${notesSection}` : ""}
 ${guidelines}
 
 ${yourTraits}
@@ -93,6 +95,7 @@ ${conversationState}
  */
 function buildStandardSystemPrompt(data: ResponsePromptData): string {
   const identity = buildIdentitySection(data.persona);
+  const notesSection = buildNotesSection(data.persona.notes);
   const guidelines = buildGuidelinesSection(data.persona.name);
   const yourTraits = buildTraitsSection(data.persona.traits, "Your Personality");
   const yourTopics = buildTopicsSection(data.persona.topics, "Your Interests");
@@ -111,7 +114,7 @@ function buildStandardSystemPrompt(data: ResponsePromptData): string {
     : "";
 
   return `${identity}
-
+${notesSection ? `\n${notesSection}` : ""}
 ${guidelines}
 
 ${yourTraits}
