@@ -18,7 +18,6 @@ export function filterMessagesForContext(
 
   return messages.filter((msg) => {
     if (msg.external === true) return false;
-    if (msg.context_status === ContextStatusEnum.Always) return true;
     if (msg.context_status === ContextStatusEnum.Never) return false;
 
     const msgMs = new Date(msg.timestamp).getTime();

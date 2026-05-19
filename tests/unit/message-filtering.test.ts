@@ -22,7 +22,7 @@ describe("filterMessagesForContext", () => {
   const windowMs = 8 * 60 * 60 * 1000;
 
   describe("context_status priority", () => {
-    it("includes Always messages regardless of hours window", () => {
+    it("excludes Always messages outside the hours window (surfaced as temporal anchors instead)", () => {
       const messages: Message[] = [
         createMessage("always", ago(24), ContextStatus.Always),
         createMessage("default-old", ago(24), ContextStatus.Default),
@@ -30,10 +30,21 @@ describe("filterMessagesForContext", () => {
 
       const result = filterMessagesForContext(messages, undefined, windowMs);
 
-      expect(result.map(m => m.id)).toEqual(["always"]);
+      expect(result.map(m => m.id)).toEqual([]);
     });
 
-    it("includes Always messages regardless of context_boundary", () => {
+    it("includes Always messages that are within the hours window", () => {
+      const messages: Message[] = [
+        createMessage("always-recent", ago(1), ContextStatus.Always),
+        createMessage("always-old", ago(24), ContextStatus.Always),
+      ];
+
+      const result = filterMessagesForContext(messages, undefined, windowMs);
+
+      expect(result.map(m => m.id)).toEqual(["always-recent"]);
+    });
+
+    it("excludes Always messages before context_boundary (surfaced as temporal anchors instead)", () => {
       const boundary = ago(1);
       const messages: Message[] = [
         createMessage("always", ago(4), ContextStatus.Always),
@@ -42,7 +53,7 @@ describe("filterMessagesForContext", () => {
 
       const result = filterMessagesForContext(messages, boundary, windowMs);
 
-      expect(result.some(m => m.id === "always")).toBe(true);
+      expect(result.some(m => m.id === "always")).toBe(false);
     });
 
     it("excludes Never messages regardless of recency", () => {
@@ -146,7 +157,7 @@ describe("filterMessagesForContext", () => {
 
       const result = filterMessagesForContext(messages, boundary, windowMs);
 
-      expect(result.map(m => m.id)).toEqual(["recent-after-boundary", "always-old"]);
+      expect(result.map(m => m.id)).toEqual(["recent-after-boundary"]);
     });
   });
 
@@ -167,7 +178,7 @@ describe("filterMessagesForContext", () => {
       expect(result.length).toBe(1);
     });
 
-    it("returns only Always messages when all others fail both filters", () => {
+    it("returns empty when all messages fail both filters (Always no longer bypasses window)", () => {
       const boundary = ago(1);
       const messages: Message[] = [
         createMessage("old-default", ago(24)),
@@ -177,8 +188,7 @@ describe("filterMessagesForContext", () => {
 
       const result = filterMessagesForContext(messages, boundary, windowMs);
 
-      expect(result.length).toBe(1);
-      expect(result[0].id).toBe("old-always");
+      expect(result.length).toBe(0);
     });
   });
 });
