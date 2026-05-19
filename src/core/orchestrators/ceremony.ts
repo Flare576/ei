@@ -475,7 +475,7 @@ export function queueReflectionDrain(personaId: string, state: StateManager): vo
     messages_analyze: unextractedPeople,
     extraction_flag: "p",
   };
-  queuePersonScan(context, state);
+  queuePersonScan(context, state, { reflection_progress: 1 });
   console.log(`[reflection:drain] Queued Person scan for ${persona.display_name} (${unextractedPeople.length} messages) — clears on completion`);
 }
 
