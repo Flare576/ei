@@ -4,6 +4,7 @@
  *   opencode:${machine}:${session}:${nativeId}
  *   claudecode:${machine}:${session}:${nativeId}
  *   cursor:${machine}:${session}:${nativeId}
+ *   codex:${machine}:${session}:${nativeId}
  *   import:document:${slug}:${uuid}
  *   slack:${workspace}:${channel}:${ts}
  */
@@ -13,6 +14,7 @@ export type MessageIdIntegration =
   | "opencode"
   | "claudecode"
   | "cursor"
+  | "codex"
   | "import"
   | "slack"
   | "unknown"
@@ -67,6 +69,16 @@ export function parseMessageId(id: string): ParsedMessageId {
     }
   }
 
+  if (parts[0] === "codex" && parts.length >= 4) {
+    return {
+      integration: "codex",
+      machine: parts[1],
+      session: parts[2],
+      nativeId: parts.slice(3).join(":"),
+      raw: id,
+    }
+  }
+
   if (parts[0] === "import" && parts[1] === "document" && parts.length >= 4) {
     return {
       integration: "import",
@@ -107,6 +119,10 @@ export function qualifyClaudeCodeMessage(machine: string, sessionId: string, nat
 
 export function qualifyCursorMessage(machine: string, sessionId: string, nativeId: string): string {
   return `cursor:${machine}:${sessionId}:${nativeId}`
+}
+
+export function qualifyCodexMessage(machine: string, sessionId: string, nativeId: string): string {
+  return `codex:${machine}:${sessionId}:${nativeId}`
 }
 
 export function qualifyDocumentMessage(slug: string, uuid: string): string {

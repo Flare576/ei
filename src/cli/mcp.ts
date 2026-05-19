@@ -37,7 +37,7 @@ export function createMcpServer(): McpServer {
           .string()
           .optional()
           .describe(
-            "Filter to entities from a specific source. Prefix match against namespaced source identifiers (e.g. 'cursor', 'opencode', 'opencode:my-machine', 'opencode:my-machine:ses_abc123')."
+            "Filter to entities from a specific source. Prefix match against namespaced source identifiers (e.g. 'cursor', 'codex', 'opencode', 'opencode:my-machine', 'codex:my-machine:thread-id')."
           ),
         limit: z
           .number()
@@ -106,7 +106,7 @@ export function createMcpServer(): McpServer {
           .string()
           .optional()
           .describe(
-            "Filter to entities from a specific source. Prefix match against namespaced source identifiers (e.g. 'cursor', 'opencode', 'opencode:my-machine', 'opencode:my-machine:ses_abc123'). If the entity does not match, returns not found."
+            "Filter to entities from a specific source. Prefix match against namespaced source identifiers (e.g. 'cursor', 'codex', 'opencode', 'opencode:my-machine', 'codex:my-machine:thread-id'). If the entity does not match, returns not found."
           ),
       },
     },
@@ -134,7 +134,7 @@ export function createMcpServer(): McpServer {
     "ei_fetch_message",
     {
       description:
-        "Retrieve a specific message by its fully-qualified ID, with optional surrounding conversation context. Use when ei_search returns a quote with a message_id and you want to read the original exchange. The 'before' and 'after' parameters expand the context window in either direction (default 0). Accepts IDs from any integrated source: 'ei:uuid' searches Ei state, 'opencode:machine:session:id' queries OpenCode SQLite, 'claudecode:...' scans Claude Code JSONL files, 'cursor:...' reads the Cursor DB.",
+        "Retrieve a specific message by its fully-qualified ID, with optional surrounding conversation context. Use when ei_search returns a quote with a message_id and you want to read the original exchange. The 'before' and 'after' parameters expand the context window in either direction (default 0). Accepts IDs from any integrated source: 'ei:uuid' searches Ei state, 'opencode:machine:session:id' queries OpenCode SQLite, 'claudecode:...' scans Claude Code JSONL files, 'cursor:...' reads the Cursor DB, and 'codex:...' reads Codex rollout history.",
       inputSchema: {
         id: z.string().describe("The ID of the message to retrieve"),
         before: z

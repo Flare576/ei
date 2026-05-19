@@ -6,6 +6,7 @@ import {
   qualifyOpenCodeMessage,
   qualifyClaudeCodeMessage,
   qualifyCursorMessage,
+  qualifyCodexMessage,
   qualifyDocumentMessage,
 } from "../../../../src/core/utils/message-id.js"
 
@@ -71,6 +72,23 @@ describe("parseMessageId — cursor", () => {
     const r = parseMessageId(fq)
     expect(r.integration).toBe("cursor")
     expect(r.nativeId).toBe("bubble-2")
+  })
+})
+
+describe("parseMessageId — codex", () => {
+  it("parses a valid codex ID", () => {
+    const r = parseMessageId("codex:laptop:thread-1:evt_42")
+    expect(r.integration).toBe("codex")
+    expect(r.machine).toBe("laptop")
+    expect(r.session).toBe("thread-1")
+    expect(r.nativeId).toBe("evt_42")
+  })
+
+  it("round-trips qualifyCodexMessage → parseMessageId", () => {
+    const fq = qualifyCodexMessage("laptop", "thread-1", "evt_42")
+    const r = parseMessageId(fq)
+    expect(r.integration).toBe("codex")
+    expect(r.nativeId).toBe("evt_42")
   })
 })
 
@@ -186,6 +204,13 @@ describe("qualify helpers — round-trips", () => {
     expect(fq).toBe("cursor:m:s:n")
     const r = parseMessageId(fq)
     expect(r).toMatchObject({ integration: "cursor", machine: "m", session: "s", nativeId: "n" })
+  })
+
+  it("qualifyCodexMessage round-trips", () => {
+    const fq = qualifyCodexMessage("m", "s", "n")
+    expect(fq).toBe("codex:m:s:n")
+    const r = parseMessageId(fq)
+    expect(r).toMatchObject({ integration: "codex", machine: "m", session: "s", nativeId: "n" })
   })
 
   it("qualifyDocumentMessage round-trips", () => {

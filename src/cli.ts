@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * EI CLI - Memory retrieval interface for OpenCode integration
+ * EI CLI - Memory retrieval interface for coding tool integrations
  *
  * Usage:
  *   ei "search text"               Search all data types
@@ -53,7 +53,7 @@ Usage:
   ei --persona "Name" "query"   Filter results to what a persona has learned
   ei --id <id>                  Look up a specific entity by ID
   echo <id> | ei --id           Look up entity by ID from stdin
-  ei mcp                        Start the Ei MCP stdio server (for Cursor/Claude Desktop)
+  ei mcp                        Start the Ei MCP stdio server (for Claude Code/Cursor/Codex)
 
 Types:
   quote / quotes      Quotes from conversation history
@@ -66,11 +66,11 @@ Options:
   --number, -n        Maximum number of results (default: 10)
   --recent, -r        Sort by last_mentioned date (most recent first)
   --persona, -p       Filter to entities a specific persona has learned about
-  --source, -s        Filter to entities from a specific source (prefix match, e.g. "cursor", "opencode:my-machine", "opencode:my-machine:ses_abc123")
+  --source, -s        Filter to entities from a specific source (prefix match, e.g. "cursor", "codex:my-machine", "opencode:my-machine:ses_abc123")
   --id                Look up entity by ID (accepts value or stdin)
-  --install           Register Ei with Claude Code, Cursor, and OpenCode (MCP + context hooks)
+  --install           Register Ei with Claude Code, Cursor, Codex, and OpenCode (MCP + context hooks where supported)
   --session <id>      Session ID to enrich the query with recent context (use with --hook-source)
-  --hook-source <src> Source of the hook: "opencode-plugin" (OpenCode SQLite) or "cursor"
+  --hook-source <src> Source of the hook: "opencode-plugin" (OpenCode SQLite), "cursor", or "codex"
   --transcript <path> Path to a Claude Code JSONL transcript file for context enrichment
   --help, -h          Show this help message
 
@@ -92,6 +92,12 @@ async function installMcpClients(): Promise<void> {
   await installClaudeCode();
 
   const home = process.env.HOME || "~";
+
+  if (await commandExists("codex")) {
+    await installCodex();
+  } else {
+    console.log(`ℹ️  Codex CLI not detected — skipping Codex MCP install.`);
+  }
 
   const cursorDataDirs = [
     join(home, "Library", "Application Support", "Cursor"),
@@ -115,6 +121,169 @@ async function installMcpClients(): Promise<void> {
   } else {
     console.log(`ℹ️  OpenCode not detected — skipping OpenCode plugin install.`);
   }
+}
+
+async function commandExists(command: string): Promise<boolean> {
+  try {
+    const proc = Bun.spawn([command, "--version"], {
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+    await proc.exited;
+    return proc.exitCode === 0;
+  } catch {
+    return false;
+  }
+}
+
+function hookEntryHasCommand(entry: unknown, command: string): boolean {
+  if (typeof entry !== "object" || entry === null || !("hooks" in entry)) return false;
+  const hooks = (entry as { hooks?: unknown }).hooks;
+  if (!Array.isArray(hooks)) return false;
+
+  return hooks.some((hook) => {
+    if (typeof hook !== "object" || hook === null) return false;
+    const candidate = hook as { type?: unknown; command?: unknown };
+    return candidate.type === "command" && candidate.command === command;
+  });
+}
+
+async function installCodex(): Promise<void> {
+  const dataPath = process.env.EI_DATA_PATH ?? join(process.env.HOME || "~", ".local", "share", "ei");
+  const proc = Bun.spawn(
+    ["codex", "mcp", "add", "ei", "--env", `EI_DATA_PATH=${dataPath}`, "--", "bunx", "ei-tui", "mcp"],
+    {
+      stdout: "pipe",
+      stderr: "pipe",
+    }
+  );
+
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+
+  if (exitCode !== 0) {
+    console.warn(`⚠️  Codex MCP install failed.`);
+    const detail = (stderr || stdout).trim();
+    if (detail) console.warn(`   ${detail}`);
+  } else {
+    console.log(`✓ Installed Ei MCP server to Codex config (~/.codex/config.toml)`);
+    console.log(`  Restart Codex to activate MCP.`);
+  }
+
+  await installCodexHooks();
+}
+
+async function installCodexHooks(): Promise<void> {
+  const home = process.env.HOME || "~";
+  const hooksDir = join(home, ".codex", "hooks");
+  const scriptPath = join(hooksDir, "ei-inject.ts");
+  const hooksJsonPath = join(home, ".codex", "hooks.json");
+
+  await Bun.$`mkdir -p ${hooksDir}`;
+
+  try {
+    await Bun.$`test -w ${hooksDir}`.quiet();
+  } catch {
+    console.warn(`⚠️  Cannot write to ${hooksDir} (permission denied).`);
+    console.warn(`   Fix with: sudo chown ${process.env.USER ?? "$(whoami)"} ${hooksDir}`);
+    console.warn(`   Then re-run: ei --install`);
+    return;
+  }
+
+  const scriptContent = `#!/usr/bin/env bun
+import { $ } from "bun";
+
+const input = await new Response(Bun.stdin.stream()).json().catch(() => ({}));
+const raw = (input.prompt ?? "").replace(/<[^>]*>/g, "").trim();
+const searchArgs = ["-n", "8"];
+
+const sessionArgs = [];
+if (input.transcript_path) {
+  sessionArgs.push("--transcript", input.transcript_path);
+}
+if (input.session_id) {
+  sessionArgs.push("--session", input.session_id, "--hook-source", "codex");
+}
+
+const args = raw ? [...searchArgs, ...sessionArgs, raw] : ["--recent", ...searchArgs];
+
+async function runEi(commandArgs) {
+  const direct = await $\`ei \${commandArgs}\`.quiet().text().catch(() => "");
+  if (direct.trim()) return direct;
+  return await $\`bunx ei-tui@latest \${commandArgs}\`.quiet().text().catch(() => "");
+}
+
+const output = await runEi(args);
+if (output.trim()) {
+  const heading = [
+    "## Ei Memory Context",
+    "*(The user cannot see this block. It is injected automatically before their message.)*",
+    "*(If you reference anything from it, briefly explain where it came from — e.g. \\"Ei shows you've been working on X\\" — so the user isn't confused by knowledge that appeared from nowhere.)*",
+    "",
+    "Ei is a personal knowledge base built from the user's coding sessions, Slack, documents, and conversations.",
+    "The following memories MAY be relevant to your current task — use \`ei_search\` or \`ei_lookup\` for targeted queries.",
+  ].join("\\n");
+
+  process.stdout.write(JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: "UserPromptSubmit",
+      additionalContext: \`\\n\${heading}\\n\${output.trim()}\\n\`,
+    },
+  }));
+}
+`;
+
+  await Bun.write(scriptPath, scriptContent);
+  await Bun.$`chmod +x ${scriptPath}`;
+
+  type CodexUserPromptHook = {
+    hooks: Array<{ type: string; command: string; statusMessage?: string; timeout?: number }>;
+  };
+
+  interface CodexHooksConfig {
+    hooks: {
+      UserPromptSubmit?: CodexUserPromptHook[];
+      [key: string]: unknown;
+    };
+  }
+
+  let hooksConfig: CodexHooksConfig = { hooks: {} };
+  try {
+    const text = await Bun.file(hooksJsonPath).text();
+    hooksConfig = JSON.parse(text) as CodexHooksConfig;
+    if (!hooksConfig.hooks || typeof hooksConfig.hooks !== "object") {
+      hooksConfig.hooks = {};
+    }
+  } catch {
+    // File doesn't exist or isn't valid JSON — start fresh
+  }
+
+  const userPromptSubmit = (hooksConfig.hooks.UserPromptSubmit ?? []) as CodexUserPromptHook[];
+  const hookEntry = {
+    hooks: [{
+      type: "command",
+      command: scriptPath,
+      statusMessage: "Loading Ei memory context",
+      timeout: 30,
+    }],
+  };
+  const alreadyInstalled = userPromptSubmit.some((entry) => hookEntryHasCommand(entry, scriptPath));
+  if (!alreadyInstalled) {
+    userPromptSubmit.push(hookEntry);
+  }
+
+  hooksConfig.hooks.UserPromptSubmit = userPromptSubmit;
+
+  const tmpPath = `${hooksJsonPath}.ei-install.tmp`;
+  await Bun.write(tmpPath, JSON.stringify(hooksConfig, null, 2) + "\n");
+  const { rename } = await import(/* @vite-ignore */ "fs/promises");
+  await rename(tmpPath, hooksJsonPath);
+
+  console.log(`✓ Installed Ei Codex context hook to ~/.codex/hooks/ei-inject.ts`);
+  console.log(`  Use /hooks in Codex to review/trust the hook if prompted.`);
 }
 
 async function installClaudeCode(): Promise<void> {
@@ -217,9 +386,7 @@ if (output.trim()) process.stdout.write(\`\\n\${heading}\\n\${output.trim()}\\n\
   const userPromptSubmit = (hooks.UserPromptSubmit ?? []) as unknown[];
 
   const hookEntry = { hooks: [{ type: "command", command: "~/.claude/hooks/ei-inject.ts" }] };
-  const alreadyInstalled = userPromptSubmit.some(
-    (entry) => JSON.stringify(entry) === JSON.stringify(hookEntry)
-  );
+  const alreadyInstalled = userPromptSubmit.some((entry) => hookEntryHasCommand(entry, "~/.claude/hooks/ei-inject.ts"));
   if (!alreadyInstalled) {
     userPromptSubmit.push(hookEntry);
   }
@@ -497,6 +664,15 @@ async function getRecentSessionMessages(
   if (transcriptPath) {
     try {
       const text = await Bun.file(transcriptPath).text();
+
+      const { parseCodexRolloutMessages } = await import(
+        /* @vite-ignore */ "./integrations/codex/reader.js"
+      );
+      const codexMessages = parseCodexRolloutMessages(text, sessionId ?? "transcript");
+      if (codexMessages.length > 0) {
+        return codexMessages.slice(-5).map((m) => `${m.role}: ${m.content}`);
+      }
+
       const messages: Array<{ content: string }> = [];
 
       for (const line of text.split("\n")) {
@@ -529,7 +705,7 @@ async function getRecentSessionMessages(
         }
       }
 
-      return messages.slice(-4).map((m) => m.content);
+      return messages.slice(-5).map((m) => m.content);
     } catch {
       return [];
     }
@@ -544,7 +720,7 @@ async function getRecentSessionMessages(
       );
       const reader = await createOpenCodeReader();
       const messages = await reader.getMessagesForSession(sessionId);
-      return messages.slice(-4).map((m) => m.content);
+      return messages.slice(-5).map((m) => `${m.role}: ${m.content}`);
     }
 
     if (hookSource === "cursor") {
@@ -556,7 +732,20 @@ async function getRecentSessionMessages(
       const session =
         sessions.find((s) => s.id === sessionId) ?? sessions[sessions.length - 1];
       if (session) {
-        return session.messages.slice(-4).map((m) => m.text);
+        return session.messages.slice(-5).map((m) => `${m.type === 1 ? "user" : "assistant"}: ${m.text}`);
+      }
+    }
+
+    if (hookSource === "codex") {
+      const { CodexReader } = await import(
+        /* @vite-ignore */ "./integrations/codex/reader.js"
+      );
+      const reader = new CodexReader();
+      const sessions = await reader.getSessions();
+      const session =
+        sessions.find((s) => s.id === sessionId) ?? sessions[sessions.length - 1];
+      if (session) {
+        return session.messages.slice(-5).map((m) => `${m.role}: ${m.content}`);
       }
     }
   } catch {
@@ -589,6 +778,16 @@ async function main(): Promise<void> {
   if (args[0] === "--install") {
     await installMcpClients();
     console.log(`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Codex
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  If Codex was detected, Ei MCP was registered via:
+
+    codex mcp add ei --env EI_DATA_PATH="${process.env.EI_DATA_PATH ?? "~/.local/share/ei"}" -- bunx ei-tui mcp
+
+  Restart Codex to activate.
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   OpenCode: add to ~/.config/opencode/opencode.jsonc
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

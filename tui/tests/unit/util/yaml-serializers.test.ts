@@ -744,6 +744,30 @@ describe("round-trip serialization", () => {
     expect(result.ceremony?.event_window_hours).toBe(2);
   });
 
+  test("settings YAML preserves Codex runtime-managed fields", () => {
+    const settings: HumanSettings = {
+      codex: {
+        integration: true,
+        polling_interval_ms: 120000,
+        last_sync: "2026-01-01T00:00:00.000Z",
+        extraction_point: "2026-01-02T00:00:00.000Z",
+        processed_sessions: { "thread-abc": "2026-01-03T00:00:00.000Z" },
+      },
+    };
+
+    const yaml = settingsToYAML(settings, []);
+    const result = settingsFromYAML(yaml, settings, []);
+
+    expect(yaml).toContain("codex:");
+    expect(result.codex?.integration).toBe(true);
+    expect(result.codex?.polling_interval_ms).toBe(120000);
+    expect(result.codex?.last_sync).toBe("2026-01-01T00:00:00.000Z");
+    expect(result.codex?.extraction_point).toBe("2026-01-02T00:00:00.000Z");
+    expect(result.codex?.processed_sessions).toEqual({
+      "thread-abc": "2026-01-03T00:00:00.000Z",
+    });
+  });
+
   test("serializes _ms fields as human-readable duration strings", () => {
     const settings: HumanSettings = {
       default_heartbeat_ms: 120000,

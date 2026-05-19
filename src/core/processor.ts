@@ -148,6 +148,7 @@ const DEFAULT_LOOP_INTERVAL_MS = 100;
 const DEFAULT_OPENCODE_POLLING_MS = 60000;
 const DEFAULT_CLAUDE_CODE_POLLING_MS = 60000;
 const DEFAULT_CURSOR_POLLING_MS = 60000;
+const DEFAULT_CODEX_POLLING_MS = 60000;
 
 let processorInstanceCount = 0;
 
@@ -170,6 +171,8 @@ export class Processor {
   private claudeCodeImportInProgress = false;
   private lastCursorSync = 0;
   private cursorImportInProgress = false;
+  private lastCodexSync = 0;
+  private codexImportInProgress = false;
   private lastSlackSync = 0;
   private slackImportInProgress = false;
   private pendingConflict: StateConflictData | null = null;
@@ -1200,6 +1203,14 @@ export class Processor {
       modified = true;
     }
 
+    if (!human.settings.codex) {
+      human.settings.codex = {
+        integration: false,
+        polling_interval_ms: 60000,
+      };
+      modified = true;
+    }
+
     if (!human.settings.ceremony) {
       human.settings.ceremony = {
         time: "09:00",
@@ -1276,6 +1287,14 @@ export class Processor {
     if (this.claudeCodeImportInProgress) {
       console.log(`[Processor ${this.instanceId}] Clearing claudeCodeImportInProgress flag`);
       this.claudeCodeImportInProgress = false;
+    }
+    if (this.cursorImportInProgress) {
+      console.log(`[Processor ${this.instanceId}] Clearing cursorImportInProgress flag`);
+      this.cursorImportInProgress = false;
+    }
+    if (this.codexImportInProgress) {
+      console.log(`[Processor ${this.instanceId}] Clearing codexImportInProgress flag`);
+      this.codexImportInProgress = false;
     }
     if (this.slackImportInProgress) {
       console.log(`[Processor ${this.instanceId}] Clearing slackImportInProgress flag`);
@@ -1520,6 +1539,14 @@ const toolNextSteps = new Set([
       this.stateManager.queue_length() === 0
     ) {
       await this.checkAndSyncCursor(human, now);
+    }
+
+    if (
+      this.isTUI &&
+      human.settings?.codex?.integration &&
+      this.stateManager.queue_length() === 0
+    ) {
+      await this.checkAndSyncCodex(human, now);
     }
 
     if (
@@ -1776,6 +1803,60 @@ const toolNextSteps = new Set([
       })
       .finally(() => {
         this.cursorImportInProgress = false;
+      });
+  }
+
+  private async checkAndSyncCodex(human: HumanEntity, now: number): Promise<void> {
+    if (this.codexImportInProgress) {
+      return;
+    }
+
+    const codex = human.settings?.codex;
+    const pollingInterval = codex?.polling_interval_ms ?? DEFAULT_CODEX_POLLING_MS;
+    const lastSync = codex?.last_sync ? new Date(codex.last_sync).getTime() : 0;
+    const timeSinceSync = now - lastSync;
+
+    if (timeSinceSync < pollingInterval && this.lastCodexSync > 0) {
+      return;
+    }
+
+    this.lastCodexSync = now;
+    const syncTimestamp = new Date().toISOString();
+    const currentHuman = this.stateManager.getHuman();
+    this.stateManager.setHuman({
+      ...currentHuman,
+      settings: {
+        ...currentHuman.settings,
+        codex: {
+          ...codex,
+          last_sync: syncTimestamp,
+        },
+      },
+    });
+
+    this.codexImportInProgress = true;
+    import("../integrations/codex/importer.js")
+      .then(({ importCodexSessions }) =>
+        importCodexSessions({
+          stateManager: this.stateManager,
+          interface: this.interface,
+          signal: this.importAbortController.signal,
+        })
+      )
+      .then((result) => {
+        if (result.sessionsProcessed > 0) {
+          console.log(
+            `[Processor] Codex sync complete: ${result.sessionsProcessed} sessions, ` +
+              `${result.messagesImported} messages imported, ` +
+              `${result.extractionScansQueued} extraction scans queued`
+          );
+        }
+      })
+      .catch((err) => {
+        console.warn(`[Processor] Codex sync failed:`, err);
+      })
+      .finally(() => {
+        this.codexImportInProgress = false;
       });
   }
 

@@ -2,7 +2,7 @@
 
 Ei TUI is built with OpenTUI and SolidJS.
 
-Coding tool integrations (OpenCode, Claude Code, Cursor): enable via `/settings` · export data via [CLI](../src/cli/README.md)
+Coding tool integrations (OpenCode, Claude Code, Cursor, Codex): enable via `/settings` · export data via [CLI](../src/cli/README.md)
 
 ## How Ei Handles Configuration
 
@@ -29,17 +29,18 @@ The one exception is `EI_DATA_PATH` (and `EI_SYNC_USERNAME` / `EI_SYNC_PASSWORD`
 
 ## Coding Tool Integrations
 
-Enable any or all three in `/settings`. They work independently and feed into the same knowledge base.
+Enable any or all four in `/settings`. They work independently and feed into the same knowledge base.
 
 | Tool | Settings key | Session data location |
 |------|-------------|----------------------|
 | OpenCode | `opencode.integration: true` | OpenCode's local SQLite / JSON session store |
 | Claude Code | `claudeCode.integration: true` | `~/.claude/projects/` (JSONL files) |
 | Cursor | `cursor.integration: true` | `~/Library/Application Support/Cursor/User/` (macOS)<br>`%APPDATA%\Cursor\User\` (Windows)<br>`~/.config/Cursor/User/` (Linux) |
+| Codex | `codex.integration: true` | `~/.codex/state_*.sqlite` + `~/.codex/sessions/` rollout JSONL files |
 
 Sessions are processed oldest-first, one per queue cycle. On first run Ei works through your backlog gradually — it won't flood your LLM provider.
 
-All three tools also support reading Ei's knowledge back out via the [CLI tool](../src/cli/README.md) — run `ei --install` to wire up automatic context injection (hooks + persona plugin) so your coding agents receive relevant Ei memory before every message without any manual tool calls.
+All four tools also support reading Ei's knowledge back out via the [CLI tool](../src/cli/README.md). Run `ei --install` to wire up MCP everywhere it is detected, plus automatic context injection where hooks/plugins are available.
 
 ## Slack Integration
 

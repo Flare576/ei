@@ -15,7 +15,7 @@ export interface DataItemBase {
   learned_by?: string;           // Persona ID that originally learned this item (stable UUID)
   last_changed_by?: string;      // Persona ID that most recently updated this item (stable UUID)
   interested_personas?: string[]; // Persona IDs that have extracted/touched this item (accumulated)
-  sources?: string[];            // Namespaced source identifiers — where items were learned from. Format: "provider:id" (e.g., "opencode:ses_abc123", "cursor:composerId"). Grow-only union.
+  sources?: string[];            // Namespaced source identifiers — where items were learned from. Format: "provider:id" (e.g., "opencode:ses_abc123", "cursor:composerId", "codex:threadId"). Grow-only union.
   persona_groups?: string[];
   embedding?: number[];
   rewrite_length_floor?: number; // Set after every rewrite scan: ceil(description.length * 1.1). Item is skipped by ceremony until description grows past this floor. Preserved across extraction upserts — only cleared when description exceeds it.

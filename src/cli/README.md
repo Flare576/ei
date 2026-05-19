@@ -15,8 +15,8 @@ ei --recent                            # Most recently mentioned items (no query
 ei --persona "Beta" --recent           # Most recently mentioned items Beta has learned
 ei --id <id>                   # Look up entity by ID — or fetch a message by FQ ID
 echo <id> | ei --id            # Look up entity by ID from stdin
-ei --install                   # Wire Ei into Claude Code, Cursor, and OpenCode (MCP + hooks + persona plugin)
-ei mcp                         # Start the Ei MCP stdio server (for Cursor/Claude Desktop)
+ei --install                   # Wire Ei into Claude Code, Cursor, Codex, and OpenCode (MCP + hooks + persona plugin)
+ei mcp                         # Start the Ei MCP stdio server (for Claude Code/Cursor/Codex)
 ```
 
 Type aliases: `fact`, `person`, `topic`, `quote`, `persona` all work (singular or plural).
@@ -35,6 +35,7 @@ It also resolves fully-qualified message IDs from any supported integration, ret
 ei --id "opencode:jeremys-macbook-pro:ses_38a7...:msg_c75b..."
 ei --id "claudecode:my-machine:session-uuid:message-uuid"
 ei --id "cursor:my-machine:composer-uuid:bubble-uuid"
+ei --id "codex:my-machine:thread-uuid:evt_42"
 ```
 
 Quotes surfaced by `ei_search` include a `message_id` field in this format — pipe it to `ei --id` to read the original conversation.
@@ -47,15 +48,16 @@ Quotes surfaced by `ei_search` include a `message_id` field in this format — p
 ei --install
 ```
 
-This registers Ei with Claude Code, Cursor, and OpenCode — MCP server config, context injection hooks, and (for OpenCode) a persona identity plugin so agents know who they are before the first message:
+This registers Ei with Claude Code, Cursor, Codex, and OpenCode — MCP server config, context injection hooks where supported, and (for OpenCode) a persona identity plugin so agents know who they are before the first message:
 
 | Tool | MCP | Context Hook | Persona Plugin |
 |------|-----|-------------|----------------|
 | **Claude Code** | `~/.claude.json` | `~/.claude/settings.json` (`UserPromptSubmit`) + `~/.claude/hooks/ei-inject.ts` | — |
 | **Cursor** | `~/.cursor/mcp.json` | `~/.cursor/hooks.json` (`beforeSubmitPrompt`) + `~/.cursor/hooks/ei-inject.sh` | — |
+| **Codex** | `~/.codex/config.toml` via `codex mcp add ei` | `~/.codex/hooks.json` (`UserPromptSubmit`) + `~/.codex/hooks/ei-inject.ts` | Local Codex agent plugin if installed separately |
 | **OpenCode** | manual (see below) | Via Oh My OpenCode compatibility layer (reads `~/.claude/settings.json`) | `~/.config/opencode/plugins/ei-persona.ts` |
 
-**Context hook**: fires before every message, searches Ei for topics relevant to what you just asked, injects them silently. No tool call required.
+**Context hook**: fires before every message, searches Ei for relevant memory, and injects it silently. No tool call required.
 
 **Persona plugin** (OpenCode + [Oh My OpenCode](https://github.com/code-yeongyu/oh-my-opencode) only): injects the agent's Ei relationship record directly into the system prompt at session start — traits, working style, shared context. The agent knows who it is *to you* before it reads a word of your message.
 
@@ -80,7 +82,7 @@ Restart your agent tool after changes to activate.
 
 ### MCP Server
 
-Claude Code and Cursor call `ei mcp` to start the MCP stdio server. You can run it directly to test:
+Claude Code, Cursor, and Codex call `ei mcp` to start the MCP stdio server. You can run it directly to test:
 
 ```sh
 ei mcp
@@ -97,7 +99,7 @@ The `ei_search`, `ei_lookup`, and `ei_fetch_message` MCP tools are still availab
 
 ## MCP Tools Reference
 
-The MCP server exposes these tools to Claude Code, Cursor, and OpenCode:
+The MCP server exposes these tools to Claude Code, Cursor, Codex, and OpenCode:
 
 | Tool | Description |
 |------|-------------|
@@ -112,7 +114,7 @@ The MCP server exposes these tools to Claude Code, Cursor, and OpenCode:
 | `query` | string (optional) | Search text. Omit to browse by recency. |
 | `type` | enum (optional) | `facts` \| `people` \| `topics` \| `quotes` \| `personas` — omit for balanced results across all types |
 | `persona` | string (optional) | Persona display_name to scope results to what that persona has learned |
-| `source` | string (optional) | Prefix match against source identifiers (e.g. `opencode`, `cursor:my-machine`) |
+| `source` | string (optional) | Prefix match against source identifiers (e.g. `opencode`, `cursor:my-machine`, `codex:my-machine`) |
 | `limit` | number (optional) | Max results, default 10 |
 | `recent` | boolean (optional) | Sort by most recently mentioned instead of relevance |
 

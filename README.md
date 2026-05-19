@@ -1,12 +1,12 @@
 # Ei
 
-A local-first AI companion system with persistent personas and coding tool integrations (OpenCode, Claude Code, Cursor).
+A local-first AI companion system with persistent personas and coding tool integrations (OpenCode, Claude Code, Cursor, Codex).
 
 You can access the Web version at [ei.flare576.com](https://ei.flare576.com).
 
 You can run the local version via `bunx ei-tui` — no install needed, always current (see [### TUI](#tui) for details).
 
-If you're here to give your coding tools (OpenCode, Claude Code, Cursor) persistent memory, jump over to [TUI README.md](./tui/README.md) to learn how to get information _into_ Ei, and [CLI README.md](./src/cli/README.md) to wire up automatic context injection so your agents receive relevant memory before every message — no tool calls required.
+If you're here to give your coding tools (OpenCode, Claude Code, Cursor, Codex) persistent memory, jump over to [TUI README.md](./tui/README.md) to learn how to get information _into_ Ei, and [CLI README.md](./src/cli/README.md) to wire up MCP/context injection so your agents can read relevant memory when they need it.
 
 ## What Does "Local First" Mean?
 
@@ -83,7 +83,7 @@ Ei can operate with three types of input, and three types of output.
                        ^
                     Sessions
                        |
-          [OpenCode / Claude Code / Cursor]
+          [OpenCode / Claude Code / Cursor / Codex]
 ```
 
 ```
@@ -91,7 +91,7 @@ Ei can operate with three types of input, and three types of output.
                           |
                        CLI Data
                           v
-                      [OpenCode]
+              [OpenCode / Claude Code / Cursor / Codex]
 ```
 
 Optionally, users can opt into a server-side data sync. This is ideal for users who want to use multiple devices or switch between TUI and Web throughout the day. All data is encrypted _before_ being sent to the server, using a key that only the user can generate (your `username` and `passphrase` never leave your device - I couldn't decrypt your data if I wanted to).
@@ -129,7 +129,7 @@ More information (including commands) can be found in the [TUI Readme](tui/READM
 
 Ei can import sessions from your coding tools and extract what you've been working on — pulling out facts, topics, and context that persist across sessions. Enable any combination; they work independently and feed into the same knowledge base.
 
-All three integrations are enabled via `/settings` in the TUI.
+All four integrations are enabled via `/settings` in the TUI.
 
 #### OpenCode
 
@@ -164,6 +164,21 @@ Reads from Cursor's SQLite databases:
 - **Linux**: `~/.config/Cursor/User/`
 
 All sessions map to a single "Cursor" persona.
+
+#### Codex
+
+```yaml
+codex:
+  integration: true
+```
+
+Reads from Codex's local state database and rollout JSONL files:
+- `~/.codex/state_*.sqlite`
+- `~/.codex/sessions/`
+
+All sessions map to a single "Codex" persona. Codex may store thread-level agent metadata for custom agents, but rollout messages do not reliably expose per-message sub-agent speaker identity yet. Tool calls, prompt scaffolding, and token-count events are stripped — only visible user/agent messages are imported.
+
+Codex can also read Ei's knowledge back out. Run `ei --install` to register the Ei MCP server and install a Codex `UserPromptSubmit` hook that injects relevant memory before each message, using your current prompt plus recent Codex transcript context when available.
 
 ---
 
@@ -233,7 +248,7 @@ Personas can use tools. Not just read-from-memory tools — *actual* tools. Web 
 |------|-------------|
 | `find_memory` | Semantic search of your personal memory — facts, traits, topics, people, quotes. Personas call this automatically when the conversation touches something they might know about you. Supports the `persona` filter to scope results to what a specific persona has learned. |
 | `fetch_memory` | Full-record lookup for a specific human entity (Fact, Topic, Person, or Quote) by ID. Use after `find_memory` to retrieve complete details. |
-| `fetch_message` | Retrieve a specific message by ID with optional surrounding context. Searches persona conversations and room messages. |
+| `fetch_message` | Retrieve a specific message by fully-qualified ID with optional surrounding context. Searches Ei conversations and supported external coding-session stores. |
 | `file_read` | Read a file from your local filesystem *(TUI only)* |
 | `list_directory` | Explore folder structure *(TUI only)* |
 | `directory_tree` | Recursive directory tree *(TUI only)* |

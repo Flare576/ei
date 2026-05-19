@@ -7,6 +7,7 @@ import type {
 } from "../../../src/core/types.js";
 import type { ClaudeCodeSettings } from "../../../src/integrations/claude-code/types.js";
 import type { CursorSettings } from "../../../src/integrations/cursor/types.js";
+import type { CodexSettings } from "../../../src/integrations/codex/types.js";
 import type { SlackSettings, SlackAuth } from "../../../src/integrations/slack/types.js";
 import { modelGuidToDisplay, displayToModelGuid } from "./yaml-shared.js";
 import { parseDuration, formatDuration } from "./duration.js";
@@ -46,6 +47,13 @@ interface EditableSettingsData {
     polling_interval_ms?: string | null;
     last_sync?: string | null;
     extraction_point?: string | null;
+  };
+  codex?: {
+    integration?: boolean | null;
+    polling_interval_ms?: string | null;
+    last_sync?: string | null;
+    extraction_point?: string | null;
+    extraction_model?: string | null;
   };
   slack?: {
     polling_interval_ms?: string | null;
@@ -111,6 +119,13 @@ export function settingsToYAML(settings: HumanSettings | undefined, accounts: Pr
       polling_interval_ms: formatDuration(settings?.cursor?.polling_interval_ms ?? 60000),
       last_sync: settings?.cursor?.last_sync ?? null,
       extraction_point: settings?.cursor?.extraction_point ?? null,
+    },
+    codex: {
+      integration: settings?.codex?.integration ?? false,
+      polling_interval_ms: formatDuration(settings?.codex?.polling_interval_ms ?? 60000),
+      extraction_model: guidToDisplay(settings?.codex?.extraction_model) ?? 'default',
+      last_sync: settings?.codex?.last_sync ?? null,
+      extraction_point: settings?.codex?.extraction_point ?? null,
     },
     slack: {
       polling_interval_ms: formatDuration(settings?.slack?.polling_interval_ms ?? 60000),
@@ -204,6 +219,18 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
     };
   }
 
+  let codex: CodexSettings | undefined;
+  if (data.codex) {
+    codex = {
+      integration: nullToUndefined(data.codex.integration),
+      polling_interval_ms: parseMsDuration(data.codex.polling_interval_ms, 60000),
+      last_sync: original?.codex?.last_sync,
+      extraction_point: original?.codex?.extraction_point,
+      processed_sessions: original?.codex?.processed_sessions,
+      extraction_model: displayToGuid(data.codex.extraction_model),
+    };
+  }
+
   let slack: SlackSettings | undefined;
   if (data.slack) {
     const parsedWorkspaces: SlackSettings["workspaces"] = {};
@@ -249,6 +276,7 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
     opencode,
     claudeCode,
     cursor,
+    codex,
     slack,
     backup,
   };
