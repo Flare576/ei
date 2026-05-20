@@ -263,6 +263,94 @@ describe("handleRoomResponse — ## No Response parsing", () => {
   });
 });
 
+describe("handleRoomResponse — JSON-parsed path (response.parsed branch)", () => {
+  let state: ReturnType<typeof createMockState>;
+
+  function makeRoomRequest(overrides: Partial<{ roomId: string; personaId: string }> = {}): LLMRequest {
+    return makeRequest({
+      next_step: LLMNextStep.HandleRoomResponse,
+      data: {
+        roomId: overrides.roomId ?? "room-1",
+        personaId: overrides.personaId ?? "persona-1",
+        personaDisplayName: "TestPersona",
+        parentMessageId: null,
+      },
+    });
+  }
+
+  function makeRoomResponseParsed(parsed: object | undefined, roomOverrides: Partial<{ roomId: string; personaId: string }> = {}): LLMResponse {
+    return {
+      request: makeRoomRequest(roomOverrides),
+      success: true,
+      content: null,
+      parsed,
+      error: undefined,
+    };
+  }
+
+  beforeEach(() => {
+    state = createMockState();
+    vi.clearAllMocks();
+  });
+
+  it("throws when roomId is missing from request data", () => {
+    const response = makeRoomResponseParsed({ should_respond: true, content: "hello" }, { roomId: "" });
+
+    expect(() => handleRoomResponse(response, state as any)).toThrow(
+      "[handleRoomResponse] Missing roomId or personaId"
+    );
+  });
+
+  it("throws when personaId is missing from request data", () => {
+    const response = makeRoomResponseParsed({ should_respond: true, content: "hello" }, { personaId: "" });
+
+    expect(() => handleRoomResponse(response, state as any)).toThrow(
+      "[handleRoomResponse] Missing roomId or personaId"
+    );
+  });
+
+  it("stores silence message when should_respond is false and reason is present", () => {
+    const response = makeRoomResponseParsed({ should_respond: false, reason: "Not relevant to me" });
+
+    handleRoomResponse(response, state as any);
+
+    expect(state.appendRoomMessage).toHaveBeenCalledTimes(1);
+    const msg = state._roomMessages[0];
+    expect(msg.silence_reason).toBe("Not relevant to me");
+    expect(msg.content).toBeUndefined();
+    expect(msg.role).toBe("persona");
+  });
+
+  it("does not call appendRoomMessage when should_respond is false and reason is absent", () => {
+    const response = makeRoomResponseParsed({ should_respond: false });
+
+    handleRoomResponse(response, state as any);
+
+    expect(state.appendRoomMessage).not.toHaveBeenCalled();
+  });
+
+  it("does not call appendRoomMessage when should_respond is true but content is empty", () => {
+    const response = makeRoomResponseParsed({ should_respond: true, content: "" });
+
+    handleRoomResponse(response, state as any);
+
+    expect(state.appendRoomMessage).not.toHaveBeenCalled();
+  });
+
+  it("stores content message when should_respond is true and content is present", () => {
+    const response = makeRoomResponseParsed({ should_respond: true, content: "Here is my response." });
+
+    handleRoomResponse(response, state as any);
+
+    expect(state.appendRoomMessage).toHaveBeenCalledTimes(1);
+    const msg = state._roomMessages[0];
+    expect(msg.content).toBe("Here is my response.");
+    expect(msg.silence_reason).toBeUndefined();
+    expect(msg.role).toBe("persona");
+    expect(msg.persona_id).toBe("persona-1");
+  });
+});
+
 describe("PersonaState.load() — message loading", () => {
   const basePersona = {
     id: "p-1",
