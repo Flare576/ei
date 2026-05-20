@@ -362,12 +362,11 @@ const heading = \`
 *(If you reference anything from it, briefly explain where it came from — e.g. "Ei shows you've been working on X" — so the user isn't confused by knowledge that appeared from nowhere.)*
 
 Ei is a personal knowledge base built from the user's coding sessions, Slack, documents, and conversations.
-The following topics MAY be relevant to your current task — use \\\`ei_search\\\` or \\\`ei_lookup\\\` for targeted queries.
+The following items MAY be relevant to your current task — use \\\`ei_search\\\` or \\\`ei_lookup\\\` for targeted queries.
 \`;
 
 const input = await new Response(Bun.stdin.stream()).json().catch(() => ({}));
 const raw = (input.prompt ?? "").replace(/<[^>]*>/g, "").trim();
-const typeArgs = ["topics", "-n", "5"];
 
 const sessionArgs = [];
 if (input.session_id && input.hook_source) {
@@ -376,7 +375,7 @@ if (input.session_id && input.hook_source) {
   sessionArgs.push("--transcript", input.transcript_path);
 }
 
-const args = raw ? [...typeArgs, ...sessionArgs, raw] : ["--recent", ...typeArgs];
+const args = raw ? ["-n", "5", ...sessionArgs, raw] : ["--recent", "-n", "5"];
 
 const output = await $\`bunx ei-tui@latest \${args}\`.quiet().text().catch(() => "");
 if (output.trim()) process.stdout.write(\`\\n\${heading}\\n\${output.trim()}\\n\`);
@@ -543,8 +542,8 @@ export default function eiIntegration(pi: ExtensionAPI) {
 
     const prompt = event.prompt ?? "";
     const args = prompt
-      ? ["topics", "-n", "5", "--", prompt]
-      : ["--recent", "topics", "-n", "5"];
+      ? ["-n", "5", "--", prompt]
+      : ["--recent", "-n", "5"];
 
     const output = await $\`bunx ei-tui@latest \${args}\`
       .env({ ...process.env, EI_DATA_PATH: "${dataPath}" })
@@ -560,7 +559,7 @@ export default function eiIntegration(pi: ExtensionAPI) {
       "*(If you reference anything from it, briefly explain where it came from.)*",
       "",
       "Ei is a personal knowledge base built from your coding sessions, Slack, documents, and conversations.",
-      "The following topics MAY be relevant to your current task — use ei_search or ei_lookup for targeted queries.",
+      "The following items MAY be relevant to your current task — use ei_search or ei_lookup for targeted queries.",
     ].join("\\n");
 
     return {
