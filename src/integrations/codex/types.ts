@@ -94,7 +94,7 @@ export const CODEX_TOPIC_GROUPS = ["General", "Coding", "Codex"];
  * Minimum session age before import.
  * Mirrors Claude Code / Cursor's 20-minute rule so active sessions can settle.
  */
-export const MIN_SESSION_AGE_MS = 20 * 60 * 1000;
+export { MIN_SESSION_AGE_MS } from "../constants.js";
 
 // ============================================================================
 // Human Settings Shape

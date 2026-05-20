@@ -116,7 +116,7 @@ export const CURSOR_TOPIC_GROUPS = ["General", "Coding", "Cursor"];
  * Minimum session age before we import it.
  * Mirrors ClaudeCode's 20-minute rule — gives the session time to "settle."
  */
-export const MIN_SESSION_AGE_MS = 20 * 60 * 1000;
+export { MIN_SESSION_AGE_MS } from "../constants.js";
 
 // ============================================================================
 // Human Settings Shape

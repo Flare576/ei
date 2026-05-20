@@ -139,7 +139,7 @@ export const CLAUDE_CODE_TOPIC_GROUPS = ["General", "Coding", "Claude Code"];
  * Minimum session age before we import it.
  * Mirrors OpenCode's 20-minute rule — gives the session time to "settle."
  */
-export const MIN_SESSION_AGE_MS = 20 * 60 * 1000;
+export { MIN_SESSION_AGE_MS } from "../constants.js";
 
 // ============================================================================
 // Human Settings Shape (mirrors OpenCodeSettings in core/types.ts)

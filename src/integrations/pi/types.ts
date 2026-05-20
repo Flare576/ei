@@ -128,7 +128,7 @@ export const PI_TOPIC_GROUPS = ["General", "Coding", "Pi"];
  * Minimum session age before import, while the tool is running.
  * Mirrors the Claude Code / Codex 20-minute rule so active sessions settle.
  */
-export const MIN_SESSION_AGE_MS = 20 * 60 * 1_000;
+export { MIN_SESSION_AGE_MS } from "../constants.js";
 
 // ============================================================================
 // Human Settings Shape
