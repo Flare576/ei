@@ -15,6 +15,7 @@ export type MessageIdIntegration =
   | "claudecode"
   | "cursor"
   | "codex"
+  | "pi"
   | "import"
   | "slack"
   | "unknown"
@@ -79,6 +80,16 @@ export function parseMessageId(id: string): ParsedMessageId {
     }
   }
 
+  if (parts[0] === "pi" && parts.length >= 4) {
+    return {
+      integration: "pi",
+      machine: parts[1],
+      session: parts[2],
+      nativeId: parts.slice(3).join(":"),
+      raw: id,
+    }
+  }
+
   if (parts[0] === "import" && parts[1] === "document" && parts.length >= 4) {
     return {
       integration: "import",
@@ -123,6 +134,10 @@ export function qualifyCursorMessage(machine: string, sessionId: string, nativeI
 
 export function qualifyCodexMessage(machine: string, sessionId: string, nativeId: string): string {
   return `codex:${machine}:${sessionId}:${nativeId}`
+}
+
+export function qualifyPiMessage(machine: string, sessionId: string, nativeId: string): string {
+  return `pi:${machine}:${sessionId}:${nativeId}`
 }
 
 export function qualifyDocumentMessage(slug: string, uuid: string): string {
