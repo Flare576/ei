@@ -1,11 +1,9 @@
 import type { StateManager } from "../../core/state-manager.js";
-import type { Ei_Interface, Message, ContextStatus, PersonaEntity, PersonaTrait } from "../../core/types.js";
+import type { Ei_Interface, Message, PersonaEntity, PersonaTrait } from "../../core/types.js";
 import { DEFAULT_SEED_TRAITS } from "../../core/constants/seed-traits.js";
-import type { IClaudeCodeReader, ClaudeCodeSession, ClaudeCodeMessage } from "./types.js";
-import {
-  CLAUDE_CODE_PERSONA_NAME,
-  MIN_SESSION_AGE_MS,
-} from "./types.js";
+import type { IClaudeCodeReader, ClaudeCodeSession } from "./types.js";
+import { CLAUDE_CODE_PERSONA_NAME } from "./types.js";
+import { MIN_SESSION_AGE_MS } from "../constants.js";
 import { ClaudeCodeReader } from "./reader.js";
 import {
   queueAllScans,
@@ -16,8 +14,10 @@ import {
   queueTopicRewritePhase,
 } from "../../core/orchestrators/ceremony.js";
 import { isProcessRunning } from "../process-check.js";
-import { getMachineId } from "../machine-id.js";
 import { qualifyClaudeCodeMessage } from "../../core/utils/message-id.js";
+import { getMachineId } from "../machine-id.js";
+import { convertToEiMessage, convertToPreMarkedEiMessage } from "../shared/message-converter.js";
+import { TWELVE_HOURS_MS } from "../constants.js";
 
 // =============================================================================
 // Export Types
@@ -41,30 +41,9 @@ export interface ClaudeCodeImporterOptions {
 // Utility Functions
 // =============================================================================
 
-const TWELVE_HOURS_MS = 43_200_000;
 const CLAUDE_CODE_GROUP = "Claude Code";
 
-function convertToEiMessage(msg: ClaudeCodeMessage, sessionId: string): Message {
-  return {
-    id: qualifyClaudeCodeMessage(getMachineId(), sessionId, msg.id),
-    role: msg.role === "user" ? "human" : "system",
-    content: msg.content,
-    timestamp: msg.timestamp,
-    read: true,
-    context_status: "default" as ContextStatus,
-    external: true,
-  };
-}
-
-function convertToPreMarkedEiMessage(msg: ClaudeCodeMessage, sessionId: string): Message {
-  return {
-    ...convertToEiMessage(msg, sessionId),
-    f: true,
-    t: true,
-    p: true,
-    e: true,
-  };
-}
+const qualify = qualifyClaudeCodeMessage;
 
 /**
  * Ensure the single "Claude Code" persona exists.
@@ -249,7 +228,7 @@ export async function importClaudeCodeSessions(
   for (const msg of messages) {
     const msgMs = new Date(msg.timestamp).getTime();
     const isOld = cutoffMs !== null && msgMs < cutoffMs;
-    const eiMsg = isOld ? convertToPreMarkedEiMessage(msg, targetSession.id) : convertToEiMessage(msg, targetSession.id);
+    const eiMsg = isOld ? convertToPreMarkedEiMessage(msg, targetSession.id, qualify) : convertToEiMessage(msg, targetSession.id, qualify);
     stateManager.messages_append(persona.id, eiMsg);
     result.messagesImported++;
     if (!isOld) toAnalyze.push(eiMsg);

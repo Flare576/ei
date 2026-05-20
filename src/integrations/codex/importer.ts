@@ -1,5 +1,5 @@
 import type { StateManager } from "../../core/state-manager.js";
-import type { ContextStatus, Ei_Interface, Message, PersonaEntity, PersonaTrait } from "../../core/types.js";
+import type { Ei_Interface, Message, PersonaEntity, PersonaTrait } from "../../core/types.js";
 import { DEFAULT_SEED_TRAITS } from "../../core/constants/seed-traits.js";
 import {
   queueAllScans,
@@ -10,16 +10,16 @@ import {
   queueTopicRewritePhase,
 } from "../../core/orchestrators/ceremony.js";
 import { qualifyCodexMessage } from "../../core/utils/message-id.js";
+import { convertToEiMessage, convertToPreMarkedEiMessage } from "../shared/message-converter.js";
 import { getMachineId } from "../machine-id.js";
 import { isProcessRunning } from "../process-check.js";
 import { CodexReader } from "./reader.js";
 import {
   CODEX_PERSONA_NAME,
-  MIN_SESSION_AGE_MS,
-  type CodexMessage,
   type CodexSession,
   type ICodexReader,
 } from "./types.js";
+import { MIN_SESSION_AGE_MS, TWELVE_HOURS_MS } from "../constants.js";
 
 export interface CodexImportResult {
   sessionsProcessed: number;
@@ -35,30 +35,9 @@ export interface CodexImporterOptions {
   signal?: AbortSignal;
 }
 
-const TWELVE_HOURS_MS = 43_200_000;
 const CODEX_GROUP = "Codex";
 
-function convertToEiMessage(msg: CodexMessage, sessionId: string): Message {
-  return {
-    id: qualifyCodexMessage(getMachineId(), sessionId, msg.id),
-    role: msg.role === "user" ? "human" : "system",
-    content: msg.content,
-    timestamp: msg.timestamp,
-    read: true,
-    context_status: "default" as ContextStatus,
-    external: true,
-  };
-}
-
-function convertToPreMarkedEiMessage(msg: CodexMessage, sessionId: string): Message {
-  return {
-    ...convertToEiMessage(msg, sessionId),
-    f: true,
-    t: true,
-    p: true,
-    e: true,
-  };
-}
+const qualify = qualifyCodexMessage;
 
 function ensureCodexPersona(
   stateManager: StateManager,
@@ -212,8 +191,8 @@ export async function importCodexSessions(
     const msgMs = new Date(msg.timestamp).getTime();
     const isOld = cutoffMs !== null && msgMs < cutoffMs;
     const eiMsg = isOld
-      ? convertToPreMarkedEiMessage(msg, targetSession.id)
-      : convertToEiMessage(msg, targetSession.id);
+      ? convertToPreMarkedEiMessage(msg, targetSession.id, qualify)
+      : convertToEiMessage(msg, targetSession.id, qualify);
 
     stateManager.messages_append(persona.id, eiMsg);
     result.messagesImported++;

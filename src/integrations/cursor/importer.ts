@@ -1,15 +1,14 @@
 import type { StateManager } from "../../core/state-manager.js";
-import type { Ei_Interface, Message, ContextStatus, PersonaEntity, PersonaTrait } from "../../core/types.js";
+import type { Ei_Interface, Message, PersonaEntity, PersonaTrait } from "../../core/types.js";
 import { DEFAULT_SEED_TRAITS } from "../../core/constants/seed-traits.js";
 import type { ICursorReader, CursorSession, CursorMessage } from "./types.js";
-import {
-  CURSOR_PERSONA_NAME,
-  MIN_SESSION_AGE_MS,
-} from "./types.js";
+import { CURSOR_PERSONA_NAME } from "./types.js";
+import { MIN_SESSION_AGE_MS, TWELVE_HOURS_MS } from "../constants.js";
 import { CursorReader } from "./reader.js";
 import { isProcessRunning } from "../process-check.js";
 import { getMachineId } from "../machine-id.js";
 import { qualifyCursorMessage } from "../../core/utils/message-id.js";
+import { convertToEiMessage, convertToPreMarkedEiMessage } from "../shared/message-converter.js";
 import {
   queueAllScans,
   type ExtractionContext,
@@ -33,29 +32,12 @@ export interface CursorImporterOptions {
   signal?: AbortSignal;
 }
 
-const TWELVE_HOURS_MS = 43_200_000;
 const CURSOR_GROUP = "Cursor";
 
-function convertToEiMessage(msg: CursorMessage, sessionId: string): Message {
-  return {
-    id: qualifyCursorMessage(getMachineId(), sessionId, msg.id),
-    role: msg.type === 1 ? "human" : "system",
-    content: msg.text,
-    timestamp: msg.timestamp,
-    read: true,
-    context_status: "default" as ContextStatus,
-    external: true,
-  };
-}
+const qualify = qualifyCursorMessage;
 
-function convertToPreMarkedEiMessage(msg: CursorMessage, sessionId: string): Message {
-  return {
-    ...convertToEiMessage(msg, sessionId),
-    f: true,
-    t: true,
-    p: true,
-    e: true,
-  };
+function normalizeCursorMessage(msg: CursorMessage) {
+  return { id: msg.id, role: (msg.type === 1 ? "user" : "assistant") as "user" | "assistant", content: msg.text, timestamp: msg.timestamp };
 }
 
 function ensureCursorPersona(
@@ -209,7 +191,8 @@ export async function importCursorSessions(
   for (const msg of messages) {
     const msgMs = new Date(msg.timestamp).getTime();
     const isOld = cutoffMs !== null && msgMs < cutoffMs;
-    const eiMsg = isOld ? convertToPreMarkedEiMessage(msg, targetSession.id) : convertToEiMessage(msg, targetSession.id);
+    const normalized = normalizeCursorMessage(msg);
+    const eiMsg = isOld ? convertToPreMarkedEiMessage(normalized, targetSession.id, qualify) : convertToEiMessage(normalized, targetSession.id, qualify);
     stateManager.messages_append(persona.id, eiMsg);
     result.messagesImported++;
     if (!isOld) toAnalyze.push(eiMsg);
