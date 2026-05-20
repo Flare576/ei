@@ -37,6 +37,7 @@ Enable any or all four in `/settings`. They work independently and feed into the
 | Claude Code | `claudeCode.integration: true` | `~/.claude/projects/` (JSONL files) |
 | Cursor | `cursor.integration: true` | `~/Library/Application Support/Cursor/User/` (macOS)<br>`%APPDATA%\Cursor\User\` (Windows)<br>`~/.config/Cursor/User/` (Linux) |
 | Codex | `codex.integration: true` | `~/.codex/state_*.sqlite` + `~/.codex/sessions/` rollout JSONL files |
+| Pi / OMP | `pi.integration: true` | `~/.pi/agent/sessions/` (Pi) or `~/.omp/agent/sessions/` (oh-my-pi) — JSONL files |
 
 Sessions are processed oldest-first, one per queue cycle. On first run Ei works through your backlog gradually — it won't flood your LLM provider.
 

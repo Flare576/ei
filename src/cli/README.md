@@ -36,6 +36,7 @@ ei --id "opencode:jeremys-macbook-pro:ses_38a7...:msg_c75b..."
 ei --id "claudecode:my-machine:session-uuid:message-uuid"
 ei --id "cursor:my-machine:composer-uuid:bubble-uuid"
 ei --id "codex:my-machine:thread-uuid:evt_42"
+ei --id "pi:my-machine:session-uuid:session-uuid/entry-id"
 ```
 
 Quotes surfaced by `ei_search` include a `message_id` field in this format — pipe it to `ei --id` to read the original conversation.
@@ -56,6 +57,7 @@ This registers Ei with Claude Code, Cursor, Codex, and OpenCode — MCP server c
 | **Cursor** | `~/.cursor/mcp.json` | `~/.cursor/hooks.json` (`beforeSubmitPrompt`) + `~/.cursor/hooks/ei-inject.sh` | — |
 | **Codex** | `~/.codex/config.toml` via `codex mcp add ei` | `~/.codex/hooks.json` (`UserPromptSubmit`) + `~/.codex/hooks/ei-inject.ts` | Local Codex agent plugin if installed separately |
 | **OpenCode** | manual (see below) | Via Oh My OpenCode compatibility layer (reads `~/.claude/settings.json`) | `~/.config/opencode/plugins/ei-persona.ts` |
+| **Pi / OMP** | — (tools registered as native Pi extension) | `~/.pi/agent/extensions/ei-integration.ts` (Pi) or `~/.omp/agent/extensions/ei-integration.ts` (OMP) | — |
 
 **Context hook**: fires before every message, searches Ei for relevant memory, and injects it silently. No tool call required.
 
