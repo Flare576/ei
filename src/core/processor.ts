@@ -149,6 +149,7 @@ const DEFAULT_OPENCODE_POLLING_MS = 60000;
 const DEFAULT_CLAUDE_CODE_POLLING_MS = 60000;
 const DEFAULT_CURSOR_POLLING_MS = 60000;
 const DEFAULT_CODEX_POLLING_MS = 60000;
+const DEFAULT_PI_POLLING_MS = 60000;
 
 let processorInstanceCount = 0;
 
@@ -173,6 +174,8 @@ export class Processor {
   private cursorImportInProgress = false;
   private lastCodexSync = 0;
   private codexImportInProgress = false;
+  private lastPiSync = 0;
+  private piImportInProgress = false;
   private lastSlackSync = 0;
   private slackImportInProgress = false;
   private pendingConflict: StateConflictData | null = null;
@@ -1296,6 +1299,10 @@ export class Processor {
       console.log(`[Processor ${this.instanceId}] Clearing codexImportInProgress flag`);
       this.codexImportInProgress = false;
     }
+    if (this.piImportInProgress) {
+      console.log(`[Processor ${this.instanceId}] Clearing piImportInProgress flag`);
+      this.piImportInProgress = false;
+    }
     if (this.slackImportInProgress) {
       console.log(`[Processor ${this.instanceId}] Clearing slackImportInProgress flag`);
       this.slackImportInProgress = false;
@@ -1547,6 +1554,14 @@ const toolNextSteps = new Set([
       this.stateManager.queue_length() === 0
     ) {
       await this.checkAndSyncCodex(human, now);
+    }
+
+    if (
+      this.isTUI &&
+      human.settings?.pi?.integration &&
+      this.stateManager.queue_length() === 0
+    ) {
+      await this.checkAndSyncPi(human, now);
     }
 
     if (
@@ -1857,6 +1872,60 @@ const toolNextSteps = new Set([
       })
       .finally(() => {
         this.codexImportInProgress = false;
+      });
+  }
+
+  private async checkAndSyncPi(human: HumanEntity, now: number): Promise<void> {
+    if (this.piImportInProgress) {
+      return;
+    }
+
+    const pi = human.settings?.pi;
+    const pollingInterval = pi?.polling_interval_ms ?? DEFAULT_PI_POLLING_MS;
+    const lastSync = pi?.last_sync ? new Date(pi.last_sync).getTime() : 0;
+    const timeSinceSync = now - lastSync;
+
+    if (timeSinceSync < pollingInterval && this.lastPiSync > 0) {
+      return;
+    }
+
+    this.lastPiSync = now;
+    const syncTimestamp = new Date().toISOString();
+    const currentHuman = this.stateManager.getHuman();
+    this.stateManager.setHuman({
+      ...currentHuman,
+      settings: {
+        ...currentHuman.settings,
+        pi: {
+          ...pi,
+          last_sync: syncTimestamp,
+        },
+      },
+    });
+
+    this.piImportInProgress = true;
+    import("../integrations/pi/importer.js")
+      .then(({ importPiSessions }) =>
+        importPiSessions({
+          stateManager: this.stateManager,
+          interface: this.interface,
+          signal: this.importAbortController.signal,
+        })
+      )
+      .then((result) => {
+        if (result.sessionsProcessed > 0) {
+          console.log(
+            `[Processor] Pi sync complete: ${result.sessionsProcessed} sessions, ` +
+              `${result.messagesImported} messages imported, ` +
+              `${result.extractionScansQueued} extraction scans queued`
+          );
+        }
+      })
+      .catch((err) => {
+        console.warn(`[Processor] Pi sync failed:`, err);
+      })
+      .finally(() => {
+        this.piImportInProgress = false;
       });
   }
 
