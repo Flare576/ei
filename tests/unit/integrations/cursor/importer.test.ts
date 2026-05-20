@@ -1,9 +1,17 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { importCursorSessions } from "../../../../src/integrations/cursor/importer.js";
 import type { StateManager } from "../../../../src/core/state-manager.js";
-import type { Ei_Interface, HumanEntity, Message, ContextStatus } from "../../../../src/core/types.js";
+import type { Ei_Interface, HumanEntity, Message } from "../../../../src/core/types.js";
 import type { ICursorReader, CursorSession } from "../../../../src/integrations/cursor/types.js";
 import { isProcessRunning } from "../../../../src/integrations/process-check.js";
+import {
+  buildPersonaEntity,
+  buildMockHuman,
+  buildMockInterface,
+  buildMockStateManager,
+  buildExternalMessage,
+  buildChatMessage,
+} from "../shared/importer-test-utils.js";
 
 vi.mock("../../../../src/integrations/process-check.js", () => ({
   isProcessRunning: vi.fn().mockResolvedValue(true),
@@ -34,20 +42,7 @@ function makeSession(overrides: Partial<CursorSession> & { id: string }): Cursor
   };
 }
 
-function buildPersonaEntity(id: string, displayName: string, archived = false) {
-  return {
-    id,
-    display_name: displayName,
-    entity: "system" as const,
-    aliases: [],
-    traits: [],
-    topics: [],
-    is_paused: false,
-    is_archived: archived,
-    is_static: false,
-    last_updated: "2026-01-01T00:00:00.000Z",
-  };
-}
+
 
 describe("importCursorSessions", () => {
   let mockStateManager: Partial<StateManager>;
@@ -61,64 +56,24 @@ describe("importCursorSessions", () => {
     cursorPersona = null;
     messageStore = new Map();
 
-    mockHuman = {
-      entity: "human",
-      facts: [],
-      topics: [],
-      people: [],
-      quotes: [],
-      last_updated: "2026-01-01T00:00:00.000Z",
-    };
-
-    mockStateManager = {
-      getHuman: vi.fn(() => mockHuman),
-      setHuman: vi.fn((h: HumanEntity) => { mockHuman = h; }),
-      persona_getById: vi.fn((id: string) => {
-        if (cursorPersona?.id === id) return cursorPersona;
-        return null;
-      }),
-      persona_getByName: vi.fn((name: string) => {
-        if (name === "Cursor" && cursorPersona) return cursorPersona;
-        return null;
-      }),
-      persona_add: vi.fn((entity: { id?: string; display_name: string }) => {
+    mockHuman = buildMockHuman();
+    mockInterface = buildMockInterface() as Partial<Ei_Interface>;
+    mockStateManager = buildMockStateManager(
+      (name) => (name === "Cursor" && cursorPersona) ? cursorPersona : null,
+      (id) => (cursorPersona?.id === id) ? cursorPersona : null,
+      (entity) => {
         const id = entity.id ?? crypto.randomUUID();
         cursorPersona = buildPersonaEntity(id, entity.display_name);
         return id;
-      }),
-      persona_update: vi.fn(),
-      persona_archive: vi.fn((id: string): boolean => {
-        if (cursorPersona?.id === id) {
-          cursorPersona = { ...cursorPersona, is_archived: true };
-          return true;
-        }
+      },
+      (id) => {
+        if (cursorPersona?.id === id) { cursorPersona = { ...cursorPersona, is_archived: true }; return true; }
         return false;
-      }),
-      messages_get: vi.fn((personaId: string) => messageStore.get(personaId) ?? []),
-      messages_append: vi.fn((personaId: string, msg: Message) => {
-        const existing = messageStore.get(personaId) ?? [];
-        existing.push(msg);
-        messageStore.set(personaId, existing);
-      }),
-      messages_remove: vi.fn((personaId: string, ids: string[]) => {
-        const existing = messageStore.get(personaId) ?? [];
-        const idSet = new Set(ids);
-        const removed = existing.filter((m) => idSet.has(m.id));
-        messageStore.set(personaId, existing.filter((m) => !idSet.has(m.id)));
-        return removed;
-      }),
-      messages_sort: vi.fn(),
-      messages_markExtracted: vi.fn(),
-      messages_getUnextracted: vi.fn().mockReturnValue([]),
-      human_topic_upsert: vi.fn(),
-      queue_enqueue: vi.fn(),
-    };
-
-    mockInterface = {
-      onPersonaAdded: vi.fn(),
-      onMessageAdded: vi.fn(),
-      onHumanUpdated: vi.fn(),
-    };
+      },
+      messageStore,
+      () => mockHuman,
+      (h) => { mockHuman = h; }
+    );
 
     mockReader = {
       getSessions: vi.fn().mockResolvedValue([]),
@@ -250,25 +205,7 @@ describe("importCursorSessions", () => {
 
   it("removes only external messages on re-import, preserves non-external chat history", async () => {
     cursorPersona = buildPersonaEntity("cursor-id", "Cursor");
-    messageStore.set("cursor-id", [
-      {
-        id: "ext-msg",
-        role: "human",
-        content: "external session import",
-        timestamp: "2025-01-01T00:00:00.000Z",
-        read: true,
-        context_status: "default" as ContextStatus,
-        external: true,
-      },
-      {
-        id: "chat-msg",
-        role: "human",
-        content: "regular chat message",
-        timestamp: "2025-01-01T00:01:00.000Z",
-        read: true,
-        context_status: "default" as ContextStatus,
-      },
-    ]);
+     messageStore.set("cursor-id", [buildExternalMessage("ext-msg"), buildChatMessage("chat-msg")]);
 
     const session = makeSession({ id: "session-abc" });
     mockReader.getSessions = vi.fn().mockResolvedValue([session]);
