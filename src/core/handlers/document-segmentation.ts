@@ -44,8 +44,7 @@ export function handleDocumentSegmentation(response: LLMResponse, state: StateMa
 
   const emmett = state.persona_getById("emmet");
   if (!emmett) {
-    console.warn("[handleDocumentSegmentation] Emmett persona not found — skipping segment write");
-    return;
+    throw new Error("[handleDocumentSegmentation] Emmett persona not found — cannot write segments");
   }
 
   const now = new Date().toISOString();
