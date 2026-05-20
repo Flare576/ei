@@ -521,6 +521,28 @@ export async function resolveExternalMessage(
       }
     }
 
+    case "pi": {
+      if (parsed.machine !== getMachineId()) {
+        return { error: `Message is from machine '${parsed.machine}', not available on this machine (${getMachineId()})` };
+      }
+      try {
+        const { PiReader } = await import("../integrations/pi/reader.js");
+        const reader = new PiReader();
+        const win = await reader.getMessageById(parsed.session!, parsed.nativeId, before, after);
+        if (!win) return null;
+        return {
+          type: "opencode_message",
+          message: { id: win.message.id, role: win.message.role, content: win.message.content, timestamp: win.message.timestamp },
+          before: win.before.map(m => ({ id: m.id, role: m.role, content: m.content, timestamp: m.timestamp })),
+          after: win.after.map(m => ({ id: m.id, role: m.role, content: m.content, timestamp: m.timestamp })),
+          session: { id: win.session.id, title: win.session.title, directory: win.session.cwd },
+          source: "pi",
+        };
+      } catch {
+        return null;
+      }
+    }
+
     case "unknown":
     default: {
       // Backward compat: bare msg_xxx → treat as opencode (no machine qualifier)

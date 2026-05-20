@@ -121,6 +121,17 @@ async function installMcpClients(): Promise<void> {
   } else {
     console.log(`ℹ️  OpenCode not detected — skipping OpenCode plugin install.`);
   }
+
+  const hasPi = await Bun.file(join(home, ".pi", "agent", "settings.json")).exists() ||
+    await Bun.file(join(home, ".pi", "agent", "auth.json")).exists();
+  const hasOmp = await Bun.file(join(home, ".omp", "agent", "settings.json")).exists() ||
+    await Bun.file(join(home, ".omp", "agent", "auth.json")).exists();
+
+  if (hasPi || hasOmp) {
+    await installPi();
+  } else {
+    console.log(`ℹ️  Pi/OMP not detected — skipping Pi extension install.`);
+  }
 }
 
 async function commandExists(command: string): Promise<boolean> {
@@ -505,6 +516,135 @@ exit 0
   await rename(tmpPath, hooksJsonPath);
 
   console.log(`✓ Installed Ei context hook to ~/.cursor/hooks/ei-inject.sh`);
+}
+
+async function installPi(): Promise<void> {
+  const home = process.env.HOME || "~";
+  const dataPath = process.env.EI_DATA_PATH ?? join(home, ".local", "share", "ei");
+
+  const extensionContent = `import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
+import { $ } from "bun";
+
+export default function eiIntegration(pi: ExtensionAPI) {
+  pi.on("before_agent_start", async (event, ctx) => {
+    const entries = ctx.sessionManager.getEntries();
+    const recentMsgs = entries
+      .filter((e: any) => e.type === "message" && (e.message?.role === "user" || e.message?.role === "assistant"))
+      .slice(-5)
+      .map((e: any) => {
+        const role = e.message?.role ?? "unknown";
+        const text = Array.isArray(e.message?.content)
+          ? e.message.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join(" ")
+          : (e.message?.content ?? "");
+        return \`\${role}: \${text.slice(0, 200)}\`;
+      })
+      .join("\\n");
+
+    const prompt = event.prompt ?? "";
+    const args = prompt
+      ? ["topics", "-n", "5", "--", prompt]
+      : ["--recent", "topics", "-n", "5"];
+
+    const output = await $\`bunx ei-tui@latest \${args}\`
+      .env({ ...process.env, EI_DATA_PATH: "${dataPath}" })
+      .quiet()
+      .text()
+      .catch(() => "");
+
+    if (!output.trim()) return undefined;
+
+    const heading = [
+      "## Ei Memory Context",
+      "*(The user cannot see this block. It is injected automatically before their message.)*",
+      "*(If you reference anything from it, briefly explain where it came from.)*",
+      "",
+      "Ei is a personal knowledge base built from your coding sessions, Slack, documents, and conversations.",
+      "The following topics MAY be relevant to your current task — use ei_search or ei_lookup for targeted queries.",
+    ].join("\\n");
+
+    return {
+      message: {
+        customType: "ei-context",
+        content: \`\${heading}\\n\\n\${output.trim()}\`,
+        display: false,
+      },
+    };
+  });
+
+  pi.registerTool({
+    name: "ei_search",
+    label: "Search Ei Memory",
+    description: "Semantic search of Ei's personal knowledge base — facts, topics, people, quotes across all sources. Use when you need context about the user, their work, or anything Ei has learned.",
+    promptSnippet: "Search Ei's personal memory for relevant facts, topics, people, or quotes.",
+    parameters: Type.Object({
+      query: Type.String({ description: "Natural language search query" }),
+      type: Type.Optional(Type.Union([
+        Type.Literal("facts"),
+        Type.Literal("topics"),
+        Type.Literal("people"),
+        Type.Literal("quotes"),
+        Type.Literal("personas"),
+      ], { description: "Filter to a specific data type. Omit for balanced results across all types." })),
+    }),
+    async execute(_id, params, _signal, _onUpdate, _ctx) {
+      const args = params.type
+        ? [params.type, "-n", "5", "--", params.query]
+        : ["-n", "5", "--", params.query];
+      const output = await $\`bunx ei-tui@latest \${args}\`
+        .env({ ...process.env, EI_DATA_PATH: "${dataPath}" })
+        .quiet()
+        .text()
+        .catch(() => "No results found");
+      return {
+        content: [{ type: "text" as const, text: output.trim() || "No results found" }],
+        details: {},
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "ei_lookup",
+    label: "Lookup Ei Entity",
+    description: "Full-record lookup for a specific Ei entity (Fact, Topic, Person, Quote, or Persona) by ID. Use after ei_search to retrieve complete details for an item.",
+    parameters: Type.Object({
+      id: Type.String({ description: "Entity ID from ei_search results" }),
+    }),
+    async execute(_id, params, _signal, _onUpdate, _ctx) {
+      const output = await $\`bunx ei-tui@latest --id \${params.id}\`
+        .env({ ...process.env, EI_DATA_PATH: "${dataPath}" })
+        .quiet()
+        .text()
+        .catch(() => "Not found");
+      return {
+        content: [{ type: "text" as const, text: output.trim() || "Not found" }],
+        details: {},
+      };
+    },
+  });
+}
+`;
+
+  const piExtDir = join(home, ".pi", "agent", "extensions");
+  const ompExtDir = join(home, ".omp", "agent", "extensions");
+  const extFilename = "ei-integration.ts";
+
+  const hasPiAgent = await Bun.file(join(home, ".pi", "agent", "auth.json")).exists() ||
+    await Bun.file(join(home, ".pi", "agent", "settings.json")).exists();
+  const hasOmpAgent = await Bun.file(join(home, ".omp", "agent", "auth.json")).exists() ||
+    await Bun.file(join(home, ".omp", "agent", "settings.json")).exists();
+
+  if (hasPiAgent) {
+    await Bun.$`mkdir -p ${piExtDir}`;
+    await Bun.write(join(piExtDir, extFilename), extensionContent);
+    console.log(`✓ Installed Ei extension to ~/.pi/agent/extensions/${extFilename}`);
+  }
+
+  if (hasOmpAgent) {
+    await Bun.$`mkdir -p ${ompExtDir}`;
+    await Bun.write(join(ompExtDir, extFilename), extensionContent);
+    console.log(`✓ Installed Ei extension to ~/.omp/agent/extensions/${extFilename}`);
+  }
 }
 
 async function installOpenCodePlugin(): Promise<void> {
