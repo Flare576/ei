@@ -11,21 +11,17 @@ import type {
   Ei_Interface, 
   HumanEntity,
   PersonaEntity,
-  PersonaTrait,
+   PersonaTrait,
   PersonaTopic,
   Quote,
   ProviderAccount,
   StateConflictData,
   ToolProvider,
   ToolDefinition,
-  RoomSummary,
-  RoomEntity,
-  RoomMessage,
-  RoomCreationInput,
   } from "../../src/core/types";
 import { decodeTheme, themeToStyleString, isBuiltInTheme } from '../../src/core/utils/theme-codec.js';
 import type { ThemeDefinition } from '../../src/core/types/entities.js';
-import { ContextStatus, LLMNextStep, RoomMode } from "../../src/core/types";
+import { ContextStatus, LLMNextStep } from "../../src/core/types";
 import { Layout, PersonaPanel, ChatPanel, RoomChatPanel, ControlArea, HelpModal, ImagePreviewModal, type PersonaPanelHandle, type ChatPanelHandle, type RoomChatPanelHandle } from "./components/Layout";
 
 function applyTheme(activeThemeId: string | undefined, customThemes: ThemeDefinition[]): void {
@@ -78,6 +74,7 @@ import { useQueueHandlers } from "./hooks/useQueueHandlers";
 import { useHumanDataHandlers } from "./hooks/useHumanDataHandlers";
 import { useOAuthCallbacks } from "./hooks/useOAuthCallbacks";
 import { useImageGeneration } from "./hooks/useImageGeneration";
+import { useRoomHandlers } from "./hooks/useRoomHandlers";
 import { clearTokenCache } from '../../src/core/tools/builtin/spotify-auth.js';
 import { clearLikedSongsCache } from '../../src/core/tools/builtin/spotify-liked-songs.js';
 import { SLACK_CLIENT_ID, SLACK_WEB_REDIRECT_URI } from '../../src/core/tools/builtin/slack-auth.js';
@@ -260,31 +257,54 @@ function App() {
   } = useImageGeneration(processorRef, activePersonaId, messages, setMessages);
 
   const [showMessageSelector, setShowMessageSelector] = useState(false);
-  const [rooms, setRooms] = useState<RoomSummary[]>([]);
-  const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
-  const [activeRoom, setActiveRoom] = useState<RoomEntity | null>(null);
-  const [roomMessages, setRoomMessages] = useState<RoomMessage[]>([]);
-  const [activeRoomPath, setActiveRoomPath] = useState<RoomMessage[]>([]);
-  const [processingRoomId, setProcessingRoomId] = useState<string | null>(null);
-  const [roomActivating, setRoomActivating] = useState(false);
-  const refreshRoomActivating = useCallback((roomId: string) => {
-    const pending = processorRef.current?.getQueueActiveItems().some(
-      item => item.next_step === LLMNextStep.HandleRoomJudge &&
-              (item.data.roomId as string) === roomId
-    ) ?? false;
-    setRoomActivating(pending);
-  }, []);
-  const [showRoomCreator, setShowRoomCreator] = useState(false);
-  const [showRoomEditor, setShowRoomEditor] = useState(false);
-  const [editingRoom, setEditingRoom] = useState<RoomEntity | null>(null);
-  const [showRoomOverview, setShowRoomOverview] = useState(false);
-  const [overviewRoomId, setOverviewRoomId] = useState<string | null>(null);
-  const [roomInputValue, setRoomInputValue] = useState("");
+
+  const {
+    rooms,
+    setRooms,
+    activeRoomId,
+    setActiveRoomId,
+    activeRoom,
+    setActiveRoom,
+    roomMessages,
+    setRoomMessages,
+    activeRoomPath,
+    setActiveRoomPath,
+    processingRoomId,
+    setProcessingRoomId,
+    roomActivating,
+    showRoomCreator,
+    setShowRoomCreator,
+    showRoomEditor,
+    setShowRoomEditor,
+    editingRoom,
+    setEditingRoom,
+    showRoomOverview,
+    setShowRoomOverview,
+    overviewRoomId,
+    setOverviewRoomId,
+    roomInputValue,
+    setRoomInputValue,
+    activeRoomIdRef,
+    refreshRoomActivating,
+    handleSelectRoom,
+    handleCreateRoom,
+    handleArchiveRoom,
+    handleEditRoom,
+    handleShowRoomOverview,
+    handleSaveRoomEdits,
+    handleUnarchiveRoom,
+    handleDeleteArchivedRoom,
+    handleSubmitHumanRoomMessage,
+    handleActivateRoom,
+    handleRecallHumanRoomMessage,
+    handleSelectCYPBranch,
+    handleSetRoomMessageContextStatus,
+    handleDeleteRoomMessages,
+  } = useRoomHandlers(processorRef, processor, switchPersona);
 
   const personaPanelRef = useRef<PersonaPanelHandle | null>(null);
   const chatPanelRef = useRef<ChatPanelHandle | null>(null);
   const roomChatPanelRef = useRef<RoomChatPanelHandle | null>(null);
-  const activeRoomIdRef = useRef<string | null>(null);
   const oneShotResolvers = useRef<Map<string, (result: string) => void>>(new Map());
   const oneShotJSONResolvers = useRef<Map<string, (result: unknown) => void>>(new Map());
   const storageRef = useRef<Storage | null>(null);
@@ -335,12 +355,8 @@ function App() {
   }, [human?.settings?.active_theme, human?.settings?.custom_themes]);
 
   useEffect(() => {
-    editingPersonaIdRef.current = editingPersonaId;
+     editingPersonaIdRef.current = editingPersonaId;
   }, [editingPersonaId]);
-
-  useEffect(() => {
-    activeRoomIdRef.current = activeRoomId;
-  }, [activeRoomId]);
 
   useEffect(() => {
     if (showOnboarding !== false) return;
@@ -675,156 +691,9 @@ function App() {
   const handleShowArchivedPersonas = useCallback(async () => {
     if (!processor) return;
     const allPersonas = await processor.getPersonaList();
-    setArchivedPersonas(allPersonas.filter(p => p.is_archived));
+         setArchivedPersonas(allPersonas.filter(p => p.is_archived));
     setShowArchivedPersonas(true);
   }, [processor]);
-
-  const handleSelectRoom = useCallback(async (roomId: string) => {
-    if (processor && activeRoomId && activeRoomId !== roomId) {
-      await processor.markAllRoomMessagesRead(activeRoomId);
-    }
-    switchPersona(null);
-    setActiveRoomId(roomId);
-    refreshRoomActivating(roomId);
-    if (processor) {
-      const room = processor.getRoom(roomId);
-      setActiveRoom(room ?? null);
-      setRoomMessages(processor.getRoomMessages(roomId));
-      setActiveRoomPath(processor.getRoomActivePath(roomId));
-      processor.markAllRoomMessagesRead(roomId).then(() => {
-        setRooms(processor.getRoomList());
-      });
-    }
-  }, [processor, activeRoomId]);
-
-  const handleCreateRoom = useCallback(async (input: RoomCreationInput) => {
-    if (!processor) return;
-    const roomId = await processor.createRoom(input);
-    setRooms(processor.getRoomList());
-    setShowRoomCreator(false);
-    const room = processor.getRoom(roomId);
-    setActiveRoom(room ?? null);
-    switchPersona(null);
-    setActiveRoomId(roomId);
-    setRoomMessages(processor.getRoomMessages(roomId));
-    setActiveRoomPath(processor.getRoomActivePath(roomId));
-  }, [processor]);
-
-  const handleArchiveRoom = useCallback(async (roomId: string) => {
-    if (!processor) return;
-    await processor.archiveRoom(roomId);
-    setRooms(processor.getRoomList());
-    if (activeRoomId === roomId) {
-      setActiveRoomId(null);
-      setActiveRoom(null);
-      setRoomMessages([]);
-      setActiveRoomPath([]);
-    }
-  }, [processor, activeRoomId]);
-
-  const handleEditRoom = useCallback((roomId: string) => {
-    if (!processor) return;
-    const room = processor.getRoom(roomId);
-    if (room) {
-      setEditingRoom(room);
-      setShowRoomEditor(true);
-    }
-  }, [processor]);
-
-  const handleShowRoomOverview = useCallback((roomId: string) => {
-    setOverviewRoomId(roomId);
-    setShowRoomOverview(true);
-  }, []);
-
-  const handleSaveRoomEdits = useCallback(async (roomId: string, updates: Partial<RoomEntity>) => {
-    if (!processor) return;
-    await processor.updateRoom(roomId, updates);
-    setRooms(processor.getRoomList());
-    setShowRoomEditor(false);
-    setEditingRoom(null);
-  }, [processor]);
-
-  const handleUnarchiveRoom = useCallback(async (roomId: string) => {
-    if (!processor) return;
-    await processor.unarchiveRoom(roomId);
-    setRooms(processor.getRoomList());
-  }, [processor]);
-
-  const handleDeleteArchivedRoom = useCallback(async (roomId: string) => {
-    if (!processor) return;
-    await processor.deleteRoom(roomId);
-    setRooms(processor.getRoomList());
-  }, [processor]);
-
-  const handleSubmitHumanRoomMessage = useCallback(async (content: string | null, silenceReason?: string) => {
-    if (!activeRoomId || !processorRef.current) return;
-    const currentRoom = processorRef.current.getRoom(activeRoomId);
-    if (!currentRoom) return;
-    if (currentRoom.mode === RoomMode.FreeForAll) {
-      await processorRef.current.sendFfaMessage(activeRoomId, content, silenceReason);
-    } else {
-      processorRef.current.submitHumanRoomMessage(activeRoomId, content, silenceReason);
-    }
-    setRoomInputValue("");
-    setRoomMessages(processorRef.current.getRoomMessages(activeRoomId));
-    const updatedRoom = processorRef.current.getRoom(activeRoomId);
-    if (updatedRoom) setActiveRoom(updatedRoom);
-    setActiveRoomPath(processorRef.current.getRoomActivePath(activeRoomId));
-  }, [activeRoomId]);
-
-  const handleActivateRoom = useCallback(async () => {
-    if (!activeRoomId || !processorRef.current) return;
-    await processorRef.current.activateRoom(activeRoomId);
-    refreshRoomActivating(activeRoomId);
-    const updatedRoom = processorRef.current.getRoom(activeRoomId);
-    if (updatedRoom) setActiveRoom(updatedRoom);
-    setRoomMessages(processorRef.current.getRoomMessages(activeRoomId));
-    setActiveRoomPath(processorRef.current.getRoomActivePath(activeRoomId));
-  }, [activeRoomId]);
-
-  const handleRecallHumanRoomMessage = useCallback(() => {
-    if (!activeRoomId || !processorRef.current) return;
-    const allMsgs = processorRef.current.getRoomMessages(activeRoomId);
-    const humanMsg = allMsgs.find(
-      m => m.role === "human" && m.parent_id === activeRoom?.active_node_id
-    );
-    if (humanMsg) {
-      const childIds = new Set(allMsgs.filter(m => m.parent_id === humanMsg.id).map(m => m.id));
-      const hasGrandchildren = allMsgs.some(m => m.parent_id && childIds.has(m.parent_id));
-      if (hasGrandchildren) return;
-    }
-    const recalledText = humanMsg?.content ?? humanMsg?.silence_reason ?? "";
-    const ok = processorRef.current.recallHumanRoomMessage(activeRoomId);
-    if (ok) {
-      setRoomInputValue(recalledText);
-      setRoomMessages(processorRef.current.getRoomMessages(activeRoomId));
-    }
-  }, [activeRoomId, activeRoom]);
-
-  const handleSelectCYPBranch = useCallback(async (messageId: string) => {
-    if (!activeRoomId || !processorRef.current) return;
-    await processorRef.current.selectCYPBranch(activeRoomId, messageId);
-    const updatedRoom = processorRef.current.getRoom(activeRoomId);
-    if (updatedRoom) setActiveRoom(updatedRoom);
-    setRoomMessages(processorRef.current.getRoomMessages(activeRoomId));
-    setActiveRoomPath(processorRef.current.getRoomActivePath(activeRoomId));
-  }, [activeRoomId]);
-
-  const handleSetRoomMessageContextStatus = useCallback(async (
-    roomId: string,
-    messageId: string,
-    status: ContextStatus,
-  ) => {
-    if (!processorRef.current) return;
-    processorRef.current.getStateManager().updateRoomMessage(roomId, messageId, { context_status: status });
-    await processorRef.current.updateRoom(roomId, {});
-  }, []);
-
-  const handleDeleteRoomMessages = useCallback(async (roomId: string, messageIds: string[]) => {
-    if (!processorRef.current) return;
-    processorRef.current.getStateManager().removeRoomMessages(roomId, messageIds);
-    await processorRef.current.updateRoom(roomId, {});
-  }, []);
 
   const handleImportDocument = useCallback(async (file: File) => {
     if (!processor) return;
