@@ -77,7 +77,7 @@ import { useReflection } from "./hooks/useReflection";
 import { useQueueHandlers } from "./hooks/useQueueHandlers";
 import { useHumanDataHandlers } from "./hooks/useHumanDataHandlers";
 import { useOAuthCallbacks } from "./hooks/useOAuthCallbacks";
-import { generateImage, type GenerationResult } from "./comfyui";
+import { useImageGeneration } from "./hooks/useImageGeneration";
 import { clearTokenCache } from '../../src/core/tools/builtin/spotify-auth.js';
 import { clearLikedSongsCache } from '../../src/core/tools/builtin/spotify-liked-songs.js';
 import { SLACK_CLIENT_ID, SLACK_WEB_REDIRECT_URI } from '../../src/core/tools/builtin/slack-auth.js';
@@ -240,16 +240,25 @@ function App() {
     handlePersonSave,
     handlePersonDelete,
     handleQuoteSave: handleQuoteSaveBase,
-    handleQuoteDelete: handleQuoteDeleteBase,
+     handleQuoteDelete: handleQuoteDeleteBase,
   } = useHumanDataHandlers(processor, setHuman);
 
-  const [showImagePreview, setShowImagePreview] = useState(false);
-  const [currentImageResult, setCurrentImageResult] = useState<GenerationResult | null>(null);
-  const [imageGenerationError, setImageGenerationError] = useState<string | null>(null);
-  const [messageImages, setMessageImages] = useState<Record<string, {blobUrl: string, result: GenerationResult}>>({});
-  const [generatingImageFor, setGeneratingImageFor] = useState<string | null>(null);
-  const [imageErrors, setImageErrors] = useState<Record<string, string>>({});
-  const [currentViewingMessageId, setCurrentViewingMessageId] = useState<string | null>(null);
+  const {
+    currentImageResult,
+    imageGenerationError,
+    messageImages,
+    generatingImageFor,
+    imageErrors,
+    showImagePreview,
+    currentViewingMessageId,
+    handleImageGenerate,
+    handleImageRegenerate,
+    handleImagePreviewClose,
+    handleImageRemove,
+    handleImageClick,
+    handlePromptUpdate,
+  } = useImageGeneration(processorRef, activePersonaId, messages, setMessages);
+
   const [showMessageSelector, setShowMessageSelector] = useState(false);
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
@@ -291,13 +300,6 @@ function App() {
       else chatPanelRef.current?.scrollChat(dir);
     },
   });
-
-  // Cleanup Blob URLs when component unmounts
-  useEffect(() => {
-    return () => {
-      Object.values(messageImages).forEach(imageData => URL.revokeObjectURL(imageData.blobUrl));
-    };
-  }, [messageImages]);
 
   // Check for first-run on mount (before Processor starts)
   useEffect(() => {
@@ -619,151 +621,6 @@ function App() {
       processor.getMessages(activePersonaId).then(setMessages);
     }
   }, [processor, activePersonaId]);
-
-
-  const handleImageGenerate = useCallback(async (message: Message) => {
-    // Extract prompt from message
-    const prompt = getContent(message);
-    
-    if (!prompt.trim()) {
-      alert("No prompt text found in this message");
-      return;
-    }
-    
-    setGeneratingImageFor(message.id);
-    setImageErrors(prev => {
-      const updated = { ...prev };
-      delete updated[message.id];
-      return updated;
-    });
-    
-    // If modal is open for this message, clear modal error state
-    if (currentViewingMessageId === message.id) {
-      setImageGenerationError(null);
-    }
-    
-    try {
-      const result = await generateImage(prompt, processorRef.current?.getStateManager());
-      const blobUrl = URL.createObjectURL(result.image);
-      setMessageImages(prev => ({ ...prev, [message.id]: { blobUrl, result } }));
-      
-      // If modal is open for this message, update modal result state
-      if (currentViewingMessageId === message.id) {
-        setCurrentImageResult(result);
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      setImageErrors(prev => ({ ...prev, [message.id]: errorMessage }));
-      
-      // If modal is open for this message, update modal error state
-      if (currentViewingMessageId === message.id) {
-        setImageGenerationError(errorMessage);
-      }
-      console.error("Image generation failed:", error);
-    } finally {
-      setGeneratingImageFor(null);
-    }
-  }, [currentViewingMessageId]);
-  
-  const handleImageRegenerate = useCallback(async () => {
-    if (!currentViewingMessageId) return;
-    
-    // Find the message being viewed
-    const message = messages.find(m => m.id === currentViewingMessageId);
-    if (!message) return;
-    
-    // Revoke old Blob URL before regenerating
-    const oldImageData = messageImages[currentViewingMessageId];
-    if (oldImageData) {
-      URL.revokeObjectURL(oldImageData.blobUrl);
-    }
-    
-    // Regenerate using the same flow as initial generation
-    await handleImageGenerate(message);
-  }, [currentViewingMessageId, messages, messageImages, handleImageGenerate]);
-  
-  const handleImagePreviewClose = useCallback(() => {
-    setShowImagePreview(false);
-    setCurrentImageResult(null);
-    setImageGenerationError(null);
-    setCurrentViewingMessageId(null);
-  }, []);
-  
-  const handleImageRemove = useCallback(() => {
-    if (!currentViewingMessageId) return;
-    
-    // Revoke the blob URL to free memory
-    const imageData = messageImages[currentViewingMessageId];
-    if (imageData?.blobUrl) {
-      URL.revokeObjectURL(imageData.blobUrl);
-    }
-    
-    // Remove from messageImages state
-    setMessageImages(prev => {
-      const newImages = { ...prev };
-      delete newImages[currentViewingMessageId];
-      return newImages;
-    });
-    
-    // Clear any error for this message
-    setImageErrors(prev => {
-      const newErrors = { ...prev };
-      delete newErrors[currentViewingMessageId];
-      return newErrors;
-    });
-    
-    // Close the modal
-    handleImagePreviewClose();
-  }, [currentViewingMessageId, messageImages, handleImagePreviewClose]);
-  
-  const handleImageClick = useCallback((messageId: string) => {
-    const message = messages.find(m => m.id === messageId);
-    const imageData = messageImages[messageId];
-    
-    // For synthesis messages, always open modal (they have editable prompts)
-    if (message?._synthesis) {
-      setImageGenerationError(null);
-      setCurrentViewingMessageId(messageId);
-      setShowImagePreview(true);
-      // Set result if available (for synthesis messages with generated images)
-      if (imageData) {
-        setCurrentImageResult(imageData.result);
-      }
-      return;
-    }
-    
-    if (!imageData) {
-      // If no image, might be error - show error in modal
-      const error = imageErrors[messageId];
-      if (error) {
-        setImageGenerationError(error);
-        setCurrentViewingMessageId(messageId);
-        setShowImagePreview(true);
-      }
-      return;
-    }
-    
-    // Open modal with generation result for normal messages
-    setImageGenerationError(null);
-    setCurrentImageResult(imageData.result);
-    setCurrentViewingMessageId(messageId);
-    setShowImagePreview(true);
-  }, [messageImages, imageErrors, messages]);
-
-  const handlePromptUpdate = useCallback((newPrompt: string) => {
-    if (!currentViewingMessageId || !activePersonaId) return;
-    
-    processor?.updateMessage(activePersonaId, currentViewingMessageId, {
-      content: newPrompt
-    });
-    
-    // Update local messages state to reflect change immediately
-    setMessages(prev => prev.map(msg => 
-      msg.id === currentViewingMessageId 
-        ? { ...msg, content: newPrompt }
-        : msg
-    ));
-  }, [currentViewingMessageId, activePersonaId, processor]);
 
 
   const handleImagePromptClick = useCallback(() => {
@@ -1179,7 +1036,6 @@ function App() {
       setMessages(updatedMessages);
       
       // Auto-trigger image generation
-      setGeneratingImageFor(synthesisMessage.id);
       handleImageGenerate(synthesisMessage);
       
     } catch (error) {
