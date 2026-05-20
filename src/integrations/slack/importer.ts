@@ -267,7 +267,7 @@ export async function importSlackChannel(opts: {
               ...updatedHuman.settings?.slack?.workspaces,
               [workspaceId]: {
                 ...workspaceConfig,
-                channels: { ...workspaceConfig.channels, [channelId]: updatedState },
+                channels: { ...channelStates, [channelId]: updatedState },
               },
             },
           },
