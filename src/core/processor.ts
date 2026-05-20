@@ -37,6 +37,7 @@ import { normalizeRoomMessages, getMessageContent } from "./handlers/utils.js";
 import { sanitizeEiPersonaIdentifiers } from "./utils/identifier-utils.js";
 import { ContextStatus as ContextStatusEnum, RoomMode } from "./types.js";
 import { bootstrapTools } from "./bootstrap-tools.js";
+import { seedBuiltinFacts, migrateLearnedOn, migrateMessageIds, migrateSlackToMultiWorkspace, seedSettings } from "./migrations.js";
 import { registerFindMemoryExecutor, registerFetchMemoryExecutor, registerFetchMessageExecutor, registerFileReadExecutor, registerPersonaNoteExecutors, buildPersonaNoteTools, SYSTEM_TOOLS } from "./tools/index.js";
 import { createAddNoteExecutor, createClearNoteExecutor } from "./tools/builtin/persona-notes.js";
 import { createFindMemoryExecutor } from "./tools/builtin/find-memory.js";
@@ -47,7 +48,6 @@ import { EMMETT_PERSONA_DEFINITION } from "../templates/emmett.js";
 import { shouldStartCeremony, startCeremony, handleCeremonyProgress, queueReflectionDrain, queueUserDedupRequest, queueRoomCapture, queuePersonaCapture, checkAndQueueRoomExtraction, queueTargetedPersonUpdate, queueTargetedTopicUpdate } from "./orchestrators/index.js";
 import { finishDocumentBatch } from "./handlers/document-segmentation.js";
 import { buildSynthesisPrompt } from "../prompts/synthesis/index.js";
-import { BUILT_IN_FACTS } from "./constants/built-in-facts.js";
 import { DEFAULT_SEED_TRAITS } from "./constants/seed-traits.js";
 
 // Static module imports
@@ -141,9 +141,6 @@ import {
 import type { RoomCreationInput, RoomEntity, RoomMessage, RoomSummary } from "./types.js";
 import { previewUnsource as _previewUnsource } from "../integrations/document/unsource.js";
 import type { UnsourcePreview, UnsourceResult } from "../integrations/document/unsource.js";
-import { isQualifiedMessageId, qualifyEiMessage, qualifyOpenCodeMessage } from "./utils/message-id.js";
-
-import type { IOpenCodeReader } from "../integrations/opencode/types.js";
 
 const DEFAULT_LOOP_INTERVAL_MS = 100;
 const DEFAULT_OPENCODE_POLLING_MS = 60000;
@@ -253,11 +250,11 @@ export class Processor {
       await this.bootstrapFirstRun();
     }
     this.bootstrapTools();
-    this.seedBuiltinFacts();
-    this.migrateLearnedOn();
-    await this.migrateMessageIds();
-    this.migrateSlackToMultiWorkspace();
-    this.seedSettings();
+    seedBuiltinFacts(this.stateManager);
+    migrateLearnedOn(this.stateManager);
+    await migrateMessageIds(this.stateManager, this.isTUI);
+    migrateSlackToMultiWorkspace(this.stateManager);
+    seedSettings(this.stateManager);
     registerFindMemoryExecutor(createFindMemoryExecutor(this.searchHumanData.bind(this), this.getPersonaList.bind(this), this.stateManager.getHuman.bind(this.stateManager)));
     registerFetchMemoryExecutor(createFetchMemoryExecutor(this.stateManager.getHuman.bind(this.stateManager)));
     registerPersonaNoteExecutors(
@@ -502,280 +499,6 @@ export class Processor {
 
   private bootstrapTools(): void {
     bootstrapTools(this.stateManager);
-  }
-
-  /**
-   * Seed 25 built-in facts if they don't exist yet.
-   * Called on every startup — safe to call repeatedly.
-   * New facts are created with empty descriptions and validated_date.
-   */
-  private seedBuiltinFacts(): void {
-    const human = this.stateManager.getHuman();
-    const existingFactNames = new Set(human.facts.map(f => f.name));
-    
-    // BUILT_IN_FACTS imported at top of file
-    const now = new Date().toISOString();
-    let seededCount = 0;
-
-    for (const builtInFact of BUILT_IN_FACTS) {
-      if (existingFactNames.has(builtInFact.name)) continue;
-
-      const newFact: Fact = {
-        id: crypto.randomUUID(),
-        name: builtInFact.name,
-        description: '',
-        sentiment: 0,
-        validated_date: '',
-        last_updated: now,
-        learned_on: now,
-      };
-      human.facts.push(newFact);
-      seededCount++;
-    }
-
-    if (seededCount > 0) {
-      this.stateManager.setHuman(human);
-      console.log(`[Processor] Seeded ${seededCount} built-in facts`);
-    }
-  }
-
-  private migrateLearnedOn(): void {
-    const human = this.stateManager.getHuman();
-
-    const backfill = <T extends { learned_on?: string; last_updated: string }>(items: T[]): T[] =>
-      items.map(item => item.learned_on ? item : { ...item, learned_on: item.last_updated });
-
-    const facts = backfill(human.facts);
-    const topics = backfill(human.topics);
-    const people = backfill(human.people);
-
-    const changed =
-      facts.some((f, i) => f !== human.facts[i]) ||
-      topics.some((t, i) => t !== human.topics[i]) ||
-      people.some((p, i) => p !== human.people[i]);
-
-    if (changed) {
-      this.stateManager.setHuman({ ...human, facts, topics, people });
-      console.log("[Processor] Backfilled learned_on for existing data items");
-    }
-  }
-
-  private async migrateMessageIds(): Promise<void> {
-    try {
-      let msgRewrites = 0;
-      let quoteRewrites = 0;
-
-      const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-      const personas = this.stateManager.persona_getAll();
-      for (const persona of personas) {
-        for (const msg of this.stateManager.messages_get(persona.id)) {
-          if (!msg.external && UUID_PATTERN.test(msg.id)) {
-            this.stateManager.messages_update(persona.id, msg.id, { id: qualifyEiMessage(msg.id) });
-            msgRewrites++;
-          }
-        }
-      }
-
-      const rooms = this.stateManager.getRoomList();
-      for (const room of rooms) {
-        for (const msg of this.stateManager.getRoomMessages(room.id).slice()) {
-          if (UUID_PATTERN.test(msg.id)) {
-            this.stateManager.updateRoomMessage(room.id, msg.id, { id: qualifyEiMessage(msg.id) });
-            msgRewrites++;
-          }
-        }
-      }
-
-      const human = this.stateManager.getHuman();
-      const quotes = human.quotes ?? [];
-
-      const eiUuidMap = new Map<string, string>();
-      for (const persona of personas) {
-        for (const msg of this.stateManager.messages_get(persona.id)) {
-          if (msg.id.startsWith("ei:")) eiUuidMap.set(msg.id.slice(3), msg.id);
-        }
-      }
-      for (const room of rooms) {
-        for (const msg of this.stateManager.getRoomMessages(room.id)) {
-          if (msg.id.startsWith("ei:")) eiUuidMap.set(msg.id.slice(3), msg.id);
-        }
-      }
-
-      const MSG_PATTERN = /^msg_[a-zA-Z0-9]+$/;
-
-      let openCodeReader: IOpenCodeReader | null = null;
-      if (this.isTUI) {
-        const { createOpenCodeReader } = await import("../integrations/opencode/reader-factory.js");
-        openCodeReader = await createOpenCodeReader().catch(() => null);
-      }
-
-      const updatedQuotes: typeof quotes = [];
-      for (const quote of quotes) {
-        const mid = quote.message_id;
-        if (!mid || isQualifiedMessageId(mid)) {
-          updatedQuotes.push(quote);
-          continue;
-        }
-
-        if (MSG_PATTERN.test(mid)) {
-          if (openCodeReader) {
-            const ocWindow = await openCodeReader.getMessageById(mid).catch(() => null);
-            if (ocWindow) {
-              const { getMachineId } = await import("../integrations/machine-id.js");
-              updatedQuotes.push({ ...quote, message_id: qualifyOpenCodeMessage(getMachineId(), ocWindow.session.id, mid) });
-              quoteRewrites++;
-              continue;
-            }
-          }
-          updatedQuotes.push(quote);
-          continue;
-        }
-
-        if (UUID_PATTERN.test(mid)) {
-          const fqId = eiUuidMap.get(mid);
-          if (fqId) {
-            updatedQuotes.push({ ...quote, message_id: fqId });
-            quoteRewrites++;
-            continue;
-          }
-          updatedQuotes.push(quote);
-          continue;
-        }
-
-        updatedQuotes.push(quote);
-      }
-
-      if (quoteRewrites > 0) {
-        this.stateManager.setHuman({ ...human, quotes: updatedQuotes });
-      }
-
-      if (msgRewrites > 0 || quoteRewrites > 0) {
-        console.log(`[Processor] migrateMessageIds: rewrote ${msgRewrites} message IDs, ${quoteRewrites} quote message_ids`);
-      }
-    } catch (err) {
-      console.error("[Processor] migrateMessageIds failed, continuing:", err);
-    }
-  }
-
-  private migrateSlackToMultiWorkspace(): void {
-    const human = this.stateManager.getHuman();
-    const slack = human.settings?.slack as Record<string, unknown> | undefined;
-    if (!slack) return;
-
-    const hasLegacyAuth = "auth" in slack && slack.auth != null;
-    const hasLegacyIntegration = "integration" in slack;
-    if (!hasLegacyAuth && !hasLegacyIntegration) return;
-
-    const legacyAuth = slack.auth as Record<string, unknown> | undefined;
-    const workspaceId = (legacyAuth?.workspace_id as string | undefined) ?? "unknown";
-
-    const migratedWorkspace: Record<string, unknown> = {
-      integration: slack.integration,
-      extraction_model: slack.extraction_model,
-      last_sync: slack.last_sync,
-      backfill_days: slack.backfill_days,
-      broadcast_threshold: slack.broadcast_threshold,
-      channel_overrides: slack.channel_overrides,
-      channels: slack.channels,
-    };
-
-    if (legacyAuth) {
-      migratedWorkspace.auth = {
-        type: "oauth",
-        token: legacyAuth.token,
-        refresh_token: legacyAuth.refresh_token,
-        workspace_name: legacyAuth.workspace_name,
-      };
-    }
-
-    this.stateManager.setHuman({
-      ...human,
-      settings: {
-        ...human.settings,
-        slack: {
-          polling_interval_ms: slack.polling_interval_ms as number | undefined,
-          workspaces: { [workspaceId]: migratedWorkspace } as unknown as import("../integrations/slack/types.js").SlackSettings["workspaces"],
-        },
-      },
-    });
-
-    console.log(`[Processor] migrateSlackToMultiWorkspace: migrated legacy slack settings to workspaces[${workspaceId}]`);
-  }
-
-  private seedSettings(): void {
-    const human = this.stateManager.getHuman();
-    let modified = false;
-
-    if (!human.settings) {
-      human.settings = {};
-      modified = true;
-    }
-
-    if (!human.settings.opencode) {
-      human.settings.opencode = {
-        integration: false,
-        polling_interval_ms: 60000,
-      };
-      modified = true;
-    }
-
-    if (!human.settings.claudeCode) {
-      human.settings.claudeCode = {
-        integration: false,
-        polling_interval_ms: 60000,
-      };
-      modified = true;
-    }
-
-    if (!human.settings.codex) {
-      human.settings.codex = {
-        integration: false,
-        polling_interval_ms: 60000,
-      };
-      modified = true;
-    }
-
-    if (!human.settings.ceremony) {
-      human.settings.ceremony = {
-        time: "09:00",
-      };
-      modified = true;
-    }
-
-    if (!human.settings.backup) {
-      human.settings.backup = {
-        enabled: false,
-        max_backups: 24,
-        interval_ms: 3600000,
-      };
-      modified = true;
-    }
-
-    if (human.settings.default_heartbeat_ms == null) {
-      human.settings.default_heartbeat_ms = 1800000;
-      modified = true;
-    }
-
-    if (human.settings.default_context_window_ms == null) {
-      human.settings.default_context_window_ms = 28800000;
-      modified = true;
-    }
-
-    if (human.settings.message_min_count == null) {
-      human.settings.message_min_count = 0;
-      modified = true;
-    }
-
-    if (human.settings.message_max_age_days == null) {
-      human.settings.message_max_age_days = 0;
-      modified = true;
-    }
-
-    if (modified) {
-      this.stateManager.setHuman(human);
-      console.log(`[Processor] Seeded missing settings`);
-    }
   }
 
   async stop(): Promise<void> {
