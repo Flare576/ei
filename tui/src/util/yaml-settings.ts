@@ -8,6 +8,7 @@ import type {
 import type { ClaudeCodeSettings } from "../../../src/integrations/claude-code/types.js";
 import type { CursorSettings } from "../../../src/integrations/cursor/types.js";
 import type { CodexSettings } from "../../../src/integrations/codex/types.js";
+import type { PiSettings } from "../../../src/integrations/pi/types.js";
 import type { SlackSettings, SlackAuth } from "../../../src/integrations/slack/types.js";
 import { modelGuidToDisplay, displayToModelGuid } from "./yaml-shared.js";
 import { parseDuration, formatDuration } from "./duration.js";
@@ -49,6 +50,13 @@ interface EditableSettingsData {
     extraction_point?: string | null;
   };
   codex?: {
+    integration?: boolean | null;
+    polling_interval_ms?: string | null;
+    last_sync?: string | null;
+    extraction_point?: string | null;
+    extraction_model?: string | null;
+  };
+  pi?: {
     integration?: boolean | null;
     polling_interval_ms?: string | null;
     last_sync?: string | null;
@@ -126,6 +134,13 @@ export function settingsToYAML(settings: HumanSettings | undefined, accounts: Pr
       extraction_model: guidToDisplay(settings?.codex?.extraction_model) ?? 'default',
       last_sync: settings?.codex?.last_sync ?? null,
       extraction_point: settings?.codex?.extraction_point ?? null,
+    },
+    pi: {
+      integration: settings?.pi?.integration ?? false,
+      polling_interval_ms: formatDuration(settings?.pi?.polling_interval_ms ?? 60000),
+      extraction_model: guidToDisplay(settings?.pi?.extraction_model) ?? 'default',
+      last_sync: settings?.pi?.last_sync ?? null,
+      extraction_point: settings?.pi?.extraction_point ?? null,
     },
     slack: {
       polling_interval_ms: formatDuration(settings?.slack?.polling_interval_ms ?? 60000),
@@ -231,6 +246,18 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
     };
   }
 
+  let pi: PiSettings | undefined;
+  if (data.pi) {
+    pi = {
+      integration: nullToUndefined(data.pi.integration),
+      polling_interval_ms: parseMsDuration(data.pi.polling_interval_ms, 60000),
+      last_sync: original?.pi?.last_sync,
+      extraction_point: original?.pi?.extraction_point,
+      processed_sessions: original?.pi?.processed_sessions,
+      extraction_model: displayToGuid(data.pi.extraction_model),
+    };
+  }
+
   let slack: SlackSettings | undefined;
   if (data.slack) {
     const parsedWorkspaces: SlackSettings["workspaces"] = {};
@@ -277,6 +304,7 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
     claudeCode,
     cursor,
     codex,
+    pi,
     slack,
     backup,
   };

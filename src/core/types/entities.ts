@@ -131,6 +131,7 @@ export interface HumanSettings {
   claudeCode?: import("../../integrations/claude-code/types.js").ClaudeCodeSettings;
   cursor?: import("../../integrations/cursor/types.js").CursorSettings;
   codex?: import("../../integrations/codex/types.js").CodexSettings;
+  pi?: import("../../integrations/pi/types.js").PiSettings;
   document?: DocumentSettings;
   active_theme?: string;
   custom_themes?: ThemeDefinition[];
