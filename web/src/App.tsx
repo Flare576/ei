@@ -78,6 +78,7 @@ import { ConflictResolutionModal } from "./components/Sync/ConflictResolutionMod
 import { Onboarding } from "./components/Onboarding";
 import { QueuePanel } from "./components/Queue/QueuePanel";
 import { useKeyboardNavigation } from "./hooks/useKeyboardNavigation";
+import { useReflection } from "./hooks/useReflection";
 import { generateImage, type GenerationResult } from "./comfyui";
 import { exchangeCode } from '../../src/core/tools/builtin/pkce.js';
 import { SPOTIFY_CLIENT_ID, SPOTIFY_WEB_REDIRECT_URI, clearTokenCache } from '../../src/core/tools/builtin/spotify-auth.js';
@@ -151,7 +152,6 @@ function App() {
   const processorRef = useRef<Processor | null>(null);
   const activePersonaIdRef = useRef<string | null>(null);
   const editingPersonaIdRef = useRef<string | null>(null);
-  const reflectionPersonaIdRef = useRef<string | null>(null);
   const [personas, setPersonas] = useState<PersonaSummary[]>([]);
   const [queueStatus, setQueueStatus] = useState<QueueStatus>({
     state: "idle",
@@ -182,11 +182,6 @@ function App() {
   } | undefined>(undefined);
   const [showArchivedPersonas, setShowArchivedPersonas] = useState(false);
   const [showArchivedRooms, setShowArchivedRooms] = useState(false);
-  const [showReflectionModal, setShowReflectionModal] = useState(false);
-  const [reflectionPersonaId, setReflectionPersonaId] = useState<string | null>(null);
-  const [reflectionPersona, setReflectionPersona] = useState<PersonaEntity | null>(null);
-  const [reflectionMessages, setReflectionMessages] = useState<Message[]>([]);
-  const [reflectionInputValue, setReflectionInputValue] = useState("");
   const [editingPersonaId, setEditingPersonaId] = useState<string | null>(null);
   const [human, setHuman] = useState<HumanEntity | null>(null);
   const [editingPersona, setEditingPersona] = useState<PersonaEntity | null>(null);
@@ -210,6 +205,23 @@ function App() {
   const [queuePanelItems, setQueuePanelItems] = useState<{ pending: LLMRequest[]; dlq: LLMRequest[] }>({ pending: [], dlq: [] });
   const [queueWasPaused, setQueueWasPaused] = useState(false);
   const [spotifyAuthError, setSpotifyAuthError] = useState<string | null>(null);
+
+  const {
+    showReflectionModal,
+    reflectionPersonaId,
+    reflectionPersona,
+    reflectionMessages,
+    reflectionInputValue,
+    reflectionPersonaIdRef,
+    setReflectionMessages,
+    setReflectionInputValue,
+    handleOpenReflection,
+    handleReflectionSendMessage,
+    handleReflectionSaveAndApply,
+    handleReflectionDismiss,
+    handleReflectionClose,
+    handleReflectionPendingUpdateChange,
+  } = useReflection(processor, setPersonas);
   const [showImagePreview, setShowImagePreview] = useState(false);
   const [currentImageResult, setCurrentImageResult] = useState<GenerationResult | null>(null);
   const [imageGenerationError, setImageGenerationError] = useState<string | null>(null);
@@ -291,10 +303,6 @@ function App() {
   useEffect(() => {
     activePersonaIdRef.current = activePersonaId;
   }, [activePersonaId]);
-
-  useEffect(() => {
-    reflectionPersonaIdRef.current = reflectionPersonaId;
-  }, [reflectionPersonaId]);
 
   useEffect(() => {
     applyTheme(
@@ -642,13 +650,6 @@ function App() {
     if (!activeRoomId) chatPanelRef.current?.focusInput();
   }, [processor, activePersonaId, activeRoomId]);
 
-  const handleReflectionSendMessage = useCallback(async (content: string | null, silenceReason?: string) => {
-    if (!processor || !reflectionPersonaId) return;
-    if (content !== null && !content.trim()) return;
-    await processor.sendMessage(reflectionPersonaId, content !== null ? content.trim() : null, silenceReason);
-    setReflectionInputValue("");
-  }, [processor, reflectionPersonaId]);
-
   
 
   const handleSelectPersona = useCallback(async (personaId: string) => {
@@ -971,77 +972,6 @@ function App() {
   const handleCreatePersona = useCallback(() => {
     setShowPersonaCreator(true);
   }, []);
-
-  const handleOpenReflection = useCallback(async (personaId: string) => {
-    if (!processor) return;
-    const [persona, msgs] = await Promise.all([
-      processor.getPersona(personaId),
-      processor.getMessages(personaId),
-    ]);
-    if (!persona?.pending_update) return;
-    setReflectionPersonaId(personaId);
-    setReflectionPersona(persona);
-    setReflectionMessages(msgs);
-    setReflectionInputValue("");
-    setShowReflectionModal(true);
-  }, [processor]);
-
-  const handleReflectionSaveAndApply = useCallback(async (updatedIdentity: {
-    long_description: string;
-    short_description: string;
-    traits: PersonaTrait[];
-    topics: PersonaTopic[];
-  }) => {
-    if (!processor || !reflectionPersonaId) return;
-    await processor.finalizeReflection(reflectionPersonaId, "apply", updatedIdentity);
-    setShowReflectionModal(false);
-    setReflectionPersonaId(null);
-    setReflectionPersona(null);
-    processor.getPersonaList().then(setPersonas);
-  }, [processor, reflectionPersonaId]);
-
-  const handleReflectionDismiss = useCallback(async () => {
-    if (!processor || !reflectionPersonaId) return;
-    await processor.finalizeReflection(reflectionPersonaId, "dismiss");
-    setShowReflectionModal(false);
-    setReflectionPersonaId(null);
-    setReflectionPersona(null);
-    processor.getPersonaList().then(setPersonas);
-  }, [processor, reflectionPersonaId]);
-
-  const handleReflectionClose = useCallback(async (updatedPending: {
-    long_description: string;
-    short_description: string;
-    traits: PersonaTrait[];
-    topics: PersonaTopic[];
-  }) => {
-    if (!processor || !reflectionPersonaId || !reflectionPersona?.pending_update) return;
-    await processor.updatePersona(reflectionPersonaId, {
-      pending_update: {
-        ...reflectionPersona.pending_update,
-        ...updatedPending,
-      },
-    });
-    setShowReflectionModal(false);
-    processor.getPersonaList().then(setPersonas);
-  }, [processor, reflectionPersonaId, reflectionPersona]);
-
-  const handleReflectionPendingUpdateChange = useCallback(async (updatedPending: {
-    long_description: string;
-    short_description: string;
-    traits: PersonaTrait[];
-    topics: PersonaTopic[];
-  }) => {
-    if (!processor || !reflectionPersonaId || !reflectionPersona?.pending_update) return;
-    await processor.updatePersona(reflectionPersonaId, {
-      pending_update: {
-        ...reflectionPersona.pending_update,
-        ...updatedPending,
-      },
-    });
-    const updated = await processor.getPersona(reflectionPersonaId);
-    if (updated) setReflectionPersona(updated);
-  }, [processor, reflectionPersonaId, reflectionPersona]);
 
   const handleShowArchivedPersonas = useCallback(async () => {
     if (!processor) return;
