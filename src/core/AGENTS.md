@@ -118,3 +118,32 @@ state.human.last_interaction = now
 ## Testing
 
 Unit tests in `tests/unit/core/`. Mock LLM responses for deterministic tests.
+
+### Mock Boundaries for Handlers
+
+Most handler tests mock at `orchestrators/index.js`:
+
+```typescript
+vi.mock("../../../../src/core/orchestrators/index.js", () => ({
+  queueAllScans: vi.fn(),
+  // ...
+}));
+```
+
+**Exception**: `document-segmentation.ts` imports `queueAllScans` directly from
+`orchestrators/human-extraction.js`, not from the index barrel. Tests for this handler
+must mock `human-extraction.js` directly or the real implementation will run and fail
+on missing `llm-client.js` exports:
+
+```typescript
+vi.mock("../../../../src/core/orchestrators/human-extraction.js", () => ({
+  queueAllScans: vi.fn(),
+}));
+```
+
+### Structural Check Gap — `console.warn + return`
+
+`ci/structural-checks.sh` check #6 catches `console.error() + return without throw` in
+handlers. It does **not** catch `console.warn + return`. If you see a warn-and-return in
+a handler that could silently drop data, treat it the same as an error-and-return — it
+should probably throw. File a bug. See issue #72 for precedent.
