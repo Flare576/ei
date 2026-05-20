@@ -11,15 +11,11 @@ import type {
   Ei_Interface, 
   HumanEntity,
   PersonaEntity,
-  Fact,
   PersonaTrait,
-  Topic,
   PersonaTopic,
-  Person,
   Quote,
   ProviderAccount,
   StateConflictData,
-  StateConflictResolution,
   ToolProvider,
   ToolDefinition,
   RoomSummary,
@@ -79,6 +75,7 @@ import { QueuePanel } from "./components/Queue/QueuePanel";
 import { useKeyboardNavigation } from "./hooks/useKeyboardNavigation";
 import { useReflection } from "./hooks/useReflection";
 import { useQueueHandlers } from "./hooks/useQueueHandlers";
+import { useHumanDataHandlers } from "./hooks/useHumanDataHandlers";
 import { generateImage, type GenerationResult } from "./comfyui";
 import { exchangeCode } from '../../src/core/tools/builtin/pkce.js';
 import { SPOTIFY_CLIENT_ID, SPOTIFY_WEB_REDIRECT_URI, clearTokenCache } from '../../src/core/tools/builtin/spotify-auth.js';
@@ -195,8 +192,6 @@ function App() {
    const [captureMessage, setCaptureMessage] = useState<Message | null>(null);
    const [editingQuote, setEditingQuote] = useState<Quote | null>(null);
    const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false);
-   const [showConflictModal, setShowConflictModal] = useState(false);
-   const [conflictData, setConflictData] = useState<{ localTimestamp: Date; remoteTimestamp: Date } | null>(null);
    const [showCaptureModal, setShowCaptureModal] = useState(false);
    const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
    const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
@@ -229,6 +224,23 @@ function App() {
     handleQueueItemsUpdate,
     handleQueueItemsDelete,
   } = useQueueHandlers(processorRef, queueStatus, setQueueStatus);
+
+  const {
+    showConflictModal,
+    conflictData,
+    setShowConflictModal,
+    setConflictData,
+    handleHumanUpdate,
+    handleConflictResolve,
+    handleFactSave,
+    handleFactDelete,
+    handleTopicSave,
+    handleTopicDelete,
+    handlePersonSave,
+    handlePersonDelete,
+    handleQuoteSave: handleQuoteSaveBase,
+    handleQuoteDelete: handleQuoteDeleteBase,
+  } = useHumanDataHandlers(processor, setHuman);
 
   const [showImagePreview, setShowImagePreview] = useState(false);
   const [currentImageResult, setCurrentImageResult] = useState<GenerationResult | null>(null);
@@ -1071,92 +1083,6 @@ function App() {
     await processorRef.current.updateRoom(roomId, {});
   }, []);
 
-  const handleHumanUpdate = useCallback(async (updates: Record<string, unknown>) => {
-    if (!processor) return;
-    const { default_model, oneshot_model, rewrite_model, queue_paused, name_display, accounts, sync, ceremony_time, default_heartbeat_ms, default_context_window_ms, message_min_count, message_max_age_days, event_window_hours, active_theme, custom_themes, ...rest } = updates;
-    
-    const settingsUpdates: Record<string, unknown> = {};
-    if (default_model !== undefined) settingsUpdates.default_model = default_model;
-    if (oneshot_model !== undefined) settingsUpdates.oneshot_model = oneshot_model;
-    if (rewrite_model !== undefined) settingsUpdates.rewrite_model = rewrite_model;
-    if (queue_paused !== undefined) settingsUpdates.queue_paused = queue_paused;
-    if (name_display !== undefined) settingsUpdates.name_display = name_display;
-    if (default_heartbeat_ms !== undefined) settingsUpdates.default_heartbeat_ms = default_heartbeat_ms;
-    if (default_context_window_ms !== undefined) settingsUpdates.default_context_window_ms = default_context_window_ms;
-    if (message_min_count !== undefined) settingsUpdates.message_min_count = message_min_count;
-    if (message_max_age_days !== undefined) settingsUpdates.message_max_age_days = message_max_age_days;
-    if (accounts !== undefined) settingsUpdates.accounts = accounts;
-    if (sync !== undefined || updates.hasOwnProperty('sync')) settingsUpdates.sync = sync;
-    if (active_theme !== undefined) settingsUpdates.active_theme = active_theme;
-    if (custom_themes !== undefined) settingsUpdates.custom_themes = custom_themes;
-    if (ceremony_time !== undefined) {
-      settingsUpdates.ceremony = { ...human?.settings?.ceremony, time: ceremony_time as string };
-    }
-    if (event_window_hours !== undefined) {
-      settingsUpdates.ceremony = { ...human?.settings?.ceremony, ...settingsUpdates.ceremony as object, event_window_hours: event_window_hours as number | undefined };
-    }
-    
-    const hasSettings = Object.keys(settingsUpdates).length > 0;
-    const coreUpdates: Partial<HumanEntity> = {
-      ...(rest as Partial<HumanEntity>),
-      ...(hasSettings ? { settings: { ...human?.settings, ...settingsUpdates } as HumanEntity['settings'] } : {}),
-    };
-    
-    if (sync && typeof sync === 'object' && 'username' in sync && 'passphrase' in sync) {
-      await remoteSync.configure({ username: sync.username as string, passphrase: sync.passphrase as string });
-    } else if (sync === undefined && updates.hasOwnProperty('sync')) {
-      remoteSync.clear();
-    }
-    
-    await processor.updateHuman(coreUpdates);
-    processor.getHuman().then(setHuman);
-  }, [processor, human]);
-
-  const handleConflictResolve = useCallback(async (resolution: StateConflictResolution) => {
-    if (!processor) return;
-    await processor.resolveStateConflict(resolution);
-    // The processor fires onStateImported which refreshes UI
-    setShowConflictModal(false);
-    setConflictData(null);
-  }, [processor]);
-
-  const handleFactSave = useCallback(async (fact: Fact) => {
-    if (!processor) return;
-    await processor.upsertFact(fact);
-    processor.getHuman().then(setHuman);
-  }, [processor]);
-
-  const handleFactDelete = useCallback(async (id: string) => {
-    if (!processor) return;
-    await processor.removeDataItem("fact", id);
-    processor.getHuman().then(setHuman);
-  }, [processor]);
-
-
-  const handleTopicSave = useCallback(async (topic: Topic) => {
-    if (!processor) return;
-    await processor.upsertTopic(topic);
-    processor.getHuman().then(setHuman);
-  }, [processor]);
-
-  const handleTopicDelete = useCallback(async (id: string) => {
-    if (!processor) return;
-    await processor.removeDataItem("topic", id);
-    processor.getHuman().then(setHuman);
-  }, [processor]);
-
-  const handlePersonSave = useCallback(async (person: Person) => {
-    if (!processor) return;
-    await processor.upsertPerson(person);
-    processor.getHuman().then(setHuman);
-  }, [processor]);
-
-  const handlePersonDelete = useCallback(async (id: string) => {
-    if (!processor) return;
-    await processor.removeDataItem("person", id);
-    processor.getHuman().then(setHuman);
-  }, [processor]);
-
   const handleImportDocument = useCallback(async (file: File) => {
     if (!processor) return;
     const content = await file.text();
@@ -1569,15 +1495,9 @@ function App() {
   }, [activeRoomId, activePersonaId]);
 
   const handleQuoteSave = useCallback(async (quoteData: Omit<Quote, 'id' | 'created_at'>) => {
-    if (!processor) return;
-    const quote: Quote = {
-      ...quoteData,
-      id: crypto.randomUUID(),
-      created_at: new Date().toISOString(),
-    };
-    await processor.addQuote(quote);
+    await handleQuoteSaveBase(quoteData);
     setCaptureMessage(null);
-  }, [processor]);
+  }, [handleQuoteSaveBase]);
 
   const handleQuoteUpdate = useCallback(async (id: string, updates: Partial<Quote>) => {
     if (!processor) return;
@@ -1586,10 +1506,9 @@ function App() {
   }, [processor]);
 
   const handleQuoteDelete = useCallback(async (id: string) => {
-    if (!processor) return;
-    await processor.removeQuote(id);
+    await handleQuoteDeleteBase(id);
     setEditingQuote(null);
-  }, [processor]);
+  }, [handleQuoteDeleteBase]);
 
   const handleDownloadBackup = useCallback(async () => {
     if (!processor) return;
