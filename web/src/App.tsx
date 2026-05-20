@@ -26,7 +26,6 @@ import type {
   RoomEntity,
   RoomMessage,
   RoomCreationInput,
-  LLMRequest,
   } from "../../src/core/types";
 import { decodeTheme, themeToStyleString, isBuiltInTheme } from '../../src/core/utils/theme-codec.js';
 import type { ThemeDefinition } from '../../src/core/types/entities.js';
@@ -79,6 +78,7 @@ import { Onboarding } from "./components/Onboarding";
 import { QueuePanel } from "./components/Queue/QueuePanel";
 import { useKeyboardNavigation } from "./hooks/useKeyboardNavigation";
 import { useReflection } from "./hooks/useReflection";
+import { useQueueHandlers } from "./hooks/useQueueHandlers";
 import { generateImage, type GenerationResult } from "./comfyui";
 import { exchangeCode } from '../../src/core/tools/builtin/pkce.js';
 import { SPOTIFY_CLIENT_ID, SPOTIFY_WEB_REDIRECT_URI, clearTokenCache } from '../../src/core/tools/builtin/spotify-auth.js';
@@ -201,9 +201,6 @@ function App() {
    const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
    const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [showQueuePanel, setShowQueuePanel] = useState(false);
-  const [queuePanelItems, setQueuePanelItems] = useState<{ pending: LLMRequest[]; dlq: LLMRequest[] }>({ pending: [], dlq: [] });
-  const [queueWasPaused, setQueueWasPaused] = useState(false);
   const [spotifyAuthError, setSpotifyAuthError] = useState<string | null>(null);
 
   const {
@@ -222,6 +219,17 @@ function App() {
     handleReflectionClose,
     handleReflectionPendingUpdateChange,
   } = useReflection(processor, setPersonas);
+
+  const {
+    showQueuePanel,
+    queuePanelItems,
+    handlePauseToggle,
+    handleQueuePanelOpen,
+    handleQueuePanelClose,
+    handleQueueItemsUpdate,
+    handleQueueItemsDelete,
+  } = useQueueHandlers(processorRef, queueStatus, setQueueStatus);
+
   const [showImagePreview, setShowImagePreview] = useState(false);
   const [currentImageResult, setCurrentImageResult] = useState<GenerationResult | null>(null);
   const [imageGenerationError, setImageGenerationError] = useState<string | null>(null);
@@ -671,70 +679,6 @@ function App() {
     await processor.markMessageRead(activePersonaId, messageId);
     processor.getMessages(activePersonaId).then(setMessages);
   }, [processor, activePersonaId]);
-
-  const handlePauseToggle = useCallback(async () => {
-    if (!processor) return;
-    const status = await processor.getQueueStatus();
-    if (status.state === "paused") {
-      await processor.resumeQueue();
-    } else {
-      await processor.abortCurrentOperation();
-    }
-    processor.getQueueStatus().then(setQueueStatus);
-  }, [processor]);
-
-  const handleQueuePanelOpen = useCallback(async () => {
-    if (!processorRef.current) return;
-    const status = await processorRef.current.getQueueStatus();
-    setQueueWasPaused(status.state === "paused");
-    if (status.state !== "paused") {
-      await processorRef.current.abortCurrentOperation();
-    }
-    const pending = processorRef.current.getQueueActiveItems();
-    const dlq = processorRef.current.getDLQItems();
-    setQueuePanelItems({ pending, dlq });
-    setShowQueuePanel(true);
-    processorRef.current.getQueueStatus().then(setQueueStatus);
-  }, []);
-
-  const handleQueuePanelClose = useCallback(async () => {
-    setShowQueuePanel(false);
-    if (!processorRef.current) return;
-    if (!queueWasPaused) {
-      await processorRef.current.resumeQueue();
-    }
-    processorRef.current.getQueueStatus().then(setQueueStatus);
-  }, [queueWasPaused]);
-
-  const handleQueueItemsUpdate = useCallback(async (ids: string[], model: string) => {
-    if (!processorRef.current) return;
-    for (const id of ids) {
-      const allItems = [...queuePanelItems.pending, ...queuePanelItems.dlq];
-      const item = allItems.find(i => i.id === id);
-      const updates: Partial<LLMRequest> = {
-        model,
-        attempts: 0,
-        retry_after: undefined,
-      };
-      if (item?.state === "dlq") {
-        updates.state = "pending";
-      }
-      processorRef.current.updateQueueItem(id, updates);
-    }
-    const pending = processorRef.current.getQueueActiveItems();
-    const dlq = processorRef.current.getDLQItems();
-    setQueuePanelItems({ pending, dlq });
-    processorRef.current.getQueueStatus().then(setQueueStatus);
-  }, [queuePanelItems]);
-
-  const handleQueueItemsDelete = useCallback((ids: string[]) => {
-    if (!processorRef.current) return;
-    processorRef.current.deleteQueueItems(ids);
-    const pending = processorRef.current.getQueueActiveItems();
-    const dlq = processorRef.current.getDLQItems();
-    setQueuePanelItems({ pending, dlq });
-    processorRef.current.getQueueStatus().then(setQueueStatus);
-  }, []);
 
   const handlePausePersona = useCallback(async (personaId: string, pauseUntil?: string) => {
     if (!processor) return;
