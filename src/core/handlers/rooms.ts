@@ -8,7 +8,11 @@ import type { StateManager } from "../state-manager.js";
 import type { PersonaResponseResult } from "../../prompts/response/index.js";
 import type { RoomJudgeResult } from "../../prompts/room/index.js";
 import { buildRoomResponsePromptData } from "../prompt-context-builder.js";
+import { buildRoomJudgePrompt } from "../prompts/room/index.js";
+import type { RoomHistoryMessage, RoomJudgeCandidate } from "../prompts/room/types.js";
+import { getMessageContent } from "./utils.js";
 import { cleanResponseContent } from "../llm-client.js";
+import { qualifyEiMessage } from "../utils/message-id.js";
 
 export function handleRoomResponse(response: LLMResponse, state: StateManager): void {
   const roomId = response.request.data.roomId as string;
@@ -31,7 +35,7 @@ export function handleRoomResponse(response: LLMResponse, state: StateManager): 
       const reason = lines.slice(1).join('\n').trim();
       console.log(`[silence] ${personaDisplayName}: ${reason || "(no reason given)"}`);
       const msg: RoomMessage = {
-        id: crypto.randomUUID(),
+        id: qualifyEiMessage(crypto.randomUUID()),
         parent_id: parentMessageId,
         role: "persona",
         persona_id: personaId,
@@ -43,7 +47,7 @@ export function handleRoomResponse(response: LLMResponse, state: StateManager): 
       state.appendRoomMessage(roomId, msg);
     } else {
       const msg: RoomMessage = {
-        id: crypto.randomUUID(),
+        id: qualifyEiMessage(crypto.randomUUID()),
         parent_id: parentMessageId,
         role: "persona",
         persona_id: personaId,
@@ -66,7 +70,7 @@ export function handleRoomResponse(response: LLMResponse, state: StateManager): 
       console.log(`[silence] ${personaDisplayName}: ${reason ?? "(no reason given)"}`);
       if (reason) {
         const msg: RoomMessage = {
-          id: crypto.randomUUID(),
+          id: qualifyEiMessage(crypto.randomUUID()),
           parent_id: parentMessageId,
           role: "persona",
           persona_id: personaId,
@@ -88,7 +92,7 @@ export function handleRoomResponse(response: LLMResponse, state: StateManager): 
     }
 
     const msg: RoomMessage = {
-      id: crypto.randomUUID(),
+      id: qualifyEiMessage(crypto.randomUUID()),
       parent_id: parentMessageId,
       role: "persona",
       persona_id: personaId,
@@ -147,7 +151,7 @@ export async function handleRoomJudge(response: LLMResponse, state: StateManager
   if (result.reason) {
     console.log(`[handleRoomJudge] ${judgeDisplayName} verdict: ${result.reason}`);
     const verdictMsg = {
-      id: crypto.randomUUID(),
+      id: qualifyEiMessage(crypto.randomUUID()),
       parent_id: verdictParentId,
       role: "persona" as const,
       persona_id: judgePersonaId,

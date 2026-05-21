@@ -8,6 +8,7 @@ import type { StateManager } from "../state-manager.js";
 import type { PersonaResponseResult } from "../../prompts/response/index.js";
 import { handlers } from "./index.js";
 import { cleanResponseContent } from "../llm-client.js";
+import { qualifyEiMessage } from "../utils/message-id.js";
 
 export type ResponseHandler = (response: LLMResponse, state: StateManager) => void | Promise<void>;
 
@@ -30,7 +31,7 @@ export function handlePersonaResponse(response: LLMResponse, state: StateManager
       const reason = lines.slice(1).join('\n').trim();
       console.log(`[silence] ${personaDisplayName}: ${reason || "(no reason given)"}`);
       const silentMessage: Message = {
-        id: crypto.randomUUID(),
+        id: qualifyEiMessage(crypto.randomUUID()),
         role: "system",
         silence_reason: reason || undefined,
         timestamp: new Date().toISOString(),
@@ -40,7 +41,7 @@ export function handlePersonaResponse(response: LLMResponse, state: StateManager
       state.messages_append(personaId, silentMessage);
     } else {
       const message: Message = {
-        id: crypto.randomUUID(),
+        id: qualifyEiMessage(crypto.randomUUID()),
         role: "system",
         content: raw,
         timestamp: new Date().toISOString(),
@@ -61,7 +62,7 @@ export function handlePersonaResponse(response: LLMResponse, state: StateManager
       if (reason) {
         console.log(`[silence] ${personaDisplayName}: ${reason}`);
         const silentMessage: Message = {
-          id: crypto.randomUUID(),
+          id: qualifyEiMessage(crypto.randomUUID()),
           role: "system",
           silence_reason: reason,
           timestamp: new Date().toISOString(),
@@ -83,7 +84,7 @@ export function handlePersonaResponse(response: LLMResponse, state: StateManager
     }
 
     const message: Message = {
-      id: crypto.randomUUID(),
+      id: qualifyEiMessage(crypto.randomUUID()),
       role: "system",
       content,
       timestamp: new Date().toISOString(),

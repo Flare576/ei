@@ -8,6 +8,7 @@ import type { StateManager } from "../state-manager.js";
 import type { HeartbeatCheckResult, EiHeartbeatResult } from "../../prompts/heartbeat/types.js";
 import type { ReflectionCriticResult } from "../../prompts/reflection/types.js";
 import { crossFind } from "../utils/index.js";
+import { qualifyEiMessage } from "../utils/message-id.js";
 
 export function handleHeartbeatCheck(response: LLMResponse, state: StateManager): void {
   const personaId = response.request.data.personaId as string;
@@ -33,7 +34,7 @@ export function handleHeartbeatCheck(response: LLMResponse, state: StateManager)
 
   if (result.message) {
     const message: Message = {
-      id: crypto.randomUUID(),
+      id: qualifyEiMessage(crypto.randomUUID()),
       role: "system",
       content: result.message,
       timestamp: now,
@@ -68,7 +69,7 @@ export function handleEiHeartbeat(response: LLMResponse, state: StateManager): v
   }
 
   const sendMessage = (content: string) => state.messages_append("ei", {
-    id: crypto.randomUUID(),
+    id: qualifyEiMessage(crypto.randomUUID()),
     role: "system",
     content,
     timestamp: now,
