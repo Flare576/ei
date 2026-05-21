@@ -147,6 +147,7 @@ export function useRoomHandlers(
 
   const handleRecallHumanRoomMessage = useCallback(() => {
     if (!activeRoomId || !processorRef.current) return;
+    if (activeRoom?.mode === RoomMode.FreeForAll) return;
     const allMsgs = processorRef.current.getRoomMessages(activeRoomId);
     const humanMsg = allMsgs.find(
       m => m.role === "human" && m.parent_id === activeRoom?.active_node_id

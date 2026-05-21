@@ -334,7 +334,11 @@ export function PromptInput() {
   registerEditorHandler(handleEditor);
 
   const getPlaceholder = () => {
-    if (activeRoomId() && humanRoomMessagePending()) return "Response Submitted - Press [Up] to recall";
+    if (activeRoomId() && humanRoomMessagePending()) {
+      const room = getRoom(activeRoomId()!);
+      if (room?.mode !== RoomMode.FreeForAll) return "Response Submitted - Press [Up] to recall";
+      return "Response Submitted";
+    }
     if (!activePersonaId()) return "Select a persona...";
     return "Type your message... (Enter to send, Ctrl+E for editor)";
   };
