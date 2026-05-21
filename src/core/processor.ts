@@ -35,6 +35,7 @@ import { QueueProcessor } from "./queue-processor.js";
 import { handlers } from "./handlers/index.js";
 import { normalizeRoomMessages, getMessageContent } from "./handlers/utils.js";
 import { sanitizeEiPersonaIdentifiers } from "./utils/identifier-utils.js";
+import { qualifyEiMessage } from "./utils/message-id.js";
 import { ContextStatus as ContextStatusEnum, RoomMode } from "./types.js";
 import { bootstrapTools } from "./bootstrap-tools.js";
 import { seedBuiltinFacts, migrateLearnedOn, migrateMessageIds, migrateSlackToMultiWorkspace, seedSettings } from "./migrations.js";
@@ -297,7 +298,7 @@ export class Processor {
     this.stateManager.persona_add(eiEntity);
 
     const welcomeMessage: Message = {
-      id: crypto.randomUUID(),
+      id: qualifyEiMessage(crypto.randomUUID()),
       role: "system",
       content: EI_WELCOME_MESSAGE,
       timestamp: new Date().toISOString(),

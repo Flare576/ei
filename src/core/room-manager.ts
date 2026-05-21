@@ -1,5 +1,6 @@
 import { ContextStatus, LLMNextStep, LLMPriority, LLMRequestType, RoomMode } from "./types.js";
 import type { RoomCreationInput, RoomEntity, RoomMessage, RoomSummary, EiError } from "./types.js";
+import { qualifyEiMessage } from "./utils/message-id.js";
 import type { StateManager } from "./state-manager.js";
 import { buildRoomResponsePromptData } from "./prompt-context-builder.js";
 import { buildRoomJudgePrompt } from "../prompts/room/index.js";
@@ -117,7 +118,7 @@ export function submitHumanRoomMessage(
   }
 
   const msg: RoomMessage = {
-    id: crypto.randomUUID(),
+    id: qualifyEiMessage(crypto.randomUUID()),
     parent_id: room.active_node_id,
     role: "human",
     content: content ?? undefined,
@@ -160,12 +161,17 @@ export async function sendFfaMessage(
   }
   const ffaParentId = ffaRootMsg.id;
 
-  const existing = sm.getRoomMessages(roomId).find(
+  const allMessages = sm.getRoomMessages(roomId);
+  const existing = allMessages.find(
     m => m.role === "human" && m.id === room.active_node_id && m.parent_id === ffaParentId
   );
 
   let humanMsgId: string;
-  if (existing) {
+  const existingHasChildren = existing
+    ? allMessages.some(m => m.parent_id === existing.id && m.role === "persona")
+    : false;
+
+  if (existing && !existingHasChildren) {
     sm.updateRoomMessage(roomId, existing.id, {
       content: content ?? undefined,
       silence_reason: content ? undefined : (silenceReason ?? "passed"),
@@ -174,7 +180,7 @@ export async function sendFfaMessage(
     humanMsgId = existing.id;
   } else {
     const msg: RoomMessage = {
-      id: crypto.randomUUID(),
+      id: qualifyEiMessage(crypto.randomUUID()),
       parent_id: ffaParentId,
       role: "human",
       content: content ?? undefined,
@@ -192,6 +198,12 @@ export async function sendFfaMessage(
   onRoomUpdated(roomId);
 
   const updatedRoom = sm.getRoom(roomId)!;
+  const alreadyAnswered = new Set(
+    sm.getRoomMessages(roomId)
+      .filter(m => m.parent_id === humanMsgId && m.role === "persona" && m.persona_id)
+      .map(m => m.persona_id!)
+  );
+
   const alreadyQueued = new Set(
     sm.queue_getAllActiveItems()
       .filter(q =>
@@ -205,6 +217,7 @@ export async function sendFfaMessage(
   const shuffledIds = [...updatedRoom.persona_ids].sort(() => Math.random() - 0.5);
 
   for (const personaId of shuffledIds) {
+    if (alreadyAnswered.has(personaId)) continue;
     if (alreadyQueued.has(personaId)) continue;
     const persona = sm.persona_getById(personaId);
     if (!persona || persona.is_archived || persona.is_paused) continue;

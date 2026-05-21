@@ -17,6 +17,7 @@ import { buildPersonRewriteScanPrompt } from "../../prompts/ceremony/people-rewr
 import { buildTopicRewriteScanPrompt } from "../../prompts/ceremony/topic-rewrite.js";
 import { buildReflectionCriticPrompt } from "../../prompts/reflection/index.js";
 import { getModelForPersona } from "../heartbeat-manager.js";
+import { qualifyEiMessage } from "../utils/message-id.js";
 
 const PERSON_LOG_REFLECTION_THRESHOLD = 3000;
 
@@ -641,7 +642,7 @@ function queueReflectionPhase(state: StateManager): boolean {
       console.log(`[ceremony:reflection] ${persona.display_name} is linked to multiple person records (${names}) — skipping reflection, writing Ei warning`);
 
       const warning: Message = {
-        id: crypto.randomUUID(),
+        id: qualifyEiMessage(crypto.randomUUID()),
         role: "system",
         content: `During today's ceremony, I noticed that **${persona.display_name}** is connected to multiple person records: ${names}. This might be intentional — if you created a composite persona — but if not, you may want to check the identifiers on those records. Reflection for ${persona.display_name} has been paused until this is resolved.`,
         timestamp: new Date().toISOString(),

@@ -19,6 +19,7 @@ import type {
 } from "./types.js";
 import { RoomMode } from "./types.js";
 import { BUILT_IN_FACT_NAMES } from './constants/built-in-facts.js';
+import { qualifyEiMessage } from './utils/message-id.js';
 import type { ThemeDefinition } from './types/entities.js';
 import type { Storage } from "../storage/interface.js";
 import {
@@ -446,7 +447,7 @@ export class StateManager {
   addRoom(input: RoomCreationInput): RoomEntity {
     const now = new Date().toISOString();
     const initialMessage: RoomMessage = {
-      id: crypto.randomUUID(),
+      id: qualifyEiMessage(crypto.randomUUID()),
       parent_id: null,
       role: "human",
       content: input.initial_message,

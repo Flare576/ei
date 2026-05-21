@@ -25,6 +25,7 @@ import {
 } from "./orchestrators/index.js";
 import { buildChatMessageContent } from "../prompts/message-utils.js";
 import { filterMessagesForContext } from "./context-utils.js";
+import { qualifyEiMessage } from "./utils/message-id.js";
 
 // =============================================================================
 // MESSAGE QUERIES
@@ -149,7 +150,7 @@ export async function sendMessage(
   clearPendingRequestsFor(sm, qp, currentRequest, personaId);
 
   const message: Message = {
-    id: crypto.randomUUID(),
+    id: qualifyEiMessage(crypto.randomUUID()),
     role: "human",
     content: content ?? undefined,
     silence_reason: content ? undefined : (silenceReason ?? "passed"),

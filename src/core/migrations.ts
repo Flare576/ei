@@ -71,13 +71,37 @@ export async function migrateMessageIds(stateManager: StateManager, isTUI: boole
       }
     }
 
-    const rooms = stateManager.getRoomList();
+    const rooms = stateManager.getRoomList(true);
     for (const room of rooms) {
+      const roomIdRewrites = new Map<string, string>();
+
       for (const msg of stateManager.getRoomMessages(room.id).slice()) {
         if (UUID_PATTERN.test(msg.id)) {
-          stateManager.updateRoomMessage(room.id, msg.id, { id: qualifyEiMessage(msg.id) });
+          const fqId = qualifyEiMessage(msg.id);
+          roomIdRewrites.set(msg.id, fqId);
+          stateManager.updateRoomMessage(room.id, msg.id, { id: fqId });
           msgRewrites++;
         }
+      }
+
+      let parentRewrites = 0;
+      for (const msg of stateManager.getRoomMessages(room.id)) {
+        const pid = msg.parent_id;
+        if (pid && UUID_PATTERN.test(pid)) {
+          const fqPid = roomIdRewrites.get(pid) ?? qualifyEiMessage(pid);
+          stateManager.updateRoomMessage(room.id, msg.id, { parent_id: fqPid });
+          parentRewrites++;
+        }
+      }
+
+      const activeNode = room.active_node_id;
+      if (activeNode && UUID_PATTERN.test(activeNode)) {
+        const fqActive = roomIdRewrites.get(activeNode) ?? qualifyEiMessage(activeNode);
+        stateManager.updateRoom(room.id, { active_node_id: fqActive });
+      }
+
+      if (parentRewrites > 0) {
+        msgRewrites += parentRewrites;
       }
     }
 
