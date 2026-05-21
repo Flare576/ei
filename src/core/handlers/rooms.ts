@@ -8,9 +8,6 @@ import type { StateManager } from "../state-manager.js";
 import type { PersonaResponseResult } from "../../prompts/response/index.js";
 import type { RoomJudgeResult } from "../../prompts/room/index.js";
 import { buildRoomResponsePromptData } from "../prompt-context-builder.js";
-import { buildRoomJudgePrompt } from "../prompts/room/index.js";
-import type { RoomHistoryMessage, RoomJudgeCandidate } from "../prompts/room/types.js";
-import { getMessageContent } from "./utils.js";
 import { cleanResponseContent } from "../llm-client.js";
 import { qualifyEiMessage } from "../utils/message-id.js";
 
