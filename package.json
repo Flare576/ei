@@ -63,7 +63,7 @@
     "@opentui/core": "^0.1.79",
     "@opentui/solid": "^0.1.79",
     "fastembed": "^2.1.0",
-    "solid-js": "1.9.9",
+    "solid-js": "^1.9.9",
     "yaml": "^2.8.2"
   }
 }

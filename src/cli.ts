@@ -151,7 +151,7 @@ async function main(): Promise<void> {
     const { RemoteSync } = await import("./storage/remote.js");
     const { decodeAllEmbeddings, encodeAllEmbeddings } = await import("./storage/embeddings.js");
     const { join } = await import("path");
-    const { readFile, writeFile, rename, unlink } = await import("fs/promises");
+    const { readFile, writeFile, rename, mkdir } = await import("fs/promises");
 
     const dataPath = getDataPath();
     const statePath = join(dataPath, "state.json");
@@ -217,6 +217,7 @@ async function main(): Promise<void> {
       process.exit(1);
     }
 
+    await mkdir(dataPath, { recursive: true });
     const tempPath = `${backupPath}.tmp.${Date.now()}`;
     await writeFile(tempPath, JSON.stringify(encodeAllEmbeddings(result.state), null, 2), "utf-8");
     await rename(tempPath, backupPath);
