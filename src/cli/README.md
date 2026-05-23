@@ -16,6 +16,7 @@ ei --persona "Beta" --recent           # Most recently mentioned items Beta has 
 ei --id <id>                   # Look up entity by ID — or fetch a message by FQ ID
 echo <id> | ei --id            # Look up entity by ID from stdin
 ei --install                   # Wire Ei into Claude Code, Cursor, Codex, and OpenCode (MCP + hooks + persona plugin)
+ei --sync                      # Pull latest state from remote sync server into state.backup.json (no TUI required)
 ei mcp                         # Start the Ei MCP stdio server (for Claude Code/Cursor/Codex)
 ```
 
@@ -133,3 +134,15 @@ All search commands return arrays. Each result includes a `type` field.
 **Persona**: `{ type, id, display_name, short_description, model, base_prompt, traits[], topics[] }`
 
 **ID lookup** (`lookup: true`): single object (not an array) with the same shape.
+
+## Quick Sync
+
+Sometimes you want your latest Ei profile available on a machine without running the full TUI — especially if the TUI is already running on another machine.
+
+```sh
+ei --sync
+```
+
+Pulls the latest state from your remote sync server and saves it to `state.backup.json`. Works the same credential hierarchy as the TUI: reads from `state.backup.json` first, falls back to `EI_SYNC_USERNAME` / `EI_SYNC_PASSPHRASE` environment variables if not present.
+
+Will abort (with a clear error) if `state.json` already exists on this machine — that means Ei has run here and a conflict resolution step would be needed on next launch.

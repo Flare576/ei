@@ -70,6 +70,7 @@ Options:
   --source, -s        Filter to entities from a specific source (prefix match, e.g. "cursor", "codex:my-machine", "opencode:my-machine:ses_abc123")
   --id                Look up entity by ID (accepts value or stdin)
   --install           Register Ei with Claude Code, Cursor, Codex, and OpenCode (MCP + context hooks where supported)
+  --sync              Pull latest state from remote sync server into state.backup.json (no TUI required)
   --session <id>      Session ID to enrich the query with recent context (use with --hook-source)
   --hook-source <src> Source of the hook: "opencode-plugin" (OpenCode SQLite), "cursor", or "codex"
   --transcript <path> Path to a Claude Code JSONL transcript file for context enrichment
@@ -142,6 +143,85 @@ async function main(): Promise<void> {
   if (args[0] === "mcp") {
     const { handleMcpCommand } = await import("./cli/mcp.js");
     await handleMcpCommand(args.slice(1));
+    process.exit(0);
+  }
+
+  if (args[0] === "--sync") {
+    const { getDataPath } = await import("./cli/retrieval.js");
+    const { RemoteSync } = await import("./storage/remote.js");
+    const { decodeAllEmbeddings, encodeAllEmbeddings } = await import("./storage/embeddings.js");
+    const { join } = await import("path");
+    const { readFile, writeFile, rename, unlink } = await import("fs/promises");
+
+    const dataPath = getDataPath();
+    const statePath = join(dataPath, "state.json");
+    const lockPath = join(dataPath, "ei.lock");
+    const backupPath = join(dataPath, "state.backup.json");
+
+    // Fail if state.json exists — implies Ei ran here and a conflict would arise on next start
+    try {
+      await readFile(statePath);
+      process.stderr.write(
+        `\nei --sync aborted: state.json already exists at ${dataPath}\n\n` +
+        `This machine has local Ei data. Running --sync here would create a conflict\n` +
+        `the next time you start Ei.\n\n` +
+        `If you want to pull from remote anyway, delete state.json first.\n\n`
+      );
+      process.exit(1);
+    } catch { /* file doesn't exist — good */ }
+
+    // Fail if ei.lock exists with a live process — Ei is actively running
+    try {
+      const lockText = await readFile(lockPath, "utf-8");
+      const lock = JSON.parse(lockText) as { pid: number; started: string };
+      try {
+        process.kill(lock.pid, 0);
+        process.stderr.write(
+          `\nei --sync aborted: Ei is already running on this machine.\n` +
+          `  PID:     ${lock.pid}\n` +
+          `  Started: ${lock.started}\n\n` +
+          `Stop Ei before syncing.\n\n`
+        );
+        process.exit(1);
+      } catch { /* PID is dead — stale lock, proceed */ }
+    } catch { /* no lock file — good */ }
+
+    // Resolve sync credentials: prefer stored backup state, fall back to env vars
+    let username: string | undefined;
+    let passphrase: string | undefined;
+    try {
+      const backupText = await readFile(backupPath, "utf-8");
+      const backup = decodeAllEmbeddings(JSON.parse(backupText));
+      username = backup?.human?.settings?.sync?.username;
+      passphrase = backup?.human?.settings?.sync?.passphrase;
+    } catch { /* no backup — fall through to env vars */ }
+
+    username ??= process.env.EI_SYNC_USERNAME;
+    passphrase ??= process.env.EI_SYNC_PASSPHRASE;
+
+    if (!username || !passphrase) {
+      process.stderr.write(
+        `\nei --sync aborted: no sync credentials found.\n\n` +
+        `Set EI_SYNC_USERNAME and EI_SYNC_PASSPHRASE environment variables,\n` +
+        `or run Ei normally first to store credentials in state.backup.json.\n\n`
+      );
+      process.exit(1);
+    }
+
+    const remote = new RemoteSync();
+    await remote.configure({ username, passphrase });
+
+    const result = await remote.fetch();
+    if (!result.success || !result.state) {
+      process.stderr.write(`\nei --sync failed: ${result.error ?? "unknown error"}\n\n`);
+      process.exit(1);
+    }
+
+    const tempPath = `${backupPath}.tmp.${Date.now()}`;
+    await writeFile(tempPath, JSON.stringify(encodeAllEmbeddings(result.state), null, 2), "utf-8");
+    await rename(tempPath, backupPath);
+
+    process.stdout.write(`\nei --sync complete. Remote state saved to state.backup.json.\n\n`);
     process.exit(0);
   }
 

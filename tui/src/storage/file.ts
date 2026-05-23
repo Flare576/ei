@@ -86,6 +86,12 @@ export class FileStorage implements Storage {
   }
 
 
+  async saveBackup(state: StorageState): Promise<void> {
+    await this.ensureDataDir();
+    const backupPath = join(this.dataPath, BACKUP_FILE);
+    await this.atomicWrite(backupPath, JSON.stringify(encodeAllEmbeddings(state), null, 2));
+  }
+
   /**
    * Read backup state without removing it.
    * Used to peek sync credentials from a previous session's backup.
