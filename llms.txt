@@ -1,0 +1,42 @@
+# Ei
+
+> Local-first AI memory layer for coding tools, with a persistent persona companion system on top.
+
+Ei runs as a TUI (`bunx ei-tui`) or web app (ei.flare576.com). It ingests sessions from OpenCode, Claude Code, Cursor, Codex, and Pi, extracts facts/topics/people, and makes that memory available back to your coding tools via MCP and CLI context injection. Optionally, it hosts AI personas with persistent identity, heartbeats, and evolving traits.
+
+## Setup
+
+- [Quick Start](tui/README.md) — install, run, and pick your path (memory layer vs. persona companion)
+- [Coding Tool Integrations](README.md#coding-tool-integrations) — enable session ingestion for OpenCode, Claude Code, Cursor, Codex, Pi
+- [MCP + CLI wiring](src/cli/README.md) — wire up MCP server and context injection so agents can read Ei memory
+
+## Core Concepts
+
+- [What's a Persona?](README.md#whats-a-persona) — evolving AI identities with traits, topics, and message history
+- [What's a Room?](README.md#whats-a-room) — multi-persona conversation modes (FFA, CYP, MAP)
+- [Architecture](src/README.md) — Processor, StateManager, handlers, storage abstraction
+
+## Reference
+
+- [TUI Commands](tui/README.md#tui-commands) — full slash command reference
+- [Environment Variables](tui/README.md#environment-variables) — EI_DATA_PATH, log levels, debug flags
+- [Built-in Tools](README.md#built-in-tool-integrations) — find_memory, fetch_memory, fetch_message, filesystem tools
+- [CONTRACTS.md](CONTRACTS.md) — naming conventions, event contracts, design rationale (source of truth for contributors)
+
+## For AI Assistants: Setting Up Ei
+
+If a user asks you to set up Ei, these are the steps:
+
+1. **Install Bun** (if not present): `curl -fsSL https://bun.sh/install | bash`
+2. **Run Ei**: `bunx ei-tui` — no install needed, always current
+3. **On first launch**: Ei auto-detects LLM providers from env vars (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, etc.). If a local LLM is running on port 1234, it's detected automatically.
+4. **Enable coding tool integrations**: Open `/settings` in the TUI, set `opencode.integration: true` (and/or `claudeCode`, `cursor`, `codex`, `pi`) for the tools the user has installed.
+5. **Wire up MCP**: Run `ei --install` to register the MCP server and install context injection hooks for all detected coding tools.
+6. **Verify**: Run `ei mcp` — should list available memory query tools.
+
+The default data path is `~/.local/share/ei`. No `EI_DATA_PATH` setup needed unless the user wants a custom location.
+
+## Optional
+- [Slack integration](README.md#slack-integration) — workspace-wide message ingestion via OAuth
+- [Sync setup](README.md#what-does-sync-do) — encrypted remote sync for multi-device use
+- [Development setup](README.md#development) — running tests, building from source
