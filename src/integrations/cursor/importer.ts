@@ -174,14 +174,10 @@ export async function importCursorSessions(
   const persona = ensureCursorPersona(stateManager, eiInterface);
   result.personaCreated = !personaExistedBefore;
 
-  if (!personaExistedBefore) {
-    stateManager.persona_archive(persona.id);
-  } else {
-    const existingMsgs = stateManager.messages_get(persona.id);
-    const externalIds = existingMsgs.filter((m) => m.external === true).map((m) => m.id);
-    if (externalIds.length > 0) {
-      stateManager.messages_remove(persona.id, externalIds);
-    }
+  const existingMsgs = stateManager.messages_get(persona.id);
+  const externalIds = existingMsgs.filter((m) => m.external === true).map((m) => m.id);
+  if (externalIds.length > 0) {
+    stateManager.messages_remove(persona.id, externalIds);
   }
 
   const cutoffIso = processedSessions[targetSession.id] ?? null;

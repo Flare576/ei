@@ -202,11 +202,8 @@ export async function importOpenCodeSessions(
   const cutoffMs = cutoffIso ? new Date(cutoffIso).getTime() : null;
   let anyPersonaHasChanges = false;
 
-  for (const [, { persona, msgs: agentMsgs, isNew, agentName }] of byPersonaId) {
-    if (isNew) {
-      // Brand-new persona: archive it (coding-session store, not a live chat persona)
-      stateManager.persona_archive(persona.id);
-    } else if (persona.is_archived) {
+  for (const [, { persona, msgs: agentMsgs, agentName }] of byPersonaId) {
+    if (persona.is_archived) {
       // Existing archived persona: refresh identity fields, then remove only external messages
       const agentInfo = await reader.getAgentInfo(persona.display_name);
       const { aliases } = resolveCanonicalAgent(agentName);
