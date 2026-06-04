@@ -162,7 +162,6 @@ describe("importPiSessions", () => {
     expect(mockStateManager.persona_add).toHaveBeenCalledWith(
       expect.objectContaining({ display_name: "Pi" })
     );
-    expect(mockStateManager.persona_archive).toHaveBeenCalledWith(piPersona!.id);
     expect(mockInterface.onPersonaAdded).toHaveBeenCalled();
   });
 

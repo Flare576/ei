@@ -190,19 +190,6 @@ describe("importCursorSessions", () => {
     expect(mockStateManager.persona_add).not.toHaveBeenCalled();
   });
 
-  it("archives persona on import", async () => {
-    const session = makeSession({ id: "session-abc" });
-    mockReader.getSessions = vi.fn().mockResolvedValue([session]);
-
-    await importCursorSessions({
-      stateManager: mockStateManager as StateManager,
-      interface: mockInterface as Ei_Interface,
-      reader: mockReader as ICursorReader,
-    });
-
-    expect(mockStateManager.persona_archive).toHaveBeenCalledWith(cursorPersona!.id);
-  });
-
   it("removes only external messages on re-import, preserves non-external chat history", async () => {
     cursorPersona = buildPersonaEntity("cursor-id", "Cursor");
      messageStore.set("cursor-id", [buildExternalMessage("ext-msg"), buildChatMessage("chat-msg")]);

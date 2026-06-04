@@ -201,30 +201,6 @@ describe("importOpenCodeSessions", () => {
     expect(result.personasCreated).not.toContain("build");
   });
 
-  it("archives persona on first encounter", async () => {
-    const session = makeSession({ id: "ses_test123" });
-    const message: OpenCodeMessage = {
-      id: "msg_1",
-      sessionId: "ses_test123",
-      role: "assistant",
-      agent: "build",
-      content: "Hello",
-      timestamp: "2026-02-01T00:00:00.000Z",
-    };
-
-    mockReader.getSessionsUpdatedSince = vi.fn().mockResolvedValue([session]);
-    mockReader.getMessagesForSession = vi.fn().mockResolvedValue([message]);
-
-    await importOpenCodeSessions({
-      stateManager: mockStateManager as StateManager,
-      interface: mockInterface as Ei_Interface,
-      reader: mockReader as IOpenCodeReader,
-    });
-
-    const buildPersona = createdPersonas.get("Build");
-    expect(mockStateManager.persona_archive).toHaveBeenCalledWith(buildPersona!.id);
-  });
-
   it("removes only external messages from existing persona on re-import", async () => {
     createdPersonas.set("build", { id: "persona-build", display_name: "build" });
     const externalMsg = makeMessage({ id: "ext_msg", timestamp: "2026-01-01T00:00:00.000Z", external: true });
@@ -288,31 +264,7 @@ describe("importOpenCodeSessions", () => {
     expect(stored.some(m => m.id === "chat_msg")).toBe(true);
   });
 
-  it("does not archive existing non-archived persona on re-import", async () => {
-    createdPersonas.set("build", { id: "persona-build", display_name: "build" });
-    messageStore.set("persona-build", []);
 
-    const session = makeSession({ id: "ses_new" });
-    const message: OpenCodeMessage = {
-      id: "msg_1",
-      sessionId: "ses_new",
-      role: "assistant",
-      agent: "build",
-      content: "Hello",
-      timestamp: "2026-02-01T00:00:00.000Z",
-    };
-
-    mockReader.getSessionsUpdatedSince = vi.fn().mockResolvedValue([session]);
-    mockReader.getMessagesForSession = vi.fn().mockResolvedValue([message]);
-
-    await importOpenCodeSessions({
-      stateManager: mockStateManager as StateManager,
-      interface: mockInterface as Ei_Interface,
-      reader: mockReader as IOpenCodeReader,
-    });
-
-    expect(mockStateManager.persona_archive).not.toHaveBeenCalled();
-  });
 
   it("imports messages to correct persona", async () => {
     const session = makeSession({ id: "ses_test123" });

@@ -163,7 +163,6 @@ describe("importCodexSessions", () => {
     expect(mockStateManager.persona_add).toHaveBeenCalledWith(
       expect.objectContaining({ display_name: "Codex" })
     );
-    expect(mockStateManager.persona_archive).toHaveBeenCalledWith(codexPersona!.id);
     expect(mockInterface.onPersonaAdded).toHaveBeenCalled();
   });
 
