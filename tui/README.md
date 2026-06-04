@@ -4,28 +4,39 @@ Ei TUI is built with OpenTUI and SolidJS.
 
 Coding tool integrations (OpenCode, Claude Code, Cursor, Codex): enable via `/settings` · export data via [CLI](../src/cli/README.md)
 
-## How Ei Handles Configuration
+## What do you want to do?
 
-Ei is designed to run consistently across machines and environments, so it keeps its own copy of your settings rather than reading from environment variables on every launch.
+**Give my coding tools persistent memory** — Enable integrations in `/settings`, run `bunx ei-tui --install` for MCP wiring. [Jump to Coding Tool Integrations →](#coding-tool-integrations)
 
-**On first run**, Ei reads environment variables like `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, etc. to auto-configure providers for you. After that, those values are saved to Ei's local state (`~/.local/share/ei/state.json` by default) and the env vars are no longer consulted.
+**Personalize my AI agents** — Create personas, set traits and topics, let them evolve. [Jump to Installation →](#installation) then come back for [Persona setup in the root README](../README.md#whats-a-persona)
 
-Detected providers are configured with sensible defaults out of the box:
+**Chat with a Persona** — Full TUI experience — heartbeats, rooms, the whole thing. [Jump to Installation →](#installation)
 
-- **Models**: Only chat-capable models are included — TTS, image generation, embeddings, and other non-chat model families are filtered out. You get one model per tier (e.g. fast/mini for extraction, capable for chat, powerful for complex work) rather than a wall of 100+ options.
-- **Token limits**: Known models get pre-configured `token_limit` and `max_output_tokens` values based on real-world Ei usage, not just the provider's advertised maximums.
-- **Rewrite model**: If a high-capability model is detected (Anthropic Opus, OpenAI o-series), it's automatically set as your `rewrite_model` — used by `/generate` and `/dedupe`. No manual `/settings` step needed.
+## Installation
 
-All of this only applies on first run. Existing profiles are never modified by detection.
+You need Bun to run the TUI:
 
-This means:
+```bash
+# Install Bun (if you don't have it)
+curl -fsSL https://bun.sh/install | bash
+```
 
-- **Rotating an API key?** Update it in Ei with `/provider`, not just in your shell.
-- **Switching machines?** Your providers and settings travel with your state file (or via Sync), not your shell profile.
-- **Changed your mind about a model?** Use `/provider` to set the model for a persona, or `/settings` to change your global default.
-- **Updated sync credentials?** Use `/setsync <user> <pass>` — env vars won't be re-read.
+But the TUI itself doesn't need to be "installed":
 
-The one exception is `EI_DATA_PATH` (and `EI_SYNC_USERNAME` / `EI_SYNC_PASSWORD` for bootstrapping sync on a new machine) — those are always read at startup since Ei needs them before it can load its own state.
+```bash
+# Run Ei — no install needed, always the latest version
+bunx ei-tui
+
+# Or, if you use it as much as I do, add this to your profile!
+alias ei='bunx ei-tui'
+```
+
+**BUT**, if you want to wire Ei's knowledge base to your coding tools, you can install the hooks for it with:
+
+```bash
+# Wire up Cursor, Claude Code, OpenCode, Codex, etc.
+bunx ei-tui --install
+```
 
 ## Coding Tool Integrations
 
@@ -41,7 +52,7 @@ Enable any or all four in `/settings`. They work independently and feed into the
 
 Sessions are processed oldest-first, one per queue cycle. On first run Ei works through your backlog gradually — it won't flood your LLM provider.
 
-All four tools also support reading Ei's knowledge back out via the [CLI tool](../src/cli/README.md). Run `ei --install` to wire up MCP everywhere it is detected, plus automatic context injection where hooks/plugins are available.
+All four tools also support reading Ei's knowledge back out via the [CLI tool](../src/cli/README.md). Run `bunx ei-tui --install` to wire up MCP everywhere it is detected, plus automatic context injection where hooks/plugins are available.
 
 ## Slack Integration
 
@@ -68,19 +79,6 @@ Ei will index channels and DMs you're a member of, extracting topics, people, an
 - Non-Marketplace apps are subject to Slack's rate limits on `conversations.history` (1 req/min). Backfill is gradual; steady-state is fast.
 - Your workspace admin may need to approve the [Ei Slack app](https://slack.com/oauth/v2/authorize?client_id=11080256060354.11080294064034&scope=&user_scope=channels:history,channels:read,groups:history,groups:read,im:history,im:read,mpim:history,mpim:read,users:read,users:read.email) — that link goes directly to the install flow
 - The Slack app is read-only — Ei never posts, reacts, or takes any action in your workspace
-
-# Installation
-
-```bash
-# Install Bun (if you don't have it)
-curl -fsSL https://bun.sh/install | bash
-
-# Run Ei — no install needed, always the latest version
-bunx ei-tui
-
-# Or, if you use it as much as I do, add this to your profile!
-alias ei='bunx ei-tui'
-```
 
 ## TUI Commands
 
@@ -198,6 +196,29 @@ Rooms have three modes, set at creation time:
 | `Ctrl+B` | Toggle sidebar |
 | `Ctrl+E` | Open `$EDITOR` (preserves current input) |
 | `PageUp / PageDown` | Scroll message history |
+
+## How Ei Handles Configuration
+
+Ei is designed to run consistently across machines and environments, so it keeps its own copy of your settings rather than reading from environment variables on every launch.
+
+**On first run**, Ei reads environment variables like `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, etc. to auto-configure providers for you. After that, those values are saved to Ei's local state (`~/.local/share/ei/state.json` by default) and the env vars are no longer consulted.
+
+Detected providers are configured with sensible defaults out of the box:
+
+- **Models**: Only chat-capable models are included — TTS, image generation, embeddings, and other non-chat model families are filtered out. You get one model per tier (e.g. fast/mini for extraction, capable for chat, powerful for complex work) rather than a wall of 100+ options.
+- **Token limits**: Known models get pre-configured `token_limit` and `max_output_tokens` values based on real-world Ei usage, not just the provider's advertised maximums.
+- **Rewrite model**: If a high-capability model is detected (Anthropic Opus, OpenAI o-series), it's automatically set as your `rewrite_model` — used by `/generate` and `/dedupe`. No manual `/settings` step needed.
+
+All of this only applies on first run. Existing profiles are never modified by detection.
+
+This means:
+
+- **Rotating an API key?** Update it in Ei with `/provider`, not just in your shell.
+- **Switching machines?** Your providers and settings travel with your state file (or via Sync), not your shell profile.
+- **Changed your mind about a model?** Use `/provider` to set the model for a persona, or `/settings` to change your global default.
+- **Updated sync credentials?** Use `/setsync <user> <pass>` — env vars won't be re-read.
+
+The one exception is `EI_DATA_PATH` (and `EI_SYNC_USERNAME` / `EI_SYNC_PASSWORD` for bootstrapping sync on a new machine) — those are always read at startup since Ei needs them before it can load its own state.
 
 # Environment Variables
 

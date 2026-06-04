@@ -1,188 +1,41 @@
 # Ei
 
-A local-first AI companion system with persistent personas and coding tool integrations (OpenCode, Claude Code, Cursor, Codex).
+Ei can be a LOT of different things, but it's always going to be **YOURS** - [Local First](#what-does-local-first-mean)
 
-You can access the Web version at [ei.flare576.com](https://ei.flare576.com).
+**What are you hoping to do with Ei today?**
 
-You can run the local version via `bunx ei-tui` — no install needed, always current (see [### TUI](#tui) for details).
+## I Want To Give My Coding Agents Memory
 
-If you're here to give your coding tools (OpenCode, Claude Code, Cursor, Codex) persistent memory, jump over to [TUI README.md](./tui/README.md) to learn how to get information _into_ Ei, and [CLI README.md](./src/cli/README.md) to wire up MCP/context injection so your agents can read relevant memory when they need it.
+You'll want to start with [Getting Data From Coding Tools](#coding-tool-integrations), then learn a little about [Installing Coding Tool Extensions](./tui/README.md#installation).
 
-## What Does "Local First" Mean?
+## I Want My Coding Agents To Have Personality
 
-All of the data Ei learns about you from your conversations is stored on your device (LocalStorage on the Web, and `$EI_DATA_PATH` or `~/.local/share/ei` in the TUI).
+I've started using terms like [Persona and Agent](#whats-a-persona). To get your agents to be more like Personas, you talk to them in the [TUI](./tui/README.md). Define what they're like, spend time with them, and they'll evolve — picking up facts, opinions, and context about you as you go. The [Personas section of the TUI README](./tui/README.md#personas) covers the commands you can use to work with Persona, and [What's a Persona](#whats-a-persona) explains the fields/Identity.
 
-Unless you enable Syncing, that's where it stays.
+## I Want My Persona To Remember Me
 
-If you have a local LLM, literally no data leaves your system(s) by default. If you don't, you'll need to provide an LLM for Ei to use. I tried to make that as easy as possible via adding Providers via API Key.
+Ei is, at its core, a memory system. It compiles Facts, People, Topics, and Quotes in your life and surfaces them to Agents and Persona naturally. Simply spending time in Ei or adding integrations [like Coding tools](#coding-tool-integrations) or [Slack](#slack-integration) will help it grow faster<sup>1</sup>!
 
-> **One honest note**: the first time you load Ei in a browser, it downloads the embedding library and model weights from public CDNs (jsdelivr, HuggingFace). Those CDNs see your IP address — but not your data. All embedding runs locally in your browser after that first download. The TUI version caches everything on first run and is fully offline after. Additionally, the same is true for my webhost - it must see your IP address to serve you assets, but no analytics, reports, metrics, etc. are done on them.
+><sup>1</sup> It should be noted - again - that all of the data Ei gathers stays with [**YOU**](#what-does-local-first-mean)
 
-There's no other usage, debugging, analytics, tracking, or history information stored or transmitted - anonymized or otherwise.
+## I Want My Persona To Talk To Each Other
 
-If there's a problem with the system, you need to tell me here on GitHub, or on Bluesky, or Discord, or whatever. There's no "report a bug" button, no "DONATE" link in the app.
+Ei features a "Rooms" concept, where you can put your Persona into a shared context space and they'll "see" all the messages in several different formats. They all maintain their Identity (Traits, Descriptions, Topics), see the other participants, and still access the shared knowledge base.
 
-Don't get me wrong - I absolutely want to fix whatever problem you run into, or hear about the feature you want - but your Ei system, and the data you build with it, is yours.
+## I Want To Use the TUI and the Web
 
-That's what "Local First" means.
+I built a [Sync](#what-does-sync-do) feature for this - it works using an encryption key only you know, before the data leaves your machine. When you sync data with Ei, you're basically just sharing your JSON data file between two machines. You don't **NEED** to use Sync - you can just send the file around!
 
-### What Does Sync Do?
+## Getting Started
 
-Optionally, you can choose to "Sync" to flare576.com. The only reason you would do this is if you wanted to easily move between two or more devices.
+- **Web** — Go to [ei.flare576.com](https://ei.flare576.com) — it'll walk you through onboarding.
+- **TUI** — Install [Bun](https://bun.sh) if you don't have it, then run `bunx ei-tui`. Full setup details in the [TUI README](./tui/README.md).
 
-If you just want data back-ups, there's an "Backup & Restore" feature built into the system on the same page as "Sync" (actually, above Sync, because I honestly don't think anyone besides me wants to use Ei enough to use two devices...).
-
-After you enable it, Sync kicks in when you close the TUI, or if you click "Save and Exit" in the web app. It sends a single, encrypted file to a file store for Ei...
-
-That I can't decrypt.
-
-Even if I wanted to (I definitely do not), I wouldn't be able to divulge your information because **You** are the only one that can generate the key. It's not a public/private keypair, it's not a "handshake".
-
-It's *your* data - I have no right to it, and neither does anyone else except you.
-
-## What's a Persona?
-
-At the core of the technology, LLM "Agents" are made up of two or three components, depending on who you ask:
-
-1. System Prompt
-2. User Prompt (which can be broken into "Messages", but they're still basically the User Prompt)
-
-The "System Prompt" is the part where you usually say
-
-> You are a pirate
-
-The "User Prompt" is the part where you put your messages
-
-> user: "OMG ARE YOU REALLY A PIRATE?!"
-> assistant: "Yar."
-
-A "Persona" is the combination of these two pieces of data, plus some _personality_. The reason I didn't call it an "Agent" is because Personas aren't static<sup>1</sup> - they'll grow and adapt as you talk to them. See the [Core Readme](src/README.md) for more information!
-
-> <sup>1</sup>: By default. You can make them static.
-
-## What's a Room?
-
-Rooms let you throw multiple personas into the same conversation thread. Chaos ensues. Or collaboration. Sometimes both.
-
-Three modes, set at creation:
-
-**Free For All (FFA)**: Everyone talks. Every message gets a response from every persona. It's loud. Good for brainstorming or when you want a bunch of perspectives on the same thing.
-
-**Choose Your Path (CYP)**: The conversation branches. Each message triggers responses from all personas, but you pick which one continues the thread. Fork in the road, every turn. You're the navigator.
-
-**Messages Against Persona (MAP)**: The interesting one. Everyone submits a response, but a Judge persona picks which one actually shows up. The personas have to stay in character and compete for the Judge's approval. The human doesn't have to play by the rules. It's partly a game of "who knows this judge best?" and partly just fun to watch them try.
-
-Rooms learn the same way persona conversations do. Quotes, topics, people — all get extracted and persisted. The knowledge base grows no matter which mode you're in.
-
-## The Basics
-
-Ei can operate with three types of input, and three types of output.
-
-```
-[TUI] -User Messages-> Ei <-User Messages- [Web]
-                       ^
-                    Sessions
-                       |
-          [OpenCode / Claude Code / Cursor / Codex]
-```
-
-```
-[TUI] <-Persona Messages- Ei -Persona Messages-> [Web]
-                          |
-                       CLI Data
-                          v
-              [OpenCode / Claude Code / Cursor / Codex]
-```
-
-Optionally, users can opt into a server-side data sync. This is ideal for users who want to use multiple devices or switch between TUI and Web throughout the day. All data is encrypted _before_ being sent to the server, using a key that only the user can generate (your `username` and `passphrase` never leave your device - I couldn't decrypt your data if I wanted to).
-
-### Web
-
-When you access Ei via https://ei.flare576.com, your browser will download the assets and walk you through onboarding. If you're running a Local LLM on port :1234 it will auto-detect it, otherwise it prompts you to enter one.
-
-Then you'll land on the chat interface. As you enter messages, they'll go to *YOUR* server. As Ei discovers information about you, summaries will be built with *YOUR* server, and data will be stored to *YOUR* LocalStorage in *YOUR* browser.
-
-When you leave, it simply stays in LocalStorage. When you come back, it loads it from LocalStorage.
-
-More information can be found in the [Web Readme](web/README.md)
-
-### TUI
-
-```bash
-# Install Bun (if you don't have it)
-curl -fsSL https://bun.sh/install | bash
-
-# Run Ei — no install needed, always the latest version
-bunx ei-tui
-
-# Or, if you use it as much as I do, add this to your profile!
-alias ei='bunx ei-tui'
-```
-
-If you have a Local LLM, that's the first and last set of signals that leave your machine for Ei unless you tell it otherwise.
-
-Regardless, running `ei` (or `bunx ei-tui`) pops open the TUI interface and, just like on the web, all messages and summary requests flow to your LLM provider, but the core data stays on your device.
-
-More information (including commands) can be found in the [TUI Readme](tui/README.md)
-
-### Coding Tool Integrations
+## Coding Tool Integrations
 
 Ei can import sessions from your coding tools and extract what you've been working on — pulling out facts, topics, and context that persist across sessions. Enable any combination; they work independently and feed into the same knowledge base.
 
-All four integrations are enabled via `/settings` in the TUI.
-
-#### OpenCode
-
-```yaml
-opencode:
-  integration: true
-```
-
-OpenCode saves sessions as JSON or SQLite (depending on version). Ei reads them, extracts context per-agent (each agent like Sisyphus gets its own persona), and keeps everything current as sessions accumulate.
-
-OpenCode can also *read* Ei's knowledge back out via the [CLI tool](src/cli/README.md). Run `ei --install` to wire up automatic context injection — relevant topics are injected before every message, and (with [Oh My OpenCode](https://github.com/code-yeongyu/oh-my-opencode)) each agent's Ei persona record is loaded into the system prompt at session start. The agent knows who it is *to you* before it reads your first message.
-
-#### Claude Code
-
-```yaml
-claudeCode:
-  integration: true
-```
-
-Reads from `~/.claude/projects/` (JSONL session files). All sessions map to a single "Claude Code" persona. Tool calls, thinking blocks, and internal plumbing are stripped — only the conversational content is imported.
-
-#### Cursor
-
-```yaml
-cursor:
-  integration: true
-```
-
-Reads from Cursor's SQLite databases:
-- **macOS**: `~/Library/Application Support/Cursor/User/`
-- **Windows**: `%APPDATA%\Cursor\User\`
-- **Linux**: `~/.config/Cursor/User/`
-
-All sessions map to a single "Cursor" persona.
-
-#### Codex
-
-```yaml
-codex:
-  integration: true
-```
-
-Reads from Codex's local state database and rollout JSONL files:
-- `~/.codex/state_*.sqlite`
-- `~/.codex/sessions/`
-
-All sessions map to a single "Codex" persona. Codex may store thread-level agent metadata for custom agents, but rollout messages do not reliably expose per-message sub-agent speaker identity yet. Tool calls, prompt scaffolding, and token-count events are stripped — only visible user/agent messages are imported.
-
-Codex can also read Ei's knowledge back out. Run `ei --install` to register the Ei MCP server and install a Codex `UserPromptSubmit` hook that injects relevant memory before each message, using your current prompt plus recent Codex transcript context when available.
-
----
-
-Sessions are processed oldest-first, one per queue cycle, so Ei won't overwhelm your LLM provider on first run. See [TUI Readme](tui/README.md)
+Supported tools: OpenCode, Claude Code, Cursor, Codex, and Pi/OMP. Full setup in the [TUI README → Coding Tool Integrations](./tui/README.md#coding-tool-integrations).
 
 ## Document Import
 
@@ -204,23 +57,11 @@ Both surfaces show you which documents have been imported and let you remove the
 
 Ei can index your Slack workspace — channels, DMs, and threads — and extract the same topics, people, and context it pulls from your conversations. Your personas end up knowing what's been going on at work without you having to explain it.
 
-**TUI** (requires setup):
-```bash
-/auth slack
-```
-
-Opens a browser OAuth flow. Once authenticated, enable in `/settings`:
-
-```yaml
-slack:
-  integration: true
-```
-
 **Web**: Open **☰ menu** → **My Data** → **External** tab → **Connect Slack**.
 
-Ei is read-only — it never posts, reacts, or takes any action in your workspace. All processing happens locally. Your workspace admin may need to approve the [Ei Slack app](https://slack.com/oauth/v2/authorize?client_id=11080256060354.11080294064034&scope=&user_scope=channels:history,channels:read,groups:history,groups:read,im:history,im:read,mpim:history,mpim:read,users:read,users:read.email) before you can connect.
+TUI setup: `/auth slack` — see the [TUI README → Slack Integration](./tui/README.md#slack-integration) for details.
 
-> **Note on backfill speed**: Slack limits non-Marketplace apps to 1 request/minute on message history. Backfill through a large workspace is gradual — steady-state (indexing new messages) is fast once you're caught up.
+Ei is read-only — it never posts, reacts, or takes any action in your workspace. All processing happens locally. Your workspace admin may need to approve the [Ei Slack app](https://slack.com/oauth/v2/authorize?client_id=11080256060354.11080294064034&scope=&user_scope=channels:history,channels:read,groups:history,groups:read,im:history,im:read,mpim:history,mpim:read,users:read,users:read.email) before you can connect.
 
 ## Knowledge Share
 
@@ -282,6 +123,100 @@ Connect in **Settings → Tool Kits → Spotify**. Once connected, personas can 
 Tools aren't global — you choose which personas get access. Edit a persona and toggle the tools it can use. A focused work persona might only have filesystem tools. A general-purpose companion might have everything.
 
 ---
+
+## How Ei Works
+
+Ei can operate with three types of input, and three types of output.
+
+```
+[TUI] -User Messages-> Ei <-User Messages- [Web]
+                       ^
+                    Sessions
+                       |
+          [OpenCode / Claude Code / Cursor / Codex]
+```
+
+```
+[TUI] <-Persona Messages- Ei -Persona Messages-> [Web]
+                          |
+                       CLI Data
+                          v
+              [OpenCode / Claude Code / Cursor / Codex]
+```
+
+Optionally, users can opt into a server-side data sync. This is ideal for users who want to use multiple devices or switch between TUI and Web throughout the day. All data is encrypted _before_ being sent to the server, using a key that only the user can generate (your `username` and `passphrase` never leave your device - I couldn't decrypt your data if I wanted to).
+
+### Web
+
+Go to [ei.flare576.com](https://ei.flare576.com) and it'll walk you through onboarding. More in the [Web README](web/README.md).
+
+## What's a Persona?
+
+At the core of the technology, LLM "Agents" are made up of two or three components, depending on who you ask:
+
+1. System Prompt
+2. User Prompt (which can be broken into "Messages", but they're still basically the User Prompt)
+
+The "System Prompt" is the part where you usually say
+
+> You are a pirate
+
+The "User Prompt" is the part where you put your messages
+
+> user: "OMG ARE YOU REALLY A PIRATE?!"
+> assistant: "Yar."
+
+A "Persona" is the combination of these two pieces of data, plus some _personality_. The reason I didn't call it an "Agent" is because Personas aren't static<sup>1</sup> - they'll grow and adapt as you talk to them. See the [Core Readme](src/README.md) for more information!
+
+> <sup>1</sup>: By default. You can make them static.
+
+## What's a Room?
+
+Rooms let you throw multiple personas into the same conversation thread. Chaos ensues. Or collaboration. Sometimes both.
+
+Three modes, set at creation:
+
+**Free For All (FFA)**: Everyone talks. Every message gets a response from every persona. It's loud. Good for brainstorming or when you want a bunch of perspectives on the same thing.
+
+**Choose Your Path (CYP)**: The conversation branches. Each message triggers responses from all personas, but you pick which one continues the thread. Fork in the road, every turn. You're the navigator.
+
+**Messages Against Persona (MAP)**: The interesting one. Everyone submits a response, but a Judge persona picks which one actually shows up. The personas have to stay in character and compete for the Judge's approval. The human doesn't have to play by the rules. It's partly a game of "who knows this judge best?" and partly just fun to watch them try.
+
+Rooms learn the same way persona conversations do. Quotes, topics, people — all get extracted and persisted. The knowledge base grows no matter which mode you're in.
+
+## Philosophy
+
+### What Does "Local First" Mean?
+
+All of the data Ei learns about you from your conversations is stored on your device (LocalStorage on the Web, and `$EI_DATA_PATH` or `~/.local/share/ei` in the TUI).
+
+Unless you enable Syncing, that's where it stays.
+
+If you have a local LLM, literally no data leaves your system(s) by default. If you don't, you'll need to provide an LLM for Ei to use. I tried to make that as easy as possible via adding Providers via API Key.
+
+> **One honest note**: the first time you load Ei in a browser, it downloads the embedding library and model weights from public CDNs (jsdelivr, HuggingFace). Those CDNs see your IP address — but not your data. All embedding runs locally in your browser after that first download. The TUI version caches everything on first run and is fully offline after. Additionally, the same is true for my webhost - it must see your IP address to serve you assets, but no analytics, reports, metrics, etc. are done on them.
+
+There's no other usage, debugging, analytics, tracking, or history information stored or transmitted - anonymized or otherwise.
+
+If there's a problem with the system, you need to tell me here on GitHub, or on Bluesky, or Discord, or whatever. There's no "report a bug" button, no "DONATE" link in the app.
+
+Don't get me wrong - I absolutely want to fix whatever problem you run into, or hear about the feature you want - but your Ei system, and the data you build with it, is yours.
+
+That's what "Local First" means.
+
+#### What Does Sync Do?
+
+Optionally, you can choose to "Sync" to flare576.com. The only reason you would do this is if you wanted to easily move between two or more devices.
+
+If you just want data back-ups, there's an "Backup & Restore" feature built into the system on the same page as "Sync" (actually, above Sync, because I honestly don't think anyone besides me wants to use Ei enough to use two devices...).
+
+After you enable it, Sync kicks in when you close the TUI, or if you click "Save and Exit" in the web app. It sends a single, encrypted file to a file store for Ei...
+
+That I can't decrypt.
+
+Even if I wanted to (I definitely do not), I wouldn't be able to divulge your information because **You** are the only one that can generate the key. It's not a public/private keypair, it's not a "handshake".
+
+It's *your* data - I have no right to it, and neither does anyone else except you.
 
 ## Technical Details
 
