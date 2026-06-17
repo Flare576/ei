@@ -34,15 +34,26 @@ export async function installMcpClients(): Promise<void> {
     console.log(`ℹ️  OpenCode not detected — skipping OpenCode plugin install.`);
   }
 
-  const hasPi = await Bun.file(join(home, ".pi", "agent", "settings.json")).exists() ||
+  const hasPi =
+    await Bun.file(join(home, ".pi", "agent", "settings.json")).exists() ||
     await Bun.file(join(home, ".pi", "agent", "auth.json")).exists();
-  const hasOmp = await Bun.file(join(home, ".omp", "agent", "settings.json")).exists() ||
-    await Bun.file(join(home, ".omp", "agent", "auth.json")).exists();
 
-  if (hasPi || hasOmp) {
+  if (hasPi) {
     await installPi();
   } else {
-    console.log(`ℹ️  Pi/OMP not detected — skipping Pi extension install.`);
+    console.log(`ℹ️  Pi not detected — skipping Pi extension install.`);
+  }
+
+  const hasOmp =
+    await Bun.file(join(home, ".omp", "agent", "settings.json")).exists() ||
+    await Bun.file(join(home, ".omp", "agent", "auth.json")).exists() ||
+    await Bun.file(join(home, ".omp", "agent", "config.yml")).exists() ||
+    await Bun.file(join(home, ".omp", "agent", "agent.db")).exists();
+
+  if (hasOmp) {
+    await installOmp();
+  } else {
+    console.log(`ℹ️  OMP not detected — skipping OMP extension install.`);
   }
 }
 
@@ -289,7 +300,12 @@ if (input.session_id && input.hook_source) {
 
 const args = raw ? ["-n", "5", ...sessionArgs, raw] : ["--recent", "-n", "5"];
 
-const output = await $\`bunx ei-tui@latest \${args}\`.quiet().text().catch(() => "");
+async function runEi(commandArgs) {
+  const direct = await $\`ei \${commandArgs}\`.quiet().text().catch(() => "");
+  if (direct.trim()) return direct;
+  return await $\`bunx ei-tui@latest \${commandArgs}\`.quiet().text().catch(() => "");
+}
+const output = await runEi(args);
 if (output.trim()) process.stdout.write(\`\\n\${heading}\\n\${output.trim()}\\n\`);
 `;
 
@@ -431,11 +447,17 @@ exit 0
 
 async function installPi(): Promise<void> {
   const home = process.env.HOME || "~";
-  const dataPath = process.env.EI_DATA_PATH ?? join(home, ".local", "share", "ei");
 
   const extensionContent = `import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { $ } from "bun";
+
+const runEi = async (cmdArgs: string[]): Promise<string> => {
+  const direct = await $\`ei \${cmdArgs}\`.quiet().text().catch(() => "");
+  if (direct.trim()) return direct;
+  return $\`bunx ei-tui@latest \${cmdArgs}\`.quiet().text().catch(() => "");
+};
+
 
 export default function eiIntegration(pi: ExtensionAPI) {
   pi.on("before_agent_start", async (event, ctx) => {
@@ -457,11 +479,7 @@ export default function eiIntegration(pi: ExtensionAPI) {
       ? ["-n", "5", "--", prompt]
       : ["--recent", "-n", "5"];
 
-    const output = await $\`bunx ei-tui@latest \${args}\`
-      .env({ ...process.env, EI_DATA_PATH: "${dataPath}" })
-      .quiet()
-      .text()
-      .catch(() => "");
+    const output = await runEi(args).catch(() => "");
 
     if (!output.trim()) return undefined;
 
@@ -502,11 +520,7 @@ export default function eiIntegration(pi: ExtensionAPI) {
       const args = params.type
         ? [params.type, "-n", "5", "--", params.query]
         : ["-n", "5", "--", params.query];
-      const output = await $\`bunx ei-tui@latest \${args}\`
-        .env({ ...process.env, EI_DATA_PATH: "${dataPath}" })
-        .quiet()
-        .text()
-        .catch(() => "No results found");
+      const output = await runEi(args).catch(() => "");
       return {
         content: [{ type: "text" as const, text: output.trim() || "No results found" }],
         details: {},
@@ -522,11 +536,7 @@ export default function eiIntegration(pi: ExtensionAPI) {
       id: Type.String({ description: "Entity ID from ei_search results" }),
     }),
     async execute(_id, params, _signal, _onUpdate, _ctx) {
-      const output = await $\`bunx ei-tui@latest --id \${params.id}\`
-        .env({ ...process.env, EI_DATA_PATH: "${dataPath}" })
-        .quiet()
-        .text()
-        .catch(() => "Not found");
+      const output = await runEi(["--id", params.id]).catch(() => "");
       return {
         content: [{ type: "text" as const, text: output.trim() || "Not found" }],
         details: {},
@@ -536,26 +546,121 @@ export default function eiIntegration(pi: ExtensionAPI) {
 }
 `;
 
-  const piExtDir = join(home, ".pi", "agent", "extensions");
-  const ompExtDir = join(home, ".omp", "agent", "extensions");
+  const extDir = join(home, ".pi", "agent", "extensions");
   const extFilename = "ei-integration.ts";
 
-  const hasPiAgent = await Bun.file(join(home, ".pi", "agent", "auth.json")).exists() ||
-    await Bun.file(join(home, ".pi", "agent", "settings.json")).exists();
-  const hasOmpAgent = await Bun.file(join(home, ".omp", "agent", "auth.json")).exists() ||
-    await Bun.file(join(home, ".omp", "agent", "settings.json")).exists();
+  await Bun.$`mkdir -p ${extDir}`;
+  await Bun.write(join(extDir, extFilename), extensionContent);
+  console.log(`✓ Installed Ei extension to ~/.pi/agent/extensions/${extFilename}`);
+}
 
-  if (hasPiAgent) {
-    await Bun.$`mkdir -p ${piExtDir}`;
-    await Bun.write(join(piExtDir, extFilename), extensionContent);
-    console.log(`✓ Installed Ei extension to ~/.pi/agent/extensions/${extFilename}`);
-  }
+async function installOmp(): Promise<void> {
+  const home = process.env.HOME || "~";
 
-  if (hasOmpAgent) {
-    await Bun.$`mkdir -p ${ompExtDir}`;
-    await Bun.write(join(ompExtDir, extFilename), extensionContent);
-    console.log(`✓ Installed Ei extension to ~/.omp/agent/extensions/${extFilename}`);
-  }
+  const extensionContent = `import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
+import { Type } from "typebox";
+import { $ } from "bun";
+
+const runEi = async (cmdArgs: string[]): Promise<string> => {
+  const direct = await $\`ei \${cmdArgs}\`.quiet().text().catch(() => "");
+  if (direct.trim()) return direct;
+  return $\`bunx ei-tui@latest \${cmdArgs}\`.quiet().text().catch(() => "");
+};
+
+
+export default function eiIntegration(pi: ExtensionAPI) {
+  pi.on("before_agent_start", async (event, ctx) => {
+    const entries = ctx.sessionManager.getEntries();
+    const recentMsgs = entries
+      .filter((e: any) => e.type === "message" && (e.message?.role === "user" || e.message?.role === "assistant"))
+      .slice(-5)
+      .map((e: any) => {
+        const role = e.message?.role ?? "unknown";
+        const text = Array.isArray(e.message?.content)
+          ? e.message.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join(" ")
+          : (e.message?.content ?? "");
+        return \`\${role}: \${text.slice(0, 200)}\`;
+      })
+      .join("\\n");
+
+    const prompt = event.prompt ?? "";
+    const args = prompt
+      ? ["-n", "5", "--", prompt]
+      : ["--recent", "-n", "5"];
+
+    const output = await runEi(args).catch(() => "");
+
+    if (!output.trim()) return undefined;
+
+    const heading = [
+      "## Ei Memory Context",
+      "*(The user cannot see this block. It is injected automatically before their message.)*",
+      "*(If you reference anything from it, briefly explain where it came from.)*",
+      "",
+      "Ei is a personal knowledge base built from your coding sessions, Slack, documents, and conversations.",
+      "The following items MAY be relevant to your current task — use ei_search or ei_lookup for targeted queries.",
+    ].join("\\n");
+
+    return {
+      message: {
+        customType: "ei-context",
+        content: \`\${heading}\\n\\n\${output.trim()}\`,
+        display: false,
+      },
+    };
+  });
+
+  pi.registerTool({
+    name: "ei_search",
+    label: "Search Ei Memory",
+    description: "Semantic search of Ei's personal knowledge base — facts, topics, people, quotes across all sources. Use when you need context about the user, their work, or anything Ei has learned.",
+    promptSnippet: "Search Ei's personal memory for relevant facts, topics, people, or quotes.",
+    parameters: Type.Object({
+      query: Type.String({ description: "Natural language search query" }),
+      type: Type.Optional(Type.Union([
+        Type.Literal("facts"),
+        Type.Literal("topics"),
+        Type.Literal("people"),
+        Type.Literal("quotes"),
+        Type.Literal("personas"),
+      ], { description: "Filter to a specific data type. Omit for balanced results across all types." })),
+    }),
+    async execute(_id, params, _signal, _onUpdate, _ctx) {
+      const args = params.type
+        ? [params.type, "-n", "5", "--", params.query]
+        : ["-n", "5", "--", params.query];
+      const output = await runEi(args).catch(() => "");
+      return {
+        content: [{ type: "text" as const, text: output.trim() || "No results found" }],
+        details: {},
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "ei_lookup",
+    label: "Lookup Ei Entity",
+    description: "Full-record lookup for a specific Ei entity (Fact, Topic, Person, Quote, or Persona) by ID. Use after ei_search to retrieve complete details for an item.",
+    parameters: Type.Object({
+      id: Type.String({ description: "Entity ID from ei_search results" }),
+    }),
+    async execute(_id, params, _signal, _onUpdate, _ctx) {
+      const output = await runEi(["--id", params.id]).catch(() => "");
+      return {
+        content: [{ type: "text" as const, text: output.trim() || "Not found" }],
+        details: {},
+      };
+    },
+  });
+}
+`;
+
+  const extDir = join(home, ".omp", "agent", "extensions");
+  const extFilename = "ei-integration.ts";
+
+  await Bun.$`mkdir -p ${extDir}`;
+  await Bun.write(join(extDir, extFilename), extensionContent);
+  console.log(`✓ Installed Ei extension to ~/.omp/agent/extensions/${extFilename}`);
 }
 
 async function installOpenCodePlugin(): Promise<void> {
@@ -603,7 +708,8 @@ export function extractAgentName(systemPrompt: string): string | null {
 // tolerates OMO renaming agents without requiring a hardcoded alias map.
 export async function resolveEiPersona(rawName: string): Promise<PersonaResult | null> {
   try {
-    const out = await $\`bunx ei-tui@latest personas -n 5 \${rawName}\`.text()
+    const direct = await $\`ei personas -n 5 \${rawName}\`.quiet().text().catch(() => "")
+    const out = direct.trim() ? direct : await $\`bunx ei-tui@latest personas -n 5 \${rawName}\`.text()
     const candidates = JSON.parse(out.trim()) as PersonaResult[]
     if (!Array.isArray(candidates) || candidates.length === 0) return null
     const rawLower = rawName.toLowerCase()
@@ -650,7 +756,8 @@ export default async function EiPersonaPlugin() {
       input: { sessionID?: string; model: { id: string; providerID: string; [key: string]: unknown } },
       output: { system: string[] },
     ): Promise<void> => {
-      const rawName = extractAgentName(output.system[0] ?? "")
+      if (!Array.isArray(output.system) || typeof output.system[0] !== "string") return
+      const rawName = extractAgentName(output.system[0])
       if (!rawName) return
 
       const cacheKey = \`\${input.sessionID ?? "unknown"}:\${rawName}\`
