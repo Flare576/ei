@@ -558,7 +558,6 @@ async function installOmp(): Promise<void> {
   const home = process.env.HOME || "~";
 
   const extensionContent = `import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
-import { Type } from "typebox";
 import { $ } from "bun";
 
 const runEi = async (cmdArgs: string[]): Promise<string> => {
@@ -567,8 +566,7 @@ const runEi = async (cmdArgs: string[]): Promise<string> => {
   return $\`bunx ei-tui@latest \${cmdArgs}\`.quiet().text().catch(() => "");
 };
 
-// WHO block deduplication: the Promise itself is re-awaited on subsequent calls
-// (resolving an already-resolved Promise is synchronous). No separate cache map needed.
+// WHO block deduplication: Promise identity reuse — resolving is synchronous on subsequent calls.
 const personaBlockFetch = new Map<string, Promise<string | null>>();
 
 async function fetchPersonaBlock(name: string): Promise<string | null> {
@@ -582,11 +580,14 @@ async function fetchPersonaBlock(name: string): Promise<string | null> {
 
 export default function eiIntegration(pi: ExtensionAPI) {
   // WHO: inject <ei-relationship> block for the active primary persona.
-  // Reads activePersonaName from the session (set by Tab/--agent) and fetches
-  // the formatted block from the Ei CLI. Cached per persona name so the
-  // subprocess only runs once per persona, not once per turn.
-  pi.on("before_agent_start", async (_event, ctx) => {
-    const personaName = (ctx as any).session?.activePersonaName as string | null | undefined;
+  // Prefer ctx.activePersonaName (OMP >= persona-tab-cycle PR); fall back to
+  // parsing "You are \\"<Name>\\"" from the HOW block in event.systemPrompt.
+  pi.on("before_agent_start", async (event, ctx) => {
+    const joined = ((event as any).systemPrompt as string[] | undefined)?.join("\\n") ?? "";
+    const quoted = joined.match(/You are "([^"]+)"/);
+    const personaName: string | null =
+      (ctx as any).activePersonaName ??
+      (quoted?.[1]?.trim() || null);
     if (!personaName) return undefined;
 
     if (!personaBlockFetch.has(personaName)) {
@@ -620,12 +621,8 @@ export default function eiIntegration(pi: ExtensionAPI) {
       .join("\\n");
 
     const prompt = event.prompt ?? "";
-    const args = prompt
-      ? ["-n", "5", "--", prompt]
-      : ["--recent", "-n", "5"];
-
+    const args = prompt ? ["-n", "5", "--", prompt] : ["--recent", "-n", "5"];
     const output = await runEi(args).catch(() => "");
-
     if (!output.trim()) return undefined;
 
     const heading = [
@@ -646,22 +643,25 @@ export default function eiIntegration(pi: ExtensionAPI) {
     };
   });
 
+  // Tools use plain JSON Schema — no typebox import needed (not available in source mode).
   pi.registerTool({
     name: "ei_search",
     label: "Search Ei Memory",
     description: "Semantic search of Ei's personal knowledge base — facts, topics, people, quotes across all sources. Use when you need context about the user, their work, or anything Ei has learned.",
     promptSnippet: "Search Ei's personal memory for relevant facts, topics, people, or quotes.",
-    parameters: Type.Object({
-      query: Type.String({ description: "Natural language search query" }),
-      type: Type.Optional(Type.Union([
-        Type.Literal("facts"),
-        Type.Literal("topics"),
-        Type.Literal("people"),
-        Type.Literal("quotes"),
-        Type.Literal("personas"),
-      ], { description: "Filter to a specific data type. Omit for balanced results across all types." })),
-    }),
-    async execute(_id, params, _signal, _onUpdate, _ctx) {
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Natural language search query" },
+        type: {
+          type: "string",
+          enum: ["facts", "topics", "people", "quotes", "personas"],
+          description: "Filter to a specific data type. Omit for balanced results across all types.",
+        },
+      },
+      required: ["query"],
+    },
+    async execute(_id, params: { query: string; type?: string }, _signal, _onUpdate, _ctx) {
       const args = params.type
         ? [params.type, "-n", "5", "--", params.query]
         : ["-n", "5", "--", params.query];
@@ -677,10 +677,14 @@ export default function eiIntegration(pi: ExtensionAPI) {
     name: "ei_lookup",
     label: "Lookup Ei Entity",
     description: "Full-record lookup for a specific Ei entity (Fact, Topic, Person, Quote, or Persona) by ID. Use after ei_search to retrieve complete details for an item.",
-    parameters: Type.Object({
-      id: Type.String({ description: "Entity ID from ei_search results" }),
-    }),
-    async execute(_id, params, _signal, _onUpdate, _ctx) {
+    parameters: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Entity ID from ei_search results" },
+      },
+      required: ["id"],
+    },
+    async execute(_id, params: { id: string }, _signal, _onUpdate, _ctx) {
       const output = await runEi(["--id", params.id]).catch(() => "");
       return {
         content: [{ type: "text" as const, text: output.trim() || "Not found" }],
