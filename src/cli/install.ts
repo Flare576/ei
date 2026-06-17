@@ -567,8 +567,44 @@ const runEi = async (cmdArgs: string[]): Promise<string> => {
   return $\`bunx ei-tui@latest \${cmdArgs}\`.quiet().text().catch(() => "");
 };
 
+// WHO block deduplication: the Promise itself is re-awaited on subsequent calls
+// (resolving an already-resolved Promise is synchronous). No separate cache map needed.
+const personaBlockFetch = new Map<string, Promise<string | null>>();
+
+async function fetchPersonaBlock(name: string): Promise<string | null> {
+  try {
+    const block = await runEi(["personas", "--format", "prompt", "--", name]);
+    return block.trim() || null;
+  } catch {
+    return null;
+  }
+}
 
 export default function eiIntegration(pi: ExtensionAPI) {
+  // WHO: inject <ei-relationship> block for the active primary persona.
+  // Reads activePersonaName from the session (set by Tab/--agent) and fetches
+  // the formatted block from the Ei CLI. Cached per persona name so the
+  // subprocess only runs once per persona, not once per turn.
+  pi.on("before_agent_start", async (_event, ctx) => {
+    const personaName = (ctx as any).session?.activePersonaName as string | null | undefined;
+    if (!personaName) return undefined;
+
+    if (!personaBlockFetch.has(personaName)) {
+      personaBlockFetch.set(personaName, fetchPersonaBlock(personaName));
+    }
+    const block = await personaBlockFetch.get(personaName)!;
+    if (!block) return undefined;
+
+    return {
+      message: {
+        customType: "ei-persona-who",
+        content: block,
+        display: false,
+      },
+    };
+  });
+
+  // MEMORY: inject relevant Ei context based on the current prompt.
   pi.on("before_agent_start", async (event, ctx) => {
     const entries = ctx.sessionManager.getEntries();
     const recentMsgs = entries
@@ -675,8 +711,8 @@ async function installOpenCodePlugin(): Promise<void> {
 import { join } from "path"
 import { appendFileSync } from "fs"
 
-const sessionCache = new Map<string, string | null>()
-const sessionFetch = new Map<string, Promise<string | null>>()
+// Deduplication: the Promise itself is re-awaited on subsequent calls (synchronous once resolved).
+const personaFetch = new Map<string, Promise<string | null>>()
 
 const logPath = join(process.env.EI_DATA_PATH ?? join(process.env.HOME ?? "~", ".local", "share", "ei"), "ei-persona-plugin.log")
 
@@ -686,11 +722,7 @@ function log(msg: string) {
   } catch {}
 }
 
-type PersonaTrait = { name: string; description: string; strength: number }
-type PersonaTopic = { name: string; perspective: string; approach: string; exposure_current: number }
-type PersonaResult = { display_name: string; base_prompt?: string; traits?: PersonaTrait[]; topics?: PersonaTopic[] }
-
-// Pulls the agent name from the system prompt. Handles OMO's multiple formats:
+// Pulls the agent name from the system prompt. Handles OMO/OMP formats:
 //   You are "Sisyphus" - ...           (quoted, dash)
 //   You are "Sisyphus - Ultraworker"   (quoted, dash in name)
 //   You are Atlas - ...                (unquoted, dash)
@@ -704,49 +736,24 @@ export function extractAgentName(systemPrompt: string): string | null {
   return null
 }
 
-// Queries Ei for persona candidates and validates by name containment —
-// tolerates OMO renaming agents without requiring a hardcoded alias map.
-export async function resolveEiPersona(rawName: string): Promise<PersonaResult | null> {
+const runEi = async (cmdArgs: string[]): Promise<string> => {
+  const direct = await $\`ei \${cmdArgs}\`.quiet().text().catch(() => "")
+  if (direct.trim()) return direct
+  return $\`bunx ei-tui@latest \${cmdArgs}\`.quiet().text().catch(() => "")
+}
+
+// Fetch the <ei-relationship> block for a named persona via the Ei CLI.
+// Delegates all formatting to \`ei personas <name> --format prompt\` so
+// the block format is maintained in one place.
+async function fetchRelationshipBlock(rawName: string): Promise<string | null> {
   try {
-    const direct = await $\`ei personas -n 5 \${rawName}\`.quiet().text().catch(() => "")
-    const out = direct.trim() ? direct : await $\`bunx ei-tui@latest personas -n 5 \${rawName}\`.text()
-    const candidates = JSON.parse(out.trim()) as PersonaResult[]
-    if (!Array.isArray(candidates) || candidates.length === 0) return null
-    const rawLower = rawName.toLowerCase()
-    const match = candidates.find((p) => {
-      const nameLower = p.display_name.toLowerCase()
-      return rawLower.includes(nameLower) || nameLower.includes(rawLower)
-    })
-    return match ?? null
+    const block = await runEi(["personas", "--format", "prompt", "--", rawName])
+    if (!block.trim() || block.includes("No saved state")) return null
+    log(\`ei-persona: injecting block for \${rawName}\`)
+    return block.trim()
   } catch {
     return null
   }
-}
-
-function buildEiRelationshipBlock(persona: PersonaResult): string {
-  const strongTraits = (persona.traits ?? [])
-    .filter((t) => t.strength >= 0.7)
-    .sort((a, b) => b.strength - a.strength)
-    .map((t) => \`**\${t.name}** (\${Math.round(t.strength * 100)}%): \${t.description}\`)
-    .join("\\n")
-  const sortedTopics = [...(persona.topics ?? [])]
-    .sort((a, b) => b.exposure_current - a.exposure_current)
-    .map((t) => \`**\${t.name}**: \${t.perspective} — \${t.approach}\`)
-    .join("\\n")
-  return [
-    "<!-- ei-relationship-injected -->",
-    "<ei-relationship>",
-    "## Ei: Relationship Context",
-    "",
-    persona.base_prompt ?? "",
-    "",
-    "### Working Style",
-    strongTraits || "(no traits above threshold)",
-    "",
-    "### Shared Context",
-    sortedTopics || "(no topics)",
-    "</ei-relationship>",
-  ].join("\\n")
 }
 
 export default async function EiPersonaPlugin() {
@@ -760,26 +767,13 @@ export default async function EiPersonaPlugin() {
       const rawName = extractAgentName(output.system[0])
       if (!rawName) return
 
-      const cacheKey = \`\${input.sessionID ?? "unknown"}:\${rawName}\`
-
-      if (sessionCache.has(cacheKey)) {
-        const cached = sessionCache.get(cacheKey) ?? null
-        if (cached !== null && !output.system[0].includes("<!-- ei-relationship-injected -->"))
-          output.system[0] = output.system[0] + "\\n\\n" + cached
-        return
+      // Cache per persona name (not per session) — block only changes when the
+      // persona's Ei data changes, which is infrequent.
+      if (!personaFetch.has(rawName)) {
+        personaFetch.set(rawName, fetchRelationshipBlock(rawName))
       }
 
-      if (!sessionFetch.has(cacheKey)) {
-        sessionFetch.set(cacheKey, (async () => {
-          const persona = await resolveEiPersona(rawName)
-          if (!persona) return null
-          log(\`ei-persona: injecting \${persona.display_name}\`)
-          return buildEiRelationshipBlock(persona)
-        })())
-      }
-
-      const block = await sessionFetch.get(cacheKey)!
-      sessionCache.set(cacheKey, block)
+      const block = await personaFetch.get(rawName)!
       if (block !== null && !output.system[0].includes("<!-- ei-relationship-injected -->"))
         output.system[0] = output.system[0] + "\\n\\n" + block
     },
