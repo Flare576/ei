@@ -283,6 +283,7 @@ async function main(): Promise<void> {
         session: { type: "string" },
         "hook-source": { type: "string" },
         transcript: { type: "string" },
+        format: { type: "string", short: "f" },
       },
       allowPositionals: true,
       strict: true,
@@ -336,6 +337,8 @@ async function main(): Promise<void> {
     ? [...recentMessages, query].join(" ").trim()
     : query;
 
+  const format = parsed.values.format?.trim();
+
   let result;
   if (targetType) {
     const module = await import(`./cli/commands/${targetType}.js`);
@@ -345,6 +348,20 @@ async function main(): Promise<void> {
     }
     if (sourcePrefix && state) {
       result = filterTypeSpecificBySource(result, state, sourcePrefix, targetType);
+    }
+
+    // --format prompt: output a formatted text block instead of JSON.
+    // Currently supported for personas only; other types tracked in GitHub issue #77.
+    if (format === "prompt" && targetType === "personas") {
+      // BUG-1 fix: when no persona matches, emit nothing and exit clean.
+      // Do NOT fall through to JSON — callers check block.trim() truthiness
+      // and "[]".trim() is truthy, corrupting system prompts.
+      if (!Array.isArray(result) || result.length === 0) {
+        process.exit(0);
+      }
+      const { buildEiRelationshipBlock } = await import("./cli/commands/personas.js");
+      process.stdout.write(buildEiRelationshipBlock(result[0]) + "\n");
+      process.exit(0);
     }
   } else {
     result = await retrieveBalanced(enrichedQuery, limit, options);
