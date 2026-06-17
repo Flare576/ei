@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, writeFileSync, rmSync, existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
+import type { StorageState } from "../../../src/core/types/integrations.js";
 
 
 vi.mock("../../../src/core/embedding-service.js", async (importOriginal) => {
@@ -340,6 +341,15 @@ describe("retrievePersonas (string matching)", () => {
     expect(r.model).toBe("Local LLM:test-model");
     expect(Array.isArray(r.traits)).toBe(true);
     expect(Array.isArray(r.topics)).toBe(true);
+  });
+  it("returns [] when query is longer than but contains the persona name (reverse containment is handled by execute(), not here)", () => {
+    // Contract: retrievePersonas() only checks display_name.includes(query).
+    // The other direction — query.includes(display_name) — lives in execute().
+    // This test pins that boundary so a future refactor doesn't accidentally
+    // collapse both into one function.
+    const state = createTestState({ personas: 1, personaNamePrefix: "Beta" });
+    const result = retrievePersonas("Beta — QA Goddess", state as unknown as StorageState, 10);
+    expect(result).toEqual([]);
   });
 });
 
