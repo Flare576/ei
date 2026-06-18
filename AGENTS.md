@@ -136,11 +136,33 @@ Format: `ProviderName:model` (e.g., `Local LLM:llama-3.1-8b`, `My OpenAI:gpt-4o`
 ### Commands
 
 ```bash
-npm run dev      # Watch mode
-npm run build    # Compile TypeScript
-npm run test     # Run tests
-npm start        # Run the app
+npm run dev        # Watch mode
+npm run build      # Compile TypeScript
+npm run test       # Unit tests only — core (vitest) + TUI (vitest + bun:test)
+npm run test:all   # EVERYTHING: unit + web E2E + TUI E2E. Use this before shipping.
+npm start          # Run the app
 ```
+
+### Test Runner Map
+
+Each tier has its own runner; they don't mix. Run the right command for the right tier.
+
+| Command | Runner | What it covers | Notes |
+|---|---|---|---|
+| `npm run test:src` | vitest (root) | Core unit tests — `tests/unit/**` | Node required; fails if `node` resolves to Bun's shim (check: `node --version`) |
+| `npm run test:tui` | vitest + bun:test | TUI unit/component tests — `tui/tests/unit/**`, `tui/src/**` | Runs from `tui/`; bun:test handles the component layer |
+| `npm run test` | both above | Core + TUI unit tests combined | Shorthand for `test:src && test:tui` |
+| `npm run test:e2e` | Playwright | Web E2E — `tests/e2e/**` | Requires running web dev server |
+| `npm run test:e2e:tui` | tui-test (NVM 20) | TUI E2E — `tui/tests/e2e/**` | Requires Node 20 specifically; script auto-switches via nvm |
+| `npm run test:all` | all of the above | Everything, in sequence | The authoritative pre-release gate |
+| `npm run test:evals` | vite-node | LLM quality evals | Hits live LLM; not part of CI |
+| `bash ci/structural-checks.sh` | grep | Architectural invariants | Fast; no runtime needed |
+
+**If `npm run test:src` fails with `globalThis.Bun readonly` or `vi.mock is not a function`**: your `node` binary is Bun's shim. Run with the explicit NVM path instead:
+```bash
+/path/to/.nvm/versions/node/vX.Y.Z/bin/node node_modules/.bin/vitest run
+```
+The TUI and E2E tiers are unaffected — they either use bun intentionally or handle their own Node version switching.
 
 ### Testing Strategy
 
@@ -284,13 +306,13 @@ export function EiProvider(props) {
 
 #### Current Testing Tiers
 
-| Tier | Tool | Scope | Status |
-|------|------|-------|--------|
-| Unit | Vitest/bun:test | Core logic (Processor, StateManager) | ✅ Working |
-| Component | `testRender` from `@opentui/solid` | SolidJS reactivity, render logic | ✅ Working |
-| E2E | tui-test | Full app + mock LLM | ✅ Working |
+| Tier | Tool | Command | Scope |
+|---|---|---|---|
+| Unit | vitest | `npm run test:src` (root) | Core logic — `tests/unit/**` |
+| Component | vitest + bun:test | `npm run test:tui` | TUI SolidJS components + storage — `tui/tests/unit/**`, `tui/src/**` |
+| E2E | tui-test | `npm run test:e2e:tui` | Full TUI app + mock LLM — `tui/tests/e2e/**` |
 
-**E2E requires Node 20** (not Bun): `npm run test:e2e` from `tui/` handles nvm switching automatically.
+**E2E requires Node 20** (not Bun): `npm run test:e2e:tui` handles nvm switching automatically.
 
 **bunfig.toml requirement**:
 ```toml
@@ -319,9 +341,8 @@ All 34 E2E tests failed. The tag pointed to a broken commit. Don't repeat this.
 2. `git branch --show-current` — must be `main`
 3. **Did you update the docs?** — Check README.md, AGENTS.md, src/cli/README.md, tui/README.md for anything stale. New tools, changed behavior, removed fields — if a human would be confused without knowing, update it now.
 4. `git pull` — must be up to date with origin
-5. `npm test` — all unit tests must pass (runs core + TUI)
+5. `npm run test:all` — all unit + E2E tests must pass. See **Test Runner Map** above if any tier fails unexpectedly.
 6. `cd web && npx tsc --noEmit && npx vite build` — **Both must succeed**: `tsc --noEmit` catches `noUnusedLocals` and dead-code errors that Vite's lenient bundler misses; Vite catches bundler/JSX errors that `tsc` misses. This is what CI runs. (v0.1.9 incident = vite; v0.1.18 deploy failure = tsc)
-7. `npm run test:e2e` — all web E2E tests must pass
 
 If **any step fails**: STOP. Fix before tagging.
 
