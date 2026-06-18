@@ -3,7 +3,6 @@ import type { PersonaTrait } from "../types.js";
 import type { StateManager } from "../state-manager.js";
 import type { IOpenCodeReader } from "../../integrations/opencode/types.js";
 import { AGENT_ALIASES } from "../../integrations/opencode/types.js";
-import { createOpenCodeReader } from "../../integrations/opencode/reader-factory.js";
 import { DEFAULT_SEED_TRAITS } from "../constants/seed-traits.js";
 
 const OPENCODE_GROUP = "OpenCode";
@@ -52,8 +51,7 @@ export async function ensureAgentPersona(
     return existing;
   }
 
-  const agentReader = reader ?? await createOpenCodeReader();
-  const agentInfo = await agentReader.getAgentInfo(canonical);
+  const agentInfo = reader ? await reader.getAgentInfo(canonical) : null;
 
   const now = new Date().toISOString();
   const personaId = crypto.randomUUID();
