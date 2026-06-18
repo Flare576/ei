@@ -49,6 +49,8 @@ export interface PiMessageEntry {
   id: string;
   parentId?: string;
   timestamp: string;
+  /** Active agent definition name, present only for OMP sessions. Mirrors the `agent` field on OpenCode message rows. */
+  agent?: string;
   message: PiMessagePayload;
   [key: string]: unknown;
 }
@@ -112,6 +114,8 @@ export interface PiMessage {
   role: "user" | "assistant";
   content: string;
   timestamp: string;
+  /** Active agent definition name when this message was recorded; undefined for vanilla Pi or OMP without an active agent. */
+  agent?: string;
 }
 
 // ============================================================================

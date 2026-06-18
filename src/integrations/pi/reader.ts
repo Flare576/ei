@@ -199,6 +199,7 @@ export class PiReader implements IPiReader {
         role,
         content,
         timestamp: ts ?? new Date(0).toISOString(),
+        agent: entry.agent as string | undefined,
       });
     }
 
