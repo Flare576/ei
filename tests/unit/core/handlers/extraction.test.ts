@@ -1812,3 +1812,250 @@ describe("Human data update handler — partial response contract", () => {
     });
   }
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Channel & Speaker Attribution
+//
+// These tests guard the specific bug fixed in:
+//   - handleHumanTopicScan / handleEventScan: channelDisplayName reconstruction
+//   - queueTopicUpdate: personaDisplayName mapping added to stored request data
+//
+// Root cause: quotes were created with channel=undefined because personaDisplayName
+// was stored by queueTopicUpdate but handleTopicUpdate was receiving channelDisplayName
+// from a ...context spread that did NOT include personaDisplayName.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("Channel and speaker attribution on quotes", () => {
+  let state: ReturnType<typeof createMockStateManager>;
+
+  beforeEach(() => {
+    state = createMockStateManager();
+    vi.clearAllMocks();
+  });
+
+  // Helper: seed a message for a persona so validateAndStoreQuotes can anchor the quote
+  function seedMessage(personaId: string, id: string, role: "human" | "system", content: string): Message {
+    const msg: Message = {
+      id,
+      role,
+      content,
+      timestamp: new Date().toISOString(),
+      read: true,
+      context_status: "default" as const,
+    };
+    (state._messages as Record<string, Message[]>)[personaId] = [
+      ...((state._messages as Record<string, Message[]>)[personaId] ?? []),
+      msg,
+    ];
+    return msg;
+  }
+
+  describe("handleTopicUpdate — quote channel/speaker", () => {
+    it("sets channel to personaDisplayName on extracted quotes", async () => {
+      seedMessage("persona-1", "msg-1", "human", "I love working with TypeScript");
+
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleTopicUpdate,
+        data: {
+          personaId: "persona-1",
+          personaDisplayName: "Sisyphus",   // ← as queueTopicUpdate now stores it
+          isNewItem: true,
+          candidateName: "TypeScript",
+          candidateDescription: "Strongly typed JS",
+          candidateCategory: "Technical",
+          messages_context: [],
+          messages_analyze: [],
+        },
+      });
+
+      const response = createMockResponse(request, {
+        name: "TypeScript",
+        description: "Strongly typed JavaScript superset",
+        sentiment: 0.8,
+        exposure_desired: 0.5,
+        quotes: [{ text: "I love working with TypeScript", reason: "direct statement" }],
+      });
+
+      await handlers[LLMNextStep.HandleTopicUpdate](response, state as any);
+
+      expect(state.human_quote_add).toHaveBeenCalledTimes(1);
+      const quote = (state.human_quote_add as ReturnType<typeof vi.fn>).mock.calls[0][0] as Quote;
+      expect(quote.channel).toBe("Sisyphus");
+    });
+
+    it("sets speaker=human for human-role message quotes", async () => {
+      seedMessage("persona-1", "msg-2", "human", "I love working with TypeScript");
+
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleTopicUpdate,
+        data: {
+          personaId: "persona-1",
+          personaDisplayName: "Sisyphus",
+          isNewItem: true,
+          candidateName: "TypeScript",
+          candidateDescription: "Strongly typed JS",
+          candidateCategory: "Technical",
+          messages_context: [],
+          messages_analyze: [],
+        },
+      });
+
+      const response = createMockResponse(request, {
+        name: "TypeScript",
+        description: "Strongly typed JavaScript superset",
+        sentiment: 0.8,
+        exposure_desired: 0.5,
+        quotes: [{ text: "I love working with TypeScript", reason: "direct statement" }],
+      });
+
+      await handlers[LLMNextStep.HandleTopicUpdate](response, state as any);
+
+      const quote = (state.human_quote_add as ReturnType<typeof vi.fn>).mock.calls[0][0] as Quote;
+      expect(quote.speaker).toBe("human");
+    });
+
+    it("sets speaker=channelDisplayName for non-human-role message quotes", async () => {
+      seedMessage("persona-1", "msg-3", "system", "This pattern is worth noting");
+
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleTopicUpdate,
+        data: {
+          personaId: "persona-1",
+          personaDisplayName: "Sisyphus",
+          isNewItem: true,
+          candidateName: "Patterns",
+          candidateDescription: "Design patterns",
+          candidateCategory: "Technical",
+          messages_context: [],
+          messages_analyze: [],
+        },
+      });
+
+      const response = createMockResponse(request, {
+        name: "Patterns",
+        description: "Design patterns in software",
+        sentiment: 0.6,
+        exposure_desired: 0.5,
+        quotes: [{ text: "This pattern is worth noting", reason: "insight" }],
+      });
+
+      await handlers[LLMNextStep.HandleTopicUpdate](response, state as any);
+
+      const quote = (state.human_quote_add as ReturnType<typeof vi.fn>).mock.calls[0][0] as Quote;
+      expect(quote.speaker).toBe("Sisyphus");
+      expect(quote.channel).toBe("Sisyphus");
+    });
+
+    it("produces no quotes when quote text is not found in messages", async () => {
+      // No messages seeded — quote cannot be anchored
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleTopicUpdate,
+        data: {
+          personaId: "persona-1",
+          personaDisplayName: "Sisyphus",
+          isNewItem: true,
+          candidateName: "TypeScript",
+          candidateDescription: "Strongly typed JS",
+          candidateCategory: "Technical",
+          messages_context: [],
+          messages_analyze: [],
+        },
+      });
+
+      const response = createMockResponse(request, {
+        name: "TypeScript",
+        description: "Strongly typed JavaScript superset",
+        sentiment: 0.8,
+        exposure_desired: 0.5,
+        quotes: [{ text: "hallucinated quote that isnt in any message", reason: "test" }],
+      });
+
+      await handlers[LLMNextStep.HandleTopicUpdate](response, state as any);
+
+      expect(state.human_quote_add).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("handlePersonUpdate — quote channel", () => {
+    it("sets channel to personaDisplayName on extracted quotes", async () => {
+      seedMessage("persona-1", "msg-4", "human", "David is a great collaborator");
+
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandlePersonUpdate,
+        data: {
+          personaId: "persona-1",
+          personaDisplayName: "Sisyphus",   // ← as queuePersonUpdate stores it
+          isNewItem: true,
+          candidateName: "David",
+          candidateDescription: "A great collaborator",
+          candidateRelationship: "Coworker",
+          messages_context: [],
+          messages_analyze: [],
+        },
+      });
+
+      const response = createMockResponse(request, {
+        description: "A thoughtful and effective collaborator",
+        sentiment: 0.8,
+        relationship: "Coworker",
+        exposure_desired: 0.5,
+        identifiers: [{ type: "Full Name", value: "David", is_primary: true }],
+        quotes: [{ text: "David is a great collaborator", reason: "direct praise" }],
+      });
+
+      await handlers[LLMNextStep.HandlePersonUpdate](response, state as any);
+
+      expect(state.human_quote_add).toHaveBeenCalledTimes(1);
+      const quote = (state.human_quote_add as ReturnType<typeof vi.fn>).mock.calls[0][0] as Quote;
+      expect(quote.channel).toBe("Sisyphus");
+    });
+  });
+
+  describe("handleHumanTopicScan — channel reconstruction from personaDisplayName", () => {
+    it("runs without error when request data uses personaDisplayName (not channelDisplayName)", async () => {
+      // Before the fix, handlers used raw request data cast as ExtractionContext,
+      // leaving channelDisplayName undefined. This test ensures the handler
+      // executes successfully with the production request data shape.
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleHumanTopicScan,
+        data: {
+          personaId: "persona-1",
+          personaDisplayName: "Ei",          // ← production shape from queueTopicScan
+          analyze_from_timestamp: null,
+          extraction_flag: "t",
+          message_ids_to_mark: [],
+        },
+      });
+
+      const response = createMockResponse(request, {
+        topics: [],  // No topics detected — exercises the early-return path
+      });
+
+      await expect(
+        handlers[LLMNextStep.HandleHumanTopicScan](response, state as any)
+      ).resolves.not.toThrow();
+    });
+  });
+
+  describe("handleEventScan — channel reconstruction from personaDisplayName", () => {
+    it("runs without error when request data uses personaDisplayName (not channelDisplayName)", async () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleEventScan,
+        data: {
+          personaId: "persona-1",
+          personaDisplayName: "Ei",          // ← production shape from queueEventScan
+          extraction_flag: "e",
+          message_ids_to_mark: [],
+        },
+      });
+
+      const response = createMockResponse(request, {
+        events: [],  // No events — exercises the early-return path
+      });
+
+      await expect(
+        handlers[LLMNextStep.HandleEventScan](response, state as any)
+      ).resolves.not.toThrow();
+    });
+  });
+});
