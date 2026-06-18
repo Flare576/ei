@@ -63,8 +63,10 @@ export const ALL_PROVIDER_NAMES: ReadonlyArray<string> = [
 // For example, Haiku's advertised context is 200k but real-world extraction quality degrades
 // above ~100k, so we cap it there. When adding new models, prefer conservative values based
 // on actual usage over marketing specs.
-export const KNOWN_MODEL_LIMITS: Readonly<Record<string, { token_limit?: number; max_output_tokens?: number }>> = {
+export const KNOWN_MODEL_LIMITS: Readonly<Record<string, { token_limit?: number; max_output_tokens?: number; temperature_disabled?: boolean }>> = {
   // Anthropic — claude-opus-4.x
+  // Models from 4-8 onward always use extended thinking and reject the temperature parameter.
+  "claude-opus-4-8":              { token_limit: 200000, max_output_tokens: 128000, temperature_disabled: true },
   "claude-opus-4-7":              { token_limit: 200000, max_output_tokens: 128000 },
   "claude-opus-4-6":              { token_limit: 200000, max_output_tokens: 128000 },
   "claude-opus-4-5-20251101":     { token_limit: 200000, max_output_tokens: 64000 },
@@ -361,9 +363,9 @@ export function buildProviderAccounts(
         name: modelName,
         ...(limits?.token_limit !== undefined && { token_limit: limits.token_limit }),
         ...(limits?.max_output_tokens !== undefined && { max_output_tokens: limits.max_output_tokens }),
+        ...(limits?.temperature_disabled === true && { temperature_disabled: true }),
       };
     };
-
     const seenNames = new Set<string>();
     const models: ModelConfig[] = [];
 

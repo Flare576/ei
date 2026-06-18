@@ -310,10 +310,16 @@ export async function callLLMRaw(
     headers["anthropic-dangerous-direct-browser-access"] = "true";
   }
   
+  // Omit temperature for models that don't accept it (e.g. Anthropic extended-thinking models).
+  // Also omit when thinking_budget > 0: Anthropic rejects temperature alongside thinking params.
+  const sendTemperature =
+    !modelConfig?.temperature_disabled &&
+    !(modelConfig?.thinking_budget !== undefined && modelConfig.thinking_budget > 0);
+
   const requestBody: Record<string, unknown> = {
     ...(model !== undefined && { model }),
     messages: finalMessages,
-    temperature,
+    ...(sendTemperature && { temperature }),
     max_tokens: modelConfig?.max_output_tokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
   };
 

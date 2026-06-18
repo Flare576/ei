@@ -60,6 +60,7 @@ export interface ModelConfig {
   token_limit?: number;             // Input token limit (user sets effective limit)
   max_output_tokens?: number;       // Output token limit (API-enforced)
   thinking_budget?: number;         // Thinking token budget: 0 = disabled, N = enable with N tokens, undefined = don't send
+  temperature_disabled?: boolean;   // Set true for models that reject temperature (e.g. Anthropic extended-thinking models)
   total_calls?: number;             // Usage counter
   total_tokens_in?: number;         // Usage counter
   total_tokens_out?: number;        // Usage counter
