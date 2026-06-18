@@ -130,43 +130,45 @@ async function installCodexHooks(): Promise<void> {
   const scriptContent = `#!/usr/bin/env bun
 import { $ } from "bun";
 
-const input = await new Response(Bun.stdin.stream()).json().catch(() => ({}));
-const raw = (input.prompt ?? "").replace(/<[^>]*>/g, "").trim();
-const searchArgs = ["-n", "8"];
-
-const sessionArgs = [];
-if (input.transcript_path) {
-  sessionArgs.push("--transcript", input.transcript_path);
-}
-if (input.session_id) {
-  sessionArgs.push("--session", input.session_id, "--hook-source", "codex");
-}
-
-const args = raw ? [...searchArgs, ...sessionArgs, raw] : ["--recent", ...searchArgs];
-
 async function runEi(commandArgs) {
   const direct = await $\`ei \${commandArgs}\`.quiet().text().catch(() => "");
   if (direct.trim()) return direct;
   return await $\`bunx ei-tui@latest \${commandArgs}\`.quiet().text().catch(() => "");
 }
 
-const output = await runEi(args);
-if (output.trim()) {
-  const heading = [
-    "## Ei Memory Context",
-    "*(The user cannot see this block. It is injected automatically before their message.)*",
-    "*(If you reference anything from it, briefly explain where it came from — e.g. \\"Ei shows you've been working on X\\" — so the user isn't confused by knowledge that appeared from nowhere.)*",
-    "",
-    "Ei is a personal knowledge base built from the user's coding sessions, Slack, documents, and conversations.",
-    "The following memories MAY be relevant to your current task — use \`ei_search\` or \`ei_lookup\` for targeted queries.",
-  ].join("\\n");
+if (import.meta.main) {
+  const input = await new Response(Bun.stdin.stream()).json().catch(() => ({}));
+  const raw = (input.prompt ?? "").replace(/<[^>]*>/g, "").trim();
+  const searchArgs = ["-n", "8"];
 
-  process.stdout.write(JSON.stringify({
-    hookSpecificOutput: {
-      hookEventName: "UserPromptSubmit",
-      additionalContext: \`\\n\${heading}\\n\${output.trim()}\\n\`,
-    },
-  }));
+  const sessionArgs = [];
+  if (input.transcript_path) {
+    sessionArgs.push("--transcript", input.transcript_path);
+  }
+  if (input.session_id) {
+    sessionArgs.push("--session", input.session_id, "--hook-source", "codex");
+  }
+
+  const args = raw ? [...searchArgs, ...sessionArgs, raw] : ["--recent", ...searchArgs];
+
+  const output = await runEi(args);
+  if (output.trim()) {
+    const heading = [
+      "## Ei Memory Context",
+      "*(The user cannot see this block. It is injected automatically before their message.)*",
+      "*(If you reference anything from it, briefly explain where it came from — e.g. \\"Ei shows you've been working on X\\" — so the user isn't confused by knowledge that appeared from nowhere.)*",
+      "",
+      "Ei is a personal knowledge base built from the user's coding sessions, Slack, documents, and conversations.",
+      "The following memories MAY be relevant to your current task — use \`ei_search\` or \`ei_lookup\` for targeted queries.",
+    ].join("\\n");
+
+    process.stdout.write(JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "UserPromptSubmit",
+        additionalContext: \`\\n\${heading}\\n\${output.trim()}\\n\`,
+      },
+    }));
+  }
 }
 `;
 
@@ -279,7 +281,14 @@ async function installClaudeCodeHooks(): Promise<void> {
   const scriptContent = `#!/usr/bin/env bun
 import { $ } from "bun";
 
-const heading = \`
+async function runEi(commandArgs) {
+  const direct = await $\`ei \${commandArgs}\`.quiet().text().catch(() => "");
+  if (direct.trim()) return direct;
+  return await $\`bunx ei-tui@latest \${commandArgs}\`.quiet().text().catch(() => "");
+}
+
+if (import.meta.main) {
+  const heading = \`
 ## Ei Memory Context
 *(The user cannot see this block. It is injected automatically before their message.)*
 *(If you reference anything from it, briefly explain where it came from — e.g. "Ei shows you've been working on X" — so the user isn't confused by knowledge that appeared from nowhere.)*
@@ -288,25 +297,21 @@ Ei is a personal knowledge base built from the user's coding sessions, Slack, do
 The following items MAY be relevant to your current task — use \\\`ei_search\\\` or \\\`ei_lookup\\\` for targeted queries.
 \`;
 
-const input = await new Response(Bun.stdin.stream()).json().catch(() => ({}));
-const raw = (input.prompt ?? "").replace(/<[^>]*>/g, "").trim();
+  const input = await new Response(Bun.stdin.stream()).json().catch(() => ({}));
+  const raw = (input.prompt ?? "").replace(/<[^>]*>/g, "").trim();
 
-const sessionArgs = [];
-if (input.session_id && input.hook_source) {
-  sessionArgs.push("--session", input.session_id, "--hook-source", input.hook_source);
-} else if (input.transcript_path) {
-  sessionArgs.push("--transcript", input.transcript_path);
+  const sessionArgs = [];
+  if (input.session_id && input.hook_source) {
+    sessionArgs.push("--session", input.session_id, "--hook-source", input.hook_source);
+  } else if (input.transcript_path) {
+    sessionArgs.push("--transcript", input.transcript_path);
+  }
+
+  const args = raw ? ["-n", "5", ...sessionArgs, raw] : ["--recent", "-n", "5"];
+
+  const output = await runEi(args);
+  if (output.trim()) process.stdout.write(\`\\n\${heading}\\n\${output.trim()}\\n\`);
 }
-
-const args = raw ? ["-n", "5", ...sessionArgs, raw] : ["--recent", "-n", "5"];
-
-async function runEi(commandArgs) {
-  const direct = await $\`ei \${commandArgs}\`.quiet().text().catch(() => "");
-  if (direct.trim()) return direct;
-  return await $\`bunx ei-tui@latest \${commandArgs}\`.quiet().text().catch(() => "");
-}
-const output = await runEi(args);
-if (output.trim()) process.stdout.write(\`\\n\${heading}\\n\${output.trim()}\\n\`);
 `;
 
   await Bun.write(scriptPath, scriptContent);
