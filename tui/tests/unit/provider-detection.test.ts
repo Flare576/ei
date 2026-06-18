@@ -459,6 +459,22 @@ describe("KNOWN_MODEL_LIMITS", () => {
   test("sonnet-4-6 has max_output_tokens of 64k", () => {
     expect(KNOWN_MODEL_LIMITS["claude-sonnet-4-6"]?.max_output_tokens).toBe(64000);
   });
+
+  test("opus-4-8 has temperature_disabled: true (model always uses extended thinking)", () => {
+    expect(KNOWN_MODEL_LIMITS["claude-opus-4-8"]?.temperature_disabled).toBe(true);
+  });
+
+  test("opus-4-8 has standard limits (200k context, 128k output)", () => {
+    expect(KNOWN_MODEL_LIMITS["claude-opus-4-8"]?.token_limit).toBe(200000);
+    expect(KNOWN_MODEL_LIMITS["claude-opus-4-8"]?.max_output_tokens).toBe(128000);
+  });
+
+  test("older models do not have temperature_disabled set", () => {
+    // Only models that always-use-thinking get this flag; older models accept temperature normally.
+    expect(KNOWN_MODEL_LIMITS["claude-opus-4-7"]?.temperature_disabled).toBeUndefined();
+    expect(KNOWN_MODEL_LIMITS["claude-sonnet-4-6"]?.temperature_disabled).toBeUndefined();
+    expect(KNOWN_MODEL_LIMITS["claude-haiku-4-5-20251001"]?.temperature_disabled).toBeUndefined();
+  });
 });
 
 describe("buildProviderAccounts — known model limits", () => {
@@ -572,6 +588,54 @@ describe("buildProviderAccounts — known model limits", () => {
     expect(names).toContain("google/gemma-4-26b-a4b");
     expect(names).toContain("qwen/qwen3.5-35b-a3b");
     expect(names).toContain("text-embedding-nomic-embed-text-v1.5");
+  });
+
+  test("claude-opus-4-8 gets temperature_disabled: true when auto-configured", () => {
+    // Oracle: claude-opus-4-8 always uses extended thinking and Anthropic's API
+    // rejects temperature for this model. The flag must flow from KNOWN_MODEL_LIMITS
+    // through buildProviderAccounts so the LLM client can suppress the field.
+    const { accounts } = buildProviderAccounts([{
+      name: "Anthropic",
+      url: "https://api.anthropic.com/v1",
+      apiKey: "sk-test",
+      modelIds: ["claude-opus-4-8", "claude-sonnet-4-6"],
+      selected: { extractionModel: "claude-sonnet-4-6", chatModel: "claude-sonnet-4-6", bonusModel: "claude-opus-4-8" },
+      status: "detected",
+    }]);
+
+    const opus = accounts[0].models!.find((m) => m.name === "claude-opus-4-8");
+    expect(opus?.temperature_disabled).toBe(true);
+  });
+
+  test("models without temperature_disabled in KNOWN_MODEL_LIMITS do not get the flag", () => {
+    const { accounts } = buildProviderAccounts([{
+      name: "Anthropic",
+      url: "https://api.anthropic.com/v1",
+      apiKey: "sk-test",
+      modelIds: ["claude-opus-4-7", "claude-sonnet-4-6"],
+      selected: { extractionModel: "claude-sonnet-4-6", chatModel: "claude-sonnet-4-6", bonusModel: "claude-opus-4-7" },
+      status: "detected",
+    }]);
+
+    const opus47 = accounts[0].models!.find((m) => m.name === "claude-opus-4-7");
+    expect(opus47?.temperature_disabled).toBeUndefined();
+
+    const sonnet = accounts[0].models!.find((m) => m.name === "claude-sonnet-4-6");
+    expect(sonnet?.temperature_disabled).toBeUndefined();
+  });
+
+  test("unknown models do not get temperature_disabled", () => {
+    const { accounts } = buildProviderAccounts([{
+      name: "Anthropic",
+      url: "https://api.anthropic.com/v1",
+      apiKey: "sk-test",
+      modelIds: ["claude-future-model-99"],
+      selected: { extractionModel: "claude-future-model-99", chatModel: "claude-future-model-99" },
+      status: "detected",
+    }]);
+
+    const model = accounts[0].models!.find((m) => m.name === "claude-future-model-99");
+    expect(model?.temperature_disabled).toBeUndefined();
   });
 });
 

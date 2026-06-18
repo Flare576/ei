@@ -173,3 +173,106 @@ describe("callLLMRaw — usage counter callback", () => {
     ).resolves.toBeDefined();
   });
 });
+
+describe("callLLMRaw — temperature handling", () => {
+  it("sends temperature by default (no ModelConfig flags set)", async () => {
+    const model = makeModel("gpt-4o");
+    const account = makeAccount("OpenAI", [model]);
+    const mockFetch = stubFetch(makeLLMResponse());
+
+    await callLLMRaw("sys", "user", [], "OpenAI:gpt-4o", {}, [account]);
+
+    const body = getCapturedBody(mockFetch);
+    expect("temperature" in body).toBe(true);
+    expect(body.temperature).toBe(0.7);
+  });
+
+  it("omits temperature when ModelConfig has temperature_disabled: true", async () => {
+    // Oracle: Anthropic's claude-opus-4-8 rejects temperature entirely.
+    // temperature_disabled on the ModelConfig signals this to the client.
+    const model = makeModel("claude-opus-4-8", { temperature_disabled: true });
+    const account = makeAccount("Anthropic", [model], { url: "https://api.anthropic.com/v1" });
+    const mockFetch = stubFetch(makeLLMResponse());
+
+    await callLLMRaw("sys", "user", [], "Anthropic:claude-opus-4-8", {}, [account]);
+
+    expect("temperature" in getCapturedBody(mockFetch)).toBe(false);
+  });
+
+  it("sends temperature when temperature_disabled is explicitly false", async () => {
+    const model = makeModel("claude-sonnet-4-6", { temperature_disabled: false });
+    const account = makeAccount("Anthropic", [model], { url: "https://api.anthropic.com/v1" });
+    const mockFetch = stubFetch(makeLLMResponse());
+
+    await callLLMRaw("sys", "user", [], "Anthropic:claude-sonnet-4-6", {}, [account]);
+
+    expect("temperature" in getCapturedBody(mockFetch)).toBe(true);
+  });
+
+  it("omits temperature when thinking_budget > 0 (Anthropic extended thinking rejects it)", async () => {
+    // Oracle: Anthropic's /chat/completions endpoint returns 400 if both temperature
+    // and extended thinking parameters are present in the same request.
+    const model = makeModel("claude-sonnet-4-6", { thinking_budget: 8000 });
+    const account = makeAccount("Anthropic", [model], { url: "https://api.anthropic.com/v1" });
+    const mockFetch = stubFetch(makeLLMResponse());
+
+    await callLLMRaw("sys", "user", [], "Anthropic:claude-sonnet-4-6", {}, [account]);
+
+    expect("temperature" in getCapturedBody(mockFetch)).toBe(false);
+  });
+
+  it("sends temperature when thinking_budget is 0 (thinking disabled, temperature allowed)", async () => {
+    // Oracle: thinking_budget=0 is the kill switch that disables thinking entirely.
+    // With thinking off, temperature is a valid parameter and should be forwarded.
+    const model = makeModel("claude-sonnet-4-6", { thinking_budget: 0 });
+    const account = makeAccount("Anthropic", [model], { url: "https://api.anthropic.com/v1" });
+    const mockFetch = stubFetch(makeLLMResponse());
+
+    await callLLMRaw("sys", "user", [], "Anthropic:claude-sonnet-4-6", {}, [account]);
+
+    expect("temperature" in getCapturedBody(mockFetch)).toBe(true);
+  });
+
+  it("omits temperature when both temperature_disabled and thinking_budget=0 set (flag wins)", async () => {
+    // temperature_disabled is an unconditional model-level contract; thinking_budget is orthogonal.
+    const model = makeModel("claude-opus-4-8", { temperature_disabled: true, thinking_budget: 0 });
+    const account = makeAccount("Anthropic", [model], { url: "https://api.anthropic.com/v1" });
+    const mockFetch = stubFetch(makeLLMResponse());
+
+    await callLLMRaw("sys", "user", [], "Anthropic:claude-opus-4-8", {}, [account]);
+
+    expect("temperature" in getCapturedBody(mockFetch)).toBe(false);
+  });
+
+  it("respects a custom temperature value from options when temperature is not disabled", async () => {
+    const model = makeModel("gpt-4o");
+    const account = makeAccount("OpenAI", [model]);
+    const mockFetch = stubFetch(makeLLMResponse());
+
+    await callLLMRaw("sys", "user", [], "OpenAI:gpt-4o", { temperature: 0.3 }, [account]);
+
+    expect(getCapturedBody(mockFetch).temperature).toBe(0.3);
+  });
+
+  it("omits temperature even when a custom temperature is provided via options but model disables it", async () => {
+    // The model-level contract overrides the caller's requested temperature.
+    const model = makeModel("claude-opus-4-8", { temperature_disabled: true });
+    const account = makeAccount("Anthropic", [model], { url: "https://api.anthropic.com/v1" });
+    const mockFetch = stubFetch(makeLLMResponse());
+
+    await callLLMRaw("sys", "user", [], "Anthropic:claude-opus-4-8", { temperature: 0.3 }, [account]);
+
+    expect("temperature" in getCapturedBody(mockFetch)).toBe(false);
+  });
+
+  it("sends temperature when no ModelConfig is found (unknown model spec falls through to default)", async () => {
+    // No ModelConfig means no flags — safe default is to include temperature.
+    const model = makeModel("claude-haiku-4-5");
+    const account = makeAccount("Anthropic", [model], { url: "https://api.anthropic.com/v1" });
+    const mockFetch = stubFetch(makeLLMResponse());
+
+    await callLLMRaw("sys", "user", [], "Anthropic:claude-haiku-4-5", {}, [account]);
+
+    expect("temperature" in getCapturedBody(mockFetch)).toBe(true);
+  });
+});
