@@ -479,6 +479,7 @@ export function queueTopicUpdate(
       next_step: LLMNextStep.HandleTopicUpdate,
       data: {
         ...context,
+        personaDisplayName: context.channelDisplayName,
         isNewItem,
         existingItemId: existingItem?.id,
         candidateName: isNewItem ? context.candidateName : undefined,

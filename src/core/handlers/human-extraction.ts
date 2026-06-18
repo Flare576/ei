@@ -169,7 +169,10 @@ export async function handleHumanTopicScan(response: LLMResponse, state: StateMa
     return;
   }
 
-  const context = response.request.data as unknown as ExtractionContext;
+  const context = {
+    ...(response.request.data as unknown as ExtractionContext),
+    channelDisplayName: (response.request.data as Record<string, unknown>).personaDisplayName as string,
+  };
   if (!context?.personaId) return;
 
   const extractionModel = (response.request.data as Record<string, unknown>).extraction_model as string | undefined;
@@ -347,7 +350,10 @@ export async function handleEventScan(response: LLMResponse, state: StateManager
     return;
   }
 
-  const context = response.request.data as unknown as ExtractionContext;
+  const context = {
+    ...(response.request.data as unknown as ExtractionContext),
+    channelDisplayName: (response.request.data as Record<string, unknown>).personaDisplayName as string,
+  };
   if (!context?.personaId) return;
 
   const extractionModel = (response.request.data as Record<string, unknown>).extraction_model as string | undefined;
