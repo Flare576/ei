@@ -101,4 +101,15 @@ describe("InstanceLock", () => {
     expect(result.acquired).toBe(true);
     await lock.release();
   });
+
+  it("creates data directory (including nested parents) if it does not exist yet", async () => {
+    const nestedPath = join(dataPath, "nested", "deep");
+    // Do NOT pre-create nestedPath — the point is that acquire() creates it
+    const lock = new InstanceLock(nestedPath);
+    const result = await lock.acquire();
+    expect(result.acquired).toBe(true);
+    const lockFile = Bun.file(join(nestedPath, "ei.lock"));
+    expect(await lockFile.exists()).toBe(true);
+    await lock.release();
+  });
 });

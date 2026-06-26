@@ -1,5 +1,5 @@
-import { join } from "path";
-import { unlink } from "fs/promises";
+import { join, dirname } from "path";
+import { unlink, mkdir } from "fs/promises";
 
 const LOCK_FILE = "ei.lock";
 
@@ -69,6 +69,7 @@ export class InstanceLock {
   }
 
   private async writeLock(): Promise<void> {
+    await mkdir(dirname(this.lockPath), { recursive: true });
     const data: LockData = {
       pid: process.pid,
       started: new Date().toISOString(),
