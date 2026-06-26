@@ -3,6 +3,7 @@ import {
   useContext,
   onMount,
   onCleanup,
+  For,
   Match,
   Switch,
   createSignal,
@@ -183,6 +184,7 @@ export const EiProvider: ParentComponent = (props) => {
   const [showWelcomeOverlay, setShowWelcomeOverlay] = createSignal(false);
   const [detectedProviders, setDetectedProviders] = createSignal<ProviderDetectionStatus[]>([]);
   const [firstBootDefaultModel, setFirstBootDefaultModel] = createSignal<string | undefined>(undefined);
+  const [bootError, setBootError] = createSignal<string | null>(null);
   const [conflictData, setConflictData] = createSignal<StateConflictData | null>(null);
 
   let processor: Processor | null = null;
@@ -970,6 +972,7 @@ export const EiProvider: ParentComponent = (props) => {
       await finishBootstrap();
     } catch (err: any) {
       logger.error(`bootstrap() failed: ${err?.message || err}`);
+      setBootError(err?.message || String(err));
     }
   }
 
@@ -1088,6 +1091,17 @@ export const EiProvider: ParentComponent = (props) => {
       </Match>
       <Match when={store.ready}>
         <EiContext.Provider value={value}>{props.children}</EiContext.Provider>
+      </Match>
+      <Match when={bootError()}>
+        <box width="100%" height="100%" justifyContent="center" alignItems="center" flexDirection="column">
+          <text fg="#dc322f">Ei failed to start</text>
+          <text> </text>
+          <For each={bootError()!.split('\n')}>
+            {(line) => <text fg="#93a1a1">{line || " "}</text>}
+          </For>
+          <text> </text>
+          <text fg="#586e75">Press Ctrl+C to exit</text>
+        </box>
       </Match>
       <Match when={!store.ready}>
         <box width="100%" height="100%" justifyContent="center" alignItems="center">

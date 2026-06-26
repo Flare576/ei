@@ -149,8 +149,16 @@ export class FileStorage implements Storage {
   private async ensureDataDir(): Promise<void> {
     try {
       await mkdir(this.dataPath, { recursive: true });
-    } catch {
-      return;
+    } catch (e: any) {
+      if (e?.code === 'EACCES' || e?.code === 'EPERM') {
+        throw new Error(
+          `Cannot create data directory: ${this.dataPath}\n` +
+          `Fix options:\n` +
+          `  - Fix Permissions  (sudo chown $USER $EI_DATA_PATH)\n` +
+          `  - Change Data Path (EI_DATA_PATH=~/ei-data ei-tui)`
+        );
+      }
+      // Other errors (e.g., race conditions) are safe to ignore
     }
   }
 

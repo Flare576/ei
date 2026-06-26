@@ -14,7 +14,19 @@ if (args.includes("--version") || args.includes("version") || args.includes("-v"
 
 const storage = new FileStorage(Bun.env.EI_DATA_PATH);
 const lock = new InstanceLock(storage.getDataPath());
-const lockResult = await lock.acquire();
+const lockResult = await lock.acquire().catch((e) => {
+  const msg = e instanceof Error ? e.message : String(e);
+  const dataPath = storage.getDataPath();
+  process.stderr.write(
+    `\nEi cannot start: cannot write to data directory.\n\n` +
+    `  Path:  ${dataPath}\n` +
+    `  Error: ${msg}\n\n` +
+    `Fix options:\n` +
+    `  - Fix Permissions  (sudo chown $USER $EI_DATA_PATH)\n` +
+    `  - Change Data Path (EI_DATA_PATH=~/ei-data ei)\n\n`
+  );
+  process.exit(1);
+});
 
 if (!lockResult.acquired) {
   process.stderr.write(
