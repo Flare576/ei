@@ -48,7 +48,7 @@ export async function openModelOverlay(ctx: Parameters<Command["execute"]>[1]): 
   const models = await buildModelList(ctx);
 
   if (models.length === 0) {
-    ctx.showNotification("No models configured. Use /provider new to create one.", "info");
+    await createProviderViaEditor(ctx);
     return;
   }
 

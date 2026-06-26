@@ -291,14 +291,42 @@ test.describe("/provider command — with NO configured providers", () => {
     },
   });
 
-  test("/provider with empty accounts shows Welcome overlay then 'No models configured'", async ({ terminal }) => {
+  test("/provider with empty accounts opens provider editor (no-op editor shows 'No content')", async ({ terminal }) => {
+    await expect(terminal.getByText("Welcome to Ei!")).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText(/Use \/provider new to configure one manually/gi)).toBeVisible({ timeout: 5000 });
+    terminal.keyEscape();
+    await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 5000 });
+    terminal.write("/provider");
+    terminal.submit();
+    await expect(terminal.getByText(/No content - provider not created/gi)).toBeVisible({ timeout: 10000 });
+  });
+});
+
+test.describe("/provider command — with NO configured providers (editor creates one)", () => {
+  test.use({
+    program: {
+      file: BUN_PATH,
+      args: ["run", "dev"],
+    },
+    rows: 30,
+    columns: 100,
+    env: {
+      EI_DATA_PATH: EMPTY_DATA_PATH,
+      PATH: process.env.PATH!,
+      HOME: process.env.HOME!,
+      TERM: "xterm-256color",
+      EI_E2E_MODE: "1",
+      EDITOR: `bash -c 'sed -i "" "s/My Provider/DirectProvider/;s|https://api.example.com/v1|http://localhost:${MOCK_PORT}/v1|" "$1"' --`,
+    },
+  });
+
+  test("/provider with empty accounts opens editor; creating a provider shows it created", async ({ terminal }) => {
     await expect(terminal.getByText("Welcome to Ei!")).toBeVisible({ timeout: 5000 });
     terminal.keyEscape();
     await expect(terminal.getByText("Ready")).toBeVisible({ timeout: 5000 });
     terminal.write("/provider");
     terminal.submit();
-
-    await expect(terminal.getByText(/No models configured/gi)).toBeVisible({ timeout: 5000 });
+    await expect(terminal.getByText(/DirectProvider/gi)).toBeVisible({ timeout: 15000 });
   });
 });
 

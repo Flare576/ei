@@ -90,9 +90,9 @@ export function WelcomeOverlay(props: WelcomeOverlayProps) {
         <box visible={!hasAny()} flexDirection="column">
           <text fg="#dc322f">No LLM provider detected.</text>
           <text> </text>
-          <text fg="#93a1a1">Start LMStudio (port 1234) or Ollama (port 11434), or</text>
-          <text fg="#93a1a1">set one of: ANTHROPIC_API_KEY, OPENAI_API_KEY, GROQ_API_KEY,</text>
-          <text fg="#93a1a1">MISTRAL_API_KEY, GEMINI_API_KEY and restart.</text>
+          <text fg="#93a1a1">Use /provider new to configure one manually, or</text>
+          <text fg="#93a1a1">start LMStudio (port 1234) / Ollama (port 11434), or</text>
+          <text fg="#93a1a1">set ANTHROPIC_API_KEY, OPENAI_API_KEY, etc. and restart.</text>
         </box>
 
         <text> </text>
