@@ -92,6 +92,12 @@ export interface LinkedItem {
   name: string;
   type: string;
 }
+export interface LinkedQuote {
+  id: string;
+  text: string;
+  speaker: string;
+  timestamp: string;
+}
 export interface QuoteResult {
   text: string;
   speaker: string;
@@ -591,5 +597,18 @@ export async function lookupById(id: string): Promise<({ type: string } & Record
   const withoutEmbedding = { ...rest } as Record<string, unknown>;
   delete withoutEmbedding.embedding;
   delete withoutEmbedding.description_embedding;
+
+  // data_item_ids on a Quote can only point at facts, topics, or people — the other
+  // types crossFind can return (quote itself, and the persona-side persona/
+  // personaTopic/personaTrait records) sit outside that linkage model entirely, so
+  // they never get a linked_quotes field. For the three linkable types, surface
+  // which quotes reference this entity: a human correcting a bad merge/split (e.g.
+  // un-merging an over-merged Person) needs this blast radius before repointing
+  // anything.
+  if (type === "fact" || type === "topic" || type === "person") {
+    withoutEmbedding.linked_quotes = state.human.quotes
+      .filter((q) => q.data_item_ids.includes(id))
+      .map((q) => ({ id: q.id, text: q.text, speaker: q.speaker, timestamp: q.timestamp }));
+  }
   return { type, ...withoutEmbedding };
 }

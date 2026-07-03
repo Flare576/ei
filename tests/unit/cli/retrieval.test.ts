@@ -274,6 +274,89 @@ describe("lookupById", () => {
   });
 });
 
+describe("lookupById — linked_quotes reverse lookup", () => {
+  it("includes linked_quotes on a fact lookup", async () => {
+    const state = createTestState({ facts: 1, quotes: 2 });
+    // Only the first quote references the fact
+    state.human.quotes[0].data_item_ids = ["fact_0"];
+    writeTestState(state);
+    const result = await lookupById("fact_0");
+    expect(result).not.toBeNull();
+    expect(result).toHaveProperty("linked_quotes");
+    expect(result!.linked_quotes).toEqual([
+      { id: "quote_0", text: "Test quote 0", speaker: "human", timestamp: NOW },
+    ]);
+  });
+
+  it("includes linked_quotes on a topic lookup", async () => {
+    const state = createTestState({ topics: 1, quotes: 1 });
+    state.human.quotes[0].data_item_ids = ["topic_0"];
+    writeTestState(state);
+    const result = await lookupById("topic_0");
+    expect(result).not.toBeNull();
+    expect(result).toHaveProperty("linked_quotes");
+    expect(result!.linked_quotes).toEqual([
+      { id: "quote_0", text: "Test quote 0", speaker: "human", timestamp: NOW },
+    ]);
+  });
+
+  it("includes linked_quotes on a person lookup", async () => {
+    const state = createTestState({ people: 1, quotes: 1 });
+    state.human.quotes[0].data_item_ids = ["person_0"];
+    writeTestState(state);
+    const result = await lookupById("person_0");
+    expect(result).not.toBeNull();
+    expect(result).toHaveProperty("linked_quotes");
+    expect(result!.linked_quotes).toEqual([
+      { id: "quote_0", text: "Test quote 0", speaker: "human", timestamp: NOW },
+    ]);
+  });
+
+  it("returns linked_quotes: [] (not omitted) when nothing references the entity", async () => {
+    const state = createTestState({ facts: 1, topics: 1, people: 1, quotes: 1 });
+    // quote's data_item_ids stays empty — nothing references any of these entities
+    writeTestState(state);
+    for (const id of ["fact_0", "topic_0", "person_0"]) {
+      const result = await lookupById(id);
+      expect(result).not.toBeNull();
+      expect(result).toHaveProperty("linked_quotes");
+      expect(result!.linked_quotes).toEqual([]);
+    }
+  });
+
+  it("does not attach linked_quotes to a quote lookup", async () => {
+    const state = createTestState({ quotes: 2 });
+    // Even if a quote's data_item_ids somehow pointed at another quote, lookups on
+    // the quote itself never get a linked_quotes field — the field only describes
+    // the fact/topic/person side of the linkage.
+    state.human.quotes[1].data_item_ids = ["quote_0"];
+    writeTestState(state);
+    const result = await lookupById("quote_0");
+    expect(result).not.toBeNull();
+    expect(result!.type).toBe("quote");
+    expect(result).not.toHaveProperty("linked_quotes");
+  });
+
+  it("does not attach linked_quotes to a persona lookup", async () => {
+    writeTestState(createTestState({ personas: 1 }));
+    const result = await lookupById("persona_0");
+    expect(result).not.toBeNull();
+    expect(result!.type).toBe("persona");
+    expect(result).not.toHaveProperty("linked_quotes");
+  });
+
+  it("includes every quote when multiple reference the same entity", async () => {
+    const state = createTestState({ people: 1, quotes: 3 });
+    state.human.quotes[0].data_item_ids = ["person_0"];
+    state.human.quotes[1].data_item_ids = ["person_0"];
+    // quotes[2] references nothing
+    writeTestState(state);
+    const result = await lookupById("person_0");
+    expect(result).not.toBeNull();
+    expect(result!.linked_quotes).toHaveLength(2);
+  });
+});
+
 describe("quote linked_items shape", () => {
   it("returns linked_items (not linked_topics) on quote results", async () => {
     const state = createTestState({ topics: 2, people: 1, quotes: 1 });
