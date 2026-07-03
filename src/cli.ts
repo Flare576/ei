@@ -17,7 +17,7 @@ import type { StorageState } from "./core/types";
 import { resolvePersonaId, filterByPersona, filterTypeSpecificByPersona, filterBySource, filterTypeSpecificBySource } from "./cli/persona-filter.js";
 import { installMcpClients } from "./cli/install.js";
 import { getRecentSessionMessages } from "./cli/session-context.js";
-import { createEntity, updateEntity, removeEntity, CorrectionValidationError, CORRECTABLE_TYPES } from "./cli/corrections-endpoints.js";
+import { createEntity, updateEntity, removeEntity, CorrectionValidationError, CORRECTABLE_TYPES, UPDATABLE_TYPES } from "./cli/corrections-endpoints.js";
 import type { CorrectableType } from "./core/corrections.js";
 import pkg from "../package.json" assert { type: "json" };
 
@@ -53,6 +53,19 @@ function resolveCorrectableType(raw: string): CorrectableType | null {
   return plural ? PLURAL_TO_CORRECTABLE[plural] ?? null : null;
 }
 
+// Plural CorrectableType resolution for `ei update` — same TYPE_ALIASES
+// lookup as resolveCorrectableType above, but sourced from UPDATABLE_TYPES
+// instead of CORRECTABLE_TYPES since quotes are correctable via update
+// (repointing data_item_ids after a split/merge, fixing mistranscribed
+// text) but never created or removed.
+const PLURAL_TO_UPDATABLE: Record<string, CorrectableType> = Object.fromEntries(
+  UPDATABLE_TYPES.map((t) => [TYPE_ALIASES[t], t])
+);
+function resolveUpdatableType(raw: string): CorrectableType | null {
+  const plural = TYPE_ALIASES[raw];
+  return plural ? PLURAL_TO_UPDATABLE[plural] ?? null : null;
+}
+
 function printHelp(): void {
   console.log(`
 Ei
@@ -71,7 +84,7 @@ Usage:
   echo <id> | ei --id           Look up entity by ID from stdin
   ei mcp                        Start the Ei MCP stdio server (for Claude Code/Cursor/Codex)
   ei create <type> --json '<json>'  Create a new entity (fact/topic/person)
-  ei update <type> <id> --json '<json>'  Replace an entity by ID (full record, not a patch)
+  ei update <type> <id> --json '<json>'  Replace an entity by ID (full record, not a patch; fact/topic/person/quote)
   ei remove <type> <id>         Remove an entity by ID
 
 Types:
@@ -107,6 +120,7 @@ Examples:
   ei "memory leak" | jq .[0].id | ei --id  # Pipe ID from search
   ei create fact --json '{"name":"Field of Study","description":"CS","sentiment":0,"validated_date":""}'
   ei update fact abc-123 --json '{"name":"Field of Study","description":"Updated","sentiment":0,"validated_date":""}'
+  ei update quote <id> --json '{"data_item_ids":["person-b-id"], ...}'  # Repoint a quote after splitting a bad merge (fetch the full record via 'ei --id <id>' first)
   ei remove fact abc-123                 # Remove a fact by ID
 `);
 }
@@ -201,9 +215,9 @@ async function main(): Promise<void> {
   if (args[0] === "update") {
     const rawType = args[1];
     const id = args[2];
-    const entityType = rawType ? resolveCorrectableType(rawType) : null;
+    const entityType = rawType ? resolveUpdatableType(rawType) : null;
     if (!entityType || !id) {
-      console.error(`Usage: ei update <type> <id> --json '<json>' (types: ${CORRECTABLE_TYPES.join(", ")})`);
+      console.error(`Usage: ei update <type> <id> --json '<json>' (types: ${UPDATABLE_TYPES.join(", ")})`);
       process.exit(1);
     }
     const jsonIdx = args.indexOf("--json");

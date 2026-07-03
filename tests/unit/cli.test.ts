@@ -128,4 +128,43 @@ describe("CLI CRUD process behavior", () => {
       validated_date: NOW,
     });
   });
+
+  it("exits non-zero and rejects quote as an invalid type for create (quotes are update-only)", () => {
+    const result = runCli(["create", "quote", "--json", "{}"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("ei create requires a valid type (fact, topic, person). Got: quote");
+  });
+
+  it("exits non-zero and rejects quote as an invalid type for remove (quotes are non-removable)", () => {
+    const result = runCli(["remove", "quote", "some-id"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Usage: ei remove <type> <id> (types: fact, topic, person)");
+  });
+
+  it("resolves quote as a valid type for update and reaches the quote not-found error (not a type-usage error)", () => {
+    const result = runCli([
+      "update",
+      "quote",
+      "missing-quote-id",
+      "--json",
+      JSON.stringify({
+        message_id: null,
+        data_item_ids: [],
+        persona_groups: [],
+        text: "Corrected text",
+        speaker: "human",
+        timestamp: NOW,
+        start: null,
+        end: null,
+        created_at: NOW,
+        created_by: "human",
+      }),
+    ]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).not.toContain("Usage: ei update");
+    expect(result.stderr).toContain("No quote found with id: missing-quote-id");
+  });
 });
