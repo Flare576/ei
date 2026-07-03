@@ -100,7 +100,7 @@ export function createMcpServer(): McpServer {
     "ei_lookup",
     {
       description:
-        "Retrieve the full record for any Ei entity by ID — facts, topics, people, quotes, or personas. Use when ei_search returns an item and you need its complete details (all fields, traits, topics, identifiers, etc.). Pass the entity id from ei_search results.",
+        "Retrieve the full record for any Ei entity by ID — facts, topics, people, quotes, or personas. Use when ei_search returns an item and you need its complete details (all fields, traits, topics, identifiers, etc.). Pass the entity id from ei_search results. For facts, topics, and people, the result also includes a `linked_quotes` array listing every quote whose data_item_ids references this entity — check this before correcting a bad merge/split (e.g. un-merging an over-merged Person) to see the full blast radius.",
       inputSchema: {
         id: z.string().describe("The entity ID to look up."),
         source: z
@@ -283,9 +283,9 @@ export function createMcpServer(): McpServer {
     "ei_update",
     {
       description:
-        "Replace an existing fact, topic, or person by ID with a COMPLETE record — this is full replacement, not a partial patch. Any field omitted from `data` is treated as absent, not 'leave the existing value alone'. Always fetch the current record with ei_lookup first, edit the fields you need to change, and pass the WHOLE thing back — passing a partial object will silently drop the fields you didn't include. Use to fix bad extracted data (e.g. correcting a person record where two people were wrongly merged into one).",
+        "Replace an existing fact, topic, or person by ID with a COMPLETE record — this is full replacement, not a partial patch. Any field omitted from `data` is treated as absent, not 'leave the existing value alone'. Always fetch the current record with ei_lookup first, edit the fields you need to change, and pass the WHOLE thing back — passing a partial object will silently drop the fields you didn't include. Use to fix bad extracted data (e.g. correcting a person record where two people were wrongly merged into one). Quote records can also be corrected this way — specifically to repoint `data_item_ids` after splitting or merging a person/topic/fact, or to fix mistranscribed `text`.",
       inputSchema: {
-        entity_type: z.enum(["fact", "topic", "person"]).describe("The type of entity to update."),
+        entity_type: z.enum(["fact", "topic", "person", "quote"]).describe("The type of entity to update."),
         id: z.string().describe("The ID of the entity to replace, from ei_lookup or ei_search."),
         data: z
           .record(z.unknown())

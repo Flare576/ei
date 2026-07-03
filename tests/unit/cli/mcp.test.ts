@@ -161,4 +161,37 @@ describe("MCP server", () => {
     expect(content[0].text).toContain("Error: No person found with id: missing-id");
     expect(result.isError).toBe(true);
   });
+
+  it("ei_update accepts entity_type: 'quote' and calls updateEntity with 'quote'", async () => {
+    mockUpdateEntity.mockResolvedValueOnce({ id: "quote-1", text: "Corrected quote text" });
+    ({ client } = await setupClient());
+    const result = await client.callTool({
+      name: "ei_update",
+      arguments: { entity_type: "quote", id: "quote-1", data: { data_item_ids: ["person-b-id"] } },
+    });
+    const content = result.content as Array<{ type: string; text: string }>;
+    const parsed = JSON.parse(content[0].text);
+    expect(parsed.id).toBe("quote-1");
+    expect(mockUpdateEntity).toHaveBeenCalledWith("quote", "quote-1", { data_item_ids: ["person-b-id"] });
+  });
+
+  it("ei_create rejects entity_type: 'quote' with a schema validation error before reaching createEntity", async () => {
+    ({ client } = await setupClient());
+    const callsBefore = mockCreateEntity.mock.calls.length;
+    const result = await client.callTool({ name: "ei_create", arguments: { entity_type: "quote", data: {} } });
+    expect(result.isError).toBe(true);
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0].text).toContain("entity_type");
+    expect(mockCreateEntity.mock.calls.length).toBe(callsBefore);
+  });
+
+  it("ei_remove rejects entity_type: 'quote' with a schema validation error before reaching removeEntity", async () => {
+    ({ client } = await setupClient());
+    const callsBefore = mockRemoveEntity.mock.calls.length;
+    const result = await client.callTool({ name: "ei_remove", arguments: { entity_type: "quote", id: "quote-1" } });
+    expect(result.isError).toBe(true);
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0].text).toContain("entity_type");
+    expect(mockRemoveEntity.mock.calls.length).toBe(callsBefore);
+  });
 });
