@@ -1,5 +1,68 @@
 import { join } from "path";
 
+/**
+ * Copy every skills/<name>/ directory from Ei's own package into a
+ * harness's native skill-discovery directory (targetDir). Copy, not
+ * symlink — a symlink into an npm/bunx-installed package's cache breaks
+ * silently on upgrade/uninstall, and Windows symlinks need elevated
+ * permissions; every other install* function in this file already
+ * materializes content onto disk rather than referencing back to source.
+ * Generic over whatever exists under skills/ — adding a new Ei-shipped
+ * skill later requires zero changes here. Overwrites unconditionally on
+ * every run, same as the extension files below.
+ *
+ * `sourceDir` defaults to Ei's own packaged skills/ (resolved relative to
+ * this file's own location, so it works regardless of install method —
+ * global npm, bunx, or a from-source checkout) and exists as a parameter
+ * purely so tests can redirect it at a fixture directory instead.
+ */
+export async function installSkillsTo(targetDir: string, sourceDir?: string): Promise<void> {
+  const skillsSourceDir = sourceDir ?? new URL("../../skills", import.meta.url).pathname;
+
+  // Bun.file(dir).exists() reports false for directories (it's designed for
+  // files) — verified by hand — so directory existence is checked the same
+  // way the permission checks below do it: shell out to `test -d`.
+  let sourceExists = true;
+  try {
+    await Bun.$`test -d ${skillsSourceDir}`.quiet();
+  } catch {
+    sourceExists = false;
+  }
+  // From-source checkout or a package build that predates this feature —
+  // nothing to do yet, and that's not an error.
+  if (!sourceExists) return;
+
+  // `ls -d dir/*/` leans on shell globbing to list only directories,
+  // skipping stray files directly under skills/ (e.g. a top-level
+  // README.md) without needing fs.readdir + manual stat calls. It throws
+  // when there are zero matches (empty skills/, or one containing only
+  // files) — that's "nothing to copy", not a failure.
+  let skillDirs: string[] = [];
+  try {
+    const listing = await Bun.$`ls -d ${skillsSourceDir}/*/`.quiet().text();
+    skillDirs = listing.split("\n").map((line) => line.trim()).filter(Boolean);
+  } catch {
+    skillDirs = [];
+  }
+  if (skillDirs.length === 0) return;
+
+  await Bun.$`mkdir -p ${targetDir}`;
+
+  for (const skillDir of skillDirs) {
+    const skillName = skillDir.split("/").filter(Boolean).pop()!;
+    const dest = join(targetDir, skillName);
+    // `cp -r src dest` copies INTO an already-existing dest directory
+    // (nesting dest/skillName/skillName/...) instead of overwriting it in
+    // place — rm -rf first so every run leaves an exact mirror of the
+    // current source, matching the unconditional full-overwrite behavior
+    // every other install* function in this file gets via Bun.write.
+    await Bun.$`rm -rf ${dest}`;
+    await Bun.$`cp -r ${skillDir} ${dest}`;
+  }
+
+  console.log(`✓ Installed ${skillDirs.length} skill(s) to ${targetDir}`);
+}
+
 export async function installMcpClients(): Promise<void> {
   await installClaudeCode();
 
@@ -222,7 +285,7 @@ if (import.meta.main) {
   console.log(`  Use /hooks in Codex to review/trust the hook if prompted.`);
 }
 
-async function installClaudeCode(): Promise<void> {
+export async function installClaudeCode(): Promise<void> {
   const home = process.env.HOME || "~";
   const claudeJsonPath = join(home, ".claude.json");
 
@@ -259,6 +322,8 @@ async function installClaudeCode(): Promise<void> {
   console.log(`  Restart Claude Code to activate.`);
 
   await installClaudeCodeHooks();
+
+  await installSkillsTo(join(home, ".claude", "skills"));
 }
 
 async function installClaudeCodeHooks(): Promise<void> {
@@ -559,7 +624,7 @@ export default function eiIntegration(pi: ExtensionAPI) {
   console.log(`✓ Installed Ei extension to ~/.pi/agent/extensions/${extFilename}`);
 }
 
-async function installOmp(): Promise<void> {
+export async function installOmp(): Promise<void> {
   const home = process.env.HOME || "~";
 
   const extensionContent = `import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
@@ -706,9 +771,11 @@ export default function eiIntegration(pi: ExtensionAPI) {
   await Bun.$`mkdir -p ${extDir}`;
   await Bun.write(join(extDir, extFilename), extensionContent);
   console.log(`✓ Installed Ei extension to ~/.omp/agent/extensions/${extFilename}`);
+
+  await installSkillsTo(join(home, ".omp", "agent", "skills"));
 }
 
-async function installOpenCodePlugin(): Promise<void> {
+export async function installOpenCodePlugin(): Promise<void> {
   const home = process.env.HOME || "~";
   const opencodeDir = join(home, ".config", "opencode");
   const pluginsDir = join(opencodeDir, "plugins");
@@ -792,6 +859,8 @@ export default async function EiPersonaPlugin() {
 
   await Bun.write(pluginPath, pluginContent);
   console.log(`✓ Installed Ei persona plugin to ${pluginPath}`);
+
+  await installSkillsTo(join(opencodeDir, "skills"));
 
   const omoCandidates = [
     join(opencodeDir, "oh-my-opencode.json"),

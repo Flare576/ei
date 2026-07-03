@@ -13,6 +13,7 @@
     "src/",
     "tui/src/",
     "tui/bunfig.toml",
+    "skills/",
     "README.md",
     "LICENSE"
   ],

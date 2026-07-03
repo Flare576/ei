@@ -100,7 +100,7 @@ Options:
   --persona, -p       Filter to entities a specific persona has learned about
   --source, -s        Filter to entities from a specific source (prefix match, e.g. "cursor", "codex:my-machine", "opencode:my-machine:ses_abc123")
   --id                Look up entity by ID (accepts value or stdin)
-  --install           Register Ei with Claude Code, Cursor, Codex, and OpenCode (MCP + context hooks where supported)
+  --install           Register Ei with Claude Code, Cursor, Codex, and OpenCode (MCP + context hooks + skills where supported)
   --sync              Pull latest state from remote sync server into state.backup.json (no TUI required)
   --session <id>      Session ID to enrich the query with recent context (use with --hook-source)
   --hook-source <src> Source of the hook: "opencode-plugin" (OpenCode SQLite), "cursor", or "codex"
