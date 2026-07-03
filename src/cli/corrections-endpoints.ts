@@ -115,6 +115,21 @@ export type PersonInput = z.infer<typeof personSchema>;
 export class CorrectionValidationError extends Error {}
 
 /**
+ * Strip the embedding vector before handing a just-written record back to a
+ * caller. writeCorrection() needs the real embedding (computed above) to
+ * persist for search — this only shapes the CLI/MCP *response*, mirroring
+ * lookupById's read-path convention (retrieval.ts) of never surfacing a raw
+ * float array to a consumer that has no use for it. Safe to strip after the
+ * fact: writeCorrection() has already awaited and fully persisted by the
+ * time each call site below runs this.
+ */
+function stripEmbedding<T extends { embedding?: number[] }>(record: T): T {
+  const { embedding, ...rest } = record;
+  void embedding;
+  return rest as T;
+}
+
+/**
  * Server-owned fields that ei_lookup returns on every entity and that a
  * caller following the documented ei_lookup -> edit -> ei_update round-trip
  * will send straight back. Stripped before schema validation so the
@@ -190,7 +205,7 @@ export async function createEntity(
 
   const id = crypto.randomUUID();
   const record = await buildAndWriteUpsert(entityType as NonQuoteType, id, parsed, Object.values(state.personas).map((p) => p.entity));
-  return { id, record };
+  return { id, record: stripEmbedding(record) };
 }
 
 export async function updateEntity(
@@ -213,7 +228,7 @@ export async function updateEntity(
     throw new Error(`No ${entityType} found with id: ${id}`);
   }
 
-  return buildAndWriteUpsert(entityType, id, parsed, Object.values(state.personas).map((p) => p.entity));
+  return stripEmbedding(await buildAndWriteUpsert(entityType, id, parsed, Object.values(state.personas).map((p) => p.entity)));
 }
 
 /**
@@ -263,7 +278,7 @@ async function updateQuoteEntity(id: string, body: unknown): Promise<Quote> {
   record.embedding = await computeQuoteEmbedding(record.text);
   const correction: CorrectionRecord = { op: "upsert", entity_type: "quote", id, record, timestamp: new Date().toISOString() };
   await writeCorrection(correction);
-  return record;
+  return stripEmbedding(record);
 }
 
 export async function removeEntity(entityType: CorrectableType, id: string): Promise<void> {

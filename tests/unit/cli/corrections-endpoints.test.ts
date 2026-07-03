@@ -26,6 +26,7 @@ vi.mock("../../../src/core/embedding-service.js", async (importOriginal) => {
 });
 
 
+import { computeDataItemEmbedding, computeQuoteEmbedding } from "../../../src/core/embedding-service.js";
 import { lookupById } from "../../../src/cli/retrieval.js";
 import {
   CorrectionValidationError,
@@ -349,8 +350,10 @@ describe("corrections endpoints", () => {
         { type: "Nickname", value: "Sisyphus", is_primary: true },
       ],
     });
-    expect(Array.isArray(created.record.embedding)).toBe(true);
-    expect((created.record.embedding ?? []).length).toBeGreaterThan(0);
+    // Response never carries the raw embedding vector (CLI/MCP output hygiene) --
+    // computation still happens, it's just not surfaced. See the dedicated
+    // "strips the embedding vector" regression test below for the direct check.
+    expect(created.record).not.toHaveProperty("embedding");
     expect(Date.parse(created.record.last_updated)).toBeGreaterThanOrEqual(createStartedAt);
     expect(Date.parse(created.record.last_updated)).toBeLessThanOrEqual(createFinishedAt);
 
@@ -392,7 +395,7 @@ describe("corrections endpoints", () => {
     });
 
     expect(updated).toMatchObject({ id: "quote_1", data_item_ids: ["person_2"] });
-    expect(updated.embedding).toEqual(EMBEDDING);
+    expect(updated).not.toHaveProperty("embedding");
 
     const persisted = await lookupById("quote_1");
     expect(persisted).toMatchObject({ type: "quote", id: "quote_1", data_item_ids: ["person_2"] });
@@ -589,5 +592,53 @@ describe("corrections endpoints", () => {
       created_by: quote.created_by,
       text: quote.text,
     });
+  });
+
+  it("strips the embedding vector from create/update responses (CLI/MCP output must never leak raw floats)", async () => {
+    writeState(makeState({
+      human: {
+        entity: "human",
+        facts: [makeFact()],
+        topics: [],
+        people: [makePerson()],
+        quotes: [makeQuote()],
+        last_updated: INITIAL_NOW,
+      },
+    }));
+
+    const createdFact = await createEntity("fact", {
+      name: "New Fact",
+      description: "test",
+      sentiment: 0,
+      validated_date: INITIAL_NOW,
+    });
+    expect(createdFact.record).not.toHaveProperty("embedding");
+
+    const updatedFact = await updateEntity("fact", "fact_1", {
+      name: "Birthday",
+      description: "1984-05-26",
+      sentiment: 0,
+      validated_date: INITIAL_NOW,
+    });
+    expect(updatedFact).not.toHaveProperty("embedding");
+
+    const updatedQuote = await updateEntity("quote", "quote_1", {
+      message_id: null,
+      data_item_ids: ["person_1"],
+      persona_groups: [],
+      text: "Existing quote text",
+      speaker: "human",
+      timestamp: INITIAL_NOW,
+      start: null,
+      end: null,
+      created_at: INITIAL_NOW,
+      created_by: "human",
+    });
+    expect(updatedQuote).not.toHaveProperty("embedding");
+
+    // The strip only reshapes the response -- computation (and therefore
+    // search) must still happen underneath.
+    expect(computeDataItemEmbedding).toHaveBeenCalled();
+    expect(computeQuoteEmbedding).toHaveBeenCalledWith("Existing quote text");
   });
 });
