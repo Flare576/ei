@@ -391,3 +391,39 @@ describe("applyCorrectionsToHuman — file order last-wins semantics", () => {
     expect(human.facts).toEqual([]);
   });
 });
+
+describe("applyCorrectionToHuman — quote upsert (insert vs replace-by-id)", () => {
+  it("inserts a new quote when no existing quote shares its id", () => {
+    const existingQuote = makeQuote("quote-existing", ["fact-1"]);
+    const newQuote = makeQuote("quote-new", ["fact-2"]);
+    const human = makeHuman({ quotes: [existingQuote] });
+
+    applyCorrectionToHuman(human, {
+      op: "upsert",
+      entity_type: "quote",
+      id: newQuote.id,
+      record: newQuote,
+      timestamp: NOW,
+    });
+
+    expect(human.quotes.map((q) => q.id)).toEqual([existingQuote.id, newQuote.id]);
+    expect(human.quotes[1]).toEqual(newQuote);
+  });
+
+  it("replaces an existing quote in place by id, preserving array position (un-merge repoint)", () => {
+    const before = makeQuote("quote-1", ["merged-person"]);
+    const other = makeQuote("quote-2", ["fact-2"]);
+    const after = makeQuote("quote-1", ["split-person"]);
+    const human = makeHuman({ quotes: [before, other] });
+
+    applyCorrectionToHuman(human, {
+      op: "upsert",
+      entity_type: "quote",
+      id: after.id,
+      record: after,
+      timestamp: NOW,
+    });
+
+    expect(human.quotes).toEqual([after, other]);
+  });
+});

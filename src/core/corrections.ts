@@ -19,12 +19,12 @@
  * draining is a pure apply, never a fetch-then-merge.
  */
 
-import type { HumanEntity, Fact, Topic, Person } from "./types.js";
+import type { HumanEntity, Fact, Topic, Person, Quote } from "./types.js";
 import { withLock, atomicWrite } from "../storage/file-lock.js";
 
-export type CorrectableType = "fact" | "topic" | "person";
-export type CorrectableEntity = Fact | Topic | Person;
-export const CORRECTABLE_TYPES: CorrectableType[] = ["fact", "topic", "person"];
+export type CorrectableType = "fact" | "topic" | "person" | "quote";
+export type CorrectableEntity = Fact | Topic | Person | Quote;
+export const CORRECTABLE_TYPES: CorrectableType[] = ["fact", "topic", "person", "quote"];
 
 export interface CorrectionUpsert {
   op: "upsert";
@@ -129,7 +129,7 @@ function syncPersonName(person: Person): Person {
 
 /**
  * Resolve the target array for a CorrectableType. Throws on anything
- * other than the 3 known types — corrections.json is external input from
+ * other than the 4 known types — corrections.json is external input from
  * CLI/MCP tools (potentially LLM-driven), and a malformed entity_type must
  * never silently fall through to the people array. Live's Processor
  * already enforces this (applyCorrectionRecord); this is the equivalent
@@ -139,6 +139,7 @@ function getCorrectableArray(human: HumanEntity, entityType: string): Array<{ id
   if (entityType === "fact") return human.facts;
   if (entityType === "topic") return human.topics;
   if (entityType === "person") return human.people;
+  if (entityType === "quote") return human.quotes;
   throw new Error(`Unrecognized correction entity_type: ${entityType}`);
 }
 

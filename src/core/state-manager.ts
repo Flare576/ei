@@ -715,6 +715,11 @@ export class StateManager {
     this.scheduleSave();
   }
 
+  human_quote_upsert(quote: Quote): void {
+    this.humanState.quote_upsert(quote);
+    this.scheduleSave();
+  }
+
   human_quote_update(id: string, updates: Partial<Quote>): boolean {
     const result = this.humanState.quote_update(id, updates);
     this.scheduleSave();

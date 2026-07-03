@@ -118,6 +118,16 @@ export class HumanState {
      return false;
    }
 
+   quote_upsert(quote: Quote): void {
+     const idx = this.human.quotes.findIndex((q) => q.id === quote.id);
+     if (idx >= 0) {
+       this.human.quotes[idx] = quote;
+     } else {
+       this.human.quotes.push(quote);
+     }
+     this.human.last_updated = new Date().toISOString();
+   }
+
    quote_add(quote: Quote): void {
      if (!quote.created_at) {
        quote.created_at = new Date().toISOString();
