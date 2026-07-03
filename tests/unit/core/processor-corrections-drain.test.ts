@@ -207,19 +207,24 @@ describe("Processor.drainCorrections() (live-side corrections drain)", () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it("drops a malformed record (bad op) with console.error and never treats it as its sibling operation", async () => {
+  it("drops a malformed record (bad op) with console.error, never treats it as its sibling operation, and still applies a valid record in the same batch", async () => {
     const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const correctionsPath = join(dataDir, "corrections.json");
     const existingFact = makeFact({ id: "fact-existing" });
+    const goodFact = makeFact({ id: "fact-good", name: "Good Fact" });
     // Bad op on an id that already exists as a fact — if the malformed op
-    // were silently coerced to "remove" (the asymmetric bug this guards
-    // against), fact-existing would vanish. It must not.
+    // were silently coerced to "remove" it would vanish, and if it were
+    // coerced to "upsert" its description would be overwritten. It must do
+    // neither, and it must not wedge the valid correction behind it.
     const badOpRecord = {
       op: "not-a-real-op",
       entity_type: "fact",
       id: "fact-existing",
-      record: existingFact,
+      record: makeFact({
+        id: "fact-existing",
+        description: "Bad op must not update this description",
+      }),
       timestamp: new Date().toISOString(),
     } as unknown as CorrectionRecord;
 
@@ -236,10 +241,55 @@ describe("Processor.drainCorrections() (live-side corrections drain)", () => {
     await asDrainable(processor).drainCorrections();
 
     await appendCorrection(correctionsPath, badOpRecord);
+    await appendCorrection(correctionsPath, {
+      op: "upsert",
+      entity_type: "fact",
+      id: goodFact.id,
+      record: goodFact,
+      timestamp: new Date().toISOString(),
+    });
     await asDrainable(processor).drainCorrections();
 
     const human = processor.getStateManager().getHuman();
-    expect(human.facts.find((f) => f.id === "fact-existing")).toBeDefined();
+    const stillExisting = human.facts.find((f) => f.id === "fact-existing");
+    expect(stillExisting).toBeDefined();
+    expect(stillExisting!.description).toBe("A corrected description");
+    expect(human.facts.find((f) => f.id === "fact-good")).toBeDefined();
+    expect(consoleErrorSpy).toHaveBeenCalled();
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("drops a malformed upsert with mismatched record.id but still applies valid records in the same batch", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const correctionsPath = join(dataDir, "corrections.json");
+    const goodFact = makeFact({ id: "fact-good", name: "Good Fact" });
+    const mismatchedRecord = {
+      op: "upsert",
+      entity_type: "fact",
+      id: "fact-wrapper",
+      record: makeFact({ id: "fact-record" }),
+      timestamp: new Date().toISOString(),
+    } as unknown as CorrectionRecord;
+
+    await appendCorrection(correctionsPath, mismatchedRecord);
+    await appendCorrection(correctionsPath, {
+      op: "upsert",
+      entity_type: "fact",
+      id: goodFact.id,
+      record: goodFact,
+      timestamp: new Date().toISOString(),
+    });
+
+    processor = new Processor(mock.ei);
+    await processor.start(storage as unknown as Parameters<Processor["start"]>[0]);
+    await asDrainable(processor).drainCorrections();
+
+    const human = processor.getStateManager().getHuman();
+    expect(human.facts.find((f) => f.id === "fact-wrapper")).toBeUndefined();
+    expect(human.facts.find((f) => f.id === "fact-record")).toBeUndefined();
+    expect(human.facts.find((f) => f.id === "fact-good")).toBeDefined();
     expect(consoleErrorSpy).toHaveBeenCalled();
 
     consoleErrorSpy.mockRestore();

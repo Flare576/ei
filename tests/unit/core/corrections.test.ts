@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import { applyCorrectionToHuman, applyCorrectionsToHuman } from "../../../src/core/corrections.js";
+import { applyCorrectionToHuman, applyCorrectionsToHuman, assertValidCorrection } from "../../../src/core/corrections.js";
 import { loadLatestState } from "../../../src/cli/retrieval.js";
 import type { CorrectionRecord } from "../../../src/core/corrections.js";
 import type { Fact, Topic, Person, Quote, HumanEntity, StorageState } from "../../../src/core/types.js";
@@ -189,6 +189,59 @@ describe("applyCorrectionToHuman — quote cleanup on remove", () => {
       [],
       ["unrelated-id"],
     ]);
+  });
+});
+
+describe("assertValidCorrection — runtime shape validation", () => {
+  it("rejects an unrecognized op with a useful message", () => {
+    expect(() =>
+      assertValidCorrection({
+        op: "not-a-real-op",
+        entity_type: "fact",
+        id: "fact-1",
+        record: makeFact("fact-1"),
+        timestamp: NOW,
+      })
+    ).toThrow(/op must be "upsert" or "remove".*not-a-real-op/);
+  });
+
+  it("rejects an upsert that is missing its record", () => {
+    expect(() =>
+      assertValidCorrection({
+        op: "upsert",
+        entity_type: "fact",
+        id: "fact-1",
+        timestamp: NOW,
+      })
+    ).toThrow(/upsert requires a record object/);
+  });
+
+  it("rejects an upsert whose record.id does not match the wrapper id", () => {
+    expect(() =>
+      assertValidCorrection({
+        op: "upsert",
+        entity_type: "fact",
+        id: "fact-1",
+        record: makeFact("fact-2"),
+        timestamp: NOW,
+      })
+    ).toThrow(/record\.id \("fact-2"\) must equal wrapper id \("fact-1"\)/);
+  });
+
+  it.each([
+    ["null", null],
+    ["string", "not-an-object"],
+    ["number", 42],
+  ])("rejects an upsert whose record is a non-object %s", (_name, record) => {
+    expect(() =>
+      assertValidCorrection({
+        op: "upsert",
+        entity_type: "fact",
+        id: "fact-1",
+        record,
+        timestamp: NOW,
+      })
+    ).toThrow(/upsert requires a record object/);
   });
 });
 
