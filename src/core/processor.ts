@@ -27,6 +27,9 @@ import { buildPersonaFromPersonPrompt } from "../prompts/index.js";
 import { buildSiblingAwarenessSection } from "../prompts/room/index.js";
 import type { PersonaGenerationResult } from "../prompts/generation/types.js";
 
+import { readCorrections, assertValidCorrection } from "./corrections.js";
+import type { CorrectionRecord } from "./corrections.js";
+import { withLock, atomicWrite } from "../storage/file-lock.js";
 import type { Storage } from "../storage/interface.js";
 import { remoteSync } from "../storage/remote.js";
 import { yoloMerge } from "../storage/merge.js";
@@ -726,7 +729,88 @@ const toolNextSteps = new Set([
     console.log(`[Processor ${this.instanceId}] runLoop() exited`);
   }
 
+  /**
+   * Drain corrections.json into the live StateManager, every tick (no
+   * time-gating — corrections need near-instant pickup, that's the whole
+   * point of the external write path). Read + apply + delete all happen
+   * inside one withLock() call so a concurrent CLI appendCorrection() can't
+   * race the read-drain-delete sequence and lose a correction appended
+   * mid-drain.
+   *
+   * A malformed record (bad entity_type, or a StateManager call that
+   * throws) is dropped with a loud console.error rather than aborting the
+   * whole batch — corrections.json is external input from CLI/MCP tools
+   * potentially driven by an LLM agent, so one bad record must not wedge
+   * every subsequent correction behind it forever. This mirrors the
+   * existing DLQ/heartbeat error-tolerance philosophy in this file: log
+   * loudly, keep the loop alive, keep draining valid records.
+   */
+  private async drainCorrections(): Promise<void> {
+    if (!this.storage) return;
+    try {
+      const dataPath = this.storage.getDataPath();
+      // Web's IndexedDBStorage/LocalStorage return "" — no filesystem, no
+      // corrections.json to drain. This mechanism is filesystem-only
+      // (TUI/future daemon); Web sessions never write corrections.json in
+      // the first place since the CLI/MCP tools that produce it are Node/Bun-only.
+      if (!dataPath) return;
+      const { join } = await import(/* @vite-ignore */ "path");
+      const correctionsPath = join(dataPath, "corrections.json");
+
+      // Cheap fast path: this runs every 100ms, and readCorrections()
+      // short-circuits on a missing file without touching the lock.
+      const pending = await readCorrections(correctionsPath);
+      if (pending.length === 0) return;
+
+      await withLock(correctionsPath, async () => {
+        // Re-read inside the lock in case a correction was appended between
+        // the unlocked fast-path read above and lock acquisition.
+        const records = await readCorrections(correctionsPath);
+        if (records.length === 0) return;
+
+        for (const record of records) {
+          try {
+            this.applyCorrectionRecord(record);
+          } catch (err) {
+            console.error(`[Processor ${this.instanceId}] Dropping malformed correction record:`, JSON.stringify(record), err);
+          }
+        }
+
+        await atomicWrite(correctionsPath, "[]");
+        this.interface.onHumanUpdated?.();
+      });
+    } catch (err) {
+      console.error(`[Processor ${this.instanceId}] Failed to drain corrections.json:`, err);
+    }
+  }
+
+  /** Dispatch one CorrectionRecord to the matching StateManager upsert/remove call. Throws on an unrecognized entity_type or op (see assertValidCorrection — the same validator the CLI read-merge/self-drain path uses, so a malformed op can never be silently treated as its sibling operation here). */
+  private applyCorrectionRecord(record: CorrectionRecord): void {
+    assertValidCorrection(record);
+    if (record.entity_type === "fact") {
+      if (record.op === "upsert") {
+        this.stateManager.human_fact_upsert(record.record as Fact);
+      } else {
+        this.stateManager.human_fact_remove(record.id);
+      }
+    } else if (record.entity_type === "topic") {
+      if (record.op === "upsert") {
+        this.stateManager.human_topic_upsert(record.record as Topic);
+      } else {
+        this.stateManager.human_topic_remove(record.id);
+      }
+    } else {
+      if (record.op === "upsert") {
+        this.stateManager.human_person_upsert(record.record as Person);
+      } else {
+        this.stateManager.human_person_remove(record.id);
+      }
+    }
+  }
+
   private async checkScheduledTasks(): Promise<void> {
+    await this.drainCorrections();
+
     const now = Date.now();
 
     const human = this.stateManager.getHuman();
