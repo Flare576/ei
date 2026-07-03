@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import type { StorageState } from "../../../src/core/types/integrations.js";
-import type { Fact, Person } from "../../../src/core/types/data-items.js";
+import type { Fact, Person, Quote } from "../../../src/core/types/data-items.js";
 
 const INITIAL_NOW = "2026-01-01T00:00:00.000Z";
 const EMBEDDING = [0.25, 0.5, 0.75];
@@ -21,6 +21,7 @@ vi.mock("../../../src/core/embedding-service.js", async (importOriginal) => {
   return {
     ...actual,
     computeDataItemEmbedding: vi.fn().mockResolvedValue([0.25, 0.5, 0.75]),
+    computeQuoteEmbedding: vi.fn().mockResolvedValue([0.25, 0.5, 0.75]),
   };
 });
 
@@ -59,6 +60,24 @@ function makePerson(overrides: Partial<Person> = {}): Person {
     last_updated: INITIAL_NOW,
     validated_date: INITIAL_NOW,
     identifiers: [{ type: "Nickname", value: "Existing Person", is_primary: true }],
+    embedding: EMBEDDING,
+    ...overrides,
+  };
+}
+
+function makeQuote(overrides: Partial<Quote> = {}): Quote {
+  return {
+    id: "quote_1",
+    message_id: null,
+    data_item_ids: ["person_1"],
+    persona_groups: [],
+    text: "Existing quote text",
+    speaker: "human",
+    timestamp: INITIAL_NOW,
+    start: null,
+    end: null,
+    created_at: INITIAL_NOW,
+    created_by: "human",
     embedding: EMBEDDING,
     ...overrides,
   };
@@ -344,6 +363,231 @@ describe("corrections endpoints", () => {
         { type: "Ei Persona", value: PERSONA_ID },
         { type: "Nickname", value: "Sisyphus", is_primary: true },
       ],
+    });
+  });
+
+  it("updates a quote's data_item_ids and recomputes its embedding (un-merge repoint)", async () => {
+    writeState(makeState({
+      human: {
+        entity: "human",
+        facts: [],
+        topics: [],
+        people: [makePerson(), makePerson({ id: "person_2", name: "Split Person" })],
+        quotes: [makeQuote()],
+        last_updated: INITIAL_NOW,
+      },
+    }));
+
+    const updated = await updateEntity("quote", "quote_1", {
+      message_id: null,
+      data_item_ids: ["person_2"],
+      persona_groups: [],
+      text: "Existing quote text",
+      speaker: "human",
+      timestamp: INITIAL_NOW,
+      start: null,
+      end: null,
+      created_at: INITIAL_NOW,
+      created_by: "human",
+    });
+
+    expect(updated).toMatchObject({ id: "quote_1", data_item_ids: ["person_2"] });
+    expect(updated.embedding).toEqual(EMBEDDING);
+
+    const persisted = await lookupById("quote_1");
+    expect(persisted).toMatchObject({ type: "quote", id: "quote_1", data_item_ids: ["person_2"] });
+  });
+
+  it("rejects an invalid quote update body (missing text) with CorrectionValidationError", async () => {
+    writeState(makeState({
+      human: {
+        entity: "human",
+        facts: [],
+        topics: [],
+        people: [],
+        quotes: [makeQuote()],
+        last_updated: INITIAL_NOW,
+      },
+    }));
+
+    await expect(
+      updateEntity("quote", "quote_1", {
+        message_id: null,
+        data_item_ids: [],
+        persona_groups: [],
+        speaker: "human",
+        timestamp: INITIAL_NOW,
+        start: null,
+        end: null,
+        created_at: INITIAL_NOW,
+        created_by: "human",
+      })
+    ).rejects.toThrow(CorrectionValidationError);
+  });
+
+  it("rejects updating a missing quote with the not-found contract", async () => {
+    writeState(makeState({
+      human: {
+        entity: "human",
+        facts: [],
+        topics: [],
+        people: [],
+        quotes: [],
+        last_updated: INITIAL_NOW,
+      },
+    }));
+
+    await expect(
+      updateEntity("quote", "missing", {
+        message_id: null,
+        data_item_ids: [],
+        persona_groups: [],
+        text: "x",
+        speaker: "human",
+        timestamp: INITIAL_NOW,
+        start: null,
+        end: null,
+        created_at: INITIAL_NOW,
+        created_by: "human",
+      })
+    ).rejects.toThrow(/^No quote found with id: missing$/);
+  });
+
+  it("accepts a lookupById quote payload on update, stripping round-trip fields without erroring", async () => {
+    writeState(makeState({
+      human: {
+        entity: "human",
+        facts: [],
+        topics: [],
+        people: [makePerson({ id: "person_2", name: "Split Person" })],
+        quotes: [makeQuote()],
+        last_updated: INITIAL_NOW,
+      },
+    }));
+
+    const lookupRecord = await lookupById("quote_1");
+    expect(lookupRecord).toMatchObject({ type: "quote", id: "quote_1" });
+
+    const updated = await updateEntity("quote", "quote_1", {
+      ...lookupRecord,
+      data_item_ids: ["person_2"],
+    });
+
+    expect(updated.id).toBe("quote_1");
+    expect(updated.data_item_ids).toEqual(["person_2"]);
+  });
+
+  it("rejects a quote update whose data_item_ids includes an ID that matches no fact/topic/person (T1)", async () => {
+    writeState(makeState({
+      human: {
+        entity: "human",
+        facts: [],
+        topics: [],
+        people: [makePerson()],
+        quotes: [makeQuote()],
+        last_updated: INITIAL_NOW,
+      },
+    }));
+
+    const body = {
+      message_id: null,
+      data_item_ids: ["totally-made-up-id"],
+      persona_groups: [],
+      text: "Existing quote text",
+      speaker: "human",
+      timestamp: INITIAL_NOW,
+      start: null,
+      end: null,
+      created_at: INITIAL_NOW,
+      created_by: "human",
+    };
+
+    await expect(updateEntity("quote", "quote_1", body)).rejects.toThrow(CorrectionValidationError);
+    await expect(updateEntity("quote", "quote_1", body)).rejects.toThrow(/totally-made-up-id/);
+
+    const persisted = await lookupById("quote_1");
+    expect(persisted).toMatchObject({ type: "quote", id: "quote_1", data_item_ids: ["person_1"] });
+  });
+
+  it("rejects a quote update whose data_item_ids includes a real ID of the wrong category, e.g. another quote's id (T2)", async () => {
+    writeState(makeState({
+      human: {
+        entity: "human",
+        facts: [],
+        topics: [],
+        people: [makePerson()],
+        quotes: [makeQuote()],
+        last_updated: INITIAL_NOW,
+      },
+    }));
+
+    const body = {
+      message_id: null,
+      data_item_ids: ["quote_1"],
+      persona_groups: [],
+      text: "Existing quote text",
+      speaker: "human",
+      timestamp: INITIAL_NOW,
+      start: null,
+      end: null,
+      created_at: INITIAL_NOW,
+      created_by: "human",
+    };
+
+    await expect(updateEntity("quote", "quote_1", body)).rejects.toThrow(CorrectionValidationError);
+    await expect(updateEntity("quote", "quote_1", body)).rejects.toThrow(/quote_1/);
+
+    const persisted = await lookupById("quote_1");
+    expect(persisted).toMatchObject({ type: "quote", id: "quote_1", data_item_ids: ["person_1"] });
+  });
+
+  it("repoints a quote from personA to personB across the lookup -> update -> lookup repair workflow (T3)", async () => {
+    const personA = makePerson({ id: "person_a", name: "Person A" });
+    const personB = makePerson({ id: "person_b", name: "Person B" });
+    const quote = makeQuote({ id: "quote_1", data_item_ids: ["person_a"] });
+
+    writeState(makeState({
+      human: {
+        entity: "human",
+        facts: [],
+        topics: [],
+        people: [personA, personB],
+        quotes: [quote],
+        last_updated: INITIAL_NOW,
+      },
+    }));
+
+    const personABefore = await lookupById("person_a");
+    expect(personABefore).toMatchObject({
+      linked_quotes: [{ id: quote.id, text: quote.text, speaker: quote.speaker, timestamp: quote.timestamp }],
+    });
+
+    const quoteRecord = await lookupById("quote_1");
+    expect(quoteRecord).toMatchObject({ type: "quote", id: "quote_1", data_item_ids: ["person_a"] });
+
+    const updated = await updateEntity("quote", "quote_1", {
+      ...quoteRecord,
+      data_item_ids: ["person_b"],
+    });
+
+    expect(updated.data_item_ids).toEqual(["person_b"]);
+
+    const personAAfter = await lookupById("person_a");
+    expect(personAAfter).toMatchObject({ linked_quotes: [] });
+
+    const personBAfter = await lookupById("person_b");
+    expect(personBAfter).toMatchObject({
+      linked_quotes: [{ id: quote.id, text: quote.text, speaker: quote.speaker, timestamp: quote.timestamp }],
+    });
+
+    // Message metadata round-trips unchanged — only data_item_ids (and the
+    // recomputed embedding) were meant to move.
+    expect(updated).toMatchObject({
+      message_id: quote.message_id,
+      timestamp: quote.timestamp,
+      created_at: quote.created_at,
+      created_by: quote.created_by,
+      text: quote.text,
     });
   });
 });

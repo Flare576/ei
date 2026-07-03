@@ -16,12 +16,24 @@ import { z } from "zod";
 import { loadLatestState } from "./retrieval.js";
 import { writeCorrection } from "./corrections-writer.js";
 import { sanitizeEiPersonaIdentifiers } from "../core/utils/identifier-utils.js";
-import { computeDataItemEmbedding } from "../core/embedding-service.js";
+import { computeDataItemEmbedding, computeQuoteEmbedding } from "../core/embedding-service.js";
 import type { CorrectableType, CorrectionRecord } from "../core/corrections.js";
-import type { Fact, Topic, Person } from "../core/types.js";
+import type { Fact, Topic, Person, Quote } from "../core/types.js";
 import type { PersonaEntity } from "../core/types/entities.js";
 
+// Fact/topic/person handling below is keyed by this narrower alias, not the
+// full CorrectableType — parseInput/buildAndWriteUpsert only ever validate
+// and materialize these 3 types. Quotes get their own updateQuoteEntity path
+// (different embedding source, no last_updated field, update-only by design)
+// rather than flowing through this shared machinery.
+type NonQuoteType = "fact" | "topic" | "person";
+
 export const CORRECTABLE_TYPES: CorrectableType[] = ["fact", "topic", "person"];
+// Wider set accepted by the `update` surface only — a Quote can be corrected
+// (data_item_ids repointed after a split/merge, mistranscribed text fixed)
+// but, per design, never created or removed, so create/remove keep gating on
+// CORRECTABLE_TYPES above while update alone widens to this constant.
+export const UPDATABLE_TYPES: CorrectableType[] = ["fact", "topic", "person", "quote"];
 
 // Metadata fields common to all three entity types, all server-preserved
 // pass-through — a caller round-tripping ei_lookup output keeps them
@@ -78,6 +90,21 @@ const personSchema = z.strictObject({
   { message: "Person requires at least one identifier or a name" }
 );
 
+const quoteSchema = z.strictObject({
+  message_id: z.string().nullable(),
+  data_item_ids: z.array(z.string()),
+  persona_groups: z.array(z.string()),
+  text: z.string().min(1),
+  speaker: z.string().min(1),
+  channel: z.string().optional(),
+  timestamp: z.string(),
+  start: z.number().nullable(),
+  end: z.number().nullable(),
+  created_at: z.string(),
+  created_by: z.enum(["extraction", "human"]),
+});
+export type QuoteInput = z.infer<typeof quoteSchema>;
+
 const SCHEMAS = { fact: factSchema, topic: topicSchema, person: personSchema } as const;
 
 export type FactInput = z.infer<typeof factSchema>;
@@ -93,13 +120,15 @@ export class CorrectionValidationError extends Error {}
  * will send straight back. Stripped before schema validation so the
  * round-trip actually works — id/last_updated are always server-assigned
  * (the id param and a fresh timestamp win, never a caller-supplied value),
- * and `type` is `lookupById`'s own discriminator, never a real entity field.
- * Any OTHER unknown key still fails validation — this is a narrow
- * allowlist, not permissive parsing.
+ * `type` is `lookupById`'s own discriminator, never a real entity field,
+ * and `linked_quotes` is a read-only reverse-index (which quotes reference
+ * this entity) that lookupById computes on the fly for fact/topic/person —
+ * never a field a caller is meant to set. Any OTHER unknown key still fails
+ * validation — this is a narrow allowlist, not permissive parsing.
  */
-const ROUND_TRIP_FIELDS = ["id", "type", "last_updated"] as const;
+const ROUND_TRIP_FIELDS = ["id", "type", "last_updated", "linked_quotes"] as const;
 
-function parseInput(entityType: CorrectableType, body: unknown, mode: "create" | "update"): FactInput | TopicInput | PersonInput {
+function parseInput(entityType: NonQuoteType, body: unknown, mode: "create" | "update"): FactInput | TopicInput | PersonInput {
   let input: unknown = body;
   if (mode === "update" && body && typeof body === "object") {
     const stripped: Record<string, unknown> = { ...body };
@@ -124,7 +153,7 @@ function parseInput(entityType: CorrectableType, body: unknown, mode: "create" |
  * need identical Person identifier sanitization and embedding computation.
  */
 async function buildAndWriteUpsert(
-  entityType: CorrectableType,
+  entityType: NonQuoteType,
   id: string,
   parsed: FactInput | TopicInput | PersonInput,
   personas: PersonaEntity[]
@@ -153,14 +182,14 @@ export async function createEntity(
   entityType: CorrectableType,
   body: unknown
 ): Promise<{ id: string; record: Fact | Topic | Person }> {
-  const parsed = parseInput(entityType, body, "create");
+  const parsed = parseInput(entityType as NonQuoteType, body, "create");
   const state = await loadLatestState();
   if (!state) {
     throw new Error("No saved state found. Is EI_DATA_PATH set correctly?");
   }
 
   const id = crypto.randomUUID();
-  const record = await buildAndWriteUpsert(entityType, id, parsed, Object.values(state.personas).map((p) => p.entity));
+  const record = await buildAndWriteUpsert(entityType as NonQuoteType, id, parsed, Object.values(state.personas).map((p) => p.entity));
   return { id, record };
 }
 
@@ -168,7 +197,11 @@ export async function updateEntity(
   entityType: CorrectableType,
   id: string,
   body: unknown
-): Promise<Fact | Topic | Person> {
+): Promise<Fact | Topic | Person | Quote> {
+  if (entityType === "quote") {
+    return updateQuoteEntity(id, body);
+  }
+
   const parsed = parseInput(entityType, body, "update");
   const state = await loadLatestState();
   if (!state) {
@@ -181,6 +214,56 @@ export async function updateEntity(
   }
 
   return buildAndWriteUpsert(entityType, id, parsed, Object.values(state.personas).map((p) => p.entity));
+}
+
+/**
+ * Quotes skip the shared fact/topic/person machinery entirely: their
+ * embedding is derived from `text` (not name+description, so
+ * computeDataItemEmbedding doesn't apply), they have no `last_updated`
+ * field to stamp, and — per design — this is their ONLY correction path;
+ * there is no createQuoteEntity/removeQuoteEntity to pair it with.
+ */
+async function updateQuoteEntity(id: string, body: unknown): Promise<Quote> {
+  let input: unknown = body;
+  if (body && typeof body === "object") {
+    const stripped: Record<string, unknown> = { ...body };
+    for (const field of ROUND_TRIP_FIELDS) delete stripped[field];
+    input = stripped;
+  }
+  const result = quoteSchema.safeParse(input);
+  if (!result.success) {
+    throw new CorrectionValidationError(
+      `Invalid quote: ${result.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`
+    );
+  }
+  const state = await loadLatestState();
+  if (!state) {
+    throw new Error("No saved state found. Is EI_DATA_PATH set correctly?");
+  }
+  if (!state.human.quotes.some((q) => q.id === id)) {
+    throw new Error(`No quote found with id: ${id}`);
+  }
+  // Beta's review (I1): the schema above only checks data_item_ids is an
+  // array of strings, not that each string resolves to a real link target.
+  // Without this, a typo'd or stale ID in an external quote repoint — the
+  // primary consumer is the person-split/merge repair workflow — would
+  // silently store a dangling link instead of failing loudly.
+  const validLinkIds = new Set([
+    ...state.human.facts.map((f) => f.id),
+    ...state.human.topics.map((t) => t.id),
+    ...state.human.people.map((p) => p.id),
+  ]);
+  const invalidIds = result.data.data_item_ids.filter((itemId) => !validLinkIds.has(itemId));
+  if (invalidIds.length > 0) {
+    throw new CorrectionValidationError(
+      `Invalid quote: data_item_ids references unknown or disallowed entities: ${invalidIds.join(", ")} (must resolve to an existing fact, topic, or person — not a quote, persona, or unmatched ID)`
+    );
+  }
+  const record: Quote = { ...result.data, id };
+  record.embedding = await computeQuoteEmbedding(record.text);
+  const correction: CorrectionRecord = { op: "upsert", entity_type: "quote", id, record, timestamp: new Date().toISOString() };
+  await writeCorrection(correction);
+  return record;
 }
 
 export async function removeEntity(entityType: CorrectableType, id: string): Promise<void> {
