@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, readFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { Processor } from "../../../src/core/processor.js";
-import type { Ei_Interface, Fact, Person } from "../../../src/core/types.js";
+import type { Ei_Interface, Fact, Person, Quote } from "../../../src/core/types.js";
 import type { CorrectionRecord } from "../../../src/core/corrections.js";
 import { appendCorrection } from "../../../src/core/corrections.js";
 
@@ -121,6 +121,24 @@ function makePerson(overrides: Partial<Person> = {}): Person {
     relationship: "Friend",
     exposure_current: 0,
     exposure_desired: 0,
+    ...overrides,
+  };
+}
+
+function makeQuote(overrides: Partial<Quote> = {}): Quote {
+  return {
+    id: "quote-1",
+    message_id: null,
+    data_item_ids: ["person-1"],
+    persona_groups: [],
+    text: "Original quote text",
+    speaker: "human",
+    timestamp: new Date().toISOString(),
+    start: null,
+    end: null,
+    created_at: new Date().toISOString(),
+    created_by: "human",
+    embedding: [0.4, 0.5, 0.6],
     ...overrides,
   };
 }
@@ -330,5 +348,68 @@ describe("Processor.drainCorrections() (live-side corrections drain)", () => {
     await asDrainable(processor).drainCorrections();
 
     expect(processor.getStateManager().getHuman().people.find((p) => p.id === "person-1")).toBeUndefined();
+  });
+
+  it("applies a Quote upsert then a Quote remove correction via human_quote_upsert/human_quote_remove", async () => {
+    const correctionsPath = join(dataDir, "corrections.json");
+    const quote = makeQuote();
+
+    await appendCorrection(correctionsPath, {
+      op: "upsert",
+      entity_type: "quote",
+      id: quote.id,
+      record: quote,
+      timestamp: new Date().toISOString(),
+    });
+
+    processor = new Processor(mock.ei);
+    await processor.start(storage as unknown as Parameters<Processor["start"]>[0]);
+    await asDrainable(processor).drainCorrections();
+
+    const applied = processor.getStateManager().getHuman().quotes.find((q) => q.id === "quote-1");
+    expect(applied).toBeDefined();
+    // Embedding must be reused verbatim — never recomputed in the drain path.
+    expect(applied!.embedding).toEqual([0.4, 0.5, 0.6]);
+
+    await appendCorrection(correctionsPath, {
+      op: "remove",
+      entity_type: "quote",
+      id: "quote-1",
+      timestamp: new Date().toISOString(),
+    });
+    await asDrainable(processor).drainCorrections();
+
+    expect(processor.getStateManager().getHuman().quotes.find((q) => q.id === "quote-1")).toBeUndefined();
+  });
+
+  it("replaces an existing Quote's data_item_ids in place on a repoint upsert (un-merge repoint)", async () => {
+    const correctionsPath = join(dataDir, "corrections.json");
+    const originalQuote = makeQuote({ data_item_ids: ["merged-person"] });
+    const repointedQuote = makeQuote({ data_item_ids: ["split-person"] });
+
+    await appendCorrection(correctionsPath, {
+      op: "upsert",
+      entity_type: "quote",
+      id: originalQuote.id,
+      record: originalQuote,
+      timestamp: new Date().toISOString(),
+    });
+
+    processor = new Processor(mock.ei);
+    await processor.start(storage as unknown as Parameters<Processor["start"]>[0]);
+    await asDrainable(processor).drainCorrections();
+
+    await appendCorrection(correctionsPath, {
+      op: "upsert",
+      entity_type: "quote",
+      id: repointedQuote.id,
+      record: repointedQuote,
+      timestamp: new Date().toISOString(),
+    });
+    await asDrainable(processor).drainCorrections();
+
+    const human = processor.getStateManager().getHuman();
+    expect(human.quotes).toHaveLength(1);
+    expect(human.quotes[0].data_item_ids).toEqual(["split-person"]);
   });
 });

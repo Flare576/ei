@@ -799,11 +799,17 @@ const toolNextSteps = new Set([
       } else {
         this.stateManager.human_topic_remove(record.id);
       }
-    } else {
+    } else if (record.entity_type === "person") {
       if (record.op === "upsert") {
         this.stateManager.human_person_upsert(record.record as Person);
       } else {
         this.stateManager.human_person_remove(record.id);
+      }
+    } else {
+      if (record.op === "upsert") {
+        this.stateManager.human_quote_upsert(record.record as Quote);
+      } else {
+        this.stateManager.human_quote_remove(record.id);
       }
     }
   }
