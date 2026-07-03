@@ -149,7 +149,7 @@ Each tier has its own runner; they don't mix. Run the right command for the righ
 
 | Command | Runner | What it covers | Notes |
 |---|---|---|---|
-| `npm run test:src` | vitest (root) | Core unit tests — `tests/unit/**` | Node required; fails if `node` resolves to Bun's shim (check: `node --version`) |
+| `npm run test:src` | vitest (root) | Core unit tests — `tests/unit/**` | Use a real Node 22+ binary; Bun's `node` shim breaks Vitest, and Node 20 has a known false-negative in `tests/unit/cli.test.ts` |
 | `npm run test:tui` | vitest + bun:test | TUI unit/component tests — `tui/tests/unit/**`, `tui/src/**` | Runs from `tui/`; bun:test handles the component layer |
 | `npm run test` | both above | Core + TUI unit tests combined | Shorthand for `test:src && test:tui` |
 | `npm run test:e2e` | Playwright | Web E2E — `tests/e2e/**` | Requires running web dev server |
@@ -157,12 +157,15 @@ Each tier has its own runner; they don't mix. Run the right command for the righ
 | `npm run test:all` | all of the above | Everything, in sequence | The authoritative pre-release gate |
 | `npm run test:evals` | vite-node | LLM quality evals | Hits live LLM; not part of CI |
 | `bash ci/structural-checks.sh` | grep | Architectural invariants | Fast; no runtime needed |
-
-**If `npm run test:src` fails with `globalThis.Bun readonly` or `vi.mock is not a function`**: your `node` binary is Bun's shim. Run with the explicit NVM path instead:
++
+**If `npm run test:src` fails with `globalThis.Bun readonly` or `vi.mock is not a function`**: your `node` binary is Bun's shim, not real Node. In OMP/harness sessions `which node` may resolve to `/private/tmp/bun-node-*/node`, and `node --version` may error instead of printing a version. Run root Vitest with an explicit NVM Node **22+** path instead:
 ```bash
-/path/to/.nvm/versions/node/vX.Y.Z/bin/node node_modules/.bin/vitest run
+/path/to/.nvm/versions/node/v22.x.y/bin/node node_modules/.bin/vitest run
 ```
-The TUI and E2E tiers are unaffected — they either use bun intentionally or handle their own Node version switching.
++
+**If root Vitest is mostly green but `tests/unit/cli.test.ts` fails only on** `creates a fact and prints the generated id with the requested record` **with** `Unexpected end of JSON input`: you're likely on Node 20. That test's `spawnSync("bun", ...)` child process can return `status: 0` with empty `stdout` inside Vitest on Node 20, even though the same `bun src/cli.ts create ...` call works outside Vitest. Re-run `test:src` under Node 22+.
++
+The TUI and E2E tiers are unaffected — they either use bun intentionally or handle their own Node version switching. `npm run test:e2e:tui` still requires Node 20 specifically.
 
 ### Testing Strategy
 
