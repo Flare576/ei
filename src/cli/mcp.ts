@@ -6,6 +6,7 @@ import type { StorageState } from "../core/types.js";
 import type { Message } from "../core/types.js";
 import type { RoomMessage } from "../core/types/rooms.js";
 import { resolvePersonaId, filterByPersona, filterTypeSpecificByPersona, filterBySource, filterTypeSpecificBySource } from "./persona-filter.js";
+import { createEntity, updateEntity, removeEntity, CorrectionValidationError } from "./corrections-endpoints.js";
 
 // Exported so tests can inject their own transport
 export function createMcpServer(): McpServer {
@@ -250,6 +251,75 @@ export function createMcpServer(): McpServer {
       return {
         content: [{ type: "text" as const, text: `Message not found: ${id}` }],
       };
+    }
+  );
+
+  server.registerTool(
+    "ei_create",
+    {
+      description:
+        "Create a new entity in the user's Ei knowledge base — a fact, topic, or person. Use to add data the extraction pipeline missed, or to split/correct bad merges. The record is validated against the entity type's schema server-side; unknown fields are rejected. Returns the assigned id and the full stored record. Not available for quotes (verifiable-origin data only) or personas.",
+      inputSchema: {
+        entity_type: z.enum(["fact", "topic", "person"]).describe("The type of entity to create."),
+        data: z
+          .record(z.unknown())
+          .describe(
+            "The entity fields. Fact requires name/description/sentiment/validated_date. Topic requires name/description/sentiment. Person requires a name and/or at least one identifier. Structural validation happens server-side against the entity type's schema."
+          ),
+      },
+    },
+    async ({ entity_type, data }) => {
+      try {
+        const { id, record } = await createEntity(entity_type, data);
+        return { content: [{ type: "text" as const, text: JSON.stringify({ id, record }, null, 2) }] };
+      } catch (e) {
+        const message = e instanceof CorrectionValidationError ? e.message : (e as Error).message;
+        return { content: [{ type: "text" as const, text: `Error: ${message}` }], isError: true };
+      }
+    }
+  );
+
+  server.registerTool(
+    "ei_update",
+    {
+      description:
+        "Replace an existing fact, topic, or person by ID with a COMPLETE record — this is full replacement, not a partial patch. Any field omitted from `data` is treated as absent, not 'leave the existing value alone'. Always fetch the current record with ei_lookup first, edit the fields you need to change, and pass the WHOLE thing back — passing a partial object will silently drop the fields you didn't include. Use to fix bad extracted data (e.g. correcting a person record where two people were wrongly merged into one).",
+      inputSchema: {
+        entity_type: z.enum(["fact", "topic", "person"]).describe("The type of entity to update."),
+        id: z.string().describe("The ID of the entity to replace, from ei_lookup or ei_search."),
+        data: z
+          .record(z.unknown())
+          .describe("The COMPLETE replacement record — round-tripped from ei_lookup output, not a partial patch."),
+      },
+    },
+    async ({ entity_type, id, data }) => {
+      try {
+        const record = await updateEntity(entity_type, id, data);
+        return { content: [{ type: "text" as const, text: JSON.stringify(record, null, 2) }] };
+      } catch (e) {
+        const message = e instanceof CorrectionValidationError ? e.message : (e as Error).message;
+        return { content: [{ type: "text" as const, text: `Error: ${message}` }], isError: true };
+      }
+    }
+  );
+
+  server.registerTool(
+    "ei_remove",
+    {
+      description:
+        "Permanently remove a fact, topic, or person from the user's Ei knowledge base by ID. Use to delete bad extracted data that shouldn't be split or corrected, just dropped entirely. Not available for quotes or personas.",
+      inputSchema: {
+        entity_type: z.enum(["fact", "topic", "person"]).describe("The type of entity to remove."),
+        id: z.string().describe("The ID of the entity to remove, from ei_lookup or ei_search."),
+      },
+    },
+    async ({ entity_type, id }) => {
+      try {
+        await removeEntity(entity_type, id);
+        return { content: [{ type: "text" as const, text: JSON.stringify({ removed: true, id }, null, 2) }] };
+      } catch (e) {
+        return { content: [{ type: "text" as const, text: `Error: ${(e as Error).message}` }], isError: true };
+      }
     }
   );
 

@@ -17,6 +17,8 @@ import type { StorageState } from "./core/types";
 import { resolvePersonaId, filterByPersona, filterTypeSpecificByPersona, filterBySource, filterTypeSpecificBySource } from "./cli/persona-filter.js";
 import { installMcpClients } from "./cli/install.js";
 import { getRecentSessionMessages } from "./cli/session-context.js";
+import { createEntity, updateEntity, removeEntity, CorrectionValidationError, CORRECTABLE_TYPES } from "./cli/corrections-endpoints.js";
+import type { CorrectableType } from "./core/corrections.js";
 import pkg from "../package.json" assert { type: "json" };
 
 const rawArgs = process.argv.slice(2);
@@ -38,6 +40,19 @@ const TYPE_ALIASES: Record<string, string> = {
   personas: "personas",
 };
 
+// Singular CorrectableType resolution for `ei create/update/remove` — derived
+// from TYPE_ALIASES + CORRECTABLE_TYPES so the two alias systems can never
+// silently diverge on which strings are accepted (e.g. "person"/"people"
+// stay synonymous here too, since both funnel through TYPE_ALIASES first).
+const PLURAL_TO_CORRECTABLE: Record<string, CorrectableType> = Object.fromEntries(
+  CORRECTABLE_TYPES.map((t) => [TYPE_ALIASES[t], t])
+);
+
+function resolveCorrectableType(raw: string): CorrectableType | null {
+  const plural = TYPE_ALIASES[raw];
+  return plural ? PLURAL_TO_CORRECTABLE[plural] ?? null : null;
+}
+
 function printHelp(): void {
   console.log(`
 Ei
@@ -55,6 +70,9 @@ Usage:
   ei --id <id>                  Look up a specific entity by ID
   echo <id> | ei --id           Look up entity by ID from stdin
   ei mcp                        Start the Ei MCP stdio server (for Claude Code/Cursor/Codex)
+  ei create <type> --json '<json>'  Create a new entity (fact/topic/person)
+  ei update <type> <id> --json '<json>'  Replace an entity by ID (full record, not a patch)
+  ei remove <type> <id>         Remove an entity by ID
 
 Types:
   quote / quotes      Quotes from conversation history
@@ -75,6 +93,7 @@ Options:
   --hook-source <src> Source of the hook: "opencode-plugin" (OpenCode SQLite), "cursor", or "codex"
   --transcript <path> Path to a Claude Code JSONL transcript file for context enrichment
   --help, -h          Show this help message
+  --json <json>       JSON body for create/update (full record for update, not a patch)
 
 Examples:
   ei "debugging"                         # Search everything
@@ -86,6 +105,9 @@ Examples:
   ei topics --source cursor "X"          # Topics learned from Cursor sessions
   ei --id abc-123                        # Look up entity by ID
   ei "memory leak" | jq .[0].id | ei --id  # Pipe ID from search
+  ei create fact --json '{"name":"Field of Study","description":"CS","sentiment":0,"validated_date":""}'
+  ei update fact abc-123 --json '{"name":"Field of Study","description":"Updated","sentiment":0,"validated_date":""}'
+  ei remove fact abc-123                 # Remove a fact by ID
 `);
 }
 
@@ -144,6 +166,85 @@ async function main(): Promise<void> {
     const { handleMcpCommand } = await import("./cli/mcp.js");
     await handleMcpCommand(args.slice(1));
     process.exit(0);
+  }
+
+  if (args[0] === "create") {
+    const rawType = args[1];
+    const entityType = rawType ? resolveCorrectableType(rawType) : null;
+    if (!entityType) {
+      console.error(`ei create requires a valid type (${CORRECTABLE_TYPES.join(", ")}). Got: ${rawType ?? "(none)"}`);
+      process.exit(1);
+    }
+    const jsonIdx = args.indexOf("--json");
+    const jsonStr = jsonIdx !== -1 ? args[jsonIdx + 1] : undefined;
+    if (!jsonStr) {
+      console.error("ei create requires --json '<json>'");
+      process.exit(1);
+    }
+    let body: unknown;
+    try {
+      body = JSON.parse(jsonStr);
+    } catch (e) {
+      console.error(`Invalid JSON: ${(e as Error).message}`);
+      process.exit(1);
+    }
+    try {
+      const result = await createEntity(entityType, body);
+      console.log(JSON.stringify(result, null, 2));
+      process.exit(0);
+    } catch (e) {
+      console.error(e instanceof CorrectionValidationError ? e.message : (e as Error).message);
+      process.exit(1);
+    }
+  }
+
+  if (args[0] === "update") {
+    const rawType = args[1];
+    const id = args[2];
+    const entityType = rawType ? resolveCorrectableType(rawType) : null;
+    if (!entityType || !id) {
+      console.error(`Usage: ei update <type> <id> --json '<json>' (types: ${CORRECTABLE_TYPES.join(", ")})`);
+      process.exit(1);
+    }
+    const jsonIdx = args.indexOf("--json");
+    const jsonStr = jsonIdx !== -1 ? args[jsonIdx + 1] : undefined;
+    if (!jsonStr) {
+      console.error("ei update requires --json '<json>'");
+      process.exit(1);
+    }
+    let body: unknown;
+    try {
+      body = JSON.parse(jsonStr);
+    } catch (e) {
+      console.error(`Invalid JSON: ${(e as Error).message}`);
+      process.exit(1);
+    }
+    try {
+      const record = await updateEntity(entityType, id, body);
+      console.log(JSON.stringify(record, null, 2));
+      process.exit(0);
+    } catch (e) {
+      console.error(e instanceof CorrectionValidationError ? e.message : (e as Error).message);
+      process.exit(1);
+    }
+  }
+
+  if (args[0] === "remove") {
+    const rawType = args[1];
+    const id = args[2];
+    const entityType = rawType ? resolveCorrectableType(rawType) : null;
+    if (!entityType || !id) {
+      console.error(`Usage: ei remove <type> <id> (types: ${CORRECTABLE_TYPES.join(", ")})`);
+      process.exit(1);
+    }
+    try {
+      await removeEntity(entityType, id);
+      console.log(JSON.stringify({ removed: true, id }, null, 2));
+      process.exit(0);
+    } catch (e) {
+      console.error((e as Error).message);
+      process.exit(1);
+    }
   }
 
   if (args[0] === "--sync") {

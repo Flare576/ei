@@ -7,6 +7,23 @@ vi.mock("../../../src/cli/retrieval.js", () => ({
   lookupById: vi.fn().mockResolvedValue(null),
 }));
 
+const { MockCorrectionValidationError, mockCreateEntity, mockUpdateEntity, mockRemoveEntity } = vi.hoisted(() => {
+  class MockCorrectionValidationError extends Error {}
+  return {
+    MockCorrectionValidationError,
+    mockCreateEntity: vi.fn(),
+    mockUpdateEntity: vi.fn(),
+    mockRemoveEntity: vi.fn(),
+  };
+});
+
+vi.mock("../../../src/cli/corrections-endpoints.js", () => ({
+  createEntity: mockCreateEntity,
+  updateEntity: mockUpdateEntity,
+  removeEntity: mockRemoveEntity,
+  CorrectionValidationError: MockCorrectionValidationError,
+}));
+
 
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -67,5 +84,81 @@ describe("MCP server", () => {
     const enumValues = typeProperty?.enum as string[];
     expect(Array.isArray(enumValues)).toBe(true);
     expect(enumValues).toContain("personas");
+  });
+
+  it("registers ei_create, ei_update, and ei_remove tools", async () => {
+    ({ client } = await setupClient());
+    const result = await client.listTools();
+    const names = result.tools.map((t) => t.name);
+    expect(names).toContain("ei_create");
+    expect(names).toContain("ei_update");
+    expect(names).toContain("ei_remove");
+  });
+
+  it("ei_create returns the created id and record as JSON", async () => {
+    mockCreateEntity.mockResolvedValueOnce({ id: "new-id", record: { id: "new-id", name: "Test" } });
+    ({ client } = await setupClient());
+    const result = await client.callTool({
+      name: "ei_create",
+      arguments: { entity_type: "fact", data: { name: "Test", description: "x", sentiment: 0, validated_date: "" } },
+    });
+    const content = result.content as Array<{ type: string; text: string }>;
+    const parsed = JSON.parse(content[0].text);
+    expect(parsed.id).toBe("new-id");
+    expect(parsed.record.name).toBe("Test");
+    expect(mockCreateEntity).toHaveBeenCalledWith("fact", { name: "Test", description: "x", sentiment: 0, validated_date: "" });
+  });
+
+  it("ei_create surfaces CorrectionValidationError as text content with isError: true", async () => {
+    mockCreateEntity.mockRejectedValueOnce(new MockCorrectionValidationError("Invalid fact: description: Required"));
+    ({ client } = await setupClient());
+    const result = await client.callTool({ name: "ei_create", arguments: { entity_type: "fact", data: {} } });
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0].text).toContain("Error: Invalid fact");
+    expect(result.isError).toBe(true);
+  });
+
+  it("ei_update returns the updated record as JSON", async () => {
+    mockUpdateEntity.mockResolvedValueOnce({ id: "abc-123", name: "Updated" });
+    ({ client } = await setupClient());
+    const result = await client.callTool({
+      name: "ei_update",
+      arguments: { entity_type: "topic", id: "abc-123", data: { name: "Updated" } },
+    });
+    const content = result.content as Array<{ type: string; text: string }>;
+    const parsed = JSON.parse(content[0].text);
+    expect(parsed.name).toBe("Updated");
+    expect(mockUpdateEntity).toHaveBeenCalledWith("topic", "abc-123", { name: "Updated" });
+  });
+
+  it("ei_update surfaces not-found errors as text content with isError: true", async () => {
+    mockUpdateEntity.mockRejectedValueOnce(new Error("No topic found with id: missing-id"));
+    ({ client } = await setupClient());
+    const result = await client.callTool({
+      name: "ei_update",
+      arguments: { entity_type: "topic", id: "missing-id", data: {} },
+    });
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0].text).toContain("Error: No topic found with id: missing-id");
+    expect(result.isError).toBe(true);
+  });
+
+  it("ei_remove returns removed confirmation as JSON", async () => {
+    mockRemoveEntity.mockResolvedValueOnce(undefined);
+    ({ client } = await setupClient());
+    const result = await client.callTool({ name: "ei_remove", arguments: { entity_type: "person", id: "p-1" } });
+    const content = result.content as Array<{ type: string; text: string }>;
+    const parsed = JSON.parse(content[0].text);
+    expect(parsed).toEqual({ removed: true, id: "p-1" });
+    expect(mockRemoveEntity).toHaveBeenCalledWith("person", "p-1");
+  });
+
+  it("ei_remove surfaces not-found errors as text content with isError: true", async () => {
+    mockRemoveEntity.mockRejectedValueOnce(new Error("No person found with id: missing-id"));
+    ({ client } = await setupClient());
+    const result = await client.callTool({ name: "ei_remove", arguments: { entity_type: "person", id: "missing-id" } });
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0].text).toContain("Error: No person found with id: missing-id");
+    expect(result.isError).toBe(true);
   });
 });
