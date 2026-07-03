@@ -19,10 +19,11 @@
 const LOCK_TIMEOUT_MS = 5000;
 const LOCK_RETRY_DELAY_MS = 50;
 
+// Plain executor form, not Promise.withResolvers — this module runs on
+// whatever Node the CLI/TUI ships with, and withResolvers only landed in
+// Node 22. No behavior difference, just broader runtime compatibility.
 function delay(ms: number): Promise<void> {
-  const { promise, resolve } = Promise.withResolvers<void>();
-  setTimeout(resolve, ms);
-  return promise;
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export function getLockPath(filePath: string): string {
