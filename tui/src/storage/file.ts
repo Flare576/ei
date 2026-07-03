@@ -1,6 +1,7 @@
 import type { StorageState } from "../../../src/core/types";
 import type { Storage } from "../../../src/storage/interface";
 import { encodeAllEmbeddings, decodeAllEmbeddings } from "../../../src/storage/embeddings";
+import { withLock, atomicWrite } from "../../../src/storage/file-lock";
 import { join } from "path";
 import { mkdir, rename, unlink, readdir } from "fs/promises";
 import { resolveDataPath } from "../util/resolve-data-path.js";
@@ -8,8 +9,6 @@ import { resolveDataPath } from "../util/resolve-data-path.js";
 const STATE_FILE = "state.json";
 const BACKUP_FILE = "state.backup.json";
 const BACKUPS_DIR = "backups";
-const LOCK_TIMEOUT_MS = 5000;
-const LOCK_RETRY_DELAY_MS = 50;
 
 export class FileStorage implements Storage {
   private readonly dataPath: string;
@@ -39,9 +38,9 @@ export class FileStorage implements Storage {
     const filePath = join(this.dataPath, STATE_FILE);
     state.timestamp = new Date().toISOString();
 
-    await this.withLock(filePath, async () => {
+    await withLock(filePath, async () => {
       try {
-        await this.atomicWrite(filePath, JSON.stringify(encodeAllEmbeddings(state), null, 2));
+        await atomicWrite(filePath, JSON.stringify(encodeAllEmbeddings(state), null, 2));
       } catch (e) {
         if (this.isQuotaError(e)) {
           throw new Error("STORAGE_SAVE_FAILED: Disk quota exceeded");
@@ -89,7 +88,7 @@ export class FileStorage implements Storage {
   async saveBackup(state: StorageState): Promise<void> {
     await this.ensureDataDir();
     const backupPath = join(this.dataPath, BACKUP_FILE);
-    await this.atomicWrite(backupPath, JSON.stringify(encodeAllEmbeddings(state), null, 2));
+    await atomicWrite(backupPath, JSON.stringify(encodeAllEmbeddings(state), null, 2));
   }
 
   /**
@@ -130,7 +129,7 @@ export class FileStorage implements Storage {
     ].join("") + ".json";
 
     const destPath = join(backupsPath, name);
-    await this.atomicWrite(destPath, JSON.stringify(encodeAllEmbeddings(state), null, 2));
+    await atomicWrite(destPath, JSON.stringify(encodeAllEmbeddings(state), null, 2));
 
     // Prune: keep only the newest maxBackups files
     const entries = await readdir(backupsPath);
@@ -167,80 +166,5 @@ export class FileStorage implements Storage {
       e instanceof Error &&
       (e.message.includes("ENOSPC") || e.message.includes("quota"))
     );
-  }
-
-  private async atomicWrite(filePath: string, content: string): Promise<void> {
-    const tempPath = `${filePath}.tmp.${Date.now()}.${Math.random().toString(36).slice(2)}`;
-    try {
-      await Bun.write(tempPath, content);
-      await rename(tempPath, filePath);
-    } catch (e) {
-      try {
-        await unlink(tempPath);
-      } catch {}
-      throw e;
-    }
-  }
-
-  private getLockPath(filePath: string): string {
-    return `${filePath}.lock`;
-  }
-
-  private async acquireLock(filePath: string): Promise<boolean> {
-    const lockPath = this.getLockPath(filePath);
-    const startTime = Date.now();
-
-    while (Date.now() - startTime < LOCK_TIMEOUT_MS) {
-      const lockFile = Bun.file(lockPath);
-      if (await lockFile.exists()) {
-        // Read may throw if another writer deleted the lock between exists() and text() —
-        // treat that as "lock is gone, proceed to acquire" by falling through.
-        let lockContent: string;
-        try {
-          lockContent = await lockFile.text();
-        } catch {
-          // Lock vanished in the race window — retry from top to re-check state cleanly.
-          await new Promise((r) => setTimeout(r, LOCK_RETRY_DELAY_MS));
-          continue;
-        }
-        const lockTime = parseInt(lockContent, 10);
-        if (!isNaN(lockTime) && Date.now() - lockTime > LOCK_TIMEOUT_MS) {
-          try {
-            await unlink(lockPath);
-          } catch {}
-        } else {
-          await new Promise((r) => setTimeout(r, LOCK_RETRY_DELAY_MS));
-          continue;
-        }
-      }
-
-      try {
-        await Bun.write(lockPath, Date.now().toString());
-        return true;
-      } catch {
-        await new Promise((r) => setTimeout(r, LOCK_RETRY_DELAY_MS));
-      }
-    }
-
-    return false;
-  }
-
-  private async releaseLock(filePath: string): Promise<void> {
-    const lockPath = this.getLockPath(filePath);
-    try {
-      await unlink(lockPath);
-    } catch {}
-  }
-
-  private async withLock<T>(filePath: string, fn: () => Promise<T>): Promise<T> {
-    const acquired = await this.acquireLock(filePath);
-    if (!acquired) {
-      throw new Error("STORAGE_LOCK_TIMEOUT: Could not acquire file lock");
-    }
-    try {
-      return await fn();
-    } finally {
-      await this.releaseLock(filePath);
-    }
   }
 }
