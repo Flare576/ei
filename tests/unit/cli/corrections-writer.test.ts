@@ -183,6 +183,99 @@ describe("writeCorrection — self-drain and branch selection", () => {
     expect(error).toBeInstanceOf(Error);
   });
 
+  it("queues a removal without touching state.json while a live Ei instance owns ei.lock", async () => {
+    const fact = makeFact({ id: "fact-live-instance" });
+    const statePath = join(tempDir, "state.json");
+    const correctionsPath = join(tempDir, "corrections.json");
+    writeJson(statePath, buildState({ facts: [fact] }));
+    writeJson(join(tempDir, "ei.lock"), { pid: process.pid });
+    const originalState = readFileSync(statePath, "utf-8");
+
+    const removeFact: CorrectionRecord = {
+      op: "remove",
+      entity_type: "fact",
+      id: fact.id,
+      timestamp: NOW,
+    };
+
+    await writeCorrection(removeFact);
+
+    expect(readFileSync(statePath, "utf-8")).toBe(originalState);
+    expect(readJson<CorrectionRecord[]>(correctionsPath)).toEqual([removeFact]);
+  });
+
+  it("rejects an existing queued correction with a malformed op without rewriting state.json", async () => {
+    const fact = makeFact({ id: "fact-existing" });
+    const statePath = join(tempDir, "state.json");
+    const correctionsPath = join(tempDir, "corrections.json");
+    writeJson(statePath, buildState({ facts: [fact] }));
+    writeJson(correctionsPath, [
+      {
+        op: "delete",
+        entity_type: "fact",
+        id: fact.id,
+        timestamp: NOW,
+      },
+    ]);
+    const originalState = readFileSync(statePath, "utf-8");
+
+    await expect(
+      writeCorrection({
+        op: "remove",
+        entity_type: "fact",
+        id: fact.id,
+        timestamp: NOW,
+      }),
+    ).rejects.toThrow(/op must be "upsert" or "remove"/);
+    expect(readFileSync(statePath, "utf-8")).toBe(originalState);
+  });
+
+  it("rejects an existing queued upsert whose wrapper id and record id disagree without rewriting state.json", async () => {
+    const fact = makeFact({ id: "fact-existing" });
+    const statePath = join(tempDir, "state.json");
+    const correctionsPath = join(tempDir, "corrections.json");
+    writeJson(statePath, buildState({ facts: [fact] }));
+    writeJson(correctionsPath, [
+      {
+        op: "upsert",
+        entity_type: "fact",
+        id: "fact-wrapper",
+        record: makeFact({ id: "fact-record" }),
+        timestamp: NOW,
+      },
+    ]);
+    const originalState = readFileSync(statePath, "utf-8");
+
+    await expect(
+      writeCorrection({
+        op: "remove",
+        entity_type: "fact",
+        id: fact.id,
+        timestamp: NOW,
+      }),
+    ).rejects.toThrow(/record\.id .* must equal wrapper id/);
+    expect(readFileSync(statePath, "utf-8")).toBe(originalState);
+  });
+
+  it("rejects invalid JSON syntax in corrections.json without rewriting state.json", async () => {
+    const fact = makeFact({ id: "fact-existing" });
+    const statePath = join(tempDir, "state.json");
+    const correctionsPath = join(tempDir, "corrections.json");
+    writeJson(statePath, buildState({ facts: [fact] }));
+    writeFileSync(correctionsPath, "[");
+    const originalState = readFileSync(statePath, "utf-8");
+
+    await expect(
+      writeCorrection({
+        op: "remove",
+        entity_type: "fact",
+        id: fact.id,
+        timestamp: NOW,
+      }),
+    ).rejects.toThrow(SyntaxError);
+    expect(readFileSync(statePath, "utf-8")).toBe(originalState);
+  });
+
   it("queues the correction when only state.backup.json exists and does not fabricate state.json", async () => {
     const backupPath = join(tempDir, "state.backup.json");
     const correctionsPath = join(tempDir, "corrections.json");

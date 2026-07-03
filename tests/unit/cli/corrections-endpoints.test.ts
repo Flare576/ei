@@ -16,11 +16,20 @@ vi.mock("zod", async (importOriginal) => {
   };
 });
 
+vi.mock("../../../src/core/embedding-service.js", async (importOriginal) => {
+  const actual = await importOriginal() as Record<string, unknown>;
+  return {
+    ...actual,
+    computeDataItemEmbedding: vi.fn().mockResolvedValue([0.25, 0.5, 0.75]),
+  };
+});
+
 
 import { lookupById } from "../../../src/cli/retrieval.js";
 import {
   CorrectionValidationError,
   createEntity,
+  removeEntity,
   updateEntity,
 } from "../../../src/cli/corrections-endpoints.js";
 
@@ -112,6 +121,73 @@ afterEach(() => {
 });
 
 describe("corrections endpoints", () => {
+  it("removes an existing fact so lookup no longer returns it", async () => {
+    writeState(makeState());
+
+    await removeEntity("fact", "fact_1");
+
+    expect(await lookupById("fact_1")).toBeNull();
+  });
+
+  it("rejects removing a missing fact with the not-found contract", async () => {
+    writeState(makeState());
+
+    await expect(removeEntity("fact", "missing")).rejects.toThrow(
+      /^No fact found with id: missing$/
+    );
+  });
+
+  it("rejects updating a missing fact with the not-found contract", async () => {
+    writeState(makeState());
+
+    await expect(
+      updateEntity("fact", "missing", {
+        name: "Known Fact",
+        description: "Valid update body",
+        sentiment: 0.4,
+        validated_date: INITIAL_NOW,
+      })
+    ).rejects.toThrow(/^No fact found with id: missing$/);
+  });
+
+  it.each([
+    ["null", null],
+    ["number", 42],
+    ["string", "str"],
+    ["array", [1, 2, 3]],
+  ] as const)("rejects non-object fact create body (%s) with CorrectionValidationError", async (_name, body) => {
+    writeState(makeState());
+
+    await expect(createEntity("fact", body)).rejects.toThrow(CorrectionValidationError);
+  });
+
+  it.each([
+    [
+      "missing identifiers and name",
+      {
+        description: "No usable identity",
+        sentiment: 0.1,
+        relationship: "unknown",
+      },
+    ],
+    [
+      "empty identifiers",
+      {
+        description: "No usable identity",
+        sentiment: 0.1,
+        relationship: "unknown",
+        identifiers: [],
+      },
+    ],
+  ] as const)("rejects person create body with %s", async (_name, body) => {
+    writeState(makeState());
+
+    await expect(createEntity("person", body)).rejects.toThrow(CorrectionValidationError);
+    await expect(createEntity("person", body)).rejects.toThrow(
+      /Person requires at least one identifier or a name/
+    );
+  });
+
   it("accepts a lookupById payload on update and ignores server-owned round-trip fields", async () => {
     writeState(makeState());
 
