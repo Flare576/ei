@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, writeFileSync, rmSync, existsSync, readFileSync } from "fs";
+import { mkdtempSync, writeFileSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 
@@ -107,12 +107,6 @@ function writeState(personas: { display_name: string; id?: string }[]) {
 }
 
 beforeEach(() => {
-  (globalThis as Record<string, unknown>).Bun = {
-    file: (path: string) => ({
-      exists: async () => existsSync(path),
-      text: async () => readFileSync(path, "utf-8"),
-    }),
-  };
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(console, "log").mockImplementation(() => {});
 });

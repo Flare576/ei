@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, writeFileSync, rmSync, existsSync, readFileSync } from "fs";
+import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import type { StorageState } from "../../../src/core/types/integrations.js";
+import type { CorrectionRecord } from "../../../src/core/corrections.js";
+import type { Person } from "../../../src/core/types/data-items.js";
 
 
 vi.mock("../../../src/core/embedding-service.js", async (importOriginal) => {
@@ -16,7 +18,7 @@ vi.mock("../../../src/core/embedding-service.js", async (importOriginal) => {
   };
 });
 
-import { retrieve, retrieveBalanced, resolveLinkedItems, lookupById, retrievePersonas, retrievePersonasSemantic, mapPersona } from "../../../src/cli/retrieval.js";
+import { retrieve, retrieveBalanced, resolveLinkedItems, lookupById, retrievePersonas, retrievePersonasSemantic, mapPersona, loadLatestState } from "../../../src/cli/retrieval.js";
 
 const EMBEDDING = new Array(384).fill(1);
 const NOW = "2026-01-01T00:00:00Z";
@@ -122,12 +124,6 @@ function writeTestState(state: unknown) {
 }
 
 beforeEach(() => {
-  (globalThis as any).Bun = {
-    file: (path: string) => ({
-      exists: async () => existsSync(path),
-      text: async () => readFileSync(path, "utf-8"),
-    }),
-  };
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(console, "log").mockImplementation(() => {});
 });
@@ -476,5 +472,62 @@ describe("retrievePersonasSemantic", () => {
     const queryVector = EMBEDDING;
     const result = await retrievePersonasSemantic(queryVector, state as any, 10);
     expect(result).toEqual([]);
+  });
+});
+
+describe("loadLatestState — corrections merge", () => {
+  it("applies a pending upsert correction to the loaded state's people before returning", async () => {
+    writeTestState(createTestState({ people: 1 }));
+    const correctedPerson: Person = {
+      id: "person_0",
+      name: "New Name",
+      description: "A test person",
+      sentiment: 0.5,
+      relationship: "friend",
+      exposure_current: 0.5,
+      exposure_desired: 0.5,
+      last_updated: NOW,
+      last_mentioned: NOW,
+      learned_by: "ei",
+      embedding: EMBEDDING,
+      identifiers: [{ type: "Nickname", value: "New Name", is_primary: true }],
+    };
+    const correction: CorrectionRecord = {
+      op: "upsert",
+      entity_type: "person",
+      id: "person_0",
+      record: correctedPerson,
+      timestamp: NOW,
+    };
+    writeFileSync(join(tempDir, "corrections.json"), JSON.stringify([correction]));
+
+    const state = await loadLatestState();
+    expect(state).not.toBeNull();
+    expect(state!.human.people).toHaveLength(1);
+    expect(state!.human.people[0].name).toBe("New Name");
+  });
+
+  it("propagates an error when corrections.json is malformed instead of serving uncorrected state", async () => {
+    writeTestState(createTestState({ people: 1 }));
+    writeFileSync(join(tempDir, "corrections.json"), "{not valid json");
+
+    await expect(loadLatestState()).rejects.toThrow();
+  });
+
+  it("does not delete or modify corrections.json on read", async () => {
+    writeTestState(createTestState({ people: 1 }));
+    const correction: CorrectionRecord = {
+      op: "remove",
+      entity_type: "person",
+      id: "person_0",
+      timestamp: NOW,
+    };
+    const correctionsPath = join(tempDir, "corrections.json");
+    const raw = JSON.stringify([correction]);
+    writeFileSync(correctionsPath, raw);
+
+    const state = await loadLatestState();
+    expect(state!.human.people).toHaveLength(0);
+    expect(readFileSync(correctionsPath, "utf-8")).toBe(raw);
   });
 });

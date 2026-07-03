@@ -8,6 +8,8 @@ import { readFile } from "fs/promises";
 import { getEmbeddingService, findTopK } from "../core/embedding-service";
 import { parseMessageId } from "../core/utils/message-id.js";
 import { getMachineId } from "../integrations/machine-id.js";
+import { readCorrections, applyCorrectionsToHuman } from "../core/corrections.js";
+import { getCorrectionsPath } from "./corrections-writer.js";
 
 const STATE_FILE = "state.json";
 const BACKUP_FILE = "state.backup.json";
@@ -23,15 +25,22 @@ export function getDataPath(): string {
 
 export async function loadLatestState(): Promise<StorageState | null> {
   const dataPath = getDataPath();
+  let state: StorageState | null = null;
   for (const file of [STATE_FILE, BACKUP_FILE]) {
     try {
       const text = await readFile(join(dataPath, file), "utf-8");
-      if (text) return decodeAllEmbeddings(JSON.parse(text) as StorageState);
+      if (text) {
+        state = decodeAllEmbeddings(JSON.parse(text) as StorageState);
+        break;
+      }
     } catch {
       continue;
     }
   }
-    return null;
+  if (!state) return null;
+  const corrections = await readCorrections(getCorrectionsPath());
+  applyCorrectionsToHuman(state.human, corrections);
+  return state;
 }
 
 export async function retrieve<T extends { id: string; embedding?: number[]; last_updated?: string; last_mentioned?: string }>(
