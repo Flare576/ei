@@ -1291,7 +1291,7 @@ const toolNextSteps = new Set([
   }
 
   async upsertPerson(person: Person): Promise<void> {
-    const sanitized = { ...person, identifiers: sanitizeEiPersonaIdentifiers(person.identifiers ?? [], this.stateManager) };
+    const sanitized = { ...person, identifiers: sanitizeEiPersonaIdentifiers(person.identifiers ?? [], this.stateManager.persona_getAll()) };
     await upsertPerson(this.stateManager, sanitized);
     this.interface.onHumanUpdated?.();
   }

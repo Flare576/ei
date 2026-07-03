@@ -1,4 +1,5 @@
 import type { PersonIdentifier } from "../types/data-items.js";
+import type { PersonaEntity } from "../types/entities.js";
 import type { StateManager } from "../state-manager.js";
 import { BUILT_IN_IDENTIFIER_TYPES } from "../constants/built-in-identifier-types.js";
 
@@ -29,12 +30,12 @@ export function normalizeIdentifierType(llmType: string, state: StateManager): s
 
 export function sanitizeEiPersonaIdentifiers(
   identifiers: PersonIdentifier[],
-  state: StateManager
+  personas: PersonaEntity[]
 ): PersonIdentifier[] {
   return identifiers.map(id => {
     if (id.type !== 'Ei Persona' && id.type !== 'AI Persona') return id;
     if (UUID_REGEX.test(id.value)) return { ...id, type: 'Ei Persona' };
-    const matched = state.persona_getAll().find(p =>
+    const matched = personas.find(p =>
       p.display_name === id.value || p.aliases?.includes(id.value)
     );
     if (matched) return { ...id, type: 'Ei Persona', value: matched.id };

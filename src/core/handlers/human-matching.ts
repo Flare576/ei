@@ -282,7 +282,7 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
         value: i.value,
         ...(i.is_primary ? { is_primary: i.is_primary } : {}),
       })),
-      state
+      state.persona_getAll()
     );
     const allCandidateIds = [...llmIdentifiers, ...candidateIdentifiers];
     if (allCandidateIds.length === 0) {
@@ -303,7 +303,7 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
         ...i,
         type: normalizeIdentifierType(i.type, state),
       })),
-      state
+      state.persona_getAll()
     );
     for (const id of sanitizedToAdd) {
       if (!base.some(e => e.value === id.value)) {
