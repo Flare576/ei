@@ -407,6 +407,26 @@ function renderTranscript(messages: LLMMessage[]): string {
     .join("\n\n");
 }
 
+interface AssertionInputContext {
+  finalResponse: string;
+  transcript: string;
+  toolCalls: ToolCallResult[];
+}
+
+function selectAssertionInput(
+  assertion: Exclude<Assertion, { type: "end-state" }>,
+  context: AssertionInputContext
+): string {
+  if (assertion.type === "tool-calls") {
+    return JSON.stringify(context.toolCalls);
+  }
+  if (assertion.type === "llm-judge") {
+    return context.transcript || context.finalResponse;
+  }
+  return context.finalResponse;
+}
+
+
 // Multi-turn agentic loop: model calls tools → toolExecutor runs them → results fed back → repeat.
 async function runAgenticLoop(
   system: string,
@@ -464,8 +484,8 @@ async function runOnce(c: EvalCase): Promise<EvalRun> {
   const { system, user } = await c.prompt();
   const extraBody = EVAL_NO_THINKING ? { ...c.extraBody, reasoning_effort: "none" } : c.extraBody;
   let response = "";
+  let transcript = "";
   let toolCalls: ToolCallResult[] = [];
-  let responseForAssertions = "";
   let assertionResults: EvalRun["assertions"] = [];
   let modelDurationMs = 0;
   let usage: LLMUsage = { promptTokens: 0, completionTokens: 0, reasoningTokens: 0 };
@@ -474,8 +494,8 @@ async function runOnce(c: EvalCase): Promise<EvalRun> {
     if (c.toolExecutor) {
       const loop = await runAgenticLoop(system, user, c, extraBody);
       response = loop.finalContent;
+      transcript = loop.transcript;
       toolCalls = loop.allToolCalls;
-      responseForAssertions = loop.transcript;
       modelDurationMs = loop.modelDurationMs;
       usage = loop.usage;
     } else {
@@ -483,9 +503,9 @@ async function runOnce(c: EvalCase): Promise<EvalRun> {
       const result = await callLLM(system, user, { tools: c.tools, priorMessages: c.priorMessages, extraBody });
       modelDurationMs = Date.now() - modelStart;
       response = result.content;
+      transcript = result.content;
       toolCalls = result.toolCalls;
       usage = result.usage;
-      responseForAssertions = toolCalls.length > 0 && !response ? JSON.stringify(toolCalls) : response;
     }
 
     if (!c.observe && c.assert) {
@@ -496,7 +516,8 @@ async function runOnce(c: EvalCase): Promise<EvalRun> {
             const norm = typeof raw === "boolean" ? { passed: raw, reason: raw ? "end-state ok" : "end-state check failed" } : raw;
             return { type: a.type, passed: norm.passed, reason: norm.reason ?? "" };
           }
-          const { passed, reason } = await runAssertion(a, responseForAssertions);
+          const assertionInput = selectAssertionInput(a, { finalResponse: response, transcript, toolCalls });
+          const { passed, reason } = await runAssertion(a, assertionInput);
           return { type: a.type, passed, reason };
         }),
       );
