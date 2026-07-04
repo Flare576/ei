@@ -7,8 +7,8 @@ trust it over this file** if they disagree (the CLI evolves).
 ## Invocation
 
 - Prefer `ei` (on PATH). If it's not found, use `bunx ei-tui` with the same arguments.
-- All output is **JSON**. On success it prints to stdout; on error it prints `{ "error": … }`
-  to stderr and exits non-zero.
+- Successful read/write commands print **JSON** to stdout. Validation and usage failures print
+- human-readable text to stderr and exit non-zero.
 
 ## Reading (safe, do this constantly)
 
@@ -74,10 +74,11 @@ ei create <type> --json '<json>'      # type: fact | topic | person
   `identifiers`).
 - **Returns `{ "id": "…", "record": { … } }` — capture that `id`.** Downstream steps
   (re-pointing quotes) need it.
-- The returned `record` includes a giant `embedding` float array. **Ignore it** — it's an
-  internal search vector, not something you read or manage.
-- **You do not `create` quotes.** Quotes are produced by Ei's extraction from real
-  conversations. You only *update* (re-point / fix) or *remove* them.
+- The returned `record` is already sanitized for CLI/MCP output hygiene — **no `embedding`
+  array is returned** even though Ei computed and stored one internally.
+- **You do not `create` or `remove` quotes through the public Ei CLI/MCP tools.** Quotes are
+  produced by Ei's extraction from real conversations; public curation support for quotes is
+  **update-only** (re-point / fix).
 
 ## Updating — FULL-RECORD ROUND-TRIP (read this twice)
 

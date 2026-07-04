@@ -58,7 +58,7 @@ Four correctable record types (personas are **not** editable here — leave them
 | **person** | someone in the user's life | edit fields; split one into two; merge two into one |
 | **fact** | a fact about the user | correct the value, or remove if wrong |
 | **topic** | a subject/project | correct the description, or remove |
-| **quote** | a real utterance from a conversation | re-point it to the correct person/topic, fix its text, or remove |
+| **quote** | a real utterance from a conversation | re-point it to the correct person/topic, or fix its text; public Ei tools do not create or remove quotes |
 
 **The links that matter:** a **quote** carries a `data_item_ids` array — the ids of the
 people/topics it is attached to. A **person** record, when you read it, shows its
