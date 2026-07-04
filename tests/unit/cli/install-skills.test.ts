@@ -101,7 +101,7 @@ afterAll(() => {
 // module-load-time Bun usage would also be covered — but note installSkillsTo
 // and friends only touch `Bun` inside function bodies, evaluated at call
 // time, so import ordering relative to the stub doesn't actually matter.
-import { installSkillsTo, installClaudeCode, installOmp, installOpenCodePlugin } from "../../../src/cli/install.js";
+import { installSkillsTo, installClaudeCode, installOmp, installOpenCodePlugin, installMcpClients, runInstallStep } from "../../../src/cli/install.js";
 
 // ── test fixture helpers ──────────────────────────────────────────────────────
 
@@ -209,8 +209,8 @@ describe("installSkillsTo", () => {
 // any two processes that happen to run this describe block at the same
 // time (a second agent, a `vitest watch` left running, a re-run overlapping
 // a prior one): each creates/removes its own uniquely-named fixture under
-// the same shared parent, but installSkillsTo's `ls -d skills/*/` lists ALL
-// siblings and then loops copying each — a TOCTOU race against whatever any
+// the same shared parent, but installSkillsTo's fs.readdir(skills/) lists
+// ALL siblings and then loops copying each — a TOCTOU race against whatever
 // other process is concurrently adding/removing there, independent of
 // naming. (Confirmed by deliberately running two concurrent `vitest run`
 // processes against this suite — reproduced the exact "No such file or
@@ -330,5 +330,81 @@ describe("installSkillsTo wiring into installClaudeCode / installOmp / installOp
     const installedSkillMd = join(fakeHome, ".config", "opencode", "skills", fixtureSkillName, "SKILL.md");
     expect(existsSync(installedSkillMd)).toBe(true);
     expect(readFileSync(installedSkillMd, "utf-8")).toBe("wiring fixture content");
+  });
+});
+
+// ── runInstallStep ───────────────────────────────────────────────────────────
+
+describe("runInstallStep", () => {
+  it("returns true and does not warn when the step succeeds", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const ok = await runInstallStep("Test Harness", async () => {});
+      expect(ok).toBe(true);
+      expect(warnSpy).not.toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("returns false and warns instead of throwing when the step rejects with an Error", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const ok = await runInstallStep("Test Harness", async () => {
+        throw new Error("disk full");
+      });
+      expect(ok).toBe(false);
+      expect(warnSpy.mock.calls.some((call) => String(call[0]).includes("Test Harness") && String(call[0]).includes("disk full"))).toBe(true);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("stringifies a non-Error throw instead of crashing on .message", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const ok = await runInstallStep("Test Harness", async () => {
+        throw "plain string failure";
+      });
+      expect(ok).toBe(false);
+      expect(warnSpy.mock.calls.some((call) => String(call[0]).includes("plain string failure"))).toBe(true);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+});
+
+// ── installMcpClients failure isolation ─────────────────────────────────────
+
+describe("installMcpClients failure isolation", () => {
+  it("still attempts every remaining harness after Claude Code's install step throws, then reports an aggregated failure", async () => {
+    const originalHome = process.env.HOME;
+    const root = makeTempDir("ei-mcp-isolation-");
+    // A plain file, not a directory — installClaudeCode's write to
+    // join(home, ".claude.json...") throws deterministically (EEXIST/ENOTDIR
+    // trying to mkdir through a file), without relying on chmod/permission games.
+    const fakeHome = join(root, "not-a-directory");
+    writeFileSync(fakeHome, "i am a file, not a home directory");
+    process.env.HOME = fakeHome;
+
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      await expect(installMcpClients()).rejects.toThrow(/Claude Code/);
+
+      expect(warnSpy.mock.calls.some((call) => String(call[0]).includes("Claude Code install step failed"))).toBe(true);
+      // Proves execution continued past the Claude Code failure instead of
+      // aborting the whole run — every independent harness still got checked.
+      expect(logSpy.mock.calls.some((call) => String(call[0]).includes("Cursor not detected"))).toBe(true);
+      expect(logSpy.mock.calls.some((call) => String(call[0]).includes("OpenCode not detected"))).toBe(true);
+      expect(logSpy.mock.calls.some((call) => String(call[0]).includes("Pi not detected"))).toBe(true);
+      expect(logSpy.mock.calls.some((call) => String(call[0]).includes("OMP not detected"))).toBe(true);
+    } finally {
+      warnSpy.mockRestore();
+      logSpy.mockRestore();
+      if (originalHome === undefined) delete process.env.HOME;
+      else process.env.HOME = originalHome;
+    }
   });
 });

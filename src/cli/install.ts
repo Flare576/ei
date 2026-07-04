@@ -1,4 +1,7 @@
 import { join } from "path";
+import { fileURLToPath } from "url";
+import { homedir } from "os";
+import { cp, mkdir, readdir, rename, rm, stat } from "fs/promises";
 
 /**
  * Copy every skills/<name>/ directory from Ei's own package into a
@@ -17,59 +20,77 @@ import { join } from "path";
  * purely so tests can redirect it at a fixture directory instead.
  */
 export async function installSkillsTo(targetDir: string, sourceDir?: string): Promise<void> {
-  const skillsSourceDir = sourceDir ?? new URL("../../skills", import.meta.url).pathname;
+  // `.pathname` on a file:// URL keeps a leading slash before a Windows
+  // drive letter (`/C:/Users/...`), which fs APIs on Windows do not accept
+  // as an absolute path — fileURLToPath() normalizes it correctly on every OS.
+  const skillsSourceDir = sourceDir ?? fileURLToPath(new URL("../../skills", import.meta.url));
 
-  // Bun.file(dir).exists() reports false for directories (it's designed for
-  // files) — verified by hand — so directory existence is checked the same
-  // way the permission checks below do it: shell out to `test -d`.
-  let sourceExists = true;
+  // Plain fs.stat instead of shelling out to `test -d` — `test` is not a
+  // Bun Shell builtin (it falls back to a PATH lookup), and stock Windows
+  // ships no `test` binary, so the old shell-based check silently treated
+  // every Windows install as "source doesn't exist" and skipped skill
+  // installation with no warning at all.
   try {
-    await Bun.$`test -d ${skillsSourceDir}`.quiet();
+    const sourceStat = await stat(skillsSourceDir);
+    if (!sourceStat.isDirectory()) return;
   } catch {
-    sourceExists = false;
+    // From-source checkout or a package build that predates this feature —
+    // nothing to do yet, and that's not an error.
+    return;
   }
-  // From-source checkout or a package build that predates this feature —
-  // nothing to do yet, and that's not an error.
-  if (!sourceExists) return;
 
-  // `ls -d dir/*/` leans on shell globbing to list only directories,
-  // skipping stray files directly under skills/ (e.g. a top-level
-  // README.md) without needing fs.readdir + manual stat calls. It throws
-  // when there are zero matches (empty skills/, or one containing only
-  // files) — that's "nothing to copy", not a failure.
-  let skillDirs: string[] = [];
-  try {
-    const listing = await Bun.$`ls -d ${skillsSourceDir}/*/`.quiet().text();
-    skillDirs = listing.split("\n").map((line) => line.trim()).filter(Boolean);
-  } catch {
-    skillDirs = [];
-  }
-  if (skillDirs.length === 0) return;
+  // fs.readdir + isDirectory() instead of `ls -d dir/*/` — skips stray files
+  // directly under skills/ (e.g. a top-level README.md) without depending on
+  // Bun Shell's undocumented `-d` flag support or POSIX glob semantics.
+  const entries = await readdir(skillsSourceDir, { withFileTypes: true });
+  const skillNames = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+  if (skillNames.length === 0) return;
 
-  await Bun.$`mkdir -p ${targetDir}`;
+  await mkdir(targetDir, { recursive: true });
 
-  for (const skillDir of skillDirs) {
-    const skillName = skillDir.split("/").filter(Boolean).pop()!;
+  for (const skillName of skillNames) {
     const dest = join(targetDir, skillName);
-    // `cp -r src dest` copies INTO an already-existing dest directory
-    // (nesting dest/skillName/skillName/...) instead of overwriting it in
-    // place — rm -rf first so every run leaves an exact mirror of the
+    // fs.cp merges into an existing dest rather than nesting like a naive
+    // `cp -r` would, but it won't remove files that only exist in a stale
+    // prior copy — clear first so every run leaves an exact mirror of the
     // current source, matching the unconditional full-overwrite behavior
     // every other install* function in this file gets via Bun.write.
-    await Bun.$`rm -rf ${dest}`;
-    await Bun.$`cp -r ${skillDir} ${dest}`;
+    await rm(dest, { recursive: true, force: true });
+    await cp(join(skillsSourceDir, skillName), dest, { recursive: true });
   }
 
-  console.log(`✓ Installed ${skillDirs.length} skill(s) to ${targetDir}`);
+  console.log(`✓ Installed ${skillNames.length} skill(s) to ${targetDir}`);
+}
+
+function resolveHome(): string {
+  // Plain Windows shells (cmd.exe, PowerShell without Git Bash/WSL) don't set
+  // $HOME — os.homedir() reads USERPROFILE there instead. Without this
+  // fallback, `home` silently became the literal string "~", and every
+  // downstream join("~", ...) resolved relative to CWD instead of the user's
+  // actual profile directory.
+  return process.env.HOME || homedir();
+}
+
+export async function runInstallStep(label: string, step: () => Promise<void>): Promise<boolean> {
+  try {
+    await step();
+    return true;
+  } catch (e) {
+    console.warn(`⚠️  ${label} install step failed: ${e instanceof Error ? e.message : String(e)}`);
+    console.warn(`   Skipping — other integrations will still be attempted.`);
+    return false;
+  }
 }
 
 export async function installMcpClients(): Promise<void> {
-  await installClaudeCode();
+  const failures: string[] = [];
 
-  const home = process.env.HOME || "~";
+  if (!(await runInstallStep("Claude Code", installClaudeCode))) failures.push("Claude Code");
+
+  const home = resolveHome();
 
   if (await commandExists("codex")) {
-    await installCodex();
+    if (!(await runInstallStep("Codex", installCodex))) failures.push("Codex");
   } else {
     console.log(`ℹ️  Codex CLI not detected — skipping Codex MCP install.`);
   }
@@ -81,7 +102,7 @@ export async function installMcpClients(): Promise<void> {
   ];
   const hasCursor = (await Promise.all(cursorDataDirs.map((p) => Bun.file(join(p, "User")).exists()))).some(Boolean);
   if (hasCursor) {
-    await installCursor();
+    if (!(await runInstallStep("Cursor", installCursor))) failures.push("Cursor");
   } else {
     console.log(`ℹ️  Cursor not detected — skipping Cursor install.`);
   }
@@ -92,7 +113,7 @@ export async function installMcpClients(): Promise<void> {
     await Bun.file(join(opencodeDir, "opencode.db")).exists();
 
   if (hasOpenCode) {
-    await installOpenCodePlugin();
+    if (!(await runInstallStep("OpenCode plugin", installOpenCodePlugin))) failures.push("OpenCode plugin");
   } else {
     console.log(`ℹ️  OpenCode not detected — skipping OpenCode plugin install.`);
   }
@@ -102,7 +123,7 @@ export async function installMcpClients(): Promise<void> {
     await Bun.file(join(home, ".pi", "agent", "auth.json")).exists();
 
   if (hasPi) {
-    await installPi();
+    if (!(await runInstallStep("Pi extension", installPi))) failures.push("Pi extension");
   } else {
     console.log(`ℹ️  Pi not detected — skipping Pi extension install.`);
   }
@@ -114,9 +135,15 @@ export async function installMcpClients(): Promise<void> {
     await Bun.file(join(home, ".omp", "agent", "agent.db")).exists();
 
   if (hasOmp) {
-    await installOmp();
+    if (!(await runInstallStep("OMP extension", installOmp))) failures.push("OMP extension");
   } else {
     console.log(`ℹ️  OMP not detected — skipping OMP extension install.`);
+  }
+
+  if (failures.length > 0) {
+    throw new Error(
+      `${failures.length} integration(s) failed to install: ${failures.join(", ")}. See warnings above for details.`,
+    );
   }
 }
 
@@ -146,7 +173,7 @@ function hookEntryHasCommand(entry: unknown, command: string): boolean {
 }
 
 async function installCodex(): Promise<void> {
-  const dataPath = process.env.EI_DATA_PATH ?? join(process.env.HOME || "~", ".local", "share", "ei");
+  const dataPath = process.env.EI_DATA_PATH ?? join(resolveHome(), ".local", "share", "ei");
   const proc = Bun.spawn(
     ["codex", "mcp", "add", "ei", "--env", `EI_DATA_PATH=${dataPath}`, "--", "bunx", "ei-tui", "mcp"],
     {
@@ -174,7 +201,7 @@ async function installCodex(): Promise<void> {
 }
 
 async function installCodexHooks(): Promise<void> {
-  const home = process.env.HOME || "~";
+  const home = resolveHome();
   const hooksDir = join(home, ".codex", "hooks");
   const scriptPath = join(hooksDir, "ei-inject.ts");
   const hooksJsonPath = join(home, ".codex", "hooks.json");
@@ -278,7 +305,6 @@ if (import.meta.main) {
 
   const tmpPath = `${hooksJsonPath}.ei-install.tmp`;
   await Bun.write(tmpPath, JSON.stringify(hooksConfig, null, 2) + "\n");
-  const { rename } = await import(/* @vite-ignore */ "fs/promises");
   await rename(tmpPath, hooksJsonPath);
 
   console.log(`✓ Installed Ei Codex context hook to ~/.codex/hooks/ei-inject.ts`);
@@ -286,7 +312,7 @@ if (import.meta.main) {
 }
 
 export async function installClaudeCode(): Promise<void> {
-  const home = process.env.HOME || "~";
+  const home = resolveHome();
   const claudeJsonPath = join(home, ".claude.json");
 
   // Claude Code supports ${VAR} substitution in env values, resolved from its
@@ -315,7 +341,6 @@ export async function installClaudeCode(): Promise<void> {
   // Atomic write: write to temp file then rename to avoid partial writes
   const tmpPath = `${claudeJsonPath}.ei-install.tmp`;
   await Bun.write(tmpPath, JSON.stringify(config, null, 2) + "\n");
-  const { rename } = await import(/* @vite-ignore */ "fs/promises");
   await rename(tmpPath, claudeJsonPath);
 
   console.log(`✓ Installed Ei MCP server to ${claudeJsonPath}`);
@@ -327,7 +352,7 @@ export async function installClaudeCode(): Promise<void> {
 }
 
 async function installClaudeCodeHooks(): Promise<void> {
-  const home = process.env.HOME || "~";
+  const home = resolveHome();
   const hooksDir = join(home, ".claude", "hooks");
   const scriptPath = join(hooksDir, "ei-inject.ts");
   const settingsPath = join(home, ".claude", "settings.json");
@@ -405,14 +430,13 @@ The following items MAY be relevant to your current task — use \\\`ei_search\\
   // Atomic write: write to temp file then rename to avoid partial writes
   const tmpPath = `${settingsPath}.ei-install.tmp`;
   await Bun.write(tmpPath, JSON.stringify(settings, null, 2) + "\n");
-  const { rename } = await import(/* @vite-ignore */ "fs/promises");
   await rename(tmpPath, settingsPath);
 
   console.log(`✓ Installed Ei context hook to ~/.claude/hooks/ei-inject.ts`);
 }
 
 async function installCursor(): Promise<void> {
-  const home = process.env.HOME || "~";
+  const home = resolveHome();
   const cursorJsonPath = join(home, ".cursor", "mcp.json");
 
   // Cursor does not support ${VAR} substitution in mcp.json — literal values only.
@@ -438,7 +462,6 @@ async function installCursor(): Promise<void> {
   await Bun.$`mkdir -p ${join(home, ".cursor")}`;
   const tmpPath = `${cursorJsonPath}.ei-install.tmp`;
   await Bun.write(tmpPath, JSON.stringify(config, null, 2) + "\n");
-  const { rename } = await import(/* @vite-ignore */ "fs/promises");
   await rename(tmpPath, cursorJsonPath);
 
   console.log(`✓ Installed Ei MCP server to ${cursorJsonPath}`);
@@ -448,7 +471,7 @@ async function installCursor(): Promise<void> {
 }
 
 async function installCursorHooks(): Promise<void> {
-  const home = process.env.HOME || "~";
+  const home = resolveHome();
   const hooksDir = join(home, ".cursor", "hooks");
   const rulesDir = join(home, ".cursor", "rules");
   const hookScriptPath = join(hooksDir, "ei-inject.sh");
@@ -509,14 +532,13 @@ exit 0
 
   const tmpPath = `${hooksJsonPath}.ei-install.tmp`;
   await Bun.write(tmpPath, JSON.stringify(hooksConfig, null, 2) + "\n");
-  const { rename } = await import(/* @vite-ignore */ "fs/promises");
   await rename(tmpPath, hooksJsonPath);
 
   console.log(`✓ Installed Ei context hook to ~/.cursor/hooks/ei-inject.sh`);
 }
 
 async function installPi(): Promise<void> {
-  const home = process.env.HOME || "~";
+  const home = resolveHome();
 
   const extensionContent = `import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
@@ -625,7 +647,7 @@ export default function eiIntegration(pi: ExtensionAPI) {
 }
 
 export async function installOmp(): Promise<void> {
-  const home = process.env.HOME || "~";
+  const home = resolveHome();
 
   const extensionContent = `import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { $ } from "bun";
@@ -776,7 +798,7 @@ export default function eiIntegration(pi: ExtensionAPI) {
 }
 
 export async function installOpenCodePlugin(): Promise<void> {
-  const home = process.env.HOME || "~";
+  const home = resolveHome();
   const opencodeDir = join(home, ".config", "opencode");
   const pluginsDir = join(opencodeDir, "plugins");
   const pluginPath = join(pluginsDir, "ei-persona.ts");
@@ -786,11 +808,12 @@ export async function installOpenCodePlugin(): Promise<void> {
   const pluginContent = `import { $ } from "bun"
 import { join } from "path"
 import { appendFileSync } from "fs"
+import { homedir } from "os"
 
 // Deduplication: the Promise itself is re-awaited on subsequent calls (synchronous once resolved).
 const personaFetch = new Map<string, Promise<string | null>>()
 
-const logPath = join(process.env.EI_DATA_PATH ?? join(process.env.HOME ?? "~", ".local", "share", "ei"), "ei-persona-plugin.log")
+const logPath = join(process.env.EI_DATA_PATH ?? join(process.env.HOME ?? homedir(), ".local", "share", "ei"), "ei-persona-plugin.log")
 
 function log(msg: string) {
   try {
