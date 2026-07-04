@@ -36,6 +36,12 @@ export interface EvalCase {
    *   extraBody: { reasoning_effort: "none" }  // disable thinking for Gemma via LM Studio
    */
   extraBody?: Record<string, unknown>;
+  /** If set, runOnce drives a multi-turn agentic loop: the model's tool calls are executed by
+   *  this function and the results fed back into the conversation until the model stops calling
+   *  tools or maxTurns is hit. Absent = the original single-shot path (unchanged). */
+  toolExecutor?: (call: ToolCallResult) => string | Promise<string>;
+  /** Max agentic turns before the loop stops (default 8). Only used when toolExecutor is set. */
+  maxTurns?: number;
 }
 
 export interface ExtractionExpected {
@@ -50,7 +56,8 @@ export type Assertion =
   | { type: "contains-all-of"; field: string; required: string[] }
   | { type: "json-field-length"; field: string; min?: number; max?: number }
   | { type: "extraction-score"; arrayField: string; nameField: string; valueField: string; expected: ExtractionExpected[]; threshold: number }
-  | { type: "tool-calls"; minCalls?: number; maxCalls?: number; requiredTools?: string[]; forbiddenTools?: string[] };
+  | { type: "tool-calls"; minCalls?: number; maxCalls?: number; requiredTools?: string[]; forbiddenTools?: string[] }
+  | { type: "end-state"; name?: string; check: () => boolean | { passed: boolean; reason?: string } | Promise<boolean | { passed: boolean; reason?: string }> };
 
 export interface ToolCallResult {
   id: string;
@@ -385,48 +392,118 @@ async function runAssertion(
   return { passed: false, reason: `Unknown assertion type` };
 }
 
+function renderTranscript(messages: LLMMessage[]): string {
+  return messages
+    .map((m) => {
+      if (m.role === "assistant") {
+        const calls = (m.tool_calls ?? [])
+          .map((t) => `  → ${t.function.name}(${t.function.arguments})`)
+          .join("\n");
+        return `ASSISTANT: ${m.content ?? ""}${calls ? "\n" + calls : ""}`;
+      }
+      if (m.role === "tool") return `TOOL[${m.name}] → ${m.content ?? ""}`;
+      return `${m.role.toUpperCase()}: ${m.content ?? ""}`;
+    })
+    .join("\n\n");
+}
+
+// Multi-turn agentic loop: model calls tools → toolExecutor runs them → results fed back → repeat.
+async function runAgenticLoop(
+  system: string,
+  user: string,
+  c: EvalCase,
+  extraBody: Record<string, unknown> | undefined,
+): Promise<{ finalContent: string; allToolCalls: ToolCallResult[]; transcript: string; modelDurationMs: number; usage: LLMUsage }> {
+  const messages: LLMMessage[] = [...(c.priorMessages ?? [])];
+  if (user) messages.push({ role: "user", content: user });
+  const allToolCalls: ToolCallResult[] = [];
+  let finalContent = "";
+  let modelDurationMs = 0;
+  const usage: LLMUsage = { promptTokens: 0, completionTokens: 0, reasoningTokens: 0 };
+  const maxTurns = c.maxTurns ?? 8;
+
+  for (let turn = 0; turn < maxTurns; turn++) {
+    const ms = Date.now();
+    const r = await callLLM(system, "", { tools: c.tools, priorMessages: messages, extraBody });
+    modelDurationMs += Date.now() - ms;
+    usage.promptTokens += r.usage.promptTokens;
+    usage.completionTokens += r.usage.completionTokens;
+    usage.reasoningTokens += r.usage.reasoningTokens;
+    finalContent = r.content;
+
+    const assistantMsg: LLMMessage = { role: "assistant" };
+    if (r.content) assistantMsg.content = r.content;
+    if (r.toolCalls.length) {
+      assistantMsg.tool_calls = r.toolCalls.map((tc) => ({
+        id: tc.id,
+        type: "function",
+        function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
+      }));
+    }
+    messages.push(assistantMsg);
+
+    if (!r.toolCalls.length) break; // model is done — no more tool calls
+
+    for (const call of r.toolCalls) {
+      allToolCalls.push(call);
+      let result: string;
+      try {
+        result = await c.toolExecutor!(call);
+      } catch (e) {
+        result = JSON.stringify({ error: e instanceof Error ? e.message : String(e) });
+      }
+      messages.push({ role: "tool", tool_call_id: call.id, name: call.name, content: result });
+    }
+  }
+
+  return { finalContent, allToolCalls, transcript: renderTranscript(messages), modelDurationMs, usage };
+}
+
 async function runOnce(c: EvalCase): Promise<EvalRun> {
   const start = Date.now();
   const { system, user } = await c.prompt();
+  const extraBody = EVAL_NO_THINKING ? { ...c.extraBody, reasoning_effort: "none" } : c.extraBody;
   let response = "";
   let toolCalls: ToolCallResult[] = [];
+  let responseForAssertions = "";
   let assertionResults: EvalRun["assertions"] = [];
   let modelDurationMs = 0;
   let usage: LLMUsage = { promptTokens: 0, completionTokens: 0, reasoningTokens: 0 };
 
   try {
-    const modelStart = Date.now();
-    const result = await callLLM(system, user, {
-      tools: c.tools,
-      priorMessages: c.priorMessages,
-      extraBody: EVAL_NO_THINKING
-        ? { ...c.extraBody, reasoning_effort: "none" }
-        : c.extraBody,
-    });
-    modelDurationMs = Date.now() - modelStart;
-    response = result.content;
-    toolCalls = result.toolCalls;
-    usage = result.usage;
-
-    const responseForAssertions = toolCalls.length > 0 && !response
-      ? JSON.stringify(toolCalls)
-      : response;
+    if (c.toolExecutor) {
+      const loop = await runAgenticLoop(system, user, c, extraBody);
+      response = loop.finalContent;
+      toolCalls = loop.allToolCalls;
+      responseForAssertions = loop.transcript;
+      modelDurationMs = loop.modelDurationMs;
+      usage = loop.usage;
+    } else {
+      const modelStart = Date.now();
+      const result = await callLLM(system, user, { tools: c.tools, priorMessages: c.priorMessages, extraBody });
+      modelDurationMs = Date.now() - modelStart;
+      response = result.content;
+      toolCalls = result.toolCalls;
+      usage = result.usage;
+      responseForAssertions = toolCalls.length > 0 && !response ? JSON.stringify(toolCalls) : response;
+    }
 
     if (!c.observe && c.assert) {
       assertionResults = await Promise.all(
         c.assert.map(async (a) => {
+          if (a.type === "end-state") {
+            const raw = await a.check();
+            const norm = typeof raw === "boolean" ? { passed: raw, reason: raw ? "end-state ok" : "end-state check failed" } : raw;
+            return { type: a.type, passed: norm.passed, reason: norm.reason ?? "" };
+          }
           const { passed, reason } = await runAssertion(a, responseForAssertions);
           return { type: a.type, passed, reason };
-        })
+        }),
       );
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    assertionResults = (c.assert ?? []).map((a) => ({
-      type: a.type,
-      passed: false,
-      reason: msg,
-    }));
+    assertionResults = (c.assert ?? []).map((a) => ({ type: a.type, passed: false, reason: msg }));
   }
 
   return {
