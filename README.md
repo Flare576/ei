@@ -37,6 +37,10 @@ Ei can import sessions from your coding tools and extract what you've been worki
 
 Supported tools: OpenCode, Claude Code, Cursor, Codex, and Pi/OMP. Full setup in the [TUI README → Coding Tool Integrations](./tui/README.md#coding-tool-integrations).
 
+Agents aren't read-only anymore. After `ei --install`, your coding agents get `ei_create`, `ei_update`, and `ei_remove` MCP tools alongside the existing search/lookup tools — they can correct bad extracted data, split merged records, and repoint mis-attributed quotes without you hand-editing JSON. For guided, verified curation, the `ei-curate` skill (also installed by `ei --install`) provides explicit confirmation before every write.
+
+`ei --install` installs: MCP config, context injection hooks, the `ei-curate` skill (and any future shipped skills) into your harness's skill discovery directory, plus a persona identity plugin where supported.
+
 ## Document Import
 
 Got notes, journals, markdown files? You can feed them directly to Ei.
