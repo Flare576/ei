@@ -445,6 +445,32 @@ Seeded on every startup via `Processor.bootstrapTools()`. Safe to call repeatedl
 
 ---
 
+## Corrections Queue
+
+External agents write to Ei's knowledge base through a validated corrections path — never directly to `state.json`.
+
+### How it works
+
+1. **Write**: `ei create/update/remove` (CLI) or `ei_create/ei_update/ei_remove` (MCP tools) validate the input against Zod schemas and append a correction record to `$EI_DATA_PATH/corrections.json`.
+2. **Drain**: The Processor reads and applies pending corrections on every runLoop tick, merging them into the live StateManager. No TUI restart required.
+3. **Atomicity**: `corrections.json` is a JSON array written under a file lock — concurrent writers serialize safely.
+
+### Type support
+
+| Operation | fact | topic | person | quote |
+|-----------|------|-------|--------|-------|
+| create | yes | yes | yes | — |
+| update | yes | yes | yes | yes |
+| remove | yes | yes | yes | — |
+
+Quotes enter only through the extraction pipeline (verifiable-origin data). They can be updated to repoint `data_item_ids` after a split/merge or to fix mistranscribed text, but not created or removed externally.
+
+### Shipped skill
+
+`ei-curate` — installed by `ei --install` into your harness's skill discovery directory — provides safe, verified workflows for agent-driven curation on top of these primitives. It requires confirmation before every write and refuses to guess on ambiguous attributions. Load it with `/ei-curate`. Source: `skills/ei-curate/SKILL.md`.
+
+---
+
 ## Room Modes — Terminology and Flow
 
 This section captures design intent that isn't obvious from the code.
