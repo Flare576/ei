@@ -19,12 +19,13 @@
  * draining is a pure apply, never a fetch-then-merge.
  */
 
-import type { HumanEntity, Fact, Topic, Person, Quote } from "./types.js";
+import type { HumanEntity, Fact, Topic, Person, Quote, PersonaEntity, StorageState } from "./types.js";
+import { isReservedPersonaId } from "./types.js";
 import { withLock, atomicWrite } from "../storage/file-lock.js";
 
-export type CorrectableType = "fact" | "topic" | "person" | "quote";
-export type CorrectableEntity = Fact | Topic | Person | Quote;
-export const CORRECTABLE_TYPES: CorrectableType[] = ["fact", "topic", "person", "quote"];
+export type CorrectableType = "fact" | "topic" | "person" | "quote" | "persona";
+export type CorrectableEntity = Fact | Topic | Person | Quote | PersonaEntity;
+export const CORRECTABLE_TYPES: CorrectableType[] = ["fact", "topic", "person", "quote", "persona"];
 
 export interface CorrectionUpsert {
   op: "upsert";
@@ -184,5 +185,49 @@ export function applyCorrectionToHuman(human: HumanEntity, correction: Correctio
 export function applyCorrectionsToHuman(human: HumanEntity, corrections: CorrectionRecord[]): void {
   for (const correction of corrections) {
     applyCorrectionToHuman(human, correction);
+  }
+}
+
+/**
+ * Apply one correction to a StorageState's personas map in place. Personas
+ * live outside HumanEntity — src/core/types/integrations.ts's StorageState.personas
+ * is a top-level `Record<id, {entity, messages}>` — so they need their own
+ * apply function rather than routing through getCorrectableArray/
+ * applyCorrectionToHuman, which only ever resolve arrays on HumanEntity.
+ *
+ * The reserved-persona delete guard here is defense-in-depth for a
+ * hand-edited corrections.json: the primary guard is the SYNCHRONOUS check
+ * in src/cli/persona-corrections.ts's removePersonaEntity, which runs
+ * before a correction is ever queued (so a live-drained rejection here can
+ * never surface as a silent no-op after an apparent CLI success).
+ */
+export function applyCorrectionToPersonas(personas: StorageState["personas"], correction: CorrectionRecord): void {
+  assertValidCorrection(correction);
+  if (correction.op === "remove") {
+    if (isReservedPersonaId(correction.id)) {
+      throw new Error(`Cannot delete reserved persona "${correction.id}". Use archive instead.`);
+    }
+    delete personas[correction.id];
+    return;
+  }
+  personas[correction.id] = {
+    entity: correction.record as PersonaEntity,
+    messages: personas[correction.id]?.messages ?? [],
+  };
+}
+
+/** Route one correction to its target: the personas map for entity_type "persona", the HumanEntity for everything else. */
+export function applyCorrectionToState(state: StorageState, correction: CorrectionRecord): void {
+  if (correction.entity_type === "persona") {
+    applyCorrectionToPersonas(state.personas, correction);
+  } else {
+    applyCorrectionToHuman(state.human, correction);
+  }
+}
+
+/** Apply every pending correction to a StorageState, in file order (later records for the same id win). */
+export function applyCorrectionsToState(state: StorageState, corrections: CorrectionRecord[]): void {
+  for (const correction of corrections) {
+    applyCorrectionToState(state, correction);
   }
 }

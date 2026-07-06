@@ -28,7 +28,7 @@ import { join } from "path";
 import { readFile, access } from "fs/promises";
 import { getDataPath } from "./retrieval.js";
 import { withLock, atomicWrite } from "../storage/file-lock.js";
-import { appendCorrection, readCorrections, applyCorrectionsToHuman } from "../core/corrections.js";
+import { appendCorrection, readCorrections, applyCorrectionsToState } from "../core/corrections.js";
 import type { CorrectionRecord } from "../core/corrections.js";
 import { encodeAllEmbeddings, decodeAllEmbeddings } from "../storage/embeddings.js";
 import type { StorageState } from "../core/types.js";
@@ -125,7 +125,7 @@ export async function writeCorrection(record: CorrectionRecord): Promise<void> {
       const state = decodeAllEmbeddings(JSON.parse(text) as StorageState);
 
       const pending = await readCorrections(correctionsPath);
-      applyCorrectionsToHuman(state.human, [...pending, record]);
+      applyCorrectionsToState(state, [...pending, record]);
       state.timestamp = new Date().toISOString();
 
       // State write happens before the queue clear: if we crash in between,

@@ -2,10 +2,11 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import { applyCorrectionToHuman, applyCorrectionsToHuman, assertValidCorrection } from "../../../src/core/corrections.js";
+import { applyCorrectionToHuman, applyCorrectionsToHuman, applyCorrectionToPersonas, applyCorrectionToState, applyCorrectionsToState, assertValidCorrection } from "../../../src/core/corrections.js";
 import { loadLatestState } from "../../../src/cli/retrieval.js";
 import type { CorrectionRecord } from "../../../src/core/corrections.js";
-import type { Fact, Topic, Person, Quote, HumanEntity, StorageState } from "../../../src/core/types.js";
+import type { Fact, Topic, Person, Quote, HumanEntity, StorageState, PersonaEntity, Message } from "../../../src/core/types.js";
+import { RESERVED_PERSONA_IDS, ContextStatus } from "../../../src/core/types.js";
 
 const NOW = "2026-01-01T00:00:00Z";
 const EMBEDDING = [1, 2, 3];
@@ -89,6 +90,44 @@ function makeState(human: HumanEntity): StorageState {
     timestamp: NOW,
     human,
     personas: {},
+    queue: [],
+    providers: [],
+    tools: [],
+  };
+}
+
+function makePersonaEntity(id: string, overrides: Partial<PersonaEntity> = {}): PersonaEntity {
+  return {
+    id,
+    display_name: `Persona ${id}`,
+    entity: "system",
+    traits: [],
+    topics: [],
+    is_paused: false,
+    is_archived: false,
+    is_static: false,
+    last_updated: NOW,
+    ...overrides,
+  };
+}
+
+function makeMessage(id: string): Message {
+  return {
+    id,
+    role: "human",
+    content: `message ${id}`,
+    timestamp: NOW,
+    read: true,
+    context_status: ContextStatus.Default,
+  };
+}
+
+function makeStateWithPersonas(personas: StorageState["personas"]): StorageState {
+  return {
+    version: 1,
+    timestamp: NOW,
+    human: makeHuman(),
+    personas,
     queue: [],
     providers: [],
     tools: [],
@@ -425,5 +464,142 @@ describe("applyCorrectionToHuman — quote upsert (insert vs replace-by-id)", ()
     });
 
     expect(human.quotes).toEqual([after, other]);
+  });
+});
+
+describe("applyCorrectionToPersonas — upsert/remove against StorageState.personas", () => {
+  it("creates a persona entry with messages: [] on upsert into an empty personas map", () => {
+    const personas: StorageState["personas"] = {};
+    const entity = makePersonaEntity("persona-1");
+
+    applyCorrectionToPersonas(personas, {
+      op: "upsert",
+      entity_type: "persona",
+      id: entity.id,
+      record: entity,
+      timestamp: NOW,
+    });
+
+    expect(personas["persona-1"]).toEqual({ entity, messages: [] });
+  });
+
+  it("preserves the persona's existing messages array untouched while replacing entity wholesale on upsert", () => {
+    const oldEntity = makePersonaEntity("persona-1", { display_name: "Old Name", aliases: ["Old Alias"] });
+    const existingMessages = [makeMessage("m1"), makeMessage("m2")];
+    const personas: StorageState["personas"] = {
+      "persona-1": { entity: oldEntity, messages: existingMessages },
+    };
+    const newEntity = makePersonaEntity("persona-1", { display_name: "New Name" });
+
+    applyCorrectionToPersonas(personas, {
+      op: "upsert",
+      entity_type: "persona",
+      id: "persona-1",
+      record: newEntity,
+      timestamp: NOW,
+    });
+
+    expect(personas["persona-1"].messages).toBe(existingMessages);
+    expect(personas["persona-1"].entity).toEqual(newEntity);
+    expect(personas["persona-1"].entity).not.toHaveProperty("aliases");
+  });
+
+  it("deletes the persona map entry on remove", () => {
+    const entity = makePersonaEntity("persona-1");
+    const personas: StorageState["personas"] = {
+      "persona-1": { entity, messages: [] },
+    };
+
+    applyCorrectionToPersonas(personas, {
+      op: "remove",
+      entity_type: "persona",
+      id: "persona-1",
+      timestamp: NOW,
+    });
+
+    expect(personas["persona-1"]).toBeUndefined();
+  });
+
+  it.each(RESERVED_PERSONA_IDS)(
+    "throws the exact reserved-persona message and never deletes when removing reserved id %s (defense-in-depth)",
+    (reservedId) => {
+      const entity = makePersonaEntity(reservedId, { display_name: reservedId });
+      const personas: StorageState["personas"] = {
+        [reservedId]: { entity, messages: [] },
+      };
+
+      expect(() =>
+        applyCorrectionToPersonas(personas, {
+          op: "remove",
+          entity_type: "persona",
+          id: reservedId,
+          timestamp: NOW,
+        })
+      ).toThrow(`Cannot delete reserved persona "${reservedId}". Use archive instead.`);
+
+      expect(personas[reservedId]).toBeDefined();
+    }
+  );
+});
+
+describe("applyCorrectionToState — routing personas vs human", () => {
+  it("routes a persona correction to the personas map, leaving the human entity untouched", () => {
+    const state = makeStateWithPersonas({});
+    const entity = makePersonaEntity("persona-1");
+
+    applyCorrectionToState(state, {
+      op: "upsert",
+      entity_type: "persona",
+      id: entity.id,
+      record: entity,
+      timestamp: NOW,
+    });
+
+    expect(state.personas["persona-1"]).toEqual({ entity, messages: [] });
+    expect(state.human.facts).toEqual([]);
+  });
+
+  it("routes a fact correction to the human entity, leaving the personas map untouched", () => {
+    const state = makeStateWithPersonas({});
+    const fact = makeFact("fact-1");
+
+    applyCorrectionToState(state, {
+      op: "upsert",
+      entity_type: "fact",
+      id: fact.id,
+      record: fact,
+      timestamp: NOW,
+    });
+
+    expect(state.human.facts).toEqual([fact]);
+    expect(state.personas).toEqual({});
+  });
+});
+
+describe("applyCorrectionsToState — mixed-type batch in file order", () => {
+  it("applies a persona upsert and a fact upsert from the same batch to their respective targets", () => {
+    const state = makeStateWithPersonas({});
+    const entity = makePersonaEntity("persona-1");
+    const fact = makeFact("fact-1");
+
+    applyCorrectionsToState(state, [
+      { op: "upsert", entity_type: "persona", id: entity.id, record: entity, timestamp: NOW },
+      { op: "upsert", entity_type: "fact", id: fact.id, record: fact, timestamp: NOW },
+    ]);
+
+    expect(state.personas["persona-1"]).toEqual({ entity, messages: [] });
+    expect(state.human.facts).toEqual([fact]);
+  });
+
+  it("lets a later persona remove delete a persona upserted earlier in the same batch", () => {
+    const state = makeStateWithPersonas({});
+    const entity = makePersonaEntity("persona-1");
+
+    applyCorrectionsToState(state, [
+      { op: "upsert", entity_type: "persona", id: entity.id, record: entity, timestamp: NOW },
+      { op: "remove", entity_type: "persona", id: entity.id, timestamp: NOW },
+    ]);
+
+    expect(state.personas["persona-1"]).toBeUndefined();
   });
 });
