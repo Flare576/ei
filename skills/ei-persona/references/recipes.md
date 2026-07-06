@@ -144,7 +144,7 @@ in X."
 2. Draft the full creation payload: `display_name` plus whichever of
    `short_description`, `long_description`, `traits`, `topics`, `model`, `group_primary`,
    `groups_visible`, `tools` the user wants set at creation (for `tools`, see Recipe I
-   below and the registry in `references/cli.md`). Omit `id` on every trait/topic —
+   below and `references/cli.md`'s "Tool grants" section). Omit `id` on every trait/topic —
    auto-assigned.
 3. Confirm the plan in plain language (name + character summary) before writing.
 4. `ei create persona --json '<payload>'` → **capture the returned `id`.**
@@ -202,21 +202,32 @@ search the web" / "[persona] shouldn't be able to read my files anymore."
 
 **Steps:**
 
-1. `ei --id <persona-id>` → read the full record. Look at the existing `tools[]` (it may
-   be empty or absent).
-2. Confirm with the user the **exact tool id** being granted or revoked — check it against
-   the registry in `references/cli.md`, don't guess a plausible-sounding name. If the
-   capability implies a provider (`tavily` or `spotify`) the user hasn't mentioned
-   configuring, ask whether they've set that provider up in Ei first: granting a tool id
-   for a disabled/unconfigured provider is a no-op, and the user deserves to know that
-   before you write it.
-3. Build the new `tools[]`: append the tool id (grant) or filter it out (revoke). Leave
-   every other field untouched.
-4. `ei update persona <persona-id> --json '<full record with tools[] changed>'`.
-5. Verify: re-read, confirm `tools[]` holds exactly the ids you intended. Tell the user
-   this only changes what **that persona** can do the next time a human chats with it
+1. `ei --id <persona-id>` → read the full record. Look at the `tools` map — every tool
+   belonging to every currently-**enabled** provider, `true`/`false` for whether this
+   persona has it granted right now. This read **is** the full menu of what's grantable —
+   there's no separate enumeration step. A provider the human hasn't finished configuring
+   (e.g. Spotify before OAuth) simply won't appear in the map at all.
+2. Find the provider block and tool key matching what the user described — e.g. "Spotify"
+   → `"Currently Playing Track"`. If you don't recognize a capability the user named
+   anywhere in the map — including because the provider itself isn't in the map — say so
+   plainly (name what's missing) and ask what they meant. Don't guess a plausible-sounding
+   display name.
+3. Flip that **one** boolean — `false → true` to grant, `true → false` to revoke. Leave
+   every other entry in the map, and the rest of the record, exactly as you read it. (A
+   persona that has never had a Spotify tool before looks the same as any other case here:
+   its Spotify entries just read all-`false` until you flip the one the user asked for.)
+4. `ei update persona <persona-id> --json '<full record with that one tools entry
+   flipped>'`.
+5. Verify: re-read, confirm the entry you flipped shows the value you intended and every
+   other entry in `tools` — and every other field on the record — is unchanged. Tell the
+   user this only changes what **that persona** can do the next time a human chats with it
    inside Ei's TUI or web client — it has no effect on your own tool access in this
    session, or anything else about the current harness.
+
+> **An unresolvable provider or tool name is rejected, not a silent no-op.** If step 4
+> fails with a validation error, a name in your payload didn't match anything real — don't
+> retry with a guessed alternate spelling. Tell the user exactly what the error said, and
+> re-read the persona (step 1) to get the real names before trying again.
 
 ---
 

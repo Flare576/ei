@@ -41,9 +41,9 @@ is_archived, archived_at,              # setting is_archived is how you archive/
                                         # there is no separate archive verb
 heartbeat_delay_ms, context_window_ms,
 include_message_timestamps, context_boundary,
-tools: [ "…" ],                        # tool ids from Ei's own built-in registry the
-                                        # PERSONA may call — see "Tool grants" below (not
-                                        # related to your own tool access)
+tools: { "<Provider>": { "<Tool>": true|false } }, # a map (not an id list) of every tool
+                                        # on every currently-enabled provider — see "Tool
+                                        # grants" below (not related to your own tool access)
 avatar_emoji, avatar_image,
 preferred_theme,
 notes: [ "…" ],
@@ -95,44 +95,51 @@ don't invent or hand-edit them:
 `create` and `update`. Renaming an existing persona *into* a reserved name is rejected
 exactly like creating one with that name.
 
-## Tool grants (`tools[]`)
+## Tool grants (`tools`)
 
-`tools[]` is a list of **tool ids from Ei's own built-in tool registry** — this has
-nothing to do with whatever tools *you* (the agent reading this file, via MCP or any other
-mechanism your own harness uses) have access to. Granting a tool id here means: the next
-time a **human** talks to **that persona** inside Ei's TUI or web client, the persona may
-call that tool mid-conversation. It has no effect on, and no relationship to, your own tool
-access in this session — a completely separate mechanism.
+`tools` is a **map you read, flip, and write back** — not a list of ids you have to know
+in advance, and there's no separate step to enumerate what exists: a read of the persona
+**is** the live menu of what's grantable right now. A real read looks like this:
 
-The current registry, grouped by provider (accurate as of this writing; see the caveat
-below):
+```json
+{
+  "Ei Built-ins": { "Web Fetch": false, "Find Memory": true },
+  "Spotify": { "Currently Playing Track": false, "Liked Songs": false }
+}
+```
 
-**`ei`** — always enabled, no configuration needed:
-- `find_memory`, `fetch_memory`, `fetch_message` — runtime `any` (works in both Web and TUI)
-- `file_read`, `list_directory`, `directory_tree`, `search_files`, `grep`, `get_file_info` —
-  runtime `node` (TUI only)
-- `web_fetch` — runtime `node` (TUI only)
+- **Outer keys** are provider display names — but only for providers that are currently
+  **enabled**. A disabled provider (e.g. Spotify before the human finishes OAuth) does not
+  appear in the map at all — not present-with-everything-false, just absent. Its tools stay
+  invisible, and ungrantable, until the human enables it.
+- **Inner keys** are every tool belonging to that enabled provider, `true` if **this
+  persona** currently has it granted, `false` if not.
+- This has nothing to do with whatever tools *you* (the agent reading this file, via MCP or
+  any other mechanism your own harness uses) have access to. A `true` here means: the next
+  time a **human** talks to **that persona** inside Ei's TUI or web client, the persona may
+  call that tool mid-conversation.
+- Trust the map from a fresh read over anything written down anywhere, including this file
+  — the set of providers and tools can change over time.
 
-**`tavily`** — disabled by default; the human must configure a Tavily API key first:
-- `tavily_web_search`, `tavily_news_search` — runtime `any`
+### Writing (grant/revoke)
 
-**`spotify`** — disabled by default; the human must complete Spotify OAuth first:
-- `get_currently_playing`, `get_liked_songs` — runtime `any`
+`create`/`update` take the **exact same map shape** back — the full-record round-trip rule
+(below) applied to `tools` specifically:
 
-`runtime: "any"` tools work in both the Web and TUI clients. `runtime: "node"` tools only
-work in the TUI — they exist in the registry either way, but a Web-client call to one
-errors or no-ops rather than running.
+1. Read the persona; look at its `tools` map.
+2. Flip the one boolean you mean to change (`false → true` to grant, `true → false` to
+   revoke).
+3. Send the **whole** map back, inside the whole record, unchanged apart from that flip.
 
-**There is no live command to enumerate tool ids today.** The list above is accurate as of
-this writing, but the registry can grow over time — trust a fresh read of the live system
-over this file if they disagree. If a user asks to grant a capability that isn't one of the
-ids above, say so plainly and ask what they mean; don't guess a plausible-sounding id (e.g.
-don't invent `search_web` when the real id is `tavily_web_search`).
+A key you omit from the map isn't "left unchanged" the way a patch would treat it — but
+since a disabled provider was never in your read to begin with, everything you can see on a
+read is everything you round-trip; there's no hidden state you can accidentally drop.
 
-Granting a tool id for `tavily` or `spotify` when the human hasn't configured that provider
-is a **no-op** — the tool stays unusable regardless of what's in a persona's `tools[]`. If
-a request implies one of those providers and you have no evidence it's configured, ask
-before writing.
+**An unresolvable provider or tool display name is rejected, not a silent no-op.** If a name
+in your write payload doesn't match anything real — a typo, a renamed tool, a provider that
+no longer exists — the write fails with a clear validation error; it does not silently
+ignore the bad key and apply the rest. **Never hand-retype a provider or tool name from
+memory** — only use names that came from an actual read of this exact persona.
 
 ## Creating
 

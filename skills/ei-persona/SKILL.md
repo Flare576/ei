@@ -96,15 +96,22 @@ people/quotes). It has:
 | **traits** (`traits[]`) | named character traits, each with a sentiment and optional strength | add / adjust / remove an entry |
 | **topics** (`topics[]`) | subjects the persona has a stance on — perspective, approach, personal stake | add / adjust / remove an entry |
 | **lifecycle flags** | `is_paused`, `is_archived`, etc. | flip via a normal update |
-| **tool grants** (`tools[]`) | which of Ei's own built-in tools this persona may call **during its own conversations inside Ei** | grant/revoke via a normal update |
+| **tool grants** (`tools`) | a map of every tool on each currently-**enabled** provider, `true`/`false` per tool for whether this persona has it granted | read the map, flip the boolean(s), write the whole map back |
 
-**Tool grants are not about you.** `tools[]` has nothing to do with whatever tools *you* —
-the agent running this skill — can reach (MCP, your own harness's toolset). It's a list of
-ids from Ei's own built-in tool registry (`references/cli.md` has the current list) that
-the **persona itself** may call mid-conversation, the next time a human talks to it inside
-Ei's TUI or web client. Example: "give DJ Spotify access so she can answer 'what are you
-listening to'" means granting DJ the `get_currently_playing` tool id — it says nothing
-about what tools are available to you, right now, in this session.
+**Tool grants are not about you.** `tools` has nothing to do with whatever tools *you* —
+the agent running this skill — can reach (MCP, your own harness's toolset). On a read,
+`tools` is a **map**: `{ "<Provider Display Name>": { "<Tool Display Name>": true|false } }`,
+covering every tool belonging to every currently-**enabled** provider, with `true`/`false`
+for whether **this persona** may call it. A disabled provider (e.g. Spotify before the
+human finishes OAuth) simply isn't in the map — there's nothing to grant until it's
+enabled, and the map you read is the full, live menu of what *is* grantable right now.
+Granting a tool means: read the map, flip the one boolean you mean to change, write the
+whole map back. Example: "give DJ Spotify access so she can answer 'what are you listening
+to'" means reading DJ's record, finding `"Spotify": { "Currently Playing Track": false,
+... }` in the `tools` map, flipping `"Currently Playing Track"` to `true`, and writing the
+whole record back — it says nothing about what tools are available to you, right now, in
+this session. If `"Spotify"` isn't in the map at all, the human hasn't finished connecting
+it in Ei yet.
 
 Full CRUD is in scope here — **create**, **update**, and **remove** — unlike
 `ei-curate`'s quote carve-out (quotes are evidence of real events and can't be
