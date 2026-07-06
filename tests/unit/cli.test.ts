@@ -69,7 +69,7 @@ describe("CLI CRUD process behavior", () => {
     const result = runCli(["create", "not-a-type", "--json", "{}"]);
 
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("ei create requires a valid type (fact, topic, person). Got: not-a-type");
+    expect(result.stderr).toContain("ei create requires a valid type (fact, topic, person, persona). Got: not-a-type");
   });
 
   it("exits non-zero and requires --json for create", () => {
@@ -101,7 +101,7 @@ describe("CLI CRUD process behavior", () => {
     const result = runCli(["remove", "fact"]);
 
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("Usage: ei remove <type> <id> (types: fact, topic, person)");
+    expect(result.stderr).toContain("Usage: ei remove <type> <id> (types: fact, topic, person, persona)");
   });
 
   it("creates a fact and prints the generated id with the requested record", () => {
@@ -133,14 +133,14 @@ describe("CLI CRUD process behavior", () => {
     const result = runCli(["create", "quote", "--json", "{}"]);
 
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("ei create requires a valid type (fact, topic, person). Got: quote");
+    expect(result.stderr).toContain("ei create requires a valid type (fact, topic, person, persona). Got: quote");
   });
 
   it("exits non-zero and rejects quote as an invalid type for remove (quotes are non-removable)", () => {
     const result = runCli(["remove", "quote", "some-id"]);
 
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("Usage: ei remove <type> <id> (types: fact, topic, person)");
+    expect(result.stderr).toContain("Usage: ei remove <type> <id> (types: fact, topic, person, persona)");
   });
 
   it("resolves quote as a valid type for update and reaches the quote not-found error (not a type-usage error)", () => {

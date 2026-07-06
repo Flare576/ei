@@ -18,6 +18,7 @@ import { resolvePersonaId, filterByPersona, filterTypeSpecificByPersona, filterB
 import { installMcpClients } from "./cli/install.js";
 import { getRecentSessionMessages } from "./cli/session-context.js";
 import { createEntity, updateEntity, removeEntity, CorrectionValidationError, CORRECTABLE_TYPES, UPDATABLE_TYPES } from "./cli/corrections-endpoints.js";
+import { createPersonaEntity, updatePersonaEntity, removePersonaEntity } from "./cli/persona-corrections.js";
 import type { CorrectableType } from "./core/corrections.js";
 import pkg from "../package.json" assert { type: "json" };
 
@@ -40,12 +41,19 @@ const TYPE_ALIASES: Record<string, string> = {
   personas: "personas",
 };
 
+// Wider set accepted by `ei create/update/remove persona` — corrections-endpoints.ts's
+// CORRECTABLE_TYPES/UPDATABLE_TYPES intentionally stay persona-free (personas bypass
+// that module's shared SCHEMAS dispatch entirely, see persona-corrections.ts), so this
+// CLI-only layer is what actually widens the accepted type set.
+const CLI_CORRECTABLE_TYPES = [...CORRECTABLE_TYPES, "persona"] as const;
+const CLI_UPDATABLE_TYPES = [...UPDATABLE_TYPES, "persona"] as const;
+
 // Singular CorrectableType resolution for `ei create/update/remove` — derived
-// from TYPE_ALIASES + CORRECTABLE_TYPES so the two alias systems can never
+// from TYPE_ALIASES + CLI_CORRECTABLE_TYPES so the two alias systems can never
 // silently diverge on which strings are accepted (e.g. "person"/"people"
 // stay synonymous here too, since both funnel through TYPE_ALIASES first).
 const PLURAL_TO_CORRECTABLE: Record<string, CorrectableType> = Object.fromEntries(
-  CORRECTABLE_TYPES.map((t) => [TYPE_ALIASES[t], t])
+  CLI_CORRECTABLE_TYPES.map((t) => [TYPE_ALIASES[t], t])
 );
 
 function resolveCorrectableType(raw: string): CorrectableType | null {
@@ -54,12 +62,12 @@ function resolveCorrectableType(raw: string): CorrectableType | null {
 }
 
 // Plural CorrectableType resolution for `ei update` — same TYPE_ALIASES
-// lookup as resolveCorrectableType above, but sourced from UPDATABLE_TYPES
-// instead of CORRECTABLE_TYPES since quotes are correctable via update
+// lookup as resolveCorrectableType above, but sourced from CLI_UPDATABLE_TYPES
+// instead of CLI_CORRECTABLE_TYPES since quotes are correctable via update
 // (repointing data_item_ids after a split/merge, fixing mistranscribed
 // text) but never created or removed.
 const PLURAL_TO_UPDATABLE: Record<string, CorrectableType> = Object.fromEntries(
-  UPDATABLE_TYPES.map((t) => [TYPE_ALIASES[t], t])
+  CLI_UPDATABLE_TYPES.map((t) => [TYPE_ALIASES[t], t])
 );
 function resolveUpdatableType(raw: string): CorrectableType | null {
   const plural = TYPE_ALIASES[raw];
@@ -83,9 +91,9 @@ Usage:
   ei --id <id>                  Look up a specific entity by ID
   echo <id> | ei --id           Look up entity by ID from stdin
   ei mcp                        Start the Ei MCP stdio server (for Claude Code/Cursor/Codex)
-  ei create <type> --json '<json>'  Create a new entity (fact/topic/person)
-  ei update <type> <id> --json '<json>'  Replace an entity by ID (full record, not a patch; fact/topic/person/quote)
-  ei remove <type> <id>         Remove an entity by ID
+  ei create <type> --json '<json>'  Create a new entity (fact/topic/person/persona)
+  ei update <type> <id> --json '<json>'  Replace an entity by ID (full record, not a patch; fact/topic/person/quote/persona)
+  ei remove <type> <id>         Remove an entity by ID (fact/topic/person/persona; not quotes)
 
 Types:
   quote / quotes      Quotes from conversation history
@@ -121,6 +129,9 @@ Examples:
   ei create fact --json '{"name":"Field of Study","description":"CS","sentiment":0,"validated_date":""}'
   ei update fact abc-123 --json '{"name":"Field of Study","description":"Updated","sentiment":0,"validated_date":""}'
   ei update quote <id> --json '{"data_item_ids":["person-b-id"], ...}'  # Repoint a quote after splitting a bad merge (fetch the full record via 'ei --id <id>' first)
+  ei create persona --json '{"display_name":"Yoda","long_description":"Speaks in inverted syntax, wise and patient.","traits":[{"name":"Inverted speech","description":"Talks like Yoda","sentiment":0.7}],"topics":[]}'
+  ei update persona <id> --json '<full persona record from ei --id <id>, edited>'
+  ei remove persona abc-123              # Remove a persona (reserved personas like "ei"/"emmet" must be archived instead)
   ei remove fact abc-123                 # Remove a fact by ID
 `);
 }
@@ -186,7 +197,7 @@ async function main(): Promise<void> {
     const rawType = args[1];
     const entityType = rawType ? resolveCorrectableType(rawType) : null;
     if (!entityType) {
-      console.error(`ei create requires a valid type (${CORRECTABLE_TYPES.join(", ")}). Got: ${rawType ?? "(none)"}`);
+      console.error(`ei create requires a valid type (${CLI_CORRECTABLE_TYPES.join(", ")}). Got: ${rawType ?? "(none)"}`);
       process.exit(1);
     }
     const jsonIdx = args.indexOf("--json");
@@ -203,7 +214,7 @@ async function main(): Promise<void> {
       process.exit(1);
     }
     try {
-      const result = await createEntity(entityType, body);
+      const result = entityType === "persona" ? await createPersonaEntity(body) : await createEntity(entityType, body);
       console.log(JSON.stringify(result, null, 2));
       process.exit(0);
     } catch (e) {
@@ -217,7 +228,7 @@ async function main(): Promise<void> {
     const id = args[2];
     const entityType = rawType ? resolveUpdatableType(rawType) : null;
     if (!entityType || !id) {
-      console.error(`Usage: ei update <type> <id> --json '<json>' (types: ${UPDATABLE_TYPES.join(", ")})`);
+      console.error(`Usage: ei update <type> <id> --json '<json>' (types: ${CLI_UPDATABLE_TYPES.join(", ")})`);
       process.exit(1);
     }
     const jsonIdx = args.indexOf("--json");
@@ -234,7 +245,7 @@ async function main(): Promise<void> {
       process.exit(1);
     }
     try {
-      const record = await updateEntity(entityType, id, body);
+      const record = entityType === "persona" ? await updatePersonaEntity(id, body) : await updateEntity(entityType, id, body);
       console.log(JSON.stringify(record, null, 2));
       process.exit(0);
     } catch (e) {
@@ -248,11 +259,15 @@ async function main(): Promise<void> {
     const id = args[2];
     const entityType = rawType ? resolveCorrectableType(rawType) : null;
     if (!entityType || !id) {
-      console.error(`Usage: ei remove <type> <id> (types: ${CORRECTABLE_TYPES.join(", ")})`);
+      console.error(`Usage: ei remove <type> <id> (types: ${CLI_CORRECTABLE_TYPES.join(", ")})`);
       process.exit(1);
     }
     try {
-      await removeEntity(entityType, id);
+      if (entityType === "persona") {
+        await removePersonaEntity(id);
+      } else {
+        await removeEntity(entityType, id);
+      }
       console.log(JSON.stringify({ removed: true, id }, null, 2));
       process.exit(0);
     } catch (e) {
