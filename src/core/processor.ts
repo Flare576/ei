@@ -23,6 +23,7 @@ import {
   type ToolDefinition,
   type ToolProvider,
 } from "./types.js";
+import { isReservedPersonaId } from "./types.js";
 import { buildPersonaFromPersonPrompt } from "../prompts/index.js";
 import { buildSiblingAwarenessSection } from "../prompts/room/index.js";
 import type { PersonaGenerationResult } from "../prompts/generation/types.js";
@@ -805,12 +806,33 @@ const toolNextSteps = new Set([
       } else {
         this.stateManager.human_person_remove(record.id);
       }
-    } else {
+    } else if (record.entity_type === "quote") {
       if (record.op === "upsert") {
         this.stateManager.human_quote_upsert(record.record as Quote);
       } else {
         this.stateManager.human_quote_remove(record.id);
       }
+    } else if (record.entity_type === "persona") {
+      if (record.op === "upsert") {
+        const existing = this.stateManager.persona_getById(record.id);
+        if (existing) {
+          this.stateManager.persona_update(record.id, record.record as PersonaEntity);
+        } else {
+          this.stateManager.persona_add(record.record as PersonaEntity);
+        }
+      } else {
+        // Defense in depth — this should never reach here since the
+        // synchronous write-time guard in src/cli/persona-corrections.ts's
+        // removePersonaEntity already rejects a reserved id before ever
+        // queuing the correction. corrections.json is external input,
+        // though, and could theoretically be hand-edited to bypass that.
+        if (isReservedPersonaId(record.id)) {
+          throw new Error(`Cannot delete reserved persona "${record.id}". Use archive instead.`);
+        }
+        this.stateManager.persona_delete(record.id);
+      }
+    } else {
+      throw new Error(`Unrecognized correction entity_type: ${JSON.stringify(record)}`);
     }
   }
 

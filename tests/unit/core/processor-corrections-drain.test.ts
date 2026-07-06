@@ -3,7 +3,8 @@ import { mkdtempSync, rmSync, readFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { Processor } from "../../../src/core/processor.js";
-import type { Ei_Interface, Fact, Person, Quote } from "../../../src/core/types.js";
+import type { Ei_Interface, Fact, Person, Quote, PersonaEntity } from "../../../src/core/types.js";
+import { RESERVED_PERSONA_IDS } from "../../../src/core/types.js";
 import type { CorrectionRecord } from "../../../src/core/corrections.js";
 import { appendCorrection } from "../../../src/core/corrections.js";
 
@@ -139,6 +140,28 @@ function makeQuote(overrides: Partial<Quote> = {}): Quote {
     created_at: new Date().toISOString(),
     created_by: "human",
     embedding: [0.4, 0.5, 0.6],
+    ...overrides,
+  };
+}
+
+// is_paused defaults to true: a freshly-added persona has no messages, so
+// Processor's own background runLoop (which start() kicks off for real,
+// alongside our explicit drainCorrections() calls below) would otherwise
+// treat it as immediately overdue for a heartbeat and call persona_update
+// on it out-of-band, corrupting the persona_add/persona_update spy counts
+// these tests assert on. Paused personas are skipped by that check.
+function makePersonaEntity(id: string, overrides: Partial<PersonaEntity> = {}): PersonaEntity {
+  return {
+    id,
+    display_name: `Persona ${id}`,
+    entity: "system",
+    aliases: [`Persona ${id}`],
+    traits: [],
+    topics: [],
+    is_paused: true,
+    is_archived: false,
+    is_static: false,
+    last_updated: new Date().toISOString(),
     ...overrides,
   };
 }
@@ -411,5 +434,136 @@ describe("Processor.drainCorrections() (live-side corrections drain)", () => {
     const human = processor.getStateManager().getHuman();
     expect(human.quotes).toHaveLength(1);
     expect(human.quotes[0].data_item_ids).toEqual(["split-person"]);
+  });
+
+  it("applies a pending Persona upsert for a new id via persona_add, not persona_update", async () => {
+    const correctionsPath = join(dataDir, "corrections.json");
+    const persona = makePersonaEntity("persona-new");
+
+    await appendCorrection(correctionsPath, {
+      op: "upsert",
+      entity_type: "persona",
+      id: persona.id,
+      record: persona,
+      timestamp: new Date().toISOString(),
+    });
+
+    processor = new Processor(mock.ei);
+    await processor.start(storage as unknown as Parameters<Processor["start"]>[0]);
+    const sm = processor.getStateManager();
+    const addSpy = vi.spyOn(sm, "persona_add");
+    const updateSpy = vi.spyOn(sm, "persona_update");
+
+    await asDrainable(processor).drainCorrections();
+
+    expect(addSpy).toHaveBeenCalledTimes(1);
+    expect(addSpy).toHaveBeenCalledWith(persona);
+    expect(updateSpy).not.toHaveBeenCalled();
+    expect(sm.persona_getById("persona-new")).toEqual(persona);
+  });
+
+  it("applies a pending Persona upsert for an existing id via persona_update with the full record, not persona_add and not a partial merge", async () => {
+    const correctionsPath = join(dataDir, "corrections.json");
+    const originalPersona = makePersonaEntity("persona-existing", {
+      display_name: "Original Name",
+      aliases: ["Original Alias"],
+      group_primary: "OriginalGroup",
+    });
+
+    processor = new Processor(mock.ei);
+    await processor.start(storage as unknown as Parameters<Processor["start"]>[0]);
+    const sm = processor.getStateManager();
+    sm.persona_add(originalPersona);
+
+    // Deliberately omits aliases/group_primary entirely -- not merely setting
+    // them to undefined -- so a wholesale-replace dispatch is distinguishable
+    // from a diff/patch that would only touch display_name.
+    const updatedPersona = makePersonaEntity("persona-existing", { display_name: "Updated Name" });
+
+    await appendCorrection(correctionsPath, {
+      op: "upsert",
+      entity_type: "persona",
+      id: updatedPersona.id,
+      record: updatedPersona,
+      timestamp: new Date().toISOString(),
+    });
+
+    const addSpy = vi.spyOn(sm, "persona_add");
+    const updateSpy = vi.spyOn(sm, "persona_update");
+
+    await asDrainable(processor).drainCorrections();
+
+    expect(updateSpy).toHaveBeenCalledTimes(1);
+    expect(updateSpy).toHaveBeenCalledWith("persona-existing", updatedPersona);
+    expect(addSpy).not.toHaveBeenCalled();
+    expect(sm.persona_getById("persona-existing")!.display_name).toBe("Updated Name");
+  });
+
+  it.each(RESERVED_PERSONA_IDS)(
+    "drops a Persona remove correction for reserved id %s via console.error, never calling persona_delete, and leaves it in state",
+    async (reservedId) => {
+      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const correctionsPath = join(dataDir, "corrections.json");
+
+      processor = new Processor(mock.ei);
+      await processor.start(storage as unknown as Parameters<Processor["start"]>[0]);
+      const sm = processor.getStateManager();
+
+      // "ei" already exists from bootstrapFirstRun; "emmet" only gets
+      // created lazily via bootstrapEmmett(), so seed it here to exercise a
+      // real delete attempt against a live record rather than an absent key.
+      if (!sm.persona_getById(reservedId)) {
+        sm.persona_add(makePersonaEntity(reservedId, { display_name: reservedId }));
+      }
+
+      const deleteSpy = vi.spyOn(sm, "persona_delete");
+
+      await appendCorrection(correctionsPath, {
+        op: "remove",
+        entity_type: "persona",
+        id: reservedId,
+        timestamp: new Date().toISOString(),
+      });
+
+      await asDrainable(processor).drainCorrections();
+
+      expect(deleteSpy).toHaveBeenCalledTimes(0);
+      expect(sm.persona_getById(reservedId)).not.toBeNull();
+      expect(consoleErrorSpy).toHaveBeenCalled();
+      const matchingCall = consoleErrorSpy.mock.calls.find(
+        (call) =>
+          call[2] instanceof Error &&
+          (call[2] as Error).message === `Cannot delete reserved persona "${reservedId}". Use archive instead.`
+      );
+      expect(matchingCall).toBeDefined();
+
+      const remaining = readFileSync(correctionsPath, "utf-8");
+      expect(JSON.parse(remaining)).toEqual([]);
+
+      consoleErrorSpy.mockRestore();
+    }
+  );
+
+  it("applies a Persona remove for a non-reserved id via persona_delete", async () => {
+    const correctionsPath = join(dataDir, "corrections.json");
+
+    processor = new Processor(mock.ei);
+    await processor.start(storage as unknown as Parameters<Processor["start"]>[0]);
+    const sm = processor.getStateManager();
+    sm.persona_add(makePersonaEntity("persona-removable"));
+
+    const deleteSpy = vi.spyOn(sm, "persona_delete");
+
+    await appendCorrection(correctionsPath, {
+      op: "remove",
+      entity_type: "persona",
+      id: "persona-removable",
+      timestamp: new Date().toISOString(),
+    });
+    await asDrainable(processor).drainCorrections();
+
+    expect(deleteSpy).toHaveBeenCalledTimes(1);
+    expect(deleteSpy).toHaveBeenCalledWith("persona-removable");
+    expect(sm.persona_getById("persona-removable")).toBeNull();
   });
 });
