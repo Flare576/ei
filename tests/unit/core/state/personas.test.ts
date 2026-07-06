@@ -112,6 +112,98 @@ describe("PersonaState", () => {
     });
   });
 
+  describe("replace", () => {
+    const makeFullPersona = (id: string): PersonaEntity => ({
+      ...makePersona("FullBot", id),
+      aliases: ["FullBot", "Full Alias"],
+      long_description: "A long description with lots of detail",
+      description_embedding: [0.1, 0.2, 0.3],
+      last_heartbeat: new Date().toISOString(),
+      pending_update: {
+        short_description: "pending short",
+        long_description: "pending long",
+        traits: [],
+        topics: [],
+        critique: "pending critique",
+        created_at: new Date().toISOString(),
+      },
+    });
+
+    const makeBarePersona = (id: string, overrides: Partial<PersonaEntity> = {}): PersonaEntity => ({
+      id,
+      display_name: "Replaced Name",
+      entity: "system",
+      traits: [],
+      topics: [],
+      is_paused: false,
+      is_archived: false,
+      is_static: false,
+      last_updated: new Date().toISOString(),
+      ...overrides,
+    });
+
+    it("returns false for a non-existent persona", () => {
+      expect(state.replace("nonexistent", makeBarePersona("nonexistent"))).toBe(false);
+    });
+
+    it("fully replaces the entity: fields genuinely absent from the new entity do NOT survive from the old one", () => {
+      const persona = makeFullPersona("persona-1");
+      state.add(persona);
+
+      // makeBarePersona deliberately omits aliases/long_description/
+      // description_embedding/pending_update/last_heartbeat entirely (not
+      // merely undefined-valued) to prove a genuine full replace, not a merge.
+      const result = state.replace("persona-1", makeBarePersona("persona-1"));
+      const stored = state.getById("persona-1")!;
+
+      expect(result).toBe(true);
+      expect(stored.display_name).toBe("Replaced Name");
+      expect(stored.aliases).toBeUndefined();
+      expect(stored.long_description).toBeUndefined();
+      expect(stored.description_embedding).toBeUndefined();
+      expect(stored.pending_update).toBeUndefined();
+      expect(stored.last_heartbeat).toBeUndefined();
+    });
+
+    it("preserves messages untouched, same as update()", () => {
+      const persona = makeFullPersona("persona-2");
+      state.add(persona);
+      state.messages_append("persona-2", makeMessage("hello"));
+
+      state.replace("persona-2", makeBarePersona("persona-2"));
+
+      expect(state.messages_get("persona-2")).toHaveLength(1);
+    });
+
+    it("sets a fresh last_updated timestamp, not the one on the incoming entity", () => {
+      const persona = makeFullPersona("persona-3");
+      state.add(persona);
+
+      const staleTimestamp = "2000-01-01T00:00:00.000Z";
+      state.replace("persona-3", makeBarePersona("persona-3", { last_updated: staleTimestamp }));
+
+      expect(state.getById("persona-3")!.last_updated).not.toBe(staleTimestamp);
+    });
+
+    it("contrast with update(): on identical fixtures, update() preserves omitted fields via shallow merge while replace() drops them", () => {
+      const persona = makeFullPersona("persona-4");
+      state.add(persona);
+
+      // Partial<PersonaEntity> update with only display_name set -- update()
+      // must NOT touch aliases/long_description/description_embedding/pending_update.
+      state.update("persona-4", { display_name: "Merged Name" });
+
+      const stored = state.getById("persona-4")!;
+      expect(stored.display_name).toBe("Merged Name");
+      expect(stored.aliases).toEqual(["FullBot", "Full Alias"]);
+      expect(stored.long_description).toBe("A long description with lots of detail");
+      expect(stored.description_embedding).toEqual([0.1, 0.2, 0.3]);
+      expect(stored.pending_update).toBeDefined();
+      expect(stored.pending_update!.short_description).toBe("pending short");
+      expect(stored.last_heartbeat).toBeDefined();
+    });
+  });
+
   describe("messages", () => {
     let personaId: string;
     

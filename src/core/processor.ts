@@ -816,7 +816,7 @@ const toolNextSteps = new Set([
       if (record.op === "upsert") {
         const existing = this.stateManager.persona_getById(record.id);
         if (existing) {
-          this.stateManager.persona_update(record.id, record.record as PersonaEntity);
+          this.stateManager.persona_replace(record.id, record.record as PersonaEntity);
         } else {
           this.stateManager.persona_add(record.record as PersonaEntity);
         }

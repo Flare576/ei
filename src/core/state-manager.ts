@@ -763,6 +763,12 @@ export class StateManager {
     return result;
   }
 
+  persona_replace(personaId: string, entity: PersonaEntity): boolean {
+    const result = this.personaState.replace(personaId, entity);
+    this.scheduleSave();
+    return result;
+  }
+
   persona_archive(personaId: string): boolean {
     const result = this.personaState.archive(personaId);
     this.scheduleSave();

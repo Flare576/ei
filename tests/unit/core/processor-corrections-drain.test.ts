@@ -3,10 +3,10 @@ import { mkdtempSync, rmSync, readFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { Processor } from "../../../src/core/processor.js";
-import type { Ei_Interface, Fact, Person, Quote, PersonaEntity } from "../../../src/core/types.js";
+import type { Ei_Interface, Fact, Person, Quote, PersonaEntity, Message } from "../../../src/core/types.js";
 import { RESERVED_PERSONA_IDS } from "../../../src/core/types.js";
 import type { CorrectionRecord } from "../../../src/core/corrections.js";
-import { appendCorrection } from "../../../src/core/corrections.js";
+import { appendCorrection, applyCorrectionToPersonas } from "../../../src/core/corrections.js";
 
 /**
  * Tests for Processor.drainCorrections() (private, invoked from the
@@ -462,7 +462,7 @@ describe("Processor.drainCorrections() (live-side corrections drain)", () => {
     expect(sm.persona_getById("persona-new")).toEqual(persona);
   });
 
-  it("applies a pending Persona upsert for an existing id via persona_update with the full record, not persona_add and not a partial merge", async () => {
+  it("applies a pending Persona upsert for an existing id via persona_replace with the full record, never persona_update, and drops fields absent from the record", async () => {
     const correctionsPath = join(dataDir, "corrections.json");
     const originalPersona = makePersonaEntity("persona-existing", {
       display_name: "Original Name",
@@ -475,10 +475,19 @@ describe("Processor.drainCorrections() (live-side corrections drain)", () => {
     const sm = processor.getStateManager();
     sm.persona_add(originalPersona);
 
-    // Deliberately omits aliases/group_primary entirely -- not merely setting
-    // them to undefined -- so a wholesale-replace dispatch is distinguishable
-    // from a diff/patch that would only touch display_name.
-    const updatedPersona = makePersonaEntity("persona-existing", { display_name: "Updated Name" });
+    // Explicitly override aliases to undefined and never set group_primary
+    // at all -- both get stripped entirely by JSON.stringify when this
+    // record round-trips through corrections.json, so the record the drain
+    // actually reads back genuinely lacks these keys (not merely `undefined`
+    // in a way a spread-merge could paper over). This makes a genuine
+    // full-replace dispatch distinguishable from a diff/patch that would
+    // only touch display_name, and means a regression back to a shallow
+    // merge (persona_update) would leave the stale aliases/group_primary
+    // behind instead of dropping them.
+    const updatedPersona = makePersonaEntity("persona-existing", {
+      display_name: "Updated Name",
+      aliases: undefined,
+    });
 
     await appendCorrection(correctionsPath, {
       op: "upsert",
@@ -489,14 +498,152 @@ describe("Processor.drainCorrections() (live-side corrections drain)", () => {
     });
 
     const addSpy = vi.spyOn(sm, "persona_add");
+    const replaceSpy = vi.spyOn(sm, "persona_replace");
     const updateSpy = vi.spyOn(sm, "persona_update");
 
     await asDrainable(processor).drainCorrections();
 
-    expect(updateSpy).toHaveBeenCalledTimes(1);
-    expect(updateSpy).toHaveBeenCalledWith("persona-existing", updatedPersona);
+    expect(replaceSpy).toHaveBeenCalledTimes(1);
+    expect(replaceSpy).toHaveBeenCalledWith("persona-existing", updatedPersona);
+    expect(updateSpy).not.toHaveBeenCalled();
     expect(addSpy).not.toHaveBeenCalled();
-    expect(sm.persona_getById("persona-existing")!.display_name).toBe("Updated Name");
+
+    const stored = sm.persona_getById("persona-existing")!;
+    expect(stored.display_name).toBe("Updated Name");
+    // The actual behavioral guarantee I2 protects: fields absent from the
+    // incoming record must not survive from the prior stored entity.
+    expect(stored.aliases).toBeUndefined();
+    expect(stored.group_primary).toBeUndefined();
+  });
+
+  it("T2: live-drain (persona_replace) and self-drain (applyCorrectionToPersonas) produce equivalent final entities for the same upsert record, differing only in last_updated", async () => {
+    const correctionsPath = join(dataDir, "corrections.json");
+    const originalPersona = makePersonaEntity("persona-parity", {
+      display_name: "Original Name",
+      aliases: ["Original Alias"],
+      long_description: "Original long description",
+      description_embedding: [0.1, 0.2, 0.3],
+      last_heartbeat: new Date().toISOString(),
+      pending_update: {
+        short_description: "pending short",
+        long_description: "pending long",
+        traits: [],
+        topics: [],
+        critique: "pending critique",
+        created_at: new Date().toISOString(),
+      },
+    });
+
+    // Omits aliases/long_description/description_embedding/pending_update/
+    // last_heartbeat entirely (and drops undefined-valued aliases via the
+    // JSON round trip on the live path) -- the same correction record must
+    // mean the same thing on both the self-drain and live-drain paths.
+    const updatedPersona = makePersonaEntity("persona-parity", {
+      display_name: "Updated Name",
+      aliases: undefined,
+    });
+    const correction: CorrectionRecord = {
+      op: "upsert",
+      entity_type: "persona",
+      id: updatedPersona.id,
+      record: updatedPersona,
+      timestamp: new Date().toISOString(),
+    };
+
+    // Self-drain path: applyCorrectionToPersonas mutates a bare personas
+    // map directly (src/core/corrections.ts), independent of any Processor.
+    const selfDrainPersonas: Record<string, { entity: PersonaEntity; messages: Message[] }> = {
+      [originalPersona.id]: { entity: originalPersona, messages: [] },
+    };
+    applyCorrectionToPersonas(selfDrainPersonas, correction);
+    const selfDrainEntity = selfDrainPersonas[originalPersona.id].entity;
+
+    // Live-drain path: Processor.drainCorrections() -> applyCorrectionRecord -> persona_replace.
+    processor = new Processor(mock.ei);
+    await processor.start(storage as unknown as Parameters<Processor["start"]>[0]);
+    const sm = processor.getStateManager();
+    sm.persona_add(originalPersona);
+
+    await appendCorrection(correctionsPath, correction);
+    await asDrainable(processor).drainCorrections();
+
+    const liveDrainEntity = sm.persona_getById(originalPersona.id)!;
+
+    const { last_updated: selfLastUpdated, ...selfRest } = selfDrainEntity;
+    const { last_updated: liveLastUpdated, ...liveRest } = liveDrainEntity;
+
+    // Equivalent everywhere except the intentionally volatile last_updated
+    // timestamp (self-drain reuses the record's own last_updated verbatim;
+    // live-drain's persona_replace stamps a fresh one).
+    expect(liveRest).toEqual(selfRest);
+    expect(typeof selfLastUpdated).toBe("string");
+    expect(typeof liveLastUpdated).toBe("string");
+
+    // Both paths must have actually dropped the omitted fields, not merely
+    // matched each other while both silently preserved stale data.
+    expect(liveRest.aliases).toBeUndefined();
+    expect(liveRest.long_description).toBeUndefined();
+    expect(liveRest.description_embedding).toBeUndefined();
+    expect(liveRest.pending_update).toBeUndefined();
+    expect(liveRest.last_heartbeat).toBeUndefined();
+  });
+
+  it("T6: a queued persona upsert and a queued persona remove in the same drain batch are both correctly applied via persona_add/persona_replace and persona_delete", async () => {
+    const correctionsPath = join(dataDir, "corrections.json");
+
+    processor = new Processor(mock.ei);
+    await processor.start(storage as unknown as Parameters<Processor["start"]>[0]);
+    const sm = processor.getStateManager();
+
+    // Seed a persona to be removed, and one to be upserted-in-place, so the
+    // same drain batch exercises both add and remove for personas that
+    // aren't the freshly-created new-id case already covered above.
+    sm.persona_add(makePersonaEntity("persona-to-remove"));
+    sm.persona_add(makePersonaEntity("persona-to-update", { display_name: "Before" }));
+
+    const newPersona = makePersonaEntity("persona-brand-new");
+    const updatedPersona = makePersonaEntity("persona-to-update", { display_name: "After" });
+
+    await appendCorrection(correctionsPath, {
+      op: "remove",
+      entity_type: "persona",
+      id: "persona-to-remove",
+      timestamp: new Date().toISOString(),
+    });
+    await appendCorrection(correctionsPath, {
+      op: "upsert",
+      entity_type: "persona",
+      id: newPersona.id,
+      record: newPersona,
+      timestamp: new Date().toISOString(),
+    });
+    await appendCorrection(correctionsPath, {
+      op: "upsert",
+      entity_type: "persona",
+      id: updatedPersona.id,
+      record: updatedPersona,
+      timestamp: new Date().toISOString(),
+    });
+
+    const addSpy = vi.spyOn(sm, "persona_add");
+    const replaceSpy = vi.spyOn(sm, "persona_replace");
+    const deleteSpy = vi.spyOn(sm, "persona_delete");
+
+    await asDrainable(processor).drainCorrections();
+
+    expect(deleteSpy).toHaveBeenCalledTimes(1);
+    expect(deleteSpy).toHaveBeenCalledWith("persona-to-remove");
+    expect(addSpy).toHaveBeenCalledTimes(1);
+    expect(addSpy).toHaveBeenCalledWith(newPersona);
+    expect(replaceSpy).toHaveBeenCalledTimes(1);
+    expect(replaceSpy).toHaveBeenCalledWith("persona-to-update", updatedPersona);
+
+    expect(sm.persona_getById("persona-to-remove")).toBeNull();
+    expect(sm.persona_getById("persona-brand-new")).toEqual(newPersona);
+    expect(sm.persona_getById("persona-to-update")!.display_name).toBe("After");
+
+    const remaining = readFileSync(correctionsPath, "utf-8");
+    expect(JSON.parse(remaining)).toEqual([]);
   });
 
   it.each(RESERVED_PERSONA_IDS)(

@@ -80,6 +80,14 @@ export class PersonaState {
     return true;
   }
 
+  /** Full replace of a persona's entity (not a merge) — used by the live-drain path for corrections-queue upserts, where record.record is already a complete PersonaEntity and any field genuinely absent from it must NOT survive from the prior value. Preserves .messages untouched, same as update(). */
+  replace(personaId: string, entity: PersonaEntity): boolean {
+    const data = this.personas.get(personaId);
+    if (!data) return false;
+    data.entity = { ...entity, last_updated: new Date().toISOString() };
+    return true;
+  }
+
   archive(personaId: string): boolean {
     const data = this.personas.get(personaId);
     if (!data) return false;
