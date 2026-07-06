@@ -7,13 +7,24 @@ vi.mock("../../../src/cli/retrieval.js", () => ({
   lookupById: vi.fn().mockResolvedValue(null),
 }));
 
-const { MockCorrectionValidationError, mockCreateEntity, mockUpdateEntity, mockRemoveEntity } = vi.hoisted(() => {
+const {
+  MockCorrectionValidationError,
+  mockCreateEntity,
+  mockUpdateEntity,
+  mockRemoveEntity,
+  mockCreatePersonaEntity,
+  mockUpdatePersonaEntity,
+  mockRemovePersonaEntity,
+} = vi.hoisted(() => {
   class MockCorrectionValidationError extends Error {}
   return {
     MockCorrectionValidationError,
     mockCreateEntity: vi.fn(),
     mockUpdateEntity: vi.fn(),
     mockRemoveEntity: vi.fn(),
+    mockCreatePersonaEntity: vi.fn(),
+    mockUpdatePersonaEntity: vi.fn(),
+    mockRemovePersonaEntity: vi.fn(),
   };
 });
 
@@ -22,6 +33,12 @@ vi.mock("../../../src/cli/corrections-endpoints.js", () => ({
   updateEntity: mockUpdateEntity,
   removeEntity: mockRemoveEntity,
   CorrectionValidationError: MockCorrectionValidationError,
+}));
+
+vi.mock("../../../src/cli/persona-corrections.js", () => ({
+  createPersonaEntity: mockCreatePersonaEntity,
+  updatePersonaEntity: mockUpdatePersonaEntity,
+  removePersonaEntity: mockRemovePersonaEntity,
 }));
 
 
@@ -193,5 +210,81 @@ describe("MCP server", () => {
     const content = result.content as Array<{ type: string; text: string }>;
     expect(content[0].text).toContain("entity_type");
     expect(mockRemoveEntity.mock.calls.length).toBe(callsBefore);
+  });
+
+  it("ei_create with entity_type 'persona' dispatches to createPersonaEntity and returns id+record", async () => {
+    mockCreatePersonaEntity.mockResolvedValueOnce({
+      id: "persona-new",
+      record: { id: "persona-new", display_name: "New Persona" },
+    });
+    const createEntityCallsBefore = mockCreateEntity.mock.calls.length;
+    ({ client } = await setupClient());
+    const result = await client.callTool({
+      name: "ei_create",
+      arguments: { entity_type: "persona", data: { display_name: "New Persona" } },
+    });
+    const content = result.content as Array<{ type: string; text: string }>;
+    const parsed = JSON.parse(content[0].text);
+    expect(parsed.id).toBe("persona-new");
+    expect(parsed.record.display_name).toBe("New Persona");
+    expect(mockCreatePersonaEntity).toHaveBeenCalledWith({ display_name: "New Persona" });
+    expect(mockCreateEntity.mock.calls.length).toBe(createEntityCallsBefore);
+  });
+
+  it("ei_update with entity_type 'persona' dispatches to updatePersonaEntity and returns the updated record", async () => {
+    mockUpdatePersonaEntity.mockResolvedValueOnce({ id: "persona-1", display_name: "Updated Persona" });
+    const updateEntityCallsBefore = mockUpdateEntity.mock.calls.length;
+    ({ client } = await setupClient());
+    const result = await client.callTool({
+      name: "ei_update",
+      arguments: { entity_type: "persona", id: "persona-1", data: { display_name: "Updated Persona" } },
+    });
+    const content = result.content as Array<{ type: string; text: string }>;
+    const parsed = JSON.parse(content[0].text);
+    expect(parsed.display_name).toBe("Updated Persona");
+    expect(mockUpdatePersonaEntity).toHaveBeenCalledWith("persona-1", { display_name: "Updated Persona" });
+    expect(mockUpdateEntity.mock.calls.length).toBe(updateEntityCallsBefore);
+  });
+
+  it("ei_remove with entity_type 'persona' dispatches to removePersonaEntity and returns {removed: true, id}", async () => {
+    mockRemovePersonaEntity.mockResolvedValueOnce(undefined);
+    const removeEntityCallsBefore = mockRemoveEntity.mock.calls.length;
+    ({ client } = await setupClient());
+    const result = await client.callTool({ name: "ei_remove", arguments: { entity_type: "persona", id: "persona-1" } });
+    const content = result.content as Array<{ type: string; text: string }>;
+    const parsed = JSON.parse(content[0].text);
+    expect(parsed).toEqual({ removed: true, id: "persona-1" });
+    expect(mockRemovePersonaEntity).toHaveBeenCalledWith("persona-1");
+    expect(mockRemoveEntity.mock.calls.length).toBe(removeEntityCallsBefore);
+  });
+
+  it("ei_create with entity_type 'persona' surfaces a CorrectionValidationError (missing display_name) as isError: true", async () => {
+    mockCreatePersonaEntity.mockRejectedValueOnce(
+      new MockCorrectionValidationError("Invalid persona: display_name: Required")
+    );
+    ({ client } = await setupClient());
+    const result = await client.callTool({ name: "ei_create", arguments: { entity_type: "persona", data: {} } });
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0].text).toContain("Error: Invalid persona: display_name: Required");
+    expect(result.isError).toBe(true);
+  });
+
+  it("ei_remove with entity_type 'persona' and id 'ei' returns isError: true with the exact reserved-persona message", async () => {
+    mockRemovePersonaEntity.mockRejectedValueOnce(new Error('Cannot delete reserved persona "ei". Use archive instead.'));
+    ({ client } = await setupClient());
+    const result = await client.callTool({ name: "ei_remove", arguments: { entity_type: "persona", id: "ei" } });
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0].text).toBe('Error: Cannot delete reserved persona "ei". Use archive instead.');
+    expect(result.isError).toBe(true);
+  });
+
+  it("ei_remove with entity_type 'persona' and id 'emmet' returns isError: true with the exact reserved-persona message", async () => {
+    mockRemovePersonaEntity.mockRejectedValueOnce(new Error('Cannot delete reserved persona "emmet". Use archive instead.'));
+    ({ client } = await setupClient());
+    const result = await client.callTool({ name: "ei_remove", arguments: { entity_type: "persona", id: "emmet" } });
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0].text).toBe('Error: Cannot delete reserved persona "emmet". Use archive instead.');
+    expect(result.isError).toBe(true);
+    expect(mockRemovePersonaEntity).toHaveBeenCalledWith("emmet");
   });
 });

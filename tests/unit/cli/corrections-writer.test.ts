@@ -6,7 +6,7 @@ import { writeCorrection } from "../../../src/cli/corrections-writer.js";
 import { appendCorrection } from "../../../src/core/corrections.js";
 import { acquireLock, releaseLock } from "../../../src/storage/file-lock.js";
 import type { CorrectionRecord } from "../../../src/core/corrections.js";
-import type { Fact, Topic, Quote, StorageState } from "../../../src/core/types.js";
+import type { Fact, Topic, Quote, PersonaEntity, Message, StorageState } from "../../../src/core/types.js";
 
 const NOW = "2026-01-01T00:00:00Z";
 
@@ -53,10 +53,26 @@ function makeQuote(data_item_ids: string[], overrides: Partial<Quote> = {}): Quo
   };
 }
 
+function makePersona(overrides: Partial<PersonaEntity> = {}): PersonaEntity {
+  return {
+    id: "persona-1",
+    display_name: "Persona 1",
+    entity: "system",
+    traits: [],
+    topics: [],
+    is_paused: false,
+    is_archived: false,
+    is_static: false,
+    last_updated: NOW,
+    ...overrides,
+  };
+}
+
 function buildState(overrides: {
   facts?: Fact[];
   topics?: Topic[];
   quotes?: Quote[];
+  personas?: StorageState["personas"];
 } = {}): StorageState {
   return {
     version: 1,
@@ -70,7 +86,7 @@ function buildState(overrides: {
       quotes: overrides.quotes ?? [],
       last_updated: NOW,
     },
-    personas: {},
+    personas: overrides.personas ?? {},
     queue: [],
   } as StorageState;
 }
@@ -359,5 +375,68 @@ describe("writeCorrection — self-drain and branch selection", () => {
     const remainingCorrections = existsSync(correctionsPath) ? readJson<CorrectionRecord[]>(correctionsPath) : [];
     const topicStillQueued = remainingCorrections.some((c) => c.id === "topic-concurrent");
     expect(topicInState || topicStillQueued).toBe(true);
+  });
+
+  it("applies pre-queued mixed fact+persona corrections plus a new write during self-drain, preserving persona messages and clearing the queue (T5)", async () => {
+    const existingMessage: Message = {
+      id: "msg-1",
+      role: "human",
+      content: "Hello from before",
+      timestamp: NOW,
+      read: true,
+      context_status: "default" as Message["context_status"],
+    };
+    const existingPersona = makePersona({ id: "persona-existing", display_name: "Existing Persona" });
+    const statePath = join(tempDir, "state.json");
+    const correctionsPath = join(tempDir, "corrections.json");
+    writeJson(
+      statePath,
+      buildState({
+        personas: {
+          "persona-existing": { entity: existingPersona, messages: [existingMessage] },
+        },
+      }),
+    );
+
+    // Pending corrections already queued from a prior write: a fact upsert and a persona upsert.
+    const pendingFact: CorrectionRecord = {
+      op: "upsert",
+      entity_type: "fact",
+      id: "fact-pending",
+      record: makeFact({ id: "fact-pending", name: "Pending Fact" }),
+      timestamp: NOW,
+    };
+    const pendingPersona: CorrectionRecord = {
+      op: "upsert",
+      entity_type: "persona",
+      id: "persona-existing",
+      record: makePersona({ id: "persona-existing", display_name: "Updated Persona Name" }),
+      timestamp: NOW,
+    };
+    writeJson(correctionsPath, [pendingFact, pendingPersona]);
+
+    // A brand new correction arrives now with no live instance running -> self-drain.
+    const newTopic: CorrectionRecord = {
+      op: "upsert",
+      entity_type: "topic",
+      id: "topic-new",
+      record: makeTopic({ id: "topic-new", name: "Freshly Written Topic" }),
+      timestamp: NOW,
+    };
+
+    await writeCorrection(newTopic);
+
+    const persisted = readJson<StorageState>(statePath);
+
+    // The pending fact landed in state.human.
+    expect(persisted.human.facts.some((f) => f.id === "fact-pending" && f.name === "Pending Fact")).toBe(true);
+    // The pending persona landed in state.personas, fully replaced, with messages preserved.
+    expect(persisted.personas["persona-existing"].entity.display_name).toBe("Updated Persona Name");
+    expect(persisted.personas["persona-existing"].messages).toEqual([existingMessage]);
+    // The new write's own correction applied too.
+    expect(persisted.human.topics.some((t) => t.id === "topic-new")).toBe(true);
+
+    // Queue cleared.
+    expect(readJson<CorrectionRecord[]>(correctionsPath)).toEqual([]);
   });
 });

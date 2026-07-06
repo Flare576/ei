@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { spawnSync } from "child_process";
@@ -166,5 +166,74 @@ describe("CLI CRUD process behavior", () => {
     expect(result.status).not.toBe(0);
     expect(result.stderr).not.toContain("Usage: ei update");
     expect(result.stderr).toContain("No quote found with id: missing-quote-id");
+  });
+
+  it("creates a persona and prints the generated id with the requested record", () => {
+    const result = runCli([
+      "create",
+      "persona",
+      "--json",
+      JSON.stringify({ display_name: "Process-created Persona" }),
+    ]);
+
+    expect(result.status).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.id).toEqual(expect.any(String));
+    expect(parsed.record).toMatchObject({
+      id: parsed.id,
+      display_name: "Process-created Persona",
+    });
+  });
+
+  it("exits non-zero and reports the missing display_name field for invalid persona create shape", () => {
+    const result = runCli(["create", "persona", "--json", "{}"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Invalid persona:");
+    expect(result.stderr).toContain("display_name:");
+  });
+
+  it("exits non-zero and reports 'No persona found' for update with a nonexistent id", () => {
+    const result = runCli([
+      "update",
+      "persona",
+      "nonexistent-persona-id",
+      "--json",
+      JSON.stringify({ display_name: "Ghost Persona" }),
+    ]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("No persona found with id: nonexistent-persona-id");
+  });
+
+  it("exits non-zero removing the reserved 'ei' persona and leaves state.json byte-identical", () => {
+    const statePath = join(tempDir, "state.json");
+    const stateWithEi: StorageState = {
+      ...makeState(),
+      personas: {
+        ei: {
+          entity: {
+            id: "ei",
+            display_name: "Ei",
+            entity: "system",
+            traits: [],
+            topics: [],
+            is_paused: false,
+            is_archived: false,
+            is_static: true,
+            last_updated: NOW,
+          },
+          messages: [],
+        },
+      },
+    };
+    writeFileSync(statePath, JSON.stringify(stateWithEi));
+    const before = readFileSync(statePath, "utf-8");
+
+    const result = runCli(["remove", "persona", "ei"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('Cannot delete reserved persona "ei". Use archive instead.');
+    expect(readFileSync(statePath, "utf-8")).toBe(before);
   });
 });
