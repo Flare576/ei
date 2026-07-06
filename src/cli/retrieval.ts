@@ -8,7 +8,7 @@ import { readFile } from "fs/promises";
 import { getEmbeddingService, findTopK } from "../core/embedding-service";
 import { parseMessageId } from "../core/utils/message-id.js";
 import { getMachineId } from "../integrations/machine-id.js";
-import { readCorrections, applyCorrectionsToHuman } from "../core/corrections.js";
+import { readCorrections, applyCorrectionsToState } from "../core/corrections.js";
 import { getCorrectionsPath } from "./corrections-writer.js";
 
 const STATE_FILE = "state.json";
@@ -39,7 +39,7 @@ export async function loadLatestState(): Promise<StorageState | null> {
   }
   if (!state) return null;
   const corrections = await readCorrections(getCorrectionsPath());
-  applyCorrectionsToHuman(state.human, corrections);
+  applyCorrectionsToState(state, corrections);
   return state;
 }
 

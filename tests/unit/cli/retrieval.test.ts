@@ -4,7 +4,8 @@ import { join } from "path";
 import { tmpdir } from "os";
 import type { StorageState } from "../../../src/core/types/integrations.js";
 import type { CorrectionRecord } from "../../../src/core/corrections.js";
-import type { Person } from "../../../src/core/types/data-items.js";
+import type { Person, Fact } from "../../../src/core/types/data-items.js";
+import type { PersonaEntity } from "../../../src/core/types/entities.js";
 
 
 vi.mock("../../../src/core/embedding-service.js", async (importOriginal) => {
@@ -611,6 +612,84 @@ describe("loadLatestState — corrections merge", () => {
 
     const state = await loadLatestState();
     expect(state!.human.people).toHaveLength(0);
+    expect(readFileSync(correctionsPath, "utf-8")).toBe(raw);
+  });
+
+  it("applies a queued persona upsert into state.personas without throwing, alongside a human fact correction (I1 regression)", async () => {
+    writeTestState(createTestState({ personas: 1, personaNamePrefix: "TestAgent", facts: 1 }));
+
+    const personaCorrection: CorrectionRecord = {
+      op: "upsert",
+      entity_type: "persona",
+      id: "persona_new",
+      record: {
+        id: "persona_new",
+        display_name: "Newly Queued Persona",
+        entity: "system",
+        traits: [],
+        topics: [],
+        is_paused: false,
+        is_archived: false,
+        is_static: false,
+        last_updated: NOW,
+      } as PersonaEntity,
+      timestamp: NOW,
+    };
+    const factCorrection: CorrectionRecord = {
+      op: "upsert",
+      entity_type: "fact",
+      id: "fact_new",
+      record: {
+        id: "fact_new",
+        name: "Queued Fact",
+        description: "A fact queued alongside the persona correction",
+        sentiment: 0.5,
+        last_updated: NOW,
+        validated_date: NOW,
+      } as Fact,
+      timestamp: NOW,
+    };
+    writeFileSync(join(tempDir, "corrections.json"), JSON.stringify([personaCorrection, factCorrection]));
+
+    const state = await loadLatestState();
+
+    expect(state).not.toBeNull();
+    // pre-existing persona from state.json survives untouched
+    expect(state!.personas["persona_0"]).toBeDefined();
+    expect(state!.personas["persona_0"].entity.display_name).toBe("TestAgent 0");
+    // queued persona upsert materialized into .personas without throwing
+    expect(state!.personas["persona_new"]).toBeDefined();
+    expect(state!.personas["persona_new"].entity.display_name).toBe("Newly Queued Persona");
+    // queued human (fact) correction still applies in the same mixed batch
+    expect(state!.human.facts.some((f) => f.id === "fact_new" && f.name === "Queued Fact")).toBe(true);
+  });
+
+  it("does not delete or modify corrections.json when the queue contains a pending persona correction", async () => {
+    writeTestState(createTestState({ personas: 1 }));
+    const personaCorrection: CorrectionRecord = {
+      op: "upsert",
+      entity_type: "persona",
+      id: "persona_new",
+      record: {
+        id: "persona_new",
+        display_name: "Read-Only Check Persona",
+        entity: "system",
+        traits: [],
+        topics: [],
+        is_paused: false,
+        is_archived: false,
+        is_static: false,
+        last_updated: NOW,
+      } as PersonaEntity,
+      timestamp: NOW,
+    };
+    const correctionsPath = join(tempDir, "corrections.json");
+    const raw = JSON.stringify([personaCorrection]);
+    writeFileSync(correctionsPath, raw);
+
+    const state = await loadLatestState();
+
+    expect(state!.personas["persona_new"]).toBeDefined();
     expect(readFileSync(correctionsPath, "utf-8")).toBe(raw);
   });
 });
