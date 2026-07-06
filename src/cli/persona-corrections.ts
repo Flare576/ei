@@ -37,6 +37,7 @@ import { writeCorrection } from "./corrections-writer.js";
 import { computePersonaDescriptionEmbedding } from "../core/embedding-service.js";
 import { CorrectionValidationError } from "./corrections-endpoints.js";
 import { isReservedPersonaName, isReservedPersonaId, RESERVED_PERSONA_NAMES } from "../core/types/entities.js";
+import { NOTES_MAX } from "../core/tools/builtin/persona-notes.js";
 import type { PersonaEntity } from "../core/types/entities.js";
 import type { PersonaTrait, PersonaTopic } from "../core/types/data-items.js";
 import type { CorrectionRecord } from "../core/corrections.js";
@@ -119,7 +120,7 @@ const personaEntitySchema = z.strictObject({
   avatar_emoji: z.string().optional(),
   avatar_image: z.string().optional(),
   preferred_theme: z.string().optional(),
-  notes: z.array(z.string()).optional(),
+  notes: z.array(z.string()).max(NOTES_MAX).optional(),
 });
 
 type PersonaEntityInput = z.infer<typeof personaEntitySchema>;

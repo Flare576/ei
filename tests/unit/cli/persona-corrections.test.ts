@@ -30,6 +30,7 @@ vi.mock("zod", async (importOriginal) => {
 
 import { loadLatestState } from "../../../src/cli/retrieval.js";
 import { createPersonaEntity, updatePersonaEntity, removePersonaEntity } from "../../../src/cli/persona-corrections.js";
+import { NOTES_MAX } from "../../../src/core/tools/builtin/persona-notes.js";
 
 function makeExistingPersonaEntity(id: string, overrides: Partial<PersonaEntity> = {}): PersonaEntity {
   return {
@@ -227,6 +228,25 @@ describe("createPersonaEntity", () => {
     const persisted = await loadLatestState();
     expect(persisted!.personas[id].entity.description_embedding).toBeUndefined();
   });
+
+  it(`accepts exactly NOTES_MAX (${NOTES_MAX}) notes`, async () => {
+    writeState(makeState({}));
+
+    const notes = Array.from({ length: NOTES_MAX }, (_, i) => `note-${i}`);
+    const { record } = await createPersonaEntity({ display_name: "Nova", notes });
+
+    expect(record.notes).toHaveLength(NOTES_MAX);
+  });
+
+  it(`rejects NOTES_MAX + 1 (${NOTES_MAX + 1}) notes`, async () => {
+    writeState(makeState({}));
+
+    const notes = Array.from({ length: NOTES_MAX + 1 }, (_, i) => `note-${i}`);
+
+    await expect(createPersonaEntity({ display_name: "Nova", notes })).rejects.toThrow(
+      new RegExp(`^Invalid persona: notes: Array must contain at most ${NOTES_MAX} element`)
+    );
+  });
 });
 
 // ── updatePersonaEntity ───────────────────────────────────────────────────────
@@ -363,6 +383,27 @@ describe("updatePersonaEntity", () => {
     const updated = await updatePersonaEntity(PERSONA_ID, { display_name: "Renamed Static Persona" });
 
     expect(updated.is_static).toBe(true);
+  });
+
+  it(`accepts exactly NOTES_MAX (${NOTES_MAX}) notes`, async () => {
+    const existing = makeExistingPersonaEntity(PERSONA_ID);
+    writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }));
+
+    const notes = Array.from({ length: NOTES_MAX }, (_, i) => `note-${i}`);
+    const updated = await updatePersonaEntity(PERSONA_ID, { display_name: "Original Name", notes });
+
+    expect(updated.notes).toHaveLength(NOTES_MAX);
+  });
+
+  it(`rejects NOTES_MAX + 1 (${NOTES_MAX + 1}) notes`, async () => {
+    const existing = makeExistingPersonaEntity(PERSONA_ID);
+    writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }));
+
+    const notes = Array.from({ length: NOTES_MAX + 1 }, (_, i) => `note-${i}`);
+
+    await expect(
+      updatePersonaEntity(PERSONA_ID, { display_name: "Original Name", notes })
+    ).rejects.toThrow(new RegExp(`^Invalid persona: notes: Array must contain at most ${NOTES_MAX} element`));
   });
 });
 
