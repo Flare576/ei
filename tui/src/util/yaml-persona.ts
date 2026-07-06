@@ -7,6 +7,7 @@ import type {
   ProviderAccount,
 } from "../../../src/core/types.js";
 import { modelGuidToDisplay, displayToModelGuid } from "./yaml-shared.js";
+import { buildPersonaToolsMap, resolvePersonaToolsFromMap } from "../../../src/core/persona-tools.js";
 import { parseDuration, formatDuration } from "./duration.js";
 
 const PLACEHOLDER_LONG_DESC = "Detailed description of this persona's personality, background, and role";
@@ -61,43 +62,6 @@ const PLACEHOLDER_TOPIC: YAMLPersonaTopic = {
   exposure_current: 0.5,
   exposure_desired: 0.5,
 };
-
-function buildPersonaToolsMap(
-  enabledToolIds: string[],
-  allTools: ToolDefinition[],
-  allProviders: import('../../../src/core/types.js').ToolProvider[]
-): Record<string, Record<string, boolean>> | undefined {
-  if (allTools.length === 0) return undefined;
-  const enabledSet = new Set(enabledToolIds);
-  const result: Record<string, Record<string, boolean>> = {};
-  for (const provider of allProviders.filter(p => p.enabled)) {
-    const providerTools = allTools.filter(t => t.provider_id === provider.id);
-    if (providerTools.length === 0) continue;
-    result[provider.display_name] = Object.fromEntries(
-      providerTools.map(t => [t.display_name, enabledSet.has(t.id)])
-    );
-  }
-  return Object.keys(result).length > 0 ? result : undefined;
-}
-
-function resolvePersonaToolsFromMap(
-  toolsMap: Record<string, Record<string, boolean>> | undefined,
-  allTools: ToolDefinition[],
-  allProviders: import('../../../src/core/types.js').ToolProvider[]
-): string[] | undefined {
-  if (!toolsMap) return undefined;
-  const enabledIds: string[] = [];
-  for (const [providerDisplayName, toolToggles] of Object.entries(toolsMap)) {
-    const provider = allProviders.find(p => p.display_name === providerDisplayName);
-    if (!provider) continue;
-    for (const [toolDisplayName, enabled] of Object.entries(toolToggles)) {
-      if (!enabled) continue;
-      const tool = allTools.find(t => t.provider_id === provider.id && t.display_name === toolDisplayName);
-      if (tool) enabledIds.push(tool.id);
-    }
-  }
-  return enabledIds.length > 0 ? enabledIds : [];
-}
 
 export function newPersonaToYAML(name: string, allTools?: ToolDefinition[], allProviders?: import('../../../src/core/types.js').ToolProvider[]): string {
   const toolsMap = buildPersonaToolsMap([], allTools ?? [], allProviders ?? []);
