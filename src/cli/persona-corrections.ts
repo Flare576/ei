@@ -41,6 +41,8 @@ import { NOTES_MAX } from "../core/tools/builtin/persona-notes.js";
 import type { PersonaEntity } from "../core/types/entities.js";
 import type { PersonaTrait, PersonaTopic } from "../core/types/data-items.js";
 import type { CorrectionRecord } from "../core/corrections.js";
+import { buildPersonaToolsMap, resolvePersonaToolsFromMap } from "../core/persona-tools.js";
+import type { ToolDefinition, ToolProvider } from "../core/types/integrations.js";
 
 const DEFAULT_GROUP = "General";
 
@@ -116,7 +118,7 @@ const personaEntitySchema = z.strictObject({
   context_window_ms: z.number().optional(),
   include_message_timestamps: z.boolean().optional(),
   context_boundary: z.string().optional(),
-  tools: z.array(z.string()).optional(),
+  tools: z.record(z.string(), z.record(z.string(), z.boolean())).optional(),
   avatar_emoji: z.string().optional(),
   avatar_image: z.string().optional(),
   preferred_theme: z.string().optional(),
@@ -124,6 +126,15 @@ const personaEntitySchema = z.strictObject({
 });
 
 type PersonaEntityInput = z.infer<typeof personaEntitySchema>;
+
+// The external CRUD surface's `tools` contract is the same self-documenting
+// `{ providerDisplayName: { toolDisplayName: boolean } }` map the TUI's
+// $EDITOR/YAML persona editor uses (buildPersonaToolsMap/
+// resolvePersonaToolsFromMap in ../core/persona-tools.js) — never the raw
+// flat ToolDefinition-id array PersonaEntity.tools actually persists as.
+type PersonaEntityWithToolsMap = Omit<PersonaEntity, "tools"> & {
+  tools?: Record<string, Record<string, boolean>>;
+};
 
 /**
  * Server-owned fields silently stripped before schema validation on
@@ -180,6 +191,41 @@ function assertNotReservedName(displayName: string): void {
   }
 }
 
+/**
+ * Deliberately stricter than resolvePersonaToolsFromMap's own silent-skip
+ * contract (shared with the TUI, which must stay lenient so a round-trip
+ * of a slightly stale/partial YAML edit never hard-fails). An external
+ * CRUD caller granting a tool it has never granted before has no other
+ * way to discover valid provider/tool display names ahead of time, so a
+ * typo'd or disabled key here fails loudly — naming the exact bad key —
+ * instead of silently resolving to "granted nothing" (the very gap this
+ * whole contract change closes: granting a tool under a disabled
+ * provider used to be an unannounced no-op).
+ */
+function validatePersonaToolsMap(
+  toolsMap: Record<string, Record<string, boolean>>,
+  allTools: ToolDefinition[],
+  allProviders: ToolProvider[]
+): void {
+  for (const [providerDisplayName, toolToggles] of Object.entries(toolsMap)) {
+    const provider = allProviders.find((p) => p.display_name === providerDisplayName);
+    if (!provider) {
+      throw new CorrectionValidationError(`Invalid persona: tools: unknown provider "${providerDisplayName}"`);
+    }
+    if (!provider.enabled) {
+      throw new CorrectionValidationError(`Invalid persona: tools: provider "${providerDisplayName}" is disabled`);
+    }
+    for (const toolDisplayName of Object.keys(toolToggles)) {
+      const tool = allTools.find((t) => t.provider_id === provider.id && t.display_name === toolDisplayName);
+      if (!tool) {
+        throw new CorrectionValidationError(
+          `Invalid persona: tools: unknown tool "${toolDisplayName}" under provider "${providerDisplayName}"`
+        );
+      }
+    }
+  }
+}
+
 /** Assign a fresh id to any trait lacking one and stamp a fresh last_updated on every trait, then reject duplicate ids. */
 function materializeTraits(traits: PersonaEntityInput["traits"], now: string): PersonaTrait[] {
   const materialized: PersonaTrait[] = traits.map((t) => ({ ...t, id: t.id ?? crypto.randomUUID(), last_updated: now }));
@@ -219,9 +265,20 @@ function stripPersonaEmbedding(record: PersonaEntity): PersonaEntity {
   return rest as PersonaEntity;
 }
 
-export async function createPersonaEntity(body: unknown): Promise<{ id: string; record: PersonaEntity }> {
+export async function createPersonaEntity(body: unknown): Promise<{ id: string; record: PersonaEntityWithToolsMap }> {
   const parsed = parsePersonaBody(body, "create");
   assertNotReservedName(parsed.display_name);
+
+  const state = await loadLatestState();
+  if (!state) {
+    throw new Error("No saved state found. Is EI_DATA_PATH set correctly?");
+  }
+  const allTools = state.tools ?? [];
+  const allProviders = state.providers ?? [];
+  if (parsed.tools) {
+    validatePersonaToolsMap(parsed.tools, allTools, allProviders);
+  }
+  const resolvedTools = resolvePersonaToolsFromMap(parsed.tools, allTools, allProviders);
 
   const now = new Date().toISOString();
   const id = crypto.randomUUID();
@@ -247,7 +304,7 @@ export async function createPersonaEntity(body: unknown): Promise<{ id: string; 
     groups_visible: parsed.groups_visible ?? [DEFAULT_GROUP],
     traits,
     topics,
-    tools: parsed.tools && parsed.tools.length > 0 ? parsed.tools : undefined,
+    tools: resolvedTools && resolvedTools.length > 0 ? resolvedTools : undefined,
     is_paused: parsed.is_paused,
     pause_until: parsed.pause_until,
     is_archived: parsed.is_archived,
@@ -270,10 +327,21 @@ export async function createPersonaEntity(body: unknown): Promise<{ id: string; 
 
   const correction: CorrectionRecord = { op: "upsert", entity_type: "persona", id, record, timestamp: now };
   await writeCorrection(correction);
-  return { id, record: stripPersonaEmbedding(record) };
+  // Re-enrich record.tools back into the boolean-map shape for the
+  // RETURNED copy only, so a create response shows the same shape a
+  // subsequent `ei --id` read would show — the queued CorrectionRecord
+  // above (and therefore the persisted PersonaEntity) keeps the flat
+  // string[] shape, which is the real on-disk contract.
+  return {
+    id,
+    record: {
+      ...stripPersonaEmbedding(record),
+      tools: buildPersonaToolsMap(record.tools ?? [], allTools, allProviders),
+    },
+  };
 }
 
-export async function updatePersonaEntity(id: string, body: unknown): Promise<PersonaEntity> {
+export async function updatePersonaEntity(id: string, body: unknown): Promise<PersonaEntityWithToolsMap> {
   const parsed = parsePersonaBody(body, "update");
   assertNotReservedName(parsed.display_name);
 
@@ -285,6 +353,13 @@ export async function updatePersonaEntity(id: string, body: unknown): Promise<Pe
   if (!existing) {
     throw new Error(`No persona found with id: ${id}`);
   }
+
+  const allTools = state.tools ?? [];
+  const allProviders = state.providers ?? [];
+  if (parsed.tools) {
+    validatePersonaToolsMap(parsed.tools, allTools, allProviders);
+  }
+  const resolvedTools = resolvePersonaToolsFromMap(parsed.tools, allTools, allProviders);
 
   const now = new Date().toISOString();
   const traits = materializeTraits(parsed.traits, now);
@@ -306,7 +381,7 @@ export async function updatePersonaEntity(id: string, body: unknown): Promise<Pe
     groups_visible: parsed.groups_visible,
     traits,
     topics,
-    tools: parsed.tools,
+    tools: resolvedTools,
     is_paused: parsed.is_paused,
     pause_until: parsed.pause_until,
     is_archived: parsed.is_archived,
@@ -331,7 +406,12 @@ export async function updatePersonaEntity(id: string, body: unknown): Promise<Pe
 
   const correction: CorrectionRecord = { op: "upsert", entity_type: "persona", id, record, timestamp: now };
   await writeCorrection(correction);
-  return stripPersonaEmbedding(record);
+  // Re-enrich for the RETURNED copy only -- see createPersonaEntity's
+  // matching comment; the persisted record.tools stays the flat string[].
+  return {
+    ...stripPersonaEmbedding(record),
+    tools: buildPersonaToolsMap(record.tools ?? [], allTools, allProviders),
+  };
 }
 
 export async function removePersonaEntity(id: string): Promise<void> {

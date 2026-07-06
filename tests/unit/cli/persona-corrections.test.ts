@@ -4,6 +4,7 @@ import { join } from "path";
 import { tmpdir } from "os";
 import type { StorageState } from "../../../src/core/types/integrations.js";
 import type { PersonaEntity } from "../../../src/core/types/entities.js";
+import type { ToolProvider, ToolDefinition } from "../../../src/core/types/integrations.js";
 import { RESERVED_PERSONA_IDS, RESERVED_PERSONA_NAMES } from "../../../src/core/types/entities.js";
 
 const INITIAL_NOW = "2026-01-01T00:00:00.000Z";
@@ -30,6 +31,8 @@ vi.mock("zod", async (importOriginal) => {
 
 import { loadLatestState } from "../../../src/cli/retrieval.js";
 import { createPersonaEntity, updatePersonaEntity, removePersonaEntity } from "../../../src/cli/persona-corrections.js";
+import { CorrectionValidationError } from "../../../src/cli/corrections-endpoints.js";
+import { buildPersonaToolsMap } from "../../../src/core/persona-tools.js";
 import { NOTES_MAX } from "../../../src/core/tools/builtin/persona-notes.js";
 
 function makeExistingPersonaEntity(id: string, overrides: Partial<PersonaEntity> = {}): PersonaEntity {
@@ -61,7 +64,10 @@ function makeExistingPersonaEntity(id: string, overrides: Partial<PersonaEntity>
   };
 }
 
-function makeState(personas: StorageState["personas"]): StorageState {
+function makeState(
+  personas: StorageState["personas"],
+  extra: { providers?: ToolProvider[]; tools?: ToolDefinition[] } = {}
+): StorageState {
   return {
     version: 1,
     timestamp: INITIAL_NOW,
@@ -75,8 +81,37 @@ function makeState(personas: StorageState["personas"]): StorageState {
     },
     personas,
     queue: [],
-    providers: [],
-    tools: [],
+    providers: extra.providers ?? [],
+    tools: extra.tools ?? [],
+  };
+}
+
+function makeToolProvider(overrides: Partial<ToolProvider> = {}): ToolProvider {
+  return {
+    id: crypto.randomUUID(),
+    name: "provider",
+    display_name: "Provider",
+    builtin: false,
+    config: {},
+    enabled: true,
+    created_at: INITIAL_NOW,
+    ...overrides,
+  };
+}
+
+function makeToolDefinition(overrides: Partial<ToolDefinition> = {}): ToolDefinition {
+  return {
+    id: crypto.randomUUID(),
+    provider_id: "provider-id",
+    name: "tool",
+    display_name: "Tool",
+    description: "d",
+    input_schema: {},
+    runtime: "any",
+    builtin: false,
+    enabled: true,
+    created_at: INITIAL_NOW,
+    ...overrides,
   };
 }
 
@@ -247,6 +282,63 @@ describe("createPersonaEntity", () => {
       new RegExp(`^Invalid persona: notes: Array must contain at most ${NOTES_MAX} element`)
     );
   });
+
+  it("grants a tool via a boolean-map tools payload, persisting only the resolved flat id and returning the re-enriched map", async () => {
+    const brave = makeToolProvider({ id: "p-brave", display_name: "Brave Search" });
+    const webSearch = makeToolDefinition({ id: "t-web-search", provider_id: "p-brave", display_name: "Web Search" });
+    const newsSearch = makeToolDefinition({ id: "t-news-search", provider_id: "p-brave", display_name: "News Search" });
+    writeState(makeState({}, { providers: [brave], tools: [webSearch, newsSearch] }));
+
+    const { id, record } = await createPersonaEntity({
+      display_name: "Nova",
+      tools: { "Brave Search": { "Web Search": true, "News Search": false } },
+    });
+
+    expect(record.tools).toEqual({ "Brave Search": { "Web Search": true, "News Search": false } });
+    expect(Array.isArray(record.tools)).toBe(false);
+
+    const persisted = await loadLatestState();
+    expect(persisted!.personas[id].entity.tools).toEqual(["t-web-search"]);
+  });
+
+  it("rejects a tools payload naming an unknown provider", async () => {
+    const brave = makeToolProvider({ id: "p-brave", display_name: "Brave Search" });
+    const webSearch = makeToolDefinition({ id: "t-web-search", provider_id: "p-brave", display_name: "Web Search" });
+    writeState(makeState({}, { providers: [brave], tools: [webSearch] }));
+
+    await expect(
+      createPersonaEntity({ display_name: "Nova", tools: { "Nonexistent Provider": { "Web Search": true } } })
+    ).rejects.toThrow(CorrectionValidationError);
+    await expect(
+      createPersonaEntity({ display_name: "Nova", tools: { "Nonexistent Provider": { "Web Search": true } } })
+    ).rejects.toThrow(/unknown provider "Nonexistent Provider"/);
+  });
+
+  it("rejects a tools payload naming an unknown tool under a known provider", async () => {
+    const brave = makeToolProvider({ id: "p-brave", display_name: "Brave Search" });
+    const webSearch = makeToolDefinition({ id: "t-web-search", provider_id: "p-brave", display_name: "Web Search" });
+    writeState(makeState({}, { providers: [brave], tools: [webSearch] }));
+
+    await expect(
+      createPersonaEntity({ display_name: "Nova", tools: { "Brave Search": { "Nonexistent Tool": true } } })
+    ).rejects.toThrow(CorrectionValidationError);
+    await expect(
+      createPersonaEntity({ display_name: "Nova", tools: { "Brave Search": { "Nonexistent Tool": true } } })
+    ).rejects.toThrow(/unknown tool "Nonexistent Tool" under provider "Brave Search"/);
+  });
+
+  it("rejects granting a tool under a disabled provider instead of silently no-op-ing", async () => {
+    const github = makeToolProvider({ id: "p-github", display_name: "GitHub", enabled: false });
+    const listIssues = makeToolDefinition({ id: "t-list-issues", provider_id: "p-github", display_name: "List Issues" });
+    writeState(makeState({}, { providers: [github], tools: [listIssues] }));
+
+    await expect(
+      createPersonaEntity({ display_name: "Nova", tools: { "GitHub": { "List Issues": true } } })
+    ).rejects.toThrow(CorrectionValidationError);
+    await expect(
+      createPersonaEntity({ display_name: "Nova", tools: { "GitHub": { "List Issues": true } } })
+    ).rejects.toThrow(/provider "GitHub" is disabled/);
+  });
 });
 
 // ── updatePersonaEntity ───────────────────────────────────────────────────────
@@ -318,7 +410,7 @@ describe("updatePersonaEntity", () => {
   });
 
   it("strips server-owned round-trip fields before validation so a lookupById-style read doesn't fail strictObject", async () => {
-    const existing = makeExistingPersonaEntity(PERSONA_ID, { description_embedding: [0.9, 0.9, 0.9] });
+    const existing = makeExistingPersonaEntity(PERSONA_ID, { description_embedding: [0.9, 0.9, 0.9], tools: undefined });
     writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }));
 
     const roundTripPayload = {
@@ -404,6 +496,85 @@ describe("updatePersonaEntity", () => {
     await expect(
       updatePersonaEntity(PERSONA_ID, { display_name: "Original Name", notes })
     ).rejects.toThrow(new RegExp(`^Invalid persona: notes: Array must contain at most ${NOTES_MAX} element`));
+  });
+
+  it("round-trips a tools map from a prior read, flipping exactly one flag while leaving every other grant untouched", async () => {
+    const brave = makeToolProvider({ id: "p-brave", display_name: "Brave Search" });
+    const webSearch = makeToolDefinition({ id: "t-web-search", provider_id: "p-brave", display_name: "Web Search" });
+    const newsSearch = makeToolDefinition({ id: "t-news-search", provider_id: "p-brave", display_name: "News Search" });
+    const imageSearch = makeToolDefinition({ id: "t-image-search", provider_id: "p-brave", display_name: "Image Search" });
+    const allTools = [webSearch, newsSearch, imageSearch];
+    const allProviders = [brave];
+
+    // Existing grants: Web Search + Image Search, NOT News Search.
+    const existing = makeExistingPersonaEntity(PERSONA_ID, { tools: ["t-web-search", "t-image-search"] });
+    writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }, { providers: allProviders, tools: allTools }));
+
+    // Simulate exactly what a caller following the documented `ei --id` ->
+    // edit -> `ei update persona` round trip would send: the SAME
+    // read-shaped map lookupById would have returned, with exactly one
+    // flag flipped (News Search false -> true).
+    const readShapedInput = buildPersonaToolsMap(existing.tools!, allTools, allProviders)!;
+    expect(readShapedInput).toEqual({
+      "Brave Search": { "Web Search": true, "News Search": false, "Image Search": true },
+    });
+    const flippedInput = {
+      "Brave Search": { ...readShapedInput["Brave Search"], "News Search": true },
+    };
+
+    const updated = await updatePersonaEntity(PERSONA_ID, {
+      display_name: existing.display_name,
+      tools: flippedInput,
+    });
+
+    expect(updated.tools).toEqual({
+      "Brave Search": { "Web Search": true, "News Search": true, "Image Search": true },
+    });
+
+    const persisted = await loadLatestState();
+    expect(persisted!.personas[PERSONA_ID].entity.tools?.slice().sort()).toEqual(
+      ["t-image-search", "t-news-search", "t-web-search"].sort()
+    );
+  });
+
+  it("rejects an update tools payload naming an unknown provider", async () => {
+    const brave = makeToolProvider({ id: "p-brave", display_name: "Brave Search" });
+    const webSearch = makeToolDefinition({ id: "t-web-search", provider_id: "p-brave", display_name: "Web Search" });
+    const existing = makeExistingPersonaEntity(PERSONA_ID, { tools: undefined });
+    writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }, { providers: [brave], tools: [webSearch] }));
+
+    await expect(
+      updatePersonaEntity(PERSONA_ID, {
+        display_name: existing.display_name,
+        tools: { "Nonexistent Provider": { "Web Search": true } },
+      })
+    ).rejects.toThrow(CorrectionValidationError);
+    await expect(
+      updatePersonaEntity(PERSONA_ID, {
+        display_name: existing.display_name,
+        tools: { "Nonexistent Provider": { "Web Search": true } },
+      })
+    ).rejects.toThrow(/unknown provider "Nonexistent Provider"/);
+  });
+
+  it("rejects an update tools payload naming an unknown tool under a known provider", async () => {
+    const brave = makeToolProvider({ id: "p-brave", display_name: "Brave Search" });
+    const webSearch = makeToolDefinition({ id: "t-web-search", provider_id: "p-brave", display_name: "Web Search" });
+    const existing = makeExistingPersonaEntity(PERSONA_ID, { tools: undefined });
+    writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }, { providers: [brave], tools: [webSearch] }));
+
+    await expect(
+      updatePersonaEntity(PERSONA_ID, {
+        display_name: existing.display_name,
+        tools: { "Brave Search": { "Nonexistent Tool": true } },
+      })
+    ).rejects.toThrow(CorrectionValidationError);
+    await expect(
+      updatePersonaEntity(PERSONA_ID, {
+        display_name: existing.display_name,
+        tools: { "Brave Search": { "Nonexistent Tool": true } },
+      })
+    ).rejects.toThrow(/unknown tool "Nonexistent Tool" under provider "Brave Search"/);
   });
 });
 
