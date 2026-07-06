@@ -10,6 +10,7 @@ import { parseMessageId } from "../core/utils/message-id.js";
 import { getMachineId } from "../integrations/machine-id.js";
 import { readCorrections, applyCorrectionsToState } from "../core/corrections.js";
 import { getCorrectionsPath } from "./corrections-writer.js";
+import { buildPersonaToolsMap } from "../core/persona-tools.js";
 
 const STATE_FILE = "state.json";
 const BACKUP_FILE = "state.backup.json";
@@ -609,6 +610,21 @@ export async function lookupById(id: string): Promise<({ type: string } & Record
     withoutEmbedding.linked_quotes = state.human.quotes
       .filter((q) => q.data_item_ids.includes(id))
       .map((q) => ({ id: q.id, text: q.text, speaker: q.speaker, timestamp: q.timestamp }));
+  }
+  // A persisted PersonaEntity.tools is a flat array of ToolDefinition ids —
+  // opaque to a caller who doesn't already know every tool's UUID. Enrich it
+  // into the same self-documenting `{ providerDisplayName: { toolDisplayName:
+  // boolean } }` map the TUI's $EDITOR/YAML persona editor uses, so an agent
+  // reading a persona via `ei --id` can both see what's granted AND discover
+  // what else is grantable (and under which — possibly disabled — provider)
+  // without a separate lookup. buildPersonaToolsMap returns undefined when no
+  // tools are registered at all; that undefined/absent result is preserved.
+  if (type === "persona") {
+    withoutEmbedding.tools = buildPersonaToolsMap(
+      (withoutEmbedding.tools as string[] | undefined) ?? [],
+      state.tools ?? [],
+      state.providers ?? []
+    );
   }
   return { type, ...withoutEmbedding };
 }

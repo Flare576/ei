@@ -6,6 +6,7 @@ import type { StorageState } from "../../../src/core/types/integrations.js";
 import type { CorrectionRecord } from "../../../src/core/corrections.js";
 import type { Person, Fact } from "../../../src/core/types/data-items.js";
 import type { PersonaEntity } from "../../../src/core/types/entities.js";
+import type { ToolProvider, ToolDefinition } from "../../../src/core/types/integrations.js";
 
 
 vi.mock("../../../src/core/embedding-service.js", async (importOriginal) => {
@@ -523,6 +524,67 @@ describe("lookupById — persona records", () => {
     writeTestState(createTestState({ facts: 1 }));
     const result = await lookupById("persona_0");
     expect(result).toBeNull();
+  });
+});
+
+describe("lookupById — persona tools boolean-map enrichment", () => {
+  function makeProvider(overrides: Partial<ToolProvider> = {}): ToolProvider {
+    return {
+      id: crypto.randomUUID(),
+      name: "provider",
+      display_name: "Provider",
+      builtin: false,
+      config: {},
+      enabled: true,
+      created_at: NOW,
+      ...overrides,
+    };
+  }
+
+  function makeTool(overrides: Partial<ToolDefinition> = {}): ToolDefinition {
+    return {
+      id: crypto.randomUUID(),
+      provider_id: "provider-id",
+      name: "tool",
+      display_name: "Tool",
+      description: "d",
+      input_schema: {},
+      runtime: "any",
+      builtin: false,
+      enabled: true,
+      created_at: NOW,
+      ...overrides,
+    };
+  }
+
+  it("replaces the flat tools id array with a nested provider->tool->boolean map, excluding disabled providers", async () => {
+    const state = createTestState({ personas: 1, personaNamePrefix: "TestAgent" }) as unknown as StorageState;
+    (state.personas["persona_0"].entity as PersonaEntity).tools = ["t-web-search", "t-list-issues"];
+
+    const brave = makeProvider({ id: "p-brave", display_name: "Brave Search", enabled: true });
+    const github = makeProvider({ id: "p-github", display_name: "GitHub", enabled: false });
+    state.providers = [brave, github];
+    state.tools = [
+      makeTool({ id: "t-web-search", provider_id: "p-brave", display_name: "Web Search" }),
+      makeTool({ id: "t-news-search", provider_id: "p-brave", display_name: "News Search" }),
+      makeTool({ id: "t-list-issues", provider_id: "p-github", display_name: "List Issues" }),
+    ];
+
+    writeTestState(state);
+    const result = await lookupById("persona_0");
+
+    expect(result).not.toBeNull();
+    expect(result!.tools).toEqual({
+      "Brave Search": { "Web Search": true, "News Search": false },
+    });
+    expect(result!.tools).not.toHaveProperty("GitHub");
+  });
+
+  it("leaves tools absent when no tools are registered at all", async () => {
+    writeTestState(createTestState({ personas: 1, personaNamePrefix: "TestAgent" }));
+    const result = await lookupById("persona_0");
+    expect(result).not.toBeNull();
+    expect(result!.tools).toBeUndefined();
   });
 });
 
