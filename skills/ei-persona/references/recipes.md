@@ -143,8 +143,9 @@ in X."
    whatever character the persona has is whatever you and the user put in the payload.
 2. Draft the full creation payload: `display_name` plus whichever of
    `short_description`, `long_description`, `traits`, `topics`, `model`, `group_primary`,
-   `groups_visible`, `tools` the user wants set at creation. Omit `id` on every
-   trait/topic — auto-assigned.
+   `groups_visible`, `tools` the user wants set at creation (for `tools`, see Recipe I
+   below and the registry in `references/cli.md`). Omit `id` on every trait/topic —
+   auto-assigned.
 3. Confirm the plan in plain language (name + character summary) before writing.
 4. `ei create persona --json '<payload>'` → **capture the returned `id`.**
 5. Verify: `ei --id <new-id>` and confirm the record matches what you intended. Tell the
@@ -191,6 +192,31 @@ Unarchiving is the same recipe in reverse: read, set `is_archived: false`, write
 5. Tell the user it's gone, and that recreating a persona with the same name later gets a
    **new** id — it will not be "the same" persona as far as anything that referenced the
    old id is concerned.
+
+---
+
+## Recipe I — Grant or revoke a persona's tool access
+
+**Symptom:** "give DJ Spotify access so she can answer what she's listening to" / "let Ei
+search the web" / "[persona] shouldn't be able to read my files anymore."
+
+**Steps:**
+
+1. `ei --id <persona-id>` → read the full record. Look at the existing `tools[]` (it may
+   be empty or absent).
+2. Confirm with the user the **exact tool id** being granted or revoked — check it against
+   the registry in `references/cli.md`, don't guess a plausible-sounding name. If the
+   capability implies a provider (`tavily` or `spotify`) the user hasn't mentioned
+   configuring, ask whether they've set that provider up in Ei first: granting a tool id
+   for a disabled/unconfigured provider is a no-op, and the user deserves to know that
+   before you write it.
+3. Build the new `tools[]`: append the tool id (grant) or filter it out (revoke). Leave
+   every other field untouched.
+4. `ei update persona <persona-id> --json '<full record with tools[] changed>'`.
+5. Verify: re-read, confirm `tools[]` holds exactly the ids you intended. Tell the user
+   this only changes what **that persona** can do the next time a human chats with it
+   inside Ei's TUI or web client — it has no effect on your own tool access in this
+   session, or anything else about the current harness.
 
 ---
 
