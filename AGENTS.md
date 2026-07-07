@@ -443,6 +443,10 @@ Seeded on every startup via `Processor.bootstrapTools()`. Safe to call repeatedl
 4. If it needs a new provider, add provider seed block before the tool seed block
 5. Update the Built-in Tool Registry table above
 
+### Persona Tool Grants Survive Provider Disable
+
+`PersonaEntity.tools` edits are full-record replacements, but neither editing surface can see or resubmit a tool id whose provider is currently disabled — disabled-provider tools are invisible to `buildPersonaToolsMap()`. Both surfaces that edit `tools` — the TUI's `$EDITOR` YAML editor (`tui/src/util/yaml-persona.ts`) and `ei update persona`/`ei_update` (`src/cli/persona-corrections.ts`) — call `preserveHiddenToolGrants()` (`src/core/persona-tools.ts`) to carry those hidden ids forward unconditionally, so re-enabling the provider later restores the persona's original grants instead of the edit having silently revoked them. This is not a general merge: every tool id whose provider IS enabled is still fully governed by what the caller submitted.
+
 ---
 
 ## Corrections Queue
@@ -452,22 +456,27 @@ External agents write to Ei's knowledge base through a validated corrections pat
 ### How it works
 
 1. **Write**: `ei create/update/remove` (CLI) or `ei_create/ei_update/ei_remove` (MCP tools) validate the input against Zod schemas and append a correction record to `$EI_DATA_PATH/corrections.json`.
-2. **Drain**: The Processor reads and applies pending corrections on every runLoop tick, merging them into the live StateManager. No TUI restart required.
+2. **Drain**: If a live instance (TUI or future daemon) holds `ei.lock`, the Processor reads and applies pending corrections on every runLoop tick, merging them into the live StateManager — no TUI restart required. If nothing holds the lock, the CLI self-drains straight into `state.json` instead of waiting (see `src/cli/corrections-writer.ts`) — the correction is already applied by the time the write command returns.
 3. **Atomicity**: `corrections.json` is a JSON array written under a file lock — concurrent writers serialize safely.
 
 ### Type support
 
-| Operation | fact | topic | person | quote |
-|-----------|------|-------|--------|-------|
-| create | yes | yes | yes | — |
-| update | yes | yes | yes | yes |
-| remove | yes | yes | yes | — |
+| Operation | fact | topic | person | quote | persona |
+|-----------|------|-------|--------|-------|---------|
+| create | yes | yes | yes | — | yes |
+| update | yes | yes | yes | yes | yes |
+| remove | yes | yes | yes | — | yes |
 
 Quotes enter only through the extraction pipeline (verifiable-origin data). They can be updated to repoint `data_item_ids` after a split/merge or to fix mistranscribed text, but not created or removed externally.
 
-### Shipped skill
+Personas take the same three operations, but never through the shared fact/topic/person schema dispatch — `entity_type: "persona"` routes to its own validation module (`src/cli/persona-corrections.ts`), matching `PersonaEntity`'s shape instead of `DataItemBase`.
 
-`ei-curate` — installed by `ei --install` into your harness's skill discovery directory — provides safe, verified workflows for agent-driven curation on top of these primitives. It requires confirmation before every write and refuses to guess on ambiguous attributions. Load it with `/ei-curate`. Source: `skills/ei-curate/SKILL.md`.
+### Shipped skills
+
+- **`ei-curate`** — safe, verified workflows for correcting facts/topics/people/quotes on top of these primitives. Requires confirmation before every write and refuses to guess on ambiguous attributions. Load it with `/ei-curate`. Source: `skills/ei-curate/SKILL.md`.
+- **`ei-persona`** — the equivalent guided workflow for authoring or directing a persona's *character* (create a new persona, edit its traits/topics, archive, or delete) rather than correcting learned data. Load it with `/ei-persona`. Source: `skills/ei-persona/SKILL.md`.
+
+Both are installed by `ei --install` into your harness's skill discovery directory alongside any future shipped skills.
 
 ---
 

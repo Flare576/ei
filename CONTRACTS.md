@@ -187,6 +187,7 @@ The Processor is the **single entry point** for all frontend interactions. It ow
 - Reads/writes all state through `StateManager` — never touches storage directly
 - Delegates LLM execution to `QueueProcessor` — never calls the LLM inline
 - Notifies the frontend through `Ei_Interface` — never holds frontend references directly
+- Drains the external Corrections Queue every tick (see below) — the one place it touches a file (`corrections.json`) directly rather than through StateManager, since that file lives outside StateManager's serialized state entirely
 
 **What it is NOT**:
 - Not a data store (that's StateManager)
@@ -271,6 +272,31 @@ The RemoteSync module handles encrypted cloud backup to flare576.com.
 4. Server stores only encrypted blobs — cannot decrypt even with full database access
 
 **Rate Limiting**: 3 uploads per hour per user. Server returns 429 with `Retry-After` header if exceeded.
+
+---
+
+## Corrections Queue
+
+External writers — the CLI (`ei create/update/remove`) and MCP tools (`ei_create`/`ei_update`/`ei_remove`) — run in a separate process from any live TUI/daemon and hold no `StateManager` instance to mutate directly. The corrections queue (`$EI_DATA_PATH/corrections.json`) is the only path by which an out-of-process writer changes state.
+
+**`CorrectableType`** (`src/core/corrections.ts`): `"fact" | "topic" | "person" | "quote" | "persona"`. These five strings are the only valid `entity_type` values across both CLI and MCP surfaces — `assertValidCorrection()` rejects anything else.
+
+| Type | create | update | remove | Why |
+|------|--------|--------|--------|-----|
+| fact / topic / person | yes | yes | yes | Shared schema dispatch (`src/cli/corrections-endpoints.ts`) |
+| quote | — | yes | — | Verifiable-origin data (produced only by the extraction pipeline) — correctable (repoint `data_item_ids`, fix mistranscribed text) but never authored or deleted externally |
+| persona | yes | yes | yes | Bypasses `corrections-endpoints.ts`'s shared schema entirely — different shape (`PersonaEntity`, not `DataItemBase`), own validation module (`src/cli/persona-corrections.ts`) |
+
+**Two drain paths** (`src/cli/corrections-writer.ts` writes, `Processor.drainCorrections()` reads):
+- **Live-drain**: if a process holds `ei.lock` (TUI or future daemon), the write appends to `corrections.json` and waits — the live Processor's `runLoop` drains it into `StateManager` every tick (~100ms). No restart needed.
+- **Self-drain**: if nothing holds the lock and `state.json` exists, the CLI applies the correction directly to `state.json` itself instead of leaving it queued indefinitely. Safe specifically because no live `StateManager` exists that could later overwrite the write with a stale in-memory copy — this is an intentional, narrow exception to the Processor/StateManager/Storage layering described above.
+- **Sync edge case**: no lock, no `state.json`, but `state.backup.json` exists (sync user, TUI currently closed) — queues into `corrections.json` rather than fabricating a `state.json` that would conflict with the next sync pull.
+
+**Atomicity**: both paths serialize through the shared advisory-lock + temp-file-rename primitives in `src/storage/file-lock.ts` (the same module `FileStorage` uses for `state.json` itself) — concurrent writers, live or self-draining, cannot interleave.
+
+**Scope**: filesystem-only. Web (`IndexedDBStorage`) never writes or reads `corrections.json` — the CLI/MCP tools that produce it are Node/Bun-only.
+
+**Event note**: `drainCorrections()` emits `onHumanUpdated` after applying a batch, regardless of which `CorrectableType`s were in it — including `quote` and `persona` corrections. This differs from the type-specific events (`onQuoteAdded`, `onPersonaUpdated`, etc.) an equivalent in-process `StateManager` mutation triggers; a frontend that only refetches personas/quotes on their dedicated events will miss corrections-driven changes to them.
 
 ---
 
