@@ -9,6 +9,7 @@
  * - Regression: no "pending-" prefixed IDs after apply
  * - Critique text displayed in modal
  */
+import type { Page } from "@playwright/test";
 import { test, expect } from "./fixtures.js";
 
 const STATE_KEY = "ei_state";
@@ -183,6 +184,12 @@ async function loadCheckpoint(
   );
 }
 
+/** Block CDN requests that would cause embedding computation to hang (see facts-ui.spec.ts) */
+async function blockEmbeddingCDN(page: Page): Promise<void> {
+  await page.route("**/jsdelivr.net/**", (route) => route.abort());
+  await page.route("**/huggingface.co/**", (route) => route.abort());
+}
+
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 test.describe("Persona Reflection Modal", () => {
@@ -329,6 +336,7 @@ test.describe("Persona Reflection Modal", () => {
   }) => {
     const checkpoint = createReflectionCheckpoint(mockServerUrl);
     await loadCheckpoint(page, checkpoint);
+    await blockEmbeddingCDN(page);
     await page.goto("/");
 
     // Open modal
@@ -567,6 +575,7 @@ test.describe("Persona Reflection Modal", () => {
   }) => {
     const checkpoint = createReflectionCheckpoint(mockServerUrl);
     await loadCheckpoint(page, checkpoint);
+    await blockEmbeddingCDN(page);
     await page.goto("/");
 
     // Open modal
