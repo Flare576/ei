@@ -61,10 +61,11 @@ Four correctable record types (personas are **not** editable here — leave them
 | **quote** | a real utterance from a conversation | re-point it to the correct person/topic, or fix its text; public Ei tools do not create or remove quotes |
 
 **The links that matter:** a **quote** carries a `data_item_ids` array — the ids of the
-people/topics it is attached to. A **person** record, when you read it, shows its
-`linked_quotes` (the reverse view). *This is the whole game:* fixing a bad merge means
-moving quotes from the wrong record to the right one by editing each quote's
-`data_item_ids`.
+people/topics (or, less commonly, facts) it is attached to; each id must resolve to an
+existing fact, topic, or person record or the write is rejected. A **person** record, when
+you read it, shows its `linked_quotes` (the reverse view). *This is the whole game:* fixing
+a bad merge means moving quotes from the wrong record to the right one by editing each
+quote's `data_item_ids`.
 
 **Provenance is your source of truth.** Every quote stores where it came from:
 `speaker`, `channel`, and a `message_id` whose prefix tells you the origin

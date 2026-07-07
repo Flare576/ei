@@ -47,7 +47,9 @@ linked_quotes: [ { id, text, speaker, timestamp } ]            # (READ-ONLY proj
 ```
 text, speaker, channel,
 message_id,                 # provenance pointer, e.g. "slack:TEAM:CHANNEL:TS" (see provenance.md)
-data_item_ids: [ … ],       # THE LINK: ids of the people/topics this quote is attached to
+data_item_ids: [ … ],       # THE LINK: ids of the facts/topics/people this quote is
+                             # attached to — must resolve to one of those three or the
+                             # write is rejected (never a persona or another quote)
 persona_groups: […],        # (managed)
 timestamp, start, end, created_at, created_by   # (managed)
 ```
@@ -128,16 +130,31 @@ or you *will* drop a field.
 
 ## There is no undo
 
-Writes are recorded as an **append-only correction log**, typically at
-`$EI_DATA_PATH/corrections.json` (default `~/.local/share/ei/corrections.json`). Each entry is
-roughly `{ op: "upsert" | "remove", entity_type, id, record, timestamp }`. Depending on the
-install, a `state.json` may or may not exist yet; when it doesn't, your writes still land in
-`corrections.json` and take effect on read.
+Every write is recorded as a correction: `{ op: "upsert" | "remove", entity_type, id, record,
+timestamp }`. Where it lands depends on what's running on this machine — don't assume it
+always sits in `corrections.json` waiting to be read:
+
+- **A live Ei instance is running** (holds `ei.lock`) → the correction is appended to
+  `$EI_DATA_PATH/corrections.json`, and the running Processor drains it into the live state
+  within ~100ms.
+- **No live instance, but `state.json` exists** → the CLI applies the correction *directly*
+  into `state.json` itself, immediately. `corrections.json` is left empty — there is nothing
+  sitting in it to inspect, even though the write fully succeeded.
+- **No live instance, no `state.json`, but `state.backup.json` exists** (a sync account that
+  hasn't opened Ei on this machine yet) → the correction queues in `corrections.json` and is
+  applied the next time Ei starts and pulls state.
+- **Neither `state.json` nor `state.backup.json` exists** → the write fails outright with an
+  error (no Ei data found at that path) — nothing is queued.
 
 Consequences you must design around:
 - **No rollback command.** To reverse a change you make *another* write (e.g. `update` it back,
   or re-`create` a removed record — which gets a **new** id, so its old quote links are lost).
 - **`remove` is the most dangerous op** — it discards the id other records may point to.
+- **`cat`-ing `corrections.json` is not a reliable way to confirm a write** — in the common
+  case (no live Ei instance open while you're running the CLI), the correction is applied and
+  the file is already back to `[]` by the time your command returns. Don't treat an empty file
+  as "nothing happened."
 - Therefore: **plan and get confirmation before writing**, and after writing, **re-read to
-  verify**. You can `cat` the correction log to confirm exactly what was recorded (skip the
-  `embedding` arrays — they're noise).
+  verify** — `ei --id <id>` is the reliable check: every read merges any not-yet-drained
+  corrections on top of the last saved state, so it reflects your write immediately no matter
+  which of the cases above applied.

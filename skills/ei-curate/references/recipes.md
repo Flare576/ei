@@ -139,5 +139,6 @@ There's no undo, but the data isn't stuck — you fix a bad write with another w
 - Removed something you shouldn't have → re-`create` it (note: new id; re-point its quotes to
   the new id). Tell the user this happened and what the new id is.
 
-Inspect `~/.local/share/ei/corrections.json` (or `$EI_DATA_PATH/corrections.json`) to see the
-exact log of what you recorded. Then re-verify and re-report.
+Re-read the record(s) via `ei --id <id>` to confirm — that's the reliable check. Don't rely
+on inspecting `corrections.json`: it's frequently already empty even after a fully
+successful write (see `references/cli.md` → "There is no undo"). Then re-verify and re-report.
