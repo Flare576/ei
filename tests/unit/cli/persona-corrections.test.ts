@@ -576,6 +576,124 @@ describe("updatePersonaEntity", () => {
       })
     ).rejects.toThrow(/unknown tool "Nonexistent Tool" under provider "Brave Search"/);
   });
+
+  it("preserves an existing grant under a disabled provider when the submitted tools map covers only visible/enabled providers (I5)", async () => {
+    const brave = makeToolProvider({ id: "p-brave", display_name: "Brave Search", enabled: true });
+    const legacy = makeToolProvider({ id: "p-legacy", display_name: "Legacy Provider", enabled: false });
+    const webSearch = makeToolDefinition({ id: "t-web-search", provider_id: "p-brave", display_name: "Web Search" });
+    const hiddenTool = makeToolDefinition({ id: "t-hidden", provider_id: "p-legacy", display_name: "Hidden Tool" });
+    const allTools = [webSearch, hiddenTool];
+    const allProviders = [brave, legacy];
+
+    // Existing grants: Web Search (visible, Brave enabled) + Hidden Tool
+    // (invisible, Legacy disabled).
+    const existing = makeExistingPersonaEntity(PERSONA_ID, { tools: ["t-web-search", "t-hidden"] });
+    writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }, { providers: allProviders, tools: allTools }));
+
+    // A real read only ever shows the visible portion -- the disabled
+    // provider (and its tool) never appears.
+    const readShapedInput = buildPersonaToolsMap(existing.tools!, allTools, allProviders)!;
+    expect(readShapedInput).toEqual({ "Brave Search": { "Web Search": true } });
+
+    // Caller round-trips exactly that map, unmodified, alongside an
+    // unrelated field edit -- the real-world "read -> edit unrelated
+    // field -> write back" flow from I5.
+    const updated = await updatePersonaEntity(PERSONA_ID, {
+      display_name: "Renamed Persona",
+      tools: readShapedInput,
+    });
+
+    // The disabled provider's grant must have survived even though it was
+    // never present in the submitted payload.
+    const persisted = await loadLatestState();
+    expect(persisted!.personas[PERSONA_ID].entity.tools?.slice().sort()).toEqual(
+      ["t-hidden", "t-web-search"].sort()
+    );
+    // And it stays invisible in the enriched response, exactly as
+    // buildPersonaToolsMap already guarantees on read.
+    expect(updated.tools).toEqual({ "Brave Search": { "Web Search": true } });
+  });
+
+  it("preserves a grant under a disabled provider even when `tools` is omitted from the request body entirely (I5)", async () => {
+    const brave = makeToolProvider({ id: "p-brave", display_name: "Brave Search", enabled: true });
+    const legacy = makeToolProvider({ id: "p-legacy", display_name: "Legacy Provider", enabled: false });
+    const webSearch = makeToolDefinition({ id: "t-web-search", provider_id: "p-brave", display_name: "Web Search" });
+    const hiddenTool = makeToolDefinition({ id: "t-hidden", provider_id: "p-legacy", display_name: "Hidden Tool" });
+    const allTools = [webSearch, hiddenTool];
+    const allProviders = [brave, legacy];
+
+    const existing = makeExistingPersonaEntity(PERSONA_ID, { tools: ["t-web-search", "t-hidden"] });
+    writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }, { providers: allProviders, tools: allTools }));
+
+    // No `tools` key at all in the request body -- full-record-replace
+    // semantics wipe the visible portion (pre-existing, documented
+    // behavior for every other omitted field), but the hidden grant must
+    // still survive unconditionally.
+    await updatePersonaEntity(PERSONA_ID, { display_name: "Renamed Persona" });
+
+    const persisted = await loadLatestState();
+    expect(persisted!.personas[PERSONA_ID].entity.tools).toEqual(["t-hidden"]);
+  });
+
+  it("still revokes a visible grant flipped to false, without resurrecting it via hidden-grant preservation", async () => {
+    const brave = makeToolProvider({ id: "p-brave", display_name: "Brave Search", enabled: true });
+    const legacy = makeToolProvider({ id: "p-legacy", display_name: "Legacy Provider", enabled: false });
+    const webSearch = makeToolDefinition({ id: "t-web-search", provider_id: "p-brave", display_name: "Web Search" });
+    const newsSearch = makeToolDefinition({ id: "t-news-search", provider_id: "p-brave", display_name: "News Search" });
+    const hiddenTool = makeToolDefinition({ id: "t-hidden", provider_id: "p-legacy", display_name: "Hidden Tool" });
+    const allTools = [webSearch, newsSearch, hiddenTool];
+    const allProviders = [brave, legacy];
+
+    // Existing grants: Web Search + News Search (both visible) + Hidden
+    // Tool (invisible).
+    const existing = makeExistingPersonaEntity(PERSONA_ID, { tools: ["t-web-search", "t-news-search", "t-hidden"] });
+    writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }, { providers: allProviders, tools: allTools }));
+
+    // Caller reads, flips News Search false (a real revocation), submits.
+    const readShapedInput = buildPersonaToolsMap(existing.tools!, allTools, allProviders)!;
+    expect(readShapedInput).toEqual({
+      "Brave Search": { "Web Search": true, "News Search": true },
+    });
+    const revokedInput = {
+      "Brave Search": { "Web Search": true, "News Search": false },
+    };
+
+    await updatePersonaEntity(PERSONA_ID, { display_name: "Renamed Persona", tools: revokedInput });
+
+    const persisted = await loadLatestState();
+    // News Search is gone (real revocation honored); Web Search stays;
+    // Hidden Tool survives despite never appearing in the payload.
+    expect(persisted!.personas[PERSONA_ID].entity.tools?.slice().sort()).toEqual(
+      ["t-hidden", "t-web-search"].sort()
+    );
+  });
+
+  it("still revokes a visible grant omitted from an otherwise-included tools map, without resurrecting it via hidden-grant preservation", async () => {
+    const brave = makeToolProvider({ id: "p-brave", display_name: "Brave Search", enabled: true });
+    const legacy = makeToolProvider({ id: "p-legacy", display_name: "Legacy Provider", enabled: false });
+    const webSearch = makeToolDefinition({ id: "t-web-search", provider_id: "p-brave", display_name: "Web Search" });
+    const newsSearch = makeToolDefinition({ id: "t-news-search", provider_id: "p-brave", display_name: "News Search" });
+    const hiddenTool = makeToolDefinition({ id: "t-hidden", provider_id: "p-legacy", display_name: "Hidden Tool" });
+    const allTools = [webSearch, newsSearch, hiddenTool];
+    const allProviders = [brave, legacy];
+
+    const existing = makeExistingPersonaEntity(PERSONA_ID, { tools: ["t-web-search", "t-news-search", "t-hidden"] });
+    writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }, { providers: allProviders, tools: allTools }));
+
+    // Submitted map includes the "Brave Search" provider key but simply
+    // leaves News Search out entirely (not even `false`) -- still a real
+    // revocation under full-record-replace semantics for the visible
+    // portion.
+    await updatePersonaEntity(PERSONA_ID, {
+      display_name: "Renamed Persona",
+      tools: { "Brave Search": { "Web Search": true } },
+    });
+
+    const persisted = await loadLatestState();
+    expect(persisted!.personas[PERSONA_ID].entity.tools?.slice().sort()).toEqual(
+      ["t-hidden", "t-web-search"].sort()
+    );
+  });
 });
 
 // ── removePersonaEntity ───────────────────────────────────────────────────────

@@ -41,7 +41,7 @@ import { NOTES_MAX } from "../core/tools/builtin/persona-notes.js";
 import type { PersonaEntity } from "../core/types/entities.js";
 import type { PersonaTrait, PersonaTopic } from "../core/types/data-items.js";
 import type { CorrectionRecord } from "../core/corrections.js";
-import { buildPersonaToolsMap, resolvePersonaToolsFromMap } from "../core/persona-tools.js";
+import { buildPersonaToolsMap, resolvePersonaToolsFromMap, preserveHiddenToolGrants } from "../core/persona-tools.js";
 import type { ToolDefinition, ToolProvider } from "../core/types/integrations.js";
 
 const DEFAULT_GROUP = "General";
@@ -360,6 +360,7 @@ export async function updatePersonaEntity(id: string, body: unknown): Promise<Pe
     validatePersonaToolsMap(parsed.tools, allTools, allProviders);
   }
   const resolvedTools = resolvePersonaToolsFromMap(parsed.tools, allTools, allProviders);
+  const finalTools = preserveHiddenToolGrants(resolvedTools, existing.entity.tools, allTools, allProviders);
 
   const now = new Date().toISOString();
   const traits = materializeTraits(parsed.traits, now);
@@ -381,7 +382,7 @@ export async function updatePersonaEntity(id: string, body: unknown): Promise<Pe
     groups_visible: parsed.groups_visible,
     traits,
     topics,
-    tools: resolvedTools,
+    tools: finalTools,
     is_paused: parsed.is_paused,
     pause_until: parsed.pause_until,
     is_archived: parsed.is_archived,
