@@ -17,7 +17,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // imports are being collected. NOT a local relative-path mock: those don't
 // actually intercept anything in this repo's current vitest setup, which is
 // why the rest of this file exercises createPersonaEntity/updatePersonaEntity/
-// removePersonaEntity for real end-to-end (real embedding computation, real
+// removePersonaEntity for real end-to-end (mocked embedding computation, real
 // self-drain to a temp EI_DATA_PATH) and verifies outcomes by reloading
 // state.json/corrections.json from disk afterward, the same strategy
 // corrections-endpoints.test.ts and corrections-writer.test.ts already use.
@@ -26,6 +26,17 @@ vi.mock("zod", async (importOriginal) => {
   return {
     ...actual,
     z: (actual.z ?? actual.default ?? actual) as Record<string, unknown>,
+  };
+});
+
+// computePersonaDescriptionEmbedding hits a real local fastembed model load
+// when unmocked — mirrors corrections-endpoints.test.ts's mock of the sibling
+// computeDataItemEmbedding/computeQuoteEmbedding functions for the same reason.
+vi.mock("../../../src/core/embedding-service.js", async (importOriginal) => {
+  const actual = await importOriginal() as Record<string, unknown>;
+  return {
+    ...actual,
+    computePersonaDescriptionEmbedding: vi.fn().mockResolvedValue([0.25, 0.5, 0.75]),
   };
 });
 
