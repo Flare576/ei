@@ -58,3 +58,35 @@ export function resolvePersonaToolsFromMap(
   }
   return enabledIds.length > 0 ? enabledIds : [];
 }
+
+/**
+ * A tool id belonging to a currently-disabled provider is invisible to
+ * buildPersonaToolsMap and therefore can never appear in a caller's
+ * submitted map -- not because the caller chose to omit it, but because
+ * they had no way to see it. Full-record-replace semantics only apply to
+ * the portion of tools[] a caller could actually read and edit; anything
+ * outside that boundary must survive an edit unconditionally, or a normal
+ * read-edit-write cycle silently destroys stored state the caller never
+ * had a chance to preserve correctly. This is intentionally NOT a general
+ * merge -- resolvedVisibleIds still fully governs every id whose provider
+ * IS enabled; only ids that are structurally unaddressable right now get
+ * carried forward.
+ */
+export function preserveHiddenToolGrants(
+  resolvedVisibleIds: string[] | undefined,
+  existingIds: string[] | undefined,
+  allTools: ToolDefinition[],
+  allProviders: ToolProvider[]
+): string[] | undefined {
+  const providerById = new Map(allProviders.map(p => [p.id, p]));
+  const toolById = new Map(allTools.map(t => [t.id, t]));
+  const hidden = (existingIds ?? []).filter(id => {
+    const tool = toolById.get(id);
+    if (!tool) return false;
+    const provider = providerById.get(tool.provider_id);
+    return provider ? !provider.enabled : false;
+  });
+  if (hidden.length === 0) return resolvedVisibleIds;
+  const merged = new Set([...(resolvedVisibleIds ?? []), ...hidden]);
+  return merged.size > 0 ? Array.from(merged) : undefined;
+}

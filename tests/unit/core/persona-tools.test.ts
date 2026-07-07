@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildPersonaToolsMap, resolvePersonaToolsFromMap } from "../../../src/core/persona-tools.js";
+import { buildPersonaToolsMap, resolvePersonaToolsFromMap, preserveHiddenToolGrants } from "../../../src/core/persona-tools.js";
 import type { ToolDefinition, ToolProvider } from "../../../src/core/types.js";
 
 function makeProvider(overrides: Partial<ToolProvider> = {}): ToolProvider {
@@ -136,5 +136,74 @@ describe("resolvePersonaToolsFromMap", () => {
     const ids = resolvePersonaToolsFromMap({ "Brave Search": { "Web Search": false } }, [search], [brave]);
 
     expect(ids).toEqual([]);
+  });
+});
+
+describe("preserveHiddenToolGrants", () => {
+  it("returns resolvedVisibleIds unchanged when no existing id belongs to a disabled provider", () => {
+    const brave = makeProvider({ id: "p-brave", display_name: "Brave Search", enabled: true });
+    const search = makeTool({ id: "t-search", provider_id: "p-brave" });
+
+    const result = preserveHiddenToolGrants(["t-search"], ["t-search"], [search], [brave]);
+
+    expect(result).toEqual(["t-search"]);
+  });
+
+  it("adds a hidden id back in even when resolvedVisibleIds is undefined", () => {
+    const disabledProvider = makeProvider({ id: "p-disabled", display_name: "Disabled Provider", enabled: false });
+    const hiddenTool = makeTool({ id: "t-hidden", provider_id: "p-disabled" });
+
+    const result = preserveHiddenToolGrants(undefined, ["t-hidden"], [hiddenTool], [disabledProvider]);
+
+    expect(result).toEqual(["t-hidden"]);
+  });
+
+  it("adds a hidden id back in even when resolvedVisibleIds is an empty array", () => {
+    const disabledProvider = makeProvider({ id: "p-disabled", display_name: "Disabled Provider", enabled: false });
+    const hiddenTool = makeTool({ id: "t-hidden", provider_id: "p-disabled" });
+
+    const result = preserveHiddenToolGrants([], ["t-hidden"], [hiddenTool], [disabledProvider]);
+
+    expect(result).toEqual(["t-hidden"]);
+  });
+
+  it("does NOT preserve a hidden id whose tool no longer exists in the registry at all", () => {
+    const disabledProvider = makeProvider({ id: "p-disabled", display_name: "Disabled Provider", enabled: false });
+
+    // "t-deleted" is in existingIds but absent from allTools entirely --
+    // that's the bootstrap reconcile pass's job to clean up, not this
+    // function's; preserveHiddenToolGrants can't classify an id it can't
+    // resolve to a provider, so it must drop it rather than guess.
+    const result = preserveHiddenToolGrants(undefined, ["t-deleted"], [], [disabledProvider]);
+
+    expect(result).toBeUndefined();
+  });
+
+  it("does NOT resurrect an id belonging to an ENABLED provider that's simply absent from resolvedVisibleIds", () => {
+    const brave = makeProvider({ id: "p-brave", display_name: "Brave Search", enabled: true });
+    const revokedTool = makeTool({ id: "t-revoked", provider_id: "p-brave" });
+
+    // "t-revoked" was granted before (existingIds) but the caller's
+    // resolved map no longer includes it, and its provider is enabled --
+    // this is a real revocation, not a visibility gap. Must not come back.
+    const result = preserveHiddenToolGrants([], ["t-revoked"], [revokedTool], [brave]);
+
+    expect(result).toEqual([]);
+  });
+
+  it("merges a hidden id alongside real visible ids without duplicating anything", () => {
+    const brave = makeProvider({ id: "p-brave", display_name: "Brave Search", enabled: true });
+    const disabledProvider = makeProvider({ id: "p-disabled", display_name: "Disabled Provider", enabled: false });
+    const visibleTool = makeTool({ id: "t-visible", provider_id: "p-brave" });
+    const hiddenTool = makeTool({ id: "t-hidden", provider_id: "p-disabled" });
+
+    const result = preserveHiddenToolGrants(
+      ["t-visible"],
+      ["t-visible", "t-hidden"],
+      [visibleTool, hiddenTool],
+      [brave, disabledProvider]
+    );
+
+    expect(result?.slice().sort()).toEqual(["t-hidden", "t-visible"]);
   });
 });
