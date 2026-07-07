@@ -7,7 +7,7 @@ import type {
   ProviderAccount,
 } from "../../../src/core/types.js";
 import { modelGuidToDisplay, displayToModelGuid } from "./yaml-shared.js";
-import { buildPersonaToolsMap, resolvePersonaToolsFromMap } from "../../../src/core/persona-tools.js";
+import { buildPersonaToolsMap, resolvePersonaToolsFromMap, preserveHiddenToolGrants } from "../../../src/core/persona-tools.js";
 import { parseDuration, formatDuration } from "./duration.js";
 
 const PLACEHOLDER_LONG_DESC = "Detailed description of this persona's personality, background, and role";
@@ -301,7 +301,12 @@ export function personaFromYAML(yamlContent: string, original: PersonaEntity, al
     pause_until: data.pause_until,
     is_static: data.is_static ?? false,
     include_message_timestamps: data.include_message_timestamps ?? false,
-    tools: resolvePersonaToolsFromMap(data.tools, allTools ?? [], allProviders ?? []),
+    tools: preserveHiddenToolGrants(
+      resolvePersonaToolsFromMap(data.tools, allTools ?? [], allProviders ?? []),
+      original.tools,
+      allTools ?? [],
+      allProviders ?? []
+    ),
     last_updated: new Date().toISOString(),
   };
 
