@@ -147,9 +147,13 @@ Follow these six steps in order for any persona task. Load the linked reference
 the moment its condition applies.
 
 ### 1. Find the persona
-- `ei --persona "<name>"` to search for it by name, or `ei --id <id>` if you
-  already have the id. If the user is asking you to create a brand-new persona,
-  there's nothing to find yet — skip to step 3.
+- `ei persona "<name>"` (or `ei personas "<name>"`) to search for it by name — a substring
+  match against `display_name`, falling back to semantic search over its description if no
+  substring hits. Or `ei --id <id>` if you already have the id. **Do not use the `--persona`
+  flag for this** — that flag filters *other* entities (facts/topics/people) down to what a
+  named persona has learned; it never returns the persona's own record, so it will not find
+  what you're looking for. If the user is asking you to create a brand-new persona, there's
+  nothing to find yet — skip to step 3.
 
 ### 2. Read — understand what's actually there
 - `ei --id <id>` → the **full** current record: `display_name`,

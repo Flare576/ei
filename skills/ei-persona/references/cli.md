@@ -13,14 +13,20 @@ first and trust it over this file** if they disagree (the CLI evolves).
 ## Reading (safe, do this constantly)
 
 ```bash
-ei --persona "<Name>"           # find a persona by (fuzzy) display name
+ei persona "<Name>"             # find a persona by name — substring match on display_name,
+                                 # falls back to semantic search over long_description
 ei --id <id>                    # full record for one entity, including a persona
 ```
 
-`ei --id <id>` is your workhorse. For a persona it returns the **full** record: identity
-fields, every entry in `traits[]` and `topics[]`, and the lifecycle flags. Always read the
-full record before writing — you cannot safely change one field of a persona without
-seeing the rest (full-record round-trip, below).
+`ei persona "<Name>"` (the type-specific search, not the `--persona` filter flag) is how you
+find a persona by name. **`--persona "<Name>"` is a different feature** — it filters *other*
+entity types (facts/topics/people) down to what a named persona has learned; it never returns
+personas themselves, so it cannot be used to find one.
+
+`ei --id <id>` is your workhorse once you have the id. For a persona it returns the **full**
+record: identity fields, every entry in `traits[]` and `topics[]`, and the lifecycle flags.
+Always read the full record before writing — you cannot safely change one field of a persona
+without seeing the rest (full-record round-trip, below).
 
 ## The persona record shape
 
@@ -46,7 +52,8 @@ tools: { "<Provider>": { "<Tool>": true|false } }, # a map (not an id list) of e
                                         # grants" below (not related to your own tool access)
 avatar_emoji, avatar_image,
 preferred_theme,
-notes: [ "…" ],
+notes: [ "…" ],                        # capped at 20 entries server-side — a write that
+                                        # pushes the array past 20 is rejected
 ```
 
 **`PersonaTrait`** — a named character trait:
@@ -226,11 +233,21 @@ programmatically, or you *will* drop a trait or field.
 
 ## There is no undo
 
-Writes are recorded as an **append-only correction log**, typically at
-`$EI_DATA_PATH/corrections.json` (default `~/.local/share/ei/corrections.json`). Each
-entry is roughly `{ op: "upsert" | "remove", entity_type: "persona", id, record,
-timestamp }`. Depending on the install, a `state.json` may or may not exist yet; when it
-doesn't, your writes still land in `corrections.json` and take effect on read.
+Every write is recorded as a correction: `{ op: "upsert" | "remove", entity_type: "persona",
+id, record, timestamp }`. Where it lands depends on what's running on this machine — don't
+assume it always sits in `corrections.json` waiting to be read:
+
+- **A live Ei instance is running** (holds `ei.lock`) → the correction is appended to
+  `$EI_DATA_PATH/corrections.json`, and the running Processor drains it into the live state
+  within ~100ms.
+- **No live instance, but `state.json` exists** → the CLI applies the correction *directly*
+  into `state.json` itself, immediately. `corrections.json` is left empty — there is nothing
+  sitting in it to inspect, even though the write fully succeeded.
+- **No live instance, no `state.json`, but `state.backup.json` exists** (a sync account that
+  hasn't opened Ei on this machine yet) → the correction queues in `corrections.json` and is
+  applied the next time Ei starts and pulls state.
+- **Neither `state.json` nor `state.backup.json` exists** → the write fails outright with an
+  error (no Ei data found at that path) — nothing is queued.
 
 Consequences you must design around:
 - **No rollback command.** To reverse a change you make *another* write (e.g. `update` it
@@ -238,6 +255,11 @@ Consequences you must design around:
   persona as far as the rest of the system is concerned).
 - **`remove` is the most dangerous op** — for a non-reserved persona it succeeds
   immediately and is permanent. For a reserved persona it's rejected outright (see above).
+- **`cat`-ing `corrections.json` is not a reliable way to confirm a write** — in the common
+  case (no live Ei instance open while you're running the CLI), the correction is applied and
+  the file is already back to `[]` by the time your command returns. Don't treat an empty
+  file as "nothing happened."
 - Therefore: **plan and get confirmation before writing**, and after writing, **re-read to
-  verify**. You can `cat` the correction log to confirm exactly what was recorded (skip the
-  embedding fields — they're noise).
+  verify** — `ei --id <id>` is the reliable check: every read merges any not-yet-drained
+  corrections on top of the last saved state, so it reflects your write immediately no matter
+  which of the cases above applied.

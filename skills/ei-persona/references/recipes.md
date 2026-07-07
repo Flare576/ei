@@ -241,5 +241,7 @@ There's no undo, but the data isn't stuck — you fix a bad write with another w
   never applies — you couldn't have deleted it in the first place.
 - Archived by mistake → set `is_archived: false` and write again.
 
-Inspect `~/.local/share/ei/corrections.json` (or `$EI_DATA_PATH/corrections.json`) to see
-the exact log of what you recorded. Then re-verify and re-report.
+Re-read the persona with `ei persona "<name>" --id <id>` (or `ei --id <id>`) to verify what
+actually landed — don't rely on `corrections.json`. In the common case (no live Ei instance
+running), the write applies straight to `state.json` and `corrections.json` is immediately
+reset to `[]`, so it will often already be empty even after a fully successful write.
