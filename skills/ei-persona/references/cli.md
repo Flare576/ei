@@ -141,6 +141,8 @@ no longer exists — the write fails with a clear validation error; it does not 
 ignore the bad key and apply the rest. **Never hand-retype a provider or tool name from
 memory** — only use names that came from an actual read of this exact persona.
 
+**A grant under a currently-disabled provider survives your update automatically — you don't do anything for this to happen.** If this persona already has a tool granted under a provider that's disabled right now, that grant isn't in your read and doesn't belong in your write either, and it stays intact across the update regardless. Do **not** try to guess-reconstruct a disabled provider's block from memory to "preserve" it — you have no way to know what it actually contains, and a fabricated one is indistinguishable from inventing a brand-new grant under an unknown/disabled provider, so it gets rejected the same way. The rule stays simple: for every provider you *can* see, write back exactly what you read, edited only where you meant to edit; every provider you can't see isn't yours to touch, in either direction. This is not the same as revocation — flipping a visible tool's boolean to `false`, or leaving it out of an otherwise-included enabled provider's block, still removes it for real. Auto-preservation only ever applies to a provider that's invisible to you to begin with.
+
 ## Creating
 
 ```bash
