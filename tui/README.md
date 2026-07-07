@@ -174,6 +174,8 @@ Rooms have three modes, set at creation time:
 | `/tools` | | Manage tool providers — enable/disable tools per persona |
 | `/auth <service>` | | Authenticate with an external service via OAuth. Supported: `spotify`, `slack` |
 
+> Disabling a tool provider hides its tools from `/details`' YAML editor, but doesn't revoke them — a persona's grants for a disabled provider's tools survive an unrelated `/details` edit and reappear once you re-enable the provider with `/tools` or `/provider`.
+
 ### Editor
 
 | Command | Aliases | Description |

@@ -15,11 +15,11 @@ ei --recent                            # Most recently mentioned items (no query
 ei --persona "Beta" --recent           # Most recently mentioned items Beta has learned
 ei --id <id>                   # Look up entity by ID — or fetch a message by FQ ID
 echo <id> | ei --id            # Look up entity by ID from stdin
-ei --install                   # Wire Ei into Claude Code, Cursor, Codex, and OpenCode (MCP + context hooks + skills (ei-curate and future shipped skills) + persona plugin where supported)
+ei --install                   # Wire Ei into Claude Code, Cursor, Codex, and OpenCode (MCP + context hooks + skills (ei-curate, ei-persona, and future shipped skills) + persona plugin where supported)
 ei --sync                      # Pull latest state from remote sync server into state.backup.json (no TUI required)
 ei mcp                         # Start the Ei MCP stdio server (for Claude Code/Cursor/Codex)
-ei create <type> --json '<json>'       # Create a new entity (fact/topic/person)
-ei update <type> <id> --json '<json>'  # Replace an entity by ID (fact/topic/person/quote)
+ei create <type> --json '<json>'       # Create a new entity (fact/topic/person/persona)
+ei update <type> <id> --json '<json>'  # Replace an entity by ID (fact/topic/person/quote/persona)
 ei remove <type> <id>                  # Remove an entity by ID
 ```
 
@@ -112,9 +112,9 @@ The MCP server exposes these tools to Claude Code, Cursor, Codex, and OpenCode:
 | `ei_search` | Search across all five data types (facts, topics, people, quotes, personas). Supports `type`, `persona`, `source`, `recent`, `limit` filters. Start here. |
 | `ei_lookup` | Full-record lookup for any entity by ID — facts, topics, people, quotes, or personas. Use when you need complete details beyond the search summary. |
 | `ei_fetch_message` | Retrieve a specific message by fully-qualified ID with optional `before`/`after` context window. Use when a quote result has a `message_id` and you want the original conversation. Routes to the correct source automatically. |
-| `ei_create` | Create a new entity (fact, topic, or person). Pass a full JSON record matching the entity's schema. Validates server-side; unknown fields are rejected. Returns the assigned id and the full stored record. Not available for quotes or personas. |
-| `ei_update` | Replace an entity by ID. Full-record replacement — fetch first with `ei_lookup`, edit the fields you need to change, and pass the complete record back. Any omitted field is treated as absent, not "leave unchanged". Supports fact, topic, person, and quote. |
-| `ei_remove` | Permanently remove a fact, topic, or person by ID. Use to drop bad extracted data that shouldn't be corrected, just deleted. Not available for quotes or personas. |
+| `ei_create` | Create a new entity (fact, topic, person, or persona). Pass a full JSON record matching the entity's schema. Validates server-side; unknown fields are rejected. Returns the assigned id and the full stored record. Not available for quotes — verifiable-origin data can only be corrected via `ei_update`, never created. |
+| `ei_update` | Replace an entity by ID. Full-record replacement — fetch first with `ei_lookup`, edit the fields you need to change, and pass the complete record back. Any omitted field is treated as absent, not "leave unchanged". Supports fact, topic, person, quote, and persona. |
+| `ei_remove` | Permanently remove a fact, topic, person, or persona by ID. Use to drop bad extracted data that shouldn't be corrected, just deleted, or to delete a persona that's no longer needed. Not available for quotes. Reserved built-in personas ("ei", "emmet") can't be removed this way — use `ei_update` to set `is_archived: true` instead. |
 
 ### `ei_search` arguments
 
@@ -139,7 +139,7 @@ All search commands return arrays. Each result includes a `type` field.
 
 **Persona**: `{ type, id, display_name, short_description, model, base_prompt, traits[], topics[] }`
 
-**ID lookup** (`ei --id <id>` / `ei_lookup`): single object (not an array) with the same shape as above, plus a `linked_quotes` array for Fact, Topic, and Person records — quotes attributed to that entity, useful when auditing what was said about a person or topic.
+**ID lookup** (`ei --id <id>` / `ei_lookup`): single object (not an array) with the same shape as above, plus a `linked_quotes` array for Fact, Topic, and Person records — quotes attributed to that entity, useful when auditing what was said about a person or topic. Persona ID lookups additionally get a `tools` field: the raw `tools` id array is replaced with a self-documenting `{ providerDisplayName: { toolDisplayName: boolean } }` map, so an agent can see exactly what's granted (and what else is grantable) without a separate lookup.
 
 ## Memory Management
 
@@ -153,8 +153,11 @@ All search commands return arrays. Each result includes a `type` field.
 | topic | yes | yes | yes |
 | person | yes | yes | yes |
 | quote | — | yes | — |
+| persona | yes | yes | yes |
 
 Quotes are created only by Ei's extraction pipeline (verifiable-origin data). They can be updated to repoint `data_item_ids` after a split/merge or to fix mistranscribed text, but never created or removed via these commands.
+
+Personas support all three operations too, but through a separate schema (`PersonaEntity`, not the fact/topic/person `DataItemBase` shape) — see the `ei create/update/remove persona` examples below and the `ei-persona` skill for guided authoring.
 
 ### Update semantics: full replacement, not a patch
 
@@ -174,12 +177,15 @@ ei update fact abc-123 --json '{"name":"Field of Study","description":"Software 
 ei create fact --json '{"name":"Field of Study","description":"CS","sentiment":0,"validated_date":""}'
 ei update fact abc-123 --json '{"name":"Field of Study","description":"Updated","sentiment":0,"validated_date":""}'
 ei update quote <id> --json '{"data_item_ids":["person-b-id"], ...}'  # Repoint a quote after splitting a bad merge (fetch the full record via 'ei --id <id>' first)
+ei create persona --json '{"display_name":"Yoda","long_description":"Speaks in inverted syntax, wise and patient.","traits":[{"name":"Inverted speech","description":"Talks like Yoda","sentiment":0.7}],"topics":[]}'
+ei update persona <id> --json '<full persona record from ei --id <id>, edited>'
+ei remove persona abc-123              # Remove a persona (reserved personas like "ei"/"emmet" must be archived instead)
 ei remove fact abc-123
 ```
 
 ### Corrections queue
 
-Changes written by `ei create/update/remove` (and the MCP tools `ei_create/ei_update/ei_remove`) go through a corrections queue (`$EI_DATA_PATH/corrections.json`). The Processor drains this file on every runLoop tick and applies changes to the live StateManager — no TUI restart required.
+Changes written by `ei create/update/remove` (and the MCP tools `ei_create/ei_update/ei_remove`) go through a corrections queue (`$EI_DATA_PATH/corrections.json`). If a live Ei instance (TUI or daemon) is running, the Processor drains this file on every runLoop tick and applies changes to the live StateManager — no TUI restart required. If nothing is running, the write applies straight to `state.json` instead of waiting for a TUI session that may not start for days.
 
 For safe, agent-driven curation with verification guardrails, use the `ei-curate` skill (see [Shipped Skills](#shipped-skills) below).
 
@@ -209,3 +215,4 @@ Skills are installed automatically — any directory added under `skills/` in th
 | Skill | What it does |
 |-------|-------------|
 | `ei-curate` | Safe agent-driven memory curation. Provides verified workflows for fixing merged records, bad attributions, stale facts, and mis-attributed quotes — using `ei create/update/remove` with explicit confirmation before every write. Read the full workflow at `skills/ei-curate/SKILL.md`. Load it in your harness with `/ei-curate`. |
+| `ei-persona` | Safe agent-driven persona authoring. Guides creating, editing (traits/topics/description), archiving, or deleting a persona's *character* via `ei create/update/remove persona` — distinct from `ei-curate`, which corrects learned data rather than authoring identity. Read the full workflow at `skills/ei-persona/SKILL.md`. Load it in your harness with `/ei-persona`. |
