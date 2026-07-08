@@ -1,5 +1,6 @@
 import type { PromptOutput, ParticipantContext } from "./types.js";
 import type { Person, Message } from "../../core/types.js";
+import type { PersonIdentifier } from "../../core/types/data-items.js";
 import { formatMessagesAsPlaceholders } from "../message-utils.js";
 
 export interface PersonUpdatePromptData {
@@ -12,6 +13,7 @@ export interface PersonUpdatePromptData {
   persona_name: string;
   participant_context?: ParticipantContext;
   known_identifier_types?: string[];
+  suggested_identifiers?: PersonIdentifier[];
 }
 
 function participantContextSection(ctx: ParticipantContext | undefined): string {
@@ -171,20 +173,29 @@ The description should NOT:
     ? `CRITICAL: The HUMAN USER is ${humanName}. They wrote these messages. Do NOT assign their names, nicknames, or handles as identifiers for this person's record — UNLESS this IS the user's own Self record (relationship: "Self").`
     : `CRITICAL: The HUMAN USER wrote these messages. Do NOT assign their own names or handles as identifiers for this person's record — UNLESS this IS the user's own Self record (relationship: "Self"). Do NOT return \`relationship: "Self"\` unless you are certain this record is about the human user themselves.`;
 
+  const attributionGuard = `\nONLY add an identifier if it is explicitly stated about THIS SPECIFIC PERSON — not inferred from proximity in the conversation. If two different people are discussed near each other, do NOT attribute one person's handle, email, or name to the other.`;
   const isUnknownNewPerson = isNewItem && personName === 'Unknown';
   const unknownIdentifierGuard = isUnknownNewPerson
-    ? `\nThis person's name is not yet known. ONLY add \`identifiers\` if their name, handle, or email is explicitly stated in the conversation about THEM specifically — not inferred, not guessed.`
+    ? `\nThis person's name is not yet known — be especially careful: only record an identifier the conversation names for THEM specifically.`
     : '';
 
-  const identifierSection = `${identityGuard}${unknownIdentifierGuard}
+  const suggestedIdentifiers = data.suggested_identifiers ?? [];
+  const suggestedIdentifiersBlock = !isNewItem && suggestedIdentifiers.length > 0
+    ? `\n\nThe scan flagged these identifiers as POSSIBLY belonging to this person: ${suggestedIdentifiers.map(i => `\`${i.type}=${i.value}\``).join(', ')}.
+For EACH, add it to \`identifiers_to_add\` ONLY if the Most Recent Messages confirm it belongs to THIS SPECIFIC PERSON. If any actually belongs to someone else mentioned in the conversation, omit it. Do not add any you cannot confirm from the conversation.`
+    : '';
+
+  const identifierSection = `${identityGuard}${attributionGuard}${unknownIdentifierGuard}
 
 If you spot a platform handle, username, email, nickname, or full name explicitly mentioned in the conversation that isn't already in the person's identifiers, include it in \`identifiers_to_add\` (updates) or \`identifiers\` (new records). Always mark exactly one identifier as \`"is_primary": true\` — prefer the most formal or complete name.
+
+Example of what NOT to do: if the conversation says "I talked to Priya and Marcus — Marcus's GitHub is @mcodes", do NOT add @mcodes to Priya's record; it belongs to Marcus only.
 
 For persons with a known relationship (Father, Mother, Sibling, etc.), also look for informal terms the HUMAN USER uses to address or refer to THAT SPECIFIC PERSON (\`Dad\`, \`Pop\`, \`Mom\`, \`Sis\`, etc.) and add them as \`{ "type": "Relationship", "value": "..." }\` identifiers.
 
 NEVER add dates, ages, birthdays, or anniversaries as identifiers. These are not identifying labels — if known, include them in the description instead.
 
-Known identifier types: ${allTypes}. If unsure of type, use \`Nickname\`.`;
+Known identifier types: ${allTypes}. If unsure of type, use \`Nickname\`.${suggestedIdentifiersBlock}`;
 
   // ── OUTPUT FORMAT ─────────────────────────────────────────────────────────
 

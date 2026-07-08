@@ -607,17 +607,6 @@ export function queuePersonUpdate(
 
   const candidateIdentifiers = context.candidateIdentifiers ?? [];
 
-  if (!isNewItem && existingItem && candidateIdentifiers.length > 0) {
-    const merged = [...(existingItem.identifiers ?? [])];
-    for (const ci of candidateIdentifiers) {
-      if (!merged.some(ei => ei.value === ci.value)) {
-        merged.push(ci);
-      }
-    }
-    existingItem = { ...existingItem, identifiers: merged };
-    state.human_person_upsert(existingItem);
-  }
-
   const userIdentifierTypes = [...new Set(
     state.getHuman().people
       .flatMap(p => (p.identifiers ?? []).map(i => i.type))
@@ -642,6 +631,7 @@ export function queuePersonUpdate(
       persona_name: chunk.channelDisplayName,
       participant_context: buildParticipantContext(primaryPersonaIdForUpdate, state),
       known_identifier_types: userIdentifierTypes,
+      suggested_identifiers: !isNewItem ? candidateIdentifiers : undefined,
     });
 
     state.queue_enqueue({

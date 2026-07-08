@@ -107,6 +107,8 @@ If you are unsure of the type, use \`Nickname\` as a fallback. Do NOT invent typ
 
 Only include \`identifiers\` when explicitly mentioned in the conversation — omit it entirely if nothing qualifies.
 
+Do NOT attribute one person's handle or identifier to another person discussed in the same window. If "Marcus's GitHub is @mcodes" appears alongside a mention of Priya, @mcodes belongs to Marcus's record only — never Priya's.
+
 ## Confidence & Relationship Type
 
 For each person, rate how important they are to the human user's life:

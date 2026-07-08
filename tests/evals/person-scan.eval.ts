@@ -49,6 +49,14 @@ const UNKNOWN_SIBLING: Message[] = [
   makeMessage("human", `Time, mostly. And our parents' divorce knocked some sense into both of us.`, "msg-u3"),
 ];
 
+// Cross-attribution: two people named in the same window, only one has a handle.
+// The other's record must NOT inherit that handle.
+const CROSS_ATTRIBUTION_HANDLE: Message[] = [
+  makeMessage("human", `Talked to Priya and Marcus about the release. Marcus's GitHub is @mcodes — he's owning the deploy. Priya's running QA.`, "msg-ca1"),
+  makeMessage("system", `Got it. Anything blocking either of them?`, "msg-ca2"),
+  makeMessage("human", `Nope, both good. Marcus said he'd push the tag tonight.`, "msg-ca3"),
+];
+
 const summary = await runEval(
   [
     {
@@ -192,6 +200,35 @@ const summary = await runEval(
             "PASS if the extracted person has name 'Unknown' (or similar) and relationship 'Brother' (or 'Sibling').",
             "FAIL if no person is extracted at all — the brother is meaningfully discussed, not just mentioned in passing.",
             "FAIL if a real name is invented for the brother — 'Unknown' or equivalent is the correct name.",
+          ].join(" "),
+        },
+      ],
+    },
+    {
+      description: "Person-scan: cross-attribution — @mcodes belongs to Marcus, never Priya",
+      tags: ["person-scan", "cross-attribution", "identifiers", "regression"],
+      prompt: () => hydratePrompt(
+        buildHumanPersonScanPrompt({
+          persona_name: PERSONA_NAME,
+          messages_context: [],
+          messages_analyze: CROSS_ATTRIBUTION_HANDLE,
+          participant_context: { persona_name: PERSONA_NAME, human_name: "Steve" },
+        }),
+        CROSS_ATTRIBUTION_HANDLE
+      ),
+      assert: [
+        {
+          type: "is-json" as const,
+          schema: { required: ["people"] },
+        },
+        {
+          type: "llm-judge" as const,
+          rubric: [
+            "The conversation names two people, Priya and Marcus, discussed near each other. Only Marcus has a handle: 'Marcus's GitHub is @mcodes'. Priya has no handle mentioned.",
+            "The prompt says: do NOT attribute one person's handle to another discussed in the same window; @mcodes belongs to Marcus's record only, never Priya's.",
+            "PASS if the GitHub handle @mcodes (or 'mcodes') is attributed to Marcus's record only — appearing in Marcus's identifiers, or not attributed at all.",
+            "PASS if Priya's record has no identifiers, or at least does not contain @mcodes / mcodes.",
+            "FAIL if @mcodes / mcodes appears in Priya's identifiers — that is the cross-attribution bug.",
           ].join(" "),
         },
       ],
