@@ -467,6 +467,9 @@ describe("handleHumanPersonScan — confidence-gated matching", () => {
   // cosineSimilarity(V, ORTHOGONAL) = 0 (< any threshold).
   const V = Array.from({ length: 384 }, (_, i) => (i === 0 ? 1 : 0));
   const ORTHOGONAL = Array.from({ length: 384 }, (_, i) => (i === 1 ? 1 : 0));
+  // Third orthogonal unit vector for multi-match "none above threshold" cases:
+  // cosineSimilarity(W, V) = cosineSimilarity(W, ORTHOGONAL) = 0.
+  const W = Array.from({ length: 384 }, (_, i) => (i === 2 ? 1 : 0));
 
   function makePerson(overrides: Partial<Person>): Person {
     return {
@@ -601,6 +604,107 @@ describe("handleHumanPersonScan — confidence-gated matching", () => {
     expect(queuePersonUpdate).toHaveBeenCalledWith(
       { matched_guid: "wife-rec" },
       expect.objectContaining({ candidateName: "Borfinda" }),
+      state,
+    );
+  });
+
+  // ── #78 C1: corroboration gate on scan-extracted identifiers ────────────────
+
+  it("C1: a shared identifier with NO name-token overlap does NOT bind (weak → cosine fails → new record)", async () => {
+    // Marcus owns @mcodes. A scan finds "Priya" also carrying @mcodes (cross-attribution
+    // signature). No name token is shared, so the identifier hit is WEAK and must clear the
+    // cosine gate — which it can't (orthogonal) — so Priya becomes a NEW record.
+    state._human.people.push(makePerson({
+      id: "marcus-id",
+      name: "Marcus Chen",
+      relationship: "Coworker",
+      embedding: V,
+      identifiers: [{ type: "GitHub", value: "@mcodes", is_primary: true }],
+    }));
+    mockEmbedImpl = async () => ORTHOGONAL; // cosine 0 < 0.75
+
+    await runScan({
+      name: "Priya",
+      description: "QA lead",
+      relationship: "Coworker",
+      identifiers: [{ type: "GitHub", value: "@mcodes" }],
+    });
+
+    expect(queuePersonUpdate).toHaveBeenCalledWith(
+      { matched_guid: null },
+      expect.objectContaining({ candidateName: "Priya" }),
+      state,
+    );
+  });
+
+  it("C1: a shared identifier WITH a corroborating name token binds directly (cosine not consulted)", async () => {
+    // Same @mcodes hit, but the candidate name "Marcus" shares a token with "Marcus Chen",
+    // so the identifier match is STRONG and merges without ever consulting the embedding.
+    state._human.people.push(makePerson({
+      id: "marcus-id",
+      name: "Marcus Chen",
+      relationship: "Coworker",
+      embedding: V,
+      identifiers: [{ type: "GitHub", value: "@mcodes", is_primary: true }],
+    }));
+    mockEmbedImpl = async () => ORTHOGONAL; // would fail the cosine gate if it were consulted
+
+    await runScan({
+      name: "Marcus",
+      relationship: "Coworker",
+      identifiers: [{ type: "GitHub", value: "@mcodes" }],
+    });
+
+    expect(queuePersonUpdate).toHaveBeenCalledWith(
+      { matched_guid: "marcus-id" },
+      expect.objectContaining({ candidateName: "Marcus" }),
+      state,
+    );
+  });
+
+  // ── Multi-match resolution by cosine ────────────────────────────────────────
+
+  it("multi-match: cosine picks the best candidate above threshold", async () => {
+    // "Jeff" first-name-matches both records (matches.length === 2 → multi-match cosine).
+    state._human.people.push(makePerson({ id: "jeff-kirk", name: "Jeff Kirk", relationship: "Coworker", embedding: V }));
+    state._human.people.push(makePerson({ id: "jeff-bezos", name: "Jeff Bezos", relationship: "Coworker", embedding: ORTHOGONAL }));
+    mockEmbedImpl = async () => V; // cosine 1.0 to jeff-kirk, 0 to jeff-bezos
+
+    await runScan({ name: "Jeff", description: "the coworker I pair with", relationship: "Coworker" });
+
+    expect(queuePersonUpdate).toHaveBeenCalledWith(
+      { matched_guid: "jeff-kirk" },
+      expect.objectContaining({ candidateName: "Jeff" }),
+      state,
+    );
+  });
+
+  it("multi-match: none above threshold creates a NEW record", async () => {
+    state._human.people.push(makePerson({ id: "jeff-kirk", name: "Jeff Kirk", relationship: "Coworker", embedding: V }));
+    state._human.people.push(makePerson({ id: "jeff-bezos", name: "Jeff Bezos", relationship: "Coworker", embedding: ORTHOGONAL }));
+    mockEmbedImpl = async () => W; // cosine 0 to both matches
+
+    await runScan({ name: "Jeff", description: "a third, unrelated Jeff", relationship: "Coworker" });
+
+    expect(queuePersonUpdate).toHaveBeenCalledWith(
+      { matched_guid: null },
+      expect.objectContaining({ candidateName: "Jeff" }),
+      state,
+    );
+  });
+
+  // ── #78 M1 (deferred): unnamed placeholder without an embedding cannot promote ──
+
+  it("M1 (deferred #78): a sole placeholder with NO embedding forks a new record instead of promoting", async () => {
+    // Pins the intentional deferred behavior documented at handler L306: confirmMatchByCosine
+    // returns null when the placeholder has no embedding, so it cannot be confirmed/promoted.
+    state._human.people.push(makePerson({ id: "unknown-cow", name: "Unknown", relationship: "Coworker" })); // no embedding
+
+    await runScan({ name: "Marcus", description: "a coworker", relationship: "Coworker" });
+
+    expect(queuePersonUpdate).toHaveBeenCalledWith(
+      { matched_guid: null },
+      expect.objectContaining({ candidateName: "Marcus" }),
       state,
     );
   });

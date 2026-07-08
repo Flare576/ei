@@ -30,6 +30,18 @@ const SINGLETON_RELATIONSHIPS = new Set([
   'father', 'mother',
 ]);
 
+function sharesNameToken(normalizedCandidateName: string, person: Person): boolean {
+  const candidateTokens = new Set(normalizedCandidateName.split(/\s+/).filter(t => t.length >= 3));
+  if (candidateTokens.size === 0) return false;
+  const personStrings = [normalizeForMatch(person.name), ...(person.identifiers ?? []).map(i => normalizeForMatch(i.value))];
+  for (const s of personStrings) {
+    for (const tok of s.split(/\s+/)) {
+      if (tok.length >= 3 && candidateTokens.has(tok)) return true;
+    }
+  }
+  return false;
+}
+
 function matchPersonCandidate(
   candidateName: string,
   candidateIdentifiers: PersonIdentifier[],
@@ -51,7 +63,12 @@ function matchPersonCandidate(
     const normVal = normalizeForMatch(scanId.value);
     for (const person of people) {
       if ((person.identifiers ?? []).some(i => normalizeForMatch(i.value) === normVal)) {
-        matched.set(person, 'strong');
+        // Corroboration gate (#78 C1): a scan-extracted identifier only STRONG-binds when the
+        // candidate's name shares a token with the match. A bare identifier hit with zero name
+        // overlap is the cross-attribution signature (one person's handle on another's record),
+        // so it drops to WEAK and must clear the cosine gate — or become a new record.
+        const strength: PersonMatchStrength = sharesNameToken(normName, person) ? 'strong' : 'weak';
+        if (matched.get(person) !== 'strong') matched.set(person, strength);
       }
     }
   }
@@ -286,6 +303,7 @@ export async function handleHumanPersonScan(response: LLMResponse, state: StateM
           matchedPerson = existing;
           console.debug(`[handleHumanPersonScan] Relationship unique match: "${candidate.name}" → "${existing.name}" (sole ${candidate.relationship}, singleton relationship)`);
         } else if (isUnknownPlaceholder) {
+          // M1 (deferred, #78): a placeholder with no embedding cannot be confirmed here and will fork a new record instead of promoting. Acceptable under the dupe-tolerant policy; revisit with embedding backfill.
           matchedPerson = await confirmMatchByCosine(existing, candidate, ZERO_MATCH_COSINE_THRESHOLD);
           console.debug(`[handleHumanPersonScan] Relationship unique match gated by cosine: "${candidate.name}" → "${existing.name}" (sole ${candidate.relationship}, unnamed placeholder) — ${matchedPerson ? 'confirmed' : 'rejected, new record'}`);
         }
