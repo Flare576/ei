@@ -8,6 +8,7 @@ import {
   type HumanEntity,
   type PersonaEntity,
 } from "../../../../src/core/types.js";
+import type { StateManager } from "../../../../src/core/state-manager.js";
 import {
   queueFactFind,
   queueTopicScan,
@@ -16,6 +17,7 @@ import {
   queueTopicValidate,
   queueEventSummary,
   queueTargetedPersonUpdate,
+  queuePersonUpdate,
   queueTargetedTopicUpdate,
   VALIDATE_MIN_SIMILARITY,
   type ExtractionContext,
@@ -112,6 +114,7 @@ function createMockStateManager() {
     persona_getAll: vi.fn(() => personas),
     persona_getById: vi.fn((id: string) => personas.find(p => p.id === id) ?? null),
     queue_enqueue: vi.fn(),
+    human_person_upsert: vi.fn(),
     messages_markExtracted: vi.fn(),
     messages_getUnextracted: vi.fn().mockReturnValue([
       { id: "unextracted-1", role: "human", content: "test", timestamp: new Date(Date.now() - 10 * 60 * 60 * 1000).toISOString(), read: true, context_status: "default" },
@@ -569,3 +572,45 @@ describe("queueTargetedTopicUpdate — guard conditions", () => {
 });
 
 
+
+describe("queuePersonUpdate — merge point A removed", () => {
+  let state = createMockStateManager();
+
+  beforeEach(() => {
+    state = createMockStateManager();
+    vi.clearAllMocks();
+  });
+
+  it("does NOT blind-upsert scan identifiers onto an existing record before the LLM pass", () => {
+    // Existing person p1 (Alice) is already seeded in createMockStateManager.
+    const result = queuePersonUpdate(
+      { matched_guid: "p1" },
+      {
+        personaId: "ei",
+        channelDisplayName: "Ei",
+        messages_context: [],
+        messages_analyze: [createMessage("m1", "Talked to Alice today")],
+        candidateName: "Alice",
+        candidateDescription: "Best friend",
+        candidateRelationship: "friend",
+        candidateIdentifiers: [{ type: "Slack", value: "newhandle" }],
+      },
+      // Mock state manager is a partial StateManager built for these orchestrator tests.
+      state as unknown as StateManager,
+    );
+
+    // Merge point A — the blind pre-LLM union of scan identifiers onto the matched
+    // record — is gone. The identifiers must reach the record only via the LLM pass.
+    expect(state.human_person_upsert).not.toHaveBeenCalled();
+
+    // The record is still queued for an update pass, flagged as an EXISTING item.
+    expect(result).toBeGreaterThan(0);
+    expect(state.queue_enqueue).toHaveBeenCalledTimes(1);
+    expect(state.queue_enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        next_step: LLMNextStep.HandlePersonUpdate,
+        data: expect.objectContaining({ isNewItem: false, existingItemId: "p1" }),
+      }),
+    );
+  });
+});
