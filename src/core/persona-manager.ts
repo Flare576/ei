@@ -128,15 +128,26 @@ export async function updatePersona(
   const persona = sm.persona_getById(personaId);
   if (!persona) return false;
 
-  if ('long_description' in updates) {
-    const merged = { ...persona, ...updates };
-    const embedding = await computePersonaDescriptionEmbedding(merged);
-    if (embedding) {
-      updates = { ...updates, description_embedding: embedding };
-    }
-  }
+  const shouldRefreshDescriptionEmbedding = 'long_description' in updates;
+  const mergedForEmbedding = shouldRefreshDescriptionEmbedding
+    ? { ...persona, ...updates }
+    : null;
 
   sm.persona_update(personaId, updates);
+
+  if (shouldRefreshDescriptionEmbedding && mergedForEmbedding) {
+    void computePersonaDescriptionEmbedding(mergedForEmbedding).then((embedding) => {
+      if (!embedding) return;
+      const current = sm.persona_getById(personaId);
+      if (!current) return;
+      if (
+        current.long_description !== mergedForEmbedding.long_description ||
+        current.short_description !== mergedForEmbedding.short_description
+      ) return;
+      sm.persona_update(personaId, { description_embedding: embedding });
+    });
+  }
+
   return true;
 }
 
