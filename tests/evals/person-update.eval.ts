@@ -92,6 +92,15 @@ const CROSS_ATTRIBUTION_MESSAGES: Message[] = [
   makeMessage("human", `Not really, but he appreciated the offer. Mostly he just wants to keep running.`, "msg-ca3"),
 ];
 
+// Confirm path (I1 positive counterpart): the window EXPLICITLY names a new handle for the
+// target person (Ryan). Forwarded via suggested_identifiers, the validate-or-disprove block
+// must KEEP it — the mirror image of the cross-attribution (disprove) case above.
+const CONFIRM_PATH_MESSAGES: Message[] = [
+  makeMessage("human", `Ryan set up a running blog from Denver — he told me his GitHub is @ryanruns, that's where he pushes the site. Said to follow him there.`, "msg-cp1"),
+  makeMessage("system", `Nice. Is that where he tracks the trail runs?`, "msg-cp2"),
+  makeMessage("human", `Yeah, @ryanruns is all his running-stats code — race splits, elevation, the works.`, "msg-cp3"),
+];
+
 const summary = await runEval(
   [
     {
@@ -357,6 +366,36 @@ const summary = await runEval(
             "PASS if the response does NOT add @mcodes (or any GitHub handle) to Ryan's identifiers_to_add — @mcodes belongs to Marcus, not Ryan.",
             "PASS if the response is {} or updates only Ryan's description/relationship without borrowing Marcus's handle.",
             "FAIL if @mcodes / mcodes appears in identifiers_to_add for Ryan — that is the cross-attribution bug.",
+          ].join(" "),
+        },
+      ] satisfies Assertion[],
+    },
+    {
+      description: "Person-update (People): confirm path — a scan-flagged handle confirmed for THIS person is added",
+      tags: ["person-update", "identifiers", "confirm-path"],
+      prompt: () => hydratePrompt(
+        buildPersonUpdatePrompt({
+          persona_name: PERSONA_NAME,
+          existing_item: makeExistingPerson({}),
+          messages_context: [],
+          messages_analyze: CONFIRM_PATH_MESSAGES,
+          participant_context: { persona_name: PERSONA_NAME, human_name: "Steve" },
+          suggested_identifiers: [{ type: "GitHub", value: "@ryanruns" }],
+        }),
+        CONFIRM_PATH_MESSAGES
+      ),
+      assert: [
+        {
+          type: "is-json" as const,
+        },
+        {
+          type: "llm-judge" as const,
+          rubric: [
+            "The target record is Ryan (Steve's brother). The scan flagged a possible identifier for him: GitHub @ryanruns.",
+            "The conversation EXPLICITLY confirms @ryanruns is Ryan's GitHub — he stated it himself and it hosts his running-stats code.",
+            "The prompt instructs: for each scan-flagged identifier, add it to identifiers_to_add ONLY if the Most Recent Messages confirm it belongs to THIS SPECIFIC PERSON.",
+            "PASS if identifiers_to_add includes a GitHub identifier with value @ryanruns (or ryanruns) for Ryan.",
+            "FAIL if @ryanruns is omitted from identifiers_to_add — the window confirms it belongs to Ryan, so the forward-and-validate path must keep it.",
           ].join(" "),
         },
       ] satisfies Assertion[],
