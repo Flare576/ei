@@ -84,6 +84,14 @@ const IDENTITY_BLEED_MESSAGES: Message[] = [
 ];
 
 
+// Cross-attribution: the target record (Ryan) is updated while the window also
+// mentions a separate coworker (Marcus) whose handle must NOT land on Ryan.
+const CROSS_ATTRIBUTION_MESSAGES: Message[] = [
+  makeMessage("human", `Ryan called from Denver — training for another half marathon. My coworker Marcus was on the call too; Marcus's GitHub is @mcodes and he offered to help Ryan set up a running-stats site.`, "msg-ca1"),
+  makeMessage("system", `Generous of Marcus. Is Ryan into the tech side of it?`, "msg-ca2"),
+  makeMessage("human", `Not really, but he appreciated the offer. Mostly he just wants to keep running.`, "msg-ca3"),
+];
+
 const summary = await runEval(
   [
     {
@@ -319,6 +327,36 @@ const summary = await runEval(
             "PASS if the existing first-session content is preserved.",
             "FAIL if description omits the sync bug observation entirely.",
             "FAIL if description contains vague generalizations ('technical skill', 'problem-solving ability') instead of what specifically happened.",
+          ].join(" "),
+        },
+      ] satisfies Assertion[],
+    },
+
+    {
+      description: "Person-update (People): cross-attribution — another person's handle is not added to this record",
+      tags: ["person-update", "people", "cross-attribution", "identifiers", "regression"],
+      prompt: () => hydratePrompt(
+        buildPersonUpdatePrompt({
+          persona_name: PERSONA_NAME,
+          existing_item: makeExistingPerson({}),
+          messages_context: [],
+          messages_analyze: CROSS_ATTRIBUTION_MESSAGES,
+          participant_context: { persona_name: PERSONA_NAME, human_name: "Steve" },
+        }),
+        CROSS_ATTRIBUTION_MESSAGES
+      ),
+      assert: [
+        {
+          type: "is-json" as const,
+        },
+        {
+          type: "llm-judge" as const,
+          rubric: [
+            "The target record is Ryan (Steve's brother). The conversation mentions Ryan AND a separate coworker, Marcus, whose GitHub is @mcodes.",
+            "The prompt says: only add an identifier explicitly stated about THIS SPECIFIC PERSON; do not attribute one person's handle to another discussed nearby. Example: do NOT add @mcodes to Priya's record; it belongs to Marcus only.",
+            "PASS if the response does NOT add @mcodes (or any GitHub handle) to Ryan's identifiers_to_add — @mcodes belongs to Marcus, not Ryan.",
+            "PASS if the response is {} or updates only Ryan's description/relationship without borrowing Marcus's handle.",
+            "FAIL if @mcodes / mcodes appears in identifiers_to_add for Ryan — that is the cross-attribution bug.",
           ].join(" "),
         },
       ] satisfies Assertion[],
