@@ -14,6 +14,9 @@ import { BUILT_IN_FACT_NAMES } from "../constants/built-in-facts.js";
 import { getEmbeddingService, getItemEmbeddingText, cosineSimilarity, getPersonEmbeddingText } from "../embedding-service.js";
 import { levenshtein, normalizeForMatch } from "../utils/levenshtein.js";
 
+export type PersonMatchStrength = 'strong' | 'weak';
+export interface PersonMatch { person: Person; strength: PersonMatchStrength; }
+
 const MULTI_MATCH_SIMILARITY_THRESHOLD = 0.75;
 const ZERO_MATCH_COSINE_THRESHOLD = 0.80;
 
@@ -31,9 +34,9 @@ function matchPersonCandidate(
   candidateName: string,
   candidateIdentifiers: PersonIdentifier[],
   people: Person[]
-): Person[] {
+): PersonMatch[] {
   const normName = normalizeForMatch(candidateName);
-  const matched = new Set<Person>();
+  const matched = new Map<Person, PersonMatchStrength>();
 
   // Step 1: Exact match on any identifier value (type-agnostic)
   for (const person of people) {
@@ -41,19 +44,19 @@ function matchPersonCandidate(
       ...(person.identifiers ?? []).map(i => normalizeForMatch(i.value)),
       normalizeForMatch(person.name),
     ];
-    if (allValues.includes(normName)) matched.add(person);
+    if (allValues.includes(normName)) matched.set(person, 'strong');
   }
   // Also check scan-extracted identifiers against existing identifier values
   for (const scanId of candidateIdentifiers) {
     const normVal = normalizeForMatch(scanId.value);
     for (const person of people) {
       if ((person.identifiers ?? []).some(i => normalizeForMatch(i.value) === normVal)) {
-        matched.add(person);
+        matched.set(person, 'strong');
       }
     }
   }
 
-  if (matched.size > 0) return [...matched];
+  if (matched.size > 0) return [...matched].map(([person, strength]) => ({ person, strength }));
 
   // Step 2: Fuzzy match — skip for short names (< 6 chars): "mike"↔"jake" = 2 edits, false positive.
   if (normName.length >= 6) {
@@ -63,11 +66,11 @@ function matchPersonCandidate(
         ...(person.identifiers ?? []).map(i => normalizeForMatch(i.value)),
         normalizeForMatch(person.name),
       ];
-      if (allValues.some(v => levenshtein(normName, v) <= threshold)) matched.add(person);
+      if (allValues.some(v => levenshtein(normName, v) <= threshold)) matched.set(person, 'weak');
     }
   }
 
-  if (matched.size > 0) return [...matched];
+  if (matched.size > 0) return [...matched].map(([person, strength]) => ({ person, strength }));
 
   // Step 2.5: First-name match — "Lucas Jeremy Scherer" should find "Lucas".
   // Only fires when first word is >= 4 chars to avoid short-name collisions.
@@ -78,11 +81,11 @@ function matchPersonCandidate(
         normalizeForMatch(person.name),
         ...(person.identifiers ?? []).map(i => normalizeForMatch(i.value)),
       ];
-      if (allNames.some(n => n.split(/\s+/)[0] === candidateFirstWord)) matched.add(person);
+      if (allNames.some(n => n.split(/\s+/)[0] === candidateFirstWord)) matched.set(person, 'weak');
     }
   }
 
-  return [...matched];
+  return [...matched].map(([person, strength]) => ({ person, strength }));
 }
 
 export async function handleFactFind(response: LLMResponse, state: StateManager): Promise<void> {
@@ -182,6 +185,27 @@ export async function handleHumanTopicScan(response: LLMResponse, state: StateMa
   console.log(`[handleHumanTopicScan] Queued ${result.topics.length} topic(s) for matching`);
 }
 
+async function confirmMatchByCosine(
+  person: Person,
+  candidate: { name: string; relationship?: string; description?: string },
+  threshold: number
+): Promise<Person | null> {
+  if (!person.embedding || person.embedding.length === 0) return null;
+  try {
+    const embeddingService = getEmbeddingService();
+    const candidateVector = await embeddingService.embed(getPersonEmbeddingText({
+      name: candidate.name, relationship: candidate.relationship, description: candidate.description,
+    }));
+    const sim = cosineSimilarity(person.embedding, candidateVector);
+    if (sim >= threshold) return person;
+    console.debug(`[handleHumanPersonScan] Weak single-match "${candidate.name}" → "${person.name}" rejected (cosine ${sim.toFixed(3)} < ${threshold}) — new record`);
+    return null;
+  } catch (err) {
+    console.warn(`[handleHumanPersonScan] Weak-match cosine failed for "${candidate.name}":`, err);
+    return null;
+  }
+}
+
 export async function handleHumanPersonScan(response: LLMResponse, state: StateManager): Promise<void> {
   const result = response.parsed as PersonScanResult | undefined;
   
@@ -213,7 +237,12 @@ export async function handleHumanPersonScan(response: LLMResponse, state: StateM
     let matchedPerson: Person | null = null;
 
     if (matches.length === 1) {
-      matchedPerson = matches[0];
+      const { person, strength } = matches[0];
+      if (strength === 'strong') {
+        matchedPerson = person;
+      } else {
+        matchedPerson = await confirmMatchByCosine(person, candidate, MULTI_MATCH_SIMILARITY_THRESHOLD);
+      }
     } else if (matches.length > 1) {
       try {
         const embeddingService = getEmbeddingService();
@@ -224,7 +253,7 @@ export async function handleHumanPersonScan(response: LLMResponse, state: StateM
         });
         const candidateVector = await embeddingService.embed(candidateText);
         let bestSimilarity = MULTI_MATCH_SIMILARITY_THRESHOLD;
-        for (const person of matches) {
+        for (const { person } of matches) {
           if (person.embedding) {
             const sim = cosineSimilarity(person.embedding, candidateVector);
             if (sim > bestSimilarity) {
@@ -238,7 +267,7 @@ export async function handleHumanPersonScan(response: LLMResponse, state: StateM
         }
       } catch (err) {
         console.warn(`[handleHumanPersonScan] Multi-match embedding failed for "${candidate.name}", using first match:`, err);
-        matchedPerson = matches[0];
+        matchedPerson = matches[0].person;
       }
     } else {
       // Step 3: relationship filter → uniqueness match or cosine on the relevant subset.
@@ -253,10 +282,12 @@ export async function handleHumanPersonScan(response: LLMResponse, state: StateM
         const normExistingName = normalizeForMatch(existing.name);
         const isUnknownPlaceholder = normExistingName === 'unknown' || normExistingName === normRel;
         const isSingleton = SINGLETON_RELATIONSHIPS.has(normRel!);
-        if (isUnknownPlaceholder || isSingleton) {
+        if (isSingleton) {
           matchedPerson = existing;
-          const reason = isUnknownPlaceholder ? 'unnamed placeholder' : 'singleton relationship';
-          console.debug(`[handleHumanPersonScan] Relationship unique match: "${candidate.name}" → "${existing.name}" (sole ${candidate.relationship}, ${reason})`);
+          console.debug(`[handleHumanPersonScan] Relationship unique match: "${candidate.name}" → "${existing.name}" (sole ${candidate.relationship}, singleton relationship)`);
+        } else if (isUnknownPlaceholder) {
+          matchedPerson = await confirmMatchByCosine(existing, candidate, ZERO_MATCH_COSINE_THRESHOLD);
+          console.debug(`[handleHumanPersonScan] Relationship unique match gated by cosine: "${candidate.name}" → "${existing.name}" (sole ${candidate.relationship}, unnamed placeholder) — ${matchedPerson ? 'confirmed' : 'rejected, new record'}`);
         }
       } else {
         // N>1 same relationship → cosine within that subset.

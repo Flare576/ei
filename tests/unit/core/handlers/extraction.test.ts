@@ -15,6 +15,7 @@ import {
   type Person,
   type Quote,
 } from "../../../../src/core/types.js";
+import type { StateManager } from "../../../../src/core/state-manager.js";
 
 // We need to test handlers in isolation, so we import them directly
 // and mock their dependencies
@@ -27,9 +28,13 @@ vi.mock("../../../../src/core/orchestrators/index.js", () => ({
   queueTopicValidate: vi.fn().mockResolvedValue(undefined),
 }));
 
+// `embed` delegates to a reconfigurable module-scoped impl so individual tests can
+// control the returned vector (and thus cosine similarity). Reset to the constant-vector
+// default before every test by the file-level beforeEach below.
+let mockEmbedImpl: (text: string) => Promise<number[]> = async () => new Array(384).fill(0.1);
 vi.mock("../../../../src/core/embedding-service.js", () => ({
   getEmbeddingService: () => ({
-    embed: vi.fn().mockResolvedValue(new Array(384).fill(0.1)),
+    embed: vi.fn((text: string) => mockEmbedImpl(text)),
   }),
   getItemEmbeddingText: ({ name, description }: { name: string; description?: string }) =>
     `${name}: ${description ?? ""}`,
@@ -37,6 +42,13 @@ vi.mock("../../../../src/core/embedding-service.js", () => ({
     `${name}: ${description ?? ""}`,
   getPersonEmbeddingText: ({ name, description }: { name: string; description?: string }) =>
     `${name}: ${description ?? ""}`,
+  // Mirrors the real cosineSimilarity — pure math, deterministic for the unit vectors below.
+  cosineSimilarity: (a: number[], b: number[]): number => {
+    let dot = 0, normA = 0, normB = 0;
+    for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; normA += a[i] * a[i]; normB += b[i] * b[i]; }
+    const magnitude = Math.sqrt(normA) * Math.sqrt(normB);
+    return magnitude === 0 ? 0 : dot / magnitude;
+  },
 }));
 
 
@@ -129,6 +141,12 @@ function createMockResponse(
     error: success ? undefined : "Test error",
   };
 }
+
+// Restore the constant-vector embedding for every test so the ~15 embed-dependent
+// tests below keep the default, regardless of per-test overrides in other blocks.
+beforeEach(() => {
+  mockEmbedImpl = async () => new Array(384).fill(0.1);
+});
 
 describe("Extraction Handlers - Step 1 (Scan)", () => {
   let state: ReturnType<typeof createMockStateManager>;
@@ -439,6 +457,152 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
         state
       );
     });
+  });
+});
+
+describe("handleHumanPersonScan — confidence-gated matching", () => {
+  let state = createMockStateManager();
+
+  // Orthogonal 384-dim unit vectors: cosineSimilarity(V, V) = 1.0 (>= any threshold),
+  // cosineSimilarity(V, ORTHOGONAL) = 0 (< any threshold).
+  const V = Array.from({ length: 384 }, (_, i) => (i === 0 ? 1 : 0));
+  const ORTHOGONAL = Array.from({ length: 384 }, (_, i) => (i === 1 ? 1 : 0));
+
+  function makePerson(overrides: Partial<Person>): Person {
+    return {
+      id: "seed-1",
+      name: "Seed",
+      description: "seeded person",
+      relationship: "Coworker",
+      sentiment: 0,
+      exposure_current: 0.5,
+      exposure_desired: 0.5,
+      last_updated: "2026-01-01T00:00:00Z",
+      identifiers: [],
+      ...overrides,
+    };
+  }
+
+  async function runScan(candidate: {
+    name: string;
+    description?: string;
+    relationship?: string;
+    identifiers?: Array<{ type: string; value: string; is_primary?: boolean }>;
+  }): Promise<void> {
+    const request = createMockRequest({
+      next_step: LLMNextStep.HandleHumanPersonScan,
+      data: {
+        personaId: "ei",
+        channelDisplayName: "Ei",
+        messages_context: [],
+        messages_analyze: [{ id: "1", role: "human", content: "test", timestamp: "", read: true, context_status: "default" }],
+      },
+    });
+    const response = createMockResponse(request, { people: [candidate] });
+    // Mock state manager is a partial StateManager built for these handler tests.
+    await handlers.handleHumanPersonScan(response, state as unknown as StateManager);
+  }
+
+  beforeEach(() => {
+    state = createMockStateManager();
+    vi.clearAllMocks();
+  });
+
+  it("STRONG exact-name match merges even when the embedding disagrees (cosine not consulted)", async () => {
+    state._human.people.push(makePerson({
+      id: "jeff-strong",
+      name: "Jeff Kirk",
+      relationship: "Coworker",
+      embedding: V,
+      identifiers: [{ type: "Full Name", value: "Jeff Kirk", is_primary: true }],
+    }));
+    mockEmbedImpl = async () => ORTHOGONAL; // would fail a cosine gate if it were consulted
+
+    await runScan({ name: "Jeff Kirk", description: "unrelated", relationship: "Coworker" });
+
+    expect(queuePersonUpdate).toHaveBeenCalledTimes(1);
+    expect(queuePersonUpdate).toHaveBeenCalledWith(
+      { matched_guid: "jeff-strong" },
+      expect.objectContaining({ candidateName: "Jeff Kirk" }),
+      state,
+    );
+  });
+
+  it("WEAK first-name match with HIGH cosine merges into the existing record", async () => {
+    state._human.people.push(makePerson({ id: "jeff-weak-hi", name: "Jeff Kirk", relationship: "Coworker", embedding: V }));
+    mockEmbedImpl = async () => V; // cosine 1.0 >= 0.75
+
+    await runScan({ name: "Jeff", description: "a coworker", relationship: "Coworker" });
+
+    expect(queuePersonUpdate).toHaveBeenCalledWith(
+      { matched_guid: "jeff-weak-hi" },
+      expect.objectContaining({ candidateName: "Jeff" }),
+      state,
+    );
+  });
+
+  it("WEAK first-name match with LOW cosine creates a NEW record (core regression)", async () => {
+    state._human.people.push(makePerson({ id: "jeff-weak-lo", name: "Jeff Kirk", relationship: "Coworker", embedding: V }));
+    mockEmbedImpl = async () => ORTHOGONAL; // cosine 0 < 0.75
+
+    await runScan({ name: "Jeff", description: "a different Jeff", relationship: "Coworker" });
+
+    expect(queuePersonUpdate).toHaveBeenCalledWith(
+      { matched_guid: null },
+      expect.objectContaining({ candidateName: "Jeff" }),
+      state,
+    );
+  });
+
+  it("WEAK match against a person with NO embedding creates a NEW record", async () => {
+    state._human.people.push(makePerson({ id: "jeff-noembed", name: "Jeff Kirk", relationship: "Coworker" })); // no embedding
+
+    await runScan({ name: "Jeff", description: "a coworker", relationship: "Coworker" });
+
+    expect(queuePersonUpdate).toHaveBeenCalledWith(
+      { matched_guid: null },
+      expect.objectContaining({ candidateName: "Jeff" }),
+      state,
+    );
+  });
+
+  it("unnamed placeholder (sole non-singleton relationship) with LOW cosine creates a NEW record", async () => {
+    state._human.people.push(makePerson({ id: "unknown-cow", name: "Unknown", relationship: "Coworker", embedding: V }));
+    mockEmbedImpl = async () => ORTHOGONAL; // cosine 0 < 0.80
+
+    await runScan({ name: "Marcus", description: "a new coworker", relationship: "Coworker" });
+
+    expect(queuePersonUpdate).toHaveBeenCalledWith(
+      { matched_guid: null },
+      expect.objectContaining({ candidateName: "Marcus" }),
+      state,
+    );
+  });
+
+  it("unnamed placeholder (sole non-singleton relationship) with HIGH cosine merges (placeholder named)", async () => {
+    state._human.people.push(makePerson({ id: "unknown-cow", name: "Unknown", relationship: "Coworker", embedding: V }));
+    mockEmbedImpl = async () => V; // cosine 1.0 >= 0.80
+
+    await runScan({ name: "Marcus", description: "the coworker", relationship: "Coworker" });
+
+    expect(queuePersonUpdate).toHaveBeenCalledWith(
+      { matched_guid: "unknown-cow" },
+      expect.objectContaining({ candidateName: "Marcus" }),
+      state,
+    );
+  });
+
+  it("SINGLETON relationship sole match merges directly, bypassing cosine", async () => {
+    state._human.people.push(makePerson({ id: "wife-rec", name: "Unknown", relationship: "wife", embedding: V }));
+    mockEmbedImpl = async () => ORTHOGONAL; // would fail the placeholder gate if cosine were consulted
+
+    await runScan({ name: "Borfinda", description: "the user's wife", relationship: "wife" });
+
+    expect(queuePersonUpdate).toHaveBeenCalledWith(
+      { matched_guid: "wife-rec" },
+      expect.objectContaining({ candidateName: "Borfinda" }),
+      state,
+    );
   });
 });
 
