@@ -97,3 +97,17 @@ describe("buildPersonUpdatePrompt — Ei Persona branch", () => {
   });
 });
 
+
+describe("buildPersonUpdatePrompt — attribution guard", () => {
+  it("includes the unconditional attribution guard for an existing named record", () => {
+    const { system } = buildPersonUpdatePrompt(baseData(makeRegularPerson()));
+    const lower = system.toLowerCase();
+    expect(lower).toContain("not inferred from proximity");
+    expect(lower).toContain("do not attribute one person");
+  });
+
+  it("includes the cross-attribution negative example (Priya / Marcus)", () => {
+    const { system } = buildPersonUpdatePrompt(baseData(makeRegularPerson()));
+    expect(system).toContain("do NOT add @mcodes to Priya's record");
+  });
+});

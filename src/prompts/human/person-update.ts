@@ -171,14 +171,17 @@ The description should NOT:
     ? `CRITICAL: The HUMAN USER is ${humanName}. They wrote these messages. Do NOT assign their names, nicknames, or handles as identifiers for this person's record — UNLESS this IS the user's own Self record (relationship: "Self").`
     : `CRITICAL: The HUMAN USER wrote these messages. Do NOT assign their own names or handles as identifiers for this person's record — UNLESS this IS the user's own Self record (relationship: "Self"). Do NOT return \`relationship: "Self"\` unless you are certain this record is about the human user themselves.`;
 
+  const attributionGuard = `\nONLY add an identifier if it is explicitly stated about THIS SPECIFIC PERSON — not inferred from proximity in the conversation. If two different people are discussed near each other, do NOT attribute one person's handle, email, or name to the other.`;
   const isUnknownNewPerson = isNewItem && personName === 'Unknown';
   const unknownIdentifierGuard = isUnknownNewPerson
-    ? `\nThis person's name is not yet known. ONLY add \`identifiers\` if their name, handle, or email is explicitly stated in the conversation about THEM specifically — not inferred, not guessed.`
+    ? `\nThis person's name is not yet known — be especially careful: only record an identifier the conversation names for THEM specifically.`
     : '';
 
-  const identifierSection = `${identityGuard}${unknownIdentifierGuard}
+  const identifierSection = `${identityGuard}${attributionGuard}${unknownIdentifierGuard}
 
 If you spot a platform handle, username, email, nickname, or full name explicitly mentioned in the conversation that isn't already in the person's identifiers, include it in \`identifiers_to_add\` (updates) or \`identifiers\` (new records). Always mark exactly one identifier as \`"is_primary": true\` — prefer the most formal or complete name.
+
+Example of what NOT to do: if the conversation says "I talked to Priya and Marcus — Marcus's GitHub is @mcodes", do NOT add @mcodes to Priya's record; it belongs to Marcus only.
 
 For persons with a known relationship (Father, Mother, Sibling, etc.), also look for informal terms the HUMAN USER uses to address or refer to THAT SPECIFIC PERSON (\`Dad\`, \`Pop\`, \`Mom\`, \`Sis\`, etc.) and add them as \`{ "type": "Relationship", "value": "..." }\` identifiers.
 
