@@ -59,8 +59,12 @@ import {
   buildFactFindPrompt,
   buildHumanTopicScanPrompt,
   buildHumanPersonScanPrompt,
+  buildPersonUpdatePrompt,
 } from "../../../../src/prompts/human/index.js";
 import { buildValidatePrompt } from "../../../../src/prompts/ceremony/dedup.js";
+// Real prompt builder (person-update.js is NOT mocked) — delegated to in the I1 test
+// below so we can assert the forwarded identifiers reach the enqueued system prompt.
+import { buildPersonUpdatePrompt as realBuildPersonUpdatePrompt } from "../../../../src/prompts/human/person-update.js";
 
 function createMockStateManager() {
   const human: HumanEntity = {
@@ -612,5 +616,40 @@ describe("queuePersonUpdate — merge point A removed", () => {
         data: expect.objectContaining({ isNewItem: false, existingItemId: "p1" }),
       }),
     );
+  });
+});
+
+describe("queuePersonUpdate — I1 forwards suggested identifiers into the prompt", () => {
+  let state = createMockStateManager();
+
+  beforeEach(() => {
+    state = createMockStateManager();
+    vi.clearAllMocks();
+  });
+
+  it("renders the validate-or-disprove block into the enqueued system prompt for an existing record", () => {
+    // Delegate this single call to the REAL builder so the enqueued system text is the real
+    // prompt. mockImplementationOnce reverts after the one chunk, restoring the file's stub.
+    vi.mocked(buildPersonUpdatePrompt).mockImplementationOnce(realBuildPersonUpdatePrompt);
+
+    queuePersonUpdate(
+      { matched_guid: "p1" }, // Alice, seeded in createMockStateManager
+      {
+        personaId: "ei",
+        channelDisplayName: "Ei",
+        messages_context: [],
+        messages_analyze: [createMessage("m1", "Talked to Alice today")],
+        candidateName: "Alice",
+        candidateDescription: "Best friend",
+        candidateRelationship: "friend",
+        candidateIdentifiers: [{ type: "Slack", value: "W1:U1" }],
+      },
+      state as unknown as StateManager,
+    );
+
+    expect(state.queue_enqueue).toHaveBeenCalledTimes(1);
+    const enqueued = state.queue_enqueue.mock.calls[0][0] as { system: string };
+    expect(enqueued.system).toContain("scan flagged these identifiers");
+    expect(enqueued.system).toContain("Slack=W1:U1");
   });
 });

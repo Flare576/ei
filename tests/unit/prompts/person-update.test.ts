@@ -111,3 +111,33 @@ describe("buildPersonUpdatePrompt — attribution guard", () => {
     expect(system).toContain("do NOT add @mcodes to Priya's record");
   });
 });
+
+describe("buildPersonUpdatePrompt — I1 forward-and-validate suggested identifiers", () => {
+  it("renders the validate-or-disprove block for an existing record with suggested identifiers", () => {
+    const { system } = buildPersonUpdatePrompt(baseData(makeRegularPerson(), {
+      suggested_identifiers: [{ type: "Slack", value: "W1:U1" }],
+    }));
+
+    expect(system).toContain("scan flagged these identifiers");
+    expect(system).toContain("Slack=W1:U1");
+    expect(system).toContain("ONLY if the Most Recent Messages confirm");
+  });
+
+  it("omits the block for a NEW record even when suggested identifiers are present", () => {
+    const { system } = buildPersonUpdatePrompt(baseData(null, {
+      new_person_name: "Bob",
+      new_person_relationship: "Coworker",
+      suggested_identifiers: [{ type: "Slack", value: "W1:U1" }],
+    }));
+
+    expect(system).not.toContain("scan flagged these identifiers");
+  });
+
+  it("omits the block for an existing record when suggested identifiers are empty", () => {
+    const { system } = buildPersonUpdatePrompt(baseData(makeRegularPerson(), {
+      suggested_identifiers: [],
+    }));
+
+    expect(system).not.toContain("scan flagged these identifiers");
+  });
+});

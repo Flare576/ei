@@ -631,6 +631,7 @@ export function queuePersonUpdate(
       persona_name: chunk.channelDisplayName,
       participant_context: buildParticipantContext(primaryPersonaIdForUpdate, state),
       known_identifier_types: userIdentifierTypes,
+      suggested_identifiers: !isNewItem ? candidateIdentifiers : undefined,
     });
 
     state.queue_enqueue({

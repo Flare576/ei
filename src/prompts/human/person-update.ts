@@ -1,5 +1,6 @@
 import type { PromptOutput, ParticipantContext } from "./types.js";
 import type { Person, Message } from "../../core/types.js";
+import type { PersonIdentifier } from "../../core/types/data-items.js";
 import { formatMessagesAsPlaceholders } from "../message-utils.js";
 
 export interface PersonUpdatePromptData {
@@ -12,6 +13,7 @@ export interface PersonUpdatePromptData {
   persona_name: string;
   participant_context?: ParticipantContext;
   known_identifier_types?: string[];
+  suggested_identifiers?: PersonIdentifier[];
 }
 
 function participantContextSection(ctx: ParticipantContext | undefined): string {
@@ -177,6 +179,12 @@ The description should NOT:
     ? `\nThis person's name is not yet known — be especially careful: only record an identifier the conversation names for THEM specifically.`
     : '';
 
+  const suggestedIdentifiers = data.suggested_identifiers ?? [];
+  const suggestedIdentifiersBlock = !isNewItem && suggestedIdentifiers.length > 0
+    ? `\n\nThe scan flagged these identifiers as POSSIBLY belonging to this person: ${suggestedIdentifiers.map(i => `\`${i.type}=${i.value}\``).join(', ')}.
+For EACH, add it to \`identifiers_to_add\` ONLY if the Most Recent Messages confirm it belongs to THIS SPECIFIC PERSON. If any actually belongs to someone else mentioned in the conversation, omit it. Do not add any you cannot confirm from the conversation.`
+    : '';
+
   const identifierSection = `${identityGuard}${attributionGuard}${unknownIdentifierGuard}
 
 If you spot a platform handle, username, email, nickname, or full name explicitly mentioned in the conversation that isn't already in the person's identifiers, include it in \`identifiers_to_add\` (updates) or \`identifiers\` (new records). Always mark exactly one identifier as \`"is_primary": true\` — prefer the most formal or complete name.
@@ -187,7 +195,7 @@ For persons with a known relationship (Father, Mother, Sibling, etc.), also look
 
 NEVER add dates, ages, birthdays, or anniversaries as identifiers. These are not identifying labels — if known, include them in the description instead.
 
-Known identifier types: ${allTypes}. If unsure of type, use \`Nickname\`.`;
+Known identifier types: ${allTypes}. If unsure of type, use \`Nickname\`.${suggestedIdentifiersBlock}`;
 
   // ── OUTPUT FORMAT ─────────────────────────────────────────────────────────
 
