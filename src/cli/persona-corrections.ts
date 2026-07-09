@@ -137,19 +137,39 @@ type PersonaEntityWithToolsMap = Omit<PersonaEntity, "tools"> & {
 };
 
 /**
- * Server-owned fields silently stripped before schema validation on
- * UPDATE — a caller following the documented `ei --id <persona>` -> edit ->
- * `ei update persona` round-trip naturally sends these back unchanged.
- * Wider than corrections-endpoints.ts's ROUND_TRIP_FIELDS (id/type/
- * last_updated/linked_quotes) because lookupById's crossFind spreads the
- * FULL PersonaEntity (plus its own `type: "persona"` discriminator) rather
- * than a narrower projection: `entity` is a fixed literal, `is_static` is
- * explicitly read-only (distinguishes built-in structural personas — never
- * flippable via this path, so it must round-trip silently rather than
- * error), and last_heartbeat/last_extraction/description_embedding/
- * pending_update/reflection_last_asked are all written only by the live
- * Processor/ceremony pipeline, never by a human or external agent. Any
- * OTHER unknown key still fails validation — this is a narrow allowlist.
+ * Server-owned fields silently stripped from the INPUT payload before
+ * schema validation on UPDATE — a caller following the documented
+ * `ei --id <persona>` -> edit -> `ei update persona` round-trip naturally
+ * sends these back unchanged. Wider than corrections-endpoints.ts's
+ * ROUND_TRIP_FIELDS (id/type/last_updated/linked_quotes) because
+ * lookupById's crossFind spreads the FULL PersonaEntity (plus its own
+ * `type: "persona"` discriminator) rather than a narrower projection.
+ *
+ * Stripping here only controls the INPUT side — a caller can never set
+ * these directly. What happens on the OUTPUT side, once `update` performs
+ * its full-record replace, differs per field and is handled explicitly in
+ * the `record` literal below, not by this list:
+ *   - `entity` — fixed literal, always "system".
+ *   - `last_updated` — always stamped to `now`.
+ *   - `description_embedding` — always recomputed from the freshly written
+ *     `long_description`, never the old value (see the
+ *     computePersonaDescriptionEmbedding call further down).
+ *   - `is_static`, `last_heartbeat` — PRESERVED: explicitly carried
+ *     forward from `existing.entity`, because the server owns them and a
+ *     caller round-tripping an unrelated identity edit has no opinion on
+ *     them. `is_static` distinguishes built-in structural personas (never
+ *     flippable via this path). `last_heartbeat` is Processor heartbeat-
+ *     scheduling bookkeeping — dropping it instead of preserving it would
+ *     make the persona spuriously heartbeat-eligible on the very next
+ *     tick, purely as a side effect of an unrelated edit.
+ *   - `pending_update` — WIPED: genuinely absent from the `record` literal
+ *     below, so it never survives a round trip regardless of what the
+ *     caller sends. Deliberate: any `update` call resolves an unapplied
+ *     Critic reflection proposal, which is how `ei-reflect` clears it
+ *     without a separate verb.
+ *
+ * Any OTHER unknown key still fails validation — this is a narrow
+ * allowlist, not a general "ignore extra fields" escape hatch.
  */
 const PERSONA_ROUND_TRIP_FIELDS = [
   "id",
@@ -158,10 +178,8 @@ const PERSONA_ROUND_TRIP_FIELDS = [
   "is_static",
   "last_updated",
   "last_heartbeat",
-  "last_extraction",
   "description_embedding",
   "pending_update",
-  "reflection_last_asked",
 ] as const;
 
 function parsePersonaBody(body: unknown, mode: "create" | "update"): PersonaEntityInput {
@@ -367,9 +385,10 @@ export async function updatePersonaEntity(id: string, body: unknown): Promise<Pe
   const topics = materializeTopics(parsed.topics, now);
 
   // Full-object replace: every writable field comes from `parsed` (absent
-  // -> undefined, never "keep the old value") except `is_static`, which
-  // isn't part of the writable schema at all and is always inherited from
-  // the existing record.
+  // -> undefined, never "keep the old value") except `is_static` and
+  // `last_heartbeat`, neither of which is part of the writable schema —
+  // both are always inherited from the existing record (see
+  // PERSONA_ROUND_TRIP_FIELDS's doc comment above for why).
   const record: PersonaEntity = {
     id,
     display_name: parsed.display_name,
@@ -388,6 +407,7 @@ export async function updatePersonaEntity(id: string, body: unknown): Promise<Pe
     is_archived: parsed.is_archived,
     archived_at: parsed.archived_at,
     is_static: existing.entity.is_static,
+    last_heartbeat: existing.entity.last_heartbeat,
     heartbeat_delay_ms: parsed.heartbeat_delay_ms,
     context_window_ms: parsed.context_window_ms,
     include_message_timestamps: parsed.include_message_timestamps,
