@@ -20,7 +20,7 @@ vi.mock("../../../src/core/embedding-service.js", async (importOriginal) => {
   };
 });
 
-import { retrieve, retrieveBalanced, resolveLinkedItems, lookupById, retrievePersonas, retrievePersonasSemantic, mapPersona, loadLatestState } from "../../../src/cli/retrieval.js";
+import { retrieve, retrieveBalanced, resolveLinkedItems, lookupById, lookupByIdentifier, retrievePersonas, retrievePersonasSemantic, mapPersona, loadLatestState } from "../../../src/cli/retrieval.js";
 
 const EMBEDDING = new Array(384).fill(1);
 const NOW = "2026-01-01T00:00:00Z";
@@ -483,6 +483,86 @@ describe("person identifiers in retrieval results", () => {
     const person = result.find(r => r.type === "person") as any;
     expect(person).toBeDefined();
     expect(person.identifiers).toEqual([]);
+  });
+});
+
+describe("lookupByIdentifier", () => {
+  it("finds a person by exact type+value match and returns the exact same enriched shape lookupById gives", async () => {
+    const state = createTestState({
+      people: 1,
+      peopleIdentifiers: [[{ type: "GitHub", value: "flare576" }]],
+      quotes: 1,
+    });
+    // Point the quote at the person so linked_quotes enrichment is exercised —
+    // proves the delegation to lookupById carries full enrichment, not just the raw record.
+    state.human.quotes[0].data_item_ids = ["person_0"];
+    writeTestState(state);
+
+    const byId = await lookupById("person_0");
+    const byIdentifier = await lookupByIdentifier("GitHub", "flare576");
+
+    expect(byIdentifier).not.toBeNull();
+    expect(byIdentifier).toEqual(byId);
+  });
+
+  it("matches type case-insensitively", async () => {
+    writeTestState(createTestState({
+      people: 1,
+      peopleIdentifiers: [[{ type: "Ei Persona", value: "yoda-persona-id" }]],
+    }));
+    const result = await lookupByIdentifier("ei persona", "yoda-persona-id");
+    expect(result).not.toBeNull();
+    expect(result!.id).toBe("person_0");
+  });
+
+  it("keeps value matching exact/case-sensitive — a near-miss value returns not found", async () => {
+    writeTestState(createTestState({
+      people: 1,
+      peopleIdentifiers: [[{ type: "GitHub", value: "flare576" }]],
+    }));
+    expect(await lookupByIdentifier("GitHub", "Flare576")).toBeNull();
+    expect(await lookupByIdentifier("GitHub", "flare57")).toBeNull();
+  });
+
+  it("returns null when no person has a matching identifier", async () => {
+    writeTestState(createTestState({
+      people: 1,
+      peopleIdentifiers: [[{ type: "GitHub", value: "flare576" }]],
+    }));
+    expect(await lookupByIdentifier("GitHub", "someone-else")).toBeNull();
+  });
+
+  it("returns null when no state exists", async () => {
+    process.env.EI_DATA_PATH = "/tmp/nonexistent-ei-path-identifier-lookup";
+    expect(await lookupByIdentifier("GitHub", "flare576")).toBeNull();
+  });
+
+  it("matches on any one of a person's multiple identifiers", async () => {
+    writeTestState(createTestState({
+      people: 1,
+      peopleIdentifiers: [[
+        { type: "GitHub", value: "flare576" },
+        { type: "Email", value: "flare@example.com" },
+        { type: "Nickname", value: "Flare" },
+      ]],
+    }));
+    expect((await lookupByIdentifier("GitHub", "flare576"))!.id).toBe("person_0");
+    expect((await lookupByIdentifier("Email", "flare@example.com"))!.id).toBe("person_0");
+    expect((await lookupByIdentifier("Nickname", "Flare"))!.id).toBe("person_0");
+  });
+
+  it("finds the correct person among several by their unique identifier", async () => {
+    writeTestState(createTestState({
+      people: 3,
+      peopleIdentifiers: [
+        [{ type: "GitHub", value: "alice-gh" }],
+        [{ type: "GitHub", value: "bob-gh" }],
+        [{ type: "GitHub", value: "carol-gh" }],
+      ],
+    }));
+    const result = await lookupByIdentifier("GitHub", "bob-gh");
+    expect(result).not.toBeNull();
+    expect(result!.id).toBe("person_1");
   });
 });
 

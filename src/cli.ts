@@ -12,7 +12,7 @@
  */
 
 import { parseArgs } from "util";
-import { retrieveBalanced, lookupById, resolveExternalMessage, loadLatestState } from "./cli/retrieval";
+import { retrieveBalanced, lookupById, lookupByIdentifier, resolveExternalMessage, loadLatestState } from "./cli/retrieval";
 import type { StorageState } from "./core/types";
 import { resolvePersonaId, filterByPersona, filterTypeSpecificByPersona, filterBySource, filterTypeSpecificBySource } from "./cli/persona-filter.js";
 import { installMcpClients } from "./cli/install.js";
@@ -90,6 +90,7 @@ Usage:
   ei --persona "Name" "query"   Filter results to what a persona has learned
   ei --id <id>                  Look up a specific entity by ID
   echo <id> | ei --id           Look up entity by ID from stdin
+  ei --identifier <type> <value>  Look up a person by identifier type + value, e.g. --identifier "GitHub" "flare576"
   ei mcp                        Start the Ei MCP stdio server (for Claude Code/Cursor/Codex)
   ei create <type> --json '<json>'  Create a new entity (fact/topic/person/persona)
   ei update <type> <id> --json '<json>'  Replace an entity by ID (full record, not a patch; fact/topic/person/quote/persona)
@@ -108,6 +109,7 @@ Options:
   --persona, -p       Filter to entities a specific persona has learned about
   --source, -s        Filter to entities from a specific source (prefix match, e.g. "cursor", "codex:my-machine", "opencode:my-machine:ses_abc123")
   --id                Look up entity by ID (accepts value or stdin)
+  --identifier <type> <value>  Look up a person by identifier type + value (case-insensitive type, exact value; no stdin support)
   --install           Register Ei with Claude Code, Cursor, Codex, and OpenCode (skills + context hooks where supported; MCP is removed by default on Claude Code/Cursor/Codex — see README for manual MCP setup)
   --sync              Pull latest state from remote sync server into state.backup.json (no TUI required)
   --session <id>      Session ID to enrich the query with recent context (use with --hook-source)
@@ -125,6 +127,7 @@ Examples:
   ei --persona "Architect" "work stuff"  # What Architect knows about work
   ei topics --source cursor "X"          # Topics learned from Cursor sessions
   ei --id abc-123                        # Look up entity by ID
+  ei --identifier "GitHub" "flare576"    # Look up a person by identifier type + value
   ei "memory leak" | jq .[0].id | ei --id  # Pipe ID from search
   ei create fact --json '{"name":"Field of Study","description":"CS","sentiment":0,"validated_date":""}'
   ei update fact abc-123 --json '{"name":"Field of Study","description":"Updated","sentiment":0,"validated_date":""}'
@@ -388,6 +391,28 @@ async function main(): Promise<void> {
     const entity = await lookupById(id);
     if (!entity) {
       console.error(`No entity found with ID: ${id}`);
+      process.exit(1);
+    }
+    console.log(JSON.stringify(entity, null, 2));
+    process.exit(0);
+  }
+
+  // Handle --identifier flag: look up a person by identifier type + value.
+  // Deliberately simpler than --id: exactly two positional args, no
+  // stdin-piping support (--id remains the primary pipe-drill-down target).
+  const identifierFlagIndex = args.indexOf("--identifier");
+  if (identifierFlagIndex !== -1) {
+    const idType = args[identifierFlagIndex + 1]?.trim();
+    const idValue = args[identifierFlagIndex + 2]?.trim();
+
+    if (!idType || !idValue) {
+      console.error("--identifier requires two values. Usage: ei --identifier <type> <value>");
+      process.exit(1);
+    }
+
+    const entity = await lookupByIdentifier(idType, idValue);
+    if (!entity) {
+      console.error(`No person found with identifier ${idType}: ${idValue}`);
       process.exit(1);
     }
     console.log(JSON.stringify(entity, null, 2));

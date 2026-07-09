@@ -4,6 +4,7 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { spawnSync } from "child_process";
 import type { StorageState } from "../../src/core/types/integrations.js";
+import type { Person } from "../../src/core/types/data-items.js";
 
 const NOW = "2026-01-01T00:00:00.000Z";
 const CLI_ARGS = ["src/cli.ts"];
@@ -235,5 +236,77 @@ describe("CLI CRUD process behavior", () => {
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain('Cannot delete reserved persona "ei". Use archive instead.');
     expect(readFileSync(statePath, "utf-8")).toBe(before);
+  });
+});
+
+function makePerson(id: string, identifiers: Person["identifiers"]): Person {
+  return {
+    id,
+    name: identifiers?.find(i => i.is_primary)?.value ?? identifiers?.[0]?.value ?? id,
+    description: "A test person",
+    sentiment: 0.5,
+    relationship: "friend",
+    exposure_current: 0.5,
+    exposure_desired: 0.5,
+    last_updated: NOW,
+    identifiers,
+  };
+}
+
+function writeStateWithPeople(people: Person[]) {
+  const statePath = join(tempDir, "state.json");
+  const state: StorageState = { ...makeState(), human: { ...makeState().human, people } };
+  writeFileSync(statePath, JSON.stringify(state));
+}
+
+describe("CLI --identifier flag process behavior", () => {
+  it("finds a person by exact type+value match and prints the enriched record", () => {
+    writeStateWithPeople([
+      makePerson("person-flare", [{ type: "GitHub", value: "flare576", is_primary: true }]),
+    ]);
+
+    const result = runCli(["--identifier", "GitHub", "flare576"]);
+
+    expect(result.status).toBe(0);
+    const printed = JSON.parse(result.stdout);
+    expect(printed.type).toBe("person");
+    expect(printed.id).toBe("person-flare");
+  });
+
+  it("matches the identifier type case-insensitively", () => {
+    writeStateWithPeople([
+      makePerson("person-yoda", [{ type: "Ei Persona", value: "yoda-persona-id" }]),
+    ]);
+
+    const result = runCli(["--identifier", "ei persona", "yoda-persona-id"]);
+
+    expect(result.status).toBe(0);
+    const printed = JSON.parse(result.stdout);
+    expect(printed.id).toBe("person-yoda");
+  });
+
+  it("prints the not-found message and exits non-zero when no identifier matches", () => {
+    writeStateWithPeople([
+      makePerson("person-flare", [{ type: "GitHub", value: "flare576" }]),
+    ]);
+
+    const result = runCli(["--identifier", "GitHub", "someone-else"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("No person found with identifier GitHub: someone-else");
+  });
+
+  it("exits non-zero with a usage error when --identifier is given no values", () => {
+    const result = runCli(["--identifier"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("--identifier requires two values. Usage: ei --identifier <type> <value>");
+  });
+
+  it("exits non-zero with a usage error when --identifier is given only one value", () => {
+    const result = runCli(["--identifier", "GitHub"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("--identifier requires two values. Usage: ei --identifier <type> <value>");
   });
 });
