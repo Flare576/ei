@@ -310,3 +310,29 @@ describe("CLI --identifier flag process behavior", () => {
     expect(result.stderr).toContain("--identifier requires two values. Usage: ei --identifier <type> <value>");
   });
 });
+
+describe("CLI --help balanced-search contract", () => {
+  // Regression guard for the ei-cli-skills-review findings (I1 / R-mcp.ts): --help
+  // text used to say plain `ei "query"` searches "all data types" / "all types",
+  // which falsely implied personas were included. retrieveBalanced() (src/cli/retrieval.ts)
+  // never returns personas — only quote/fact/person/topic. Phrases implying "all
+  // types"/"all five" are only acceptable when paired with language that explicitly
+  // excludes personas from that set.
+  function impliesPersonasInBalancedSearch(text: string): boolean {
+    const claimsAllTypes = /\ball\s+(data\s+)?types\b/i.test(text) || /\ball\s+five\b/i.test(text) || /\ball\s+5\b/i.test(text);
+    if (!claimsAllTypes) return false;
+    const explicitlyExcludesPersonas = /persona/i.test(text) && /exclud/i.test(text);
+    return !explicitlyExcludesPersonas;
+  }
+
+  it("--help output never claims balanced search covers personas", () => {
+    const result = runCli(["--help"]);
+
+    expect(result.status).toBe(0);
+    expect(impliesPersonasInBalancedSearch(result.stdout)).toBe(false);
+    // Positive half: the balanced-search usage line explicitly names the four
+    // covered types and steers persona lookups to `ei personas`.
+    expect(result.stdout).toMatch(/facts\/people\/topics\/quotes/i);
+    expect(result.stdout).toMatch(/ei personas/);
+  });
+});

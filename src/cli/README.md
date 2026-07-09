@@ -3,7 +3,7 @@
 > For installation, see the [TUI README](../../tui/README.md#installation).
 ```sh
 ei                             # Start the TUI
-ei "query string"              # Return up to 10 results across all types
+ei "query string"              # Return up to 10 results across facts/people/topics/quotes (no personas — use "ei personas")
 ei -n 5 "query string"         # Return up to 5 results
 ei facts -n 5 "query string"      # Return up to 5 facts
 ei people -n 5 "query string"     # Return up to 5 people
@@ -122,7 +122,7 @@ The MCP server exposes these tools to Claude Code, Cursor, Codex, and OpenCode:
 
 | Tool | Description |
 |------|-------------|
-| `ei_search` | Search across all five data types (facts, topics, people, quotes, personas). Supports `type`, `persona`, `source`, `recent`, `limit` filters. Start here. |
+| `ei_search` | Balanced search across facts, topics, people, and quotes (personas excluded — pass `type: "personas"` explicitly to search those). Supports `type`, `persona`, `source`, `recent`, `limit` filters. Start here. |
 | `ei_lookup` | Full-record lookup for any entity by ID — facts, topics, people, quotes, or personas. Use when you need complete details beyond the search summary. |
 | `ei_fetch_message` | Retrieve a specific message by fully-qualified ID with optional `before`/`after` context window. Use when a quote result has a `message_id` and you want the original conversation. Routes to the correct source automatically. |
 | `ei_create` | Create a new entity (fact, topic, person, or persona). Pass a full JSON record matching the entity's schema. Validates server-side; unknown fields are rejected. Returns the assigned id and the full stored record. Not available for quotes — verifiable-origin data can only be corrected via `ei_update`, never created. |
@@ -134,7 +134,7 @@ The MCP server exposes these tools to Claude Code, Cursor, Codex, and OpenCode:
 | Arg | Type | Description |
 |-----|------|-------------|
 | `query` | string (optional) | Search text. Omit to browse by recency. |
-| `type` | enum (optional) | `facts` \| `people` \| `topics` \| `quotes` \| `personas` — omit for balanced results across all types |
+| `type` | enum (optional) | `facts` \| `people` \| `topics` \| `quotes` \| `personas` — omit for balanced results across facts/people/topics/quotes; pass `personas` explicitly to search those |
 | `persona` | string (optional) | Persona display_name to scope results to what that persona has learned |
 | `source` | string (optional) | Prefix match against source identifiers (e.g. `opencode`, `cursor:my-machine`, `codex:my-machine`) |
 | `limit` | number (optional) | Max results, default 10 |

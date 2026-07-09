@@ -103,6 +103,37 @@ describe("MCP server", () => {
     expect(enumValues).toContain("personas");
   });
 
+  it("ei_search description and type description never claim balanced search covers personas", async () => {
+    ({ client } = await setupClient());
+    const tools = await client.listTools();
+    const eiSearch = tools.tools.find((t) => t.name === "ei_search");
+    expect(eiSearch).toBeDefined();
+
+    // Regression guard for the mcp.ts finding: the tool's top-level `description`
+    // and the `type` field's `.describe()` call both used to claim balanced
+    // search (omitting `type`) covers personas too ("all 5"/"all types"). It
+    // doesn't — retrieveBalanced() never returns personas. Phrases implying
+    // "all types"/"all five" are only acceptable when paired with language
+    // that explicitly excludes personas from that set.
+    function impliesPersonasInBalancedSearch(text: string): boolean {
+      const claimsAllTypes = /\ball\s+(data\s+)?types\b/i.test(text) || /\ball\s+five\b/i.test(text) || /\ball\s+5\b/i.test(text);
+      if (!claimsAllTypes) return false;
+      const explicitlyExcludesPersonas = /persona/i.test(text) && /exclud/i.test(text);
+      return !explicitlyExcludesPersonas;
+    }
+
+    const description = eiSearch!.description ?? "";
+    expect(impliesPersonasInBalancedSearch(description)).toBe(false);
+    expect(description).toMatch(/personas?.{0,40}exclud|exclud.{0,40}personas?/i);
+
+    const typeSchema = eiSearch!.inputSchema as Record<string, unknown>;
+    const properties = typeSchema.properties as Record<string, unknown>;
+    const typeProperty = properties?.type as Record<string, unknown>;
+    const typeDescription = (typeProperty?.description as string) ?? "";
+    expect(impliesPersonasInBalancedSearch(typeDescription)).toBe(false);
+    expect(typeDescription).toMatch(/personas?.{0,40}exclud|exclud.{0,40}personas?/i);
+  });
+
   it("registers ei_create, ei_update, and ei_remove tools", async () => {
     ({ client } = await setupClient());
     const result = await client.listTools();

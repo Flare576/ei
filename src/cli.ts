@@ -80,7 +80,7 @@ Ei
 
 Usage:
   ei                            Launch the TUI chat interface
-  ei "search text"              Search all data types (top 10)
+  ei "search text"              Balanced search: facts/people/topics/quotes, no personas (top 10; use "ei personas")
   ei -n 5 "search text"         Limit results
   ei <type> "search text"       Search a specific data type
   ei <type> -n 5 "search text"  Type-specific with limit
@@ -120,7 +120,7 @@ Options:
 
 Examples:
   ei "debugging"                         # Search everything
-  ei -n 5 "API design"                   # Top 5 across all types
+  ei -n 5 "API design"                   # Top 5 across facts/people/topics/quotes (no personas)
   ei quote "you guessed it"              # Search quotes only
   ei --recent                            # Most recently mentioned items
   ei topics --recent "work"              # Recent work-related topics
@@ -128,7 +128,7 @@ Examples:
   ei topics --source cursor "X"          # Topics learned from Cursor sessions
   ei --id abc-123                        # Look up entity by ID
   ei --identifier "GitHub" "flare576"    # Look up a person by identifier type + value
-  ei "memory leak" | jq .[0].id | ei --id  # Pipe ID from search
+  ei "memory leak" | jq -r '.[0] | if .id != null then .id else .message_id end' | ei --id  # Pipe ID from search (quote-safe)
   ei create fact --json '{"name":"Field of Study","description":"CS","sentiment":0,"validated_date":""}'
   ei update fact abc-123 --json '{"name":"Field of Study","description":"Updated","sentiment":0,"validated_date":""}'
   ei update quote <id> --json '{"data_item_ids":["person-b-id"], ...}'  # Repoint a quote after splitting a bad merge (fetch the full record via 'ei --id <id>' first)
