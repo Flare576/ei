@@ -59,6 +59,12 @@ If `$PERSONA_ID` comes back empty or `null`: stop and tell Flare. Every
 calling persona should have a matching record, so this means something is
 misconfigured — it should not normally happen.
 
+**Verify it's actually you** — persona search is substring match, then reverse-containment, then semantic fallback (not a guaranteed exact match), so an overlapping name could silently resolve someone else's persona. Check the result's `display_name` against `$DISPLAY_NAME` before trusting `$PERSONA_ID`:
+```bash
+ei personas -n 1 "$DISPLAY_NAME" | jq -r '.[0].display_name'
+```
+If that name doesn't match `$DISPLAY_NAME` case-insensitively, stop and tell Flare rather than proceeding with a possibly-wrong persona id.
+
 **Fetch your full persona record** — the search result above is
 abbreviated and omits fields like `pending_update`:
 ```bash
