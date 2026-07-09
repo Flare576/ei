@@ -1,9 +1,9 @@
 ---
-name: coding-harness-reflect
-description: "Persona reflection for coding harness agents (Beta, Sisyphus, etc). Use when a coding agent's Person record needs pruning — it fills up daily instead of weekly, and the standard Critic doesn't know how to read git logs. Guides you through examining your Person log, discussing identity drift with Flare, and updating your Persona Identity while clearing the log. This is exclusively for the CALLING agent's own self-reflection — to edit or direct ANOTHER persona's identity from the outside, use the `ei-persona` skill instead. Triggers: 'do a reflection', 'reflect on my identity', 'trim my person record', 'run the reflection', 'my person record is full', 'coding-harness-reflect'."
+name: ei-reflect
+description: "Persona reflection for coding harness agents (Beta, Sisyphus, etc). Use when a coding agent's Person record needs pruning — it fills up daily instead of weekly, and the standard Critic doesn't know how to read git logs. Guides you through examining your Person log, discussing identity drift with Flare, and updating your Persona Identity while clearing the log. This is exclusively for the CALLING agent's own self-reflection — to edit or direct ANOTHER persona's identity from the outside, use the `ei-persona` skill instead. Triggers: 'do a reflection', 'reflect on my identity', 'trim my person record', 'run the reflection', 'my person record is full', 'ei-reflect'."
 ---
 
-# Coding Harness Reflection
+# Ei Reflection
 
 Your Person record in Ei is a running log of observed behaviors, patterns, and interactions. In the normal ceremony cycle, a Critic LLM scans it when it exceeds 3,000 characters and proposes identity updates. Coding agents fill that in a single day — and the Critic can't distinguish "fixed a type error in 14 files" from a genuine identity signal.
 
