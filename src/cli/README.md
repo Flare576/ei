@@ -15,6 +15,7 @@ ei --recent                            # Most recently mentioned items (no query
 ei --persona "Beta" --recent           # Most recently mentioned items Beta has learned
 ei --id <id>                   # Look up entity by ID — or fetch a message by FQ ID
 echo <id> | ei --id            # Look up entity by ID from stdin
+ei --identifier <type> <value>  # Look up a person by identifier type + value (case-insensitive type, exact value), e.g. --identifier "GitHub" "flare576"
 ei --install                   # Wire Ei into Claude Code, Cursor, Codex, and OpenCode (skills + context hooks + persona plugin where supported; MCP is removed by default on Claude Code/Cursor/Codex — see "MCP Server" below)
 ei --sync                      # Pull latest state from remote sync server into state.backup.json (no TUI required)
 ei mcp                         # Start the Ei MCP stdio server (for Claude Code/Cursor/Codex)
@@ -27,10 +28,10 @@ Type aliases: `fact`, `person`, `topic`, `quote`, `persona` all work (singular o
 
 # An Agentic Tool
 
-The `--id` flag is designed for piping. For example, search for a topic and then fetch the full entity:
+The `--id` flag is designed for piping. Entity hits (fact/person/topic/persona) carry an `id`; quote hits don't (they carry `message_id` instead) — so a safe drill-down handles both:
 
 ```sh
-ei "memory leak" | jq '.[0].id' | ei --id
+ei "memory leak" | jq -r '.[0] | if .id != null then .id else .message_id end' | ei --id
 ```
 
 It also resolves fully-qualified message IDs from any supported integration, returning the original message content and session context:
@@ -231,3 +232,4 @@ Skills are installed automatically — any directory added under `skills/` in th
 | `ei-search` | Deliberate, explicit read-path lookups — search, full-record fetch, original-message fetch — via the CLI (`ei "query"`, `ei --id <id>`), for the mid-conversation case beyond whatever the automatic context-injection hook already surfaced. Read-only. Read the full workflow at `skills/ei-search/SKILL.md`. |
 | `ei-curate` | Safe agent-driven memory curation. Provides verified workflows for fixing merged records, bad attributions, stale facts, and mis-attributed quotes — using `ei create/update/remove` with explicit confirmation before every write. Read the full workflow at `skills/ei-curate/SKILL.md`. Load it in your harness with `/ei-curate`. |
 | `ei-persona` | Safe agent-driven persona authoring. Guides creating, editing (traits/topics/description), archiving, or deleting a persona's *character* via `ei create/update/remove persona` — distinct from `ei-curate`, which corrects learned data rather than authoring identity. Read the full workflow at `skills/ei-persona/SKILL.md`. Load it in your harness with `/ei-persona`. |
+| `ei-reflect` | Manual persona self-reflection for coding-harness agents — reviews your own Person log against your current persona identity entirely via the CLI (`ei personas`, `ei --id`, `ei --identifier`), discusses identity drift with Flare, then updates the persona and clears the log via `ei update persona`/`ei update person`. Read the full workflow at `skills/ei-reflect/SKILL.md`. Load it in your harness with `/ei-reflect`. |
