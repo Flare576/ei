@@ -12,7 +12,7 @@
  */
 
 import { parseArgs } from "util";
-import { retrieveBalanced, lookupById, resolveExternalMessage, loadLatestState } from "./cli/retrieval";
+import { retrieveBalanced, lookupById, lookupByIdentifier, resolveExternalMessage, loadLatestState } from "./cli/retrieval";
 import type { StorageState } from "./core/types";
 import { resolvePersonaId, filterByPersona, filterTypeSpecificByPersona, filterBySource, filterTypeSpecificBySource } from "./cli/persona-filter.js";
 import { installMcpClients } from "./cli/install.js";
@@ -80,7 +80,7 @@ Ei
 
 Usage:
   ei                            Launch the TUI chat interface
-  ei "search text"              Search all data types (top 10)
+  ei "search text"              Balanced search: facts/people/topics/quotes, no personas (top 10; use "ei personas")
   ei -n 5 "search text"         Limit results
   ei <type> "search text"       Search a specific data type
   ei <type> -n 5 "search text"  Type-specific with limit
@@ -90,6 +90,7 @@ Usage:
   ei --persona "Name" "query"   Filter results to what a persona has learned
   ei --id <id>                  Look up a specific entity by ID
   echo <id> | ei --id           Look up entity by ID from stdin
+  ei --identifier <type> <value>  Look up a person by identifier type + value, e.g. --identifier "GitHub" "flare576"
   ei mcp                        Start the Ei MCP stdio server (for Claude Code/Cursor/Codex)
   ei create <type> --json '<json>'  Create a new entity (fact/topic/person/persona)
   ei update <type> <id> --json '<json>'  Replace an entity by ID (full record, not a patch; fact/topic/person/quote/persona)
@@ -108,7 +109,8 @@ Options:
   --persona, -p       Filter to entities a specific persona has learned about
   --source, -s        Filter to entities from a specific source (prefix match, e.g. "cursor", "codex:my-machine", "opencode:my-machine:ses_abc123")
   --id                Look up entity by ID (accepts value or stdin)
-  --install           Register Ei with Claude Code, Cursor, Codex, and OpenCode (MCP + context hooks + skills where supported)
+  --identifier <type> <value>  Look up a person by identifier type + value (case-insensitive type, exact value; no stdin support)
+  --install           Register Ei with Claude Code, Cursor, Codex, and OpenCode (skills + context hooks where supported; MCP is removed by default on Claude Code/Cursor/Codex — see README for manual MCP setup)
   --sync              Pull latest state from remote sync server into state.backup.json (no TUI required)
   --session <id>      Session ID to enrich the query with recent context (use with --hook-source)
   --hook-source <src> Source of the hook: "opencode-plugin" (OpenCode SQLite), "cursor", or "codex"
@@ -118,14 +120,15 @@ Options:
 
 Examples:
   ei "debugging"                         # Search everything
-  ei -n 5 "API design"                   # Top 5 across all types
+  ei -n 5 "API design"                   # Top 5 across facts/people/topics/quotes (no personas)
   ei quote "you guessed it"              # Search quotes only
   ei --recent                            # Most recently mentioned items
   ei topics --recent "work"              # Recent work-related topics
   ei --persona "Architect" "work stuff"  # What Architect knows about work
   ei topics --source cursor "X"          # Topics learned from Cursor sessions
   ei --id abc-123                        # Look up entity by ID
-  ei "memory leak" | jq .[0].id | ei --id  # Pipe ID from search
+  ei --identifier "GitHub" "flare576"    # Look up a person by identifier type + value
+  ei "memory leak" | jq -r '.[0] | if .id != null then .id else .message_id end' | ei --id  # Pipe ID from search (quote-safe)
   ei create fact --json '{"name":"Field of Study","description":"CS","sentiment":0,"validated_date":""}'
   ei update fact abc-123 --json '{"name":"Field of Study","description":"Updated","sentiment":0,"validated_date":""}'
   ei update quote <id> --json '{"data_item_ids":["person-b-id"], ...}'  # Repoint a quote after splitting a bad merge (fetch the full record via 'ei --id <id>' first)
@@ -160,14 +163,15 @@ async function main(): Promise<void> {
     await installMcpClients();
     console.log(`
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Codex
+  MCP (optional, manual)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  If Codex was detected, Ei MCP was registered via:
+  Ei now ships as Agent Skills by default. Any existing Ei MCP registration
+  in Claude Code, Cursor, or Codex was just removed in favor of the
+  ei-search, ei-curate, and ei-persona skills. MCP is still available if you
+  want it — add it back manually:
 
     codex mcp add ei --env EI_DATA_PATH="${process.env.EI_DATA_PATH ?? "~/.local/share/ei"}" -- bunx ei-tui mcp
-
-  Restart Codex to activate.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   OpenCode: add to ~/.config/opencode/opencode.jsonc
@@ -387,6 +391,28 @@ async function main(): Promise<void> {
     const entity = await lookupById(id);
     if (!entity) {
       console.error(`No entity found with ID: ${id}`);
+      process.exit(1);
+    }
+    console.log(JSON.stringify(entity, null, 2));
+    process.exit(0);
+  }
+
+  // Handle --identifier flag: look up a person by identifier type + value.
+  // Deliberately simpler than --id: exactly two positional args, no
+  // stdin-piping support (--id remains the primary pipe-drill-down target).
+  const identifierFlagIndex = args.indexOf("--identifier");
+  if (identifierFlagIndex !== -1) {
+    const idType = args[identifierFlagIndex + 1]?.trim();
+    const idValue = args[identifierFlagIndex + 2]?.trim();
+
+    if (!idType || !idValue) {
+      console.error("--identifier requires two values. Usage: ei --identifier <type> <value>");
+      process.exit(1);
+    }
+
+    const entity = await lookupByIdentifier(idType, idValue);
+    if (!entity) {
+      console.error(`No person found with identifier ${idType}: ${idValue}`);
       process.exit(1);
     }
     console.log(JSON.stringify(entity, null, 2));

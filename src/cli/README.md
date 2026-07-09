@@ -3,7 +3,7 @@
 > For installation, see the [TUI README](../../tui/README.md#installation).
 ```sh
 ei                             # Start the TUI
-ei "query string"              # Return up to 10 results across all types
+ei "query string"              # Return up to 10 results across facts/people/topics/quotes (no personas — use "ei personas")
 ei -n 5 "query string"         # Return up to 5 results
 ei facts -n 5 "query string"      # Return up to 5 facts
 ei people -n 5 "query string"     # Return up to 5 people
@@ -15,7 +15,8 @@ ei --recent                            # Most recently mentioned items (no query
 ei --persona "Beta" --recent           # Most recently mentioned items Beta has learned
 ei --id <id>                   # Look up entity by ID — or fetch a message by FQ ID
 echo <id> | ei --id            # Look up entity by ID from stdin
-ei --install                   # Wire Ei into Claude Code, Cursor, Codex, and OpenCode (MCP + context hooks + skills (ei-curate, ei-persona, and future shipped skills) + persona plugin where supported)
+ei --identifier <type> <value>  # Look up a person by identifier type + value (case-insensitive type, exact value), e.g. --identifier "GitHub" "flare576"
+ei --install                   # Wire Ei into Claude Code, Cursor, Codex, and OpenCode (skills + context hooks + persona plugin where supported; MCP is removed by default on Claude Code/Cursor/Codex — see "MCP Server" below)
 ei --sync                      # Pull latest state from remote sync server into state.backup.json (no TUI required)
 ei mcp                         # Start the Ei MCP stdio server (for Claude Code/Cursor/Codex)
 ei create <type> --json '<json>'       # Create a new entity (fact/topic/person/persona)
@@ -25,12 +26,14 @@ ei remove <type> <id>                  # Remove an entity by ID
 
 Type aliases: `fact`, `person`, `topic`, `quote`, `persona` all work (singular or plural).
 
+`--identifier` matches the *first* person whose identifier array contains that value — safe for identifier types that are unique by construction (e.g. `Ei Persona`, a UUID assigned once per persona), but arbitrary if two people happen to share a value under a type that isn't guaranteed unique (e.g. duplicate `Nickname` or `First Name` entries).
+
 # An Agentic Tool
 
-The `--id` flag is designed for piping. For example, search for a topic and then fetch the full entity:
+The `--id` flag is designed for piping. Entity hits (fact/person/topic/persona) carry an `id`; quote hits don't (they carry `message_id` instead) — so a safe drill-down handles both:
 
 ```sh
-ei "memory leak" | jq '.[0].id' | ei --id
+ei "memory leak" | jq -r '.[0] | if .id != null then .id else .message_id end' | ei --id
 ```
 
 It also resolves fully-qualified message IDs from any supported integration, returning the original message content and session context:
@@ -53,15 +56,16 @@ Quotes surfaced by `ei_search` include a `message_id` field in this format — p
 ei --install
 ```
 
-This registers Ei with Claude Code, Cursor, Codex, and OpenCode — MCP server config, context injection hooks where supported, and (for OpenCode) a persona identity plugin so agents know who they are before the first message:
+This registers Ei with Claude Code, Cursor, Codex, and OpenCode — skill directories, context injection hooks where supported, and (for OpenCode) a persona identity plugin so agents know who they are before the first message. **MCP is removed by default** on Claude Code, Cursor, and Codex (see [MCP Server](#mcp-server) below) — every capability those MCP tools offered has a skill or CLI equivalent, so there's no longer a persistent `ei mcp` process sitting around per open session:
 
-| Tool | MCP | Context Hook | Persona Plugin |
-|------|-----|-------------|----------------|
-| **Claude Code** | `~/.claude.json` | `~/.claude/settings.json` (`UserPromptSubmit`) + `~/.claude/hooks/ei-inject.ts` | — |
-| **Cursor** | `~/.cursor/mcp.json` | `~/.cursor/hooks.json` (`beforeSubmitPrompt`) + `~/.cursor/hooks/ei-inject.sh` | — |
-| **Codex** | `~/.codex/config.toml` via `codex mcp add ei` | `~/.codex/hooks.json` (`UserPromptSubmit`) + `~/.codex/hooks/ei-inject.ts` | Local Codex agent plugin if installed separately |
-| **OpenCode** | manual (see below) | Via Oh My OpenCode compatibility layer (reads `~/.claude/settings.json`) | `~/.config/opencode/plugins/ei-persona.ts` |
-| **Pi / OMP** | — (tools registered as native Pi extension) | `~/.pi/agent/extensions/ei-integration.ts` (Pi) or `~/.omp/agent/extensions/ei-integration.ts` (OMP) | — |
+| Tool | Skills | Context Hook | Persona Plugin |
+|------|--------|-------------|----------------|
+| **Claude Code** | `~/.claude/skills/` + shared `~/.agents/skills/` | `~/.claude/settings.json` (`UserPromptSubmit`) + `~/.claude/hooks/ei-inject.ts` | — |
+| **Cursor** | shared `~/.agents/skills/` (Cursor's own native discovery path) | `~/.cursor/hooks.json` (`beforeSubmitPrompt`) + `~/.cursor/hooks/ei-inject.sh` | — |
+| **Codex** | shared `~/.agents/skills/` (Codex's own native discovery path) | `~/.codex/hooks.json` (`UserPromptSubmit`) + `~/.codex/hooks/ei-inject.ts` | Local Codex agent plugin if installed separately |
+| **OpenCode** | `~/.config/opencode/skills/` | Via Oh My OpenCode compatibility layer (reads `~/.claude/settings.json`) | `~/.config/opencode/plugins/ei-persona.ts` |
+| **Pi** | shared `~/.agents/skills/` (Pi's own native discovery path) | `~/.pi/agent/extensions/ei-integration.ts` | — |
+| **OMP** | `~/.omp/agent/skills/` | `~/.omp/agent/extensions/ei-integration.ts` | — |
 
 **Context hook**: fires before every message, searches Ei for relevant memory, and injects it silently. No tool call required.
 
@@ -88,11 +92,22 @@ Restart your agent tool after changes to activate.
 
 ### MCP Server
 
-Claude Code, Cursor, and Codex call `ei mcp` to start the MCP stdio server. You can run it directly to test:
+`ei --install` removes any Ei MCP registration from Claude Code, Cursor, and Codex by default — every MCP tool (`ei_search`, `ei_lookup`, `ei_fetch_message`, `ei_create`, `ei_update`, `ei_remove`) is a thin wrapper over the same CLI/corrections-queue code the `ei-search`, `ei-curate`, and `ei-persona` skills already teach agents to call directly. A persistent `ei mcp` process per open session bought nothing — it reloads state from disk fresh on every call, same as the CLI — and multiple such processes are what caused real Ei MCP processes to get mistaken for orphaned processes and killed.
+
+MCP support isn't removed from the codebase — `ei mcp` still works if you want it back:
 
 ```sh
-ei mcp
+ei mcp   # Start the Ei MCP stdio server directly, for testing or manual wiring
 ```
+
+To re-register it manually:
+
+- **Codex**: `codex mcp add ei --env EI_DATA_PATH=<path> -- bunx ei-tui mcp`
+- **Claude Code**: add to `~/.claude.json`'s `mcpServers`:
+  ```json
+  { "ei": { "type": "stdio", "command": "bunx", "args": ["ei-tui", "mcp"], "env": { "EI_DATA_PATH": "${EI_DATA_PATH}" } } }
+  ```
+- **Cursor**: add to `~/.cursor/mcp.json`'s `mcpServers` (same shape, but Cursor doesn't support `${VAR}` substitution — use a literal path for `EI_DATA_PATH`)
 
 ## How Automatic Context Injection Works
 
@@ -101,7 +116,7 @@ After `ei --install`, agents receive Ei context without any manual tool calls:
 1. **Before each message** — the hook searches Ei using your prompt + recent conversation history as the query, then injects relevant topics into the conversation as `[Ei Memory Context]`. You won't see this in your chat view; the agent does.
 2. **At session start** (OpenCode + OMO only) — the persona plugin finds the agent's Ei persona record and appends it to the system prompt as `<ei-relationship>`. The agent knows its working style, traits, and shared history with you before the session begins.
 
-The `ei_search`, `ei_lookup`, and `ei_fetch_message` MCP tools are still available for targeted mid-session queries — use them when you want to look something up explicitly.
+For targeted, explicit mid-session queries — beyond whatever the hook already silently injected — agents reach for the `ei-search` skill (installed by default) to run `ei "query"` / `ei --id <id>` directly. The `ei_search`, `ei_lookup`, and `ei_fetch_message` MCP tools cover the same ground and remain available if you've manually re-registered MCP (see above).
 
 ## MCP Tools Reference
 
@@ -109,7 +124,7 @@ The MCP server exposes these tools to Claude Code, Cursor, Codex, and OpenCode:
 
 | Tool | Description |
 |------|-------------|
-| `ei_search` | Search across all five data types (facts, topics, people, quotes, personas). Supports `type`, `persona`, `source`, `recent`, `limit` filters. Start here. |
+| `ei_search` | Balanced search across facts, topics, people, and quotes (personas excluded — pass `type: "personas"` explicitly to search those). Supports `type`, `persona`, `source`, `recent`, `limit` filters. Start here. |
 | `ei_lookup` | Full-record lookup for any entity by ID — facts, topics, people, quotes, or personas. Use when you need complete details beyond the search summary. |
 | `ei_fetch_message` | Retrieve a specific message by fully-qualified ID with optional `before`/`after` context window. Use when a quote result has a `message_id` and you want the original conversation. Routes to the correct source automatically. |
 | `ei_create` | Create a new entity (fact, topic, person, or persona). Pass a full JSON record matching the entity's schema. Validates server-side; unknown fields are rejected. Returns the assigned id and the full stored record. Not available for quotes — verifiable-origin data can only be corrected via `ei_update`, never created. |
@@ -121,7 +136,7 @@ The MCP server exposes these tools to Claude Code, Cursor, Codex, and OpenCode:
 | Arg | Type | Description |
 |-----|------|-------------|
 | `query` | string (optional) | Search text. Omit to browse by recency. |
-| `type` | enum (optional) | `facts` \| `people` \| `topics` \| `quotes` \| `personas` — omit for balanced results across all types |
+| `type` | enum (optional) | `facts` \| `people` \| `topics` \| `quotes` \| `personas` — omit for balanced results across facts/people/topics/quotes; pass `personas` explicitly to search those |
 | `persona` | string (optional) | Persona display_name to scope results to what that persona has learned |
 | `source` | string (optional) | Prefix match against source identifiers (e.g. `opencode`, `cursor:my-machine`, `codex:my-machine`) |
 | `limit` | number (optional) | Max results, default 10 |
@@ -203,16 +218,20 @@ Will abort (with a clear error) if `state.json` already exists on this machine �
 
 ## Shipped Skills
 
-`ei --install` copies Ei's shipped skills into each harness's skill discovery directory alongside the MCP config and context hooks:
+`ei --install` copies Ei's shipped skills into each harness's skill discovery directory alongside context hooks:
 
-- **Claude Code / OMP**: `~/.config/opencode/skills/<skill-name>/`
-- Other tools: respective skill directories per harness
+- **Claude Code**: `~/.claude/skills/<skill-name>/`
+- **OMP**: `~/.omp/agent/skills/<skill-name>/`
+- **OpenCode**: `~/.config/opencode/skills/<skill-name>/`
+- **Cursor, Codex, Pi (base)**: shared `~/.agents/skills/<skill-name>/` — written unconditionally, once, regardless of which of these three are actually detected on the machine, since all three natively discover this cross-tool convention on their own
 
-Skills are installed automatically — any directory added under `skills/` in the Ei package gets copied on the next `ei --install` run.
+Skills are installed automatically — any directory added under `skills/` in the Ei package gets copied to every location above on the next `ei --install` run.
 
 ### Currently shipped
 
 | Skill | What it does |
 |-------|-------------|
+| `ei-search` | Deliberate, explicit read-path lookups — search, full-record fetch, original-message fetch — via the CLI (`ei "query"`, `ei --id <id>`), for the mid-conversation case beyond whatever the automatic context-injection hook already surfaced. Read-only. Read the full workflow at `skills/ei-search/SKILL.md`. |
 | `ei-curate` | Safe agent-driven memory curation. Provides verified workflows for fixing merged records, bad attributions, stale facts, and mis-attributed quotes — using `ei create/update/remove` with explicit confirmation before every write. Read the full workflow at `skills/ei-curate/SKILL.md`. Load it in your harness with `/ei-curate`. |
 | `ei-persona` | Safe agent-driven persona authoring. Guides creating, editing (traits/topics/description), archiving, or deleting a persona's *character* via `ei create/update/remove persona` — distinct from `ei-curate`, which corrects learned data rather than authoring identity. Read the full workflow at `skills/ei-persona/SKILL.md`. Load it in your harness with `/ei-persona`. |
+| `ei-reflect` | Manual persona self-reflection for coding-harness agents — reviews your own Person log against your current persona identity entirely via the CLI (`ei personas`, `ei --id`, `ei --identifier`), discusses identity drift with Flare, then updates the persona and clears the log via `ei update persona`/`ei update person`. Read the full workflow at `skills/ei-reflect/SKILL.md`. Load it in your harness with `/ei-reflect`. |

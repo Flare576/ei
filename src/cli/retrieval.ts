@@ -628,3 +628,30 @@ export async function lookupById(id: string): Promise<({ type: string } & Record
   }
   return { type, ...withoutEmbedding };
 }
+
+// Reverse lookup for the `Person.identifiers[]` array: mirrors
+// StateManager#human_person_getByIdentifier's exact matching semantics
+// (case-insensitive `type`, exact `value`; `type` is a user-extensible
+// string like "Ei Persona" or "GitHub", not an enum) so a caller who only
+// has a (type, value) pair — e.g. a Persona record's linked human identity —
+// can resolve straight to the same enriched shape `lookupById` returns.
+// Like the StateManager method it mirrors, this returns the FIRST matching
+// Person and does not change that first-match behavior — safe for identifier
+// types that are unique by construction (e.g. "Ei Persona", a UUID assigned
+// once per persona), but arbitrary if more than one Person shares a value
+// under a type that isn't guaranteed unique (e.g. "Nickname", "First Name").
+// Delegating to lookupById reuses all of its enrichment (embedding
+// stripping, linked_quotes) with zero duplication; this does mean
+// loadLatestState() is called twice on the not-found-then-found path,
+// consistent with every other exported function in this file already
+// calling it independently.
+export async function lookupByIdentifier(type: string, value: string): Promise<({ type: string } & Record<string, unknown>) | null> {
+  const state = await loadLatestState();
+  if (!state) return null;
+  const typeLower = type.toLowerCase();
+  const person = state.human.people.find(p =>
+    p.identifiers?.some(i => i.type.toLowerCase() === typeLower && i.value === value)
+  );
+  if (!person) return null;
+  return lookupById(person.id);
+}
