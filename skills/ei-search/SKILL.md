@@ -73,24 +73,41 @@ exact command surface — this skill is a guide, but the CLI evolves.
 
 | Command | Returns |
 |---|---|
-| `ei "query"` | Balanced search across all 5 types (facts, people, topics, quotes, personas), ranked by relevance, up to 10 results |
+| `ei "query"` | Balanced search across facts, people, topics, and quotes, ranked by relevance, up to 10 results — does **not** include personas; use `ei personas "query"` for those |
 | `ei -n N "query"` | Same, capped at `N` results |
 | `ei facts -n N "query"` | Facts only |
 | `ei people -n N "query"` | People only |
 | `ei topics -n N "query"` | Topics only |
 | `ei quotes -n N "query"` | Quotes only |
 | `ei personas -n N "query"` | Personas only — matches display name first, falls back to semantic search over persona descriptions |
-| `ei --persona "Name" "query"` | Scope any of the above to what a specific persona has learned — not the persona's own identity record, its accumulated facts/topics/people/quotes |
+| `ei --persona "Name" "query"` | Narrow facts/people/topics to what a specific persona has learned — reliable only for those three types: always excludes quotes, and on `ei personas` returns everything unfiltered instead of scoping (see Guardrails) |
 | `ei --recent` | Most recently mentioned items, no query needed — browse by recency |
 | `ei --persona "Name" --recent` | Recent items scoped to one persona's knowledge |
-| `ei --source <prefix> "query"` | Filter any of the above to entities from a specific source — prefix match, e.g. `cursor`, `codex:my-machine` |
+| `ei --source <prefix> "query"` | Same narrowing, by source prefix (e.g. `cursor`, `codex:my-machine`) instead of persona — same caveats: always excludes quotes, doesn't scope `ei personas` results |
 | `ei --id <id>` | Full-record lookup — entity id or fully-qualified message id (see below) |
 | `echo <id> \| ei --id` | Same lookup, id piped via stdin |
-| `ei "query" \| jq '.[0].id' \| ei --id` | Idiomatic search-then-drill-down: search, take the top hit's id, fetch its full record |
+| `ei "query" \| jq -r '.[0] \| if .id != null then .id else .message_id end' \| ei --id` | Quote-safe search-then-drill-down: entity hits drill down by `id`, quote hits (no `id`) drill down by `message_id` |
 
 Type aliases work singular or plural: `fact`/`facts`, `person`/`people`,
 `topic`/`topics`, `quote`/`quotes`, `persona`/`personas`. Short flags:
 `-n` (number), `-p` (persona), `-s` (source), `-r` (recent).
+
+### Choosing which command to run
+
+A short decision tree for picking the right read path before you search:
+
+1. **Start broad** with `ei "query"` when you don't yet know whether the
+   answer is a fact, person, topic, or quote.
+2. **Start typed** with `ei personas "query"` when the target is clearly an
+   AI persona/agent identity — balanced search never returns those (see
+   above).
+3. **Add `--recent`** when the ask is about what Ei learned *lately /
+   recently / just now*, not a specific topic.
+4. **Add `--persona "Name"` or `--source <prefix>`** only when you're
+   intentionally narrowing human-memory results (facts/people/topics) —
+   don't assume they scope quote or persona searches the same way.
+5. **Stop at the search result** if it already answers the question. Reach
+   for `ei --id` only when you need a field the summary didn't include.
 
 ### Two id formats
 
@@ -111,6 +128,14 @@ never have to pick which path, just pass the id:
 Quote results carry a `message_id` in this format — pipe it to `ei --id` to
 read the original exchange it came from.
 
+Safe mental model: **entity hits drill down by `id`; quote hits drill down
+by `message_id`.** Don't assume every search hit has an `id` — quote hits
+won't. Prefer a quote-safe pipeline over grabbing `.[0].id` blindly:
+
+```sh
+ei "query" | jq -r '.[0] | if .id != null then .id else .message_id end' | ei --id
+```
+
 ---
 
 ## What each command is actually for
@@ -119,7 +144,9 @@ read the original exchange it came from.
 before searching, plus what changes when you're driving it from the CLI.)
 
 **Search (`ei` / `ei <type>`)** — searches a persistent memory store built
-from conversations. The type boundaries aren't always obvious:
+from conversations. Balanced `ei "query"` covers facts, people, topics, and
+quotes; it does **not** include personas — those are a type-only search
+(`ei personas "query"`). The type boundaries aren't always obvious:
 
 - **facts** are ONLY user demographics: name, age, job title, location,
   family structure, physical traits.
@@ -133,6 +160,8 @@ from conversations. The type boundaries aren't always obvious:
 - **personas** are AI agent identities with traits and working style —
   search by name (e.g. "Sisyphus") or by a description of their role (e.g.
   "primary coding agent"); distinct from **people**, which are humans.
+  Reachable only via `ei personas "query"` — balanced `ei "query"` skips
+  them.
 
 Omit the query and pass `--recent` to browse without semantic filtering.
 
@@ -190,8 +219,16 @@ only when you actually need one of the extra fields listed above.
   bad record → `ei-curate`. A persona's character → `ei-persona`.
 - **`--help` is the source of truth.** If a command here doesn't match live
   `ei --help` output, trust `--help` and adapt.
-- **Quotes have no `id`.** Don't try `ei --id <quote-id>` — quotes are found
-  via search and read via their `message_id`.
+- **Search results omit quote `id` by design.** Address a quote by its
+  `message_id`, not an id. If you already have a quote's *entity* id from
+  somewhere else — e.g. a `linked_quotes` entry on a fact/topic/person
+  record — `ei --id <quote-id>` does work and returns the full quote
+  record.
+- **`--persona`/`--source` are human-memory narrowing tools, not universal
+  filters.** They're reliable for facts, people, and topics. They always
+  exclude quotes (results come back empty, not an error). On `ei personas`
+  they don't filter at all — every persona comes back unfiltered — so
+  don't rely on them there.
 - **This is the explicit-call path, not a substitute for the passive
   injection.** Don't re-run a broad search "just in case" every turn — the
   hook already did that before you saw the message. Use this skill when you

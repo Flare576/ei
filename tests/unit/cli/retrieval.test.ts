@@ -580,6 +580,20 @@ describe("retrieveBalanced with personas", () => {
     const personaResults = result.filter(r => r.type === "persona");
     expect(personaResults.length).toBe(0);
   });
+
+  it("covers exactly quote/fact/person/topic and never persona, even on an exact persona-name query (non-recent path)", async () => {
+    writeTestState(createTestState({ facts: 2, people: 2, topics: 2, quotes: 2, personas: 2, personaNamePrefix: "ExactMatchName" }));
+    const result = await retrieveBalanced("ExactMatchName", 20);
+    const types = new Set(result.map(r => r.type));
+    expect(types).toEqual(new Set(["quote", "fact", "person", "topic"]));
+  });
+
+  it("covers exactly quote/fact/person/topic and never persona, even on an exact persona-name query (recent path)", async () => {
+    writeTestState(createTestState({ facts: 2, people: 2, topics: 2, quotes: 2, personas: 2, personaNamePrefix: "ExactMatchName" }));
+    const result = await retrieveBalanced("ExactMatchName", 20, { recent: true });
+    const types = new Set(result.map(r => r.type));
+    expect(types).toEqual(new Set(["quote", "fact", "person", "topic"]));
+  });
 });
 
 describe("lookupById — persona records", () => {
