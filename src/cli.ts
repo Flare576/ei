@@ -108,7 +108,7 @@ Options:
   --persona, -p       Filter to entities a specific persona has learned about
   --source, -s        Filter to entities from a specific source (prefix match, e.g. "cursor", "codex:my-machine", "opencode:my-machine:ses_abc123")
   --id                Look up entity by ID (accepts value or stdin)
-  --install           Register Ei with Claude Code, Cursor, Codex, and OpenCode (MCP + context hooks + skills where supported)
+  --install           Register Ei with Claude Code, Cursor, Codex, and OpenCode (skills + context hooks where supported; MCP is removed by default on Claude Code/Cursor/Codex — see README for manual MCP setup)
   --sync              Pull latest state from remote sync server into state.backup.json (no TUI required)
   --session <id>      Session ID to enrich the query with recent context (use with --hook-source)
   --hook-source <src> Source of the hook: "opencode-plugin" (OpenCode SQLite), "cursor", or "codex"
@@ -160,14 +160,15 @@ async function main(): Promise<void> {
     await installMcpClients();
     console.log(`
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Codex
+  MCP (optional, manual)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  If Codex was detected, Ei MCP was registered via:
+  Ei now ships as Agent Skills by default. Any existing Ei MCP registration
+  in Claude Code, Cursor, or Codex was just removed in favor of the
+  ei-search, ei-curate, and ei-persona skills. MCP is still available if you
+  want it — add it back manually:
 
     codex mcp add ei --env EI_DATA_PATH="${process.env.EI_DATA_PATH ?? "~/.local/share/ei"}" -- bunx ei-tui mcp
-
-  Restart Codex to activate.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   OpenCode: add to ~/.config/opencode/opencode.jsonc

@@ -140,6 +140,22 @@ export async function installMcpClients(): Promise<void> {
     console.log(`ℹ️  OMP not detected — skipping OMP extension install.`);
   }
 
+  // Shared, spec-standard skill discovery directory that Cursor, Codex, and
+  // base Pi (non-OMP) each independently walk up looking for
+  // (~/.agents/skills/<name>/SKILL.md) — unconditional because, unlike the
+  // harness-specific steps above, it needs no per-tool detection: every tool
+  // that reads it does so regardless of what else is installed on the machine.
+  // Claude Code, OMP, and OpenCode do NOT read this path — they keep their own
+  // installSkillsTo() calls inside installClaudeCode()/installOmp()/
+  // installOpenCodePlugin() untouched.
+  if (
+    !(await runInstallStep("Shared skills directory (~/.agents/skills)", () =>
+      installSkillsTo(join(home, ".agents", "skills"))
+    ))
+  ) {
+    failures.push("Shared skills directory");
+  }
+
   if (failures.length > 0) {
     throw new Error(
       `${failures.length} integration(s) failed to install: ${failures.join(", ")}. See warnings above for details.`,
@@ -172,29 +188,49 @@ function hookEntryHasCommand(entry: unknown, command: string): boolean {
   });
 }
 
-async function installCodex(): Promise<void> {
-  const dataPath = process.env.EI_DATA_PATH ?? join(resolveHome(), ".local", "share", "ei");
-  const proc = Bun.spawn(
-    ["codex", "mcp", "add", "ei", "--env", `EI_DATA_PATH=${dataPath}`, "--", "bunx", "ei-tui", "mcp"],
-    {
+export async function installCodex(): Promise<void> {
+  const home = resolveHome();
+  const configPath = join(home, ".codex", "config.toml");
+
+  // `codex mcp remove <name>` verified as a real subcommand (`codex mcp
+  // --help`, `codex mcp remove --help`) against codex-cli 0.142.3 —
+  // symmetric with the `codex mcp add` call this replaces. It rewrites
+  // ~/.codex/config.toml itself, so we don't hand-roll a TOML writer here;
+  // we only pre-check the file (via Bun's built-in TOML parser) to decide
+  // whether there's anything to remove, so a no-op run never touches —
+  // or lets the codex CLI reformat — the file at all.
+  let hasEiEntry = false;
+  try {
+    const text = await Bun.file(configPath).text();
+    const parsed = Bun.TOML.parse(text) as { mcp_servers?: Record<string, unknown> };
+    hasEiEntry = Boolean(parsed?.mcp_servers?.ei);
+  } catch {
+    // File doesn't exist, or isn't valid TOML — nothing to remove.
+  }
+
+  if (!hasEiEntry) {
+    console.log(`ℹ️  Ei MCP already absent from ${configPath} — nothing to remove.`);
+  } else {
+    const proc = Bun.spawn(["codex", "mcp", "remove", "ei"], {
       stdout: "pipe",
       stderr: "pipe",
+    });
+
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
+
+    if (exitCode !== 0) {
+      console.warn(`⚠️  Codex MCP removal failed.`);
+      const detail = (stderr || stdout).trim();
+      if (detail) console.warn(`   ${detail}`);
+    } else {
+      console.log(
+        `✓ Removed Ei MCP server registration from ${configPath} (skills now cover this capability; MCP remains available via manual setup — see README).`
+      );
     }
-  );
-
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-
-  if (exitCode !== 0) {
-    console.warn(`⚠️  Codex MCP install failed.`);
-    const detail = (stderr || stdout).trim();
-    if (detail) console.warn(`   ${detail}`);
-  } else {
-    console.log(`✓ Installed Ei MCP server to Codex config (~/.codex/config.toml)`);
-    console.log(`  Restart Codex to activate MCP.`);
   }
 
   await installCodexHooks();
@@ -315,36 +351,34 @@ export async function installClaudeCode(): Promise<void> {
   const home = resolveHome();
   const claudeJsonPath = join(home, ".claude.json");
 
-  // Claude Code supports ${VAR} substitution in env values, resolved from its
-  // own environment at spawn time — so the value stays fresh if EI_DATA_PATH changes.
-  const mcpEntry: Record<string, unknown> = {
-    type: "stdio",
-    command: "bunx",
-    args: ["ei-tui", "mcp"],
-    env: { EI_DATA_PATH: "${EI_DATA_PATH}" },
-  };
-
-  // Direct atomic write — we need full control over the config structure to
-  // write the env field. `claude mcp add` doesn't support env vars.
+  // Direct config edit — matches the atomic-write pattern the original
+  // registration used, but inverted: remove the "ei" entry instead of
+  // adding one. Every other key/entry in the file is left untouched.
   let config: Record<string, unknown> = {};
   try {
     const text = await Bun.file(claudeJsonPath).text();
     config = JSON.parse(text) as Record<string, unknown>;
   } catch {
-    // File doesn't exist or isn't valid JSON — start fresh
+    // File doesn't exist or isn't valid JSON — nothing to remove.
   }
 
-  const mcpServers = (config.mcpServers ?? {}) as Record<string, unknown>;
-  mcpServers["ei"] = mcpEntry;
-  config.mcpServers = mcpServers;
+  const mcpServers = config.mcpServers;
+  const hasEiEntry = typeof mcpServers === "object" && mcpServers !== null && "ei" in mcpServers;
 
-  // Atomic write: write to temp file then rename to avoid partial writes
-  const tmpPath = `${claudeJsonPath}.ei-install.tmp`;
-  await Bun.write(tmpPath, JSON.stringify(config, null, 2) + "\n");
-  await rename(tmpPath, claudeJsonPath);
+  if (!hasEiEntry) {
+    console.log(`ℹ️  Ei MCP already absent from ${claudeJsonPath} — nothing to remove.`);
+  } else {
+    delete (mcpServers as Record<string, unknown>)["ei"];
 
-  console.log(`✓ Installed Ei MCP server to ${claudeJsonPath}`);
-  console.log(`  Restart Claude Code to activate.`);
+    // Atomic write: write to temp file then rename to avoid partial writes
+    const tmpPath = `${claudeJsonPath}.ei-install.tmp`;
+    await Bun.write(tmpPath, JSON.stringify(config, null, 2) + "\n");
+    await rename(tmpPath, claudeJsonPath);
+
+    console.log(
+      `✓ Removed Ei MCP server registration from ${claudeJsonPath} (skills now cover this capability; MCP remains available via manual setup — see README).`
+    );
+  }
 
   await installClaudeCodeHooks();
 
@@ -435,37 +469,37 @@ The following items MAY be relevant to your current task — use \\\`ei_search\\
   console.log(`✓ Installed Ei context hook to ~/.claude/hooks/ei-inject.ts`);
 }
 
-async function installCursor(): Promise<void> {
+export async function installCursor(): Promise<void> {
   const home = resolveHome();
   const cursorJsonPath = join(home, ".cursor", "mcp.json");
 
-  // Cursor does not support ${VAR} substitution in mcp.json — literal values only.
-  const mcpEntry: Record<string, unknown> = {
-    type: "stdio",
-    command: "bunx",
-    args: ["ei-tui", "mcp"],
-    env: { EI_DATA_PATH: process.env.EI_DATA_PATH ?? "" },
-  };
-
+  // Direct config edit — matches the atomic-write pattern the original
+  // registration used, but inverted: remove the "ei" entry instead of
+  // adding one. Every other key/entry in the file is left untouched.
   let config: Record<string, unknown> = {};
   try {
     const text = await Bun.file(cursorJsonPath).text();
     config = JSON.parse(text) as Record<string, unknown>;
   } catch {
-    // File doesn't exist or isn't valid JSON — start fresh
+    // File doesn't exist or isn't valid JSON — nothing to remove.
   }
 
-  const mcpServers = (config.mcpServers ?? {}) as Record<string, unknown>;
-  mcpServers["ei"] = mcpEntry;
-  config.mcpServers = mcpServers;
+  const mcpServers = config.mcpServers;
+  const hasEiEntry = typeof mcpServers === "object" && mcpServers !== null && "ei" in mcpServers;
 
-  await Bun.$`mkdir -p ${join(home, ".cursor")}`;
-  const tmpPath = `${cursorJsonPath}.ei-install.tmp`;
-  await Bun.write(tmpPath, JSON.stringify(config, null, 2) + "\n");
-  await rename(tmpPath, cursorJsonPath);
+  if (!hasEiEntry) {
+    console.log(`ℹ️  Ei MCP already absent from ${cursorJsonPath} — nothing to remove.`);
+  } else {
+    delete (mcpServers as Record<string, unknown>)["ei"];
 
-  console.log(`✓ Installed Ei MCP server to ${cursorJsonPath}`);
-  console.log(`  Restart Cursor to activate.`);
+    const tmpPath = `${cursorJsonPath}.ei-install.tmp`;
+    await Bun.write(tmpPath, JSON.stringify(config, null, 2) + "\n");
+    await rename(tmpPath, cursorJsonPath);
+
+    console.log(
+      `✓ Removed Ei MCP server registration from ${cursorJsonPath} (skills now cover this capability; MCP remains available via manual setup — see README).`
+    );
+  }
 
   await installCursorHooks();
 }
