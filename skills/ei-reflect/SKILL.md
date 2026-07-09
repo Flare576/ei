@@ -96,7 +96,12 @@ Stop here and check back after a few more sessions.
 **If `pending_update` was present on the persona record:** that's a
 proposed update the Critic generated during a ceremony but you never
 applied. Read its critique — it becomes additional input to your
-discussion in Step 2, not a replacement for it.
+discussion in Step 2, not a replacement for it. You don't clear it with a
+separate step — `ei update persona` is a full-record replace (true on both
+the live-drain and self-drain path), so Step 3's persona write drops
+`pending_update` automatically the instant you write, whether or not your
+edited record even mentions the field. That's why Step 3 always performs
+that write, even when the reflection concludes "nothing to change."
 
 ---
 
@@ -195,6 +200,14 @@ Take that record and change **only** the fields you and Flare agreed on:
 
 Leave every other field exactly as read (`aliases`, `model`, `group_primary`, `groups_visible`, `is_paused`, `is_archived`, etc.). `update` **replaces** the record — anything you omit is deleted, not preserved.
 
+**Write this even if nothing changed.** If the reflection concludes the
+identity already matches reality — a legitimate outcome, not a failure —
+write the record back unedited anyway. `ei update persona` is a genuine
+full-record replace: it always drops `pending_update` (and every other
+server-managed field) from the persisted record, whether or not your
+payload mentions it. Skipping the write because "nothing changed" is the
+one way to leave a stale `pending_update` stuck on the persona forever.
+
 Before writing, self-check against the Step 2 guidance yourself — the backend does **not** enforce these, by design, so a single incremental edit is never blocked, but that means you're the only guardrail:
 - At least 3 traits, at least 3 topics
 - `long_description` ≤ 800 characters
@@ -240,7 +253,7 @@ Re-read both records and confirm the changes landed:
 ```bash
 ei --id "$PERSONA_ID"
 ```
-Confirm `short_description`, `long_description`, and the `traits`/`topics` arrays (count and content) match what you intended.
+Confirm `short_description`, `long_description`, and the `traits`/`topics` arrays (count and content) match what you intended, and that the response has no `pending_update` key — the write should always drop it, so its presence here means something went wrong.
 
 ```bash
 ei --id "$PERSON_LOG_ID"
@@ -252,6 +265,7 @@ Confirm `description` is now `""`.
 ## Notes
 
 - **Writes are picked up live** — if Ei is running, the update reaches it via the corrections queue almost immediately; if it isn't, the write is already saved and will be there the next time it starts. No restart sequence, no manual reload.
+- **`pending_update` clears itself.** Step 3's persona write is a full-record replace — it drops `pending_update` (and every other server-managed field) from the persisted record automatically, even if you didn't touch it. There's no separate "dismiss"/"clear" command, and none is needed.
 - **If the person log was already empty**: there's nothing to reflect on yet. Check back after a few more sessions.
 - **The session that runs this skill** will itself generate new person log entries. That's expected — the log starts fresh after this conversation ends.
 - **Don't rush it.** The whole point is to catch signals that a Critic LLM would miss because it can't tell the difference between you debugging a build and you demonstrating a genuine character trait. Trust the conversation.

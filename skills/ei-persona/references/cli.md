@@ -89,13 +89,24 @@ enforces. Adding a single trait to an otherwise-untouched persona is a completel
 edit.)
 
 **Server-managed, not part of the writable surface.** Fields set by Ei — read them,
-don't invent or hand-edit them:
-- `id`, `entity`, `last_updated`, `last_heartbeat`, `last_extraction`,
-  `description_embedding`, `pending_update`, `reflection_last_asked` — silently stripped
-  and ignored if present in an `update` payload (the natural result of round-tripping a
-  read), never a validation error.
-- `is_static` — marks built-in structural personas; not writable through this path at all.
-  Don't try to flip it.
+don't invent or hand-edit them. All of them are silently stripped from the input
+payload before validation (never a validation error), but what survives your `update`
+call differs per field — `update` is a true full-record replace (live-drain and
+self-drain both), so nothing here is a merge:
+- `id`, `entity` — fixed; `entity` is always the literal `"system"`.
+- `last_updated` — always stamped to the current time.
+- `description_embedding` — always recomputed from whatever `long_description` you
+  just wrote; never the old value, never dropped.
+- `pending_update` — **wiped.** Genuinely absent after any `update`, whether or not
+  your payload mentions it — there is no way to edit an unrelated field (say, adding a
+  trait) while preserving an unresolved Critic reflection proposal the human hasn't
+  reviewed yet; any `update` drops it. Deliberate — it's how `ei-reflect` resolves a
+  pending reflection without a separate "clear" verb.
+- `is_static`, `last_heartbeat` — **preserved.** Carried forward from the existing
+  record automatically; not writable, but not dropped either. `is_static` marks
+  built-in structural personas — never flippable through this path. `last_heartbeat`
+  is Processor heartbeat-scheduling bookkeeping; an unrelated identity edit has no
+  business resetting it.
 
 **Reserved names.** `display_name` is checked against a reserved-word list (currently
 `new`, `clone` — command keywords that collide with `/persona` subcommands) on **both**
