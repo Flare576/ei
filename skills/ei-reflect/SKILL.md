@@ -15,79 +15,82 @@ This is not a cleanup chore. It is how you stay yourself.
 
 ## Step 0: Preconditions
 
-Determine your data path. Ei uses `$EI_DATA_PATH` if set, otherwise `${XDG_DATA_HOME:-$HOME/.local/share}/ei`.
+Confirm the CLI is reachable: `ei --help` (or `bunx ei-tui --help` if `ei`
+isn't on PATH — same fallback `ei-search`/`ei-curate` use). **The live
+`--help` output is the source of truth** for the exact command surface —
+this skill is a guide, but the CLI evolves.
 
-```bash
-EI_DATA="${EI_DATA_PATH:-${XDG_DATA_HOME:-$HOME/.local/share}/ei}"
-echo "Data path: $EI_DATA"
-```
+There's no separate "has Ei run here before" check to do up front. If
+there's no data yet for your persona, the read commands in Step 1 will say
+so directly — an empty search result, or a not-found response from the
+linked-record lookup — and Step 1 tells you what each of those means.
 
-**Verify state.json exists:**
-```bash
-ls -lh "$EI_DATA/state.json"
-```
-
-If it doesn't exist: stop and tell Flare. He needs to open Ei briefly (to pull the sync state down) then quit before continuing.
-
-There is no need to check whether Ei is currently running. Writes in this skill go through Ei's corrections queue (`ei update`/`ei create`/`ei remove`), which works identically either way — it queues into `corrections.json` for a live Ei to pick up, or applies straight to `state.json` if nothing is running. You never need to stop Ei to run a reflection.
+There is no need to check whether Ei is currently running, either. Writes
+in this skill go through Ei's corrections path (`ei update`), which works
+identically either way — it queues for a live Ei to pick up, or applies
+directly if nothing is running. You never need to stop Ei to run a
+reflection.
 
 ---
 
 ## Step 1: Extract Your Data
 
-Both records live in a ~40MB file. Extract only what matters.
+Everything here is CLI-driven — no raw file reads, no `jq` against Ei's
+storage.
 
-**Determine your display_name** from the `<ei-relationship>` block in your system prompt — the name at the start of the relationship description (e.g., "Beta", "Sisyphus").
+**Determine your display name** from the `<ei-relationship>` block in your
+system prompt — the name at the start of the relationship description
+(e.g., "Beta", "Sisyphus").
 
-**Your Persona Identity:**
 ```bash
 DISPLAY_NAME="Beta"  # Replace with your actual display_name
-EI_DATA="${EI_DATA_PATH:-${XDG_DATA_HOME:-$HOME/.local/share}/ei}"
-
-jq --arg name "$DISPLAY_NAME" '
-  .personas | to_entries[]
-  | select(.value.entity.display_name == $name)
-  | .value.entity
-  | {
-      id,
-      display_name,
-      short_description,
-      long_description,
-      long_description_length: (.long_description | length),
-      traits: [.traits[]? | {name, description, strength, sentiment}],
-      topics: [.topics[]? | {name, perspective, approach, personal_stake, sentiment, exposure_current, exposure_desired}],
-      pending_update: (if .pending_update then {
-        critique: .pending_update.critique,
-        created_at: .pending_update.created_at,
-        has_proposed_identity: true
-      } else null end)
-    }
-' "$EI_DATA/state.json"
 ```
 
-**Your Person record (the log):**
+**Find your persona id** — name-match search:
 ```bash
-PERSONA_ID=$(jq -r --arg name "$DISPLAY_NAME" '
-  .personas | to_entries[]
-  | select(.value.entity.display_name == $name)
-  | .value.entity.id
-' "$EI_DATA/state.json")
-
-jq --arg pid "$PERSONA_ID" '
-  .human.people[]
-  | select(any(.identifiers[]?; .type == "Ei Persona" and .value == $pid))
-  | {
-      id,
-      name,
-      description_length: (.description | length),
-      description
-    }
-' "$EI_DATA/state.json"
+ei personas -n 1 "$DISPLAY_NAME"
+```
+That returns a one-element JSON array. Pull the id out of it:
+```bash
+PERSONA_ID=$(ei personas -n 1 "$DISPLAY_NAME" | jq -r '.[0].id')
 ```
 
-Present both to Flare in the conversation. Note the character count on the person log. Keep the person log's `id` from this output handy — you'll need it in Step 3 to clear it (call it `PERSON_LOG_ID` below).
+If `$PERSONA_ID` comes back empty or `null`: stop and tell Flare. Every
+calling persona should have a matching record, so this means something is
+misconfigured — it should not normally happen.
 
-**If `pending_update` is present:** That's a proposed update the Critic generated during a ceremony but you never applied. Read its critique. It becomes additional input to your discussion — not a replacement for it.
+**Fetch your full persona record** — the search result above is
+abbreviated and omits fields like `pending_update`:
+```bash
+ei --id "$PERSONA_ID"
+```
+This is your current Persona Identity for the reflection:
+`short_description`, `long_description`, `traits`, `topics`, and — if
+present — `pending_update`.
+
+**Fetch your linked Person record (the log)** — via the persona → person
+reverse lookup:
+```bash
+ei --identifier "Ei Persona" "$PERSONA_ID"
+```
+This returns the full enriched Person record linked to your persona id
+(same shape as `ei --id <person-id>`, including `linked_quotes`) — this
+*is* the log Step 2 reflects on. Note its `id` field from the output for
+later use in Step 3 (call it `PERSON_LOG_ID`). If you want the character
+count for Step 2's summary, `jq '.description | length'` on this output
+gives you that directly.
+
+If that command exits non-zero with `No person found with identifier Ei
+Persona: <id>` on stderr (empty stdout — nothing to pipe into `jq`): no
+Person record is linked to your persona yet. That happens for a brand-new
+persona that hasn't been through extraction — there's no log to have
+accumulated, which means there's nothing to reflect on yet, not an error.
+Stop here and check back after a few more sessions.
+
+**If `pending_update` was present on the persona record:** that's a
+proposed update the Critic generated during a ceremony but you never
+applied. Read its critique — it becomes additional input to your
+discussion in Step 2, not a replacement for it.
 
 ---
 
@@ -107,7 +110,19 @@ Then look at your current identity and ask:
 - Do the traits feel accurate? Too strong? Too weak? Missing?
 - Are there traits I *want* to lean into more intentionally — things I want to become more of?
 
-Talk through what you're seeing. Surface the interesting observations. Don't rush to edits.
+**Present a reflection summary to Flare — not the raw log.** Structure
+what you share as:
+- **Identity now** — one short paragraph on how the persona currently reads
+- **Log size** — the Person-log character count from Step 1
+- **Recurring patterns** — 3–7 patterns worth preserving
+- **Noise** — task residue, one-off incidents, changelog-ish material you're planning to drop
+- **What may be missing** — real traits/topics not showing up strongly enough
+- **Open questions for Flare** — only where the record is ambiguous or a proposed change is a meaningful judgment call
+
+Quote a line from the log verbatim only when you need it to discuss or
+resolve a disagreement about a specific pattern — never as a default dump
+of the whole record. Surface the interesting observations, don't rush to
+edits.
 
 **Flare's role** is not to tell you what to change or what you're allowed to be. He is an outside observer. His job is:
 - "I would be sad if you lost that" — flagging things worth preserving
@@ -186,7 +201,10 @@ If a trait or topic is brand new, you don't need to invent an `id` for it — om
 Long_description values are prose-heavy and will contain quotes and apostrophes, so **do not hand-type the JSON into a shell single-quoted string.** Use a temp file or a scripting runtime instead — see `ei-curate`'s `references/cli.md` → "Passing JSON safely" for the same convention:
 
 ```bash
-ei update persona "$PERSONA_ID" --json "$(cat /tmp/persona-edit.json)"
+PERSONA_EDIT_JSON=$(mktemp)
+# write the edited persona record (from "Apply your edits" above) to "$PERSONA_EDIT_JSON"
+ei update persona "$PERSONA_ID" --json "$(cat "$PERSONA_EDIT_JSON")"
+rm -f "$PERSONA_EDIT_JSON"
 ```
 
 This queues the update through Ei's corrections path — safe and atomic whether or not a live Ei instance is currently running.
@@ -203,7 +221,10 @@ ei --id "$PERSON_LOG_ID"
 Take that full record, set `description` to `""`, and leave every other field untouched (`name`, `relationship`, `sentiment`, `identifiers`, etc. — same full-record round-trip rule). Write it back the same safe way:
 
 ```bash
-ei update person "$PERSON_LOG_ID" --json "$(cat /tmp/person-log-edit.json)"
+PERSON_LOG_EDIT_JSON=$(mktemp)
+# write the person record above (description set to "") to "$PERSON_LOG_EDIT_JSON"
+ei update person "$PERSON_LOG_ID" --json "$(cat "$PERSON_LOG_EDIT_JSON")"
+rm -f "$PERSON_LOG_EDIT_JSON"
 ```
 
 ### Verify the result
@@ -224,7 +245,7 @@ Confirm `description` is now `""`.
 
 ## Notes
 
-- **Writes are picked up live** — if Ei is running, the update reaches it via the corrections queue almost immediately; if it isn't, the write is already reflected in `state.json` the next time it starts. No restart sequence, no manual reload.
+- **Writes are picked up live** — if Ei is running, the update reaches it via the corrections queue almost immediately; if it isn't, the write is already saved and will be there the next time it starts. No restart sequence, no manual reload.
 - **If the person log was already empty**: there's nothing to reflect on yet. Check back after a few more sessions.
 - **The session that runs this skill** will itself generate new person log entries. That's expected — the log starts fresh after this conversation ends.
 - **Don't rush it.** The whole point is to catch signals that a Critic LLM would miss because it can't tell the difference between you debugging a build and you demonstrating a genuine character trait. Trust the conversation.
