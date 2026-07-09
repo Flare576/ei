@@ -26,6 +26,8 @@ ei remove <type> <id>                  # Remove an entity by ID
 
 Type aliases: `fact`, `person`, `topic`, `quote`, `persona` all work (singular or plural).
 
+`--identifier` matches the *first* person whose identifier array contains that value — safe for identifier types that are unique by construction (e.g. `Ei Persona`, a UUID assigned once per persona), but arbitrary if two people happen to share a value under a type that isn't guaranteed unique (e.g. duplicate `Nickname` or `First Name` entries).
+
 # An Agentic Tool
 
 The `--id` flag is designed for piping. Entity hits (fact/person/topic/persona) carry an `id`; quote hits don't (they carry `message_id` instead) — so a safe drill-down handles both:
