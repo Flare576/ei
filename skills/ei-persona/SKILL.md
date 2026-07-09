@@ -40,7 +40,7 @@ change.
 
 **If instead the calling agent is being asked to reflect on its OWN identity**,
 based on **its own** accumulated session history (a Person log it has been
-building up about itself) — that is a *different* skill: **`coding-harness-reflect`**.
+building up about itself) — that is a *different* skill: **`ei-reflect`**.
 That skill is introspective self-critique ("do a reflection", "reflect on my
 identity", "my person record is full", "trim my person record") driven by the
 agent examining its own behavior log with an outside observer. It is not about a
@@ -48,7 +48,7 @@ human directing a persona's character from outside, and it has its own
 minimum-trait/topic conventions specific to that ceremony. If you're not sure
 which applies, ask: *is a human telling an agent what to become, or is the agent
 examining what it already is?* The former is this skill; the latter is
-`coding-harness-reflect`.
+`ei-reflect`.
 
 This skill is also **not** `ei-curate`: `ei-curate` fixes records of *real external
 people* (facts/topics/people/quotes) by verifying against evidence. A persona isn't

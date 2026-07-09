@@ -97,7 +97,7 @@ const personaTopicSchema = z.strictObject({
 });
 
 // No minimum trait/topic count is enforced here on purpose — that floor
-// (coding-harness-reflect's "3 traits minimum") exists only as skill-level
+// (ei-reflect's "3 traits minimum") exists only as skill-level
 // AGENT guidance today, not a server-side gate, so a single "add one trait"
 // edit is never blocked.
 const personaEntitySchema = z.strictObject({
