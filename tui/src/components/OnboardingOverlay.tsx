@@ -293,7 +293,11 @@ export function OnboardingOverlay(props: OnboardingOverlayProps) {
 
     if (s === "welcome") {
       event.preventDefault();
-      setStep("install");
+      if (key === "escape") {
+        props.onDismiss();
+      } else {
+        setStep("install");
+      }
       return;
     }
 
@@ -395,7 +399,7 @@ export function OnboardingOverlay(props: OnboardingOverlayProps) {
       alignItems="center"
       justifyContent="center"
     >
-      <box width={150} backgroundColor="#1a1a2e" borderStyle="single" borderColor="#586e75" padding={2} flexDirection="column">
+      <box width={95} backgroundColor="#1a1a2e" borderStyle="single" borderColor="#586e75" padding={2} flexDirection="column">
         <text fg="#93a1a1">{`Step ${STEP_META[step()].index}/6: ${STEP_META[step()].name}`}</text>
         <text> </text>
 
@@ -421,6 +425,13 @@ export function OnboardingOverlay(props: OnboardingOverlayProps) {
                 </For>
               </box>
               <text> </text>
+              <box visible={!hasDetectedProvider()} flexDirection="column">
+                <text fg="#dc322f">No LLM provider detected.</text>
+                <text> </text>
+                <text fg="#93a1a1">Use /provider new to configure one manually, or</text>
+                <text fg="#93a1a1">start LMStudio (port 1234) / Ollama (port 11434), or</text>
+                <text fg="#93a1a1">set ANTHROPIC_API_KEY, OPENAI_API_KEY, etc. and restart.</text>
+              </box>
               <text fg="#586e75">Press any key to get started</text>
             </box>
           </Match>

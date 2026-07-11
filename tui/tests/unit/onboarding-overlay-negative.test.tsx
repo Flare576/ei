@@ -61,6 +61,17 @@ function wait(ms = 20): Promise<void> {
   return promise;
 }
 
+// See onboarding-overlay.test.tsx's dewrap() for the full rationale — real
+// macOS temp paths wrap across box-drawing lines with no inserted
+// separator; reconstruct by stripping border chars and joining trimmed
+// lines directly.
+function dewrap(frame: string): string {
+  return frame
+    .split("\n")
+    .map((line) => line.replace(/[┌┐└┘│─]/g, "").trim())
+    .join("");
+}
+
 async function waitForFrame(
   captureCharFrame: () => string,
   renderOnce: () => Promise<void>,
@@ -136,7 +147,7 @@ describe("OnboardingOverlay — negative paths", () => {
       await renderOnce();
       mockInput.pressEnter();
       frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Not a directory"));
-      expect(frame).toContain(`Not a directory: ${notADirectory}`);
+      expect(dewrap(frame)).toContain(`Not a directory: ${notADirectory}`);
       // Still on the editing sub-step — no transition to "result", no write attempted.
       expect(frame).toContain("Enter: validate | Esc: back");
 
@@ -151,7 +162,7 @@ describe("OnboardingOverlay — negative paths", () => {
       await renderOnce();
       frame = captureCharFrame();
       expect(frame).toContain("Step 3/6: Data Path");
-      expect(frame).toContain(`Data path: ${testDataDir}`);
+      expect(dewrap(frame)).toContain(`Data path: ${testDataDir}`);
 
       mockInput.pressEnter(); // continue with unchanged path -> Provider
       frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 4/6: Provider"));

@@ -82,6 +82,18 @@ function wait(ms = 20): Promise<void> {
   return promise;
 }
 
+// OpenTUI wraps long unbroken strings (e.g. real macOS temp-dir paths like
+// /var/folders/.../ei-onboarding-newpath-XXXXXX) across box-drawing lines
+// with no inserted separator — reconstruct by stripping border characters
+// and joining trimmed lines directly, so a substring check tolerates the
+// wrap regardless of exactly where it falls.
+function dewrap(frame: string): string {
+  return frame
+    .split("\n")
+    .map((line) => line.replace(/[┌┐└┘│─]/g, "").trim())
+    .join("");
+}
+
 async function waitForFrame(
   captureCharFrame: () => string,
   renderOnce: () => Promise<void>,
@@ -164,7 +176,7 @@ describe("OnboardingOverlay — happy path", () => {
 
       mockInput.pressEnter();
       frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 3/6: Data Path"));
-      expect(frame).toContain(`Data path: ${testDataDir}`);
+      expect(dewrap(frame)).toContain(`Data path: ${testDataDir}`);
 
       // --- Step 3: Data Path (change to a new custom path) ---
       mockInput.pressKey("c");
@@ -172,7 +184,7 @@ describe("OnboardingOverlay — happy path", () => {
       await mockInput.typeText(newDataDir);
       await renderOnce();
       mockInput.pressEnter();
-      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes(`Using data path: ${newDataDir}`));
+      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => dewrap(f).includes(`Using data path: ${newDataDir}`));
 
       mockInput.pressEnter();
       frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 4/6: Provider"));
@@ -195,7 +207,7 @@ describe("OnboardingOverlay — happy path", () => {
       mockInput.pressEnter();
       frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 6/6: Done"));
       expect(frame).toContain("You're all set!");
-      expect(frame).toContain(`Data path: ${newDataDir}`);
+      expect(dewrap(frame)).toContain(`Data path: ${newDataDir}`);
 
       // --- Step 6: Done (dismiss) ---
       expect(onDismissCalled).toBe(false);
