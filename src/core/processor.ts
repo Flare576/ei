@@ -446,7 +446,7 @@ export class Processor {
     });
 
     const model = this.stateManager.getHuman().settings?.rewrite_model
-      ?? this.stateManager.getHuman().settings?.default_model;
+      ?? this.stateManager.getHuman().settings?.conversation_model;
 
     this.stateManager.queue_enqueue({
       type: LLMRequestType.Raw,
@@ -466,7 +466,7 @@ export class Processor {
     if (settings?.rewrite_model) {
       return { model: settings.rewrite_model, isRewriteModel: true };
     }
-    return { model: settings?.default_model ?? "unknown", isRewriteModel: false };
+    return { model: settings?.conversation_model ?? "unknown", isRewriteModel: false };
   }
 
   async getGeneratedDocumentContent(slug: string): Promise<string | null> {

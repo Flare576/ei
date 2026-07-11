@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { Processor } from "../../../src/core/processor.js";
-import type { Ei_Interface } from "../../../src/core/types.js";
+import type { Ei_Interface, StorageState } from "../../../src/core/types.js";
 import { LLMNextStep, LLMRequestType, LLMPriority } from "../../../src/core/types.js";
+import { createDefaultTestState } from "../../helpers/mock-storage.js";
 
 vi.mock("../../../src/core/handlers/index.js", () => ({
   handlers: {
@@ -211,6 +212,23 @@ describe("Processor.generateDocument()", () => {
     );
     expect(synthItem!.model).toBeUndefined();
   });
+
+  it("falls back to settings.conversation_model when rewrite_model is not set", async () => {
+    const sm = processor.getStateManager();
+    sm.getHuman().facts.push(makeFact("f1", "Test Subject"));
+    const human = sm.getHuman();
+    sm.setHuman({
+      ...human,
+      settings: { ...human.settings, rewrite_model: undefined, conversation_model: "MyProvider:conv-model" },
+    });
+    await processor.generateDocument("Test Subject");
+
+    const activeItems = sm.queue_getAllActiveItems();
+    const synthItem = activeItems.find(
+      r => r.next_step === LLMNextStep.HandleKnowledgeSynthesis
+    );
+    expect(synthItem!.model).toBe("MyProvider:conv-model");
+  });
 });
 
 describe("Processor.checkGenerationModel()", () => {
@@ -235,24 +253,36 @@ describe("Processor.checkGenerationModel()", () => {
     expect(result.model).toBe("Provider:sonnet");
   });
 
-  it("returns isRewriteModel=false with default_model when no rewrite_model", () => {
+  it("returns isRewriteModel=false with conversation_model when no rewrite_model", () => {
     const sm = processor.getStateManager();
     const h = sm.getHuman();
-    sm.setHuman({ ...h, settings: { ...h.settings, rewrite_model: undefined, default_model: "Provider:default" } });
+    sm.setHuman({ ...h, settings: { ...h.settings, rewrite_model: undefined, conversation_model: "Provider:default" } });
 
     const result = processor.checkGenerationModel();
     expect(result.isRewriteModel).toBe(false);
     expect(result.model).toBe("Provider:default");
   });
 
-  it("returns 'unknown' when neither rewrite_model nor default_model is set", () => {
+  it("returns 'unknown' when neither rewrite_model nor conversation_model is set", () => {
     const sm = processor.getStateManager();
     const h = sm.getHuman();
-    sm.setHuman({ ...h, settings: { ...h.settings, rewrite_model: undefined, default_model: undefined } });
+    sm.setHuman({ ...h, settings: { ...h.settings, rewrite_model: undefined, conversation_model: undefined } });
 
     const result = processor.checkGenerationModel();
     expect(result.isRewriteModel).toBe(false);
     expect(result.model).toBe("unknown");
+  });
+
+  it("backward-read: old-shape state (only default_model set, pre-migration) still resolves a usable model", async () => {
+    const sm = processor.getStateManager();
+    const restoredState: StorageState = createDefaultTestState();
+    restoredState.human.settings = { default_model: "Provider:legacy" };
+
+    sm.restoreFromState(restoredState);
+
+    const result = processor.checkGenerationModel();
+    expect(result.isRewriteModel).toBe(false);
+    expect(result.model).toBe("Provider:legacy");
   });
 });
 

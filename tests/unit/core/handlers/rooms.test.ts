@@ -38,7 +38,8 @@ import {
   type LLMRequestState,
 } from "../../../../src/core/types.js";
 import type { RoomMessage, RoomEntity } from "../../../../src/core/types/rooms.js";
-import type { PersonaEntity } from "../../../../src/core/types/entities.js";
+import type { PersonaEntity, HumanEntity } from "../../../../src/core/types/entities.js";
+import type { StateManager } from "../../../../src/core/state-manager.js";
 import type { RoomJudgeResult } from "../../../../src/prompts/room/index.js";
 
 // ─── Factories ────────────────────────────────────────────────────────────────
@@ -129,7 +130,7 @@ function createMockRoomState(options: {
   room?: RoomEntity | null;
   setRoomActiveNodeResult?: boolean;
   personaById?: (id: string) => PersonaEntity | null;
-  humanSettings?: any;
+  humanSettings?: HumanEntity["settings"];
 } = {}) {
   const _roomMessages: RoomMessage[] = [];
   const _queuedRequests: any[] = [];
@@ -158,7 +159,7 @@ function createMockRoomState(options: {
       return "enqueued-id";
     }),
     getHuman: vi.fn(() => ({
-      settings: options.humanSettings ?? { default_model: "test-model" },
+      settings: options.humanSettings ?? { conversation_model: "test-model" },
     })),
     // Inspection handles
     _roomMessages,
@@ -387,6 +388,40 @@ describe("handleRoomJudge", () => {
 
     expect(state._queuedRequests[0].data.parentMessageId).toBe("winner-id");
     expect(state._queuedRequests[0].next_step).toBe(LLMNextStep.HandleRoomResponse);
+  });
+
+  // ── Model resolution (persona.model || settings.conversation_model) ────────
+
+  it("uses persona.model for the queued response when set", async () => {
+    const winner = makeRoomMessage({ id: "winner-id" });
+    const room = makeRoom({ persona_ids: ["persona-1"], judge_persona_id: "judge-1" });
+    const state = createMockRoomState({
+      messages: [winner],
+      room,
+      humanSettings: { conversation_model: "conv-guid" },
+      personaById: (id) => makePersona({ id, model: "Persona:override" }),
+    });
+    const response = makeJudgeResponse({ winner_message_id: "winner-id" });
+
+    await handleRoomJudge(response, state as unknown as StateManager);
+
+    expect(state._queuedRequests[0].model).toBe("Persona:override");
+  });
+
+  it("falls back to settings.conversation_model for the queued response when persona.model is unset", async () => {
+    const winner = makeRoomMessage({ id: "winner-id" });
+    const room = makeRoom({ persona_ids: ["persona-1"], judge_persona_id: "judge-1" });
+    const state = createMockRoomState({
+      messages: [winner],
+      room,
+      humanSettings: { conversation_model: "conv-guid" },
+      personaById: (id) => makePersona({ id }),
+    });
+    const response = makeJudgeResponse({ winner_message_id: "winner-id" });
+
+    await handleRoomJudge(response, state as unknown as StateManager);
+
+    expect(state._queuedRequests[0].model).toBe("conv-guid");
   });
 
   it("skips queue when getRoom returns null after deletion", async () => {

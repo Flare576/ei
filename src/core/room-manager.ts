@@ -44,7 +44,7 @@ async function queueRoomPersonaResponses(
     if (room.mode === RoomMode.MessagesAgainstPersona && room.judge_persona_id === personaId) continue;
 
     const promptOutput = await buildRoomResponsePromptData(sm, room, persona, isTUI);
-    const model = persona.model ?? sm.getHuman().settings?.default_model ?? "";
+    const model = persona.model ?? sm.getHuman().settings?.conversation_model ?? "";
 
     sm.queue_enqueue({
       type: LLMRequestType.Raw,
@@ -223,7 +223,7 @@ export async function sendFfaMessage(
     if (!persona || persona.is_archived || persona.is_paused) continue;
 
     const promptOutput = await buildRoomResponsePromptData(sm, updatedRoom, persona, isTUI, true);
-    const model = persona.model ?? sm.getHuman().settings?.default_model ?? "";
+    const model = persona.model ?? sm.getHuman().settings?.conversation_model ?? "";
 
     sm.queue_enqueue({
       type: LLMRequestType.Raw,
@@ -339,7 +339,7 @@ export async function activateRoom(
       candidates,
     });
 
-    const model = judgePersona.model ?? sm.getHuman().settings?.default_model ?? "";
+    const model = judgePersona.model ?? sm.getHuman().settings?.conversation_model ?? "";
     sm.queue_enqueue({
       type: LLMRequestType.JSON,
       priority: LLMPriority.Judge,
@@ -406,7 +406,7 @@ export async function selectCYPBranch(
     if (!persona || persona.is_archived || persona.is_paused) continue;
 
     const promptOutput = await buildRoomResponsePromptData(sm, room, persona, isTUI);
-    const model = persona.model ?? sm.getHuman().settings?.default_model ?? "";
+    const model = persona.model ?? sm.getHuman().settings?.conversation_model ?? "";
 
     sm.queue_enqueue({
       type: LLMRequestType.Raw,

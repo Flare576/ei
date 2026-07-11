@@ -27,14 +27,14 @@ export function getModelForPersona(sm: StateManager, personaId?: string): string
   const human = sm.getHuman();
   if (personaId) {
     const persona = sm.persona_getById(personaId);
-    return persona?.model || human.settings?.default_model;
+    return persona?.model || human.settings?.conversation_model;
   }
-  return human.settings?.default_model;
+  return human.settings?.conversation_model;
 }
 
 export function getOneshotModel(sm: StateManager): string | undefined {
   const human = sm.getHuman();
-  return human.settings?.oneshot_model || human.settings?.default_model;
+  return human.settings?.oneshot_model || human.settings?.conversation_model;
 }
 
 // =============================================================================

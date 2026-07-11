@@ -170,7 +170,7 @@ export async function handleRoomJudge(response: LLMResponse, state: StateManager
 
     const isTUI = false;
     const promptData = await buildRoomResponsePromptData(state, room, persona, isTUI);
-    const model = persona.model ?? state.getHuman().settings?.default_model ?? "";
+    const model = persona.model ?? state.getHuman().settings?.conversation_model ?? "";
 
     state.queue_enqueue({
       type: LLMRequestType.Raw,
