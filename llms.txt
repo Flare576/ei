@@ -31,7 +31,7 @@ If a user asks you to set up Ei, these are the steps:
 2. **Run Ei**: `bunx ei-tui` — no install needed, always current
 3. **On first launch**: Ei auto-detects LLM providers from env vars (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, etc.). If a local LLM is running on port 1234, it's detected automatically.
 4. **Enable coding tool integrations**: Open `/settings` in the TUI, set `opencode.integration: true` (and/or `claudeCode`, `cursor`, `codex`, `pi`) for the tools the user has installed.
-5. **Wire up MCP**: Run `ei --install` to register the MCP server and install context injection hooks for all detected coding tools.
+5. **Wire up integrations**: The onboarding wizard (shown on first launch, or run anytime via `/onboarding`) handles this — it installs context injection hooks for all detected coding tools. MCP itself is off by default on Claude Code, Cursor, and Codex; for headless/CI setup without the interactive wizard, run `bunx ei-tui --install` directly.
 6. **Verify**: Run `ei mcp` — should list available memory query tools.
 
 The default data path is `~/.local/share/ei`. No `EI_DATA_PATH` setup needed unless the user wants a custom location.

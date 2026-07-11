@@ -6,7 +6,7 @@ Coding tool integrations (OpenCode, Claude Code, Cursor, Codex): enable via `/se
 
 ## What do you want to do?
 
-**Give my coding tools persistent memory** — Enable integrations in `/settings`, run `bunx ei-tui --install` for MCP wiring. [Jump to Coding Tool Integrations →](#coding-tool-integrations)
+**Give my coding tools persistent memory** — Enable integrations in `/settings`, then let the onboarding wizard (or `/onboarding` anytime) wire up the hooks. [Jump to Coding Tool Integrations →](#coding-tool-integrations)
 
 **Personalize my AI agents** — Create personas, set traits and topics, let them evolve. [Jump to Installation →](#installation) then come back for [Persona setup in the root README](../README.md#whats-a-persona)
 
@@ -31,11 +31,12 @@ bunx ei-tui
 alias ei='bunx ei-tui'
 ```
 
-**BUT**, if you want to wire Ei's knowledge base to your coding tools, you can install the hooks for it with:
+**BUT**, if you want to wire Ei's knowledge base to your coding tools, run Ei and step through the onboarding wizard:
 
 ```bash
-# Wire up Cursor, Claude Code, OpenCode, Codex, etc.
-bunx ei-tui --install
+# The wizard detects Cursor, Claude Code, OpenCode, Codex, etc. and installs
+# context injection hooks for each. Re-run it anytime with /onboarding.
+bunx ei-tui
 ```
 
 ## Coding Tool Integrations
@@ -52,7 +53,7 @@ Enable any or all four in `/settings`. They work independently and feed into the
 
 Sessions are processed oldest-first, one per queue cycle. On first run Ei works through your backlog gradually — it won't flood your LLM provider.
 
-All four tools also support reading Ei's knowledge back out via the [CLI tool](../src/cli/README.md). Run `bunx ei-tui --install` to wire up MCP everywhere it is detected, plus automatic context injection where hooks/plugins are available.
+All four tools also support reading Ei's knowledge back out via the [CLI tool](../src/cli/README.md). Run `bunx ei-tui` and step through the onboarding wizard (or re-run it anytime with `/onboarding`) to wire up context injection everywhere it's detected. MCP itself is disabled by default on Claude Code, Cursor, and Codex — see the [CLI README](../src/cli/README.md#mcp-server) for manual MCP setup.
 
 ## Slack Integration
 

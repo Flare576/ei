@@ -37,9 +37,9 @@ Ei can import sessions from your coding tools and extract what you've been worki
 
 Supported tools: OpenCode, Claude Code, Cursor, Codex, and Pi/OMP. Full setup in the [TUI README → Coding Tool Integrations](./tui/README.md#coding-tool-integrations).
 
-Agents aren't read-only anymore. After `ei --install`, your coding agents get `ei_create`, `ei_update`, and `ei_remove` MCP tools alongside the existing search/lookup tools — they can correct bad extracted data, split merged records, repoint mis-attributed quotes, and create or direct a persona's identity (display name, traits, topics), all without you hand-editing JSON. For guided, verified workflows, the `ei-curate` skill (memory corrections) and `ei-persona` skill (persona authoring) — both installed by `ei --install` — walk the agent through explicit confirmation before every write.
+Agents aren't read-only anymore. Run `bunx ei-tui` — the onboarding wizard walks you through setup and installs the `ei-curate` skill (memory corrections) and `ei-persona` skill (persona authoring) for your detected coding tools, plus context injection hooks and a persona identity plugin where supported. Both skills walk the agent through explicit confirmation before every write, letting it correct bad extracted data, split merged records, repoint mis-attributed quotes, and create or direct a persona's identity (display name, traits, topics) — all without you hand-editing JSON. Re-run the wizard anytime with `/onboarding`.
 
-`ei --install` installs: MCP config, context injection hooks, shipped skills (`ei-curate`, `ei-persona`, and any future additions) into your harness's skill discovery directory, plus a persona identity plugin where supported.
+The same corrections are also available as MCP tools (`ei_create`, `ei_update`, `ei_remove`) alongside the existing search/lookup tools, but MCP is disabled by default on Claude Code, Cursor, and Codex — see the [CLI README](./src/cli/README.md#mcp-server) for manual MCP setup.
 
 ## Document Import
 
