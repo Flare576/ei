@@ -73,6 +73,7 @@ export class StateManager {
     this.migrateThemes();
     this.migrateFfaParentIds();
     this.migrateDocumentSettings();
+    this.migrateModelSplit();
   }
 
   /**
@@ -619,6 +620,35 @@ export class StateManager {
       this.humanState.set(human);
       this.scheduleSave();
       console.log("[StateManager] Migrated document settings to unified processed_documents schema");
+    }
+  }
+
+  /**
+   * Migration: split the legacy default_model into conversation_model + extraction_model.
+   * Must run after migrateProviderModel so default_model is already a GUID.
+   * Idempotent on conversation_model's absence: once either field is set, it is never
+   * overwritten. default_model itself is left untouched (read-only, deprecated).
+   */
+  private migrateModelSplit(): void {
+    const human = this.humanState.get();
+    const settings = human.settings;
+    if (!settings?.default_model) return;
+
+    let migrated = false;
+
+    if (!settings.conversation_model) {
+      settings.conversation_model = settings.default_model;
+      migrated = true;
+    }
+    if (!settings.extraction_model) {
+      settings.extraction_model = settings.default_model;
+      migrated = true;
+    }
+
+    if (migrated) {
+      this.humanState.set(human);
+      this.scheduleSave();
+      console.log("[StateManager] Migrated default_model to conversation_model/extraction_model");
     }
   }
 

@@ -112,7 +112,10 @@ export interface ThemeDefinition {
 }
 
 export interface HumanSettings {
-  default_model?: string;           // Will store ModelConfig.id GUID post-migration
+  /** @deprecated Read-only for one release; migrated to conversation_model/extraction_model. Do not write. Will store ModelConfig.id GUID post-migration. */
+  default_model?: string;
+  conversation_model?: string;    // Chat/response model. Migrated from default_model (migrateModelSplit). Stores ModelConfig.id GUID.
+  extraction_model?: string;      // Top-level extraction fallback model. Migrated from default_model (migrateModelSplit). Stores ModelConfig.id GUID.
   oneshot_model?: string;           // Model for AI-assist (wand) requests; falls back to default_model. Will store ModelConfig.id GUID post-migration.
   rewrite_model?: string;           // Model for rewrite ceremony step; must be capable (Sonnet/Opus class). Unset = rewrite disabled. Will store ModelConfig.id GUID post-migration.
   queue_paused?: boolean;
