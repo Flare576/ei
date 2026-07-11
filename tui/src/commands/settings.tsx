@@ -45,10 +45,10 @@ export const settingsCommand: Command = {
         const newSettings = settingsFromYAML(result.content, human.settings, accounts);
         const llmAccounts = human.settings?.accounts?.filter(a => a.type === "llm") ?? [];
 
-        if (newSettings.default_model) {
-          const isGuid = !newSettings.default_model.includes(':');
-          if (!isGuid && !llmAccounts.some(a => a.models?.some(m => m.id === newSettings.default_model))) {
-            throw new Error(`No matching model found for "${newSettings.default_model}". Use format: ProviderName:modelName`);
+        if (newSettings.conversation_model) {
+          const isGuid = !newSettings.conversation_model.includes(':');
+          if (!isGuid && !llmAccounts.some(a => a.models?.some(m => m.id === newSettings.conversation_model))) {
+            throw new Error(`No matching model found for "${newSettings.conversation_model}". Use format: ProviderName:modelName`);
           }
         }
 

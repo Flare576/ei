@@ -14,7 +14,8 @@ import { modelGuidToDisplay, displayToModelGuid } from "./yaml-shared.js";
 import { parseDuration, formatDuration } from "./duration.js";
 
 interface EditableSettingsData {
-  default_model?: string | null;
+  conversation_model?: string | null;
+  extraction_model?: string | null;
   oneshot_model?: string | null;
   rewrite_model?: string | null;
   name_display?: string | null;
@@ -93,7 +94,8 @@ export function settingsToYAML(settings: HumanSettings | undefined, accounts: Pr
   };
 
   const data: EditableSettingsData = {
-    default_model: guidToDisplay(settings?.default_model),
+    conversation_model: guidToDisplay(settings?.conversation_model),
+    extraction_model: guidToDisplay(settings?.extraction_model),
     oneshot_model: guidToDisplay(settings?.oneshot_model),
     rewrite_model: guidToDisplay(settings?.rewrite_model),
     name_display: settings?.name_display ?? null,
@@ -168,7 +170,7 @@ export function settingsToYAML(settings: HumanSettings | undefined, accounts: Pr
   })
   .replace(/^(\s+)(last_sync: .+)$/mg, '$1# [read-only] $2')
   .replace(/^(\s+)(extraction_point: .+)$/mg, '$1# [read-only] $2')
-  .replace(/^(\s+)(extraction_model: .+)$/mg, '$1$2 # e.g. Anthropic:claude-haiku-4-5');
+  .replace(/^(\s*)(extraction_model: .+)$/mg, '$1$2 # e.g. Anthropic:claude-haiku-4-5');
 }
 
 export function settingsFromYAML(yamlContent: string, original: HumanSettings | undefined, accounts: ProviderAccount[]): HumanSettings {
@@ -291,7 +293,8 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
 
   return {
     ...original,
-    default_model: displayToGuid(data.default_model),
+    conversation_model: displayToGuid(data.conversation_model),
+    extraction_model: displayToGuid(data.extraction_model),
     oneshot_model: displayToGuid(data.oneshot_model),
     rewrite_model: displayToGuid(data.rewrite_model),
     name_display: nullToUndefined(data.name_display),

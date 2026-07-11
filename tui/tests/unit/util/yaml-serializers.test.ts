@@ -790,6 +790,98 @@ describe("round-trip serialization", () => {
   });
 });
 
+describe("settingsToYAML / settingsFromYAML - conversation_model/extraction_model (T8)", () => {
+  const timestamp = "2024-01-01T00:00:00.000Z";
+
+  const accounts: ProviderAccount[] = [
+    {
+      id: "acc-1",
+      name: "Anthropic",
+      type: ProviderType.LLM,
+      url: "https://api.anthropic.com",
+      enabled: true,
+      created_at: timestamp,
+      models: [
+        { id: "guid-haiku", name: "claude-haiku-4-5" },
+        { id: "guid-sonnet", name: "claude-sonnet-4-5" },
+      ],
+    },
+  ];
+
+  test("serializes conversation_model/extraction_model as Provider:Model display strings", () => {
+    const settings: HumanSettings = {
+      conversation_model: "guid-haiku",
+      extraction_model: "guid-sonnet",
+    };
+    const yaml = settingsToYAML(settings, accounts);
+    expect(yaml).toContain("conversation_model: Anthropic:claude-haiku-4-5");
+    expect(yaml).toContain("extraction_model: Anthropic:claude-sonnet-4-5 # e.g. Anthropic:claude-haiku-4-5");
+    expect(yaml).not.toContain("guid-haiku");
+    expect(yaml).not.toContain("guid-sonnet");
+  });
+
+  test("does NOT expose default_model as an editable field", () => {
+    const settings: HumanSettings = {
+      default_model: "guid-haiku",
+      conversation_model: "guid-sonnet",
+    };
+    const yaml = settingsToYAML(settings, accounts);
+    expect(yaml).not.toMatch(/^default_model:/m);
+  });
+
+  test("round-trips conversation_model/extraction_model through display-name conversion", () => {
+    const settings: HumanSettings = {
+      conversation_model: "guid-haiku",
+      extraction_model: "guid-sonnet",
+    };
+    const yaml = settingsToYAML(settings, accounts);
+    const result = settingsFromYAML(yaml, settings, accounts);
+    expect(result.conversation_model).toBe("guid-haiku");
+    expect(result.extraction_model).toBe("guid-sonnet");
+  });
+
+  test("NEGATIVE: editing the model in YAML actually changes conversation_model (no silent no-op)", () => {
+    const original: HumanSettings = {
+      conversation_model: "guid-haiku",
+      default_model: "guid-haiku",
+    };
+    const yaml = settingsToYAML(original, accounts);
+    expect(yaml).toContain("conversation_model: Anthropic:claude-haiku-4-5");
+
+    // Simulate a user editing the YAML in $EDITOR to point at a different model.
+    const edited = yaml.replace(
+      "conversation_model: Anthropic:claude-haiku-4-5",
+      "conversation_model: Anthropic:claude-sonnet-4-5"
+    );
+    expect(edited).not.toBe(yaml);
+
+    const result = settingsFromYAML(edited, original, accounts);
+
+    // The edit must land on conversation_model, not be silently dropped in favor
+    // of a spread-through-original value (the T8 bug: overwrite target dead).
+    expect(result.conversation_model).toBe("guid-sonnet");
+    // default_model is deprecated/read-only: never written by this path, spread
+    // through unchanged from `original`.
+    expect(result.default_model).toBe("guid-haiku");
+  });
+
+  test("clearing the model line in YAML resets conversation_model to undefined", () => {
+    const original: HumanSettings = { conversation_model: "guid-haiku" };
+    const yaml = settingsToYAML(original, accounts);
+    const edited = yaml.replace("conversation_model: Anthropic:claude-haiku-4-5", "conversation_model: null");
+    const result = settingsFromYAML(edited, original, accounts);
+    expect(result.conversation_model).toBeUndefined();
+  });
+
+  test("unresolvable Provider:Model display string falls back to the raw string (validated by callers)", () => {
+    const original: HumanSettings = {};
+    const yaml = settingsToYAML(original, accounts);
+    const edited = yaml.replace("conversation_model: null", "conversation_model: Anthropic:no-such-model");
+    const result = settingsFromYAML(edited, original, accounts);
+    expect(result.conversation_model).toBe("Anthropic:no-such-model");
+  });
+});
+
 // =============================================================================
 // PROVIDER SERIALIZATION TESTS
 // =============================================================================
