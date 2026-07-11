@@ -22,6 +22,10 @@ import {
   ALL_PROVIDER_NAMES,
 } from "../util/provider-detection.js";
 import type { ProviderDetectionStatus } from "../util/provider-detection.js";
+import { getInstalledVersion } from "../util/local-state.js";
+import { shouldShowUpgradePrompt } from "../util/upgrade-prompt.js";
+import { runHarnessInstall, stampInstalled } from "../util/harness-install.js";
+import pkg from "../../../package.json";
 import { ConflictOverlay } from "../components/ConflictOverlay.js";
 import type {
   Ei_Interface,
@@ -112,10 +116,16 @@ export interface EiContextValue {
     people: Person[];
     quotes: Quote[];
   }>;
-  showWelcomeOverlay: () => boolean;
-  dismissWelcomeOverlay: () => void;
+  showOnboarding: () => boolean;
+  dismissOnboarding: () => void;
+  showOnboardingOverlay: () => void;
+  isFirstBoot: () => boolean;
+  dataPath: () => string;
   detectedProviders: () => ProviderDetectionStatus[];
-  firstBootDefaultModel: () => string | undefined;
+  firstBootConversationModel: () => string | undefined;
+  showUpgradePrompt: () => boolean;
+  confirmUpgradeInstall: () => Promise<void>;
+  dismissUpgradePrompt: () => Promise<void>;
   deleteMessages: (personaId: string, messageIds: string[]) => Promise<void>;
   setMessageContextStatus: (personaId: string, messageId: string, status: ContextStatus) => Promise<void>;
   deleteRoomMessages: (roomId: string, messageIds: string[]) => Promise<void>;
@@ -181,9 +191,11 @@ export const EiProvider: ParentComponent = (props) => {
 
   const [contextBoundarySignal, setContextBoundarySignal] = createSignal<string | undefined>(undefined);
   const [quotesVersion, setQuotesVersion] = createSignal(0);
-  const [showWelcomeOverlay, setShowWelcomeOverlay] = createSignal(false);
+  const [showOnboarding, setShowOnboarding] = createSignal(false);
+  const [isFirstBoot, setIsFirstBoot] = createSignal(false);
   const [detectedProviders, setDetectedProviders] = createSignal<ProviderDetectionStatus[]>([]);
-  const [firstBootDefaultModel, setFirstBootDefaultModel] = createSignal<string | undefined>(undefined);
+  const [firstBootConversationModel, setFirstBootConversationModel] = createSignal<string | undefined>(undefined);
+  const [showUpgradePrompt, setShowUpgradePrompt] = createSignal(false);
   const [bootError, setBootError] = createSignal<string | null>(null);
   const [conflictData, setConflictData] = createSignal<StateConflictData | null>(null);
 
@@ -820,7 +832,16 @@ export const EiProvider: ParentComponent = (props) => {
       try {
         const human = await processor!.getHuman();
         const hasAccounts = human.settings?.accounts && human.settings.accounts.length > 0;
-        if (hasAccounts) return;
+
+        if (hasAccounts) {
+          const installedVersion = await getInstalledVersion(eiDataPath);
+          if (shouldShowUpgradePrompt(installedVersion, pkg.version)) {
+            setShowUpgradePrompt(true);
+          }
+          return;
+        }
+
+        setIsFirstBoot(true);
 
         const { detected, statuses } = await detectProviders({
           skipLocalDetect: E2E_SKIP_LOCAL_DETECT,
@@ -836,14 +857,16 @@ export const EiProvider: ParentComponent = (props) => {
         if (detected.length > 0) {
           const { accounts, suggestedRewriteModelId } = buildProviderAccounts(detected);
           const topProvider = detected[0];
-          const defaultModel = `${topProvider.name}:${topProvider.selected.extractionModel}`;
-          setFirstBootDefaultModel(defaultModel);
+          const conversationModel = `${topProvider.name}:${topProvider.selected.chatModel}`;
+          const extractionModel = `${topProvider.name}:${topProvider.selected.extractionModel}`;
+          setFirstBootConversationModel(conversationModel);
           const currentHuman = await processor!.getHuman();
           await processor!.updateHuman({
             settings: {
               ...currentHuman.settings,
               accounts,
-              default_model: defaultModel,
+              conversation_model: conversationModel,
+              extraction_model: extractionModel,
               ...(!currentHuman.settings?.rewrite_model && suggestedRewriteModelId && {
                 rewrite_model: suggestedRewriteModelId,
               }),
@@ -853,16 +876,33 @@ export const EiProvider: ParentComponent = (props) => {
           showNotification(`${names} detected and configured!`, "info");
           logger.info(`Auto-configured: ${names}`);
         } else {
-          logger.info("No LLM providers found, showing welcome overlay");
+          logger.info("No LLM providers found, showing onboarding wizard");
         }
 
-        setShowWelcomeOverlay(true);
-      } catch (err: any) {
-        logger.warn(`LLM detection failed: ${err?.message || err}`);
+        setShowOnboarding(true);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.warn(`LLM detection failed: ${message}`);
       }
     })();
     setStore("ready", true);
   }
+
+  const confirmUpgradeInstall = async (): Promise<void> => {
+    const result = await runHarnessInstall();
+    await stampInstalled(eiDataPath, pkg.version);
+    setShowUpgradePrompt(false);
+    if (!result.ok) {
+      const failureList = result.failures.join(", ");
+      logger.warn(`Harness install failures: ${failureList}`);
+      showNotification(`Some integrations failed to install: ${failureList}`, "warn");
+    }
+  };
+
+  const dismissUpgradePrompt = async (): Promise<void> => {
+    await stampInstalled(eiDataPath, pkg.version);
+    setShowUpgradePrompt(false);
+  };
 
   const resolveStateConflict = async (resolution: StateConflictResolution): Promise<void> => {
     if (!processor) return;
@@ -1031,10 +1071,16 @@ export const EiProvider: ParentComponent = (props) => {
     removeQuote,
     quotesVersion,
     searchHumanData,
-    showWelcomeOverlay,
-    dismissWelcomeOverlay: () => setShowWelcomeOverlay(false),
+    showOnboarding,
+    dismissOnboarding: () => setShowOnboarding(false),
+    showOnboardingOverlay: () => setShowOnboarding(true),
+    isFirstBoot,
+    dataPath: () => eiDataPath,
     detectedProviders,
-    firstBootDefaultModel,
+    firstBootConversationModel,
+    showUpgradePrompt,
+    confirmUpgradeInstall,
+    dismissUpgradePrompt,
     deleteMessages,
     setMessageContextStatus,
     deleteRoomMessages,

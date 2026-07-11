@@ -10,29 +10,58 @@ import { PromptInput } from "./components/PromptInput";
 import { StatusBar } from "./components/StatusBar";
 import { Show } from "solid-js";
 import { useEi } from "./context/ei";
-import { WelcomeOverlay } from "./components/WelcomeOverlay";
+import { OnboardingOverlay } from "./components/OnboardingOverlay";
+import { ConfirmOverlay } from "./components/ConfirmOverlay";
 import { useRenderer } from "@opentui/solid";
 
 function AppContent() {
   const { overlayRenderer, showOverlay } = useOverlay();
-  const { showWelcomeOverlay, dismissWelcomeOverlay, activeRoomId, detectedProviders, firstBootDefaultModel } = useEi();
+  const {
+    showOnboarding,
+    dismissOnboarding,
+    isFirstBoot,
+    dataPath,
+    activeRoomId,
+    detectedProviders,
+    showUpgradePrompt,
+    confirmUpgradeInstall,
+    dismissUpgradePrompt,
+  } = useEi();
   const renderer = useRenderer();
   createEffect(() => {
-    if (showWelcomeOverlay()) {
+    if (showOnboarding()) {
       showOverlay((onDismiss, _hideForEditor) => (
-        <WelcomeOverlay
+        <OnboardingOverlay
           onDismiss={() => {
-            dismissWelcomeOverlay();
+            dismissOnboarding();
             onDismiss();
           }}
           detectedProviders={detectedProviders()}
-          defaultModel={firstBootDefaultModel()}
+          isFirstBoot={isFirstBoot()}
+          dataPath={dataPath()}
         />
       ), renderer);
     }
   });
 
-  
+  createEffect(() => {
+    if (showUpgradePrompt()) {
+      showOverlay((onDismiss, _hideForEditor) => (
+        <ConfirmOverlay
+          message="A new Ei harness version is available. Install the latest skills, hooks, and integrations now?"
+          onConfirm={() => {
+            void confirmUpgradeInstall();
+            onDismiss();
+          }}
+          onCancel={() => {
+            void dismissUpgradePrompt();
+            onDismiss();
+          }}
+        />
+      ), renderer);
+    }
+  });
+
   return (
     <box flexDirection="column" width="100%" height="100%">
       <Layout

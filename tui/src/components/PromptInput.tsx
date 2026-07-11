@@ -19,6 +19,7 @@ import { contextCommand } from "../commands/context.js";
 import { deleteCommand } from "../commands/delete";
 import { quotesCommand } from "../commands/quotes";
 import { providerCommand } from "../commands/provider";
+import { onboardingCommand } from "../commands/onboarding.js";
 import { setSyncCommand } from "../commands/setsync";
 import { queueCommand } from "../commands/queue";
 import { dlqCommand } from "../commands/dlq";
@@ -79,6 +80,7 @@ export function PromptInput() {
   registerCommand(newCommand);
   registerCommand(settingsCommand);
   registerCommand(providerCommand);
+  registerCommand(onboardingCommand);
   registerCommand(setSyncCommand);
   registerCommand(contextCommand);
   registerCommand(deleteCommand);
