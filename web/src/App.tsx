@@ -1170,7 +1170,7 @@ function App() {
           const defaultModel = firstEnabled?.name;
           const newSettings = { ...h.settings };
           if (accounts.length > 0) {
-            Object.assign(newSettings, { accounts, default_model: defaultModel });
+            Object.assign(newSettings, { accounts, conversation_model: defaultModel, extraction_model: defaultModel });
           }
           if (syncCredentials) {
             Object.assign(newSettings, { sync: syncCredentials });
@@ -1355,7 +1355,8 @@ function App() {
           settings={{
             name_display: human.settings?.name_display,
             ceremony_time: human.settings?.ceremony?.time ?? "09:00",
-            default_model: human.settings?.default_model,
+            conversation_model: human.settings?.conversation_model,
+            extraction_model: human.settings?.extraction_model,
             oneshot_model: human.settings?.oneshot_model,
             rewrite_model: human.settings?.rewrite_model,
             accounts: human.settings?.accounts,

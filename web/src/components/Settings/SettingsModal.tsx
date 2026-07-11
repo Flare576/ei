@@ -11,7 +11,8 @@ import type { ThemeDefinition } from '../../../../src/core/types/entities.js';
 interface SettingsData {
   name_display?: string;
   ceremony_time: string;
-  default_model?: string;
+  conversation_model?: string;
+  extraction_model?: string;
   oneshot_model?: string;
   rewrite_model?: string;
   accounts?: ProviderAccount[];
@@ -344,12 +345,23 @@ export const SettingsModal = ({
               <h3 className="ei-settings-section__title">Default Models</h3>
               
               <ModelPicker
-                id="default-model"
-                label="Default Model"
-                value={settings.default_model}
-                onChange={(modelId) => onUpdate({ default_model: modelId })}
+                id="conversation-model"
+                label="Conversation Model"
+                value={settings.conversation_model}
+                onChange={(modelId) => onUpdate({ conversation_model: modelId })}
                 accounts={localAccounts}
-                hint="Used for all background processing and new personas."
+                hint="Used for chat responses and all background processing."
+              />
+
+              <ModelPicker
+                id="extraction-model"
+                label="Extraction Model"
+                value={settings.extraction_model}
+                onChange={(modelId) => onUpdate({ extraction_model: modelId })}
+                accounts={localAccounts}
+                allowEmpty
+                optionalLabel
+                hint="Fallback model for background extraction and analysis tasks."
               />
 
               <ModelPicker
@@ -360,7 +372,7 @@ export const SettingsModal = ({
                 accounts={localAccounts}
                 allowEmpty
                 optionalLabel
-                hint="Model used for AI-assist (✨) buttons. Falls back to Default Model if not set."
+                hint="Model used for AI-assist (✨) buttons. Falls back to Conversation Model if not set."
               />
 
               <ModelPicker
@@ -378,7 +390,7 @@ export const SettingsModal = ({
             <section className="ei-settings-section">
               <h3 className="ei-settings-section__title">Provider Accounts</h3>
               <p className="ei-settings-section__description">
-                Configure LLM and storage providers. Use account-name:model format in Default Model above.
+                Configure LLM and storage providers. Use account-name:model format in Conversation Model above.
               </p>
               <ProviderList
                 accounts={localAccounts}

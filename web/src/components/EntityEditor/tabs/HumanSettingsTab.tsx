@@ -4,7 +4,8 @@ import type { ProviderAccount, SyncCredentials } from '../../../../../src/core/t
 
 interface HumanSettings {
   auto_save_interval_ms?: number;
-  default_model?: string;
+  conversation_model?: string;
+  extraction_model?: string;
   queue_paused?: boolean;
   name_color?: string;
   name_display?: string;
@@ -138,16 +139,29 @@ export const HumanSettingsTab: React.FC<HumanSettingsTabProps> = ({
         </div>
 
         <div className="ei-form-group">
-          <label htmlFor="default-model" className="ei-form-label">Default Model</label>
+          <label htmlFor="conversation-model" className="ei-form-label">Conversation Model</label>
           <input
-            id="default-model"
+            id="conversation-model"
             type="text"
             className="ei-input"
-            value={settings.default_model || ""}
-            onChange={(e) => onChange("default_model", e.target.value)}
+            value={settings.conversation_model || ""}
+            onChange={(e) => onChange("conversation_model", e.target.value)}
             placeholder="e.g., openai:gpt-4o or local:qwen3-30b"
           />
-          <small className="ei-form-hint">Format: provider:model (e.g., openai:gpt-4o, local:google/gemma-3-12b)</small>
+          <small className="ei-form-hint">Format: provider:model (e.g., openai:gpt-4o, local:google/gemma-3-12b). Used for chat responses.</small>
+        </div>
+
+        <div className="ei-form-group">
+          <label htmlFor="extraction-model" className="ei-form-label">Extraction Model</label>
+          <input
+            id="extraction-model"
+            type="text"
+            className="ei-input"
+            value={settings.extraction_model || ""}
+            onChange={(e) => onChange("extraction_model", e.target.value)}
+            placeholder="e.g., openai:gpt-4o or local:qwen3-30b"
+          />
+          <small className="ei-form-hint">Format: provider:model. Fallback model for background extraction/analysis.</small>
         </div>
       </section>
 
@@ -256,7 +270,7 @@ export const HumanSettingsTab: React.FC<HumanSettingsTabProps> = ({
       <section className="ei-settings-section">
         <h3 className="ei-settings-section__title">Provider Accounts</h3>
         <p className="ei-settings-section__description">
-          Configure LLM and storage providers. Use account-name:model format in Default Model above.
+          Configure LLM and storage providers. Use account-name:model format in Conversation Model above.
         </p>
         <ProviderList
           accounts={accounts}

@@ -13,10 +13,12 @@ export function useHumanDataHandlers(
   const handleHumanUpdate = useCallback(async (updates: Record<string, unknown>) => {
     if (!processor) return;
     const currentHuman = await processor.getHuman();
-    const { default_model, oneshot_model, rewrite_model, queue_paused, name_display, accounts, sync, ceremony_time, default_heartbeat_ms, default_context_window_ms, message_min_count, message_max_age_days, event_window_hours, active_theme, custom_themes, ...rest } = updates;
+    const { default_model, conversation_model, extraction_model, oneshot_model, rewrite_model, queue_paused, name_display, accounts, sync, ceremony_time, default_heartbeat_ms, default_context_window_ms, message_min_count, message_max_age_days, event_window_hours, active_theme, custom_themes, ...rest } = updates;
 
     const settingsUpdates: Record<string, unknown> = {};
     if (default_model !== undefined) settingsUpdates.default_model = default_model;
+    if (conversation_model !== undefined) settingsUpdates.conversation_model = conversation_model;
+    if (extraction_model !== undefined) settingsUpdates.extraction_model = extraction_model;
     if (oneshot_model !== undefined) settingsUpdates.oneshot_model = oneshot_model;
     if (rewrite_model !== undefined) settingsUpdates.rewrite_model = rewrite_model;
     if (queue_paused !== undefined) settingsUpdates.queue_paused = queue_paused;
