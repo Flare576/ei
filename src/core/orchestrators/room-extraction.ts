@@ -24,7 +24,7 @@ const MIN_EXTRACTION_TOKENS = 10000;
 
 function getExtractionMaxTokens(state: StateManager): number {
   const human = state.getHuman();
-  const tokenLimit = resolveTokenLimit(human.settings?.default_model, human.settings?.accounts);
+  const tokenLimit = resolveTokenLimit(human.settings?.extraction_model ?? human.settings?.conversation_model, human.settings?.accounts);
   return Math.max(MIN_EXTRACTION_TOKENS, Math.floor(tokenLimit * EXTRACTION_BUDGET_RATIO));
 }
 
@@ -338,7 +338,7 @@ export function queuePersonaCapture(state: StateManager, personaId: string): voi
 
   const unextractedT = state.messages_getUnextracted(personaId, "t");
   const unextractedP = state.messages_getUnextracted(personaId, "p");
-  const model = state.getHuman().settings?.default_model;
+  const model = state.getHuman().settings?.extraction_model ?? state.getHuman().settings?.conversation_model;
   const options = { extraction_model: model };
 
   if (unextractedT.length > 0) {

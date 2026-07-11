@@ -525,6 +525,35 @@ describe("queueTargetedPersonUpdate — guard conditions", () => {
     expect(result).toBeGreaterThan(0);
     expect(state.queue_enqueue).toHaveBeenCalled();
   });
+
+  it("resolves extraction model from settings.extraction_model when set (tier 2)", () => {
+    const state = createMockStateManager();
+    state.messages_get.mockReturnValue([
+      createMessage("m1", "Beta is great"),
+    ]);
+    state._human.settings = { extraction_model: "settings-extraction-guid", conversation_model: "settings-conversation-guid" };
+
+    queueTargetedPersonUpdate("p1", "ei", state as unknown as StateManager);
+
+    expect(state.queue_enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({ model: "settings-extraction-guid" })
+    );
+  });
+
+  it("falls back to settings.conversation_model when extraction_model is unset at every tier — never undefined (tail)", () => {
+    const state = createMockStateManager();
+    state.messages_get.mockReturnValue([
+      createMessage("m1", "Beta is great"),
+    ]);
+    state._human.settings = { conversation_model: "settings-conversation-guid" };
+
+    queueTargetedPersonUpdate("p1", "ei", state as unknown as StateManager);
+
+    const call = state.queue_enqueue.mock.calls[0]?.[0] as { model?: string } | undefined;
+    expect(call?.model).toBe("settings-conversation-guid");
+    expect(call?.model).not.toBeUndefined();
+    expect(call?.model).not.toBe("");
+  });
 });
 
 describe("queueTargetedTopicUpdate — guard conditions", () => {
@@ -572,6 +601,35 @@ describe("queueTargetedTopicUpdate — guard conditions", () => {
 
     expect(result).toBeGreaterThan(0);
     expect(state.queue_enqueue).toHaveBeenCalled();
+  });
+
+  it("resolves extraction model from settings.extraction_model when set (tier 2)", () => {
+    const state = createMockStateManager();
+    state.messages_get.mockReturnValue([
+      createMessage("m1", "AI is fascinating"),
+    ]);
+    state._human.settings = { extraction_model: "settings-extraction-guid", conversation_model: "settings-conversation-guid" };
+
+    queueTargetedTopicUpdate("top1", "ei", state as unknown as StateManager);
+
+    expect(state.queue_enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({ model: "settings-extraction-guid" })
+    );
+  });
+
+  it("falls back to settings.conversation_model when extraction_model is unset at every tier — never undefined (tail)", () => {
+    const state = createMockStateManager();
+    state.messages_get.mockReturnValue([
+      createMessage("m1", "AI is fascinating"),
+    ]);
+    state._human.settings = { conversation_model: "settings-conversation-guid" };
+
+    queueTargetedTopicUpdate("top1", "ei", state as unknown as StateManager);
+
+    const call = state.queue_enqueue.mock.calls[0]?.[0] as { model?: string } | undefined;
+    expect(call?.model).toBe("settings-conversation-guid");
+    expect(call?.model).not.toBeUndefined();
+    expect(call?.model).not.toBe("");
   });
 });
 

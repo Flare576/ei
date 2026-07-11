@@ -56,7 +56,7 @@ export async function importDocument(options: DocumentImportOptions): Promise<Do
 
   const batchId = crypto.randomUUID();
   const docSettings = stateManager.getHuman().settings?.document;
-  const model = docSettings?.extraction_model ?? stateManager.getHuman().settings?.default_model;
+  const model = docSettings?.extraction_model ?? stateManager.getHuman().settings?.extraction_model ?? stateManager.getHuman().settings?.conversation_model;
 
   for (let i = 0; i < preChunks.length; i++) {
     const chunk = preChunks[i];

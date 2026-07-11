@@ -92,7 +92,7 @@ const MIN_EXTRACTION_TOKENS = 10000;
 
 function getExtractionMaxTokens(state: StateManager, options?: ExtractionOptions): number {
   const human = state.getHuman();
-  const modelForTokenLimit = options?.extraction_model ?? human.settings?.default_model;
+  const modelForTokenLimit = options?.extraction_model ?? human.settings?.extraction_model ?? human.settings?.conversation_model;
   const tokenLimit = resolveTokenLimit(modelForTokenLimit, human.settings?.accounts);
   return Math.max(MIN_EXTRACTION_TOKENS, Math.floor(tokenLimit * EXTRACTION_BUDGET_RATIO));
 }
@@ -699,7 +699,7 @@ export function queueTargetedPersonUpdate(
 
   if (allMessages.length === 0) return 0;
 
-  const model = state.getHuman().settings?.default_model;
+  const model = state.getHuman().settings?.extraction_model ?? state.getHuman().settings?.conversation_model;
   const context: ExtractionContext & {
     candidateName: string;
     candidateDescription: string;
@@ -759,7 +759,7 @@ export function queueTargetedTopicUpdate(
 
   if (allMessages.length === 0) return 0;
 
-  const model = state.getHuman().settings?.default_model;
+  const model = state.getHuman().settings?.extraction_model ?? state.getHuman().settings?.conversation_model;
   const context: ExtractionContext = {
     personaId: contextPersonaId,
     channelDisplayName: displayName,
