@@ -931,9 +931,10 @@ export class StateManager {
   }
 
   queue_enqueue(request: Omit<LLMRequest, "id" | "created_at" | "attempts" | "state">): string {
+    const settings = this.humanState.get().settings;
     const requestWithModel = {
       ...request,
-      model: request.model ?? this.humanState.get().settings?.default_model,
+      model: request.model ?? settings?.conversation_model ?? settings?.default_model,
     };
     const id = this.queueState.enqueue(requestWithModel);
     this.scheduleSave();
@@ -1197,6 +1198,14 @@ export class StateManager {
     if (settings.rewrite_model === modelId) {
       settings.rewrite_model = undefined;
       cleared.push("settings.rewrite_model");
+    }
+    if (settings.conversation_model === modelId) {
+      settings.conversation_model = undefined;
+      cleared.push("settings.conversation_model");
+    }
+    if (settings.extraction_model === modelId) {
+      settings.extraction_model = undefined;
+      cleared.push("settings.extraction_model");
     }
     if (settings.opencode?.extraction_model === modelId) {
       settings.opencode.extraction_model = undefined;

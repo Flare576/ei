@@ -147,6 +147,8 @@ export function yoloMerge(local: StorageState, remote: StorageState): StorageSta
     if (remoteSettings.default_model !== undefined) localSettings.default_model = remoteSettings.default_model;
     if (remoteSettings.oneshot_model !== undefined) localSettings.oneshot_model = remoteSettings.oneshot_model;
     if (remoteSettings.rewrite_model !== undefined) localSettings.rewrite_model = remoteSettings.rewrite_model;
+    if (remoteSettings.conversation_model !== undefined) localSettings.conversation_model = remoteSettings.conversation_model;
+    if (remoteSettings.extraction_model !== undefined) localSettings.extraction_model = remoteSettings.extraction_model;
     if (remoteSettings.queue_paused !== undefined) localSettings.queue_paused = remoteSettings.queue_paused;
     if (remoteSettings.skip_quote_delete_confirm !== undefined) localSettings.skip_quote_delete_confirm = remoteSettings.skip_quote_delete_confirm;
     if (remoteSettings.name_display !== undefined) localSettings.name_display = remoteSettings.name_display;

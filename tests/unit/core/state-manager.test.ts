@@ -214,6 +214,64 @@ describe("StateManager", () => {
       expect(sm.queue_isPaused()).toBe(false);
       expect(sm.queue_claimHighest()).not.toBeNull();
     });
+
+    it("uses request.model when explicitly provided, ignoring settings fallbacks", () => {
+      const human = sm.getHuman();
+      human.settings = { conversation_model: "convo-model-id", default_model: "legacy-model-id" };
+      sm.setHuman(human);
+
+      const id = sm.queue_enqueue({ ...makeRequest(), model: "explicit-model-id" });
+
+      const request = sm.getStorageState().queue.find(r => r.id === id);
+      expect(request?.model).toBe("explicit-model-id");
+    });
+
+    it("falls back to settings.conversation_model when request.model is unset", () => {
+      const human = sm.getHuman();
+      human.settings = { conversation_model: "convo-model-id", default_model: "legacy-model-id" };
+      sm.setHuman(human);
+
+      const id = sm.queue_enqueue(makeRequest());
+
+      const request = sm.getStorageState().queue.find(r => r.id === id);
+      expect(request?.model).toBe("convo-model-id");
+    });
+
+    it("falls back to legacy settings.default_model when neither request.model nor conversation_model is set", () => {
+      const human = sm.getHuman();
+      human.settings = { default_model: "legacy-model-id" };
+      sm.setHuman(human);
+
+      const id = sm.queue_enqueue(makeRequest());
+
+      const request = sm.getStorageState().queue.find(r => r.id === id);
+      expect(request?.model).toBe("legacy-model-id");
+    });
+  });
+
+  describe("model-split fields: restore + queue interaction (task 7)", () => {
+    it("restoring an old-shape (default_model-only) state re-derives conversation_model, which queue_enqueue then picks up as its fallback", () => {
+      const restoredState = createDefaultTestState();
+      restoredState.human.settings = { default_model: "legacy-model-id" };
+
+      sm.restoreFromState(restoredState);
+
+      const settings = sm.getHuman().settings;
+      expect(settings?.conversation_model).toBe("legacy-model-id");
+      expect(settings?.extraction_model).toBe("legacy-model-id");
+
+      const id = sm.queue_enqueue({
+        type: LLMRequestType.Response,
+        priority: LLMPriority.Normal,
+        system: "Test",
+        user: "Test",
+        next_step: LLMNextStep.HandlePersonaResponse,
+        data: {},
+      });
+
+      const request = sm.getStorageState().queue.find(r => r.id === id);
+      expect(request?.model).toBe("legacy-model-id");
+    });
   });
 
   describe("migrateInterestedPersonas", () => {

@@ -398,3 +398,55 @@ describe("yoloMerge() — ToolProvider and ToolDefinition (name-based, unchanged
     expect(names).toContain("news_search");
   });
 });
+
+describe("yoloMerge() — settings whitelist: conversation_model/extraction_model", () => {
+  it("test 7: preferRemote merge — remote's conversation_model/extraction_model overwrite local's", () => {
+    const local = makeState({
+      timestamp: "2024-01-01T00:00:00.000Z",
+      human: makeHuman({ settings: { conversation_model: "local-convo", extraction_model: "local-extract" } }),
+    });
+    const remote = makeState({
+      timestamp: "2025-01-01T00:00:00.000Z", // newer → preferRemote=true
+      human: makeHuman({ settings: { conversation_model: "remote-convo", extraction_model: "remote-extract" } }),
+    });
+
+    const result = yoloMerge(local, remote);
+
+    expect(result.human.settings?.conversation_model).toBe("remote-convo");
+    expect(result.human.settings?.extraction_model).toBe("remote-extract");
+  });
+
+  it("test 8 (syncdrop guard): preferRemote merge where remote leaves conversation_model unset does NOT drop local's value", () => {
+    const local = makeState({
+      timestamp: "2024-01-01T00:00:00.000Z",
+      human: makeHuman({ settings: { conversation_model: "local-convo-only", extraction_model: "local-extract-only" } }),
+    });
+    const remote = makeState({
+      timestamp: "2025-01-01T00:00:00.000Z", // newer → preferRemote=true
+      human: makeHuman({ settings: { queue_paused: true } }), // no conversation_model/extraction_model at all
+    });
+
+    const result = yoloMerge(local, remote);
+
+    // Remote never set these fields (undefined) — the whitelist's `!== undefined`
+    // guard must leave local's values intact, not wipe them to undefined.
+    expect(result.human.settings?.conversation_model).toBe("local-convo-only");
+    expect(result.human.settings?.extraction_model).toBe("local-extract-only");
+  });
+
+  it("test 9: preferLocal merge (local newer) keeps local's conversation_model/extraction_model untouched", () => {
+    const local = makeState({
+      timestamp: "2025-01-01T00:00:00.000Z", // newer → preferRemote=false
+      human: makeHuman({ settings: { conversation_model: "local-convo", extraction_model: "local-extract" } }),
+    });
+    const remote = makeState({
+      timestamp: "2024-01-01T00:00:00.000Z",
+      human: makeHuman({ settings: { conversation_model: "remote-convo", extraction_model: "remote-extract" } }),
+    });
+
+    const result = yoloMerge(local, remote);
+
+    expect(result.human.settings?.conversation_model).toBe("local-convo");
+    expect(result.human.settings?.extraction_model).toBe("local-extract");
+  });
+});

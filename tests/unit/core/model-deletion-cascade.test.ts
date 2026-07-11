@@ -99,6 +99,56 @@ describe("StateManager.deleteModel()", () => {
     expect(p1.model).toBeUndefined();
   });
 
+  it("test 11: deleting a model referenced by conversation_model/extraction_model clears both", async () => {
+    const state = createDefaultTestState();
+    const modelA = makeModel("gpt-4o");
+    const modelB = makeModel("gpt-3.5-turbo");
+    const provider = makeProvider("OpenAI", [modelA, modelB]);
+
+    state.human.settings = {
+      accounts: [provider],
+      conversation_model: modelA.id,
+      extraction_model: modelA.id,
+    };
+
+    await initWithState(state);
+
+    const result = sm.deleteModel(provider.id, modelA.id);
+
+    expect(result.success).toBe(true);
+    expect(result.cleared).toContain("settings.conversation_model");
+    expect(result.cleared).toContain("settings.extraction_model");
+
+    const settings = sm.getHuman().settings!;
+    expect(settings.conversation_model).toBeUndefined();
+    expect(settings.extraction_model).toBeUndefined();
+  });
+
+  it("test 12: deleting a model referenced only by conversation_model (not extraction_model) clears just that field", async () => {
+    const state = createDefaultTestState();
+    const modelA = makeModel("gpt-4o");
+    const modelB = makeModel("gpt-3.5-turbo");
+    const provider = makeProvider("OpenAI", [modelA, modelB]);
+
+    state.human.settings = {
+      accounts: [provider],
+      conversation_model: modelA.id,
+      extraction_model: modelB.id,
+    };
+
+    await initWithState(state);
+
+    const result = sm.deleteModel(provider.id, modelA.id);
+
+    expect(result.success).toBe(true);
+    expect(result.cleared).toContain("settings.conversation_model");
+    expect(result.cleared).not.toContain("settings.extraction_model");
+
+    const settings = sm.getHuman().settings!;
+    expect(settings.conversation_model).toBeUndefined();
+    expect(settings.extraction_model).toBe(modelB.id);
+  });
+
   it("test 2: cleared list accurately lists all touched references", async () => {
     const state = createDefaultTestState();
     const modelA = makeModel("claude-opus-4");
@@ -109,6 +159,12 @@ describe("StateManager.deleteModel()", () => {
     state.human.settings = {
       accounts: [provider],
       default_model: modelA.id,
+      // Pinned to modelB (not the model under test) so T1's migrateModelSplit's
+      // auto-derivation from default_model doesn't populate these with modelA.id
+      // and inflate this test's "partial clear" cleared-list count — that full-set
+      // scenario is covered by test 1 and the dedicated tests 11/12 below.
+      conversation_model: modelB.id,
+      extraction_model: modelB.id,
       opencode: { extraction_model: modelA.id },
     };
     state.personas = {
