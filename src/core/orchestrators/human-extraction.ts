@@ -99,7 +99,7 @@ function getExtractionMaxTokens(state: StateManager, options?: ExtractionOptions
 
 export function queueFactFind(context: ExtractionContext, state: StateManager, options?: ExtractionOptions): number {
   const human = state.getHuman();
-  const extractionModel = options?.extraction_model;
+  const extractionModel = options?.extraction_model ?? human.settings?.extraction_model ?? human.settings?.conversation_model;
 
   const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state, options));
 
@@ -148,7 +148,8 @@ export function queueFactFind(context: ExtractionContext, state: StateManager, o
 }
 
 export function queueTopicScan(context: ExtractionContext, state: StateManager, options?: ExtractionOptions): number {
-  const extractionModel = options?.extraction_model;
+  const settings = state.getHuman().settings;
+  const extractionModel = options?.extraction_model ?? settings?.extraction_model ?? settings?.conversation_model;
   const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state, options));
   
   if (chunks.length === 0) return 0;
@@ -191,7 +192,8 @@ export function queueTopicScan(context: ExtractionContext, state: StateManager, 
 }
 
 export function queuePersonScan(context: ExtractionContext, state: StateManager, options?: ExtractionOptions): number {
-  const extractionModel = options?.extraction_model;
+  const settings = state.getHuman().settings;
+  const extractionModel = options?.extraction_model ?? settings?.extraction_model ?? settings?.conversation_model;
   const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state, options));
   
   if (chunks.length === 0) return 0;
@@ -519,7 +521,7 @@ export function queueEventSummary(
   const windows = buildEventWindows(sorted, gapHours);
 
   const allMessages = state.messages_get(personaId);
-  const extractionModel = options?.extraction_model;
+  const extractionModel = options?.extraction_model ?? human.settings?.extraction_model ?? human.settings?.conversation_model;
   const gapMs = gapHours * 60 * 60 * 1000;
   const now = Date.now();
   let totalChunks = 0;

@@ -249,6 +249,75 @@ describe("Scan Orchestrators (Step 1)", () => {
   });
 });
 
+describe("extraction model fallback (regression: was silently using conversation_model)", () => {
+  // Real bug found via manual QA: queueFactFind/queueTopicScan/queuePersonScan/
+  // queueEventSummary read `options?.extraction_model` with NO fallback at all.
+  // Combined with state-manager.ts's queue_enqueue() defaulting an unset
+  // `model` to settings.conversation_model, any caller that didn't pass
+  // `options.extraction_model` explicitly (e.g. message-manager.ts's seed
+  // extraction, or any import/sync path routing through queueAllScans with
+  // no options) silently burned the CONVERSATION model for extraction work
+  // instead of the configured, typically-cheaper extraction_model.
+  let state: any;
+  let context: ExtractionContext;
+
+  beforeEach(() => {
+    state = createMockStateManager();
+    state._human.settings = {
+      conversation_model: "conversation-guid",
+      extraction_model: "extraction-guid",
+    };
+    context = {
+      personaId: "ei",
+      channelDisplayName: "Ei",
+      messages_context: [createMessage("1", "Earlier message")],
+      messages_analyze: [createMessage("2", "Recent message to analyze")],
+    };
+    vi.clearAllMocks();
+  });
+
+  it("queueFactFind: no options.extraction_model -> falls back to settings.extraction_model, not conversation_model", () => {
+    queueFactFind(context, state);
+    const call = state.queue_enqueue.mock.calls[0][0];
+    expect(call.model).toBe("extraction-guid");
+  });
+
+  it("queueTopicScan: no options.extraction_model -> falls back to settings.extraction_model, not conversation_model", () => {
+    queueTopicScan(context, state);
+    const call = state.queue_enqueue.mock.calls[0][0];
+    expect(call.model).toBe("extraction-guid");
+  });
+
+  it("queuePersonScan: no options.extraction_model -> falls back to settings.extraction_model, not conversation_model", () => {
+    queuePersonScan(context, state);
+    const call = state.queue_enqueue.mock.calls[0][0];
+    expect(call.model).toBe("extraction-guid");
+  });
+
+  it("queueEventSummary: no options.extraction_model -> falls back to settings.extraction_model, not conversation_model", () => {
+    const oldMessage = createMessage("e1", "event message");
+    oldMessage.timestamp = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    state.messages_getUnextracted = vi.fn().mockReturnValue([oldMessage]);
+    queueEventSummary("ei", state);
+    expect(state.queue_enqueue).toHaveBeenCalled();
+    const call = state.queue_enqueue.mock.calls[0][0];
+    expect(call.model).toBe("extraction-guid");
+  });
+
+  it("queueFactFind: settings.extraction_model unset -> tail falls back to settings.conversation_model, never empty", () => {
+    state._human.settings = { conversation_model: "conversation-guid" };
+    queueFactFind(context, state);
+    const call = state.queue_enqueue.mock.calls[0][0];
+    expect(call.model).toBe("conversation-guid");
+  });
+
+  it("queueFactFind: explicit options.extraction_model still wins over settings", () => {
+    queueFactFind(context, state, { extraction_model: "explicit-override-guid" });
+    const call = state.queue_enqueue.mock.calls[0][0];
+    expect(call.model).toBe("explicit-override-guid");
+  });
+});
+
 describe("queueTopicValidate", () => {
   function makeTopic(id: string, name: string, withEmbedding = true): Topic {
     return {
