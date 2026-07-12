@@ -12,7 +12,7 @@ import { runHarnessInstall as runHarnessInstallReal, stampInstalled, type Harnes
 import { resolveDataPath } from "../util/resolve-data-path.js";
 import { writeShellExport, type ResolveShellProfileOptions } from "../util/shell-profile.js";
 import { ProviderForm, type ProviderFormResult } from "./ProviderForm.js";
-import type { HumanSettings } from "../../../src/core/types.js";
+import type { HumanSettings, ProviderAccount } from "../../../src/core/types.js";
 import pkg from "../../../package.json";
 
 type WizardStep = "welcome" | "install" | "data-path" | "provider" | "import" | "done";
@@ -133,6 +133,7 @@ export function OnboardingOverlay(props: OnboardingOverlayProps) {
   // --- Provider step ---
   const [providerPhase, setProviderPhase] = createSignal<ProviderPhase>("checking");
   const [providerSummary, setProviderSummary] = createSignal("");
+  const [existingAccounts, setExistingAccounts] = createSignal<ProviderAccount[] | null>(null);
 
   // --- Import step ---
   const [importDetection, setImportDetection] = createSignal<ImportSourceDetection | null>(null);
@@ -147,9 +148,22 @@ export function OnboardingOverlay(props: OnboardingOverlayProps) {
       try {
         const human = await ei.getHuman();
         const accounts = human.settings?.accounts ?? [];
-        const lastAccount = accounts[accounts.length - 1];
-        if (lastAccount) {
-          setProviderSummary(`${lastAccount.name} (already configured)`);
+        setExistingAccounts(accounts);
+
+        // Resolve the account that actually backs `conversation_model` —
+        // it may be a ModelConfig.id GUID, or a legacy "Provider:Model"
+        // display string (see src/core/llm-client.ts's resolveModel() for
+        // the same two-shape handling). Falls back to the last account if
+        // no account backs it specifically (e.g. a stale/deleted model id).
+        const conversationModel = human.settings?.conversation_model;
+        const matchedAccount = conversationModel
+          ? accounts.find((acc) => acc.models?.some((m) => m.id === conversationModel)) ??
+            accounts.find((acc) => acc.name.toLowerCase() === conversationModel.split(":")[0].toLowerCase())
+          : undefined;
+        const activeAccount = matchedAccount ?? accounts[accounts.length - 1];
+
+        if (activeAccount) {
+          setProviderSummary(`${activeAccount.name} (already configured)`);
           setProviderPhase("configured");
         } else {
           setProviderPhase("form");
@@ -161,9 +175,17 @@ export function OnboardingOverlay(props: OnboardingOverlayProps) {
   });
   onCleanup(() => setOverlayActive(false));
 
-  const hasDetectedProvider = () => props.detectedProviders.some((p) => p.detected);
+  // Re-launching /onboarding on an existing user never populates
+  // props.detectedProviders (that only happens during ei.tsx's first-boot
+  // scan) — for that case, derive the equivalent status list from the
+  // same accounts fetched above instead of a permanently-empty prop.
+  const effectiveDetectedProviders = (): ProviderDetectionStatus[] =>
+    props.isFirstBoot
+      ? props.detectedProviders
+      : (existingAccounts() ?? []).map((account) => ({ name: account.name, detected: true }));
+  const hasDetectedProvider = () => effectiveDetectedProviders().some((p) => p.detected);
   const detectedRows = () => {
-    const items = props.detectedProviders;
+    const items = effectiveDetectedProviders();
     const out: ProviderDetectionStatus[][] = [];
     for (let i = 0; i < items.length; i += COLUMNS) out.push(items.slice(i, i + COLUMNS));
     return out;
@@ -240,7 +262,7 @@ export function OnboardingOverlay(props: OnboardingOverlayProps) {
       } else if (!result.success) {
         setDpShellNote(`Could not update your shell profile: ${result.message}`);
       } else {
-        setDpShellNote(null);
+        setDpShellNote(`Also added to ${result.path} for future launches.`);
       }
     } else {
       setDpShellNote(null);
@@ -415,8 +437,11 @@ export function OnboardingOverlay(props: OnboardingOverlayProps) {
                     <box flexDirection="row">
                       <For each={row}>
                         {(provider) => (
-                          <box width={22} flexDirection="row">
-                            <text fg="#93a1a1">{provider.name}:</text>
+                          <box width={30} flexDirection="row">
+                            <text fg="#93a1a1">{provider.name}: </text>
+                            <text fg={provider.detected ? "#859900" : "#586e75"}>
+                              {provider.detected ? "[✓] detected" : "[ ] not detected"}
+                            </text>
                           </box>
                         )}
                       </For>
