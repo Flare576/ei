@@ -71,6 +71,8 @@ export const KNOWN_MODEL_LIMITS: Readonly<Record<string, { token_limit?: number;
   "claude-opus-4-6":              { token_limit: 200000, max_output_tokens: 128000 },
   "claude-opus-4-5-20251101":     { token_limit: 200000, max_output_tokens: 64000 },
   "claude-opus-4-1-20250805":     { token_limit: 200000, max_output_tokens: 32000 },
+  // Anthropic — claude-sonnet-5.x
+  "claude-sonnet-5":              { token_limit: 200000, max_output_tokens: 128000, temperature_disabled: true },
   // Anthropic — claude-sonnet-4.x
   "claude-sonnet-4-6":            { token_limit: 200000, max_output_tokens: 64000 },
   "claude-sonnet-4-5-20250929":   { token_limit: 200000, max_output_tokens: 64000 },
