@@ -118,11 +118,8 @@ async function waitForFrame(
 }
 
 describe("OnboardingOverlay — happy path", () => {
-  it("walks Welcome -> Install -> Data Path -> Provider -> Import -> Done, changes the data path mid-wizard, sets import flags via updateSettings, and stamps local.json exactly once to the final path", async () => {
+  it("walks Welcome -> Provider -> Install -> Done, sets import flags via updateSettings, and stamps local.json exactly once", async () => {
     runHarnessInstallImpl = async () => ({ ok: true, failures: [] });
-
-    const newDataDir = mkdtempSync(join(tmpdir(), "ei-onboarding-newpath-"));
-    const scratchHome = mkdtempSync(join(tmpdir(), "ei-onboarding-home-"));
 
     const detectIntegrations = async (): Promise<ImportSourceDetection> => ({
       claudeCode: true,
@@ -134,11 +131,11 @@ describe("OnboardingOverlay — happy path", () => {
     let onDismissCalled = false;
 
     // Wide viewport: the wizard renders absolute filesystem paths (mkdtemp
-    // temp dirs) inline in single-row status text (e.g. "Using data path:
-    // <path>"). A real macOS/Linux tmp path plus its label comfortably
-    // exceeds a narrow terminal's column count, which would force a
-    // mid-string wrap/clip and break the exact-substring assertions below.
-    // 220 columns gives every such line room to render unbroken.
+    // temp dirs) inline in single-row status text (e.g. the Done screen's
+    // "Data path: <path>" line). A real macOS/Linux tmp path plus its label
+    // comfortably exceeds a narrow terminal's column count, which would
+    // force a mid-string wrap/clip and break the exact-substring assertions
+    // below. 220 columns gives every such line room to render unbroken.
     const { renderOnce, mockInput, captureCharFrame, renderer } = await testRender(
       () => (
         <TestProviders>
@@ -151,7 +148,6 @@ describe("OnboardingOverlay — happy path", () => {
             isFirstBoot={true}
             dataPath={testDataDir}
             detectIntegrations={detectIntegrations}
-            shellProfileOptions={{ env: { SHELL: "/bin/zsh" }, home: scratchHome }}
             runHarnessInstall={() => runHarnessInstallImpl()}
           />
         </TestProviders>
@@ -162,67 +158,50 @@ describe("OnboardingOverlay — happy path", () => {
     try {
       // --- Step 1: Welcome ---
       let frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Welcome to Ei!"));
-      expect(frame).toContain("Step 1/6: Welcome");
+      expect(frame).toContain("Step 1/4: Welcome");
 
       mockInput.pressEnter();
-      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 2/6: Install"));
-      expect(frame).toContain("Set up recommended Skills");
-      expect(frame).toContain("MCP entry is removed");
+      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 2/4: Provider"));
 
-      // --- Step 2: Install (confirm Yes) ---
-      await mockInput.typeText("y");
-      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("installed."));
-      expect(frame).toContain("✓ Skills, hooks, and harness integrations installed.");
-
-      mockInput.pressEnter();
-      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 3/6: Data Path"));
-      expect(dewrap(frame)).toContain(`Data path: ${testDataDir}`);
-
-      // --- Step 3: Data Path (change to a new custom path) ---
-      mockInput.pressKey("c");
-      await renderOnce();
-      await mockInput.typeText(newDataDir);
-      await renderOnce();
-      mockInput.pressEnter();
-      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => dewrap(f).includes(`Using data path: ${newDataDir}`));
-
-      mockInput.pressEnter();
-      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 4/6: Provider"));
-
-      // --- Step 4: Provider (skip via ProviderForm's own Escape-at-first-step) ---
+      // --- Step 2: Provider (skip via ProviderForm's own Escape-at-first-step) ---
       mockInput.pressEscape();
       frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Skipped — no AI provider configured."));
 
       mockInput.pressEnter();
-      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 5/6: Import"));
+      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 3/4: Install"));
+      expect(frame).toContain("Set up Skills, hooks, and harness integrations");
+      expect(frame).toContain("MCP entry is removed");
 
-      // --- Step 5: Import (detect two of four sources, set flags) ---
-      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Ei will import"));
+      // --- Step 3: Install (detects two of four sources; confirming Yes
+      // installs the harness AND sets the import flags together, from the
+      // same one-question gate) ---
       expect(frame).toContain("Claude Code");
       expect(frame).toContain("[✓] found");
       expect(frame).toContain("Pi / OMP");
       expect(frame).toContain("Cursor");
       expect(frame).toContain("Codex");
 
-      mockInput.pressEnter();
-      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 6/6: Done"));
-      expect(frame).toContain("You're all set!");
-      expect(dewrap(frame)).toContain(`Data path: ${newDataDir}`);
+      await mockInput.typeText("y");
+      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("installed."));
+      expect(frame).toContain("✓ Skills, hooks, and harness integrations installed.");
 
-      // --- Step 6: Done (dismiss) ---
+      mockInput.pressEnter();
+      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 4/4: Done"));
+      expect(frame).toContain("You're all set!");
+      expect(dewrap(frame)).toContain(`Data path: ${testDataDir}`);
+
+      // --- Step 4: Done (dismiss) ---
       expect(onDismissCalled).toBe(false);
       mockInput.pressEnter();
       await renderOnce();
       await wait();
       expect(onDismissCalled).toBe(true);
 
-      // --- Single-stamp proof: written to the FINAL (changed) path, not the original ---
-      const stampedNew = await getInstalledVersion(newDataDir);
-      expect(stampedNew).toBe(pkg.version);
-      const stampedOriginal = await getInstalledVersion(testDataDir);
-      expect(stampedOriginal).toBeUndefined();
+      const stamped = await getInstalledVersion(testDataDir);
+      expect(stamped).toBe(pkg.version);
 
-      // --- Import step used ei.updateSettings flags, not a bulk import trigger ---
+      // --- Install's single "yes" gate set BOTH the harness installer AND
+      // the import flags, not a bulk import trigger ---
       expect(capturedEi).toBeDefined();
       const human = await capturedEi!.getHuman();
       expect(human.settings?.claudeCode?.integration).toBe(true);
@@ -234,9 +213,6 @@ describe("OnboardingOverlay — happy path", () => {
       // on that (falsy), not on one specific absent-vs-false representation.
       expect(human.settings?.cursor?.integration).toBeFalsy();
       expect(human.settings?.codex?.integration).toBeFalsy();
-
-      await rm(newDataDir, { recursive: true, force: true });
-      await rm(scratchHome, { recursive: true, force: true });
     } finally {
       renderer.destroy();
     }

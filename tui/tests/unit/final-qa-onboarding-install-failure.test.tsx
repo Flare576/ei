@@ -118,7 +118,6 @@ describe("Final QA — OnboardingOverlay Install step: genuine installer failure
             isFirstBoot={true}
             dataPath={testDataDir}
             detectIntegrations={detectIntegrations}
-            shellProfileOptions={{ env: { SHELL: "/bin/zsh" } }}
             runHarnessInstall={() => runHarnessInstallImpl()}
           />
         </TestProviders>
@@ -129,7 +128,12 @@ describe("Final QA — OnboardingOverlay Install step: genuine installer failure
     try {
       let frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Welcome to Ei!"));
       mockInput.pressEnter();
-      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 2/6: Install"));
+      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 2/4: Provider"));
+      mockInput.pressEscape(); // skip provider
+      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Skipped — no AI provider configured."));
+
+      mockInput.pressEnter();
+      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 3/4: Install"));
 
       // --- Confirm "Yes" -> the injected installer genuinely fails ---
       await mockInput.typeText("y");
@@ -141,19 +145,7 @@ describe("Final QA — OnboardingOverlay Install step: genuine installer failure
 
       // --- The failure does NOT block progression ---
       mockInput.pressEnter();
-      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 3/6: Data Path"));
-
-      mockInput.pressEnter();
-      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 4/6: Provider"));
-      mockInput.pressEscape(); // skip provider
-      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Skipped — no AI provider configured."));
-
-      mockInput.pressEnter();
-      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 5/6: Import"));
-      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("No supported integrations detected"));
-
-      mockInput.pressEnter();
-      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 6/6: Done"));
+      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 4/4: Done"));
       // Done step's summary correctly reflects the failure, not a false "installed".
       expect(frame).toContain("Install: failed (Claude Code, Cursor)");
 

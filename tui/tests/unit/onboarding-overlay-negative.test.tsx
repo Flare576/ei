@@ -1,5 +1,5 @@
 import { describe, it, expect, mock, afterAll } from "bun:test";
-import { mkdtempSync, writeFileSync } from "fs";
+import { mkdtempSync } from "fs";
 import { rm } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -27,8 +27,10 @@ import { getInstalledVersion } from "../../src/util/local-state";
 // Test-controlled: injected directly as a PROP, never via mock.module() —
 // see onboarding-overlay.test.tsx's happy-path file for the full
 // mock.module()-leak rationale.
+let runHarnessInstallCalls = 0;
 let runHarnessInstallImpl: () => Promise<{ ok: boolean; failures: string[] }> = async () => {
-  throw new Error("runHarnessInstall should never be called when Install is declined");
+  runHarnessInstallCalls += 1;
+  return { ok: true, failures: [] };
 };
 
 // Hard safety net — see onboarding-overlay.test.tsx's happy-path file for
@@ -41,7 +43,7 @@ globalThis.fetch = (() =>
 
 import { testRender } from "@opentui/solid";
 import type { ParentComponent } from "solid-js";
-import { EiProvider } from "../../src/context/ei";
+import { EiProvider, useEi, type EiContextValue } from "../../src/context/ei";
 import { KeyboardProvider } from "../../src/context/keyboard";
 import { OverlayProvider } from "../../src/context/overlay";
 import { OnboardingOverlay, type ImportSourceDetection } from "../../src/components/OnboardingOverlay";
@@ -55,22 +57,18 @@ const TestProviders: ParentComponent = (props) => (
   </EiProvider>
 );
 
+let capturedEi: EiContextValue | undefined;
+function EiCapture() {
+  capturedEi = useEi();
+  return <box width={0} height={0} />;
+}
+
 function wait(ms = 20): Promise<void> {
   const { promise, resolve } = Promise.withResolvers<void>();
   setTimeout(resolve, ms);
   return promise;
 }
 
-// See onboarding-overlay.test.tsx's dewrap() for the full rationale — real
-// macOS temp paths wrap across box-drawing lines with no inserted
-// separator; reconstruct by stripping border chars and joining trimmed
-// lines directly.
-function dewrap(frame: string): string {
-  return frame
-    .split("\n")
-    .map((line) => line.replace(/[┌┐└┘│─]/g, "").trim())
-    .join("");
-}
 
 async function waitForFrame(
   captureCharFrame: () => string,
@@ -89,18 +87,19 @@ async function waitForFrame(
 }
 
 describe("OnboardingOverlay — negative paths", () => {
-  it("declining Install still completes the wizard and stamps; an invalid custom Data Path is rejected without writing anything", async () => {
-    const notADirectory = join(testDataDir, "not-a-directory.txt");
-    writeFileSync(notADirectory, "this is a file, not a directory");
-    const originalFileContents = "this is a file, not a directory";
+  it("declining Install still completes the wizard and stamps; detected sources are never flagged on when Install is declined", async () => {
+    runHarnessInstallCalls = 0;
 
-    const scratchHome = mkdtempSync(join(tmpdir(), "ei-onboarding-neg-home-"));
+    runHarnessInstallImpl = async () => {
+      runHarnessInstallCalls += 1;
+      return { ok: true, failures: [] };
+    };
 
     const detectIntegrations = async (): Promise<ImportSourceDetection> => ({
-      claudeCode: false,
+      claudeCode: true,
       cursor: false,
       codex: false,
-      pi: false,
+      pi: true,
     });
 
     let onDismissCalled = false;
@@ -110,6 +109,7 @@ describe("OnboardingOverlay — negative paths", () => {
     const { renderOnce, mockInput, captureCharFrame, renderer } = await testRender(
       () => (
         <TestProviders>
+          <EiCapture />
           <OnboardingOverlay
             onDismiss={() => {
               onDismissCalled = true;
@@ -118,7 +118,6 @@ describe("OnboardingOverlay — negative paths", () => {
             isFirstBoot={true}
             dataPath={testDataDir}
             detectIntegrations={detectIntegrations}
-            shellProfileOptions={{ env: { SHELL: "/bin/zsh" }, home: scratchHome }}
             runHarnessInstall={() => runHarnessInstallImpl()}
           />
         </TestProviders>
@@ -127,56 +126,28 @@ describe("OnboardingOverlay — negative paths", () => {
     );
 
     try {
-      // --- Welcome -> Install ---
+      // --- Welcome -> Provider (skip) ---
       let frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Welcome to Ei!"));
       mockInput.pressEnter();
-      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 2/6: Install"));
+      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 2/4: Provider"));
+      mockInput.pressEscape();
+      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Skipped — no AI provider configured."));
 
-      // --- Decline the Install confirm ('n' -> declined, no ConfirmOverlay involved) ---
+      mockInput.pressEnter();
+      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 3/4: Install"));
+      // Sources ARE detected here — proves the decline below withholds the
+      // flags rather than there being nothing to withhold in the first place.
+      expect(frame).toContain("Claude Code");
+      expect(frame).toContain("[✓] found");
+      expect(frame).toContain("Pi / OMP");
+
+      // --- Decline the merged Install/Import confirm ('n' -> declined, no ConfirmOverlay involved) ---
       mockInput.pressKey("n");
       frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Skipped"));
       expect(frame).toContain("Skipped — run this later via `ei --install` or `/onboarding`.");
 
       mockInput.pressEnter();
-      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 3/6: Data Path"));
-
-      // --- Try an invalid custom path: exists, but is a FILE, not a directory ---
-      mockInput.pressKey("c");
-      await renderOnce();
-      await mockInput.typeText(notADirectory);
-      await renderOnce();
-      mockInput.pressEnter();
-      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Not a directory"));
-      expect(dewrap(frame)).toContain(`Not a directory: ${notADirectory}`);
-      // Still on the editing sub-step — no transition to "result", no write attempted.
-      expect(frame).toContain("Enter: validate | Esc: back");
-
-      // Nothing was written to the rejected path.
-      const fileContentsAfter = await Bun.file(notADirectory).text();
-      expect(fileContentsAfter).toBe(originalFileContents);
-
-      // Back out and continue with the unchanged (original) path.
-      mockInput.pressEscape();
-      await renderOnce();
-      await wait(50);
-      await renderOnce();
-      frame = captureCharFrame();
-      expect(frame).toContain("Step 3/6: Data Path");
-      expect(dewrap(frame)).toContain(`Data path: ${testDataDir}`);
-
-      mockInput.pressEnter(); // continue with unchanged path -> Provider
-      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 4/6: Provider"));
-
-      // --- Skip Provider ---
-      mockInput.pressEscape();
-      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Skipped — no AI provider configured."));
-      mockInput.pressEnter();
-      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 5/6: Import"));
-
-      // --- Import: nothing detected ---
-      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("No supported integrations detected"));
-      mockInput.pressEnter();
-      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 6/6: Done"));
+      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 4/4: Done"));
       expect(frame).toContain("Install: skipped");
 
       // --- Done: no crash, stamps despite the earlier decline ---
@@ -188,7 +159,14 @@ describe("OnboardingOverlay — negative paths", () => {
       const stamped = await getInstalledVersion(testDataDir);
       expect(stamped).toBe(pkg.version);
 
-      await rm(scratchHome, { recursive: true, force: true });
+      // --- Declining withheld the import flags too, even though Claude
+      // Code and Pi were genuinely detected above — the one 'n' gates both
+      // the installer and the flag write together. ---
+      expect(capturedEi).toBeDefined();
+      const human = await capturedEi!.getHuman();
+      expect(human.settings?.claudeCode?.integration).toBeFalsy();
+      expect(human.settings?.pi?.integration).toBeFalsy();
+      expect(runHarnessInstallCalls).toBe(0);
     } finally {
       renderer.destroy();
     }
