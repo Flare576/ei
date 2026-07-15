@@ -100,7 +100,20 @@ export async function installMcpClients(): Promise<void> {
     join(home, ".config", "Cursor"),
     join(home, "AppData", "Roaming", "Cursor"),
   ];
-  const hasCursor = (await Promise.all(cursorDataDirs.map((p) => Bun.file(join(p, "User")).exists()))).some(Boolean);
+  // Bun.file(x).exists() only detects regular files — it returns false for
+  // a directory, and "<CursorDir>/User" is a directory. Use fs.stat()'s
+  // isDirectory() instead (already imported above).
+  const hasCursor = (
+    await Promise.all(
+      cursorDataDirs.map(async (p) => {
+        try {
+          return (await stat(join(p, "User"))).isDirectory();
+        } catch {
+          return false;
+        }
+      })
+    )
+  ).some(Boolean);
   if (hasCursor) {
     if (!(await runInstallStep("Cursor", installCursor))) failures.push("Cursor");
   } else {

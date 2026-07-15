@@ -391,6 +391,48 @@ describe("installCursor — Ei MCP entry removal (~/.cursor/mcp.json)", () => {
   });
 });
 
+// ── installMcpClients — Cursor directory detection ──────────────────────────
+// Regression coverage for the fix: Bun.file(dir).exists() always returns
+// false for a directory (it only detects regular files), so the old
+// `Bun.file(join(p, "User")).exists()` check could never see a real Cursor
+// install and always logged "Cursor not detected" — silently skipping the
+// Cursor install step on every machine that actually has Cursor. No
+// existing test exercised this true-positive path; every other case here
+// (and the "shared skills directory" describe block above) only proves the
+// negative ("not detected" when the directory is absent).
+describe("installMcpClients — Cursor directory detection", () => {
+  it('attempts the Cursor install step (does not log "Cursor not detected") when a real Cursor data directory exists', async () => {
+    acquireSkillsLock(); // installMcpClients() also touches the shared skills/ resource (see block above)
+    const home = makeTempDir("ei-cursor-detect-home-");
+    mkdirSync(join(home, "Library", "Application Support", "Cursor", "User"), { recursive: true });
+
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      await runWithHome(home, () => installMcpClients());
+      expect(logSpy.mock.calls.some((call) => String(call[0]).includes("Cursor not detected"))).toBe(false);
+    } finally {
+      logSpy.mockRestore();
+      releaseSkillsLock();
+    }
+  });
+  it('logs "Cursor not detected" when the Cursor User path is a regular file', async () => {
+    acquireSkillsLock(); // installMcpClients() also touches the shared skills/ resource (see block above)
+    const home = makeTempDir("ei-cursor-file-home-");
+    const cursorUserPath = join(home, "Library", "Application Support", "Cursor", "User");
+    mkdirSync(dirname(cursorUserPath), { recursive: true });
+    writeFileSync(cursorUserPath, "");
+
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      await runWithHome(home, () => installMcpClients());
+      expect(logSpy.mock.calls.some((call) => String(call[0]).includes("Cursor not detected"))).toBe(true);
+    } finally {
+      logSpy.mockRestore();
+      releaseSkillsLock();
+    }
+  });
+});
+
 // ── installCodex — Ei MCP entry removal via `codex mcp remove` ─────────────
 // installCodex() doesn't edit ~/.codex/config.toml directly — it pre-checks
 // the file with Bun.TOML.parse and only shells out to the codex CLI (which
