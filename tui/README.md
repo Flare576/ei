@@ -208,7 +208,7 @@ Ei is designed to run consistently across machines and environments, so it keeps
 
 Detected providers are configured with sensible defaults out of the box:
 
-- **Models**: Only chat-capable models are included — TTS, image generation, embeddings, and other non-chat model families are filtered out. You get one model per tier (e.g. fast/mini for extraction, capable for chat, powerful for complex work) rather than a wall of 100+ options.
+- **Models**: Only chat-capable models are included — TTS, image generation, embeddings, and other non-chat model families are filtered out. Detection sets both `conversation_model` (chat responses) and `extraction_model` (background extraction/analysis) to the same starting model rather than presenting a wall of 100+ options; split them later in `/settings` if you want a cheaper model dedicated to extraction.
 - **Token limits**: Known models get pre-configured `token_limit` and `max_output_tokens` values based on real-world Ei usage, not just the provider's advertised maximums.
 - **Rewrite model**: If a high-capability model is detected (Anthropic Opus, OpenAI o-series), it's automatically set as your `rewrite_model` — used by `/generate` and `/dedupe`. No manual `/settings` step needed.
 
@@ -218,7 +218,7 @@ This means:
 
 - **Rotating an API key?** Update it in Ei with `/provider`, not just in your shell.
 - **Switching machines?** Your providers and settings travel with your state file (or via Sync), not your shell profile.
-- **Changed your mind about a model?** Use `/provider` to set the model for a persona, or `/settings` to change your global default.
+- **Changed your mind about a model?** Use `/provider` to set the model for a persona, or `/settings` to change your `conversation_model`/`extraction_model`.
 - **Updated sync credentials?** Use `/setsync <user> <pass>` — env vars won't be re-read.
 
 The one exception is `EI_DATA_PATH` (and `EI_SYNC_USERNAME` / `EI_SYNC_PASSWORD` for bootstrapping sync on a new machine) — those are always read at startup since Ei needs them before it can load its own state.

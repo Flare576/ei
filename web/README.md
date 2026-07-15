@@ -59,7 +59,7 @@ The **Documents** tab lets you import `.txt`, `.md`, or `.markdown` files direct
 Open the **☰ menu** → **Settings** to:
 
 - Add, edit, or remove LLM providers
-- Set a default model (used for background processing and new personas)
+- Set your **Conversation Model** (chat responses) and **Extraction Model** (background extraction/analysis — optional, falls back to Conversation Model if unset)
 - Set up **sync** so you can use Ei on multiple devices
 - **Export** your data as a backup, or **Import** a backup to restore
 
