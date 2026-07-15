@@ -12,25 +12,35 @@
 // for the real finding that this repo's OWN standard e2e width (100
 // columns) makes the wizard entirely invisible. This file exists to answer
 // a DIFFERENT question, in isolation from that layout bug: once the wizard
-// is actually visible, do its own step-navigation mechanics (confirm/decline,
-// path validation, provider skip) genuinely work end to end against a real
+// is actually visible, do its own step-navigation mechanics (provider skip,
+// install confirm/decline) genuinely work end to end against a real
 // terminal, real keyboard events, and a real child process — not just
 // bun:test's SolidJS-only render tree?
 //
-// Deliberately stops right after the Provider step (does NOT press Enter to
-// advance into Import). This is a REAL, unmocked child process — there is
-// no way to inject a fake `detectIntegrations`/`runHarnessInstall` prop
-// through a black-box PTY the way the bun:test component tests do.
-// Advancing into the Import step here would run the REAL
-// defaultDetectImportSources() against this literal dev machine (which has
-// real Claude Code project data) and could flip a real integration flag on,
-// which the project's own notepad (.sisyphus/notepads/.../issues.md, T12
-// entry) documents as having independently, intermittently woken a real
-// background sync/extraction pipeline that attempts a real fetch() to
-// api.anthropic.com using a real API key. That is a disclosed, pre-existing,
-// out-of-scope risk this QA pass must not itself trigger as a side effect —
-// so Install is also always declined ('n'), never invoking the real
-// installMcpClients() side effects on this machine.
+// Wizard order as of the onboarding-polish rework: Welcome -> Provider ->
+// Install -> Done (4 steps; the old, always-redundant Data Path step is
+// gone — Ei already fails fast with actionable tips at boot, before the
+// wizard can ever render, if EI_DATA_PATH is unwritable — and the old
+// Import step is folded into Install: one y/N now gates both the harness
+// installer AND the source-detection settings write together).
+//
+// Runs through Provider (skip, no accounts configured) and Install
+// (decline, 'n') then stops before Done. Declining Install is safe here:
+// integration flags are now only ever written from inside the Install
+// step's explicit 'y' branch (runInstallYes), never as a side effect of
+// detection alone. Detection itself (defaultDetectImportSources) is real
+// and unmocked in this PTY — there's no prop-injection seam across a
+// black-box child process — but it now runs eagerly on mount regardless of
+// which step is showing, same as the pre-existing account-fetch. That's
+// fine: it's read-only (file-existence checks + one `codex --version`
+// spawn), never a write. The write this file must still never trigger is
+// the real installMcpClients() install / the real integration-flag write,
+// both gated behind Install's 'y' — which this test only ever declines.
+// (Per the project notepad's T12 entry, flipping a real integration flag
+// on this machine has independently, intermittently woken a real
+// background sync/extraction pipeline that hits api.anthropic.com with a
+// real API key — a disclosed, pre-existing, out-of-scope risk this QA pass
+// must not itself trigger.)
 import { test, expect } from "@microsoft/tui-test";
 import { rmSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
@@ -81,23 +91,10 @@ test.use({
 
 test("fresh first boot at an adequate terminal width: the wizard renders and real keyboard-driven navigation actually works", async ({ terminal }) => {
   await expect(terminal.getByText("Welcome to Ei!")).toBeVisible({ timeout: 15000 });
-  await expect(terminal.getByText("Step 1/6: Welcome")).toBeVisible({ timeout: 5000 });
+  await expect(terminal.getByText("Step 1/4: Welcome")).toBeVisible({ timeout: 5000 });
 
-  terminal.submit(); // any key -> advance to Install
-  await expect(terminal.getByText("Step 2/6: Install")).toBeVisible({ timeout: 5000 });
-  await expect(terminal.getByText("Set up recommended Skills")).toBeVisible({ timeout: 5000 });
-
-  // Decline — never invoke the real installer on this machine.
-  terminal.write("n");
-  await expect(terminal.getByText(/Skipped — run this later/gi)).toBeVisible({ timeout: 5000 });
-
-  terminal.submit();
-  await expect(terminal.getByText("Step 3/6: Data Path")).toBeVisible({ timeout: 5000 });
-  await expect(terminal.getByText(`Data path: ${TEST_DATA_PATH}`)).toBeVisible({ timeout: 5000 });
-
-  // Continue without changing the path.
-  terminal.submit();
-  await expect(terminal.getByText("Step 4/6: Provider")).toBeVisible({ timeout: 5000 });
+  terminal.submit(); // any key -> advance to Provider
+  await expect(terminal.getByText("Step 2/4: Provider")).toBeVisible({ timeout: 5000 });
 
   // ProviderForm mounts for real (no accounts configured) — Escape at its
   // first field skips, matching onboarding-overlay-negative.test.tsx's
@@ -105,6 +102,15 @@ test("fresh first boot at an adequate terminal width: the wizard renders and rea
   terminal.keyEscape();
   await expect(terminal.getByText("Skipped — no AI provider configured.")).toBeVisible({ timeout: 5000 });
 
-  // Deliberately stop here — see the file header for why we never
-  // advance into the real Import step in an unmocked child process.
+  terminal.submit();
+  await expect(terminal.getByText("Step 3/4: Install")).toBeVisible({ timeout: 5000 });
+  await expect(terminal.getByText("Set up Skills, hooks, and harness integrations")).toBeVisible({ timeout: 5000 });
+
+  // Decline — never invoke the real installer, and never write a real
+  // integration flag, on this machine.
+  terminal.write("n");
+  await expect(terminal.getByText(/Skipped — run this later/gi)).toBeVisible({ timeout: 5000 });
+
+  // Deliberately stop here — see the file header for why we never confirm
+  // ('y') Install's real, unmocked side effects in an unmocked child process.
 });
