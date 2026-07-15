@@ -10,9 +10,12 @@
 // already-configured EiProvider instance. onboarding-overlay.test.tsx /
 // onboarding-overlay-negative.test.tsx both start from isFirstBoot=true with
 // NO existing accounts. None of the three exercise the re-run-on-configured-
-// instance path, and none prove the Import step's "only ever sets true,
-// never resets to false" behavior when a re-run's detection no longer finds
-// a source that was already flagged on from a prior run.
+// instance path, and none prove the merged Install step's "only ever sets
+// an integration flag true, never resets one back to false" behavior when a
+// re-run's detection no longer finds a source that was already flagged on
+// from a prior run — this file confirms it by pressing 'y' (not declining),
+// since declining now skips the flag-write logic entirely and would leave
+// that invariant unexercised.
 process.env.EI_E2E_MODE = "3";
 
 import { describe, it, expect, mock, afterAll } from "bun:test";
@@ -33,16 +36,17 @@ mock.module("../../src/util/logger", () => ({
 
 import { getInstalledVersion } from "../../src/util/local-state";
 
-let runHarnessInstallImpl: () => Promise<{ ok: boolean; failures: string[] }> = async () => {
-  throw new Error("runHarnessInstall should never be called — Install is declined in this scenario");
-};
+let runHarnessInstallImpl: () => Promise<{ ok: boolean; failures: string[] }> = async () => ({
+  ok: true,
+  failures: [],
+});
 
 const realFetch = globalThis.fetch;
 globalThis.fetch = (() =>
   Promise.reject(new Error("Real network fetch blocked during final-qa-onboarding-rerun test"))) as unknown as typeof fetch;
 
 import { testRender } from "@opentui/solid";
-import type { ParentComponent } from "solid-js";
+import { createSignal, Show, type ParentComponent } from "solid-js";
 import { EiProvider, useEi, type EiContextValue } from "../../src/context/ei";
 import { KeyboardProvider } from "../../src/context/keyboard";
 import { OverlayProvider } from "../../src/context/overlay";
@@ -81,12 +85,12 @@ function wait(ms = 20): Promise<void> {
 }
 
 /** Poll a real predicate (not a guessed duration) until it turns true. */
-async function waitUntil(predicate: () => boolean, timeoutMs = 3000): Promise<void> {
+async function waitUntil(predicate: () => boolean | Promise<boolean>, timeoutMs = 3000): Promise<void> {
   const start = Date.now();
-  while (!predicate() && Date.now() - start < timeoutMs) {
+  while (!(await predicate()) && Date.now() - start < timeoutMs) {
     await wait(20);
   }
-  if (!predicate()) throw new Error("Timed out waiting for condition");
+  if (!(await predicate())) throw new Error("Timed out waiting for condition");
 }
 
 async function waitForFrame(
@@ -134,6 +138,13 @@ const EXISTING_ACCOUNT = {
   url: "http://127.0.0.1:0",
   api_key: "",
   default_model: "existing-model",
+  // Explicit, matching the GUIDs settings.conversation_model/extraction_model
+  // point at below — ProviderSelector resolves real model NAMES (not just
+  // the account), unlike the old design's account-only summary line.
+  models: [
+    { id: "existing-conversation-guid", name: "Existing Conversation Model" },
+    { id: "existing-extraction-guid", name: "Existing Extraction Model" },
+  ],
   enabled: true,
   created_at: new Date().toISOString(),
 };
@@ -143,16 +154,17 @@ function makeAlreadyConfiguredSettings(): Record<string, unknown> {
     accounts: [EXISTING_ACCOUNT],
     conversation_model: "existing-conversation-guid",
     extraction_model: "existing-extraction-guid",
-    // Already flagged on from a PRIOR wizard/import run — the re-run's own
+    // Already flagged on from a PRIOR wizard/install run — the re-run's own
     // detectIntegrations below deliberately returns false for claudeCode
     // (simulating "not currently detected on this pass") to prove the
-    // Import step never resets an already-true flag back to false/undefined.
+    // merged Install step never resets an already-true flag back to
+    // false/undefined, even when the user says 'y' again on this pass.
     claudeCode: { integration: true },
   };
 }
 
 describe("Final QA — /onboarding re-run on an already-configured instance", () => {
-  it("shows already-done state (Welcome back / already configured) and does not silently overwrite accounts, model fields, or an already-true integration flag", async () => {
+  it("shows already-done state (Welcome back / pre-filled provider selection) and does not silently overwrite accounts, model fields, or an already-true integration flag", async () => {
     writeFileSync(join(testDataDir, "state.json"), JSON.stringify(makeCheckpoint(makeAlreadyConfiguredSettings())));
     // Already stamped at the current version — this really is a fully
     // "already-done" instance re-running /onboarding, not a fresh/upgrade case.
@@ -179,7 +191,6 @@ describe("Final QA — /onboarding re-run on an already-configured instance", ()
             isFirstBoot={false}
             dataPath={testDataDir}
             detectIntegrations={detectIntegrations}
-            shellProfileOptions={{ env: { SHELL: "/bin/zsh" } }}
             runHarnessInstall={() => runHarnessInstallImpl()}
           />
         </TestProviders>
@@ -193,33 +204,32 @@ describe("Final QA — /onboarding re-run on an already-configured instance", ()
       expect(frame).not.toContain("Welcome to Ei!");
 
       mockInput.pressEnter();
-      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 2/6: Install"));
+      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 2/4: Provider"));
 
-      // --- Decline Install (never touch the real installer in a re-run QA test) ---
-      mockInput.pressKey("n");
-      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Skipped"));
+      // --- Provider step: exactly one llm account -> ProviderSelector skips
+      // straight to the model picker, pre-filled from the EXISTING settings
+      // GUIDs (not a static "already configured" summary — it's always
+      // interactive now, but confirming with no changes must round-trip
+      // the identical values). ---
+      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Existing"));
+      expect(frame).toContain("Existing Conversation Model");
+      expect(frame).toContain("Existing Extraction Model");
+
+      // Confirm without changing anything -> auto-advances straight to Install.
+      mockInput.pressEnter();
+      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 3/4: Install"));
+
+      // --- Install/Import: nothing NEW detected this pass ---
+      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("No supported coding tools detected"));
+
+      // --- Confirm 'y' — proves the flag-write logic itself never resets
+      // an already-true flag, not merely that declining leaves it alone. ---
+      await mockInput.typeText("y");
+      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("installed."));
 
       mockInput.pressEnter();
-      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 3/6: Data Path"));
-      // Shows the CURRENT (unchanged) data path, not reset to any default.
-      expect(frame).toContain(`Data path: ${testDataDir}`);
-
-      mockInput.pressEnter(); // continue without changing the path
-      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 4/6: Provider"));
-
-      // --- Provider step: shows "already configured" using the EXISTING
-      // account name, without ever mounting ProviderForm (no form fields). ---
-      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("already configured"));
-      expect(frame).toContain("Existing (already configured)");
-
-      mockInput.pressEnter();
-      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 5/6: Import"));
-
-      // --- Import step: nothing NEW detected this pass ---
-      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("No supported integrations detected"));
-
-      mockInput.pressEnter();
-      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 6/6: Done"));
+      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 4/4: Done"));
+      expect(frame).toContain("Existing (configured)");
 
       // --- Done: finish ---
       expect(onDismissCalled).toBe(false);
@@ -231,14 +241,10 @@ describe("Final QA — /onboarding re-run on an already-configured instance", ()
       // --- Nothing silently overwritten: accounts, conversation_model,
       // extraction_model, and the already-true claudeCode flag are all
       // EXACTLY as they were before the re-run — even though this run's
-      // own detection returned false for claudeCode. ---
+      // own detection returned false for claudeCode and the user confirmed
+      // ('y') the merged Install step. ---
       expect(capturedEi).toBeDefined();
       const human = await capturedEi!.getHuman();
-      // Note: an unrelated PRE-EXISTING migration (migrateProviderModel,
-      // string default_model -> GUID ModelConfig) fires on every account
-      // load regardless of the wizard — assert on identity, not full
-      // deep-equality, so this test targets only what the wizard itself
-      // could have clobbered.
       expect(human.settings?.accounts).toHaveLength(1);
       expect(human.settings?.accounts?.[0]?.id).toBe(EXISTING_ACCOUNT.id);
       expect(human.settings?.accounts?.[0]?.name).toBe(EXISTING_ACCOUNT.name);
@@ -250,6 +256,228 @@ describe("Final QA — /onboarding re-run on an already-configured instance", ()
       // re-stamps but the value is unchanged since it was already current).
       const stamped = await getInstalledVersion(testDataDir);
       expect(stamped).toBe(pkg.version);
+    } finally {
+      renderer.destroy();
+    }
+  }, 20000);
+
+  it("lets a re-run with one enabled model-less LLM account skip Provider and preserves its existing model settings (I1)", async () => {
+    const modelLessAccount = {
+      id: "model-less-account",
+      name: "Model-less",
+      type: "llm",
+      url: "http://127.0.0.1:0",
+      api_key: "",
+      models: [],
+      enabled: true,
+      created_at: new Date().toISOString(),
+    };
+    const originalModelSettings = {
+      conversation_model: "preserved-conversation-model",
+      extraction_model: "preserved-extraction-model",
+    };
+    writeFileSync(
+      join(testDataDir, "state.json"),
+      JSON.stringify(makeCheckpoint({ accounts: [modelLessAccount], ...originalModelSettings }))
+    );
+    writeFileSync(join(testDataDir, "local.json"), JSON.stringify({ installed_version: pkg.version }));
+
+    const detectIntegrations = async (): Promise<ImportSourceDetection> => ({
+      claudeCode: false,
+      cursor: false,
+      codex: false,
+      pi: false,
+    });
+    capturedEi = undefined;
+    let mountOverlay: (() => void) | undefined;
+    const DeferredOnboardingOverlay = () => {
+      const [isOverlayMounted, setIsOverlayMounted] = createSignal(false);
+      mountOverlay = () => setIsOverlayMounted(true);
+      return (
+        <>
+          <EiCapture />
+          <Show when={isOverlayMounted()}>
+            <OnboardingOverlay
+              onDismiss={() => {}}
+              detectedProviders={[]}
+              isFirstBoot={false}
+              dataPath={testDataDir}
+              detectIntegrations={detectIntegrations}
+              runHarnessInstall={() => runHarnessInstallImpl()}
+            />
+          </Show>
+        </>
+      );
+    };
+
+    const { renderOnce, mockInput, captureCharFrame, renderer } = await testRender(
+      () => (
+        <TestProviders>
+          <DeferredOnboardingOverlay />
+        </TestProviders>
+      ),
+      { width: 220, height: 34 }
+    );
+
+    try {
+      await waitUntil(async () => {
+        try {
+          await capturedEi?.getHuman();
+          return capturedEi !== undefined && mountOverlay !== undefined;
+        } catch {
+          return false;
+        }
+      });
+
+      // State migration supplies a placeholder model for legacy model-less
+      // accounts, so restore the checkpoint's empty model list immediately
+      // before mounting the overlay to exercise the persisted edge case.
+      await capturedEi!.updateSettings({ accounts: [modelLessAccount], ...originalModelSettings });
+      expect((await capturedEi!.getHuman()).settings?.accounts?.[0]?.models).toHaveLength(0);
+      mountOverlay!();
+
+      await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Welcome back!"));
+      mockInput.pressEnter();
+      let frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 2/4: Provider"));
+
+      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("No models configured for this account"));
+      expect(frame).toContain("Esc: skip provider setup for now");
+
+      mockInput.pressEscape();
+      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Skipped — no AI provider configured."));
+      expect(frame).toContain("Skipped — no AI provider configured.");
+
+      mockInput.pressEnter();
+      await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 3/4: Install"));
+
+      const human = await capturedEi!.getHuman();
+      expect(human.settings?.conversation_model).toBe(originalModelSettings.conversation_model);
+      expect(human.settings?.extraction_model).toBe(originalModelSettings.extraction_model);
+    } finally {
+      renderer.destroy();
+    }
+  }, 20000);
+
+  it("excludes a disabled LLM account from the provider picker entirely (I3)", async () => {
+    const disabledAccount = {
+      id: "disabled-account",
+      name: "Disabled",
+      type: "llm",
+      url: "http://127.0.0.1:0",
+      api_key: "",
+      models: [{ id: "disabled-model-guid", name: "Disabled Model" }],
+      enabled: false,
+      created_at: new Date().toISOString(),
+    };
+    const enabledAccount = {
+      id: "enabled-account",
+      name: "Enabled",
+      type: "llm",
+      url: "http://127.0.0.1:0",
+      api_key: "",
+      models: [{ id: "enabled-model-guid", name: "Enabled Model" }],
+      enabled: true,
+      created_at: new Date().toISOString(),
+    };
+    writeFileSync(
+      join(testDataDir, "state.json"),
+      JSON.stringify(makeCheckpoint({ accounts: [disabledAccount, enabledAccount] }))
+    );
+    writeFileSync(join(testDataDir, "local.json"), JSON.stringify({ installed_version: pkg.version }));
+
+    const detectIntegrations = async (): Promise<ImportSourceDetection> => ({
+      claudeCode: false,
+      cursor: false,
+      codex: false,
+      pi: false,
+    });
+
+    const { renderOnce, mockInput, captureCharFrame, renderer } = await testRender(
+      () => (
+        <TestProviders>
+          <EiCapture />
+          <OnboardingOverlay
+            onDismiss={() => {}}
+            detectedProviders={[]}
+            isFirstBoot={false}
+            dataPath={testDataDir}
+            detectIntegrations={detectIntegrations}
+            runHarnessInstall={() => runHarnessInstallImpl()}
+          />
+        </TestProviders>
+      ),
+      { width: 220, height: 34 }
+    );
+
+    try {
+      let frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Welcome back!"));
+      mockInput.pressEnter();
+      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 2/4: Provider"));
+
+      // Only ONE account is selectable -> straight to its models step,
+      // never an account picker with a "Disabled" row to (mis)select.
+      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Enabled Model"));
+      expect(frame).not.toContain("Select a provider account");
+      expect(frame).not.toContain("Disabled");
+      expect(frame).not.toContain("Disabled Model");
+
+      mockInput.pressEnter();
+      await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 3/4: Install"));
+
+      expect(capturedEi).toBeDefined();
+      const human = await capturedEi!.getHuman();
+      // The disabled account itself is untouched (still present) — only
+      // the onboarding PICKER excludes it; nothing here deletes accounts.
+      expect(human.settings?.accounts).toHaveLength(2);
+      // The written model can only have come from the enabled account —
+      // resolveModelById() would reject the disabled one's GUID at runtime.
+      expect(human.settings?.conversation_model).toBe("enabled-model-guid");
+      expect(human.settings?.extraction_model).toBe("enabled-model-guid");
+    } finally {
+      renderer.destroy();
+    }
+  }, 20000);
+
+  it("Install consent copy discloses Cursor's recent-memory injection when Cursor is detected (M1)", async () => {
+    writeFileSync(join(testDataDir, "state.json"), JSON.stringify(makeCheckpoint({})));
+    writeFileSync(join(testDataDir, "local.json"), JSON.stringify({ installed_version: pkg.version }));
+
+    const detectIntegrations = async (): Promise<ImportSourceDetection> => ({
+      claudeCode: false,
+      cursor: true,
+      codex: false,
+      pi: false,
+    });
+
+    const { renderOnce, mockInput, captureCharFrame, renderer } = await testRender(
+      () => (
+        <TestProviders>
+          <OnboardingOverlay
+            onDismiss={() => {}}
+            detectedProviders={[]}
+            isFirstBoot={false}
+            dataPath={testDataDir}
+            detectIntegrations={detectIntegrations}
+            runHarnessInstall={() => runHarnessInstallImpl()}
+          />
+        </TestProviders>
+      ),
+      { width: 220, height: 34 }
+    );
+
+    try {
+      let frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Welcome back!"));
+      mockInput.pressEnter();
+      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 2/4: Provider"));
+      mockInput.pressEscape(); // no accounts -> ProviderForm's create step -> skip
+      await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Skipped — no AI provider configured."));
+
+      mockInput.pressEnter();
+      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Cursor"));
+      expect(frame).toContain("[✓] found");
+      expect(frame).toContain("Cursor: enabling this installs a hook that injects your recent Ei");
+      expect(frame).toContain("context into Cursor's prompts on every request");
+      expect(frame).toContain("to Cursor's configured model backend.");
     } finally {
       renderer.destroy();
     }
