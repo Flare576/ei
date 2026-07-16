@@ -79,6 +79,26 @@ describe("callLLMRaw — max_tokens resolution", () => {
 
     expect(getCapturedBody(mockFetch).max_tokens).toBe(8000);
   });
+
+  it("uses KNOWN_MODEL_LIMITS max_output_tokens fallback when ModelConfig has no explicit value", async () => {
+    const model = makeModel("opus", { model_id: "claude-opus-4-8" });
+    const account = makeAccount("Anthropic", [model], { url: "https://api.anthropic.com/v1" });
+    const mockFetch = stubFetch(makeLLMResponse());
+
+    await callLLMRaw("sys", "user", [], "Anthropic:opus", {}, [account]);
+
+    expect(getCapturedBody(mockFetch).max_tokens).toBe(128000);
+  });
+
+  it("explicit max_output_tokens overrides the KNOWN_MODEL_LIMITS fallback", async () => {
+    const model = makeModel("opus", { model_id: "claude-opus-4-8", max_output_tokens: 50000 });
+    const account = makeAccount("Anthropic", [model], { url: "https://api.anthropic.com/v1" });
+    const mockFetch = stubFetch(makeLLMResponse());
+
+    await callLLMRaw("sys", "user", [], "Anthropic:opus", {}, [account]);
+
+    expect(getCapturedBody(mockFetch).max_tokens).toBe(50000);
+  });
 });
 
 describe("callLLMRaw — model field in request body", () => {
@@ -274,5 +294,87 @@ describe("callLLMRaw — temperature handling", () => {
     await callLLMRaw("sys", "user", [], "Anthropic:claude-haiku-4-5", {}, [account]);
 
     expect("temperature" in getCapturedBody(mockFetch)).toBe(true);
+  });
+
+  it("omits temperature via KNOWN_MODEL_LIMITS fallback when ModelConfig has no explicit temperature_disabled but model_id matches a known model", async () => {
+    // Production bug scenario: a user hand-edited a model entry, and temperature_disabled got dropped.
+    // The fallback to KNOWN_MODEL_LIMITS should rescue it.
+    const model = makeModel("opus", { model_id: "claude-opus-4-8" });
+    const account = makeAccount("Anthropic", [model], { url: "https://api.anthropic.com/v1" });
+    const mockFetch = stubFetch(makeLLMResponse());
+
+    await callLLMRaw("sys", "user", [], "Anthropic:opus", {}, [account]);
+
+    expect("temperature" in getCapturedBody(mockFetch)).toBe(false);
+  });
+
+  it("sends temperature when explicit temperature_disabled: false overrides a KNOWN_MODEL_LIMITS true entry", async () => {
+    // Override scenario: a model whose id matches a known 'always disabled' entry, but the user
+    // has explicitly set it to false for a different backend (e.g., Bedrock vs Anthropic API).
+    const model = makeModel("opus", { model_id: "claude-opus-4-8", temperature_disabled: false });
+    const account = makeAccount("Anthropic", [model], { url: "https://api.anthropic.com/v1" });
+    const mockFetch = stubFetch(makeLLMResponse());
+
+    await callLLMRaw("sys", "user", [], "Anthropic:opus", {}, [account]);
+
+    expect("temperature" in getCapturedBody(mockFetch)).toBe(true);
+  });
+
+  it("omits temperature via KNOWN_MODEL_LIMITS fallback when matched by name (no model_id set)", async () => {
+    // Name-based fallback: the model name itself matches a KNOWN_MODEL_LIMITS entry that disables temperature.
+    const model = makeModel("claude-sonnet-5");
+    const account = makeAccount("Anthropic", [model], { url: "https://api.anthropic.com/v1" });
+    const mockFetch = stubFetch(makeLLMResponse());
+
+    await callLLMRaw("sys", "user", [], "Anthropic:claude-sonnet-5", {}, [account]);
+
+    expect("temperature" in getCapturedBody(mockFetch)).toBe(false);
+  });
+});
+
+describe("callLLMRaw — resolved-model/known-limits unification (Beta review I1)", () => {
+  it("T1 (P0): bare account-name spec with a default_model resolves the SAME ModelConfig used for known-limits fallback", async () => {
+    // Beta's repro: resolveModel() picks the account's default_model for the outbound `model`
+    // field, but the separate modelConfig lookup used to miss it entirely for bare specs,
+    // so a known temperature-rejecting model still got sent `temperature`.
+    const model = makeModel("claude-opus-4-8");
+    const account = makeAccount("Anthropic", [model], {
+      url: "https://api.anthropic.com/v1",
+      default_model: model.id,
+    });
+    const mockFetch = stubFetch(makeLLMResponse());
+
+    await callLLMRaw("sys", "user", [], "Anthropic", {}, [account]);
+
+    const body = getCapturedBody(mockFetch);
+    expect(body.model).toBe("claude-opus-4-8");
+    expect("temperature" in body).toBe(false);
+    expect(body.max_tokens).toBe(128000);
+  });
+
+  it("T2 (P1): model GUID spec for a known model resolves known-limits fallback", async () => {
+    const model = makeModel("claude-opus-4-8");
+    const account = makeAccount("Anthropic", [model], { url: "https://api.anthropic.com/v1" });
+    const mockFetch = stubFetch(makeLLMResponse());
+
+    await callLLMRaw("sys", "user", [], model.id, {}, [account]);
+
+    const body = getCapturedBody(mockFetch);
+    expect("temperature" in body).toBe(false);
+    expect(body.max_tokens).toBe(128000);
+  });
+
+  it("T3 (P1): a known model record without temperature_disabled must not imply temperature is disabled", async () => {
+    // Table membership alone (claude-opus-4-7 has max_output_tokens but no temperature_disabled)
+    // must not leak into the temperature decision for that entry.
+    const model = makeModel("claude-opus-4-7");
+    const account = makeAccount("Anthropic", [model], { url: "https://api.anthropic.com/v1" });
+    const mockFetch = stubFetch(makeLLMResponse());
+
+    await callLLMRaw("sys", "user", [], "Anthropic:claude-opus-4-7", {}, [account]);
+
+    const body = getCapturedBody(mockFetch);
+    expect("temperature" in body).toBe(true);
+    expect(body.max_tokens).toBe(128000);
   });
 });

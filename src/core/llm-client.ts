@@ -1,4 +1,5 @@
 import type { ChatMessage, ProviderAccount, ModelConfig } from "./types.js";
+import { KNOWN_MODEL_LIMITS } from "./constants/known-model-limits.js";
 import { resolveDataPath } from "./utils/resolve-data-path.js";
 const DEFAULT_TOKEN_LIMIT = 8192;
 const DEFAULT_MAX_OUTPUT_TOKENS = 8000;
@@ -213,11 +214,20 @@ function findModelAndAccount(
     const model = account.models?.find((m) => m.id === spec);
     if (model) return { model, account };
   }
-  // Fall back to matching by account name (bare spec like "EG" or "RnP")
+  // Fall back to matching by account name (bare spec like "EG" or "RnP").
+  // Mirror resolveModel()'s bare-spec branch: a bare account-name spec resolves to
+  // the account's default_model for the actual API call, so the ModelConfig used
+  // here for capability defaults (temperature_disabled, max_output_tokens, token_limit)
+  // must be that SAME model — not always undefined.
   const accountByName = accounts.find(
     (a) => a.name.toLowerCase() === spec.toLowerCase() && a.enabled
   );
-  if (accountByName) return { model: undefined, account: accountByName };
+  if (accountByName) {
+    const defaultModel = accountByName.default_model
+      ? accountByName.models?.find((m) => m.id === accountByName.default_model)
+      : undefined;
+    return { model: defaultModel, account: accountByName };
+  }
   return { model: undefined, account: undefined };
 }
 
@@ -278,6 +288,9 @@ export async function callLLMRaw(
   const { model: modelConfig } = (accounts && modelSpec)
     ? findModelAndAccount(modelSpec, accounts)
     : { model: undefined };
+  const knownLimits = modelConfig ? KNOWN_MODEL_LIMITS[modelConfig.model_id ?? modelConfig.name] : undefined;
+  const effectiveTemperatureDisabled = modelConfig?.temperature_disabled ?? knownLimits?.temperature_disabled ?? false;
+  const effectiveMaxOutputTokens = modelConfig?.max_output_tokens ?? knownLimits?.max_output_tokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
   
   const chatMessages: ChatMessage[] = [
     { role: "system", content: systemPrompt },
@@ -313,14 +326,14 @@ export async function callLLMRaw(
   // Omit temperature for models that don't accept it (e.g. Anthropic extended-thinking models).
   // Also omit when thinking_budget > 0: Anthropic rejects temperature alongside thinking params.
   const sendTemperature =
-    !modelConfig?.temperature_disabled &&
+    !effectiveTemperatureDisabled &&
     !(modelConfig?.thinking_budget !== undefined && modelConfig.thinking_budget > 0);
 
   const requestBody: Record<string, unknown> = {
     ...(model !== undefined && { model }),
     messages: finalMessages,
     ...(sendTemperature && { temperature }),
-    max_tokens: modelConfig?.max_output_tokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
+    max_tokens: effectiveMaxOutputTokens,
   };
 
   if (modelConfig?.thinking_budget !== undefined) {
