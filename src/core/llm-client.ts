@@ -219,12 +219,23 @@ function findModelAndAccount(
   // the account's default_model for the actual API call, so the ModelConfig used
   // here for capability defaults (temperature_disabled, max_output_tokens, token_limit)
   // must be that SAME model — not always undefined.
+  //
+  // default_model isn't reliably a GUID: buildProviderAccounts() (auto-detect/onboarding)
+  // stamps it with the raw model NAME, not the newly-generated ModelConfig id — only a
+  // manual pick through the model-picker UI rewrites it to a GUID afterward. Match all
+  // three shapes so a freshly auto-detected account (the most common real-world state)
+  // resolves correctly too, not just one that's been through the picker.
   const accountByName = accounts.find(
     (a) => a.name.toLowerCase() === spec.toLowerCase() && a.enabled
   );
   if (accountByName) {
     const defaultModel = accountByName.default_model
-      ? accountByName.models?.find((m) => m.id === accountByName.default_model)
+      ? accountByName.models?.find(
+          (m) =>
+            m.id === accountByName.default_model ||
+            m.name === accountByName.default_model ||
+            m.model_id === accountByName.default_model
+        )
       : undefined;
     return { model: defaultModel, account: accountByName };
   }
