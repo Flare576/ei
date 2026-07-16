@@ -8,12 +8,22 @@ import { modelGuidToDisplay } from "./yaml-shared.js";
 const tokenFormatter = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
 const formatTokens = (n: number) => tokenFormatter.format(n);
 
+function validateTemperatureDisabled(value: unknown, modelName: string): boolean | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === "boolean") return value;
+  throw new Error(
+    `temperature_disabled for model "${modelName}" must be true, false, or omitted (got: ${JSON.stringify(value)}). ` +
+    "Non-boolean values are silently ambiguous (e.g. the string \"false\" is truthy) and are rejected instead of guessed."
+  );
+}
+
 interface EditableModelData {
   name: string;
   model_id?: string;
   token_limit?: number;
   max_output_tokens?: number;
   thinking_budget?: number;
+  temperature_disabled?: boolean | null;
   _delete?: boolean;
 }
 
@@ -52,6 +62,7 @@ function parseModels(editableModels: EditableModelData[]): import('../../../src/
       token_limit: m.token_limit ?? undefined,
       max_output_tokens: m.max_output_tokens ?? undefined,
       thinking_budget: m.thinking_budget ?? undefined,
+      temperature_disabled: validateTemperatureDisabled(m.temperature_disabled, m.name),
     });
   }
   return result;
@@ -76,6 +87,7 @@ export function newProviderToYAML(name?: string): string {
     "    token_limit: null",
     "    max_output_tokens: null",
     "    thinking_budget: null",
+    "    temperature_disabled: null",
     "    # _delete: true",
     "# _delete: true   # Delete this entire provider",
   ].join("\n");
@@ -151,6 +163,7 @@ export function providerToYAML(account: ProviderAccount): string {
       modelLines.push(`    token_limit: ${m.token_limit ?? null}`);
       modelLines.push(`    max_output_tokens: ${m.max_output_tokens ?? null}`);
       modelLines.push(`    thinking_budget: ${m.thinking_budget ?? null}`);
+      modelLines.push(`    temperature_disabled: ${m.temperature_disabled ?? null}`);
       if (m.total_calls !== undefined || m.total_tokens_in !== undefined) {
         const tokensIn = m.total_tokens_in ?? 0;
         const tokensOut = m.total_tokens_out ?? 0;
@@ -167,6 +180,7 @@ export function providerToYAML(account: ProviderAccount): string {
     modelLines.push(`    token_limit: null`);
     modelLines.push(`    max_output_tokens: null`);
     modelLines.push(`    thinking_budget: null`);
+    modelLines.push("    temperature_disabled: null");
     modelLines.push("    _delete: false");
   }
   modelLines.push("_delete: false   # Set to true to delete this entire provider");
@@ -209,6 +223,7 @@ export function providerFromYAML(yamlContent: string, original: ProviderAccount)
       token_limit: m.token_limit ?? undefined,
       max_output_tokens: m.max_output_tokens ?? undefined,
       thinking_budget: m.thinking_budget ?? undefined,
+      temperature_disabled: validateTemperatureDisabled(m.temperature_disabled, m.name),
       total_calls: existing?.total_calls,
       total_tokens_in: existing?.total_tokens_in,
       total_tokens_out: existing?.total_tokens_out,
