@@ -35,6 +35,7 @@ export function queuePersonaTopicRating(
   options?: PersonaTopicOptions
 ): void {
   const maxTokens = getExtractionMaxTokens(state);
+  const extractionModel = state.getHuman().settings?.extraction_model ?? state.getHuman().settings?.conversation_model;
   const { chunks } = chunkExtractionContext(
     {
       personaId: context.personaId,
@@ -76,6 +77,7 @@ export function queuePersonaTopicRating(
     state.queue_enqueue({
       type: LLMRequestType.JSON,
       priority: LLMPriority.Low,
+      model: extractionModel,
       system: prompt.system,
       user: prompt.user,
       next_step: LLMNextStep.HandlePersonaTopicRating,

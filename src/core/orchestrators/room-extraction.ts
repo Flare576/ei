@@ -86,6 +86,8 @@ function queueRoomTopicScan(
   const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state));
   if (chunks.length === 0) return;
 
+  const extractionModel = state.getHuman().settings?.extraction_model ?? state.getHuman().settings?.conversation_model;
+
   state.markRoomMessagesExtracted(roomId, messages_analyze.map(m => m.id), "t");
 
   for (const chunk of chunks) {
@@ -98,6 +100,7 @@ function queueRoomTopicScan(
     state.queue_enqueue({
       type: LLMRequestType.JSON,
       priority: LLMPriority.Low,
+      model: extractionModel,
       system: prompt.system,
       user: prompt.user,
       next_step: LLMNextStep.HandleHumanTopicScan,
@@ -106,6 +109,7 @@ function queueRoomTopicScan(
         personaId: (state.getRoom(roomId)?.persona_ids ?? []).join("|"),
         personaDisplayName: roomDisplayName,
         message_ids_to_mark: chunk.messages_analyze.map(m => m.id),
+        extraction_model: extractionModel,
         ...(ceremony_progress !== undefined ? { ceremony_progress } : {}),
       },
     });
@@ -130,6 +134,8 @@ function queueRoomPersonScan(
   const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state));
   if (chunks.length === 0) return;
 
+  const extractionModel = state.getHuman().settings?.extraction_model ?? state.getHuman().settings?.conversation_model;
+
   state.markRoomMessagesExtracted(roomId, messages_analyze.map(m => m.id), "p");
 
   for (const chunk of chunks) {
@@ -141,6 +147,7 @@ function queueRoomPersonScan(
     state.queue_enqueue({
       type: LLMRequestType.JSON,
       priority: LLMPriority.Low,
+      model: extractionModel,
       system: prompt.system,
       user: prompt.user,
       next_step: LLMNextStep.HandleHumanPersonScan,
@@ -149,6 +156,7 @@ function queueRoomPersonScan(
         personaId: (state.getRoom(roomId)?.persona_ids ?? []).join("|"),
         personaDisplayName: roomDisplayName,
         message_ids_to_mark: chunk.messages_analyze.map(m => m.id),
+        extraction_model: extractionModel,
         ...(ceremony_progress !== undefined ? { ceremony_progress } : {}),
       },
     });
@@ -167,6 +175,7 @@ function queueRoomEventScan(
 
   const human = state.getHuman();
   const gapHours = human.settings?.ceremony?.event_window_hours ?? 8;
+  const extractionModel = human.settings?.extraction_model ?? human.settings?.conversation_model;
   const sorted = [...unextracted].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
   const windows = buildEventWindows(sorted, gapHours);
 
@@ -196,6 +205,7 @@ function queueRoomEventScan(
       state.queue_enqueue({
         type: LLMRequestType.JSON,
         priority: LLMPriority.Low,
+        model: extractionModel,
         system: prompt.system,
         user: prompt.user,
         next_step: LLMNextStep.HandleEventScan,
@@ -204,6 +214,7 @@ function queueRoomEventScan(
           personaId: (state.getRoom(roomId)?.persona_ids ?? []).join("|"),
           personaDisplayName: roomDisplayName,
           message_ids_to_mark: chunk.messages_analyze.map(m => m.id),
+          extraction_model: extractionModel,
         },
       });
     }
