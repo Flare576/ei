@@ -239,6 +239,8 @@ export async function handleHumanPersonScan(response: LLMResponse, state: StateM
   };
   if (!context?.personaId) return;
 
+  const extractionModel = (response.request.data as Record<string, unknown>).extraction_model as string | undefined;
+
   const { messages_context, messages_analyze } = resolveMessageWindow(response, state);
   const human = state.getHuman();
 
@@ -377,6 +379,7 @@ export async function handleHumanPersonScan(response: LLMResponse, state: StateM
       candidateDescription: candidate.description,
       candidateRelationship: candidate.relationship,
       candidateIdentifiers,
+      extraction_model: extractionModel,
     }, state);
 
     const matched = matchedPerson

@@ -184,6 +184,7 @@ export function queueTopicScan(context: ExtractionContext, state: StateManager, 
         extraction_flag: context.extraction_flag,
         message_ids_to_mark: chunk.messages_analyze.map(m => m.id),
         sources: context.sources,
+        extraction_model: extractionModel,
       },
     });
   }
@@ -245,6 +246,7 @@ export function queuePersonScan(context: ExtractionContext, state: StateManager,
         extraction_flag: context.extraction_flag,
         message_ids_to_mark: chunk.messages_analyze.map(m => m.id),
         sources: context.sources,
+        extraction_model: extractionModel,
       },
     });
   }
@@ -277,7 +279,8 @@ export function queueDirectTopicUpdate(
   state: StateManager,
   options?: ExtractionOptions
 ): number {
-  const extractionModel = options?.extraction_model;
+  const settings = state.getHuman().settings;
+  const extractionModel = options?.extraction_model ?? settings?.extraction_model ?? settings?.conversation_model;
   const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state, options));
 
   if (chunks.length === 0) return 0;
@@ -577,6 +580,7 @@ export function queueEventSummary(
           personaDisplayName: chunk.channelDisplayName,
           extraction_flag: "e",
           message_ids_to_mark: chunk.messages_analyze.map(m => m.id),
+          extraction_model: extractionModel,
         },
       });
       totalChunks++;

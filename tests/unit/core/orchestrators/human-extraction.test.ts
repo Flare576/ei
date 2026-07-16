@@ -19,6 +19,7 @@ import {
   queueTargetedPersonUpdate,
   queuePersonUpdate,
   queueTopicMatch,
+  queueDirectTopicUpdate,
   queueTargetedTopicUpdate,
   VALIDATE_MIN_SIMILARITY,
   type ExtractionContext,
@@ -392,6 +393,40 @@ describe("Human-chain extraction model propagation", () => {
       },
       stateManager,
     );
+
+    const enqueued = state.queue_enqueue.mock.calls[0][0] as { model?: string };
+    expect(enqueued.model).toBe("extraction-guid");
+  });
+
+  // T6 (P2): queueDirectTopicUpdate's only current caller (queueTopicValidate)
+  // always passes an explicit extraction_model, so this was not a live bug —
+  // but unlike every sibling queuer in this file, it had NO settings fallback
+  // at all (`options?.extraction_model` with nothing after the `??`), leaving
+  // it one careless future caller away from the same conversation_model collapse.
+  it("queueDirectTopicUpdate: no options.extraction_model -> falls back to settings.extraction_model, not conversation_model", () => {
+    const state = createMockStateManager();
+    state._human.settings = {
+      conversation_model: "conversation-guid",
+      extraction_model: "extraction-guid",
+    };
+    const stateManager = state as unknown as StateManager;
+    const topic: Topic = {
+      id: "top1",
+      name: "AI",
+      description: "Artificial Intelligence",
+      sentiment: 0.8,
+      exposure_current: 0.5,
+      exposure_desired: 0.7,
+      last_updated: "",
+    };
+    const context: ExtractionContext = {
+      personaId: "ei",
+      channelDisplayName: "Ei",
+      messages_context: [],
+      messages_analyze: [createMessage("m1", "Talked about AI research")],
+    };
+
+    queueDirectTopicUpdate(topic, context, stateManager);
 
     const enqueued = state.queue_enqueue.mock.calls[0][0] as { model?: string };
     expect(enqueued.model).toBe("extraction-guid");
