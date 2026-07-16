@@ -18,6 +18,7 @@ import {
   queueEventSummary,
   queueTargetedPersonUpdate,
   queuePersonUpdate,
+  queueTopicMatch,
   queueTargetedTopicUpdate,
   VALIDATE_MIN_SIMILARITY,
   type ExtractionContext,
@@ -29,6 +30,7 @@ vi.mock("../../../../src/prompts/human/index.js", () => ({
   buildHumanPersonScanPrompt: vi.fn().mockReturnValue({ system: "person-sys", user: "person-usr" }),
   buildEventScanPrompt: vi.fn().mockReturnValue({ system: "event-sys", user: "event-usr" }),
   buildPersonUpdatePrompt: vi.fn().mockReturnValue({ system: "person-update-sys", user: "person-update-usr" }),
+  buildTopicMatchPrompt: vi.fn().mockReturnValue({ system: "topic-match-sys", user: "topic-match-usr" }),
   buildTopicUpdatePrompt: vi.fn().mockReturnValue({ system: "topic-update-sys", user: "topic-update-usr" }),
 }));
 
@@ -304,6 +306,35 @@ describe("extraction model fallback (regression: was silently using conversation
     expect(call.model).toBe("extraction-guid");
   });
 
+  // Second half of the same bug class: queueTopicScan/queuePersonScan/queueEventSummary
+  // resolve the correct model for THEIR OWN queue item (asserted above), but the
+  // resolved value never made it into `data.extraction_model` — the field
+  // handleHumanTopicScan/handleHumanPersonScan/handleEventScan read to thread the
+  // model into the descendant queueTopicMatch/queuePersonUpdate call. `data` was
+  // built by spreading `...options` (which callers rarely populate), silently
+  // dropping the resolved model and leaving the descendant call with `model:
+  // undefined` — which state.queue_enqueue then defaults to conversation_model.
+  it("queueTopicScan: resolved model is also threaded into data.extraction_model for handleHumanTopicScan", () => {
+    queueTopicScan(context, state);
+    const call = state.queue_enqueue.mock.calls[0][0];
+    expect(call.data.extraction_model).toBe("extraction-guid");
+  });
+
+  it("queuePersonScan: resolved model is also threaded into data.extraction_model for handleHumanPersonScan", () => {
+    queuePersonScan(context, state);
+    const call = state.queue_enqueue.mock.calls[0][0];
+    expect(call.data.extraction_model).toBe("extraction-guid");
+  });
+
+  it("queueEventSummary: resolved model is also threaded into data.extraction_model for handleEventScan", () => {
+    const oldMessage = createMessage("e1", "event message");
+    oldMessage.timestamp = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    state.messages_getUnextracted = vi.fn().mockReturnValue([oldMessage]);
+    queueEventSummary("ei", state);
+    const call = state.queue_enqueue.mock.calls[0][0];
+    expect(call.data.extraction_model).toBe("extraction-guid");
+  });
+
   it("queueFactFind: settings.extraction_model unset -> tail falls back to settings.conversation_model, never empty", () => {
     state._human.settings = { conversation_model: "conversation-guid" };
     queueFactFind(context, state);
@@ -317,6 +348,56 @@ describe("extraction model fallback (regression: was silently using conversation
     expect(call.model).toBe("explicit-override-guid");
   });
 });
+describe("Human-chain extraction model propagation", () => {
+
+  // Tested by Beta — 2026-07-15
+  it("queues direct Topic Match work with its supplied extraction model", async () => {
+    const state = createMockStateManager();
+    const context: ExtractionContext = {
+      personaId: "ei",
+      channelDisplayName: "Ei",
+      messages_context: [],
+      messages_analyze: [createMessage("m1", "Talked about AI research")],
+    };
+    // The test double implements the StateManager members exercised by this direct queue path.
+    const stateManager = state as unknown as StateManager;
+
+    await queueTopicMatch(
+      { name: "AI research", description: "Artificial intelligence", category: "Interest", reason: "User mentioned AI" },
+      context,
+      stateManager,
+      "extraction-guid",
+    );
+
+    const enqueued = state.queue_enqueue.mock.calls[0][0] as { model?: string };
+    expect(enqueued.model).toBe("extraction-guid");
+  });
+
+  it("queues direct Person Update work with its context extraction model", () => {
+    const state = createMockStateManager();
+    // The test double implements the StateManager members exercised by this direct queue path.
+    const stateManager = state as unknown as StateManager;
+
+    queuePersonUpdate(
+      { matched_guid: "p1" },
+      {
+        personaId: "ei",
+        channelDisplayName: "Ei",
+        messages_context: [],
+        messages_analyze: [createMessage("m1", "Talked to Alice today")],
+        candidateName: "Alice",
+        candidateDescription: "Best friend",
+        candidateRelationship: "friend",
+        extraction_model: "extraction-guid",
+      },
+      stateManager,
+    );
+
+    const enqueued = state.queue_enqueue.mock.calls[0][0] as { model?: string };
+    expect(enqueued.model).toBe("extraction-guid");
+  });
+});
+
 
 describe("queueTopicValidate", () => {
   function makeTopic(id: string, name: string, withEmbedding = true): Topic {

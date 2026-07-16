@@ -342,6 +342,33 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
         undefined
       );
     });
+    // Tested by Beta — 2026-07-15
+    it("forwards the extraction model to Topic Match", async () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleHumanTopicScan,
+        data: {
+          personaId: "ei",
+          channelDisplayName: "Ei",
+          messages_context: [],
+          messages_analyze: [{ id: "1", role: "human", content: "test", timestamp: "", read: true, context_status: "default" }],
+          extraction_model: "extraction-guid",
+        },
+      });
+      const response = createMockResponse(request, {
+        topics: [{ name: "AI research", description: "Artificial intelligence", category: "Interest", reason: "User mentioned AI" }],
+      });
+      // The test double implements the StateManager members exercised by this handler.
+      const stateManager = state as unknown as StateManager;
+
+      await handlers.handleHumanTopicScan(response, stateManager);
+
+      expect(queueTopicMatch).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "AI research" }),
+        expect.any(Object),
+        state,
+        "extraction-guid"
+      );
+    });
   });
 
   describe("handleEventScan", () => {
@@ -370,6 +397,33 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
         expect.any(Object),
         state,
         undefined
+      );
+    });
+    // Tested by Beta — 2026-07-15
+    it("forwards the extraction model to Topic Match", async () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleEventScan,
+        data: {
+          personaId: "ei",
+          channelDisplayName: "Ei",
+          messages_context: [],
+          messages_analyze: [{ id: "1", role: "human", content: "test", timestamp: "", read: true, context_status: "default" }],
+          extraction_model: "extraction-guid",
+        },
+      });
+      const response = createMockResponse(request, {
+        events: [{ name: "The Night We Debugged Beta", description: "We fixed a gnarly CPU issue", reason: "3 hours of debugging" }],
+      });
+      // The test double implements the StateManager members exercised by this handler.
+      const stateManager = state as unknown as StateManager;
+
+      await handlers[LLMNextStep.HandleEventScan](response, stateManager);
+
+      expect(queueTopicMatch).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "The Night We Debugged Beta", category: "Event" }),
+        expect.any(Object),
+        state,
+        "extraction-guid"
       );
     });
 
@@ -454,6 +508,39 @@ describe("Extraction Handlers - Step 1 (Scan)", () => {
       expect(queuePersonUpdate).toHaveBeenCalledWith(
         { matched_guid: null },
         expect.objectContaining({ candidateName: "Alice" }),
+        state
+      );
+    });
+
+    // Regression: handleHumanPersonScan never read `extraction_model` off
+    // response.request.data at all (unlike handleHumanTopicScan/handleEventScan,
+    // which do read it but from a `data` that queueTopicScan/queueEventSummary
+    // never actually populated). Both bugs left queuePersonUpdate's queued item
+    // with `model: undefined`, which state.queue_enqueue silently defaults to
+    // the CONVERSATION model instead of the configured extraction model.
+    it("threads extraction_model from request data into queuePersonUpdate", async () => {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleHumanPersonScan,
+        data: {
+          personaId: "ei",
+          channelDisplayName: "Ei",
+          messages_context: [],
+          messages_analyze: [{ id: "1", role: "human", content: "test", timestamp: "", read: true, context_status: "default" }],
+          extraction_model: "extraction-guid",
+        },
+      });
+
+      const response = createMockResponse(request, {
+        people: [
+          { name: "Bob", description: "A coworker", relationship: "coworker", reason: "User mentioned Bob" },
+        ],
+      });
+
+      await handlers.handleHumanPersonScan(response, state as unknown as StateManager);
+
+      expect(queuePersonUpdate).toHaveBeenCalledWith(
+        { matched_guid: null },
+        expect.objectContaining({ candidateName: "Bob", extraction_model: "extraction-guid" }),
         state
       );
     });
