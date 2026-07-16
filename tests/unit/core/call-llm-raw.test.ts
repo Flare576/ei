@@ -352,6 +352,22 @@ describe("callLLMRaw — resolved-model/known-limits unification (Beta review I1
     expect(body.max_tokens).toBe(128000);
   });
 
+  it("T1-R (P0): auto-detected name-valued default_model resolves known limits", async () => {
+    const model = makeModel("claude-opus-4-8");
+    const account = makeAccount("Anthropic", [model], {
+      url: "https://api.anthropic.com/v1",
+      default_model: model.name,
+    });
+    const mockFetch = stubFetch(makeLLMResponse());
+
+    await callLLMRaw("sys", "user", [], "Anthropic", {}, [account]);
+
+    const body = getCapturedBody(mockFetch);
+    expect(body.model).toBe("claude-opus-4-8");
+    expect("temperature" in body).toBe(false);
+    expect(body.max_tokens).toBe(128000);
+  });
+
   it("T2 (P1): model GUID spec for a known model resolves known-limits fallback", async () => {
     const model = makeModel("claude-opus-4-8");
     const account = makeAccount("Anthropic", [model], { url: "https://api.anthropic.com/v1" });
