@@ -216,6 +216,25 @@ models:
 
     expect(() => providerFromYAML(yaml, account)).toThrow();
   });
+
+  test("rejects a duplicate identity when one occurrence is a _delete entry and the other is kept", () => {
+    const yaml = `
+name: Test Provider
+type: llm
+url: https://api.example.com/v1
+enabled: true
+models:
+  - id: model-1
+    name: claude-opus
+    model_id: claude-opus-4-8
+    _delete: true
+  - id: model-1
+    name: claude-opus-kept
+    model_id: claude-opus-4-8
+`;
+
+    expect(() => providerFromYAML(yaml, account)).toThrow();
+  });
 });
 
 describe("provider default_model resolution (Beta review I1)", () => {
@@ -232,7 +251,7 @@ describe("provider default_model resolution (Beta review I1)", () => {
     expect(result.account.default_model).toBe("model-1");
   });
 
-  test("clears default_model when its target model is deleted", () => {
+  test("clears default_model when its target model is deleted (via the real providerToYAML serialization, not a hand-written fixture)", () => {
     const account = createTestAccount({
       default_model: "model-1",
       models: [
@@ -240,20 +259,10 @@ describe("provider default_model resolution (Beta review I1)", () => {
         { id: "model-2", name: "claude-haiku", model_id: "claude-haiku-4-5" },
       ],
     });
-    const editedYaml = `
-name: Test Provider
-type: llm
-url: https://api.example.com/v1
-enabled: true
-models:
-  - id: model-1
-    name: claude-opus
-    model_id: claude-opus-4-8
-    _delete: true
-  - id: model-2
-    name: claude-haiku
-    model_id: claude-haiku-4-5
-`;
+    const editedYaml = providerToYAML(account).replace(
+      "_delete: false\n  - name: claude-haiku",
+      "_delete: true\n  - name: claude-haiku"
+    );
     const result = providerFromYAML(editedYaml, account);
     expect(result.account.default_model).toBeUndefined();
   });
