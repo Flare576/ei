@@ -6,7 +6,7 @@ import { createProviderViaEditor, openProviderEditor } from "../../../src/util/p
 import type { CommandContext } from "../../../src/commands/registry";
 import type { EiContextValue } from "../../../src/context/ei";
 import type { CliRenderer } from "@opentui/core";
-import type { HumanEntity, HumanSettings } from "../../../../src/core/types";
+import type { HumanEntity, HumanSettings, PersonaEntity } from "../../../../src/core/types";
 
 // A valid new-provider YAML (name/url filled in, one non-deleted model) that
 // `newProviderFromYAML` will accept without throwing.
@@ -66,7 +66,8 @@ function makeHuman(settings: HumanSettings): HumanEntity {
 
 function makeContext(
   human: HumanEntity,
-  updateSettings: (updates: Partial<HumanSettings>) => Promise<void>
+  updateSettings: (updates: Partial<HumanSettings>) => Promise<void>,
+  personaRecords: Record<string, PersonaEntity> = {}
 ): CommandContext {
   return {
     showOverlay: () => {},
@@ -80,6 +81,11 @@ function makeContext(
     ei: {
       getHuman: async () => human,
       updateSettings,
+      personas: () => Object.values(personaRecords).map((p) => ({ id: p.id, display_name: p.display_name })),
+      getPersona: async (id: string) => personaRecords[id] ?? null,
+      updatePersona: async (id: string, updates: Partial<PersonaEntity>) => {
+        if (personaRecords[id]) personaRecords[id] = { ...personaRecords[id], ...updates };
+      },
     } as unknown as EiContextValue,
   };
 }
@@ -248,5 +254,63 @@ describe("openProviderEditor - model deletion cleanup", () => {
       opencode: undefined,
       claudeCode: undefined,
     });
+  });
+
+  test("clears persona.model pins when YAML explicitly deletes the pinned model", async () => {
+    const account = {
+      id: "provider-1",
+      name: "TestProvider",
+      type: "llm" as const,
+      url: "https://api.test.example/v1",
+      enabled: true,
+      created_at: "2026-01-01T00:00:00.000Z",
+      models: [
+        { id: "model-1", name: "claude-opus", model_id: "claude-opus-4-8" },
+        { id: "model-2", name: "claude-haiku", model_id: "claude-haiku-4-5" },
+      ],
+    };
+    const editedYaml = [
+      "name: TestProvider",
+      "type: llm",
+      "url: https://api.test.example/v1",
+      "enabled: true",
+      "models:",
+      "  - name: claude-opus",
+      "    model_id: claude-opus-4-8",
+      "    _delete: true",
+      "  - name: claude-haiku",
+      "    model_id: claude-haiku-4-5",
+      "    _delete: false",
+    ].join("\n");
+    const { editorCmd, cleanup } = fakeEditorFor(editedYaml);
+    cleanupEditor = cleanup;
+    process.env.EDITOR = editorCmd;
+
+    const human = makeHuman({ accounts: [account] });
+    const timestamp = "2026-01-01T00:00:00.000Z";
+    const basePersona = {
+      entity: "system" as const,
+      traits: [],
+      topics: [],
+      is_paused: false,
+      is_archived: false,
+      is_static: false,
+      last_updated: timestamp,
+      last_heartbeat: timestamp,
+    };
+    const personaRecords: Record<string, PersonaEntity> = {
+      "persona-1": { ...basePersona, id: "persona-1", display_name: "Pinned", model: "model-1" },
+      "persona-2": { ...basePersona, id: "persona-2", display_name: "Other", model: "model-2" },
+    };
+    const ctx = makeContext(
+      human,
+      async (updates) => { human.settings = { ...human.settings, ...updates }; },
+      personaRecords
+    );
+
+    await openProviderEditor(account, ctx);
+
+    expect(personaRecords["persona-1"].model).toBeUndefined();
+    expect(personaRecords["persona-2"].model).toBe("model-2");
   });
 });

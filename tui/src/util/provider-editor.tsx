@@ -180,6 +180,15 @@ export async function openProviderEditor(account: ProviderAccount, ctx: CommandC
         settingsUpdate.claudeCode = { ...settings.claudeCode, extraction_model: undefined };
       }
 
+      if (removedModelIds.size > 0) {
+        for (const summary of ctx.ei.personas()) {
+          const persona = await ctx.ei.getPersona(summary.id);
+          if (persona?.model && removedModelIds.has(persona.model)) {
+            await ctx.ei.updatePersona(summary.id, { model: undefined });
+          }
+        }
+      }
+
       await ctx.ei.updateSettings(settingsUpdate);
       
       ctx.showNotification(`Updated provider "${updated.name}"`, "info");
