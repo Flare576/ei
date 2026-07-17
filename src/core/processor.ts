@@ -1255,6 +1255,24 @@ const toolNextSteps = new Set([
     if (ok) this.interface.onPersonaRemoved?.();
   }
 
+  async deleteModel(providerId: string, modelId: string): Promise<{ success: boolean; error?: string }> {
+    const { success, error, affectedPersonaIds } = this.stateManager.deleteModel(providerId, modelId);
+    if (success) {
+      this.interface.onHumanUpdated?.();
+      for (const personaId of affectedPersonaIds) this.interface.onPersonaUpdated?.(personaId);
+    }
+    return { success, error };
+  }
+
+  async deleteProvider(providerId: string): Promise<{ success: boolean; error?: string }> {
+    const { success, error, affectedPersonaIds } = this.stateManager.deleteProvider(providerId);
+    if (success) {
+      this.interface.onHumanUpdated?.();
+      for (const personaId of affectedPersonaIds) this.interface.onPersonaUpdated?.(personaId);
+    }
+    return { success, error };
+  }
+
   async updatePersona(personaId: string, updates: Partial<PersonaEntity>): Promise<void> {
     const ok = await updatePersona(this.stateManager, personaId, updates);
     if (ok) this.interface.onPersonaUpdated?.(personaId);
