@@ -2,7 +2,7 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { createProviderViaEditor } from "../../../src/util/provider-editor";
+import { createProviderViaEditor, openProviderEditor } from "../../../src/util/provider-editor";
 import type { CommandContext } from "../../../src/commands/registry";
 import type { EiContextValue } from "../../../src/context/ei";
 import type { CliRenderer } from "@opentui/core";
@@ -163,5 +163,90 @@ describe("createProviderViaEditor - conversation_model/extraction_model seeding 
     if (!saved) throw new Error("expected ctx.ei.updateSettings to be called");
     expect(saved.accounts).toHaveLength(1);
     expect(saved.accounts?.[0].name).toBe("TestProvider");
+  });
+});
+
+
+describe("openProviderEditor - model deletion cleanup", () => {
+  let originalEditor: string | undefined;
+  let cleanupEditor: (() => void) | null = null;
+
+  beforeEach(() => {
+    originalEditor = process.env.EDITOR;
+  });
+
+  afterEach(() => {
+    if (originalEditor !== undefined) process.env.EDITOR = originalEditor;
+    else delete process.env.EDITOR;
+    cleanupEditor?.();
+    cleanupEditor = null;
+  });
+
+  test("clears every settings reference when YAML explicitly deletes a model", async () => {
+    const account = {
+      id: "provider-1",
+      name: "TestProvider",
+      type: "llm" as const,
+      url: "https://api.test.example/v1",
+      enabled: true,
+      created_at: "2026-01-01T00:00:00.000Z",
+      default_model: "model-1",
+      models: [
+        { id: "model-1", name: "claude-opus", model_id: "claude-opus-4-8" },
+        { id: "model-2", name: "claude-haiku", model_id: "claude-haiku-4-5" },
+      ],
+    };
+    const editedYaml = [
+      "name: TestProvider",
+      "type: llm",
+      "url: https://api.test.example/v1",
+      "enabled: true",
+      "models:",
+      "  - name: claude-opus",
+      "    model_id: claude-opus-4-8",
+      "    _delete: true",
+      "  - name: claude-haiku",
+      "    model_id: claude-haiku-4-5",
+      "    _delete: false",
+    ].join("\n");
+    const { editorCmd, cleanup } = fakeEditorFor(editedYaml);
+    cleanupEditor = cleanup;
+    process.env.EDITOR = editorCmd;
+
+    const human = makeHuman({
+      accounts: [account],
+      default_model: "model-1",
+      oneshot_model: "model-1",
+      rewrite_model: "model-1",
+      conversation_model: "model-1",
+      extraction_model: "model-1",
+      opencode: { extraction_model: "model-1" },
+      claudeCode: { extraction_model: "model-1" },
+    });
+    const ctx = makeContext(human, async (updates) => {
+      human.settings = { ...human.settings, ...updates };
+    });
+
+    await openProviderEditor(account, ctx);
+
+    expect({
+      modelIds: human.settings.accounts?.[0]?.models?.map((model) => model.id),
+      default_model: human.settings.default_model,
+      oneshot_model: human.settings.oneshot_model,
+      rewrite_model: human.settings.rewrite_model,
+      conversation_model: human.settings.conversation_model,
+      extraction_model: human.settings.extraction_model,
+      opencode: human.settings.opencode?.extraction_model,
+      claudeCode: human.settings.claudeCode?.extraction_model,
+    }).toEqual({
+      modelIds: ["model-2"],
+      default_model: undefined,
+      oneshot_model: undefined,
+      rewrite_model: undefined,
+      conversation_model: undefined,
+      extraction_model: undefined,
+      opencode: undefined,
+      claudeCode: undefined,
+    });
   });
 });
