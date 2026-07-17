@@ -191,6 +191,25 @@ export function providerToYAML(account: ProviderAccount): string {
   return topYAML + "\n" + modelLines.join("\n") + "\n";
 }
 
+function resolveProviderDefaultModel(
+  raw: string | undefined,
+  existingModels: ModelConfig[],
+  parsedModels: ModelConfig[]
+): string | undefined {
+  if (!raw) return undefined;
+  const colonIdx = raw.indexOf(':');
+  const namePart = colonIdx >= 0 ? raw.substring(colonIdx + 1) : raw;
+  const resolvedId =
+    existingModels.find(m => m.id === raw)?.id ??
+    existingModels.find(m => m.name === namePart)?.id ??
+    parsedModels.find(m => m.id === raw)?.id ??
+    parsedModels.find(m => m.name === namePart)?.id;
+  if (!resolvedId) return undefined;
+  // Model kept its id across a rename -> still valid. Model actually
+  // removed (delete or dropped from the YAML) -> no longer valid.
+  return parsedModels.some(m => m.id === resolvedId) ? resolvedId : undefined;
+}
+
 export function providerFromYAML(yamlContent: string, original: ProviderAccount): ProviderYAMLResult {
   const cleaned = yamlContent
     .split('\n')
@@ -217,8 +236,8 @@ export function providerFromYAML(yamlContent: string, original: ProviderAccount)
   const seenIds = new Set<string>();
   const parsedModels: ModelConfig[] = [];
   for (const m of data.models ?? []) {
-    if (m._delete) continue;
     const id = resolveEntryId({ id: m.id, name: m.name }, existingModels, seenIds, "Model");
+    if (m._delete) continue;
     const existing = existingModels.find(em => em.id === id);
     const modelId = m.model_id ?? undefined;
     parsedModels.push({
@@ -242,7 +261,7 @@ export function providerFromYAML(yamlContent: string, original: ProviderAccount)
     type: (data.type === "storage" ? "storage" : "llm") as ProviderType,
     url: data.url,
     api_key: data.api_key,
-    default_model: data.default_model,
+    default_model: resolveProviderDefaultModel(data.default_model, existingModels, parsedModels),
     token_limit: data.token_limit ?? undefined,
     extra_headers: data.extra_headers && Object.keys(data.extra_headers).length > 0 ? data.extra_headers : undefined,
     enabled: data.enabled ?? true,

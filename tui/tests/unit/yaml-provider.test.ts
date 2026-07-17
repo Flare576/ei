@@ -197,6 +197,81 @@ models:
 
     expect(() => providerFromYAML(yaml, account)).toThrow();
   });
+
+  test("rejects a foreign identity even on a _delete entry, before applying the deletion", () => {
+    const yaml = `
+name: Test Provider
+type: llm
+url: https://api.example.com/v1
+enabled: true
+models:
+  - id: foreign-model
+    name: claude-opus
+    model_id: claude-opus-4-8
+    _delete: true
+  - id: model-2
+    name: claude-haiku
+    model_id: claude-haiku-4-5
+`;
+
+    expect(() => providerFromYAML(yaml, account)).toThrow();
+  });
+});
+
+describe("provider default_model resolution (Beta review I1)", () => {
+  test("resolves default_model display string to the model's GUID", () => {
+    const account = createTestAccount({
+      default_model: "model-1",
+      models: [
+        { id: "model-1", name: "claude-opus", model_id: "claude-opus-4-8" },
+        { id: "model-2", name: "claude-haiku", model_id: "claude-haiku-4-5" },
+      ],
+    });
+    const yaml = providerToYAML(account);
+    const result = providerFromYAML(yaml, account);
+    expect(result.account.default_model).toBe("model-1");
+  });
+
+  test("clears default_model when its target model is deleted", () => {
+    const account = createTestAccount({
+      default_model: "model-1",
+      models: [
+        { id: "model-1", name: "claude-opus", model_id: "claude-opus-4-8" },
+        { id: "model-2", name: "claude-haiku", model_id: "claude-haiku-4-5" },
+      ],
+    });
+    const editedYaml = `
+name: Test Provider
+type: llm
+url: https://api.example.com/v1
+enabled: true
+models:
+  - id: model-1
+    name: claude-opus
+    model_id: claude-opus-4-8
+    _delete: true
+  - id: model-2
+    name: claude-haiku
+    model_id: claude-haiku-4-5
+`;
+    const result = providerFromYAML(editedYaml, account);
+    expect(result.account.default_model).toBeUndefined();
+  });
+
+  test("keeps default_model's GUID when the target model is only renamed", () => {
+    const account = createTestAccount({
+      default_model: "model-1",
+      models: [
+        { id: "model-1", name: "claude-opus", model_id: "claude-opus-4-8" },
+      ],
+    });
+    const editedYaml = providerToYAML(account).replace(
+      "  - name: claude-opus",
+      "  - name: claude-opus-renamed"
+    );
+    const result = providerFromYAML(editedYaml, account);
+    expect(result.account.default_model).toBe("model-1");
+  });
 });
 
 describe("providerFromYAML — explicit override is written, not merged with existing (Beta review T4)", () => {
