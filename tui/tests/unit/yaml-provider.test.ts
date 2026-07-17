@@ -126,6 +126,163 @@ describe("providerFromYAML — temperature_disabled round-trip", () => {
   });
 });
 
+describe("provider model rename identity", () => {
+  test("keeps every existing model reference resolvable after a name-only edit", () => {
+    const account = createTestAccount({
+      models: [
+        { id: "model-1", name: "claude-opus", model_id: "claude-opus-4-8" },
+        { id: "model-2", name: "claude-haiku", model_id: "claude-haiku-4-5" },
+      ],
+    });
+    const references = {
+      conversation_model: "model-1",
+      rewrite_model: "model-1",
+      persona_model: "model-1",
+    };
+
+    const editedYaml = providerToYAML(account).replace(
+      "  - name: claude-opus",
+      "  - name: claude-opus-renamed"
+    );
+    const renamedAccount = providerFromYAML(editedYaml, account).account;
+    const modelNames = Object.values(references).map(
+      (id) => renamedAccount.models?.find((model) => model.id === id)?.name
+    );
+
+    expect(modelNames).toEqual([
+      "claude-opus-renamed",
+      "claude-opus-renamed",
+      "claude-opus-renamed",
+    ]);
+  });
+});
+
+describe("provider model identity validation", () => {
+  const account = createTestAccount({
+    models: [
+      { id: "model-1", name: "claude-opus", model_id: "claude-opus-4-8" },
+      { id: "model-2", name: "claude-haiku", model_id: "claude-haiku-4-5" },
+    ],
+  });
+
+  test("rejects a model identity that does not belong to the edited provider", () => {
+    const yaml = `
+name: Test Provider
+type: llm
+url: https://api.example.com/v1
+enabled: true
+models:
+  - id: foreign-model
+    name: claude-opus
+    model_id: claude-opus-4-8
+`;
+
+    expect(() => providerFromYAML(yaml, account)).toThrow();
+  });
+
+  test("rejects the same existing model identity more than once", () => {
+    const yaml = `
+name: Test Provider
+type: llm
+url: https://api.example.com/v1
+enabled: true
+models:
+  - id: model-1
+    name: claude-opus
+    model_id: claude-opus-4-8
+  - id: model-1
+    name: claude-opus-renamed
+    model_id: claude-opus-4-8
+`;
+
+    expect(() => providerFromYAML(yaml, account)).toThrow();
+  });
+
+  test("rejects a foreign identity even on a _delete entry, before applying the deletion", () => {
+    const yaml = `
+name: Test Provider
+type: llm
+url: https://api.example.com/v1
+enabled: true
+models:
+  - id: foreign-model
+    name: claude-opus
+    model_id: claude-opus-4-8
+    _delete: true
+  - id: model-2
+    name: claude-haiku
+    model_id: claude-haiku-4-5
+`;
+
+    expect(() => providerFromYAML(yaml, account)).toThrow();
+  });
+
+  test("rejects a duplicate identity when one occurrence is a _delete entry and the other is kept", () => {
+    const yaml = `
+name: Test Provider
+type: llm
+url: https://api.example.com/v1
+enabled: true
+models:
+  - id: model-1
+    name: claude-opus
+    model_id: claude-opus-4-8
+    _delete: true
+  - id: model-1
+    name: claude-opus-kept
+    model_id: claude-opus-4-8
+`;
+
+    expect(() => providerFromYAML(yaml, account)).toThrow();
+  });
+});
+
+describe("provider default_model resolution (Beta review I1)", () => {
+  test("resolves default_model display string to the model's GUID", () => {
+    const account = createTestAccount({
+      default_model: "model-1",
+      models: [
+        { id: "model-1", name: "claude-opus", model_id: "claude-opus-4-8" },
+        { id: "model-2", name: "claude-haiku", model_id: "claude-haiku-4-5" },
+      ],
+    });
+    const yaml = providerToYAML(account);
+    const result = providerFromYAML(yaml, account);
+    expect(result.account.default_model).toBe("model-1");
+  });
+
+  test("clears default_model when its target model is deleted (via the real providerToYAML serialization, not a hand-written fixture)", () => {
+    const account = createTestAccount({
+      default_model: "model-1",
+      models: [
+        { id: "model-1", name: "claude-opus", model_id: "claude-opus-4-8" },
+        { id: "model-2", name: "claude-haiku", model_id: "claude-haiku-4-5" },
+      ],
+    });
+    const editedYaml = providerToYAML(account).replace(
+      "_delete: false\n  - name: claude-haiku",
+      "_delete: true\n  - name: claude-haiku"
+    );
+    const result = providerFromYAML(editedYaml, account);
+    expect(result.account.default_model).toBeUndefined();
+  });
+
+  test("keeps default_model's GUID when the target model is only renamed", () => {
+    const account = createTestAccount({
+      default_model: "model-1",
+      models: [
+        { id: "model-1", name: "claude-opus", model_id: "claude-opus-4-8" },
+      ],
+    });
+    const editedYaml = providerToYAML(account).replace(
+      "  - name: claude-opus",
+      "  - name: claude-opus-renamed"
+    );
+    const result = providerFromYAML(editedYaml, account);
+    expect(result.account.default_model).toBe("model-1");
+  });
+});
+
 describe("providerFromYAML — explicit override is written, not merged with existing (Beta review T4)", () => {
   test("T4 (P1): editing temperature_disabled: true to false in YAML persists false, not the prior true", () => {
     const account = createTestAccount({

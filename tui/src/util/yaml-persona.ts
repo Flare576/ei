@@ -6,13 +6,14 @@ import type {
   ToolDefinition,
   ProviderAccount,
 } from "../../../src/core/types.js";
-import { modelGuidToDisplay, displayToModelGuid } from "./yaml-shared.js";
+import { modelGuidToDisplay, displayToModelGuid, resolveEntryId } from "./yaml-shared.js";
 import { buildPersonaToolsMap, resolvePersonaToolsFromMap, preserveHiddenToolGrants } from "../../../src/core/persona-tools.js";
 import { parseDuration, formatDuration } from "./duration.js";
 
 const PLACEHOLDER_LONG_DESC = "Detailed description of this persona's personality, background, and role";
 
 interface YAMLTrait {
+  id?: string;
   name: string;
   description: string;
   sentiment: number;
@@ -20,6 +21,7 @@ interface YAMLTrait {
 }
 
 interface YAMLPersonaTopic {
+  id?: string;
   name: string;
   perspective: string;
   approach: string;
@@ -177,11 +179,11 @@ export function personaToYAML(persona: PersonaEntity, allGroups?: string[], allT
     groups_visible: groupsForYAML,
     traits: useTraitPlaceholder
       ? [PLACEHOLDER_TRAIT]
-      : persona.traits.map(({ name, description, sentiment, strength }) => ({ name, description, sentiment: sentiment ?? 0, strength: strength ?? 0.5 })),
+      : persona.traits.map(({ id, name, description, sentiment, strength }) => ({ id, name, description, sentiment: sentiment ?? 0, strength: strength ?? 0.5 })),
     topics: useTopicPlaceholder
       ? [PLACEHOLDER_TOPIC]
-      : persona.topics.map(({ name, perspective, approach, personal_stake, sentiment, exposure_current, exposure_desired }) => ({
-          name, perspective, approach, personal_stake, sentiment: sentiment ?? 0, exposure_current, exposure_desired
+      : persona.topics.map(({ id, name, perspective, approach, personal_stake, sentiment, exposure_current, exposure_desired }) => ({
+          id, name, perspective, approach, personal_stake, sentiment: sentiment ?? 0, exposure_current, exposure_desired
         })),
     heartbeat_delay_ms: persona.heartbeat_delay_ms ? formatDuration(persona.heartbeat_delay_ms) : null,
     context_window_ms: persona.context_window_ms ? formatDuration(persona.context_window_ms) : null,
@@ -214,11 +216,13 @@ export function personaFromYAML(yamlContent: string, original: PersonaEntity, al
     t.description === PLACEHOLDER_TRAIT.description;
 
   const traits: PersonaTrait[] = [];
+  const seenTraitIds = new Set<string>();
   for (const t of data.traits ?? []) {
     if (isTraitPlaceholder(t)) continue;
-    const existing = original.traits.find(orig => orig.name === t.name);
+    const id = resolveEntryId({ id: t.id, name: t.name }, original.traits, seenTraitIds, "Trait");
+    const existing = original.traits.find(orig => orig.id === id);
     traits.push({
-      id: existing?.id ?? crypto.randomUUID(),
+      id,
       name: t.name,
       description: t.description,
       sentiment: t.sentiment ?? existing?.sentiment ?? 0,
@@ -238,11 +242,13 @@ export function personaFromYAML(yamlContent: string, original: PersonaEntity, al
     t.perspective === PLACEHOLDER_TOPIC.perspective;
 
   const topics: PersonaTopic[] = [];
+  const seenTopicIds = new Set<string>();
   for (const t of data.topics ?? []) {
     if (isTopicPlaceholder(t)) continue;
-    const existing = original.topics.find(orig => orig.name === t.name);
+    const id = resolveEntryId({ id: t.id, name: t.name }, original.topics, seenTopicIds, "Persona topic");
+    const existing = original.topics.find(orig => orig.id === id);
     topics.push({
-      id: existing?.id ?? crypto.randomUUID(),
+      id,
       name: t.name,
       perspective: t.perspective,
       approach: t.approach,
