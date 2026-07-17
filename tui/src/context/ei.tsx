@@ -95,6 +95,8 @@ export interface EiContextValue {
   getHuman: () => Promise<HumanEntity>;
   updateHuman: (updates: Partial<HumanEntity>) => Promise<void>;
   updateSettings: (updates: Partial<HumanSettings>) => Promise<void>;
+  deleteModel: (providerId: string, modelId: string) => Promise<{ success: boolean; error?: string }>;
+  deleteProvider: (providerId: string) => Promise<{ success: boolean; error?: string }>;
   upsertFact: (fact: Fact) => Promise<void>;
   upsertTopic: (topic: Topic) => Promise<void>;
   upsertPerson: (person: Person) => Promise<void>;
@@ -505,6 +507,16 @@ export const EiProvider: ParentComponent = (props) => {
     const human = await processor.getHuman();
     const newSettings = { ...human.settings, ...updates };
     await processor.updateHuman({ settings: newSettings });
+  };
+
+  const deleteModel = async (providerId: string, modelId: string): Promise<{ success: boolean; error?: string }> => {
+    if (!processor) return { success: false, error: "Processor not initialized" };
+    return processor.deleteModel(providerId, modelId);
+  };
+
+  const deleteProvider = async (providerId: string): Promise<{ success: boolean; error?: string }> => {
+    if (!processor) return { success: false, error: "Processor not initialized" };
+    return processor.deleteProvider(providerId);
   };
 
   const syncStatus = (): { configured: boolean; envBased: boolean } => {
@@ -1058,6 +1070,8 @@ export const EiProvider: ParentComponent = (props) => {
     getHuman,
     updateHuman,
     updateSettings,
+    deleteModel,
+    deleteProvider,
     upsertFact,
     upsertTopic,
     upsertPerson,

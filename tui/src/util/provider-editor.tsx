@@ -129,9 +129,11 @@ export async function openProviderEditor(account: ProviderAccount, ctx: CommandC
       const parseResult = providerFromYAML(result.content, account);
       
       if (parseResult._delete) {
-        const human = await ctx.ei.getHuman();
-        const accounts = (human.settings?.accounts ?? []).filter(a => a.id !== account.id);
-        await ctx.ei.updateSettings({ accounts });
+        const { success, error } = await ctx.ei.deleteProvider(account.id);
+        if (!success) {
+          ctx.showNotification(error ?? `Failed to delete provider "${account.name}"`, "error");
+          return { success: false, account: null, cancelled: false };
+        }
         ctx.showNotification(`Deleted provider "${account.name}"`, "info");
         return { success: true, account: null, cancelled: false, deleted: true };
       }
@@ -147,6 +149,14 @@ export async function openProviderEditor(account: ProviderAccount, ctx: CommandC
         (account.models ?? []).filter(m => !updatedModelIds.has(m.id)).map(m => m.id)
       );
 
+      for (const modelId of removedModelIds) {
+        const { success, error } = await ctx.ei.deleteModel(account.id, modelId);
+        if (!success) {
+          ctx.showNotification(error ?? "Failed to delete model", "error");
+          return { success: false, account: null, cancelled: false };
+        }
+      }
+
       const human = await ctx.ei.getHuman();
       const accounts = [...(human.settings?.accounts ?? [])];
       const idx = accounts.findIndex(a => a.id === account.id);
@@ -156,41 +166,8 @@ export async function openProviderEditor(account: ProviderAccount, ctx: CommandC
         accounts.push(updated);
       }
 
-      const settings = human.settings;
-      const settingsUpdate: Partial<HumanSettings> = { accounts };
-      if (settings?.default_model !== undefined && removedModelIds.has(settings.default_model)) {
-        settingsUpdate.default_model = undefined;
-      }
-      if (settings?.oneshot_model !== undefined && removedModelIds.has(settings.oneshot_model)) {
-        settingsUpdate.oneshot_model = undefined;
-      }
-      if (settings?.rewrite_model !== undefined && removedModelIds.has(settings.rewrite_model)) {
-        settingsUpdate.rewrite_model = undefined;
-      }
-      if (settings?.conversation_model !== undefined && removedModelIds.has(settings.conversation_model)) {
-        settingsUpdate.conversation_model = undefined;
-      }
-      if (settings?.extraction_model !== undefined && removedModelIds.has(settings.extraction_model)) {
-        settingsUpdate.extraction_model = undefined;
-      }
-      if (settings?.opencode?.extraction_model !== undefined && removedModelIds.has(settings.opencode.extraction_model)) {
-        settingsUpdate.opencode = { ...settings.opencode, extraction_model: undefined };
-      }
-      if (settings?.claudeCode?.extraction_model !== undefined && removedModelIds.has(settings.claudeCode.extraction_model)) {
-        settingsUpdate.claudeCode = { ...settings.claudeCode, extraction_model: undefined };
-      }
+      await ctx.ei.updateSettings({ accounts });
 
-      if (removedModelIds.size > 0) {
-        for (const summary of ctx.ei.personas()) {
-          const persona = await ctx.ei.getPersona(summary.id);
-          if (persona?.model && removedModelIds.has(persona.model)) {
-            await ctx.ei.updatePersona(summary.id, { model: undefined });
-          }
-        }
-      }
-
-      await ctx.ei.updateSettings(settingsUpdate);
-      
       ctx.showNotification(`Updated provider "${updated.name}"`, "info");
       return { success: true, account: updated, cancelled: false };
       

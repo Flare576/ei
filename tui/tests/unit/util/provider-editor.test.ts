@@ -67,12 +67,64 @@ function makeHuman(settings: HumanSettings): HumanEntity {
 function makeContext(
   human: HumanEntity,
   updateSettings: (updates: Partial<HumanSettings>) => Promise<void>,
-  personaRecords: Record<string, PersonaEntity> = {}
+  personaRecords: Record<string, PersonaEntity> = {},
+  options: {
+    deleteModel?: EiContextValue["deleteModel"];
+    deleteProvider?: EiContextValue["deleteProvider"];
+    onNotify?: (message: string, level: "error" | "warn" | "info") => void;
+  } = {}
 ): CommandContext {
+  const clearModelReferences = (modelId: string) => {
+    const settings = human.settings;
+    if (!settings) return;
+    if (settings.default_model === modelId) settings.default_model = undefined;
+    if (settings.oneshot_model === modelId) settings.oneshot_model = undefined;
+    if (settings.rewrite_model === modelId) settings.rewrite_model = undefined;
+    if (settings.conversation_model === modelId) settings.conversation_model = undefined;
+    if (settings.extraction_model === modelId) settings.extraction_model = undefined;
+    if (settings.opencode?.extraction_model === modelId) {
+      settings.opencode = { ...settings.opencode, extraction_model: undefined };
+    }
+    if (settings.claudeCode?.extraction_model === modelId) {
+      settings.claudeCode = { ...settings.claudeCode, extraction_model: undefined };
+    }
+    for (const id of Object.keys(personaRecords)) {
+      if (personaRecords[id].model === modelId) {
+        personaRecords[id] = { ...personaRecords[id], model: undefined };
+      }
+    }
+  };
+
+  // Mimics StateManager.deleteModel's cascade: drop the model from the
+  // provider's model list, then sweep every settings pointer + persona pin.
+  const defaultDeleteModel: EiContextValue["deleteModel"] = async (providerId, modelId) => {
+    const account = (human.settings?.accounts ?? []).find((a) => a.id === providerId);
+    if (!account) return { success: false, error: "Provider not found" };
+    account.models = (account.models ?? []).filter((m) => m.id !== modelId);
+    clearModelReferences(modelId);
+    return { success: true };
+  };
+
+  // Mimics StateManager.deleteProvider's cascade: sweep every model the
+  // provider owns, then remove the account itself.
+  const defaultDeleteProvider: EiContextValue["deleteProvider"] = async (providerId) => {
+    const account = (human.settings?.accounts ?? []).find((a) => a.id === providerId);
+    if (!account) return { success: false, error: "Provider not found" };
+    for (const model of account.models ?? []) {
+      clearModelReferences(model.id);
+    }
+    if (human.settings) {
+      human.settings.accounts = (human.settings.accounts ?? []).filter((a) => a.id !== providerId);
+    }
+    return { success: true };
+  };
+
   return {
     showOverlay: () => {},
     hideOverlay: () => {},
-    showNotification: () => {},
+    showNotification: (message: string, level: "error" | "warn" | "info") => {
+      options.onNotify?.(message, level);
+    },
     exitApp: async () => {},
     stopProcessor: async () => {},
     renderer: createMockRenderer(),
@@ -86,6 +138,8 @@ function makeContext(
       updatePersona: async (id: string, updates: Partial<PersonaEntity>) => {
         if (personaRecords[id]) personaRecords[id] = { ...personaRecords[id], ...updates };
       },
+      deleteModel: options.deleteModel ?? defaultDeleteModel,
+      deleteProvider: options.deleteProvider ?? defaultDeleteProvider,
     } as unknown as EiContextValue,
   };
 }
@@ -312,5 +366,184 @@ describe("openProviderEditor - model deletion cleanup", () => {
 
     expect(personaRecords["persona-1"].model).toBeUndefined();
     expect(personaRecords["persona-2"].model).toBe("model-2");
+  });
+});
+
+describe("openProviderEditor - whole-provider deletion cascade (T4)", () => {
+  let originalEditor: string | undefined;
+  let cleanupEditor: (() => void) | null = null;
+
+  beforeEach(() => {
+    originalEditor = process.env.EDITOR;
+  });
+
+  afterEach(() => {
+    if (originalEditor !== undefined) process.env.EDITOR = originalEditor;
+    else delete process.env.EDITOR;
+    cleanupEditor?.();
+    cleanupEditor = null;
+  });
+
+  test("deleting a whole provider clears both a persona pin and a global settings field across its models", async () => {
+    const account = {
+      id: "provider-1",
+      name: "TestProvider",
+      type: "llm" as const,
+      url: "https://api.test.example/v1",
+      enabled: true,
+      created_at: "2026-01-01T00:00:00.000Z",
+      models: [
+        { id: "model-1", name: "claude-opus", model_id: "claude-opus-4-8" },
+        { id: "model-2", name: "claude-haiku", model_id: "claude-haiku-4-5" },
+      ],
+    };
+    // Top-level `_delete: true` triggers providerFromYAML's whole-provider path;
+    // name/url are still required for parsing to reach that branch.
+    const editedYaml = [
+      "name: TestProvider",
+      "url: https://api.test.example/v1",
+      "_delete: true",
+    ].join("\n");
+    const { editorCmd, cleanup } = fakeEditorFor(editedYaml);
+    cleanupEditor = cleanup;
+    process.env.EDITOR = editorCmd;
+
+    const human = makeHuman({
+      accounts: [account],
+      default_model: "model-2",
+    });
+    const timestamp = "2026-01-01T00:00:00.000Z";
+    const basePersona = {
+      entity: "system" as const,
+      traits: [],
+      topics: [],
+      is_paused: false,
+      is_archived: false,
+      is_static: false,
+      last_updated: timestamp,
+      last_heartbeat: timestamp,
+    };
+    const personaRecords: Record<string, PersonaEntity> = {
+      "persona-1": { ...basePersona, id: "persona-1", display_name: "Pinned", model: "model-1" },
+    };
+    const ctx = makeContext(
+      human,
+      async (updates) => { human.settings = { ...human.settings, ...updates }; },
+      personaRecords
+    );
+
+    const result = await openProviderEditor(account, ctx);
+
+    expect(result.success).toBe(true);
+    expect(result.deleted).toBe(true);
+    expect(human.settings.accounts ?? []).toEqual([]);
+    expect(human.settings.default_model).toBeUndefined();
+    expect(personaRecords["persona-1"].model).toBeUndefined();
+  });
+});
+
+describe("openProviderEditor - cascade failure surfaces error, does not report success", () => {
+  let originalEditor: string | undefined;
+  let cleanupEditor: (() => void) | null = null;
+
+  beforeEach(() => {
+    originalEditor = process.env.EDITOR;
+  });
+
+  afterEach(() => {
+    if (originalEditor !== undefined) process.env.EDITOR = originalEditor;
+    else delete process.env.EDITOR;
+    cleanupEditor?.();
+    cleanupEditor = null;
+  });
+
+  test("deleteProvider failure is surfaced and the account is not treated as removed", async () => {
+    const account = {
+      id: "provider-1",
+      name: "TestProvider",
+      type: "llm" as const,
+      url: "https://api.test.example/v1",
+      enabled: true,
+      created_at: "2026-01-01T00:00:00.000Z",
+      models: [
+        { id: "model-1", name: "claude-opus", model_id: "claude-opus-4-8" },
+      ],
+    };
+    const editedYaml = [
+      "name: TestProvider",
+      "url: https://api.test.example/v1",
+      "_delete: true",
+    ].join("\n");
+    const { editorCmd, cleanup } = fakeEditorFor(editedYaml);
+    cleanupEditor = cleanup;
+    process.env.EDITOR = editorCmd;
+
+    const human = makeHuman({ accounts: [account] });
+    const notifications: Array<{ message: string; level: string }> = [];
+    const ctx = makeContext(
+      human,
+      async (updates) => { human.settings = { ...human.settings, ...updates }; },
+      {},
+      {
+        deleteProvider: async () => ({ success: false, error: "provider is in use" }),
+        onNotify: (message, level) => notifications.push({ message, level }),
+      }
+    );
+
+    const result = await openProviderEditor(account, ctx);
+
+    expect(result.success).toBe(false);
+    expect(result.deleted).not.toBe(true);
+    expect(human.settings.accounts).toEqual([account]);
+    expect(notifications).toContainEqual({ message: "provider is in use", level: "error" });
+  });
+
+  test("deleteModel failure is surfaced and no edits are saved", async () => {
+    const account = {
+      id: "provider-1",
+      name: "TestProvider",
+      type: "llm" as const,
+      url: "https://api.test.example/v1",
+      enabled: true,
+      created_at: "2026-01-01T00:00:00.000Z",
+      models: [
+        { id: "model-1", name: "claude-opus", model_id: "claude-opus-4-8" },
+        { id: "model-2", name: "claude-haiku", model_id: "claude-haiku-4-5" },
+      ],
+    };
+    const editedYaml = [
+      "name: TestProvider",
+      "type: llm",
+      "url: https://api.test.example/v1",
+      "enabled: true",
+      "models:",
+      "  - name: claude-opus",
+      "    model_id: claude-opus-4-8",
+      "    _delete: true",
+      "  - name: claude-haiku",
+      "    model_id: claude-haiku-4-5",
+      "    _delete: false",
+    ].join("\n");
+    const { editorCmd, cleanup } = fakeEditorFor(editedYaml);
+    cleanupEditor = cleanup;
+    process.env.EDITOR = editorCmd;
+
+    const human = makeHuman({ accounts: [account] });
+    const notifications: Array<{ message: string; level: string }> = [];
+    const ctx = makeContext(
+      human,
+      async (updates) => { human.settings = { ...human.settings, ...updates }; },
+      {},
+      {
+        deleteModel: async () => ({ success: false, error: "model is in use" }),
+        onNotify: (message, level) => notifications.push({ message, level }),
+      }
+    );
+
+    const result = await openProviderEditor(account, ctx);
+
+    expect(result.success).toBe(false);
+    expect(human.settings.accounts?.[0]?.models?.map((m) => m.id)).toEqual(["model-1", "model-2"]);
+    expect(notifications).toContainEqual({ message: "model is in use", level: "error" });
   });
 });
