@@ -82,7 +82,8 @@ describe("personaToYAML", () => {
     expect(yaml).toContain("strength: 0.8");
     expect(yaml).toContain("name: testing");
     expect(yaml).toContain("perspective: loves it");
-    expect(yaml).not.toContain("id:");
+    expect(yaml).toContain("id: trait-1");
+    expect(yaml).toContain("id: topic-1");
     expect(yaml).not.toContain("_delete:");
     expect(yaml).not.toContain("short_description:");
   });
@@ -116,7 +117,7 @@ describe("personaToYAML", () => {
     expect(yaml).toContain("family: false");
   });
 
-  test("does not include id or _delete in output", () => {
+  test("includes stable trait/topic id, but not _delete, in output", () => {
     const persona: PersonaEntity = {
       ...minimalPersona,
       traits: [
@@ -129,7 +130,9 @@ describe("personaToYAML", () => {
     };
     
     const yaml = personaToYAML(persona);
-    expect(yaml).not.toContain("id:");
+    expect(yaml).toContain("id: t1");
+    expect(yaml).toContain("id: t2");
+    expect(yaml).toContain("id: top1");
     expect(yaml).not.toContain("_delete:");
   });
 });
