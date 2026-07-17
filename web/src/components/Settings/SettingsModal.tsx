@@ -7,6 +7,7 @@ import { ThemeList } from './ThemeList';
 import { ThemeEditor } from './ThemeEditor';
 import type { ProviderAccount, SyncCredentials, ToolProvider, ToolDefinition } from '../../../../src/core/types';
 import type { ThemeDefinition } from '../../../../src/core/types/entities.js';
+import type { Processor } from '../../../../src/core/processor';
 
 interface SettingsData {
   name_display?: string;
@@ -31,6 +32,7 @@ interface SettingsModalProps {
   onUpdate: (updates: Partial<SettingsData>) => void;
   onDownloadBackup: () => void;
   onUploadBackup: (file: File) => void;
+  processor: Processor | null;
   toolProviders: ToolProvider[];
   toolDefinitions: ToolDefinition[];
   onToolProviderUpdate: (id: string, updates: Partial<Omit<ToolProvider, 'id' | 'created_at'>>) => void;
@@ -70,6 +72,7 @@ export const SettingsModal = ({
   onThemeChange,
   onCustomThemeUpsert,
   onCustomThemeRemove,
+  processor,
 }: SettingsModalProps) => {
   const [activeTab, setActiveTab] = useState('general');
   const modalRef = useRef<HTMLDivElement>(null);
@@ -131,11 +134,17 @@ export const SettingsModal = ({
     setAccountEditorOpen(true);
   }, []);
 
-  const handleAccountDelete = useCallback((id: string) => {
+  const handleAccountDelete = useCallback(async (id: string) => {
+    if (!processor) return;
+    const result = await processor.deleteProvider(id);
+    if (!result.success) {
+      alert(`Failed to delete provider: ${result.error ?? 'Unknown error'}`);
+      return;
+    }
     const updated = localAccounts.filter(a => a.id !== id);
     setLocalAccounts(updated);
     onUpdate({ accounts: updated });
-  }, [localAccounts, onUpdate]);
+  }, [processor, localAccounts, onUpdate]);
 
   const handleAccountToggle = useCallback((id: string, enabled: boolean) => {
     const updated = localAccounts.map(a => a.id === id ? { ...a, enabled } : a);
@@ -143,8 +152,24 @@ export const SettingsModal = ({
     onUpdate({ accounts: updated });
   }, [localAccounts, onUpdate]);
 
-  const handleAccountSave = useCallback((account: ProviderAccount) => {
+  const handleAccountSave = useCallback(async (account: ProviderAccount) => {
+    if (!processor) return;
     const existing = localAccounts.find(a => a.id === account.id);
+
+    if (existing) {
+      const previousModelIds = new Set((existing.models ?? []).map(m => m.id));
+      const currentModelIds = new Set((account.models ?? []).map(m => m.id));
+      const removedModelIds = [...previousModelIds].filter(id => !currentModelIds.has(id));
+
+      for (const modelId of removedModelIds) {
+        const result = await processor.deleteModel(account.id, modelId);
+        if (!result.success) {
+          alert(`Failed to delete model: ${result.error ?? 'Unknown error'}`);
+          return;
+        }
+      }
+    }
+
     const updated = existing
       ? localAccounts.map(a => a.id === account.id ? account : a)
       : [...localAccounts, account];
@@ -152,7 +177,7 @@ export const SettingsModal = ({
     onUpdate({ accounts: updated });
     setAccountEditorOpen(false);
     setEditingAccount(null);
-  }, [localAccounts, onUpdate]);
+  }, [processor, localAccounts, onUpdate]);
 
   const handleAccountEditorClose = useCallback(() => {
     setAccountEditorOpen(false);

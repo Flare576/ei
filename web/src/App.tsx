@@ -1369,6 +1369,7 @@ function App() {
           }}
           onUpdate={handleHumanUpdate}
           onDownloadBackup={handleDownloadBackup}
+          processor={processor}
           onUploadBackup={handleUploadBackup}
           toolProviders={toolProviders}
           toolDefinitions={toolDefinitions}
