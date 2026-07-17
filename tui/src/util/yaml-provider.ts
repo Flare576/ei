@@ -1,9 +1,10 @@
 import YAML from "yaml";
 import type {
+  ModelConfig,
   ProviderAccount,
   ProviderType,
 } from "../../../src/core/types.js";
-import { modelGuidToDisplay } from "./yaml-shared.js";
+import { modelGuidToDisplay, resolveEntryId } from "./yaml-shared.js";
 
 const tokenFormatter = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
 const formatTokens = (n: number) => tokenFormatter.format(n);
@@ -19,6 +20,7 @@ function validateTemperatureDisabled(value: unknown, modelName: string): boolean
 
 interface EditableModelData {
   name: string;
+  id?: string;
   model_id?: string;
   token_limit?: number;
   max_output_tokens?: number;
@@ -50,8 +52,8 @@ const PLACEHOLDER_PROVIDER_URL = "https://api.example.com/v1";
 const PLACEHOLDER_PROVIDER_API_KEY = "your-api-key-or-$ENVAR";
 const PLACEHOLDER_PROVIDER_DEFAULT_MODEL = "model-name";
 
-function parseModels(editableModels: EditableModelData[]): import('../../../src/core/types.js').ModelConfig[] {
-  const result: import('../../../src/core/types.js').ModelConfig[] = [];
+function parseModels(editableModels: EditableModelData[]): ModelConfig[] {
+  const result: ModelConfig[] = [];
   for (const m of editableModels) {
     if (m._delete) continue;
     const modelId = m.model_id ?? undefined;
@@ -159,6 +161,7 @@ export function providerToYAML(account: ProviderAccount): string {
   if (modelList.length > 0) {
     for (const m of modelList) {
       modelLines.push(`  - name: ${m.name}`);
+      modelLines.push(`    id: ${m.id}`);
       modelLines.push(`    model_id: ${m.model_id ?? m.name}`);
       modelLines.push(`    token_limit: ${m.token_limit ?? null}`);
       modelLines.push(`    max_output_tokens: ${m.max_output_tokens ?? null}`);
@@ -211,13 +214,15 @@ export function providerFromYAML(yamlContent: string, original: ProviderAccount)
   }
 
   const existingModels = original.models ?? [];
-  const parsedModels: import('../../../src/core/types.js').ModelConfig[] = [];
+  const seenIds = new Set<string>();
+  const parsedModels: ModelConfig[] = [];
   for (const m of data.models ?? []) {
     if (m._delete) continue;
-    const existing = existingModels.find(em => em.name === m.name);
+    const id = resolveEntryId({ id: m.id, name: m.name }, existingModels, seenIds, "Model");
+    const existing = existingModels.find(em => em.id === id);
     const modelId = m.model_id ?? undefined;
     parsedModels.push({
-      id: existing?.id ?? crypto.randomUUID(),
+      id,
       name: m.name,
       model_id: (modelId === null || modelId === m.name) ? undefined : modelId,
       token_limit: m.token_limit ?? undefined,

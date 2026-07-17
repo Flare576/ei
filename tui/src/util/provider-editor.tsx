@@ -141,7 +141,12 @@ export async function openProviderEditor(account: ProviderAccount, ctx: CommandC
       if ((updated.models ?? []).length === 0) {
         throw new Error("Provider must have at least one model. Remove _delete: true from at least one model, or add a new model.");
       }
-      
+
+      const updatedModelIds = new Set((updated.models ?? []).map(m => m.id));
+      const removedModelIds = new Set(
+        (account.models ?? []).filter(m => !updatedModelIds.has(m.id)).map(m => m.id)
+      );
+
       const human = await ctx.ei.getHuman();
       const accounts = [...(human.settings?.accounts ?? [])];
       const idx = accounts.findIndex(a => a.id === account.id);
@@ -150,7 +155,32 @@ export async function openProviderEditor(account: ProviderAccount, ctx: CommandC
       } else {
         accounts.push(updated);
       }
-      await ctx.ei.updateSettings({ accounts });
+
+      const settings = human.settings;
+      const settingsUpdate: Partial<HumanSettings> = { accounts };
+      if (settings?.default_model !== undefined && removedModelIds.has(settings.default_model)) {
+        settingsUpdate.default_model = undefined;
+      }
+      if (settings?.oneshot_model !== undefined && removedModelIds.has(settings.oneshot_model)) {
+        settingsUpdate.oneshot_model = undefined;
+      }
+      if (settings?.rewrite_model !== undefined && removedModelIds.has(settings.rewrite_model)) {
+        settingsUpdate.rewrite_model = undefined;
+      }
+      if (settings?.conversation_model !== undefined && removedModelIds.has(settings.conversation_model)) {
+        settingsUpdate.conversation_model = undefined;
+      }
+      if (settings?.extraction_model !== undefined && removedModelIds.has(settings.extraction_model)) {
+        settingsUpdate.extraction_model = undefined;
+      }
+      if (settings?.opencode?.extraction_model !== undefined && removedModelIds.has(settings.opencode.extraction_model)) {
+        settingsUpdate.opencode = { ...settings.opencode, extraction_model: undefined };
+      }
+      if (settings?.claudeCode?.extraction_model !== undefined && removedModelIds.has(settings.claudeCode.extraction_model)) {
+        settingsUpdate.claudeCode = { ...settings.claudeCode, extraction_model: undefined };
+      }
+
+      await ctx.ei.updateSettings(settingsUpdate);
       
       ctx.showNotification(`Updated provider "${updated.name}"`, "info");
       return { success: true, account: updated, cancelled: false };

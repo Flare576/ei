@@ -1033,7 +1033,7 @@ describe("providerToYAML / providerFromYAML", () => {
     expect(yaml).not.toContain("total_tokens_in");
     expect(yaml).not.toContain("total_tokens_out");
     expect(yaml).not.toContain("last_used");
-    expect(yaml).not.toMatch(/^\s*id:/m);
+    expect(yaml).toContain("id: model-guid-1");
   });
 
   test("providerToYAML includes _delete fields", () => {
