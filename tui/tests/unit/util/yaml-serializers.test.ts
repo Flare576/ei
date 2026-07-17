@@ -348,6 +348,106 @@ topics:
   });
 });
 
+describe("persona rename identity", () => {
+  const timestamp = "2024-01-01T00:00:00.000Z";
+  const original: PersonaEntity = {
+    id: "test-id",
+    display_name: "TestBot",
+    entity: "system",
+    traits: [
+      { id: "trait-1", name: "friendly", description: "old description", strength: 0.5, sentiment: 0, last_updated: timestamp },
+    ],
+    topics: [
+      { id: "topic-1", name: "old topic", perspective: "p", approach: "a", personal_stake: "s", sentiment: 0, exposure_current: 0.5, exposure_desired: 0.5, last_updated: timestamp },
+    ],
+    is_paused: false,
+    is_archived: false,
+    is_static: false,
+    last_updated: timestamp,
+    last_heartbeat: timestamp,
+    heartbeat_delay_ms: 300000,
+  };
+
+  test("keeps a trait's identity when its name changes", () => {
+    const editedYaml = personaToYAML(original).replace("name: friendly", "name: supportive");
+    const result = personaFromYAML(editedYaml, original);
+
+    expect({
+      id: result.updates.traits?.[0]?.id,
+      deleted: result.deletedTraitIds,
+    }).toEqual({ id: "trait-1", deleted: [] });
+  });
+
+  test("keeps a persona topic's identity when its name changes", () => {
+    const editedYaml = personaToYAML(original).replace("name: old topic", "name: renamed topic");
+    const result = personaFromYAML(editedYaml, original);
+
+    expect({
+      id: result.updates.topics?.[0]?.id,
+      deleted: result.deletedTopicIds,
+    }).toEqual({ id: "topic-1", deleted: [] });
+  });
+});
+
+describe("persona identity validation", () => {
+  const timestamp = "2024-01-01T00:00:00.000Z";
+  const original: PersonaEntity = {
+    id: "test-id",
+    display_name: "TestBot",
+    entity: "system",
+    traits: [
+      { id: "trait-1", name: "friendly", description: "old description", strength: 0.5, sentiment: 0, last_updated: timestamp },
+    ],
+    topics: [
+      { id: "topic-1", name: "old topic", perspective: "p", approach: "a", personal_stake: "s", sentiment: 0, exposure_current: 0.5, exposure_desired: 0.5, last_updated: timestamp },
+    ],
+    is_paused: false,
+    is_archived: false,
+    is_static: false,
+    last_updated: timestamp,
+    last_heartbeat: timestamp,
+    heartbeat_delay_ms: 300000,
+  };
+
+  test("rejects a trait identity that does not belong to the edited persona", () => {
+    const yaml = `
+display_name: TestBot
+traits:
+  - id: foreign-trait
+    name: friendly
+    description: old description
+    strength: 0.5
+topics: []
+`;
+
+    expect(() => personaFromYAML(yaml, original)).toThrow();
+  });
+
+  test("rejects the same persona topic identity more than once", () => {
+    const yaml = `
+display_name: TestBot
+traits: []
+topics:
+  - id: topic-1
+    name: old topic
+    perspective: p
+    approach: a
+    personal_stake: s
+    exposure_current: 0.5
+    exposure_desired: 0.5
+  - id: topic-1
+    name: renamed topic
+    perspective: p
+    approach: a
+    personal_stake: s
+    exposure_current: 0.5
+    exposure_desired: 0.5
+`;
+
+    expect(() => personaFromYAML(yaml, original)).toThrow();
+  });
+});
+
 describe("humanToYAML", () => {
   const timestamp = "2024-01-01T00:00:00.000Z";
   
