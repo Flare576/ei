@@ -876,16 +876,25 @@ export const EiProvider: ParentComponent = (props) => {
         if (detected.length > 0) {
           const { accounts, suggestedRewriteModelId } = buildProviderAccounts(detected);
           const topProvider = detected[0];
-          const conversationModel = `${topProvider.name}:${topProvider.selected.chatModel}`;
-          const extractionModel = `${topProvider.name}:${topProvider.selected.extractionModel}`;
-          setFirstBootConversationModel(conversationModel);
+          const topAccount = accounts[0];
+          // Same GUID-resolution pattern as ProviderForm.tsx/ProviderSelector.tsx:
+          // conversation_model/extraction_model are documented ModelConfig.id GUIDs
+          // (src/core/types/entities.ts), never a hand-built "Provider:model" display
+          // string (issue #89, M1 follow-up — the auto-detect seeding site).
+          const conversationModelId =
+            topAccount?.models?.find((m) => m.name === topProvider.selected.chatModel)?.id ??
+            topAccount?.models?.[0]?.id;
+          const extractionModelId =
+            topAccount?.models?.find((m) => m.name === topProvider.selected.extractionModel)?.id ??
+            topAccount?.models?.[0]?.id;
+          setFirstBootConversationModel(`${topProvider.name}:${topProvider.selected.chatModel}`);
           const currentHuman = await processor!.getHuman();
           await processor!.updateHuman({
             settings: {
               ...currentHuman.settings,
               accounts,
-              conversation_model: conversationModel,
-              extraction_model: extractionModel,
+              conversation_model: conversationModelId,
+              extraction_model: extractionModelId,
               ...(!currentHuman.settings?.rewrite_model && suggestedRewriteModelId && {
                 rewrite_model: suggestedRewriteModelId,
               }),
