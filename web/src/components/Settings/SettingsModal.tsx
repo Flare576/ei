@@ -154,7 +154,6 @@ export const SettingsModal = ({
 
   const handleAccountSave = useCallback(async (account: ProviderAccount) => {
     if (!processor) return;
-    const existing = localAccounts.find(a => a.id === account.id);
 
     const result = await processor.upsertProviderAccount(account);
     if (!result.success) {
@@ -162,14 +161,19 @@ export const SettingsModal = ({
       return;
     }
 
-    const updated = existing
-      ? localAccounts.map(a => a.id === account.id ? account : a)
-      : [...localAccounts, account];
+    // Re-read from the processor instead of hand-building the array from
+    // localAccounts: upsertProviderAccount() mutates HumanSettings.accounts
+    // in place (state-manager.ts push/index-assign), and localAccounts is
+    // initialized straight from that same array reference (never cloned by
+    // stripHumanEmbeddings), so appending to it here would double the just-
+    // saved account (provider-management E2E "can add a new provider").
+    const freshHuman = await processor.getHuman();
+    const updated = freshHuman.settings?.accounts ?? [];
     setLocalAccounts(updated);
     onUpdate({ accounts: updated });
     setAccountEditorOpen(false);
     setEditingAccount(null);
-  }, [processor, localAccounts, onUpdate]);
+  }, [processor, onUpdate]);
 
   const handleAccountEditorClose = useCallback(() => {
     setAccountEditorOpen(false);

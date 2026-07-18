@@ -7,11 +7,24 @@ import { Processor as RealProcessor } from "../../../../src/core/processor";
 import type { Ei_Interface } from "../../../../src/core/types";
 import type { Storage } from "../../../../src/storage/interface";
 
-function makeProcessor(overrides: Partial<Pick<Processor, "deleteProvider" | "deleteModel" | "upsertProviderAccount">> = {}): Processor {
+function makeProcessor(
+  accounts: ProviderAccount[] = [],
+  overrides: Partial<Pick<Processor, "deleteProvider" | "deleteModel" | "upsertProviderAccount" | "getHuman">> = {}
+): Processor {
+  // Mirrors StateManager.upsertProviderAccount's real semantics (replace-by-id
+  // or push) against a private store, so getHuman() reflects saves the same
+  // way SettingsModal.handleAccountSave now depends on post-fix.
+  const store = [...accounts];
   return {
     deleteProvider: vi.fn().mockResolvedValue({ success: true }),
     deleteModel: vi.fn().mockResolvedValue({ success: true }),
-    upsertProviderAccount: vi.fn().mockResolvedValue({ success: true }),
+    upsertProviderAccount: vi.fn().mockImplementation(async (account: ProviderAccount) => {
+      const idx = store.findIndex((a) => a.id === account.id);
+      if (idx >= 0) store[idx] = account;
+      else store.push(account);
+      return { success: true };
+    }),
+    getHuman: vi.fn().mockImplementation(async () => ({ settings: { accounts: store } })),
     ...overrides,
   } as unknown as Processor;
 }
@@ -76,7 +89,7 @@ describe("SettingsModal provider/model deletion cascade", () => {
 
   it("deletes the whole provider through processor.deleteProvider and clears local state on success", async () => {
     const account = makeAccount();
-    const processor = makeProcessor();
+    const processor = makeProcessor([account]);
     const onUpdate = renderModal([account], processor);
 
     fireEvent.click(screen.getByText("Providers"));
@@ -91,7 +104,7 @@ describe("SettingsModal provider/model deletion cascade", () => {
   it("surfaces the error and keeps the account when processor.deleteProvider fails", async () => {
     const account = makeAccount();
     const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
-    const processor = makeProcessor({
+    const processor = makeProcessor([account], {
       deleteProvider: vi.fn().mockResolvedValue({ success: false, error: "boom" }),
     });
     const onUpdate = renderModal([account], processor);
@@ -108,7 +121,7 @@ describe("SettingsModal provider/model deletion cascade", () => {
 
   it("saves through processor.upsertProviderAccount when a model is removed in the editor", async () => {
     const account = makeAccount();
-    const processor = makeProcessor();
+    const processor = makeProcessor([account]);
     const onUpdate = renderModal([account], processor);
 
     fireEvent.click(screen.getByText("Providers"));
@@ -131,7 +144,7 @@ describe("SettingsModal provider/model deletion cascade", () => {
   it("surfaces the error and does not save when processor.upsertProviderAccount fails", async () => {
     const account = makeAccount();
     const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
-    const processor = makeProcessor({
+    const processor = makeProcessor([account], {
       upsertProviderAccount: vi.fn().mockResolvedValue({ success: false, error: "cannot delete the last model" }),
     });
     const onUpdate = renderModal([account], processor);
@@ -151,7 +164,7 @@ describe("SettingsModal provider/model deletion cascade", () => {
 
   it("does not save when a model is removed in the editor and then cancelled (no save)", async () => {
     const account = makeAccount();
-    const processor = makeProcessor();
+    const processor = makeProcessor([account]);
     renderModal([account], processor);
 
     fireEvent.click(screen.getByText("Providers"));
