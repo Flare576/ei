@@ -144,29 +144,11 @@ export async function openProviderEditor(account: ProviderAccount, ctx: CommandC
         throw new Error("Provider must have at least one model. Remove _delete: true from at least one model, or add a new model.");
       }
 
-      const updatedModelIds = new Set((updated.models ?? []).map(m => m.id));
-      const removedModelIds = new Set(
-        (account.models ?? []).filter(m => !updatedModelIds.has(m.id)).map(m => m.id)
-      );
-
-      for (const modelId of removedModelIds) {
-        const { success, error } = await ctx.ei.deleteModel(account.id, modelId);
-        if (!success) {
-          ctx.showNotification(error ?? "Failed to delete model", "error");
-          return { success: false, account: null, cancelled: false };
-        }
+      const { success, error } = await ctx.ei.upsertProviderAccount(updated);
+      if (!success) {
+        ctx.showNotification(error ?? "Failed to save provider", "error");
+        return { success: false, account: null, cancelled: false };
       }
-
-      const human = await ctx.ei.getHuman();
-      const accounts = [...(human.settings?.accounts ?? [])];
-      const idx = accounts.findIndex(a => a.id === account.id);
-      if (idx >= 0) {
-        accounts[idx] = updated;
-      } else {
-        accounts.push(updated);
-      }
-
-      await ctx.ei.updateSettings({ accounts });
 
       ctx.showNotification(`Updated provider "${updated.name}"`, "info");
       return { success: true, account: updated, cancelled: false };

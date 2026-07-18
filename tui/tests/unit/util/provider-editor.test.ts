@@ -71,6 +71,7 @@ function makeContext(
   options: {
     deleteModel?: EiContextValue["deleteModel"];
     deleteProvider?: EiContextValue["deleteProvider"];
+    upsertProviderAccount?: EiContextValue["upsertProviderAccount"];
     onNotify?: (message: string, level: "error" | "warn" | "info") => void;
   } = {}
 ): CommandContext {
@@ -119,6 +120,27 @@ function makeContext(
     return { success: true };
   };
 
+  // Mimics StateManager.upsertProviderAccount's cascade: diff existing vs
+  // updated models, sweep references for whatever was removed, then replace
+  // (or append) the account - all in one atomic step, no isolated-delete guard.
+  const defaultUpsertProviderAccount: EiContextValue["upsertProviderAccount"] = async (account) => {
+    if (account.models !== undefined && account.models.length === 0) {
+      return { success: false, error: "Provider must have at least one model" };
+    }
+    const existing = (human.settings?.accounts ?? []).find((a) => a.id === account.id);
+    const existingModelIds = new Set((existing?.models ?? []).map((m) => m.id));
+    const updatedModelIds = new Set((account.models ?? []).map((m) => m.id));
+    for (const modelId of existingModelIds) {
+      if (!updatedModelIds.has(modelId)) clearModelReferences(modelId);
+    }
+    if (!human.settings) human.settings = {};
+    const accounts = human.settings.accounts ?? (human.settings.accounts = []);
+    const idx = accounts.findIndex((a) => a.id === account.id);
+    if (idx >= 0) accounts[idx] = account;
+    else accounts.push(account);
+    return { success: true };
+  };
+
   return {
     showOverlay: () => {},
     hideOverlay: () => {},
@@ -140,6 +162,7 @@ function makeContext(
       },
       deleteModel: options.deleteModel ?? defaultDeleteModel,
       deleteProvider: options.deleteProvider ?? defaultDeleteProvider,
+      upsertProviderAccount: options.upsertProviderAccount ?? defaultUpsertProviderAccount,
     } as unknown as EiContextValue,
   };
 }
@@ -498,7 +521,7 @@ describe("openProviderEditor - cascade failure surfaces error, does not report s
     expect(notifications).toContainEqual({ message: "provider is in use", level: "error" });
   });
 
-  test("deleteModel failure is surfaced and no edits are saved", async () => {
+  test("upsertProviderAccount failure is surfaced and no edits are saved", async () => {
     const account = {
       id: "provider-1",
       name: "TestProvider",
@@ -535,7 +558,7 @@ describe("openProviderEditor - cascade failure surfaces error, does not report s
       async (updates) => { human.settings = { ...human.settings, ...updates }; },
       {},
       {
-        deleteModel: async () => ({ success: false, error: "model is in use" }),
+        upsertProviderAccount: async () => ({ success: false, error: "model is in use" }),
         onNotify: (message, level) => notifications.push({ message, level }),
       }
     );
@@ -545,5 +568,71 @@ describe("openProviderEditor - cascade failure surfaces error, does not report s
     expect(result.success).toBe(false);
     expect(human.settings.accounts?.[0]?.models?.map((m) => m.id)).toEqual(["model-1", "model-2"]);
     expect(notifications).toContainEqual({ message: "model is in use", level: "error" });
+  });
+
+  test("replacing a provider's only model in one save succeeds (I1 regression guard)", async () => {
+    const account = {
+      id: "provider-1",
+      name: "TestProvider",
+      type: "llm" as const,
+      url: "https://api.test.example/v1",
+      enabled: true,
+      created_at: "2026-01-01T00:00:00.000Z",
+      default_model: "model-a",
+      models: [
+        { id: "model-a", name: "old-model", model_id: "old-model" },
+      ],
+    };
+    // Adds model-b and marks model-a for deletion in the same save - the
+    // exact sequence Beta's I1 flagged: last-model guard must not fire here
+    // because the final account still has a model, it just isn't model-a.
+    const editedYaml = [
+      "name: TestProvider",
+      "type: llm",
+      "url: https://api.test.example/v1",
+      "enabled: true",
+      "models:",
+      "  - name: old-model",
+      "    model_id: old-model",
+      "    _delete: true",
+      "  - name: new-model",
+      "    model_id: new-model",
+    ].join("\n");
+    const { editorCmd, cleanup } = fakeEditorFor(editedYaml);
+    cleanupEditor = cleanup;
+    process.env.EDITOR = editorCmd;
+
+    const human = makeHuman({ accounts: [account], default_model: "model-a" });
+    const timestamp = "2026-01-01T00:00:00.000Z";
+    const personaRecords: Record<string, PersonaEntity> = {
+      "persona-1": {
+        entity: "system" as const,
+        traits: [],
+        topics: [],
+        is_paused: false,
+        is_archived: false,
+        is_static: false,
+        last_updated: timestamp,
+        last_heartbeat: timestamp,
+        id: "persona-1",
+        display_name: "Pinned",
+        model: "model-a",
+      },
+    };
+    const ctx = makeContext(
+      human,
+      async (updates) => { human.settings = { ...human.settings, ...updates }; },
+      personaRecords
+    );
+
+    const result = await openProviderEditor(account, ctx);
+
+    expect(result.success).toBe(true);
+    const finalModels = human.settings.accounts?.[0]?.models ?? [];
+    expect(finalModels).toHaveLength(1);
+    expect(finalModels[0].name).toBe("new-model");
+    expect(finalModels.some((m) => m.id === "model-a")).toBe(false);
+    expect(human.settings.default_model).toBeUndefined();
+    expect(personaRecords["persona-1"].model).toBeUndefined();
   });
 });
