@@ -156,18 +156,10 @@ export const SettingsModal = ({
     if (!processor) return;
     const existing = localAccounts.find(a => a.id === account.id);
 
-    if (existing) {
-      const previousModelIds = new Set((existing.models ?? []).map(m => m.id));
-      const currentModelIds = new Set((account.models ?? []).map(m => m.id));
-      const removedModelIds = [...previousModelIds].filter(id => !currentModelIds.has(id));
-
-      for (const modelId of removedModelIds) {
-        const result = await processor.deleteModel(account.id, modelId);
-        if (!result.success) {
-          alert(`Failed to delete model: ${result.error ?? 'Unknown error'}`);
-          return;
-        }
-      }
+    const result = await processor.upsertProviderAccount(account);
+    if (!result.success) {
+      alert(`Failed to save provider: ${result.error ?? 'Unknown error'}`);
+      return;
     }
 
     const updated = existing
