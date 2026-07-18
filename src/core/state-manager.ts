@@ -17,6 +17,7 @@ import type {
   RoomSummary,
   RoomCreationInput,
   HumanSettings,
+  ProviderAccount,
 } from "./types.js";
 import { RoomMode } from "./types.js";
 import { BUILT_IN_FACT_NAMES } from './constants/built-in-facts.js';
@@ -1260,6 +1261,34 @@ export class StateManager {
     const { cleared, affectedPersonaIds } = this.sweepModelReferences(settings, modelIds);
 
     settings.accounts = settings.accounts.filter(a => a.id !== providerId);
+    this.humanState.set(human);
+
+    this.scheduleSave();
+    return { success: true, cleared, affectedPersonaIds };
+  }
+
+  upsertProviderAccount(account: ProviderAccount): { success: boolean; error?: string; cleared: string[]; affectedPersonaIds: string[] } {
+    if (account.models !== undefined && account.models.length === 0) {
+      return { success: false, error: "Provider must have at least one model", cleared: [], affectedPersonaIds: [] };
+    }
+
+    const human = this.humanState.get();
+    const settings: HumanSettings = human.settings ?? (human.settings = {});
+    const accounts = settings.accounts ?? (settings.accounts = []);
+
+    const existing = accounts.find(a => a.id === account.id);
+    const existingModelIds = new Set((existing?.models ?? []).map(m => m.id));
+    const updatedModelIds = new Set((account.models ?? []).map(m => m.id));
+    const removedModelIds = new Set([...existingModelIds].filter(id => !updatedModelIds.has(id)));
+
+    const { cleared, affectedPersonaIds } = this.sweepModelReferences(settings, removedModelIds);
+
+    if (existing) {
+      accounts[accounts.indexOf(existing)] = account;
+    } else {
+      accounts.push(account);
+    }
+
     this.humanState.set(human);
 
     this.scheduleSave();

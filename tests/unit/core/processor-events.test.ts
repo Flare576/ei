@@ -702,6 +702,137 @@ describe("Processor API Methods", () => {
       expect(mock.calls).toContain("onHumanUpdated");
     });
   });
+
+  describe("Provider account operations", () => {
+    async function seedAccountAndPin(modelIds: string[], providerId = "provider-1") {
+      await processor.updateHuman({
+        settings: {
+          accounts: [{
+            id: providerId,
+            name: "TestProvider",
+            type: "llm" as any,
+            url: "https://api.example.com",
+            created_at: new Date().toISOString(),
+            models: modelIds.map(id => ({ id, name: id })),
+            default_model: modelIds[0],
+          }],
+        },
+      });
+      await processor.createPersona({ name: "Pinned", long_description: "Pinned to modelIds[0]" });
+      const personaId = (await processor.resolvePersonaName("Pinned"))!;
+      await processor.updatePersona(personaId, { model: modelIds[0] });
+      return { personaId, providerId };
+    }
+
+    describe("deleteModel", () => {
+      it("on success fires onHumanUpdated once and onPersonaUpdated once per affected persona", async () => {
+        const { personaId, providerId } = await seedAccountAndPin(["model-a", "model-b"]);
+        await processor.createPersona({ name: "Unaffected", long_description: "Pinned to model-b" });
+        const unaffectedId = (await processor.resolvePersonaName("Unaffected"))!;
+        await processor.updatePersona(unaffectedId, { model: "model-b" });
+        mock.calls.length = 0;
+
+        const result = await processor.deleteModel(providerId, "model-a");
+
+        expect(result.success).toBe(true);
+        expect(mock.calls.filter(c => c === "onHumanUpdated")).toHaveLength(1);
+        expect(mock.calls.filter(c => c.startsWith("onPersonaUpdated"))).toEqual([`onPersonaUpdated:${personaId}`]);
+
+        const persona = await processor.getPersona(unaffectedId);
+        expect(persona?.model).toBe("model-b");
+      });
+
+      it("refuses to delete a provider's last model, firing no events", async () => {
+        const { providerId } = await seedAccountAndPin(["model-a"]);
+        mock.calls.length = 0;
+
+        const result = await processor.deleteModel(providerId, "model-a");
+
+        expect(result.success).toBe(false);
+        expect(mock.calls).toHaveLength(0);
+      });
+
+      it("on failure fires no events", async () => {
+        mock.calls.length = 0;
+
+        const result = await processor.deleteModel("nonexistent-provider", "nonexistent-model");
+
+        expect(result.success).toBe(false);
+        expect(mock.calls).toHaveLength(0);
+      });
+    });
+
+    describe("deleteProvider", () => {
+      it("on success fires onHumanUpdated once and onPersonaUpdated once per affected persona", async () => {
+        const { personaId, providerId } = await seedAccountAndPin(["model-a"]);
+        await processor.createPersona({ name: "Unaffected", long_description: "Not pinned" });
+        mock.calls.length = 0;
+
+        const result = await processor.deleteProvider(providerId);
+
+        expect(result.success).toBe(true);
+        expect(mock.calls.filter(c => c === "onHumanUpdated")).toHaveLength(1);
+        expect(mock.calls.filter(c => c.startsWith("onPersonaUpdated"))).toEqual([`onPersonaUpdated:${personaId}`]);
+      });
+
+      it("on failure fires no events", async () => {
+        mock.calls.length = 0;
+
+        const result = await processor.deleteProvider("nonexistent-provider");
+
+        expect(result.success).toBe(false);
+        expect(mock.calls).toHaveLength(0);
+      });
+    });
+
+    describe("upsertProviderAccount", () => {
+      it("replacing a provider's only model in one call succeeds and fires events exactly once", async () => {
+        const { personaId, providerId } = await seedAccountAndPin(["model-a"]);
+        await processor.createPersona({ name: "Unaffected", long_description: "Not pinned" });
+        mock.calls.length = 0;
+
+        const result = await processor.upsertProviderAccount({
+          id: providerId,
+          name: "TestProvider",
+          type: "llm" as any,
+          url: "https://api.example.com",
+          created_at: new Date().toISOString(),
+          models: [{ id: "model-b", name: "model-b" }],
+          default_model: "model-b",
+        });
+
+        expect(result.success).toBe(true);
+        expect(mock.calls.filter(c => c === "onHumanUpdated")).toHaveLength(1);
+        expect(mock.calls.filter(c => c.startsWith("onPersonaUpdated"))).toEqual([`onPersonaUpdated:${personaId}`]);
+
+        const human = await processor.getHuman();
+        const account = human.settings!.accounts!.find(a => a.id === providerId)!;
+        expect(account.models).toHaveLength(1);
+        expect(account.models![0].id).toBe("model-b");
+
+        const persona = await processor.getPersona(personaId);
+        expect(persona?.model).toBeUndefined();
+      });
+
+      it("rejects a replacement account with zero models and fires no events", async () => {
+        const { providerId } = await seedAccountAndPin(["model-a"]);
+        mock.calls.length = 0;
+
+        const result = await processor.upsertProviderAccount({
+          id: providerId,
+          name: "TestProvider",
+          type: "llm" as any,
+          url: "https://api.example.com",
+          created_at: new Date().toISOString(),
+          models: [],
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+        expect(mock.calls).toHaveLength(0);
+      });
+    });
+  });
 });
 
 describe("Processor Error Handling", () => {

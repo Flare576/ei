@@ -22,6 +22,7 @@ import {
   type StateConflictData,
   type ToolDefinition,
   type ToolProvider,
+  type ProviderAccount,
 } from "./types.js";
 import { isReservedPersonaId } from "./types.js";
 import { buildPersonaFromPersonPrompt } from "../prompts/index.js";
@@ -1266,6 +1267,15 @@ const toolNextSteps = new Set([
 
   async deleteProvider(providerId: string): Promise<{ success: boolean; error?: string }> {
     const { success, error, affectedPersonaIds } = this.stateManager.deleteProvider(providerId);
+    if (success) {
+      this.interface.onHumanUpdated?.();
+      for (const personaId of affectedPersonaIds) this.interface.onPersonaUpdated?.(personaId);
+    }
+    return { success, error };
+  }
+
+  async upsertProviderAccount(account: ProviderAccount): Promise<{ success: boolean; error?: string }> {
+    const { success, error, affectedPersonaIds } = this.stateManager.upsertProviderAccount(account);
     if (success) {
       this.interface.onHumanUpdated?.();
       for (const personaId of affectedPersonaIds) this.interface.onPersonaUpdated?.(personaId);
