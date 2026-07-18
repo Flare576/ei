@@ -16,6 +16,8 @@ import type {
   RoomMessage,
   RoomSummary,
   RoomCreationInput,
+  HumanSettings,
+  ProviderAccount,
 } from "./types.js";
 import { RoomMode } from "./types.js";
 import { BUILT_IN_FACT_NAMES } from './constants/built-in-facts.js';
@@ -1165,56 +1167,72 @@ export class StateManager {
     return result;
   }
 
-  deleteModel(providerId: string, modelId: string): { success: boolean; error?: string; cleared: string[] } {
+  private sweepModelReferences(settings: HumanSettings, modelIds: Set<string>): { cleared: string[]; affectedPersonaIds: string[] } {
+    const cleared: string[] = [];
+    const affectedPersonaIds: string[] = [];
+
+    if (settings.default_model !== undefined && modelIds.has(settings.default_model)) {
+      settings.default_model = undefined;
+      cleared.push("settings.default_model");
+    }
+    if (settings.oneshot_model !== undefined && modelIds.has(settings.oneshot_model)) {
+      settings.oneshot_model = undefined;
+      cleared.push("settings.oneshot_model");
+    }
+    if (settings.rewrite_model !== undefined && modelIds.has(settings.rewrite_model)) {
+      settings.rewrite_model = undefined;
+      cleared.push("settings.rewrite_model");
+    }
+    if (settings.conversation_model !== undefined && modelIds.has(settings.conversation_model)) {
+      settings.conversation_model = undefined;
+      cleared.push("settings.conversation_model");
+    }
+    if (settings.extraction_model !== undefined && modelIds.has(settings.extraction_model)) {
+      settings.extraction_model = undefined;
+      cleared.push("settings.extraction_model");
+    }
+    if (settings.opencode?.extraction_model !== undefined && modelIds.has(settings.opencode.extraction_model)) {
+      settings.opencode.extraction_model = undefined;
+      cleared.push("settings.opencode.extraction_model");
+    }
+    if (settings.claudeCode?.extraction_model !== undefined && modelIds.has(settings.claudeCode.extraction_model)) {
+      settings.claudeCode.extraction_model = undefined;
+      cleared.push("settings.claudeCode.extraction_model");
+    }
+
+    for (const persona of this.personaState.getAll()) {
+      if (persona.model !== undefined && modelIds.has(persona.model)) {
+        this.personaState.update(persona.id, { model: undefined });
+        cleared.push(`persona:${persona.display_name}`);
+        affectedPersonaIds.push(persona.id);
+      }
+    }
+
+    return { cleared, affectedPersonaIds };
+  }
+
+  deleteModel(providerId: string, modelId: string): { success: boolean; error?: string; cleared: string[]; affectedPersonaIds: string[] } {
     const human = this.humanState.get();
     const settings = human.settings;
     if (!settings?.accounts?.length) {
-      return { success: false, error: `Provider not found: ${providerId}`, cleared: [] };
+      return { success: false, error: `Provider not found: ${providerId}`, cleared: [], affectedPersonaIds: [] };
     }
 
     const provider = settings.accounts.find(a => a.id === providerId);
     if (!provider) {
-      return { success: false, error: `Provider not found: ${providerId}`, cleared: [] };
+      return { success: false, error: `Provider not found: ${providerId}`, cleared: [], affectedPersonaIds: [] };
     }
 
     if (!provider.models?.find(m => m.id === modelId)) {
-      return { success: false, error: `Model not found: ${modelId}`, cleared: [] };
+      return { success: false, error: `Model not found: ${modelId}`, cleared: [], affectedPersonaIds: [] };
     }
 
     if ((provider.models?.length ?? 0) <= 1) {
-      return { success: false, error: `Cannot delete the last model on a provider`, cleared: [] };
+      return { success: false, error: `Cannot delete the last model on a provider`, cleared: [], affectedPersonaIds: [] };
     }
 
-    const cleared: string[] = [];
+    const { cleared, affectedPersonaIds } = this.sweepModelReferences(settings, new Set([modelId]));
 
-    if (settings.default_model === modelId) {
-      settings.default_model = undefined;
-      cleared.push("settings.default_model");
-    }
-    if (settings.oneshot_model === modelId) {
-      settings.oneshot_model = undefined;
-      cleared.push("settings.oneshot_model");
-    }
-    if (settings.rewrite_model === modelId) {
-      settings.rewrite_model = undefined;
-      cleared.push("settings.rewrite_model");
-    }
-    if (settings.conversation_model === modelId) {
-      settings.conversation_model = undefined;
-      cleared.push("settings.conversation_model");
-    }
-    if (settings.extraction_model === modelId) {
-      settings.extraction_model = undefined;
-      cleared.push("settings.extraction_model");
-    }
-    if (settings.opencode?.extraction_model === modelId) {
-      settings.opencode.extraction_model = undefined;
-      cleared.push("settings.opencode.extraction_model");
-    }
-    if (settings.claudeCode?.extraction_model === modelId) {
-      settings.claudeCode.extraction_model = undefined;
-      cleared.push("settings.claudeCode.extraction_model");
-    }
     if (provider.default_model === modelId) {
       provider.default_model = undefined;
       cleared.push("provider.default_model");
@@ -1223,15 +1241,63 @@ export class StateManager {
     provider.models = provider.models!.filter(m => m.id !== modelId);
     this.humanState.set(human);
 
-    for (const persona of this.personaState.getAll()) {
-      if (persona.model === modelId) {
-        this.personaState.update(persona.id, { model: undefined });
-        cleared.push(`persona:${persona.display_name}`);
-      }
+    this.scheduleSave();
+    return { success: true, cleared, affectedPersonaIds };
+  }
+
+  deleteProvider(providerId: string): { success: boolean; error?: string; cleared: string[]; affectedPersonaIds: string[] } {
+    const human = this.humanState.get();
+    const settings = human.settings;
+    if (!settings?.accounts?.length) {
+      return { success: false, error: `Provider not found: ${providerId}`, cleared: [], affectedPersonaIds: [] };
     }
 
+    const provider = settings.accounts.find(a => a.id === providerId);
+    if (!provider) {
+      return { success: false, error: `Provider not found: ${providerId}`, cleared: [], affectedPersonaIds: [] };
+    }
+
+    const modelIds = new Set((provider.models ?? []).map(m => m.id));
+    const { cleared, affectedPersonaIds } = this.sweepModelReferences(settings, modelIds);
+
+    settings.accounts = settings.accounts.filter(a => a.id !== providerId);
+    this.humanState.set(human);
+
     this.scheduleSave();
-    return { success: true, cleared };
+    return { success: true, cleared, affectedPersonaIds };
+  }
+
+  upsertProviderAccount(account: ProviderAccount): { success: boolean; error?: string; cleared: string[]; affectedPersonaIds: string[] } {
+    if (account.models !== undefined && account.models.length === 0) {
+      return { success: false, error: "Provider must have at least one model", cleared: [], affectedPersonaIds: [] };
+    }
+
+    const human = this.humanState.get();
+    const settings: HumanSettings = human.settings ?? (human.settings = {});
+    const accounts = settings.accounts ?? (settings.accounts = []);
+
+    const existing = accounts.find(a => a.id === account.id);
+    const existingModelIds = new Set((existing?.models ?? []).map(m => m.id));
+    const updatedModelIds = new Set((account.models ?? []).map(m => m.id));
+    const removedModelIds = new Set([...existingModelIds].filter(id => !updatedModelIds.has(id)));
+
+    const { cleared, affectedPersonaIds } = this.sweepModelReferences(settings, removedModelIds);
+
+    if (account.default_model !== undefined && removedModelIds.has(account.default_model)) {
+      account.default_model = undefined;
+      cleared.push("provider.default_model");
+    }
+
+    if (existing) {
+      accounts[accounts.indexOf(existing)] = account;
+    } else {
+      accounts.push(account);
+    }
+
+    this.humanState.set(human);
+
+    this.scheduleSave();
+    return { success: true, cleared, affectedPersonaIds };
   }
 
   model_update_usage(modelId: string, delta: { calls: number; tokens_in: number; tokens_out: number }): void {

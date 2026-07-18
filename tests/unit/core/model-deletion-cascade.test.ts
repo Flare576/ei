@@ -364,4 +364,354 @@ describe("StateManager.deleteModel()", () => {
 
     expect((storage.save as any).mock.calls.length).toBeGreaterThan(saveBefore);
   });
+  it("test 13: affectedPersonaIds returns persona IDs, not display names", async () => {
+    const state = createDefaultTestState();
+    const modelA = makeModel("model-a");
+    const modelB = makeModel("model-b");
+    const provider = makeProvider("Provider", [modelA, modelB]);
+    state.human.settings = { accounts: [provider] };
+    state.personas = {
+      p1: makePersonaRecord("p1", modelA.id) as any,
+      p2: makePersonaRecord("p2", modelB.id) as any,
+    };
+
+    await initWithState(state);
+
+    const result = sm.deleteModel(provider.id, modelA.id);
+
+    expect(result.success).toBe(true);
+    expect(result.affectedPersonaIds).toEqual(["p1"]);
+  });
+});
+
+describe("StateManager.deleteProvider()", () => {
+  let sm: StateManager;
+
+  function makeModel(name: string, overrides: Partial<ModelConfig> = {}): ModelConfig {
+    return {
+      id: crypto.randomUUID(),
+      name,
+      ...overrides,
+    };
+  }
+
+  function makeProvider(name: string, models: ModelConfig[], overrides: Partial<ProviderAccount> = {}): ProviderAccount {
+    return {
+      id: crypto.randomUUID(),
+      name,
+      type: ProviderType.LLM,
+      url: "https://api.example.com",
+      created_at: new Date().toISOString(),
+      models,
+      default_model: models[0]?.id,
+      ...overrides,
+    };
+  }
+
+  function makePersonaRecord(id: string, model?: string) {
+    return {
+      entity: {
+        id,
+        display_name: `Persona ${id}`,
+        entity: "system" as const,
+        traits: [],
+        topics: [],
+        is_paused: false,
+        is_archived: false,
+        is_static: false,
+        last_updated: new Date().toISOString(),
+        model,
+      },
+      messages: [],
+    };
+  }
+
+  async function initWithState(state: StorageState): Promise<void> {
+    const storage = createMockStorage();
+    (storage.load as any).mockResolvedValue(state);
+    await sm.initialize(storage);
+  }
+
+  beforeEach(() => {
+    sm = new StateManager();
+  });
+
+  it("deleting a provider clears every settings field referencing any of its models", async () => {
+    const state = createDefaultTestState();
+    const modelA = makeModel("gpt-4o");
+    const modelB = makeModel("gpt-3.5-turbo");
+    const provider = makeProvider("OpenAI", [modelA, modelB]);
+
+    state.human.settings = {
+      accounts: [provider],
+      default_model: modelA.id,
+      oneshot_model: modelB.id,
+      conversation_model: modelA.id,
+      extraction_model: modelB.id,
+    };
+
+    await initWithState(state);
+
+    const result = sm.deleteProvider(provider.id);
+
+    expect(result.success).toBe(true);
+    expect(result.cleared).toContain("settings.default_model");
+    expect(result.cleared).toContain("settings.oneshot_model");
+    expect(result.cleared).toContain("settings.conversation_model");
+    expect(result.cleared).toContain("settings.extraction_model");
+
+    const settings = sm.getHuman().settings!;
+    expect(settings.default_model).toBeUndefined();
+    expect(settings.oneshot_model).toBeUndefined();
+    expect(settings.conversation_model).toBeUndefined();
+    expect(settings.extraction_model).toBeUndefined();
+  });
+
+  it("deleting a provider removes the account from settings.accounts", async () => {
+    const state = createDefaultTestState();
+    const modelA = makeModel("model-a");
+    const provider = makeProvider("Provider", [modelA]);
+    const otherProvider = makeProvider("Other", [makeModel("model-x")]);
+    state.human.settings = { accounts: [provider, otherProvider] };
+
+    await initWithState(state);
+
+    const result = sm.deleteProvider(provider.id);
+
+    expect(result.success).toBe(true);
+
+    const accounts = sm.getHuman().settings!.accounts!;
+    expect(accounts).toHaveLength(1);
+    expect(accounts[0].id).toBe(otherProvider.id);
+  });
+
+  it("only personas using a model owned by the deleted provider are cleared", async () => {
+    const state = createDefaultTestState();
+    const modelA = makeModel("model-a");
+    const modelB = makeModel("model-b");
+    const provider = makeProvider("Provider", [modelA, modelB]);
+    const otherProvider = makeProvider("Other", [makeModel("model-c")]);
+    const modelC = otherProvider.models![0];
+
+    state.human.settings = { accounts: [provider, otherProvider] };
+    state.personas = {
+      p1: makePersonaRecord("p1", modelA.id) as any,
+      p2: makePersonaRecord("p2", modelB.id) as any,
+      p3: makePersonaRecord("p3", modelC.id) as any,
+    };
+
+    await initWithState(state);
+
+    const result = sm.deleteProvider(provider.id);
+
+    expect(result.success).toBe(true);
+    expect(result.affectedPersonaIds.sort()).toEqual(["p1", "p2"]);
+
+    const personas = sm.persona_getAll();
+    expect(personas.find(p => p.id === "p1")!.model).toBeUndefined();
+    expect(personas.find(p => p.id === "p2")!.model).toBeUndefined();
+    expect(personas.find(p => p.id === "p3")!.model).toBe(modelC.id);
+  });
+
+  it("deleting a provider with no references succeeds with an empty cleared list", async () => {
+    const state = createDefaultTestState();
+    const provider = makeProvider("Unused", [makeModel("model-a")]);
+    const otherProvider = makeProvider("Other", [makeModel("model-b")]);
+    state.human.settings = {
+      accounts: [provider, otherProvider],
+      default_model: otherProvider.models![0].id,
+    };
+
+    await initWithState(state);
+
+    const result = sm.deleteProvider(provider.id);
+
+    expect(result.success).toBe(true);
+    expect(result.cleared).toHaveLength(0);
+    expect(result.affectedPersonaIds).toHaveLength(0);
+  });
+
+  it("nonexistent provider ID returns error", async () => {
+    const state = createDefaultTestState();
+    const provider = makeProvider("Provider", [makeModel("model-a")]);
+    state.human.settings = { accounts: [provider] };
+
+    await initWithState(state);
+
+    const result = sm.deleteProvider("non-existent-provider-id");
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBeDefined();
+    expect(result.cleared).toHaveLength(0);
+  });
+
+  it("successful deletion triggers a save", async () => {
+    const state = createDefaultTestState();
+    const provider = makeProvider("Provider", [makeModel("model-a")]);
+    const otherProvider = makeProvider("Other", [makeModel("model-b")]);
+    state.human.settings = { accounts: [provider, otherProvider] };
+
+    const storage = createMockStorage();
+    (storage.load as any).mockResolvedValue(state);
+    await sm.initialize(storage);
+
+    const saveBefore = (storage.save as any).mock.calls.length;
+
+    sm.deleteProvider(provider.id);
+
+    await sm.flush();
+
+    expect((storage.save as any).mock.calls.length).toBeGreaterThan(saveBefore);
+  });
+});
+
+describe("StateManager.upsertProviderAccount()", () => {
+  let sm: StateManager;
+
+  function makeModel(name: string, overrides: Partial<ModelConfig> = {}): ModelConfig {
+    return {
+      id: crypto.randomUUID(),
+      name,
+      ...overrides,
+    };
+  }
+
+  function makeProvider(name: string, models: ModelConfig[], overrides: Partial<ProviderAccount> = {}): ProviderAccount {
+    return {
+      id: crypto.randomUUID(),
+      name,
+      type: ProviderType.LLM,
+      url: "https://api.example.com",
+      created_at: new Date().toISOString(),
+      models,
+      default_model: models[0]?.id,
+      ...overrides,
+    };
+  }
+
+  function makePersonaRecord(id: string, model?: string) {
+    return {
+      entity: {
+        id,
+        display_name: `Persona ${id}`,
+        entity: "system" as const,
+        traits: [],
+        topics: [],
+        is_paused: false,
+        is_archived: false,
+        is_static: false,
+        last_updated: new Date().toISOString(),
+        model,
+      },
+      messages: [],
+    };
+  }
+
+  async function initWithState(state: StorageState): Promise<void> {
+    const storage = createMockStorage();
+    (storage.load as any).mockResolvedValue(state);
+    await sm.initialize(storage);
+  }
+
+  beforeEach(() => {
+    sm = new StateManager();
+  });
+
+  it("T4: clears a replacement's stale default_model when it points at a removed model", async () => {
+    const state = createDefaultTestState();
+    const modelA = makeModel("model-a");
+    const provider = makeProvider("Provider", [modelA]);
+    state.human.settings = { accounts: [provider] };
+
+    await initWithState(state);
+
+    const modelB = makeModel("model-b");
+    const result = sm.upsertProviderAccount({
+      ...provider,
+      models: [modelB],
+      default_model: modelA.id, // stale - still names the removed model
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.cleared).toContain("provider.default_model");
+
+    const account = sm.getHuman().settings!.accounts!.find(a => a.id === provider.id)!;
+    expect(account.models).toEqual([modelB]);
+    expect(account.default_model).toBeUndefined();
+  });
+
+  it("T4b: preserves a replacement's default_model when it points at a retained or new model", async () => {
+    const state = createDefaultTestState();
+    const modelA = makeModel("model-a");
+    const provider = makeProvider("Provider", [modelA]);
+    state.human.settings = { accounts: [provider] };
+
+    await initWithState(state);
+
+    const modelB = makeModel("model-b");
+    const result = sm.upsertProviderAccount({
+      ...provider,
+      models: [modelB],
+      default_model: modelB.id,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.cleared).not.toContain("provider.default_model");
+
+    const account = sm.getHuman().settings!.accounts!.find(a => a.id === provider.id)!;
+    expect(account.default_model).toBe(modelB.id);
+  });
+
+  it("T5: replacing a provider clears every pointer scope for the removed model and leaves the retained model's pointers untouched", async () => {
+    const state = createDefaultTestState();
+    const modelA = makeModel("model-a");
+    const modelB = makeModel("model-b");
+    const provider = makeProvider("Provider", [modelA, modelB]);
+    provider.default_model = modelA.id;
+
+    state.human.settings = {
+      accounts: [provider],
+      default_model: modelA.id,
+      oneshot_model: modelA.id,
+      rewrite_model: modelA.id,
+      conversation_model: modelA.id,
+      extraction_model: modelB.id,
+      opencode: { extraction_model: modelA.id },
+      claudeCode: { extraction_model: modelB.id },
+    };
+    state.personas = {
+      p1: makePersonaRecord("p1", modelA.id) as any,
+      p2: makePersonaRecord("p2", modelB.id) as any,
+    };
+
+    await initWithState(state);
+
+    const modelC = makeModel("model-c");
+    const result = sm.upsertProviderAccount({
+      ...provider,
+      models: [modelB, modelC],
+      default_model: modelA.id, // stale - A was removed, must clear
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.affectedPersonaIds).toEqual(["p1"]);
+
+    const settings = sm.getHuman().settings!;
+    expect(settings.default_model).toBeUndefined();
+    expect(settings.oneshot_model).toBeUndefined();
+    expect(settings.rewrite_model).toBeUndefined();
+    expect(settings.conversation_model).toBeUndefined();
+    expect(settings.opencode?.extraction_model).toBeUndefined();
+    // References to the retained model B must survive untouched
+    expect(settings.extraction_model).toBe(modelB.id);
+    expect(settings.claudeCode?.extraction_model).toBe(modelB.id);
+
+    const account = settings.accounts!.find(a => a.id === provider.id)!;
+    expect(account.default_model).toBeUndefined();
+    expect(account.models?.map(m => m.id).sort()).toEqual([modelB.id, modelC.id].sort());
+
+    const personas = sm.persona_getAll();
+    expect(personas.find(p => p.id === "p1")!.model).toBeUndefined();
+    expect(personas.find(p => p.id === "p2")!.model).toBe(modelB.id);
+  });
 });
