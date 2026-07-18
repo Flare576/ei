@@ -129,7 +129,7 @@ export function newProviderFromYAML(yamlContent: string): ProviderAccount {
     type: (data.type === "storage" ? "storage" : "llm") as ProviderType,
     url: data.url,
     api_key: data.api_key,
-    default_model: data.default_model,
+    default_model: resolveProviderDefaultModel(data.default_model, [], models),
     token_limit: data.token_limit ?? undefined,
     extra_headers: data.extra_headers && Object.keys(data.extra_headers).length > 0 ? data.extra_headers : undefined,
     enabled: data.enabled ?? true,

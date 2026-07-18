@@ -195,8 +195,13 @@ describe("createProviderViaEditor - conversation_model/extraction_model seeding 
 
     expect(result.created).toBe(true);
     if (!saved) throw new Error("expected ctx.ei.updateSettings to be called");
-    expect(saved.conversation_model).toBe("TestProvider:default");
-    expect(saved.extraction_model).toBe("TestProvider:default");
+    const seededModelId = saved.accounts?.[0]?.models?.[0]?.id;
+    if (!seededModelId) throw new Error("expected seeded account to have a model with an id");
+    // M1 regression (issue #89): must be the model's GUID, never a
+    // "Provider:model" display string built by hand.
+    expect(seededModelId).not.toContain(":");
+    expect(saved.conversation_model).toBe(seededModelId);
+    expect(saved.extraction_model).toBe(seededModelId);
     expect(saved.default_model).toBeUndefined();
   });
 
@@ -216,6 +221,24 @@ describe("createProviderViaEditor - conversation_model/extraction_model seeding 
     expect(saved.extraction_model).toBeUndefined();
   });
 
+  test("resolves default_model to the model's GUID, not a display string (issue #89)", async () => {
+    const { editorCmd, cleanup } = fakeEditorFor(VALID_PROVIDER_YAML);
+    cleanupEditor = cleanup;
+    process.env.EDITOR = editorCmd;
+
+    const human = makeHuman({});
+    let saved: Partial<HumanSettings> | undefined;
+    const ctx = makeContext(human, async (updates) => { saved = updates; });
+
+    await createProviderViaEditor(ctx);
+
+    if (!saved) throw new Error("expected ctx.ei.updateSettings to be called");
+    const seededAccount = saved.accounts?.[0];
+    const seededModelId = seededAccount?.models?.[0]?.id;
+    if (!seededModelId) throw new Error("expected seeded account to have a model with an id");
+    expect(seededAccount?.default_model).toBe(seededModelId);
+  });
+
   test("seeds only the field that is still unset (per-field idempotency, mirrors migrateModelSplit)", async () => {
     const { editorCmd, cleanup } = fakeEditorFor(VALID_PROVIDER_YAML);
     cleanupEditor = cleanup;
@@ -229,7 +252,7 @@ describe("createProviderViaEditor - conversation_model/extraction_model seeding 
 
     if (!saved) throw new Error("expected ctx.ei.updateSettings to be called");
     expect(saved.conversation_model).toBeUndefined();
-    expect(saved.extraction_model).toBe("TestProvider:default");
+    expect(saved.extraction_model).toBe(saved.accounts?.[0]?.models?.[0]?.id);
   });
 
   test("always includes the new account in accounts regardless of seeding", async () => {

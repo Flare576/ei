@@ -54,15 +54,13 @@ export async function createProviderViaEditor(ctx: CommandContext, name?: string
       const accounts = [...(human.settings?.accounts ?? []), account];
       const updates: Partial<HumanSettings> = { accounts };
       
-      if (!human.settings?.conversation_model) {
-        updates.conversation_model = account.default_model
-          ? `${account.name}:${account.default_model}`
-          : account.name;
+      const defaultModelId = account.default_model ?? account.models?.[0]?.id;
+
+      if (!human.settings?.conversation_model && defaultModelId) {
+        updates.conversation_model = defaultModelId;
       }
-      if (!human.settings?.extraction_model) {
-        updates.extraction_model = account.default_model
-          ? `${account.name}:${account.default_model}`
-          : account.name;
+      if (!human.settings?.extraction_model && defaultModelId) {
+        updates.extraction_model = defaultModelId;
       }
       await ctx.ei.updateSettings(updates);
       

@@ -1152,6 +1152,43 @@ describe("providerToYAML / providerFromYAML", () => {
     expect(account.models![0].name).toBe("gpt-4o");
     expect(account.models![0].id).toBeDefined();
   });
+
+  test("newProviderFromYAML resolves default_model to the model's GUID (issue #89)", () => {
+    const yaml = [
+      "name: My New Provider",
+      "type: llm",
+      "url: https://api.mynewprovider.com/v1",
+      "api_key: sk-abc",
+      "default_model: gpt-4o",
+      "token_limit: null",
+      "enabled: true",
+      "models:",
+      "  - name: gpt-4o",
+      "  - name: gpt-3.5-turbo",
+    ].join("\n");
+    const account = newProviderFromYAML(yaml);
+    const gpt4 = account.models?.find(m => m.name === "gpt-4o");
+    expect(gpt4?.id).toBeDefined();
+    // Must be the model's GUID, never the raw "gpt-4o" name/display value.
+    expect(account.default_model).toBe(gpt4?.id);
+    expect(account.default_model).not.toBe("gpt-4o");
+  });
+
+  test("newProviderFromYAML drops default_model when it names no model", () => {
+    const yaml = [
+      "name: My New Provider",
+      "type: llm",
+      "url: https://api.mynewprovider.com/v1",
+      "api_key: sk-abc",
+      "default_model: no-such-model",
+      "token_limit: null",
+      "enabled: true",
+      "models:",
+      "  - name: gpt-4o",
+    ].join("\n");
+    const account = newProviderFromYAML(yaml);
+    expect(account.default_model).toBeUndefined();
+  });
 });
 
 // =============================================================================
