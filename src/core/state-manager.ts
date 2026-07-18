@@ -1283,6 +1283,11 @@ export class StateManager {
 
     const { cleared, affectedPersonaIds } = this.sweepModelReferences(settings, removedModelIds);
 
+    if (account.default_model !== undefined && removedModelIds.has(account.default_model)) {
+      account.default_model = undefined;
+      cleared.push("provider.default_model");
+    }
+
     if (existing) {
       accounts[accounts.indexOf(existing)] = account;
     } else {
