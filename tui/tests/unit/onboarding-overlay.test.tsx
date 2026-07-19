@@ -117,6 +117,20 @@ async function waitForFrame(
   throw new Error(`Timed out waiting for frame condition. Last frame:\n${captureCharFrame()}`);
 }
 
+async function waitForCondition(
+  renderOnce: () => Promise<void>,
+  predicate: () => boolean,
+  timeoutMs = 8000
+): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    await renderOnce();
+    if (predicate()) return;
+    await wait(30);
+  }
+  throw new Error("Timed out waiting for condition");
+}
+
 describe("OnboardingOverlay — happy path", () => {
   it("walks Welcome -> Provider -> Install -> Done, sets import flags via updateSettings, and stamps local.json exactly once", async () => {
     runHarnessInstallImpl = async () => ({ ok: true, failures: [] });
@@ -193,8 +207,7 @@ describe("OnboardingOverlay — happy path", () => {
       // --- Step 4: Done (dismiss) ---
       expect(onDismissCalled).toBe(false);
       mockInput.pressEnter();
-      await renderOnce();
-      await wait();
+      await waitForCondition(renderOnce, () => onDismissCalled);
       expect(onDismissCalled).toBe(true);
 
       const stamped = await getInstalledVersion(testDataDir);

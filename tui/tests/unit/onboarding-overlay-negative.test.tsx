@@ -86,6 +86,20 @@ async function waitForFrame(
   throw new Error(`Timed out waiting for frame condition. Last frame:\n${captureCharFrame()}`);
 }
 
+async function waitForCondition(
+  renderOnce: () => Promise<void>,
+  predicate: () => boolean,
+  timeoutMs = 8000
+): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    await renderOnce();
+    if (predicate()) return;
+    await wait(30);
+  }
+  throw new Error("Timed out waiting for condition");
+}
+
 describe("OnboardingOverlay — negative paths", () => {
   it("declining Install still completes the wizard and stamps; detected sources are never flagged on when Install is declined", async () => {
     runHarnessInstallCalls = 0;
@@ -152,8 +166,7 @@ describe("OnboardingOverlay — negative paths", () => {
 
       // --- Done: no crash, stamps despite the earlier decline ---
       mockInput.pressEnter();
-      await renderOnce();
-      await wait();
+      await waitForCondition(renderOnce, () => onDismissCalled);
       expect(onDismissCalled).toBe(true);
 
       const stamped = await getInstalledVersion(testDataDir);
