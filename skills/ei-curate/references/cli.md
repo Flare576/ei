@@ -39,7 +39,7 @@ sources: [ "slack:C123…", … ]                    # (managed) origin channels
 persona_groups: […]                              # (managed)
 exposure_current, exposure_desired,              # (managed)
 validated_date, learned_on, last_mentioned, last_updated,      # (managed)
-learned_by, last_changed_by, interested_personas,              # (managed)
+learned_by, last_changed_by, interested_personas, rewrite_length_floor,      # (managed)
 linked_quotes: [ { id, text, speaker, timestamp } ]            # (READ-ONLY projection — see note)
 ```
 

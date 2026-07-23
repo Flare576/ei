@@ -60,6 +60,12 @@ Four correctable record types (personas are **not** editable here — leave them
 | **topic** | a subject/project | correct the description, or remove |
 | **quote** | a real utterance from a conversation | re-point it to the correct person/topic, or fix its text; public Ei tools do not create or remove quotes |
 
+> **Not this skill:** if a person/topic record is *correctly attributed* but
+> has simply grown bloated with content that belongs elsewhere (project
+> detail buried in a Person profile, a Topic that became a catch-all) — that's
+> a redistribution problem, not a correctness problem. Use the `ei-rewrite`
+> skill instead.
+
 **The links that matter:** a **quote** carries a `data_item_ids` array — the ids of the
 people/topics (or, less commonly, facts) it is attached to; each id must resolve to an
 existing fact, topic, or person record or the write is rejected. A **person** record, when
