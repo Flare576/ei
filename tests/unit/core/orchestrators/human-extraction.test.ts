@@ -165,7 +165,10 @@ describe("Scan Orchestrators (Step 1)", () => {
       expect(buildFactFindPrompt).toHaveBeenCalledWith({
         persona_name: "Ei",
         missing_fact_names: ["Full Name"],
-        messages_context: context.messages_context,
+        // With this tiny fixture (~11-token analyze batch), the chunker's content-sized budget
+        // correctly excludes the earlier-context message — see extraction-chunker.test.ts for
+        // the dedicated coverage of that sizing behavior.
+        messages_context: [],
         messages_analyze: context.messages_analyze,
       });
 
@@ -204,7 +207,7 @@ describe("Scan Orchestrators (Step 1)", () => {
       expect(buildHumanTopicScanPrompt).toHaveBeenCalledWith(
         expect.objectContaining({
           persona_name: "Ei",
-          messages_context: context.messages_context,
+          messages_context: [],
           messages_analyze: context.messages_analyze,
         })
       );
@@ -224,7 +227,7 @@ describe("Scan Orchestrators (Step 1)", () => {
       expect(buildHumanPersonScanPrompt).toHaveBeenCalledWith(
         expect.objectContaining({
           persona_name: "Ei",
-          messages_context: context.messages_context,
+          messages_context: [],
           messages_analyze: context.messages_analyze,
         })
       );

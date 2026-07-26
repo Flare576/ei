@@ -6,6 +6,7 @@ import { getMessageDisplayText } from "../../prompts/message-utils.js";
 const DEFAULT_MAX_TOKENS = 10000;
 const CHARS_PER_TOKEN = 4;
 const CONTEXT_RATIO = 0.15;
+const MAX_CONTEXT_TOKENS = 1000;
 const ANALYZE_RATIO = 0.85;
 const SYSTEM_PROMPT_BUFFER = 1000;
 
@@ -13,11 +14,16 @@ function estimateTokens(text: string): number {
   return Math.ceil(text.length / CHARS_PER_TOKEN);
 }
 
+function estimateSingleMessageTokens(message: Message): number {
+  // Must match what actually gets hydrated into the provider prompt — includes silence_reason,
+  // not just raw content — so admission checks below can't under-price a message relative to
+  // what's really sent.
+  const text = getMessageDisplayText(message) ?? getMessageContent(message);
+  return estimateTokens(text) + 4;
+}
+
 function estimateMessageTokens(messages: Message[]): number {
-  return messages.reduce((sum, msg) => {
-    const text = getMessageDisplayText(msg) ?? getMessageContent(msg);
-    return sum + estimateTokens(text) + 4;
-  }, 0);
+  return messages.reduce((sum, msg) => sum + estimateSingleMessageTokens(msg), 0);
 }
 
 function fitMessagesFromEnd(messages: Message[], maxTokens: number): Message[] {
@@ -25,7 +31,7 @@ function fitMessagesFromEnd(messages: Message[], maxTokens: number): Message[] {
   let tokens = 0;
 
   for (let i = messages.length - 1; i >= 0; i--) {
-    const msgTokens = estimateTokens(getMessageContent(messages[i])) + 4;
+    const msgTokens = estimateSingleMessageTokens(messages[i]);
     if (tokens + msgTokens > maxTokens) break;
     result.unshift(messages[i]);
     tokens += msgTokens;
@@ -44,7 +50,7 @@ function pullMessagesFromStart(
   let i = startIndex;
 
   while (i < messages.length) {
-    const msgTokens = estimateTokens(getMessageContent(messages[i])) + 4;
+    const msgTokens = estimateSingleMessageTokens(messages[i]);
     if (tokens + msgTokens > maxTokens && pulled.length > 0) break;
     pulled.push(messages[i]);
     tokens += msgTokens;
@@ -75,12 +81,12 @@ export function chunkExtractionContext(
   }
 
   const availableTokens = maxTokens - SYSTEM_PROMPT_BUFFER;
-  const contextBudget = Math.floor(availableTokens * CONTEXT_RATIO);
   const analyzeBudget = Math.floor(availableTokens * ANALYZE_RATIO);
 
   const totalAnalyzeTokens = estimateMessageTokens(messages_analyze);
 
   if (totalAnalyzeTokens <= analyzeBudget) {
+    const contextBudget = Math.min(Math.floor(CONTEXT_RATIO * totalAnalyzeTokens), MAX_CONTEXT_TOKENS);
     const fittedContext = fitMessagesFromEnd(messages_context, contextBudget);
     return {
       chunks: [{
@@ -95,7 +101,7 @@ export function chunkExtractionContext(
   }
 
   const chunks: ExtractionContext[] = [];
-  let currentContext = fitMessagesFromEnd(messages_context, contextBudget);
+  let currentContextPool = messages_context;
   let analyzeIndex = 0;
 
   console.log(`[Chunker] Splitting ${messages_analyze.length} messages (~${totalAnalyzeTokens} tokens) into batches (budget: ${analyzeBudget} tokens/batch)`);
@@ -109,17 +115,21 @@ export function chunkExtractionContext(
 
     if (pulled.length === 0) break;
 
+    const analyzeTokensForChunk = estimateMessageTokens(pulled);
+    const contextBudget = Math.min(Math.floor(CONTEXT_RATIO * analyzeTokensForChunk), MAX_CONTEXT_TOKENS);
+    const chunkContext = fitMessagesFromEnd(currentContextPool, contextBudget);
+
     chunks.push({
       personaId,
       channelDisplayName: personaDisplayName,
-      messages_context: currentContext,
+      messages_context: chunkContext,
       messages_analyze: pulled,
     });
 
-    const chunkTokens = estimateMessageTokens(currentContext) + estimateMessageTokens(pulled);
-    console.log(`[Chunker] Batch ${chunks.length}: ${currentContext.length} context + ${pulled.length} analyze msgs (~${chunkTokens} tokens)`);
+    const chunkTokens = estimateMessageTokens(chunkContext) + analyzeTokensForChunk;
+    console.log(`[Chunker] Batch ${chunks.length}: ${chunkContext.length} context + ${pulled.length} analyze msgs (~${chunkTokens} tokens)`);
 
-    currentContext = fitMessagesFromEnd(pulled, contextBudget);
+    currentContextPool = pulled;
     analyzeIndex = nextIndex;
   }
 
