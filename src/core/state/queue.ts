@@ -15,8 +15,11 @@ function isPermanentError(error: string): boolean {
     // 4xx are permanent EXCEPT 429 (rate limit) and 408 (request timeout)
     return status >= 400 && status < 500 && status !== 429 && status !== 408;
   }
-  // Pattern-based fallback for non-HTTP errors
-  return /bad request|invalid api key|unauthorized|forbidden/i.test(error);
+  // Pattern-based fallback for non-HTTP errors. Includes stale/unresolvable model
+  // configuration (resolveModel()'s "not found", legacy "no longer exists" wording,
+  // and duplicate-ownership "is ambiguous" wording) — an invalid model reference
+  // cannot self-resolve on retry.
+  return /bad request|invalid api key|unauthorized|forbidden|model\b.*(not found|no longer exists|is ambiguous)/i.test(error);
 }
 
 function calculateBackoff(attempts: number): number {

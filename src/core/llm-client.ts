@@ -129,18 +129,20 @@ export function resolveModel(modelSpec?: string, accounts?: ProviderAccount[]): 
     throw new Error("No model specified. Set a provider on this persona with /provider, or set a default_model in settings.");
   }
 
-  if (accounts && isGuid(modelSpec)) {
-    const result = resolveModelById(modelSpec, accounts);
-    if (result) {
-      return buildResolvedModel(result.account, result.model);
+  if (isGuid(modelSpec)) {
+    const owners = (accounts ?? []).filter(
+      (acc) => acc.enabled && acc.type === "llm" && acc.models?.some((m) => m.id === modelSpec)
+    );
+
+    if (owners.length > 1) {
+      throw new Error(
+        `Model "${modelSpec}" is ambiguous: multiple enabled providers own this model ID. Update this persona's model in settings.`
+      );
     }
 
-    const fallbackAccount = accounts.find((acc) => acc.enabled && acc.type === "llm" && acc.default_model);
-    if (fallbackAccount?.default_model) {
-      const fallbackResult = resolveModelById(fallbackAccount.default_model, accounts);
-      if (fallbackResult) {
-        return buildResolvedModel(fallbackResult.account, fallbackResult.model);
-      }
+    if (owners.length === 1) {
+      const model = owners[0].models!.find((m) => m.id === modelSpec)!;
+      return buildResolvedModel(owners[0], model);
     }
 
     throw new Error(
