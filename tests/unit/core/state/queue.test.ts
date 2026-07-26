@@ -162,6 +162,22 @@ describe("QueueState", () => {
         .toContain('Configured model "missing-model-id" no longer exists');
     });
 
+    it("moves emitted unresolved and ambiguous model errors to DLQ", () => {
+      const errors = [
+        'Model "missing-model-id" not found. It may have been deleted.',
+        'Model "duplicate-model-id" is ambiguous: multiple enabled providers own this model ID.',
+      ];
+
+      for (const error of errors) {
+        const id = state.enqueue(makeRequest());
+        expect(state.fail(id, error).dropped).toBe(true);
+      }
+
+      expect(state.length()).toBe(0);
+      expect(state.dlqLength()).toBe(2);
+      expect(state.getDLQItems().map(item => item.data._lastError)).toEqual(errors);
+    });
+
     it("moves 401 auth errors to DLQ", () => {
       const id = state.enqueue(makeRequest());
 
