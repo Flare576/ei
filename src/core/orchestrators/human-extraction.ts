@@ -94,7 +94,7 @@ function getExtractionMaxTokens(state: StateManager, options?: ExtractionOptions
   const human = state.getHuman();
   const modelForTokenLimit = options?.extraction_model ?? human.settings?.extraction_model ?? human.settings?.conversation_model;
   const tokenLimit = resolveTokenLimit(modelForTokenLimit, human.settings?.accounts);
-  return Math.max(MIN_EXTRACTION_TOKENS, Math.floor(tokenLimit * EXTRACTION_BUDGET_RATIO));
+  return Math.min(tokenLimit, Math.max(MIN_EXTRACTION_TOKENS, Math.floor(tokenLimit * EXTRACTION_BUDGET_RATIO)));
 }
 
 export function queueFactFind(context: ExtractionContext, state: StateManager, options?: ExtractionOptions): number {

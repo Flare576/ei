@@ -26,7 +26,7 @@ function getExtractionMaxTokens(state: StateManager): number {
   const human = state.getHuman();
   const modelForTokenLimit = human.settings?.extraction_model ?? human.settings?.conversation_model;
   const tokenLimit = resolveTokenLimit(modelForTokenLimit, human.settings?.accounts);
-  return Math.max(MIN_EXTRACTION_TOKENS, Math.floor(tokenLimit * EXTRACTION_BUDGET_RATIO));
+  return Math.min(tokenLimit, Math.max(MIN_EXTRACTION_TOKENS, Math.floor(tokenLimit * EXTRACTION_BUDGET_RATIO)));
 }
 
 export function queuePersonaTopicRating(

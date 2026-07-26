@@ -25,7 +25,7 @@ const MIN_EXTRACTION_TOKENS = 10000;
 function getExtractionMaxTokens(state: StateManager): number {
   const human = state.getHuman();
   const tokenLimit = resolveTokenLimit(human.settings?.extraction_model ?? human.settings?.conversation_model, human.settings?.accounts);
-  return Math.max(MIN_EXTRACTION_TOKENS, Math.floor(tokenLimit * EXTRACTION_BUDGET_RATIO));
+  return Math.min(tokenLimit, Math.max(MIN_EXTRACTION_TOKENS, Math.floor(tokenLimit * EXTRACTION_BUDGET_RATIO)));
 }
 
 function buildRoomParticipantContext(roomId: string, state: StateManager): ParticipantContext {
