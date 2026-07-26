@@ -456,8 +456,9 @@ export function queueTopicUpdate(
     existingItem = state.getHuman().topics.find(t => t.id === matchedGuid) ?? null;
   }
 
-  const extractionOptions: ExtractionOptions = { extraction_model: context.extraction_model };
-  const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state, extractionOptions));
+  const settings = state.getHuman().settings;
+  const extractionModel = context.extraction_model ?? settings?.extraction_model ?? settings?.conversation_model;
+  const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state, { extraction_model: extractionModel }));
 
   if (chunks.length === 0) return 0;
 
@@ -478,7 +479,7 @@ export function queueTopicUpdate(
     state.queue_enqueue({
       type: LLMRequestType.JSON,
       priority: LLMPriority.Normal,
-      model: context.extraction_model,
+      model: extractionModel,
       system: prompt.system,
       user: prompt.user,
       next_step: LLMNextStep.HandleTopicUpdate,
@@ -490,6 +491,7 @@ export function queueTopicUpdate(
         candidateName: isNewItem ? context.candidateName : undefined,
         candidateDescription: isNewItem ? context.candidateDescription : undefined,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
+        extraction_model: extractionModel,
       },
     });
   }
@@ -619,8 +621,9 @@ export function queuePersonUpdate(
       .filter(Boolean)
   )];
 
-  const extractionOptions: ExtractionOptions = { extraction_model: context.extraction_model };
-  const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state, extractionOptions));
+  const settings = state.getHuman().settings;
+  const extractionModel = context.extraction_model ?? settings?.extraction_model ?? settings?.conversation_model;
+  const { chunks } = chunkExtractionContext(context, getExtractionMaxTokens(state, { extraction_model: extractionModel }));
 
   if (chunks.length === 0) return 0;
 
@@ -643,7 +646,7 @@ export function queuePersonUpdate(
     state.queue_enqueue({
       type: LLMRequestType.JSON,
       priority: LLMPriority.Normal,
-      model: context.extraction_model,
+      model: extractionModel,
       system: prompt.system,
       user: prompt.user,
       next_step: LLMNextStep.HandlePersonUpdate,
@@ -658,7 +661,7 @@ export function queuePersonUpdate(
         candidateRelationship: context.candidateRelationship,
         candidateIdentifiers: isNewItem ? candidateIdentifiers : undefined,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
-        extraction_model: context.extraction_model,
+        extraction_model: extractionModel,
         sources: context.sources,
       },
     });

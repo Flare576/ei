@@ -18,6 +18,7 @@ import {
   queueEventSummary,
   queueTargetedPersonUpdate,
   queuePersonUpdate,
+  queueTopicUpdate,
   queueTopicMatch,
   queueDirectTopicUpdate,
   queueTargetedTopicUpdate,
@@ -350,6 +351,47 @@ describe("extraction model fallback (regression: was silently using conversation
     queueFactFind(context, state, { extraction_model: "explicit-override-guid" });
     const call = state.queue_enqueue.mock.calls[0][0];
     expect(call.model).toBe("explicit-override-guid");
+  });
+
+  // C2 (Beta review, 2026-07-25): queueTopicUpdate/queuePersonUpdate compute their chunk
+  // budget via getExtractionMaxTokens(state, { extraction_model: context.extraction_model }),
+  // which internally falls back to settings.extraction_model, then settings.conversation_model.
+  // But dispatch used to pass `model: context.extraction_model` bare — when that's undefined,
+  // state-manager.ts's queue_enqueue() defaults an unset model straight to
+  // settings.conversation_model, SKIPPING settings.extraction_model entirely. Budget and
+  // dispatch could resolve to two different models whenever settings.extraction_model was set
+  // and context.extraction_model was omitted (e.g. a Slack workspace with no per-workspace
+  // extraction_model override).
+  it("queueTopicUpdate: no context.extraction_model -> dispatch model matches the model the chunk budget was computed against", () => {
+    queueTopicUpdate(
+      { matched_guid: "top1" },
+      {
+        ...context,
+        candidateName: "AI",
+        candidateDescription: "Artificial Intelligence",
+        candidateCategory: "Technical",
+      },
+      state,
+    );
+    const call = state.queue_enqueue.mock.calls[0][0];
+    expect(call.model).toBe("extraction-guid");
+    expect(call.data.extraction_model).toBe("extraction-guid");
+  });
+
+  it("queuePersonUpdate: no context.extraction_model -> dispatch model matches the model the chunk budget was computed against", () => {
+    queuePersonUpdate(
+      { matched_guid: "p1" },
+      {
+        ...context,
+        candidateName: "Alice",
+        candidateDescription: "Best friend",
+        candidateRelationship: "friend",
+      },
+      state,
+    );
+    const call = state.queue_enqueue.mock.calls[0][0];
+    expect(call.model).toBe("extraction-guid");
+    expect(call.data.extraction_model).toBe("extraction-guid");
   });
 });
 describe("Human-chain extraction model propagation", () => {
