@@ -212,6 +212,22 @@ describe("callLLMRaw — usage counter callback", () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
+  it("rejects a GUID owned only by a disabled account before provider dispatch", async () => {
+    const disabledModel = makeModel("disabled-model");
+    const disabledAccount = makeAccount("Disabled", [disabledModel], { enabled: false });
+    const fallbackModel = makeModel("default");
+    const fallbackAccount = makeAccount("Fallback", [fallbackModel], {
+      default_model: fallbackModel.id,
+    });
+    const mockFetch = stubFetch(makeLLMResponse());
+
+    await expect(
+      callLLMRaw("sys", "user", [], disabledModel.id, {}, [disabledAccount, fallbackAccount])
+    ).rejects.toThrow(`Model "${disabledModel.id}" not found`);
+
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
   it("does not throw when onUsageUpdate is not provided", async () => {
     const model = makeModel("gpt-4o");
     const account = makeAccount("OpenAI", [model]);

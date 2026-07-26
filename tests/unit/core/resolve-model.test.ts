@@ -184,6 +184,21 @@ describe("resolveModel", () => {
     expect(result.model).toBe("claude-opus-4");
   });
 
+  it("rejects duplicate enabled model IDs as ambiguous", () => {
+    const duplicateId = crypto.randomUUID();
+    const first = createAccount({
+      name: "First",
+      models: [createModel("first-model", { id: duplicateId })],
+    });
+    const second = createAccount({
+      name: "Second",
+      models: [createModel("second-model", { id: duplicateId })],
+    });
+
+    expect(() => resolveModel(duplicateId, [first, second]))
+      .toThrow(`Model "${duplicateId}" is ambiguous`);
+  });
+
   // ── Test 9: getDisplayName "Provider:model" ─────────────────────────────────
   // (tested above in getDisplayName suite — verified here via round-trip)
   it("test 9: resolveModel + getDisplayName round-trips correctly", () => {
