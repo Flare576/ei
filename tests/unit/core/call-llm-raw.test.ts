@@ -169,17 +169,20 @@ describe("callLLMRaw — usage counter callback", () => {
     expect(usage.tokens_out).toBe(100);
   });
 
-  it("does not call onUsageUpdate when modelConfig not found (unknown GUID fallback)", async () => {
+  it("rejects an unknown GUID before provider dispatch even when an account default_model exists", async () => {
     const defaultModel = makeModel("default");
     const account = makeAccount("Fallback", [makeModel("gpt-4o"), defaultModel], {
       default_model: defaultModel.id,
     });
-    stubFetch(makeLLMResponse());
-
+    const mockFetch = stubFetch(makeLLMResponse());
     const onUsageUpdate = vi.fn();
+    const unknownGuid = crypto.randomUUID();
 
-    await callLLMRaw("sys", "user", [], crypto.randomUUID(), { onUsageUpdate }, [account]);
+    await expect(
+      callLLMRaw("sys", "user", [], unknownGuid, { onUsageUpdate }, [account])
+    ).rejects.toThrow(`Model "${unknownGuid}" not found`);
 
+    expect(mockFetch).not.toHaveBeenCalled();
     expect(onUsageUpdate).not.toHaveBeenCalled();
   });
 

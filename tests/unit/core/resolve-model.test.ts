@@ -143,8 +143,8 @@ describe("resolveModel", () => {
     expect(result.model).toBe("org/model:variant");
   });
 
-  // ── Test 5: Nonexistent GUID falls back to account default_model ────────────
-  it("test 5: nonexistent GUID falls back to account default_model", () => {
+  // ── Test 5: Nonexistent GUID is invalid configuration, even with a default model ──
+  it("test 5: nonexistent GUID throws even when an account default_model exists", () => {
     const defaultModel = createModel("gpt-4o");
     const account = createAccount({
       name: "OpenAI",
@@ -152,9 +152,9 @@ describe("resolveModel", () => {
       default_model: defaultModel.id,
     });
     const nonexistentGuid = crypto.randomUUID();
-    const result = resolveModel(nonexistentGuid, [account]);
-    expect(result.provider).toBe("OpenAI");
-    expect(result.model).toBe("gpt-4o");
+
+    expect(() => resolveModel(nonexistentGuid, [account]))
+      .toThrow(`Model "${nonexistentGuid}" not found`);
   });
 
   // ── Test 6: Nonexistent GUID with no default_model throws ───────────────────
