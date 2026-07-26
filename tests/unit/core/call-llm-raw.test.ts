@@ -186,6 +186,32 @@ describe("callLLMRaw — usage counter callback", () => {
     expect(onUsageUpdate).not.toHaveBeenCalled();
   });
 
+  it("rejects an unknown GUID before provider dispatch when account configuration is absent", async () => {
+    const mockFetch = stubFetch(makeLLMResponse());
+    const onUsageUpdate = vi.fn();
+    const unknownGuid = crypto.randomUUID();
+
+    await expect(
+      callLLMRaw("sys", "user", [], unknownGuid, { onUsageUpdate }, undefined)
+    ).rejects.toThrow(`Model "${unknownGuid}" not found`);
+
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(onUsageUpdate).not.toHaveBeenCalled();
+  });
+
+  it("rejects an ambiguously owned GUID before provider dispatch", async () => {
+    const duplicateId = crypto.randomUUID();
+    const firstAccount = makeAccount("First", [makeModel("first-model", { id: duplicateId })]);
+    const secondAccount = makeAccount("Second", [makeModel("second-model", { id: duplicateId })]);
+    const mockFetch = stubFetch(makeLLMResponse());
+
+    await expect(
+      callLLMRaw("sys", "user", [], duplicateId, {}, [firstAccount, secondAccount])
+    ).rejects.toThrow(`Model "${duplicateId}" is ambiguous`);
+
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
   it("does not throw when onUsageUpdate is not provided", async () => {
     const model = makeModel("gpt-4o");
     const account = makeAccount("OpenAI", [model]);
