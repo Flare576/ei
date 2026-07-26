@@ -148,6 +148,20 @@ describe("QueueState", () => {
       expect(state.getDLQItems()[0].state).toBe("dlq");
     });
 
+    it("moves stale model configuration errors to DLQ", () => {
+      const id = state.enqueue(makeRequest());
+
+      const result = state.fail(
+        id,
+        'Configured model "missing-model-id" no longer exists'
+      );
+
+      expect(result.dropped).toBe(true);
+      expect(state.dlqLength()).toBe(1);
+      expect(state.getDLQItems()[0]?.data._lastError)
+        .toContain('Configured model "missing-model-id" no longer exists');
+    });
+
     it("moves 401 auth errors to DLQ", () => {
       const id = state.enqueue(makeRequest());
 
