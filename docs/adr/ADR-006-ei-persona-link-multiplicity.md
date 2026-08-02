@@ -1,8 +1,8 @@
-# ADR-006: Persona-to-Person Link Multiplicity
+# ADR-006: A Person Record and a Persona Link One-to-One
 
 ## Status
 
-**Proposed.** One question in the Decision section is genuinely open and belongs to the project owner. Everything else here is settled and safe to build against.
+Accepted
 
 ## Date
 
@@ -10,85 +10,106 @@
 
 ## Context
 
-Ei links a Persona to a Person record through an identifier on the Person: `{ type: "Ei Persona", value: <persona uuid> }`. That linked Person record is the **PersonLog** — the accumulating behavioral record that reflection reads and clears.
+Ei links a `Person` record to a `PersonaEntity` through an identifier on the Person: `{ type: "Ei Persona", value: <persona id> }`. That linked Person record is the **PersonLog** — the accumulating behavioral record reflection reads and clears.
 
-Three places in the codebase describe the cardinality of that link, and they do not agree.
+The original design deliberately allowed a **many-to-many** graph. The intent was composites: someone curious what a persona blending King and Einstein would be like could point both the King and Einstein Person records at that one Persona. If they also kept standalone King and Einstein Personas, each Person record would then carry several `Ei Persona` identifiers, overlapping at the composite.
 
-**`src/cli/retrieval.ts`, on `lookupByIdentifier`** — returns the first matching Person, and its comment states this is *"safe for identifier types that are unique by construction (e.g. `Ei Persona`, a UUID assigned once per persona), but arbitrary if more than one Person shares a value under a type that isn't guaranteed unique."* This asserts one persona uuid appears on at most one Person.
+Three sites described the resulting cardinality inconsistently — `CONTRACTS.md` permitted many, `lookupByIdentifier`'s comment asserted uniqueness "by construction," and the ceremony's reflection phase detected and refused the many case while calling it *"might be intentional — if you created a composite persona."* That disagreement is what opened this record.
 
-**`src/core/orchestrators/ceremony.ts`, in the reflection phase** — filters every Person carrying this persona's id, and if more than one is found, refuses to reflect and writes a user-facing warning. So this code path is built for exactly the situation the comment above says cannot happen.
-
-**`CONTRACTS.md`** — states a single Person record may carry multiple `ei_persona` identifiers.
-
-The three are not actually describing the same thing, which is most of why they read as contradictory. There are **two distinct multiplicities**:
-
-| Shape | Meaning | Status |
-|---|---|---|
-| One Person, many persona ids | A single human record associated with several personas | Explicitly permitted by `CONTRACTS.md` |
-| Many Persons, one persona id | Several human records each claiming the same persona | The case ceremony detects and refuses |
-
-`CONTRACTS.md` permits the first. `retrieval.ts` asserts the second does not happen. Ceremony handles the second anyway. Only the second is contested.
+The disagreement turned out to be downstream of the design, not a misunderstanding of it. The design was real; it is now rejected.
 
 ## Decision
 
-**Settled: any consumer resolving a Persona's log must enumerate all linked Person records and never silently take the first.**
+**One Person record links to exactly one Persona. One Persona is linked from exactly one Person record.**
 
-This holds regardless of how the open question below resolves, because the situation demonstrably *can* occur — ceremony's branch exists, fires, and writes a warning a user can read. Whether it is legal or a defect, code that assumes it away will pick an arbitrary record and clear the wrong log. The reflection skill therefore enumerates and asks; the readiness notice aggregates across all linked records rather than reading one.
+A composite is still supported — it simply gets its own Person record rather than being expressed as a shared link:
 
-**Open — belongs to the project owner:** is *many Persons sharing one persona id* a supported configuration or a data defect?
+```
+Person:Einstein        <->  Persona:Einstein
+Person:King            <->  Persona:King
+Person:King_Einstein   <->  Persona:King_Einstein
+```
 
-The evidence points both ways, which is why this is not being decided here:
+The composite Persona gets a composite Person, and the graph stays a set of pairs. Nothing a user could express under the old model becomes unexpressible; it just stops being expressed by overlapping edges.
 
-- Ceremony's warning text tells the user *"This might be intentional — if you created a composite persona."* That reads as sanctioning it.
-- But "composite persona" more naturally describes the **other** multiplicity — one Person holding several persona ids — which is the shape `CONTRACTS.md` actually permits. So the warning may be describing a configuration it did not detect.
-
-Resolving it decides two follow-on corrections:
-
-- **If it is a defect:** `retrieval.ts`'s comment is correct, ceremony's warning text should stop suggesting intent, and the warning should point toward repair.
-- **If it is supported:** `retrieval.ts`'s comment is wrong and its first-match behavior is arbitrary for `Ei Persona` too, `CONTRACTS.md` should document the shape, and ceremony's refusal to reflect needs a defined resolution path rather than a permanent pause.
+**This is a decision about intent, not a description of current code.** The codebase permits and actively creates the many-to-many shape today. The gap between this record and reality is a tracked fix, not an oversight — see the footprint below.
 
 ## Alternatives Considered
 
-### Alternative A: Decide it here, in favour of uniqueness
-- **Description**: Declare many-Persons-one-persona a defect, correct ceremony's warning text, ship.
-- **Pros**: Closes the contradiction now. Matches the most likely original intent, since a persona uuid is generated once.
-- **Cons**: Would silently reclassify any existing install that has this shape — plausibly created deliberately — as corrupt, and the warning text is the only user-facing communication about it.
-- **Why not chosen**: The reclassification is a product decision with a user-visible consequence, and nothing in source establishes intent strongly enough to make it unilaterally.
+### Alternative A: keep many-to-many
+- **Description**: Leave the graph as designed; correct the docs and the first-match sites to handle multiplicity properly.
+- **Pros**: No migration. Composites keep the more compact expression.
+- **Cons**: Every consumer resolving "the log for this Persona" must handle zero, one, or many, and choose between them — which is a question with no good automatic answer. The ceremony already refuses rather than choosing, and the reflection skill has to stop and ask a human. The expressive gain is one saved record; the cost is an unanswerable question at every read site.
+- **Why not chosen**: The project owner's assessment on revisiting it: *"In retrospect... that is stupid, and we should not do that."*
 
-### Alternative B: Decide it here, in favour of multiplicity
-- **Description**: Declare it supported, correct `retrieval.ts`, define a resolution path for reflection.
-- **Pros**: Matches the warning's own wording and requires no user's data to be called broken.
-- **Cons**: Rests entirely on one parenthetical in a log message, against a comment that reasons explicitly about uniqueness. Also leaves reflection permanently paused for those personas with no defined way forward.
-- **Why not chosen**: Same reason — insufficient evidence, and this direction carries the larger implementation burden if wrong.
+### Alternative B: one Person, many Personas — but not the reverse
+- **Description**: Permit a Person to carry several `Ei Persona` identifiers; forbid several Person records sharing one persona id.
+- **Pros**: Resolves the only genuinely ambiguous direction — "which log belongs to this Persona" gets one answer. Keeps the composite expression.
+- **Cons**: Leaves the inverse question ("which Persona is this human?") ambiguous, which matters for attribution. And it is a subtler rule to hold in mind than a pair.
+- **Why not chosen**: Half a constraint is harder to reason about than a whole one, and the composite use case is already served by its own record.
 
-### Alternative C: Leave the contradiction unrecorded
-- **Description**: Ship the enumerate-and-ask rule and say nothing about the disagreement.
-- **Pros**: No open ADR.
-- **Cons**: The next reader re-derives the whole thing, and the two source sites keep asserting incompatible invariants at each other indefinitely.
-- **Why not chosen**: Recording a live disagreement is more useful than a decision that was never actually made. An ADR marked Proposed is honest; one marked Accepted here would not be.
+### Alternative C: defer, keep ADR-006 Proposed
+- **Description**: Leave it open until something forces the issue.
+- **Pros**: No fix work.
+- **Cons**: The contradiction is live, load-bearing, and already producing wrong behavior — `handleReflectionCritic` clears whichever record `lookupByIdentifier` happens to return first.
+- **Why not chosen**: An unresolved cardinality question is what let three sites drift apart in the first place.
 
 ## Consequences
 
 ### Positive
-- The enumerate-and-ask rule is safe under either resolution, so dependent work proceeds without waiting.
-- The disagreement is now written down in one place instead of being rediscovered from three.
+- "Which log belongs to this Persona" has exactly one answer, so consumers stop needing an enumerate-and-ask branch.
+- The first-match sites that are wrong today become correct once the constraint holds, rather than needing individual repair.
 
 ### Negative
-- The index carries a Proposed entry, and two source sites keep contradicting each other until it resolves.
+- The codebase does not satisfy this yet. Until it does, this record describes intent and the enumerate-all rule below remains mandatory.
+- Existing installs may hold data in the old shape. Any enforcement needs a repair path, not just a guard.
+
+### The footprint, as investigated
+
+Moderate — real, bounded, spread across core, CLI, web, TUI, skills, and tests. Not schema-wide.
+
+**Paths that create the many shape today.** Not only hand-editing, which is the finding that matters most:
+- Web link action (`web/src/App.tsx:917-927`) and the PersonCard add-row (`:145-173`, `:289-417`) both append without a uniqueness check; the link guard checks only the selected person, so one Persona can be linked from several.
+- TUI `/p update` appends (`tui/src/commands/persona.tsx:417-423`); `/me` YAML round-trips every identifier.
+- CLI and MCP accept full identifier arrays.
+- **The LLM's `handlePersonUpdate` accepts and commits `Ei Persona` arrays** (`src/core/handlers/human-matching.ts:277-313`, `:328-345`).
+- **Dedup merges identifiers by value and can combine distinct persona ids** (`src/core/handlers/dedup.ts:50-96`, `:177-184`), and its prompt instructs a union.
+
+The last two contradict `CONTRACTS.md`'s claim that these links are *"always user-initiated — the system never auto-links without confirmation."* That claim is already false.
+
+**Sites that already assume one.** These are wrong under today's permissive model and become correct under this decision:
+- `human_person_getByIdentifier` (`src/core/state-manager.ts:738-743`) and `lookupByIdentifier` (`src/cli/retrieval.ts:660-690`) both return the first match.
+- **`handleReflectionCritic` delegates to first-match and then clears only that record** (`src/core/handlers/heartbeat.ts:137-145`) — under the many shape it clears an arbitrary log.
+- `ensureEiPersonaHasNickname` uses the first `Ei Persona` identifier only.
+- TUI `/p update` without a persona name resolves to the first linked record.
+
+**Sites that correctly handle many**, and can be simplified once the constraint holds: the ceremony's reflection phase (enumerate, warn and pause on more than one), the readiness resolver (`resolvePersonLogLength`, max across linked records), and the `ei-reflect` skill (all-match, ask the user).
+
+**Enforcement has no single chokepoint.** `applyCorrectionToHuman` bypasses `StateManager`, so a constraint placed there alone would not cover the corrections path. Dedup's update-before-remove sequence also creates a transient duplicate mid-merge, which a naive check would reject.
+
+**No existing link-repair machinery.** Dedup merges Person records and re-points quote foreign keys, so the shape to copy exists — but no routine specifically repairs persona links.
+
+### Until the constraint is enforced
+
+**Enumerate all linked records; never take the first.** This holds regardless, because the situation occurs in data whether or not it is legal. Code assuming one will silently pick an arbitrary record — which, for the critic, means clearing the wrong log.
 
 ### Risks
 
-- **The uniqueness comment is load-bearing and easy to trust.** `lookupByIdentifier`'s first-match behavior is documented as safe specifically for `Ei Persona`. Anyone reading only that comment will write first-match code. Until this resolves, treat the comment as an assumption rather than a guarantee.
+- **Repair before enforcement, or the guard rejects real data.** An install already holding the many shape will fail a naive uniqueness check on the next write to an unrelated field. Sequence matters.
 
-- **The warning text may be actively misleading.** If many-Persons-one-persona is a defect, the message currently tells users it might be intentional — which would discourage the very repair it should prompt.
+- **`handleReflectionCritic` is the sharp edge today.** It is the one first-match site whose consequence is destructive rather than merely wrong. Worth fixing ahead of the general constraint if enforcement is not immediate.
+
+- **The exact-case sites are a separate, overlapping hazard.** Several sites match `'Ei Persona'` exactly while the documented contract is case-insensitive. Enforcement written against one convention will miss records written under the other.
 
 ## Reversibility
 
-Trivial. Nothing is built on this record yet; the settled half only forbids an assumption. Resolving the open question amends this ADR and corrects at most one comment, one warning string, and one CONTRACTS row.
+Moderate. The decision itself is cheap to revisit — nothing built yet depends on it, and the enumerate-all rule is safe either way. Reversing it *after* enforcement and a data migration would be expensive, since the migration splits records and the split is not automatically undoable.
 
 ## References
 
-- ADR-001 — the Persona / Agent split that makes the PersonLog worth resolving correctly
-- ADR-007 — the opt-out flag whose readiness notice aggregates across linked records under the settled rule
-- `src/cli/retrieval.ts` — `lookupByIdentifier` and the uniqueness comment
-- `src/core/orchestrators/ceremony.ts` — the reflection phase's multi-record detection and its warning text
+- ADR-001 — the Persona / Agent split that makes the PersonLog worth resolving to one record
+- ADR-007 — the opt-out whose readiness notice aggregates across linked records under the interim rule
+- `src/core/orchestrators/ceremony.ts` — the reflection phase's multi-record detection and warning
+- `src/core/handlers/heartbeat.ts` — the first-match clear, the destructive case
+- `src/cli/retrieval.ts` — `lookupByIdentifier` and `resolvePersonLogLength`
+- `src/core/handlers/dedup.ts` — identifier union, and the transient-duplicate window

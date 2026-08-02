@@ -13,8 +13,10 @@ This exists because the alternative was observed directly: *"I really wish we ha
 | [003](ADR-003-personlog-clear-timing.md) | PersonLog Clears at Critic Completion, Not at User Decision | Accepted | 2026-08-01 | Current |
 | [004](ADR-004-exponential-exposure-decay.md) | Exposure Decays Exponentially at K=0.1, Replacing a Logistic Curve | Accepted | 2026-08-01 | Backfill |
 | [005](ADR-005-generic-user-references.md) | Generic User References (GURs) Define Ei's Design Priority | Accepted | 2026-08-01 | Current |
-| [006](ADR-006-ei-persona-link-multiplicity.md) | Persona-to-Person Link Multiplicity | **Proposed** | 2026-08-01 | Current |
+| [006](ADR-006-ei-persona-link-multiplicity.md) | A Person Record and a Persona Link One-to-One | Accepted | 2026-08-01 | Current |
 | [007](ADR-007-external-reflection-only.md) | A Persona May Opt Out of the Automatic Reflection Critic | Accepted | 2026-08-01 | Current |
+| [008](ADR-008-accepted-write-races.md) | Two Last-Write-Wins Races Are Accepted, Not Fixed | Accepted | 2026-08-01 | Current |
+| [009](ADR-009-tui-yaml-loses-to-concurrent-writes.md) | A Stale TUI YAML Edit Loses to a Concurrent Write | Accepted | 2026-08-01 | Current |
 
 ## Conventions
 
