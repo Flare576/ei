@@ -390,7 +390,7 @@ An earlier design deliberately allowed a many-to-many graph so a composite perso
 
 Two consequences for anyone writing against this section today:
 
-- **The "always user-initiated" claim below is currently false.** Those two automatic paths link without confirmation. It is written here as the intent; do not rely on it as a guarantee until the fix lands.
+- **Links are not user-initiated, and their presence is not evidence a human intended them.** Earlier revisions of this document said the system never auto-links without confirmation. That describes a workflow which no longer exists. A link is now most often created *implicitly*, as a side effect of creating a Persona or updating a Person record; the LLM person-update handler and dedup also create them outright. Explicit user linking is the rare path, not the rule.
 - **Until the constraint is enforced, enumerate all linked records — never take the first.** The many shape exists in data whether or not it is legal, and code that assumes one will silently pick an arbitrary record. For the reflection critic, that means clearing the wrong log.
 
 ### Built-in Identifier Types
