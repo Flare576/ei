@@ -43,6 +43,18 @@ The alternative — rejecting the whole upsert — means one bad link in an LLM 
 
 **No bespoke alert surface is built for this.** The shape should never occur; a dedicated resolution UI would be machinery for a state nobody reaches.
 
+**4a. When a single write carries two otherwise-valid links, neither survives.**
+
+Clause 4 says "the offending link," which assumes one established link plus one bad arrival. A write carrying *two* valid-looking links at once has no offender to identify, and clause 1 forbids resolving by first-match. So the consistent outcome is that **both are dropped**: the rest of the write applies, no link is created, and the user is told what was refused so they can link deliberately.
+
+This is derived from clause 1 rather than chosen independently — every alternative (keep first, keep last, keep the one whose Persona still exists) is a silent guess about intent, which is the thing this ADR exists to prevent. It is written out because an implementer should not have to re-derive it, and because "drop the offending link" reads as though a winner is always identifiable.
+
+**4b. CLI and MCP validate before queueing, not at drain time.**
+
+Both drain modes must return the *same* caller-visible result. They cannot: a live instance returns once the correction is queued, while a self-draining CLI applies it immediately. A rejection discovered at drain time therefore reaches the live caller after it has already been told the write succeeded — the issue's "a logged drain-time drop is a failed contract."
+
+That leaves one option. **Validate the link shape before the correction enters the queue**, so both modes answer synchronously and identically. This too is forced rather than preferred: a durable conflict-status mechanism could also work in principle, but it makes the result asynchronous in one mode and synchronous in the other, which is the divergence being ruled out.
+
 **5. Deleting a Persona removes its links from Person records.** Pre-existing orphaned links — values pointing at a Persona that no longer exists — are left alone. No migration cleans them.
 
 **6. `Ei Persona` is persisted exactly as the user typed it and matched case-insensitively.**
