@@ -30,10 +30,10 @@ Type aliases: `fact`, `person`, `topic`, `quote`, `persona` all work (singular o
 
 # An Agentic Tool
 
-The `--id` flag is designed for piping. Entity hits (fact/person/topic/persona) carry an `id`; quote hits don't (they carry `message_id` instead) — so a safe drill-down handles both:
+The `--id` flag is designed for piping. Every search hit — quotes included — carries an `id`, so drilling down is a uniform one-liner:
 
 ```sh
-ei "memory leak" | jq -r '.[0] | if .id != null then .id else .message_id end' | ei --id
+ei "memory leak" | jq -r '.[0].id' | ei --id
 ```
 
 It also resolves fully-qualified message IDs from any supported integration, returning the original message content and session context:
@@ -46,7 +46,7 @@ ei --id "codex:my-machine:thread-uuid:evt_42"
 ei --id "pi:my-machine:session-uuid:session-uuid/entry-id"
 ```
 
-Quotes surfaced by `ei_search` include a `message_id` field in this format — pipe it to `ei --id` to read the original conversation.
+A quote's `id` and its `message_id` are different addresses: `id` identifies the quote record itself (what `ei --id` resolves and what `ei update quote <id>` takes), while `message_id` identifies the *source message* it was lifted from — nullable, and shared by several quotes lifted from the same message. Pipe `message_id` to `ei --id` to read the original conversation; use `id` when you mean one specific quote.
 
 # OpenCode Integration
 

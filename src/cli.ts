@@ -128,7 +128,7 @@ Examples:
   ei topics --source cursor "X"          # Topics learned from Cursor sessions
   ei --id abc-123                        # Look up entity by ID
   ei --identifier "GitHub" "flare576"    # Look up a person by identifier type + value
-  ei "memory leak" | jq -r '.[0] | if .id != null then .id else .message_id end' | ei --id  # Pipe ID from search (quote-safe)
+  ei "memory leak" | jq -r '.[0].id' | ei --id  # Pipe ID from search (every hit — including quotes — carries an id)
   ei create fact --json '{"name":"Field of Study","description":"CS","sentiment":0,"validated_date":""}'
   ei update fact abc-123 --json '{"name":"Field of Study","description":"Updated","sentiment":0,"validated_date":""}'
   ei update quote <id> --json '{"data_item_ids":["person-b-id"], ...}'  # Repoint a quote after splitting a bad merge (fetch the full record via 'ei --id <id>' first)
