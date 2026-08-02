@@ -165,6 +165,22 @@ describe("createPersonaEntity", () => {
     expect(record).not.toHaveProperty("description_embedding");
   });
 
+  it("defaults external_reflection_only to false when omitted from a create body", async () => {
+    writeState(makeState({}));
+
+    const { record } = await createPersonaEntity({ display_name: "Nova" });
+
+    expect(record.external_reflection_only).toBe(false);
+  });
+
+  it("rejects a non-boolean external_reflection_only instead of coercing it", async () => {
+    writeState(makeState({}));
+
+    await expect(
+      createPersonaEntity({ display_name: "Nova", external_reflection_only: "yes" })
+    ).rejects.toThrow(/^Invalid persona: external_reflection_only: Expected boolean, received string$/);
+  });
+
   it("auto-assigns a fresh id to any trait or topic missing one", async () => {
     writeState(makeState({}));
 
@@ -421,7 +437,40 @@ describe("updatePersonaEntity", () => {
   });
 
   it("strips server-owned round-trip fields before validation so a lookupById-style read doesn't fail strictObject", async () => {
-    const existing = makeExistingPersonaEntity(PERSONA_ID, { description_embedding: [0.9, 0.9, 0.9], tools: undefined });
+    const existing = makeExistingPersonaEntity(PERSONA_ID, {
+      description_embedding: [0.9, 0.9, 0.9],
+      tools: undefined,
+      is_static: true,
+      last_heartbeat: "2026-01-02T00:00:00.000Z",
+      pending_update: {
+        short_description: "Pending short description",
+        long_description: "Pending long description",
+        traits: [],
+        topics: [],
+        critique: "Pending critique",
+        created_at: "2026-01-02T00:00:00.000Z",
+      },
+    });
+    const expectedWritableFields = {
+      display_name: existing.display_name,
+      aliases: existing.aliases,
+      short_description: existing.short_description,
+      long_description: existing.long_description,
+      model: existing.model,
+      group_primary: existing.group_primary,
+      groups_visible: existing.groups_visible,
+      traits: existing.traits,
+      topics: existing.topics,
+      is_paused: existing.is_paused,
+      is_archived: existing.is_archived,
+      heartbeat_delay_ms: existing.heartbeat_delay_ms,
+      context_window_ms: existing.context_window_ms,
+      include_message_timestamps: existing.include_message_timestamps,
+      context_boundary: existing.context_boundary,
+      avatar_emoji: existing.avatar_emoji,
+      preferred_theme: existing.preferred_theme,
+      notes: existing.notes,
+    };
     writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }));
 
     const roundTripPayload = {
@@ -431,8 +480,31 @@ describe("updatePersonaEntity", () => {
 
     const updated = await updatePersonaEntity(PERSONA_ID, roundTripPayload);
 
-    expect(updated.display_name).toBe("Original Name");
-    expect(updated.aliases).toEqual(["Original Alias"]);
+    expect(updated).toMatchObject(expectedWritableFields);
+    expect(updated.is_static).toBe(existing.is_static);
+    expect(updated.last_heartbeat).toBe(existing.last_heartbeat);
+    expect(updated.pending_update).toBeUndefined();
+
+    const persisted = await loadLatestState();
+    const reloaded = persisted!.personas[PERSONA_ID].entity;
+    expect(reloaded).toMatchObject(expectedWritableFields);
+    expect(reloaded.is_static).toBe(existing.is_static);
+    expect(reloaded.last_heartbeat).toBe(existing.last_heartbeat);
+    expect(reloaded.pending_update).toBeUndefined();
+  });
+
+  it("preserves external_reflection_only: true across a full-record round trip (lookupById-style read -> update) -- catches both the strip-list and record-literal hazards", async () => {
+    const existing = makeExistingPersonaEntity(PERSONA_ID, { external_reflection_only: true, tools: undefined });
+    writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }));
+
+    const roundTripPayload = {
+      ...existing,
+      type: "persona", // lookupById's discriminator -- not a PersonaEntity field at all
+    };
+
+    const updated = await updatePersonaEntity(PERSONA_ID, roundTripPayload);
+
+    expect(updated.external_reflection_only).toBe(true);
   });
 
   it("throws 'No persona found with id: X' for an unknown id", async () => {

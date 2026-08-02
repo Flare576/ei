@@ -5,6 +5,7 @@ import { tmpdir } from "os";
 import { spawnSync } from "child_process";
 import type { StorageState } from "../../src/core/types/integrations.js";
 import type { Person } from "../../src/core/types/data-items.js";
+import { PERSON_LOG_REFLECTION_THRESHOLD } from "../../src/core/orchestrators/ceremony.js";
 
 const NOW = "2026-01-01T00:00:00.000Z";
 const CLI_ARGS = ["src/cli.ts"];
@@ -237,13 +238,75 @@ describe("CLI CRUD process behavior", () => {
     expect(result.stderr).toContain('Cannot delete reserved persona "ei". Use archive instead.');
     expect(readFileSync(statePath, "utf-8")).toBe(before);
   });
+
+  it("renders a matching persona as a relationship prompt block", () => {
+    const personaName = "Prompt Process Persona";
+    const basePrompt = "DISTINCTIVE_BASE_PROMPT: Helps turn uncertain evidence into reliable decisions.";
+    const traitName = "Evidence-first judgment";
+    const traitDescription = "DISTINCTIVE_TRAIT_DESCRIPTION: Separates verified facts from inference before advising.";
+    const topicName = "Release quality";
+    const topicPerspective = "DISTINCTIVE_TOPIC_PERSPECTIVE: Quality is a product decision, not a final checkpoint.";
+    const topicApproach = "DISTINCTIVE_TOPIC_APPROACH: Define observable acceptance criteria before implementation.";
+    const state: StorageState = {
+      ...makeState(),
+      personas: {
+        "prompt-process-persona": {
+          entity: {
+            id: "prompt-process-persona",
+            display_name: personaName,
+            entity: "system",
+            long_description: basePrompt,
+            traits: [{
+              id: "evidence-first-judgment",
+              name: traitName,
+              description: traitDescription,
+              sentiment: 0.9,
+              strength: 0.8,
+              last_updated: NOW,
+            }],
+            topics: [{
+              id: "release-quality",
+              name: topicName,
+              perspective: topicPerspective,
+              approach: topicApproach,
+              personal_stake: "Reliable releases protect the people who rely on the software.",
+              sentiment: 0.9,
+              exposure_current: 0.8,
+              exposure_desired: 0.8,
+              last_updated: NOW,
+            }],
+            is_paused: false,
+            is_archived: false,
+            is_static: false,
+            last_updated: NOW,
+          },
+          messages: [],
+        },
+      },
+    };
+    writeFileSync(join(tempDir, "state.json"), JSON.stringify(state));
+
+    const result = runCli(["personas", personaName, "--format", "prompt"]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.split("\n")[0]).toBe("<!-- ei-relationship-injected -->");
+    expect(result.stdout).toContain("<ei-relationship>");
+    expect(result.stdout).toContain("</ei-relationship>");
+    expect(result.stdout).toContain(basePrompt);
+    expect(result.stdout).toContain(traitName);
+    expect(result.stdout).toContain(traitDescription);
+    expect(result.stdout).toContain(topicName);
+    expect(result.stdout).toContain(topicPerspective);
+    expect(result.stdout).toContain(topicApproach);
+    expect(() => JSON.parse(result.stdout)).toThrow();
+  });
 });
 
-function makePerson(id: string, identifiers: Person["identifiers"]): Person {
+function makePerson(id: string, identifiers: Person["identifiers"], description = "A test person"): Person {
   return {
     id,
     name: identifiers?.find(i => i.is_primary)?.value ?? identifiers?.[0]?.value ?? id,
-    description: "A test person",
+    description,
     sentiment: 0.5,
     relationship: "friend",
     exposure_current: 0.5,
@@ -334,5 +397,83 @@ describe("CLI --help balanced-search contract", () => {
     // covered types and steers persona lookups to `ei personas`.
     expect(result.stdout).toMatch(/facts\/people\/topics\/quotes/i);
     expect(result.stdout).toMatch(/ei personas/);
+  });
+});
+
+// ── CLI --format prompt: Ei Person Log composition seam ──────────────────────
+// resolvePersonLogLength() and buildEiRelationshipBlock() are each covered
+// directly (tests/unit/cli/personas.test.ts), but a helper-level test can't
+// see whether the real `--format prompt` route (src/cli.ts) actually wires
+// the resolver's output into the formatter correctly. This exercises the
+// full process: a persisted persona linked to a real Person record, through
+// `ei personas <name> --format prompt`, asserting the privacy boundary holds
+// end-to-end and not just at the helper seam.
+describe("CLI --format prompt process behavior — Ei Person Log section", () => {
+  const personaId = "person-log-persona";
+  const personaName = "Person Log Persona";
+
+  function writeStateWithPersonaAndPeople(people: Person[]) {
+    const statePath = join(tempDir, "state.json");
+    const state: StorageState = {
+      ...makeState(),
+      personas: {
+        [personaId]: {
+          entity: {
+            id: personaId,
+            display_name: personaName,
+            entity: "system",
+            long_description: "Base prompt for person log tests.",
+            traits: [],
+            topics: [],
+            is_paused: false,
+            is_archived: false,
+            is_static: false,
+            last_updated: NOW,
+          },
+          messages: [],
+        },
+      },
+      human: { ...makeState().human, people },
+    };
+    writeFileSync(statePath, JSON.stringify(state));
+  }
+
+  it("emits no Person Log section when the persona has no linked Person record", () => {
+    writeStateWithPersonaAndPeople([]);
+
+    const result = runCli(["personas", personaName, "--format", "prompt"]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).not.toContain("Ei Person Log");
+  });
+
+  it("reports the count and the reflection cue when the linked record is over threshold, and never leaks the log content", () => {
+    const sentinel = "SENTINEL_PROCESS_LEVEL_DO_NOT_LEAK_9d21ff";
+    const description = sentinel + "z".repeat(PERSON_LOG_REFLECTION_THRESHOLD + 100);
+    writeStateWithPersonaAndPeople([
+      makePerson("linked-person", [{ type: "Ei Persona", value: personaId, is_primary: true }], description),
+    ]);
+
+    const result = runCli(["personas", personaName, "--format", "prompt"]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("# Ei Person Log");
+    expect(result.stdout).toContain(`currently ${description.length} characters`);
+    expect(result.stdout).toMatch(/prompt the user to perform a reflection soon/i);
+    expect(result.stdout).not.toContain(sentinel);
+    expect(result.stdout).not.toContain(description);
+  });
+
+  it("reports the count with no reflection cue at exactly the threshold (strict >, matching ceremony.ts)", () => {
+    const description = "a".repeat(PERSON_LOG_REFLECTION_THRESHOLD);
+    writeStateWithPersonaAndPeople([
+      makePerson("linked-person", [{ type: "Ei Persona", value: personaId, is_primary: true }], description),
+    ]);
+
+    const result = runCli(["personas", personaName, "--format", "prompt"]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(`currently ${PERSON_LOG_REFLECTION_THRESHOLD} characters`);
+    expect(result.stdout).not.toMatch(/reflection/i);
   });
 });

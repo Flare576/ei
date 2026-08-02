@@ -351,6 +351,65 @@ topics:
   });
 });
 
+describe("personaFromYAML — external_reflection_only validation", () => {
+  const timestamp = "2024-01-01T00:00:00.000Z";
+
+  const emptyOriginal: PersonaEntity = {
+    id: "test-id",
+    display_name: "TestBot",
+    entity: "system",
+    traits: [],
+    topics: [],
+    is_paused: false,
+    is_archived: false,
+    is_static: false,
+    last_updated: timestamp,
+    last_heartbeat: timestamp,
+    heartbeat_delay_ms: 300000,
+  };
+
+  test("rejects a quoted string \"false\" with a field-named error", () => {
+    const yaml = `
+display_name: TestBot
+external_reflection_only: "false"
+traits: []
+topics: []
+`;
+    expect(() => personaFromYAML(yaml, emptyOriginal)).toThrow(/external_reflection_only.*boolean/i);
+  });
+
+  test("rejects the number 0 with a field-named error", () => {
+    const yaml = `
+display_name: TestBot
+external_reflection_only: 0
+traits: []
+topics: []
+`;
+    expect(() => personaFromYAML(yaml, emptyOriginal)).toThrow(/external_reflection_only.*boolean/i);
+  });
+
+  test("rejects an object value with a field-named error", () => {
+    const yaml = `
+display_name: TestBot
+external_reflection_only: {}
+traits: []
+topics: []
+`;
+    expect(() => personaFromYAML(yaml, emptyOriginal)).toThrow(/external_reflection_only.*boolean/i);
+  });
+
+  test("persists a literal false without throwing", () => {
+    const yaml = `
+display_name: TestBot
+external_reflection_only: false
+traits: []
+topics: []
+`;
+    const result = personaFromYAML(yaml, emptyOriginal);
+    expect(result.updates.external_reflection_only).toBe(false);
+  });
+});
+
 describe("persona rename identity", () => {
   const timestamp = "2024-01-01T00:00:00.000Z";
   const original: PersonaEntity = {
@@ -709,6 +768,52 @@ describe("round-trip serialization", () => {
     expect(result.updates.context_window_ms).toBe(original.context_window_ms);
     expect(result.deletedTraitIds).toEqual([]);
     expect(result.deletedTopicIds).toEqual([]);
+  });
+
+  test("round-trips non-default persona boolean settings", () => {
+    const original: PersonaEntity = {
+      id: "test-id",
+      display_name: "TestBot",
+      entity: "system",
+      traits: [],
+      topics: [],
+      is_paused: true,
+      is_archived: false,
+      is_static: true,
+      include_message_timestamps: true,
+      last_updated: timestamp,
+      last_heartbeat: timestamp,
+      heartbeat_delay_ms: 300000,
+    };
+
+    const yaml = personaToYAML(original);
+    const result = personaFromYAML(yaml, original);
+
+    expect(result.updates.is_paused).toBe(true);
+    expect(result.updates.is_static).toBe(true);
+    expect(result.updates.include_message_timestamps).toBe(true);
+  });
+
+  test("round-trips external_reflection_only persona setting", () => {
+    const original: PersonaEntity = {
+      id: "test-id",
+      display_name: "TestBot",
+      entity: "system",
+      traits: [],
+      topics: [],
+      is_paused: false,
+      is_archived: false,
+      is_static: false,
+      external_reflection_only: true,
+      last_updated: timestamp,
+      last_heartbeat: timestamp,
+      heartbeat_delay_ms: 300000,
+    };
+
+    const yaml = personaToYAML(original);
+    const result = personaFromYAML(yaml, original);
+
+    expect(result.updates.external_reflection_only).toBe(true);
   });
 
   test("human data survives round-trip without data loss", () => {

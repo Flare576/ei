@@ -12,6 +12,15 @@ import { parseDuration, formatDuration } from "./duration.js";
 
 const PLACEHOLDER_LONG_DESC = "Detailed description of this persona's personality, background, and role";
 
+function validateExternalReflectionOnly(value: unknown): boolean | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === "boolean") return value;
+  throw new Error(
+    `external_reflection_only must be true, false, or omitted (got: ${JSON.stringify(value)}). ` +
+    "Non-boolean values are silently ambiguous (e.g. the string \"false\" is truthy) and are rejected instead of guessed."
+  );
+}
+
 interface YAMLTrait {
   id?: string;
   name: string;
@@ -43,6 +52,7 @@ interface EditablePersonaData {
   heartbeat_delay_ms?: string | null;
   context_window_ms?: string | null;
   is_paused?: boolean;
+  external_reflection_only?: boolean;
   pause_until?: string;
   is_static?: boolean;
   include_message_timestamps?: boolean;
@@ -188,6 +198,7 @@ export function personaToYAML(persona: PersonaEntity, allGroups?: string[], allT
     heartbeat_delay_ms: persona.heartbeat_delay_ms ? formatDuration(persona.heartbeat_delay_ms) : null,
     context_window_ms: persona.context_window_ms ? formatDuration(persona.context_window_ms) : null,
     is_paused: persona.is_paused || undefined,
+    external_reflection_only: persona.external_reflection_only ?? false,
     pause_until: persona.pause_until,
     is_static: persona.is_static || undefined,
     include_message_timestamps: persona.include_message_timestamps ?? false,
@@ -304,6 +315,7 @@ export function personaFromYAML(yamlContent: string, original: PersonaEntity, al
       ? undefined
       : parseDuration(data.context_window_ms) ?? undefined,
     is_paused: data.is_paused ?? false,
+    external_reflection_only: validateExternalReflectionOnly(data.external_reflection_only) ?? false,
     pause_until: data.pause_until,
     is_static: data.is_static ?? false,
     include_message_timestamps: data.include_message_timestamps ?? false,

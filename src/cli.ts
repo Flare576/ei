@@ -12,7 +12,7 @@
  */
 
 import { parseArgs } from "util";
-import { retrieveBalanced, lookupById, lookupByIdentifier, resolveExternalMessage, loadLatestState } from "./cli/retrieval";
+import { retrieveBalanced, lookupById, lookupByIdentifier, resolveExternalMessage, loadLatestState, resolvePersonLogLength } from "./cli/retrieval";
 import type { StorageState } from "./core/types";
 import { resolvePersonaId, filterByPersona, filterTypeSpecificByPersona, filterBySource, filterTypeSpecificBySource } from "./cli/persona-filter.js";
 import { installMcpClients } from "./cli/install.js";
@@ -515,8 +515,14 @@ async function main(): Promise<void> {
       if (!Array.isArray(result) || result.length === 0) {
         process.exit(0);
       }
+      // Deliberately dynamic (not top-level static): personas.js pulls in
+      // the embedding service and ceremony orchestrator, and this branch
+      // only runs for the personas --format=prompt path, mirroring the
+      // targetType-parameterized command import above.
       const { buildEiRelationshipBlock } = await import("./cli/commands/personas.js");
-      process.stdout.write(buildEiRelationshipBlock(result[0]) + "\n");
+      const personLogState = state ?? await loadLatestState();
+      const personLogLength = personLogState ? resolvePersonLogLength(result[0].id, personLogState) : undefined;
+      process.stdout.write(buildEiRelationshipBlock(result[0], personLogLength) + "\n");
       process.exit(0);
     }
   } else {

@@ -154,7 +154,7 @@ export interface HumanEntity {
 }
 
 export interface PersonaEntity {
-  id: string;                    // UUID (or "ei" for built-in Ei persona)
+  id: string;                    // UUID (or "ei"/"emmet" for built-in personas)
   display_name: string;          // What shows in UI (user's chosen name)
   entity: "system";
   aliases?: string[];            // For fuzzy matching (user types "/persona Bob")
@@ -190,6 +190,7 @@ export interface PersonaEntity {
   avatar_image?: string;            // Base64-encoded 64×64 image used as avatar (takes priority over avatar_emoji).
   preferred_theme?: string;         // Theme ID (built-in name or ThemeDefinition.id). Applied to chat panel when this persona is active.
   notes?: string[];                 // Private scratchpad — up to 20 short-term notes visible in the system prompt. Oldest evicted when full.
+  external_reflection_only?: boolean; // When true, Ei's automatic Reflection critic skips this Persona (queue and handler time) so an external, agent-aware reflection can run first without consuming the linked PersonLog. Absent = false.
 }
 
 export interface PersonaCreationInput {

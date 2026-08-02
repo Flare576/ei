@@ -304,7 +304,7 @@ export const PersonCard = ({
                               className="ei-identifier-row__value"
                               value={id.type === 'Ei Persona' ? displayValue : id.value}
                               onChange={e => handleIdentifierValueChange(index, e.target.value)}
-                              title={id.type === 'Ei Persona' ? `UUID: ${id.value}` : undefined}
+                              title={id.type === 'Ei Persona' ? `Persona id: ${id.value}` : undefined}
                               readOnly={selectionMode || id.type === 'Ei Persona'}
                               aria-label={`${id.type} identifier value`}
                             />

@@ -202,7 +202,7 @@ describe("Decay Computation", () => {
 // Rewrite Phase Tests (queueRewritePhase)
 // =============================================================================
 
-import { queuePersonRewritePhase, queueTopicRewritePhase, handleCeremonyProgress } from "../../../src/core/orchestrators/ceremony.js";
+import { queuePersonRewritePhase, queueTopicRewritePhase, handleCeremonyProgress, PERSON_LOG_REFLECTION_THRESHOLD } from "../../../src/core/orchestrators/ceremony.js";
 import { LLMNextStep, LLMRequestType, LLMPriority } from "../../../src/core/types.js";
 import type { HumanEntity, Fact, Topic, Person } from "../../../src/core/types.js";
 
@@ -829,5 +829,114 @@ describe("Ei Ceremony Participation — Reflection Phase", () => {
         req.next_step === LLMNextStep.HandleReflectionCritic && req.data.personaId === "ei"
     );
     expect(reflectionCall).toBeUndefined();
+  });
+});
+
+// =============================================================================
+// external_reflection_only Gate (Reflection Phase queue-time filter)
+// =============================================================================
+
+interface MockLinkedPersonRecord {
+  id: string;
+  name: string;
+  description: string;
+  identifiers: Array<{ type: string; value: string }>;
+}
+
+function createMultiPersonaReflectionMockState(personas: PersonaEntity[], people: MockLinkedPersonRecord[]) {
+  return {
+    persona_getAll: vi.fn(() => personas),
+    persona_getById: vi.fn((id: string) => personas.find(p => p.id === id) ?? null),
+    persona_update: vi.fn(),
+    getHuman: vi.fn(() => ({
+      entity: "human",
+      facts: [],
+      topics: [],
+      people,
+      quotes: [],
+      last_updated: new Date().toISOString(),
+      settings: { ceremony: { time: "03:00", last_ceremony: new Date(Date.now() - 86400000).toISOString() } },
+    })),
+    setHuman: vi.fn(),
+    queue_enqueue: vi.fn(),
+    queue_hasPendingCeremonies: vi.fn(() => false),
+    messages_get: vi.fn(() => []),
+    messages_getUnextracted: vi.fn(() => []),
+    messages_markExtracted: vi.fn(),
+    messages_markPersonaExtracted: vi.fn(),
+    messages_getUnextractedForPersona: vi.fn(() => []),
+    messages_sort: vi.fn(),
+    getRoomList: vi.fn(() => []),
+    getRoomActivePath: vi.fn(() => []),
+    getRoomUnextractedMessagesForPersona: vi.fn(() => []),
+    human_person_getByIdentifier: vi.fn((type: string, value: string) =>
+      people.find(p => p.identifiers.some(i => i.type.toLowerCase() === type.toLowerCase() && i.value === value))
+    ),
+    messages_append: vi.fn(),
+  };
+}
+
+describe("Ei Ceremony Participation — Reflection Phase — external_reflection_only gate", () => {
+  it("does not enqueue a reflection critic for an opted-out persona even when its Person record is over threshold", () => {
+    const optedOut = { ...makeEiPersona(), id: "persona-opted-out", display_name: "OptedOut", external_reflection_only: true };
+    const people = [
+      { id: "person-opted-out", name: "OptedOut", description: "X".repeat(PERSON_LOG_REFLECTION_THRESHOLD + 1), identifiers: [{ type: "Ei Persona", value: "persona-opted-out" }] },
+    ];
+    const state = createMultiPersonaReflectionMockState([optedOut], people);
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    handleCeremonyProgress(state as unknown as StateManager, 3);
+
+    consoleSpy.mockRestore();
+
+    const reflectionCalls = state.queue_enqueue.mock.calls.filter(
+      ([req]: [{ next_step: string }]) => req.next_step === LLMNextStep.HandleReflectionCritic
+    );
+    expect(reflectionCalls).toHaveLength(0);
+  });
+
+  it("still enqueues exactly one reflection critic for an ordinary persona over threshold when an opted-out persona over threshold is also present (proves the filter is selective, not a blanket disable)", () => {
+    const optedOut = { ...makeEiPersona(), id: "persona-opted-out", display_name: "OptedOut", external_reflection_only: true };
+    const ordinary = { ...makeEiPersona(), id: "persona-ordinary", display_name: "Ordinary" };
+    const bigDesc = "X".repeat(PERSON_LOG_REFLECTION_THRESHOLD + 1);
+    const people = [
+      { id: "person-opted-out", name: "OptedOut", description: bigDesc, identifiers: [{ type: "Ei Persona", value: "persona-opted-out" }] },
+      { id: "person-ordinary", name: "Ordinary", description: bigDesc, identifiers: [{ type: "Ei Persona", value: "persona-ordinary" }] },
+    ];
+    const state = createMultiPersonaReflectionMockState([optedOut, ordinary], people);
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    handleCeremonyProgress(state as unknown as StateManager, 3);
+
+    consoleSpy.mockRestore();
+
+    const reflectionCalls = state.queue_enqueue.mock.calls.filter(
+      ([req]: [{ next_step: string; data: { personaId: string } }]) => req.next_step === LLMNextStep.HandleReflectionCritic
+    );
+    expect(reflectionCalls).toHaveLength(1);
+    expect(reflectionCalls[0][0].data.personaId).toBe("persona-ordinary");
+  });
+
+  it("still writes the multi-record warning for an opted-out persona linked to duplicate Person records, but does not enqueue a critic (I21)", () => {
+    const optedOut = { ...makeEiPersona(), id: "persona-opted-out", display_name: "OptedOut", external_reflection_only: true };
+    const bigDesc = "X".repeat(PERSON_LOG_REFLECTION_THRESHOLD + 1);
+    const people = [
+      { id: "person-real", name: "Real", description: bigDesc, identifiers: [{ type: "Ei Persona", value: "persona-opted-out" }] },
+      { id: "person-accident", name: "Accident", description: bigDesc, identifiers: [{ type: "Ei Persona", value: "persona-opted-out" }] },
+    ];
+    const state = createMultiPersonaReflectionMockState([optedOut], people);
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const result = handleCeremonyProgress(state as unknown as StateManager, 3);
+
+    consoleSpy.mockRestore();
+
+    expect(result.wroteEiWarning).toBe(true);
+    expect(state.messages_append).toHaveBeenCalledWith("ei", expect.objectContaining({ role: "system" }));
+
+    const reflectionCalls = state.queue_enqueue.mock.calls.filter(
+      ([req]: [{ next_step: string }]) => req.next_step === LLMNextStep.HandleReflectionCritic
+    );
+    expect(reflectionCalls).toHaveLength(0);
   });
 });

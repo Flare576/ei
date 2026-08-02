@@ -111,6 +111,7 @@ const personaEntitySchema = z.strictObject({
   traits: z.array(personaTraitSchema).default([]),
   topics: z.array(personaTopicSchema).default([]),
   is_paused: z.boolean().default(false),
+  external_reflection_only: z.boolean().default(false),
   pause_until: z.string().optional(),
   is_archived: z.boolean().default(false),
   archived_at: z.string().optional(),
@@ -337,6 +338,7 @@ export async function createPersonaEntity(body: unknown): Promise<{ id: string; 
     avatar_image: parsed.avatar_image,
     preferred_theme: parsed.preferred_theme,
     notes: parsed.notes,
+    external_reflection_only: parsed.external_reflection_only,
   };
 
   if (record.long_description) {
@@ -417,6 +419,7 @@ export async function updatePersonaEntity(id: string, body: unknown): Promise<Pe
     avatar_image: parsed.avatar_image,
     preferred_theme: parsed.preferred_theme,
     notes: parsed.notes,
+    external_reflection_only: parsed.external_reflection_only,
   };
 
   // Always recompute on update rather than diffing old vs new — simplest

@@ -15,8 +15,11 @@ vi.mock("../../../src/core/embedding-service.js", async (importOriginal) => {
 });
 
 import { execute, buildEiRelationshipBlock } from "../../../src/cli/commands/personas.js";
+import { resolvePersonLogLength } from "../../../src/cli/retrieval.js";
+import { PERSON_LOG_REFLECTION_THRESHOLD } from "../../../src/core/orchestrators/ceremony.js";
 import type { PersonaResult } from "../../../src/cli/retrieval.js";
-import type { PersonaTrait, PersonaTopic } from "../../../src/core/types/data-items.js";
+import type { PersonaTrait, PersonaTopic, Person } from "../../../src/core/types/data-items.js";
+import type { StorageState } from "../../../src/core/types/integrations.js";
 
 // ── fixtures ────────────────────────────────────────────────────────────────
 
@@ -328,5 +331,127 @@ describe("execute() — reverse containment matching (BUG-2 fix)", () => {
       traits: expect.any(Array),
       topics: expect.any(Array),
     });
+  });
+});
+
+
+// ── Ei Person Log readiness notice ───────────────────────────────────────────
+// The relationship block reports the linked PersonLog's size (never its
+// content) so an agent whose persona is `external_reflection_only` — and
+// therefore no longer gets Ei's automatic critic — still learns the log is
+// worth reflecting on. See resolvePersonLogLength (src/cli/retrieval.ts)
+// for the linked-record resolution and buildEiRelationshipBlock for the
+// text it produces from that resolved number.
+
+function makeStateWithPeople(people: Person[]): StorageState {
+  return {
+    version: 1,
+    timestamp: NOW,
+    human: {
+      entity: "human",
+      facts: [],
+      topics: [],
+      people,
+      quotes: [],
+      last_updated: NOW,
+    },
+    personas: {},
+    queue: [],
+    providers: [],
+    tools: [],
+  };
+}
+
+function makeLinkedPerson(id: string, description: string, personaId: string): Person {
+  return {
+    id,
+    name: id,
+    description,
+    sentiment: 0.5,
+    relationship: "friend",
+    exposure_current: 0.5,
+    exposure_desired: 0.5,
+    last_updated: NOW,
+    identifiers: [{ type: "Ei Persona", value: personaId, is_primary: true }],
+  };
+}
+
+describe("resolvePersonLogLength — linked-record resolution", () => {
+  it("returns undefined when the persona has no linked Person record", () => {
+    const state = makeStateWithPeople([]);
+    expect(resolvePersonLogLength("persona_0", state)).toBeUndefined();
+  });
+
+  it("returns undefined when Person records exist but none link to this persona", () => {
+    const state = makeStateWithPeople([makeLinkedPerson("p1", "x".repeat(500), "some_other_persona")]);
+    expect(resolvePersonLogLength("persona_0", state)).toBeUndefined();
+  });
+
+  it("returns the linked record's description length when under threshold", () => {
+    const state = makeStateWithPeople([makeLinkedPerson("p1", "x".repeat(500), "persona_0")]);
+    expect(resolvePersonLogLength("persona_0", state)).toBe(500);
+  });
+
+  it("returns the linked record's description length when over threshold", () => {
+    const length = PERSON_LOG_REFLECTION_THRESHOLD + 200;
+    const state = makeStateWithPeople([makeLinkedPerson("p1", "x".repeat(length), "persona_0")]);
+    expect(resolvePersonLogLength("persona_0", state)).toBe(length);
+  });
+
+  it("reports the second linked record's length when only it is over threshold — a first-match implementation reads the wrong (under-threshold) record and stays silent", () => {
+    const underLength = 400;
+    const overLength = PERSON_LOG_REFLECTION_THRESHOLD + 300;
+    const state = makeStateWithPeople([
+      makeLinkedPerson("p1", "y".repeat(underLength), "persona_0"),
+      makeLinkedPerson("p2", "z".repeat(overLength), "persona_0"),
+    ]);
+    expect(resolvePersonLogLength("persona_0", state)).toBe(overLength);
+  });
+});
+
+describe("buildEiRelationshipBlock — Ei Person Log section", () => {
+  it("emits no log section, and does not crash, when the persona has no linked Person record", () => {
+    expect(() => buildEiRelationshipBlock(makePersonaResult(), undefined)).not.toThrow();
+    const result = buildEiRelationshipBlock(makePersonaResult(), undefined);
+    expect(result).not.toContain("Ei Person Log");
+  });
+
+  it("reports the count without the reflection prompt when under threshold", () => {
+    const result = buildEiRelationshipBlock(makePersonaResult(), 500);
+    expect(result).toContain("# Ei Person Log");
+    expect(result).toContain("currently 500 characters");
+    expect(result).not.toMatch(/reflection/i);
+  });
+
+  it("reports the count and the reflection prompt when over threshold", () => {
+    const overLength = PERSON_LOG_REFLECTION_THRESHOLD + 1;
+    const result = buildEiRelationshipBlock(makePersonaResult(), overLength);
+    expect(result).toContain(`currently ${overLength} characters`);
+    expect(result).toMatch(/prompt the user to perform a reflection soon/i);
+  });
+
+  it("does not add the reflection prompt exactly at the threshold (over means strictly greater, matching ceremony.ts)", () => {
+    const result = buildEiRelationshipBlock(makePersonaResult(), PERSON_LOG_REFLECTION_THRESHOLD);
+    expect(result).toContain(`currently ${PERSON_LOG_REFLECTION_THRESHOLD} characters`);
+    expect(result).not.toMatch(/reflection/i);
+  });
+
+  it("keeps </ei-relationship> as the final line with the Person Log section present", () => {
+    const result = buildEiRelationshipBlock(makePersonaResult(), PERSON_LOG_REFLECTION_THRESHOLD + 1);
+    const lines = result.split("\n");
+    expect(lines[lines.length - 1]).toBe("</ei-relationship>");
+  });
+
+  it("never leaks PersonLog content: a seeded marker in the linked record's description reaches only a length, never the block", () => {
+    const marker = "SEEDED_MARKER_DO_NOT_LEAK_7f3c9a";
+    const description = marker + "y".repeat(PERSON_LOG_REFLECTION_THRESHOLD + 50);
+    const state = makeStateWithPeople([makeLinkedPerson("p1", description, "persona_0")]);
+
+    const length = resolvePersonLogLength("persona_0", state);
+    const result = buildEiRelationshipBlock(makePersonaResult({ id: "persona_0" }), length);
+
+    expect(result).not.toContain(marker);
+    expect(result).not.toContain(description);
+    expect(result).toContain(`currently ${description.length} characters`);
   });
 });

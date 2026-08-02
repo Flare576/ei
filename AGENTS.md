@@ -475,8 +475,9 @@ Personas take the same three operations, but never through the shared fact/topic
 
 - **`ei-curate`** — safe, verified workflows for correcting facts/topics/people/quotes on top of these primitives. Requires confirmation before every write and refuses to guess on ambiguous attributions. Load it with `/ei-curate`. Source: `skills/ei-curate/SKILL.md`.
 - **`ei-persona`** — the equivalent guided workflow for authoring or directing a persona's *character* (create a new persona, edit its traits/topics, archive, or delete) rather than correcting learned data. Load it with `/ei-persona`. Source: `skills/ei-persona/SKILL.md`.
+- **`ei-reflect`** — a coding-harness agent reflecting on its own accumulated Person log (the "PersonLog"), for when that log fills faster than Ei's automatic Reflection critic can usefully consume it. Not a single file: a root dispatcher (`SKILL.md`) over two lenses. `lenses/persona.md` is the identity half and writes through these same correction primitives (`ei update persona`); `lenses/agent.md` is the operating-contract half — how the agent works *in this harness* — and writes into the harness's own instruction files as a marked delimited region, touching no Ei record at all. The dispatcher owns the lifecycle: it splits the log's evidence between the lenses and clears the log (`ei update person`) only once both reach a terminal state. A `references/` directory carries the CLI surface, the per-harness target files, and the configuration surfaces no file-based tool can reach. Load it with `/ei-reflect`. Source: `skills/ei-reflect/SKILL.md`.
 
-Both are installed by `ei --install` into your harness's skill discovery directory alongside any future shipped skills.
+All three are installed by `ei --install` into your harness's skill discovery directory, alongside Ei's other shipped skills.
 
 ---
 

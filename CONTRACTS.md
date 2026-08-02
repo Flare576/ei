@@ -374,11 +374,17 @@ Code that reads `person.name` continues to work transparently. The UI never expo
 
 Records with `identifiers: []` are in the pre-migration state. `name` still functions as the fallback for all code. The ceremony migration step (replaces `Dedup.Person`) populates identifiers for these records via an Opus call with `read_memory` access. `HumanSettings.people_migration_complete` flags when all records are migrated.
 
-### `ei_persona` Type
+### `Ei Persona` Type
 
-A special identifier type that links a `Person` record to a `PersonaEntity` in the same Ei instance. The `value` is the **Persona's UUID** (not the display name) — this survives persona renames. Resolve to display name via `state.persona_getById(value)?.display_name` for UI.
+**The stored `type` string is literally `Ei Persona`** — capitalised, space-separated. Production code matches it case-insensitively (`i.type.toLowerCase() === 'ei persona'`) but not with any other separator, so a lookup written against `ei_persona` matches nothing and fails silently with an empty result. Earlier revisions of this document used the underscored form; that was never the stored value.
 
-A single `Person` record can have multiple `ei_persona` identifiers (one per persona that maps to them). This is the prerequisite for Plan 4 (drift detection). `ei_persona` links are **always user-initiated** — the system never auto-links without confirmation.
+A special identifier type that links a `Person` record to a `PersonaEntity` in the same Ei instance. The `value` is the **Persona's id** — not the display name — so the link survives persona renames. Resolve to a display name via `state.persona_getById(value)?.display_name` for UI.
+
+Note the id is not always a UUID: the reserved personas `ei` and `emmet` carry those literal strings as their ids. Code or documentation asserting a UUID shape is wrong for them.
+
+A single `Person` record can have multiple `Ei Persona` identifiers (one per persona that maps to them). This is the prerequisite for Plan 4 (drift detection). These links are **always user-initiated** — the system never auto-links without confirmation.
+
+Whether the inverse is legal — several `Person` records sharing one persona id — is unresolved; see `docs/adr/ADR-006-ei-persona-link-multiplicity.md`. Settled regardless: enumerate all linked records, never take the first.
 
 ### Built-in Identifier Types
 
@@ -395,9 +401,11 @@ These are suggested types for UI discoverability (dropdowns, autocomplete). They
 | `reddit` | Reddit username |
 | `twitter` | Twitter/X handle |
 | `ff14` | Final Fantasy XIV character name |
-| `ei_persona` | Links to a Persona in this Ei instance (value = Persona UUID) |
+| `Ei Persona` | Links to a Persona in this Ei instance (value = the Persona's id — **not** always a UUID; reserved personas `ei` and `emmet` use those literal strings). See the `Ei Persona` Type section above. |
 
 The user can add any type string. Types are NOT unique — multiple identifiers with the same type are valid (e.g., two `nickname` entries). Type values are stored and displayed exactly as typed — no normalization.
+
+**On the casing in this table:** these are written lowercase for readability, but stored values are capitalised as the user or seeder typed them — `Email`, `GitHub`, `Ei Persona`. Matching is case-insensitive, so the casing here is harmless. The **separator** is not: `Ei Persona` is space-separated, and a lookup written against `ei_persona` matches nothing and returns empty without erroring.
 
 ---
 
@@ -485,3 +493,6 @@ Standard error codes for `onError` events:
 | 2026-04-06 | **People Matching Enhancement**: Replaced LLM-based Scan→Match→Update pipeline with Scan→StructuredLookup→Update. `HandlePersonMatch` removed from `LLMNextStep`. Matching is now synchronous: exact identifier-value lookup (type-agnostic) then Levenshtein fuzzy fallback (threshold ≤2 for names <8 chars, ≤3 otherwise). Scan prompt extended to extract optional `identifiers[]`. Person update prompt split: `identifiers_to_add` (updates, additive) vs `identifiers` (new records). New people get `validated_date: ''`; heartbeat introduces them to Ei once. UI (web + TUI) stamps `validated_date` on first user interaction. Ceremony topic auto-dedup (`queueDedupPhase`) retired; user-triggered dedup (`queueUserDedupRequest`) remains. Dedup handler now unions `identifiers[]` when merging person records. `human_person_getByIdentifier` type param made optional for type-agnostic lookup. `levenshtein()` + `normalizeForMatch()` added to `src/core/utils/`. |
 | 2026-04-06 | **People Schema Enhancement**: Added `PersonIdentifier` interface and `identifiers: PersonIdentifier[]` to `Person`. `DataItemBase.name` retained for backward compat — state manager syncs from primary identifier on every write. Added `people_migration_complete?: boolean` to `HumanSettings`. Added `HandlePersonIdentifierMigration` to `LLMNextStep`. Ceremony `Dedup.Person` step replaced by `Person Migration` step (same `ceremony_progress: 1` slot). Migration queues one Opus + `read_memory` call per unmigrated person; short-circuits when `people_migration_complete = true`. Added `human_person_getByIdentifier(type, value)` to StateManager. Person editor (web) gains identifiers UI; TUI `/me people` command shows identifiers as YAML list-of-maps. See "Person Identifiers" section above for matching policy and built-in types. |
 | 2026-07-11 | **Model Settings Split**: Deprecated `HumanSettings.default_model` (read-only for one release; migration via `migrateModelSplit()` copies it forward). Added `conversation_model` (chat responses) and `extraction_model` (background extraction/analysis, optional). Extraction call sites (`human-extraction`, `persona-topics`, `room-extraction`, document importer) resolve via 3-tier fallback: per-call `options.extraction_model` → `HumanSettings.extraction_model` → `HumanSettings.conversation_model`. `oneshot_model`/`rewrite_model` unaffected. |
+| 2026-08-01 | Added `external_reflection_only?: boolean` to `PersonaEntity` (default `false`). When set, Ei's automatic Reflection critic skips that Persona at **both** queue time (`queueReflectionPhase`) and handler time (`handleReflectionCritic`), so an external agent-aware reflection can process the PersonLog before it is cleared. The handler gate must suppress **both** of that function's writes — the log clear and the `pending_update` write — since they are independent. Exposed in TUI YAML, the web persona settings tab, and CLI/MCP. Rationale and rejected alternatives: `docs/adr/ADR-007-external-reflection-only.md`. |
+| 2026-08-01 | The persona relationship block (`--format prompt`) now reports the linked PersonLog's character count, and past `PERSON_LOG_REFLECTION_THRESHOLD` adds a cue for the agent to raise reflection with the user. A count only — no log content crosses that boundary, enforced by the builder accepting `number \| undefined` rather than a record. Reaches OMP and OpenCode (base and OMO); the other four harnesses receive it when GitHub #94 lands. |
+| 2026-08-01 | Corrected this document's spelling of the `Ei Persona` identifier type, which appeared here as `ei_persona` but is stored and matched as `Ei Persona`. A lookup written against the underscored form matches nothing and fails silently. Also recorded that persona ids are not universally UUID-shaped — reserved personas `ei` and `emmet` use those literal strings. Cardinality of the inverse link (several `Person` records sharing one persona id) is unresolved and tracked in `docs/adr/ADR-006-ei-persona-link-multiplicity.md`, status Proposed; settled regardless is that consumers must enumerate all linked records rather than taking the first. |

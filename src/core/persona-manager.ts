@@ -66,6 +66,7 @@ export async function createPersona(
     topics: [],
     tools: input.tools && input.tools.length > 0 ? input.tools : undefined,
     is_paused: false,
+    external_reflection_only: false,
     is_archived: false,
     is_static: false,
     last_updated: now,

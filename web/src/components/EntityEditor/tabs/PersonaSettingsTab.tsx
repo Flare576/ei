@@ -52,6 +52,10 @@ export const PersonaSettingsTab: React.FC<PersonaSettingsTabProps> = ({
     onChange("pause_until", e.target.value || undefined);
   };
 
+  const handleExternalReflectionOnlyToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
+    onChange("external_reflection_only", e.target.checked);
+  };
+
   const handleArchivedToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
     const isArchived = e.target.checked;
     onChange("is_archived", isArchived);
@@ -163,6 +167,20 @@ export const PersonaSettingsTab: React.FC<PersonaSettingsTabProps> = ({
             <small className="ei-form-hint">Leave empty to pause indefinitely</small>
           </div>
         )}
+
+        <div className="ei-form-group">
+          <label className="ei-checkbox-label">
+            <input
+              type="checkbox"
+              className="ei-checkbox"
+              data-testid="external-reflection-only-checkbox"
+              checked={persona.external_reflection_only ?? false}
+              onChange={handleExternalReflectionOnlyToggle}
+            />
+            <span>Let an External Agent Handle Reflection</span>
+          </label>
+          <small className="ei-form-hint">Skips Ei's automatic reflection check-in so an external, agent-driven reflection (e.g. a coding assistant's own self-review) can run instead.</small>
+        </div>
 
         <div className="ei-form-group">
           <label className="ei-checkbox-label">

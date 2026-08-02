@@ -19,7 +19,7 @@ import { buildReflectionCriticPrompt } from "../../prompts/reflection/index.js";
 import { getModelForPersona } from "../heartbeat-manager.js";
 import { qualifyEiMessage } from "../utils/message-id.js";
 
-const PERSON_LOG_REFLECTION_THRESHOLD = 3000;
+export const PERSON_LOG_REFLECTION_THRESHOLD = 3000;
 
 export function isNewDay(lastCeremony: string | undefined, now: Date): boolean {
   if (!lastCeremony) return true;
@@ -651,6 +651,11 @@ function queueReflectionPhase(state: StateManager): boolean {
       };
       state.messages_append("ei", warning);
       wroteEiWarning = true;
+      continue;
+    }
+
+    if (persona.external_reflection_only) {
+      console.log(`[ceremony:reflection] ${persona.display_name} is external_reflection_only — skipping automatic critic enqueue`);
       continue;
     }
 

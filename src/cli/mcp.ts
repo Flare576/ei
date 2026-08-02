@@ -265,7 +265,7 @@ export function createMcpServer(): McpServer {
         data: z
           .record(z.unknown())
           .describe(
-            "The entity fields. Fact requires name/description/sentiment/validated_date. Topic requires name/description/sentiment. Person requires a name and/or at least one identifier. Persona requires display_name (traits/topics default to empty arrays, is_paused/is_archived default to false, group_primary/groups_visible default to \"General\" if omitted). Structural validation happens server-side against the entity type's schema."
+            "The entity fields. Fact requires name/description/sentiment/validated_date. Topic requires name/description/sentiment. Person requires a name and/or at least one identifier. Persona requires display_name (traits/topics default to empty arrays, is_paused/is_archived/external_reflection_only default to false, group_primary/groups_visible default to \"General\" if omitted). Structural validation happens server-side against the entity type's schema."
           ),
       },
     },
@@ -288,7 +288,7 @@ export function createMcpServer(): McpServer {
     "ei_update",
     {
       description:
-        "Replace an existing fact, topic, person, quote, or persona by ID with a COMPLETE record — this is full replacement, not a partial patch. Any field omitted from `data` is treated as absent, not 'leave the existing value alone'. Always fetch the current record with ei_lookup first, edit the fields you need to change, and pass the WHOLE thing back — passing a partial object will silently drop the fields you didn't include. Use to fix bad extracted data (e.g. correcting a person record where two people were wrongly merged into one). Quote records can also be corrected this way — specifically to repoint `data_item_ids` after splitting or merging a person/topic/fact, or to fix mistranscribed `text`. Persona records support full CRUD this way too — rewriting display_name/traits[]/topics[] to author a persona's character (e.g. \"make this persona talk like Yoda\"), or toggling `is_archived` (archive/unarchive is just a normal update). Renaming a persona to a reserved name (\"new\", \"clone\") is rejected.",
+        "Replace an existing fact, topic, person, quote, or persona by ID with a COMPLETE record — this is full replacement, not a partial patch. Any field omitted from `data` is treated as absent, not 'leave the existing value alone'. Always fetch the current record with ei_lookup first, edit the fields you need to change, and pass the WHOLE thing back — passing a partial object will silently drop the fields you didn't include. Use to fix bad extracted data (e.g. correcting a person record where two people were wrongly merged into one). Quote records can also be corrected this way — specifically to repoint `data_item_ids` after splitting or merging a person/topic/fact, or to fix mistranscribed `text`. Persona records support full CRUD this way too — rewriting display_name/traits[]/topics[] to author a persona's character (e.g. \"make this persona talk like Yoda\"), or toggling `is_archived`/`external_reflection_only` (both are just normal updates). Renaming a persona to a reserved name (\"new\", \"clone\") is rejected.",
       inputSchema: {
         entity_type: z.enum(["fact", "topic", "person", "quote", "persona"]).describe("The type of entity to update."),
         id: z.string().describe("The ID of the entity to replace, from ei_lookup or ei_search."),

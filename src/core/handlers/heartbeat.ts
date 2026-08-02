@@ -123,6 +123,12 @@ export function handleReflectionCritic(response: LLMResponse, state: StateManage
   const personaId = response.request.data.personaId as string;
   const personaDisplayName = response.request.data.personaDisplayName as string;
 
+  const persona = state.persona_getById(personaId);
+  if (persona?.external_reflection_only) {
+    console.log(`[ReflectionCritic ${personaDisplayName}] external_reflection_only is set — skipping automatic critic (no clear, no pending_update)`);
+    return;
+  }
+
   const result = response.parsed as ReflectionCriticResult | undefined;
   if (!result?.critique) {
     throw new Error(`[ReflectionCritic ${personaDisplayName}] Invalid or missing parsed result`);
@@ -145,7 +151,6 @@ export function handleReflectionCritic(response: LLMResponse, state: StateManage
     return;
   }
 
-  const persona = state.persona_getById(personaId);
   if (!persona) {
     throw new Error(`[ReflectionCritic ${personaDisplayName}] Persona not found after critic`);
   }

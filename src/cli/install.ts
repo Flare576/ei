@@ -158,9 +158,12 @@ export async function installMcpClients(): Promise<void> {
   // (~/.agents/skills/<name>/SKILL.md) — unconditional because, unlike the
   // harness-specific steps above, it needs no per-tool detection: every tool
   // that reads it does so regardless of what else is installed on the machine.
-  // Claude Code, OMP, and OpenCode do NOT read this path — they keep their own
-  // installSkillsTo() calls inside installClaudeCode()/installOmp()/
-  // installOpenCodePlugin() untouched.
+  // OMP has its own "agents" provider that treats `.agent[s]/skills` as its
+  // canonical native location (see omp://skills.md), so OMP reads this path
+  // independently of installOmp(). Claude Code does NOT read this path — it
+  // keeps its own installSkillsTo() call inside installClaudeCode(). Whether
+  // OpenCode's plugin reads this path is unverified against OpenCode's own
+  // docs; do not assume either way.
   if (
     !(await runInstallStep("Shared skills directory (~/.agents/skills)", () =>
       installSkillsTo(join(home, ".agents", "skills"))

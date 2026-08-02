@@ -233,6 +233,32 @@ export function mapPersona(persona: PersonaEntity): PersonaResult {
   };
 }
 
+/**
+ * Resolve the size of a Persona's linked PersonLog (the Person record(s)
+ * whose `description` accumulates behavioral observations — see
+ * `queueReflectionPhase` in ceremony.ts, which this mirrors).
+ *
+ * A Persona may be linked to more than one Person record. Readiness is
+ * "any linked record over threshold," so this returns the length of the
+ * LARGEST linked record rather than the first match: since any
+ * over-threshold record is by definition larger than every under-threshold
+ * one, the max is always the over-threshold record when exactly one
+ * exists, and it is the most urgent one to surface when several do.
+ *
+ * Returns `undefined` when the Persona has no linked Person record at all
+ * — callers use this to omit the notice entirely. Never returns or
+ * exposes any PersonLog content, only its length.
+ */
+export function resolvePersonLogLength(personaId: string, state: StorageState): number | undefined {
+  const linkedRecords = state.human.people.filter((p) =>
+    p.identifiers?.some((i) => i.type.toLowerCase() === "ei persona" && i.value === personaId)
+  );
+  if (linkedRecords.length === 0) {
+    return undefined;
+  }
+  return Math.max(...linkedRecords.map((p) => p.description?.length ?? 0));
+}
+
 export function retrievePersonas(
   query: string,
   state: StorageState,
@@ -639,9 +665,15 @@ export async function lookupById(id: string): Promise<({ type: string } & Record
 // can resolve straight to the same enriched shape `lookupById` returns.
 // Like the StateManager method it mirrors, this returns the FIRST matching
 // Person and does not change that first-match behavior — safe for identifier
-// types that are unique by construction (e.g. "Ei Persona", a UUID assigned
-// once per persona), but arbitrary if more than one Person shares a value
-// under a type that isn't guaranteed unique (e.g. "Nickname", "First Name").
+// types that are unique by construction (e.g. "Ei Persona"), but arbitrary if
+// more than one Person shares a value under a type that isn't guaranteed
+// unique (e.g. "Nickname", "First Name"). Note the "unique by construction"
+// premise for "Ei Persona" does NOT rest on the value being a UUID — the two
+// reserved personas ("ei", "emmet") carry those literal strings as their ids,
+// not UUIDs. Whether "Ei Persona" values are actually unique per person is a
+// genuinely open question, tracked as Proposed in
+// docs/adr/ADR-006-ei-persona-link-multiplicity.md; this comment doesn't
+// resolve it.
 // Delegating to lookupById reuses all of its enrichment (embedding
 // stripping, linked_quotes) with zero duplication; this does mean
 // loadLatestState() is called twice on the not-found-then-found path,

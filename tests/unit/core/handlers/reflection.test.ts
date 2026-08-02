@@ -12,6 +12,7 @@ import {
   type PersonaEntity,
   type Person,
 } from "../../../../src/core/types.js";
+import type { StateManager } from "../../../../src/core/state-manager.js";
 
 vi.mock("../../../../src/core/orchestrators/index.js", () => ({
   orchestratePersonaGeneration: vi.fn(),
@@ -297,6 +298,55 @@ describe("handleReflectionCritic", () => {
     expect(upsertedPerson.description).toBe("");
 
     expect(state.persona_update).not.toHaveBeenCalled();
+  });
+
+  it("in-flight race: flag flips to external_reflection_only after the critic was already queued for an ordinary persona — neither write occurs", () => {
+    const persona = seedPersona(state);
+    seedPersonRecord(state);
+
+    const request = createMockRequest();
+    const response = createMockResponse(request, makeReflectionResult());
+
+    // Simulates the race: the critic was queued while the persona was still
+    // ordinary, but external_reflection_only flips to true before the queued
+    // response comes back for handling.
+    persona.external_reflection_only = true;
+
+    handlers[LLMNextStep.HandleReflectionCritic](response, state as unknown as StateManager);
+
+    expect(state.human_person_upsert).not.toHaveBeenCalled();
+
+    const pendingUpdateCalls = state.persona_update.mock.calls.filter(
+      ([, update]: [string, { pending_update?: unknown }]) => update?.pending_update !== undefined
+    );
+    expect(pendingUpdateCalls).toHaveLength(0);
+  });
+
+  it("opted-out in-flight malformed critic result returns normally instead of throwing, so the Processor completes the request rather than retrying it (I22)", () => {
+    const persona = seedPersona(state);
+    seedPersonRecord(state);
+
+    const request = createMockRequest();
+    const response = createMockResponse(request, {}); // malformed: missing critique field
+
+    // Simulates the race: the critic was queued while the persona was still
+    // ordinary, but external_reflection_only flips to true before the queued
+    // (malformed) response comes back for handling. Processor.handleResponse
+    // (processor.ts:999-1001,1197-1210) only calls queue_fail()/retries when
+    // the handler throws, so asserting no throw here is what proves the
+    // request completes instead of retrying.
+    persona.external_reflection_only = true;
+
+    expect(() =>
+      handlers[LLMNextStep.HandleReflectionCritic](response, state as unknown as StateManager)
+    ).not.toThrow();
+
+    expect(state.human_person_upsert).not.toHaveBeenCalled();
+
+    const pendingUpdateCalls = state.persona_update.mock.calls.filter(
+      ([, update]: [string, { pending_update?: unknown }]) => update?.pending_update !== undefined
+    );
+    expect(pendingUpdateCalls).toHaveLength(0);
   });
 
   it("sets created_at as a valid ISO timestamp", () => {

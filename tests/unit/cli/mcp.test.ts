@@ -276,6 +276,22 @@ describe("MCP server", () => {
     expect(mockUpdatePersonaEntity).toHaveBeenCalledWith("persona-1", { display_name: "Updated Persona" });
     expect(mockUpdateEntity.mock.calls.length).toBe(updateEntityCallsBefore);
   });
+  it("ei_update with entity_type 'persona' forwards optional settings and returns the full updated record", async () => {
+    const data = { include_message_timestamps: true, preferred_theme: "dark" };
+    const updatedPersona = { id: "persona-forward", ...data };
+    mockUpdatePersonaEntity.mockResolvedValueOnce(updatedPersona);
+    const updateEntityCallsBefore = mockUpdateEntity.mock.calls.length;
+    ({ client } = await setupClient());
+    const result = await client.callTool({
+      name: "ei_update",
+      arguments: { entity_type: "persona", id: "persona-forward", data },
+    });
+    const content = result.content as Array<{ type: string; text: string }>;
+    const parsed = JSON.parse(content[0].text);
+    expect(mockUpdatePersonaEntity).toHaveBeenCalledWith("persona-forward", data);
+    expect(mockUpdateEntity.mock.calls.length).toBe(updateEntityCallsBefore);
+    expect(parsed).toEqual(updatedPersona);
+  });
 
   it("ei_remove with entity_type 'persona' dispatches to removePersonaEntity and returns {removed: true, id}", async () => {
     mockRemovePersonaEntity.mockResolvedValueOnce(undefined);
