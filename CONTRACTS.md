@@ -382,7 +382,7 @@ A special identifier type that links a `Person` record to a `PersonaEntity` in t
 
 Note the id is not always a UUID: the reserved personas `ei` and `emmet` carry those literal strings as their ids. Code or documentation asserting a UUID shape is wrong for them.
 
-**A `Person` record and a Persona link one-to-one.** One Person, one Persona; one Persona, one Person. This is decided — see `docs/adr/ADR-006-ei-persona-link-multiplicity.md`, status Accepted.
+**A `Person` record carries at most one `Ei Persona` link, and a Persona is linked from at most one `Person` record.** This is decided — see `docs/adr/ADR-006-ei-persona-link-multiplicity.md`, status Accepted. Note **at most**: most Person records have no Persona link and should not have one. `identifiers: []` is valid. The constraint forbids a second link in either direction, not the absence of a first.
 
 An earlier design deliberately allowed a many-to-many graph so a composite persona could be expressed as overlapping links, and earlier revisions of this section documented that. It is rejected. A composite gets its own Person record instead: `Person:King_Einstein <-> Persona:King_Einstein`, alongside the standalone pairs.
 

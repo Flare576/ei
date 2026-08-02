@@ -20,7 +20,11 @@ The disagreement turned out to be downstream of the design, not a misunderstandi
 
 ## Decision
 
-**One Person record links to exactly one Persona. One Persona is linked from exactly one Person record.**
+**A `Person` record carries at most one Persona link, and a Persona is linked from at most one `Person` record.**
+
+**"At most," not "exactly."** Most Person records have no Persona link at all, and that is correct — an ordinary human you know is not a Persona. `identifiers: []` is valid and accepted, and `src/core/handlers/rewrite.ts:257-270` deliberately creates Person records with empty identifiers. The constraint forbids a *second* link in either direction; it does not require a first.
+
+This distinction is load-bearing for whoever enforces it. Read as "exactly one," a faithful implementer would reject valid unlinked people or try to auto-link every Person to something — both worse than the shape being fixed.
 
 A composite is still supported — it simply gets its own Person record rather than being expressed as a shared link:
 
@@ -57,7 +61,7 @@ The composite Persona gets a composite Person, and the graph stays a set of pair
 ## Consequences
 
 ### Positive
-- "Which log belongs to this Persona" has exactly one answer, so consumers stop needing an enumerate-and-ask branch.
+- "Which log belongs to this Persona" has at most one answer, so consumers stop needing an enumerate-and-ask branch. Zero stays valid and already has defined handling — the ceremony skips a Persona with no linked record.
 - The first-match sites that are wrong today become correct once the constraint holds, rather than needing individual repair.
 
 ### Negative
