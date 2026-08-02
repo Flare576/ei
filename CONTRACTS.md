@@ -376,7 +376,9 @@ Records with `identifiers: []` are in the pre-migration state. `name` still func
 
 ### `Ei Persona` Type
 
-**The stored `type` string is literally `Ei Persona`** — capitalised, space-separated. Production code matches it case-insensitively (`i.type.toLowerCase() === 'ei persona'`) but not with any other separator, so a lookup written against `ei_persona` matches nothing and fails silently with an empty result. Earlier revisions of this document used the underscored form; that was never the stored value.
+**The type is persisted exactly as typed and matched case-insensitively.** The canonical form is `Ei Persona` — capitalised, space-separated — and that is what seeders write, but a value the user typed as `ei persona` is stored that way and still matches. The string is user-visible and meant to read like a label, so its casing is theirs to choose. Every semantic consumer lowercases before comparing (`i.type.toLowerCase() === 'ei persona'`).
+
+**The separator is not flexible.** `ei_persona` is not a variant spelling — it matches nothing, and because lookups return an empty result rather than an error, it fails *silently*. Earlier revisions of this document used the underscored form; it was never the stored value, and it has resurfaced in docs and comments repeatedly since. If you are writing a lookup, lowercase and compare against `'ei persona'` with a space.
 
 A special identifier type that links a `Person` record to a `PersonaEntity` in the same Ei instance. The `value` is the **Persona's id** — not the display name — so the link survives persona renames. Resolve to a display name via `state.persona_getById(value)?.display_name` for UI.
 

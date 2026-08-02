@@ -17,6 +17,7 @@ This exists because the alternative was observed directly: *"I really wish we ha
 | [007](ADR-007-external-reflection-only.md) | A Persona May Opt Out of the Automatic Reflection Critic | Accepted | 2026-08-01 | Current |
 | [008](ADR-008-accepted-write-races.md) | Two Last-Write-Wins Races Are Accepted, Not Fixed | Accepted | 2026-08-01 | Current |
 | [009](ADR-009-tui-yaml-loses-to-concurrent-writes.md) | A Stale TUI YAML Edit Loses to a Concurrent Write | Accepted | 2026-08-01 | Current |
+| [010](ADR-010-invalid-persona-links-are-reported-not-repaired.md) | Invalid Persona Links Are Reported, Never Repaired Automatically | Accepted | 2026-08-01 | Current |
 
 ## Conventions
 
