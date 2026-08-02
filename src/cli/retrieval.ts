@@ -100,6 +100,7 @@ export interface LinkedQuote {
   timestamp: string;
 }
 export interface QuoteResult {
+  id: string;
   text: string;
   speaker: string;
   timestamp: string;
@@ -178,6 +179,7 @@ export function resolveLinkedItems(dataItemIds: string[], state: StorageState): 
 }
 export function mapQuote(quote: Quote, state: StorageState): QuoteResult {
   return {
+    id: quote.id,
     text: quote.text,
     speaker: quote.speaker,
     timestamp: quote.timestamp,

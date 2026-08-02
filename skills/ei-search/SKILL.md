@@ -86,7 +86,7 @@ exact command surface — this skill is a guide, but the CLI evolves.
 | `ei --source <prefix> "query"` | Same narrowing, by source prefix (e.g. `cursor`, `codex:my-machine`) instead of persona — same caveats: always excludes quotes, doesn't scope `ei personas` results |
 | `ei --id <id>` | Full-record lookup — entity id or fully-qualified message id (see below) |
 | `echo <id> \| ei --id` | Same lookup, id piped via stdin |
-| `ei "query" \| jq -r '.[0] \| if .id != null then .id else .message_id end' \| ei --id` | Quote-safe search-then-drill-down: entity hits drill down by `id`, quote hits (no `id`) drill down by `message_id` |
+| `ei "query" \| jq -r '.[0].id' \| ei --id` | Search-then-drill-down: every hit carries an `id`, so this fetches the top hit's full record |
 
 Type aliases work singular or plural: `fact`/`facts`, `person`/`people`,
 `topic`/`topics`, `quote`/`quotes`, `persona`/`personas`. Short flags:
@@ -125,15 +125,19 @@ never have to pick which path, just pass the id:
   - `pi:my-machine:session-uuid:session-uuid/entry-id`
   - `ei:uuid` (persona-to-persona / internal Ei conversations)
 
-Quote results carry a `message_id` in this format — pipe it to `ei --id` to
-read the original exchange it came from.
+Quote results carry both ids, and they are not interchangeable. A quote's
+`id` addresses that one quote — it's what `ei --id` resolves to the full
+quote record, and what curation commands like `ei update quote <id>` take.
+Its `message_id` addresses the *source message* the quote came from: it's
+nullable, and several quotes lifted from the same message share it. Pipe a
+`message_id` to `ei --id` to read the original exchange; use `id` when you
+mean one specific quote.
 
-Safe mental model: **entity hits drill down by `id`; quote hits drill down
-by `message_id`.** Don't assume every search hit has an `id` — quote hits
-won't. Prefer a quote-safe pipeline over grabbing `.[0].id` blindly:
+Every search hit — quotes included — has an `id`, so drilling down is the
+same one-liner for every type:
 
 ```sh
-ei "query" | jq -r '.[0] | if .id != null then .id else .message_id end' | ei --id
+ei "query" | jq -r '.[0].id' | ei --id
 ```
 
 ---
@@ -195,7 +199,7 @@ All search commands return **arrays**; every result has a `type` field.
 |---|---|
 | Fact / Topic | `{ type, id, name, description, sentiment, ...type-specific fields }` |
 | Person | `{ type, id, name, description, relationship, sentiment, identifiers[] }` |
-| Quote | `{ type, text, speaker, message_id, timestamp, linked_items[] }` — **no `id`, on purpose**: quotes are addressed by `message_id` (fetch the original message), not an editable entity id |
+| Quote | `{ type, id, text, speaker, timestamp, message_id, linked_items[] }` — `id` addresses this quote; `message_id` addresses the source message it came from (nullable, and shared by every quote from that message) |
 | Persona | `{ type, id, display_name, short_description, model, base_prompt, traits[], topics[] }` |
 
 `ei --id <entity-id>` returns a **single object** (not an array), same shape
@@ -219,11 +223,10 @@ only when you actually need one of the extra fields listed above.
   bad record → `ei-curate`. A persona's character → `ei-persona`.
 - **`--help` is the source of truth.** If a command here doesn't match live
   `ei --help` output, trust `--help` and adapt.
-- **Search results omit quote `id` by design.** Address a quote by its
-  `message_id`, not an id. If you already have a quote's *entity* id from
-  somewhere else — e.g. a `linked_quotes` entry on a fact/topic/person
-  record — `ei --id <quote-id>` does work and returns the full quote
-  record.
+- **A quote's `id` and its `message_id` are different addresses.** `id`
+  identifies the quote record itself; `message_id` identifies the original
+  message it was lifted from, and is nullable and non-unique across quotes.
+  Both resolve through `ei --id`, but only `id` names one quote.
 - **`--persona`/`--source` are human-memory narrowing tools, not universal
   filters.** They're reliable for facts, people, and topics. They always
   exclude quotes (results come back empty, not an error). On `ei personas`

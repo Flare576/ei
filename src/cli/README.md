@@ -150,7 +150,7 @@ All search commands return arrays. Each result includes a `type` field.
 
 **Person**: `{ type, id, name, description, relationship, sentiment, identifiers[] }` — `identifiers` contains all known accounts and aliases (e.g. `{ type: "GitHub", value: "flare576" }`)
 
-**Quote**: `{ type, text, speaker, message_id, timestamp, linked_items[] }` — note: `id` is intentionally omitted; use `message_id` with `ei_fetch_message` to retrieve the original conversation
+**Quote**: `{ type, id, text, speaker, message_id, timestamp, linked_items[] }` — `message_id` links to `ei_fetch_message` for the original conversation; `id` is the stable identity for `ei update quote`
 
 **Persona**: `{ type, id, display_name, short_description, model, base_prompt, traits[], topics[] }`
 
