@@ -457,6 +457,37 @@ export function findQuoteByWords(quoteText: string, msgText: string): WordBounda
   return null;
 }
 
+export interface QuoteMatch extends WordBoundaryMatch {
+  level: "exact" | "word-boundary";
+}
+
+/**
+ * Matches candidate quote text against a single message's text, trying a
+ * normalized-exact match first (Level 1) and falling back to a word-boundary
+ * scan (Level 2, ≥2-word threshold) if that fails. Extracted from
+ * `validateAndStoreQuotes`'s inline per-message matching so the same logic
+ * can be reused outside the extraction pipeline (e.g. `ei create`/`ei fix
+ * quote`'s server-side verification).
+ */
+export function matchQuoteInMessage(candidateText: string, msgText: string): QuoteMatch | null {
+  // Level 1: normalized exact match
+  const { normalized: normalizedMsg, map } = normalizeWithMap(msgText);
+  const normalizedQuote = normalizeWithMap(candidateText).normalized;
+  const start = normalizedQuote.length > 0 ? normalizedMsg.indexOf(normalizedQuote) : -1;
+
+  if (start !== -1) {
+    const rawStart = map[start];
+    const rawEnd = map[start + normalizedQuote.length - 1] + 1;
+    const expanded = expandToWordBoundaries(msgText, rawStart, rawEnd);
+    return { start: expanded.start, end: expanded.end, text: expanded.text, level: "exact" };
+  }
+
+  // Level 2: word-boundary fallback
+  const wordMatch = findQuoteByWords(candidateText, msgText);
+  if (!wordMatch) return null;
+  return { start: wordMatch.start, end: wordMatch.end, text: wordMatch.text, level: "word-boundary" };
+}
+
 async function validateAndStoreQuotes(
   candidates: Array<{ text: string; reason: string }> | undefined,
   messages: Message[],
@@ -476,33 +507,13 @@ async function validateAndStoreQuotes(
     for (const message of messages) {
       const msgText = getMessageText(message);
 
-      // Level 1: normalized exact match
-      const { normalized: normalizedMsg, map } = normalizeWithMap(msgText);
-      const normalizedQuote = normalizeWithMap(candidate.text).normalized;
-      const start = normalizedQuote.length > 0 ? normalizedMsg.indexOf(normalizedQuote) : -1;
+      const match = matchQuoteInMessage(candidate.text, msgText);
+      if (!match) continue;
 
-      let matchStart: number;
-      let matchEnd: number;
-      let matchText: string;
-      let matchLevel: string;
-
-      if (start !== -1) {
-        const rawStart = map[start];
-        const rawEnd = map[start + normalizedQuote.length - 1] + 1;
-        const expanded = expandToWordBoundaries(msgText, rawStart, rawEnd);
-        matchStart = expanded.start;
-        matchEnd = expanded.end;
-        matchText = expanded.text;
-        matchLevel = "exact";
-      } else {
-        // Level 2: word-boundary fallback
-        const wordMatch = findQuoteByWords(candidate.text, msgText);
-        if (!wordMatch) continue;
-        matchStart = wordMatch.start;
-        matchEnd = wordMatch.end;
-        matchText = wordMatch.text;
-        matchLevel = "word-boundary";
-      }
+      const matchStart = match.start;
+      const matchEnd = match.end;
+      const matchText = match.text;
+      const matchLevel = match.level;
 
       const existing = state.human_quote_getForMessage(message.id);
       const overlapping = existing.find(q =>

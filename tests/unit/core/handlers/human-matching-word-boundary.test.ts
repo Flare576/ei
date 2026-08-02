@@ -13,6 +13,7 @@ import { describe, it, expect } from "vitest";
 import {
   findQuoteByWords,
   expandToWordBoundaries,
+  matchQuoteInMessage,
 } from "../../../../src/core/handlers/human-matching.js";
 
 // ---------------------------------------------------------------------------
@@ -234,5 +235,34 @@ describe("findQuoteByWords", () => {
     expect(result).not.toBeNull();
     expect(result!.text).toMatch(/^thinking/);
     expect(result!.text).toContain("and then");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// matchQuoteInMessage — direct tests (exported two-level matcher seam)
+// ---------------------------------------------------------------------------
+
+describe("matchQuoteInMessage", () => {
+  it("returns a Level 1 ('exact') hit with the raw source span when a normalized-exact match exists", () => {
+    const msg = "The “word” remains";
+    const result = matchQuoteInMessage('"word"', msg);
+
+    expect(result).not.toBeNull();
+    expect(result).toEqual({ start: 4, end: 10, text: "“word”", level: "exact" });
+  });
+
+  it("falls back to a Level 2 ('word-boundary') hit when the normalized-exact match misses", () => {
+    const msg = "thinking… and then the conclusion";
+    const result = matchQuoteInMessage("thinking... and then", msg);
+
+    expect(result).not.toBeNull();
+    expect(result).toEqual({ start: 0, end: 18, text: "thinking… and then", level: "word-boundary" });
+  });
+
+  it("returns null when neither level matches (one-word fallback candidate below threshold)", () => {
+    const msg = "thinking… continues";
+    const result = matchQuoteInMessage("thinking...", msg);
+
+    expect(result).toBeNull();
   });
 });
