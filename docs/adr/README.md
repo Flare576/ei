@@ -18,6 +18,7 @@ This exists because the alternative was observed directly: *"I really wish we ha
 | [008](ADR-008-accepted-write-races.md) | Two Last-Write-Wins Races Are Accepted, Not Fixed | Accepted | 2026-08-01 | Current |
 | [009](ADR-009-tui-yaml-loses-to-concurrent-writes.md) | A Stale TUI YAML Edit Loses to a Concurrent Write | Accepted | 2026-08-01 | Current |
 | [010](ADR-010-invalid-persona-links-are-reported-not-repaired.md) | Invalid Persona Links Are Reported, Never Repaired Automatically | Accepted | 2026-08-01 | Current |
+| [011](ADR-011-quotes-outlive-their-links.md) | A Quote Outlives the Items It Was Linked To | Accepted | 2026-08-02 | Current |
 
 ## Conventions
 
