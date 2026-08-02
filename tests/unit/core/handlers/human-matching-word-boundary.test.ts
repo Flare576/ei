@@ -81,7 +81,7 @@ describe("expandToWordBoundaries", () => {
   });
 
   it("F: correct offset when message contains ASCII ellipsis (no drift)", () => {
-    // normalizeText no longer normalizes "..." → "…", so the indexOf offset
+    // normalizeWithMap preserves "..." rather than converting it to "…", so the indexOf offset
     // in the original message is the same as in the normalized message.
     // expandToWordBoundaries called with that correct offset should return
     // exactly the quote substring — not something shifted by 2.
@@ -175,7 +175,7 @@ describe("findQuoteByWords", () => {
   });
 
   it("F: ASCII ellipsis in message does not drift the match position", () => {
-    // If normalizeText had converted "..." → "…" (1 char), the offset would
+    // If normalizeWithMap had converted "..." → "…" (1 char), the offset would
     // be off by 2. Since that normalization was removed, Level 2 still finds
     // the match at the correct position in the original message.
     const quote = "and then the real insight";
@@ -210,7 +210,7 @@ describe("findQuoteByWords", () => {
 
   it("H: unicode ellipsis in message matched by Level 2 even when it differs from ASCII quote", () => {
     // Message has "…" (U+2026), quote has "..." (three dots).
-    // normalizeText does NOT normalize these to each other, so Level 1 misses.
+    // normalizeWithMap does NOT normalize these to each other, so Level 1 misses.
     // Level 2 (findQuoteByWords) strips all punctuation from both sides, so
     // "thinking…" and "thinking..." both strip to "thinking" — match succeeds.
     const quote = "thinking... and then";

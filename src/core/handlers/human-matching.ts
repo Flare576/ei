@@ -357,14 +357,37 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
 }
 
 
-function normalizeText(text: string): string {
-  return text
-    .replace(/[\u201C\u201D]/g, '"')              // curly double quotes
-    .replace(/[\u2018\u2019\u0060\u00B4]/g, "'")  // curly single, backtick, acute accent
-    .replace(/[\u2014\u2013\u2012]/g, '-')         // em-dash, en-dash, figure dash
-    .replace(/\u00A0/g, ' ')                       // non-breaking space
-    .replace(/[\u2000-\u200F]/g, ' ')              // unicode space variants
-    .replace(/[*_`~]/g, '');                       // Markdown emphasis/code chars
+function normalizeWithMap(text: string): { normalized: string; map: number[] } {
+  const chars: string[] = [];
+  const map: number[] = [];
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    let mapped: string;
+
+    if (/[\u201C\u201D]/.test(ch)) {
+      mapped = '"';                                 // curly double quotes
+    } else if (/[\u2018\u2019\u0060\u00B4]/.test(ch)) {
+      mapped = "'";                                 // curly single, backtick, acute accent
+    } else if (/[\u2014\u2013\u2012]/.test(ch)) {
+      mapped = '-';                                 // em-dash, en-dash, figure dash
+    } else if (ch === '\u00A0') {
+      mapped = ' ';                                 // non-breaking space
+    } else if (/[\u2000-\u200F]/.test(ch)) {
+      mapped = ' ';                                 // unicode space variants
+    } else if (/[*_`~]/.test(ch)) {
+      continue;                                      // Markdown emphasis/code chars — deleted, no output, no map entry
+    } else {
+      mapped = ch;
+    }
+
+    chars.push(mapped);
+    map.push(i);
+  }
+
+  map.push(text.length); // sentinel — makes the end-of-string normalized index addressable
+
+  return { normalized: chars.join(''), map };
 }
 
 function stripPunctuation(text: string): string {
@@ -454,9 +477,9 @@ async function validateAndStoreQuotes(
       const msgText = getMessageText(message);
 
       // Level 1: normalized exact match
-      const normalizedMsg = normalizeText(msgText);
-      const normalizedQuote = normalizeText(candidate.text);
-      const start = normalizedMsg.indexOf(normalizedQuote);
+      const { normalized: normalizedMsg, map } = normalizeWithMap(msgText);
+      const normalizedQuote = normalizeWithMap(candidate.text).normalized;
+      const start = normalizedQuote.length > 0 ? normalizedMsg.indexOf(normalizedQuote) : -1;
 
       let matchStart: number;
       let matchEnd: number;
@@ -464,7 +487,9 @@ async function validateAndStoreQuotes(
       let matchLevel: string;
 
       if (start !== -1) {
-        const expanded = expandToWordBoundaries(msgText, start, start + candidate.text.length);
+        const rawStart = map[start];
+        const rawEnd = map[start + normalizedQuote.length - 1] + 1;
+        const expanded = expandToWordBoundaries(msgText, rawStart, rawEnd);
         matchStart = expanded.start;
         matchEnd = expanded.end;
         matchText = expanded.text;

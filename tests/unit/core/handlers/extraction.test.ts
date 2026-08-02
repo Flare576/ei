@@ -14,6 +14,7 @@ import {
   type Topic,
   type Person,
   type Quote,
+  type RoomMessage,
 } from "../../../../src/core/types.js";
 import type { StateManager } from "../../../../src/core/state-manager.js";
 
@@ -68,6 +69,7 @@ function createMockStateManager() {
 
   const personas: Record<string, PersonaEntity> = {};
   const messages: Record<string, Message[]> = {};
+  const roomMessages: Record<string, RoomMessage[]> = {};
 
   return {
     getHuman: vi.fn(() => human),
@@ -88,14 +90,20 @@ function createMockStateManager() {
       else human.people.push(person);
     }),
     human_quote_add: vi.fn((quote: Quote) => human.quotes.push(quote)),
-    human_quote_update: vi.fn(),
-    human_quote_getForMessage: vi.fn(() => []),
+    human_quote_update: vi.fn((id: string, updates: Partial<Quote>) => {
+      const index = human.quotes.findIndex(quote => quote.id === id);
+      if (index >= 0) human.quotes[index] = { ...human.quotes[index], ...updates };
+    }),
+    human_quote_getForMessage: vi.fn((messageId: string) =>
+      human.quotes.filter(quote => quote.message_id === messageId)
+    ),
     persona_getById: vi.fn((id: string) => Object.values(personas).find(p => p.id === id) ?? null),
     persona_getByName: vi.fn((name: string) => Object.values(personas).find(p => p.display_name === name || p.aliases?.includes(name)) ?? null),
     persona_getAll: vi.fn(() => Object.values(personas)),
     persona_add: vi.fn((entity: PersonaEntity) => { personas[entity.id] = entity; }),
     persona_update: vi.fn(),
     messages_get: vi.fn((id: string) => messages[id] ?? []),
+    getRoomMessages: vi.fn((roomId: string) => roomMessages[roomId] ?? []),
     messages_append: vi.fn(),
     messages_markPendingAsRead: vi.fn(),
     messages_markExtracted: vi.fn().mockReturnValue(1),
@@ -104,6 +112,7 @@ function createMockStateManager() {
     _human: human,
     _personas: personas,
     _messages: messages,
+    _roomMessages: roomMessages,
   };
 }
 
@@ -2204,10 +2213,155 @@ describe("Channel and speaker attribution on quotes", () => {
     ];
     return msg;
   }
+  function seedPersona(
+    id: string,
+    displayName: string,
+    groupPrimary: string | null = "Engineering",
+  ): PersonaEntity {
+    const persona: PersonaEntity = {
+      id,
+      display_name: displayName,
+      entity: "system",
+      group_primary: groupPrimary,
+      traits: [],
+      topics: [],
+      is_paused: false,
+      is_archived: false,
+      is_static: false,
+      last_updated: new Date().toISOString(),
+    };
+    state._personas[id] = persona;
+    return persona;
+  }
+
+  function seedTopic(id: string): Topic {
+    const topic: Topic = {
+      id,
+      name: "Quote matching target",
+      description: "A topic used to verify quote persistence.",
+      sentiment: 0,
+      category: "Technical",
+      exposure_current: 0.5,
+      exposure_desired: 0.5,
+      last_updated: new Date().toISOString(),
+    };
+    state._human.topics.push(topic);
+    return topic;
+  }
+
+  async function captureTopicQuote(
+    quoteText: string,
+    options: {
+      existingItemId?: string;
+      roomId?: string;
+      personaId?: string;
+      personaDisplayName?: string;
+    } = {},
+  ): Promise<void> {
+    const personaId = options.personaId ?? "persona-1";
+    const personaDisplayName = options.personaDisplayName ?? "Sisyphus";
+    const candidateName = "Quote matching target";
+    const candidateDescription = "A topic used to verify quote persistence.";
+    const request = createMockRequest({
+      next_step: LLMNextStep.HandleTopicUpdate,
+      data: {
+        personaId,
+        personaDisplayName,
+        ...(options.roomId ? { roomId: options.roomId } : {}),
+        isNewItem: !options.existingItemId,
+        ...(options.existingItemId ? { existingItemId: options.existingItemId } : {}),
+        candidateName,
+        candidateDescription,
+        candidateCategory: "Technical",
+        messages_context: [],
+        messages_analyze: [],
+      },
+    });
+    const response = createMockResponse(request, {
+      name: candidateName,
+      description: candidateDescription,
+      category: "Technical",
+      sentiment: 0.5,
+      exposure_desired: 0.5,
+      quotes: [{ text: quoteText, reason: "quote matcher regression" }],
+    });
+
+    await handlers[LLMNextStep.HandleTopicUpdate](response, state as unknown as StateManager);
+  }
+
+  function getAddedQuote(): Quote {
+    expect(state.human_quote_add).toHaveBeenCalledTimes(1);
+    return state.human_quote_add.mock.calls[0][0] as Quote;
+  }
+
+  function expectRawSpan(
+    quote: { start?: number | null; end?: number | null; text?: string },
+    msgText: string,
+    expected: { start: number; end: number; text: string },
+  ): void {
+    expect(quote.start).toBe(expected.start);
+    expect(quote.end).toBe(expected.end);
+    expect(quote.text).toBe(expected.text);
+    expect(quote.text).toBe(msgText.slice(quote.start!, quote.end!));
+  }
+
+  // validateAndStoreQuotes is deliberately private, so these cases exercise its
+  // two-level behavior through the public topic-update handler rather than adding
+  // a test-only export.
+  describe("two-level quote matcher regressions (T1, through handler seam)", () => {
+    const cases: Array<{
+      name: string;
+      message: string;
+      candidate: string;
+      expected: { start: number; end: number; text: string } | null;
+    }> = [
+      {
+        name: "normalizes curly quotes for a one-word Level 1 match",
+        message: "The “word” remains",
+        candidate: '"word"',
+        expected: { start: 4, end: 10, text: "“word”" },
+      },
+      {
+        name: "uses Level 2 for an ASCII candidate against a Unicode ellipsis",
+        message: "thinking… and then the conclusion",
+        candidate: "thinking... and then",
+        expected: { start: 0, end: 18, text: "thinking… and then" },
+      },
+      {
+        name: "does not let a one-word fallback candidate match",
+        message: "thinking… continues",
+        candidate: "thinking...",
+        expected: null,
+      },
+      {
+        name: "maps a Markdown-normalized match back to the candidate raw span",
+        message: "prefix **bold** then exact quote",
+        candidate: "then exact quote",
+        expected: { start: 16, end: 32, text: "then exact quote" },
+      },
+    ];
+
+    for (const testCase of cases) {
+      it(testCase.name, async () => {
+        const msgText = testCase.message;
+        seedMessage("persona-1", "matcher-case", "human", msgText);
+
+        await captureTopicQuote(testCase.candidate);
+
+        if (testCase.expected === null) {
+          expect(state.human_quote_add).not.toHaveBeenCalled();
+          return;
+        }
+
+        expectRawSpan(getAddedQuote(), msgText, testCase.expected);
+      });
+    }
+  });
 
   describe("handleTopicUpdate — quote channel/speaker", () => {
     it("sets channel to personaDisplayName on extracted quotes", async () => {
-      seedMessage("persona-1", "msg-1", "human", "I love working with TypeScript");
+      const msgText = "I love working with TypeScript";
+      seedMessage("persona-1", "msg-1", "human", msgText);
 
       const request = createMockRequest({
         next_step: LLMNextStep.HandleTopicUpdate,
@@ -2236,10 +2390,12 @@ describe("Channel and speaker attribution on quotes", () => {
       expect(state.human_quote_add).toHaveBeenCalledTimes(1);
       const quote = (state.human_quote_add as ReturnType<typeof vi.fn>).mock.calls[0][0] as Quote;
       expect(quote.channel).toBe("Sisyphus");
+      expectRawSpan(quote, msgText, { start: 0, end: msgText.length, text: msgText });
     });
 
     it("sets speaker=human for human-role message quotes", async () => {
-      seedMessage("persona-1", "msg-2", "human", "I love working with TypeScript");
+      const msgText = "I love working with TypeScript";
+      seedMessage("persona-1", "msg-2", "human", msgText);
 
       const request = createMockRequest({
         next_step: LLMNextStep.HandleTopicUpdate,
@@ -2267,10 +2423,12 @@ describe("Channel and speaker attribution on quotes", () => {
 
       const quote = (state.human_quote_add as ReturnType<typeof vi.fn>).mock.calls[0][0] as Quote;
       expect(quote.speaker).toBe("human");
+      expectRawSpan(quote, msgText, { start: 0, end: msgText.length, text: msgText });
     });
 
     it("sets speaker=channelDisplayName for non-human-role message quotes", async () => {
-      seedMessage("persona-1", "msg-3", "system", "This pattern is worth noting");
+      const msgText = "This pattern is worth noting";
+      seedMessage("persona-1", "msg-3", "system", msgText);
 
       const request = createMockRequest({
         next_step: LLMNextStep.HandleTopicUpdate,
@@ -2299,41 +2457,53 @@ describe("Channel and speaker attribution on quotes", () => {
       const quote = (state.human_quote_add as ReturnType<typeof vi.fn>).mock.calls[0][0] as Quote;
       expect(quote.speaker).toBe("Sisyphus");
       expect(quote.channel).toBe("Sisyphus");
+      expectRawSpan(quote, msgText, { start: 0, end: msgText.length, text: msgText });
     });
 
-    it("produces no quotes when quote text is not found in messages", async () => {
-      // No messages seeded — quote cannot be anchored
-      const request = createMockRequest({
-        next_step: LLMNextStep.HandleTopicUpdate,
-        data: {
-          personaId: "persona-1",
-          personaDisplayName: "Sisyphus",
-          isNewItem: true,
-          candidateName: "TypeScript",
-          candidateDescription: "Strongly typed JS",
-          candidateCategory: "Technical",
-          messages_context: [],
-          messages_analyze: [],
-        },
-      });
+    it("warns and produces no quote when a candidate misses a real message", async () => {
+      const msgText = "This real message contains unrelated evidence only.";
+      seedMessage("persona-1", "msg-unmatched", "human", msgText);
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
 
-      const response = createMockResponse(request, {
-        name: "TypeScript",
-        description: "Strongly typed JavaScript superset",
-        sentiment: 0.8,
-        exposure_desired: 0.5,
-        quotes: [{ text: "hallucinated quote that isnt in any message", reason: "test" }],
-      });
+      try {
+        const request = createMockRequest({
+          next_step: LLMNextStep.HandleTopicUpdate,
+          data: {
+            personaId: "persona-1",
+            personaDisplayName: "Sisyphus",
+            isNewItem: true,
+            candidateName: "TypeScript",
+            candidateDescription: "Strongly typed JS",
+            candidateCategory: "Technical",
+            messages_context: [],
+            messages_analyze: [],
+          },
+        });
 
-      await handlers[LLMNextStep.HandleTopicUpdate](response, state as any);
+        const response = createMockResponse(request, {
+          name: "TypeScript",
+          description: "Strongly typed JavaScript superset",
+          sentiment: 0.8,
+          exposure_desired: 0.5,
+          quotes: [{ text: "hallucinated quote that isnt in any message", reason: "test" }],
+        });
 
-      expect(state.human_quote_add).not.toHaveBeenCalled();
+        await handlers[LLMNextStep.HandleTopicUpdate](response, state as unknown as StateManager);
+
+        expect(state.human_quote_add).not.toHaveBeenCalled();
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining(
+          'Quote not found in messages (both levels), skipping: "hallucinated quote that isnt in any message"'
+        ));
+      } finally {
+        warnSpy.mockRestore();
+      }
     });
   });
 
   describe("handlePersonUpdate — quote channel", () => {
     it("sets channel to personaDisplayName on extracted quotes", async () => {
-      seedMessage("persona-1", "msg-4", "human", "David is a great collaborator");
+      const msgText = "David is a great collaborator";
+      seedMessage("persona-1", "msg-4", "human", msgText);
 
       const request = createMockRequest({
         next_step: LLMNextStep.HandlePersonUpdate,
@@ -2363,6 +2533,146 @@ describe("Channel and speaker attribution on quotes", () => {
       expect(state.human_quote_add).toHaveBeenCalledTimes(1);
       const quote = (state.human_quote_add as ReturnType<typeof vi.fn>).mock.calls[0][0] as Quote;
       expect(quote.channel).toBe("Sisyphus");
+      expectRawSpan(quote, msgText, { start: 0, end: msgText.length, text: msgText });
+    });
+  });
+
+  describe("handleTopicUpdate quote persistence regressions (T2)", () => {
+    it("persists normalized-exact raw provenance and topic metadata", async () => {
+      const msgText = "The “release plan” is ready";
+      const message = seedMessage("persona-1", "msg-normalized", "human", msgText);
+      seedPersona("persona-1", "Sisyphus", "Engineering");
+      const topic = seedTopic("topic-normalized");
+
+      await captureTopicQuote('The "release plan" is ready', { existingItemId: topic.id });
+
+      const quote = getAddedQuote();
+      expectRawSpan(quote, msgText, { start: 0, end: 27, text: msgText });
+      expect(quote.message_id).toBe(message.id);
+      expect(quote.data_item_ids).toEqual([topic.id]);
+      expect(quote.persona_groups).toEqual(["Engineering"]);
+    });
+
+    it("persists fallback raw provenance and topic metadata", async () => {
+      const msgText = "thinking… and then the conclusion";
+      const message = seedMessage("persona-1", "msg-fallback", "human", msgText);
+      seedPersona("persona-1", "Sisyphus", "Engineering");
+      const topic = seedTopic("topic-fallback");
+
+      await captureTopicQuote("thinking... and then", { existingItemId: topic.id });
+
+      const quote = getAddedQuote();
+      expectRawSpan(quote, msgText, { start: 0, end: 18, text: "thinking… and then" });
+      expect(quote.message_id).toBe(message.id);
+      expect(quote.data_item_ids).toEqual([topic.id]);
+      expect(quote.persona_groups).toEqual(["Engineering"]);
+    });
+  });
+
+  describe("overlapping quote merge (T3)", () => {
+    it("updates the existing quote with the raw union span and deduplicated metadata", async () => {
+      const msgText = "The durable architecture protects people.";
+      const message = seedMessage("persona-1", "msg-merge", "human", msgText);
+      seedPersona("persona-1", "Sisyphus", "Research");
+      const topic = seedTopic("topic-merge");
+      const existingQuote: Quote = {
+        id: "quote-existing",
+        message_id: message.id,
+        data_item_ids: ["topic-existing"],
+        persona_groups: ["Existing Group"],
+        text: msgText.slice(0, 24),
+        speaker: "human",
+        channel: "Prior channel",
+        timestamp: message.timestamp,
+        start: 0,
+        end: 24,
+        created_at: new Date().toISOString(),
+        created_by: "extraction",
+        embedding: [0.1, 0.2],
+      };
+      state._human.quotes.push(existingQuote);
+
+      await captureTopicQuote("architecture protects", { existingItemId: topic.id });
+
+      expect(state.human_quote_add).not.toHaveBeenCalled();
+      expect(state.human_quote_update).toHaveBeenCalledTimes(1);
+      const [quoteId, updates] = state.human_quote_update.mock.calls[0] as [
+        string,
+        Partial<Quote>,
+      ];
+      expect(quoteId).toBe(existingQuote.id);
+      expectRawSpan(updates, msgText, {
+        start: 0,
+        end: 33,
+        text: "The durable architecture protects",
+      });
+      expect(updates.data_item_ids).toEqual(["topic-existing", topic.id]);
+      expect(updates.persona_groups).toEqual(["Existing Group", "Research"]);
+      expect(new Set(updates.data_item_ids).size).toBe(updates.data_item_ids?.length);
+      expect(new Set(updates.persona_groups).size).toBe(updates.persona_groups?.length);
+
+      const mergedQuote = state._human.quotes.find(quote => quote.id === existingQuote.id);
+      expect(mergedQuote).toBeDefined();
+      expectRawSpan(mergedQuote!, msgText, {
+        start: 0,
+        end: 33,
+        text: "The durable architecture protects",
+      });
+    });
+  });
+
+  describe("duplicate occurrence selection (T4)", () => {
+    it("anchors an exact candidate to its first raw occurrence", async () => {
+      const msgText = "Start exact phrase middle exact phrase finish";
+      seedMessage("persona-1", "msg-duplicate", "human", msgText);
+      const topic = seedTopic("topic-duplicate");
+
+      await captureTopicQuote("exact phrase", { existingItemId: topic.id });
+
+      expectRawSpan(getAddedQuote(), msgText, {
+        start: 6,
+        end: 18,
+        text: "exact phrase",
+      });
+    });
+  });
+
+  describe("room quote route (T5)", () => {
+    it("normalizes a room message before persisting its raw provenance", async () => {
+      const msgText = "A room-specific insight lands here";
+      const roomMessage: RoomMessage = {
+        id: "room-msg-1",
+        parent_id: null,
+        role: "persona",
+        persona_id: "room-speaker",
+        content: msgText,
+        timestamp: new Date().toISOString(),
+        read: true,
+        context_status: "default" as RoomMessage["context_status"],
+      };
+      state._roomMessages["room-1"] = [roomMessage];
+      seedPersona("persona-1", "Sisyphus", "Engineering");
+      seedPersona("room-speaker", "Room Speaker", "General");
+      const topic = seedTopic("topic-room");
+
+      await captureTopicQuote("room-specific insight", {
+        existingItemId: topic.id,
+        roomId: "room-1",
+      });
+
+      const quote = getAddedQuote();
+      expectRawSpan(quote, msgText, {
+        start: 2,
+        end: 23,
+        text: "room-specific insight",
+      });
+      expect(quote.message_id).toBe(roomMessage.id);
+      expect(quote.speaker).toBe("Room Speaker");
+      expect(quote.channel).toBe("Sisyphus");
+      expect(quote.data_item_ids).toEqual([topic.id]);
+      expect(quote.persona_groups).toEqual(["Engineering"]);
+      expect(state.getRoomMessages).toHaveBeenCalledWith("room-1");
+      expect(state.messages_get).not.toHaveBeenCalled();
     });
   });
 
