@@ -196,7 +196,8 @@ What you *tell* them depends on the run:
   worth something, so offer it again, once, in the same breath: *"want me to
   switch the automatic reflection off so this keeps until you've decided?"* If
   they say yes, set it (→ `../SKILL.md` Step 1b) and the run is protected from
-  here on.
+  the next drain tick — about 100 ms — onward. A pass already underway can
+  still finish, so say "from here on", not "it was never at risk".
 
 If no candidate file exists at all and the harness offers a documented path
 you could create, offer to create it — and let the user approve the *path*,

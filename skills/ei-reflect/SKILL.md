@@ -304,6 +304,14 @@ reads it as `// false`.
   run**. This is the write that deletes `pending_update`; you captured it
   above, which is why that is now harmless.
 
+  The setting takes effect on Ei's next drain tick — ordinarily inside about
+  100 ms — and holds from then on. A critic run that was already dispatched
+  before that tick still finishes, so tell them so as you confirm:
+
+  > "Done — automatic reflection is off for you now. If a pass was already
+  > underway when I flipped it, that one will still finish; everything after
+  > it leaves your log alone."
+
   **Declined** → **the skill still runs, as an unprotected run.** Say once,
   plainly, what that changed:
 
@@ -323,6 +331,10 @@ report depend on it.
 | A `RETAIN` row means | this skill won't clear the log, **and** it will still be there | this skill won't clear the log — nothing beyond that is promised |
 | Parking at `needs_target_selection` | the normal path; a later run resumes | still allowed, but the evidence is exposed for as long as the user thinks |
 | What you may say | "your log is safe until we finish" | "I won't clear it — I can't promise Ei's automatic pass won't" |
+
+A run that became protected *during* this step is protected from the next
+drain tick — about 100 ms — not retroactively: a critic already dispatched
+before it can still clear the log. After that tick the table above holds.
 
 **Why a decline does not stop the run — and why this should not be
 re-litigated into a hard gate.** Declining puts the log at no *new* risk: the

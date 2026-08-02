@@ -382,9 +382,16 @@ A special identifier type that links a `Person` record to a `PersonaEntity` in t
 
 Note the id is not always a UUID: the reserved personas `ei` and `emmet` carry those literal strings as their ids. Code or documentation asserting a UUID shape is wrong for them.
 
-A single `Person` record can have multiple `Ei Persona` identifiers (one per persona that maps to them). This is the prerequisite for Plan 4 (drift detection). These links are **always user-initiated** — the system never auto-links without confirmation.
+**A `Person` record and a Persona link one-to-one.** One Person, one Persona; one Persona, one Person. This is decided — see `docs/adr/ADR-006-ei-persona-link-multiplicity.md`, status Accepted.
 
-Whether the inverse is legal — several `Person` records sharing one persona id — is unresolved; see `docs/adr/ADR-006-ei-persona-link-multiplicity.md`. Settled regardless: enumerate all linked records, never take the first.
+An earlier design deliberately allowed a many-to-many graph so a composite persona could be expressed as overlapping links, and earlier revisions of this section documented that. It is rejected. A composite gets its own Person record instead: `Person:King_Einstein <-> Persona:King_Einstein`, alongside the standalone pairs.
+
+**The code does not satisfy this yet.** Several write paths still permit and can create the many shape, including automatic ones — the LLM person-update handler commits identifier arrays, and dedup unions identifiers when merging Person records. Tracked as a fix, not an oversight.
+
+Two consequences for anyone writing against this section today:
+
+- **The "always user-initiated" claim below is currently false.** Those two automatic paths link without confirmation. It is written here as the intent; do not rely on it as a guarantee until the fix lands.
+- **Until the constraint is enforced, enumerate all linked records — never take the first.** The many shape exists in data whether or not it is legal, and code that assumes one will silently pick an arbitrary record. For the reflection critic, that means clearing the wrong log.
 
 ### Built-in Identifier Types
 
