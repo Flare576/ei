@@ -233,6 +233,21 @@ describe("createFetchMessageExecutor", () => {
       expect(result.persona).toBe("Test Room");
     });
 
+    it("falls back to Participant when the room message's persona_id is orphaned (persona deleted)", async () => {
+      const roomSummary = makeRoomSummary("room-1", "Test Room");
+      const roomMsg = makeRoomMessage("rmsg-1", { role: "persona", persona_id: "deleted-persona-id", content: "Hey" });
+
+      getAllPersonas.mockReturnValue([]); // the persona no longer exists
+      getRoomList.mockReturnValue([roomSummary]);
+      getRoomMessages.mockReturnValue([roomMsg]);
+      getRoomDisplayName.mockReturnValue("Test Room");
+
+      const executor = makeExecutor();
+      const result = JSON.parse(await executor.execute({ id: "rmsg-1" }));
+
+      expect(result.message.speaker_name).toBe("Participant");
+    });
+
     it("uses getRoomDisplayName result for persona field", async () => {
       const roomSummary = makeRoomSummary("room-1", "Summary Name");
       const roomMsg = makeRoomMessage("rmsg-1", { role: "human", content: "Hi" });
@@ -285,7 +300,27 @@ describe("createFetchMessageExecutor", () => {
     it("calls resolveExternalMessage when id not found locally", async () => {
       getAllPersonas.mockReturnValue([]);
       getRoomList.mockReturnValue([]);
-      const externalResult = { message: { id: "ext-1", role: "human", content: "external" }, before: [], after: [], source: "opencode" };
+      const externalResult = {
+        origin_kind: "opencode",
+        source_id: "opencode:test-machine:ses_abc:msg_1",
+        container: { kind: "session", id: "ses_abc", display_name: "Test Session" },
+        speaker: { kind: "human", display_name: "Human" },
+        timestamp: "2026-01-01T00:00:00.000Z",
+        content: "external",
+        before: [
+          {
+            origin_kind: "opencode",
+            source_id: "opencode:test-machine:ses_abc:msg_0",
+            container: { kind: "session", id: "ses_abc", display_name: "Test Session" },
+            speaker: { kind: "agent", id: "build", display_name: "build" },
+            timestamp: "2025-12-31T23:59:00.000Z",
+            content: "prior turn",
+            before: [],
+            after: [],
+          },
+        ],
+        after: [],
+      };
       resolveExternalMessage.mockResolvedValue(externalResult);
 
       const executor = makeExecutor();

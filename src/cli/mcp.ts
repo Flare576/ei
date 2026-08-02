@@ -160,6 +160,9 @@ export function createMcpServer(): McpServer {
         if ("error" in externalResult) {
           return { content: [{ type: "text" as const, text: String(externalResult.error) }] };
         }
+        if ("refused" in externalResult) {
+          return { content: [{ type: "text" as const, text: String(externalResult.reason) }] };
+        }
         return { content: [{ type: "text" as const, text: JSON.stringify(externalResult, null, 2) }] };
       }
 
@@ -206,7 +209,7 @@ export function createMcpServer(): McpServer {
         personaMap: Record<string, { entity: { display_name: string }; messages: Message[] }>
       ): string | undefined => {
         if (m.role !== "persona" || !m.persona_id) return undefined;
-        return personaMap[m.persona_id]?.entity.display_name;
+        return personaMap[m.persona_id]?.entity.display_name ?? "Participant";
       };
 
       const stripRoomMessage = (

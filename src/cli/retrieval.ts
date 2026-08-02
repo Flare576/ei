@@ -1,4 +1,4 @@
-import type { StorageState, Quote, Fact, Person, Topic } from "../core/types";
+import type { StorageState, Quote, Fact, Person, Topic, Message, RoomMessage } from "../core/types";
 import type { PersonaEntity } from "../core/types/entities.js";
 import type { PersonaTrait, PersonaTopic, PersonIdentifier } from "../core/types/data-items.js";
 import { decodeAllEmbeddings } from "../storage/embeddings";
@@ -6,11 +6,21 @@ import { crossFind } from "../core/utils/index.ts";
 import { join } from "path";
 import { readFile } from "fs/promises";
 import { getEmbeddingService, findTopK } from "../core/embedding-service";
-import { parseMessageId } from "../core/utils/message-id.js";
+import { parseMessageId, qualifyOpenCodeMessage, qualifyClaudeCodeMessage, qualifyCursorMessage, qualifyCodexMessage, qualifyPiMessage } from "../core/utils/message-id.js";
 import { getMachineId } from "../integrations/machine-id.js";
 import { readCorrections, applyCorrectionsToState } from "../core/corrections.js";
+import type { QuoteCorrectionSkip } from "../core/corrections.js";
 import { getCorrectionsPath } from "./corrections-writer.js";
 import { buildPersonaToolsMap } from "../core/persona-tools.js";
+import type { OpenCodeMessage } from "../integrations/opencode/types.js";
+import type { ClaudeCodeMessage } from "../integrations/claude-code/types.js";
+import { CLAUDE_CODE_PERSONA_NAME } from "../integrations/claude-code/types.js";
+import type { CursorMessage } from "../integrations/cursor/types.js";
+import { CURSOR_PERSONA_NAME } from "../integrations/cursor/types.js";
+import type { CodexMessage } from "../integrations/codex/types.js";
+import { CODEX_PERSONA_NAME } from "../integrations/codex/types.js";
+import type { PiMessage } from "../integrations/pi/types.js";
+import { PI_PERSONA_NAME } from "../integrations/pi/types.js";
 
 const STATE_FILE = "state.json";
 const BACKUP_FILE = "state.backup.json";
@@ -22,6 +32,20 @@ export function getDataPath(): string {
   }
   const xdgData = process.env.XDG_DATA_HOME || join(process.env.HOME || "~", ".local", "share");
   return join(xdgData, "ei");
+}
+
+// Populated only by loadLatestState() (see getLastCorrectionSkips below),
+// for the quote corrections it declined to materialize into the returned
+// state. loadLatestState()'s own return type stays `StorageState | null`
+// (a broad, pre-existing set of callers — CLI, correction endpoints, MCP,
+// persona corrections, retrieval commands, and their tests — all keep
+// receiving that exact primary return); this companion is the additive
+// diagnostic surface instead of a breaking signature change.
+let lastCorrectionSkips: QuoteCorrectionSkip[] = [];
+
+/** The quote corrections the most recent loadLatestState() call declined to materialize (skipped for wrong shape, forbidden key, marker misuse, or a stale relink target), each as `{record_id, reason}`. Call immediately after loadLatestState() — see the Corrections Wire Grammar's "Skip/report diagnostic shape." */
+export function getLastCorrectionSkips(): QuoteCorrectionSkip[] {
+  return lastCorrectionSkips;
 }
 
 export async function loadLatestState(): Promise<StorageState | null> {
@@ -38,9 +62,12 @@ export async function loadLatestState(): Promise<StorageState | null> {
       continue;
     }
   }
-  if (!state) return null;
+  if (!state) {
+    lastCorrectionSkips = [];
+    return null;
+  }
   const corrections = await readCorrections(getCorrectionsPath());
-  applyCorrectionsToState(state, corrections);
+  lastCorrectionSkips = applyCorrectionsToState(state, corrections);
   return state;
 }
 
@@ -418,15 +445,169 @@ export async function resolveOpenCodeMessage(
   id: string,
   before = 0,
   after = 0
-): Promise<Record<string, unknown> | null> {
+): Promise<ResolvedMessage | { error: string } | ResolverRefusal | null> {
   return resolveExternalMessage(id, before, after);
+}
+
+/**
+ * origin_kind discriminant for a ResolvedMessage. "ei-direct" and "ei-room"
+ * both parse from the same `ei:<uuid>` id form (MessageIdIntegration only
+ * has a single "ei" value) — which one applies is decided at resolve time
+ * by which storage loop (persona thread vs room) actually contains the
+ * message, not by the id's own shape. This is what closes B11: a
+ * room-human message is no longer indistinguishable from a direct-human
+ * message.
+ */
+export type ResolvedMessageOriginKind =
+  | "ei-direct"
+  | "ei-room"
+  | "opencode"
+  | "claudecode"
+  | "cursor"
+  | "codex"
+  | "pi";
+
+export interface ResolvedMessageContainer {
+  /** "persona" = a direct 1:1 thread, "room" = a multi-participant room, "session" = an external coding-tool session. */
+  kind: "persona" | "room" | "session";
+  id: string;
+  display_name: string;
+}
+
+export interface ResolvedMessageSpeaker {
+  kind: "human" | "agent";
+  /**
+   * Stable identifier for the speaker, populated only where one exists: a
+   * persona id (ei-direct/ei-room, including a dangling id when the
+   * PersonaEntity was deleted), or an OpenCode/Pi per-message agent slug.
+   * Absent for every "human" role and for external roles with no stable
+   * per-message identity (Claude Code, Cursor, and Codex each speak
+   * through one fixed integration-wide name).
+   */
+  id?: string;
+  display_name: string;
+}
+
+/**
+ * The discriminated resolver contract for a single resolved message,
+ * replacing the old generic `{ type: "opencode_message", message, session,
+ * source }` envelope. Every accepted origin populates every field below;
+ * sources that cannot (Slack, document import/generation, a room message
+ * whose role is "persona" with no persona_id at all) are explicitly
+ * refused — resolveExternalMessage returns a discriminable
+ * `ResolverRefusal` (`{ refused: true, reason }`) rather than fabricating
+ * a partial result. Bare `null` is reserved for an id shape the resolver
+ * does not recognize at all; callers may fall back to a legacy lookup
+ * only on `null`, never on a refusal.
+ */
+export interface ResolvedMessage {
+  origin_kind: ResolvedMessageOriginKind;
+  /**
+   * Canonical, fully-qualified locator for this exact message — stable
+   * and re-resolvable even when the caller's original id was a legacy
+   * bare/unqualified form.
+   */
+  source_id: string;
+  container: ResolvedMessageContainer;
+  speaker: ResolvedMessageSpeaker;
+  timestamp: string;
+  content: string;
+  /**
+   * Preceding messages in the same container, oldest-first, each itself a
+   * ResolvedMessage with empty before/after (context windows do not nest).
+   */
+  before: ResolvedMessage[];
+  /** Following messages in the same container, oldest-first, each itself a ResolvedMessage with empty before/after. */
+  after: ResolvedMessage[];
+}
+
+/**
+ * A resolver refusal: the id was a recognized/classifiable shape (Slack,
+ * document import/generation, or a malformed room-message record), but
+ * that source is explicitly not attestable/resolvable — distinct from
+ * bare `null`, which means the id's shape was not recognized at all and
+ * the caller may fall back to a legacy lookup. A refusal is terminal:
+ * every public fetch surface (MCP's ei_fetch_message, the builtin
+ * fetch_message tool executor) must report it, never fall through to a
+ * legacy envelope.
+ */
+export interface ResolverRefusal {
+  refused: true;
+  reason: string;
+}
+
+const HUMAN_SPEAKER: ResolvedMessageSpeaker = { kind: "human", display_name: "Human" };
+
+/**
+ * Resolves a room message's speaker, applying the same orphaned-persona
+ * "Participant" display fallback as handlers/utils.ts's
+ * normalizeRoomMessages (replicated here, at fetch-message.ts, and at
+ * mcp.ts so every read surface treats a deleted persona identically).
+ * Returns null only when role is "persona" and persona_id is entirely
+ * absent — a malformed record this adapter refuses to fabricate an
+ * identity for. That is distinct from an orphaned persona_id (present,
+ * but the PersonaEntity was deleted), which still resolves — just with
+ * the "Participant" display fallback — because the id itself is real.
+ */
+function resolveRoomSpeaker(
+  m: RoomMessage,
+  personas: StorageState["personas"]
+): ResolvedMessageSpeaker | null {
+  if (m.role === "human") return HUMAN_SPEAKER;
+  if (!m.persona_id) return null;
+  const display_name = personas[m.persona_id]?.entity.display_name ?? "Participant";
+  return { kind: "agent", id: m.persona_id, display_name };
+}
+
+/** Shared user/assistant → human/agent mapping for the 5 external integrations. */
+function externalSpeaker(
+  role: "user" | "assistant",
+  agentId: string | undefined,
+  agentDisplayName: string
+): ResolvedMessageSpeaker {
+  if (role === "user") return HUMAN_SPEAKER;
+  return { kind: "agent", id: agentId, display_name: agentDisplayName };
+}
+
+/**
+ * Shared by the explicit "opencode" case and the bare-`msg_xxx` legacy
+ * fallback below — both resolve through the same reader and produce the
+ * same shape, differing only in how the native message id was obtained.
+ */
+async function resolveOpenCode(nativeId: string, before: number, after: number): Promise<ResolvedMessage | null> {
+  try {
+    const { createOpenCodeReader } = await import("../integrations/opencode/reader-factory.js");
+    const reader = await createOpenCodeReader();
+    const win = await reader.getMessageById(nativeId, before, after);
+    if (!win) return null;
+
+    const container: ResolvedMessageContainer = { kind: "session", id: win.session.id, display_name: win.session.title };
+    const toOpenCode = (m: OpenCodeMessage): ResolvedMessage => ({
+      origin_kind: "opencode",
+      source_id: qualifyOpenCodeMessage(getMachineId(), win.session.id, m.id),
+      container,
+      speaker: externalSpeaker(m.role, m.agent, m.agent),
+      timestamp: m.timestamp,
+      content: m.content,
+      before: [],
+      after: [],
+    });
+
+    return {
+      ...toOpenCode(win.message),
+      before: win.before.map(toOpenCode),
+      after: win.after.map(toOpenCode),
+    };
+  } catch {
+    return null;
+  }
 }
 
 export async function resolveExternalMessage(
   id: string,
   before = 0,
   after = 0
-): Promise<Record<string, unknown> | null> {
+): Promise<ResolvedMessage | { error: string } | ResolverRefusal | null> {
   const parsed = parseMessageId(id);
 
   switch (parsed.integration) {
@@ -437,29 +618,58 @@ export async function resolveExternalMessage(
       for (const { entity: persona, messages } of Object.values(state.personas)) {
         const idx = messages.findIndex(m => m.id === id);
         if (idx === -1) continue;
-        const msg = messages[idx];
+
+        const container: ResolvedMessageContainer = { kind: "persona", id: persona.id, display_name: persona.display_name };
+        const toDirect = (m: Message): ResolvedMessage => ({
+          origin_kind: "ei-direct",
+          source_id: m.id,
+          container,
+          speaker: m.role === "human" ? HUMAN_SPEAKER : { kind: "agent", id: persona.id, display_name: persona.display_name },
+          timestamp: m.timestamp,
+          content: m.content ?? "",
+          before: [],
+          after: [],
+        });
+
         return {
-          type: "opencode_message",
-          message: { id: msg.id, role: msg.role, content: msg.content ?? "", timestamp: msg.timestamp },
-          before: messages.slice(Math.max(0, idx - before), idx).map(m => ({ id: m.id, role: m.role, content: m.content ?? "", timestamp: m.timestamp })),
-          after: messages.slice(idx + 1, idx + 1 + after).map(m => ({ id: m.id, role: m.role, content: m.content ?? "", timestamp: m.timestamp })),
-          session: { id: persona.id, title: persona.display_name, directory: "" },
-          source: "ei",
+          ...toDirect(messages[idx]),
+          before: messages.slice(Math.max(0, idx - before), idx).map(toDirect),
+          after: messages.slice(idx + 1, idx + 1 + after).map(toDirect),
         };
       }
 
       for (const room of Object.values(state.rooms ?? {})) {
         const idx = room.messages.findIndex(m => m.id === id);
         if (idx === -1) continue;
-        const msg = room.messages[idx];
-        return {
-          type: "opencode_message",
-          message: { id: msg.id, role: msg.role, content: msg.content ?? "", timestamp: msg.timestamp },
-          before: room.messages.slice(Math.max(0, idx - before), idx).map(m => ({ id: m.id, role: m.role, content: m.content ?? "", timestamp: m.timestamp })),
-          after: room.messages.slice(idx + 1, idx + 1 + after).map(m => ({ id: m.id, role: m.role, content: m.content ?? "", timestamp: m.timestamp })),
-          session: { id: room.id, title: room.display_name, directory: "" },
-          source: "ei",
+
+        const container: ResolvedMessageContainer = { kind: "room", id: room.id, display_name: room.display_name };
+        const toRoom = (m: RoomMessage): ResolvedMessage | null => {
+          const speaker = resolveRoomSpeaker(m, state.personas);
+          if (!speaker) return null;
+          return {
+            origin_kind: "ei-room",
+            source_id: m.id,
+            container,
+            speaker,
+            timestamp: m.timestamp,
+            content: m.content ?? "",
+            before: [],
+            after: [],
+          };
         };
+
+        const resolved = toRoom(room.messages[idx]);
+        if (!resolved) {
+          return {
+            refused: true,
+            reason: `Room message ${id} has role "persona" but no persona_id; cannot resolve a speaker identity for this record.`,
+          };
+        }
+
+        const isResolved = (x: ResolvedMessage | null): x is ResolvedMessage => x !== null;
+        resolved.before = room.messages.slice(Math.max(0, idx - before), idx).map(toRoom).filter(isResolved);
+        resolved.after = room.messages.slice(idx + 1, idx + 1 + after).map(toRoom).filter(isResolved);
+        return resolved;
       }
 
       return null;
@@ -469,22 +679,7 @@ export async function resolveExternalMessage(
       if (parsed.machine !== getMachineId()) {
         return { error: `Message is from machine '${parsed.machine}', not available on this machine (${getMachineId()})` };
       }
-      try {
-        const { createOpenCodeReader } = await import("../integrations/opencode/reader-factory.js");
-        const reader = await createOpenCodeReader();
-        const win = await reader.getMessageById(parsed.nativeId, before, after);
-        if (!win) return null;
-        return {
-          type: "opencode_message",
-          message: { id: win.message.id, role: win.message.role, content: win.message.content, timestamp: win.message.timestamp, agent: win.message.agent },
-          before: win.before.map(m => ({ id: m.id, role: m.role, content: m.content, timestamp: m.timestamp, agent: m.agent })),
-          after: win.after.map(m => ({ id: m.id, role: m.role, content: m.content, timestamp: m.timestamp, agent: m.agent })),
-          session: { id: win.session.id, title: win.session.title, directory: win.session.directory },
-          source: "opencode",
-        };
-      } catch {
-        return null;
-      }
+      return resolveOpenCode(parsed.nativeId, before, after);
     }
 
     case "claudecode": {
@@ -497,14 +692,23 @@ export async function resolveExternalMessage(
         const messages = await reader.getMessagesForSession(parsed.session!);
         const idx = messages.findIndex(m => m.id === parsed.nativeId);
         if (idx === -1) return null;
-        const msg = messages[idx];
+
+        const container: ResolvedMessageContainer = { kind: "session", id: parsed.session!, display_name: parsed.session! };
+        const toClaudeCode = (m: ClaudeCodeMessage): ResolvedMessage => ({
+          origin_kind: "claudecode",
+          source_id: qualifyClaudeCodeMessage(parsed.machine!, parsed.session!, m.id),
+          container,
+          speaker: externalSpeaker(m.role, undefined, CLAUDE_CODE_PERSONA_NAME),
+          timestamp: m.timestamp,
+          content: m.content,
+          before: [],
+          after: [],
+        });
+
         return {
-          type: "opencode_message",
-          message: { id: msg.id, role: msg.role, content: msg.content, timestamp: msg.timestamp },
-          before: messages.slice(Math.max(0, idx - before), idx).map(m => ({ id: m.id, role: m.role, content: m.content, timestamp: m.timestamp })),
-          after: messages.slice(idx + 1, idx + 1 + after).map(m => ({ id: m.id, role: m.role, content: m.content, timestamp: m.timestamp })),
-          session: { id: parsed.session!, title: parsed.session!, directory: "" },
-          source: "claudecode",
+          ...toClaudeCode(messages[idx]),
+          before: messages.slice(Math.max(0, idx - before), idx).map(toClaudeCode),
+          after: messages.slice(idx + 1, idx + 1 + after).map(toClaudeCode),
         };
       } catch {
         return null;
@@ -523,20 +727,23 @@ export async function resolveExternalMessage(
         if (!session) return null;
         const idx = session.messages.findIndex(m => m.id === parsed.nativeId);
         if (idx === -1) return null;
-        const msg = session.messages[idx];
-        const mapCursor = (m: { id: string; type: 1 | 2; text: string; timestamp: string }) => ({
-          id: m.id,
-          role: (m.type === 1 ? "user" : "assistant") as "user" | "assistant",
-          content: m.text,
+
+        const container: ResolvedMessageContainer = { kind: "session", id: session.id, display_name: session.name };
+        const toCursor = (m: CursorMessage): ResolvedMessage => ({
+          origin_kind: "cursor",
+          source_id: qualifyCursorMessage(parsed.machine!, session.id, m.id),
+          container,
+          speaker: externalSpeaker(m.type === 1 ? "user" : "assistant", undefined, CURSOR_PERSONA_NAME),
           timestamp: m.timestamp,
+          content: m.text,
+          before: [],
+          after: [],
         });
+
         return {
-          type: "opencode_message",
-          message: mapCursor(msg),
-          before: session.messages.slice(Math.max(0, idx - before), idx).map(mapCursor),
-          after: session.messages.slice(idx + 1, idx + 1 + after).map(mapCursor),
-          session: { id: session.id, title: session.name, directory: session.workspacePath },
-          source: "cursor",
+          ...toCursor(session.messages[idx]),
+          before: session.messages.slice(Math.max(0, idx - before), idx).map(toCursor),
+          after: session.messages.slice(idx + 1, idx + 1 + after).map(toCursor),
         };
       } catch {
         return null;
@@ -552,13 +759,23 @@ export async function resolveExternalMessage(
         const reader = new CodexReader();
         const win = await reader.getMessageById(parsed.session!, parsed.nativeId, before, after);
         if (!win) return null;
+
+        const container: ResolvedMessageContainer = { kind: "session", id: win.session.id, display_name: win.session.title };
+        const toCodex = (m: CodexMessage): ResolvedMessage => ({
+          origin_kind: "codex",
+          source_id: qualifyCodexMessage(parsed.machine!, win.session.id, m.id),
+          container,
+          speaker: externalSpeaker(m.role, undefined, CODEX_PERSONA_NAME),
+          timestamp: m.timestamp,
+          content: m.content,
+          before: [],
+          after: [],
+        });
+
         return {
-          type: "opencode_message",
-          message: { id: win.message.id, role: win.message.role, content: win.message.content, timestamp: win.message.timestamp },
-          before: win.before.map(m => ({ id: m.id, role: m.role, content: m.content, timestamp: m.timestamp })),
-          after: win.after.map(m => ({ id: m.id, role: m.role, content: m.content, timestamp: m.timestamp })),
-          session: { id: win.session.id, title: win.session.title, directory: win.session.cwd },
-          source: "codex",
+          ...toCodex(win.message),
+          before: win.before.map(toCodex),
+          after: win.after.map(toCodex),
         };
       } catch {
         return null;
@@ -574,39 +791,58 @@ export async function resolveExternalMessage(
         const reader = new PiReader();
         const win = await reader.getMessageById(parsed.session!, parsed.nativeId, before, after);
         if (!win) return null;
+
+        const container: ResolvedMessageContainer = { kind: "session", id: win.session.id, display_name: win.session.title };
+        const toPi = (m: PiMessage): ResolvedMessage => ({
+          origin_kind: "pi",
+          source_id: qualifyPiMessage(parsed.machine!, win.session.id, m.id),
+          container,
+          speaker: externalSpeaker(m.role, m.agent, m.agent ?? PI_PERSONA_NAME),
+          timestamp: m.timestamp,
+          content: m.content,
+          before: [],
+          after: [],
+        });
+
         return {
-          type: "opencode_message",
-          message: { id: win.message.id, role: win.message.role, content: win.message.content, timestamp: win.message.timestamp },
-          before: win.before.map(m => ({ id: m.id, role: m.role, content: m.content, timestamp: m.timestamp })),
-          after: win.after.map(m => ({ id: m.id, role: m.role, content: m.content, timestamp: m.timestamp })),
-          session: { id: win.session.id, title: win.session.title, directory: win.session.cwd },
-          source: "pi",
+          ...toPi(win.message),
+          before: win.before.map(toPi),
+          after: win.after.map(toPi),
         };
       } catch {
         return null;
       }
     }
 
+    case "slack": {
+      return {
+        refused: true,
+        reason: `Message ${id} originates from a Slack import; Slack sources are not independently resolvable/attestable.`,
+      };
+    }
+
+    case "import": {
+      return {
+        refused: true,
+        reason: `Message ${id} originates from an imported document; document sources are not independently resolvable/attestable.`,
+      };
+    }
+
     case "unknown":
     default: {
       // Backward compat: bare msg_xxx → treat as opencode (no machine qualifier)
       if (OPENCODE_MESSAGE_ID.test(id)) {
-        try {
-          const { createOpenCodeReader } = await import("../integrations/opencode/reader-factory.js");
-          const reader = await createOpenCodeReader();
-          const win = await reader.getMessageById(id, before, after);
-          if (!win) return null;
-          return {
-            type: "opencode_message",
-            message: { id: win.message.id, role: win.message.role, content: win.message.content, timestamp: win.message.timestamp, agent: win.message.agent },
-            before: win.before.map(m => ({ id: m.id, role: m.role, content: m.content, timestamp: m.timestamp, agent: m.agent })),
-            after: win.after.map(m => ({ id: m.id, role: m.role, content: m.content, timestamp: m.timestamp, agent: m.agent })),
-            session: { id: win.session.id, title: win.session.title, directory: win.session.directory },
-            source: "opencode",
-          };
-        } catch {
-          return null;
-        }
+        return resolveOpenCode(id, before, after);
+      }
+      // Explicit refusal: generated documents use a literal `generate:document:`
+      // id that predates the qualified-id scheme, so parseMessageId cannot
+      // classify it via ParsedMessageId.integration — recognized here by
+      // prefix instead, same as the OpenCode legacy check above.
+      if (id.startsWith("generate:document:")) {
+        return {
+          refused: true,
+          reason: `Message ${id} originates from a generated document; document sources are not independently resolvable/attestable.`,
+        };
       }
       return null;
     }

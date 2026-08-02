@@ -2,6 +2,7 @@ import type { ToolExecutor } from "../types.js";
 import type { Message } from "../../types.js";
 import type { RoomMessage, RoomSummary } from "../../types/rooms.js";
 import type { PersonaEntity } from "../../types/entities.js";
+import { classifyRefusedMessageId, classifyMalformedRoomPrimary } from "../../utils/message-refusal.js";
 
 interface CleanMessage {
   id: string;
@@ -64,6 +65,26 @@ export function createFetchMessageExecutor(
         return JSON.stringify({ error: "Missing required argument: id" });
       }
 
+      // I3 (round 2): a browser-safe terminal-refusal check, run before
+      // ANY local scan or resolver call, on both runtime registrations —
+      // see src/core/utils/message-refusal.ts. TUI's resolver (below)
+      // would classify these three id formats identically, but running
+      // this first means browser (which gets no resolver at all) refuses
+      // them too, instead of silently falling through to the local scan.
+      const formatRefusal = classifyRefusedMessageId(id);
+      if (formatRefusal) {
+        console.log(`[fetch_message] refused id="${id}": ${formatRefusal.reason}`);
+        return JSON.stringify(formatRefusal);
+      }
+
+      if (resolveExternalMessage) {
+        const external = await resolveExternalMessage(id, before, after);
+        if (external) {
+          console.log(`[fetch_message] resolved id="${id}" via resolver`);
+          return JSON.stringify(external);
+        }
+      }
+
       const personas = getAllPersonas();
 
       // TODO: add persona access gate when calling context is available —
@@ -94,12 +115,23 @@ export function createFetchMessageExecutor(
         if (idx === -1) continue;
 
         const msg = messages[idx];
+
+        // I3 (round 2): a malformed room-persona-primary message (role
+        // "persona", no persona_id at all) is refused here — using data
+        // this scan already has locally, no resolver needed — instead of
+        // silently falling back to the Participant-name legacy envelope.
+        const roomRefusal = classifyMalformedRoomPrimary(msg);
+        if (roomRefusal) {
+          console.log(`[fetch_message] refused room message id="${id}": ${roomRefusal.reason}`);
+          return JSON.stringify(roomRefusal);
+        }
+
         const roomDisplayName = getRoomDisplayName(roomSummary.id) ?? roomSummary.display_name;
 
         const resolvePersonaName = (m: RoomMessage): string | undefined => {
           if (m.role !== "persona" || !m.persona_id) return undefined;
           const p = personas.find(pe => pe.id === m.persona_id);
-          return p?.display_name;
+          return p?.display_name ?? "Participant";
         };
 
         const beforeMsgs = messages
@@ -116,14 +148,6 @@ export function createFetchMessageExecutor(
           after: afterMsgs,
           persona: roomDisplayName,
         });
-      }
-
-      if (resolveExternalMessage) {
-        const external = await resolveExternalMessage(id, before, after);
-        if (external) {
-          if ("error" in external) return JSON.stringify(external);
-          return JSON.stringify(external);
-        }
       }
 
       console.log(`[fetch_message] message not found for id="${id}"`);
