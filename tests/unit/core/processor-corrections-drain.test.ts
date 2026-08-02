@@ -5,7 +5,7 @@ import { join } from "path";
 import { Processor } from "../../../src/core/processor.js";
 import type { Ei_Interface, Fact, Person, Quote, PersonaEntity, Message } from "../../../src/core/types.js";
 import { RESERVED_PERSONA_IDS } from "../../../src/core/types.js";
-import type { CorrectionRecord } from "../../../src/core/corrections.js";
+import type { CorrectionRecord, QuoteCreateRecord, QuoteFixRecord, QuoteRelinkRecord, QuoteRemoveRecord, QuoteCorrectionSkip } from "../../../src/core/corrections.js";
 import { appendCorrection, applyCorrectionToPersonas } from "../../../src/core/corrections.js";
 
 /**
@@ -142,6 +142,26 @@ function makeQuote(overrides: Partial<Quote> = {}): Quote {
     embedding: [0.4, 0.5, 0.6],
     ...overrides,
   };
+}
+
+/** Builds a valid `quote.create` wire record. `data_item_ids`/`persona_groups` default empty (create's own constraint) — override deliberately to test rejection. */
+function makeQuoteCreateRecord(overrides: Partial<QuoteCreateRecord> = {}): QuoteCreateRecord {
+  return { op: "quote.create", entity_type: "quote", ...makeQuote({ data_item_ids: [], persona_groups: [] }), channel: "Test Channel", verified: true, ...overrides };
+}
+
+/** Builds a valid `quote.fix` wire record — unlike create, fix does not require empty data_item_ids/persona_groups (they carry forward from the existing record). */
+function makeQuoteFixRecord(overrides: Partial<QuoteFixRecord> = {}): QuoteFixRecord {
+  return { op: "quote.fix", entity_type: "quote", ...makeQuote(), channel: "Test Channel", verified: true, ...overrides };
+}
+
+/** Builds a valid `quote.relink` wire record — `{id, data_item_ids}` only. */
+function makeQuoteRelinkRecord(id: string, dataItemIds: string[]): QuoteRelinkRecord {
+  return { op: "quote.relink", entity_type: "quote", id, data_item_ids: dataItemIds };
+}
+
+/** Builds a valid `quote.remove` wire record — `{id}` only. */
+function makeQuoteRemoveRecord(id: string): QuoteRemoveRecord {
+  return { op: "quote.remove", entity_type: "quote", id };
 }
 
 // is_paused defaults to true: a freshly-added persona has no messages, so
@@ -373,17 +393,11 @@ describe("Processor.drainCorrections() (live-side corrections drain)", () => {
     expect(processor.getStateManager().getHuman().people.find((p) => p.id === "person-1")).toBeUndefined();
   });
 
-  it("applies a Quote upsert then a Quote remove correction via human_quote_upsert/human_quote_remove", async () => {
+  it("applies a quote.create correction via the live drain, then a quote.remove correction", async () => {
     const correctionsPath = join(dataDir, "corrections.json");
-    const quote = makeQuote();
+    const createRecord = makeQuoteCreateRecord();
 
-    await appendCorrection(correctionsPath, {
-      op: "upsert",
-      entity_type: "quote",
-      id: quote.id,
-      record: quote,
-      timestamp: new Date().toISOString(),
-    });
+    await appendCorrection(correctionsPath, createRecord);
 
     processor = new Processor(mock.ei);
     await processor.start(storage as unknown as Parameters<Processor["start"]>[0]);
@@ -393,47 +407,281 @@ describe("Processor.drainCorrections() (live-side corrections drain)", () => {
     expect(applied).toBeDefined();
     // Embedding must be reused verbatim — never recomputed in the drain path.
     expect(applied!.embedding).toEqual([0.4, 0.5, 0.6]);
+    // The wire-only verified marker must never leak onto the persisted Quote.
+    expect(applied).not.toHaveProperty("verified");
 
-    await appendCorrection(correctionsPath, {
-      op: "remove",
-      entity_type: "quote",
-      id: "quote-1",
-      timestamp: new Date().toISOString(),
-    });
+    await appendCorrection(correctionsPath, makeQuoteRemoveRecord("quote-1"));
     await asDrainable(processor).drainCorrections();
 
     expect(processor.getStateManager().getHuman().quotes.find((q) => q.id === "quote-1")).toBeUndefined();
   });
 
-  it("replaces an existing Quote's data_item_ids in place on a repoint upsert (un-merge repoint)", async () => {
+  it("changes only data_item_ids via a quote.relink correction on the live drain (un-merge repoint), never routing through the full-replacement quote_upsert", async () => {
     const correctionsPath = join(dataDir, "corrections.json");
-    const originalQuote = makeQuote({ data_item_ids: ["merged-person"] });
-    const repointedQuote = makeQuote({ data_item_ids: ["split-person"] });
+    const originalQuote = makeQuoteCreateRecord({ data_item_ids: [] });
 
-    await appendCorrection(correctionsPath, {
-      op: "upsert",
-      entity_type: "quote",
-      id: originalQuote.id,
-      record: originalQuote,
-      timestamp: new Date().toISOString(),
-    });
+    await appendCorrection(correctionsPath, originalQuote);
 
     processor = new Processor(mock.ei);
     await processor.start(storage as unknown as Parameters<Processor["start"]>[0]);
+    const sm = processor.getStateManager();
+    // The relink target must actually exist for the state-aware check to pass.
+    sm.human_person_upsert(makePerson({ id: "split-person" }));
     await asDrainable(processor).drainCorrections();
 
-    await appendCorrection(correctionsPath, {
-      op: "upsert",
-      entity_type: "quote",
-      id: repointedQuote.id,
-      record: repointedQuote,
-      timestamp: new Date().toISOString(),
-    });
+    await appendCorrection(correctionsPath, makeQuoteRelinkRecord("quote-1", ["split-person"]));
     await asDrainable(processor).drainCorrections();
 
-    const human = processor.getStateManager().getHuman();
+    const human = sm.getHuman();
     expect(human.quotes).toHaveLength(1);
     expect(human.quotes[0].data_item_ids).toEqual(["split-person"]);
+    // Every other field survives byte-for-byte — a relink is a partial merge
+    // (the effect of quote_update), never a full-replacement quote_upsert.
+    expect(human.quotes[0].text).toBe(originalQuote.text);
+    expect(human.quotes[0].created_at).toBe(originalQuote.created_at);
+    expect(human.quotes[0].embedding).toEqual(originalQuote.embedding);
+  });
+
+  it("live drain: skips a pre-cutover unmarked full-record quote correction, applies a valid quote.remove and a valid person update in the same batch, and surfaces exactly one skip via getLastCorrectionSkips()", async () => {
+    const correctionsPath = join(dataDir, "corrections.json");
+
+    processor = new Processor(mock.ei);
+    await processor.start(storage as unknown as Parameters<Processor["start"]>[0]);
+    const sm = processor.getStateManager();
+    sm.human_quote_add(makeQuote({ id: "quote-keep" }));
+    sm.human_quote_add(makeQuote({ id: "quote-remove-me" }));
+
+    const legacyForgedRecord = {
+      op: "upsert",
+      entity_type: "quote",
+      id: "quote-forged",
+      record: makeQuote({ id: "quote-forged", text: "forged text" }),
+      timestamp: new Date().toISOString(),
+    } as unknown as CorrectionRecord;
+    const goodPerson = makePerson({ id: "person-new" });
+
+    await appendCorrection(correctionsPath, legacyForgedRecord);
+    await appendCorrection(correctionsPath, makeQuoteRemoveRecord("quote-remove-me"));
+    await appendCorrection(correctionsPath, {
+      op: "upsert",
+      entity_type: "person",
+      id: goodPerson.id,
+      record: goodPerson,
+      timestamp: new Date().toISOString(),
+    });
+
+    await asDrainable(processor).drainCorrections();
+
+    const skips: QuoteCorrectionSkip[] = processor.getLastCorrectionSkips();
+    expect(skips).toHaveLength(1);
+    expect(skips[0].record_id).toBe("quote-forged");
+
+    const finalHuman = sm.getHuman();
+    expect(finalHuman.quotes.find((q) => q.id === "quote-forged")).toBeUndefined();
+    expect(finalHuman.quotes.find((q) => q.id === "quote-remove-me")).toBeUndefined();
+    expect(finalHuman.quotes.find((q) => q.id === "quote-keep")).toBeDefined();
+    expect(finalHuman.people.find((p) => p.id === "person-new")).toBeDefined();
+  });
+
+  it("T1: live drain — a stale quote.fix does not recreate a quote removed earlier in the same batch, or restore a link an earlier fact removal already cleared, and getLastCorrectionSkips() plus a following valid correction still work (C1)", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const correctionsPath = join(dataDir, "corrections.json");
+
+    processor = new Processor(mock.ei);
+    await processor.start(storage as unknown as Parameters<Processor["start"]>[0]);
+    const sm = processor.getStateManager();
+    sm.human_fact_upsert(makeFact({ id: "fact-linked" }));
+    sm.human_quote_add(makeQuote({ id: "quote-linked", data_item_ids: ["fact-linked"] }));
+    sm.human_quote_add(makeQuote({ id: "quote-doomed", data_item_ids: [] }));
+
+    const staleFixForLinked = makeQuoteFixRecord({ id: "quote-linked", data_item_ids: ["fact-linked"], persona_groups: ["stale-group"], text: "stale corrected text" });
+    const staleFixForDoomed = makeQuoteFixRecord({ id: "quote-doomed", text: "should never land" });
+    const goodPerson = makePerson({ id: "person-new" });
+
+    // File order matters: both removals land BEFORE the stale fixes that
+    // target their now-gone quote/link, exactly like C1's trigger — a fix
+    // queued while state was still valid, draining after a same-batch
+    // correction invalidated it.
+    await appendCorrection(correctionsPath, { op: "remove", entity_type: "fact", id: "fact-linked", timestamp: new Date().toISOString() });
+    await appendCorrection(correctionsPath, makeQuoteRemoveRecord("quote-doomed"));
+    await appendCorrection(correctionsPath, staleFixForLinked);
+    await appendCorrection(correctionsPath, staleFixForDoomed);
+    await appendCorrection(correctionsPath, {
+      op: "upsert",
+      entity_type: "person",
+      id: goodPerson.id,
+      record: goodPerson,
+      timestamp: new Date().toISOString(),
+    });
+
+    await asDrainable(processor).drainCorrections();
+
+    const skips = processor.getLastCorrectionSkips();
+    expect(skips).toHaveLength(1);
+    expect(skips[0].record_id).toBe("quote-doomed");
+    expect(consoleErrorSpy).toHaveBeenCalled();
+
+    const human = sm.getHuman();
+    // The removed quote was never recreated by the stale fix that targeted it.
+    expect(human.quotes.find((q) => q.id === "quote-doomed")).toBeUndefined();
+    // The surviving quote's fix applied its text change but did NOT restore
+    // the link the fact removal already cleared -- data_item_ids/persona_groups
+    // stay at their CURRENT (already-cleaned) values, never the fix's stale copy.
+    const fixedQuote = human.quotes.find((q) => q.id === "quote-linked");
+    expect(fixedQuote).toBeDefined();
+    expect(fixedQuote!.text).toBe("stale corrected text");
+    expect(fixedQuote!.data_item_ids).toEqual([]);
+    expect(fixedQuote!.persona_groups).toEqual([]);
+    // The following valid correction still applied.
+    expect(human.people.find((p) => p.id === "person-new")).toBeDefined();
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("T2: live drain skips a quote.relink with a missing entity_type and still applies a later valid correction, reporting it via getLastCorrectionSkips() with no wedge (I2)", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const correctionsPath = join(dataDir, "corrections.json");
+
+    processor = new Processor(mock.ei);
+    await processor.start(storage as unknown as Parameters<Processor["start"]>[0]);
+    const sm = processor.getStateManager();
+    sm.human_quote_add(makeQuote({ id: "quote-keep", data_item_ids: [] }));
+
+    const malformedRelink = { op: "quote.relink", id: "quote-keep", data_item_ids: ["anything"] } as unknown as CorrectionRecord;
+    const goodPerson = makePerson({ id: "person-new" });
+
+    await appendCorrection(correctionsPath, malformedRelink);
+    await appendCorrection(correctionsPath, {
+      op: "upsert",
+      entity_type: "person",
+      id: goodPerson.id,
+      record: goodPerson,
+      timestamp: new Date().toISOString(),
+    });
+
+    await asDrainable(processor).drainCorrections();
+
+    const skips = processor.getLastCorrectionSkips();
+    expect(skips).toHaveLength(1);
+    expect(skips[0].record_id).toBe("quote-keep");
+    expect(skips[0].reason).toContain("entity_type");
+    expect(consoleErrorSpy).toHaveBeenCalled();
+
+    const human = sm.getHuman();
+    expect(human.quotes.find((q) => q.id === "quote-keep")?.data_item_ids).toEqual([]);
+    expect(human.people.find((p) => p.id === "person-new")).toBeDefined();
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("T2: live drain skips a quote.create with a missing entity_type and still applies a later valid correction, reporting it via getLastCorrectionSkips() with no wedge (I6)", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const correctionsPath = join(dataDir, "corrections.json");
+
+    processor = new Processor(mock.ei);
+    await processor.start(storage as unknown as Parameters<Processor["start"]>[0]);
+    const sm = processor.getStateManager();
+
+    const malformedCreate: Record<string, unknown> = { ...makeQuoteCreateRecord({ id: "quote-new" }) };
+    delete malformedCreate.entity_type;
+    const goodPerson = makePerson({ id: "person-new" });
+
+    await appendCorrection(correctionsPath, malformedCreate as unknown as CorrectionRecord);
+    await appendCorrection(correctionsPath, {
+      op: "upsert",
+      entity_type: "person",
+      id: goodPerson.id,
+      record: goodPerson,
+      timestamp: new Date().toISOString(),
+    });
+
+    await asDrainable(processor).drainCorrections();
+
+    const skips = processor.getLastCorrectionSkips();
+    expect(skips).toHaveLength(1);
+    expect(skips[0].record_id).toBe("quote-new");
+    expect(skips[0].reason).toContain("entity_type");
+    expect(consoleErrorSpy).toHaveBeenCalled();
+
+    const human = sm.getHuman();
+    expect(human.quotes.find((q) => q.id === "quote-new")).toBeUndefined();
+    expect(human.people.find((p) => p.id === "person-new")).toBeDefined();
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("T2: live drain skips a quote.fix with a missing entity_type and still applies a later valid correction, reporting it via getLastCorrectionSkips() with no wedge (I6)", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const correctionsPath = join(dataDir, "corrections.json");
+
+    processor = new Processor(mock.ei);
+    await processor.start(storage as unknown as Parameters<Processor["start"]>[0]);
+    const sm = processor.getStateManager();
+    sm.human_quote_add(makeQuote({ id: "quote-keep", text: "Original quote text" }));
+
+    const malformedFix: Record<string, unknown> = { ...makeQuoteFixRecord({ id: "quote-keep", text: "should never land" }) };
+    delete malformedFix.entity_type;
+    const goodPerson = makePerson({ id: "person-new" });
+
+    await appendCorrection(correctionsPath, malformedFix as unknown as CorrectionRecord);
+    await appendCorrection(correctionsPath, {
+      op: "upsert",
+      entity_type: "person",
+      id: goodPerson.id,
+      record: goodPerson,
+      timestamp: new Date().toISOString(),
+    });
+
+    await asDrainable(processor).drainCorrections();
+
+    const skips = processor.getLastCorrectionSkips();
+    expect(skips).toHaveLength(1);
+    expect(skips[0].record_id).toBe("quote-keep");
+    expect(skips[0].reason).toContain("entity_type");
+    expect(consoleErrorSpy).toHaveBeenCalled();
+
+    const human = sm.getHuman();
+    expect(human.quotes.find((q) => q.id === "quote-keep")?.text).toBe("Original quote text");
+    expect(human.people.find((p) => p.id === "person-new")).toBeDefined();
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("T2: live drain skips a quote.remove with a missing entity_type and still applies a later valid correction, reporting it via getLastCorrectionSkips() with no wedge (I6)", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const correctionsPath = join(dataDir, "corrections.json");
+
+    processor = new Processor(mock.ei);
+    await processor.start(storage as unknown as Parameters<Processor["start"]>[0]);
+    const sm = processor.getStateManager();
+    sm.human_quote_add(makeQuote({ id: "quote-keep" }));
+
+    const malformedRemove: Record<string, unknown> = { ...makeQuoteRemoveRecord("quote-keep") };
+    delete malformedRemove.entity_type;
+    const goodPerson = makePerson({ id: "person-new" });
+
+    await appendCorrection(correctionsPath, malformedRemove as unknown as CorrectionRecord);
+    await appendCorrection(correctionsPath, {
+      op: "upsert",
+      entity_type: "person",
+      id: goodPerson.id,
+      record: goodPerson,
+      timestamp: new Date().toISOString(),
+    });
+
+    await asDrainable(processor).drainCorrections();
+
+    const skips = processor.getLastCorrectionSkips();
+    expect(skips).toHaveLength(1);
+    expect(skips[0].record_id).toBe("quote-keep");
+    expect(skips[0].reason).toContain("entity_type");
+    expect(consoleErrorSpy).toHaveBeenCalled();
+
+    const human = sm.getHuman();
+    expect(human.quotes.find((q) => q.id === "quote-keep")).toBeDefined();
+    expect(human.people.find((p) => p.id === "person-new")).toBeDefined();
+
+    consoleErrorSpy.mockRestore();
   });
 
   it("applies a pending Persona upsert for a new id via persona_add, not persona_update", async () => {

@@ -3,8 +3,8 @@ import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import type { StorageState } from "../../../src/core/types/integrations.js";
-import type { CorrectionRecord } from "../../../src/core/corrections.js";
-import type { Person, Fact } from "../../../src/core/types/data-items.js";
+import type { CorrectionRecord, QuoteCreateRecord, QuoteFixRecord, QuoteRelinkRecord, QuoteRemoveRecord } from "../../../src/core/corrections.js";
+import type { Person, Fact, Quote } from "../../../src/core/types/data-items.js";
 import type { PersonaEntity } from "../../../src/core/types/entities.js";
 import type { ToolProvider, ToolDefinition } from "../../../src/core/types/integrations.js";
 
@@ -20,7 +20,7 @@ vi.mock("../../../src/core/embedding-service.js", async (importOriginal) => {
   };
 });
 
-import { retrieve, retrieveBalanced, resolveLinkedItems, lookupById, lookupByIdentifier, retrievePersonas, retrievePersonasSemantic, mapPersona, loadLatestState } from "../../../src/cli/retrieval.js";
+import { retrieve, retrieveBalanced, resolveLinkedItems, lookupById, lookupByIdentifier, retrievePersonas, retrievePersonasSemantic, mapPersona, loadLatestState, getLastCorrectionSkips } from "../../../src/cli/retrieval.js";
 
 const EMBEDDING = new Array(384).fill(1);
 const NOW = "2026-01-01T00:00:00Z";
@@ -53,6 +53,62 @@ function makeQuotes(count: number) {
     created_by: "human",
     embedding: EMBEDDING,
   }));
+}
+
+/** Builds a valid `quote.create` wire record. `data_item_ids`/`persona_groups` default empty, matching create's own constraint. */
+function makeQuoteCreateRecord(id: string, overrides: Partial<QuoteCreateRecord> = {}): QuoteCreateRecord {
+  return {
+    op: "quote.create",
+    entity_type: "quote",
+    id,
+    text: `Test quote ${id}`,
+    speaker: "human",
+    channel: "Test Channel",
+    timestamp: NOW,
+    message_id: null,
+    data_item_ids: [],
+    persona_groups: [],
+    start: null,
+    end: null,
+    created_at: NOW,
+    created_by: "human",
+    embedding: EMBEDDING,
+    verified: true,
+    ...overrides,
+  };
+}
+
+/** Builds a valid `quote.fix` wire record. `data_item_ids`/`persona_groups` default empty — override to simulate an endpoint that correctly preserves the target's current links. */
+function makeQuoteFixRecord(id: string, overrides: Partial<QuoteFixRecord> = {}): QuoteFixRecord {
+  return {
+    op: "quote.fix",
+    entity_type: "quote",
+    id,
+    text: `Test quote ${id}`,
+    speaker: "human",
+    channel: "Test Channel",
+    timestamp: NOW,
+    message_id: null,
+    data_item_ids: [],
+    persona_groups: [],
+    start: null,
+    end: null,
+    created_at: NOW,
+    created_by: "human",
+    embedding: EMBEDDING,
+    verified: true,
+    ...overrides,
+  };
+}
+
+/** Builds a valid `quote.relink` wire record — `{id, data_item_ids}` only. */
+function makeQuoteRelinkRecord(id: string, dataItemIds: string[]): QuoteRelinkRecord {
+  return { op: "quote.relink", entity_type: "quote", id, data_item_ids: dataItemIds };
+}
+
+/** Builds a valid `quote.remove` wire record — `{id}` only. */
+function makeQuoteRemoveRecord(id: string): QuoteRemoveRecord {
+  return { op: "quote.remove", entity_type: "quote", id };
 }
 
 function makePersonaEntities(count: number, namePrefix: string = "Persona", withEmbeddings = false) {
@@ -847,5 +903,249 @@ describe("loadLatestState — corrections merge", () => {
 
     expect(state!.personas["persona_new"]).toBeDefined();
     expect(readFileSync(correctionsPath, "utf-8")).toBe(raw);
+  });
+});
+
+describe("loadLatestState — quote corrections (Corrections Wire Grammar)", () => {
+  it("materializes a valid quote.create correction into the returned state without consuming corrections.json", async () => {
+    writeTestState(createTestState({}));
+    const correctionsPath = join(tempDir, "corrections.json");
+    const raw = JSON.stringify([makeQuoteCreateRecord("quote_new")]);
+    writeFileSync(correctionsPath, raw);
+
+    const state = await loadLatestState();
+
+    expect(state!.human.quotes.find((q) => q.id === "quote_new")).toBeDefined();
+    expect(readFileSync(correctionsPath, "utf-8")).toBe(raw);
+    expect(getLastCorrectionSkips()).toEqual([]);
+  });
+
+  it("materializes a valid quote.relink correction, changing only data_item_ids, given a live target in the loaded state", async () => {
+    writeTestState(createTestState({ people: 1, quotes: 1 }));
+    writeFileSync(join(tempDir, "corrections.json"), JSON.stringify([makeQuoteRelinkRecord("quote_0", ["person_0"])]));
+
+    const state = await loadLatestState();
+
+    const applied = state!.human.quotes.find((q) => q.id === "quote_0");
+    expect(applied?.data_item_ids).toEqual(["person_0"]);
+    expect(applied?.text).toBe("Test quote 0");
+    expect(getLastCorrectionSkips()).toEqual([]);
+  });
+
+  it("rejects a quote.relink whose target id does not resolve in the loaded state (state-aware validation), reporting it via getLastCorrectionSkips()", async () => {
+    writeTestState(createTestState({ quotes: 1 }));
+    writeFileSync(join(tempDir, "corrections.json"), JSON.stringify([makeQuoteRelinkRecord("quote_0", ["totally-made-up-id"])]));
+
+    const state = await loadLatestState();
+
+    const applied = state!.human.quotes.find((q) => q.id === "quote_0");
+    expect(applied?.data_item_ids).toEqual([]);
+    const skips = getLastCorrectionSkips();
+    expect(skips).toHaveLength(1);
+    expect(skips[0].record_id).toBe("quote_0");
+    expect(skips[0].reason).toContain("totally-made-up-id");
+  });
+
+  it("materializes a valid quote.remove correction", async () => {
+    writeTestState(createTestState({ quotes: 1 }));
+    writeFileSync(join(tempDir, "corrections.json"), JSON.stringify([makeQuoteRemoveRecord("quote_0")]));
+
+    const state = await loadLatestState();
+
+    expect(state!.human.quotes.find((q) => q.id === "quote_0")).toBeUndefined();
+  });
+
+  it("skips a pre-cutover unmarked full-record quote correction, applies a valid quote.remove and a valid person update in the same batch, and reports exactly one skip via getLastCorrectionSkips()", async () => {
+    writeTestState(createTestState({ quotes: 2, people: 1 }));
+
+    const legacyForgedRecord = {
+      op: "upsert",
+      entity_type: "quote",
+      id: "quote_forged",
+      record: { ...makeQuotes(1)[0], id: "quote_forged", text: "forged text" },
+      timestamp: NOW,
+    } as unknown as CorrectionRecord;
+    const personCorrection: CorrectionRecord = {
+      op: "upsert",
+      entity_type: "person",
+      id: "person_0",
+      record: { ...makePeople(1)[0], description: "Corrected description" } as Person,
+      timestamp: NOW,
+    };
+
+    writeFileSync(join(tempDir, "corrections.json"), JSON.stringify([legacyForgedRecord, makeQuoteRemoveRecord("quote_1"), personCorrection]));
+
+    const state = await loadLatestState();
+
+    expect(state!.human.quotes.find((q) => q.id === "quote_forged")).toBeUndefined();
+    expect(state!.human.quotes.find((q) => q.id === "quote_1")).toBeUndefined();
+    expect(state!.human.quotes.find((q) => q.id === "quote_0")).toBeDefined();
+    expect(state!.human.people.find((p) => p.id === "person_0")?.description).toBe("Corrected description");
+
+    const skips = getLastCorrectionSkips();
+    expect(skips).toHaveLength(1);
+    expect(skips[0].record_id).toBe("quote_forged");
+  });
+
+  it("does not delete or modify corrections.json when the queue contains a pending quote.create correction", async () => {
+    writeTestState(createTestState({}));
+    const correctionsPath = join(tempDir, "corrections.json");
+    const raw = JSON.stringify([makeQuoteCreateRecord("quote_new")]);
+    writeFileSync(correctionsPath, raw);
+
+    await loadLatestState();
+
+    expect(readFileSync(correctionsPath, "utf-8")).toBe(raw);
+  });
+
+  it("T1: read overlay — a stale quote.fix does not recreate a quote removed earlier in the same batch, or restore a link an earlier fact removal already cleared, and a following valid correction still applies (C1)", async () => {
+    const fact = makeDataItems("fact", 1, { validated_date: NOW })[0];
+    const quoteLinked = { ...makeQuotes(1)[0], id: "quote_linked", data_item_ids: [fact.id] };
+    const quoteDoomed = { ...makeQuotes(1)[0], id: "quote_doomed", data_item_ids: [] as string[] };
+    const state = createTestState({});
+    state.human.facts = [fact];
+    state.human.quotes = [quoteLinked, quoteDoomed];
+    writeTestState(state);
+
+    const staleFixForLinked = makeQuoteFixRecord("quote_linked", { data_item_ids: [fact.id], persona_groups: ["stale-group"], text: "stale corrected text" });
+    const staleFixForDoomed = makeQuoteFixRecord("quote_doomed", { text: "should never land" });
+    const goodPerson: Person = { ...makePeople(1)[0], id: "person_new" };
+    const personCorrection: CorrectionRecord = {
+      op: "upsert",
+      entity_type: "person",
+      id: goodPerson.id,
+      record: goodPerson,
+      timestamp: NOW,
+    };
+    const factRemove: CorrectionRecord = { op: "remove", entity_type: "fact", id: fact.id, timestamp: NOW };
+
+    // File order matters: both removals land BEFORE the stale fixes that
+    // target their now-gone quote/link, exactly like C1's trigger.
+    writeFileSync(join(tempDir, "corrections.json"), JSON.stringify([
+      factRemove,
+      makeQuoteRemoveRecord("quote_doomed"),
+      staleFixForLinked,
+      staleFixForDoomed,
+      personCorrection,
+    ]));
+
+    const result = await loadLatestState();
+
+    // The removed quote was never recreated by the stale fix that targeted it.
+    expect(result!.human.quotes.find((q) => q.id === "quote_doomed")).toBeUndefined();
+    // The surviving quote's fix applied its text change but did NOT restore
+    // the link the fact removal already cleared.
+    const fixedQuote = result!.human.quotes.find((q) => q.id === "quote_linked");
+    expect(fixedQuote).toBeDefined();
+    expect(fixedQuote?.text).toBe("stale corrected text");
+    expect(fixedQuote?.data_item_ids).toEqual([]);
+    expect(fixedQuote?.persona_groups).toEqual([]);
+    expect(result!.human.facts.find((f) => f.id === fact.id)).toBeUndefined();
+    // The following valid correction still applied.
+    expect(result!.human.people.find((p) => p.id === "person_new")).toBeDefined();
+
+    const skips = getLastCorrectionSkips();
+    expect(skips).toHaveLength(1);
+    expect(skips[0].record_id).toBe("quote_doomed");
+    expect(skips[0].reason).toContain("does not exist");
+  });
+
+  it("T2: read overlay skips a quote.relink with a missing entity_type and still applies a later valid correction, with no throw (I2)", async () => {
+    writeTestState(createTestState({ quotes: 1 }));
+    const malformedRelink = { op: "quote.relink", id: "quote_0", data_item_ids: ["anything"] } as unknown as CorrectionRecord;
+    const goodPerson: Person = { ...makePeople(1)[0], id: "person_new" };
+    const personCorrection: CorrectionRecord = {
+      op: "upsert",
+      entity_type: "person",
+      id: goodPerson.id,
+      record: goodPerson,
+      timestamp: NOW,
+    };
+    writeFileSync(join(tempDir, "corrections.json"), JSON.stringify([malformedRelink, personCorrection]));
+
+    const state = await loadLatestState();
+
+    expect(state!.human.quotes.find((q) => q.id === "quote_0")?.data_item_ids).toEqual([]);
+    expect(state!.human.people.find((p) => p.id === "person_new")).toBeDefined();
+
+    const skips = getLastCorrectionSkips();
+    expect(skips).toHaveLength(1);
+    expect(skips[0].record_id).toBe("quote_0");
+    expect(skips[0].reason).toContain("entity_type");
+  });
+
+  it("T2: read overlay skips a quote.create with a missing entity_type and still applies a later valid correction, with no throw (I6)", async () => {
+    writeTestState(createTestState({}));
+    const malformedCreate: Record<string, unknown> = { ...makeQuoteCreateRecord("quote_new") };
+    delete malformedCreate.entity_type;
+    const goodPerson: Person = { ...makePeople(1)[0], id: "person_new" };
+    const personCorrection: CorrectionRecord = {
+      op: "upsert",
+      entity_type: "person",
+      id: goodPerson.id,
+      record: goodPerson,
+      timestamp: NOW,
+    };
+    writeFileSync(join(tempDir, "corrections.json"), JSON.stringify([malformedCreate, personCorrection]));
+
+    const state = await loadLatestState();
+
+    expect(state!.human.quotes.find((q) => q.id === "quote_new")).toBeUndefined();
+    expect(state!.human.people.find((p) => p.id === "person_new")).toBeDefined();
+
+    const skips = getLastCorrectionSkips();
+    expect(skips).toHaveLength(1);
+    expect(skips[0].record_id).toBe("quote_new");
+    expect(skips[0].reason).toContain("entity_type");
+  });
+
+  it("T2: read overlay skips a quote.fix with a missing entity_type and still applies a later valid correction, with no throw (I6)", async () => {
+    writeTestState(createTestState({ quotes: 1 }));
+    const malformedFix: Record<string, unknown> = { ...makeQuoteFixRecord("quote_0", { text: "should never land" }) };
+    delete malformedFix.entity_type;
+    const goodPerson: Person = { ...makePeople(1)[0], id: "person_new" };
+    const personCorrection: CorrectionRecord = {
+      op: "upsert",
+      entity_type: "person",
+      id: goodPerson.id,
+      record: goodPerson,
+      timestamp: NOW,
+    };
+    writeFileSync(join(tempDir, "corrections.json"), JSON.stringify([malformedFix, personCorrection]));
+
+    const state = await loadLatestState();
+
+    expect(state!.human.quotes.find((q) => q.id === "quote_0")?.text).toBe("Test quote 0");
+    expect(state!.human.people.find((p) => p.id === "person_new")).toBeDefined();
+
+    const skips = getLastCorrectionSkips();
+    expect(skips).toHaveLength(1);
+    expect(skips[0].record_id).toBe("quote_0");
+    expect(skips[0].reason).toContain("entity_type");
+  });
+
+  it("T2: read overlay skips a quote.remove with a missing entity_type and still applies a later valid correction, with no throw (I6)", async () => {
+    writeTestState(createTestState({ quotes: 1 }));
+    const malformedRemove: Record<string, unknown> = { ...makeQuoteRemoveRecord("quote_0") };
+    delete malformedRemove.entity_type;
+    const goodPerson: Person = { ...makePeople(1)[0], id: "person_new" };
+    const personCorrection: CorrectionRecord = {
+      op: "upsert",
+      entity_type: "person",
+      id: goodPerson.id,
+      record: goodPerson,
+      timestamp: NOW,
+    };
+    writeFileSync(join(tempDir, "corrections.json"), JSON.stringify([malformedRemove, personCorrection]));
+
+    const state = await loadLatestState();
+
+    expect(state!.human.quotes.find((q) => q.id === "quote_0")).toBeDefined();
+    expect(state!.human.people.find((p) => p.id === "person_new")).toBeDefined();
+
+    const skips = getLastCorrectionSkips();
+    expect(skips).toHaveLength(1);
+    expect(skips[0].record_id).toBe("quote_0");
+    expect(skips[0].reason).toContain("entity_type");
   });
 });

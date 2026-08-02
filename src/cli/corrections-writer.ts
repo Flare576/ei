@@ -29,7 +29,7 @@ import { readFile, access } from "fs/promises";
 import { getDataPath } from "./retrieval.js";
 import { withLock, atomicWrite } from "../storage/file-lock.js";
 import { appendCorrection, readCorrections, applyCorrectionsToState } from "../core/corrections.js";
-import type { CorrectionRecord } from "../core/corrections.js";
+import type { CorrectionRecord, QuoteCorrectionSkip } from "../core/corrections.js";
 import { encodeAllEmbeddings, decodeAllEmbeddings } from "../storage/embeddings.js";
 import type { StorageState } from "../core/types.js";
 
@@ -79,14 +79,20 @@ async function isLiveInstanceRunning(): Promise<boolean> {
  * pickup, or self-drains straight into state.json when nothing is running
  * to pick it up. Throws if neither state.json nor state.backup.json exist
  * (no Ei data at this EI_DATA_PATH — misconfiguration, not a sync gap).
+ *
+ * Returns every Quote correction skipped during this call's self-drain
+ * (wrong shape, forbidden key, marker misuse, or a stale relink target) —
+ * `{ skipped: [] }` on the append-only branches (live instance running, or
+ * backup-only), since nothing is validated/applied there yet. Additive:
+ * existing callers indifferent to skips are unaffected either way.
  */
-export async function writeCorrection(record: CorrectionRecord): Promise<void> {
+export async function writeCorrection(record: CorrectionRecord): Promise<{ skipped: QuoteCorrectionSkip[] }> {
   const dataPath = getDataPath();
   const correctionsPath = join(dataPath, CORRECTIONS_FILE);
 
   if (await isLiveInstanceRunning()) {
     await appendCorrection(correctionsPath, record);
-    return;
+    return { skipped: [] };
   }
 
   const statePath = join(dataPath, STATE_FILE);
@@ -101,16 +107,16 @@ export async function writeCorrection(record: CorrectionRecord): Promise<void> {
     // TUI launch (pulled from remote). Queue for that drain instead of
     // fabricating a local state.json that would conflict with the pull.
     await appendCorrection(correctionsPath, record);
-    return;
+    return { skipped: [] };
   }
 
   // No live instance and state.json exists — safe to self-drain directly.
   // Re-check liveness after acquiring the lock to shrink the race window
   // where a TUI/daemon starts between the check above and the write below.
-  await withLock(statePath, async () => {
+  return await withLock(statePath, async () => {
     if (await isLiveInstanceRunning()) {
       await appendCorrection(correctionsPath, record);
-      return;
+      return { skipped: [] };
     }
 
     // Read pending corrections, apply them (plus the new record), and clear
@@ -120,12 +126,12 @@ export async function writeCorrection(record: CorrectionRecord): Promise<void> {
     // write a new record between our unlocked read and our unconditional
     // "[]" clear, silently discarding it. Nesting the correctionsPath lock
     // inside statePath's serializes against every other writer of that file.
-    await withLock(correctionsPath, async () => {
+    return await withLock(correctionsPath, async () => {
       const text = await readFile(statePath, "utf-8");
       const state = decodeAllEmbeddings(JSON.parse(text) as StorageState);
 
       const pending = await readCorrections(correctionsPath);
-      applyCorrectionsToState(state, [...pending, record]);
+      const skipped = applyCorrectionsToState(state, [...pending, record]);
       state.timestamp = new Date().toISOString();
 
       // State write happens before the queue clear: if we crash in between,
@@ -133,6 +139,7 @@ export async function writeCorrection(record: CorrectionRecord): Promise<void> {
       // safely re-applies them (upsert/remove are idempotent by id).
       await atomicWrite(statePath, JSON.stringify(encodeAllEmbeddings(state), null, 2));
       await atomicWrite(correctionsPath, "[]");
+      return { skipped };
     });
   });
 }

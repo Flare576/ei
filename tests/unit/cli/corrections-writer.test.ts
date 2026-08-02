@@ -5,8 +5,8 @@ import { join } from "path";
 import { writeCorrection } from "../../../src/cli/corrections-writer.js";
 import { appendCorrection } from "../../../src/core/corrections.js";
 import { acquireLock, releaseLock } from "../../../src/storage/file-lock.js";
-import type { CorrectionRecord } from "../../../src/core/corrections.js";
-import type { Fact, Topic, Quote, PersonaEntity, Message, StorageState } from "../../../src/core/types.js";
+import type { CorrectionRecord, QuoteCreateRecord, QuoteFixRecord, QuoteRelinkRecord, QuoteRemoveRecord } from "../../../src/core/corrections.js";
+import type { Fact, Topic, Quote, Person, PersonaEntity, Message, StorageState } from "../../../src/core/types.js";
 
 const NOW = "2026-01-01T00:00:00Z";
 
@@ -53,6 +53,26 @@ function makeQuote(data_item_ids: string[], overrides: Partial<Quote> = {}): Quo
   };
 }
 
+/** Builds a valid `quote.create` wire record — makeQuote's fields plus the create-only structural fields (op/entity_type/channel/embedding/verified). data_item_ids/persona_groups default empty, matching create's own constraint. */
+function makeQuoteCreateRecord(overrides: Partial<QuoteCreateRecord> = {}): QuoteCreateRecord {
+  return { op: "quote.create", entity_type: "quote", ...makeQuote([]), channel: "Test Channel", embedding: [0.1, 0.2, 0.3], verified: true, ...overrides };
+}
+
+/** Builds a valid `quote.fix` wire record. Unlike create, fix does not require empty data_item_ids/persona_groups. */
+function makeQuoteFixRecord(dataItemIds: string[] = [], overrides: Partial<QuoteFixRecord> = {}): QuoteFixRecord {
+  return { op: "quote.fix", entity_type: "quote", ...makeQuote(dataItemIds), channel: "Test Channel", embedding: [0.1, 0.2, 0.3], verified: true, ...overrides };
+}
+
+/** Builds a valid `quote.relink` wire record — `{id, data_item_ids}` only. */
+function makeQuoteRelinkRecord(id: string, dataItemIds: string[]): QuoteRelinkRecord {
+  return { op: "quote.relink", entity_type: "quote", id, data_item_ids: dataItemIds };
+}
+
+/** Builds a valid `quote.remove` wire record — `{id}` only. */
+function makeQuoteRemoveRecord(id: string): QuoteRemoveRecord {
+  return { op: "quote.remove", entity_type: "quote", id };
+}
+
 function makePersona(overrides: Partial<PersonaEntity> = {}): PersonaEntity {
   return {
     id: "persona-1",
@@ -68,10 +88,26 @@ function makePersona(overrides: Partial<PersonaEntity> = {}): PersonaEntity {
   };
 }
 
+function makePerson(overrides: Partial<Person> = {}): Person {
+  return {
+    id: "person-1",
+    name: "Person 1",
+    description: "A person worth remembering accurately",
+    sentiment: 0.5,
+    relationship: "friend",
+    exposure_current: 0.5,
+    exposure_desired: 0.5,
+    last_updated: NOW,
+    identifiers: [{ type: "Nickname", value: "Person 1", is_primary: true }],
+    ...overrides,
+  };
+}
+
 function buildState(overrides: {
   facts?: Fact[];
   topics?: Topic[];
   quotes?: Quote[];
+  people?: Person[];
   personas?: StorageState["personas"];
 } = {}): StorageState {
   return {
@@ -81,7 +117,7 @@ function buildState(overrides: {
       entity: "human",
       facts: overrides.facts ?? [],
       traits: [],
-      people: [],
+      people: overrides.people ?? [],
       topics: overrides.topics ?? [],
       quotes: overrides.quotes ?? [],
       last_updated: NOW,
@@ -437,6 +473,238 @@ describe("writeCorrection — self-drain and branch selection", () => {
     expect(persisted.human.topics.some((t) => t.id === "topic-new")).toBe(true);
 
     // Queue cleared.
+    expect(readJson<CorrectionRecord[]>(correctionsPath)).toEqual([]);
+  });
+});
+
+describe("writeCorrection — quote corrections (Corrections Wire Grammar)", () => {
+  it("self-drains a quote.create correction into state.json, never leaking the wire-only verified marker onto the persisted Quote", async () => {
+    const statePath = join(tempDir, "state.json");
+    writeJson(statePath, buildState());
+
+    const result = await writeCorrection(makeQuoteCreateRecord());
+
+    expect(result).toEqual({ skipped: [] });
+    const persisted = readJson<StorageState>(statePath);
+    const applied = persisted.human.quotes.find((q) => q.id === "quote-1");
+    expect(applied).toBeDefined();
+    expect(applied).not.toHaveProperty("verified");
+  });
+
+  it("self-drains a quote.relink correction, changing only data_item_ids and leaving every other field byte-identical", async () => {
+    const statePath = join(tempDir, "state.json");
+    const existing = makeQuote(["merged-person"]);
+    writeJson(statePath, buildState({ quotes: [existing], people: [makePerson({ id: "split-person" })] }));
+
+    const result = await writeCorrection(makeQuoteRelinkRecord("quote-1", ["split-person"]));
+
+    expect(result).toEqual({ skipped: [] });
+    const persisted = readJson<StorageState>(statePath);
+    expect(persisted.human.quotes).toEqual([{ ...existing, data_item_ids: ["split-person"] }]);
+  });
+
+  it("self-drains a quote.remove correction", async () => {
+    const statePath = join(tempDir, "state.json");
+    writeJson(statePath, buildState({ quotes: [makeQuote([])] }));
+
+    const result = await writeCorrection(makeQuoteRemoveRecord("quote-1"));
+
+    expect(result).toEqual({ skipped: [] });
+    const persisted = readJson<StorageState>(statePath);
+    expect(persisted.human.quotes).toEqual([]);
+  });
+
+  it("skips a pre-cutover unmarked full-record quote correction during self-drain, applies a valid quote.remove and a valid person upsert in the same batch, and returns exactly one skip from writeCorrection()", async () => {
+    const statePath = join(tempDir, "state.json");
+    const correctionsPath = join(tempDir, "corrections.json");
+    const survivingQuote = makeQuote([], { id: "quote-keep" });
+    const removableQuote = makeQuote([], { id: "quote-remove-me" });
+    writeJson(statePath, buildState({ quotes: [survivingQuote, removableQuote] }));
+
+    const legacyForgedRecord = {
+      op: "upsert",
+      entity_type: "quote",
+      id: "quote-forged",
+      record: makeQuote([], { id: "quote-forged", text: "forged text" }),
+      timestamp: NOW,
+    } as unknown as CorrectionRecord;
+    writeJson(correctionsPath, [legacyForgedRecord, makeQuoteRemoveRecord("quote-remove-me")]);
+
+    const goodPerson = makePerson({ id: "person-new" });
+    const result = await writeCorrection({
+      op: "upsert",
+      entity_type: "person",
+      id: goodPerson.id,
+      record: goodPerson,
+      timestamp: NOW,
+    });
+
+    expect(result.skipped).toEqual([{ record_id: "quote-forged", reason: expect.stringContaining("quote.create") }]);
+
+    const persisted = readJson<StorageState>(statePath);
+    expect(persisted.human.quotes.find((q) => q.id === "quote-forged")).toBeUndefined();
+    expect(persisted.human.quotes.find((q) => q.id === "quote-remove-me")).toBeUndefined();
+    expect(persisted.human.quotes.find((q) => q.id === "quote-keep")).toBeDefined();
+    expect(persisted.human.people.find((p) => p.id === "person-new")).toBeDefined();
+
+    expect(readJson<CorrectionRecord[]>(correctionsPath)).toEqual([]);
+  });
+
+  it("T1: self-drain — a stale quote.fix does not recreate a quote removed earlier in the same batch, or restore a link an earlier fact removal already cleared, and writeCorrection() still applies a following valid correction (C1)", async () => {
+    const statePath = join(tempDir, "state.json");
+    const correctionsPath = join(tempDir, "corrections.json");
+    const linkedFact = makeFact({ id: "fact-linked" });
+    const quoteLinked = makeQuote(["fact-linked"], { id: "quote-linked" });
+    const quoteDoomed = makeQuote([], { id: "quote-doomed" });
+    writeJson(statePath, buildState({ facts: [linkedFact], quotes: [quoteLinked, quoteDoomed] }));
+
+    const staleFixForLinked = makeQuoteFixRecord(["fact-linked"], { id: "quote-linked", persona_groups: ["stale-group"], text: "stale corrected text" });
+    const staleFixForDoomed = makeQuoteFixRecord([], { id: "quote-doomed", text: "should never land" });
+
+    // File order matters: both removals land BEFORE the stale fixes that
+    // target their now-gone quote/link, exactly like C1's trigger.
+    writeJson(correctionsPath, [
+      { op: "remove", entity_type: "fact", id: "fact-linked", timestamp: NOW },
+      makeQuoteRemoveRecord("quote-doomed"),
+      staleFixForLinked,
+      staleFixForDoomed,
+    ]);
+
+    const goodPerson = makePerson({ id: "person-new" });
+    const result = await writeCorrection({
+      op: "upsert",
+      entity_type: "person",
+      id: goodPerson.id,
+      record: goodPerson,
+      timestamp: NOW,
+    });
+
+    expect(result.skipped).toEqual([{ record_id: "quote-doomed", reason: expect.stringContaining("does not exist") }]);
+
+    const persisted = readJson<StorageState>(statePath);
+    // The removed quote was never recreated by the stale fix that targeted it.
+    expect(persisted.human.quotes.find((q) => q.id === "quote-doomed")).toBeUndefined();
+    // The surviving quote's fix applied its text change but did NOT restore
+    // the link the fact removal already cleared.
+    const fixedQuote = persisted.human.quotes.find((q) => q.id === "quote-linked");
+    expect(fixedQuote).toBeDefined();
+    expect(fixedQuote!.text).toBe("stale corrected text");
+    expect(fixedQuote!.data_item_ids).toEqual([]);
+    expect(fixedQuote!.persona_groups).toEqual([]);
+    expect(persisted.human.facts.find((f) => f.id === "fact-linked")).toBeUndefined();
+    // The following valid correction still applied.
+    expect(persisted.human.people.find((p) => p.id === "person-new")).toBeDefined();
+
+    expect(readJson<CorrectionRecord[]>(correctionsPath)).toEqual([]);
+  });
+
+  it("T2: self-drain skips a quote.relink with a missing entity_type and writeCorrection() still applies a later valid correction, with no throw (I2)", async () => {
+    const statePath = join(tempDir, "state.json");
+    const correctionsPath = join(tempDir, "corrections.json");
+    const survivingQuote = makeQuote([], { id: "quote-keep" });
+    writeJson(statePath, buildState({ quotes: [survivingQuote] }));
+
+    const malformedRelink = { op: "quote.relink", id: "quote-keep", data_item_ids: ["anything"] } as unknown as CorrectionRecord;
+    writeJson(correctionsPath, [malformedRelink]);
+
+    const goodPerson = makePerson({ id: "person-new" });
+    const result = await writeCorrection({
+      op: "upsert",
+      entity_type: "person",
+      id: goodPerson.id,
+      record: goodPerson,
+      timestamp: NOW,
+    });
+
+    expect(result.skipped).toEqual([{ record_id: "quote-keep", reason: expect.stringContaining("entity_type") }]);
+
+    const persisted = readJson<StorageState>(statePath);
+    expect(persisted.human.quotes.find((q) => q.id === "quote-keep")?.data_item_ids).toEqual([]);
+    expect(persisted.human.people.find((p) => p.id === "person-new")).toBeDefined();
+
+    expect(readJson<CorrectionRecord[]>(correctionsPath)).toEqual([]);
+  });
+
+  it("T2: self-drain skips a quote.create with a missing entity_type and writeCorrection() still applies a later valid correction, with no throw (I6)", async () => {
+    const statePath = join(tempDir, "state.json");
+    const correctionsPath = join(tempDir, "corrections.json");
+    writeJson(statePath, buildState());
+
+    const malformedCreate: Record<string, unknown> = { ...makeQuoteCreateRecord({ id: "quote-new" }) };
+    delete malformedCreate.entity_type;
+    writeJson(correctionsPath, [malformedCreate]);
+
+    const goodPerson = makePerson({ id: "person-new" });
+    const result = await writeCorrection({
+      op: "upsert",
+      entity_type: "person",
+      id: goodPerson.id,
+      record: goodPerson,
+      timestamp: NOW,
+    });
+
+    expect(result.skipped).toEqual([{ record_id: "quote-new", reason: expect.stringContaining("entity_type") }]);
+
+    const persisted = readJson<StorageState>(statePath);
+    expect(persisted.human.quotes.find((q) => q.id === "quote-new")).toBeUndefined();
+    expect(persisted.human.people.find((p) => p.id === "person-new")).toBeDefined();
+
+    expect(readJson<CorrectionRecord[]>(correctionsPath)).toEqual([]);
+  });
+
+  it("T2: self-drain skips a quote.fix with a missing entity_type and writeCorrection() still applies a later valid correction, with no throw (I6)", async () => {
+    const statePath = join(tempDir, "state.json");
+    const correctionsPath = join(tempDir, "corrections.json");
+    const survivingQuote = makeQuote([], { id: "quote-keep" });
+    writeJson(statePath, buildState({ quotes: [survivingQuote] }));
+
+    const malformedFix: Record<string, unknown> = { ...makeQuoteFixRecord([], { id: "quote-keep", text: "should never land" }) };
+    delete malformedFix.entity_type;
+    writeJson(correctionsPath, [malformedFix]);
+
+    const goodPerson = makePerson({ id: "person-new" });
+    const result = await writeCorrection({
+      op: "upsert",
+      entity_type: "person",
+      id: goodPerson.id,
+      record: goodPerson,
+      timestamp: NOW,
+    });
+
+    expect(result.skipped).toEqual([{ record_id: "quote-keep", reason: expect.stringContaining("entity_type") }]);
+
+    const persisted = readJson<StorageState>(statePath);
+    expect(persisted.human.quotes.find((q) => q.id === "quote-keep")?.text).toBe(survivingQuote.text);
+    expect(persisted.human.people.find((p) => p.id === "person-new")).toBeDefined();
+
+    expect(readJson<CorrectionRecord[]>(correctionsPath)).toEqual([]);
+  });
+
+  it("T2: self-drain skips a quote.remove with a missing entity_type and writeCorrection() still applies a later valid correction, with no throw (I6)", async () => {
+    const statePath = join(tempDir, "state.json");
+    const correctionsPath = join(tempDir, "corrections.json");
+    const survivingQuote = makeQuote([], { id: "quote-keep" });
+    writeJson(statePath, buildState({ quotes: [survivingQuote] }));
+
+    const malformedRemove: Record<string, unknown> = { ...makeQuoteRemoveRecord("quote-keep") };
+    delete malformedRemove.entity_type;
+    writeJson(correctionsPath, [malformedRemove]);
+
+    const goodPerson = makePerson({ id: "person-new" });
+    const result = await writeCorrection({
+      op: "upsert",
+      entity_type: "person",
+      id: goodPerson.id,
+      record: goodPerson,
+      timestamp: NOW,
+    });
+
+    expect(result.skipped).toEqual([{ record_id: "quote-keep", reason: expect.stringContaining("entity_type") }]);
+
+    const persisted = readJson<StorageState>(statePath);
+    expect(persisted.human.quotes.find((q) => q.id === "quote-keep")).toBeDefined();
+    expect(persisted.human.people.find((p) => p.id === "person-new")).toBeDefined();
+
     expect(readJson<CorrectionRecord[]>(correctionsPath)).toEqual([]);
   });
 });

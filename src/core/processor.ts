@@ -29,8 +29,8 @@ import { buildPersonaFromPersonPrompt } from "../prompts/index.js";
 import { buildSiblingAwarenessSection } from "../prompts/room/index.js";
 import type { PersonaGenerationResult } from "../prompts/generation/types.js";
 
-import { readCorrections, assertValidCorrection } from "./corrections.js";
-import type { CorrectionRecord } from "./corrections.js";
+import { readCorrections, assertValidCorrection, applyQuoteOperation, isQuoteCorrectionOp } from "./corrections.js";
+import type { CorrectionRecord, QuoteCorrectionSkip } from "./corrections.js";
 import { withLock, atomicWrite } from "../storage/file-lock.js";
 import type { Storage } from "../storage/interface.js";
 import { remoteSync } from "../storage/remote.js";
@@ -171,6 +171,13 @@ export class Processor {
   private importAbortController = new AbortController();
   private syncManager: IntegrationSyncManager | null = null;
   private personaPreviewResolvers = new Map<string, { resolve: (r: PersonaGenerationResult) => void; reject: (e: Error) => void }>();
+  // Populated only by drainCorrections() (reset per drain), for the quote
+  // corrections it declined to apply — nothing in production consumes
+  // this today; it exists so the live drain's per-record skip behavior is
+  // observable/testable the same way the self-drain and read-overlay
+  // consumers' diagnostic returns are (see corrections.ts's
+  // QuoteCorrectionSkip / Corrections Wire Grammar).
+  private lastCorrectionSkips: QuoteCorrectionSkip[] = [];
 
   constructor(ei: Ei_Interface) {
     this.interface = ei;
@@ -515,6 +522,11 @@ export class Processor {
     return this.stateManager;
   }
 
+  /** The quote corrections the most recent drainCorrections() call declined to apply (skipped for wrong shape, forbidden key, marker misuse, or a stale relink target), each as `{record_id, reason}`. Reset at the start of every drain that finds pending records. See the Corrections Wire Grammar's "Skip/report diagnostic shape." */
+  getLastCorrectionSkips(): QuoteCorrectionSkip[] {
+    return this.lastCorrectionSkips;
+  }
+
   async pause(): Promise<void> {
     console.log(`[Processor ${this.instanceId}] pause() called`);
     this.running = false;
@@ -769,6 +781,7 @@ const toolNextSteps = new Set([
         // the unlocked fast-path read above and lock acquisition.
         const records = await readCorrections(correctionsPath);
         if (records.length === 0) return;
+        this.lastCorrectionSkips = [];
 
         for (const record of records) {
           try {
@@ -786,8 +799,39 @@ const toolNextSteps = new Set([
     }
   }
 
-  /** Dispatch one CorrectionRecord to the matching StateManager upsert/remove call. Throws on an unrecognized entity_type or op (see assertValidCorrection — the same validator the CLI read-merge/self-drain path uses, so a malformed op can never be silently treated as its sibling operation here). */
+  /**
+   * Dispatch one CorrectionRecord to the matching StateManager upsert/remove
+   * call. Throws on an unrecognized entity_type or op (see
+   * assertValidCorrection — the same validator the CLI read-merge/self-drain
+   * path uses, so a malformed op can never be silently treated as its
+   * sibling operation here).
+   *
+   * A quote-domain record (per isQuoteCorrectionOp — `op` one of the four
+   * `quote.*` literals, or `entity_type: "quote"`) is intercepted first
+   * and routed through the shared applyQuoteOperation dispatcher instead
+   * of a StateManager upsert/remove call — this is what keeps
+   * relink/remove from ever routing through the full-replacement
+   * `human_quote_upsert`, and what catches a `quote.*` op carrying a
+   * wrong or missing `entity_type` (I2) instead of letting it fall
+   * through to the generic entity_type dispatch below. It never throws
+   * internally; a skip is recorded to lastCorrectionSkips (see
+   * getLastCorrectionSkips) and then re-thrown here so the outer
+   * try/catch in drainCorrections keeps logging and isolating it exactly
+   * like every other malformed record.
+   */
   private applyCorrectionRecord(record: CorrectionRecord): void {
+    if (isQuoteCorrectionOp(record)) {
+      const human = this.stateManager.getHuman();
+      const result = applyQuoteOperation(human.quotes, record, human);
+      if (result.skipped) {
+        this.lastCorrectionSkips.push(result.skipped);
+        throw new Error(result.skipped.reason);
+      }
+      human.quotes = result.quotes;
+      this.stateManager.setHuman(human);
+      return;
+    }
+
     assertValidCorrection(record);
     if (record.entity_type === "fact") {
       if (record.op === "upsert") {
@@ -806,12 +850,6 @@ const toolNextSteps = new Set([
         this.stateManager.human_person_upsert(record.record as Person);
       } else {
         this.stateManager.human_person_remove(record.id);
-      }
-    } else if (record.entity_type === "quote") {
-      if (record.op === "upsert") {
-        this.stateManager.human_quote_upsert(record.record as Quote);
-      } else {
-        this.stateManager.human_quote_remove(record.id);
       }
     } else if (record.entity_type === "persona") {
       if (record.op === "upsert") {
