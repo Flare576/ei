@@ -244,9 +244,10 @@ export function ProviderForm(props: ProviderFormProps) {
       } else if (key.length === 1 && !event.ctrl && !event.meta) {
         event.preventDefault();
         // `event.name` is lowercased by the parser for letters regardless
-        // of shift state (shift+Z -> name "z") — the case-preserving
-        // character comes from `event.sequence`. See MaskedInput.tsx /
-        // .sisyphus/notepads/.../issues.md's T4 entry.
+        // of shift state (shift+Z -> name "z"), so using it here would
+        // silently drop capitalization from the display name. The
+        // case-preserving character comes from `event.sequence` instead —
+        // same fix as MaskedInput.tsx's keyboard handler.
         setDisplayName((v) => v + event.sequence);
       }
       return;
