@@ -35,6 +35,7 @@ This exists because the alternative was observed directly: *"I really wish we ha
 | [025](ADR-025-exposure-system-left-dormant.md) | The Exposure System Is Left Dormant, Not Removed | Accepted | 2026-08-03 | Backfill |
 | [026](ADR-026-integration-granularity-per-harness.md) | Third-Party Integrations Are Scoped Per-Harness, Not Per-Vendor | Accepted | 2026-08-03 | Backfill |
 | [027](ADR-027-environment-variables-gate-test-only-behavior.md) | Environment Variables Gate Test-Only Behavior, Never Real Config | Accepted | 2026-08-03 | Backfill |
+| [028](ADR-028-cli-never-trails-mcp-in-capability.md) | The CLI Never Trails MCP in Capability — MCP Is a Thin Wrapper, Not a Second Implementation | Accepted | 2026-08-03 | Current |
 
 ## Conventions
 
