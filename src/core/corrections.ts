@@ -75,6 +75,21 @@ export interface CorrectionRemove {
 
 interface QuoteFullFields {
   id: string;
+  /**
+   * Transport-only correlation id for THIS call alone — a fresh
+   * crypto.randomUUID() minted by createQuoteEntity/fixQuoteEntity before
+   * they ever construct this record, NOT a persisted Quote field (never
+   * appears on the materialized entity — applyQuoteOperation destructures
+   * it away on create and never reads it for fix's overlay). Lets the
+   * endpoint match a skip result back to the EXACT record it just queued
+   * (see QuoteCorrectionSkip.attempt_id) with certainty instead of
+   * inferring success from final-state equality, which cannot distinguish
+   * "my write applied" from "the value already happened to be right" (I5,
+   * round 3 of wave-2-quote-attestation.md). Unlike `id` — which two
+   * independent pending corrections for the same quote CAN share (I4) —
+   * no two calls, ever, share an attempt_id.
+   */
+  attempt_id: string;
   message_id: string | null;
   data_item_ids: string[];
   persona_groups: string[];
@@ -122,6 +137,17 @@ export type QuoteCorrectionRecord = QuoteCreateRecord | QuoteFixRecord | QuoteRe
 /** Structured, non-throwing diagnostic for one correction record a consumer declined to apply. Never a bare boolean or a swallowed exception — see the Corrections Wire Grammar's "Skip/report diagnostic shape." */
 export interface QuoteCorrectionSkip {
   record_id: string;
+  /**
+   * Present only for a quote.create/quote.fix skip — the caller-generated
+   * attempt_id (see QuoteFullFields.attempt_id) of the record that was
+   * declined, letting createQuoteEntity/fixQuoteEntity recognize THEIR
+   * OWN queued record's fate with certainty rather than inferring it from
+   * final state or a same-id match (I4/I5, round 2-3 of
+   * wave-2-quote-attestation.md). Absent for quote.relink/quote.remove
+   * skips (neither shape carries this field) and for a record too
+   * malformed to have one at all.
+   */
+  attempt_id?: string;
   reason: string;
 }
 
@@ -145,7 +171,7 @@ const QUOTE_OPS: Record<string, true> = Object.assign(Object.create(null), {
 // `__proto__`, ...) to a truthy value on lookup even though the literal
 // itself never declared them (I1).
 const QUOTE_CREATE_FIX_ALLOWED_KEYS: Record<string, true> = Object.assign(Object.create(null), {
-  op: true, entity_type: true, id: true, message_id: true, data_item_ids: true,
+  op: true, entity_type: true, id: true, attempt_id: true, message_id: true, data_item_ids: true,
   persona_groups: true, text: true, speaker: true, channel: true, timestamp: true,
   start: true, end: true, created_at: true, created_by: true, embedding: true, verified: true,
 });
@@ -240,6 +266,9 @@ function assertValidQuoteCorrection(value: object, human: HumanEntity | undefine
   // QUOTE_FULL_RECORD_FIELDS) specifically so TypeScript's control-flow
   // analysis can narrow `value` field-by-field — narrowing does not apply
   // when the checked key name is a dynamic variable.
+  if (!("attempt_id" in value) || typeof value.attempt_id !== "string" || value.attempt_id.length === 0) {
+    throw new Error(`Malformed quote correction (${op}): attempt_id must be a non-empty string, got ${JSON.stringify("attempt_id" in value ? value.attempt_id : undefined)}`);
+  }
   if (!("verified" in value) || value.verified !== true) {
     throw new Error(`Malformed quote correction (${op}): verified must be exactly true, got ${JSON.stringify("verified" in value ? value.verified : undefined)}`);
   }
@@ -458,13 +487,14 @@ export function applyQuoteOperation(quotes: Quote[], record: unknown, human?: Hu
     assertValidQuoteCorrection(record, human);
   } catch (err) {
     const recordId = "id" in record && typeof record.id === "string" ? record.id : "<unknown>";
-    return { quotes, skipped: { record_id: recordId, reason: err instanceof Error ? err.message : String(err) } };
+    const attemptId = "attempt_id" in record && typeof record.attempt_id === "string" ? record.attempt_id : undefined;
+    return { quotes, skipped: { record_id: recordId, attempt_id: attemptId, reason: err instanceof Error ? err.message : String(err) } };
   }
 
   switch (record.op) {
     case "quote.create": {
-      const { op, entity_type, verified, ...quote } = record;
-      void op; void entity_type; void verified;
+      const { op, entity_type, verified, attempt_id, ...quote } = record;
+      void op; void entity_type; void verified; void attempt_id;
       const idx = quotes.findIndex((q) => q.id === quote.id);
       const nextQuotes = idx >= 0 ? quotes.map((q, i) => (i === idx ? quote : q)) : [...quotes, quote];
       return { quotes: nextQuotes };
@@ -480,6 +510,7 @@ export function applyQuoteOperation(quotes: Quote[], record: unknown, human?: Hu
           quotes,
           skipped: {
             record_id: record.id,
+            attempt_id: record.attempt_id,
             reason: `Invalid fix: quote "${record.id}" does not exist — only quote.create may insert a new quote`,
           },
         };

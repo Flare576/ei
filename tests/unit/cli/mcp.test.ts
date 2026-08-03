@@ -12,6 +12,8 @@ const {
   mockCreateEntity,
   mockUpdateEntity,
   mockRemoveEntity,
+  mockCreateQuoteEntity,
+  mockFixQuoteEntity,
   mockCreatePersonaEntity,
   mockUpdatePersonaEntity,
   mockRemovePersonaEntity,
@@ -22,6 +24,8 @@ const {
     mockCreateEntity: vi.fn(),
     mockUpdateEntity: vi.fn(),
     mockRemoveEntity: vi.fn(),
+    mockCreateQuoteEntity: vi.fn(),
+    mockFixQuoteEntity: vi.fn(),
     mockCreatePersonaEntity: vi.fn(),
     mockUpdatePersonaEntity: vi.fn(),
     mockRemovePersonaEntity: vi.fn(),
@@ -32,6 +36,8 @@ vi.mock("../../../src/cli/corrections-endpoints.js", () => ({
   createEntity: mockCreateEntity,
   updateEntity: mockUpdateEntity,
   removeEntity: mockRemoveEntity,
+  createQuoteEntity: mockCreateQuoteEntity,
+  fixQuoteEntity: mockFixQuoteEntity,
   CorrectionValidationError: MockCorrectionValidationError,
 }));
 
@@ -333,5 +339,134 @@ describe("MCP server", () => {
     expect(content[0].text).toBe('Error: Cannot delete reserved persona "emmet". Use archive instead.');
     expect(result.isError).toBe(true);
     expect(mockRemovePersonaEntity).toHaveBeenCalledWith("emmet");
+  });
+
+  // ei_quote_create / ei_quote_fix -- these tools use FLAT raw-shape schemas
+  // (message_id/text/start/end, quote_id/text/start/end), not the generic
+  // `data: z.record(unknown())` blob ei_create/ei_update use. The MCP SDK
+  // converts a flat raw shape into a plain (non-strict) z.object(shape) --
+  // see node_modules/@modelcontextprotocol/sdk/dist/esm/server/zod-compat.js
+  // `objectFromShape()` -- so an undeclared argument like `speaker` is
+  // stripped by the SDK's own input validation before the handler ever
+  // runs, never reaching createQuoteEntity/fixQuoteEntity. That's a
+  // DIFFERENT enforcement point than the CLI's `--json` path (which merges
+  // straight into the endpoint's own z.strictObject and rejects there) --
+  // per Beta's coverage audit (.sisyphus/reviews/t3-create-fix-quote-coverage.md,
+  // I1), the correct oracle here is "the forbidden field never arrives",
+  // not "the call errors."
+  it("registers ei_quote_create and ei_quote_fix tools", async () => {
+    ({ client } = await setupClient());
+    const result = await client.listTools();
+    const names = result.tools.map((t) => t.name);
+    expect(names).toContain("ei_quote_create");
+    expect(names).toContain("ei_quote_fix");
+  });
+
+  it("ei_quote_create's schema declares only message_id/text/start/end -- no speaker/channel/created_by/etc.", async () => {
+    ({ client } = await setupClient());
+    const tools = await client.listTools();
+    const tool = tools.tools.find((t) => t.name === "ei_quote_create");
+    const properties = (tool!.inputSchema as Record<string, unknown>).properties as Record<string, unknown>;
+    expect(Object.keys(properties).sort()).toEqual(["end", "message_id", "start", "text"]);
+  });
+
+  it("ei_quote_fix's schema declares only quote_id/text/start/end -- no message_id/speaker/created_by/etc.", async () => {
+    ({ client } = await setupClient());
+    const tools = await client.listTools();
+    const tool = tools.tools.find((t) => t.name === "ei_quote_fix");
+    const properties = (tool!.inputSchema as Record<string, unknown>).properties as Record<string, unknown>;
+    expect(Object.keys(properties).sort()).toEqual(["end", "quote_id", "start", "text"]);
+  });
+
+  it("ei_quote_create forwards message_id/text/start/end to createQuoteEntity and returns the created record as JSON", async () => {
+    mockCreateQuoteEntity.mockResolvedValueOnce({ id: "new-quote-1", text: "the lease bug is the real defect", channel: "Test Room" });
+    ({ client } = await setupClient());
+    const result = await client.callTool({
+      name: "ei_quote_create",
+      arguments: { message_id: "ei:room-msg-1", text: "the lease bug is the real defect", start: 6, end: 38 },
+    });
+    const content = result.content as Array<{ type: string; text: string }>;
+    const parsed = JSON.parse(content[0].text);
+    expect(parsed.id).toBe("new-quote-1");
+    expect(result.isError).toBeUndefined();
+    expect(mockCreateQuoteEntity).toHaveBeenCalledWith({ message_id: "ei:room-msg-1", text: "the lease bug is the real defect", start: 6, end: 38 });
+  });
+
+  it("ei_quote_create omits start/end from the forwarded call when the caller doesn't supply them", async () => {
+    mockCreateQuoteEntity.mockResolvedValueOnce({ id: "new-quote-2" });
+    ({ client } = await setupClient());
+    await client.callTool({
+      name: "ei_quote_create",
+      arguments: { message_id: "ei:room-msg-1", text: "the lease bug is the real defect" },
+    });
+    expect(mockCreateQuoteEntity).toHaveBeenCalledWith({ message_id: "ei:room-msg-1", text: "the lease bug is the real defect", start: undefined, end: undefined });
+  });
+
+  it("ei_quote_create silently drops an undeclared 'speaker' argument before it reaches createQuoteEntity (SDK schema stripping, not endpoint rejection)", async () => {
+    mockCreateQuoteEntity.mockResolvedValueOnce({ id: "new-quote-3" });
+    ({ client } = await setupClient());
+    const result = await client.callTool({
+      name: "ei_quote_create",
+      // @ts-expect-error -- deliberately supplying an undeclared field to prove the SDK strips it
+      arguments: { message_id: "ei:room-msg-1", text: "the lease bug is the real defect", speaker: "forged" },
+    });
+    expect(result.isError).toBeUndefined();
+    expect(mockCreateQuoteEntity).toHaveBeenCalledWith({ message_id: "ei:room-msg-1", text: "the lease bug is the real defect", start: undefined, end: undefined });
+  });
+
+  it("ei_quote_create surfaces a refusal Error as isError: true text", async () => {
+    mockCreateQuoteEntity.mockRejectedValueOnce(new Error("Cannot create quote: quote text not found in source message"));
+    ({ client } = await setupClient());
+    const result = await client.callTool({
+      name: "ei_quote_create",
+      arguments: { message_id: "ei:room-msg-1", text: "not present anywhere" },
+    });
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0].text).toBe("Error: Cannot create quote: quote text not found in source message");
+    expect(result.isError).toBe(true);
+  });
+
+  it("ei_quote_create surfaces CorrectionValidationError as text content with isError: true", async () => {
+    mockCreateQuoteEntity.mockRejectedValueOnce(new MockCorrectionValidationError("Invalid quote (create): message_id: Required"));
+    ({ client } = await setupClient());
+    const result = await client.callTool({ name: "ei_quote_create", arguments: { message_id: "x", text: "y" } });
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0].text).toContain("Error: Invalid quote (create)");
+    expect(result.isError).toBe(true);
+  });
+
+  it("ei_quote_fix forwards quote_id/text/start/end to fixQuoteEntity and returns the fixed record as JSON", async () => {
+    mockFixQuoteEntity.mockResolvedValueOnce({ id: "sourced-quote-1", text: "corrected text" });
+    ({ client } = await setupClient());
+    const result = await client.callTool({
+      name: "ei_quote_fix",
+      arguments: { quote_id: "sourced-quote-1", text: "corrected text", start: 10, end: 24 },
+    });
+    const content = result.content as Array<{ type: string; text: string }>;
+    const parsed = JSON.parse(content[0].text);
+    expect(parsed.text).toBe("corrected text");
+    expect(result.isError).toBeUndefined();
+    expect(mockFixQuoteEntity).toHaveBeenCalledWith({ quote_id: "sourced-quote-1", text: "corrected text", start: 10, end: 24 });
+  });
+
+  it("ei_quote_fix silently drops an undeclared 'message_id' argument before it reaches fixQuoteEntity (SDK schema stripping, not endpoint rejection)", async () => {
+    mockFixQuoteEntity.mockResolvedValueOnce({ id: "sourced-quote-1" });
+    ({ client } = await setupClient());
+    const result = await client.callTool({
+      name: "ei_quote_fix",
+      // @ts-expect-error -- deliberately supplying an undeclared field to prove the SDK strips it
+      arguments: { quote_id: "sourced-quote-1", text: "anything", message_id: "forged" },
+    });
+    expect(result.isError).toBeUndefined();
+    expect(mockFixQuoteEntity).toHaveBeenCalledWith({ quote_id: "sourced-quote-1", text: "anything", start: undefined, end: undefined });
+  });
+
+  it("ei_quote_fix surfaces a refusal Error as isError: true text", async () => {
+    mockFixQuoteEntity.mockRejectedValueOnce(new Error("Cannot fix quote: no source message to verify against"));
+    ({ client } = await setupClient());
+    const result = await client.callTool({ name: "ei_quote_fix", arguments: { quote_id: "orphaned-1", text: "anything" } });
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0].text).toBe("Error: Cannot fix quote: no source message to verify against");
+    expect(result.isError).toBe(true);
   });
 });

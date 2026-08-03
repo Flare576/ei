@@ -61,6 +61,7 @@ function makeQuoteCreateRecord(id: string, overrides: Partial<QuoteCreateRecord>
     op: "quote.create",
     entity_type: "quote",
     id,
+    attempt_id: `attempt-${id}`,
     text: `Test quote ${id}`,
     speaker: "human",
     channel: "Test Channel",
@@ -84,6 +85,7 @@ function makeQuoteFixRecord(id: string, overrides: Partial<QuoteFixRecord> = {})
     op: "quote.fix",
     entity_type: "quote",
     id,
+    attempt_id: `attempt-${id}`,
     text: `Test quote ${id}`,
     speaker: "human",
     channel: "Test Channel",
@@ -1048,6 +1050,44 @@ describe("loadLatestState — quote corrections (Corrections Wire Grammar)", () 
     expect(skips).toHaveLength(1);
     expect(skips[0].record_id).toBe("quote_doomed");
     expect(skips[0].reason).toContain("does not exist");
+  });
+
+  it("T16: an unrelated later create sharing the same id cannot launder this call's own skipped fix into a false success (I5, round 3)", async () => {
+    // Round 3's [INFERENCE]: under a live lock, multiple writers can
+    // append to corrections.json over time with nothing yet durably
+    // drained -- remove(Q) -> fix(Q) [this call, skipped because Q no
+    // longer exists at that point in the batch] -> create(Q) [a totally
+    // independent later writer, whose projection coincidentally matches
+    // what the fix requested]. A final-state text/start/end read-back
+    // could not tell these two writers' outcomes apart; attempt_id can,
+    // because it is retired final-state equality's exact replacement.
+    writeTestState(createTestState({ quotes: 1 })); // quote_0, text "Test quote 0"
+
+    const ourFix = makeQuoteFixRecord("quote_0", { text: "coincidental match", attempt_id: "attempt-under-test" });
+    const laterCreate = makeQuoteCreateRecord("quote_0", { attempt_id: "later-writer-attempt", text: "coincidental match" });
+
+    writeFileSync(join(tempDir, "corrections.json"), JSON.stringify([
+      makeQuoteRemoveRecord("quote_0"),
+      ourFix,
+      laterCreate,
+    ]));
+
+    const state = await loadLatestState();
+
+    // The coincidental-match premise is real: final state DOES show
+    // quote_0 with the exact text this fix requested -- a final-state
+    // equality check would have wrongly called this fix a success.
+    expect(state!.human.quotes.find((q) => q.id === "quote_0")?.text).toBe("coincidental match");
+
+    // But the skip list still correctly, unambiguously identifies OUR
+    // fix's own attempt as skipped, entirely independent of the later
+    // create -- which contributes no skip at all, since it succeeded.
+    const skips = getLastCorrectionSkips();
+    const mine = skips.find((s) => s.attempt_id === "attempt-under-test");
+    expect(mine).toBeDefined();
+    expect(mine?.record_id).toBe("quote_0");
+    expect(mine?.reason).toContain("does not exist");
+    expect(skips.find((s) => s.attempt_id === "later-writer-attempt")).toBeUndefined();
   });
 
   it("T2: read overlay skips a quote.relink with a missing entity_type and still applies a later valid correction, with no throw (I2)", async () => {

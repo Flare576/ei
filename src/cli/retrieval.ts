@@ -690,7 +690,12 @@ export async function resolveExternalMessage(
         const { ClaudeCodeReader } = await import("../integrations/claude-code/reader.js");
         const reader = new ClaudeCodeReader();
         const messages = await reader.getMessagesForSession(parsed.session!);
-        const idx = messages.findIndex(m => m.id === parsed.nativeId);
+        // C1: also require the record's OWN sessionId to match the
+        // requested session -- defense in depth alongside the reader's
+        // own traversal guard (getMessagesForSession). Real Claude Code
+        // transcripts always satisfy this (a session's own records carry
+        // that session's id), so no legitimate lookup is affected.
+        const idx = messages.findIndex(m => m.id === parsed.nativeId && m.sessionId === parsed.session);
         if (idx === -1) return null;
 
         const container: ResolvedMessageContainer = { kind: "session", id: parsed.session!, display_name: parsed.session! };

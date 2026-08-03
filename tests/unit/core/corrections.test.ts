@@ -74,12 +74,12 @@ function makeQuote(id: string, dataItemIds: string[]): Quote {
 
 /** Builds a valid `quote.create` wire record: makeQuote's fields plus the create-only structural fields (op/entity_type/verified). data_item_ids/persona_groups default empty, matching create's own constraint. */
 function makeQuoteCreateRecord(id: string, overrides: Partial<QuoteCreateRecord> = {}): QuoteCreateRecord {
-  return { op: "quote.create", entity_type: "quote", ...makeQuote(id, []), channel: "Test Channel", verified: true, ...overrides };
+  return { op: "quote.create", entity_type: "quote", attempt_id: `attempt-${id}`, ...makeQuote(id, []), channel: "Test Channel", verified: true, ...overrides };
 }
 
 /** Builds a valid `quote.fix` wire record. `dataItemIds` defaults to [] but, unlike create, fix does not require emptiness — pass the target's current links to simulate an endpoint that correctly preserves them. */
 function makeQuoteFixRecord(id: string, dataItemIds: string[] = [], overrides: Partial<QuoteFixRecord> = {}): QuoteFixRecord {
-  return { op: "quote.fix", entity_type: "quote", ...makeQuote(id, dataItemIds), channel: "Test Channel", verified: true, ...overrides };
+  return { op: "quote.fix", entity_type: "quote", attempt_id: `attempt-${id}`, ...makeQuote(id, dataItemIds), channel: "Test Channel", verified: true, ...overrides };
 }
 
 /** Builds a valid `quote.relink` wire record — `{id, data_item_ids}` only, no provenance fields, no marker slot. */
@@ -613,6 +613,53 @@ describe("applyQuoteOperation — Corrections Wire Grammar dispatch (direct, no 
     expect(quotes[0].data_item_ids).toEqual(["anything-goes-without-human"]);
   });
 
+  it("rejects a quote.create record missing attempt_id (I5, round 3)", () => {
+    const record = makeQuoteCreateRecord("quote-1") as Record<string, unknown>;
+    delete record.attempt_id;
+    const { quotes, skipped } = applyQuoteOperation([], record);
+    expect(quotes).toEqual([]);
+    expect(skipped?.reason).toContain("attempt_id");
+    expect(skipped?.attempt_id).toBeUndefined();
+  });
+
+  it("rejects a quote.fix record missing attempt_id (I5, round 3)", () => {
+    const record = makeQuoteFixRecord("quote-1") as Record<string, unknown>;
+    delete record.attempt_id;
+    const { quotes, skipped } = applyQuoteOperation([], record);
+    expect(quotes).toEqual([]);
+    expect(skipped?.reason).toContain("attempt_id");
+    expect(skipped?.attempt_id).toBeUndefined();
+  });
+
+  it("rejects a quote.create record with an empty-string attempt_id", () => {
+    const record = { ...makeQuoteCreateRecord("quote-1"), attempt_id: "" };
+    const { quotes, skipped } = applyQuoteOperation([], record);
+    expect(quotes).toEqual([]);
+    expect(skipped?.reason).toContain("attempt_id");
+  });
+
+  it("rejects an attempt_id carried on a quote.relink record — the field does not exist on this shape at all", () => {
+    const existing = makeQuote("quote-1", []);
+    const record = { ...makeQuoteRelinkRecord("quote-1", []), attempt_id: "should-not-be-here" };
+    const { quotes, skipped } = applyQuoteOperation([existing], record);
+    expect(quotes).toEqual([existing]);
+    expect(skipped?.reason).toContain("attempt_id");
+  });
+
+  it("rejects an attempt_id carried on a quote.remove record — the field does not exist on this shape at all", () => {
+    const existing = makeQuote("quote-1", []);
+    const record = { ...makeQuoteRemoveRecord("quote-1"), attempt_id: "should-not-be-here" };
+    const { quotes, skipped } = applyQuoteOperation([existing], record);
+    expect(quotes).toEqual([existing]);
+    expect(skipped?.reason).toContain("attempt_id");
+  });
+
+  it("quote.create places a full verified record without leaking attempt_id onto the persisted Quote", () => {
+    const { quotes, skipped } = applyQuoteOperation([], makeQuoteCreateRecord("quote-attempt-check"));
+    expect(skipped).toBeUndefined();
+    expect(quotes[0]).not.toHaveProperty("attempt_id");
+  });
+
   it("rejects a quote.create record missing verified", () => {
     const record = makeQuoteCreateRecord("quote-1") as Record<string, unknown>;
     delete record.verified;
@@ -694,6 +741,10 @@ describe("applyQuoteOperation — Corrections Wire Grammar dispatch (direct, no 
     expect(skipped?.record_id).toBe("quote-1");
     expect(skipped?.reason).toContain("does not exist");
     expect(skipped?.reason).toContain("quote.create");
+    // I5: the dispatcher echoes back the attempt_id of the SKIPPED record
+    // itself — this is what lets fixQuoteEntity recognize its own queued
+    // write with certainty instead of inferring it from final state.
+    expect(skipped?.attempt_id).toBe(fixRecord.attempt_id);
   });
 
   it("a quote.fix never restores a data_item_ids/persona_groups link that an earlier-applied correction already cleared, even though the incoming record still carries the stale value (C1, T1 direct-dispatcher proof)", () => {
@@ -732,6 +783,7 @@ describe("applyQuoteOperation — Corrections Wire Grammar dispatch (direct, no 
       op: "quote.fix",
       entity_type: "quote",
       id: "quote-1",
+      attempt_id: "attempt-quote-1",
       message_id: "ei:forged-message",
       data_item_ids: ["fact-forged"],
       persona_groups: ["group-forged"],
@@ -958,7 +1010,7 @@ describe("quote.* op routing regardless of entity_type — create/fix/remove (I6
 
         const result = applyCorrectionToHuman(human, malformed);
 
-        expect(result).toEqual({ record_id: "quote-1", reason: expect.stringContaining("entity_type") });
+        expect(result).toEqual({ record_id: "quote-1", reason: expect.stringContaining("entity_type"), ...(label === "quote.remove" ? {} : { attempt_id: expect.any(String) }) });
         expect(human.quotes).toEqual([existing]);
       });
 
@@ -969,7 +1021,7 @@ describe("quote.* op routing regardless of entity_type — create/fix/remove (I6
 
         const result = applyCorrectionToState(state, malformed);
 
-        expect(result).toEqual({ record_id: "quote-1", reason: expect.stringContaining("entity_type") });
+        expect(result).toEqual({ record_id: "quote-1", reason: expect.stringContaining("entity_type"), ...(label === "quote.remove" ? {} : { attempt_id: expect.any(String) }) });
         expect(state.human.quotes).toEqual([existing]);
         expect(state.personas).toEqual({});
       });

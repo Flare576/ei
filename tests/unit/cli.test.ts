@@ -4,7 +4,8 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { spawnSync } from "child_process";
 import type { StorageState } from "../../src/core/types/integrations.js";
-import type { Person } from "../../src/core/types/data-items.js";
+import type { Person, Quote } from "../../src/core/types/data-items.js";
+import { ContextStatus } from "../../src/core/types/enums.js";
 import { PERSON_LOG_REFLECTION_THRESHOLD } from "../../src/core/orchestrators/ceremony.js";
 
 const NOW = "2026-01-01T00:00:00.000Z";
@@ -131,11 +132,11 @@ describe("CLI CRUD process behavior", () => {
     });
   });
 
-  it("exits non-zero and rejects quote as an invalid type for create (quotes are update-only)", () => {
+  it("exits non-zero and reports missing message_id/text for an empty create-quote body (Plan 2: create quote is now a real attested command, no longer update-only)", () => {
     const result = runCli(["create", "quote", "--json", "{}"]);
 
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("ei create requires a valid type (fact, topic, person, persona). Got: quote");
+    expect(result.stderr).toContain("Invalid quote (create): message_id: Required; text: Required");
   });
 
   it("exits non-zero and rejects quote as an invalid type for remove (quotes are non-removable)", () => {
@@ -475,5 +476,172 @@ describe("CLI --format prompt process behavior — Ei Person Log section", () =>
     expect(result.status).toBe(0);
     expect(result.stdout).toContain(`currently ${PERSON_LOG_REFLECTION_THRESHOLD} characters`);
     expect(result.stdout).not.toMatch(/reflection/i);
+  });
+});
+
+// ── I1: create/fix quote numeric flag errors never echo the raw input ────────
+// src/cli.ts's --start/--end numeric validation used to interpolate the raw
+// flag value verbatim into its error message. A quick, real-process
+// regression: a control-character-bearing invalid value must never surface
+// in stderr, just the stable "<flag> must be a number." message.
+describe("CLI create/fix quote — numeric flag error output is sanitized (I1)", () => {
+  it("does not echo the raw invalid --start value into the create-quote numeric flag error", () => {
+    const evilValue = "not-a-number\x1b[31mRED\x1b[0m";
+    const result = runCli([
+      "create", "quote",
+      "--message-id", "ei:00000000-0000-4000-8000-000000000000",
+      "--text", "anything",
+      "--start", evilValue,
+    ]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("--start must be a number.");
+    expect(result.stderr).not.toContain(evilValue);
+    expect(result.stderr).not.toContain("not-a-number");
+  });
+
+  it("does not echo the raw invalid --start value into the fix-quote numeric flag error", () => {
+    const evilValue = "\x07alsoNotANumber";
+    const result = runCli([
+      "fix", "quote",
+      "--quote-id", "does-not-matter",
+      "--text", "anything",
+      "--start", evilValue,
+    ]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("--start must be a number.");
+    expect(result.stderr).not.toContain(evilValue);
+    expect(result.stderr).not.toContain("alsoNotANumber");
+  });
+
+  it("does not echo a control-character-bearing --quote-id into the fix-quote not-found error (I1 round 2)", () => {
+    const evilQuoteId = "does-not-exist\x1b[31mRED\x1b[0m";
+    const result = runCli([
+      "fix", "quote",
+      "--quote-id", evilQuoteId,
+      "--text", "anything",
+    ]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Cannot fix quote: no quote found with the supplied id");
+    expect(result.stderr).not.toContain(evilQuoteId);
+    expect(result.stderr).not.toContain("does-not-exist");
+  });
+});
+
+// ── T14 (round 3): a genuinely SKIPPED fix must never echo the raw quote
+// id or the internal skip diagnostic through the CLI transport ─────────
+// The review's own reproduction races a concurrent quote.remove between
+// verification and self-drain -- not reproducible deterministically
+// across two real OS processes without introducing a flaky test (see
+// decisions.md). This reaches the IDENTICAL public-error code path (a
+// post-write skip surfacing through fixQuoteEntity's attempt_id check)
+// via a deterministic trigger instead: a malformed carried-forward
+// `speaker` field the wire grammar rejects on write, exactly like I5's
+// corrections-endpoints.test.ts reproduction.
+describe("CLI fix quote — a genuinely skipped write never echoes the raw id or internal reason (T14, round 3)", () => {
+  it("does not echo a control-character-bearing quote id or the internal skip diagnostic when the queued fix is itself rejected", () => {
+    const evilQuoteId = "attest\x1b[31mRED\x1b[0mquote-1";
+    const personaId = "55555555-5555-4555-8555-555555555555";
+    const msgId = "ei:ffffffff-ffff-4fff-8fff-ffffffffffff";
+    const content = "some resolvable content lives here for the CLI fix quote test";
+    const quote: Quote = {
+      id: evilQuoteId,
+      message_id: msgId,
+      data_item_ids: [],
+      persona_groups: [],
+      text: content,
+      // Malformed: the wire grammar requires a non-empty speaker on any
+      // real write. Simulates hand-edited/pre-migration state.
+      speaker: "",
+      timestamp: NOW,
+      start: 0,
+      end: content.length,
+      created_at: NOW,
+      created_by: "human",
+    };
+    const state: StorageState = {
+      version: 1,
+      timestamp: NOW,
+      human: { entity: "human", facts: [], topics: [], people: [], quotes: [quote], last_updated: NOW },
+      personas: {
+        [personaId]: {
+          entity: {
+            id: personaId,
+            display_name: "Attest Persona",
+            aliases: [],
+            entity: "system",
+            short_description: "t",
+            long_description: "t",
+            model: "Local LLM:test-model",
+            traits: [],
+            topics: [],
+            is_paused: false,
+            is_archived: false,
+            is_static: false,
+            last_updated: NOW,
+          },
+          messages: [{ id: msgId, role: "human", content, timestamp: NOW, read: false, context_status: ContextStatus.Default }],
+        },
+      },
+      queue: [],
+      providers: [],
+      tools: [],
+    };
+    writeFileSync(join(tempDir, "state.json"), JSON.stringify(state));
+
+    const result = runCli(["fix", "quote", "--quote-id", evilQuoteId, "--text", content]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Cannot fix quote: the write could not be verified");
+    expect(result.stderr).not.toContain(evilQuoteId);
+    expect(result.stderr).not.toContain("\x1b[31m");
+    expect(result.stderr).not.toContain("does not exist");
+    expect(result.stderr).not.toContain("speaker");
+  }, 20000);
+});
+
+// ── I6/T17 (round 4/5): an extra --json property is merged straight into
+// the endpoint body before it ever reaches quoteCreateInputSchema/
+// quoteFixInputSchema's z.strictObject. Zod's own "unrecognized_keys"
+// issue built its message directly from the caller's literal property
+// name -- echoing that verbatim let a --json key decoded from terminal
+// control/ANSI bytes reach CLI stderr unsanitized
+// (.sisyphus/reviews/wave-2-quote-attestation.md). The fix must report a
+// stable, generic "unrecognized field(s) present" refusal instead of the
+// raw key text, for both create quote and fix quote.
+describe("CLI create/fix quote — an extra --json key name is sanitized, never echoed (I6/T17)", () => {
+  it("does not echo a control/ANSI-bearing extra --json key into the create-quote validation error", () => {
+    const evilKey = "\x1b[31mFORGED\x1b[0m";
+    const result = runCli([
+      "create", "quote",
+      "--message-id", "ei:00000000-0000-4000-8000-000000000000",
+      "--text", "anything",
+      "--json", JSON.stringify({ [evilKey]: "x" }),
+    ]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Invalid quote (create): unrecognized field(s) present");
+    expect(result.stderr).not.toContain(evilKey);
+    expect(result.stderr).not.toContain("FORGED");
+    expect(result.stderr).not.toContain("\x1b[31m");
+  });
+
+  it("does not echo a control/ANSI-bearing extra --json key into the fix-quote validation error", () => {
+    const evilKey = "\x07bell\x1b[31mFORGED\x1b[0m";
+    const result = runCli([
+      "fix", "quote",
+      "--quote-id", "does-not-matter",
+      "--text", "anything",
+      "--json", JSON.stringify({ [evilKey]: "x" }),
+    ]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Invalid quote (fix): unrecognized field(s) present");
+    expect(result.stderr).not.toContain(evilKey);
+    expect(result.stderr).not.toContain("FORGED");
+    expect(result.stderr).not.toContain("\x07");
+    expect(result.stderr).not.toContain("\x1b[31m");
   });
 });

@@ -55,12 +55,12 @@ function makeQuote(data_item_ids: string[], overrides: Partial<Quote> = {}): Quo
 
 /** Builds a valid `quote.create` wire record — makeQuote's fields plus the create-only structural fields (op/entity_type/channel/embedding/verified). data_item_ids/persona_groups default empty, matching create's own constraint. */
 function makeQuoteCreateRecord(overrides: Partial<QuoteCreateRecord> = {}): QuoteCreateRecord {
-  return { op: "quote.create", entity_type: "quote", ...makeQuote([]), channel: "Test Channel", embedding: [0.1, 0.2, 0.3], verified: true, ...overrides };
+  return { op: "quote.create", entity_type: "quote", attempt_id: crypto.randomUUID(), ...makeQuote([]), channel: "Test Channel", embedding: [0.1, 0.2, 0.3], verified: true, ...overrides };
 }
 
 /** Builds a valid `quote.fix` wire record. Unlike create, fix does not require empty data_item_ids/persona_groups. */
 function makeQuoteFixRecord(dataItemIds: string[] = [], overrides: Partial<QuoteFixRecord> = {}): QuoteFixRecord {
-  return { op: "quote.fix", entity_type: "quote", ...makeQuote(dataItemIds), channel: "Test Channel", embedding: [0.1, 0.2, 0.3], verified: true, ...overrides };
+  return { op: "quote.fix", entity_type: "quote", attempt_id: crypto.randomUUID(), ...makeQuote(dataItemIds), channel: "Test Channel", embedding: [0.1, 0.2, 0.3], verified: true, ...overrides };
 }
 
 /** Builds a valid `quote.relink` wire record — `{id, data_item_ids}` only. */
@@ -250,8 +250,9 @@ describe("writeCorrection — self-drain and branch selection", () => {
       timestamp: NOW,
     };
 
-    await writeCorrection(removeFact);
+    const result = await writeCorrection(removeFact);
 
+    expect(result).toEqual({ skipped: [], drainMode: "queued" });
     expect(readFileSync(statePath, "utf-8")).toBe(originalState);
     expect(readJson<CorrectionRecord[]>(correctionsPath)).toEqual([removeFact]);
   });
@@ -340,8 +341,9 @@ describe("writeCorrection — self-drain and branch selection", () => {
       timestamp: NOW,
     };
 
-    await writeCorrection(removeFact);
+    const result = await writeCorrection(removeFact);
 
+    expect(result).toEqual({ skipped: [], drainMode: "queued" });
     expect(existsSync(join(tempDir, "state.json"))).toBe(false);
     expect(readJson<CorrectionRecord[]>(correctionsPath)).toEqual([removeFact]);
   });
@@ -478,17 +480,18 @@ describe("writeCorrection — self-drain and branch selection", () => {
 });
 
 describe("writeCorrection — quote corrections (Corrections Wire Grammar)", () => {
-  it("self-drains a quote.create correction into state.json, never leaking the wire-only verified marker onto the persisted Quote", async () => {
+  it("self-drains a quote.create correction into state.json, never leaking the wire-only verified marker or attempt_id onto the persisted Quote", async () => {
     const statePath = join(tempDir, "state.json");
     writeJson(statePath, buildState());
 
     const result = await writeCorrection(makeQuoteCreateRecord());
 
-    expect(result).toEqual({ skipped: [] });
+    expect(result).toEqual({ skipped: [], drainMode: "self" });
     const persisted = readJson<StorageState>(statePath);
     const applied = persisted.human.quotes.find((q) => q.id === "quote-1");
     expect(applied).toBeDefined();
     expect(applied).not.toHaveProperty("verified");
+    expect(applied).not.toHaveProperty("attempt_id");
   });
 
   it("self-drains a quote.relink correction, changing only data_item_ids and leaving every other field byte-identical", async () => {
@@ -498,7 +501,7 @@ describe("writeCorrection — quote corrections (Corrections Wire Grammar)", () 
 
     const result = await writeCorrection(makeQuoteRelinkRecord("quote-1", ["split-person"]));
 
-    expect(result).toEqual({ skipped: [] });
+    expect(result).toEqual({ skipped: [], drainMode: "self" });
     const persisted = readJson<StorageState>(statePath);
     expect(persisted.human.quotes).toEqual([{ ...existing, data_item_ids: ["split-person"] }]);
   });
@@ -509,7 +512,7 @@ describe("writeCorrection — quote corrections (Corrections Wire Grammar)", () 
 
     const result = await writeCorrection(makeQuoteRemoveRecord("quote-1"));
 
-    expect(result).toEqual({ skipped: [] });
+    expect(result).toEqual({ skipped: [], drainMode: "self" });
     const persisted = readJson<StorageState>(statePath);
     expect(persisted.human.quotes).toEqual([]);
   });
@@ -579,7 +582,7 @@ describe("writeCorrection — quote corrections (Corrections Wire Grammar)", () 
       timestamp: NOW,
     });
 
-    expect(result.skipped).toEqual([{ record_id: "quote-doomed", reason: expect.stringContaining("does not exist") }]);
+    expect(result.skipped).toEqual([{ record_id: "quote-doomed", attempt_id: staleFixForDoomed.attempt_id, reason: expect.stringContaining("does not exist") }]);
 
     const persisted = readJson<StorageState>(statePath);
     // The removed quote was never recreated by the stale fix that targeted it.
@@ -643,7 +646,7 @@ describe("writeCorrection — quote corrections (Corrections Wire Grammar)", () 
       timestamp: NOW,
     });
 
-    expect(result.skipped).toEqual([{ record_id: "quote-new", reason: expect.stringContaining("entity_type") }]);
+    expect(result.skipped).toEqual([{ record_id: "quote-new", attempt_id: malformedCreate.attempt_id, reason: expect.stringContaining("entity_type") }]);
 
     const persisted = readJson<StorageState>(statePath);
     expect(persisted.human.quotes.find((q) => q.id === "quote-new")).toBeUndefined();
@@ -671,7 +674,7 @@ describe("writeCorrection — quote corrections (Corrections Wire Grammar)", () 
       timestamp: NOW,
     });
 
-    expect(result.skipped).toEqual([{ record_id: "quote-keep", reason: expect.stringContaining("entity_type") }]);
+    expect(result.skipped).toEqual([{ record_id: "quote-keep", attempt_id: malformedFix.attempt_id, reason: expect.stringContaining("entity_type") }]);
 
     const persisted = readJson<StorageState>(statePath);
     expect(persisted.human.quotes.find((q) => q.id === "quote-keep")?.text).toBe(survivingQuote.text);

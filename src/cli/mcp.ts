@@ -6,7 +6,7 @@ import type { StorageState } from "../core/types.js";
 import type { Message } from "../core/types.js";
 import type { RoomMessage } from "../core/types/rooms.js";
 import { resolvePersonaId, filterByPersona, filterTypeSpecificByPersona, filterBySource, filterTypeSpecificBySource } from "./persona-filter.js";
-import { createEntity, updateEntity, removeEntity, CorrectionValidationError } from "./corrections-endpoints.js";
+import { createEntity, updateEntity, removeEntity, createQuoteEntity, fixQuoteEntity, CorrectionValidationError } from "./corrections-endpoints.js";
 import { createPersonaEntity, updatePersonaEntity, removePersonaEntity } from "./persona-corrections.js";
 
 // Exported so tests can inject their own transport
@@ -331,6 +331,52 @@ export function createMcpServer(): McpServer {
         return { content: [{ type: "text" as const, text: JSON.stringify({ removed: true, id }, null, 2) }] };
       } catch (e) {
         return { content: [{ type: "text" as const, text: `Error: ${(e as Error).message}` }], isError: true };
+      }
+    }
+  );
+
+  server.registerTool(
+    "ei_quote_create",
+    {
+      description:
+        "Create a new, source-verified Quote by matching caller-supplied text against a resolved source message. The message must already exist and be resolvable — use ei_fetch_message first to read it and copy the exact text to quote. speaker/timestamp/channel/embedding are all derived server-side from the resolved source and can never be supplied by the caller (rejected at the schema level). Refuses without persisting anything if the text cannot be found in the source message (normalized-exact or word-boundary match), or if the source message itself cannot be resolved. `start`/`end` are optional and are a consistency check only, never a way to select a later occurrence of repeated text: if supplied, both must exactly match the location the server independently finds, or the write refuses.",
+      inputSchema: {
+        message_id: z.string().describe("Fully-qualified id of the source message to quote from — from ei_search's quote.message_id field or ei_fetch_message."),
+        text: z.string().describe("The exact quote text to verify against the source message's content. Must appear verbatim (allowing for whitespace/punctuation normalization) in the resolved message."),
+        start: z.number().optional().describe("Optional: the expected raw character offset (start) of the quote within the source message — only useful to disambiguate repeated text. Must be supplied together with `end` and must exactly match what the server independently finds, or the write is refused."),
+        end: z.number().optional().describe("Optional: the expected raw character offset (end, exclusive) of the quote within the source message. See `start`."),
+      },
+    },
+    async ({ message_id, text, start, end }) => {
+      try {
+        const record = await createQuoteEntity({ message_id, text, start, end });
+        return { content: [{ type: "text" as const, text: JSON.stringify(record, null, 2) }] };
+      } catch (e) {
+        const message = e instanceof CorrectionValidationError ? e.message : (e as Error).message;
+        return { content: [{ type: "text" as const, text: `Error: ${message}` }], isError: true };
+      }
+    }
+  );
+
+  server.registerTool(
+    "ei_quote_fix",
+    {
+      description:
+        "Re-verify and correct an existing Quote's text against its already-recorded source message. Only `text`/`start`/`end`/the embedding can change — message_id, speaker, timestamp, channel, links (data_item_ids/persona_groups), and provenance (created_at/created_by) are always preserved from the existing record and can never be supplied by the caller (rejected at the schema level); a fix never re-resolves a new source, it only re-verifies against the one the quote already has. Refuses without persisting anything if the quote has no message_id to verify against (it predates attestation), if the recorded source message can no longer be resolved, if the text cannot be found in that source, or if supplied start/end offsets don't match the location the server independently found.",
+      inputSchema: {
+        quote_id: z.string().describe("The id of the existing Quote to fix, from ei_search or ei_lookup."),
+        text: z.string().describe("The corrected quote text to verify against the quote's existing source message."),
+        start: z.number().optional().describe("Optional: the expected raw character offset (start) of the quote — only useful to disambiguate repeated text. Must be supplied together with `end` and must exactly match what the server independently finds, or the write is refused."),
+        end: z.number().optional().describe("Optional: the expected raw character offset (end, exclusive). See `start`."),
+      },
+    },
+    async ({ quote_id, text, start, end }) => {
+      try {
+        const record = await fixQuoteEntity({ quote_id, text, start, end });
+        return { content: [{ type: "text" as const, text: JSON.stringify(record, null, 2) }] };
+      } catch (e) {
+        const message = e instanceof CorrectionValidationError ? e.message : (e as Error).message;
+        return { content: [{ type: "text" as const, text: `Error: ${message}` }], isError: true };
       }
     }
   );

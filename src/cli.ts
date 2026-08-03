@@ -17,7 +17,7 @@ import type { StorageState } from "./core/types";
 import { resolvePersonaId, filterByPersona, filterTypeSpecificByPersona, filterBySource, filterTypeSpecificBySource } from "./cli/persona-filter.js";
 import { installMcpClients } from "./cli/install.js";
 import { getRecentSessionMessages } from "./cli/session-context.js";
-import { createEntity, updateEntity, removeEntity, CorrectionValidationError, CORRECTABLE_TYPES, UPDATABLE_TYPES } from "./cli/corrections-endpoints.js";
+import { createEntity, updateEntity, removeEntity, createQuoteEntity, fixQuoteEntity, CorrectionValidationError, CORRECTABLE_TYPES, UPDATABLE_TYPES } from "./cli/corrections-endpoints.js";
 import { createPersonaEntity, updatePersonaEntity, removePersonaEntity } from "./cli/persona-corrections.js";
 import type { CorrectableType } from "./core/corrections.js";
 import pkg from "../package.json" assert { type: "json" };
@@ -72,6 +72,18 @@ const PLURAL_TO_UPDATABLE: Record<string, CorrectableType> = Object.fromEntries(
 function resolveUpdatableType(raw: string): CorrectableType | null {
   const plural = TYPE_ALIASES[raw];
   return plural ? PLURAL_TO_UPDATABLE[plural] ?? null : null;
+}
+
+/**
+ * Reads the value immediately following `flag` in `args` (e.g.
+ * `readFlag(args, "--text")` for `... --text "foo" ...`), matching the
+ * existing inline `args.indexOf("--json")` convention used by
+ * create/update above — extracted once here since `ei create quote`/
+ * `ei fix quote` each need several discrete flags rather than just one.
+ */
+function readFlag(args: string[], flag: string): string | undefined {
+  const idx = args.indexOf(flag);
+  return idx !== -1 ? args[idx + 1] : undefined;
 }
 
 function printHelp(): void {
@@ -197,6 +209,51 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
+  // Intercepted ahead of the generic `create <type>` dispatch below:
+  // "quote" is deliberately absent from CLI_CORRECTABLE_TYPES (a quote can
+  // only be created through this source-verified path, never the generic
+  // upsert schema), so this must run first or `resolveCorrectableType`
+  // would reject it as an invalid type before ever reaching here.
+  if (args[0] === "create" && args[1] === "quote") {
+    const body: Record<string, unknown> = {};
+    const messageId = readFlag(args, "--message-id");
+    const text = readFlag(args, "--text");
+    if (messageId !== undefined) body.message_id = messageId;
+    if (text !== undefined) body.text = text;
+    for (const [flag, key] of [["--start", "start"], ["--end", "end"]] as const) {
+      const raw = readFlag(args, flag);
+      if (raw !== undefined) {
+        const n = Number(raw);
+        if (!Number.isFinite(n)) {
+          console.error(`${flag} must be a number.`);
+          process.exit(1);
+        }
+        body[key] = n;
+      }
+    }
+    const jsonStr = readFlag(args, "--json");
+    if (jsonStr !== undefined) {
+      let parsedJson: unknown;
+      try {
+        parsedJson = JSON.parse(jsonStr);
+      } catch (e) {
+        console.error(`Invalid JSON: ${(e as Error).message}`);
+        process.exit(1);
+      }
+      if (parsedJson && typeof parsedJson === "object") {
+        Object.assign(body, parsedJson);
+      }
+    }
+    try {
+      const record = await createQuoteEntity(body);
+      console.log(JSON.stringify(record, null, 2));
+      process.exit(0);
+    } catch (e) {
+      console.error(e instanceof CorrectionValidationError ? e.message : (e as Error).message);
+      process.exit(1);
+    }
+  }
+
   if (args[0] === "create") {
     const rawType = args[1];
     const entityType = rawType ? resolveCorrectableType(rawType) : null;
@@ -276,6 +333,53 @@ async function main(): Promise<void> {
       process.exit(0);
     } catch (e) {
       console.error((e as Error).message);
+      process.exit(1);
+    }
+  }
+
+  // "fix" is a new, reserved top-level verb — quote-only, no other type
+  // supports it — so an unrecognized second argument is a usage error
+  // rather than falling through to the search path at the bottom of main().
+  if (args[0] === "fix") {
+    if (args[1] !== "quote") {
+      console.error(`Usage: ei fix quote --quote-id <id> --text "<text>" [--start N --end N]`);
+      process.exit(1);
+    }
+    const body: Record<string, unknown> = {};
+    const quoteId = readFlag(args, "--quote-id");
+    const text = readFlag(args, "--text");
+    if (quoteId !== undefined) body.quote_id = quoteId;
+    if (text !== undefined) body.text = text;
+    for (const [flag, key] of [["--start", "start"], ["--end", "end"]] as const) {
+      const raw = readFlag(args, flag);
+      if (raw !== undefined) {
+        const n = Number(raw);
+        if (!Number.isFinite(n)) {
+          console.error(`${flag} must be a number.`);
+          process.exit(1);
+        }
+        body[key] = n;
+      }
+    }
+    const jsonStr = readFlag(args, "--json");
+    if (jsonStr !== undefined) {
+      let parsedJson: unknown;
+      try {
+        parsedJson = JSON.parse(jsonStr);
+      } catch (e) {
+        console.error(`Invalid JSON: ${(e as Error).message}`);
+        process.exit(1);
+      }
+      if (parsedJson && typeof parsedJson === "object") {
+        Object.assign(body, parsedJson);
+      }
+    }
+    try {
+      const record = await fixQuoteEntity(body);
+      console.log(JSON.stringify(record, null, 2));
+      process.exit(0);
+    } catch (e) {
+      console.error(e instanceof CorrectionValidationError ? e.message : (e as Error).message);
       process.exit(1);
     }
   }

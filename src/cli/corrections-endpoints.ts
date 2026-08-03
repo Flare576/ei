@@ -10,16 +10,26 @@
  * a full record obtained from ei_lookup: unset optional fields are treated
  * as absent, not "leave existing value alone" (full-replacement semantics —
  * see design discussion for why partial-field patching isn't safe here).
+ *
+ * createQuoteEntity/fixQuoteEntity (`ei create quote`/`ei fix quote`) are a
+ * separate, source-verified write path living in this same file: they
+ * resolve a source message and match caller text against it before ever
+ * building a CorrectionRecord, per the Corrections Wire Grammar
+ * (`.sisyphus/plans/2-quote-attestation.md`) — see verifyQuoteAgainstSource.
  */
 
 import { z } from "zod";
-import { loadLatestState } from "./retrieval.js";
+import { loadLatestState, resolveExternalMessage } from "./retrieval.js";
 import { writeCorrection } from "./corrections-writer.js";
 import { sanitizeEiPersonaIdentifiers } from "../core/utils/identifier-utils.js";
+import { isQualifiedMessageId, qualifyEiMessage, UUID_PATTERN } from "../core/utils/message-id.js";
 import { computeDataItemEmbedding, computeQuoteEmbedding } from "../core/embedding-service.js";
-import type { CorrectableType, CorrectionRecord } from "../core/corrections.js";
+import type { CorrectableType, CorrectionRecord, QuoteCreateRecord, QuoteFixRecord } from "../core/corrections.js";
 import type { Fact, Topic, Person, Quote } from "../core/types.js";
 import type { PersonaEntity } from "../core/types/entities.js";
+import type { ResolvedMessage } from "./retrieval.js";
+import { matchQuoteInMessage } from "../core/handlers/human-matching.js";
+import type { QuoteMatch } from "../core/handlers/human-matching.js";
 
 // Fact/topic/person handling below is keyed by this narrower alias, not the
 // full CorrectableType — parseInput/buildAndWriteUpsert only ever validate
@@ -105,6 +115,61 @@ const quoteSchema = z.strictObject({
 });
 export type QuoteInput = z.infer<typeof quoteSchema>;
 
+/**
+ * `ei create quote` / MCP `ei_quote_create` input — deliberately narrow:
+ * only `message_id`/`text` (required) and `start`/`end` (optional
+ * consistency-check offsets, see verifyQuoteAgainstSource below) are
+ * accepted. speaker/timestamp/channel/embedding/created_at/created_by are
+ * never caller-supplied — they're derived server-side in createQuoteEntity
+ * — so `z.strictObject` schema-rejects any of those fields the instant
+ * they appear, before any resolution/matching ever runs.
+ */
+const quoteCreateInputSchema = z.strictObject({
+  message_id: z.string().min(1),
+  text: z.string().min(1),
+  start: z.number().optional(),
+  end: z.number().optional(),
+});
+export type QuoteCreateInput = z.infer<typeof quoteCreateInputSchema>;
+
+/**
+ * `ei fix quote` / MCP `ei_quote_fix` input — same narrowness as create,
+ * keyed by `quote_id` instead of `message_id`: a fix re-verifies against
+ * the target's EXISTING source, it never re-resolves a new one (see
+ * fixQuoteEntity below).
+ */
+const quoteFixInputSchema = z.strictObject({
+  quote_id: z.string().min(1),
+  text: z.string().min(1),
+  start: z.number().optional(),
+  end: z.number().optional(),
+});
+export type QuoteFixInput = z.infer<typeof quoteFixInputSchema>;
+
+/**
+ * Formats zod validation issues for quoteCreateInputSchema/quoteFixInputSchema
+ * failures. Every field on these two strict, enum-free schemas
+ * (message_id/quote_id/text: string, start/end: number) only ever produces
+ * a fixed schema field name or a bounded JS type name in its `.message` --
+ * neither is caller-controlled. `unrecognized_keys` is the one exception:
+ * Zod builds that issue's own message directly from the caller's literal
+ * `--json` property names (node_modules/zod/v3/locales/en.js:17-19), so
+ * echoing it verbatim let an extra JSON key -- including one decoded from
+ * terminal control/ANSI bytes -- reach CLI/MCP output unsanitized (I6,
+ * .sisyphus/reviews/wave-2-quote-attestation.md). That one issue gets a
+ * fixed, generic message instead; every other issue keeps its normal,
+ * already-safe `path: message` text.
+ */
+function formatQuoteValidationIssues(issues: z.ZodIssue[]): string {
+  return issues
+    .map((issue) =>
+      issue.code === z.ZodIssueCode.unrecognized_keys
+        ? "unrecognized field(s) present"
+        : `${issue.path.join(".")}: ${issue.message}`
+    )
+    .join("; ");
+}
+
 const SCHEMAS = { fact: factSchema, topic: topicSchema, person: personSchema } as const;
 
 export type FactInput = z.infer<typeof factSchema>;
@@ -113,6 +178,27 @@ export type PersonInput = z.infer<typeof personSchema>;
 
 /** Thrown on schema violations — callers should surface `.message` directly, not swallow it. */
 export class CorrectionValidationError extends Error {}
+
+/**
+ * Returned by createQuoteEntity/fixQuoteEntity instead of the
+ * materialized Quote when writeCorrection() could only append the
+ * record — a live Ei instance holds ei.lock, or (per
+ * corrections-writer.ts's backup-only branch) no instance is running yet
+ * but a remote sync pull is pending. Nothing has validated the write
+ * synchronously in either case: the record is durably queued in
+ * corrections.json and will be applied (or skipped) whenever that other
+ * process's own drain next runs, but that outcome lives entirely in a
+ * different process and cannot be observed from here (I8,
+ * .sisyphus/reviews/wave-2-quote-attestation.md). Deliberately never
+ * shaped like a Quote (no `text`/`message_id`/etc.) so a caller cannot
+ * mistake this for a confirmed create/fix — re-querying `id` (e.g. via
+ * ei_lookup) after the fact is the only way to confirm the outcome.
+ */
+export interface QuoteWritePending {
+  status: "queued";
+  id: string;
+  message: string;
+}
 
 /**
  * Strip the embedding vector before handing a just-written record back to a
@@ -279,6 +365,308 @@ async function updateQuoteEntity(id: string, body: unknown): Promise<Quote> {
   const correction: CorrectionRecord = { op: "upsert", entity_type: "quote", id, record, timestamp: new Date().toISOString() };
   await writeCorrection(correction);
   return stripEmbedding(record);
+}
+
+/**
+ * Shared verification core for createQuoteEntity/fixQuoteEntity (the
+ * plan's "same verification core as create" requirement for fix).
+ * Resolves `messageId` via T2a's ResolvedMessage adapter, matches
+ * `candidateText` against the resolved content via T1's
+ * matchQuoteInMessage (Level 1 normalized-exact, Level 2 word-boundary
+ * fallback — first-hit only, no later-occurrence selection), and enforces
+ * the offset disambiguator's consistency-check semantics: `start`/`end`,
+ * when supplied, must exactly equal the half-open span the matcher
+ * independently finds, or the write refuses — they are never an
+ * occurrence-selector.
+ *
+ * Throws a plain Error (never CorrectionValidationError — these are
+ * verification-time refusals against otherwise well-formed input, not
+ * schema-shape violations) with one of three shared, named reasons:
+ * "source message could not be found" (the message_id doesn't resolve at
+ * all — a null/refused/cross-machine-error result from
+ * resolveExternalMessage are all the same "cannot verify" disposition for
+ * this purpose; a refusal/error's own more specific detail is
+ * deliberately never echoed into this message — it can carry a
+ * caller-controlled id or this machine's own hostname, see I1 in
+ * .sisyphus/reviews/wave-2-quote-attestation.md), "quote text not found
+ * in source message" (no match at either level), or "offset does not
+ * match the resolved text location" (start/end supplied but
+ * inconsistent, only one of the two supplied, or either falls outside
+ * the source content's bounds — an out-of-range offset can never equal
+ * the matcher's real, in-bounds position, so a single equality check
+ * covers all three cases). `refusalPrefix` supplies the create/fix-
+ * specific context (and, for fix, the target id).
+ */
+async function verifyQuoteAgainstSource(
+  messageId: string,
+  candidateText: string,
+  callerStart: number | undefined,
+  callerEnd: number | undefined,
+  refusalPrefix: string
+): Promise<{ resolved: ResolvedMessage; match: QuoteMatch }> {
+  const resolved = await resolveExternalMessage(messageId);
+  if (!resolved || "refused" in resolved || "error" in resolved) {
+    throw new Error(`${refusalPrefix}: source message could not be found`);
+  }
+
+  const match = matchQuoteInMessage(candidateText, resolved.content);
+  if (!match) {
+    throw new Error(`${refusalPrefix}: quote text not found in source message`);
+  }
+
+  const hasStart = callerStart !== undefined;
+  const hasEnd = callerEnd !== undefined;
+  if (hasStart || hasEnd) {
+    const consistent = hasStart && hasEnd && callerStart === match.start && callerEnd === match.end;
+    if (!consistent) {
+      throw new Error(`${refusalPrefix}: offset does not match the resolved text location`);
+    }
+  }
+
+  return { resolved, match };
+}
+
+/**
+ * `ei create quote` / MCP `ei_quote_create` — the only path that can
+ * originate a brand-new, verified Quote. Verifies `text` against the
+ * message `message_id` resolves to, then derives every provenance field
+ * server-side: `message_id` becomes the resolver's canonical `source_id`
+ * (never the caller's raw input), `speaker`/`channel`/`timestamp` come
+ * from the resolved source, `embedding` is computed fresh from the
+ * matched text, and `created_by` is the literal "extraction" — per the
+ * design's decision that this value means "verifiable," not "produced by
+ * the extraction pipeline specifically." `data_item_ids`/`persona_groups`
+ * start empty (a freshly created quote has no links yet — relink is a
+ * separate verb). Queues a Wire-Grammar `quote.create` record carrying
+ * `verified: true`.
+ *
+ * Returns a QuoteWritePending instead of the materialized Quote when
+ * writeCorrection() could only queue the record (see the I8 comment
+ * below) — a caller that only checks for Quote-shaped fields must not
+ * mistake that for a confirmed create.
+ */
+export async function createQuoteEntity(body: unknown): Promise<Quote | QuoteWritePending> {
+  const result = quoteCreateInputSchema.safeParse(body);
+  if (!result.success) {
+    throw new CorrectionValidationError(
+      `Invalid quote (create): ${formatQuoteValidationIssues(result.error.issues)}`
+    );
+  }
+  const { message_id, text, start, end } = result.data;
+
+  const { resolved, match } = await verifyQuoteAgainstSource(message_id, text, start, end, "Cannot create quote");
+
+  const speaker = resolved.speaker.kind === "human" ? "human" : resolved.speaker.display_name;
+  const embedding = await computeQuoteEmbedding(match.text);
+
+  const quote: Quote = {
+    id: crypto.randomUUID(),
+    message_id: resolved.source_id,
+    data_item_ids: [],
+    persona_groups: [],
+    text: match.text,
+    speaker,
+    channel: resolved.container.display_name,
+    timestamp: resolved.timestamp,
+    start: match.start,
+    end: match.end,
+    created_at: new Date().toISOString(),
+    created_by: "extraction",
+    embedding,
+  };
+
+  const attemptId = crypto.randomUUID();
+  // I7 (round 4, .sisyphus/reviews/wave-2-quote-attestation.md): attempt_id
+  // is listed AFTER ...quote, never before -- `quote` above is always
+  // freshly constructed with no attempt_id of its own, but ordering it
+  // last here too (matching the already-correct channel/embedding/verified
+  // pattern) means a fresh call token can never be shadowed even if that
+  // ever stopped being true. This fix must not depend on the invariant
+  // holding perfectly forever; see fixQuoteEntity, where `quote` starts
+  // from persisted state and the same defense is load-bearing today.
+  const record: QuoteCreateRecord = { op: "quote.create", entity_type: "quote", ...quote, channel: resolved.container.display_name, embedding: quote.embedding ?? [], verified: true, attempt_id: attemptId };
+  const { skipped, drainMode } = await writeCorrection(record);
+
+  // I8 (round 4): a "queued" drain mode means writeCorrection() only
+  // appended this record -- a live Ei instance (or a pending sync) will
+  // validate and apply it on its own, in a different process, on its own
+  // loop. That process's outcome cannot be observed synchronously here: a
+  // live Processor can drain and clear corrections.json at any point
+  // after this call returns, including before any follow-up read this
+  // function could perform, which made re-deriving the outcome via a
+  // fresh overlay read (the retired getLastCorrectionSkips() fallback)
+  // a genuine race -- by the time such a read happened, the queue entry
+  // (and any skip it produced) could already be gone, which the old code
+  // wrongly read as "not found in skips, must have succeeded." Report the
+  // honest, unresolved state instead of guessing at a result that may
+  // already be stale the moment it's computed.
+  if (drainMode === "queued") {
+    return {
+      status: "queued",
+      id: quote.id,
+      message: "Quote create queued: a live Ei instance is processing this write; it has not been confirmed yet.",
+    };
+  }
+
+  // I5 (round 3) / I7 (round 4): attempt_id -- a fresh crypto.randomUUID()
+  // minted for this call alone, never persisted on the Quote itself -- is
+  // what proves THIS call's own record applied, replacing the retired
+  // final-state read-back entirely (a coincidental text match could
+  // otherwise manufacture a false success). A self-drain's `skipped`
+  // return already reflects validation run synchronously against
+  // `record` (writeCorrection), so it alone is authoritative -- there is
+  // nothing left to re-check (the live-lock/backup-only case is handled
+  // entirely above, so `drainMode` here is always "self"). See the
+  // longer matching comment in fixQuoteEntity for the full rationale;
+  // create shares the identical mechanism so both endpoints use one
+  // uniform verdict strategy rather than two.
+  const skippedMine = skipped.some((s) => s.attempt_id === attemptId);
+  if (skippedMine) {
+    throw new Error("Cannot create quote: the write could not be verified");
+  }
+
+  return stripEmbedding(quote);
+}
+
+/**
+ * `ei fix quote` / MCP `ei_quote_fix` — re-verifies an existing Quote's
+ * text against its ALREADY-RECORDED source (never re-resolves a new
+ * message_id — see the field table in the plan). Refuses with four
+ * distinct, named reasons: orphaned (the target's `message_id` is already
+ * null — nothing to verify against), dangling (the recorded source no
+ * longer resolves), no-match (the text isn't found in the source), and
+ * offset-mismatch (supplied start/end don't match what the matcher
+ * independently finds).
+ *
+ * `message_id`/`speaker`/`timestamp`/`channel`/`created_at`/`created_by`/
+ * `data_item_ids`/`persona_groups` are all copied from the CURRENT record
+ * purely so the wire record satisfies the Corrections Wire Grammar's
+ * full-field-set shape — the dispatcher (applyQuoteOperation) overwrites
+ * all eight from its own current-state copy at apply time regardless of
+ * what's sent here, so no effort is spent deriving anything "better" for
+ * them than what's already on `current`.
+ *
+ * Returns a QuoteWritePending instead of the materialized Quote when
+ * writeCorrection() could only queue the record (see the I8 comment
+ * below) — a caller that only checks for Quote-shaped fields must not
+ * mistake that for a confirmed fix.
+ */
+export async function fixQuoteEntity(body: unknown): Promise<Quote | QuoteWritePending> {
+  const result = quoteFixInputSchema.safeParse(body);
+  if (!result.success) {
+    throw new CorrectionValidationError(
+      `Invalid quote (fix): ${formatQuoteValidationIssues(result.error.issues)}`
+    );
+  }
+  const { quote_id, text, start, end } = result.data;
+
+  const state = await loadLatestState();
+  if (!state) {
+    throw new Error("No saved state found. Is EI_DATA_PATH set correctly?");
+  }
+  const current = state.human.quotes.find((q) => q.id === quote_id);
+  if (!current) {
+    // I1 (round 2): never interpolate the caller-supplied quote_id into a
+    // public error -- a control-character-bearing id could otherwise
+    // inject into terminal/MCP output (see
+    // .sisyphus/reviews/wave-2-quote-attestation.md). The caller already
+    // knows what id they supplied; a fixed, stable refusal is enough.
+    throw new Error("Cannot fix quote: no quote found with the supplied id");
+  }
+  if (current.message_id === null) {
+    throw new Error("Cannot fix quote: no source message to verify against");
+  }
+
+  // I3: T5's message-id migration (src/core/migrations.ts) conservatively
+  // leaves a Quote's message_id as a bare (unqualified) internal UUID
+  // when its stored text doesn't match the mapped source at migration
+  // time -- resolveExternalMessage only recognizes qualified ids and a
+  // legacy bare `msg_*` OpenCode id, so a bare UUID otherwise resolves to
+  // null forever. T5 only ever maps FROM a candidate that is *already*
+  // "ei:"-qualified (see migrateMessageIds' eiUuidMap), so the real local
+  // source -- if it still exists -- is always reachable under its
+  // qualified form. Re-qualify for lookup purposes only: this repairs
+  // the quote's text, it never rewrites the quote's own stored
+  // message_id (that stays T5/migration's job).
+  const lookupId =
+    !isQualifiedMessageId(current.message_id) && UUID_PATTERN.test(current.message_id)
+      ? qualifyEiMessage(current.message_id)
+      : current.message_id;
+
+  const { match } = await verifyQuoteAgainstSource(lookupId, text, start, end, "Cannot fix quote");
+  const embedding = await computeQuoteEmbedding(match.text);
+
+  const quote: Quote = { ...current, text: match.text, start: match.start, end: match.end, embedding };
+
+  const attemptId = crypto.randomUUID();
+  // I7 (round 4, .sisyphus/reviews/wave-2-quote-attestation.md): attempt_id
+  // is listed AFTER ...quote, never before. `quote` above starts from
+  // `current` -- the persisted, on-disk record -- which is untyped at the
+  // JSON boundary (src/cli/retrieval.ts) and so is not guaranteed to be
+  // free of a stray runtime attempt_id property (hand-edited state, or
+  // any past/future bug that let one leak through). Listing the fresh
+  // token last, matching the already-correct channel/embedding/verified
+  // pattern, means such a stray value can never shadow it and get read
+  // back below as if it were THIS call's own correlation id.
+  const record: QuoteFixRecord = {
+    op: "quote.fix",
+    entity_type: "quote",
+    ...quote,
+    channel: quote.channel && quote.channel.length > 0 ? quote.channel : "unknown",
+    embedding: quote.embedding ?? [],
+    verified: true,
+    attempt_id: attemptId,
+  };
+  const { skipped, drainMode } = await writeCorrection(record);
+
+  // I8 (round 4): a "queued" drain mode means writeCorrection() only
+  // appended this record -- a live Ei instance (or a pending sync) will
+  // validate and apply it on its own, in a different process, on its own
+  // loop. That process's outcome cannot be observed synchronously here: a
+  // live Processor can drain and clear corrections.json at any point
+  // after this call returns, including before any follow-up read this
+  // function could perform, which made re-deriving the outcome via a
+  // fresh overlay read (the retired getLastCorrectionSkips() fallback)
+  // a genuine race -- by the time such a read happened, the queue entry
+  // (and any skip it produced) could already be gone, which the old code
+  // wrongly read as "not found in skips, must have succeeded." Report the
+  // honest, unresolved state instead of guessing at a result that may
+  // already be stale the moment it's computed.
+  if (drainMode === "queued") {
+    return {
+      status: "queued",
+      id: quote.id,
+      message: "Quote fix queued: a live Ei instance is processing this write; it has not been confirmed yet.",
+    };
+  }
+
+  // I1/I5 (round 3) / I7 (round 4): attempt_id -- a fresh
+  // crypto.randomUUID() minted for this call alone, never persisted on
+  // the Quote itself -- is the ONLY thing that decides success now. It
+  // replaces mechanisms retired across earlier rounds:
+  //   - I4's record_id match (round 2): ambiguous the moment an unrelated
+  //     pending correction shares this quote's id.
+  //   - the final-state text/start/end read-back (round 3, I5): a
+  //     malformed carried-forward field (e.g. an empty speaker) can be
+  //     skipped even when the old and requested text/spans coincide,
+  //     which a projection can never distinguish from a genuine write.
+  // A self-drain's own `skipped` return already reflects validation run
+  // synchronously against `record` (writeCorrection), so it alone is
+  // authoritative -- there is nothing left to re-check, and the
+  // live-lock/backup-only case is handled entirely above, before this
+  // point, so `drainMode` here is always "self".
+  //
+  // The skip's own `reason` can interpolate a caller-selected quote id
+  // (e.g. a concurrent quote.remove producing `quote "<id>" does not
+  // exist`) or other internal detail -- it is used here only as a
+  // presence check, NEVER read as text: the public refusal below is a
+  // fixed, id-free string regardless of what the internal reason says.
+  const skippedMine = skipped.some((s) => s.attempt_id === attemptId);
+  if (skippedMine) {
+    throw new Error("Cannot fix quote: the write could not be verified");
+  }
+
+  return stripEmbedding(quote);
 }
 
 export async function removeEntity(entityType: CorrectableType, id: string): Promise<void> {

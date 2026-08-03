@@ -112,6 +112,12 @@ export class ClaudeCodeReader implements IClaudeCodeReader {
   }
 
   async getMessagesForSession(sessionId: string): Promise<ClaudeCodeMessage[]> {
+    // C1: reject a session segment containing a path separator or ".." before
+    // it ever reaches path.join below -- see
+    // .sisyphus/reviews/wave-2-quote-attestation.md. Real Claude Code session
+    // ids are plain UUIDs and never contain any of these characters, so this
+    // rejects zero legitimate lookups.
+    if (sessionId.includes("/") || sessionId.includes("\\") || sessionId.includes("..")) return [];
     if (!(await ensureNodeModules())) return [];
 
     const projectsDir = this.projectsPath ?? getDefaultProjectsPath();

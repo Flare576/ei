@@ -470,6 +470,36 @@ describe("resolveExternalMessage — claudecode", () => {
   });
 });
 
+// --- claudecode session identity verification (C1) -----------------------
+//
+// A traversal-bearing or otherwise crafted session segment must never let
+// a foreign-session record be accepted as this session's provenance --
+// see C1 in .sisyphus/reviews/wave-2-quote-attestation.md. The reader's
+// own traversal guard (tests/unit/integrations/claude-code/reader.test.ts)
+// closes the filesystem-escape primitive directly; this proves the
+// resolver's independent sessionId-match check refuses even a record the
+// (mocked) reader itself hands back under the right id but the wrong
+// session -- defense in depth, not a duplicate of the reader-level test.
+
+describe("resolveExternalMessage — claudecode session identity verification (C1)", () => {
+  it("refuses a returned record whose own sessionId differs from the requested session", async () => {
+    mockClaudeCodeGetMessagesForSession.mockResolvedValue([
+      { id: CC_MSG_ID, sessionId: "some-other-session-entirely", role: "user", content: "forged provenance", timestamp: NOW },
+    ]);
+    const result = await resolveExternalMessage(CC_QUALIFIED_ID);
+    expect(result).toBeNull();
+    expect(mockClaudeCodeGetMessagesForSession).toHaveBeenCalledWith(CC_SESSION_ID);
+  });
+
+  it("still resolves normally when the record's own sessionId genuinely matches (no regression)", async () => {
+    mockClaudeCodeGetMessagesForSession.mockResolvedValue([
+      { id: CC_MSG_ID, sessionId: CC_SESSION_ID, role: "user", content: "legitimate content", timestamp: NOW },
+    ]);
+    const result = expectResolved(await resolveExternalMessage(CC_QUALIFIED_ID));
+    expect(result.content).toBe("legitimate content");
+  });
+});
+
 // --- cursor ----------------------------------------------------------------
 
 describe("resolveExternalMessage — cursor", () => {

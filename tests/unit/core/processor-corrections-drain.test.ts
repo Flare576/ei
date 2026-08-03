@@ -146,12 +146,12 @@ function makeQuote(overrides: Partial<Quote> = {}): Quote {
 
 /** Builds a valid `quote.create` wire record. `data_item_ids`/`persona_groups` default empty (create's own constraint) — override deliberately to test rejection. */
 function makeQuoteCreateRecord(overrides: Partial<QuoteCreateRecord> = {}): QuoteCreateRecord {
-  return { op: "quote.create", entity_type: "quote", ...makeQuote({ data_item_ids: [], persona_groups: [] }), channel: "Test Channel", verified: true, ...overrides };
+  return { op: "quote.create", entity_type: "quote", attempt_id: crypto.randomUUID(), ...makeQuote({ data_item_ids: [], persona_groups: [] }), channel: "Test Channel", verified: true, ...overrides };
 }
 
 /** Builds a valid `quote.fix` wire record — unlike create, fix does not require empty data_item_ids/persona_groups (they carry forward from the existing record). */
 function makeQuoteFixRecord(overrides: Partial<QuoteFixRecord> = {}): QuoteFixRecord {
-  return { op: "quote.fix", entity_type: "quote", ...makeQuote(), channel: "Test Channel", verified: true, ...overrides };
+  return { op: "quote.fix", entity_type: "quote", attempt_id: crypto.randomUUID(), ...makeQuote(), channel: "Test Channel", verified: true, ...overrides };
 }
 
 /** Builds a valid `quote.relink` wire record — `{id, data_item_ids}` only. */
@@ -409,6 +409,7 @@ describe("Processor.drainCorrections() (live-side corrections drain)", () => {
     expect(applied!.embedding).toEqual([0.4, 0.5, 0.6]);
     // The wire-only verified marker must never leak onto the persisted Quote.
     expect(applied).not.toHaveProperty("verified");
+    expect(applied).not.toHaveProperty("attempt_id");
 
     await appendCorrection(correctionsPath, makeQuoteRemoveRecord("quote-1"));
     await asDrainable(processor).drainCorrections();
@@ -481,6 +482,26 @@ describe("Processor.drainCorrections() (live-side corrections drain)", () => {
     expect(finalHuman.quotes.find((q) => q.id === "quote-remove-me")).toBeUndefined();
     expect(finalHuman.quotes.find((q) => q.id === "quote-keep")).toBeDefined();
     expect(finalHuman.people.find((p) => p.id === "person-new")).toBeDefined();
+  });
+
+  it("live drain: getLastCorrectionSkips() echoes back the attempt_id of a quote.fix skipped for a missing target, letting a caller recognize its OWN queued write with certainty (I5, round 3)", async () => {
+    const correctionsPath = join(dataDir, "corrections.json");
+
+    processor = new Processor(mock.ei);
+    await processor.start(storage as unknown as Parameters<Processor["start"]>[0]);
+
+    // No quote with id "quote-missing" exists -- this fix must be skipped,
+    // never treated as an insert (only quote.create may insert).
+    const fixRecord = makeQuoteFixRecord({ id: "quote-missing", attempt_id: "attempt-under-test" });
+    await appendCorrection(correctionsPath, fixRecord);
+
+    await asDrainable(processor).drainCorrections();
+
+    const skips = processor.getLastCorrectionSkips();
+    expect(skips).toHaveLength(1);
+    expect(skips[0].record_id).toBe("quote-missing");
+    expect(skips[0].attempt_id).toBe("attempt-under-test");
+    expect(skips[0].reason).toContain("does not exist");
   });
 
   it("T1: live drain — a stale quote.fix does not recreate a quote removed earlier in the same batch, or restore a link an earlier fact removal already cleared, and getLastCorrectionSkips() plus a following valid correction still work (C1)", async () => {

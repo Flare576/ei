@@ -75,24 +75,47 @@ async function isLiveInstanceRunning(): Promise<boolean> {
 }
 
 /**
+ * Which branch of writeCorrection() actually ran, so a caller can tell an
+ * authoritative result from one that hasn't happened yet (I8,
+ * .sisyphus/reviews/wave-2-quote-attestation.md):
+ *   - `"self"`: this call itself validated and applied the record (plus
+ *     every pre-existing pending correction) synchronously. `skipped` is
+ *     final here — if this call's own record isn't in it, it applied.
+ *   - `"queued"`: the record was only appended (live instance running, or
+ *     backup-only/sync-pending) — `skipped` is always `[]` on this branch
+ *     because nothing has been validated yet, not because nothing was
+ *     declined. A live Processor drains and validates corrections.json on
+ *     its own loop, in its own process (src/core/processor.ts); that
+ *     outcome is not observable synchronously from here — re-deriving it
+ *     via a fresh loadLatestState() overlay is a genuine race, since the
+ *     live Processor can drain and clear the queue between this call
+ *     returning and any such follow-up read. Callers must report an
+ *     honest "queued, not yet confirmed" outcome for this branch instead
+ *     of attempting any further verification.
+ */
+export interface WriteCorrectionResult {
+  skipped: QuoteCorrectionSkip[];
+  drainMode: "self" | "queued";
+}
+
+/**
  * Apply a correction. Appends to corrections.json for a live-drained
  * pickup, or self-drains straight into state.json when nothing is running
  * to pick it up. Throws if neither state.json nor state.backup.json exist
  * (no Ei data at this EI_DATA_PATH — misconfiguration, not a sync gap).
  *
  * Returns every Quote correction skipped during this call's self-drain
- * (wrong shape, forbidden key, marker misuse, or a stale relink target) —
- * `{ skipped: [] }` on the append-only branches (live instance running, or
- * backup-only), since nothing is validated/applied there yet. Additive:
- * existing callers indifferent to skips are unaffected either way.
+ * (wrong shape, forbidden key, marker misuse, or a stale relink target)
+ * alongside `drainMode` — see WriteCorrectionResult above for what each
+ * value means and why a caller must treat them differently.
  */
-export async function writeCorrection(record: CorrectionRecord): Promise<{ skipped: QuoteCorrectionSkip[] }> {
+export async function writeCorrection(record: CorrectionRecord): Promise<WriteCorrectionResult> {
   const dataPath = getDataPath();
   const correctionsPath = join(dataPath, CORRECTIONS_FILE);
 
   if (await isLiveInstanceRunning()) {
     await appendCorrection(correctionsPath, record);
-    return { skipped: [] };
+    return { skipped: [], drainMode: "queued" };
   }
 
   const statePath = join(dataPath, STATE_FILE);
@@ -107,16 +130,16 @@ export async function writeCorrection(record: CorrectionRecord): Promise<{ skipp
     // TUI launch (pulled from remote). Queue for that drain instead of
     // fabricating a local state.json that would conflict with the pull.
     await appendCorrection(correctionsPath, record);
-    return { skipped: [] };
+    return { skipped: [], drainMode: "queued" };
   }
 
   // No live instance and state.json exists — safe to self-drain directly.
   // Re-check liveness after acquiring the lock to shrink the race window
   // where a TUI/daemon starts between the check above and the write below.
-  return await withLock(statePath, async () => {
+  return await withLock(statePath, async (): Promise<WriteCorrectionResult> => {
     if (await isLiveInstanceRunning()) {
       await appendCorrection(correctionsPath, record);
-      return { skipped: [] };
+      return { skipped: [], drainMode: "queued" };
     }
 
     // Read pending corrections, apply them (plus the new record), and clear
@@ -126,7 +149,7 @@ export async function writeCorrection(record: CorrectionRecord): Promise<{ skipp
     // write a new record between our unlocked read and our unconditional
     // "[]" clear, silently discarding it. Nesting the correctionsPath lock
     // inside statePath's serializes against every other writer of that file.
-    return await withLock(correctionsPath, async () => {
+    return await withLock(correctionsPath, async (): Promise<WriteCorrectionResult> => {
       const text = await readFile(statePath, "utf-8");
       const state = decodeAllEmbeddings(JSON.parse(text) as StorageState);
 
@@ -139,7 +162,7 @@ export async function writeCorrection(record: CorrectionRecord): Promise<{ skipp
       // safely re-applies them (upsert/remove are idempotent by id).
       await atomicWrite(statePath, JSON.stringify(encodeAllEmbeddings(state), null, 2));
       await atomicWrite(correctionsPath, "[]");
-      return { skipped };
+      return { skipped, drainMode: "self" };
     });
   });
 }
