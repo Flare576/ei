@@ -305,8 +305,10 @@ export function queueDirectTopicUpdate(
       data: {
         personaId: context.personaId,
         personaDisplayName: context.channelDisplayName,
+        roomId: context.roomId,
         isNewItem: false,
         existingItemId: topic.id,
+        message_ids_to_mark: chunk.messages_analyze.map(m => m.id),
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
         extraction_model: extractionModel,
         sources: context.sources,
@@ -491,6 +493,7 @@ export function queueTopicUpdate(
         candidateName: isNewItem ? context.candidateName : undefined,
         candidateDescription: isNewItem ? context.candidateDescription : undefined,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
+        message_ids_to_mark: chunk.messages_analyze.map(m => m.id),
         extraction_model: extractionModel,
       },
     });
@@ -661,6 +664,7 @@ export function queuePersonUpdate(
         candidateRelationship: context.candidateRelationship,
         candidateIdentifiers: isNewItem ? candidateIdentifiers : undefined,
         analyze_from_timestamp: getAnalyzeFromTimestamp(chunk),
+        message_ids_to_mark: chunk.messages_analyze.map(m => m.id),
         extraction_model: extractionModel,
         sources: context.sources,
       },

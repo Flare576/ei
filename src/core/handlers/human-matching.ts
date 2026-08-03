@@ -13,7 +13,7 @@ import { getEmbeddingService, getTopicEmbeddingText, getPersonEmbeddingText } fr
 import { calculateExposureCurrent } from "../utils/exposure.js";
 
 
-import { resolveMessageWindow, getMessageText, normalizeRoomMessages } from "./utils.js";
+import { resolveMessageWindow, getMessageText } from "./utils.js";
 import { sanitizeEiPersonaIdentifiers, normalizeIdentifierType } from "../utils/identifier-utils.js";
 
 export function handleTopicMatch(response: LLMResponse, state: StateManager): void {
@@ -76,7 +76,6 @@ export async function handleTopicUpdate(response: LLMResponse, state: StateManag
   const existingItemId = response.request.data.existingItemId as string | undefined;
   const personaId = response.request.data.personaId as string;
   const personaDisplayName = response.request.data.personaDisplayName as string;
-  const roomId = response.request.data.roomId as string | undefined;
   const candidateCategory = response.request.data.candidateCategory as string | undefined;
   const candidateName = response.request.data.candidateName as string | undefined;
   const candidateDescription = response.request.data.candidateDescription as string | undefined;
@@ -162,10 +161,7 @@ export async function handleTopicUpdate(response: LLMResponse, state: StateManag
   };
   state.human_topic_upsert(topic);
 
-  const allMessages = roomId
-    ? normalizeRoomMessages(state.getRoomMessages(roomId), state)
-    : state.messages_get(personaId);
-  await validateAndStoreQuotes(result.quotes, allMessages, itemId, personaDisplayName, personaGroup, state);
+  await validateAndStoreQuotes(result.quotes, messages_analyze, itemId, personaDisplayName, personaGroup, state);
 
   if (isNewItem && embedding) {
     const extractionModel = (response.request.data as Record<string, unknown>).extraction_model as string | undefined;
@@ -211,7 +207,6 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
   const existingItemId = response.request.data.existingItemId as string | undefined;
   const personaId = response.request.data.personaId as string;
   const personaDisplayName = response.request.data.personaDisplayName as string;
-  const roomId = response.request.data.roomId as string | undefined;
   const candidateRelationship = response.request.data.candidateRelationship as string | undefined;
   const candidateIdentifiers = (response.request.data.candidateIdentifiers ?? []) as PersonIdentifier[];
 
@@ -344,10 +339,7 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
   };
   state.human_person_upsert(person);
 
-  const allMessages = roomId
-    ? normalizeRoomMessages(state.getRoomMessages(roomId), state)
-    : state.messages_get(personaId);
-  await validateAndStoreQuotes(result.quotes, allMessages, itemId, personaDisplayName, personaGroup, state);
+  await validateAndStoreQuotes(result.quotes, messages_analyze, itemId, personaDisplayName, personaGroup, state);
 
   const primaryValue = resolvedIdentifiers.find(i => i.is_primary)?.value ?? candidateName;
   const resolvedName = (!primaryValue || primaryValue.toLowerCase() === 'unknown')

@@ -3,6 +3,7 @@ import {
   LLMNextStep,
   LLMRequestType,
   LLMPriority,
+  RoomMode,
 
   type LLMRequestState,
   type LLMResponse,
@@ -15,19 +16,25 @@ import {
   type Person,
   type Quote,
   type RoomMessage,
+  type RoomEntity,
 } from "../../../../src/core/types.js";
 import type { StateManager } from "../../../../src/core/state-manager.js";
+import type * as OrchestratorsModule from "../../../../src/core/orchestrators/index.js";
 
 // We need to test handlers in isolation, so we import them directly
 // and mock their dependencies
 
 // Mock the orchestrators module
-vi.mock("../../../../src/core/orchestrators/index.js", () => ({
-  orchestratePersonaGeneration: vi.fn(),
-  queueTopicMatch: vi.fn().mockResolvedValue(undefined),
-  queuePersonUpdate: vi.fn().mockReturnValue(1),
-  queueTopicValidate: vi.fn().mockResolvedValue(undefined),
-}));
+vi.mock("../../../../src/core/orchestrators/index.js", async (importOriginal) => {
+  const actual = await importOriginal<OrchestratorsModule>();
+  return {
+    ...actual,
+    orchestratePersonaGeneration: vi.fn(),
+    queueTopicMatch: vi.fn().mockResolvedValue(undefined),
+    queuePersonUpdate: vi.fn().mockReturnValue(1),
+    queueTopicValidate: vi.fn().mockResolvedValue(undefined),
+  };
+});
 
 // `embed` delegates to a reconfigurable module-scoped impl so individual tests can
 // control the returned vector (and thus cosine similarity). Reset to the constant-vector
@@ -55,7 +62,7 @@ vi.mock("../../../../src/core/embedding-service.js", () => ({
 
 
 import { handlers } from "../../../../src/core/handlers/index.js";
-import { queueTopicMatch, queuePersonUpdate } from "../../../../src/core/orchestrators/index.js";
+import { queueTopicMatch, queuePersonUpdate, queueTargetedTopicUpdate } from "../../../../src/core/orchestrators/index.js";
 
 function createMockStateManager() {
   const human: HumanEntity = {
@@ -70,6 +77,7 @@ function createMockStateManager() {
   const personas: Record<string, PersonaEntity> = {};
   const messages: Record<string, Message[]> = {};
   const roomMessages: Record<string, RoomMessage[]> = {};
+  const rooms: Record<string, RoomEntity> = {};
 
   return {
     getHuman: vi.fn(() => human),
@@ -104,6 +112,7 @@ function createMockStateManager() {
     persona_update: vi.fn(),
     messages_get: vi.fn((id: string) => messages[id] ?? []),
     getRoomMessages: vi.fn((roomId: string) => roomMessages[roomId] ?? []),
+    getRoom: vi.fn((roomId: string) => rooms[roomId]),
     messages_append: vi.fn(),
     messages_markPendingAsRead: vi.fn(),
     messages_markExtracted: vi.fn().mockReturnValue(1),
@@ -113,6 +122,7 @@ function createMockStateManager() {
     _personas: personas,
     _messages: messages,
     _roomMessages: roomMessages,
+    _rooms: rooms,
   };
 }
 
@@ -2356,6 +2366,120 @@ describe("Channel and speaker attribution on quotes", () => {
         expectRawSpan(getAddedQuote(), msgText, testCase.expected);
       });
     }
+  });
+
+  describe("quote validation scope (primacy/scope regression)", () => {
+    it("handleTopicUpdate anchors a quote to the message actually analyzed, not an earlier duplicate elsewhere in persona history", async () => {
+      const phrase = "does the pope shit in his hat";
+      seedMessage("persona-1", "old-occurrence", "human", `unrelated aside: ${phrase}`);
+      const newMsg = seedMessage("persona-1", "new-occurrence", "human", `on topic: ${phrase}`);
+
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleTopicUpdate,
+        data: {
+          personaId: "persona-1",
+          personaDisplayName: "Sisyphus",
+          isNewItem: true,
+          candidateName: "Quote matching target",
+          candidateDescription: "A topic used to verify quote persistence.",
+          candidateCategory: "Technical",
+          message_ids_to_mark: [newMsg.id],
+        },
+      });
+      const response = createMockResponse(request, {
+        name: "Quote matching target",
+        description: "A topic used to verify quote persistence.",
+        category: "Technical",
+        sentiment: 0.5,
+        exposure_desired: 0.5,
+        quotes: [{ text: phrase, reason: "quote matcher regression" }],
+      });
+
+      await handlers[LLMNextStep.HandleTopicUpdate](response, state as unknown as StateManager);
+
+      const quote = getAddedQuote();
+      expect(quote.message_id).toBe(newMsg.id);
+    });
+
+    it("handlePersonUpdate anchors a quote to the message actually analyzed, not an earlier duplicate elsewhere in persona history", async () => {
+      const phrase = "does the pope shit in his hat";
+      seedMessage("persona-1", "old-occurrence-person", "human", `unrelated aside: ${phrase}`);
+      const newMsg = seedMessage("persona-1", "new-occurrence-person", "human", `on topic: ${phrase}`);
+
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandlePersonUpdate,
+        data: {
+          personaId: "persona-1",
+          personaDisplayName: "Sisyphus",
+          isNewItem: true,
+          candidateName: "David",
+          candidateDescription: "A great collaborator",
+          candidateRelationship: "Coworker",
+          message_ids_to_mark: [newMsg.id],
+        },
+      });
+      const response = createMockResponse(request, {
+        description: "A thoughtful and effective collaborator",
+        sentiment: 0.8,
+        relationship: "Coworker",
+        exposure_desired: 0.5,
+        identifiers: [{ type: "Full Name", value: "David", is_primary: true }],
+        quotes: [{ text: phrase, reason: "quote matcher regression" }],
+      });
+
+      await handlers[LLMNextStep.HandlePersonUpdate](response, state as unknown as StateManager);
+
+      const quote = getAddedQuote();
+      expect(quote.message_id).toBe(newMsg.id);
+    });
+
+    it("queueTargetedTopicUpdate threads roomId through so a targeted room-topic capture resolves real room messages, not the bogus room.persona_ids.join('|') persona key", async () => {
+      const phrase = "does the pope shit in his hat";
+      const roomMsg: RoomMessage = {
+        id: "room-occurrence",
+        parent_id: null,
+        role: "persona",
+        persona_id: "persona-1",
+        content: `on topic: ${phrase}`,
+        timestamp: "2020-01-02T00:00:00.000Z",
+        read: true,
+        context_status: "default" as RoomMessage["context_status"],
+      };
+      state._roomMessages["room-1"] = [roomMsg];
+      state._rooms["room-1"] = {
+        id: "room-1",
+        display_name: "Test Room",
+        entity: "room",
+        mode: RoomMode.FreeForAll,
+        persona_ids: ["persona-1"],
+        active_node_id: null,
+        is_archived: false,
+        created_at: new Date().toISOString(),
+        last_updated: new Date().toISOString(),
+        messages: [],
+      };
+      seedPersona("persona-1", "Sisyphus", "Engineering");
+      const topic = seedTopic("topic-room-targeted");
+
+      const queued = queueTargetedTopicUpdate(topic.id, "persona-1", state as unknown as StateManager, "room-1");
+      expect(queued).toBeGreaterThan(0);
+      expect(state.queue_enqueue).toHaveBeenCalledTimes(1);
+      const enqueuedRequest = state.queue_enqueue.mock.calls[0][0] as LLMRequest;
+
+      // Orchestrator-level fix: roomId must be forwarded so the handler resolves room messages,
+      // not the bogus room.persona_ids.join("|") composite persona key (which resolves to zero
+      // messages and silently drops every proposed quote).
+      expect(enqueuedRequest.data.roomId).toBe("room-1");
+
+      const response = createMockResponse(enqueuedRequest, {
+        quotes: [{ text: phrase, reason: "quote matcher regression" }],
+      });
+
+      await handlers[LLMNextStep.HandleTopicUpdate](response, state as unknown as StateManager);
+
+      const quote = getAddedQuote();
+      expect(quote.message_id).toBe(roomMsg.id);
+    });
   });
 
   describe("handleTopicUpdate — quote channel/speaker", () => {
