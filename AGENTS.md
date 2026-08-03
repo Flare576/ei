@@ -39,7 +39,7 @@ Generated documents (from `/generate`) are also attributed to Emmett — written
 | Document | Purpose |
 |----------|---------|
 | `CONTRACTS.md` | **THE** source of truth for naming conventions, event contracts, security model, and design rationale. TypeScript interfaces live in `src/core/types/*.ts`. |
-| `v1.md` | Design philosophy and background context |
+| `docs/adr/README.md` | Architecture Decision Records — why Ei works the way it does, and what was rejected. Index of every ADR by number. |
 | GitHub Issues | Active feature requests and bugs |
 
 > **CRITICAL**: If code contradicts something defined in CONTRACTS.md, **STOP and ASK**. CONTRACTS.md wins.

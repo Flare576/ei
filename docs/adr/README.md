@@ -21,6 +21,20 @@ This exists because the alternative was observed directly: *"I really wish we ha
 | [011](ADR-011-quotes-outlive-their-links.md) | A Quote Outlives the Items It Was Linked To | Accepted | 2026-08-02 | Current |
 | [012](ADR-012-sunset-with-a-path-forward.md) | Sunset With a Path Forward | Accepted | 2026-08-02 | Current |
 | [013](ADR-013-tool-agnostic-skill-language.md) | Skills Name Tool Capabilities, Never Specific Tools | Accepted | 2026-08-03 | Current |
+| [014](ADR-014-quote-attestation-trusts-verified-text.md) | Quote Attestation Trusts Verified Text, Not `created_by` or `message_id` | Accepted | 2026-08-03 | Current |
+| [015](ADR-015-fully-qualified-message-ids.md) | Message IDs Are Fully-Qualified Provenance Locators, and the Resolver Refuses What It Cannot Safely Resolve | Accepted | 2026-08-03 | Current |
+| [016](ADR-016-ambiguous-person-match-threshold.md) | Ambiguous Person-Identity Matches Resolve Conservatively — Miss Over False-Positive Merge | Accepted | 2026-08-03 | Current |
+| [017](ADR-017-topic-validation-embedding-gate.md) | Topic Validation Uses a Top-1 Embedding Gate, Not Ceremony-Wide Clustering | Accepted | 2026-08-03 | Current |
+| [018](ADR-018-ceremony-rates-exposure-never-identity.md) | Ceremony Rates Exposure, Never Identity | Accepted | 2026-08-03 | Current |
+| [019](ADR-019-markdown-responses-not-json.md) | Persona and Room Responses Are Markdown Text, Not JSON | Accepted | 2026-08-03 | Current |
+| [020](ADR-020-indexeddb-canonical-web-storage.md) | IndexedDB Is the Web App's Canonical Storage Backend, localStorage Is a Non-Destructive Fallback | Accepted | 2026-08-03 | Current |
+| [021](ADR-021-oauth-pkce-no-server-proxy.md) | Third-Party OAuth Uses PKCE Directly Against the Provider, Never an Ei-Hosted Proxy | Accepted | 2026-08-03 | Current |
+| [022](ADR-022-persona-embedding-excludes-traits.md) | Persona Description Embedding Excludes Traits | Accepted | 2026-08-03 | Current |
+| [023](ADR-023-human-trait-extraction-dropped.md) | Human Trait Extraction Dropped | Accepted | 2026-08-03 | Current |
+| [024](ADR-024-topic-scan-scoring-rejects-duration.md) | Topic-Scan Scoring Rejects Density, Duration, and Importance — No Numeric Gate Ships | Accepted | 2026-08-03 | Backfill |
+| [025](ADR-025-exposure-system-left-dormant.md) | The Exposure System Is Left Dormant, Not Removed | Accepted | 2026-08-03 | Backfill |
+| [026](ADR-026-integration-granularity-per-harness.md) | Third-Party Integrations Are Scoped Per-Harness, Not Per-Vendor | Accepted | 2026-08-03 | Backfill |
+| [027](ADR-027-environment-variables-gate-test-only-behavior.md) | Environment Variables Gate Test-Only Behavior, Never Real Config | Accepted | 2026-08-03 | Backfill |
 
 ## Conventions
 
@@ -94,10 +108,6 @@ produces are deliberately deleted once spent, so anything that must outlive them
 
 ## Backlog
 
-- **Three pre-convention records await migration** into this directory, with numbers assigned at
-  migration time: one on integration granularity, one on topic-scan scoring, and one on the exposure
-  system. The exposure record's substance is already reproduced in ADR-004's Risks section, so that
-  ADR does not depend on the migration happening.
 - **Backfill queue**, identified by prior-decision mining and ranked by whether current work touches
   them: the three-mode Person description contract; reflection trigger and threshold gating; the
   reflection critic's null escape hatch; the 3-trait/3-topic health floor; `long_description`
@@ -106,6 +116,3 @@ produces are deliberately deleted once spent, so anything that must outlive them
 - **Undocumented load-bearing carve-out**: `ceremony.ts:495-501` excludes `ei persona`-linked records
   from the Rewrite phase with no explanatory comment. One line of code comment, cheap, prevents a
   future maintainer removing it. Tracked in ADR-003.
-- **Possible stale comment**: `src/cli/install.ts:156-163` states OMP does not read `~/.agents/skills`.
-  Upstream OMP source reportedly now has a generic `.agent`/`.agents` provider that includes it. Needs
-  verification against the installed OMP version; if confirmed, the comment is misleading.
