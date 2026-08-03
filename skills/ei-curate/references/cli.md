@@ -29,7 +29,8 @@ array is how you see a bad merge's blast radius.
 ## The record shapes
 
 You must round-trip these on `update` (see "full-record round-trip" below). Fields marked
-**(managed)** are set by Ei — preserve them as-read; don't invent them.
+**(managed)** are set by Ei — preserve them as-read; don't invent them. **Quotes are the
+exception: they are never round-tripped** — see "Quote writes" below.
 
 **person**
 ```
@@ -53,6 +54,10 @@ data_item_ids: [ … ],       # THE LINK: ids of the facts/topics/people this qu
 persona_groups: […],        # (managed)
 timestamp, start, end, created_at, created_by   # (managed)
 ```
+
+> **You never send a quote record back.** Everything above except `data_item_ids` and `text`
+> is derived by Ei from the source message, and the two you *can* change each have their own
+> dedicated command. `ei update` on a quote always rejects. See "Quote writes" below.
 
 **fact** — `name, description, sentiment, validated_date` (+ managed: sources, persona_groups, …)
 
@@ -78,41 +83,79 @@ ei create <type> --json '<json>'      # type: fact | topic | person
   (re-pointing quotes) need it.
 - The returned `record` is already sanitized for CLI/MCP output hygiene — **no `embedding`
   array is returned** even though Ei computed and stored one internally.
-- **You do not `create` or `remove` quotes through the public Ei CLI/MCP tools.** Quotes are
-  produced by Ei's extraction from real conversations; public curation support for quotes is
-  **update-only** (re-point / fix).
+- **Quotes are not created this way.** `ei create quote` is a separate, source-verified
+  command with its own flags — see "Quote writes" below.
 
 ## Updating — FULL-RECORD ROUND-TRIP (read this twice)
 
 ```bash
-ei update <type> <id> --json '<json>'   # type: fact | topic | person | quote
+ei update <type> <id> --json '<json>'   # type: fact | topic | person
 ```
 
 **`update` REPLACES the entire record. Any field you leave out is DELETED.** It is not a
 patch/merge. The only safe pattern:
 
 1. `ei --id <id>` → get the current, complete record.
-2. Change **only** the field(s) you intend to change (e.g. a quote's `data_item_ids`, a
-   person's `description`).
+2. Change **only** the field(s) you intend to change (e.g. a person's `description`, a fact's
+   value).
 3. Send the **whole** record back to `update`.
 
 Ei recomputes the embedding automatically on every update, so corrected text re-indexes for
 search — you never manage embeddings yourself.
 
-The canonical re-point (fixing a mis-attributed quote):
+**`update` does not accept quotes.** It is a real command that always rejects for them, and
+its error names the replacements. Use "Quote writes" below.
+
+## Quote writes
+
+A quote asserts that a real person really said a specific thing, so it has four narrow verbs
+instead of the generic create/update/remove trio. Two of them verify that claim against the
+source message; two deliberately assert nothing about it.
+
 ```bash
-# 1) read it       →  ei --id <quote-id>
-# 2) swap the link →  set data_item_ids to [ "<correct-person-id>" ]
-# 3) write it back →  ei update quote <quote-id> --json '<full record with new data_item_ids>'
+ei create quote --message-id <message-id> --text "<exact text from that message>" [--start N --end N]
+ei fix quote --quote-id <quote-id> --text "<corrected text>" [--start N --end N]
+ei relink quote <quote-id> --to <entity-id,entity-id,...>
+ei remove quote <quote-id>
 ```
+
+- **`ei create quote`** attests a new quote. Read the source message first (`ei --id
+  <message-id>`), copy the text verbatim, and pass both. Ei finds that text in the message and
+  derives `speaker`, `channel`, `timestamp`, `start`, `end`, and the embedding from it — there
+  is no flag for those, and smuggling them in through `--json` is rejected.
+- **`ei fix quote`** corrects mistranscribed text, re-verified against the quote's *existing*
+  source message. It never re-resolves a different source, and never touches links.
+- **`ei relink quote`** is the canonical re-point: it changes `data_item_ids` and nothing else.
+  `--to` is the **complete** new list, comma-separated — preserve the ids you want to keep, and
+  use `--to ""` to clear every link. Every id must resolve to a live fact, topic, or person.
+- **`ei remove quote`** deletes one quote.
+
+The canonical re-point (fixing a mis-attributed quote) is now one command, no round-trip:
+```bash
+# 1) read it        →  ei --id <quote-id>          (see its current data_item_ids)
+# 2) re-point it    →  ei relink quote <quote-id> --to "<correct-person-id>,<other-id-to-keep>"
+# 3) verify         →  ei --id <quote-id>   and  ei --id <person-id>
+```
+
+`create` and `fix` refuse and write nothing if: the quote has `no source message to verify
+against` (its `message_id` is `null` — it predates attestation), the `source message could not
+be found`, the `quote text not found in source message`, or `offset does not match the
+resolved text location` (if you pass `--start`/`--end`, pass both, and they must match what Ei
+finds). A refusal is not a partial write — nothing changed, so fix the input and retry.
+
+`relink` and `remove` assert nothing about text or origin, so they are the two verbs that
+still work on a quote whose source can no longer be resolved, or that predates attestation.
+If `ei fix quote` refuses with "no source message to verify against", the text on that quote
+simply cannot be corrected — say so; do not reach for another command.
 
 ## Removing (destructive)
 
 ```bash
-ei remove <type> <id>
+ei remove <type> <id>                   # type: fact | topic | person | quote
 ```
 Deletes the record. For a person, this also orphans that person's quote links. Only remove
 records that are genuine junk/duplicates **after** you've moved any real quotes off them.
+`ei remove quote <id>` is the same command for a single quote.
 
 ## Passing JSON safely
 
@@ -131,8 +174,9 @@ or you *will* drop a field.
 ## There is no undo
 
 Every write is recorded as a correction: `{ op: "upsert" | "remove", entity_type, id, record,
-timestamp }`. Where it lands depends on what's running on this machine — don't assume it
-always sits in `corrections.json` waiting to be read:
+timestamp }` for facts/topics/people/personas, and one of `quote.create` / `quote.fix` /
+`quote.relink` / `quote.remove` for a quote. Where it lands depends on what's running on this
+machine — don't assume it always sits in `corrections.json` waiting to be read:
 
 - **A live Ei instance is running** (holds `ei.lock`) → the correction is appended to
   `$EI_DATA_PATH/corrections.json`, and the running Processor drains it into the live state

@@ -343,9 +343,10 @@ All 34 E2E tests failed. The tag pointed to a broken commit. Don't repeat this.
 1. `git status` — working tree must be clean
 2. `git branch --show-current` — must be `main`
 3. **Did you update the docs?** — Check README.md, AGENTS.md, src/cli/README.md, tui/README.md for anything stale. New tools, changed behavior, removed fields — if a human would be confused without knowing, update it now.
-4. `git pull` — must be up to date with origin
-5. `npm run test:all` — all unit + E2E tests must pass. See **Test Runner Map** above if any tier fails unexpectedly.
-6. `cd web && npx tsc --noEmit && npx vite build` — **Both must succeed**: `tsc --noEmit` catches `noUnusedLocals` and dead-code errors that Vite's lenient bundler misses; Vite catches bundler/JSX errors that `tsc` misses. This is what CI runs. (v0.1.9 incident = vite; v0.1.18 deploy failure = tsc)
+4. **Close out `CHANGELOG.md`** — rename the `## [Unreleased]` heading to `## [<version>] — <YYYY-MM-DD>` for the version you are about to tag, drop any category that ended up empty, and open a fresh empty `## [Unreleased]` above it. The version here must match `package.json`. If `[Unreleased]` is empty, there is nothing to release — stop and work out why.
+5. `git pull` — must be up to date with origin
+6. `npm run test:all` — all unit + E2E tests must pass. See **Test Runner Map** above if any tier fails unexpectedly.
+7. `cd web && npx tsc --noEmit && npx vite build` — **Both must succeed**: `tsc --noEmit` catches `noUnusedLocals` and dead-code errors that Vite's lenient bundler misses; Vite catches bundler/JSX errors that `tsc` misses. This is what CI runs. (v0.1.9 incident = vite; v0.1.18 deploy failure = tsc)
 
 If **any step fails**: STOP. Fix before tagging.
 
@@ -455,7 +456,7 @@ External agents write to Ei's knowledge base through a validated corrections pat
 
 ### How it works
 
-1. **Write**: `ei create/update/remove` (CLI) or `ei_create/ei_update/ei_remove` (MCP tools) validate the input against Zod schemas and append a correction record to `$EI_DATA_PATH/corrections.json`.
+1. **Write**: `ei create/update/remove` (CLI) or `ei_create/ei_update/ei_remove` (MCP tools) validate the input against Zod schemas and append a correction record to `$EI_DATA_PATH/corrections.json`. Quotes go through their own four verbs instead — `ei create quote`/`ei fix quote`/`ei relink quote`/`ei remove quote` (CLI), `ei_quote_create`/`ei_quote_fix`/`ei_quote_relink`/`ei_remove` with `entity_type: "quote"` (MCP) — but land in the same queue.
 2. **Drain**: If a live instance (TUI or future daemon) holds `ei.lock`, the Processor reads and applies pending corrections on every runLoop tick, merging them into the live StateManager — no TUI restart required. If nothing holds the lock, the CLI self-drains straight into `state.json` instead of waiting (see `src/cli/corrections-writer.ts`) — the correction is already applied by the time the write command returns.
 3. **Atomicity**: `corrections.json` is a JSON array written under a file lock — concurrent writers serialize safely.
 
@@ -463,11 +464,18 @@ External agents write to Ei's knowledge base through a validated corrections pat
 
 | Operation | fact | topic | person | quote | persona |
 |-----------|------|-------|--------|-------|---------|
-| create | yes | yes | yes | — | yes |
-| update | yes | yes | yes | yes | yes |
-| remove | yes | yes | yes | — | yes |
+| create | yes | yes | yes | yes (`ei create quote` / `ei_quote_create`) | yes |
+| update | yes | yes | yes | — (tombstoned; use `ei fix quote` or `ei relink quote`) | yes |
+| remove | yes | yes | yes | yes (`ei remove quote` / `ei_remove`) | yes |
 
-Quotes enter only through the extraction pipeline (verifiable-origin data). They can be updated to repoint `data_item_ids` after a split/merge or to fix mistranscribed text, but not created or removed externally.
+Quotes have four dedicated verbs rather than the generic create/update/remove trio, because two of them assert provenance and two deliberately do not:
+
+- **`ei create quote --message-id <id> --text "<text>"`** / **`ei_quote_create`** — mints a new quote only if the supplied text is found in the resolved source message. `speaker`, `channel`, `timestamp`, offsets, and the embedding are all derived server-side from that message; a caller cannot supply them.
+- **`ei fix quote --quote-id <id> --text "<text>"`** / **`ei_quote_fix`** — corrects mistranscribed text by re-verifying it against the quote's *existing* source message. It never re-resolves a new source, and never changes links or provenance.
+- **`ei relink quote <id> --to <entity-id,...>`** / **`ei_quote_relink`** — repoints `data_item_ids` after a split/merge. Asserts nothing about text or origin, so it works on quotes whose source no longer resolves and on pre-attestation quotes whose `message_id` is `null`.
+- **`ei remove quote <id>`** / **`ei_remove`** with `entity_type: "quote"` — deletes a quote.
+
+`create` and `fix` either verify the caller's text against a resolved source message or refuse — there is no third outcome. `ei update` on a quote (and MCP `ei_update` with `entity_type: "quote"`) is kept and always rejects, naming those three replacement verbs: see `docs/adr/ADR-012-sunset-with-a-path-forward.md` for why a retired command stays behind as a rejecting stub instead of disappearing. Full op/shape detail is in `CONTRACTS.md` → Corrections Queue → Quote write path.
 
 Personas take the same three operations, but never through the shared fact/topic/person schema dispatch — `entity_type: "persona"` routes to its own validation module (`src/cli/persona-corrections.ts`), matching `PersonaEntity`'s shape instead of `DataItemBase`.
 

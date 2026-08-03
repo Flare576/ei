@@ -40,7 +40,8 @@ message owned by the `Emmett` persona (id format
 `settings.document.processed_documents` and cleanable via `/unsource`.
 
 None of that machinery is reachable from here. There is no `ei generate` CLI
-verb, and Ei's write path (`ei create/update/remove`) only supports
+verb, and Ei's write path (`ei create/update/remove`, plus the quote-only
+`ei create/fix/relink/remove quote`) only supports
 `fact | topic | person | quote | persona` — no message/document type. So:
 
 - **You are the LLM.** There is no queue to hand this off to — you read the

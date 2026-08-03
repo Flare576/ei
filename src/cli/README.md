@@ -46,7 +46,7 @@ ei --id "codex:my-machine:thread-uuid:evt_42"
 ei --id "pi:my-machine:session-uuid:session-uuid/entry-id"
 ```
 
-A quote's `id` and its `message_id` are different addresses: `id` identifies the quote record itself (what `ei --id` resolves and what `ei update quote <id>` takes), while `message_id` identifies the *source message* it was lifted from — nullable, and shared by several quotes lifted from the same message. Pipe `message_id` to `ei --id` to read the original conversation; use `id` when you mean one specific quote.
+A quote's `id` and its `message_id` are different addresses: `id` identifies the quote record itself (what `ei --id` resolves, and what `ei fix quote`, `ei relink quote`, and `ei remove quote` take), while `message_id` identifies the *source message* it was lifted from — nullable, and shared by several quotes lifted from the same message, and what `ei create quote` quotes *from*. Pipe `message_id` to `ei --id` to read the original conversation; use `id` when you mean one specific quote.
 
 # OpenCode Integration
 
@@ -92,7 +92,7 @@ Restart your agent tool after changes to activate.
 
 ### MCP Server
 
-`ei --install` removes any Ei MCP registration from Claude Code, Cursor, and Codex by default — every MCP tool (`ei_search`, `ei_lookup`, `ei_fetch_message`, `ei_create`, `ei_update`, `ei_remove`) is a thin wrapper over the same CLI/corrections-queue code the `ei-search`, `ei-curate`, and `ei-persona` skills already teach agents to call directly. A persistent `ei mcp` process per open session bought nothing — it reloads state from disk fresh on every call, same as the CLI — and multiple such processes are what caused real Ei MCP processes to get mistaken for orphaned processes and killed.
+`ei --install` removes any Ei MCP registration from Claude Code, Cursor, and Codex by default — every MCP tool (`ei_search`, `ei_lookup`, `ei_fetch_message`, `ei_create`, `ei_update`, `ei_remove`, `ei_quote_create`, `ei_quote_fix`, `ei_quote_relink`) is a thin wrapper over the same CLI/corrections-queue code the `ei-search`, `ei-curate`, and `ei-persona` skills already teach agents to call directly. A persistent `ei mcp` process per open session bought nothing — it reloads state from disk fresh on every call, same as the CLI — and multiple such processes are what caused real Ei MCP processes to get mistaken for orphaned processes and killed.
 
 MCP support isn't removed from the codebase — `ei mcp` still works if you want it back:
 
@@ -127,9 +127,12 @@ The MCP server exposes these tools to Claude Code, Cursor, Codex, and OpenCode:
 | `ei_search` | Balanced search across facts, topics, people, and quotes (personas excluded — pass `type: "personas"` explicitly to search those). Supports `type`, `persona`, `source`, `recent`, `limit` filters. Start here. |
 | `ei_lookup` | Full-record lookup for any entity by ID — facts, topics, people, quotes, or personas. Use when you need complete details beyond the search summary. |
 | `ei_fetch_message` | Retrieve a specific message by fully-qualified ID with optional `before`/`after` context window. Use when a quote result has a `message_id` and you want the original conversation. Routes to the correct source automatically. |
-| `ei_create` | Create a new entity (fact, topic, person, or persona). Pass a full JSON record matching the entity's schema. Validates server-side; unknown fields are rejected. Returns the assigned id and the full stored record. Not available for quotes — verifiable-origin data can only be corrected via `ei_update`, never created. |
-| `ei_update` | Replace an entity by ID. Full-record replacement — fetch first with `ei_lookup`, edit the fields you need to change, and pass the complete record back. Any omitted field is treated as absent, not "leave unchanged". Supports fact, topic, person, quote, and persona. |
-| `ei_remove` | Permanently remove a fact, topic, person, or persona by ID. Use to drop bad extracted data that shouldn't be corrected, just deleted, or to delete a persona that's no longer needed. Not available for quotes. Reserved built-in personas ("ei", "emmet") can't be removed this way — use `ei_update` to set `is_archived: true` instead. |
+| `ei_create` | Create a new entity (fact, topic, person, or persona). Pass a full JSON record matching the entity's schema. Validates server-side; unknown fields are rejected. Returns the assigned id and the full stored record. Not available for quotes — use `ei_quote_create`, which verifies the text against its source message. |
+| `ei_update` | Replace a fact, topic, person, or persona by ID. Full-record replacement — fetch first with `ei_lookup`, edit the fields you need to change, and pass the complete record back. Any omitted field is treated as absent, not "leave unchanged". Not available for quotes: `entity_type: "quote"` is accepted by the schema but always rejects with a message naming `ei_quote_fix`/`ei_quote_relink`/`ei_remove` (ADR-012 tombstone). |
+| `ei_remove` | Permanently remove a fact, topic, person, quote, or persona by ID. Use to drop bad extracted data that shouldn't be corrected, just deleted, or to delete a persona that's no longer needed. Reserved built-in personas ("ei", "emmet") can't be removed this way — use `ei_update` to set `is_archived: true` instead. |
+| `ei_quote_create` | Create a source-verified quote. Requires the source `message_id` and the exact `text`; the server matches that text against the resolved message and refuses if it isn't there. `speaker`, `channel`, `timestamp`, offsets, and the embedding are all derived from the source and cannot be supplied. Optional `start`/`end` are a consistency check, not a way to pick a later occurrence. |
+| `ei_quote_fix` | Correct an existing quote's `text` by re-verifying it against the quote's *existing* source message. Never re-resolves a new source; links, provenance, speaker, channel, and timestamp are all preserved. Refuses if the quote has no `message_id`, its source no longer resolves, or the text isn't found. |
+| `ei_quote_relink` | Change which facts/topics/people a quote is linked to (`data_item_ids`) and nothing else. Complete replacement list, not an additive delta; every target must resolve to an existing fact, topic, or person. Asserts no provenance, so it works on dangling and pre-attestation quotes too. |
 
 ### `ei_search` arguments
 
@@ -150,7 +153,7 @@ All search commands return arrays. Each result includes a `type` field.
 
 **Person**: `{ type, id, name, description, relationship, sentiment, identifiers[] }` — `identifiers` contains all known accounts and aliases (e.g. `{ type: "GitHub", value: "flare576" }`)
 
-**Quote**: `{ type, id, text, speaker, message_id, timestamp, linked_items[] }` — `message_id` links to `ei_fetch_message` for the original conversation; `id` is the stable identity for `ei update quote`
+**Quote**: `{ type, id, text, speaker, message_id, timestamp, linked_items[] }` — `message_id` links to `ei_fetch_message` for the original conversation; `id` is the stable identity `ei fix quote` / `ei relink quote` / `ei remove quote` take
 
 **Persona**: `{ type, id, display_name, short_description, model, base_prompt, traits[], topics[] }`
 
@@ -158,7 +161,7 @@ All search commands return arrays. Each result includes a `type` field.
 
 ## Memory Management
 
-`ei create`, `ei update`, and `ei remove` let you correct Ei's knowledge base directly — from the CLI or via MCP tools in your coding agent.
+`ei create`, `ei update`, and `ei remove` let you correct Ei's knowledge base directly — from the CLI or via MCP tools in your coding agent. Quotes are the exception: they have their own four verbs (`ei create quote`, `ei fix quote`, `ei relink quote`, `ei remove quote`), described below.
 
 ### Which types support which operations
 
@@ -167,18 +170,36 @@ All search commands return arrays. Each result includes a `type` field.
 | fact | yes | yes | yes |
 | topic | yes | yes | yes |
 | person | yes | yes | yes |
-| quote | — | yes | — |
+| quote | `ei create quote` | — (tombstoned) | `ei remove quote` |
 | persona | yes | yes | yes |
 
-Quotes are created only by Ei's extraction pipeline (verifiable-origin data). They can be updated to repoint `data_item_ids` after a split/merge or to fix mistranscribed text, but never created or removed via these commands.
+### Quote commands
 
-Personas support all three operations too, but through a separate schema (`PersonaEntity`, not the fact/topic/person `DataItemBase` shape) — see the `ei create/update/remove persona` examples below and the `ei-persona` skill for guided authoring.
+A quote claims that a real person said a specific thing, so the commands that touch one are split by whether they assert that claim. Two verify it against the source message; two deliberately assert nothing:
+
+```sh
+ei create quote --message-id <message-id> --text "<exact substring of that message>" [--start N --end N]
+ei fix quote --quote-id <quote-id> --text "<corrected text>" [--start N --end N]
+ei relink quote <quote-id> --to <entity-id,entity-id,...>
+ei remove quote <quote-id>
+```
+
+- **`ei create quote`** (MCP: `ei_quote_create`) mints a new quote only if `--text` is actually found in the message `--message-id` resolves to. `speaker`, `channel`, `timestamp`, the offsets, and the embedding are all derived from that message — there is no flag to supply them, and supplying them through `--json` is rejected. Read the message first with `ei --id <message-id>` and copy the text you want.
+- **`ei fix quote`** (MCP: `ei_quote_fix`) corrects mistranscribed text by re-verifying it against the quote's *existing* source message. It never re-resolves a new source, and never touches links or provenance.
+- **`ei relink quote`** (MCP: `ei_quote_relink`) repoints `data_item_ids` after a split or merge. `--to` is the complete new list (comma-separated, and `--to ""` clears every link); each id must resolve to a live fact, topic, or person. Because it asserts nothing about text or origin, it is the one quote write that works on a quote whose source message no longer resolves, or that predates attestation entirely (`message_id` is `null`).
+- **`ei remove quote`** (MCP: `ei_remove` with `entity_type: "quote"`) deletes a quote.
+
+`create` and `fix` either verify your text against a resolved source message or refuse — there is no partial success. The four refusals are `no source message to verify against` (the quote predates attestation), `source message could not be found`, `quote text not found in source message`, and `offset does not match the resolved text location`. Nothing is written in any of those cases.
+
+`ei update` on a quote is retired and always rejects, naming `ei fix quote`, `ei relink quote`, and `ei remove quote` in the error. The command is deliberately kept rather than deleted so an older installed skill gets a corrective message instead of "unknown type" — see `docs/adr/ADR-012-sunset-with-a-path-forward.md`.
+
+Personas support create/update/remove too, but through a separate schema (`PersonaEntity`, not the fact/topic/person `DataItemBase` shape) — see the `ei create/update/remove persona` examples below and the `ei-persona` skill for guided authoring.
 
 One persona-only field worth flagging for external callers: `external_reflection_only` (default `false`, alongside `is_paused`/`is_archived`) skips Ei's automatic Reflection critic for that persona so an external, agent-driven reflection can run first instead — it applies uniformly to every persona, reserved ones (`ei`/`emmet`) included.
 
 ### Update semantics: full replacement, not a patch
 
-`ei update` replaces the entire record. Any field you omit is gone. The safe pattern:
+`ei update` replaces the entire record for facts, topics, people, and personas. Any field you omit is gone. (Quotes are not updateable this way at all — use the quote verbs above.) The safe pattern:
 
 ```sh
 # 1. Fetch the current record
@@ -193,7 +214,10 @@ ei update fact abc-123 --json '{"name":"Field of Study","description":"Software 
 ```sh
 ei create fact --json '{"name":"Field of Study","description":"CS","sentiment":0,"validated_date":""}'
 ei update fact abc-123 --json '{"name":"Field of Study","description":"Updated","sentiment":0,"validated_date":""}'
-ei update quote <id> --json '{"data_item_ids":["person-b-id"], ...}'  # Repoint a quote after splitting a bad merge (fetch the full record via 'ei --id <id>' first)
+ei create quote --message-id "opencode:my-machine:ses_abc:msg_def" --text "you guessed it"   # Attest a new quote against its source message
+ei fix quote --quote-id abc-123 --text "you guessed it, again"   # Re-verify corrected text against the quote's existing source
+ei relink quote abc-123 --to person-b-id            # Repoint a quote after splitting a bad merge
+ei remove quote abc-123                             # Delete a quote
 ei create persona --json '{"display_name":"Yoda","long_description":"Speaks in inverted syntax, wise and patient.","traits":[{"name":"Inverted speech","description":"Talks like Yoda","sentiment":0.7}],"topics":[]}'
 ei update persona <id> --json '<full persona record from ei --id <id>, edited>'
 ei remove persona abc-123              # Remove a persona (reserved personas like "ei"/"emmet" must be archived instead)
@@ -202,7 +226,7 @@ ei remove fact abc-123
 
 ### Corrections queue
 
-Changes written by `ei create/update/remove` (and the MCP tools `ei_create/ei_update/ei_remove`) go through a corrections queue (`$EI_DATA_PATH/corrections.json`). If a live Ei instance (TUI or daemon) is running, the Processor drains this file on every runLoop tick and applies changes to the live StateManager — no TUI restart required. If nothing is running, the write applies straight to `state.json` instead of waiting for a TUI session that may not start for days.
+Changes written by `ei create/update/remove`, the quote verbs `ei create/fix/relink/remove quote`, and the MCP tools (`ei_create`/`ei_update`/`ei_remove`, `ei_quote_create`/`ei_quote_fix`/`ei_quote_relink`) all go through the same corrections queue (`$EI_DATA_PATH/corrections.json`). If a live Ei instance (TUI or daemon) is running, the Processor drains this file on every runLoop tick and applies changes to the live StateManager — no TUI restart required. If nothing is running, the write applies straight to `state.json` instead of waiting for a TUI session that may not start for days.
 
 For safe, agent-driven curation with verification guardrails, use the `ei-curate` skill (see [Shipped Skills](#shipped-skills) below).
 
@@ -234,7 +258,7 @@ Skills are installed automatically — any directory added under `skills/` in th
 | Skill | What it does |
 |-------|-------------|
 | `ei-search` | Deliberate, explicit read-path lookups — search, full-record fetch, original-message fetch — via the CLI (`ei "query"`, `ei --id <id>`), for the mid-conversation case beyond whatever the automatic context-injection hook already surfaced. Read-only. Read the full workflow at `skills/ei-search/SKILL.md`. |
-| `ei-curate` | Safe agent-driven memory curation. Provides verified workflows for fixing merged records, bad attributions, stale facts, and mis-attributed quotes — using `ei create/update/remove` with explicit confirmation before every write. Read the full workflow at `skills/ei-curate/SKILL.md`. Load it in your harness with `/ei-curate`. |
+| `ei-curate` | Safe agent-driven memory curation. Provides verified workflows for fixing merged records, bad attributions, stale facts, and mis-attributed quotes — using `ei create/update/remove` for facts/topics/people and the quote verbs `ei create/fix/relink/remove quote` for quotes, with explicit confirmation before every write. Read the full workflow at `skills/ei-curate/SKILL.md`. Load it in your harness with `/ei-curate`. |
 | `ei-persona` | Safe agent-driven persona authoring. Guides creating, editing (traits/topics/description), archiving, or deleting a persona's *character* via `ei create/update/remove persona` — distinct from `ei-curate`, which corrects learned data rather than authoring identity. Read the full workflow at `skills/ei-persona/SKILL.md`. Load it in your harness with `/ei-persona`. |
 | `ei-reflect` | Manual self-reflection for a coding-harness agent over its own accumulated Person log, for when the log fills faster than Ei's automatic Reflection critic can usefully consume it. Not a single file: a root dispatcher (`skills/ei-reflect/SKILL.md`) over two lenses in `skills/ei-reflect/lenses/`. The **Persona** lens (`lenses/persona.md`) is the identity half — it reviews the log against the current persona identity via the CLI (`ei personas`, `ei --id`) and rewrites traits/topics/descriptions with `ei update persona`. The **Agent** lens (`lenses/agent.md`) is the operating-contract half — the rules, sequences, and tool preferences that govern how the agent works *in this harness* — which it writes into the harness's own instruction files as a marked delimited region, touching no Ei record. The dispatcher resolves the persona, reads the log once, splits the evidence between the lenses, and clears the log with `ei update person` only once both lenses reach a terminal state — never while the Agent lens is still waiting on the user to choose a write target. `skills/ei-reflect/references/` holds the CLI surface, per-harness target files, and the configuration surfaces no file-based tool can reach. Read the full workflow at `skills/ei-reflect/SKILL.md`. Load it in your harness with `/ei-reflect`. |
 | `ei-rewrite` | Manual, on-demand slimming of a bloated Topic or Person record — redistributes correctly-attributed content that's outgrown the record's contract (a Person profile accreting project detail, a Topic becoming a catch-all) into the right existing or new records, with mandatory Ei-native recon before creating anything. Mirrors the automatic Rewrite ceremony (`src/core/handlers/rewrite.ts`) by hand. Distinct from `ei-curate`, which fixes *wrong* data rather than *misplaced* data. Read the full workflow at `skills/ei-rewrite/SKILL.md`. Load it in your harness with `/ei-rewrite`. |

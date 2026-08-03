@@ -127,11 +127,12 @@ never have to pick which path, just pass the id:
 
 Quote results carry both ids, and they are not interchangeable. A quote's
 `id` addresses that one quote — it's what `ei --id` resolves to the full
-quote record, and what curation commands like `ei update quote <id>` take.
-Its `message_id` addresses the *source message* the quote came from: it's
-nullable, and several quotes lifted from the same message share it. Pipe a
-`message_id` to `ei --id` to read the original exchange; use `id` when you
-mean one specific quote.
+quote record, and what the curation verbs `ei fix quote`, `ei relink quote`,
+and `ei remove quote` take. Its `message_id` addresses the *source message*
+the quote came from: it's nullable, several quotes lifted from the same
+message share it, and it's what `ei create quote` attests a new quote
+*against*. Pipe a `message_id` to `ei --id` to read the original exchange;
+use `id` when you mean one specific quote.
 
 Every search hit — quotes included — has an `id`, so drilling down is the
 same one-liner for every type:

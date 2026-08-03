@@ -262,7 +262,7 @@ export function createMcpServer(): McpServer {
     "ei_create",
     {
       description:
-        "Create a new entity in the user's Ei knowledge base — a fact, topic, person, or persona. Use to add data the extraction pipeline missed, split/correct bad merges, or author a new AI persona's identity (display name, description, traits, topics). The record is validated against the entity type's schema server-side; unknown fields are rejected. Returns the assigned id and the full stored record. Not available for quotes — verifiable-origin data can only be corrected via ei_update, never created.",
+        "Create a new entity in the user's Ei knowledge base — a fact, topic, person, or persona. Use to add data the extraction pipeline missed, split/correct bad merges, or author a new AI persona's identity (display name, description, traits, topics). The record is validated against the entity type's schema server-side; unknown fields are rejected. Returns the assigned id and the full stored record. Not available for quotes — use ei_quote_create instead, which verifies the quote's text against its resolved source message before persisting anything.",
       inputSchema: {
         entity_type: z.enum(["fact", "topic", "person", "persona"]).describe("The type of entity to create."),
         data: z
@@ -291,7 +291,7 @@ export function createMcpServer(): McpServer {
     "ei_update",
     {
       description:
-        "Replace an existing fact, topic, person, quote, or persona by ID with a COMPLETE record — this is full replacement, not a partial patch. Any field omitted from `data` is treated as absent, not 'leave the existing value alone'. Always fetch the current record with ei_lookup first, edit the fields you need to change, and pass the WHOLE thing back — passing a partial object will silently drop the fields you didn't include. Use to fix bad extracted data (e.g. correcting a person record where two people were wrongly merged into one). Quote records can also be corrected this way — specifically to repoint `data_item_ids` after splitting or merging a person/topic/fact, or to fix mistranscribed `text`. Persona records support full CRUD this way too — rewriting display_name/traits[]/topics[] to author a persona's character (e.g. \"make this persona talk like Yoda\"), or toggling `is_archived`/`external_reflection_only` (both are just normal updates). Renaming a persona to a reserved name (\"new\", \"clone\") is rejected.",
+        "Replace an existing fact, topic, person, or persona by ID with a COMPLETE record — this is full replacement, not a partial patch. Any field omitted from `data` is treated as absent, not 'leave the existing value alone'. Always fetch the current record with ei_lookup first, edit the fields you need to change, and pass the WHOLE thing back — passing a partial object will silently drop the fields you didn't include. Use to fix bad extracted data (e.g. correcting a person record where two people were wrongly merged into one). Persona records support full CRUD this way too — rewriting display_name/traits[]/topics[] to author a persona's character (e.g. \"make this persona talk like Yoda\"), or toggling `is_archived`/`external_reflection_only` (both are just normal updates). Renaming a persona to a reserved name (\"new\", \"clone\") is rejected. NOT usable for quotes: entity_type \"quote\" is still accepted by the schema but ALWAYS rejects, because a full-record replacement could assert text, a speaker, or a timestamp that nobody verified. Use ei_quote_fix to correct a quote's text, ei_quote_relink to change which facts/topics/people it links to, or ei_remove to delete it.",
       inputSchema: {
         entity_type: z.enum(["fact", "topic", "person", "quote", "persona"]).describe("The type of entity to update."),
         id: z.string().describe("The ID of the entity to replace, from ei_lookup or ei_search."),
@@ -315,7 +315,7 @@ export function createMcpServer(): McpServer {
     "ei_remove",
     {
       description:
-        "Permanently remove a fact, topic, person, or persona from the user's Ei knowledge base by ID. Use to delete bad extracted data that shouldn't be split or corrected, just dropped entirely, or to delete an AI persona that's no longer needed. Not available for quotes — verifiable-origin data can only be corrected, never deleted. Reserved built-in personas (\"ei\", \"emmet\") cannot be deleted this way — use ei_update to set `is_archived: true` instead.",
+        "Permanently remove a fact, topic, person, quote, or persona from the user's Ei knowledge base by ID. Use to delete bad extracted data that shouldn't be split or corrected, just dropped entirely, to drop a quote that shouldn't exist at all, or to delete an AI persona that's no longer needed. Removing a quote asserts nothing about its provenance, so it is permitted on any quote — including one whose source message can no longer be resolved, or one that predates attestation (message_id is null). Reserved built-in personas (\"ei\", \"emmet\") cannot be deleted this way — use ei_update to set `is_archived: true` instead.",
       inputSchema: {
         entity_type: z.enum(["fact", "topic", "person", "persona", "quote"]).describe("The type of entity to remove."),
         id: z.string().describe("The ID of the entity to remove, from ei_lookup or ei_search."),

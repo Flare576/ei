@@ -30,7 +30,7 @@ Extraction reads an entity, sends it to an LLM, and writes back a record built f
 
 **This window is not 100 ms.** It is the LLM round trip — seconds, sometimes tens of seconds. That is three to four orders of magnitude wider than Race 1, and anyone weighing whether to fix this later should have the real number rather than an inherited "sub-100ms" framing.
 
-It also runs in both directions. A correction drained on top of an entity a handler modified *after* the correction was queued will overwrite that modification, because corrections apply as full-record replacements.
+It also runs in both directions. A correction drained on top of an entity a handler modified *after* the correction was queued will overwrite that modification, because corrections apply as full-record replacements. (As of 2026-08-02 that is no longer true of every correction — see the dated note below.)
 
 ## Decision
 
@@ -80,6 +80,16 @@ The second is genuinely tempting and was not rejected on merit; it is simply lar
 ## Reversibility
 
 Easy for Race 1 — the fix directions above are additive and localized. Harder for Race 2: optimistic concurrency means a field on every entity and a check on every write, and retrofitting it is meaningfully more work than having built it in. Nothing here forecloses either.
+
+## Note (2026-08-02): "full-record replacements" no longer describes every correction
+
+Race 2's second direction above rests on the premise that *corrections apply as full-record replacements*. That premise is now narrower than when this was written, and a reader reasoning about the reverse direction needs the current shape.
+
+Quote corrections were split into four dedicated ops — `quote.create`, `quote.fix`, `quote.relink`, `quote.remove` (see `CONTRACTS.md` → Corrections Queue → Quote write path). Only `create` and `fix` are full-record replacements. `quote.relink` carries `data_item_ids` and nothing else; `quote.remove` carries only an `id`. Both are partial by construction, precisely so neither can be a vehicle for asserting text or provenance that nobody verified. A partial op cannot overwrite a field it does not carry, so Race 2's reverse direction does not apply to `relink` or `remove` at all.
+
+This narrows the exposure; it changes neither decision. Fact, topic, person, and persona corrections are still full-record `upsert`s, and `quote.create`/`quote.fix` still are too, so Race 2 is unchanged for every op that carries a whole record. Race 1 is unchanged in every case — the drain interval is a property of the queue, not of the record shape.
+
+One related mechanism is worth recording here because it is easy to mistake for a fix: every quote op carries a caller-minted `attempt_id`, and each of the three correction consumers echoes it back on any record it declines. That exists so a CLI/MCP caller can distinguish *its own* declined write from an unrelated one after a self-drain, and it is what lets `ei relink quote` report an unconfirmed result instead of a fabricated success. It reports the disposition of one queued record. It is not optimistic concurrency, it does not detect a competing write, and it closes neither race.
 
 ## References
 

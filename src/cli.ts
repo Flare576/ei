@@ -116,8 +116,9 @@ Usage:
   ei --identifier <type> <value>  Look up a person by identifier type + value, e.g. --identifier "GitHub" "flare576"
   ei mcp                        Start the Ei MCP stdio server (for Claude Code/Cursor/Codex)
   ei create <type> --json '<json>'  Create a new entity (fact/topic/person/persona)
-  ei update <type> <id> --json '<json>'  Replace an entity by ID (full record, not a patch; fact/topic/person/quote/persona)
-  ei remove <type> <id>         Remove an entity by ID (fact/topic/person/persona; not quotes)
+  ei update <type> <id> --json '<json>'  Replace an entity by ID (full record, not a patch; fact/topic/person/persona)
+  ei remove <type> <id>         Remove an entity by ID (fact/topic/person/quote/persona)
+  ei create quote | fix quote | relink quote | remove quote   Quote writes (see Quotes below)
 
 Types:
   quote / quotes      Quotes from conversation history
@@ -125,6 +126,17 @@ Types:
   person / people     People from the user's life
   topic / topics      Topics of interest
   persona / personas  Personas in this Ei instance
+
+Quotes (source-verified — a quote claims someone really said something):
+  ei create quote --message-id <id> --text "<exact text from that message>" [--start N --end N]
+  ei fix quote --quote-id <id> --text "<corrected text>" [--start N --end N]
+  ei relink quote <id> --to <entity-id,...>   Complete new link list; --to "" clears all links
+  ei remove quote <id>
+  'create' and 'fix' refuse unless the text is found in the resolved source message. Speaker,
+  channel, timestamp, offsets and the embedding always come from that message, never from you.
+  'relink' and 'remove' assert nothing about text or origin, so they also work on a quote whose
+  source no longer resolves. 'ei update' on a quote is retired and always rejects — use
+  'fix quote' to correct text, 'relink quote' to change links, 'remove quote' to delete.
 
 Options:
   --number, -n        Maximum number of results (default: 10)
@@ -139,7 +151,7 @@ Options:
   --hook-source <src> Source of the hook: "opencode-plugin" (OpenCode SQLite), "cursor", or "codex"
   --transcript <path> Path to a Claude Code JSONL transcript file for context enrichment
   --help, -h          Show this help message
-  --json <json>       JSON body for create/update (full record for update, not a patch)
+  --json <json>       JSON body for create/update (full record for update, not a patch); on the quote verbs it merges over the discrete flags
 
 Examples:
   ei "debugging"                         # Search everything
@@ -154,7 +166,10 @@ Examples:
   ei "memory leak" | jq -r '.[0].id' | ei --id  # Pipe ID from search (every hit — including quotes — carries an id)
   ei create fact --json '{"name":"Field of Study","description":"CS","sentiment":0,"validated_date":""}'
   ei update fact abc-123 --json '{"name":"Field of Study","description":"Updated","sentiment":0,"validated_date":""}'
-  ei update quote <id> --json '{"data_item_ids":["person-b-id"], ...}'  # Repoint a quote after splitting a bad merge (fetch the full record via 'ei --id <id>' first)
+  ei create quote --message-id "opencode:my-machine:ses_abc:msg_def" --text "you guessed it"  # Attest a quote against its source message
+  ei fix quote --quote-id abc-123 --text "you guessed it, again"   # Re-verify corrected text against the quote's existing source
+  ei relink quote abc-123 --to person-b-id  # Repoint a quote after splitting a bad merge
+  ei remove quote abc-123                   # Delete a quote
   ei create persona --json '{"display_name":"Yoda","long_description":"Speaks in inverted syntax, wise and patient.","traits":[{"name":"Inverted speech","description":"Talks like Yoda","sentiment":0.7}],"topics":[]}'
   ei update persona <id> --json '<full persona record from ei --id <id>, edited>'
   ei remove persona abc-123              # Remove a persona (reserved personas like "ei"/"emmet" must be archived instead)

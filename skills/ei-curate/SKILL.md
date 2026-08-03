@@ -58,7 +58,7 @@ Four correctable record types (personas are **not** editable here — leave them
 | **person** | someone in the user's life | edit fields; split one into two; merge two into one |
 | **fact** | a fact about the user | correct the value, or remove if wrong |
 | **topic** | a subject/project | correct the description, or remove |
-| **quote** | a real utterance from a conversation | re-point it to the correct person/topic, or fix its text; public Ei tools do not create or remove quotes |
+| **quote** | a real utterance from a conversation | `ei relink quote` to re-point it to the correct person/topic; `ei fix quote` to correct its text; `ei remove quote` to delete it; `ei create quote` to attest one from a source message. **Never `ei update`** — that verb is retired for quotes and always rejects |
 
 > **Not this skill:** if a person/topic record is *correctly attributed* but
 > has simply grown bloated with content that belongs elsewhere (project
@@ -72,6 +72,15 @@ existing fact, topic, or person record or the write is rejected. A **person** re
 you read it, shows its `linked_quotes` (the reverse view). *This is the whole game:* fixing
 a bad merge means moving quotes from the wrong record to the right one by editing each
 quote's `data_item_ids`.
+
+**Quote writes are narrower than the others, on purpose.** A quote asserts that a real
+person really said a specific thing, so the four verbs are split by whether they make that
+claim. `ei create quote` and `ei fix quote` verify your text against the resolved source
+message and refuse outright if it isn't there — they can never be talked into inventing a
+speaker, channel, or timestamp. `ei relink quote` and `ei remove quote` assert nothing about
+text or origin, so they are the two that still work on a quote whose source message no
+longer resolves, or one old enough that its `message_id` is `null`. Exact syntax and every
+refusal message: `references/cli.md` → "Quote writes".
 
 **Provenance is your source of truth.** Every quote stores where it came from:
 `speaker`, `channel`, and a `message_id` whose prefix tells you the origin

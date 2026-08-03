@@ -12,7 +12,8 @@ the source of truth if it disagrees with anything here or in `ei-search`.
 
 ## There is no `ei generate` command
 
-Ei's write path (`ei create/update/remove`) supports
+Ei's write path (`ei create/update/remove`, plus the quote-only
+`ei create/fix/relink/remove quote`) supports
 `fact | topic | person | quote | persona` only — no document/message type.
 This skill never attempts to write a generated document back into Ei; the
 only CLI verbs it ever uses are the read ones `ei-search` already

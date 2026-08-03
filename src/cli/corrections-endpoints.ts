@@ -36,8 +36,9 @@ import type { QuoteMatch } from "../core/handlers/human-matching.js";
 // and materialize these 3 types. Quotes get their own dedicated paths
 // (createQuoteEntity/fixQuoteEntity/relinkQuoteEntity/removeQuoteEntity,
 // each with different embedding/verification/link semantics) rather than
-// flowing through this shared machinery — updateQuoteEntity is the one
-// quote path that's a tombstone, not a real handler (ADR-012, see below).
+// flowing through this shared machinery. The retired `update` path is the
+// one exception: updateEntity's own quote branch is an ADR-012 tombstone
+// that always rejects, not a handler at all (see its doc comment below).
 type NonQuoteType = "fact" | "topic" | "person";
 // `quote` joined this list in Wave 3 (T4) — create/fix/relink/remove are
 // all either source-verified or provenance-free by construction (see the
@@ -69,8 +70,8 @@ export const CORRECTABLE_TYPES: CorrectableType[] = ["fact", "topic", "person", 
 // Update accepts the same set as create/remove now that quote has joined
 // CORRECTABLE_TYPES above — kept as its own named constant (not an alias)
 // since `ei update quote` is a distinct, ADR-012-tombstoned surface: the
-// CLI/MCP schema still accepts the parameter shape, but updateQuoteEntity
-// itself always rejects. See its own doc comment below.
+// CLI/MCP schema still accepts the parameter shape, but updateEntity's own
+// quote branch always rejects. See updateEntity's doc comment below.
 export const UPDATABLE_TYPES: CorrectableType[] = ["fact", "topic", "person", "quote"];
 
 // Metadata fields common to all three entity types, all server-preserved

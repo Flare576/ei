@@ -5,15 +5,18 @@
  * src/cli/mcp.ts).
  *
  * Deliberately NOT folded into the shared SCHEMAS dispatch in
- * corrections-endpoints.ts — mirrors that module's own updateQuoteEntity,
- * which already bypasses the shared machinery for a type with a distinct
- * shape. PersonaEntity's nested traits[]/topics[] need structural checks
- * (id uniqueness, id auto-assignment) a flat Zod object doesn't give for
- * free, and this keeps Persona's validation free to harden independently
- * of fact/topic/person.
+ * corrections-endpoints.ts — mirrors that module's own dedicated quote
+ * paths (createQuoteEntity/fixQuoteEntity/relinkQuoteEntity/
+ * removeQuoteEntity), which already bypass the shared machinery for a type
+ * with a distinct shape. PersonaEntity's nested traits[]/topics[] need
+ * structural checks (id uniqueness, id auto-assignment) a flat Zod object
+ * doesn't give for free, and this keeps Persona's validation free to harden
+ * independently of fact/topic/person.
  *
- * Unlike Quote (update-only — quotes are records of external reality that
- * can't be fabricated or destroyed), Persona corrections are full CRUD:
+ * Unlike Quote — whose four verbs are each deliberately narrow, because a
+ * quote asserts that a real person really said something, so create/fix
+ * must verify that text against a resolved source message and relink/remove
+ * must assert nothing about it — Persona corrections are full CRUD:
  * personas are authored, disposable-by-design artifacts, so there's no
  * epistemic reason to restrict create/remove. The only restriction is
  * DELETE of a reserved persona (RESERVED_PERSONA_IDS — "ei", "emmet"),

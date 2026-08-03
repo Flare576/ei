@@ -3,7 +3,14 @@
 Pick the recipe that matches the task. Every recipe assumes you have already **assessed**
 the record(s) and **disambiguated** the quotes (`references/provenance.md`), and that you
 will **confirm with the user** (`references/talking-to-the-user.md`) before writing and
-**verify** after. All writes follow the full-record round-trip rule in `references/cli.md`.
+**verify** after.
+
+Fact/topic/person writes follow the full-record round-trip rule in `references/cli.md`.
+**Quote writes do not.** A quote asserts that someone really said something, so it has four
+narrow verbs of its own instead: `ei create quote` (attest a new one against its source
+message), `ei fix quote` (correct its text, re-verified against that source), `ei relink
+quote` (change which records it is attached to), and `ei remove quote`. `ei update` on a quote
+always rejects. Read `references/cli.md` → "Quote writes" before your first quote write.
 
 Command mechanics live in `references/cli.md`; this file is the *sequence and judgment* for
 each operation.
@@ -35,13 +42,14 @@ Kirk, *contaminated* by "Jeff Nickles."
    ```
 
 3. **Re-point the "moves" quotes** (from your disambiguation buckets). For each quote that
-   belongs to the extracted identity: read it, set `data_item_ids` to the new id (preserving
-   any *other* ids already in the array — a quote can link multiple people/topics — and
-   de-duping), write it back.
+   belongs to the extracted identity: read its current `data_item_ids`, then relink it to the
+   new id **plus any other ids already in the array** — a quote can link multiple
+   people/topics, and `--to` is the complete replacement list, so anything you leave out is
+   unlinked.
    ```
-   ei --id <quote-id>                                  # read full record
-   # data_item_ids: replace the OLD person id with <new-id>, keep the rest
-   ei update quote <quote-id> --json '<full record with fixed data_item_ids>'
+   ei --id <quote-id>                                  # read the current data_item_ids
+   # replace the OLD person id with <new-id>, keep the rest, de-dupe
+   ei relink quote <quote-id> --to "<new-id>,<other-id-to-keep>"
    ```
 
 4. **Clean the original record.** Full-record `update` that:
@@ -68,9 +76,9 @@ Kirk, *contaminated* by "Jeff Nickles."
 
 1. **Choose the survivor.** Keep the one with the richer history / more correct identifiers;
    the other is the "loser."
-2. **Move every quote off the loser.** For each of the loser's `linked_quotes`: read it,
-   replace the loser id in `data_item_ids` with the survivor id (preserve/de-dupe others),
-   write it back.
+2. **Move every quote off the loser.** For each of the loser's `linked_quotes`: read its
+   `data_item_ids`, then `ei relink quote <quote-id> --to "<survivor-id>,<others-to-keep>"`.
+   `--to` is the complete new list, so preserve and de-dupe the other ids yourself.
 3. **Fold in detail.** Full-record `update` the survivor to absorb any correct identifiers
    and description nuance the loser had (don't lose real information).
 4. **Remove the loser** (`ei remove …`) — only *after* its quotes are moved, or you'll orphan
@@ -108,13 +116,17 @@ Kirk, *contaminated* by "Jeff Nickles."
 
 **Symptom:** one quote is attached to the wrong person/topic.
 
-The canonical three-step (see `references/cli.md`):
+The canonical two-step (see `references/cli.md` → "Quote writes"):
 ```
-ei --id <quote-id>                 # 1. read
-# 2. set data_item_ids to the correct id(s)
-ei update quote <quote-id> --json '<full record with fixed data_item_ids>'   # 3. write
+ei --id <quote-id>                                               # 1. read current data_item_ids
+ei relink quote <quote-id> --to "<correct-id>,<any-id-to-keep>"   # 2. write the complete new list
 ```
 Then re-read the quote and the affected person(s) to confirm the link moved.
+
+`relink` only touches links. If the quote's *text* is wrong instead, that is `ei fix quote
+--quote-id <id> --text "<corrected text>"`, which re-verifies your text against the quote's
+source message and refuses if it is not there. If the quote should not exist at all, `ei
+remove quote <id>`.
 
 ---
 
@@ -135,7 +147,7 @@ company name, an empty duplicate, noise).
 
 There's no undo, but the data isn't stuck — you fix a bad write with another write:
 - Wrong field value → `update` it again with the correct full record.
-- Re-pointed the wrong quote → `update` the quote again to the right id.
+- Re-pointed the wrong quote → `ei relink quote` again with the correct complete `--to` list.
 - Removed something you shouldn't have → re-`create` it (note: new id; re-point its quotes to
   the new id). Tell the user this happened and what the new id is.
 
