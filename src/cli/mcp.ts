@@ -6,7 +6,7 @@ import type { StorageState } from "../core/types.js";
 import type { Message } from "../core/types.js";
 import type { RoomMessage } from "../core/types/rooms.js";
 import { resolvePersonaId, filterByPersona, filterTypeSpecificByPersona, filterBySource, filterTypeSpecificBySource } from "./persona-filter.js";
-import { createEntity, updateEntity, removeEntity, createQuoteEntity, fixQuoteEntity, CorrectionValidationError } from "./corrections-endpoints.js";
+import { createEntity, updateEntity, removeEntity, createQuoteEntity, fixQuoteEntity, relinkQuoteEntity, CorrectionValidationError } from "./corrections-endpoints.js";
 import { createPersonaEntity, updatePersonaEntity, removePersonaEntity } from "./persona-corrections.js";
 
 // Exported so tests can inject their own transport
@@ -317,7 +317,7 @@ export function createMcpServer(): McpServer {
       description:
         "Permanently remove a fact, topic, person, or persona from the user's Ei knowledge base by ID. Use to delete bad extracted data that shouldn't be split or corrected, just dropped entirely, or to delete an AI persona that's no longer needed. Not available for quotes — verifiable-origin data can only be corrected, never deleted. Reserved built-in personas (\"ei\", \"emmet\") cannot be deleted this way — use ei_update to set `is_archived: true` instead.",
       inputSchema: {
-        entity_type: z.enum(["fact", "topic", "person", "persona"]).describe("The type of entity to remove."),
+        entity_type: z.enum(["fact", "topic", "person", "persona", "quote"]).describe("The type of entity to remove."),
         id: z.string().describe("The ID of the entity to remove, from ei_lookup or ei_search."),
       },
     },
@@ -373,6 +373,27 @@ export function createMcpServer(): McpServer {
     async ({ quote_id, text, start, end }) => {
       try {
         const record = await fixQuoteEntity({ quote_id, text, start, end });
+        return { content: [{ type: "text" as const, text: JSON.stringify(record, null, 2) }] };
+      } catch (e) {
+        const message = e instanceof CorrectionValidationError ? e.message : (e as Error).message;
+        return { content: [{ type: "text" as const, text: `Error: ${message}` }], isError: true };
+      }
+    }
+  );
+
+  server.registerTool(
+    "ei_quote_relink",
+    {
+      description:
+        "Change which facts/topics/people an existing Quote is linked to (data_item_ids) — the only field this tool can change. Asserts no provenance: it never touches text/message_id/speaker/timestamp/etc, so unlike ei_quote_create/ei_quote_fix it's permitted on every quote regardless of source state, including one whose source message can no longer be resolved (dangling) or that predates attestation entirely (orphaned, message_id is null). `data_item_ids` is the complete replacement list, not an additive delta. Every target id must already resolve to an existing fact, topic, or person, and the quote id itself must already exist, or the whole call is refused before anything is queued.",
+      inputSchema: {
+        id: z.string().describe("The id of the existing Quote to relink, from ei_search or ei_lookup."),
+        data_item_ids: z.array(z.string()).describe("The complete replacement list of fact/topic/person ids this quote should be linked to — not additive, the full new set. Every id must resolve to an existing fact, topic, or person."),
+      },
+    },
+    async ({ id, data_item_ids }) => {
+      try {
+        const record = await relinkQuoteEntity({ id, data_item_ids });
         return { content: [{ type: "text" as const, text: JSON.stringify(record, null, 2) }] };
       } catch (e) {
         const message = e instanceof CorrectionValidationError ? e.message : (e as Error).message;

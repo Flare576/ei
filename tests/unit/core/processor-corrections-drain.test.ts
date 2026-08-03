@@ -154,9 +154,9 @@ function makeQuoteFixRecord(overrides: Partial<QuoteFixRecord> = {}): QuoteFixRe
   return { op: "quote.fix", entity_type: "quote", attempt_id: crypto.randomUUID(), ...makeQuote(), channel: "Test Channel", verified: true, ...overrides };
 }
 
-/** Builds a valid `quote.relink` wire record — `{id, data_item_ids}` only. */
+/** Builds a valid `quote.relink` wire record — `{id, attempt_id, data_item_ids}` only. */
 function makeQuoteRelinkRecord(id: string, dataItemIds: string[]): QuoteRelinkRecord {
-  return { op: "quote.relink", entity_type: "quote", id, data_item_ids: dataItemIds };
+  return { op: "quote.relink", entity_type: "quote", id, attempt_id: crypto.randomUUID(), data_item_ids: dataItemIds };
 }
 
 /** Builds a valid `quote.remove` wire record — `{id}` only. */

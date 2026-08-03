@@ -33,6 +33,7 @@ vi.mock("../../../src/core/embedding-service.js", async (importOriginal) => {
 
 import { computeDataItemEmbedding, computeQuoteEmbedding } from "../../../src/core/embedding-service.js";
 import { lookupById, loadLatestState, getLastCorrectionSkips } from "../../../src/cli/retrieval.js";
+import * as retrievalModule from "../../../src/cli/retrieval.js";
 import { writeCorrection } from "../../../src/cli/corrections-writer.js";
 import {
   CorrectionValidationError,
@@ -41,6 +42,7 @@ import {
   updateEntity,
   createQuoteEntity,
   fixQuoteEntity,
+  relinkQuoteEntity,
 } from "../../../src/cli/corrections-endpoints.js";
 
 function makeFact(overrides: Partial<Fact> = {}): Fact {
@@ -377,55 +379,26 @@ describe("corrections endpoints", () => {
     });
   });
 
-  it("updates a quote's data_item_ids and recomputes its embedding (un-merge repoint)", async () => {
+  it("ei update quote always rejects with the ADR-012 tombstone message, naming all three replacement verbs and a removal target, even for a well-formed body against an existing quote", async () => {
     writeState(makeState({
       human: {
         entity: "human",
         facts: [],
         topics: [],
-        people: [makePerson(), makePerson({ id: "person_2", name: "Split Person" })],
+        people: [makePerson()],
         quotes: [makeQuote()],
         last_updated: INITIAL_NOW,
       },
     }));
-
-    const updated = await updateEntity("quote", "quote_1", {
-      message_id: null,
-      data_item_ids: ["person_2"],
-      persona_groups: [],
-      text: "Existing quote text",
-      speaker: "human",
-      timestamp: INITIAL_NOW,
-      start: null,
-      end: null,
-      created_at: INITIAL_NOW,
-      created_by: "human",
-    });
-
-    expect(updated).toMatchObject({ id: "quote_1", data_item_ids: ["person_2"] });
-    expect(updated).not.toHaveProperty("embedding");
-
-    const persisted = await lookupById("quote_1");
-    expect(persisted).toMatchObject({ type: "quote", id: "quote_1", data_item_ids: ["person_2"] });
-  });
-
-  it("rejects an invalid quote update body (missing text) with CorrectionValidationError", async () => {
-    writeState(makeState({
-      human: {
-        entity: "human",
-        facts: [],
-        topics: [],
-        people: [],
-        quotes: [makeQuote()],
-        last_updated: INITIAL_NOW,
-      },
-    }));
+    const correctionsPath = join(tempDir, "corrections.json");
+    writeFileSync(correctionsPath, "[]");
 
     await expect(
       updateEntity("quote", "quote_1", {
         message_id: null,
         data_item_ids: [],
         persona_groups: [],
+        text: "Attempted forged correction",
         speaker: "human",
         timestamp: INITIAL_NOW,
         start: null,
@@ -433,10 +406,16 @@ describe("corrections endpoints", () => {
         created_at: INITIAL_NOW,
         created_by: "human",
       })
-    ).rejects.toThrow(CorrectionValidationError);
+    ).rejects.toThrow(
+      /"ei update quote" is retired.*"ei fix quote".*"ei relink quote".*"ei remove quote".*Scheduled for removal/
+    );
+
+    expect(readFileSync(correctionsPath, "utf-8")).toBe("[]");
+    const persisted = await lookupById("quote_1");
+    expect(persisted).toMatchObject({ text: "Existing quote text", data_item_ids: ["person_1"] });
   });
 
-  it("rejects updating a missing quote with the not-found contract", async () => {
+  it("ei update quote always rejects for a nonexistent quote id with the identical tombstone text, not a not-found error", async () => {
     writeState(makeState({
       human: {
         entity: "human",
@@ -447,159 +426,40 @@ describe("corrections endpoints", () => {
         last_updated: INITIAL_NOW,
       },
     }));
+    const correctionsPath = join(tempDir, "corrections.json");
+    writeFileSync(correctionsPath, "[]");
 
-    await expect(
-      updateEntity("quote", "missing", {
-        message_id: null,
-        data_item_ids: [],
-        persona_groups: [],
-        text: "x",
-        speaker: "human",
-        timestamp: INITIAL_NOW,
-        start: null,
-        end: null,
-        created_at: INITIAL_NOW,
-        created_by: "human",
-      })
-    ).rejects.toThrow(/^No quote found with id: missing$/);
+    await expect(updateEntity("quote", "missing", { text: "x" })).rejects.toThrow(
+      /"ei update quote" is retired/
+    );
+    await expect(updateEntity("quote", "missing", { text: "x" })).rejects.not.toThrow(
+      /No quote found with id/
+    );
+
+    expect(readFileSync(correctionsPath, "utf-8")).toBe("[]");
   });
 
-  it("accepts a lookupById quote payload on update, stripping round-trip fields without erroring", async () => {
+  it("ei update quote rejects with the tombstone message, not CorrectionValidationError, even for a schema-invalid body — proving rejection fires before validation runs", async () => {
     writeState(makeState({
       human: {
         entity: "human",
         facts: [],
         topics: [],
-        people: [makePerson({ id: "person_2", name: "Split Person" })],
+        people: [],
         quotes: [makeQuote()],
         last_updated: INITIAL_NOW,
       },
     }));
 
-    const lookupRecord = await lookupById("quote_1");
-    expect(lookupRecord).toMatchObject({ type: "quote", id: "quote_1" });
-
-    const updated = await updateEntity("quote", "quote_1", {
-      ...lookupRecord,
-      data_item_ids: ["person_2"],
-    });
-
-    expect(updated.id).toBe("quote_1");
-    expect(updated.data_item_ids).toEqual(["person_2"]);
-  });
-
-  it("rejects a quote update whose data_item_ids includes an ID that matches no fact/topic/person (T1)", async () => {
-    writeState(makeState({
-      human: {
-        entity: "human",
-        facts: [],
-        topics: [],
-        people: [makePerson()],
-        quotes: [makeQuote()],
-        last_updated: INITIAL_NOW,
-      },
-    }));
-
-    const body = {
-      message_id: null,
-      data_item_ids: ["totally-made-up-id"],
-      persona_groups: [],
-      text: "Existing quote text",
-      speaker: "human",
-      timestamp: INITIAL_NOW,
-      start: null,
-      end: null,
-      created_at: INITIAL_NOW,
-      created_by: "human",
-    };
-
-    await expect(updateEntity("quote", "quote_1", body)).rejects.toThrow(CorrectionValidationError);
-    await expect(updateEntity("quote", "quote_1", body)).rejects.toThrow(/totally-made-up-id/);
-
-    const persisted = await lookupById("quote_1");
-    expect(persisted).toMatchObject({ type: "quote", id: "quote_1", data_item_ids: ["person_1"] });
-  });
-
-  it("rejects a quote update whose data_item_ids includes a real ID of the wrong category, e.g. another quote's id (T2)", async () => {
-    writeState(makeState({
-      human: {
-        entity: "human",
-        facts: [],
-        topics: [],
-        people: [makePerson()],
-        quotes: [makeQuote()],
-        last_updated: INITIAL_NOW,
-      },
-    }));
-
-    const body = {
-      message_id: null,
-      data_item_ids: ["quote_1"],
-      persona_groups: [],
-      text: "Existing quote text",
-      speaker: "human",
-      timestamp: INITIAL_NOW,
-      start: null,
-      end: null,
-      created_at: INITIAL_NOW,
-      created_by: "human",
-    };
-
-    await expect(updateEntity("quote", "quote_1", body)).rejects.toThrow(CorrectionValidationError);
-    await expect(updateEntity("quote", "quote_1", body)).rejects.toThrow(/quote_1/);
-
-    const persisted = await lookupById("quote_1");
-    expect(persisted).toMatchObject({ type: "quote", id: "quote_1", data_item_ids: ["person_1"] });
-  });
-
-  it("repoints a quote from personA to personB across the lookup -> update -> lookup repair workflow (T3)", async () => {
-    const personA = makePerson({ id: "person_a", name: "Person A" });
-    const personB = makePerson({ id: "person_b", name: "Person B" });
-    const quote = makeQuote({ id: "quote_1", data_item_ids: ["person_a"] });
-
-    writeState(makeState({
-      human: {
-        entity: "human",
-        facts: [],
-        topics: [],
-        people: [personA, personB],
-        quotes: [quote],
-        last_updated: INITIAL_NOW,
-      },
-    }));
-
-    const personABefore = await lookupById("person_a");
-    expect(personABefore).toMatchObject({
-      linked_quotes: [{ id: quote.id, text: quote.text, speaker: quote.speaker, timestamp: quote.timestamp }],
-    });
-
-    const quoteRecord = await lookupById("quote_1");
-    expect(quoteRecord).toMatchObject({ type: "quote", id: "quote_1", data_item_ids: ["person_a"] });
-
-    const updated = await updateEntity("quote", "quote_1", {
-      ...quoteRecord,
-      data_item_ids: ["person_b"],
-    });
-
-    expect(updated.data_item_ids).toEqual(["person_b"]);
-
-    const personAAfter = await lookupById("person_a");
-    expect(personAAfter).toMatchObject({ linked_quotes: [] });
-
-    const personBAfter = await lookupById("person_b");
-    expect(personBAfter).toMatchObject({
-      linked_quotes: [{ id: quote.id, text: quote.text, speaker: quote.speaker, timestamp: quote.timestamp }],
-    });
-
-    // Message metadata round-trips unchanged — only data_item_ids (and the
-    // recomputed embedding) were meant to move.
-    expect(updated).toMatchObject({
-      message_id: quote.message_id,
-      timestamp: quote.timestamp,
-      created_at: quote.created_at,
-      created_by: quote.created_by,
-      text: quote.text,
-    });
+    let caught: unknown;
+    try {
+      await updateEntity("quote", "quote_1", {});
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught).not.toBeInstanceOf(CorrectionValidationError);
+    expect((caught as Error).message).toContain('"ei update quote" is retired');
   });
 
   it("strips the embedding vector from create/update responses (CLI/MCP output must never leak raw floats)", async () => {
@@ -630,24 +490,9 @@ describe("corrections endpoints", () => {
     });
     expect(updatedFact).not.toHaveProperty("embedding");
 
-    const updatedQuote = await updateEntity("quote", "quote_1", {
-      message_id: null,
-      data_item_ids: ["person_1"],
-      persona_groups: [],
-      text: "Existing quote text",
-      speaker: "human",
-      timestamp: INITIAL_NOW,
-      start: null,
-      end: null,
-      created_at: INITIAL_NOW,
-      created_by: "human",
-    });
-    expect(updatedQuote).not.toHaveProperty("embedding");
-
     // The strip only reshapes the response -- computation (and therefore
     // search) must still happen underneath.
     expect(computeDataItemEmbedding).toHaveBeenCalled();
-    expect(computeQuoteEmbedding).toHaveBeenCalledWith("Existing quote text");
   });
 });
 
@@ -1711,5 +1556,790 @@ describe("createQuoteEntity / fixQuoteEntity — post-write skip is an id-free, 
     // attempt_id "attempt-under-test" was, and remains, the one skipped
     // record -- unaffected by the later create's unrelated attempt_id.
     expect(fixResult.skipped[0].attempt_id).toBe("attempt-under-test");
+  });
+});
+
+// -----------------------------------------------------------------------
+// relinkQuoteEntity (`ei relink quote` / `ei_quote_relink`)
+// -----------------------------------------------------------------------
+// relink carries no provenance fields at all -- it's the one write path
+// permitted on every quote population, orphaned/dangling included, since
+// it asserts nothing about text/source. Uses the plain makeState/makeQuote/
+// makePerson/makeFact fixtures (not buildAttestationState below), since
+// relink never resolves a source message.
+
+describe("relinkQuoteEntity (ei relink quote / ei_quote_relink)", () => {
+  it("changes only data_item_ids, leaving every other field byte-identical, when relinking a sourced quote to a new valid target", async () => {
+    writeState(makeState({
+      human: {
+        entity: "human",
+        facts: [makeFact(), makeFact({ id: "fact_2", name: "Second Fact" })],
+        topics: [],
+        people: [],
+        quotes: [makeQuote()],
+        last_updated: INITIAL_NOW,
+      },
+    }));
+
+    const relinked = await relinkQuoteEntity({ id: "quote_1", data_item_ids: ["fact_2"] });
+
+    expect(relinked).toMatchObject({
+      id: "quote_1",
+      data_item_ids: ["fact_2"],
+      text: "Existing quote text",
+      speaker: "human",
+      message_id: null,
+    });
+    expect(relinked).not.toHaveProperty("embedding");
+
+    const persisted = await lookupById("quote_1");
+    expect(persisted).toMatchObject({ id: "quote_1", data_item_ids: ["fact_2"], text: "Existing quote text" });
+  });
+
+  it("relinks an orphaned quote (message_id: null) successfully -- relink asserts no provenance so it's permitted on every population", async () => {
+    writeState(makeState({
+      human: {
+        entity: "human",
+        facts: [],
+        topics: [],
+        people: [makePerson()],
+        quotes: [makeQuote({ id: "orphaned-1", message_id: null, data_item_ids: [] })],
+        last_updated: INITIAL_NOW,
+      },
+    }));
+
+    const relinked = await relinkQuoteEntity({ id: "orphaned-1", data_item_ids: ["person_1"] });
+    expect(relinked.data_item_ids).toEqual(["person_1"]);
+
+    const persisted = await lookupById("orphaned-1");
+    expect(persisted).toMatchObject({ data_item_ids: ["person_1"], message_id: null });
+  });
+
+  it("relinks a dangling quote (message_id set, source unresolvable) successfully", async () => {
+    writeState(makeState({
+      human: {
+        entity: "human",
+        facts: [],
+        topics: [{ id: "topic_1", name: "T", description: "d", sentiment: 0, validated_date: INITIAL_NOW, last_updated: INITIAL_NOW }],
+        people: [],
+        quotes: [makeQuote({ id: "dangling-1", message_id: "ei:00000000-0000-4000-8000-000000000000", data_item_ids: [] })],
+        last_updated: INITIAL_NOW,
+      },
+    }));
+
+    const relinked = await relinkQuoteEntity({ id: "dangling-1", data_item_ids: ["topic_1"] });
+    expect(relinked.data_item_ids).toEqual(["topic_1"]);
+  });
+
+  it("rejects relinking to a nonexistent entity id, queuing nothing, without echoing the caller-supplied id (I1)", async () => {
+    writeState(makeState({
+      human: {
+        entity: "human",
+        facts: [],
+        topics: [],
+        people: [],
+        quotes: [makeQuote({ data_item_ids: [] })],
+        last_updated: INITIAL_NOW,
+      },
+    }));
+    const correctionsPath = join(tempDir, "corrections.json");
+    writeFileSync(correctionsPath, "[]");
+
+    let caught: Error | undefined;
+    try {
+      await relinkQuoteEntity({ id: "quote_1", data_item_ids: ["totally-made-up-id"] });
+    } catch (e) {
+      caught = e as Error;
+    }
+
+    expect(caught).toBeInstanceOf(CorrectionValidationError);
+    expect(caught!.message).toContain("data_item_ids references unknown or disallowed entities");
+    expect(caught!.message).not.toContain("totally-made-up-id");
+
+    expect(readFileSync(correctionsPath, "utf-8")).toBe("[]");
+    const persisted = await lookupById("quote_1");
+    expect(persisted).toMatchObject({ data_item_ids: [] });
+  });
+
+
+  it("rejects relinking to a real id of the wrong category, e.g. another quote's id, without echoing it (I1)", async () => {
+    writeState(makeState({
+      human: {
+        entity: "human",
+        facts: [],
+        topics: [],
+        people: [],
+        quotes: [makeQuote({ id: "quote_1", data_item_ids: [] }), makeQuote({ id: "quote_2", data_item_ids: [] })],
+        last_updated: INITIAL_NOW,
+      },
+    }));
+
+    let caught: Error | undefined;
+    try {
+      await relinkQuoteEntity({ id: "quote_1", data_item_ids: ["quote_2"] });
+    } catch (e) {
+      caught = e as Error;
+    }
+
+    expect(caught).toBeInstanceOf(CorrectionValidationError);
+    expect(caught!.message).toContain("data_item_ids references unknown or disallowed entities");
+    expect(caught!.message).not.toContain("quote_2");
+  });
+
+  it("a control/ANSI-bearing invalid relink target produces a fixed, sanitized refusal -- no raw control bytes or attacker-supplied id text (I1, T1)", async () => {
+    writeState(makeState({
+      human: {
+        entity: "human",
+        facts: [],
+        topics: [],
+        people: [],
+        quotes: [makeQuote({ data_item_ids: [] })],
+        last_updated: INITIAL_NOW,
+      },
+    }));
+    const evilId = "not-a-real-id\x07bell\x1b[31mred\x1b[0m";
+
+    let caught: Error | undefined;
+    try {
+      await relinkQuoteEntity({ id: "quote_1", data_item_ids: [evilId] });
+    } catch (e) {
+      caught = e as Error;
+    }
+
+    expect(caught).toBeInstanceOf(CorrectionValidationError);
+    expect(caught!.message).toBe(
+      "Invalid quote (relink): data_item_ids references unknown or disallowed entities (must resolve to an existing fact, topic, or person — not a quote, persona, or unmatched ID)"
+    );
+    // eslint-disable-next-line no-control-regex
+    expect(/[\x00-\x1f]/.test(caught!.message)).toBe(false);
+    expect(caught!.message).not.toContain(evilId);
+    expect(caught!.message).not.toContain("not-a-real-id");
+  });
+
+  it("rejects relinking a quote id that does not exist at all, queuing nothing -- distinct from the invalid-target-id case", async () => {
+    writeState(makeState({
+      human: {
+        entity: "human",
+        facts: [],
+        topics: [],
+        people: [makePerson()],
+        quotes: [],
+        last_updated: INITIAL_NOW,
+      },
+    }));
+    const correctionsPath = join(tempDir, "corrections.json");
+    writeFileSync(correctionsPath, "[]");
+
+    await expect(relinkQuoteEntity({ id: "does-not-exist", data_item_ids: ["person_1"] })).rejects.toThrow(
+      "Cannot relink quote: no quote found with the supplied id"
+    );
+
+    expect(readFileSync(correctionsPath, "utf-8")).toBe("[]");
+  });
+
+  it("rejects a relink body carrying a forbidden field (e.g. text) with CorrectionValidationError", async () => {
+    writeState(makeState({
+      human: {
+        entity: "human",
+        facts: [],
+        topics: [],
+        people: [],
+        quotes: [makeQuote({ data_item_ids: [] })],
+        last_updated: INITIAL_NOW,
+      },
+    }));
+
+    await expect(
+      relinkQuoteEntity({ id: "quote_1", data_item_ids: [], text: "forged text" })
+    ).rejects.toThrow(CorrectionValidationError);
+  });
+
+  it("strips the embedding vector from its response", async () => {
+    writeState(makeState({
+      human: {
+        entity: "human",
+        facts: [],
+        topics: [],
+        people: [],
+        quotes: [makeQuote({ data_item_ids: [] })],
+        last_updated: INITIAL_NOW,
+      },
+    }));
+
+    const relinked = await relinkQuoteEntity({ id: "quote_1", data_item_ids: [] });
+    expect(relinked).not.toHaveProperty("embedding");
+  });
+
+  it("reports a distinct queued/pending response, never a confirmed success, when a live instance holds ei.lock", async () => {
+    writeState(makeState({
+      human: {
+        entity: "human",
+        facts: [],
+        topics: [],
+        people: [makePerson()],
+        quotes: [makeQuote({ data_item_ids: [] })],
+        last_updated: INITIAL_NOW,
+      },
+    }));
+    const statePath = join(tempDir, "state.json");
+    const originalStateBytes = readFileSync(statePath, "utf-8");
+    writeFileSync(join(tempDir, "ei.lock"), JSON.stringify({ pid: process.pid }));
+
+    const result = await relinkQuoteEntity({ id: "quote_1", data_item_ids: ["person_1"] });
+
+    expect(result).toEqual({ status: "queued", id: "quote_1", message: expect.stringContaining("queued") });
+    expect(result).not.toHaveProperty("data_item_ids");
+    expect(readFileSync(statePath, "utf-8")).toBe(originalStateBytes);
+
+    const queued = JSON.parse(readFileSync(join(tempDir, "corrections.json"), "utf-8"));
+    expect(queued).toEqual([{ op: "quote.relink", entity_type: "quote", id: "quote_1", data_item_ids: ["person_1"], attempt_id: expect.any(String) }]);
+  });
+});
+
+// -----------------------------------------------------------------------
+// removeEntity's quote branch / removeQuoteEntity (`ei remove quote` /
+// `ei_remove` with entity_type "quote")
+// -----------------------------------------------------------------------
+
+describe("removeEntity — quote branch / removeQuoteEntity (ei remove quote / ei_remove entity_type:quote)", () => {
+  it("queues a quote.remove record under a live lock, matching the Corrections Wire Grammar's {id}-only shape", async () => {
+    writeState(makeState({
+      human: {
+        entity: "human",
+        facts: [],
+        topics: [],
+        people: [],
+        quotes: [makeQuote()],
+        last_updated: INITIAL_NOW,
+      },
+    }));
+    const correctionsPath = join(tempDir, "corrections.json");
+    writeFileSync(correctionsPath, "[]");
+    writeFileSync(join(tempDir, "ei.lock"), JSON.stringify({ pid: process.pid }));
+
+    await removeEntity("quote", "quote_1");
+
+    const queued = JSON.parse(readFileSync(correctionsPath, "utf-8"));
+    expect(queued).toEqual([{ op: "quote.remove", entity_type: "quote", id: "quote_1" }]);
+  });
+
+  it("removes an existing quote via self-drain (no live lock), and lookup no longer returns it", async () => {
+    writeState(makeState({
+      human: {
+        entity: "human",
+        facts: [],
+        topics: [],
+        people: [],
+        quotes: [makeQuote()],
+        last_updated: INITIAL_NOW,
+      },
+    }));
+
+    await removeEntity("quote", "quote_1");
+
+    expect(await lookupById("quote_1")).toBeNull();
+  });
+
+  it("removes an orphaned quote too -- remove asserts no provenance so it's permitted on every population", async () => {
+    writeState(makeState({
+      human: {
+        entity: "human",
+        facts: [],
+        topics: [],
+        people: [],
+        quotes: [makeQuote({ id: "orphaned-1", message_id: null })],
+        last_updated: INITIAL_NOW,
+      },
+    }));
+
+    await removeEntity("quote", "orphaned-1");
+
+    expect(await lookupById("orphaned-1")).toBeNull();
+  });
+
+  it("rejects removing a nonexistent quote id, queuing nothing", async () => {
+    writeState(makeState({
+      human: {
+        entity: "human",
+        facts: [],
+        topics: [],
+        people: [],
+        quotes: [],
+        last_updated: INITIAL_NOW,
+      },
+    }));
+    const correctionsPath = join(tempDir, "corrections.json");
+    writeFileSync(correctionsPath, "[]");
+
+    await expect(removeEntity("quote", "does-not-exist")).rejects.toThrow(
+      "Cannot remove quote: no quote found with the supplied id"
+    );
+
+    expect(readFileSync(correctionsPath, "utf-8")).toBe("[]");
+  });
+
+  it("routes through removeQuoteEntity specifically -- removing a quote id never touches state.human.people (the exact removeEntity fallthrough this task must not reproduce)", async () => {
+    writeState(makeState({
+      human: {
+        entity: "human",
+        facts: [],
+        topics: [],
+        people: [makePerson({ id: "person_1" })],
+        quotes: [makeQuote({ id: "quote_1" })],
+        last_updated: INITIAL_NOW,
+      },
+    }));
+
+    await removeEntity("quote", "quote_1");
+
+    expect(await lookupById("quote_1")).toBeNull();
+    // The person with a DIFFERENT id must survive untouched -- if
+    // removeEntity's fact/topic/person ternary ever silently absorbed
+    // "quote" into its final state.human.people fallthrough arm, this
+    // call would have searched people for "quote_1", found nothing,
+    // thrown a not-found error, and the quote itself would still exist.
+    expect(await lookupById("person_1")).toMatchObject({ type: "person", id: "person_1" });
+  });
+});
+
+// -----------------------------------------------------------------------
+// relinkQuoteEntity — self-drain skip surfaces as an unconfirmed refusal,
+// never success (I2)
+// -----------------------------------------------------------------------
+// T2b's own state-aware relink validation (assertValidQuoteCorrection)
+// revalidates data_item_ids against LIVE apply-time state, and
+// applyQuoteOperation's relink case reports a skip (I2 round 3 --
+// reversed from the original silent no-op) when the quote itself no
+// longer exists at apply time. relinkQuoteEntity mints a fresh
+// attempt_id per call and checks writeCorrection()'s skipped list for
+// it; a match means this call's own write was declined, never a
+// materialized { ...current, data_item_ids } "success," even when the
+// write it just queued was declined by a concurrent change between this
+// endpoint's own pre-check and the self-drain that actually applies
+// records.
+//
+// loadLatestState() overlays corrections.json onto its returned state
+// (retrieval.ts), so a conflicting correction seeded into corrections.json
+// BEFORE the call is already visible to relinkQuoteEntity's OWN pre-check
+// -- it never reaches writeCorrection() at all in that case (a real, but
+// different and already-covered, refusal). Reaching the actual
+// self-drain-time race requires the conflicting write to land strictly
+// AFTER the pre-check's own loadLatestState() call resolves but BEFORE
+// writeCorrection()'s independent, unmocked fresh read of
+// state.json/corrections.json -- reproduced deterministically below via a
+// one-shot loadLatestState() mock returning the pre-conflict snapshot (so
+// the pre-check passes) while writing the conflicting correction to disk
+// as a side effect, exactly where the real race window sits.
+
+describe("relinkQuoteEntity — self-drain skip surfaces as an unconfirmed refusal, never success (I2)", () => {
+  it("returns an unconfirmed refusal, not a materialized success, when a relink target is removed between the pre-check and this call's own self-drain apply", async () => {
+    const seedState = makeState({
+      human: {
+        entity: "human",
+        facts: [],
+        topics: [],
+        people: [makePerson({ id: "person_1" })],
+        quotes: [makeQuote({ id: "quote_1", data_item_ids: [] })],
+        last_updated: INITIAL_NOW,
+      },
+    });
+    writeState(seedState);
+    const correctionsPath = join(tempDir, "corrections.json");
+    writeFileSync(correctionsPath, "[]");
+
+    const spy = vi.spyOn(retrievalModule, "loadLatestState").mockImplementationOnce(async () => {
+      // Simulates the exact race I2 describes: a separate call's own
+      // writeCorrection() commits a removal of person_1 strictly AFTER
+      // this pre-check's read resolves but before this call reaches its
+      // own writeCorrection() -- the pre-check still sees person_1 as
+      // valid, and only the self-drain's own independent, unmocked fresh
+      // read observes the removal.
+      writeFileSync(
+        correctionsPath,
+        JSON.stringify([{ op: "remove", entity_type: "person", id: "person_1", timestamp: INITIAL_NOW }])
+      );
+      return seedState;
+    });
+
+    const result = await relinkQuoteEntity({ id: "quote_1", data_item_ids: ["person_1"] });
+    spy.mockRestore();
+
+    expect(result).toEqual({
+      status: "unconfirmed",
+      id: "quote_1",
+      message: expect.stringContaining("could not be confirmed"),
+    });
+    expect(result).not.toHaveProperty("data_item_ids");
+
+    const persisted = await lookupById("quote_1");
+    expect(persisted).toMatchObject({ id: "quote_1", data_item_ids: [] });
+  });
+
+  it("returns an unconfirmed refusal, never a materialized success, when the quote itself is removed between the pre-check and this call's own self-drain apply", async () => {
+    const seedState = makeState({
+      human: {
+        entity: "human",
+        facts: [],
+        topics: [],
+        people: [makePerson({ id: "person_1" })],
+        quotes: [makeQuote({ id: "quote_1", data_item_ids: [] })],
+        last_updated: INITIAL_NOW,
+      },
+    });
+    writeState(seedState);
+    const correctionsPath = join(tempDir, "corrections.json");
+    writeFileSync(correctionsPath, "[]");
+
+    const spy = vi.spyOn(retrievalModule, "loadLatestState").mockImplementationOnce(async () => {
+      // applyQuoteOperation's relink case now reports a skip (carrying
+      // this call's own attempt_id) when the target quote id no longer
+      // exists at apply time (I2 round 3) -- resolved entirely from
+      // writeCorrection()'s own return value, with no need for a second
+      // loadLatestState() call.
+      writeFileSync(correctionsPath, JSON.stringify([{ op: "quote.remove", entity_type: "quote", id: "quote_1" }]));
+      return seedState;
+    });
+
+    const result = await relinkQuoteEntity({ id: "quote_1", data_item_ids: ["person_1"] });
+    spy.mockRestore();
+
+    expect(result).toEqual({
+      status: "unconfirmed",
+      id: "quote_1",
+      message: expect.stringContaining("could not be confirmed"),
+    });
+    expect(result).not.toHaveProperty("data_item_ids");
+
+    const persisted = await lookupById("quote_1");
+    expect(persisted).toBeNull();
+  });
+});
+
+// -----------------------------------------------------------------------
+// relinkQuoteEntity — a same-ID quote.create recreation cannot launder a
+// self-drained skip into a materialized success (I2, rounds 2-3)
+// -----------------------------------------------------------------------
+// Round 1's fix closed the stale-target and vanished-quote sub-cases by
+// re-checking `id`'s existence after self-drain, but existence alone
+// could not tell "this call's own relink actually applied" apart from "a
+// DIFFERENT quote was recreated at this same id after this call's own
+// relink no-op'd" (round 2). Round 2's fix -- a nine-field identity
+// projection comparing the pre-relink snapshot against a post-drain read
+// -- narrowed but did not close the gap: an EXACT-clone quote.create
+// replay, sharing every one of those nine fields including empty links,
+// could still pass the projection (round 3's own failing trace). Both
+// rounds are now moot: relinkQuoteEntity mints its own fresh attempt_id
+// per call (the same mechanism createQuoteEntity/fixQuoteEntity already
+// use), and applyQuoteOperation's relink case reports a real skip --
+// carrying that attempt_id -- the instant the target quote is missing at
+// apply time, resolved entirely in-memory from writeCorrection()'s own
+// return value before any recreation, of any similarity, could even
+// land. The three tests below drive the identical real ordering
+// (remove(Q) lands inside this call's own self-drain batch, so this
+// relink's own record finds Q missing) with recreations of varying
+// similarity to the pre-relink snapshot, proving the fix is general
+// rather than another field-comparison special case.
+
+describe("relinkQuoteEntity — a same-ID quote.create recreation cannot launder a self-drained skip into a materialized success (I2, rounds 2-3)", () => {
+  it("returns an unconfirmed refusal, never the requested links, when a different-field same-id quote.create lands after this call's own self-drain skip (R2-T1)", async () => {
+    const originalQuote = makeQuote({
+      id: "quote_1",
+      text: "Original quote text",
+      message_id: null,
+      created_at: INITIAL_NOW,
+      data_item_ids: [],
+    });
+    const seedState = makeState({
+      human: {
+        entity: "human",
+        facts: [],
+        topics: [],
+        people: [makePerson({ id: "person_1" })],
+        quotes: [originalQuote],
+        last_updated: INITIAL_NOW,
+      },
+    });
+    writeState(seedState);
+    const correctionsPath = join(tempDir, "corrections.json");
+    writeFileSync(correctionsPath, "[]");
+
+    const spy = vi.spyOn(retrievalModule, "loadLatestState").mockImplementationOnce(async () => {
+      // This relink's own pre-check sees quote_1 with person_1 still
+      // live. Side effect: a concurrent quote.remove(quote_1) lands in
+      // corrections.json strictly after this read resolves, so THIS
+      // call's own upcoming self-drain batch applies the removal FIRST,
+      // then reaches its own relink record for an id that's already
+      // gone -- applyQuoteOperation's relink case (I2, round 3) reports
+      // a real skip carrying this call's own attempt_id, instead of the
+      // old silent no-op.
+      writeFileSync(correctionsPath, JSON.stringify([{ op: "quote.remove", entity_type: "quote", id: "quote_1" }]));
+      return seedState;
+    });
+
+    const result = await relinkQuoteEntity({ id: "quote_1", data_item_ids: ["person_1"] });
+    spy.mockRestore();
+
+    // Oracle: a non-Quote unconfirmed/refused result -- never the
+    // requested links returned as this call's own success. Decided here
+    // purely from this call's own attempt_id appearing in
+    // writeCorrection()'s skipped list, before any later state is ever
+    // consulted -- so it cannot matter what happens next.
+    expect(result).toEqual({
+      status: "unconfirmed",
+      id: "quote_1",
+      message: expect.stringContaining("could not be confirmed"),
+    });
+    expect(result).not.toHaveProperty("data_item_ids");
+
+    // NOW drive the same-ID quote.create recreation strictly AFTER
+    // relinkQuoteEntity has already returned -- a DIFFERENT quote (text,
+    // message_id, created_at all differ from the pre-relink snapshot),
+    // with fresh create-required empty links, occupying the same id.
+    await writeCorrection({
+      op: "quote.create",
+      entity_type: "quote",
+      id: "quote_1",
+      attempt_id: crypto.randomUUID(),
+      message_id: "ei:22222222-2222-4222-8222-222222222222",
+      data_item_ids: [],
+      persona_groups: [],
+      text: "A completely different, later-recreated quote",
+      speaker: originalQuote.speaker,
+      channel: "unknown",
+      timestamp: originalQuote.timestamp,
+      start: originalQuote.start,
+      end: originalQuote.end,
+      created_at: "2099-01-01T00:00:00.000Z",
+      created_by: originalQuote.created_by,
+      embedding: [],
+      verified: true,
+    });
+
+    // Independently confirms the persisted quote really is the
+    // recreated one -- this call's own relink never touched it.
+    const persisted = await lookupById("quote_1");
+    expect(persisted).toMatchObject({
+      id: "quote_1",
+      text: "A completely different, later-recreated quote",
+      data_item_ids: [],
+    });
+  });
+
+  it("returns QuoteWriteUnconfirmed, never the requested links, when an EXACT-clone same-id quote.create (sharing every pre-relink field, including empty links) lands after this call's own self-drain skip (R3-T1)", async () => {
+    const originalQuote = makeQuote({
+      id: "quote_1",
+      text: "Original quote text",
+      message_id: null,
+      created_at: INITIAL_NOW,
+      data_item_ids: [],
+    });
+    const seedState = makeState({
+      human: {
+        entity: "human",
+        facts: [],
+        topics: [],
+        people: [makePerson({ id: "person_1" })],
+        quotes: [originalQuote],
+        last_updated: INITIAL_NOW,
+      },
+    });
+    writeState(seedState);
+    const correctionsPath = join(tempDir, "corrections.json");
+    writeFileSync(correctionsPath, "[]");
+
+    const spy = vi.spyOn(retrievalModule, "loadLatestState").mockImplementationOnce(async () => {
+      writeFileSync(correctionsPath, JSON.stringify([{ op: "quote.remove", entity_type: "quote", id: "quote_1" }]));
+      return seedState;
+    });
+
+    const result = await relinkQuoteEntity({ id: "quote_1", data_item_ids: ["person_1"] });
+    spy.mockRestore();
+
+    expect(result).toEqual({
+      status: "unconfirmed",
+      id: "quote_1",
+      message: expect.stringContaining("could not be confirmed"),
+    });
+    expect(result).not.toHaveProperty("data_item_ids");
+
+    // The exact-clone case that defeated the round-2 fix: every one of
+    // the retired QUOTE_IDENTITY_FIELDS (created_at, created_by,
+    // message_id, text, speaker, timestamp, start, end) matches the
+    // pre-relink snapshot exactly, and links are the create-required
+    // empty set -- a value-comparison-only fix cannot tell this apart
+    // from this call's own relink having actually applied.
+    await writeCorrection({
+      op: "quote.create",
+      entity_type: "quote",
+      id: "quote_1",
+      attempt_id: crypto.randomUUID(),
+      message_id: originalQuote.message_id,
+      data_item_ids: [],
+      persona_groups: [],
+      text: originalQuote.text,
+      speaker: originalQuote.speaker,
+      channel: "unknown",
+      timestamp: originalQuote.timestamp,
+      start: originalQuote.start,
+      end: originalQuote.end,
+      created_at: originalQuote.created_at,
+      created_by: originalQuote.created_by,
+      embedding: [],
+      verified: true,
+    });
+
+    // Persisted links remain the recreated record's own (empty) links --
+    // never the ["person_1"] this call requested.
+    const persisted = await lookupById("quote_1");
+    expect(persisted).toMatchObject({ id: "quote_1", text: "Original quote text", data_item_ids: [] });
+  });
+
+  it("returns QuoteWriteUnconfirmed for a relink-to-[] request too, when the same exact-clone same-id quote.create lands after this call's own self-drain skip (R3-T1, relink-to-[] variant)", async () => {
+    const originalQuote = makeQuote({
+      id: "quote_1",
+      text: "Original quote text",
+      message_id: null,
+      created_at: INITIAL_NOW,
+      data_item_ids: [],
+    });
+    const seedState = makeState({
+      human: {
+        entity: "human",
+        facts: [],
+        topics: [],
+        people: [makePerson({ id: "person_1" })],
+        quotes: [originalQuote],
+        last_updated: INITIAL_NOW,
+      },
+    });
+    writeState(seedState);
+    const correctionsPath = join(tempDir, "corrections.json");
+    writeFileSync(correctionsPath, "[]");
+
+    const spy = vi.spyOn(retrievalModule, "loadLatestState").mockImplementationOnce(async () => {
+      writeFileSync(correctionsPath, JSON.stringify([{ op: "quote.remove", entity_type: "quote", id: "quote_1" }]));
+      return seedState;
+    });
+
+    // Unlike the other two cases, this call itself requests
+    // data_item_ids: [] -- the specific case Beta's round-3 review named
+    // explicitly: a relink TO an empty list plus a replay of the
+    // original all-empty creation record makes every persisted field
+    // (including links) coincidentally equal, which is exactly what
+    // defeated a value-comparison-only fix.
+    const result = await relinkQuoteEntity({ id: "quote_1", data_item_ids: [] });
+    spy.mockRestore();
+
+    expect(result).toEqual({
+      status: "unconfirmed",
+      id: "quote_1",
+      message: expect.stringContaining("could not be confirmed"),
+    });
+    expect(result).not.toHaveProperty("data_item_ids");
+
+    await writeCorrection({
+      op: "quote.create",
+      entity_type: "quote",
+      id: "quote_1",
+      attempt_id: crypto.randomUUID(),
+      message_id: originalQuote.message_id,
+      data_item_ids: [],
+      persona_groups: [],
+      text: originalQuote.text,
+      speaker: originalQuote.speaker,
+      channel: "unknown",
+      timestamp: originalQuote.timestamp,
+      start: originalQuote.start,
+      end: originalQuote.end,
+      created_at: originalQuote.created_at,
+      created_by: originalQuote.created_by,
+      embedding: [],
+      verified: true,
+    });
+
+    const persisted = await lookupById("quote_1");
+    expect(persisted).toMatchObject({ id: "quote_1", data_item_ids: [] });
+  });
+});
+
+// -----------------------------------------------------------------------
+// relinkQuoteEntity / removeEntity(quote) — an absent quote id queues
+// nothing, even under a live lock (T4)
+// -----------------------------------------------------------------------
+// The existing "queuing nothing" coverage for a nonexistent quote id only
+// ever ran without a live lock -- writeCorrection()'s self-drain ALWAYS
+// clears corrections.json back to "[]" after applying a batch, including
+// one where a wrongly-queued record turned out to be a no-op, so an
+// empty queue afterward does not by itself prove the pre-check ran
+// before writeCorrection() was ever called. Under a live lock,
+// writeCorrection() would instead unconditionally APPEND the record --
+// so a byte-identical queue is the falsifiable proof this row asks for.
+
+describe("relinkQuoteEntity / removeEntity(quote) — an absent quote id queues nothing, even under a live lock (T4)", () => {
+  it("relinkQuoteEntity rejects a nonexistent quote id before ever calling writeCorrection, leaving corrections.json byte-identical under a live lock", async () => {
+    writeState(makeState({
+      human: { entity: "human", facts: [], topics: [], people: [], quotes: [], last_updated: INITIAL_NOW },
+    }));
+    const correctionsPath = join(tempDir, "corrections.json");
+    writeFileSync(correctionsPath, "[]");
+    writeFileSync(join(tempDir, "ei.lock"), JSON.stringify({ pid: process.pid }));
+
+    await expect(relinkQuoteEntity({ id: "does-not-exist", data_item_ids: [] })).rejects.toThrow(
+      "Cannot relink quote: no quote found with the supplied id"
+    );
+
+    expect(readFileSync(correctionsPath, "utf-8")).toBe("[]");
+  });
+
+  it("removeEntity('quote', ...) rejects a nonexistent quote id before ever calling writeCorrection, leaving corrections.json byte-identical under a live lock", async () => {
+    writeState(makeState({
+      human: { entity: "human", facts: [], topics: [], people: [], quotes: [], last_updated: INITIAL_NOW },
+    }));
+    const correctionsPath = join(tempDir, "corrections.json");
+    writeFileSync(correctionsPath, "[]");
+    writeFileSync(join(tempDir, "ei.lock"), JSON.stringify({ pid: process.pid }));
+
+    await expect(removeEntity("quote", "does-not-exist")).rejects.toThrow(
+      "Cannot remove quote: no quote found with the supplied id"
+    );
+
+    expect(readFileSync(correctionsPath, "utf-8")).toBe("[]");
+  });
+});
+
+// -----------------------------------------------------------------------
+// relinkQuoteEntity — split/merge repair workflow via relink + reverse
+// linked_quotes view (T6, P2)
+// -----------------------------------------------------------------------
+// The retired ei_update-based "personA -> personB repair workflow" test
+// exercised the dead full-record update route (see the review's Explicit
+// Opinion section); the live equivalent is relink plus lookupById's
+// linked_quotes reverse index. Confirms the split/merge workflow this
+// plan's design discussion motivates still works end to end through the
+// new narrow verb: the old link's owner loses the reverse reference, the
+// new one gains it.
+
+describe("relinkQuoteEntity — split/merge repair workflow via relink + reverse linked_quotes view (T6)", () => {
+  it("relinking a quote from personA to personB updates both entities' linked_quotes reverse view", async () => {
+    writeState(makeState({
+      human: {
+        entity: "human",
+        facts: [],
+        topics: [],
+        people: [makePerson({ id: "person-a" }), makePerson({ id: "person-b", name: "Person B" })],
+        quotes: [makeQuote({ id: "quote_1", data_item_ids: ["person-a"] })],
+        last_updated: INITIAL_NOW,
+      },
+    }));
+
+    const relinked = await relinkQuoteEntity({ id: "quote_1", data_item_ids: ["person-b"] });
+    expect(relinked).toMatchObject({ id: "quote_1", data_item_ids: ["person-b"] });
+
+    const personA = await lookupById("person-a");
+    const personB = await lookupById("person-b");
+    expect(personA?.linked_quotes).toEqual([]);
+    expect(personB?.linked_quotes).toEqual([
+      { id: "quote_1", text: "Existing quote text", speaker: "human", timestamp: INITIAL_NOW },
+    ]);
   });
 });

@@ -63,9 +63,9 @@ function makeQuoteFixRecord(dataItemIds: string[] = [], overrides: Partial<Quote
   return { op: "quote.fix", entity_type: "quote", attempt_id: crypto.randomUUID(), ...makeQuote(dataItemIds), channel: "Test Channel", embedding: [0.1, 0.2, 0.3], verified: true, ...overrides };
 }
 
-/** Builds a valid `quote.relink` wire record — `{id, data_item_ids}` only. */
+/** Builds a valid `quote.relink` wire record — `{id, attempt_id, data_item_ids}` only. */
 function makeQuoteRelinkRecord(id: string, dataItemIds: string[]): QuoteRelinkRecord {
-  return { op: "quote.relink", entity_type: "quote", id, data_item_ids: dataItemIds };
+  return { op: "quote.relink", entity_type: "quote", id, attempt_id: crypto.randomUUID(), data_item_ids: dataItemIds };
 }
 
 /** Builds a valid `quote.remove` wire record — `{id}` only. */

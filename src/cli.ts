@@ -17,7 +17,7 @@ import type { StorageState } from "./core/types";
 import { resolvePersonaId, filterByPersona, filterTypeSpecificByPersona, filterBySource, filterTypeSpecificBySource } from "./cli/persona-filter.js";
 import { installMcpClients } from "./cli/install.js";
 import { getRecentSessionMessages } from "./cli/session-context.js";
-import { createEntity, updateEntity, removeEntity, createQuoteEntity, fixQuoteEntity, CorrectionValidationError, CORRECTABLE_TYPES, UPDATABLE_TYPES } from "./cli/corrections-endpoints.js";
+import { createEntity, updateEntity, removeEntity, createQuoteEntity, fixQuoteEntity, relinkQuoteEntity, CorrectionValidationError, CORRECTABLE_TYPES, UPDATABLE_TYPES } from "./cli/corrections-endpoints.js";
 import { createPersonaEntity, updatePersonaEntity, removePersonaEntity } from "./cli/persona-corrections.js";
 import type { CorrectableType } from "./core/corrections.js";
 import pkg from "../package.json" assert { type: "json" };
@@ -48,10 +48,16 @@ const TYPE_ALIASES: Record<string, string> = {
 const CLI_CORRECTABLE_TYPES = [...CORRECTABLE_TYPES, "persona"] as const;
 const CLI_UPDATABLE_TYPES = [...UPDATABLE_TYPES, "persona"] as const;
 
-// Singular CorrectableType resolution for `ei create/update/remove` — derived
-// from TYPE_ALIASES + CLI_CORRECTABLE_TYPES so the two alias systems can never
-// silently diverge on which strings are accepted (e.g. "person"/"people"
-// stay synonymous here too, since both funnel through TYPE_ALIASES first).
+// Singular CorrectableType resolution for `ei create`/`ei remove` (create's
+// own interception ahead of the generic createEntity dispatch, and fix/
+// relink's independent reserved-verb guard clauses, resolve through this
+// same helper) — derived from TYPE_ALIASES +
+// CLI_CORRECTABLE_TYPES so the two alias systems can never silently
+// diverge on which strings are accepted (e.g. "person"/"people" stay
+// synonymous here too, since both funnel through TYPE_ALIASES first).
+// `ei update` does NOT resolve through this helper -- it has its own,
+// independently-maintained resolveUpdatableType/CLI_UPDATABLE_TYPES pair
+// below, a separate type set gating a separate verb.
 const PLURAL_TO_CORRECTABLE: Record<string, CorrectableType> = Object.fromEntries(
   CLI_CORRECTABLE_TYPES.map((t) => [TYPE_ALIASES[t], t])
 );
@@ -63,9 +69,14 @@ function resolveCorrectableType(raw: string): CorrectableType | null {
 
 // Plural CorrectableType resolution for `ei update` — same TYPE_ALIASES
 // lookup as resolveCorrectableType above, but sourced from CLI_UPDATABLE_TYPES
-// instead of CLI_CORRECTABLE_TYPES since quotes are correctable via update
-// (repointing data_item_ids after a split/merge, fixing mistranscribed
-// text) but never created or removed.
+// instead of CLI_CORRECTABLE_TYPES. Quotes are createable (the dedicated
+// `ei create quote` interception below) and removable (the generic remove
+// dispatch, via removeEntity's own quote branch) as of Plan 2 (T4) — but
+// `ei update quote` itself is an ADR-012 tombstone that always rejects,
+// regardless of id or body; text correction is `ei fix quote`'s job now,
+// link repointing is `ei relink quote`'s. This constant still needs to
+// resolve "quote"/"quotes" so that rejection is reached at all, instead
+// of a generic "invalid type" usage error.
 const PLURAL_TO_UPDATABLE: Record<string, CorrectableType> = Object.fromEntries(
   CLI_UPDATABLE_TYPES.map((t) => [TYPE_ALIASES[t], t])
 );
@@ -209,12 +220,24 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
-  // Intercepted ahead of the generic `create <type>` dispatch below:
-  // "quote" is deliberately absent from CLI_CORRECTABLE_TYPES (a quote can
-  // only be created through this source-verified path, never the generic
-  // upsert schema), so this must run first or `resolveCorrectableType`
-  // would reject it as an invalid type before ever reaching here.
-  if (args[0] === "create" && args[1] === "quote") {
+  // Intercepted ahead of the generic `create <type>` dispatch below, for
+  // both "quote" and its plural alias "quotes" (resolveCorrectableType
+  // resolves either, via TYPE_ALIASES). This condition's own
+  // resolveCorrectableType(args[1]) === "quote" check is itself why
+  // CORRECTABLE_TYPES (corrections-endpoints.ts) must include "quote" --
+  // CLI_CORRECTABLE_TYPES/PLURAL_TO_CORRECTABLE above are both derived
+  // from it, so without quote membership there, neither spelling would
+  // resolve here at all, let alone reach this interception. Without this
+  // interception running first, either spelling would fall through to
+  // the generic createEntity()/SCHEMAS dispatch, which has no "quote"
+  // entry at all and throws a raw runtime error instead of this
+  // source-verified path's own controlled validation (I3,
+  // .sisyphus/reviews/wave-3-t4-diff-review.md). CORRECTABLE_TYPES is
+  // independently load-bearing for `ei remove quote`'s generic dispatch
+  // too (no dedicated interception exists for remove) -- but it plays no
+  // role in `ei update`, which resolves through the entirely separate
+  // UPDATABLE_TYPES/resolveUpdatableType pair (src/cli.ts:299-303).
+  if (args[0] === "create" && args[1] && resolveCorrectableType(args[1]) === "quote") {
     const body: Record<string, unknown> = {};
     const messageId = readFlag(args, "--message-id");
     const text = readFlag(args, "--text");
@@ -339,9 +362,13 @@ async function main(): Promise<void> {
 
   // "fix" is a new, reserved top-level verb — quote-only, no other type
   // supports it — so an unrecognized second argument is a usage error
-  // rather than falling through to the search path at the bottom of main().
+  // rather than falling through to the search path at the bottom of
+  // main(). Resolved via resolveCorrectableType (not a literal "quote"
+  // compare) so the plural alias "quotes" is accepted too, matching
+  // every other quote-accepting verb (I3,
+  // .sisyphus/reviews/wave-3-t4-diff-review.md).
   if (args[0] === "fix") {
-    if (args[1] !== "quote") {
+    if (!args[1] || resolveCorrectableType(args[1]) !== "quote") {
       console.error(`Usage: ei fix quote --quote-id <id> --text "<text>" [--start N --end N]`);
       process.exit(1);
     }
@@ -376,6 +403,48 @@ async function main(): Promise<void> {
     }
     try {
       const record = await fixQuoteEntity(body);
+      console.log(JSON.stringify(record, null, 2));
+      process.exit(0);
+    } catch (e) {
+      console.error(e instanceof CorrectionValidationError ? e.message : (e as Error).message);
+      process.exit(1);
+    }
+  }
+
+  // "relink" is a new, reserved top-level verb — quote-only, no other
+  // type supports it — so an unrecognized second argument is a usage
+  // error rather than falling through to the search path at the bottom
+  // of main(). Resolved via resolveCorrectableType (not a literal
+  // "quote" compare) so the plural alias "quotes" is accepted too,
+  // matching every other quote-accepting verb (I3,
+  // .sisyphus/reviews/wave-3-t4-diff-review.md).
+  if (args[0] === "relink") {
+    if (!args[1] || resolveCorrectableType(args[1]) !== "quote") {
+      console.error(`Usage: ei relink quote <id> --to <entity-id,...>`);
+      process.exit(1);
+    }
+    const id = args[2];
+    const body: Record<string, unknown> = {};
+    if (id !== undefined) body.id = id;
+    const toRaw = readFlag(args, "--to");
+    if (toRaw !== undefined) {
+      body.data_item_ids = toRaw.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
+    }
+    const jsonStr = readFlag(args, "--json");
+    if (jsonStr !== undefined) {
+      let parsedJson: unknown;
+      try {
+        parsedJson = JSON.parse(jsonStr);
+      } catch (e) {
+        console.error(`Invalid JSON: ${(e as Error).message}`);
+        process.exit(1);
+      }
+      if (parsedJson && typeof parsedJson === "object") {
+        Object.assign(body, parsedJson);
+      }
+    }
+    try {
+      const record = await relinkQuoteEntity(body);
       console.log(JSON.stringify(record, null, 2));
       process.exit(0);
     } catch (e) {

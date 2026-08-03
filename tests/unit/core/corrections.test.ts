@@ -82,9 +82,9 @@ function makeQuoteFixRecord(id: string, dataItemIds: string[] = [], overrides: P
   return { op: "quote.fix", entity_type: "quote", attempt_id: `attempt-${id}`, ...makeQuote(id, dataItemIds), channel: "Test Channel", verified: true, ...overrides };
 }
 
-/** Builds a valid `quote.relink` wire record — `{id, data_item_ids}` only, no provenance fields, no marker slot. */
+/** Builds a valid `quote.relink` wire record — `{id, attempt_id, data_item_ids}` only, no provenance fields, no marker slot. */
 function makeQuoteRelinkRecord(id: string, dataItemIds: string[]): QuoteRelinkRecord {
-  return { op: "quote.relink", entity_type: "quote", id, data_item_ids: dataItemIds };
+  return { op: "quote.relink", entity_type: "quote", id, attempt_id: `attempt-${id}`, data_item_ids: dataItemIds };
 }
 
 /** Builds a valid `quote.remove` wire record — `{id}` only. */
@@ -555,11 +555,19 @@ describe("applyQuoteOperation — Corrections Wire Grammar dispatch (direct, no 
     expect(quotes).toEqual([other]);
   });
 
-  it("relink naming a quote id that does not exist is a silent no-op, not a skip", () => {
+  it("relink naming a quote id that does not exist is a reported skip, reversed from the old silent no-op (I2, round 3)", () => {
     const other = makeQuote("quote-2", []);
-    const { quotes, skipped } = applyQuoteOperation([other], makeQuoteRelinkRecord("quote-missing", ["fact-1"]));
-    expect(skipped).toBeUndefined();
+    const relinkRecord = makeQuoteRelinkRecord("quote-missing", ["fact-1"]);
+    const { quotes, skipped } = applyQuoteOperation([other], relinkRecord);
     expect(quotes).toEqual([other]);
+    expect(skipped?.record_id).toBe("quote-missing");
+    expect(skipped?.reason).toContain("does not exist");
+    // I2 round 3: the dispatcher echoes back the attempt_id of the
+    // SKIPPED record itself, matching quote.fix's pre-existing pattern --
+    // this is what lets relinkQuoteEntity recognize its own queued write
+    // with certainty instead of inferring it from a final-state field
+    // comparison (the retired QUOTE_IDENTITY_FIELDS projection).
+    expect(skipped?.attempt_id).toBe(relinkRecord.attempt_id);
   });
 
   it("remove naming a quote id that does not exist is a silent no-op, not a skip", () => {
@@ -574,7 +582,7 @@ describe("applyQuoteOperation — Corrections Wire Grammar dispatch (direct, no 
     const malformed = { ...makeQuoteRelinkRecord("quote-1", ["fact-2"]), text: "forged text" };
     const { quotes, skipped } = applyQuoteOperation([existing], malformed);
     expect(quotes).toEqual([existing]);
-    expect(skipped).toEqual({ record_id: "quote-1", reason: expect.stringContaining("text") });
+    expect(skipped).toEqual({ record_id: "quote-1", attempt_id: "attempt-quote-1", reason: expect.stringContaining("text") });
   });
 
   it("rejects a relink naming a non-existent entity id, given the current entity set", () => {
@@ -638,12 +646,30 @@ describe("applyQuoteOperation — Corrections Wire Grammar dispatch (direct, no 
     expect(skipped?.reason).toContain("attempt_id");
   });
 
-  it("rejects an attempt_id carried on a quote.relink record — the field does not exist on this shape at all", () => {
+  it("rejects a quote.relink record missing attempt_id (I2, round 3)", () => {
     const existing = makeQuote("quote-1", []);
-    const record = { ...makeQuoteRelinkRecord("quote-1", []), attempt_id: "should-not-be-here" };
+    const record = makeQuoteRelinkRecord("quote-1", []) as Record<string, unknown>;
+    delete record.attempt_id;
     const { quotes, skipped } = applyQuoteOperation([existing], record);
     expect(quotes).toEqual([existing]);
     expect(skipped?.reason).toContain("attempt_id");
+    expect(skipped?.attempt_id).toBeUndefined();
+  });
+
+  it("rejects a quote.relink record with an empty-string attempt_id", () => {
+    const existing = makeQuote("quote-1", []);
+    const record = { ...makeQuoteRelinkRecord("quote-1", []), attempt_id: "" };
+    const { quotes, skipped } = applyQuoteOperation([existing], record);
+    expect(quotes).toEqual([existing]);
+    expect(skipped?.reason).toContain("attempt_id");
+  });
+
+  it("quote.relink changes data_item_ids without leaking attempt_id onto the persisted Quote", () => {
+    const existing = makeQuote("quote-1", []);
+    const { quotes, skipped } = applyQuoteOperation([existing], makeQuoteRelinkRecord("quote-1", ["fact-1"]));
+    expect(skipped).toBeUndefined();
+    expect(quotes[0]).not.toHaveProperty("attempt_id");
+    expect(quotes[0].data_item_ids).toEqual(["fact-1"]);
   });
 
   it("rejects an attempt_id carried on a quote.remove record — the field does not exist on this shape at all", () => {

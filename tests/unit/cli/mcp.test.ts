@@ -14,6 +14,7 @@ const {
   mockRemoveEntity,
   mockCreateQuoteEntity,
   mockFixQuoteEntity,
+  mockRelinkQuoteEntity,
   mockCreatePersonaEntity,
   mockUpdatePersonaEntity,
   mockRemovePersonaEntity,
@@ -26,6 +27,7 @@ const {
     mockRemoveEntity: vi.fn(),
     mockCreateQuoteEntity: vi.fn(),
     mockFixQuoteEntity: vi.fn(),
+    mockRelinkQuoteEntity: vi.fn(),
     mockCreatePersonaEntity: vi.fn(),
     mockUpdatePersonaEntity: vi.fn(),
     mockRemovePersonaEntity: vi.fn(),
@@ -38,6 +40,7 @@ vi.mock("../../../src/cli/corrections-endpoints.js", () => ({
   removeEntity: mockRemoveEntity,
   createQuoteEntity: mockCreateQuoteEntity,
   fixQuoteEntity: mockFixQuoteEntity,
+  relinkQuoteEntity: mockRelinkQuoteEntity,
   CorrectionValidationError: MockCorrectionValidationError,
 }));
 
@@ -239,14 +242,23 @@ describe("MCP server", () => {
     expect(mockCreateEntity.mock.calls.length).toBe(callsBefore);
   });
 
-  it("ei_remove rejects entity_type: 'quote' with a schema validation error before reaching removeEntity", async () => {
+  it("ei_remove accepts entity_type: 'quote' and calls removeEntity with 'quote'", async () => {
+    mockRemoveEntity.mockResolvedValueOnce(undefined);
     ({ client } = await setupClient());
-    const callsBefore = mockRemoveEntity.mock.calls.length;
     const result = await client.callTool({ name: "ei_remove", arguments: { entity_type: "quote", id: "quote-1" } });
-    expect(result.isError).toBe(true);
     const content = result.content as Array<{ type: string; text: string }>;
-    expect(content[0].text).toContain("entity_type");
-    expect(mockRemoveEntity.mock.calls.length).toBe(callsBefore);
+    const parsed = JSON.parse(content[0].text);
+    expect(parsed).toEqual({ removed: true, id: "quote-1" });
+    expect(mockRemoveEntity).toHaveBeenCalledWith("quote", "quote-1");
+  });
+
+  it("ei_remove surfaces a quote not-found error as text content with isError: true", async () => {
+    mockRemoveEntity.mockRejectedValueOnce(new Error("Cannot remove quote: no quote found with the supplied id"));
+    ({ client } = await setupClient());
+    const result = await client.callTool({ name: "ei_remove", arguments: { entity_type: "quote", id: "missing-id" } });
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0].text).toBe("Error: Cannot remove quote: no quote found with the supplied id");
+    expect(result.isError).toBe(true);
   });
 
   it("ei_create with entity_type 'persona' dispatches to createPersonaEntity and returns id+record", async () => {
@@ -467,6 +479,64 @@ describe("MCP server", () => {
     const result = await client.callTool({ name: "ei_quote_fix", arguments: { quote_id: "orphaned-1", text: "anything" } });
     const content = result.content as Array<{ type: string; text: string }>;
     expect(content[0].text).toBe("Error: Cannot fix quote: no source message to verify against");
+    expect(result.isError).toBe(true);
+  });
+
+  it("registers ei_quote_relink tool", async () => {
+    ({ client } = await setupClient());
+    const result = await client.listTools();
+    const names = result.tools.map((t) => t.name);
+    expect(names).toContain("ei_quote_relink");
+  });
+
+  it("ei_quote_relink's schema declares only id/data_item_ids -- no text/message_id/verified/etc.", async () => {
+    ({ client } = await setupClient());
+    const tools = await client.listTools();
+    const tool = tools.tools.find((t) => t.name === "ei_quote_relink");
+    const properties = (tool!.inputSchema as Record<string, unknown>).properties as Record<string, unknown>;
+    expect(Object.keys(properties).sort()).toEqual(["data_item_ids", "id"]);
+  });
+
+  it("ei_quote_relink forwards id/data_item_ids to relinkQuoteEntity and returns the relinked record as JSON", async () => {
+    mockRelinkQuoteEntity.mockResolvedValueOnce({ id: "quote-1", data_item_ids: ["person-b-id"] });
+    ({ client } = await setupClient());
+    const result = await client.callTool({
+      name: "ei_quote_relink",
+      arguments: { id: "quote-1", data_item_ids: ["person-b-id"] },
+    });
+    const content = result.content as Array<{ type: string; text: string }>;
+    const parsed = JSON.parse(content[0].text);
+    expect(parsed).toEqual({ id: "quote-1", data_item_ids: ["person-b-id"] });
+    expect(mockRelinkQuoteEntity).toHaveBeenCalledWith({ id: "quote-1", data_item_ids: ["person-b-id"] });
+  });
+
+  it("ei_quote_relink silently drops an undeclared 'text' argument before it reaches relinkQuoteEntity (SDK schema stripping, not endpoint rejection)", async () => {
+    mockRelinkQuoteEntity.mockResolvedValueOnce({ id: "quote-1" });
+    ({ client } = await setupClient());
+    const result = await client.callTool({
+      name: "ei_quote_relink",
+      // @ts-expect-error -- deliberately supplying an undeclared field to prove the SDK strips it
+      arguments: { id: "quote-1", data_item_ids: [], text: "forged" },
+    });
+    expect(result.isError).toBeUndefined();
+    expect(mockRelinkQuoteEntity).toHaveBeenCalledWith({ id: "quote-1", data_item_ids: [] });
+  });
+
+  it("ei_quote_relink surfaces a not-found refusal as isError: true text", async () => {
+    mockRelinkQuoteEntity.mockRejectedValueOnce(new Error("Cannot relink quote: no quote found with the supplied id"));
+    ({ client } = await setupClient());
+    const result = await client.callTool({ name: "ei_quote_relink", arguments: { id: "missing-id", data_item_ids: [] } });
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0].text).toBe("Error: Cannot relink quote: no quote found with the supplied id");
+    expect(result.isError).toBe(true);
+  });
+
+  it("ei_quote_relink surfaces CorrectionValidationError as text content with isError: true", async () => {
+    mockRelinkQuoteEntity.mockRejectedValueOnce(new MockCorrectionValidationError("Invalid quote (relink): data_item_ids references unknown or disallowed entities: made-up-id"));
+    ({ client } = await setupClient());
+    const result = await client.callTool({ name: "ei_quote_relink", arguments: { id: "quote-1", data_item_ids: ["made-up-id"] } });
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0].text).toContain("Error: Invalid quote (relink)");
     expect(result.isError).toBe(true);
   });
 });

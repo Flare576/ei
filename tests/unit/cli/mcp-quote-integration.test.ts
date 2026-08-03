@@ -487,3 +487,239 @@ describe("MCP forbidden fields have zero effect (T5)", () => {
     expect(persisted.message_id).not.toBe("ei:forged-message-id");
   });
 });
+
+describe("ei_quote_relink — two-phase queue and drain (T4)", () => {
+  it("queues a well-formed quote.relink record under a live lock, leaving state.json untouched", async () => {
+    writeState(buildState([makeSourcedQuote()]));
+    writeFileSync(lockPath, JSON.stringify({ pid: process.pid }));
+    const originalStateBytes = readFileSync(statePath, "utf-8");
+
+    const client = await setupClient();
+    const result = await client.callTool({
+      name: "ei_quote_relink",
+      arguments: { id: "sourced-quote-1", data_item_ids: [] },
+    });
+    await client.close();
+
+    expect(result.isError).toBeUndefined();
+    expect(readFileSync(statePath, "utf-8")).toBe(originalStateBytes);
+
+    const queued = readCorrectionsFile();
+    // The narrow wire shape -- {op, entity_type, id, data_item_ids} only --
+    // proves relink can never smuggle a full-record replacement through,
+    // unlike the retired generic quote_upsert path.
+    expect(queued).toEqual([{ op: "quote.relink", entity_type: "quote", id: "sourced-quote-1", data_item_ids: [], attempt_id: expect.any(String) }]);
+  });
+
+  it("after a real drain, changes only data_item_ids -- every other field remains byte-identical to the pre-relink record", async () => {
+    const before = makeSourcedQuote();
+    writeState(buildState([before]));
+    writeFileSync(lockPath, JSON.stringify({ pid: process.pid }));
+
+    const client = await setupClient();
+    await client.callTool({
+      name: "ei_quote_relink",
+      arguments: { id: "sourced-quote-1", data_item_ids: [] },
+    });
+    await client.close();
+
+    rmSync(lockPath);
+    await driveRealDrain();
+    expect(readCorrectionsFile()).toEqual([]);
+
+    const state = readStateFile();
+    const persisted = state.human.quotes.find((q) => q.id === "sourced-quote-1")!;
+    expect(persisted.data_item_ids).toEqual([]);
+    expect(persisted.text).toBe(before.text);
+    expect(persisted.message_id).toBe(before.message_id);
+    expect(persisted.speaker).toBe(before.speaker);
+    expect(persisted.timestamp).toBe(before.timestamp);
+    expect(persisted.channel).toBe(before.channel);
+    expect(persisted.persona_groups).toEqual(before.persona_groups);
+    expect(persisted.created_at).toBe(before.created_at);
+    expect(persisted.created_by).toBe(before.created_by);
+    expect(persisted.start).toBe(before.start);
+    expect(persisted.end).toBe(before.end);
+  });
+});
+
+describe("ei_remove(entity_type: 'quote') — two-phase queue and drain (T4)", () => {
+  it("queues a well-formed quote.remove record under a live lock, leaving state.json untouched", async () => {
+    writeState(buildState([makeSourcedQuote()]));
+    writeFileSync(lockPath, JSON.stringify({ pid: process.pid }));
+    const originalStateBytes = readFileSync(statePath, "utf-8");
+
+    const client = await setupClient();
+    const result = await client.callTool({
+      name: "ei_remove",
+      arguments: { entity_type: "quote", id: "sourced-quote-1" },
+    });
+    await client.close();
+
+    expect(result.isError).toBeUndefined();
+    expect(readFileSync(statePath, "utf-8")).toBe(originalStateBytes);
+
+    const queued = readCorrectionsFile();
+    expect(queued).toEqual([{ op: "quote.remove", entity_type: "quote", id: "sourced-quote-1" }]);
+  });
+
+  it("after a real drain, the quote is gone and the queue is empty", async () => {
+    writeState(buildState([makeSourcedQuote()]));
+    writeFileSync(lockPath, JSON.stringify({ pid: process.pid }));
+
+    const client = await setupClient();
+    await client.callTool({ name: "ei_remove", arguments: { entity_type: "quote", id: "sourced-quote-1" } });
+    await client.close();
+
+    rmSync(lockPath);
+    await driveRealDrain();
+    expect(readCorrectionsFile()).toEqual([]);
+
+    const state = readStateFile();
+    expect(state.human.quotes.find((q) => q.id === "sourced-quote-1")).toBeUndefined();
+  });
+});
+
+describe("ei_quote_relink / ei_remove(quote) — a nonexistent quote id fails immediately with the named refusal, queuing nothing (T4)", () => {
+  it("ei_quote_relink against a well-formed quote id absent from state returns isError: true with the named refusal and leaves corrections.json byte-identical", async () => {
+    writeState(buildState([]));
+    // Beta's coverage audit (t4-mcp-fixture-coverage-audit.md, T4-MCP-5):
+    // readCorrectionsFile() assumes corrections.json already exists -- a
+    // correct refusal should never create it, so seed a baseline here
+    // rather than calling readCorrectionsFile() on a possibly-absent file.
+    writeFileSync(correctionsPath, "[]");
+
+    const client = await setupClient();
+    const result = await client.callTool({
+      name: "ei_quote_relink",
+      arguments: { id: "does-not-exist-at-all", data_item_ids: [] },
+    });
+    await client.close();
+
+    expect(result.isError).toBe(true);
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0].text).toBe("Error: Cannot relink quote: no quote found with the supplied id");
+    expect(readFileSync(correctionsPath, "utf-8")).toBe("[]");
+  });
+
+  it("ei_remove(entity_type: 'quote') against a well-formed quote id absent from state returns isError: true with the named refusal and leaves corrections.json byte-identical", async () => {
+    writeState(buildState([]));
+    writeFileSync(correctionsPath, "[]");
+
+    const client = await setupClient();
+    const result = await client.callTool({
+      name: "ei_remove",
+      arguments: { entity_type: "quote", id: "does-not-exist-at-all" },
+    });
+    await client.close();
+
+    expect(result.isError).toBe(true);
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0].text).toBe("Error: Cannot remove quote: no quote found with the supplied id");
+    expect(readFileSync(correctionsPath, "utf-8")).toBe("[]");
+  });
+
+  it("ei_quote_relink against a well-formed quote id absent from state, under a live lock, still queues nothing (T4 -- falsifiable, not inferred from an empty self-drained file)", async () => {
+    writeState(buildState([]));
+    writeFileSync(correctionsPath, "[]");
+    writeFileSync(lockPath, JSON.stringify({ pid: process.pid }));
+
+    const client = await setupClient();
+    const result = await client.callTool({
+      name: "ei_quote_relink",
+      arguments: { id: "does-not-exist-at-all", data_item_ids: [] },
+    });
+    await client.close();
+
+    expect(result.isError).toBe(true);
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0].text).toBe("Error: Cannot relink quote: no quote found with the supplied id");
+    // Under a live lock, writeCorrection() would otherwise unconditionally
+    // APPEND the record -- byte-identical here proves the pre-check ran
+    // before writeCorrection() was ever called, not merely that a
+    // self-drain later cleared the queue back to empty.
+    expect(readFileSync(correctionsPath, "utf-8")).toBe("[]");
+  });
+
+  it("ei_remove(entity_type: 'quote') against a well-formed quote id absent from state, under a live lock, still queues nothing (T4 -- falsifiable, not inferred from an empty self-drained file)", async () => {
+    writeState(buildState([]));
+    writeFileSync(correctionsPath, "[]");
+    writeFileSync(lockPath, JSON.stringify({ pid: process.pid }));
+
+    const client = await setupClient();
+    const result = await client.callTool({
+      name: "ei_remove",
+      arguments: { entity_type: "quote", id: "does-not-exist-at-all" },
+    });
+    await client.close();
+
+    expect(result.isError).toBe(true);
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0].text).toBe("Error: Cannot remove quote: no quote found with the supplied id");
+    expect(readFileSync(correctionsPath, "utf-8")).toBe("[]");
+  });
+});
+
+describe("ei_quote_relink — an invalid data_item_ids target is sanitized before reaching MCP output (I1, T1)", () => {
+  it("a control/ANSI-bearing invalid relink target never reaches the MCP response text", async () => {
+    writeState(buildState([makeSourcedQuote()]));
+    const evilId = "not-a-real-id\x1b[31mRED\x1b[0m";
+
+    const client = await setupClient();
+    const result = await client.callTool({
+      name: "ei_quote_relink",
+      arguments: { id: "sourced-quote-1", data_item_ids: [evilId] },
+    });
+    await client.close();
+
+    expect(result.isError).toBe(true);
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0].text).toBe(
+      "Error: Invalid quote (relink): data_item_ids references unknown or disallowed entities (must resolve to an existing fact, topic, or person — not a quote, persona, or unmatched ID)"
+    );
+    expect(content[0].text).not.toContain(evilId);
+    expect(content[0].text).not.toContain("not-a-real-id");
+    expect(content[0].text).not.toContain("\x1b[31m");
+  });
+});
+
+describe("ei_update(entity_type: 'quote') — ADR-012 tombstone (T4)", () => {
+  it("always rejects with the exact tombstone text -- not a generic MCP/schema error -- and leaves corrections.json byte-identical", async () => {
+    const before = makeSourcedQuote();
+    writeState(buildState([before]));
+    writeFileSync(correctionsPath, "[]");
+
+    const client = await setupClient();
+    const result = await client.callTool({
+      name: "ei_update",
+      arguments: {
+        entity_type: "quote",
+        id: "sourced-quote-1",
+        data: {
+          message_id: null,
+          data_item_ids: [],
+          persona_groups: [],
+          text: "Forged replacement text",
+          speaker: "human",
+          timestamp: NOW,
+          start: null,
+          end: null,
+          created_at: NOW,
+          created_by: "human",
+        },
+      },
+    });
+    await client.close();
+
+    expect(result.isError).toBe(true);
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0].text).toBe(
+      'Error: "ei update quote" is retired. Use "ei fix quote" to correct text, "ei relink quote" to change links, or "ei remove quote" to delete a quote instead — if you were told to call this, your installed skills predate this version. Scheduled for removal two releases after the one that ships this message (ADR-012).'
+    );
+    expect(readFileSync(correctionsPath, "utf-8")).toBe("[]");
+
+    const state = readStateFile();
+    const persisted = state.human.quotes.find((q) => q.id === "sourced-quote-1")!;
+    expect(persisted.text).toBe(before.text);
+  });
+});

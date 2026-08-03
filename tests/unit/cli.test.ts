@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "fs";
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { spawnSync } from "child_process";
@@ -72,7 +72,7 @@ describe("CLI CRUD process behavior", () => {
     const result = runCli(["create", "not-a-type", "--json", "{}"]);
 
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("ei create requires a valid type (fact, topic, person, persona). Got: not-a-type");
+    expect(result.stderr).toContain("ei create requires a valid type (fact, topic, person, quote, persona). Got: not-a-type");
   });
 
   it("exits non-zero and requires --json for create", () => {
@@ -104,7 +104,7 @@ describe("CLI CRUD process behavior", () => {
     const result = runCli(["remove", "fact"]);
 
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("Usage: ei remove <type> <id> (types: fact, topic, person, persona)");
+    expect(result.stderr).toContain("Usage: ei remove <type> <id> (types: fact, topic, person, quote, persona)");
   });
 
   it("creates a fact and prints the generated id with the requested record", () => {
@@ -139,14 +139,15 @@ describe("CLI CRUD process behavior", () => {
     expect(result.stderr).toContain("Invalid quote (create): message_id: Required; text: Required");
   });
 
-  it("exits non-zero and rejects quote as an invalid type for remove (quotes are non-removable)", () => {
+  it("resolves quote as a valid type for remove and reaches the quote not-found error (Plan 2: ei remove quote is now real)", () => {
     const result = runCli(["remove", "quote", "some-id"]);
 
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("Usage: ei remove <type> <id> (types: fact, topic, person, persona)");
+    expect(result.stderr).not.toContain("Usage: ei remove");
+    expect(result.stderr).toContain("Cannot remove quote: no quote found with the supplied id");
   });
 
-  it("resolves quote as a valid type for update and reaches the quote not-found error (not a type-usage error)", () => {
+  it("ei update quote always rejects with the ADR-012 tombstone message, not the not-found contract (Plan 2: ei update quote is retired)", () => {
     const result = runCli([
       "update",
       "quote",
@@ -168,7 +169,12 @@ describe("CLI CRUD process behavior", () => {
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).not.toContain("Usage: ei update");
-    expect(result.stderr).toContain("No quote found with id: missing-quote-id");
+    expect(result.stderr).not.toContain("No quote found with id");
+    expect(result.stderr).toContain('"ei update quote" is retired');
+    expect(result.stderr).toContain('"ei fix quote"');
+    expect(result.stderr).toContain('"ei relink quote"');
+    expect(result.stderr).toContain('"ei remove quote"');
+    expect(result.stderr).toContain("Scheduled for removal");
   });
 
   it("creates a persona and prints the generated id with the requested record", () => {
@@ -643,5 +649,268 @@ describe("CLI create/fix quote — an extra --json key name is sanitized, never 
     expect(result.stderr).not.toContain("FORGED");
     expect(result.stderr).not.toContain("\x07");
     expect(result.stderr).not.toContain("\x1b[31m");
+  });
+});
+
+// ── T4: ei relink quote — process behavior ────────────────────────────────
+describe("CLI relink quote — process behavior (T4)", () => {
+  it("relinks a quote's data_item_ids to a new valid target via a real CLI process", () => {
+    const quote: Quote = {
+      id: "quote-1",
+      message_id: null,
+      data_item_ids: [],
+      persona_groups: [],
+      text: "Existing quote text",
+      speaker: "human",
+      timestamp: NOW,
+      start: null,
+      end: null,
+      created_at: NOW,
+      created_by: "human",
+    };
+    const person = makePerson("person-1", [{ type: "GitHub", value: "octocat", is_primary: true }]);
+    const state: StorageState = {
+      version: 1,
+      timestamp: NOW,
+      human: { entity: "human", facts: [], topics: [], people: [person], quotes: [quote], last_updated: NOW },
+      personas: {},
+      queue: [],
+      providers: [],
+      tools: [],
+    };
+    writeFileSync(join(tempDir, "state.json"), JSON.stringify(state));
+
+    const result = runCli(["relink", "quote", "quote-1", "--to", "person-1"]);
+
+    expect(result.status).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed).toMatchObject({ id: "quote-1", data_item_ids: ["person-1"] });
+  });
+
+  it("fails when relinking to a nonexistent entity id, without echoing the invalid id in stderr (I1)", () => {
+    const quote: Quote = {
+      id: "quote-1",
+      message_id: null,
+      data_item_ids: [],
+      persona_groups: [],
+      text: "Existing quote text",
+      speaker: "human",
+      timestamp: NOW,
+      start: null,
+      end: null,
+      created_at: NOW,
+      created_by: "human",
+    };
+    const state: StorageState = {
+      version: 1,
+      timestamp: NOW,
+      human: { entity: "human", facts: [], topics: [], people: [], quotes: [quote], last_updated: NOW },
+      personas: {},
+      queue: [],
+      providers: [],
+      tools: [],
+    };
+    writeFileSync(join(tempDir, "state.json"), JSON.stringify(state));
+
+    const result = runCli(["relink", "quote", "quote-1", "--to", "does-not-exist"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Invalid quote (relink): data_item_ids references unknown or disallowed entities");
+    expect(result.stderr).not.toContain("does-not-exist");
+  });
+
+
+  it("fails immediately with a named 'quote not found' error, distinct from the invalid-target error, when relinking a quote id that does not exist at all", () => {
+    const state: StorageState = {
+      version: 1,
+      timestamp: NOW,
+      human: { entity: "human", facts: [], topics: [], people: [], quotes: [], last_updated: NOW },
+      personas: {},
+      queue: [],
+      providers: [],
+      tools: [],
+    };
+    writeFileSync(join(tempDir, "state.json"), JSON.stringify(state));
+
+    const result = runCli(["relink", "quote", "does-not-exist", "--to", "anything"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Cannot relink quote: no quote found with the supplied id");
+    expect(result.stderr).not.toContain("does-not-exist");
+  });
+
+  it("exits non-zero with a usage error for 'ei relink <not-quote>'", () => {
+    const result = runCli(["relink", "fact", "some-id"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Usage: ei relink quote");
+  });
+});
+
+// ── T1 (Wave 3, I1): a control/ANSI-bearing invalid relink target never
+// echoes into the CLI's stderr, matching the numeric-flag/quote-id
+// sanitization above ──────────────────────────────────────────────────
+describe("CLI relink quote — an invalid relink target is never echoed into stderr (I1, T1)", () => {
+  it("does not echo a control/ANSI-bearing --to target into the invalid-target error", () => {
+    const quote: Quote = {
+      id: "quote-1",
+      message_id: null,
+      data_item_ids: [],
+      persona_groups: [],
+      text: "Existing quote text",
+      speaker: "human",
+      timestamp: NOW,
+      start: null,
+      end: null,
+      created_at: NOW,
+      created_by: "human",
+    };
+    const state: StorageState = {
+      version: 1,
+      timestamp: NOW,
+      human: { entity: "human", facts: [], topics: [], people: [], quotes: [quote], last_updated: NOW },
+      personas: {},
+      queue: [],
+      providers: [],
+      tools: [],
+    };
+    writeFileSync(join(tempDir, "state.json"), JSON.stringify(state));
+    const evilId = "not-a-real-id\x1b[31mRED\x1b[0m";
+
+    const result = runCli(["relink", "quote", "quote-1", "--to", evilId]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Invalid quote (relink): data_item_ids references unknown or disallowed entities");
+    expect(result.stderr).not.toContain(evilId);
+    expect(result.stderr).not.toContain("not-a-real-id");
+    expect(result.stderr).not.toContain("\x1b[31m");
+  });
+});
+
+// ── T3 (Wave 3, I3): singular/plural quote alias parity across every
+// quote-accepting verb ──────────────────────────────────────────────────
+// TYPE_ALIASES treats "quote" and "quotes" as synonyms, but only create's
+// generic dispatch resolved aliases via CORRECTABLE_TYPES/
+// resolveCorrectableType -- fix/relink were each gated by a literal
+// `=== "quote"` string compare with no alias awareness at all. Once T4
+// added "quote" to CORRECTABLE_TYPES, "ei create quotes" silently
+// resolved to the generic createEntity("quote", ...) dispatch, which has
+// no "quote" schema entry and crashed with a raw runtime error instead of
+// reaching create's own dedicated, source-verified validation. Each verb
+// below is checked against BOTH spellings reaching the IDENTICAL outcome.
+describe("CLI quote verbs — singular/plural alias parity (I3)", () => {
+  it("'ei create quotes' reaches the same attested-create validation as 'ei create quote', never the generic schema dispatcher, and writes neither state.json nor corrections.json (I3, I4/R2-T2)", () => {
+    const statePath = join(tempDir, "state.json");
+    const correctionsPath = join(tempDir, "corrections.json");
+    const stateBefore = readFileSync(statePath, "utf-8");
+    expect(existsSync(correctionsPath)).toBe(false);
+
+    const singular = runCli(["create", "quote", "--json", "{}"]);
+    const plural = runCli(["create", "quotes", "--json", "{}"]);
+
+    expect(plural.status).not.toBe(0);
+    expect(plural.status).toBe(singular.status);
+    expect(plural.stderr).toBe(singular.stderr);
+    expect(plural.stderr).toContain("Invalid quote (create): message_id: Required; text: Required");
+    // The generic dispatcher's crash, pre-fix, surfaced as a raw runtime
+    // TypeError rather than this controlled validation message.
+    expect(plural.stderr).not.toMatch(/is not an object|is not a function|TypeError/);
+
+    // I4 (round 2): T3's own stated oracle requires no state or
+    // correction-queue write on this controlled validation failure --
+    // assert it directly through the real CLI process fixture rather
+    // than inferring it from the endpoint's early validation.
+    expect(readFileSync(statePath, "utf-8")).toBe(stateBefore);
+    expect(existsSync(correctionsPath)).toBe(false);
+  });
+
+  it("'ei fix quotes' reaches fixQuoteEntity, not a usage error", () => {
+    const singular = runCli(["fix", "quote", "--quote-id", "does-not-exist", "--text", "anything"]);
+    const plural = runCli(["fix", "quotes", "--quote-id", "does-not-exist", "--text", "anything"]);
+
+    expect(plural.status).not.toBe(0);
+    expect(plural.stderr).toBe(singular.stderr);
+    expect(plural.stderr).toContain("Cannot fix quote: no quote found with the supplied id");
+    expect(plural.stderr).not.toContain("Usage: ei fix quote");
+  });
+
+  it("'ei relink quotes' reaches relinkQuoteEntity, not a usage error", () => {
+    const singular = runCli(["relink", "quote", "does-not-exist", "--to", "anything"]);
+    const plural = runCli(["relink", "quotes", "does-not-exist", "--to", "anything"]);
+
+    expect(plural.status).not.toBe(0);
+    expect(plural.stderr).toBe(singular.stderr);
+    expect(plural.stderr).toContain("Cannot relink quote: no quote found with the supplied id");
+    expect(plural.stderr).not.toContain("Usage: ei relink quote");
+  });
+
+  it("'ei remove quotes' already reaches removeQuoteEntity (regression lock -- CORRECTABLE_TYPES' generic dispatch already resolved this alias correctly before this fix)", () => {
+    const singular = runCli(["remove", "quote", "does-not-exist"]);
+    const plural = runCli(["remove", "quotes", "does-not-exist"]);
+
+    expect(plural.status).not.toBe(0);
+    expect(plural.stderr).toBe(singular.stderr);
+    expect(plural.stderr).toContain("Cannot remove quote: no quote found with the supplied id");
+  });
+
+  it("'ei update quotes' already reaches the ADR-012 tombstone (regression lock -- already correct before this fix)", () => {
+    const body = JSON.stringify({
+      message_id: null,
+      data_item_ids: [],
+      persona_groups: [],
+      text: "Corrected text",
+      speaker: "human",
+      timestamp: NOW,
+      start: null,
+      end: null,
+      created_at: NOW,
+      created_by: "human",
+    });
+    const singular = runCli(["update", "quote", "missing-quote-id", "--json", body]);
+    const plural = runCli(["update", "quotes", "missing-quote-id", "--json", body]);
+
+    expect(plural.status).not.toBe(0);
+    expect(plural.stderr).toBe(singular.stderr);
+    expect(plural.stderr).toContain('"ei update quote" is retired');
+  });
+});
+
+// ── T5 (Wave 3): a successful 'ei remove quote' through the spawned CLI,
+// not only its error path ────────────────────────────────────────────
+describe("CLI remove quote — a successful removal through a real CLI process (T5)", () => {
+  it("removes an existing quote and leaves an unrelated person untouched", () => {
+    const quote: Quote = {
+      id: "quote-to-remove",
+      message_id: null,
+      data_item_ids: [],
+      persona_groups: [],
+      text: "Existing quote text",
+      speaker: "human",
+      timestamp: NOW,
+      start: null,
+      end: null,
+      created_at: NOW,
+      created_by: "human",
+    };
+    const person = makePerson("unrelated-person", [{ type: "GitHub", value: "octocat", is_primary: true }]);
+    const state: StorageState = {
+      version: 1,
+      timestamp: NOW,
+      human: { entity: "human", facts: [], topics: [], people: [person], quotes: [quote], last_updated: NOW },
+      personas: {},
+      queue: [],
+      providers: [],
+      tools: [],
+    };
+    writeFileSync(join(tempDir, "state.json"), JSON.stringify(state));
+
+    const result = runCli(["remove", "quote", "quote-to-remove"]);
+
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({ removed: true, id: "quote-to-remove" });
+
+    const persisted = JSON.parse(readFileSync(join(tempDir, "state.json"), "utf-8")) as StorageState;
+    expect(persisted.human.quotes.find((q) => q.id === "quote-to-remove")).toBeUndefined();
+    expect(persisted.human.people.find((p) => p.id === "unrelated-person")).toBeDefined();
   });
 });

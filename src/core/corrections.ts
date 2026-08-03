@@ -122,6 +122,21 @@ export interface QuoteRelinkRecord {
   op: "quote.relink";
   entity_type: "quote";
   id: string;
+  /**
+   * Transport-only correlation id for THIS call alone — same purpose and
+   * construction as QuoteFullFields.attempt_id (a fresh
+   * crypto.randomUUID() minted by relinkQuoteEntity before it ever
+   * constructs this record). NOT a persisted Quote field: a successful
+   * relink's dispatcher case below only ever merges `data_item_ids` onto
+   * the existing record, so attempt_id never reaches the materialized
+   * Quote either way. Added so a relink's own self-drain outcome —
+   * including a missing-target quote id, now a reported skip rather
+   * than the prior silent no-op below — can be attributed to THIS
+   * call's own record with certainty, replacing the final-state
+   * field-projection comparison that could not (I2,
+   * .sisyphus/reviews/wave-3-t4-diff-review.md, Round 3).
+   */
+  attempt_id: string;
   data_item_ids: string[];
 }
 
@@ -138,14 +153,19 @@ export type QuoteCorrectionRecord = QuoteCreateRecord | QuoteFixRecord | QuoteRe
 export interface QuoteCorrectionSkip {
   record_id: string;
   /**
-   * Present only for a quote.create/quote.fix skip — the caller-generated
-   * attempt_id (see QuoteFullFields.attempt_id) of the record that was
-   * declined, letting createQuoteEntity/fixQuoteEntity recognize THEIR
-   * OWN queued record's fate with certainty rather than inferring it from
-   * final state or a same-id match (I4/I5, round 2-3 of
-   * wave-2-quote-attestation.md). Absent for quote.relink/quote.remove
-   * skips (neither shape carries this field) and for a record too
-   * malformed to have one at all.
+   * Present for a quote.create/quote.fix/quote.relink skip — the
+   * caller-generated attempt_id (see QuoteFullFields.attempt_id and
+   * QuoteRelinkRecord's own attempt_id field) of the record that was
+   * declined, letting createQuoteEntity/fixQuoteEntity/relinkQuoteEntity
+   * recognize THEIR OWN queued record's fate with certainty rather than
+   * inferring it from final state or a same-id match (I4/I5, round 2-3
+   * of wave-2-quote-attestation.md; extended to relink in I2, round 3 of
+   * wave-3-t4-diff-review.md, so a relink's own self-drain outcome —
+   * including a missing-target quote id — is attributable to THIS
+   * call's own record with the same certainty, used for the endpoint's
+   * post-self-drain correlation check). Absent only for quote.remove
+   * skips (that shape carries no attempt_id at all) and for a record
+   * too malformed to have one.
    */
   attempt_id?: string;
   reason: string;
@@ -175,7 +195,7 @@ const QUOTE_CREATE_FIX_ALLOWED_KEYS: Record<string, true> = Object.assign(Object
   persona_groups: true, text: true, speaker: true, channel: true, timestamp: true,
   start: true, end: true, created_at: true, created_by: true, embedding: true, verified: true,
 });
-const QUOTE_RELINK_ALLOWED_KEYS: Record<string, true> = Object.assign(Object.create(null), { op: true, entity_type: true, id: true, data_item_ids: true });
+const QUOTE_RELINK_ALLOWED_KEYS: Record<string, true> = Object.assign(Object.create(null), { op: true, entity_type: true, id: true, attempt_id: true, data_item_ids: true });
 const QUOTE_REMOVE_ALLOWED_KEYS: Record<string, true> = Object.assign(Object.create(null), { op: true, entity_type: true, id: true });
 
 /**
@@ -244,6 +264,9 @@ function assertValidQuoteCorrection(value: object, human: HumanEntity | undefine
   }
 
   if (op === "quote.relink") {
+    if (!("attempt_id" in value) || typeof value.attempt_id !== "string" || value.attempt_id.length === 0) {
+      throw new Error(`Malformed quote correction (relink): attempt_id must be a non-empty string, got ${JSON.stringify("attempt_id" in value ? value.attempt_id : undefined)}`);
+    }
     if (!("data_item_ids" in value) || !Array.isArray(value.data_item_ids) || !value.data_item_ids.every((x): x is string => typeof x === "string")) {
       throw new Error(`Malformed quote correction (relink): data_item_ids must be an array of strings, got ${JSON.stringify("data_item_ids" in value ? value.data_item_ids : undefined)}`);
     }
@@ -466,9 +489,16 @@ export interface QuoteOperationResult {
  * a fix queued before a concurrent relink/remove drains can never
  * resurrect a removed quote or replay a stale link/provenance field.
  * relink applies as a partial merge touching only `data_item_ids` — the
- * effect of `quote_update`, never a full-record placement. remove filters
- * the target out — the effect of `quote_remove`. relink/remove/fix never
- * call or duplicate the full-replacement `quote_upsert`.
+ * effect of `quote_update`, never a full-record placement. Its target id
+ * must also already exist: a missing target is now a reported skip too
+ * (I2, .sisyphus/reviews/wave-3-t4-diff-review.md, Round 3), reversing
+ * relink's original disposition of silently no-op'ing on a missing id —
+ * that silent no-op made a self-drained relink's own apply-time failure
+ * indistinguishable from success to any consumer checking `skipped` by
+ * this call's own attempt_id, since nothing was ever appended to find.
+ * remove filters the target out — the effect of `quote_remove`.
+ * relink/remove/fix never call or duplicate the full-replacement
+ * `quote_upsert`.
  *
  * `record` is deliberately `unknown`, not `QuoteCorrectionRecord`: every
  * real caller is handing this function something that has only survived
@@ -527,7 +557,26 @@ export function applyQuoteOperation(quotes: Quote[], record: unknown, human?: Hu
     }
     case "quote.relink": {
       const idx = quotes.findIndex((q) => q.id === record.id);
-      if (idx < 0) return { quotes }; // target quote itself absent — silent no-op, mirroring quote_update's existing false-return-on-missing-id semantics
+      if (idx < 0) {
+        // I2 (round 3, wave-3-t4-diff-review.md): a missing relink target
+        // is now a REPORTED skip, matching quote.fix's own missing-target
+        // disposition above -- reversed from the original silent no-op,
+        // which made a relink's own apply-time failure indistinguishable
+        // from success at every consumer that only checks `skipped` by
+        // this call's own attempt_id, since nothing was ever appended to
+        // find. relinkQuoteEntity's self-drain check
+        // (corrections-endpoints.ts) depends on this skip existing to
+        // return QuoteWriteUnconfirmed instead of a materialized false
+        // success when a same-id quote.create later replays into this id.
+        return {
+          quotes,
+          skipped: {
+            record_id: record.id,
+            attempt_id: record.attempt_id,
+            reason: `Invalid relink: quote "${record.id}" does not exist`,
+          },
+        };
+      }
       const nextQuotes = quotes.map((q, i) => (i === idx ? { ...q, data_item_ids: record.data_item_ids } : q));
       return { quotes: nextQuotes };
     }

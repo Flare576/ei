@@ -24,7 +24,7 @@ import { writeCorrection } from "./corrections-writer.js";
 import { sanitizeEiPersonaIdentifiers } from "../core/utils/identifier-utils.js";
 import { isQualifiedMessageId, qualifyEiMessage, UUID_PATTERN } from "../core/utils/message-id.js";
 import { computeDataItemEmbedding, computeQuoteEmbedding } from "../core/embedding-service.js";
-import type { CorrectableType, CorrectionRecord, QuoteCreateRecord, QuoteFixRecord } from "../core/corrections.js";
+import type { CorrectableType, CorrectionRecord, QuoteCreateRecord, QuoteFixRecord, QuoteRelinkRecord, QuoteRemoveRecord } from "../core/corrections.js";
 import type { Fact, Topic, Person, Quote } from "../core/types.js";
 import type { PersonaEntity } from "../core/types/entities.js";
 import type { ResolvedMessage } from "./retrieval.js";
@@ -33,16 +33,44 @@ import type { QuoteMatch } from "../core/handlers/human-matching.js";
 
 // Fact/topic/person handling below is keyed by this narrower alias, not the
 // full CorrectableType — parseInput/buildAndWriteUpsert only ever validate
-// and materialize these 3 types. Quotes get their own updateQuoteEntity path
-// (different embedding source, no last_updated field, update-only by design)
-// rather than flowing through this shared machinery.
+// and materialize these 3 types. Quotes get their own dedicated paths
+// (createQuoteEntity/fixQuoteEntity/relinkQuoteEntity/removeQuoteEntity,
+// each with different embedding/verification/link semantics) rather than
+// flowing through this shared machinery — updateQuoteEntity is the one
+// quote path that's a tombstone, not a real handler (ADR-012, see below).
 type NonQuoteType = "fact" | "topic" | "person";
-
-export const CORRECTABLE_TYPES: CorrectableType[] = ["fact", "topic", "person"];
-// Wider set accepted by the `update` surface only — a Quote can be corrected
-// (data_item_ids repointed after a split/merge, mistranscribed text fixed)
-// but, per design, never created or removed, so create/remove keep gating on
-// CORRECTABLE_TYPES above while update alone widens to this constant.
+// `quote` joined this list in Wave 3 (T4) — create/fix/relink/remove are
+// all either source-verified or provenance-free by construction (see the
+// Corrections Wire Grammar), so quote is no longer create/remove-excluded
+// the way it was pre-attestation. This membership is load-bearing, not
+// cosmetic, for cli.ts's dispatch, in three independent, dedicated
+// places -- not one shared interception (M2,
+// .sisyphus/reviews/wave-3-t4-diff-review.md, Round 3): (1) `ei create
+// quote`/`ei create quotes` is intercepted ahead of the generic create
+// dispatch (it needs its own discrete flags rather than the generic
+// --json body); that interception's own
+// resolveCorrectableType(args[1]) === "quote" check resolves through
+// cli.ts's own CLI_CORRECTABLE_TYPES/PLURAL_TO_CORRECTABLE, both derived
+// from this exact constant, so dropping "quote" here would stop the
+// interception from firing for either spelling, not merely change its
+// usage/error text. (2) `ei fix quote` is a SEPARATE top-level reserved
+// verb (src/cli.ts:362-410) -- not a create-dispatch interception, since
+// it never reaches the generic create dispatch at all -- resolved via
+// the same resolveCorrectableType and so equally dependent on this
+// constant. (3) `ei relink quote` is likewise its own separate
+// top-level reserved verb (src/cli.ts:413-452), independently dependent
+// on this constant. `ei remove quote <id>` has no interception of its
+// own either and depends entirely on this constant so the generic
+// remove dispatch can reach removeEntity's quote branch. `ei update
+// quote` is unaffected by any of the above -- it resolves through
+// cli.ts's entirely separate UPDATABLE_TYPES/resolveUpdatableType pair,
+// independent of this constant.
+export const CORRECTABLE_TYPES: CorrectableType[] = ["fact", "topic", "person", "quote"];
+// Update accepts the same set as create/remove now that quote has joined
+// CORRECTABLE_TYPES above — kept as its own named constant (not an alias)
+// since `ei update quote` is a distinct, ADR-012-tombstoned surface: the
+// CLI/MCP schema still accepts the parameter shape, but updateQuoteEntity
+// itself always rejects. See its own doc comment below.
 export const UPDATABLE_TYPES: CorrectableType[] = ["fact", "topic", "person", "quote"];
 
 // Metadata fields common to all three entity types, all server-preserved
@@ -100,21 +128,6 @@ const personSchema = z.strictObject({
   { message: "Person requires at least one identifier or a name" }
 );
 
-const quoteSchema = z.strictObject({
-  message_id: z.string().nullable(),
-  data_item_ids: z.array(z.string()),
-  persona_groups: z.array(z.string()),
-  text: z.string().min(1),
-  speaker: z.string().min(1),
-  channel: z.string().optional(),
-  timestamp: z.string(),
-  start: z.number().nullable(),
-  end: z.number().nullable(),
-  created_at: z.string(),
-  created_by: z.enum(["extraction", "human"]),
-});
-export type QuoteInput = z.infer<typeof quoteSchema>;
-
 /**
  * `ei create quote` / MCP `ei_quote_create` input — deliberately narrow:
  * only `message_id`/`text` (required) and `start`/`end` (optional
@@ -145,6 +158,22 @@ const quoteFixInputSchema = z.strictObject({
   end: z.number().optional(),
 });
 export type QuoteFixInput = z.infer<typeof quoteFixInputSchema>;
+
+/**
+ * `ei relink quote` / MCP `ei_quote_relink` input — `{id, data_item_ids}`
+ * only, per the Corrections Wire Grammar's `quote.relink` row. No
+ * provenance field exists on this shape at all (not text, not message_id,
+ * not verified) — relink asserts nothing about a Quote's source, it only
+ * changes which facts/topics/people it's linked to, so it's permitted on
+ * every population, orphaned/dangling included. `data_item_ids` is the
+ * COMPLETE replacement list, not an additive delta — omitting an existing
+ * link drops it.
+ */
+const quoteRelinkInputSchema = z.strictObject({
+  id: z.string().min(1),
+  data_item_ids: z.array(z.string()),
+});
+export type QuoteRelinkInput = z.infer<typeof quoteRelinkInputSchema>;
 
 /**
  * Formats zod validation issues for quoteCreateInputSchema/quoteFixInputSchema
@@ -196,6 +225,34 @@ export class CorrectionValidationError extends Error {}
  */
 export interface QuoteWritePending {
   status: "queued";
+  id: string;
+  message: string;
+}
+
+/**
+ * Returned by relinkQuoteEntity instead of the materialized Quote when a
+ * SELF-drain declined to apply this call's own record. Two distinct
+ * causes both land here: (1) this call's own attempt_id appears in
+ * writeCorrection()'s skipped list -- a stale data_item_ids target, or
+ * the target quote itself no longer existing at apply time, are BOTH
+ * reported skips now (I2, .sisyphus/reviews/wave-3-t4-diff-review.md,
+ * Round 3 -- see applyQuoteOperation's "quote.relink" case, which used
+ * to silently no-op on a missing target instead of reporting it); or (2)
+ * this call's own write was NOT skipped (so it genuinely applied) but a
+ * fresh post-drain read still cannot find the quote -- a later,
+ * independent removal, not caused by this call. Distinct from
+ * QuoteWritePending: the write was not merely queued, it was evaluated
+ * synchronously. relinkQuoteEntity mints its own fresh attempt_id (the
+ * same mechanism createQuoteEntity/fixQuoteEntity already use) so case
+ * (1) can always be attributed to THIS call's own record with certainty
+ * -- closing the gap where a same-id `quote.create` replay could
+ * otherwise launder a self-drained no-op into a materialized false
+ * success, no matter how many fields the replay happens to share with
+ * the pre-relink snapshot. Re-querying `id` (e.g. via ei_lookup) remains
+ * the only way to confirm the actual outcome when this is returned.
+ */
+export interface QuoteWriteUnconfirmed {
+  status: "unconfirmed";
   id: string;
   message: string;
 }
@@ -294,13 +351,27 @@ export async function createEntity(
   return { id, record: stripEmbedding(record) };
 }
 
+/**
+ * The "quote" branch below is a TOMBSTONE (ADR-012,
+ * docs/adr/ADR-012-sunset-with-a-path-forward.md): `ei update quote` / MCP
+ * `ei_update` with entity_type "quote" is retired. It always rejects,
+ * regardless of body shape or whether `id` resolves to anything — schema
+ * validation, state loading, link validation, embedding computation, and
+ * writeCorrection() are all gone deliberately, not merely unreachable,
+ * per ADR-012's "a retired surface's job is to say what happened, not to
+ * do any part of the old work first." Never delete this branch outright
+ * (ADR-012 requires keep-and-reject, not disappearance) and never let it
+ * fall through to the old full-replacement quote_upsert shape again.
+ */
 export async function updateEntity(
   entityType: CorrectableType,
   id: string,
   body: unknown
 ): Promise<Fact | Topic | Person | Quote> {
   if (entityType === "quote") {
-    return updateQuoteEntity(id, body);
+    throw new Error(
+      `"ei update quote" is retired. Use "ei fix quote" to correct text, "ei relink quote" to change links, or "ei remove quote" to delete a quote instead — if you were told to call this, your installed skills predate this version. Scheduled for removal two releases after the one that ships this message (ADR-012).`
+    );
   }
 
   const parsed = parseInput(entityType, body, "update");
@@ -315,56 +386,6 @@ export async function updateEntity(
   }
 
   return stripEmbedding(await buildAndWriteUpsert(entityType, id, parsed, Object.values(state.personas).map((p) => p.entity)));
-}
-
-/**
- * Quotes skip the shared fact/topic/person machinery entirely: their
- * embedding is derived from `text` (not name+description, so
- * computeDataItemEmbedding doesn't apply), they have no `last_updated`
- * field to stamp, and — per design — this is their ONLY correction path;
- * there is no createQuoteEntity/removeQuoteEntity to pair it with.
- */
-async function updateQuoteEntity(id: string, body: unknown): Promise<Quote> {
-  let input: unknown = body;
-  if (body && typeof body === "object") {
-    const stripped: Record<string, unknown> = { ...body };
-    for (const field of ROUND_TRIP_FIELDS) delete stripped[field];
-    input = stripped;
-  }
-  const result = quoteSchema.safeParse(input);
-  if (!result.success) {
-    throw new CorrectionValidationError(
-      `Invalid quote: ${result.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`
-    );
-  }
-  const state = await loadLatestState();
-  if (!state) {
-    throw new Error("No saved state found. Is EI_DATA_PATH set correctly?");
-  }
-  if (!state.human.quotes.some((q) => q.id === id)) {
-    throw new Error(`No quote found with id: ${id}`);
-  }
-  // Beta's review (I1): the schema above only checks data_item_ids is an
-  // array of strings, not that each string resolves to a real link target.
-  // Without this, a typo'd or stale ID in an external quote repoint — the
-  // primary consumer is the person-split/merge repair workflow — would
-  // silently store a dangling link instead of failing loudly.
-  const validLinkIds = new Set([
-    ...state.human.facts.map((f) => f.id),
-    ...state.human.topics.map((t) => t.id),
-    ...state.human.people.map((p) => p.id),
-  ]);
-  const invalidIds = result.data.data_item_ids.filter((itemId) => !validLinkIds.has(itemId));
-  if (invalidIds.length > 0) {
-    throw new CorrectionValidationError(
-      `Invalid quote: data_item_ids references unknown or disallowed entities: ${invalidIds.join(", ")} (must resolve to an existing fact, topic, or person — not a quote, persona, or unmatched ID)`
-    );
-  }
-  const record: Quote = { ...result.data, id };
-  record.embedding = await computeQuoteEmbedding(record.text);
-  const correction: CorrectionRecord = { op: "upsert", entity_type: "quote", id, record, timestamp: new Date().toISOString() };
-  await writeCorrection(correction);
-  return stripEmbedding(record);
 }
 
 /**
@@ -669,7 +690,151 @@ export async function fixQuoteEntity(body: unknown): Promise<Quote | QuoteWriteP
   return stripEmbedding(quote);
 }
 
+/**
+ * `ei relink quote` / MCP `ei_quote_relink` — the only verb permitted to
+ * change a Quote's `data_item_ids`. Carries no full-record provenance
+ * fields (Corrections Wire Grammar's `quote.relink` row: `{id,
+ * data_item_ids}` plus a transport-only `attempt_id`, mirroring
+ * create/fix's own correlation token) — relink asserts nothing about
+ * text/source, so unlike create/fix it's permitted on every population,
+ * orphaned/dangling included, once `id` itself is confirmed to exist.
+ *
+ * `id`'s existence is checked HERE, before ever queueing anything, so a
+ * genuinely nonexistent id gets an immediate named "quote not found"
+ * error rather than a queued write whose failure could only be
+ * discovered later. Each `data_item_ids` target gets the identical
+ * treatment for the same reason, distinct from T2b's own state-aware
+ * re-check of the same field at DRAIN time (the
+ * relink-target-deleted-mid-flight race) — this is in addition to that,
+ * not a replacement for it.
+ *
+ * Returns a QuoteWritePending instead of the materialized Quote when
+ * writeCorrection() could only queue the record (a live Ei instance
+ * holds ei.lock) — see createQuoteEntity's identical comment for why
+ * that outcome can't be resolved synchronously from here. Returns a
+ * QuoteWriteUnconfirmed instead when a SELF-drain declined to apply
+ * this call's own record — identified by its own fresh attempt_id
+ * appearing in writeCorrection()'s skipped list, the exact same
+ * mechanism createQuoteEntity/fixQuoteEntity already use, rather than a
+ * final-state field comparison (I2,
+ * .sisyphus/reviews/wave-3-t4-diff-review.md, Round 3 — see that
+ * interface's own doc comment for the full mechanism).
+ */
+export async function relinkQuoteEntity(body: unknown): Promise<Quote | QuoteWritePending | QuoteWriteUnconfirmed> {
+  const result = quoteRelinkInputSchema.safeParse(body);
+  if (!result.success) {
+    throw new CorrectionValidationError(
+      `Invalid quote (relink): ${formatQuoteValidationIssues(result.error.issues)}`
+    );
+  }
+  const { id, data_item_ids } = result.data;
+
+  const state = await loadLatestState();
+  if (!state) {
+    throw new Error("No saved state found. Is EI_DATA_PATH set correctly?");
+  }
+  const current = state.human.quotes.find((q) => q.id === id);
+  if (!current) {
+    throw new Error("Cannot relink quote: no quote found with the supplied id");
+  }
+
+  const validLinkIds = new Set([
+    ...state.human.facts.map((f) => f.id),
+    ...state.human.topics.map((t) => t.id),
+    ...state.human.people.map((p) => p.id),
+  ]);
+  const invalidIds = data_item_ids.filter((itemId) => !validLinkIds.has(itemId));
+  if (invalidIds.length > 0) {
+    // I1 (.sisyphus/reviews/wave-3-t4-diff-review.md): never interpolate
+    // caller-supplied data_item_ids into a public error -- a control/
+    // ANSI-bearing invalid id could otherwise inject into terminal/MCP
+    // output, the same output-injection class formatQuoteValidationIssues()
+    // already prevents for Zod's unrecognized_keys above. The caller
+    // already knows what ids they supplied; a fixed, stable refusal is
+    // enough -- matches the "quote not found" refusals' own id-free
+    // convention, not the byte-for-byte-echoing message this replaces.
+    throw new CorrectionValidationError(
+      "Invalid quote (relink): data_item_ids references unknown or disallowed entities (must resolve to an existing fact, topic, or person — not a quote, persona, or unmatched ID)"
+    );
+  }
+
+  // I2 (.sisyphus/reviews/wave-3-t4-diff-review.md, Round 3): a fresh
+  // crypto.randomUUID() minted for this call alone, never persisted on
+  // the Quote itself (applyQuoteOperation's "quote.relink" case only
+  // ever merges data_item_ids onto the existing record) -- the same
+  // mechanism createQuoteEntity/fixQuoteEntity already use, replacing
+  // the retired final-state field-projection comparison that could not
+  // tell "this call's own write applied" apart from "a later, unrelated
+  // same-id quote.create happens to look similar."
+  const attemptId = crypto.randomUUID();
+  const record: QuoteRelinkRecord = { op: "quote.relink", entity_type: "quote", id, data_item_ids, attempt_id: attemptId };
+  const { skipped, drainMode } = await writeCorrection(record);
+
+  if (drainMode === "queued") {
+    return {
+      status: "queued",
+      id,
+      message: "Quote relink queued: a live Ei instance is processing this write; it has not been confirmed yet.",
+    };
+  }
+
+  // A self-drain's own `skipped` return already reflects validation run
+  // synchronously against `record` (writeCorrection) -- this covers a
+  // stale data_item_ids target AND the target quote no longer existing
+  // at apply time, since applyQuoteOperation's "quote.relink" case now
+  // reports BOTH as a skip carrying this same attempt_id (reversed from
+  // the prior silent no-op on a missing target, I2 round 3). Matching by
+  // attempt_id, not record_id, is what makes this attributable to THIS
+  // call specifically even when an unrelated, already-pending relink for
+  // the same quote shares the same record_id.
+  const skippedMine = skipped.some((s) => s.attempt_id === attemptId);
+  if (skippedMine) {
+    return {
+      status: "unconfirmed",
+      id,
+      message:
+        "Quote relink could not be confirmed: the write was declined during processing. Re-check the quote's data_item_ids (e.g. via ei_lookup) to confirm the outcome.",
+    };
+  }
+
+  // Not skipped: applyQuoteOperation now reports every non-application
+  // case as a skip (a stale target, or the quote missing at apply time),
+  // so there is no remaining case where "not skipped" could mean
+  // anything other than "applied." Re-read the actual persisted quote
+  // and return it as genuine success, rather than splicing the caller's
+  // requested links onto the stale pre-relink snapshot (`current`) --
+  // that splice is exactly what let an unrelated same-id recreation
+  // launder a self-drained no-op into a materialized false success
+  // before this call ever mattered (I2, rounds 2-3).
+  const after = await loadLatestState();
+  if (!after) {
+    throw new Error("No saved state found. Is EI_DATA_PATH set correctly?");
+  }
+  const afterQuote = after.human.quotes.find((q) => q.id === id);
+  if (!afterQuote) {
+    // Not reachable from this call's own outcome -- applyQuoteOperation
+    // reports a skip instead of silently no-op'ing whenever it doesn't
+    // apply, and this call would already have returned above had its
+    // own attempt_id been in that skip list. A missing quote here means
+    // a genuinely later, independent removal landed after this call's
+    // own self-drain released its locks but before this unlocked
+    // follow-up read; this call's own write still applied and is not
+    // what removed it.
+    return {
+      status: "unconfirmed",
+      id,
+      message: "Quote relink could not be confirmed: the quote no longer exists after processing.",
+    };
+  }
+
+  return stripEmbedding(afterQuote);
+}
+
 export async function removeEntity(entityType: CorrectableType, id: string): Promise<void> {
+  if (entityType === "quote") {
+    return removeQuoteEntity(id);
+  }
+
   const state = await loadLatestState();
   if (!state) {
     throw new Error("No saved state found. Is EI_DATA_PATH set correctly?");
@@ -682,4 +847,25 @@ export async function removeEntity(entityType: CorrectableType, id: string): Pro
 
   const correction: CorrectionRecord = { op: "remove", entity_type: entityType, id, timestamp: new Date().toISOString() };
   await writeCorrection(correction);
+}
+
+/**
+ * `ei remove quote` / MCP `ei_remove` with entity_type "quote" —
+ * removeEntity's explicit quote branch, returning before the fact/topic/
+ * person dispatch below ever runs. That dispatch falls through to
+ * state.human.people for any type it doesn't recognize by name, so
+ * without this branch, adding "quote" to the enum would make `ei remove
+ * quote <id>` silently search people for the id instead of quotes — a
+ * real, silent-failure-shaped bug, not a hypothetical one.
+ */
+async function removeQuoteEntity(id: string): Promise<void> {
+  const state = await loadLatestState();
+  if (!state) {
+    throw new Error("No saved state found. Is EI_DATA_PATH set correctly?");
+  }
+  if (!state.human.quotes.some((q) => q.id === id)) {
+    throw new Error("Cannot remove quote: no quote found with the supplied id");
+  }
+  const record: QuoteRemoveRecord = { op: "quote.remove", entity_type: "quote", id };
+  await writeCorrection(record);
 }

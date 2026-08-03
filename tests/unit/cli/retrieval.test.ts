@@ -103,9 +103,9 @@ function makeQuoteFixRecord(id: string, overrides: Partial<QuoteFixRecord> = {})
   };
 }
 
-/** Builds a valid `quote.relink` wire record — `{id, data_item_ids}` only. */
+/** Builds a valid `quote.relink` wire record — `{id, attempt_id, data_item_ids}` only. */
 function makeQuoteRelinkRecord(id: string, dataItemIds: string[]): QuoteRelinkRecord {
-  return { op: "quote.relink", entity_type: "quote", id, data_item_ids: dataItemIds };
+  return { op: "quote.relink", entity_type: "quote", id, attempt_id: `attempt-${id}`, data_item_ids: dataItemIds };
 }
 
 /** Builds a valid `quote.remove` wire record — `{id}` only. */
