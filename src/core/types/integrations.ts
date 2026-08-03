@@ -17,7 +17,8 @@ export interface ToolProvider {
   display_name: string;              // Human label ("Ei Built-ins", "Brave Search")
   description?: string;              // Short description shown in UI
   builtin: boolean;                  // true = ships with Ei; false = user-registered
-  config: Record<string, string>;    // Shared API keys / base URLs (encrypted at rest)
+  config: Record<string, string>;    // Shared API keys / base URLs — plaintext on this device;
+                                      // encrypted only in the optional remote-sync backup blob
   enabled: boolean;                  // Kill-switch: disabled = all its tools unavailable
   created_at: string;                // ISO timestamp
 }
