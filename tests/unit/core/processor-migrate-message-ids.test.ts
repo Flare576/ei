@@ -102,11 +102,11 @@ function makePersona(id: string): PersonaEntity {
   };
 }
 
-function makeMessage(id: string, external = false): Message {
+function makeMessage(id: string, external = false, content: string | undefined = "test content"): Message {
   return {
     id,
     role: "human",
-    content: "test content",
+    content,
     timestamp: new Date().toISOString(),
     read: false,
     context_status: "normal",
@@ -114,10 +114,10 @@ function makeMessage(id: string, external = false): Message {
   };
 }
 
-function makeQuote(messageId: string | null): Quote {
+function makeQuote(messageId: string | null, text = "test quote"): Quote {
   return {
     id: `quote-${Math.random().toString(36).slice(2)}`,
-    content: "test quote",
+    text,
     message_id: messageId,
     persona_id: "persona-1",
     timestamp: new Date().toISOString(),
@@ -141,9 +141,9 @@ describe("Processor.migrateMessageIds()", () => {
   it("rewrites naked msg_ quote when OpenCode reader finds the message", async () => {
     const state = createDefaultTestState();
     const nakdMsgId = "msg_abc123XYZ";
-    state.human.quotes = [makeQuote(nakdMsgId)];
+    state.human.quotes = [makeQuote(nakdMsgId, "test quote")];
     mockGetMessageById.mockResolvedValue({
-      message: { id: nakdMsgId },
+      message: { id: nakdMsgId, content: "Quote: test quote appears here." },
       before: [],
       after: [],
       session: { id: "ses_sessionABC" },
@@ -156,15 +156,33 @@ describe("Processor.migrateMessageIds()", () => {
     expect(human.quotes[0].message_id).toBe(`opencode:test-machine:ses_sessionABC:${nakdMsgId}`);
   });
 
+  it("leaves naked msg_ quote unqualified when OpenCode content does not contain the quote text", async () => {
+    const state = createDefaultTestState();
+    const nakdMsgId = "msg_mismatch456";
+    state.human.quotes = [makeQuote(nakdMsgId, "test quote")];
+    mockGetMessageById.mockResolvedValue({
+      message: { id: nakdMsgId, content: "Completely unrelated content." },
+      before: [],
+      after: [],
+      session: { id: "ses_sessionMismatch" },
+    });
+
+    const storage = createMockStorage(state);
+    await processor.start(storage);
+
+    const human = processor.getStateManager().getHuman();
+    expect(human.quotes[0].message_id).toBe(nakdMsgId);
+  });
+
   it("rewrites naked UUID quote to ei: when found in persona messages", async () => {
     const bareUuid = "550e8400-e29b-41d4-a716-446655440000";
     const personaId = "persona-uuid-test";
     const state = createDefaultTestState();
     state.personas[personaId] = {
       entity: makePersona(personaId),
-      messages: [makeMessage(bareUuid)],
+      messages: [makeMessage(bareUuid, false, "Quote: test quote appears here.")],
     };
-    state.human.quotes = [makeQuote(bareUuid)];
+    state.human.quotes = [makeQuote(bareUuid, "test quote")];
     mockGetMessageById.mockResolvedValue(null);
 
     const storage = createMockStorage(state);
@@ -172,6 +190,93 @@ describe("Processor.migrateMessageIds()", () => {
 
     const human = processor.getStateManager().getHuman();
     expect(human.quotes[0].message_id).toBe(`ei:${bareUuid}`);
+  });
+
+  it("leaves naked UUID quote unqualified when mapped message content does not contain the quote text", async () => {
+    const bareUuid = "550e8400-e29b-41d4-a716-446655440002";
+    const personaId = "persona-uuid-mismatch";
+    const state = createDefaultTestState();
+    state.personas[personaId] = {
+      entity: makePersona(personaId),
+      messages: [makeMessage(bareUuid, false, "This message has nothing to do with the stored quote.")],
+    };
+    state.human.quotes = [makeQuote(bareUuid, "test quote")];
+
+    const storage = createMockStorage(state);
+    await processor.start(storage);
+
+    const human = processor.getStateManager().getHuman();
+    expect(human.quotes[0].message_id).toBe(bareUuid);
+  });
+
+  it("leaves naked UUID quote unqualified when mapped message has no content", async () => {
+    const bareUuid = "550e8400-e29b-41d4-a716-446655440003";
+    const personaId = "persona-uuid-no-content";
+    const state = createDefaultTestState();
+    const contentlessMessage = makeMessage(bareUuid, false, "test quote");
+    delete contentlessMessage.content;
+    state.personas[personaId] = {
+      entity: makePersona(personaId),
+      messages: [contentlessMessage],
+    };
+    state.human.quotes = [makeQuote(bareUuid, "test quote")];
+
+    const storage = createMockStorage(state);
+    await processor.start(storage);
+
+    const human = processor.getStateManager().getHuman();
+    expect(human.quotes[0].message_id).toBe(bareUuid);
+  });
+
+  it("is idempotent: a second migration pass against already-migrated state makes zero further rewrites", async () => {
+    const bareUuid = "550e8400-e29b-41d4-a716-446655440004";
+    const personaId = "persona-uuid-idempotent";
+    const nakdMsgId = "msg_idempotent789";
+    const matchingContent = "Quote: test quote appears here.";
+
+    const state = createDefaultTestState();
+    state.personas[personaId] = {
+      entity: makePersona(personaId),
+      messages: [makeMessage(bareUuid, false, matchingContent)],
+    };
+    state.human.quotes = [makeQuote(bareUuid, "test quote"), makeQuote(nakdMsgId, "test quote")];
+    mockGetMessageById.mockResolvedValue({
+      message: { id: nakdMsgId, content: matchingContent },
+      before: [],
+      after: [],
+      session: { id: "ses_sessionIdem" },
+    });
+
+    const storage = createMockStorage(state);
+    await processor.start(storage);
+
+    const firstPassQuotes = processor.getStateManager().getHuman().quotes;
+    const firstPassMessages = processor.getStateManager().messages_get(personaId);
+    expect(firstPassQuotes[0].message_id).toBe(`ei:${bareUuid}`);
+    expect(firstPassQuotes[1].message_id).toBe(`opencode:test-machine:ses_sessionIdem:${nakdMsgId}`);
+
+    const firstPassSnapshot = JSON.parse(JSON.stringify({ quotes: firstPassQuotes, messages: firstPassMessages }));
+
+    await processor.stop();
+
+    const secondPassState = {
+      ...createDefaultTestState(),
+      human: { ...state.human, quotes: firstPassQuotes },
+      personas: { [personaId]: { entity: makePersona(personaId), messages: firstPassMessages } },
+    };
+
+    const secondProcessor = new Processor(createMockInterface());
+    await secondProcessor.start(createMockStorage(secondPassState));
+
+    const secondPassSnapshot = JSON.parse(JSON.stringify({
+      quotes: secondProcessor.getStateManager().getHuman().quotes,
+      messages: secondProcessor.getStateManager().messages_get(personaId),
+    }));
+
+    expect(secondPassSnapshot).toEqual(firstPassSnapshot);
+    expect(mockGetMessageById).toHaveBeenCalledTimes(1);
+
+    await secondProcessor.stop();
   });
 
   it("leaves null message_id alone", async () => {

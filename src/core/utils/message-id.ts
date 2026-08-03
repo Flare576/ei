@@ -116,6 +116,9 @@ export function isQualifiedMessageId(id: string): boolean {
   return id.includes(":")
 }
 
+/** Canonical bare-UUID shape (no braces/urn: variant) -- distinguishes a genuinely-unqualified internal UUID (pre-`ei:`-prefix legacy data) from any other unqualified string. */
+export const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export function qualifyEiMessage(uuid: string): string {
   return `ei:${uuid}`
 }

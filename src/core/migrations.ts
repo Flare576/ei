@@ -1,8 +1,9 @@
 import { StateManager } from "./state-manager.js";
 import type { Fact } from "./types.js";
 import { BUILT_IN_FACTS } from "./constants/built-in-facts.js";
-import { isQualifiedMessageId, qualifyEiMessage, qualifyOpenCodeMessage } from "./utils/message-id.js";
+import { isQualifiedMessageId, qualifyEiMessage, qualifyOpenCodeMessage, UUID_PATTERN } from "./utils/message-id.js";
 import type { IOpenCodeReader } from "../integrations/opencode/types.js";
+import { matchQuoteInMessage } from "./handlers/human-matching.js";
 
 export function seedBuiltinFacts(stateManager: StateManager): void {
   const human = stateManager.getHuman();
@@ -59,8 +60,6 @@ export async function migrateMessageIds(stateManager: StateManager, isTUI: boole
     let msgRewrites = 0;
     let quoteRewrites = 0;
 
-    const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
     const personas = stateManager.persona_getAll();
     for (const persona of personas) {
       for (const msg of stateManager.messages_get(persona.id)) {
@@ -108,15 +107,15 @@ export async function migrateMessageIds(stateManager: StateManager, isTUI: boole
     const human = stateManager.getHuman();
     const quotes = human.quotes ?? [];
 
-    const eiUuidMap = new Map<string, string>();
+    const eiUuidMap = new Map<string, { qualifiedId: string; content: string | undefined }>();
     for (const persona of personas) {
       for (const msg of stateManager.messages_get(persona.id)) {
-        if (msg.id.startsWith("ei:")) eiUuidMap.set(msg.id.slice(3), msg.id);
+        if (msg.id.startsWith("ei:")) eiUuidMap.set(msg.id.slice(3), { qualifiedId: msg.id, content: msg.content });
       }
     }
     for (const room of rooms) {
       for (const msg of stateManager.getRoomMessages(room.id)) {
-        if (msg.id.startsWith("ei:")) eiUuidMap.set(msg.id.slice(3), msg.id);
+        if (msg.id.startsWith("ei:")) eiUuidMap.set(msg.id.slice(3), { qualifiedId: msg.id, content: msg.content });
       }
     }
 
@@ -139,7 +138,7 @@ export async function migrateMessageIds(stateManager: StateManager, isTUI: boole
       if (MSG_PATTERN.test(mid)) {
         if (openCodeReader) {
           const ocWindow = await openCodeReader.getMessageById(mid).catch(() => null);
-          if (ocWindow) {
+          if (ocWindow && matchQuoteInMessage(quote.text, ocWindow.message.content)) {
             const { getMachineId } = await import("../integrations/machine-id.js");
             updatedQuotes.push({ ...quote, message_id: qualifyOpenCodeMessage(getMachineId(), ocWindow.session.id, mid) });
             quoteRewrites++;
@@ -151,9 +150,9 @@ export async function migrateMessageIds(stateManager: StateManager, isTUI: boole
       }
 
       if (UUID_PATTERN.test(mid)) {
-        const fqId = eiUuidMap.get(mid);
-        if (fqId) {
-          updatedQuotes.push({ ...quote, message_id: fqId });
+        const mapped = eiUuidMap.get(mid);
+        if (mapped && mapped.content !== undefined && matchQuoteInMessage(quote.text, mapped.content)) {
+          updatedQuotes.push({ ...quote, message_id: mapped.qualifiedId });
           quoteRewrites++;
           continue;
         }
