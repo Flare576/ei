@@ -26,9 +26,20 @@ what your recon (`references/recon.md`) gathered:
 ## What does NOT trigger it
 
 Don't add friction to subjects with no third-party identifiers at all — a
-personal hobby, the user's own stated career history in first person, a
-purely technical topic with no named people or companies attached. Asking
-here just slows the user down for no protective value.
+personal hobby, or a purely technical topic with no named people or
+companies attached, or the user's own stated career history in first
+person *when that narrative carries no identifying detail of its own* (no
+phone number, birth date, specific address, or similar — just the
+story). Asking here just slows the user down for no protective value.
+
+That exemption is about the *absence* of identifiers, not about the
+subject being the user: a self-identifier that does show up somewhere in
+the user's own career history (phone, birth date, location, personal or
+employer email, client/engagement affiliation) isn't a third party
+either, but it's not exempt from being asked about — it just isn't this
+gate's question. `references/document-types.md`'s Profile / Job
+Description entry asks about exactly those self-identifiers directly,
+on its own terms, when the subject is the Ei user.
 
 ## What to actually ask
 

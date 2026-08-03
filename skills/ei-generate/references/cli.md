@@ -29,6 +29,46 @@ those quotes' `data_item_ids` are how you find secondary entities a facet
 search alone wouldn't surface. If you're skipping `ei --id` on your strong
 primary hits, you're skipping the expansion step, not just being efficient.
 
+## `ei facts` is about the Ei user only, never a subject
+
+Facts are a small, fixed, seeded list of biographical fields (name,
+birthday, employer, field of study, and the like — see the CLI's own
+`ei facts` output for the live list) filled in once by extraction and then
+treated as settled; the human can also add arbitrary custom facts.
+Extraction only ever targets the Ei user — there is no per-third-party
+fact record. So `ei facts "<subject>"` returns the **Ei user's**
+demographic data every time, filtered by the query string, regardless of
+what subject you pass it. If your subject is anyone other than the Ei
+user, this command silently returns the wrong person's information with
+no warning that it's mismatched — use `ei people "<subject>"` /
+`ei --id <id>` to get that person's own `Person` record instead, and treat
+anything you need about them as attributable quotes or corroborated
+evidence, not `ei facts`.
+
+## Enumerating the whole fixed fact set: `ei facts -n 30`, no query
+
+`ei facts "<subject>"` — even pointed correctly at the Ei user, not a
+third party — still embeds whatever query string you pass and returns
+only the top matches above the similarity floor. Pass the user's own
+name and you can get Full Name/Nickname back while Current Employer,
+Current Job Title, and Years of Experience rank below the floor and
+silently don't come back at all.
+
+Passing **no query** avoids this. `ei facts -n 30` (no query string,
+`-n` raised past the fixed set's size) resolves to recency mode
+automatically — the CLI's own arg parsing treats an empty query the same
+as `--recent` — which returns every fact sorted by recency instead of
+filtering by similarity to a query. Since Facts are a small, fixed set
+(the built-ins plus whatever custom facts the user has added), `-n 30`
+enumerates the whole thing. This is not the broad-search-limit
+workaround this skill's own guardrails warn against elsewhere — that
+guidance is about not substituting a bigger `-n` for real faceting on a
+semantic search; this is a small, fixed, non-semantic record set where
+"return all of it" is the actually-correct query, not a workaround for a
+lazy one. If you want a narrower pull instead, query specific field
+vocabulary ("current employer", "years of experience") — never the
+subject's name.
+
 ## Everything else
 
 Follows `ei-search` exactly — output shapes, the two id formats
