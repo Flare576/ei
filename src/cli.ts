@@ -8,7 +8,7 @@
  *   ei quote "search text"         Search specific type
  *   ei quote -n 5 "search text"    Type-specific with limit
  *   ei --id <id>                   Look up entity by ID
- *   echo <id> | ei --id             Look up entity by ID from stdin
+ *   ei --id <id> --before N --after N  Message IDs: include N surrounding messages
  */
 
 import { parseArgs } from "util";
@@ -112,6 +112,7 @@ Usage:
   ei <type> --recent "query"    Type-specific recent search
   ei --persona "Name" "query"   Filter results to what a persona has learned
   ei --id <id>                  Look up a specific entity by ID
+  ei --id <id> --before 2 --after 2  Message IDs only: include surrounding messages
   echo <id> | ei --id           Look up entity by ID from stdin
   ei --identifier <type> <value>  Look up a person by identifier type + value, e.g. --identifier "GitHub" "flare576"
   ei mcp                        Start the Ei MCP stdio server (for Claude Code/Cursor/Codex)
@@ -144,6 +145,8 @@ Options:
   --persona, -p       Filter to entities a specific persona has learned about
   --source, -s        Filter to entities from a specific source (prefix match, e.g. "cursor", "codex:my-machine", "opencode:my-machine:ses_abc123")
   --id                Look up entity by ID (accepts value or stdin)
+  --before <N>        With --id on a message ID: include N preceding messages (default 0)
+  --after <N>         With --id on a message ID: include N following messages (default 0)
   --identifier <type> <value>  Look up a person by identifier type + value (case-insensitive type, exact value; no stdin support)
   --install           Register Ei with Claude Code, Cursor, Codex, and OpenCode (skills + context hooks where supported; MCP is removed by default on Claude Code/Cursor/Codex — see README for manual MCP setup)
   --sync              Pull latest state from remote sync server into state.backup.json (no TUI required)
@@ -164,6 +167,7 @@ Examples:
   ei --id abc-123                        # Look up entity by ID
   ei --identifier "GitHub" "flare576"    # Look up a person by identifier type + value
   ei "memory leak" | jq -r '.[0].id' | ei --id  # Pipe ID from search (every hit — including quotes — carries an id)
+  ei --id "ei:abc-123" --before 2 --after 2  # Message ID: read the surrounding conversation
   ei create fact --json '{"name":"Field of Study","description":"CS","sentiment":0,"validated_date":""}'
   ei update fact abc-123 --json '{"name":"Field of Study","description":"Updated","sentiment":0,"validated_date":""}'
   ei create quote --message-id "opencode:my-machine:ses_abc:msg_def" --text "you guessed it"  # Attest a quote against its source message
@@ -593,7 +597,16 @@ async function main(): Promise<void> {
     // Strip surrounding quotes (from jq output or shell quoting)
     id = id.replace(/^["']|["']$/g, "");
 
-    const ocMessage = await resolveExternalMessage(id);
+    const parseContextCount = (raw: string | undefined): number => {
+      const n = Number(raw);
+      return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
+    };
+    const beforeFlagIndex = args.indexOf("--before");
+    const beforeN = beforeFlagIndex !== -1 ? parseContextCount(args[beforeFlagIndex + 1]) : 0;
+    const afterFlagIndex = args.indexOf("--after");
+    const afterN = afterFlagIndex !== -1 ? parseContextCount(args[afterFlagIndex + 1]) : 0;
+
+    const ocMessage = await resolveExternalMessage(id, beforeN, afterN);
     if (ocMessage) {
       console.log(JSON.stringify(ocMessage, null, 2));
       process.exit(0);

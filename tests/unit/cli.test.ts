@@ -414,6 +414,109 @@ describe("CLI --identifier flag process behavior", () => {
   });
 });
 
+describe("CLI --id --before/--after flags on a message ID (v1.8.0 CLI/MCP parity, ADR-028)", () => {
+  const personaId = "66666666-6666-4666-8666-666666666666";
+  function writeStateWithMessages(messages: { id: string; role: "human" | "system"; content: string }[]) {
+    const state: StorageState = {
+      ...makeState(),
+      personas: {
+        [personaId]: {
+          entity: {
+            id: personaId,
+            display_name: "Context Window Persona",
+            aliases: [],
+            entity: "system",
+            short_description: "t",
+            long_description: "t",
+            model: "Local LLM:test-model",
+            traits: [],
+            topics: [],
+            is_paused: false,
+            is_archived: false,
+            is_static: false,
+            last_updated: NOW,
+          },
+          messages: messages.map((m, i) => ({
+            id: m.id,
+            role: m.role,
+            content: m.content,
+            timestamp: new Date(Date.parse(NOW) + i * 1000).toISOString(),
+            read: true,
+            context_status: ContextStatus.Default,
+          })),
+        },
+      },
+    };
+    writeFileSync(join(tempDir, "state.json"), JSON.stringify(state));
+  }
+
+  it("defaults to no surrounding context when --before/--after are omitted", () => {
+    writeStateWithMessages([
+      { id: "ei:m0", role: "human", content: "zero" },
+      { id: "ei:m1", role: "system", content: "one" },
+      { id: "ei:m2", role: "human", content: "two" },
+    ]);
+
+    const result = runCli(["--id", "ei:m1"]);
+
+    expect(result.status).toBe(0);
+    const printed = JSON.parse(result.stdout);
+    expect(printed.content).toBe("one");
+    expect(printed.before).toEqual([]);
+    expect(printed.after).toEqual([]);
+  });
+
+  it("returns exactly N preceding and following messages when requested", () => {
+    writeStateWithMessages([
+      { id: "ei:m0", role: "human", content: "zero" },
+      { id: "ei:m1", role: "system", content: "one" },
+      { id: "ei:m2", role: "human", content: "two" },
+      { id: "ei:m3", role: "system", content: "three" },
+      { id: "ei:m4", role: "human", content: "four" },
+    ]);
+
+    const result = runCli(["--id", "ei:m2", "--before", "1", "--after", "1"]);
+
+    expect(result.status).toBe(0);
+    const printed = JSON.parse(result.stdout);
+    expect(printed.content).toBe("two");
+    expect(printed.before.map((m: { content: string }) => m.content)).toEqual(["one"]);
+    expect(printed.after.map((m: { content: string }) => m.content)).toEqual(["three"]);
+  });
+
+  it("clamps at the edges of the conversation instead of erroring", () => {
+    writeStateWithMessages([
+      { id: "ei:m0", role: "human", content: "zero" },
+      { id: "ei:m1", role: "system", content: "one" },
+    ]);
+
+    const result = runCli(["--id", "ei:m0", "--before", "10", "--after", "10"]);
+
+    expect(result.status).toBe(0);
+    const printed = JSON.parse(result.stdout);
+    expect(printed.content).toBe("zero");
+    expect(printed.before).toEqual([]);
+    expect(printed.after.map((m: { content: string }) => m.content)).toEqual(["one"]);
+  });
+
+  it("treats malformed, negative, and non-finite counts as zero instead of crashing or unbounded-slicing", () => {
+    writeStateWithMessages([
+      { id: "ei:m0", role: "human", content: "zero" },
+      { id: "ei:m1", role: "system", content: "one" },
+      { id: "ei:m2", role: "human", content: "two" },
+    ]);
+
+    for (const badValue of ["abc", "-3", "Infinity", "-Infinity", "NaN"]) {
+      const result = runCli(["--id", "ei:m1", "--before", badValue, "--after", badValue]);
+      expect(result.status).toBe(0);
+      const printed = JSON.parse(result.stdout);
+      expect(printed.content).toBe("one");
+      expect(printed.before).toEqual([]);
+      expect(printed.after).toEqual([]);
+    }
+  });
+});
+
 describe("CLI --help balanced-search contract", () => {
   // Regression guard for the ei-cli-skills-review findings (I1 / R-mcp.ts): --help
   // text used to say plain `ei "query"` searches "all data types" / "all types",
