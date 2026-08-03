@@ -3,6 +3,10 @@
  *
  * BUILT_IN_FACTS: Array of fact objects (name field only) for iteration/display.
  * BUILT_IN_FACT_NAMES: Set<string> for O(1) lookup (is this fact built-in?).
+ *
+ * This list has grown past earlier internal drafts that capped it at a fixed
+ * count. There is no hard limit — keep it to a reasonable set of information
+ * a human would actually want an Agent or Persona to remember, not a number.
  */
 
 export const BUILT_IN_FACTS: { name: string }[] = [
