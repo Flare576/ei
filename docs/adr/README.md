@@ -20,6 +20,7 @@ This exists because the alternative was observed directly: *"I really wish we ha
 | [010](ADR-010-invalid-persona-links-are-reported-not-repaired.md) | Invalid Persona Links Are Reported, Never Repaired Automatically | Accepted | 2026-08-01 | Current |
 | [011](ADR-011-quotes-outlive-their-links.md) | A Quote Outlives the Items It Was Linked To | Accepted | 2026-08-02 | Current |
 | [012](ADR-012-sunset-with-a-path-forward.md) | Sunset With a Path Forward | Accepted | 2026-08-02 | Current |
+| [013](ADR-013-tool-agnostic-skill-language.md) | Skills Name Tool Capabilities, Never Specific Tools | Accepted | 2026-08-03 | Current |
 
 ## Conventions
 
