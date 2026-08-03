@@ -662,7 +662,7 @@ export async function resolveExternalMessage(
         if (!resolved) {
           return {
             refused: true,
-            reason: `Room message ${id} has role "persona" but no persona_id; cannot resolve a speaker identity for this record.`,
+            reason: `Room message has role "persona" but no persona_id; cannot resolve a speaker identity for this record.`,
           };
         }
 
@@ -822,14 +822,14 @@ export async function resolveExternalMessage(
     case "slack": {
       return {
         refused: true,
-        reason: `Message ${id} originates from a Slack import; Slack sources are not independently resolvable/attestable.`,
+        reason: `Message originates from a Slack import; Slack sources are not independently resolvable/attestable.`,
       };
     }
 
     case "import": {
       return {
         refused: true,
-        reason: `Message ${id} originates from an imported document; document sources are not independently resolvable/attestable.`,
+        reason: `Message originates from an imported document; document sources are not independently resolvable/attestable.`,
       };
     }
 
@@ -846,7 +846,7 @@ export async function resolveExternalMessage(
       if (id.startsWith("generate:document:")) {
         return {
           refused: true,
-          reason: `Message ${id} originates from a generated document; document sources are not independently resolvable/attestable.`,
+          reason: `Message originates from a generated document; document sources are not independently resolvable/attestable.`,
         };
       }
       return null;

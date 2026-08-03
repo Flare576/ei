@@ -688,7 +688,35 @@ export async function fixQuoteEntity(body: unknown): Promise<Quote | QuoteWriteP
     throw new Error("Cannot fix quote: the write could not be verified");
   }
 
-  return stripEmbedding(quote);
+  // I4 (.sisyphus/reviews/quote-attestation-final-implementation.md):
+  // re-read and return the ACTUAL persisted quote rather than `quote`
+  // (the local snapshot built from `current`, the pre-drain read at the
+  // top of this function) -- if a concurrent relink lands in the SAME
+  // self-drain batch ahead of this fix (writeCorrection() applies every
+  // pending record, then this call's own record, in one sequential
+  // fold), the persisted quote's data_item_ids reflect the relink, but
+  // `quote` here can only ever carry the pre-relink snapshot's links
+  // plus this call's own text/start/end/embedding overlay. Mirrors
+  // relinkQuoteEntity's own identical "not skipped -> re-read and return
+  // the real persisted record" fix.
+  const after = await loadLatestState();
+  if (!after) {
+    throw new Error("No saved state found. Is EI_DATA_PATH set correctly?");
+  }
+  const afterQuote = after.human.quotes.find((q) => q.id === quote_id);
+  if (!afterQuote) {
+    // Not reachable from this call's own outcome -- this call's own
+    // attempt_id was not in the skip list (checked above), so its write
+    // applied; a missing quote here means a genuinely later, independent
+    // removal landed after this call's own self-drain released its
+    // locks but before this unlocked follow-up read, not something this
+    // call's write caused. Matches the existing verification-failure
+    // message above rather than inventing a new disposition for an
+    // effectively unreachable branch.
+    throw new Error("Cannot fix quote: the write could not be verified");
+  }
+
+  return stripEmbedding(afterQuote);
 }
 
 /**
@@ -831,7 +859,7 @@ export async function relinkQuoteEntity(body: unknown): Promise<Quote | QuoteWri
   return stripEmbedding(afterQuote);
 }
 
-export async function removeEntity(entityType: CorrectableType, id: string): Promise<void> {
+export async function removeEntity(entityType: CorrectableType, id: string): Promise<QuoteWritePending | undefined> {
   if (entityType === "quote") {
     return removeQuoteEntity(id);
   }
@@ -848,6 +876,7 @@ export async function removeEntity(entityType: CorrectableType, id: string): Pro
 
   const correction: CorrectionRecord = { op: "remove", entity_type: entityType, id, timestamp: new Date().toISOString() };
   await writeCorrection(correction);
+  return undefined;
 }
 
 /**
@@ -858,8 +887,21 @@ export async function removeEntity(entityType: CorrectableType, id: string): Pro
  * without this branch, adding "quote" to the enum would make `ei remove
  * quote <id>` silently search people for the id instead of quotes — a
  * real, silent-failure-shaped bug, not a hypothetical one.
+ *
+ * Returns a QuoteWritePending instead of undefined when writeCorrection()
+ * could only queue the record (a live Ei instance holds ei.lock) — see
+ * createQuoteEntity's identical comment for why that outcome can't be
+ * resolved synchronously from here (I3,
+ * .sisyphus/reviews/quote-attestation-final-implementation.md). Unlike
+ * create/fix/relink, a confirmed self-drain needs no further attempt_id
+ * check: applyQuoteOperation's "quote.remove" case unconditionally
+ * filters by id with no existence guard of its own (it can never itself
+ * appear in a self-drain's skipped list), and the wire record built
+ * below is always structurally valid by construction -- the existence
+ * check above, which runs before writeCorrection() is ever called, is
+ * what remove relies on instead.
  */
-async function removeQuoteEntity(id: string): Promise<void> {
+async function removeQuoteEntity(id: string): Promise<QuoteWritePending | undefined> {
   const state = await loadLatestState();
   if (!state) {
     throw new Error("No saved state found. Is EI_DATA_PATH set correctly?");
@@ -868,5 +910,15 @@ async function removeQuoteEntity(id: string): Promise<void> {
     throw new Error("Cannot remove quote: no quote found with the supplied id");
   }
   const record: QuoteRemoveRecord = { op: "quote.remove", entity_type: "quote", id };
-  await writeCorrection(record);
+  const { drainMode } = await writeCorrection(record);
+
+  if (drainMode === "queued") {
+    return {
+      status: "queued",
+      id,
+      message: "Quote remove queued: a live Ei instance is processing this write; it has not been confirmed yet.",
+    };
+  }
+
+  return undefined;
 }

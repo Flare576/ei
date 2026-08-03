@@ -217,8 +217,31 @@ const QUOTE_REMOVE_ALLOWED_KEYS: Record<string, true> = Object.assign(Object.cre
  * applyCorrectionToHuman) keeps the same post-check narrowing to
  * `CorrectionUpsert | CorrectionRemove` that the old direct
  * `entity_type === "quote"` comparison gave it for free.
+ *
+ * `value` is typed `unknown`, not `object` (I7): every real caller hands
+ * this the very first thing it does with a queue entry fresh off
+ * `readCorrections()`'s unchecked `JSON.parse(...) as CorrectionRecord[]`
+ * cast, so a syntactically-valid-JSON-but-non-object entry (`null`, a
+ * string, a number, a boolean, or a bare array) must be classifiable
+ * without the `in` operator ever touching it — `"op" in value` throws a
+ * TypeError for any non-object right operand, which is exactly what
+ * wedged read overlay/self-drain on a `[null, ...validRecords]` queue
+ * before this fix. A non-object/null/array value now returns `true`
+ * (optimistically routed to the quote path, the same "optimistic"
+ * contract already documented above for the wrong-entity_type case) so
+ * it reaches `applyQuoteOperation`'s own pre-existing non-object guard
+ * (or, for a bare array, its `assertValidQuoteCorrection` try/catch,
+ * since an array passes the `typeof === "object"` check but has no `op`
+ * property) — either way, a structured `<unknown>` skip comes back
+ * instead of a throw. It never reaches `assertValidCorrection`'s
+ * throwing entry point: every one of the three consumer-facing callers
+ * (applyCorrectionToHuman, applyCorrectionToState,
+ * Processor.applyCorrectionRecord) checks this predicate before reaching
+ * assertValidCorrection anyway, so this one guard is sufficient to make
+ * all three skip-and-continue instead of throw.
  */
-export function isQuoteCorrectionOp(value: object): value is QuoteCorrectionRecord {
+export function isQuoteCorrectionOp(value: unknown): value is QuoteCorrectionRecord {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return true;
   if ("op" in value && typeof value.op === "string" && QUOTE_OPS[value.op]) return true;
   return "entity_type" in value && value.entity_type === "quote";
 }

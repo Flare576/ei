@@ -375,4 +375,55 @@ describe("createFetchMessageExecutor", () => {
       expect(result).toEqual({ error: "Message not found" });
     });
   });
+
+  describe("Oracle 8 — I6: control characters in the caller-supplied id never reach console output", () => {
+    it("does not log raw control/ANSI bytes from the id when nothing resolves it, even though a sanitized identifier is still logged", async () => {
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const evilId = "attest\x1b[31mRED\x1b[0mid";
+      getAllPersonas.mockReturnValue([]);
+      getRoomList.mockReturnValue([]);
+      resolveExternalMessage.mockResolvedValue(null);
+
+      const executor = makeExecutor();
+      await executor.execute({ id: evilId });
+
+      const logged = logSpy.mock.calls.map((call) => call.join(" ")).join("\n");
+      expect(logged).not.toContain("\x1b[31m");
+      expect(logged).not.toContain(evilId);
+      expect(logged).toContain("RED"); // sanitized copy still logged, only the control bytes are stripped
+      logSpy.mockRestore();
+    });
+
+    it("does not log raw control bytes when the id is refused by format (Slack/import/generated-document)", async () => {
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const evilId = "slack:\x1b[31mT0123\x1b[0m:C0456:1700000000.000100";
+
+      const executor = makeExecutor();
+      const result = JSON.parse(await executor.execute({ id: evilId }));
+
+      expect(result.refused).toBe(true);
+      const logged = logSpy.mock.calls.map((call) => call.join(" ")).join("\n");
+      expect(logged).not.toContain("\x1b[31m");
+      expect(logged).not.toContain(evilId);
+      logSpy.mockRestore();
+    });
+
+    it("does not log raw control bytes when a malformed room-persona-primary message is refused", async () => {
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const evilId = "room\x07bell\x1b[31mred\x1b[0mmsg-1";
+      getAllPersonas.mockReturnValue([]);
+      getRoomList.mockReturnValue([makeRoomSummary("room-1", "Test Room")]);
+      getRoomMessages.mockReturnValue([makeRoomMessage(evilId, { role: "persona" })]);
+
+      const executor = makeExecutor(false);
+      const result = JSON.parse(await executor.execute({ id: evilId }));
+
+      expect(result.refused).toBe(true);
+      const logged = logSpy.mock.calls.map((call) => call.join(" ")).join("\n");
+      expect(logged).not.toContain("\x1b[31m");
+      expect(logged).not.toContain("\x07");
+      expect(logged).not.toContain(evilId);
+      logSpy.mockRestore();
+    });
+  });
 });

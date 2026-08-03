@@ -20,8 +20,9 @@ ei --install                   # Wire Ei into Claude Code, Cursor, Codex, and Op
 ei --sync                      # Pull latest state from remote sync server into state.backup.json (no TUI required)
 ei mcp                         # Start the Ei MCP stdio server (for Claude Code/Cursor/Codex)
 ei create <type> --json '<json>'       # Create a new entity (fact/topic/person/persona)
-ei update <type> <id> --json '<json>'  # Replace an entity by ID (fact/topic/person/quote/persona)
-ei remove <type> <id>                  # Remove an entity by ID
+ei update <type> <id> --json '<json>'  # Replace an entity by ID (fact/topic/person/persona — never quote)
+ei remove <type> <id>                  # Remove an entity by ID (fact/topic/person/quote/persona)
+ei create quote | fix quote | relink quote | remove quote   # Quote writes have their own verbs — `ei update` on a quote always rejects (see "Quote commands")
 ```
 
 Type aliases: `fact`, `person`, `topic`, `quote`, `persona` all work (singular or plural).

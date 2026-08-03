@@ -1154,6 +1154,52 @@ describe("fixQuoteEntity — a same-id prior pending skip does not fail this cal
 });
 
 // -----------------------------------------------------------------------
+// fixQuoteEntity — a successful self-drain returns the ACTUAL persisted
+// quote, not a stale pre-drain snapshot (I4)
+// -----------------------------------------------------------------------
+// fixQuoteEntity snapshots `current` before ever calling writeCorrection(),
+// then overlays only text/start/end/embedding onto that snapshot. If a
+// concurrent relink lands in corrections.json between that snapshot and
+// this call's own self-drain (writeCorrection() applies every pending
+// record, then this call's own, in one sequential fold -- see
+// corrections-writer.ts), the PERSISTED quote's data_item_ids reflect
+// the relink, but a pre-fix response could only ever reflect the
+// pre-drain snapshot's stale links.
+
+describe("fixQuoteEntity — a successful self-drain returns the actual materialized quote, not a stale pre-drain snapshot (I4)", () => {
+  it("reflects a concurrent relink's data_item_ids applied in the SAME self-drain batch, ahead of this call's own record", async () => {
+    writeState(buildAttestationState([makeSourcedQuote()])); // data_item_ids: ["attest-fact-1"]
+    const correctionsPath = join(tempDir, "corrections.json");
+
+    // Simulates 'ei relink quote sourced-quote-1 --to ""' landing in the
+    // queue right as this call's own embedding computation runs --
+    // writeCorrection() reads corrections.json fresh immediately
+    // afterward, so both records apply together in ONE self-drain batch,
+    // relink first (already pending), this fix's own record last.
+    vi.mocked(computeQuoteEmbedding).mockImplementationOnce(async () => {
+      writeFileSync(
+        correctionsPath,
+        JSON.stringify([
+          { op: "quote.relink", entity_type: "quote", id: "sourced-quote-1", data_item_ids: [], attempt_id: "concurrent-relink-attempt" },
+        ])
+      );
+      return EMBEDDING;
+    });
+
+    const fixed = await fixQuoteEntity({ quote_id: "sourced-quote-1", text: "the real defect lives here too" });
+
+    expect(fixed).not.toHaveProperty("status");
+    expect(fixed.text).toBe("the real defect lives here too");
+    // The concurrent relink's links, never the pre-drain snapshot's stale ["attest-fact-1"].
+    expect(fixed.data_item_ids).toEqual([]);
+
+    const persisted = await lookupById("sourced-quote-1");
+    expect(persisted).toMatchObject({ text: "the real defect lives here too", data_item_ids: [] });
+    expect(readFileSync(correctionsPath, "utf-8")).toBe("[]");
+  });
+});
+
+// -----------------------------------------------------------------------
 // fixQuoteEntity — bare-UUID recovery after T5 migration (I3/T3)
 // -----------------------------------------------------------------------
 // T5's migrateMessageIds() conservatively leaves a Quote's message_id as
@@ -1560,6 +1606,65 @@ describe("createQuoteEntity / fixQuoteEntity — post-write skip is an id-free, 
 });
 
 // -----------------------------------------------------------------------
+// createQuoteEntity / fixQuoteEntity — agent-authored source provenance
+// (T9, .sisyphus/reviews/quote-attestation-final-implementation.md)
+// -----------------------------------------------------------------------
+// Every existing createQuoteEntity/fixQuoteEntity test in this file
+// sources from a role:"human" message. This closes that gap: an
+// agent-authored (role:"system") source message's display name and
+// exact timestamp must persist on create, and an existing quote's
+// non-default (i.e. not create's own hardcoded "extraction") created_by
+// must survive a fix untouched.
+
+describe("createQuoteEntity — agent-authored source provenance (T9)", () => {
+  it("persists the source persona's display name as speaker and the message's exact timestamp, never the human default", async () => {
+    const state = buildAttestationState([]);
+    const agentMsgId = "ei:dddddddd-1111-4111-8111-dddddddddddd";
+    const agentMsgTimestamp = "2025-06-15T08:30:00.000Z";
+    state.personas[QUOTE_PERSONA_ID].messages.push({
+      id: agentMsgId,
+      role: "system",
+      content: "The migration script silently drops records above one thousand rows per batch",
+      timestamp: agentMsgTimestamp,
+      read: false,
+      context_status: ContextStatus.Default,
+    });
+    writeState(state);
+
+    const created = await createQuoteEntity({
+      message_id: agentMsgId,
+      text: "silently drops records above one thousand rows per batch",
+    });
+
+    expect(created.speaker).toBe("Attest Persona"); // the agent's own display name, never "human"
+    expect(created.speaker).not.toBe("human");
+    expect(created.timestamp).toBe(agentMsgTimestamp); // the message's EXACT timestamp
+    expect(created.created_by).toBe("extraction");
+
+    const persisted = await lookupById(created.id);
+    expect(persisted).toMatchObject({ speaker: "Attest Persona", timestamp: agentMsgTimestamp });
+  });
+});
+
+describe("fixQuoteEntity — preserves non-default provenance fields (T9)", () => {
+  it("a fix on a human-created_by quote preserves created_by/speaker/channel/message_id, changing only text/start/end/embedding", async () => {
+    const before = makeSourcedQuote({ created_by: "human", speaker: "human" });
+    writeState(buildAttestationState([before]));
+
+    const fixed = await fixQuoteEntity({ quote_id: "sourced-quote-1", text: "the real defect lives here too" });
+
+    expect(fixed.text).toBe("the real defect lives here too");
+    expect(fixed.created_by).toBe("human"); // preserved, never reset to create's own "extraction" default
+    expect(fixed.speaker).toBe("human");
+    expect(fixed.message_id).toBe(SOURCED_MSG_ID);
+    expect(fixed.channel).toBe("Attest Persona");
+
+    const persisted = await lookupById("sourced-quote-1");
+    expect(persisted).toMatchObject({ created_by: "human", text: "the real defect lives here too" });
+  });
+});
+
+// -----------------------------------------------------------------------
 // relinkQuoteEntity (`ei relink quote` / `ei_quote_relink`)
 // -----------------------------------------------------------------------
 // relink carries no provenance fields at all -- it's the one write path
@@ -1802,7 +1907,7 @@ describe("relinkQuoteEntity (ei relink quote / ei_quote_relink)", () => {
 // -----------------------------------------------------------------------
 
 describe("removeEntity — quote branch / removeQuoteEntity (ei remove quote / ei_remove entity_type:quote)", () => {
-  it("queues a quote.remove record under a live lock, matching the Corrections Wire Grammar's {id}-only shape", async () => {
+  it("under a live lock, reports a pending/queued response -- never a bare undefined that CLI/MCP would render as {removed: true} -- and queues a quote.remove record matching the Corrections Wire Grammar's {id}-only shape; a subsequent drain actually removes it (I3)", async () => {
     writeState(makeState({
       human: {
         entity: "human",
@@ -1813,14 +1918,36 @@ describe("removeEntity — quote branch / removeQuoteEntity (ei remove quote / e
         last_updated: INITIAL_NOW,
       },
     }));
+    const statePath = join(tempDir, "state.json");
     const correctionsPath = join(tempDir, "corrections.json");
+    const originalStateBytes = readFileSync(statePath, "utf-8");
     writeFileSync(correctionsPath, "[]");
     writeFileSync(join(tempDir, "ei.lock"), JSON.stringify({ pid: process.pid }));
 
-    await removeEntity("quote", "quote_1");
+    const result = await removeEntity("quote", "quote_1");
+
+    expect(result).toEqual({ status: "queued", id: "quote_1", message: expect.stringContaining("queued") });
+    expect(readFileSync(statePath, "utf-8")).toBe(originalStateBytes);
 
     const queued = JSON.parse(readFileSync(correctionsPath, "utf-8"));
     expect(queued).toEqual([{ op: "quote.remove", entity_type: "quote", id: "quote_1" }]);
+
+    // A subsequent drain actually removes it -- this call's own return
+    // value never claimed completion prematurely. Driven via a harmless
+    // throwaway fact upsert, matching this file's own self-drain
+    // fixture pattern elsewhere (writeCorrection()'s self-drain applies
+    // every pending record, including the quote.remove queued above,
+    // alongside the new one).
+    rmSync(join(tempDir, "ei.lock"));
+    await writeCorrection({
+      op: "upsert",
+      entity_type: "fact",
+      id: "drain-trigger-fact",
+      record: { id: "drain-trigger-fact", name: "Drain Trigger", description: "unrelated to quote assertions", sentiment: 0, validated_date: INITIAL_NOW, last_updated: INITIAL_NOW },
+      timestamp: INITIAL_NOW,
+    });
+    expect(JSON.parse(readFileSync(correctionsPath, "utf-8"))).toEqual([]);
+    expect(await lookupById("quote_1")).toBeNull();
   });
 
   it("removes an existing quote via self-drain (no live lock), and lookup no longer returns it", async () => {

@@ -6,8 +6,51 @@ import type { StorageState } from "../core/types.js";
 import type { Message } from "../core/types.js";
 import type { RoomMessage } from "../core/types/rooms.js";
 import { resolvePersonaId, filterByPersona, filterTypeSpecificByPersona, filterBySource, filterTypeSpecificBySource } from "./persona-filter.js";
-import { createEntity, updateEntity, removeEntity, createQuoteEntity, fixQuoteEntity, relinkQuoteEntity, CorrectionValidationError } from "./corrections-endpoints.js";
+import { createEntity, updateEntity, removeEntity, createQuoteEntity, fixQuoteEntity, relinkQuoteEntity, CorrectionValidationError, type QuoteWritePending } from "./corrections-endpoints.js";
 import { createPersonaEntity, updatePersonaEntity, removePersonaEntity } from "./persona-corrections.js";
+import { classifyMalformedRoomPrimary } from "../core/utils/message-refusal.js";
+
+/**
+ * Allow-lists for ei_quote_create/ei_quote_fix/ei_quote_relink's raw MCP
+ * arguments, checked BEFORE any named field is destructured out of them
+ * (I1, .sisyphus/reviews/quote-attestation-final-implementation.md).
+ *
+ * These 3 tools register a `.passthrough()` object schema instance, not
+ * the SDK's default raw-shape adapter -- a plain object-of-Zod-types
+ * literal gets rebuilt by the SDK into a non-strict `z.object()` that
+ * silently STRIPS any key outside the declared shape during its own
+ * pre-handler parse (see node_modules/@modelcontextprotocol/sdk's
+ * server/zod-compat.js `objectFromShape()`). That silent strip was the
+ * entire bug: a forged top-level field like `speaker`/`created_by`/
+ * `message_id` never reached createQuoteEntity/fixQuoteEntity/
+ * relinkQuoteEntity, so the endpoint's own strict schema never got a
+ * chance to reject it, and the call reported success instead of
+ * `isError: true`. `.passthrough()` keeps every key -- forged or not --
+ * in the parsed object long enough for this function to see and reject
+ * it, with a FIXED, generic message that never echoes the caller's own
+ * key name: Zod's own `unrecognized_keys` issue embeds the raw key text
+ * verbatim (`Unrecognized key(s) in object: 'speaker'`), and relying on
+ * the SDK's own z.strictObject-triggered error text would reopen the
+ * exact class of MCP-text injection formatQuoteValidationIssues()
+ * (corrections-endpoints.ts) already closes for the identical failure
+ * mode -- considered and rejected for that reason.
+ */
+function rejectUnknownQuoteFields(
+  args: Record<string, unknown>,
+  allowed: readonly string[],
+  label: string
+): { content: { type: "text"; text: string }[]; isError: true } | null {
+  const hasUnknown = Object.keys(args).some((key) => !allowed.includes(key));
+  if (!hasUnknown) return null;
+  return {
+    content: [{ type: "text" as const, text: `Error: Invalid quote (${label}): unrecognized field(s) present` }],
+    isError: true,
+  };
+}
+
+const QUOTE_CREATE_FIELDS = ["message_id", "text", "start", "end"] as const;
+const QUOTE_FIX_FIELDS = ["quote_id", "text", "start", "end"] as const;
+const QUOTE_RELINK_FIELDS = ["id", "data_item_ids"] as const;
 
 // Exported so tests can inject their own transport
 export function createMcpServer(): McpServer {
@@ -158,7 +201,15 @@ export function createMcpServer(): McpServer {
       const externalResult = await resolveExternalMessage(id, beforeN, afterN);
       if (externalResult) {
         if ("error" in externalResult) {
-          return { content: [{ type: "text" as const, text: String(externalResult.error) }] };
+          // I6 remaining gap (final review, round 2): retrieval.ts's
+          // cross-machine error text interpolates the caller-supplied id's
+          // parsed machine segment raw (`parsed.machine`, derived directly
+          // from `id`) -- forwarding externalResult.error verbatim here
+          // would echo arbitrary control/ANSI bytes into public MCP-facing
+          // text. Drop it for a fixed, id-free message, matching this same
+          // tool's other two branches below (`refused`/local-scan refusals),
+          // which are already id-free at the source per the earlier I6 fix.
+          return { content: [{ type: "text" as const, text: "Message is from a different machine and is not available here." }] };
         }
         if ("refused" in externalResult) {
           return { content: [{ type: "text" as const, text: String(externalResult.reason) }] };
@@ -231,6 +282,19 @@ export function createMcpServer(): McpServer {
         if (idx === -1) continue;
 
         const msg = room.messages[idx];
+
+        // I5 (.sisyphus/reviews/quote-attestation-final-implementation.md):
+        // this bare-id local scan is a fallback for stale, pre-migration
+        // on-disk state (resolveExternalMessage's own "ei-room" branch
+        // already refuses this exact shape for any QUALIFIED id -- see
+        // retrieval.ts). Reject a malformed room-persona-primary message
+        // (role "persona", no persona_id at all) here too, instead of
+        // silently omitting speaker_name and serving it as if it were an
+        // ordinary envelope.
+        const roomRefusal = classifyMalformedRoomPrimary(msg);
+        if (roomRefusal) {
+          return { content: [{ type: "text" as const, text: roomRefusal.reason }] };
+        }
         const beforeMsgs = room.messages
           .slice(Math.max(0, idx - beforeN), idx)
           .map((m) => stripRoomMessage(m, state.personas));
@@ -252,8 +316,12 @@ export function createMcpServer(): McpServer {
         };
       }
 
+      // I6 remaining gap (final review, round 2): never echo the raw
+      // caller-supplied `id` into this public MCP-facing text -- matches
+      // the fixed, id-free "Message not found" string the sibling browser
+      // executor (src/core/tools/builtin/fetch-message.ts) already uses.
       return {
-        content: [{ type: "text" as const, text: `Message not found: ${id}` }],
+        content: [{ type: "text" as const, text: "Message not found" }],
       };
     }
   );
@@ -296,8 +364,11 @@ export function createMcpServer(): McpServer {
         entity_type: z.enum(["fact", "topic", "person", "quote", "persona"]).describe("The type of entity to update."),
         id: z.string().describe("The ID of the entity to replace, from ei_lookup or ei_search."),
         data: z
-          .record(z.unknown())
-          .describe("The COMPLETE replacement record — round-tripped from ei_lookup output, not a partial patch."),
+          .unknown()
+          .optional()
+          .describe(
+            "The COMPLETE replacement record — round-tripped from ei_lookup output, not a partial patch. Not required when entity_type is \"quote\": quote update is retired (ADR-012) and always rejects before this field is ever inspected."
+          ),
       },
     },
     async ({ entity_type, id, data }) => {
@@ -325,10 +396,17 @@ export function createMcpServer(): McpServer {
       try {
         if (entity_type === "persona") {
           await removePersonaEntity(id);
-        } else {
-          await removeEntity(entity_type, id);
+          return { content: [{ type: "text" as const, text: JSON.stringify({ removed: true, id }, null, 2) }] };
         }
-        return { content: [{ type: "text" as const, text: JSON.stringify({ removed: true, id }, null, 2) }] };
+        // I3 (.sisyphus/reviews/quote-attestation-final-implementation.md):
+        // removeEntity's quote branch can return a QuoteWritePending
+        // instead of confirming -- a live Ei instance holds ei.lock, so
+        // the record is only queued, not yet validated/applied. Forward
+        // that honest pending shape verbatim instead of always claiming
+        // {removed: true}; fact/topic/person always resolve `undefined`
+        // here, so their own response stays byte-identical to before.
+        const pending: QuoteWritePending | undefined = await removeEntity(entity_type, id);
+        return { content: [{ type: "text" as const, text: JSON.stringify(pending ?? { removed: true, id }, null, 2) }] };
       } catch (e) {
         return { content: [{ type: "text" as const, text: `Error: ${(e as Error).message}` }], isError: true };
       }
@@ -340,14 +418,17 @@ export function createMcpServer(): McpServer {
     {
       description:
         "Create a new, source-verified Quote by matching caller-supplied text against a resolved source message. The message must already exist and be resolvable — use ei_fetch_message first to read it and copy the exact text to quote. speaker/timestamp/channel/embedding are all derived server-side from the resolved source and can never be supplied by the caller (rejected at the schema level). Refuses without persisting anything if the text cannot be found in the source message (normalized-exact or word-boundary match), or if the source message itself cannot be resolved. `start`/`end` are optional and are a consistency check only, never a way to select a later occurrence of repeated text: if supplied, both must exactly match the location the server independently finds, or the write refuses.",
-      inputSchema: {
+      inputSchema: z.object({
         message_id: z.string().describe("Fully-qualified id of the source message to quote from — from ei_search's quote.message_id field or ei_fetch_message."),
         text: z.string().describe("The exact quote text to verify against the source message's content. Must appear verbatim (allowing for whitespace/punctuation normalization) in the resolved message."),
-        start: z.number().optional().describe("Optional: the expected raw character offset (start) of the quote within the source message — only useful to disambiguate repeated text. Must be supplied together with `end` and must exactly match what the server independently finds, or the write is refused."),
+        start: z.number().optional().describe("Optional: the expected raw character offset (start) of the quote within the source message — a first-match consistency check only, never a way to select a later occurrence of repeated text (the matcher always returns the first match). Must be supplied together with `end` and must exactly match what the server independently finds, or the write is refused."),
         end: z.number().optional().describe("Optional: the expected raw character offset (end, exclusive) of the quote within the source message. See `start`."),
-      },
+      }).passthrough(),
     },
-    async ({ message_id, text, start, end }) => {
+    async (args) => {
+      const rejection = rejectUnknownQuoteFields(args, QUOTE_CREATE_FIELDS, "create");
+      if (rejection) return rejection;
+      const { message_id, text, start, end } = args;
       try {
         const record = await createQuoteEntity({ message_id, text, start, end });
         return { content: [{ type: "text" as const, text: JSON.stringify(record, null, 2) }] };
@@ -363,14 +444,17 @@ export function createMcpServer(): McpServer {
     {
       description:
         "Re-verify and correct an existing Quote's text against its already-recorded source message. Only `text`/`start`/`end`/the embedding can change — message_id, speaker, timestamp, channel, links (data_item_ids/persona_groups), and provenance (created_at/created_by) are always preserved from the existing record and can never be supplied by the caller (rejected at the schema level); a fix never re-resolves a new source, it only re-verifies against the one the quote already has. Refuses without persisting anything if the quote has no message_id to verify against (it predates attestation), if the recorded source message can no longer be resolved, if the text cannot be found in that source, or if supplied start/end offsets don't match the location the server independently found.",
-      inputSchema: {
+      inputSchema: z.object({
         quote_id: z.string().describe("The id of the existing Quote to fix, from ei_search or ei_lookup."),
         text: z.string().describe("The corrected quote text to verify against the quote's existing source message."),
-        start: z.number().optional().describe("Optional: the expected raw character offset (start) of the quote — only useful to disambiguate repeated text. Must be supplied together with `end` and must exactly match what the server independently finds, or the write is refused."),
+        start: z.number().optional().describe("Optional: the expected raw character offset (start) of the quote — a first-match consistency check only, never a way to select a later occurrence of repeated text (the matcher always returns the first match). Must be supplied together with `end` and must exactly match what the server independently finds, or the write is refused."),
         end: z.number().optional().describe("Optional: the expected raw character offset (end, exclusive). See `start`."),
-      },
+      }).passthrough(),
     },
-    async ({ quote_id, text, start, end }) => {
+    async (args) => {
+      const rejection = rejectUnknownQuoteFields(args, QUOTE_FIX_FIELDS, "fix");
+      if (rejection) return rejection;
+      const { quote_id, text, start, end } = args;
       try {
         const record = await fixQuoteEntity({ quote_id, text, start, end });
         return { content: [{ type: "text" as const, text: JSON.stringify(record, null, 2) }] };
@@ -386,12 +470,15 @@ export function createMcpServer(): McpServer {
     {
       description:
         "Change which facts/topics/people an existing Quote is linked to (data_item_ids) — the only field this tool can change. Asserts no provenance: it never touches text/message_id/speaker/timestamp/etc, so unlike ei_quote_create/ei_quote_fix it's permitted on every quote regardless of source state, including one whose source message can no longer be resolved (dangling) or that predates attestation entirely (orphaned, message_id is null). `data_item_ids` is the complete replacement list, not an additive delta. Every target id must already resolve to an existing fact, topic, or person, and the quote id itself must already exist, or the whole call is refused before anything is queued.",
-      inputSchema: {
+      inputSchema: z.object({
         id: z.string().describe("The id of the existing Quote to relink, from ei_search or ei_lookup."),
         data_item_ids: z.array(z.string()).describe("The complete replacement list of fact/topic/person ids this quote should be linked to — not additive, the full new set. Every id must resolve to an existing fact, topic, or person."),
-      },
+      }).passthrough(),
     },
-    async ({ id, data_item_ids }) => {
+    async (args) => {
+      const rejection = rejectUnknownQuoteFields(args, QUOTE_RELINK_FIELDS, "relink");
+      if (rejection) return rejection;
+      const { id, data_item_ids } = args;
       try {
         const record = await relinkQuoteEntity({ id, data_item_ids });
         return { content: [{ type: "text" as const, text: JSON.stringify(record, null, 2) }] };

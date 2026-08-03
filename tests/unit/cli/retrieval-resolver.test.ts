@@ -313,10 +313,12 @@ describe("resolveExternalMessage — ei-room", () => {
     expect(result.speaker).toEqual({ kind: "agent", id: ROOM_ORPHANED_PERSONA_ID, display_name: "Participant" });
   });
 
-  it("rejects a persona-role room message with no persona_id at all", async () => {
+  it("rejects a persona-role room message with no persona_id at all, without echoing the id into the reason (I6)", async () => {
     writeState(buildState());
     const result = await resolveExternalMessage(ROOM_MISSING_PERSONA_MSG_ID);
-    expect(result).toEqual({ refused: true, reason: expect.stringContaining(ROOM_MISSING_PERSONA_MSG_ID) });
+    expect(result).toEqual({ refused: true, reason: expect.stringContaining("no persona_id") });
+    if (!result || !("reason" in result)) throw new Error("expected a refusal result");
+    expect(result.reason).not.toContain(ROOM_MISSING_PERSONA_MSG_ID);
   });
 
   it("populates before/after window arrays for a room message, dropping malformed window entries rather than fabricating or failing", async () => {
@@ -348,6 +350,15 @@ describe("resolveExternalMessage — explicit rejection", () => {
     const id = `generate:document:my-doc-slug:${crypto.randomUUID()}`;
     const result = await resolveExternalMessage(id);
     expect(result).toEqual({ refused: true, reason: expect.stringContaining("document") });
+  });
+
+  it("I6/T7: a control/ANSI-bearing Slack id produces no raw control bytes and no id echo in the refusal reason", async () => {
+    const evilId = "slack:\x1b[31mT0123\x1b[0m:C0456:1700000000.000100";
+    const result = await resolveExternalMessage(evilId);
+    expect(result).toEqual({ refused: true, reason: expect.stringContaining("Slack") });
+    if (!result || !("reason" in result)) throw new Error("expected a refusal result");
+    expect(result.reason).not.toContain("\x1b[31m");
+    expect(result.reason).not.toContain(evilId);
   });
 });
 
@@ -881,7 +892,7 @@ describe("MCP and builtin fetch_message preserve resolver refusals (I3)", () => 
       const text = (toolResult.content as Array<{ type: string; text: string }>)[0].text;
       expect(() => JSON.parse(text)).toThrow(); // a plain refusal reason, never a `{message,before,after,...}` envelope
       expect(text).toContain(reasonSubstring); // I5: the SPECIFIC refusal reason, not merely non-JSON
-      expect(text).toContain(refusedId);
+      expect(text).not.toContain(refusedId); // I6: never echo the caller's own id into MCP response text
     } finally {
       await client.close();
     }
@@ -904,7 +915,7 @@ describe("MCP and builtin fetch_message preserve resolver refusals (I3)", () => 
       const toolResult = await client.callTool({ name: "ei_fetch_message", arguments: { id: ROOM_MISSING_PERSONA_MSG_ID } });
       const text = (toolResult.content as Array<{ type: string; text: string }>)[0].text;
       expect(() => JSON.parse(text)).toThrow();
-      expect(text).toContain(ROOM_MISSING_PERSONA_MSG_ID);
+      expect(text).not.toContain(ROOM_MISSING_PERSONA_MSG_ID); // I6: never echo the caller's own id into MCP response text
       expect(text).toContain("no persona_id"); // I5: the SPECIFIC refusal reason, not just a substring a generic miss could also contain
     } finally {
       await client.close();
@@ -918,9 +929,34 @@ describe("MCP and builtin fetch_message preserve resolver refusals (I3)", () => 
     });
     const executor = createFetchMessageExecutor(() => [], () => [], canaryGetRoomList, () => [], () => null, resolveExternalMessage);
     const result = JSON.parse(await executor.execute({ id: ROOM_MISSING_PERSONA_MSG_ID }));
-    expect(result).toEqual({ refused: true, reason: expect.stringContaining(ROOM_MISSING_PERSONA_MSG_ID) });
-    expect(result.reason).toContain("no persona_id"); // I5: the SPECIFIC refusal reason
+    expect(result).toEqual({ refused: true, reason: expect.stringContaining("no persona_id") });
+    expect(result.reason).not.toContain(ROOM_MISSING_PERSONA_MSG_ID); // I6: never echo the caller's own id into the reason
     expect(canaryGetRoomList).not.toHaveBeenCalled();
+  });
+
+  it("I6/T7: a control/ANSI-bearing Slack id produces no raw control bytes in MCP response text or the builtin executor's result, while both still return a distinguishable Slack refusal", async () => {
+    const evilId = "slack:\x1b[31mT0123\x1b[0m:C0456:1700000000.000100";
+    writeState(makeLocallyStoredCopyState(evilId));
+
+    const executor = createFetchMessageExecutor(() => [], () => [], () => [], () => [], () => null, resolveExternalMessage);
+    const builtinResult = JSON.parse(await executor.execute({ id: evilId }));
+    expect(builtinResult).toEqual({ refused: true, reason: expect.stringContaining("Slack import") });
+    expect(builtinResult.reason).not.toContain("\x1b[31m");
+    expect(builtinResult.reason).not.toContain(evilId);
+
+    const server = createMcpServer();
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "test-client", version: "1.0.0" });
+    await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+    try {
+      const toolResult = await client.callTool({ name: "ei_fetch_message", arguments: { id: evilId } });
+      const text = (toolResult.content as Array<{ type: string; text: string }>)[0].text;
+      expect(text).toContain("Slack import");
+      expect(text).not.toContain("\x1b[31m");
+      expect(text).not.toContain(evilId);
+    } finally {
+      await client.close();
+    }
   });
 
   it("a genuinely unknown bare legacy id is still not a refusal — both surfaces fall back and report not-found", async () => {
@@ -939,7 +975,72 @@ describe("MCP and builtin fetch_message preserve resolver refusals (I3)", () => 
     try {
       const toolResult = await client.callTool({ name: "ei_fetch_message", arguments: { id: legacyId } });
       const text = (toolResult.content as Array<{ type: string; text: string }>)[0].text;
-      expect(text).toBe(`Message not found: ${legacyId}`);
+      // I6 remaining gap (final review, round 2): mcp.ts's own unknown-id
+      // text used to echo the raw id (`Message not found: ${id}`); now a
+      // fixed, id-free string, matching the sibling browser executor.
+      expect(text).toBe("Message not found");
+    } finally {
+      await client.close();
+    }
+  });
+
+  it("T11: a control/ANSI-bearing unknown message id produces clean, control-byte-free MCP error text", async () => {
+    const evilId = "unknown-id-\x1b[2JK";
+
+    writeState(emptyState());
+    const server = createMcpServer();
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "test-client", version: "1.0.0" });
+    await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+    try {
+      const toolResult = await client.callTool({ name: "ei_fetch_message", arguments: { id: evilId } });
+      const text = (toolResult.content as Array<{ type: string; text: string }>)[0].text;
+      expect(text).toBe("Message not found");
+      expect(text).not.toContain("\x1b[2J");
+      expect(text).not.toContain(evilId);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it("T11: a control/ANSI-bearing cross-machine message id produces the exact fixed, id-free MCP error text — never the caller-derived machine string, sanitized or not", async () => {
+    // getMachineId() is mocked to return MACHINE ("test-machine") at the top of this
+    // file; any other machine segment trips retrieval.ts's cross-machine `{error}`
+    // branch, unmocked/real, before any reader module is ever touched.
+    const evilMachineC0 = "\x1b[31mEVIL-HOST\x1b[0m";
+    const evilIdC0 = qualifyOpenCodeMessage(evilMachineC0, "sess1", "msg1");
+    // C1 control bytes (0x80-0x9F) are a distinct range from the C0/ESC bytes
+    // above -- a fix that only strips 0x00-0x1F/0x7F would still leak here.
+    const evilMachineC1 = "\x9b31mEVIL-HOST\x9c";
+    const evilIdC1 = qualifyOpenCodeMessage(evilMachineC1, "sess2", "msg2");
+    const derivedLiteral = "EVIL-HOST";
+    const fixedMessage = "Message is from a different machine and is not available here.";
+
+    writeState(emptyState());
+    const server = createMcpServer();
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "test-client", version: "1.0.0" });
+    await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+    try {
+      for (const evilId of [evilIdC0, evilIdC1]) {
+        const toolResult = await client.callTool({ name: "ei_fetch_message", arguments: { id: evilId } });
+        const text = (toolResult.content as Array<{ type: string; text: string }>)[0].text;
+        // Exact fixed contract, not a substring: a future refactor that
+        // changes the wording but still contains "machine" must fail here.
+        expect(text).toBe(fixedMessage);
+        expect(text).not.toContain("\x1b[31m");
+        expect(text).not.toContain("\x9b");
+        expect(text).not.toContain(evilMachineC0);
+        expect(text).not.toContain(evilMachineC1);
+        expect(text).not.toContain(evilId);
+        // Proves the fix never forwards the caller-derived machine value at
+        // all -- not merely that it strips control bytes from it. A refactor
+        // that sanitizes control bytes but still interpolates the (now
+        // partially-clean) machine string, e.g. forwarding "EVIL-HOST" after
+        // stripping its ANSI wrapping, would leak this literal here even
+        // though it contains no control bytes itself.
+        expect(text).not.toContain(derivedLiteral);
+      }
     } finally {
       await client.close();
     }
@@ -1035,6 +1136,33 @@ describe("mcp.ts local room scan — Participant fallback for pre-migration bare
       const parsed = JSON.parse(text);
 
       expect(parsed.message.speaker_name).toBe("Participant");
+    } finally {
+      await client.close();
+    }
+  });
+
+  it("I5 (.sisyphus/reviews/quote-attestation-final-implementation.md): refuses a bare (unqualified) room message with role persona and NO persona_id at all, instead of serving a legacy envelope with a missing speaker_name", async () => {
+    const bareRoomMsgId = "bare-room-msg-legacy-1";
+    const state = emptyState();
+    state.rooms = {
+      [ROOM_ID]: makeRoom(ROOM_ID, "Test Room", [], [
+        makeRoomMessage(bareRoomMsgId, { role: "persona", content: "Malformed: no persona_id at all" }),
+      ]),
+    };
+    writeState(state);
+
+    const server = createMcpServer();
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "test-client", version: "1.0.0" });
+    await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+
+    try {
+      const toolResult = await client.callTool({ name: "ei_fetch_message", arguments: { id: bareRoomMsgId } });
+      const text = (toolResult.content as Array<{ type: string; text: string }>)[0].text;
+      // A plain refusal reason, never a `{message,before,after,...}` envelope.
+      expect(() => JSON.parse(text)).toThrow();
+      expect(text).toContain("no persona_id");
+      expect(text).not.toContain(bareRoomMsgId); // I6: never echo the caller's own id into MCP response text
     } finally {
       await client.close();
     }

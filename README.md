@@ -41,7 +41,7 @@ Agents aren't read-only anymore. Run `bunx ei-tui` — the onboarding wizard wal
 
 The same corrections are also available as MCP tools (`ei_create`, `ei_update`, `ei_remove`) alongside the existing search/lookup tools, but MCP is disabled by default on Claude Code, Cursor, and Codex — see the [CLI README](./src/cli/README.md#mcp-server) for manual MCP setup.
 
-Quotes are their own case. Because a quote claims a real person said a specific thing, the four commands that touch one are deliberately narrower than the generic trio: `ei create quote` and `ei fix quote` (MCP: `ei_quote_create`, `ei_quote_fix`) only accept text they can actually find in the source message, and refuse outright otherwise; `ei relink quote` (MCP: `ei_quote_relink`) only moves which people/topics a quote is attached to; `ei remove quote` (MCP: `ei_remove`) deletes one. Nothing on the public surface can invent a quote's speaker, channel, or timestamp — see the [CLI README](./src/cli/README.md#memory-management) for the full reference.
+Quotes are their own case. Because a quote claims a real person said a specific thing, the four commands that touch one are deliberately narrower than the generic trio: `ei create quote` and `ei fix quote` (MCP: `ei_quote_create`, `ei_quote_fix`) only accept text they can actually find in the source message, and refuse outright otherwise; `ei relink quote` (MCP: `ei_quote_relink`) only moves which facts, topics, or people a quote is attached to; `ei remove quote` (MCP: `ei_remove`) deletes one. Nothing on the public surface can invent a quote's speaker, channel, or timestamp — see the [CLI README](./src/cli/README.md#memory-management) for the full reference.
 
 ## Document Import
 

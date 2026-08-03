@@ -330,6 +330,21 @@ async function main(): Promise<void> {
       console.error(`Usage: ei update <type> <id> --json '<json>' (types: ${CLI_UPDATABLE_TYPES.join(", ")})`);
       process.exit(1);
     }
+    // I2 (.sisyphus/reviews/quote-attestation-final-implementation.md):
+    // the ADR-012 tombstone must be unconditional once "quote" is
+    // recognized as the update target -- reached here, before requiring
+    // or parsing --json at all, so a missing or malformed legacy payload
+    // still gets the retirement guidance instead of a generic parse/
+    // usage error. updateEntity's own quote branch ignores `body`
+    // entirely and always throws, so passing `undefined` is safe.
+    if (entityType === "quote") {
+      try {
+        await updateEntity(entityType, id, undefined);
+      } catch (e) {
+        console.error((e as Error).message);
+        process.exit(1);
+      }
+    }
     const jsonIdx = args.indexOf("--json");
     const jsonStr = jsonIdx !== -1 ? args[jsonIdx + 1] : undefined;
     if (!jsonStr) {
@@ -364,10 +379,18 @@ async function main(): Promise<void> {
     try {
       if (entityType === "persona") {
         await removePersonaEntity(id);
+        console.log(JSON.stringify({ removed: true, id }, null, 2));
       } else {
-        await removeEntity(entityType, id);
+        // I3 (.sisyphus/reviews/quote-attestation-final-implementation.md):
+        // removeEntity's quote branch can return a QuoteWritePending
+        // instead of confirming -- a live Ei instance holds ei.lock, so
+        // the record is only queued, not yet validated/applied. Print
+        // that honest pending shape verbatim instead of always claiming
+        // {removed: true}; fact/topic/person always resolve `undefined`
+        // here, so their own output stays byte-identical to before.
+        const pending = await removeEntity(entityType, id);
+        console.log(JSON.stringify(pending ?? { removed: true, id }, null, 2));
       }
-      console.log(JSON.stringify({ removed: true, id }, null, 2));
       process.exit(0);
     } catch (e) {
       console.error((e as Error).message);

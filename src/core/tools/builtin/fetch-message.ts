@@ -2,7 +2,7 @@ import type { ToolExecutor } from "../types.js";
 import type { Message } from "../../types.js";
 import type { RoomMessage, RoomSummary } from "../../types/rooms.js";
 import type { PersonaEntity } from "../../types/entities.js";
-import { classifyRefusedMessageId, classifyMalformedRoomPrimary } from "../../utils/message-refusal.js";
+import { classifyRefusedMessageId, classifyMalformedRoomPrimary, sanitizeMessageIdForLog } from "../../utils/message-refusal.js";
 
 interface CleanMessage {
   id: string;
@@ -57,8 +57,13 @@ export function createFetchMessageExecutor(
       const id = typeof args.id === "string" ? args.id.trim() : "";
       const before = typeof args.before === "number" && args.before > 0 ? Math.floor(args.before) : 0;
       const after = typeof args.after === "number" && args.after > 0 ? Math.floor(args.after) : 0;
+      // I6 (.sisyphus/reviews/quote-attestation-final-implementation.md):
+      // every log line below prints this sanitized copy, never the raw
+      // `id` -- a control/ANSI-bearing caller-supplied id must not reach
+      // a terminal-capable log sink unescaped.
+      const logId = sanitizeMessageIdForLog(id);
 
-      console.log(`[fetch_message] called with id="${id}", before=${before}, after=${after}`);
+      console.log(`[fetch_message] called with id="${logId}", before=${before}, after=${after}`);
 
       if (!id) {
         console.warn("[fetch_message] missing id argument");
@@ -73,14 +78,14 @@ export function createFetchMessageExecutor(
       // them too, instead of silently falling through to the local scan.
       const formatRefusal = classifyRefusedMessageId(id);
       if (formatRefusal) {
-        console.log(`[fetch_message] refused id="${id}": ${formatRefusal.reason}`);
+        console.log(`[fetch_message] refused id="${logId}": ${formatRefusal.reason}`);
         return JSON.stringify(formatRefusal);
       }
 
       if (resolveExternalMessage) {
         const external = await resolveExternalMessage(id, before, after);
         if (external) {
-          console.log(`[fetch_message] resolved id="${id}" via resolver`);
+          console.log(`[fetch_message] resolved id="${logId}" via resolver`);
           return JSON.stringify(external);
         }
       }
@@ -122,7 +127,7 @@ export function createFetchMessageExecutor(
         // silently falling back to the Participant-name legacy envelope.
         const roomRefusal = classifyMalformedRoomPrimary(msg);
         if (roomRefusal) {
-          console.log(`[fetch_message] refused room message id="${id}": ${roomRefusal.reason}`);
+          console.log(`[fetch_message] refused room message id="${logId}": ${roomRefusal.reason}`);
           return JSON.stringify(roomRefusal);
         }
 
@@ -150,7 +155,7 @@ export function createFetchMessageExecutor(
         });
       }
 
-      console.log(`[fetch_message] message not found for id="${id}"`);
+      console.log(`[fetch_message] message not found for id="${logId}"`);
       return JSON.stringify({ error: "Message not found" });
     },
   };

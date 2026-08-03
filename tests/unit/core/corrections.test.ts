@@ -1097,6 +1097,112 @@ describe("quote.* op routing regardless of entity_type — create/fix/remove (I6
   }
 });
 
+describe("non-object correction entries are skipped, not thrown (I7, T8)", () => {
+  /**
+   * readCorrections() casts JSON.parse(...) straight to CorrectionRecord[]
+   * with no per-entry shape check, so corrections.json can genuinely
+   * contain a `null`/string/number/boolean/array entry alongside otherwise
+   * valid records (a hand-edited file, or a write that got truncated
+   * mid-array). Before this fix, isQuoteCorrectionOp's `"op" in value`
+   * threw a raw TypeError for any of these — read overlay and self-drain
+   * have no per-record try/catch around applyCorrectionToHuman/
+   * applyCorrectionToState, so the entire batch (including every valid
+   * record after the malformed one) was lost. This block proves each
+   * non-object shape now comes back as a normal, structured
+   * `{record_id: "<unknown>", reason}` skip instead.
+   */
+  it.each([
+    ["null", null],
+    ["string", "not-a-record"],
+    ["number", 42],
+    ["boolean", true],
+    ["array", ["not", "a", "record"]],
+  ])("applyCorrectionToHuman returns a skip (never throws) for a %s correction entry, leaving quotes untouched", (_label, malformed) => {
+    const existing = makeQuote("quote-1", ["fact-1"]);
+    const human = makeHuman({ quotes: [existing] });
+
+    const result = applyCorrectionToHuman(human, malformed as unknown as CorrectionRecord);
+
+    expect(result).toEqual({ record_id: "<unknown>", reason: expect.stringContaining("Malformed quote correction") });
+    expect(human.quotes).toEqual([existing]);
+  });
+
+  it.each([
+    ["null", null],
+    ["string", "not-a-record"],
+    ["number", 42],
+    ["boolean", true],
+    ["array", ["not", "a", "record"]],
+  ])("applyCorrectionToState returns a skip (never throws) for a %s correction entry — never reaches applyCorrectionToPersonas", (_label, malformed) => {
+    const existing = makeQuote("quote-1", ["fact-1"]);
+    const state = makeState(makeHuman({ quotes: [existing] }));
+
+    const result = applyCorrectionToState(state, malformed as unknown as CorrectionRecord);
+
+    expect(result).toEqual({ record_id: "<unknown>", reason: expect.stringContaining("Malformed quote correction") });
+    expect(state.human.quotes).toEqual([existing]);
+    expect(state.personas).toEqual({});
+  });
+
+  it("T8: applyCorrectionsToHuman skips a null entry and still applies a later valid quote.remove and person upsert in the same batch, with no throw", () => {
+    const survivingQuote = makeQuote("quote-keep", []);
+    const removableQuote = makeQuote("quote-remove-me", []);
+    const human = makeHuman({ quotes: [survivingQuote, removableQuote] });
+    const goodPerson = makePerson("person-new");
+
+    const corrections: CorrectionRecord[] = [
+      null as unknown as CorrectionRecord,
+      makeQuoteRemoveRecord("quote-remove-me"),
+      { op: "upsert", entity_type: "person", id: goodPerson.id, record: goodPerson, timestamp: NOW },
+    ];
+
+    const skipped = applyCorrectionsToHuman(human, corrections);
+
+    expect(skipped).toHaveLength(1);
+    expect(skipped[0].record_id).toBe("<unknown>");
+    expect(human.quotes.map((q) => q.id)).toEqual(["quote-keep"]);
+    expect(human.people.find((p) => p.id === "person-new")).toBeDefined();
+  });
+
+  it("T8: applyCorrectionsToState skips a null entry and still applies a later valid quote.create and fact upsert in the same batch, with no throw", () => {
+    const survivingQuote = makeQuote("quote-keep", []);
+    const state = makeState(makeHuman({ quotes: [survivingQuote] }));
+    const goodFact = makeFact("fact-new");
+
+    const corrections: CorrectionRecord[] = [
+      null as unknown as CorrectionRecord,
+      makeQuoteCreateRecord("quote-new"),
+      { op: "upsert", entity_type: "fact", id: goodFact.id, record: goodFact, timestamp: NOW },
+    ];
+
+    const skipped = applyCorrectionsToState(state, corrections);
+
+    expect(skipped).toHaveLength(1);
+    expect(skipped[0].record_id).toBe("<unknown>");
+    expect(state.human.quotes.map((q) => q.id).sort()).toEqual(["quote-keep", "quote-new"]);
+    expect(state.human.facts.find((f) => f.id === "fact-new")).toBeDefined();
+  });
+
+  it("readCorrections-shaped batch: a malformed non-object entry between two valid quote records is skipped while both valid records still apply (overlay/self-drain oracle)", () => {
+    const targetQuote = makeQuote("quote-target", []);
+    const human = makeHuman({ quotes: [targetQuote] });
+    const fixed = makeQuoteFixRecord("quote-target", [], { text: "Fixed text" });
+
+    const corrections: CorrectionRecord[] = [
+      makeQuoteCreateRecord("quote-brand-new"),
+      null as unknown as CorrectionRecord,
+      fixed,
+    ];
+
+    const skipped = applyCorrectionsToHuman(human, corrections);
+
+    expect(skipped).toHaveLength(1);
+    expect(skipped[0].record_id).toBe("<unknown>");
+    expect(human.quotes.map((q) => q.id).sort()).toEqual(["quote-brand-new", "quote-target"]);
+    expect(human.quotes.find((q) => q.id === "quote-target")?.text).toBe("Fixed text");
+  });
+});
+
 describe("applyCorrectionToPersonas — upsert/remove against StorageState.personas", () => {
   it("creates a persona entry with messages: [] on upsert into an empty personas map", () => {
     const personas: StorageState["personas"] = {};

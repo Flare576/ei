@@ -177,6 +177,39 @@ describe("CLI CRUD process behavior", () => {
     expect(result.stderr).toContain("Scheduled for removal");
   });
 
+  it("ei update quote rejects with the ADR-012 tombstone even when --json is entirely omitted (I2)", () => {
+    const statePath = join(tempDir, "state.json");
+    const stateBefore = readFileSync(statePath, "utf-8");
+
+    const result = runCli(["update", "quote", "missing-quote-id"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).not.toContain("requires --json");
+    expect(result.stderr).not.toContain("Usage: ei update");
+    expect(result.stderr).toContain('"ei update quote" is retired');
+    expect(result.stderr).toContain('"ei fix quote"');
+    expect(result.stderr).toContain('"ei relink quote"');
+    expect(result.stderr).toContain('"ei remove quote"');
+    expect(readFileSync(statePath, "utf-8")).toBe(stateBefore);
+    expect(existsSync(join(tempDir, "corrections.json"))).toBe(false);
+  });
+
+  it("ei update quote rejects with the ADR-012 tombstone even when --json is malformed JSON (I2)", () => {
+    const statePath = join(tempDir, "state.json");
+    const stateBefore = readFileSync(statePath, "utf-8");
+
+    const result = runCli(["update", "quote", "missing-quote-id", "--json", "{not-json"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).not.toContain("Invalid JSON");
+    expect(result.stderr).toContain('"ei update quote" is retired');
+    expect(result.stderr).toContain('"ei fix quote"');
+    expect(result.stderr).toContain('"ei relink quote"');
+    expect(result.stderr).toContain('"ei remove quote"');
+    expect(readFileSync(statePath, "utf-8")).toBe(stateBefore);
+    expect(existsSync(join(tempDir, "corrections.json"))).toBe(false);
+  });
+
   it("creates a persona and prints the generated id with the requested record", () => {
     const result = runCli([
       "create",
@@ -483,6 +516,119 @@ describe("CLI --format prompt process behavior — Ei Person Log section", () =>
     expect(result.stdout).toContain(`currently ${PERSON_LOG_REFLECTION_THRESHOLD} characters`);
     expect(result.stdout).not.toMatch(/reflection/i);
   });
+});
+
+// ── T1: successful CLI create/fix quote through a real spawned process ──────
+// (.sisyphus/reviews/quote-attestation-final-implementation.md): only the
+// FAILURE branches of `ei create quote`/`ei fix quote` had permanent
+// process-level coverage before this -- the successful, source-verified
+// write paths were only exercised manually during final review, never
+// locked down as a regression.
+describe("CLI create/fix quote — a successful write through a real spawned process (T1)", () => {
+  const t1PersonaId = "66666666-6666-4666-8666-666666666666";
+  const t1MsgId = "ei:00000000-1111-4111-8111-111111111111";
+  const t1Content = "The migration script silently drops records when the batch size exceeds one thousand";
+
+  function writeT1SourcedState(quotes: Quote[] = []) {
+    const state: StorageState = {
+      version: 1,
+      timestamp: NOW,
+      human: { entity: "human", facts: [], topics: [], people: [], quotes, last_updated: NOW },
+      personas: {
+        [t1PersonaId]: {
+          entity: {
+            id: t1PersonaId,
+            display_name: "T1 Persona",
+            aliases: [],
+            entity: "system",
+            short_description: "t",
+            long_description: "t",
+            model: "Local LLM:test-model",
+            traits: [],
+            topics: [],
+            is_paused: false,
+            is_archived: false,
+            is_static: false,
+            last_updated: NOW,
+          },
+          messages: [{ id: t1MsgId, role: "human", content: t1Content, timestamp: NOW, read: false, context_status: ContextStatus.Default }],
+        },
+      },
+      queue: [],
+      providers: [],
+      tools: [],
+    };
+    writeFileSync(join(tempDir, "state.json"), JSON.stringify(state));
+  }
+
+  it("creates a source-verified quote, persisting server-derived speaker/channel/timestamp -- exit 0, parseable JSON output (T1)", () => {
+    writeT1SourcedState();
+
+    const result = runCli([
+      "create", "quote",
+      "--message-id", t1MsgId,
+      "--text", "silently drops records when the batch size exceeds one thousand",
+    ]);
+
+    expect(result.status).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.id).toEqual(expect.any(String));
+    expect(parsed.text).toBe("silently drops records when the batch size exceeds one thousand");
+    expect(parsed.message_id).toBe(t1MsgId);
+    expect(parsed.speaker).toBe("human");
+    expect(parsed.channel).toBe("T1 Persona");
+    expect(parsed.timestamp).toBe(NOW);
+    expect(parsed.created_by).toBe("extraction");
+    expect(parsed.data_item_ids).toEqual([]);
+    expect(parsed.persona_groups).toEqual([]);
+
+    const persisted = JSON.parse(readFileSync(join(tempDir, "state.json"), "utf-8")) as StorageState;
+    const persistedQuote = persisted.human.quotes.find((q) => q.id === parsed.id);
+    expect(persistedQuote).toBeDefined();
+    expect(persistedQuote!.text).toBe(parsed.text);
+  }, 20000);
+
+  it("fixes an existing quote's text, persisting ONLY text/start/end/embedding changes -- exit 0, parseable JSON output (T1)", () => {
+    const existing: Quote = {
+      id: "t1-fix-quote-1",
+      message_id: t1MsgId,
+      data_item_ids: ["some-fact-id"],
+      persona_groups: ["General"],
+      text: "silently drops records",
+      speaker: "human",
+      channel: "T1 Persona",
+      timestamp: NOW,
+      start: 0,
+      end: 23,
+      created_at: "2020-01-01T00:00:00.000Z",
+      created_by: "human",
+    };
+    writeT1SourcedState([existing]);
+
+    const result = runCli([
+      "fix", "quote",
+      "--quote-id", "t1-fix-quote-1",
+      "--text", "drops records when the batch size exceeds one thousand",
+    ]);
+
+    expect(result.status).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.id).toBe("t1-fix-quote-1");
+    expect(parsed.text).toBe("drops records when the batch size exceeds one thousand");
+    // Everything else preserved from the existing record, untouched by the fix.
+    expect(parsed.message_id).toBe(t1MsgId);
+    expect(parsed.speaker).toBe("human");
+    expect(parsed.channel).toBe("T1 Persona");
+    expect(parsed.data_item_ids).toEqual(["some-fact-id"]);
+    expect(parsed.persona_groups).toEqual(["General"]);
+    expect(parsed.created_at).toBe("2020-01-01T00:00:00.000Z");
+    expect(parsed.created_by).toBe("human");
+
+    const persisted = JSON.parse(readFileSync(join(tempDir, "state.json"), "utf-8")) as StorageState;
+    const persistedQuote = persisted.human.quotes.find((q) => q.id === "t1-fix-quote-1")!;
+    expect(persistedQuote.text).toBe(parsed.text);
+    expect(persistedQuote.data_item_ids).toEqual(["some-fact-id"]);
+  }, 20000);
 });
 
 // ── I1: create/fix quote numeric flag errors never echo the raw input ────────

@@ -252,6 +252,21 @@ describe("MCP server", () => {
     expect(mockRemoveEntity).toHaveBeenCalledWith("quote", "quote-1");
   });
 
+  it("ei_remove(entity_type: 'quote') forwards a queued/pending response verbatim, never claiming {removed: true} (I3)", async () => {
+    mockRemoveEntity.mockResolvedValueOnce({
+      status: "queued",
+      id: "quote-1",
+      message: "Quote remove queued: a live Ei instance is processing this write; it has not been confirmed yet.",
+    });
+    ({ client } = await setupClient());
+    const result = await client.callTool({ name: "ei_remove", arguments: { entity_type: "quote", id: "quote-1" } });
+    const content = result.content as Array<{ type: string; text: string }>;
+    const parsed = JSON.parse(content[0].text);
+    expect(parsed).toEqual({ status: "queued", id: "quote-1", message: expect.stringContaining("queued") });
+    expect(parsed).not.toEqual({ removed: true, id: "quote-1" });
+    expect(result.isError).toBeUndefined();
+  });
+
   it("ei_remove surfaces a quote not-found error as text content with isError: true", async () => {
     mockRemoveEntity.mockRejectedValueOnce(new Error("Cannot remove quote: no quote found with the supplied id"));
     ({ client } = await setupClient());
@@ -353,19 +368,22 @@ describe("MCP server", () => {
     expect(mockRemovePersonaEntity).toHaveBeenCalledWith("emmet");
   });
 
-  // ei_quote_create / ei_quote_fix -- these tools use FLAT raw-shape schemas
-  // (message_id/text/start/end, quote_id/text/start/end), not the generic
-  // `data: z.record(unknown())` blob ei_create/ei_update use. The MCP SDK
-  // converts a flat raw shape into a plain (non-strict) z.object(shape) --
-  // see node_modules/@modelcontextprotocol/sdk/dist/esm/server/zod-compat.js
-  // `objectFromShape()` -- so an undeclared argument like `speaker` is
-  // stripped by the SDK's own input validation before the handler ever
-  // runs, never reaching createQuoteEntity/fixQuoteEntity. That's a
-  // DIFFERENT enforcement point than the CLI's `--json` path (which merges
-  // straight into the endpoint's own z.strictObject and rejects there) --
-  // per Beta's coverage audit (.sisyphus/reviews/t3-create-fix-quote-coverage.md,
-  // I1), the correct oracle here is "the forbidden field never arrives",
-  // not "the call errors."
+  // I1 (.sisyphus/reviews/quote-attestation-final-implementation.md):
+  // ei_quote_create/ei_quote_fix/ei_quote_relink register a `.passthrough()`
+  // z.object() SCHEMA INSTANCE for inputSchema, not a flat raw shape --
+  // a raw shape gets rebuilt by the MCP SDK into a plain (non-strict)
+  // z.object(shape) that silently STRIPS any undeclared key during its
+  // own pre-handler parse (see
+  // node_modules/@modelcontextprotocol/sdk/dist/esm/server/zod-compat.js
+  // `objectFromShape()`) -- that silent strip was the original I1 bug: a
+  // forged field like `speaker` never reached createQuoteEntity/
+  // fixQuoteEntity, so the endpoint's own strict schema never got a
+  // chance to reject it, and the call reported success. `.passthrough()`
+  // instead keeps every key in the parsed object, and mcp.ts's own
+  // rejectUnknownQuoteFields() checks it against an allow-list BEFORE
+  // any named field is destructured, returning isError: true with a
+  // fixed, generic message (never the caller's own key name) and never
+  // calling the endpoint at all.
   it("registers ei_quote_create and ei_quote_fix tools", async () => {
     ({ client } = await setupClient());
     const result = await client.listTools();
@@ -388,6 +406,18 @@ describe("MCP server", () => {
     const tool = tools.tools.find((t) => t.name === "ei_quote_fix");
     const properties = (tool!.inputSchema as Record<string, unknown>).properties as Record<string, unknown>;
     expect(Object.keys(properties).sort()).toEqual(["end", "quote_id", "start", "text"]);
+  });
+
+  it("M2: ei_quote_create/ei_quote_fix's start/end field descriptions describe a first-match consistency check, never a disambiguation/selection mechanism", async () => {
+    ({ client } = await setupClient());
+    const tools = await client.listTools();
+    for (const toolName of ["ei_quote_create", "ei_quote_fix"] as const) {
+      const tool = tools.tools.find((t) => t.name === toolName);
+      const properties = (tool!.inputSchema as Record<string, unknown>).properties as Record<string, { description?: string }>;
+      const startDescription = properties.start.description ?? "";
+      expect(startDescription).not.toMatch(/disambiguate/i);
+      expect(startDescription).toMatch(/first-match|first match/i);
+    }
   });
 
   it("ei_quote_create forwards message_id/text/start/end to createQuoteEntity and returns the created record as JSON", async () => {
@@ -414,16 +444,18 @@ describe("MCP server", () => {
     expect(mockCreateQuoteEntity).toHaveBeenCalledWith({ message_id: "ei:room-msg-1", text: "the lease bug is the real defect", start: undefined, end: undefined });
   });
 
-  it("ei_quote_create silently drops an undeclared 'speaker' argument before it reaches createQuoteEntity (SDK schema stripping, not endpoint rejection)", async () => {
-    mockCreateQuoteEntity.mockResolvedValueOnce({ id: "new-quote-3" });
+  it("ei_quote_create rejects an undeclared 'speaker' argument with isError: true, never reaching createQuoteEntity (I1)", async () => {
     ({ client } = await setupClient());
+    const callsBefore = mockCreateQuoteEntity.mock.calls.length;
     const result = await client.callTool({
       name: "ei_quote_create",
-      // @ts-expect-error -- deliberately supplying an undeclared field to prove the SDK strips it
+      // @ts-expect-error -- deliberately supplying an undeclared field to prove it's rejected, not silently stripped
       arguments: { message_id: "ei:room-msg-1", text: "the lease bug is the real defect", speaker: "forged" },
     });
-    expect(result.isError).toBeUndefined();
-    expect(mockCreateQuoteEntity).toHaveBeenCalledWith({ message_id: "ei:room-msg-1", text: "the lease bug is the real defect", start: undefined, end: undefined });
+    expect(result.isError).toBe(true);
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0].text).toBe("Error: Invalid quote (create): unrecognized field(s) present");
+    expect(mockCreateQuoteEntity.mock.calls.length).toBe(callsBefore);
   });
 
   it("ei_quote_create surfaces a refusal Error as isError: true text", async () => {
@@ -461,16 +493,18 @@ describe("MCP server", () => {
     expect(mockFixQuoteEntity).toHaveBeenCalledWith({ quote_id: "sourced-quote-1", text: "corrected text", start: 10, end: 24 });
   });
 
-  it("ei_quote_fix silently drops an undeclared 'message_id' argument before it reaches fixQuoteEntity (SDK schema stripping, not endpoint rejection)", async () => {
-    mockFixQuoteEntity.mockResolvedValueOnce({ id: "sourced-quote-1" });
+  it("ei_quote_fix rejects an undeclared 'message_id' argument with isError: true, never reaching fixQuoteEntity (I1)", async () => {
     ({ client } = await setupClient());
+    const callsBefore = mockFixQuoteEntity.mock.calls.length;
     const result = await client.callTool({
       name: "ei_quote_fix",
-      // @ts-expect-error -- deliberately supplying an undeclared field to prove the SDK strips it
+      // @ts-expect-error -- deliberately supplying an undeclared field to prove it's rejected, not silently stripped
       arguments: { quote_id: "sourced-quote-1", text: "anything", message_id: "forged" },
     });
-    expect(result.isError).toBeUndefined();
-    expect(mockFixQuoteEntity).toHaveBeenCalledWith({ quote_id: "sourced-quote-1", text: "anything", start: undefined, end: undefined });
+    expect(result.isError).toBe(true);
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0].text).toBe("Error: Invalid quote (fix): unrecognized field(s) present");
+    expect(mockFixQuoteEntity.mock.calls.length).toBe(callsBefore);
   });
 
   it("ei_quote_fix surfaces a refusal Error as isError: true text", async () => {
@@ -510,16 +544,18 @@ describe("MCP server", () => {
     expect(mockRelinkQuoteEntity).toHaveBeenCalledWith({ id: "quote-1", data_item_ids: ["person-b-id"] });
   });
 
-  it("ei_quote_relink silently drops an undeclared 'text' argument before it reaches relinkQuoteEntity (SDK schema stripping, not endpoint rejection)", async () => {
-    mockRelinkQuoteEntity.mockResolvedValueOnce({ id: "quote-1" });
+  it("ei_quote_relink rejects an undeclared 'text' argument with isError: true, never reaching relinkQuoteEntity (I1)", async () => {
     ({ client } = await setupClient());
+    const callsBefore = mockRelinkQuoteEntity.mock.calls.length;
     const result = await client.callTool({
       name: "ei_quote_relink",
-      // @ts-expect-error -- deliberately supplying an undeclared field to prove the SDK strips it
+      // @ts-expect-error -- deliberately supplying an undeclared field to prove it's rejected, not silently stripped
       arguments: { id: "quote-1", data_item_ids: [], text: "forged" },
     });
-    expect(result.isError).toBeUndefined();
-    expect(mockRelinkQuoteEntity).toHaveBeenCalledWith({ id: "quote-1", data_item_ids: [] });
+    expect(result.isError).toBe(true);
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0].text).toBe("Error: Invalid quote (relink): unrecognized field(s) present");
+    expect(mockRelinkQuoteEntity.mock.calls.length).toBe(callsBefore);
   });
 
   it("ei_quote_relink surfaces a not-found refusal as isError: true text", async () => {

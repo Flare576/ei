@@ -33,7 +33,7 @@
  *   assert the persisted Quote and that corrections.json is cleared.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "fs";
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -440,51 +440,99 @@ describe("ei_quote_fix — synchronous self-drain outcomes with no live lock (I1
   });
 });
 
-describe("MCP forbidden fields have zero effect (T5)", () => {
-  it("ei_quote_create with a forged 'speaker' argument persists the server-derived speaker/channel/created_by, never the forged value", async () => {
+describe("MCP forbidden fields are rejected, not silently stripped (I1, T2)", () => {
+  it("ei_quote_create with a forged 'speaker' argument returns isError: true and persists/queues nothing", async () => {
     writeState(buildState([]));
+    const originalStateBytes = readFileSync(statePath, "utf-8");
 
     const client = await setupClient();
     const result = await client.callTool({
       name: "ei_quote_create",
-      // @ts-expect-error -- deliberately supplying undeclared fields to prove the SDK strips them before persistence
-      arguments: { message_id: DIRECT_MSG_ID, text: "unique wording to verify channel derivation", speaker: "forged-speaker", created_by: "human" },
+      // @ts-expect-error -- deliberately supplying an undeclared field to prove it's rejected, not silently stripped
+      arguments: { message_id: DIRECT_MSG_ID, text: "unique wording to verify channel derivation", speaker: "forged-speaker" },
     });
     await client.close();
 
-    expect(result.isError).toBeUndefined();
-    const created = JSON.parse((result.content as Array<{ text: string }>)[0].text) as Quote;
-    expect(created.speaker).toBe("human");
-    expect(created.speaker).not.toBe("forged-speaker");
-    expect(created.created_by).toBe("extraction");
-    expect(created.channel).toBe("Integration Persona");
-
-    const state = readStateFile();
-    const persisted = state.human.quotes.find((q) => q.id === created.id)!;
-    expect(persisted.speaker).toBe("human");
-    expect(persisted.created_by).toBe("extraction");
+    expect(result.isError).toBe(true);
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0].text).toBe("Error: Invalid quote (create): unrecognized field(s) present");
+    expect(readFileSync(statePath, "utf-8")).toBe(originalStateBytes);
+    expect(existsSync(correctionsPath)).toBe(false);
   });
 
-  it("ei_quote_fix with a forged 'created_by'/'message_id' argument preserves the existing provenance, never the forged value", async () => {
+  it("ei_quote_create with a forged 'created_by' argument returns isError: true and persists/queues nothing", async () => {
+    writeState(buildState([]));
+    const originalStateBytes = readFileSync(statePath, "utf-8");
+
+    const client = await setupClient();
+    const result = await client.callTool({
+      name: "ei_quote_create",
+      // @ts-expect-error -- deliberately supplying an undeclared field to prove it's rejected, not silently stripped
+      arguments: { message_id: DIRECT_MSG_ID, text: "unique wording to verify channel derivation", created_by: "human" },
+    });
+    await client.close();
+
+    expect(result.isError).toBe(true);
+    expect(readFileSync(statePath, "utf-8")).toBe(originalStateBytes);
+    expect(existsSync(correctionsPath)).toBe(false);
+  });
+
+  it("ei_quote_fix with a forged 'created_by' argument returns isError: true and leaves the existing quote untouched", async () => {
     const before = makeSourcedQuote({ created_by: "human" });
     writeState(buildState([before]));
+    const originalStateBytes = readFileSync(statePath, "utf-8");
 
     const client = await setupClient();
     const result = await client.callTool({
       name: "ei_quote_fix",
-      // @ts-expect-error -- deliberately supplying undeclared fields to prove the SDK strips them before persistence
-      arguments: { quote_id: "sourced-quote-1", text: "the real defect lives here too", created_by: "forged", message_id: "ei:forged-message-id" },
+      // @ts-expect-error -- deliberately supplying an undeclared field to prove it's rejected, not silently stripped
+      arguments: { quote_id: "sourced-quote-1", text: "the real defect lives here too", created_by: "forged" },
     });
     await client.close();
 
-    expect(result.isError).toBeUndefined();
+    expect(result.isError).toBe(true);
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0].text).toBe("Error: Invalid quote (fix): unrecognized field(s) present");
+    expect(readFileSync(statePath, "utf-8")).toBe(originalStateBytes);
+    expect(existsSync(correctionsPath)).toBe(false);
+  });
 
-    const state = readStateFile();
-    const persisted = state.human.quotes.find((q) => q.id === "sourced-quote-1")!;
-    expect(persisted.created_by).toBe("human");
-    expect(persisted.created_by).not.toBe("forged");
-    expect(persisted.message_id).toBe(SOURCED_MSG_ID);
-    expect(persisted.message_id).not.toBe("ei:forged-message-id");
+  it("ei_quote_fix with a forged 'message_id' argument returns isError: true and leaves the existing quote untouched", async () => {
+    const before = makeSourcedQuote();
+    writeState(buildState([before]));
+    const originalStateBytes = readFileSync(statePath, "utf-8");
+
+    const client = await setupClient();
+    const result = await client.callTool({
+      name: "ei_quote_fix",
+      // @ts-expect-error -- deliberately supplying an undeclared field to prove it's rejected, not silently stripped
+      arguments: { quote_id: "sourced-quote-1", text: "the real defect lives here too", message_id: "ei:forged-message-id" },
+    });
+    await client.close();
+
+    expect(result.isError).toBe(true);
+    expect(readFileSync(statePath, "utf-8")).toBe(originalStateBytes);
+    expect(existsSync(correctionsPath)).toBe(false);
+  });
+
+  it("ei_quote_relink with a forged 'text' argument returns isError: true and leaves the existing quote's links untouched", async () => {
+    const before = makeSourcedQuote({ data_item_ids: ["linked-fact-1"] });
+    writeState(buildState([before]));
+    const originalStateBytes = readFileSync(statePath, "utf-8");
+
+    const client = await setupClient();
+    const result = await client.callTool({
+      name: "ei_quote_relink",
+      // @ts-expect-error -- deliberately supplying an undeclared field to prove it's rejected, not silently stripped
+      arguments: { id: "sourced-quote-1", data_item_ids: [], text: "forged" },
+    });
+    await client.close();
+
+    expect(result.isError).toBe(true);
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0].text).toBe("Error: Invalid quote (relink): unrecognized field(s) present");
+    expect(readFileSync(statePath, "utf-8")).toBe(originalStateBytes);
+    expect(existsSync(correctionsPath)).toBe(false);
   });
 });
 
@@ -543,8 +591,8 @@ describe("ei_quote_relink — two-phase queue and drain (T4)", () => {
   });
 });
 
-describe("ei_remove(entity_type: 'quote') — two-phase queue and drain (T4)", () => {
-  it("queues a well-formed quote.remove record under a live lock, leaving state.json untouched", async () => {
+describe("ei_remove(entity_type: 'quote') — two-phase queue and drain (T4/I3)", () => {
+  it("under a live lock, reports a pending/queued response -- never {removed: true} -- leaving state.json untouched (I3)", async () => {
     writeState(buildState([makeSourcedQuote()]));
     writeFileSync(lockPath, JSON.stringify({ pid: process.pid }));
     const originalStateBytes = readFileSync(statePath, "utf-8");
@@ -557,6 +605,10 @@ describe("ei_remove(entity_type: 'quote') — two-phase queue and drain (T4)", (
     await client.close();
 
     expect(result.isError).toBeUndefined();
+    const content = result.content as Array<{ type: string; text: string }>;
+    const parsed = JSON.parse(content[0].text);
+    expect(parsed).toEqual({ status: "queued", id: "sourced-quote-1", message: expect.stringContaining("queued") });
+    expect(parsed).not.toEqual({ removed: true, id: "sourced-quote-1" });
     expect(readFileSync(statePath, "utf-8")).toBe(originalStateBytes);
 
     const queued = readCorrectionsFile();
@@ -721,5 +773,56 @@ describe("ei_update(entity_type: 'quote') — ADR-012 tombstone (T4)", () => {
     const state = readStateFile();
     const persisted = state.human.quotes.find((q) => q.id === "sourced-quote-1")!;
     expect(persisted.text).toBe(before.text);
+  });
+
+  it("still rejects with the exact tombstone text when 'data' is omitted entirely -- not a generic MCP schema-validation error (I2)", async () => {
+    const before = makeSourcedQuote();
+    writeState(buildState([before]));
+    writeFileSync(correctionsPath, "[]");
+
+    const client = await setupClient();
+    const result = await client.callTool({
+      name: "ei_update",
+      arguments: { entity_type: "quote", id: "sourced-quote-1" },
+    });
+    await client.close();
+
+    expect(result.isError).toBe(true);
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0].text).toBe(
+      'Error: "ei update quote" is retired. Use "ei fix quote" to correct text, "ei relink quote" to change links, or "ei remove quote" to delete a quote instead — if you were told to call this, your installed skills predate this version. Scheduled for removal two releases after the one that ships this message (ADR-012).'
+    );
+    expect(readFileSync(correctionsPath, "utf-8")).toBe("[]");
+
+    const state = readStateFile();
+    const persisted = state.human.quotes.find((q) => q.id === "sourced-quote-1")!;
+    expect(persisted.text).toBe(before.text);
+  });
+});
+
+describe("ei_fetch_message bare-id local fallback refuses a malformed room-persona message (I5)", () => {
+  it("returns a refusal, never a legacy envelope, for a bare (pre-migration, unqualified) room message with role persona and no persona_id", async () => {
+    const state = buildState([]);
+    const bareId = "bare-room-msg-legacy-1";
+    state.rooms![ROOM_ID].messages.push({
+      id: bareId,
+      parent_id: null,
+      role: "persona",
+      content: "Malformed: no persona_id at all",
+      timestamp: NOW,
+      read: false,
+      context_status: ContextStatus.Default,
+    });
+    writeState(state);
+
+    const client = await setupClient();
+    const result = await client.callTool({ name: "ei_fetch_message", arguments: { id: bareId } });
+    await client.close();
+
+    const content = result.content as Array<{ type: string; text: string }>;
+    const text = content[0].text;
+    expect(() => JSON.parse(text)).toThrow(); // a plain refusal reason, never a `{message,before,after,...}` envelope
+    expect(text).toContain("no persona_id");
+    expect(text).not.toContain(bareId); // I6: never echo the caller's own id into MCP response text
   });
 });
