@@ -51,9 +51,9 @@ export async function execute(query: string, limit: number, options: { recent?: 
  */
 export function buildEiRelationshipBlock(persona: PersonaResult, personLogLength?: number): string {
   const strongTraits = (persona.traits ?? [])
-    .filter((t) => t.strength >= 0.7)
-    .sort((a, b) => b.strength - a.strength)
-    .map((t) => `**${t.name}** (${Math.round(t.strength * 100)}%): ${t.description}`)
+    .filter((t) => (t.strength ?? 0.5) >= 0.7)
+    .sort((a, b) => (b.strength ?? 0.5) - (a.strength ?? 0.5))
+    .map((t) => `**${t.name}** (${Math.round((t.strength ?? 0.5) * 100)}%): ${t.description}`)
     .join("\n");
   const sortedTopics = [...(persona.topics ?? [])]
     .sort((a, b) => b.exposure_current - a.exposure_current)

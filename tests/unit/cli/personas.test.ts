@@ -213,6 +213,16 @@ describe("buildEiRelationshipBlock — trait filtering", () => {
     const persona = makePersonaResult({ traits: [makeTrait("Exact", 0.7)] });
     expect(buildEiRelationshipBlock(persona)).toContain("(70%)");
   });
+
+  it("excludes a trait with undefined strength while a 0.8 trait qualifies (undefined defaults to 0.5, not 0.7)", () => {
+    const undefinedStrength = { ...makeTrait("Unset", 0.9), strength: undefined } as PersonaTrait;
+    const persona = makePersonaResult({
+      traits: [undefinedStrength, makeTrait("Confirmed", 0.8)],
+    });
+    const result = buildEiRelationshipBlock(persona);
+    expect(result).not.toContain("Unset");
+    expect(result).toContain("Confirmed");
+  });
 });
 
 describe("buildEiRelationshipBlock — topic formatting", () => {
