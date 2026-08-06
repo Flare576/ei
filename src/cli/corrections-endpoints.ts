@@ -365,7 +365,7 @@ export async function createEntity(
  * fall through to the old full-replacement quote_upsert shape again.
  */
 export async function updateEntity(
-  entityType: CorrectableType,
+  entityType: NonQuoteType | "quote",
   id: string,
   body: unknown
 ): Promise<Fact | Topic | Person | Quote> {
