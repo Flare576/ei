@@ -42,7 +42,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "tsc --watch",
-    "build": "tsc",
+    "build": "tsc && npm run typecheck:cli",
     "test": "vitest run && npm run test:tui",
     "test:src": "vitest run",
     "test:tui": "cd tui && npm run test",
@@ -54,7 +54,8 @@
     "test:e2e:debug": "playwright test --debug",
     "test:evals": "vite-node tests/evals/run.ts",
     "test:all": "npm run test && npm run test:e2e && npm run test:e2e:tui",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && npm run typecheck:cli",
+    "typecheck:cli": "tsc -p tsconfig.cli.json --noEmit",
     "web": "cd web && npm run dev",
     "tui": "cd tui && npm run dev"
   },

@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node", "bun"],
+    "allowImportingTsExtensions": true
+  },
+  "include": ["src/cli.ts", "src/cli/**/*"],
+  "exclude": ["node_modules", "dist", "v0", "spike"]
+}
