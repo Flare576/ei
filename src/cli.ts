@@ -712,9 +712,12 @@ async function main(): Promise<void> {
 
   const options = { recent };
 
-  const recentMessages = await getRecentSessionMessages(sessionId, hookSource, transcriptPath);
-  const enrichedQuery = recentMessages.length > 0
-    ? [...recentMessages, query].join(" ").trim()
+  const sessionContext = await getRecentSessionMessages(sessionId, hookSource, transcriptPath);
+  if (sessionContext.failure) {
+    console.error(`[session-context] ${sessionContext.failure.message}`);
+  }
+  const enrichedQuery = sessionContext.messages.length > 0
+    ? [...sessionContext.messages, query].join(" ").trim()
     : query;
 
   const format = parsed.values.format?.trim();
