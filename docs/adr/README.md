@@ -36,6 +36,11 @@ This exists because the alternative was observed directly: *"I really wish we ha
 | [026](ADR-026-integration-granularity-per-harness.md) | Third-Party Integrations Are Scoped Per-Harness, Not Per-Vendor | Accepted | 2026-08-03 | Backfill |
 | [027](ADR-027-environment-variables-gate-test-only-behavior.md) | Environment Variables Gate Test-Only Behavior, Never Real Config | Accepted | 2026-08-03 | Backfill |
 | [028](ADR-028-cli-never-trails-mcp-in-capability.md) | The CLI Never Trails MCP in Capability — MCP Is a Thin Wrapper, Not a Second Implementation | Accepted | 2026-08-03 | Current |
+| [029](ADR-029-merge-patch-write-semantics.md) | External Writes Are JSON Merge Patch, Not Full-Record Replacement | Accepted | 2026-08-03 | Current |
+| [030](ADR-030-attested-quotes-merge-on-overlap.md) | An Attested Quote Merges With Overlapping Quotes, Exactly As Extraction Does | Accepted | 2026-08-03 | Current |
+| [031](ADR-031-external-field-visibility-categories.md) | External Callers See Four Field Categories, Not the Whole Entity | Accepted | 2026-08-04 | Current |
+| [032](ADR-032-manual-setting-prevents-automated-resetting.md) | Manual Setting Prevents Automated Re-Setting — Enforced Structurally, Not by a Marker | Accepted | 2026-08-04 | Current |
+| [033](ADR-033-message-retention-defaults-to-never-prune.md) | Message Retention Defaults To Never Prune, And `0` Means Disabled | Accepted | 2026-08-04 | Backfill |
 
 ## Conventions
 
