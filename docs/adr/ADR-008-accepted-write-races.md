@@ -91,6 +91,46 @@ This narrows the exposure; it changes neither decision. Fact, topic, person, and
 
 One related mechanism is worth recording here because it is easy to mistake for a fix: `quote.create`, `quote.fix`, and `quote.relink` each carry a caller-minted `attempt_id` (`quote.remove` does not — its record is `{op, entity_type, id}` and nothing else), and each of the three correction consumers echoes it back on any record it declines. That exists so a CLI/MCP caller can distinguish *its own* declined write from an unrelated one after a self-drain, and it is what lets `ei relink quote` report an unconfirmed result instead of a fabricated success. It reports the disposition of one queued record. It is not optimistic concurrency, it does not detect a competing write, and it closes neither race.
 
+## Note (2026-08-04): RFC 7396 merge-patch narrows Race 2 for corrections, and leaves extraction untouched
+
+[ADR-029](ADR-029-merge-patch-write-semantics.md) changed external writes from full-record replacement to RFC 7396
+merge-patch. That interacts with Race 2, but **not symmetrically**, and the asymmetry is the part worth recording —
+a reader who takes "merge-patch fixes lost updates" as a general statement will be wrong about half of this.
+
+**ADR-029 reasons about this race explicitly, and it is why merging happens where it does.** Its first clause
+requires the merge to occur **at drain time against live state**, not at write time against a snapshot, for exactly
+this reason: *"A write-time merge would read current state, materialise a full record, and queue that — which
+reintroduces ADR-008's Race 2 in full, because the materialised record carries every field from a snapshot that may
+be seconds stale."* So the drain-time choice is a Race 2 mitigation, not an implementation preference.
+
+**What narrows.** A correction now carries only the fields the caller actually supplied. A stale correction can
+therefore clobber only *those* fields, instead of every field on the record. Two concurrent editors touching
+different fields of the same entity no longer lose each other's work. The window is unchanged; the **blast radius
+per collision** shrinks from the whole record to the patched members.
+
+**What does not narrow, and this is the load-bearing half.** Race 2 as written above is *extraction* versus a user
+edit — and **extraction is not a correction.** It writes through `state.human_topic_upsert` /
+`state.human_person_upsert` directly (`src/core/handlers/human-matching.ts:162`, `:326`), never through the
+corrections queue, so nothing in ADR-029 applies to it. Extraction still builds a full record from the snapshot it
+sent to the LLM and still overwrites every field on write.
+
+**So the direction of loss is now uneven:** a user's external edit can no longer clobber unrelated fields, but
+extraction can still clobber the user's edit wholesale. Race 2's *severity* is unchanged for the path that
+originally motivated it.
+
+**One consequence for the Alternatives above.** "Narrow the read-modify-write window — re-read immediately before
+writing rather than using the snapshot sent to the LLM" is now the *only* remaining direction for the extraction
+half, and it is cheaper than it was: the merge machinery ADR-029 introduces (`applyMergePatch`, drain-time overlay)
+is a re-usable precedent for "apply computed fields onto current state" rather than "write the record you read."
+Nothing obliges extraction to adopt it, but the option is no longer a from-scratch build.
+
+**Race 1 is unchanged.** The ~100 ms drain interval is a property of the queue, not of the record shape — the same
+reasoning the 2026-08-02 note gives.
+
+**Neither decision is reversed.** Both races remain accepted and unfixed. This note exists because "corrections are
+full-record replacements" was load-bearing in the reasoning above and is now false, and because the natural
+shorthand — *merge-patch fixes the lost-update race* — is true for one half of Race 2 and false for the other.
+
 ## References
 
 - ADR-007 — the opt-out whose protected-run promise is what makes Race 1 user-visible

@@ -33,6 +33,72 @@ conversation. A persona has fewer than ten topics, all user-confirmed at creatio
 (`src/core/handlers/persona-generation.ts`, discussed below); nothing about the set of topics or
 their constitutive fields is meant to change on its own.
 
+> **Scope note added 2026-08-04.** Everything in this ADR is about **`PersonaTopic`**
+> (`src/core/types/data-items.ts:54-57`) and nothing else. That matters because **three distinct types carry a
+> field named `exposure_desired`, and they have different authorship rules:**
+>
+> | Type | `exposure_desired` written by | Authorship |
+> |---|---|---|
+> | **`PersonaTopic`** (`data-items.ts:54-55`) | `persona-generation.ts:76`, `:93` — **at creation only** | user-authored. **This ADR's subject.** |
+> | **`Topic`** (`data-items.ts:34-35`) | `human-matching.ts:150` — `result.exposure_desired ?? 0.5`, **every extraction pass** | LLM-inferred, by design |
+> | **`Person`** (`data-items.ts:72-73`) | `human-matching.ts:322` — same shape, every pass | LLM-inferred, by design |
+>
+> The LLM inference is deliberate and documented in the prompt itself: `src/prompts/human/person-update.ts:268-270`
+> defines `exposure_desired` as *"How much the HUMAN USER wants to talk about this PERSON"* and asks the model to
+> supply it (`:211`, `:222`). So for human Topics and People, a model estimating the user's appetite for a subject
+> **is** the intended mechanism.
+>
+> **Why this note exists.** During 1.10 planning this ADR's "constitutive — user-authored at creation only" claim
+> was recorded as *contradicted* by `human-matching.ts:150`, and that finding was carried for several hours before
+> being checked. It was a category error: the cited line writes a human `Topic`, which this ADR does not govern.
+> **The claim is true as written.** Verified 2026-08-04 — no ceremony code path writes `PersonaTopic.exposure_desired`,
+> exactly as the Decision section asserts.
+>
+> The error was easy to make and will be made again, because one field name spans three types with three different
+> rules. Hence this table rather than a one-line correction.
+>
+> **This looked like it conflicted with two later ADRs. It does not — resolved 2026-08-04.**
+> [ADR-031](ADR-031-external-field-visibility-categories.md) assigns each field a visibility category and
+> [ADR-032](ADR-032-manual-setting-prevents-automated-resetting.md) rules that manual setting prevents automated
+> re-setting, so a field whose authorship differs by entity type appeared to need two categories at once —
+> `PersonaTopic.exposure_desired` resisting overwrite while `Topic.exposure_desired` is *supposed* to be rewritten
+> every extraction pass.
+>
+> **The conflict was built on a write path that barely exists, and the owner ruled it irrelevant.** His words,
+> verbatim: *"it's a hidden, deprecated field. Humans setting it is irrelevant."* That is consistent with
+> [ADR-025](ADR-025-exposure-system-left-dormant.md), which decided the exposure system is live but dormant and will
+> be allowed to atrophy rather than repaired.
+>
+> **ADR-031 classifies both exposure fields as System Hidden — but note the precise scope: its table row covers
+> `Person` and `Topic`.** *(An earlier revision of this note said "on any entity type," which overstated ADR-031's
+> coverage. Corrected 2026-08-04 — overstating another ADR's scope is the same error, in the opposite direction, as
+> the one this note exists to fix.)*
+>
+> **`PersonaTopic` is not in that row, and `personaTopicSchema` (`src/cli/persona-corrections.ts:98`) still declares
+> `exposure_desired` as a required member** — so it remains externally writable today. That does not revive the
+> conflict: the field is deprecated in both places and the owner's ruling covers it. It does mean whichever item
+> implements ADR-031 must remove it from that schema too, which is flagged at the end of this note rather than
+> assumed handled.
+>
+> So **the decision is uniform even though the implementation is not yet**: both exposure fields are deprecated and
+> owner-ruled irrelevant to external callers, on every type. ADR-032 never engages either way, because it governs the
+> boundary between *manual* and *automated* writes, and a field nobody should be setting has no human authorship claim
+> to protect.
+>
+> *(This previously read "the category **is** uniform — Hidden everywhere," which contradicted the paragraph above it
+> in this same note: `personaTopicSchema` still accepts the field. Corrected 2026-08-04. Writing a correction and then
+> restating the uncorrected claim four lines later is the failure this note is entirely about.)*
+>
+> **What survives, and it is narrower than what I claimed.** The general hazard — *an implementation that keys on
+> field **name** rather than field **owner** gets one entity type wrong* — is still a real trap for any field that
+> genuinely is externally writable on one type and system-owned on another. **`exposure_desired` was my only example
+> and it turned out not to be one.** So this is a caution for future fields, not a defect in either ADR.
+>
+> **One implementation detail this leaves open**, recorded because it is easy to miss: `personaTopicSchema`
+> (`src/cli/persona-corrections.ts:98`) still declares `exposure_desired` as a **required** member, so a persona
+> update currently must supply it. Making the field Hidden means removing it from that schema too, not only from the
+> topic/person schemas. That belongs to whichever item implements ADR-031 — flagged, not assumed handled.
+
 The ceremony's persona-topic pipeline originally didn't respect that distinction. It was copied
 from the shape used for *human* topics — `Scan` (find candidate topics in conversation) → `Match`
 (check candidates against the existing backlog) → `Update` (write the result) — plus two more

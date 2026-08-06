@@ -94,6 +94,79 @@ The mechanism being reused has three defects that must be fixed as it moves, rat
 2. **It is gated behind the reflection threshold.** `:637-638` filters to linked records whose log exceeds `PERSON_LOG_REFLECTION_THRESHOLD` and `continue`s if none qualify — *before* the multiplicity check. A broken link shape on a small log is never reported.
 3. **Its text misdiagnoses the cause.** It reads "This might be intentional — if you created a composite persona." Under ADR-006 a composite has its own Person record, so that is not what B-many indicates, and there is no longer an intentional case. The message should state plainly that the shape is wrong and name what to fix.
 
+## Note (2026-08-04): what implementing this changed — clause 4b's premise did not survive
+
+Item 04 (`.sisyphus/plans/tickets/04-persona-link-guard.md`) implements this ADR. Four rounds of
+independent review changed three things about it. Recorded here because the ADR is the durable artifact and the plan
+is not.
+
+### Clause 2 is extended, not superseded — detection became prevention
+
+Clause 2 says detection runs at startup, unconditionally, in both directions. That stands. But the implementation
+adds `guardPersonaLinks(candidate, priorStored, allPeople, excludeIds?)` at **seven mutation boundaries** — LLM
+person update (`src/core/handlers/human-matching.ts:291-295`), the dedup survivor
+(`src/core/handlers/dedup.ts:178-195`), and five others.
+
+So the invariant is now **prevention at write time plus detection at startup**, where this ADR described detection
+alone. The prevention half does not repair anything — a refused link is dropped and reported, exactly per clauses 1
+and 4 — so the decision is unchanged in substance. But a reader who takes clause 2 as the full picture will miss
+where most of the enforcement actually lives.
+
+### Clause 4b is corrected. Its conclusion holds; its premise does not.
+
+Clause 4b concluded *"validate the link shape before the correction enters the queue,"* reasoning that **both drain
+modes must return the same caller-visible result** and that a drain-time rejection would reach a live caller after it
+had already been told the write succeeded.
+
+**The implementation inverted the authority and rejected the symmetry requirement**, and independent review forced
+both:
+
+> *"**The drain-time guard is authoritative.** Pre-queue validation is an early-rejection convenience that catches
+> the common case fast and cheaply. It is not the authority, and it may pass a write the drain later refuses."*
+
+And the two modes are now **deliberately asymmetric**:
+
+| Path | How the refusal reaches the caller |
+|---|---|
+| CLI / MCP pre-queue | synchronous return; nothing was queued, so no drain report follows |
+| **Self**-drain | **synchronous** — it runs in the caller's own process |
+| **Live**-drain | **asynchronous**, via the Ei thread — the caller was honestly told "queued" and has already gone |
+
+**Clause 4b's premise was that this asymmetry had to be eliminated. The correct resolution was to accept it.** A
+caller told `queued` was not told `applied`, so a later refusal does not contradict anything it was told — and the
+earlier framing (*"a logged drain-time drop is a failed contract"*) was true only of a **silent** drop. A reported one
+is a different thing.
+
+Pre-queue validation is still built, and clause 4b's practical instruction survives. What changed is which layer is
+the authority, and that matters: an implementer who reads 4b alone would build pre-queue validation and stop, leaving
+the drain unguarded — which is the path review found had **no report owner at all**.
+
+### New: the guard must be told what is leaving
+
+A case this ADR did not anticipate. Dedup's update-before-remove ordering means *"transient duplicate"* and *"newly
+introduced link"* are **the same observation** at the moment the guard runs, so no signature could distinguish them.
+
+Resolution: dedup passes the donor ids it is about to remove as `excludeIds`, and the guard treats an excluded record
+as already gone. A link the survivor inherits from a **departing** donor is therefore not a collision; a union of
+links from **two independently-linked** donors still is.
+
+This is consistent with clause 1 rather than an exception to it — nothing is repaired, and the guard is told the truth
+instead of guessing about intent. It is recorded because "run a cardinality guard at every write" sounds complete and
+is not: **removal ordering can make a legal end state look illegal mid-operation.**
+
+### The three implementation defects above are being fixed, not carried
+
+`## Notes on the existing implementation` lists three: B-many-only detection, threshold gating, and misdiagnosing text.
+All three are in item 04's scope. Clause 4a (two otherwise-valid links → **neither** survives) is preserved and gets a
+dedicated test that distinguishes it from the departing-donor case — the two were previously indistinguishable in the
+test fixtures, which is how the gap was found.
+
+### Not changed
+
+Clause 1 (never repair automatically) is untouched and is load-bearing for everything above — it is precisely why 4a
+drops both links rather than picking a winner, and why the dedup case is solved by informing the guard rather than by
+letting it resolve.
+
 ## Alternatives
 
 ### Alternative A: Repair once at startup via migration
