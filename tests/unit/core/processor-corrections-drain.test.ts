@@ -1125,7 +1125,7 @@ describe("Processor.drainCorrections() (live-side corrections drain)", () => {
     expect(quotes[0].embedding).not.toEqual([1, 1, 1]);
   });
 
-  it("I3: a refusal report is not silently lost when the state bypasses first-run Ei bootstrap (some other Persona already exists) but the 'ei' persona itself was never created", async () => {
+  it("I3: a refusal report gets a durable home even when the state bypasses first-run Ei bootstrap (some other Persona already exists) and the 'ei' persona itself was never created", async () => {
     const PERSONA_A = "11111111-1111-4111-8111-111111111111";
     const otherPersona = makePersonaEntity("other-persona", { display_name: "Other", is_paused: true });
     const alice = makePerson({
@@ -1151,22 +1151,27 @@ describe("Processor.drainCorrections() (live-side corrections drain)", () => {
       op: "upsert", entity_type: "person", id: bob.id, record: bob, timestamp: new Date().toISOString(),
     });
 
-    const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     processor = new Processor(mock.ei);
     await processor.start(storage as unknown as Parameters<Processor["start"]>[0]);
-    await asDrainable(processor).drainCorrections();
 
     const sm = processor.getStateManager();
-    // Confirm bootstrap really was bypassed -- "ei" genuinely never exists.
+    // Confirm bootstrap really was bypassed -- "ei" genuinely never
+    // exists right after start(), before the drain that needs it.
     expect(sm.persona_getById("ei")).toBeNull();
+
+    await asDrainable(processor).drainCorrections();
+
     // The write itself still applied (Bob's own conflicting link was
     // refused) -- it must not silently vanish as if fully successful.
     expect(sm.getHuman().people.find((p) => p.id === "bob")?.identifiers).not.toContainEqual(expect.objectContaining({ type: "Ei Persona" }));
-    // No "ei" thread exists to hold a durable report...
-    expect(sm.messages_get("ei")).toEqual([]);
-    // ...so the loss must be surfaced some other discoverable way (I3).
-    expect(consoleWarnSpy).toHaveBeenCalled();
-    expect(consoleWarnSpy.mock.calls.some((call) => call.join(" ").includes(PERSONA_A))).toBe(true);
-    consoleWarnSpy.mockRestore();
+    // "ei" is created on demand, exactly like Emmett's own lazy
+    // bootstrap, so the report has somewhere durable to land (I3) --
+    // never a console-only warning that nobody watching a live process
+    // would ever see.
+    expect(sm.persona_getById("ei")).not.toBeNull();
+    const reports = sm.messages_get("ei");
+    expect(reports).toHaveLength(1);
+    expect(reports[0].context_status).toBe("always");
+    expect(reports[0].content).toContain("bob");
   });
 });

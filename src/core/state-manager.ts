@@ -20,6 +20,7 @@ import type {
 } from "./types.js";
 import { RoomMode, RESERVED_PERSONA_IDS, ContextStatus } from "./types.js";
 import { BUILT_IN_FACT_NAMES } from './constants/built-in-facts.js';
+import { EI_PERSONA_DEFINITION } from '../templates/welcome.js';
 import { qualifyEiMessage } from './utils/message-id.js';
 import { guardPersonaLinks, removePersonaLinksToId, type PersonaLinkRefusal } from './utils/identifier-utils.js';
 import type { ThemeDefinition } from './types/entities.js';
@@ -725,17 +726,46 @@ export class StateManager {
   }
 
   /**
+   * Lazily creates the reserved "ei" persona if this state doesn't have
+   * one yet -- mirrors Processor.bootstrapFirstRun()'s own creation of
+   * "ei", the same on-demand pattern Processor.bootstrapEmmett() already
+   * uses for "emmet". A nonempty state can hold other Personas while
+   * having never run first-run bootstrap (see
+   * src/core/processor.ts#completeInitialization), so the "ei" thread a
+   * persona-link refusal report needs to go through cannot be assumed to
+   * exist (I3, .sisyphus/reviews/tonight-post-audit-fix-queue.md).
+   * Ensuring it here, right before delivery, keeps the report durable
+   * instead of accepting that the report channel might be silently
+   * missing.
+   */
+  private ensureEiPersonaExists(): void {
+    if (this.persona_getById("ei")) return;
+    this.persona_add({
+      ...EI_PERSONA_DEFINITION,
+      id: "ei",
+      display_name: "Ei",
+      last_updated: new Date().toISOString(),
+    });
+  }
+
+  /**
    * The ADR-010 clause 3/4 report for a write-time persona-link refusal —
    * same shape as the ceremony reflection phase's existing "ei" warning
    * (src/core/orchestrators/ceremony.ts), reused rather than duplicated
    * with new machinery. One message per guard invocation, naming every
    * link that write declined to create.
+   *
+   * Never interpolates a Person's name (the candidate's own, or a B-many
+   * conflict's) -- both are caller-controlled free text (I5,
+   * .sisyphus/reviews/tonight-post-audit-fix-queue.md) and this message
+   * is a durable, privileged `ContextStatus.Always` system message that
+   * `buildTemporalAnchorsSection()` later copies verbatim into a future
+   * LLM system prompt. Every Person is instead named by id -- safe,
+   * non-instruction-shaped, and resolvable back to a name through a
+   * normal, non-privileged channel (fetch_memory) by anyone who needs it.
    */
   private buildPersonaLinkRefusalMessage(refusals: PersonaLinkRefusal[]): Message {
-    const describe = (r: PersonaLinkRefusal): string => {
-      const who = r.personName ? `"${r.personName}"` : `person ${r.personId}`;
-      return `${who} → Persona ${r.value} (${r.reason})`;
-    };
+    const describe = (r: PersonaLinkRefusal): string => `person ${r.personId} → Persona ${r.value} (${r.reason})`;
     const content = refusals.length === 1
       ? `A write just tried to link ${describe(refusals[0])}, but that would break the one-Persona-per-Person rule (ADR-006). The link was not created; everything else in the write was saved.`
       : `A write just tried to create Persona links that would break the one-Persona-per-Person rule (ADR-006). None of these were created; everything else in the write was saved:\n${refusals.map((r) => `- ${describe(r)}`).join("\n")}`;
@@ -760,10 +790,10 @@ export class StateManager {
    *
    * The `ei` persona thread may not exist yet (a nonempty state can have
    * other Personas but bypass first-run Ei bootstrap, see
-   * src/core/processor.ts) — `messages_append`'s return value is checked
-   * rather than assumed, and a failed delivery is logged loudly (I3) so
-   * the refusal is discoverable even though it could not be made durable
-   * through the normal `ei` thread.
+   * src/core/processor.ts) -- `ensureEiPersonaExists()` creates it on
+   * demand right before delivery (I3) rather than accepting that the
+   * report channel might be missing, so `messages_append` below always
+   * succeeds; the delivery check remains only as a defensive backstop.
    */
   human_person_upsert(person: Person, excludeIds?: readonly string[]): void {
     const priorStored = this.getHuman().people.find((p) => p.id === person.id);
@@ -771,11 +801,15 @@ export class StateManager {
     this.humanState.person_upsert(guarded);
     this.scheduleSave();
     if (refusals.length > 0) {
+      this.ensureEiPersonaExists();
       const message = this.buildPersonaLinkRefusalMessage(refusals);
       const delivered = this.messages_append("ei", message);
       if (!delivered) {
-        console.warn(
-          `[StateManager] Persona-link refusal report could not be delivered: the "ei" persona does not exist in this state yet. Lost report: ${message.content}`
+        // Unreachable in normal operation -- ensureEiPersonaExists() just
+        // ran above -- kept as a loud defensive backstop in case some
+        // future caller manages to delete "ei" out from under this call.
+        console.error(
+          `[StateManager] Persona-link refusal report could not be delivered even after ensuring the "ei" persona exists. Lost report for person ${person.id}.`
         );
       }
     }

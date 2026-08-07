@@ -89,6 +89,16 @@ export interface PersonaLinkRefusal {
   personName?: string;
   value: string;
   reason: string;
+  /**
+   * The id of the OTHER Person already holding this value -- set only for
+   * a B-many collision (never for an A-many/duplicate refusal, where
+   * there is no separate conflicting Person). `reason`'s own text never
+   * names that Person, only this id, so a consumer that must stay
+   * id-only for a durable, privileged message (I5,
+   * buildPersonaLinkRefusalMessage) can point at the record without ever
+   * rendering its caller-controlled name.
+   */
+  conflictPersonId?: string;
 }
 
 /**
@@ -137,10 +147,23 @@ export interface PersonaLinkRefusal {
  * `identifiers`, plus a refusal entry for every link that did not
  * survive. Reporting the refusal is the caller's job -- this function only
  * decides the data. Every free-text field on a refusal (Person name,
- * identifier value, conflicting Person's name) is stripped of control
- * bytes before being recorded (I5) -- these values are caller-controlled
- * and refusals are later rendered verbatim into CLI/MCP output and a
- * durable system-prompt message.
+ * identifier value) is stripped of control bytes before being recorded
+ * (I5) -- these values are caller-controlled and refusals are later
+ * rendered verbatim into CLI/MCP output. The conflicting Person in a
+ * B-many refusal is never named at all here, only referenced by
+ * `conflictPersonId` (I5) -- guardPersonaLinks cannot know whether a
+ * caller will render a refusal into that CLI/MCP diagnostic or into a
+ * durable, privileged system-prompt message, so the conflicting Person's
+ * own name (also caller-controlled) never enters either.
+ *
+ * Also refuses an intra-candidate duplicate: the exact same value
+ * appearing 2+ times in `candidate.identifiers` in this ONE write (I7).
+ * That is never legitimate regardless of prior state -- a literal
+ * duplicate entry, not a cardinality dispute between two different
+ * values. The first occurrence of a repeated value keeps whatever fate
+ * the prior-vs-introduced/B-many resolution below gives it; every
+ * REPEATED occurrence already accounted for in this same write is
+ * refused as a duplicate.
  */
 export function guardPersonaLinks(
   candidate: Person,
@@ -202,6 +225,30 @@ export function guardPersonaLinks(
     }
   }
 
+  // I7: `survivors` can still hold the exact same value more than once --
+  // e.g. a Person already holding [X] updated with [X, X] has BOTH raw X
+  // entries land in the "introduces nothing new" branch above untouched.
+  // The first occurrence of each value here keeps whatever fate the
+  // resolution above already gave it; every REPEATED occurrence of a
+  // value already seen in THIS pass is refused as a duplicate before it
+  // ever reaches the cross-Person check below.
+  const seenSurvivorValues = new Set<string>();
+  const dedupedSurvivors: PersonIdentifier[] = [];
+  for (const link of survivors) {
+    if (seenSurvivorValues.has(link.value)) {
+      refusals.push({
+        personId: candidate.id,
+        personName,
+        value: sanitizeMessageIdForLog(link.value),
+        reason: "duplicate of a Persona link already present in this same write",
+      });
+      continue;
+    }
+    seenSurvivorValues.add(link.value);
+    dedupedSurvivors.push(link);
+  }
+  survivors = dedupedSurvivors;
+
   const excluded = new Set(excludeIds ?? []);
   const finalSurvivors: PersonIdentifier[] = [];
   for (const link of survivors) {
@@ -223,7 +270,8 @@ export function guardPersonaLinks(
         personId: candidate.id,
         personName,
         value: sanitizeMessageIdForLog(link.value),
-        reason: `already linked from a different Person ("${sanitizeMessageIdForLog(conflict.name)}", ${conflict.id})`,
+        reason: `already linked from a different Person (${conflict.id})`,
+        conflictPersonId: conflict.id,
       });
     } else {
       finalSurvivors.push(link);
@@ -234,10 +282,19 @@ export function guardPersonaLinks(
     return { person: candidate, refusals: [] };
   }
 
-  const keptValues = new Set(finalSurvivors.map(l => l.value));
-  const newIdentifiers = identifiers.filter(id =>
-    !isEiPersonaLinkIdentifier(id) || keptValues.has(id.value)
-  );
+  // Reference-safe, not value-based: I7's duplicate handling above means
+  // `identifiers` can legitimately hold two objects sharing one `.value`
+  // (the surviving first occurrence and the refused repeat) -- filtering
+  // by value alone would let both back in. `emittedValues` keeps at most
+  // one identifier per surviving value, in original order.
+  const survivingValues = new Set(finalSurvivors.map(l => l.value));
+  const emittedValues = new Set<string>();
+  const newIdentifiers = identifiers.filter(id => {
+    if (!isEiPersonaLinkIdentifier(id)) return true;
+    if (!survivingValues.has(id.value) || emittedValues.has(id.value)) return false;
+    emittedValues.add(id.value);
+    return true;
+  });
 
   return { person: { ...candidate, identifiers: newIdentifiers }, refusals };
 }
