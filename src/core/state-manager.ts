@@ -19,7 +19,7 @@ import type {
   HumanSettings,
   ProviderAccount,
 } from "./types.js";
-import { RoomMode } from "./types.js";
+import { RoomMode, RESERVED_PERSONA_IDS } from "./types.js";
 import { BUILT_IN_FACT_NAMES } from './constants/built-in-facts.js';
 import { qualifyEiMessage } from './utils/message-id.js';
 import type { ThemeDefinition } from './types/entities.js';
@@ -406,11 +406,11 @@ export class StateManager {
   }
 
   /**
-   * Returns true if value looks like a persona ID (UUID or the special "ei" id).
+   * Returns true if value looks like a persona ID (UUID or a reserved persona ID, e.g. "ei", "emmet").
    * Display names are free-form strings that won't match UUID format.
    */
   private isPersonaId(value: string): boolean {
-    if (value === "ei") return true;
+    if ((RESERVED_PERSONA_IDS as readonly string[]).includes(value)) return true;
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
   }
 

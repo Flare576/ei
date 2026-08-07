@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { StateManager } from "../../../src/core/state-manager.js";
 import { LLMRequestType, LLMPriority, LLMNextStep, ContextStatus } from "../../../src/core/types.js";
 import { createMockStorage, createDefaultTestState } from "../../helpers/mock-storage.js";
@@ -431,6 +431,103 @@ describe("StateManager", () => {
       const topics = newSm.getHuman().topics;
       expect(topics[0].interested_personas).toEqual(["11111111-1111-1111-1111-111111111111"]);
       expect(topics[1].interested_personas).toEqual(["33333333-3333-3333-3333-333333333333"]);
+    });
+  });
+
+  describe("emmet reserved persona id recognized during startup migration (issue #96)", () => {
+    // Regression oracle for: StateManager.isPersonaId() didn't recognize "emmet" (only UUIDs
+    // and "ei"), so migrateLearnedByToIds() treated it as an unresolved display name and
+    // cleared learned_by/last_changed_by whenever the Emmett record had no "emmet" alias.
+
+    const makeTopic = (id: string, name: string, overrides: Partial<Topic> = {}): Topic => ({
+      id,
+      name,
+      description: "",
+      sentiment: 0,
+      exposure_current: 0.5,
+      exposure_desired: 0.5,
+      last_updated: "",
+      ...overrides,
+    });
+
+    const makeEmmettPersona = (): PersonaEntity => ({
+      id: "emmet",
+      display_name: "Emmett",
+      entity: "system",
+      aliases: [], // no "emmet" alias to mask the defect
+      short_description: "Emmett description",
+      traits: [],
+      topics: [],
+      is_paused: false,
+      is_archived: false,
+      is_static: false,
+      last_updated: new Date().toISOString(),
+    });
+
+    it("retains emmet provenance in memory and through a subsequent durable save", async () => {
+      const testState = createDefaultTestState();
+      testState.personas = {
+        emmet: { entity: makeEmmettPersona(), messages: [] },
+      };
+      testState.human.topics = [
+        makeTopic("t-current", "Current-style item", {
+          learned_by: "emmet",
+          last_changed_by: "emmet",
+          interested_personas: ["emmet"],
+        }),
+        makeTopic("t-legacy", "Legacy-style item", {
+          learned_by: "emmet",
+          last_changed_by: "emmet",
+          interested_personas: undefined,
+        }),
+      ];
+
+      const newSm = new StateManager();
+      const testStorage = createMockStorage();
+      vi.mocked(testStorage.load).mockResolvedValue(testState);
+      await newSm.initialize(testStorage);
+
+      // In-memory: the reserved id must survive migrateLearnedByToIds unresolved-clear,
+      // and migrateInterestedPersonas must leave the current item alone while backfilling
+      // the legacy item from the (now correctly retained) provenance fields.
+      const [current, legacy] = newSm.getHuman().topics;
+      expect(current.learned_by).toBe("emmet");
+      expect(current.last_changed_by).toBe("emmet");
+      expect(current.interested_personas).toEqual(["emmet"]);
+      expect(legacy.learned_by).toBe("emmet");
+      expect(legacy.last_changed_by).toBe("emmet");
+      expect(legacy.interested_personas).toEqual(["emmet"]);
+
+      // Durable: the migrations above don't call scheduleSave() themselves, so a bare
+      // initialize() can look fine yet still be one write away from losing the data. An
+      // ordinary Processor restart schedules that write via builtin-tool bootstrapping
+      // (tools_upsertBuiltin); simulate it and assert against what actually gets persisted,
+      // not just the live StateManager snapshot.
+      vi.mocked(testStorage.save).mockClear();
+      newSm.tools_upsertBuiltin({
+        id: "tool-1",
+        provider_id: "ei",
+        name: "file_read",
+        display_name: "Read File",
+        description: "Reads a file",
+        input_schema: {},
+        runtime: "node",
+        builtin: true,
+        enabled: true,
+        created_at: new Date().toISOString(),
+      });
+      await newSm.flush();
+
+      expect(vi.mocked(testStorage.save).mock.calls.length).toBeGreaterThan(0);
+      const saveCalls = vi.mocked(testStorage.save).mock.calls;
+      const persistedState = saveCalls[saveCalls.length - 1][0];
+      const [persistedCurrent, persistedLegacy] = persistedState.human.topics;
+      expect(persistedCurrent.learned_by).toBe("emmet");
+      expect(persistedCurrent.last_changed_by).toBe("emmet");
+      expect(persistedCurrent.interested_personas).toEqual(["emmet"]);
+      expect(persistedLegacy.learned_by).toBe("emmet");
+      expect(persistedLegacy.last_changed_by).toBe("emmet");
+      expect(persistedLegacy.interested_personas).toEqual(["emmet"]);
     });
   });
 
