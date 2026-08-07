@@ -670,46 +670,214 @@ export async function installCursor(): Promise<void> {
   await installCursorHooks();
 }
 
+// WHO (sessionStart): Cursor's docs (cursor.com/docs/hooks) confirm sessionStart
+// supports `additional_context` output — a real, non-file-based context channel,
+// unlike beforeSubmitPrompt (continue/user_message only, no context field). Every
+// Cursor session shares the single "Cursor" persona (ensureCursorPersona-equivalent
+// in src/integrations/cursor/importer.ts, CURSOR_PERSONA_NAME = "Cursor"), so — same
+// as Claude Code — there's no active-persona resolution needed, just an unconditional
+// lookup. sessionStart's own docs describe it as fire-and-forget (the agent loop does
+// not wait for or enforce a blocking response), so the very first prompt in a brand
+// new session can race ahead of this — see docs/adr/ADR-034.
+//
+// MEMORY (beforeSubmitPrompt): Cursor's ONLY per-turn hook has no context-injection
+// output at all (confirmed directly from the docs — continue/user_message only), so
+// content still has to go through the rules-file trick, unlike OMP/Claude Code where
+// the hook itself can carry fresh content. But Cursor genuinely supports concurrent
+// sessions (background agents, Side Chats, multiple Composer windows via worktrees),
+// while ~/.cursor/rules/ lives outside any one session's scope — a single shared file
+// has no way to know which session "owns" it. So per-session bookkeeping (which items
+// THIS session has already seen) lives in its own state file, keyed by conversation_id
+// exactly like Claude Code's session_id-keyed store, and the shared rules file is
+// treated as a pure render target: every time a session's hook fires, it swaps in
+// THAT session's own current view. A session that isn't the most recent speaker can
+// see a stale, different session's view for one turn when sessions interleave — a
+// bounded, self-correcting race of the same shape as the sessionStart race above, not
+// unbounded cross-session contamination. See ADR-034.
 async function installCursorHooks(): Promise<void> {
   const home = resolveHome();
   const hooksDir = join(home, ".cursor", "hooks");
   const rulesDir = join(home, ".cursor", "rules");
-  const hookScriptPath = join(hooksDir, "ei-inject.sh");
+  const memoryScriptPath = join(hooksDir, "ei-inject.ts");
+  const sessionStartScriptPath = join(hooksDir, "ei-session-start.ts");
   const hooksJsonPath = join(home, ".cursor", "hooks.json");
 
   await Bun.$`mkdir -p ${hooksDir}`;
   await Bun.$`mkdir -p ${rulesDir}`;
 
-  const hookScript = `#!/bin/bash
-# Ei memory context injection hook for Cursor
-# Writes recent Ei context to ~/.cursor/rules/ei-context.mdc (alwaysApply)
-# so Cursor includes it automatically on the next prompt.
+  const memoryScriptContent = `#!/usr/bin/env bun
+import { $ } from "bun";
+import { mkdir, readFile, writeFile, chmod, rename } from "fs/promises";
 
-RULES_FILE="$HOME/.cursor/rules/ei-context.mdc"
-CONTEXT=$(ei --recent -n 10 2>/dev/null)
+async function runEi(commandArgs) {
+  const direct = await $\`ei \${commandArgs}\`.quiet().text().catch(() => "");
+  if (direct.trim()) return direct;
+  return await $\`bunx ei-tui@latest \${commandArgs}\`.quiet().text().catch(() => "");
+}
 
-if [ -n "$CONTEXT" ]; then
-  cat > "$RULES_FILE" << 'RULE'
----
-description: Ei persistent memory context (auto-updated before each prompt)
-alwaysApply: true
----
-RULE
-  echo "## Ei Memory (recent context)" >> "$RULES_FILE"
-  echo "$CONTEXT" >> "$RULES_FILE"
-fi
+const STATE_DIR = \`\${process.env.HOME}/.cursor/ei-hook-state\`;
+const RULES_DIR = \`\${process.env.HOME}/.cursor/rules\`;
+const RULES_FILE = \`\${RULES_DIR}/ei-context.mdc\`;
+// conversation_id/session_id are UUIDs in practice, but treat that as a
+// convention, not a guarantee — reject anything else before it reaches a path.
+const SAFE_SESSION_ID = /^[A-Za-z0-9_-]+$/;
+// The whole accumulated array is resent every turn (alwaysApply has no
+// incremental-context concept the way OMP/Claude Code's transient messages
+// do), so this bounds a single long-lived session's token cost. Aging an
+// item out of this list re-eligibilizes it for a future "fresh" showing —
+// once it's no longer actually in context, resurfacing it later isn't waste.
+const MAX_MEMORY_ITEMS = 30;
 
-# Always exit 0 — never block Cursor
-exit 0
+function extractId(item) {
+  return item && typeof item === "object" && typeof item.id === "string" ? item.id : undefined;
+}
+
+function statePathFor(sessionId) {
+  if (typeof sessionId !== "string" || !SAFE_SESSION_ID.test(sessionId)) return null;
+  return \`\${STATE_DIR}/\${sessionId}.json\`;
+}
+
+async function loadItems(sessionId) {
+  const path = statePathFor(sessionId);
+  if (!path) return [];
+  try {
+    const data = JSON.parse(await readFile(path, "utf-8"));
+    return Array.isArray(data?.items) ? data.items : [];
+  } catch {
+    return [];
+  }
+}
+
+async function saveItems(sessionId, items) {
+  const path = statePathFor(sessionId);
+  if (!path) return;
+  try {
+    await mkdir(STATE_DIR, { recursive: true });
+    await chmod(STATE_DIR, 0o700);
+    await writeFile(path, JSON.stringify({ items }), { mode: 0o600 });
+    await chmod(path, 0o600);
+  } catch {
+    // Persistence failure — the render step below still uses this turn's
+    // in-memory items, so the shared rules file stays correct even if the
+    // durable per-session record didn't make it to disk.
+  }
+}
+
+function renderRulesFile(items) {
+  const body = items.length > 0 ? \`## Ei Memory (session context)\\n\\n\${JSON.stringify(items, null, 2)}\\n\` : "";
+  return \`---\\ndescription: Ei persistent memory context (auto-updated before each prompt)\\nalwaysApply: true\\n---\\n\${body}\`;
+}
+
+async function swapInRulesFile(content) {
+  try {
+    await mkdir(RULES_DIR, { recursive: true });
+    const tmpPath = \`\${RULES_FILE}.ei-tmp-\${process.pid}\`;
+    await writeFile(tmpPath, content);
+    await rename(tmpPath, RULES_FILE);
+  } catch {
+    // If the swap fails, Cursor keeps whatever was already there — never
+    // worse than the pre-swap state, never a crash.
+  }
+}
+
+if (import.meta.main) {
+  const input = (await new Response(Bun.stdin.stream()).json().catch(() => ({}))) ?? {};
+  const sessionId =
+    typeof input.conversation_id === "string"
+      ? input.conversation_id
+      : typeof input.session_id === "string"
+        ? input.session_id
+        : undefined;
+  const rawPrompt = typeof input.prompt === "string" ? input.prompt : "";
+  const raw = rawPrompt.replace(/<[^>]*>/g, "").trim();
+
+  const args = raw ? ["-n", "5", raw] : ["--recent", "-n", "5"];
+  const output = await runEi(args);
+
+  let items = await loadItems(sessionId);
+  if (output.trim()) {
+    let parsed = null;
+    try {
+      parsed = JSON.parse(output);
+    } catch {
+      // Non-JSON output — nothing to merge by id; accumulated items stay as-is.
+    }
+    if (Array.isArray(parsed)) {
+      const seen = new Set(items.map(extractId).filter((id) => id !== undefined));
+      const fresh = parsed.filter((item) => {
+        const id = extractId(item);
+        return !id || !seen.has(id);
+      });
+      if (fresh.length > 0) {
+        items = [...items, ...fresh].slice(-MAX_MEMORY_ITEMS);
+        await saveItems(sessionId, items);
+      }
+    }
+  }
+
+  // Always re-render, even when nothing changed this turn: this session's
+  // own hook firing is what keeps the one shared rules file pointed at ITS
+  // view. Skipping the render on a no-new-items turn would let a different
+  // session that fired in between keep "winning" the shared file indefinitely.
+  await swapInRulesFile(renderRulesFile(items));
+
+  process.stdout.write(JSON.stringify({ continue: true }));
+}
 `;
 
-  await Bun.write(hookScriptPath, hookScript);
-  await Bun.$`chmod +x ${hookScriptPath}`;
+  const sessionStartScriptContent = `#!/usr/bin/env bun
+import { $ } from "bun";
+import { readdir, stat, unlink } from "fs/promises";
+
+async function runEi(commandArgs) {
+  const direct = await $\`ei \${commandArgs}\`.quiet().text().catch(() => "");
+  if (direct.trim()) return direct;
+  return await $\`bunx ei-tui@latest \${commandArgs}\`.quiet().text().catch(() => "");
+}
+
+const STATE_DIR = \`\${process.env.HOME}/.cursor/ei-hook-state\`;
+const STALE_MS = 30 * 24 * 60 * 60 * 1000;
+
+async function pruneStaleState() {
+  let names;
+  try {
+    names = await readdir(STATE_DIR);
+  } catch {
+    return; // state dir doesn't exist yet — nothing to prune
+  }
+  const now = Date.now();
+  for (const name of names) {
+    if (!name.endsWith(".json")) continue;
+    const path = \`\${STATE_DIR}/\${name}\`;
+    try {
+      const info = await stat(path);
+      if (now - info.mtimeMs > STALE_MS) await unlink(path);
+    } catch {
+      // transient stat/unlink failure, or another process already removed it — skip.
+    }
+  }
+}
+
+if (import.meta.main) {
+  await new Response(Bun.stdin.stream()).json().catch(() => ({}));
+  const block = await runEi(["personas", "--format", "prompt", "--", "Cursor"]);
+  const result = block.trim() && !block.includes("No saved state") ? { additional_context: block.trim() } : {};
+  process.stdout.write(JSON.stringify(result));
+
+  await pruneStaleState();
+}
+`;
+
+  await Bun.write(memoryScriptPath, memoryScriptContent);
+  await Bun.$`chmod +x ${memoryScriptPath}`;
+  await Bun.write(sessionStartScriptPath, sessionStartScriptContent);
+  await Bun.$`chmod +x ${sessionStartScriptPath}`;
 
   interface HooksConfig {
     version: number;
     hooks: {
       beforeSubmitPrompt?: Array<{ command: string }>;
+      sessionStart?: Array<{ command: string }>;
       [key: string]: unknown;
     };
   }
@@ -723,18 +891,24 @@ exit 0
   }
 
   const beforeSubmit = (hooksConfig.hooks.beforeSubmitPrompt ?? []) as Array<{ command: string }>;
-  const eiEntry = { command: "~/.cursor/hooks/ei-inject.sh" };
-  const alreadyPresent = beforeSubmit.some((entry) => entry.command === eiEntry.command);
-  if (!alreadyPresent) {
-    beforeSubmit.push(eiEntry);
+  const memoryEntry = { command: "~/.cursor/hooks/ei-inject.ts" };
+  if (!beforeSubmit.some((entry) => entry.command === memoryEntry.command)) {
+    beforeSubmit.push(memoryEntry);
   }
   hooksConfig.hooks.beforeSubmitPrompt = beforeSubmit;
+
+  const sessionStart = (hooksConfig.hooks.sessionStart ?? []) as Array<{ command: string }>;
+  const whoEntry = { command: "~/.cursor/hooks/ei-session-start.ts" };
+  if (!sessionStart.some((entry) => entry.command === whoEntry.command)) {
+    sessionStart.push(whoEntry);
+  }
+  hooksConfig.hooks.sessionStart = sessionStart;
 
   const tmpPath = `${hooksJsonPath}.ei-install.tmp`;
   await Bun.write(tmpPath, JSON.stringify(hooksConfig, null, 2) + "\n");
   await rename(tmpPath, hooksJsonPath);
 
-  console.log(`✓ Installed Ei context hook to ~/.cursor/hooks/ei-inject.sh`);
+  console.log(`✓ Installed Ei context hooks to ~/.cursor/hooks/ei-inject.ts (beforeSubmitPrompt) and ~/.cursor/hooks/ei-session-start.ts (sessionStart)`);
 }
 
 async function installPi(): Promise<void> {
