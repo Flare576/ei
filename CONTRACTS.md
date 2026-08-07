@@ -405,12 +405,12 @@ Note the id is not always a UUID: the reserved personas `ei` and `emmet` carry t
 
 An earlier design deliberately allowed a many-to-many graph so a composite persona could be expressed as overlapping links, and earlier revisions of this section documented that. It is rejected. A composite gets its own Person record instead: `Person:King_Einstein <-> Persona:King_Einstein`, alongside the standalone pairs.
 
-**The code does not satisfy this yet.** Several write paths still permit and can create the many shape, including automatic ones — the LLM person-update handler commits identifier arrays, and dedup unions identifiers when merging Person records. Tracked as a fix, not an oversight.
+**Write-time prevention now exists at three ingress points; pre-existing data is not migrated.** The LLM person-update handler (`handlePersonUpdate`), CLI/MCP full-record person writes (both drain modes), and dedup's identifier union each run a shared guard (`guardPersonaLinks`, `src/core/utils/identifier-utils.ts`) immediately before persisting: a write that would create a second link applies everything else in the payload, drops only the offending link(s) — both, with no precedence, if the write introduces two at once — and reports the refusal through the `ei` persona thread (a self-drain reports synchronously to its own caller instead). No startup detector or repair pass exists, so data already in the many shape before this guard existed is untouched until a human edits it (ADR-010).
 
 Two consequences for anyone writing against this section today:
 
 - **Links are not user-initiated, and their presence is not evidence a human intended them.** Earlier revisions of this document said the system never auto-links without confirmation. That describes a workflow which no longer exists. A link is now most often created *implicitly*, as a side effect of creating a Persona or updating a Person record; the LLM person-update handler and dedup also create them outright. Explicit user linking is the rare path, not the rule.
-- **Until the constraint is enforced, enumerate all linked records — never take the first.** The many shape exists in data whether or not it is legal, and code that assumes one will silently pick an arbitrary record. For the reflection critic, that means clearing the wrong log.
+- **Enumerate all linked records regardless — never take the first.** The write-time guard above stops *new* violations; it does not migrate data that was already in the many shape, and it does not change any consumer's own read-side logic. Code that assumes one link will still silently pick an arbitrary record on old data. For the reflection critic, that means clearing the wrong log.
 
 ### Built-in Identifier Types
 

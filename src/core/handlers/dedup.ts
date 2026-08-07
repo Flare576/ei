@@ -191,7 +191,15 @@ export async function handleDedupCurate(
     } else if (entity_type === 'topic') {
       stateManager.human_topic_upsert(updatedEntity as Topic);
     } else if (entity_type === 'person') {
-      stateManager.human_person_upsert(updatedEntity as Person);
+      // Donors merging INTO this survivor are already departing (removed in
+      // Phase 3, right after this loop) — a link inherited from exactly one
+      // of them is legal (ADR-010's dated note: "the guard must be told
+      // what is leaving"). A union of two independently-linked donors is
+      // still refused; the guard decides that, not this call site.
+      const donorIds = decisions.remove
+        .filter(r => r.replaced_by === update.id)
+        .map(r => r.to_be_removed);
+      stateManager.human_person_upsert(updatedEntity as Person, donorIds);
     }
     console.log(`[Dedup] Updated ${entity_type} "${update.name}"`);
   }

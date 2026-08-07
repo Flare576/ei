@@ -336,6 +336,17 @@ function parseInput(entityType: NonQuoteType, body: unknown, mode: "create" | "u
  * identifiers, embedding) and persist it as an upsert correction. Shared by
  * createEntity (fresh id) and updateEntity (caller-supplied id) — both
  * need identical Person identifier sanitization and embedding computation.
+ *
+ * A self-drained Person write that the drain-time cardinality guard
+ * declined a link on (ADR-006/ADR-010) throws here — the ONLY drain mode
+ * with a caller still present to answer synchronously. The record itself
+ * was already saved with the offending link dropped and everything else
+ * intact; the throw is purely the report, not an undo. A live-queued
+ * write is never checked here — its own outcome isn't known yet, and a
+ * refusal for it (if any) is reported later via the `ei` persona thread
+ * once the live drain actually runs (see StateManager.human_person_upsert /
+ * Processor's live drain path — a queued write is never validated by
+ * this call at all).
  */
 async function buildAndWriteUpsert(
   entityType: NonQuoteType,
@@ -359,7 +370,18 @@ async function buildAndWriteUpsert(
   record.embedding = await computeDataItemEmbedding(record);
 
   const correction: CorrectionRecord = { op: "upsert", entity_type: entityType, id, record, timestamp: now };
-  await writeCorrection(correction);
+  const { personLinkRefusals, drainMode } = await writeCorrection(correction);
+
+  if (entityType === "person" && drainMode === "self") {
+    const ownRefusals = personLinkRefusals.filter((r) => r.personId === id);
+    if (ownRefusals.length > 0) {
+      const summary = ownRefusals.map((r) => `Persona ${r.value} (${r.reason})`).join("; ");
+      throw new Error(
+        `"${record.name}" was saved, but the following Ei Persona link(s) were refused because they would break the one-Person-per-Persona rule: ${summary}`
+      );
+    }
+  }
+
   return record;
 }
 

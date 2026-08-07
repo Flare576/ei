@@ -9,6 +9,7 @@ import {
   type Fact,
   type Topic,
   type Person,
+  type PersonIdentifier,
   type Quote,
 } from "../../../src/core/types.js";
 
@@ -25,7 +26,8 @@ vi.mock("../../../src/core/embedding-service.js", () => ({
 }));
 
 import { handlers } from "../../../src/core/handlers/index.js";
-import type { StateManager } from "../../../src/core/state-manager.js";
+import { StateManager } from "../../../src/core/state-manager.js";
+import { createMockStorage } from "../../helpers/mock-storage.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -498,5 +500,108 @@ describe("Dedup Handler - handleDedupCurate", () => {
         data_item_ids: [],
       })
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// IRQ-4 / ADR-006 / ADR-010 — dedup's person-identifier union must not
+// reintroduce a duplicate Persona link, even though neither donor alone
+// violated it. Uses a REAL StateManager (not the lightweight mock above)
+// so this exercises the actual guardPersonaLinks call inside
+// human_person_upsert, not just that dedup.ts calls it with some args.
+// ---------------------------------------------------------------------------
+describe("Dedup Handler - handleDedupCurate — persona-link guard on the identifier union", () => {
+  const PERSONA_A = "11111111-1111-4111-8111-111111111111";
+  const PERSONA_B = "22222222-2222-4222-8222-222222222222";
+
+  async function createRealState(): Promise<StateManager> {
+    const sm = new StateManager();
+    await sm.initialize(createMockStorage());
+    return sm;
+  }
+
+  function makeLinkedPerson(id: string, name: string, identifiers: PersonIdentifier[] = []): Person {
+    return {
+      id,
+      name,
+      description: `${name}'s description`,
+      relationship: "friend",
+      sentiment: 0,
+      exposure_current: 0.5,
+      exposure_desired: 0.5,
+      last_updated: "",
+      identifiers,
+    };
+  }
+
+  it("a survivor legally inherits its one donor's link — excludeIds prevents a false B-many against the still-present donor (update-before-remove ordering)", async () => {
+    const sm = await createRealState();
+    sm.human_person_upsert(makeLinkedPerson("survivor", "Survivor"));
+    sm.human_person_upsert(makeLinkedPerson("donor", "Donor", [{ type: "Ei Persona", value: PERSONA_A }]));
+
+    const request = createMockRequest({
+      data: { entity_type: "person", entity_ids: ["survivor", "donor"], ceremony_progress: 1 },
+    });
+    const dedupResult = {
+      update: [{ id: "survivor", name: "Survivor", description: "Survivor's description" }],
+      remove: [{ to_be_removed: "donor", replaced_by: "survivor" }],
+      add: [],
+    };
+    const response = createMockResponse(request, dedupResult);
+
+    await handlers[LLMNextStep.HandleDedupCurate](response, sm);
+
+    expect(sm.getHuman().people.find((p) => p.id === "survivor")?.identifiers).toEqual([
+      { type: "Ei Persona", value: PERSONA_A },
+    ]);
+    // Phase 3 really did remove the donor — this isn't merely a lucky
+    // ordering where the donor was gone before the guard ever ran.
+    expect(sm.getHuman().people.find((p) => p.id === "donor")).toBeUndefined();
+  });
+
+  it("a union of two independently-linked donors merging into a link-less survivor keeps neither link — the guard never picks a winner", async () => {
+    const sm = await createRealState();
+    sm.human_person_upsert(makeLinkedPerson("survivor", "Survivor"));
+    sm.human_person_upsert(makeLinkedPerson("donorA", "DonorA", [{ type: "Ei Persona", value: PERSONA_A }]));
+    sm.human_person_upsert(makeLinkedPerson("donorB", "DonorB", [{ type: "Ei Persona", value: PERSONA_B }]));
+
+    const request = createMockRequest({
+      data: { entity_type: "person", entity_ids: ["survivor", "donorA", "donorB"], ceremony_progress: 1 },
+    });
+    const dedupResult = {
+      update: [{ id: "survivor", name: "Survivor", description: "Survivor's description" }],
+      remove: [
+        { to_be_removed: "donorA", replaced_by: "survivor" },
+        { to_be_removed: "donorB", replaced_by: "survivor" },
+      ],
+      add: [],
+    };
+    const response = createMockResponse(request, dedupResult);
+
+    await handlers[LLMNextStep.HandleDedupCurate](response, sm);
+
+    expect(sm.getHuman().people.find((p) => p.id === "survivor")?.identifiers).toEqual([]);
+  });
+
+  it("a survivor that ALREADY carries a link keeps it over a donor's independently-linked arrival", async () => {
+    const sm = await createRealState();
+    sm.human_person_upsert(makeLinkedPerson("survivor", "Survivor", [{ type: "Ei Persona", value: PERSONA_A }]));
+    sm.human_person_upsert(makeLinkedPerson("donor", "Donor", [{ type: "Ei Persona", value: PERSONA_B }]));
+
+    const request = createMockRequest({
+      data: { entity_type: "person", entity_ids: ["survivor", "donor"], ceremony_progress: 1 },
+    });
+    const dedupResult = {
+      update: [{ id: "survivor", name: "Survivor", description: "Survivor's description" }],
+      remove: [{ to_be_removed: "donor", replaced_by: "survivor" }],
+      add: [],
+    };
+    const response = createMockResponse(request, dedupResult);
+
+    await handlers[LLMNextStep.HandleDedupCurate](response, sm);
+
+    expect(sm.getHuman().people.find((p) => p.id === "survivor")?.identifiers).toEqual([
+      { type: "Ei Persona", value: PERSONA_A },
+    ]);
   });
 });

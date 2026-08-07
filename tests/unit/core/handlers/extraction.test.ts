@@ -18,7 +18,8 @@ import {
   type RoomMessage,
   type RoomEntity,
 } from "../../../../src/core/types.js";
-import type { StateManager } from "../../../../src/core/state-manager.js";
+import { StateManager } from "../../../../src/core/state-manager.js";
+import { createMockStorage } from "../../../helpers/mock-storage.js";
 import type * as OrchestratorsModule from "../../../../src/core/orchestrators/index.js";
 
 // We need to test handlers in isolation, so we import them directly
@@ -2939,5 +2940,169 @@ describe("Channel and speaker attribution on quotes", () => {
         handlers[LLMNextStep.HandleEventScan](response, state as any)
       ).resolves.not.toThrow();
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// IRQ-4 / ADR-006 / ADR-010 — write-time one-to-one Person<->Persona guard,
+// LLM extraction ingress point. Uses a REAL StateManager (not the mock
+// above) so this exercises the actual guardPersonaLinks call inside
+// StateManager.human_person_upsert, not merely what handlePersonUpdate
+// itself passes to a mocked upsert.
+// ---------------------------------------------------------------------------
+describe("handlePersonUpdate — persona-link cardinality guard (real StateManager)", () => {
+  const PERSONA_A = "11111111-1111-4111-8111-111111111111";
+  const PERSONA_B = "22222222-2222-4222-8222-222222222222";
+
+  let sm: StateManager;
+
+  beforeEach(async () => {
+    sm = new StateManager();
+    await sm.initialize(createMockStorage());
+    sm.persona_add({
+      id: "ei",
+      display_name: "Ei",
+      entity: "system",
+      aliases: ["Ei", "ei"],
+      short_description: "",
+      traits: [],
+      topics: [],
+      is_paused: false,
+      is_archived: false,
+      is_static: false,
+      last_updated: new Date().toISOString(),
+    });
+  });
+
+  function makePersonUpdateRequest(overrides: Partial<Record<string, unknown>> = {}) {
+    return createMockRequest({
+      next_step: LLMNextStep.HandlePersonUpdate,
+      data: {
+        personaId: "persona-1",
+        channelDisplayName: "TestPersona",
+        isNewItem: true,
+        candidateName: "Someone",
+        candidateRelationship: "friend",
+        messages_context: [],
+        messages_analyze: [],
+        ...overrides,
+      },
+    });
+  }
+
+  it("a new LLM result with two Ei Persona links keeps neither, but the rest of the write (description) still applies, and a report reaches the ei thread", async () => {
+    const request = makePersonUpdateRequest();
+    const response = createMockResponse(request, {
+      description: "A person with two claimed links",
+      sentiment: 0,
+      identifiers: [
+        { type: "Ei Persona", value: PERSONA_A },
+        { type: "Ei Persona", value: PERSONA_B },
+        { type: "Nickname", value: "Someone", is_primary: true },
+      ],
+    });
+
+    await handlers[LLMNextStep.HandlePersonUpdate](response, sm);
+
+    const person = sm.getHuman().people[0];
+    expect(person.description).toBe("A person with two claimed links");
+    expect(person.identifiers).not.toContainEqual(expect.objectContaining({ type: "Ei Persona" }));
+    expect(person.identifiers).toContainEqual(expect.objectContaining({ type: "Nickname", value: "Someone" }));
+
+    const reports = sm.messages_get("ei");
+    expect(reports).toHaveLength(1);
+    expect(reports[0].content).toContain(PERSONA_A);
+    expect(reports[0].content).toContain(PERSONA_B);
+  });
+
+  it("an existing-result identifiers_to_add path introducing a second link keeps the established one and refuses only the new arrival, with the description edit still applying", async () => {
+    sm.human_person_upsert({
+      id: "existing-person",
+      name: "Someone",
+      description: "Old description",
+      relationship: "friend",
+      sentiment: 0,
+      exposure_current: 0,
+      exposure_desired: 0.5,
+      last_updated: "",
+      identifiers: [{ type: "Ei Persona", value: PERSONA_A }],
+      interested_personas: [],
+      validated_date: "",
+    });
+
+    const request = makePersonUpdateRequest({ isNewItem: false, existingItemId: "existing-person" });
+    const response = createMockResponse(request, {
+      description: "Updated description",
+      sentiment: 0,
+      identifiers_to_add: [{ type: "Ei Persona", value: PERSONA_B }],
+    });
+
+    await handlers[LLMNextStep.HandlePersonUpdate](response, sm);
+
+    const person = sm.getHuman().people.find((p) => p.id === "existing-person")!;
+    expect(person.description).toBe("Updated description");
+    expect(person.identifiers).toContainEqual(expect.objectContaining({ type: "Ei Persona", value: PERSONA_A }));
+    expect(person.identifiers).not.toContainEqual(expect.objectContaining({ type: "Ei Persona", value: PERSONA_B }));
+  });
+
+  it("two candidates sharing a Persona link (B-many): the later write's link is refused, the earlier Person keeps its link", async () => {
+    const firstRequest = makePersonUpdateRequest({ candidateName: "Alice" });
+    await handlers[LLMNextStep.HandlePersonUpdate](
+      createMockResponse(firstRequest, {
+        description: "Alice's bio",
+        sentiment: 0,
+        identifiers: [{ type: "Ei Persona", value: PERSONA_A }, { type: "Nickname", value: "Alice", is_primary: true }],
+      }),
+      sm
+    );
+
+    const secondRequest = makePersonUpdateRequest({ candidateName: "Bob" });
+    await handlers[LLMNextStep.HandlePersonUpdate](
+      createMockResponse(secondRequest, {
+        description: "Bob's bio",
+        sentiment: 0,
+        identifiers: [{ type: "Ei Persona", value: PERSONA_A }, { type: "Nickname", value: "Bob", is_primary: true }],
+      }),
+      sm
+    );
+
+    const people = sm.getHuman().people;
+    const alice = people.find((p) => p.name === "Alice")!;
+    const bob = people.find((p) => p.name === "Bob")!;
+    expect(alice.identifiers).toContainEqual(expect.objectContaining({ type: "Ei Persona", value: PERSONA_A }));
+    expect(bob.identifiers).not.toContainEqual(expect.objectContaining({ type: "Ei Persona" }));
+  });
+
+  it("a reserved 'ei' value is never treated as a linkable target, so two People can both carry it without refusal", async () => {
+    const first = makePersonUpdateRequest({ candidateName: "Alice" });
+    await handlers[LLMNextStep.HandlePersonUpdate](
+      createMockResponse(first, {
+        description: "Alice's bio",
+        sentiment: 0,
+        identifiers: [{ type: "Ei Persona", value: "ei" }, { type: "Nickname", value: "Alice", is_primary: true }],
+      }),
+      sm
+    );
+    const second = makePersonUpdateRequest({ candidateName: "Bob" });
+    await handlers[LLMNextStep.HandlePersonUpdate](
+      createMockResponse(second, {
+        description: "Bob's bio",
+        sentiment: 0,
+        identifiers: [{ type: "Ei Persona", value: "ei" }, { type: "Nickname", value: "Bob", is_primary: true }],
+      }),
+      sm
+    );
+
+    // Not looked up by name: ensureEiPersonaHasNickname (an unrelated,
+    // pre-existing behavior) injects "Ei" as the primary Nickname whenever
+    // an Ei Persona identifier resolves to a real Persona, which outranks
+    // each candidate's own nickname for primacy — both People end up
+    // sharing that display name, which is exactly why this test can't key
+    // off `.name` and instead asserts against the full People array.
+    expect(sm.getHuman().people).toHaveLength(2);
+    for (const person of sm.getHuman().people) {
+      expect(person.identifiers).toContainEqual(expect.objectContaining({ type: "Ei Persona", value: "ei" }));
+    }
+    expect(sm.messages_get("ei")).toHaveLength(0);
   });
 });

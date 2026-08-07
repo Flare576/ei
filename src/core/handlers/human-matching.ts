@@ -15,7 +15,7 @@ import { mergeOverlappingQuotes, unionIds } from "../corrections.js";
 
 
 import { resolveMessageWindow, getMessageText } from "./utils.js";
-import { sanitizeEiPersonaIdentifiers, normalizeIdentifierType } from "../utils/identifier-utils.js";
+import { sanitizeEiPersonaIdentifiers, normalizeIdentifierType, isEiPersonaIdentifierType } from "../utils/identifier-utils.js";
 
 export function handleTopicMatch(response: LLMResponse, state: StateManager): void {
   const result = response.parsed as ItemMatchResult | undefined;
@@ -173,7 +173,7 @@ export async function handleTopicUpdate(response: LLMResponse, state: StateManag
 }
 
 function ensureEiPersonaHasNickname(identifiers: PersonIdentifier[], state: StateManager): PersonIdentifier[] {
-  const eiPersonaId = identifiers.find(i => i.type === 'Ei Persona')?.value;
+  const eiPersonaId = identifiers.find(i => isEiPersonaIdentifierType(i.type))?.value;
   if (!eiPersonaId) return identifiers;
 
   const persona = state.persona_getById(eiPersonaId);
@@ -183,12 +183,12 @@ function ensureEiPersonaHasNickname(identifiers: PersonIdentifier[], state: Stat
   if (hasNickname) return identifiers;
 
   const withoutPrimary = identifiers.map(i =>
-    i.type === 'Ei Persona' ? { ...i, is_primary: undefined } : i
+    isEiPersonaIdentifierType(i.type) ? { ...i, is_primary: undefined } : i
   ).map(({ is_primary, ...rest }) => is_primary ? { ...rest, is_primary } : rest);
 
   return [
     { type: 'Nickname', value: persona.display_name, is_primary: true as const },
-    ...withoutPrimary.map(i => i.type === 'Ei Persona' ? { type: i.type, value: i.value } : i),
+    ...withoutPrimary.map(i => isEiPersonaIdentifierType(i.type) ? { type: i.type, value: i.value } : i),
   ];
 }
 

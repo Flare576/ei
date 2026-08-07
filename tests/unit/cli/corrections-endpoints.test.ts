@@ -380,6 +380,107 @@ describe("corrections endpoints", () => {
     });
   });
 
+  describe("createEntity(\"person\") — persona-link cardinality guard (ADR-006/ADR-010, IRQ-4)", () => {
+    const PERSONA_ID_2 = "22222222-2222-4222-8222-222222222222";
+
+    it("self-drain: a new person written with two Ei Persona links at once keeps neither, throws synchronously, and the rest of the write still persists", async () => {
+      writeState(makeState({
+        human: { entity: "human", facts: [], topics: [], people: [], quotes: [], last_updated: INITIAL_NOW },
+      }));
+
+      await expect(createEntity("person", {
+        name: "Will Be Replaced",
+        description: "A person with two claimed links",
+        sentiment: 0,
+        relationship: "friend",
+        exposure_current: 0,
+        exposure_desired: 0.5,
+        identifiers: [
+          { type: "Ei Persona", value: PERSONA_ID },
+          { type: "Ei Persona", value: PERSONA_ID_2 },
+          { type: "Nickname", value: "Someone", is_primary: true },
+        ],
+      })).rejects.toThrow(/one-Person-per-Persona/);
+
+      // The write was not rejected as a whole (ADR-010 clauses 1/4) — the
+      // description and Nickname persisted, only the two colliding links
+      // were dropped.
+      const state = await loadLatestState();
+      const person = state!.human.people[0];
+      expect(person.description).toBe("A person with two claimed links");
+      expect(person.identifiers).not.toContainEqual(expect.objectContaining({ type: "Ei Persona" }));
+      expect(person.identifiers).toContainEqual(expect.objectContaining({ type: "Nickname", value: "Someone" }));
+    });
+
+    it("self-drain: creating a second Person linked to an already-linked Persona (B-many) is refused, and the rest of the new record still persists", async () => {
+      writeState(makeState({
+        human: {
+          entity: "human",
+          facts: [],
+          topics: [],
+          quotes: [],
+          last_updated: INITIAL_NOW,
+          people: [makePerson({
+            id: "existing-link-holder",
+            identifiers: [{ type: "Ei Persona", value: PERSONA_ID }],
+          })],
+        },
+      }));
+
+      await expect(createEntity("person", {
+        name: "New Person",
+        description: "A brand new person",
+        sentiment: 0,
+        relationship: "friend",
+        exposure_current: 0,
+        exposure_desired: 0.5,
+        identifiers: [
+          { type: "Ei Persona", value: PERSONA_ID },
+          { type: "Nickname", value: "New Person", is_primary: true },
+        ],
+      })).rejects.toThrow(/one-Person-per-Persona/);
+
+      const state = await loadLatestState();
+      const existing = state!.human.people.find((p) => p.id === "existing-link-holder")!;
+      const created = state!.human.people.find((p) => p.id !== "existing-link-holder")!;
+      expect(existing.identifiers).toContainEqual({ type: "Ei Persona", value: PERSONA_ID });
+      expect(created.description).toBe("A brand new person");
+      expect(created.identifiers).not.toContainEqual(expect.objectContaining({ type: "Ei Persona" }));
+      expect(created.identifiers).toContainEqual(expect.objectContaining({ type: "Nickname", value: "New Person" }));
+    });
+
+    it("live drain: a queued write with two links never triggers a synchronous refusal — it is honestly returned as queued, unvalidated, and state.json is untouched (this call's own drain never runs)", async () => {
+      writeState(makeState({
+        human: { entity: "human", facts: [], topics: [], people: [], quotes: [], last_updated: INITIAL_NOW },
+      }));
+      const statePath = join(tempDir, "state.json");
+      const originalStateBytes = readFileSync(statePath, "utf-8");
+      writeFileSync(join(tempDir, "ei.lock"), JSON.stringify({ pid: process.pid }));
+
+      const created = await createEntity("person", {
+        name: "Will Be Replaced",
+        description: "A person with two claimed links",
+        sentiment: 0,
+        relationship: "friend",
+        exposure_current: 0,
+        exposure_desired: 0.5,
+        identifiers: [
+          { type: "Ei Persona", value: PERSONA_ID },
+          { type: "Ei Persona", value: PERSONA_ID_2 },
+          { type: "Nickname", value: "Someone", is_primary: true },
+        ],
+      });
+
+      // Nothing was validated by this call — no throw, both links still on
+      // the optimistically-returned record. The eventual refusal (if any)
+      // is the live drain's job, reported later via the ei thread, not
+      // this call's.
+      expect(created.record.identifiers).toContainEqual(expect.objectContaining({ type: "Ei Persona", value: PERSONA_ID }));
+      expect(created.record.identifiers).toContainEqual(expect.objectContaining({ type: "Ei Persona", value: PERSONA_ID_2 }));
+      expect(readFileSync(statePath, "utf-8")).toBe(originalStateBytes);
+    });
+  });
+
   it("ei update quote always rejects with the ADR-012 tombstone message, naming all three replacement verbs and a removal target, even for a well-formed body against an existing quote", async () => {
     writeState(makeState({
       human: {

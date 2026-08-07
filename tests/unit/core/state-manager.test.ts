@@ -124,6 +124,185 @@ describe("StateManager", () => {
     });
   });
 
+  describe("persona-link cardinality guard (ADR-006/ADR-010, write-time prevention)", () => {
+    const PERSONA_A = "11111111-1111-4111-8111-111111111111";
+    const PERSONA_B = "22222222-2222-4222-8222-222222222222";
+
+    const makePersonaEntity = (id: string, name: string): PersonaEntity => ({
+      id,
+      display_name: name,
+      entity: "system",
+      aliases: [name],
+      short_description: `${name} description`,
+      traits: [],
+      topics: [],
+      is_paused: false,
+      is_archived: false,
+      is_static: false,
+      last_updated: new Date().toISOString(),
+    });
+
+    const makeLinkedPerson = (id: string, name: string, identifiers: Person["identifiers"]): Person => ({
+      id,
+      name,
+      description: "",
+      relationship: "friend",
+      sentiment: 0,
+      exposure_current: 0.5,
+      exposure_desired: 0.5,
+      last_updated: "",
+      identifiers,
+    });
+
+    beforeEach(() => {
+      // A durable Ei-thread report requires a persona record to append to —
+      // PersonaState.messages_append no-ops for a missing target, matching
+      // the real bootstrap's own "ei" persona.
+      sm.persona_add(makePersonaEntity("ei", "Ei"));
+    });
+
+    it("a brand-new Person written with two links at once keeps neither, and reports both by name", () => {
+      sm.human_person_upsert(makeLinkedPerson("p1", "Alice", [
+        { type: "Ei Persona", value: PERSONA_A },
+        { type: "Ei Persona", value: PERSONA_B },
+      ]));
+
+      expect(sm.getHuman().people.find((p) => p.id === "p1")?.identifiers).toEqual([]);
+
+      const messages = sm.messages_get("ei");
+      expect(messages).toHaveLength(1);
+      expect(messages[0].role).toBe("system");
+      expect(messages[0].context_status).toBe(ContextStatus.Always);
+      expect(messages[0].content).toContain(PERSONA_A);
+      expect(messages[0].content).toContain(PERSONA_B);
+    });
+
+    it("a second Person linking to an already-linked Persona (B-many) loses only its own link", () => {
+      sm.human_person_upsert(makeLinkedPerson("p1", "Alice", [{ type: "Ei Persona", value: PERSONA_A }]));
+      sm.human_person_upsert(makeLinkedPerson("p2", "Bob", [{ type: "Ei Persona", value: PERSONA_A }]));
+
+      expect(sm.getHuman().people.find((p) => p.id === "p1")?.identifiers).toEqual([{ type: "Ei Persona", value: PERSONA_A }]);
+      expect(sm.getHuman().people.find((p) => p.id === "p2")?.identifiers).toEqual([]);
+      expect(sm.messages_get("ei")).toHaveLength(1);
+    });
+
+    it("an unrelated field edit that keeps the same single link produces no report", () => {
+      sm.human_person_upsert(makeLinkedPerson("p1", "Alice", [{ type: "Ei Persona", value: PERSONA_A }]));
+      const stored = sm.getHuman().people.find((p) => p.id === "p1")!;
+      sm.human_person_upsert({ ...stored, description: "an unrelated description edit" });
+
+      const updated = sm.getHuman().people.find((p) => p.id === "p1")!;
+      expect(updated.description).toBe("an unrelated description edit");
+      expect(updated.identifiers).toEqual([{ type: "Ei Persona", value: PERSONA_A }]);
+      expect(sm.messages_get("ei")).toHaveLength(0);
+    });
+
+    it("legacy-cased 'ei persona' collides with canonical 'Ei Persona' across two People", () => {
+      sm.human_person_upsert(makeLinkedPerson("p1", "Alice", [{ type: "ei persona", value: PERSONA_A }]));
+      sm.human_person_upsert(makeLinkedPerson("p2", "Bob", [{ type: "Ei Persona", value: PERSONA_A }]));
+
+      expect(sm.getHuman().people.find((p) => p.id === "p2")?.identifiers).toEqual([]);
+      expect(sm.messages_get("ei")).toHaveLength(1);
+    });
+
+    it("reserved values ei/emmet are never refused, even shared across many People", () => {
+      sm.human_person_upsert(makeLinkedPerson("p1", "Alice", [{ type: "Ei Persona", value: "ei" }]));
+      sm.human_person_upsert(makeLinkedPerson("p2", "Bob", [{ type: "Ei Persona", value: "ei" }]));
+
+      expect(sm.getHuman().people.find((p) => p.id === "p1")?.identifiers).toEqual([{ type: "Ei Persona", value: "ei" }]);
+      expect(sm.getHuman().people.find((p) => p.id === "p2")?.identifiers).toEqual([{ type: "Ei Persona", value: "ei" }]);
+      expect(sm.messages_get("ei")).toHaveLength(0);
+    });
+
+    it("excludeIds lets a survivor legally inherit exactly one departing donor's link", () => {
+      sm.human_person_upsert(makeLinkedPerson("donor", "Donor", [{ type: "Ei Persona", value: PERSONA_A }]));
+      sm.human_person_upsert(makeLinkedPerson("survivor", "Survivor", [{ type: "Ei Persona", value: PERSONA_A }]), ["donor"]);
+
+      expect(sm.getHuman().people.find((p) => p.id === "survivor")?.identifiers).toEqual([{ type: "Ei Persona", value: PERSONA_A }]);
+      expect(sm.messages_get("ei")).toHaveLength(0);
+    });
+
+    it("excludeIds does not rescue a union of two independently-linked donors — the guard never picks a winner", () => {
+      sm.human_person_upsert(makeLinkedPerson("donorA", "DonorA", [{ type: "Ei Persona", value: PERSONA_A }]));
+      sm.human_person_upsert(makeLinkedPerson("donorB", "DonorB", [{ type: "Ei Persona", value: PERSONA_B }]));
+      sm.human_person_upsert(makeLinkedPerson("survivor", "Survivor", [
+        { type: "Ei Persona", value: PERSONA_A },
+        { type: "Ei Persona", value: PERSONA_B },
+      ]), ["donorA", "donorB"]);
+
+      expect(sm.getHuman().people.find((p) => p.id === "survivor")?.identifiers).toEqual([]);
+    });
+  });
+
+  describe("persona_delete strips its links from Person records (ADR-010 clause 5)", () => {
+    const PERSONA_ID = "33333333-3333-4333-8333-333333333333";
+
+    it("removes the deleted persona's Ei Persona identifier, leaving other identifiers alone", () => {
+      sm.persona_add({
+        id: PERSONA_ID,
+        display_name: "Composite",
+        entity: "system",
+        aliases: [],
+        short_description: "",
+        traits: [],
+        topics: [],
+        is_paused: false,
+        is_archived: false,
+        is_static: false,
+        last_updated: new Date().toISOString(),
+      });
+      sm.human_person_upsert({
+        id: "p1",
+        name: "Alice",
+        description: "",
+        relationship: "friend",
+        sentiment: 0,
+        exposure_current: 0.5,
+        exposure_desired: 0.5,
+        last_updated: "",
+        identifiers: [
+          { type: "Ei Persona", value: PERSONA_ID },
+          { type: "Nickname", value: "Ally" },
+        ],
+      });
+
+      sm.persona_delete(PERSONA_ID);
+
+      expect(sm.getHuman().people[0].identifiers).toEqual([{ type: "Nickname", value: "Ally" }]);
+    });
+
+    it("does not touch a Person whose link points at a different persona", () => {
+      sm.persona_add({
+        id: PERSONA_ID,
+        display_name: "Composite",
+        entity: "system",
+        aliases: [],
+        short_description: "",
+        traits: [],
+        topics: [],
+        is_paused: false,
+        is_archived: false,
+        is_static: false,
+        last_updated: new Date().toISOString(),
+      });
+      sm.human_person_upsert({
+        id: "p1",
+        name: "Alice",
+        description: "",
+        relationship: "friend",
+        sentiment: 0,
+        exposure_current: 0.5,
+        exposure_desired: 0.5,
+        last_updated: "",
+        identifiers: [{ type: "Ei Persona", value: "some-other-persona" }],
+      });
+
+      sm.persona_delete(PERSONA_ID);
+
+      expect(sm.getHuman().people[0].identifiers).toEqual([{ type: "Ei Persona", value: "some-other-persona" }]);
+    });
+  });
+
   describe("message operations", () => {
     const makeMessage = (content: string): Message => ({
       id: crypto.randomUUID(),

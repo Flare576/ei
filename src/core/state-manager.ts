@@ -8,7 +8,6 @@ import type {
   Quote,
   LLMRequest,
   StorageState,
-  ContextStatus,
   QueueFailResult,
   ToolDefinition,
   ToolProvider,
@@ -19,9 +18,10 @@ import type {
   HumanSettings,
   ProviderAccount,
 } from "./types.js";
-import { RoomMode, RESERVED_PERSONA_IDS } from "./types.js";
+import { RoomMode, RESERVED_PERSONA_IDS, ContextStatus } from "./types.js";
 import { BUILT_IN_FACT_NAMES } from './constants/built-in-facts.js';
 import { qualifyEiMessage } from './utils/message-id.js';
+import { guardPersonaLinks, removePersonaLinksToId, type PersonaLinkRefusal } from './utils/identifier-utils.js';
 import type { ThemeDefinition } from './types/entities.js';
 import type { Storage } from "../storage/interface.js";
 import {
@@ -724,9 +724,48 @@ export class StateManager {
     return result;
   }
 
-  human_person_upsert(person: Person): void {
-    this.humanState.person_upsert(person);
+  /**
+   * The ADR-010 clause 3/4 report for a write-time persona-link refusal —
+   * same shape as the ceremony reflection phase's existing "ei" warning
+   * (src/core/orchestrators/ceremony.ts), reused rather than duplicated
+   * with new machinery. One message per guard invocation, naming every
+   * link that write declined to create.
+   */
+  private buildPersonaLinkRefusalMessage(refusals: PersonaLinkRefusal[]): Message {
+    const describe = (r: PersonaLinkRefusal): string => {
+      const who = r.personName ? `"${r.personName}"` : `person ${r.personId}`;
+      return `${who} → Persona ${r.value} (${r.reason})`;
+    };
+    const content = refusals.length === 1
+      ? `A write just tried to link ${describe(refusals[0])}, but that would break the one-Persona-per-Person rule (ADR-006). The link was not created; everything else in the write was saved.`
+      : `A write just tried to create Persona links that would break the one-Persona-per-Person rule (ADR-006). None of these were created; everything else in the write was saved:\n${refusals.map((r) => `- ${describe(r)}`).join("\n")}`;
+    return {
+      id: qualifyEiMessage(crypto.randomUUID()),
+      role: "system",
+      content,
+      timestamp: new Date().toISOString(),
+      read: false,
+      context_status: ContextStatus.Always,
+    };
+  }
+
+  /**
+   * ADR-006/ADR-010 write-time guard: runs before every person upsert that
+   * reaches StateManager — the LLM person-update handler, dedup's
+   * update/add phases, and the live Processor's corrections drain all
+   * funnel through here, none of them with a synchronous caller left to
+   * answer, so a refusal is reported through the `ei` persona thread
+   * rather than returned. `excludeIds` is dedup's departing-donor list —
+   * see guardPersonaLinks's own doc comment.
+   */
+  human_person_upsert(person: Person, excludeIds?: readonly string[]): void {
+    const priorStored = this.getHuman().people.find((p) => p.id === person.id);
+    const { person: guarded, refusals } = guardPersonaLinks(person, priorStored, this.getHuman().people, excludeIds);
+    this.humanState.person_upsert(guarded);
     this.scheduleSave();
+    if (refusals.length > 0) {
+      this.messages_append("ei", this.buildPersonaLinkRefusalMessage(refusals));
+    }
   }
 
   human_person_remove(id: string): boolean {
@@ -813,8 +852,12 @@ export class StateManager {
     return result;
   }
 
+  /** ADR-010 clause 5: deleting a Persona removes its links from Person records going forward — pre-existing orphaned links are left alone (never migrated). */
   persona_delete(personaId: string): boolean {
     const result = this.personaState.delete(personaId);
+    if (result) {
+      removePersonaLinksToId(this.getHuman().people, personaId);
+    }
     this.scheduleSave();
     return result;
   }

@@ -30,6 +30,7 @@ import { getDataPath } from "./retrieval.js";
 import { withLock, atomicWrite } from "../storage/file-lock.js";
 import { appendCorrection, readCorrections, applyCorrectionsToStateWithMerges } from "../core/corrections.js";
 import type { CorrectionRecord, QuoteCorrectionSkip, QuoteCorrectionMerge } from "../core/corrections.js";
+import type { PersonaLinkRefusal } from "../core/utils/identifier-utils.js";
 import { encodeAllEmbeddings, decodeAllEmbeddings } from "../storage/embeddings.js";
 import type { StorageState } from "../core/types.js";
 
@@ -105,6 +106,15 @@ export interface WriteCorrectionResult {
    * `skipped`.
    */
   merged: QuoteCorrectionMerge[];
+  /**
+   * Every Person-entity Ei Persona link this self-drain declined to
+   * create, across the whole batch (ADR-006/ADR-010) — always `[]` on the
+   * "queued" branch for the same reason `skipped`/`merged` are: a queued
+   * write is validated later, by the live drain, against state this call
+   * never sees. A caller looks up its own outcome by `personId`, the same
+   * way create/fixQuoteEntity look theirs up by `attempt_id`.
+   */
+  personLinkRefusals: PersonaLinkRefusal[];
   drainMode: "self" | "queued";
 }
 
@@ -125,7 +135,7 @@ export async function writeCorrection(record: CorrectionRecord): Promise<WriteCo
 
   if (await isLiveInstanceRunning()) {
     await appendCorrection(correctionsPath, record);
-    return { skipped: [], merged: [], drainMode: "queued" };
+    return { skipped: [], merged: [], personLinkRefusals: [], drainMode: "queued" };
   }
 
   const statePath = join(dataPath, STATE_FILE);
@@ -140,7 +150,7 @@ export async function writeCorrection(record: CorrectionRecord): Promise<WriteCo
     // TUI launch (pulled from remote). Queue for that drain instead of
     // fabricating a local state.json that would conflict with the pull.
     await appendCorrection(correctionsPath, record);
-    return { skipped: [], merged: [], drainMode: "queued" };
+    return { skipped: [], merged: [], personLinkRefusals: [], drainMode: "queued" };
   }
 
   // No live instance and state.json exists — safe to self-drain directly.
@@ -149,7 +159,7 @@ export async function writeCorrection(record: CorrectionRecord): Promise<WriteCo
   return await withLock(statePath, async (): Promise<WriteCorrectionResult> => {
     if (await isLiveInstanceRunning()) {
       await appendCorrection(correctionsPath, record);
-      return { skipped: [], merged: [], drainMode: "queued" };
+      return { skipped: [], merged: [], personLinkRefusals: [], drainMode: "queued" };
     }
 
     // Read pending corrections, apply them (plus the new record), and clear
@@ -164,7 +174,11 @@ export async function writeCorrection(record: CorrectionRecord): Promise<WriteCo
       const state = decodeAllEmbeddings(JSON.parse(text) as StorageState);
 
       const pending = await readCorrections(correctionsPath);
-      const { skipped, merged } = applyCorrectionsToStateWithMerges(state, [...pending, record]);
+      // Authoritative drain-time cardinality check (ADR-006/ADR-010): this
+      // validates the merged candidate against the state just read from
+      // disk, not a stale snapshot taken before queueing — see corrections.ts's
+      // applyCorrectionsToStateWithMerges doc comment.
+      const { skipped, merged, personLinkRefusals } = applyCorrectionsToStateWithMerges(state, [...pending, record]);
       state.timestamp = new Date().toISOString();
 
       // State write happens before the queue clear: if we crash in between,
@@ -172,7 +186,7 @@ export async function writeCorrection(record: CorrectionRecord): Promise<WriteCo
       // safely re-applies them (upsert/remove are idempotent by id).
       await atomicWrite(statePath, JSON.stringify(encodeAllEmbeddings(state), null, 2));
       await atomicWrite(correctionsPath, "[]");
-      return { skipped, merged, drainMode: "self" };
+      return { skipped, merged, personLinkRefusals, drainMode: "self" };
     });
   });
 }

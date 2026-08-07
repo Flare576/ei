@@ -231,6 +231,79 @@ describe("Processor.drainCorrections() (live-side corrections drain)", () => {
     expect(mock.humanUpdatedCount[0]).toBeGreaterThanOrEqual(1);
   });
 
+  describe("Person upsert — persona-link cardinality guard (ADR-006/ADR-010, IRQ-4)", () => {
+    const PERSONA_A = "11111111-1111-4111-8111-111111111111";
+    const PERSONA_B = "22222222-2222-4222-8222-222222222222";
+
+    it("a single queued correction introducing two Persona links at once: neither survives, and exactly one durable report reaches the ei persona thread", async () => {
+      const person = makePerson({
+        id: "person-guard-1",
+        identifiers: [
+          { type: "Ei Persona", value: PERSONA_A },
+          { type: "Ei Persona", value: PERSONA_B },
+          { type: "Nickname", value: "Jane Doe", is_primary: true },
+        ],
+      });
+      const correction: CorrectionRecord = {
+        op: "upsert",
+        entity_type: "person",
+        id: person.id,
+        record: person,
+        timestamp: new Date().toISOString(),
+      };
+      await appendCorrection(join(dataDir, "corrections.json"), correction);
+
+      processor = new Processor(mock.ei);
+      await processor.start(storage as unknown as Parameters<Processor["start"]>[0]);
+      await asDrainable(processor).drainCorrections();
+
+      const sm = processor.getStateManager();
+      const applied = sm.getHuman().people.find((p) => p.id === person.id)!;
+      // The write was not rejected as a whole — the Nickname persisted,
+      // only the two colliding Persona links were dropped.
+      expect(applied.identifiers).not.toContainEqual(expect.objectContaining({ type: "Ei Persona" }));
+      expect(applied.identifiers).toContainEqual(expect.objectContaining({ type: "Nickname", value: "Jane Doe" }));
+
+      // The caller was already told "queued" and is long gone by the time
+      // this drain tick runs — the only way it learns of the refusal is
+      // this async, durable report.
+      // Bootstrap's own first-run welcome message also lands on "ei" —
+      // isolate this guard's own report rather than assuming it's alone.
+      const reports = sm.messages_get("ei").filter((m) => m.content?.includes(PERSONA_A));
+      expect(reports).toHaveLength(1);
+      expect(reports[0].role).toBe("system");
+      expect(reports[0].context_status).toBe("always");
+      expect(reports[0].content).toContain(PERSONA_B);
+    });
+
+    it("two independently-queued person corrections that would each pass their own pre-queue snapshot check still collide once the second is validated against the first's already-applied result", async () => {
+      const first = makePerson({ id: "person-race-1", identifiers: [{ type: "Ei Persona", value: PERSONA_A }] });
+      const second = makePerson({ id: "person-race-2", identifiers: [{ type: "Ei Persona", value: PERSONA_A }] });
+      const correctionsPath = join(dataDir, "corrections.json");
+      await appendCorrection(correctionsPath, {
+        op: "upsert", entity_type: "person", id: first.id, record: first, timestamp: new Date().toISOString(),
+      });
+      await appendCorrection(correctionsPath, {
+        op: "upsert", entity_type: "person", id: second.id, record: second, timestamp: new Date().toISOString(),
+      });
+
+      processor = new Processor(mock.ei);
+      await processor.start(storage as unknown as Parameters<Processor["start"]>[0]);
+      await asDrainable(processor).drainCorrections();
+
+      const sm = processor.getStateManager();
+      const firstApplied = sm.getHuman().people.find((p) => p.id === first.id)!;
+      const secondApplied = sm.getHuman().people.find((p) => p.id === second.id)!;
+      // The first write to actually apply wins the link; the guard is
+      // authoritative against live state at drain time, not a pre-queue
+      // snapshot both callers could have independently passed.
+      expect(firstApplied.identifiers).toContainEqual({ type: "Ei Persona", value: PERSONA_A });
+      expect(secondApplied.identifiers).not.toContainEqual(expect.objectContaining({ type: "Ei Persona" }));
+
+      expect(sm.messages_get("ei").filter((m) => m.content?.includes(PERSONA_A))).toHaveLength(1);
+    });
+  });
+
   it("drops a malformed record (bad entity_type) with console.error but still applies valid records in the same batch", async () => {
     const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
