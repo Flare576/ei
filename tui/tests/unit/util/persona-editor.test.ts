@@ -254,6 +254,79 @@ describe("openPersonaEditor - stale-edit guard (ADR-009 extended to Persona)", (
     expect(personaRecords["persona-1"].short_description).toBe("Edited by user");
     expect(notifications.some(n => n.message.includes("changed by another process"))).toBe(false);
   });
+
+  test("(T9) rejects the save when a concurrent write changes only a topic's sentiment, and the concurrent value survives", async () => {
+    // Mirrors src/core/handlers/persona-generation.ts's identity-update flow,
+    // which owns topic-sentiment updates independently of anything the YAML
+    // editor exposes. Sentiment isn't rendered in the editable YAML at all
+    // (see YAMLPersonaTopic), so a stale editor buffer that resaves the rest
+    // of the topic unchanged must still be rejected once sentiment drifts
+    // underneath it — otherwise personaFromYAML's `existing?.sentiment ?? 0`
+    // silently reapplies the pre-open value and clobbers the concurrent write.
+    const topic = {
+      id: "topic-1",
+      name: "Tech Trends",
+      perspective: "Cautiously optimistic",
+      approach: "Ask clarifying questions",
+      personal_stake: "Directly affects my role",
+      sentiment: 0.2,
+      exposure_current: 0.5,
+      exposure_desired: 0.5,
+      last_updated: timestamp,
+    };
+    const persona = makePersona({ short_description: "Original", topics: [topic] });
+    const personaRecords: Record<string, PersonaEntity> = { "persona-1": persona };
+
+    const { editorCmd, cleanup } = fakeEditorFor(
+      [
+        "display_name: TestBot",
+        "short_description: Edited by user",
+        "long_description: A persona used for stale-edit-guard tests.",
+        "traits: []",
+        "topics:",
+        "  - id: topic-1",
+        "    name: Tech Trends",
+        "    perspective: Cautiously optimistic",
+        "    approach: Ask clarifying questions",
+        "    personal_stake: Directly affects my role",
+        "    exposure_current: 0.5",
+        "    exposure_desired: 0.5",
+      ].join("\n") + "\n"
+    );
+    cleanupEditor = cleanup;
+    process.env.EDITOR = editorCmd;
+
+    // Concurrent writer (persona-generation's identity-update flow) changes
+    // ONLY this topic's sentiment, landing inside spawnEditor's 50ms
+    // pre-spawn delay window.
+    setTimeout(() => {
+      personaRecords["persona-1"] = {
+        ...personaRecords["persona-1"],
+        topics: personaRecords["persona-1"].topics.map(t =>
+          t.id === "topic-1" ? { ...t, sentiment: 0.8, last_updated: new Date().toISOString() } : t
+        ),
+        last_updated: new Date().toISOString(),
+      };
+    }, 10);
+
+    const notifications: Array<{ message: string; level: string }> = [];
+    const ctx = makeContext(personaRecords, {
+      onNotify: (message, level) => notifications.push({ message, level }),
+    });
+
+    const result = await openPersonaEditor({ personaId: "persona-1", persona, ctx });
+
+    expect(result.success).toBe(false);
+    expect(result.personaWasModified).toBe(false);
+    // The concurrent sentiment change survived untouched — the stale editor
+    // buffer (which would have reapplied 0.2 via `existing?.sentiment ?? 0`)
+    // never landed.
+    expect(personaRecords["persona-1"].topics[0].sentiment).toBe(0.8);
+    expect(notifications).toContainEqual({
+      message: "Persona changed by another process since editor opened — re-open to see current state and re-apply your edits.",
+      level: "warn",
+    });
+  });
 });
 
 describe("personaEditableFingerprint", () => {

@@ -259,8 +259,8 @@ export function personaEditableFingerprint(persona: PersonaEntity): string {
       }))
       .sort((a, b) => a.id.localeCompare(b.id)),
     topics: persona.topics
-      .map(({ id, name, perspective, approach, personal_stake, exposure_current, exposure_desired }) => ({
-        id, name, perspective, approach, personal_stake, exposure_current, exposure_desired,
+      .map(({ id, name, perspective, approach, personal_stake, sentiment, exposure_current, exposure_desired }) => ({
+        id, name, perspective, approach, personal_stake, sentiment: sentiment ?? 0, exposure_current, exposure_desired,
       }))
       .sort((a, b) => a.id.localeCompare(b.id)),
     heartbeat_delay_ms: persona.heartbeat_delay_ms ?? null,
