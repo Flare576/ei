@@ -97,8 +97,6 @@ export async function handleTopicUpdate(response: LLMResponse, state: StateManag
   };
   const itemId = resolveItemId();
 
-  const persona = state.persona_getById(primaryId);
-  const personaGroup = persona?.group_primary ?? null;
   const allPersonaGroups = personaIds
     .map(id => state.persona_getById(id)?.group_primary)
     .filter((g): g is string => g != null);
@@ -162,7 +160,7 @@ export async function handleTopicUpdate(response: LLMResponse, state: StateManag
   };
   state.human_topic_upsert(topic);
 
-  await validateAndStoreQuotes(result.quotes, messages_analyze, itemId, personaDisplayName, personaGroup, state);
+  await validateAndStoreQuotes(result.quotes, messages_analyze, itemId, personaDisplayName, allPersonaGroups, state);
 
   if (isNewItem && embedding) {
     const extractionModel = (response.request.data as Record<string, unknown>).extraction_model as string | undefined;
@@ -229,8 +227,6 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
   };
   const itemId = resolveItemId();
 
-  const persona = state.persona_getById(primaryId);
-  const personaGroup = persona?.group_primary ?? null;
   const allPersonaGroups = personaIds
     .map(id => state.persona_getById(id)?.group_primary)
     .filter((g): g is string => g != null);
@@ -340,7 +336,7 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
   };
   state.human_person_upsert(person);
 
-  await validateAndStoreQuotes(result.quotes, messages_analyze, itemId, personaDisplayName, personaGroup, state);
+  await validateAndStoreQuotes(result.quotes, messages_analyze, itemId, personaDisplayName, allPersonaGroups, state);
 
   const primaryValue = resolvedIdentifiers.find(i => i.is_primary)?.value ?? candidateName;
   const resolvedName = (!primaryValue || primaryValue.toLowerCase() === 'unknown')
@@ -486,7 +482,7 @@ async function validateAndStoreQuotes(
   messages: Message[],
   dataItemId: string,
   channelDisplayName: string,
-  personaGroup: string | null,
+  personaGroups: string[],
   state: StateManager
 ): Promise<void> {
   if (!candidates || candidates.length === 0) return;
@@ -515,9 +511,9 @@ async function validateAndStoreQuotes(
         const survivor = merge.absorbed[0];
         const others = merge.absorbed.slice(1);
 
-        const group = personaGroup || "General";
+        const groups = personaGroups.length > 0 ? personaGroups : ["General"];
         const dataItemIds = unionIds(survivor.data_item_ids, [dataItemId], ...others.map((q) => q.data_item_ids));
-        const personaGroups = unionIds(survivor.persona_groups, [group], ...others.map((q) => q.persona_groups));
+        const mergedPersonaGroups = unionIds(survivor.persona_groups, groups, ...others.map((q) => q.persona_groups));
 
         let embedding = survivor.embedding;
         if (merge.text !== survivor.text) {
@@ -534,7 +530,7 @@ async function validateAndStoreQuotes(
           end: merge.end,
           text: merge.text,
           data_item_ids: dataItemIds,
-          persona_groups: personaGroups,
+          persona_groups: mergedPersonaGroups,
           embedding,
         });
         for (const absorbed of others) {
@@ -557,7 +553,7 @@ async function validateAndStoreQuotes(
         id: crypto.randomUUID(),
         message_id: message.id,
         data_item_ids: [dataItemId],
-        persona_groups: [personaGroup || "General"],
+        persona_groups: personaGroups.length > 0 ? personaGroups : ["General"],
         text: matchText,
         speaker: message.role === "human" ? "human" : (message.speaker_name ?? channelDisplayName),
         channel: channelDisplayName,

@@ -19,6 +19,7 @@ import {
   type RoomEntity,
 } from "../../../../src/core/types.js";
 import { StateManager } from "../../../../src/core/state-manager.js";
+import { filterQuotesByPersonaGroupVisibility } from "../../../../src/core/group-visibility.js";
 import { createMockStorage } from "../../../helpers/mock-storage.js";
 import type * as OrchestratorsModule from "../../../../src/core/orchestrators/index.js";
 
@@ -2699,6 +2700,43 @@ describe("Channel and speaker attribution on quotes", () => {
     });
   });
 
+  // Beta C1: quote persona_groups tagging must match the pattern
+  // handleTopicUpdate/handlePersonUpdate already use for the Topic's/Person's
+  // own persona_groups — every room participant's group_primary, not just the
+  // primary persona who happened to run this extraction pass. Two personas in
+  // the same room already see every message in it, so a quote captured from a
+  // multi-persona room must be visible to every one of them.
+  describe("quote persona_groups reflect the full room roster, not just the primary persona (Beta C1)", () => {
+    it("tags a newly created quote with every room participant's persona group", async () => {
+      const msgText = "The room agreed the migration plan was solid";
+      const roomMessage: RoomMessage = {
+        id: "room-msg-multi-groups",
+        parent_id: null,
+        role: "persona",
+        persona_id: "persona-eng",
+        content: msgText,
+        timestamp: new Date().toISOString(),
+        read: true,
+        context_status: "default" as RoomMessage["context_status"],
+      };
+      state._roomMessages["room-multi-groups"] = [roomMessage];
+      seedPersona("persona-eng", "Engineer Bot", "Engineering");
+      seedPersona("persona-res", "Research Bot", "Research");
+      const topic = seedTopic("topic-multi-room-groups");
+
+      await captureTopicQuote("migration plan was solid", {
+        existingItemId: topic.id,
+        roomId: "room-multi-groups",
+        personaId: "persona-eng|persona-res",
+      });
+
+      // Both room participants' groups are present — not just persona-eng, the
+      // one this extraction call happened to be primary for.
+      const quote = getAddedQuote();
+      expect(quote.persona_groups).toEqual(["Engineering", "Research"]);
+    });
+  });
+
   describe("overlapping quote merge (T3)", () => {
     it("updates the existing quote with the raw union span and deduplicated metadata", async () => {
       const msgText = "The durable architecture protects people.";
@@ -2754,19 +2792,41 @@ describe("Channel and speaker attribution on quotes", () => {
       // Precomputed word offsets (verified with node, not hand-counted):
       // alpha[0,5) bravo[6,11) charlie[12,19) delta[20,25) echo[26,30)
       // foxtrot[31,38) golf[39,43) hotel[44,49). Length 49.
+      //
+      // Beta C1: persona_groups on `left`/`mid`/`right` below are each a
+      // REALISTIC two-persona room roster (not an arbitrary single-word label
+      // standing in for "whichever persona happened to run that extraction"),
+      // deliberately overlapping across rooms — Research is shared by `left`
+      // and this call's own room; Engineering is shared by `mid` and `right` —
+      // so the union this test asserts has to actually dedupe, not merely
+      // concatenate four lists. That union is only safe to trust because every
+      // quote's persona_groups is now tagged with its own FULL room roster at
+      // creation time; the oracle assertions at the end confirm every real
+      // participant of every contributing room can still see the survivor.
       const msgText = "alpha bravo charlie delta echo foxtrot golf hotel";
-      const message = seedMessage("persona-1", "msg-merge-nway", "human", msgText);
-      seedPersona("persona-1", "Sisyphus", "Research");
+      const roomMessage: RoomMessage = {
+        id: "room-msg-merge-nway",
+        parent_id: null,
+        role: "persona",
+        persona_id: "persona-cur-a",
+        content: msgText,
+        timestamp: new Date().toISOString(),
+        read: true,
+        context_status: "default" as RoomMessage["context_status"],
+      };
+      state._roomMessages["room-nway"] = [roomMessage];
+      seedPersona("persona-cur-a", "Designer Bot", "Design");
+      seedPersona("persona-cur-b", "Researcher Bot", "Research");
       const topic = seedTopic("topic-merge-nway");
       const left: Quote = {
         id: "quote-left",
-        message_id: message.id,
+        message_id: roomMessage.id,
         data_item_ids: ["topic-left"],
-        persona_groups: ["Group Left"],
+        persona_groups: ["Product", "Research"], // room-left's own two-persona roster
         text: "alpha bravo",
         speaker: "human",
         channel: "Prior channel",
-        timestamp: message.timestamp,
+        timestamp: roomMessage.timestamp,
         start: 0,
         end: 11,
         created_at: new Date().toISOString(),
@@ -2775,13 +2835,13 @@ describe("Channel and speaker attribution on quotes", () => {
       };
       const mid: Quote = {
         id: "quote-mid",
-        message_id: message.id,
+        message_id: roomMessage.id,
         data_item_ids: ["topic-mid"],
-        persona_groups: ["Group Mid"],
+        persona_groups: ["Research", "Engineering"], // room-mid's own two-persona roster
         text: "delta",
         speaker: "human",
         channel: "Prior channel",
-        timestamp: message.timestamp,
+        timestamp: roomMessage.timestamp,
         start: 20,
         end: 25,
         created_at: new Date().toISOString(),
@@ -2790,13 +2850,13 @@ describe("Channel and speaker attribution on quotes", () => {
       };
       const right: Quote = {
         id: "quote-right",
-        message_id: message.id,
+        message_id: roomMessage.id,
         data_item_ids: ["topic-right"],
-        persona_groups: ["Group Right"],
+        persona_groups: ["Engineering", "Support"], // room-right's own two-persona roster
         text: "foxtrot golf hotel",
         speaker: "human",
         channel: "Prior channel",
-        timestamp: message.timestamp,
+        timestamp: roomMessage.timestamp,
         start: 31,
         end: 49,
         created_at: new Date().toISOString(),
@@ -2805,7 +2865,11 @@ describe("Channel and speaker attribution on quotes", () => {
       };
       state._human.quotes.push(left, mid, right);
 
-      await captureTopicQuote("bravo charlie delta echo foxtrot", { existingItemId: topic.id });
+      await captureTopicQuote("bravo charlie delta echo foxtrot", {
+        existingItemId: topic.id,
+        roomId: "room-nway",
+        personaId: "persona-cur-a|persona-cur-b",
+      });
 
       // The Array.find() defect this closes: with three overlapping
       // quotes, the old code absorbed only the first and left the other
@@ -2820,7 +2884,10 @@ describe("Channel and speaker attribution on quotes", () => {
       expect(quoteId).toBe(left.id);
       expectRawSpan(updates, msgText, { start: 0, end: 49, text: msgText });
       expect(updates.data_item_ids).toEqual(["topic-left", topic.id, "topic-mid", "topic-right"]);
-      expect(updates.persona_groups).toEqual(["Group Left", "Research", "Group Mid", "Group Right"]);
+      // Union of four room rosters (survivor, this call's own room, then each
+      // absorbed quote's room) with Research and Engineering deduped exactly
+      // once each, first-seen order preserved.
+      expect(updates.persona_groups).toEqual(["Product", "Research", "Design", "Engineering", "Support"]);
       expect(new Set(updates.data_item_ids).size).toBe(updates.data_item_ids?.length);
       expect(new Set(updates.persona_groups).size).toBe(updates.persona_groups?.length);
 
@@ -2836,6 +2903,33 @@ describe("Channel and speaker attribution on quotes", () => {
       // Provenance invariant, explicit: the merged text is still exactly
       // the source slice for its widened span.
       expect(mergedQuote!.text).toBe(msgText.slice(mergedQuote!.start!, mergedQuote!.end!));
+
+      // Beta C1 oracle: this is the check that actually resolves the finding —
+      // not "did the union compute the right array" (already asserted above)
+      // but "can every persona who was actually a participant of one of the
+      // four contributing rooms still see the merged quote". Each of these
+      // was a real room participant for the quote whose group(s) they hold;
+      // the union only ever adds groups, so nobody who could see their own
+      // room's quote before the merge loses visibility into the survivor.
+      const roomParticipantGroups: Record<string, string> = {
+        "persona-cur-a": "Design",
+        "persona-cur-b": "Research",
+        "persona-left-a": "Product",
+        "persona-left-b": "Research",
+        "persona-mid-a": "Research",
+        "persona-mid-b": "Engineering",
+        "persona-right-a": "Engineering",
+        "persona-right-b": "Support",
+      };
+      for (const [id, group_primary] of Object.entries(roomParticipantGroups)) {
+        const visible = filterQuotesByPersonaGroupVisibility([mergedQuote!], { id, group_primary });
+        expect(visible.length, `${id} (group ${group_primary}) should see the merged quote`).toBe(1);
+      }
+
+      // Conversely, a persona from a group that was never in any of the four
+      // rooms must NOT see the merged quote — the union isn't a free-for-all.
+      const outsider = { id: "persona-outsider", group_primary: "Legal" };
+      expect(filterQuotesByPersonaGroupVisibility([mergedQuote!], outsider)).toHaveLength(0);
     });
   });
 
