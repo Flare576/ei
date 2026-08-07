@@ -59,6 +59,10 @@ So persona and quote YAML edits race in the opposite direction — a stale edito
 
 This is not a decision, it is an omission; the guard was built for `/me` and not carried across. Whether it should be is a real question, since the collision likelihood differs: persona records change far less often than extracted human data. But the current asymmetry is undocumented and would surprise anyone who read this record and assumed it applied to every YAML editor.
 
+> **Corrected (2026-08-06) — the persona half of this gap is closed.** `tui/src/util/yaml-persona.ts` now has an equivalent guard: `personaEditableFingerprint()` computes a content hash over exactly the fields the YAML editor can change, and `tui/src/util/persona-editor.tsx`'s save path performs a compare-and-swap against it, rejecting a save whose fingerprint no longer matches with a clear message — the concurrent write's data is left untouched. Covered by `tui/tests/unit/util/persona-editor.test.ts` (normal save, concurrent-write rejection, and a false-positive check for unrelated `last_updated` bumps that don't touch an editable field).
+>
+> **`tui/src/util/yaml-quotes.ts` remains genuinely unguarded.** Rather than a straightforward parity fix, whether the TUI quote `$EDITOR` should exist at all is an open design question, tracked at GitHub issue #101.
+
 ## Alternatives Considered
 
 ### Alternative A: the YAML edit wins
@@ -88,7 +92,7 @@ This is not a decision, it is an omission; the guard was built for `/me` and not
 
 ### Negative
 - Work is lost. The message says an edit was skipped, not what it was — the user must reconstruct it from memory against the new state.
-- The asymmetry with persona and quote editing is live and undocumented outside this record.
+- The asymmetry with persona and quote editing is live and undocumented outside this record. **Corrected (2026-08-06):** the persona half is now documented and closed above; quote editing remains unguarded, tracked separately at GitHub issue #101 rather than as a parity fix.
 
 ### Risks
 

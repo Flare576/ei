@@ -1,5 +1,5 @@
 import { spawnEditor } from "./editor.js";
-import { personaToYAML, personaFromYAML, newPersonaToYAML, newPersonaFromYAML } from "./yaml-serializers.js";
+import { personaToYAML, personaFromYAML, personaEditableFingerprint, newPersonaToYAML, newPersonaFromYAML } from "./yaml-serializers.js";
 import type { CommandContext } from "../commands/registry.js";
 import type { PersonaEntity } from "../../../src/core/types.js";
 import { logger } from "./logger.js";
@@ -120,6 +120,7 @@ export async function openPersonaEditor(options: PersonaEditorOptions): Promise<
   const human = await ctx.ei.getHuman();
   const llmAccounts = human.settings?.accounts?.filter(a => a.type === "llm") ?? [];
   let yamlContent = personaToYAML(persona, allGroups, allTools, allProviders, llmAccounts);
+  const openedFingerprint = personaEditableFingerprint(persona);
   
   while (true) {
     const result = await spawnEditor({
@@ -145,9 +146,17 @@ export async function openPersonaEditor(options: PersonaEditorOptions): Promise<
     
     try {
       const parsed = personaFromYAML(result.content, persona, allTools, allProviders, llmAccounts);
-      
+
+      const current = await ctx.ei.getPersona(personaId);
+      if (!current || personaEditableFingerprint(current) !== openedFingerprint) {
+        ctx.showNotification(
+          "Persona changed by another process since editor opened — re-open to see current state and re-apply your edits.",
+          "warn"
+        );
+        return { success: false, cancelled: false, personaWasModified: false };
+      }
+
       await ctx.ei.updatePersona(personaId, parsed.updates);
-      
       ctx.showNotification(`Updated ${persona.display_name}`, "info");
       return { success: true, cancelled: false, personaWasModified: true };
       

@@ -216,6 +216,64 @@ export interface PersonaYAMLResult {
   deletedTopicIds: string[];
 }
 
+// =============================================================================
+// STALE-EDIT GUARD (ADR-009's concurrency guard, extended to Persona; see
+// docs/adr/ADR-009-tui-yaml-loses-to-concurrent-writes.md)
+// =============================================================================
+
+/**
+ * Deterministic content fingerprint of exactly the PersonaEntity fields the
+ * YAML editor can change — the same set `personaFromYAML()` below writes into
+ * its `updates` object. Everything else on PersonaEntity (last_heartbeat,
+ * description_embedding, pending_update, is_archived, last_updated itself,
+ * ...) is deliberately excluded — a concurrent write that only touches those
+ * is not a collision with anything the user could be editing.
+ *
+ * This is Persona's equivalent of `staleInState` (`yaml-human.ts:308-312`),
+ * but it can't reuse that mechanism's shape. `staleInState` compares one
+ * `last_updated` per item; a single root-level `Persona.last_updated`
+ * comparison would both false-positive-reject on unrelated Persona activity
+ * (e.g. `PersonaState.messages_append`/`messages_update` bump
+ * `last_updated` on every inbound/outbound chat message, with no editable
+ * field touched) and fail to represent the editable projection at all, since
+ * it's nested (traits/topics as sub-collections) plus calculated deletions
+ * that one flat timestamp can't carry. Fingerprinting the actual field
+ * values instead of a timestamp sidesteps both problems: it only trips when
+ * content a user could actually be editing changed underneath them.
+ *
+ * Not cryptographic — a stable `JSON.stringify` is sufficient for an
+ * in-process equality check between two snapshots taken minutes apart.
+ */
+export function personaEditableFingerprint(persona: PersonaEntity): string {
+  return JSON.stringify({
+    display_name: persona.display_name,
+    aliases: [...(persona.aliases ?? [])].sort(),
+    short_description: persona.short_description ?? null,
+    long_description: persona.long_description ?? null,
+    model: persona.model ?? null,
+    group_primary: persona.group_primary ?? null,
+    groups_visible: [...(persona.groups_visible ?? [])].sort(),
+    traits: persona.traits
+      .map(({ id, name, description, sentiment, strength }) => ({
+        id, name, description, sentiment: sentiment ?? 0, strength: strength ?? 0,
+      }))
+      .sort((a, b) => a.id.localeCompare(b.id)),
+    topics: persona.topics
+      .map(({ id, name, perspective, approach, personal_stake, exposure_current, exposure_desired }) => ({
+        id, name, perspective, approach, personal_stake, exposure_current, exposure_desired,
+      }))
+      .sort((a, b) => a.id.localeCompare(b.id)),
+    heartbeat_delay_ms: persona.heartbeat_delay_ms ?? null,
+    context_window_ms: persona.context_window_ms ?? null,
+    is_paused: persona.is_paused ?? false,
+    external_reflection_only: persona.external_reflection_only ?? false,
+    pause_until: persona.pause_until ?? null,
+    is_static: persona.is_static ?? false,
+    include_message_timestamps: persona.include_message_timestamps ?? false,
+    tools: [...(persona.tools ?? [])].sort(),
+  });
+}
+
 export function personaFromYAML(yamlContent: string, original: PersonaEntity, allTools?: ToolDefinition[], allProviders?: import('../../../src/core/types.js').ToolProvider[], accounts?: ProviderAccount[]): PersonaYAMLResult {
   const data = YAML.parse(yamlContent) as EditablePersonaData;
 
