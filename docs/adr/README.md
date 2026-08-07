@@ -41,6 +41,7 @@ This exists because the alternative was observed directly: *"I really wish we ha
 | [031](ADR-031-external-field-visibility-categories.md) | External Callers See Four Field Categories, Not the Whole Entity | Accepted | 2026-08-04 | Current |
 | [032](ADR-032-manual-setting-prevents-automated-resetting.md) | Manual Setting Prevents Automated Re-Setting — Enforced Structurally, Not by a Marker | Accepted | 2026-08-04 | Current |
 | [033](ADR-033-message-retention-defaults-to-never-prune.md) | Message Retention Defaults To Never Prune, And `0` Means Disabled | Accepted | 2026-08-04 | Backfill |
+| [035](ADR-035-sync-peers-are-the-user-not-an-adversary.md) | A Sync Peer With Valid Credentials Is the User, Not an Adversary | Accepted | 2026-08-07 | Current |
 
 ## Conventions
 
