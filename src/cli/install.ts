@@ -699,7 +699,7 @@ export default function eiIntegration(pi: ExtensionAPI) {
 export async function installOmp(): Promise<void> {
   const home = resolveHome();
 
-  const extensionContent = `import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
+  const extensionContent = `import type { ExtensionAPI, ExtensionContext } from "@oh-my-pi/pi-coding-agent";
 import { $ } from "bun";
 
 const runEi = async (cmdArgs: string[]): Promise<string> => {
@@ -720,23 +720,83 @@ async function fetchPersonaBlock(name: string): Promise<string | null> {
   }
 }
 
+// Scan THIS session's actual lineage — never ctx.sessionManager.getEntries(),
+// which spans every fork/branch and would let a sibling fork's markers wrongly
+// suppress an injection this branch never received — for the persona named in
+// the most recent "ei-who" marker. Custom entries never reach the LLM (see
+// ExtensionAPI.appendEntry's doc comment), so this dedup state costs nothing
+// per turn, and a forked child correctly inherits everything marked before the
+// fork point while staying blind to whatever a sibling branch marks after it.
+function findLastWhoPersona(ctx: ExtensionContext): string | null | undefined {
+  const branch = ctx.sessionManager.getBranch();
+  for (let i = branch.length - 1; i >= 0; i--) {
+    const entry = branch[i];
+    if (entry.type !== "custom" || entry.customType !== "ei-who") continue;
+    const data = entry.data;
+    if (!data || typeof data !== "object" || !("persona" in data)) continue;
+    const persona = data.persona;
+    if (persona === null || typeof persona === "string") return persona;
+    // Marker present but malformed (persona is neither a string nor null) — keep
+    // scanning further back for the latest actually-valid marker.
+  }
+  return undefined; // no marker recorded yet on this branch
+}
+
+// Union of every entity id the MEMORY hook has already surfaced on this branch.
+function collectSeenMemoryIds(ctx: ExtensionContext): Set<string> {
+  const seen = new Set<string>();
+  for (const entry of ctx.sessionManager.getBranch()) {
+    if (entry.type !== "custom" || entry.customType !== "ei-memory") continue;
+    const data = entry.data;
+    if (!data || typeof data !== "object" || !("ids" in data) || !Array.isArray(data.ids)) continue;
+    for (const id of data.ids) {
+      if (typeof id === "string") seen.add(id);
+    }
+  }
+  return seen;
+}
+
+function extractId(item: unknown): string | undefined {
+  if (item && typeof item === "object" && "id" in item) {
+    const id = item.id;
+    return typeof id === "string" ? id : undefined;
+  }
+  return undefined;
+}
+
 export default function eiIntegration(pi: ExtensionAPI) {
   // WHO: inject <ei-relationship> block for the active primary persona.
-  // Prefer ctx.activePersonaName (OMP >= persona-tab-cycle PR); fall back to
-  // parsing "You are \\"<Name>\\"" from the HOW block in event.systemPrompt.
+  // Prefer ctx.activePersonaName when the field is present at all — including
+  // when its value is explicitly null ("no persona loaded"), which must win
+  // over a stale "You are X" string surviving in event.systemPrompt. Only
+  // fall back to parsing the HOW block when the field is genuinely absent
+  // (pre persona-tab-cycle OMP, which predates this API entirely).
   pi.on("before_agent_start", async (event, ctx) => {
-    const joined = ((event as any).systemPrompt as string[] | undefined)?.join("\\n") ?? "";
-    const quoted = joined.match(/You are "([^"]+)"/);
+    const quoted = event.systemPrompt.join("\\n").match(/You are "([^"]+)"/);
     const personaName: string | null =
-      (ctx as any).activePersonaName ??
-      (quoted?.[1]?.trim() || null);
-    if (!personaName) return undefined;
+      "activePersonaName" in ctx ? ctx.activePersonaName : (quoted?.[1]?.trim() ?? null);
+
+    // Dedup key is "what identity did we last announce on THIS branch" — not
+    // "have we ever sent this persona." A→B→A (and A→null→A) all resend: every
+    // transition is a real change the model hasn't seen reflected yet, even
+    // when the destination identity already appeared earlier in the session.
+    // "No active persona" is its own tracked state, not a bare skip — otherwise
+    // clearing and then reselecting the same persona would look identical to
+    // never having left it.
+    if (findLastWhoPersona(ctx) === personaName) return undefined;
+
+    if (!personaName) {
+      pi.appendEntry("ei-who", { persona: null });
+      return undefined;
+    }
 
     if (!personaBlockFetch.has(personaName)) {
       personaBlockFetch.set(personaName, fetchPersonaBlock(personaName));
     }
     const block = await personaBlockFetch.get(personaName)!;
     if (!block) return undefined;
+
+    pi.appendEntry("ei-who", { persona: personaName });
 
     return {
       message: {
@@ -747,25 +807,37 @@ export default function eiIntegration(pi: ExtensionAPI) {
     };
   });
 
-  // MEMORY: inject relevant Ei context based on the current prompt.
+  // MEMORY: inject relevant Ei context based on the current prompt, filtered
+  // against every entity id already surfaced earlier on this branch. Request
+  // size stays at -n 5 deliberately: the fix is per-item de-dup, not a bigger
+  // candidate pool padded back up to size — that would just push relevance
+  // further down the ranked list every turn instead of shrinking the block,
+  // trading duplication for noise about steadily less-relevant items.
   pi.on("before_agent_start", async (event, ctx) => {
-    const entries = ctx.sessionManager.getEntries();
-    const recentMsgs = entries
-      .filter((e: any) => e.type === "message" && (e.message?.role === "user" || e.message?.role === "assistant"))
-      .slice(-5)
-      .map((e: any) => {
-        const role = e.message?.role ?? "unknown";
-        const text = Array.isArray(e.message?.content)
-          ? e.message.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join(" ")
-          : (e.message?.content ?? "");
-        return \`\${role}: \${text.slice(0, 200)}\`;
-      })
-      .join("\\n");
-
     const prompt = event.prompt ?? "";
     const args = prompt ? ["-n", "5", "--", prompt] : ["--recent", "-n", "5"];
     const output = await runEi(args).catch(() => "");
     if (!output.trim()) return undefined;
+
+    let items: unknown = null;
+    try {
+      items = JSON.parse(output);
+    } catch {
+      // Non-JSON output (e.g. an error string) — nothing to de-dup by id, inject as-is.
+    }
+
+    let body = output.trim();
+    let newIds: string[] = [];
+    if (Array.isArray(items)) {
+      const seen = collectSeenMemoryIds(ctx);
+      const fresh = items.filter((item) => {
+        const id = extractId(item);
+        return !id || !seen.has(id);
+      });
+      if (fresh.length === 0) return undefined; // everything here already surfaced this session
+      newIds = fresh.map(extractId).filter((id): id is string => id !== undefined);
+      body = JSON.stringify(fresh, null, 2);
+    }
 
     const heading = [
       "## Ei Memory Context",
@@ -776,10 +848,12 @@ export default function eiIntegration(pi: ExtensionAPI) {
       "The following items MAY be relevant to your current task — use ei_search or ei_lookup for targeted queries.",
     ].join("\\n");
 
+    if (newIds.length > 0) pi.appendEntry("ei-memory", { ids: newIds });
+
     return {
       message: {
         customType: "ei-context",
-        content: \`\${heading}\\n\\n\${output.trim()}\`,
+        content: \`\${heading}\\n\\n\${body}\`,
         display: false,
       },
     };
@@ -790,7 +864,6 @@ export default function eiIntegration(pi: ExtensionAPI) {
     name: "ei_search",
     label: "Search Ei Memory",
     description: "Semantic search of Ei's personal knowledge base — facts, topics, people, quotes across all sources. Use when you need context about the user, their work, or anything Ei has learned.",
-    promptSnippet: "Search Ei's personal memory for relevant facts, topics, people, or quotes.",
     parameters: {
       type: "object",
       properties: {
