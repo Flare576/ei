@@ -217,9 +217,9 @@ describe("PersonaState", () => {
       expect(state.messages_get(personaId)).toEqual([]);
     });
 
-    it("appends messages", () => {
-      state.messages_append(personaId, makeMessage("Hello"));
-      state.messages_append(personaId, makeMessage("World"));
+    it("appends messages, returning true on success (I3: caller must be able to check delivery)", () => {
+      expect(state.messages_append(personaId, makeMessage("Hello"))).toBe(true);
+      expect(state.messages_append(personaId, makeMessage("World"))).toBe(true);
       
       const messages = state.messages_get(personaId);
       
@@ -232,8 +232,8 @@ describe("PersonaState", () => {
       expect(state.messages_get("nonexistent")).toEqual([]);
     });
 
-    it("does not append to non-existent persona", () => {
-      state.messages_append("nonexistent", makeMessage("Test"));
+    it("does not append to non-existent persona, returning false (I3: a silent no-op must be distinguishable from success)", () => {
+      expect(state.messages_append("nonexistent", makeMessage("Test"))).toBe(false);
       expect(state.messages_get("nonexistent")).toEqual([]);
     });
 

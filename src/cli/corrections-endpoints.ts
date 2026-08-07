@@ -22,6 +22,7 @@ import { z } from "zod";
 import { loadLatestState, resolveExternalMessage } from "./retrieval.js";
 import { writeCorrection } from "./corrections-writer.js";
 import { sanitizeEiPersonaIdentifiers } from "../core/utils/identifier-utils.js";
+import { sanitizeMessageIdForLog } from "../core/utils/message-refusal.js";
 import { isQualifiedMessageId, qualifyEiMessage, UUID_PATTERN } from "../core/utils/message-id.js";
 import { computeDataItemEmbedding, computeQuoteEmbedding } from "../core/embedding-service.js";
 import type { CorrectableType, CorrectionRecord, QuoteCreateRecord, QuoteFixRecord, QuoteRelinkRecord, QuoteRemoveRecord } from "../core/corrections.js";
@@ -377,7 +378,7 @@ async function buildAndWriteUpsert(
     if (ownRefusals.length > 0) {
       const summary = ownRefusals.map((r) => `Persona ${r.value} (${r.reason})`).join("; ");
       throw new Error(
-        `"${record.name}" was saved, but the following Ei Persona link(s) were refused because they would break the one-Person-per-Persona rule: ${summary}`
+        `"${sanitizeMessageIdForLog(record.name)}" was saved, but the following Ei Persona link(s) were refused because they would break the one-Person-per-Persona rule: ${summary}`
       );
     }
   }

@@ -3,6 +3,7 @@ import type { PersonaEntity } from "../types/entities.js";
 import { isReservedPersonaId } from "../types/entities.js";
 import type { StateManager } from "../state-manager.js";
 import { BUILT_IN_IDENTIFIER_TYPES } from "../constants/built-in-identifier-types.js";
+import { sanitizeMessageIdForLog } from "./message-refusal.js";
 
 export const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -35,6 +36,14 @@ export function sanitizeEiPersonaIdentifiers(
 ): PersonIdentifier[] {
   return identifiers.map(id => {
     if (!isEiPersonaIdentifierType(id.type) && id.type !== 'AI Persona') return id;
+    // Reserved system-persona ids ("ei"/"emmet") are always valid Ei
+    // Persona link targets, regardless of whether that Persona has
+    // actually been bootstrapped yet (I4) -- Emmett is lazily created,
+    // so demoting this to Nickname before that happens would destroy a
+    // legitimate reserved-id link on an ordinary CLI/MCP edit. Passed
+    // through completely unchanged (never re-cased) so a legacy-cased
+    // record round-trips exactly as written.
+    if (isReservedPersonaId(id.value)) return id;
     if (UUID_REGEX.test(id.value)) return { ...id, type: 'Ei Persona' };
     const matched = personas.find(p =>
       p.display_name === id.value || p.aliases?.includes(id.value)
@@ -83,39 +92,55 @@ export interface PersonaLinkRefusal {
 }
 
 /**
- * ADR-006's write-time enforcement: a Person carries at most one Ei
+ * ADR-006/ADR-010 write-time enforcement: a Person carries at most one Ei
  * Persona link, and a Persona is linked from at most one Person. Never
- * repairs existing data (ADR-010 clause 1) — it only decides which of the
- * links PRESENT ON THIS CANDIDATE survive this one write, given what the
- * same Person already had before this write (`priorStored`, `undefined`
- * for a brand-new Person) and what every other CURRENT Person record
- * already claims (`allPeople` — must be authoritative, live state; a
- * stale pre-queue snapshot can pass this check and still collide once
- * applied, see the issue's "Authoritative queued-write correction").
+ * repairs existing data (ADR-010 clause 1) -- every check below only ever
+ * refuses a link this write is actually INTRODUCING; a link already
+ * present on the same Person's OWN prior stored record (`priorStored`,
+ * `undefined` for a brand-new Person) always survives this write
+ * untouched, even if it now looks ambiguous against this Person's other
+ * links or collides with another CURRENT Person's already-existing claim
+ * on the same value -- that is pre-existing invalid data for a human to
+ * resolve, never something an unrelated write may silently repair by
+ * deleting (C2, .sisyphus/reviews/tonight-post-audit-fix-queue.md).
+ *
+ * `allPeople` must be authoritative, live state; a stale pre-queue
+ * snapshot can pass this check and still collide once applied, see the
+ * issue's "Authoritative queued-write correction".
  *
  * `excludeIds` names People being removed as part of this SAME operation
- * (dedup's departing donors) — a link inherited from a departing donor is
+ * (dedup's departing donors) -- a link inherited from a departing donor is
  * not a collision with that donor's own not-yet-deleted record (ADR-010's
  * dated note, "the guard must be told what is leaving").
  *
- * Resolution, with NO precedence between two otherwise-valid new links
- * (ADR-010 clause 4a — every tiebreak is a silent guess):
- *   1. At most one Ei-Persona-typed identifier on the candidate → nothing
- *      to resolve; return it unchanged.
- *   2. More than one, and exactly one of them already existed on this same
- *      Person before this write → that one survives (clause 4's "the
- *      offending link" — every newly introduced one is refused).
- *   3. Otherwise (zero pre-existing survivors to prefer, or the
- *      pre-existing shape was already invalid) → none of the candidate's
- *      links survive; this write introduced ambiguity it cannot resolve.
- *   4. Whatever survives step 2 is then checked against every OTHER
- *      Person for the same value (the B-many direction) and refused too
- *      if it collides.
+ * Resolution, with NO precedence between two otherwise-valid NEW links
+ * (ADR-010 clause 4a -- every tiebreak is a silent guess):
+ *   1. At most one Ei-Persona-typed identifier on the candidate -> nothing
+ *      to resolve on this Person alone; it proceeds to step 4 unchanged.
+ *   2. More than one, and this write introduces no NEW value at all
+ *      (every link was already on `priorStored`, however many there are)
+ *      -> the whole pre-existing shape survives untouched; never repaired.
+ *   3. More than one, and this write DOES introduce at least one NEW
+ *      value: if exactly one PRE-EXISTING link remains, it is preferred
+ *      and every newly introduced one is refused (clause 4's "the
+ *      offending link"); otherwise (no pre-existing link to prefer, or an
+ *      already-ambiguous multiple) every pre-existing link still survives
+ *      untouched and only the newly introduced ones are refused -- this
+ *      write's own ambiguity, never the inherited one.
+ *   4. Whatever survives steps 1-3 is then checked against every OTHER
+ *      Person for the same value (the B-many direction) -- but ONLY when
+ *      that value is itself new to this Person's record; a value already
+ *      on `priorStored` is never refused here either, no matter what any
+ *      other Person currently claims.
  *
  * Returns the candidate with only the surviving link (if any) in its
  * `identifiers`, plus a refusal entry for every link that did not
- * survive. Reporting the refusal is the caller's job — this function only
- * decides the data.
+ * survive. Reporting the refusal is the caller's job -- this function only
+ * decides the data. Every free-text field on a refusal (Person name,
+ * identifier value, conflicting Person's name) is stripped of control
+ * bytes before being recorded (I5) -- these values are caller-controlled
+ * and refusals are later rendered verbatim into CLI/MCP output and a
+ * durable system-prompt message.
  */
 export function guardPersonaLinks(
   candidate: Person,
@@ -129,6 +154,11 @@ export function guardPersonaLinks(
     return { person: candidate, refusals: [] };
   }
 
+  const priorValues = new Set(
+    (priorStored?.identifiers ?? []).filter(isEiPersonaLinkIdentifier).map(i => i.value)
+  );
+  const personName = sanitizeMessageIdForLog(candidate.name);
+
   const refusals: PersonaLinkRefusal[] = [];
   let survivors: PersonIdentifier[];
 
@@ -136,29 +166,36 @@ export function guardPersonaLinks(
     // Nothing to resolve on this Person alone — the sole B-many check below decides its fate.
     survivors = links;
   } else {
-    const priorValues = new Set(
-      (priorStored?.identifiers ?? []).filter(isEiPersonaLinkIdentifier).map(i => i.value)
-    );
     const preExisting = links.filter(l => priorValues.has(l.value));
     const introduced = links.filter(l => !priorValues.has(l.value));
 
-    if (preExisting.length === 1 && introduced.length > 0) {
+    if (introduced.length === 0) {
+      // This write introduces nothing new — whatever shape was already
+      // stored (however many links, even an already-ambiguous multiple)
+      // survives untouched (ADR-010 clause 1: never repair pre-existing
+      // invalid data on an unrelated write).
+      survivors = links;
+    } else if (preExisting.length === 1) {
       survivors = preExisting;
       for (const bad of introduced) {
         refusals.push({
           personId: candidate.id,
-          personName: candidate.name,
-          value: bad.value,
-          reason: `already linked to a different Persona (${preExisting[0].value})`,
+          personName,
+          value: sanitizeMessageIdForLog(bad.value),
+          reason: `already linked to a different Persona (${sanitizeMessageIdForLog(preExisting[0].value)})`,
         });
       }
     } else {
-      survivors = [];
-      for (const bad of links) {
+      // No single pre-existing link to prefer (none, or an
+      // already-ambiguous multiple) — that inherited shape is left
+      // exactly as it was; only the NEWLY introduced links are this
+      // write's own ambiguity.
+      survivors = preExisting;
+      for (const bad of introduced) {
         refusals.push({
           personId: candidate.id,
-          personName: candidate.name,
-          value: bad.value,
+          personName,
+          value: sanitizeMessageIdForLog(bad.value),
           reason: "this write introduced more than one Persona link at once",
         });
       }
@@ -168,6 +205,14 @@ export function guardPersonaLinks(
   const excluded = new Set(excludeIds ?? []);
   const finalSurvivors: PersonIdentifier[] = [];
   for (const link of survivors) {
+    // A link this Person already had before this write is never refused
+    // for colliding with another Person's claim — that collision (if any)
+    // predates this write, and ADR-010 forbids repairing it on an
+    // unrelated edit.
+    if (priorValues.has(link.value)) {
+      finalSurvivors.push(link);
+      continue;
+    }
     const conflict = allPeople.find(p =>
       p.id !== candidate.id &&
       !excluded.has(p.id) &&
@@ -176,9 +221,9 @@ export function guardPersonaLinks(
     if (conflict) {
       refusals.push({
         personId: candidate.id,
-        personName: candidate.name,
-        value: link.value,
-        reason: `already linked from a different Person ("${conflict.name}", ${conflict.id})`,
+        personName,
+        value: sanitizeMessageIdForLog(link.value),
+        reason: `already linked from a different Person ("${sanitizeMessageIdForLog(conflict.name)}", ${conflict.id})`,
       });
     } else {
       finalSurvivors.push(link);

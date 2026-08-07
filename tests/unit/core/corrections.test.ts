@@ -855,6 +855,117 @@ describe("applyQuoteOperation — Corrections Wire Grammar dispatch (direct, no 
     expect(quotes).toEqual([]);
     expect(skipped).toBeDefined();
   });
+
+  it("quote.create merging into a single existing overlapping quote reports absorbed:[] — the survivor's own id must never appear in absorbed (I1)", () => {
+    const existing = makeQuote("quote-existing", ["item-x"]);
+    existing.message_id = "ei:msg-1";
+    existing.start = 6;
+    existing.end = 19;
+    existing.text = "bravo charlie";
+    const record = makeQuoteCreateRecord("quote-new", { message_id: "ei:msg-1", start: 12, end: 25, text: "charlie delta" });
+
+    const { quotes, merged } = applyQuoteOperation([existing], record);
+
+    expect(merged).toBeDefined();
+    expect(merged!.quote.id).toBe("quote-existing");
+    expect(merged!.absorbed).toEqual([]);
+    expect(quotes).toHaveLength(1);
+    expect(quotes[0].id).toBe("quote-existing");
+  });
+
+  it("quote.create merging N-way reports absorbed excluding only the survivor's own id, every OTHER overlapping quote listed (I1)", () => {
+    const left = makeQuote("quote-left", []);
+    Object.assign(left, { message_id: "ei:msg-1", start: 0, end: 11, text: "alpha bravo" });
+    const mid = makeQuote("quote-mid", []);
+    Object.assign(mid, { message_id: "ei:msg-1", start: 20, end: 25, text: "delta" });
+    const right = makeQuote("quote-right", []);
+    Object.assign(right, { message_id: "ei:msg-1", start: 31, end: 49, text: "foxtrot golf hotel" });
+    const record = makeQuoteCreateRecord("quote-new", { message_id: "ei:msg-1", start: 6, end: 38, text: "bravo charlie delta echo foxtrot" });
+
+    const { quotes, merged } = applyQuoteOperation([left, mid, right], record);
+
+    expect(merged).toBeDefined();
+    // "quote-left" is the first overlapping existing quote in pool order
+    // and survives under its own id -- it must never appear in absorbed.
+    expect(merged!.quote.id).toBe("quote-left");
+    expect(merged!.absorbed.sort()).toEqual(["quote-mid", "quote-right"]);
+    expect(quotes).toHaveLength(1);
+    expect(quotes[0].id).toBe("quote-left");
+  });
+
+  it("quote.create: an exact-match merge (one piece's own span covers the full union) is never flagged embeddingStale (I2)", () => {
+    const existing = makeQuote("quote-existing", []);
+    existing.message_id = "ei:msg-1";
+    existing.start = 0;
+    existing.end = 19;
+    existing.text = "alpha bravo charlie";
+    const record = makeQuoteCreateRecord("quote-new", { message_id: "ei:msg-1", start: 6, end: 19, text: "bravo charlie" });
+
+    const { merged } = applyQuoteOperation([existing], record);
+
+    expect(merged).toBeDefined();
+    expect(merged!.quote.text).toBe(existing.text);
+    expect(merged!.embeddingStale).toBeFalsy();
+  });
+
+  it("quote.create: a genuine multi-piece stitch (no single piece's own span covers the full union) is flagged embeddingStale for recompute (I2)", () => {
+    const existing = makeQuote("quote-existing", []);
+    existing.message_id = "ei:msg-1";
+    existing.start = 6;
+    existing.end = 19;
+    existing.text = "bravo charlie";
+    const record = makeQuoteCreateRecord("quote-new", { message_id: "ei:msg-1", start: 12, end: 25, text: "charlie delta" });
+
+    const { merged } = applyQuoteOperation([existing], record);
+
+    expect(merged).toBeDefined();
+    expect(merged!.quote.start).toBe(6);
+    expect(merged!.quote.end).toBe(25);
+    expect(merged!.quote.text).toBe("bravo charlie delta");
+    expect(merged!.embeddingStale).toBe(true);
+  });
+
+  it("quote.fix: a re-verified span that exactly covers the union is never flagged embeddingStale (I2)", () => {
+    const target = makeQuote("quote-target", []);
+    target.message_id = "ei:msg-1";
+    target.start = 20;
+    target.end = 25;
+    target.text = "stale placeholder";
+    const neighbor = makeQuote("quote-neighbor", []);
+    neighbor.message_id = "ei:msg-1";
+    neighbor.start = 6;
+    neighbor.end = 19;
+    neighbor.text = "bravo charlie";
+    const fixRecord = makeQuoteFixRecord("quote-target", [], { start: 0, end: 25, text: "alpha bravo charlie delta" });
+
+    const { merged } = applyQuoteOperation([target, neighbor], fixRecord);
+
+    expect(merged).toBeDefined();
+    expect(merged!.quote.text).toBe("alpha bravo charlie delta");
+    expect(merged!.embeddingStale).toBeFalsy();
+  });
+
+  it("quote.fix: a genuine multi-piece stitch (neither the fixed span nor the neighbor alone covers the full union) is flagged embeddingStale (I2)", () => {
+    const target = makeQuote("quote-target", []);
+    target.message_id = "ei:msg-1";
+    target.start = 12;
+    target.end = 19;
+    target.text = "stale placeholder";
+    const neighbor = makeQuote("quote-neighbor", []);
+    neighbor.message_id = "ei:msg-1";
+    neighbor.start = 0;
+    neighbor.end = 19;
+    neighbor.text = "alpha bravo charlie";
+    const fixRecord = makeQuoteFixRecord("quote-target", [], { start: 12, end: 25, text: "charlie delta" });
+
+    const { merged } = applyQuoteOperation([target, neighbor], fixRecord);
+
+    expect(merged).toBeDefined();
+    expect(merged!.quote.start).toBe(0);
+    expect(merged!.quote.end).toBe(25);
+    expect(merged!.quote.text).not.toBe("charlie delta");
+    expect(merged!.embeddingStale).toBe(true);
+  });
 });
 
 describe("applyQuoteOperation — prototype-reserved keys bypass the strict allowlist (I1, T3)", () => {
@@ -1309,6 +1420,53 @@ describe("applyCorrectionToState — routing personas vs human", () => {
 
     expect(state.human.facts).toEqual([fact]);
     expect(state.personas).toEqual({});
+  });
+});
+
+describe("applyCorrectionToPersonas — C3: reports whether a remove actually deleted something", () => {
+  it("returns true when an upsert is applied", () => {
+    const personas: StorageState["personas"] = {};
+    const entity = makePersonaEntity("persona-1");
+    const removed = applyCorrectionToPersonas(personas, { op: "upsert", entity_type: "persona", id: entity.id, record: entity, timestamp: NOW });
+    expect(removed).toBe(true);
+  });
+
+  it("returns true when removing a Persona that exists", () => {
+    const entity = makePersonaEntity("persona-1");
+    const personas: StorageState["personas"] = { "persona-1": { entity, messages: [] } };
+    const removed = applyCorrectionToPersonas(personas, { op: "remove", entity_type: "persona", id: "persona-1", timestamp: NOW });
+    expect(removed).toBe(true);
+  });
+
+  it("returns false (a no-op) when removing a Persona that doesn't exist", () => {
+    const personas: StorageState["personas"] = {};
+    const removed = applyCorrectionToPersonas(personas, { op: "remove", entity_type: "persona", id: "no-such-persona", timestamp: NOW });
+    expect(removed).toBe(false);
+  });
+});
+
+describe("applyCorrectionToState — C3 regression: orphan Persona links only stripped when a removal actually deletes something", () => {
+  it("a remove whose target Persona already doesn't exist leaves a Person's historical orphan link untouched (matches live-drain's persona_delete)", () => {
+    const orphanLinkedPerson = makePerson("p1", { identifiers: [{ type: "Ei Persona", value: "gone-persona" }] });
+    const state = makeStateWithPersonas({});
+    state.human.people = [orphanLinkedPerson];
+
+    const result = applyCorrectionToState(state, { op: "remove", entity_type: "persona", id: "gone-persona", timestamp: NOW });
+
+    expect(result).toBeUndefined();
+    expect(state.human.people[0].identifiers).toEqual([{ type: "Ei Persona", value: "gone-persona" }]);
+  });
+
+  it("removing a Persona that DOES exist still strips its links from Person records (unchanged live-drain-equivalent behavior)", () => {
+    const entity = makePersonaEntity("persona-1");
+    const linkedPerson = makePerson("p1", { identifiers: [{ type: "Ei Persona", value: "persona-1" }] });
+    const state = makeStateWithPersonas({ "persona-1": { entity, messages: [] } });
+    state.human.people = [linkedPerson];
+
+    applyCorrectionToState(state, { op: "remove", entity_type: "persona", id: "persona-1", timestamp: NOW });
+
+    expect(state.personas["persona-1"]).toBeUndefined();
+    expect(state.human.people[0].identifiers).toEqual([]);
   });
 });
 

@@ -33,6 +33,7 @@ import type { HumanEntity, Fact, Topic, Person, Quote, PersonaEntity, StorageSta
 import { isReservedPersonaId } from "./types.js";
 import { guardPersonaLinks, removePersonaLinksToId, type PersonaLinkRefusal } from "./utils/identifier-utils.js";
 import { withLock, atomicWrite } from "../storage/file-lock.js";
+import { getEmbeddingService } from "./embedding-service.js";
 
 export type CorrectableType = "fact" | "topic" | "person" | "quote" | "persona";
 export type CorrectableEntity = Fact | Topic | Person | Quote | PersonaEntity;
@@ -582,7 +583,10 @@ export function unionIds(...lists: string[][]): string[] {
  * contributing piece's embedding is kept as a labelled best-effort
  * approximation rather than forcing this pure, synchronous dispatcher —
  * used by the read overlay on every corrections-aware read, not just a
- * real write — to perform embedding-service I/O.
+ * real write — to perform embedding-service I/O. Callers building a
+ * QuoteCorrectionMerge label that approximation via `embeddingStale`
+ * (I2) so a real write-time consumer can recompute it with
+ * `resolveMergedEmbedding` instead of persisting it as final.
  */
 function pickMergedEmbedding(mergedStart: number, mergedEnd: number, pieces: Array<{ start: number; end: number; embedding?: number[] }>): number[] | undefined {
   const exact = pieces.find((p) => p.start === mergedStart && p.end === mergedEnd);
@@ -614,6 +618,45 @@ export interface QuoteCorrectionMerge {
   quote: Quote;
   absorbed: string[];
   attempt_id?: string;
+  /**
+   * True when `quote.embedding` is only pickMergedEmbedding's best-effort
+   * placeholder — the widest single contributing piece's own embedding —
+   * and does NOT yet represent `quote.text`, the actual persisted union
+   * text (I2). Only ever set for the "no single contributor spans the
+   * full union" case; a real write-time caller (self-drain, live drain)
+   * must recompute the embedding via `resolveMergedEmbedding` below
+   * before treating this as final, exactly like extraction's own
+   * already-correct pattern (src/core/handlers/human-matching.ts's
+   * validateAndStoreQuotes). The read overlay, which applies this same
+   * merge on every corrections-aware read rather than a real write, must
+   * never trigger that embedding-service I/O itself — it just uses
+   * `quote.embedding` as-is and ignores this flag.
+   */
+  embeddingStale?: boolean;
+}
+
+/**
+ * Recomputes a widened attested merge's embedding against its actual
+ * persisted union text (I2) — a no-op returning `merge.quote.embedding`
+ * unchanged when `merge.embeddingStale` is falsy, since the common
+ * exact-match case already has the correct embedding. Mirrors
+ * extraction's own already-correct recompute
+ * (src/core/handlers/human-matching.ts's validateAndStoreQuotes) exactly,
+ * including its failure disposition: an embedding-service error is
+ * logged and the stale placeholder is kept rather than losing the
+ * embedding entirely. Only ever called by a real write-time consumer
+ * (self-drain's writeCorrection, live drain's Processor) — never by the
+ * read overlay, which must stay synchronous.
+ */
+export async function resolveMergedEmbedding(merge: QuoteCorrectionMerge): Promise<number[] | undefined> {
+  if (!merge.embeddingStale) return merge.quote.embedding;
+  try {
+    const embeddingService = getEmbeddingService();
+    return await embeddingService.embed(merge.quote.text);
+  } catch (err) {
+    console.warn(`[corrections] Failed to recompute embedding for merged quote: "${merge.quote.text.slice(0, 30)}..."`, err);
+    return merge.quote.embedding;
+  }
 }
 
 /**
@@ -704,7 +747,18 @@ export function applyQuoteOperation(quotes: Quote[], record: unknown, human?: Hu
           };
           const absorbedIds = new Set(others.map((q) => q.id));
           const nextQuotes = quotes.filter((q) => !absorbedIds.has(q.id)).map((q) => (q.id === survivor.id ? mergedQuote : q));
-          return { quotes: nextQuotes, merged: { quote: mergedQuote, absorbed: merge.absorbed.map((q) => q.id), attempt_id } };
+          // I1: `absorbed` reports only ids ACTUALLY removed from state --
+          // the survivor (merge.absorbed[0]) is retained under its own id,
+          // never itself absorbed, even though it originated the union.
+          return {
+            quotes: nextQuotes,
+            merged: {
+              quote: mergedQuote,
+              absorbed: others.map((q) => q.id),
+              attempt_id,
+              embeddingStale: merge.text !== survivor.text,
+            },
+          };
         }
       }
 
@@ -754,7 +808,15 @@ export function applyQuoteOperation(quotes: Quote[], record: unknown, human?: Hu
           };
           const absorbedIds = new Set(merge.absorbed.map((q) => q.id));
           const nextQuotes = quotes.filter((q) => !absorbedIds.has(q.id)).map((q) => (q.id === fixed.id ? mergedQuote : q));
-          return { quotes: nextQuotes, merged: { quote: mergedQuote, absorbed: merge.absorbed.map((q) => q.id), attempt_id: record.attempt_id } };
+          return {
+            quotes: nextQuotes,
+            merged: {
+              quote: mergedQuote,
+              absorbed: merge.absorbed.map((q) => q.id),
+              attempt_id: record.attempt_id,
+              embeddingStale: merge.text !== fixed.text,
+            },
+          };
         }
       }
 
@@ -872,32 +934,43 @@ export function applyCorrectionsToHuman(human: HumanEntity, corrections: Correct
  * hence the narrower CorrectionUpsert | CorrectionRemove parameter type —
  * a QuoteCorrectionRecord is never routed here.
  *
+ * Returns whether a remove op actually deleted an existing Persona record
+ * (false for a remove whose target id was already absent — a no-op, C3)
+ * — always true for an upsert. applyCorrectionToState uses this to decide
+ * whether to strip that id's links from Person records, mirroring the
+ * live path's own `PersonaState.delete()` boolean check
+ * (StateManager.persona_delete): a Persona removal that deletes nothing
+ * must not cascade into a link cleanup that live-drain would never have
+ * performed either.
+ *
  * The reserved-persona delete guard here is defense-in-depth for a
  * hand-edited corrections.json: the primary guard is the SYNCHRONOUS check
  * in src/cli/persona-corrections.ts's removePersonaEntity, which runs
  * before a correction is ever queued (so a live-drained rejection here can
  * never surface as a silent no-op after an apparent CLI success).
  */
-export function applyCorrectionToPersonas(personas: StorageState["personas"], correction: CorrectionUpsert | CorrectionRemove): void {
+export function applyCorrectionToPersonas(personas: StorageState["personas"], correction: CorrectionUpsert | CorrectionRemove): boolean {
   assertValidCorrection(correction);
   if (correction.op === "remove") {
     if (isReservedPersonaId(correction.id)) {
       throw new Error(`Cannot delete reserved persona "${correction.id}". Use archive instead.`);
     }
+    const existed = correction.id in personas;
     delete personas[correction.id];
-    return;
+    return existed;
   }
   personas[correction.id] = {
     entity: correction.record as PersonaEntity,
     messages: personas[correction.id]?.messages ?? [],
   };
+  return true;
 }
 
-/** Route one correction to its target: the personas map for entity_type "persona", the HumanEntity for everything else — except a quote-domain record (isQuoteCorrectionOp) always routes to the HumanEntity, since quotes live there, even if a malformed record's `entity_type` claims "persona". Returns a skip descriptor if a Quote correction was declined; personas/other entities still throw on malformed input, unchanged. A persona removal also strips that persona's id from every Person's `Ei Persona` identifiers (ADR-010 clause 5) — never for pre-existing orphans, only for a delete that actually happens through this path. */
+/** Route one correction to its target: the personas map for entity_type "persona", the HumanEntity for everything else — except a quote-domain record (isQuoteCorrectionOp) always routes to the HumanEntity, since quotes live there, even if a malformed record's `entity_type` claims "persona". Returns a skip descriptor if a Quote correction was declined; personas/other entities still throw on malformed input, unchanged. A persona removal also strips that persona's id from every Person's `Ei Persona` identifiers (ADR-010 clause 5) — never for pre-existing orphans, and never for a remove whose target Persona was already absent (C3): only for a delete that actually removes an existing record through this path, matching the live path's own `persona_delete` guard. */
 export function applyCorrectionToState(state: StorageState, correction: CorrectionRecord): QuoteCorrectionSkip | void {
   if (!isQuoteCorrectionOp(correction) && correction.entity_type === "persona") {
-    applyCorrectionToPersonas(state.personas, correction);
-    if (correction.op === "remove") {
+    const removed = applyCorrectionToPersonas(state.personas, correction);
+    if (correction.op === "remove" && removed) {
       removePersonaLinksToId(state.human.people, correction.id);
     }
     return;

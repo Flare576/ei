@@ -28,7 +28,7 @@ import { join } from "path";
 import { readFile, access } from "fs/promises";
 import { getDataPath } from "./retrieval.js";
 import { withLock, atomicWrite } from "../storage/file-lock.js";
-import { appendCorrection, readCorrections, applyCorrectionsToStateWithMerges } from "../core/corrections.js";
+import { appendCorrection, readCorrections, applyCorrectionsToStateWithMerges, resolveMergedEmbedding } from "../core/corrections.js";
 import type { CorrectionRecord, QuoteCorrectionSkip, QuoteCorrectionMerge } from "../core/corrections.js";
 import type { PersonaLinkRefusal } from "../core/utils/identifier-utils.js";
 import { encodeAllEmbeddings, decodeAllEmbeddings } from "../storage/embeddings.js";
@@ -179,6 +179,18 @@ export async function writeCorrection(record: CorrectionRecord): Promise<WriteCo
       // disk, not a stale snapshot taken before queueing — see corrections.ts's
       // applyCorrectionsToStateWithMerges doc comment.
       const { skipped, merged, personLinkRefusals } = applyCorrectionsToStateWithMerges(state, [...pending, record]);
+      // I2: a widened merge's embedding may only be pickMergedEmbedding's
+      // best-effort placeholder (QuoteCorrectionMerge.embeddingStale) --
+      // recompute it against the actual persisted union text before this
+      // is written to disk. `m.quote` is the exact same object reference
+      // already sitting in `state.human.quotes` (applyQuoteOperation's
+      // merge branches never clone it), so mutating it here also updates
+      // the record about to be persisted.
+      for (const m of merged) {
+        if (m.embeddingStale) {
+          m.quote.embedding = await resolveMergedEmbedding(m);
+        }
+      }
       state.timestamp = new Date().toISOString();
 
       // State write happens before the queue clear: if we crash in between,

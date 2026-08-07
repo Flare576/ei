@@ -123,11 +123,13 @@ export class PersonaState {
       .map(m => ({ ...m }));
   }
 
-  messages_append(personaId: string, message: Message): void {
+  /** Returns true when `personaId` exists and the message was appended; false (a silent no-op) when it doesn't — the caller must check this rather than assume delivery (I3, .sisyphus/reviews/tonight-post-audit-fix-queue.md). */
+  messages_append(personaId: string, message: Message): boolean {
     const data = this.personas.get(personaId);
-    if (!data) return;
+    if (!data) return false;
     data.messages.push(message);
     data.entity.last_updated = new Date().toISOString();
+    return true;
   }
 
   messages_update(personaId: string, messageId: string, updates: Partial<Message>): boolean {

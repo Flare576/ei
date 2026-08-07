@@ -3,10 +3,36 @@ import { mkdtempSync, rmSync, readFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { Processor } from "../../../src/core/processor.js";
-import type { Ei_Interface, Fact, Person, Quote, PersonaEntity, Message } from "../../../src/core/types.js";
+import type { Ei_Interface, Fact, Person, Quote, PersonaEntity, Message, StorageState } from "../../../src/core/types.js";
 import { RESERVED_PERSONA_IDS } from "../../../src/core/types.js";
 import type { CorrectionRecord, QuoteCreateRecord, QuoteFixRecord, QuoteRelinkRecord, QuoteRemoveRecord, QuoteCorrectionSkip } from "../../../src/core/corrections.js";
 import { appendCorrection, applyCorrectionToPersonas } from "../../../src/core/corrections.js";
+
+// I2: the live drain's own merge recompute (Processor.applyCorrectionRecord)
+// calls getEmbeddingService().embed() directly whenever a widened merge's
+// text differs from its survivor's original text -- mocked here exactly
+// like corrections-endpoints.test.ts's identical mock, deterministic and
+// TEXT-DERIVED so a test can prove the final persisted embedding is
+// actually a function of the union text, never a stale contributor's
+// partial-span vector. Nothing else in this file's drain path touches the
+// embedding service (drainCorrections trusts every OTHER record's
+// embedding verbatim, per this file's own doc comment above), so this mock
+// cannot affect any other test.
+vi.mock("../../../src/core/embedding-service.js", async (importOriginal) => {
+  const actual = await importOriginal() as Record<string, unknown>;
+  return {
+    ...actual,
+    getEmbeddingService: vi.fn(() => ({
+      embed: vi.fn(async (text: string) => textToDeterministicVector(text)),
+      embedBatch: vi.fn(async (texts: string[]) => texts.map(textToDeterministicVector)),
+      isReady: () => true,
+    })),
+  };
+});
+
+function textToDeterministicVector(text: string): number[] {
+  return [text.length, text.charCodeAt(0) || 0, text.charCodeAt(text.length - 1) || 0];
+}
 
 /**
  * Tests for Processor.drainCorrections() (private, invoked from the
@@ -16,8 +42,13 @@ import { appendCorrection, applyCorrectionToPersonas } from "../../../src/core/c
  * ei_create/ei_update/ei_remove through src/cli/corrections-writer.ts),
  * applies each record to the live StateManager, clears the file, and
  * fires onHumanUpdated(). It must tolerate malformed records without
- * wedging subsequent drains, and never recompute embeddings — it trusts
- * CorrectionRecord.record.embedding verbatim.
+ * wedging subsequent drains, and never recomputes an embedding for an
+ * ordinary correction — it trusts CorrectionRecord.record.embedding
+ * verbatim. The one exception is a quote.create/quote.fix that widens
+ * into an ADR-030 overlap merge with no single contributor's own span
+ * covering the full union: `resolveMergedEmbedding` (src/core/corrections.ts)
+ * recomputes that one record's embedding against its actual persisted
+ * union text (I2) — see the getEmbeddingService mock above.
  *
  * These tests invoke drainCorrections() directly (via a narrow structural
  * cast) rather than waiting on the background runLoop tick, so the
@@ -1054,5 +1085,88 @@ describe("Processor.drainCorrections() (live-side corrections drain)", () => {
     expect(deleteSpy).toHaveBeenCalledTimes(1);
     expect(deleteSpy).toHaveBeenCalledWith("persona-removable");
     expect(sm.persona_getById("persona-removable")).toBeNull();
+  });
+
+  it("I2: live drain recomputes a widened merge's embedding against the persisted union text, never keeping a stale partial-span vector", async () => {
+    const existingQuote = makeQuote({
+      id: "quote-existing", message_id: "ei:msg-1", data_item_ids: [], persona_groups: [],
+      start: 6, end: 19, text: "bravo charlie", embedding: [9, 9, 9],
+    });
+    const preloadedState: StorageState = {
+      version: 1,
+      timestamp: new Date().toISOString(),
+      human: { entity: "human", facts: [], topics: [], people: [], quotes: [existingQuote], last_updated: new Date().toISOString() },
+      personas: {},
+      queue: [],
+      providers: [],
+      tools: [],
+    };
+    vi.mocked(storage.load).mockResolvedValue(preloadedState);
+
+    const createRecord = makeQuoteCreateRecord({
+      id: "quote-new", message_id: "ei:msg-1", start: 12, end: 25, text: "charlie delta",
+      data_item_ids: [], persona_groups: [], embedding: [1, 1, 1],
+    });
+    await appendCorrection(join(dataDir, "corrections.json"), createRecord);
+
+    processor = new Processor(mock.ei);
+    await processor.start(storage as unknown as Parameters<Processor["start"]>[0]);
+    await asDrainable(processor).drainCorrections();
+
+    const quotes = processor.getStateManager().getHuman().quotes;
+    expect(quotes).toHaveLength(1);
+    expect(quotes[0].id).toBe("quote-existing");
+    expect(quotes[0].text).toBe("bravo charlie delta");
+    // The final embedding must represent the full persisted union text --
+    // never the survivor's own stale partial-span vector ([9,9,9]) or the
+    // incoming candidate's own partial-span vector ([1,1,1]).
+    expect(quotes[0].embedding).toEqual(textToDeterministicVector("bravo charlie delta"));
+    expect(quotes[0].embedding).not.toEqual([9, 9, 9]);
+    expect(quotes[0].embedding).not.toEqual([1, 1, 1]);
+  });
+
+  it("I3: a refusal report is not silently lost when the state bypasses first-run Ei bootstrap (some other Persona already exists) but the 'ei' persona itself was never created", async () => {
+    const PERSONA_A = "11111111-1111-4111-8111-111111111111";
+    const otherPersona = makePersonaEntity("other-persona", { display_name: "Other", is_paused: true });
+    const alice = makePerson({
+      id: "alice",
+      identifiers: [{ type: "Nickname", value: "Alice", is_primary: true }, { type: "Ei Persona", value: PERSONA_A }],
+    });
+    const preloadedState: StorageState = {
+      version: 1,
+      timestamp: new Date().toISOString(),
+      human: { entity: "human", facts: [], topics: [], people: [alice], quotes: [], last_updated: new Date().toISOString() },
+      personas: { [otherPersona.id]: { entity: otherPersona, messages: [] } },
+      queue: [],
+      providers: [],
+      tools: [],
+    };
+    vi.mocked(storage.load).mockResolvedValue(preloadedState);
+
+    const bob = makePerson({
+      id: "bob",
+      identifiers: [{ type: "Nickname", value: "Bob", is_primary: true }, { type: "Ei Persona", value: PERSONA_A }],
+    });
+    await appendCorrection(join(dataDir, "corrections.json"), {
+      op: "upsert", entity_type: "person", id: bob.id, record: bob, timestamp: new Date().toISOString(),
+    });
+
+    const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    processor = new Processor(mock.ei);
+    await processor.start(storage as unknown as Parameters<Processor["start"]>[0]);
+    await asDrainable(processor).drainCorrections();
+
+    const sm = processor.getStateManager();
+    // Confirm bootstrap really was bypassed -- "ei" genuinely never exists.
+    expect(sm.persona_getById("ei")).toBeNull();
+    // The write itself still applied (Bob's own conflicting link was
+    // refused) -- it must not silently vanish as if fully successful.
+    expect(sm.getHuman().people.find((p) => p.id === "bob")?.identifiers).not.toContainEqual(expect.objectContaining({ type: "Ei Persona" }));
+    // No "ei" thread exists to hold a durable report...
+    expect(sm.messages_get("ei")).toEqual([]);
+    // ...so the loss must be surfaced some other discoverable way (I3).
+    expect(consoleWarnSpy).toHaveBeenCalled();
+    expect(consoleWarnSpy.mock.calls.some((call) => call.join(" ").includes(PERSONA_A))).toBe(true);
+    consoleWarnSpy.mockRestore();
   });
 });

@@ -29,7 +29,7 @@ import { buildPersonaFromPersonPrompt } from "../prompts/index.js";
 import { buildSiblingAwarenessSection } from "../prompts/room/index.js";
 import type { PersonaGenerationResult } from "../prompts/generation/types.js";
 
-import { readCorrections, assertValidCorrection, applyQuoteOperation, isQuoteCorrectionOp } from "./corrections.js";
+import { readCorrections, assertValidCorrection, applyQuoteOperation, isQuoteCorrectionOp, resolveMergedEmbedding } from "./corrections.js";
 import type { CorrectionRecord, QuoteCorrectionSkip } from "./corrections.js";
 import { withLock, atomicWrite } from "../storage/file-lock.js";
 import type { Storage } from "../storage/interface.js";
@@ -785,7 +785,7 @@ const toolNextSteps = new Set([
 
         for (const record of records) {
           try {
-            this.applyCorrectionRecord(record);
+            await this.applyCorrectionRecord(record);
           } catch (err) {
             console.error(`[Processor ${this.instanceId}] Dropping malformed correction record:`, JSON.stringify(record), err);
           }
@@ -819,13 +819,21 @@ const toolNextSteps = new Set([
    * try/catch in drainCorrections keeps logging and isolating it exactly
    * like every other malformed record.
    */
-  private applyCorrectionRecord(record: CorrectionRecord): void {
+  private async applyCorrectionRecord(record: CorrectionRecord): Promise<void> {
     if (isQuoteCorrectionOp(record)) {
       const human = this.stateManager.getHuman();
       const result = applyQuoteOperation(human.quotes, record, human);
       if (result.skipped) {
         this.lastCorrectionSkips.push(result.skipped);
         throw new Error(result.skipped.reason);
+      }
+      if (result.merged?.embeddingStale) {
+        // I2: pickMergedEmbedding's placeholder for a widened merge is
+        // only a labelled approximation -- recompute it against the
+        // actual persisted union text before this reaches disk. `.quote`
+        // is the exact same object already sitting in `result.quotes`,
+        // so mutating it here also updates the record about to persist.
+        result.merged.quote.embedding = await resolveMergedEmbedding(result.merged);
       }
       human.quotes = result.quotes;
       this.stateManager.setHuman(human);

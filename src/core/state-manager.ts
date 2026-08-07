@@ -757,6 +757,13 @@ export class StateManager {
    * answer, so a refusal is reported through the `ei` persona thread
    * rather than returned. `excludeIds` is dedup's departing-donor list —
    * see guardPersonaLinks's own doc comment.
+   *
+   * The `ei` persona thread may not exist yet (a nonempty state can have
+   * other Personas but bypass first-run Ei bootstrap, see
+   * src/core/processor.ts) — `messages_append`'s return value is checked
+   * rather than assumed, and a failed delivery is logged loudly (I3) so
+   * the refusal is discoverable even though it could not be made durable
+   * through the normal `ei` thread.
    */
   human_person_upsert(person: Person, excludeIds?: readonly string[]): void {
     const priorStored = this.getHuman().people.find((p) => p.id === person.id);
@@ -764,7 +771,13 @@ export class StateManager {
     this.humanState.person_upsert(guarded);
     this.scheduleSave();
     if (refusals.length > 0) {
-      this.messages_append("ei", this.buildPersonaLinkRefusalMessage(refusals));
+      const message = this.buildPersonaLinkRefusalMessage(refusals);
+      const delivered = this.messages_append("ei", message);
+      if (!delivered) {
+        console.warn(
+          `[StateManager] Persona-link refusal report could not be delivered: the "ei" persona does not exist in this state yet. Lost report: ${message.content}`
+        );
+      }
     }
   }
 
@@ -901,9 +914,11 @@ export class StateManager {
     return new Date(last.timestamp).getTime();
   }
 
-  messages_append(personaId: string, message: Message): void {
-    this.personaState.messages_append(personaId, message);
-    this.scheduleSave();
+  /** Returns whether the message was actually appended -- false when `personaId` names a Persona that doesn't exist (I3): a caller reporting a diagnostic through a persona thread must not assume delivery just because this returned. */
+  messages_append(personaId: string, message: Message): boolean {
+    const delivered = this.personaState.messages_append(personaId, message);
+    if (delivered) this.scheduleSave();
+    return delivered;
   }
 
   messages_update(personaId: string, messageId: string, updates: Partial<Message>): boolean {
