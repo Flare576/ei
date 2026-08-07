@@ -404,7 +404,8 @@ export async function installClaudeCode(): Promise<void> {
 async function installClaudeCodeHooks(): Promise<void> {
   const home = resolveHome();
   const hooksDir = join(home, ".claude", "hooks");
-  const scriptPath = join(hooksDir, "ei-inject.ts");
+  const memoryScriptPath = join(hooksDir, "ei-inject.ts");
+  const sessionStartScriptPath = join(hooksDir, "ei-session-start.ts");
   const settingsPath = join(home, ".claude", "settings.json");
 
   await Bun.$`mkdir -p ${hooksDir}`;
@@ -418,13 +419,74 @@ async function installClaudeCodeHooks(): Promise<void> {
     return;
   }
 
-  const scriptContent = `#!/usr/bin/env bun
+  // MEMORY (UserPromptSubmit): unchanged -n 5 request size, but now filters
+  // returned items against every entity id already surfaced earlier in this
+  // Claude Code session before injecting, and skips injection entirely once
+  // nothing new survives the filter. Claude Code hooks are stateless external
+  // processes (a fresh `bun run` per turn, no persistent extension host like
+  // OMP's), so the dedup state has to be a real file — one per session_id
+  // under ~/.claude/ei-hook-state/. session_id is stable across --continue
+  // and --resume as of Claude Code 2.0.24 (github.com/anthropics/claude-code
+  // issue #9188), and Claude Code replays saved additionalContext on resume
+  // rather than re-running the hook for past turns, so the file needs to
+  // survive the resume for this to be correct, not just the live process.
+  // Dropped the old `input.hook_source` branch: Claude Code never actually
+  // sends that field (session_id/transcript_path/cwd/permission_mode/
+  // hook_event_name/prompt are the real UserPromptSubmit fields per
+  // code.claude.com/docs/en/hooks), and `ei --hook-source` only recognizes
+  // "opencode-plugin"/"cursor"/"codex" — so that branch could never fire.
+  const memoryScriptContent = `#!/usr/bin/env bun
 import { $ } from "bun";
+import { mkdir, writeFile, chmod } from "fs/promises";
 
 async function runEi(commandArgs) {
   const direct = await $\`ei \${commandArgs}\`.quiet().text().catch(() => "");
   if (direct.trim()) return direct;
   return await $\`bunx ei-tui@latest \${commandArgs}\`.quiet().text().catch(() => "");
+}
+
+const STATE_DIR = \`\${process.env.HOME}/.claude/ei-hook-state\`;
+// Claude Code session_ids are UUIDs, but treat that as a convention, not a
+// guarantee — reject anything else outright rather than interpolating it
+// into a filesystem path unchecked (a session_id of "../settings" would
+// otherwise resolve outside STATE_DIR entirely).
+const SAFE_SESSION_ID = /^[A-Za-z0-9_-]+$/;
+
+function extractId(item) {
+  return item && typeof item === "object" && typeof item.id === "string" ? item.id : undefined;
+}
+
+function statePathFor(sessionId) {
+  if (typeof sessionId !== "string" || !SAFE_SESSION_ID.test(sessionId)) return null;
+  return \`\${STATE_DIR}/\${sessionId}.json\`;
+}
+
+async function loadSeenIds(sessionId) {
+  const path = statePathFor(sessionId);
+  if (!path) return new Set();
+  try {
+    const data = await Bun.file(path).json();
+    return new Set(Array.isArray(data?.ids) ? data.ids.filter((id) => typeof id === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+
+async function saveSeenIds(sessionId, ids) {
+  const path = statePathFor(sessionId);
+  if (!path) return;
+  try {
+    await mkdir(STATE_DIR, { recursive: true });
+    await chmod(STATE_DIR, 0o700);
+    await writeFile(path, JSON.stringify({ ids: [...ids] }), { mode: 0o600 });
+    await chmod(path, 0o600);
+  } catch {
+    // State persistence failed (disk full, permissions, a race with another
+    // process, ...). The fresh context we already wrote to stdout above is
+    // still valid and must not be lost to an uncaught rejection here — losing
+    // just the durable marker means these ids may resurface next turn, which
+    // is safe; letting this throw and crash the hook process is not.
+  }
 }
 
 if (import.meta.main) {
@@ -437,25 +499,107 @@ Ei is a personal knowledge base built from the user's coding sessions, Slack, do
 The following items MAY be relevant to your current task — use \\\`ei_search\\\` or \\\`ei_lookup\\\` for targeted queries.
 \`;
 
-  const input = await new Response(Bun.stdin.stream()).json().catch(() => ({}));
-  const raw = (input.prompt ?? "").replace(/<[^>]*>/g, "").trim();
+  const input = (await new Response(Bun.stdin.stream()).json().catch(() => ({}))) ?? {};
+  const rawPrompt = typeof input.prompt === "string" ? input.prompt : "";
+  const raw = rawPrompt.replace(/<[^>]*>/g, "").trim();
 
   const sessionArgs = [];
-  if (input.session_id && input.hook_source) {
-    sessionArgs.push("--session", input.session_id, "--hook-source", input.hook_source);
-  } else if (input.transcript_path) {
+  if (typeof input.transcript_path === "string" && input.transcript_path) {
     sessionArgs.push("--transcript", input.transcript_path);
   }
 
   const args = raw ? ["-n", "5", ...sessionArgs, raw] : ["--recent", "-n", "5"];
 
   const output = await runEi(args);
-  if (output.trim()) process.stdout.write(\`\\n\${heading}\\n\${output.trim()}\\n\`);
+  if (output.trim()) {
+    let items = null;
+    try {
+      items = JSON.parse(output);
+    } catch {
+      // Non-JSON output (e.g. an error string) — nothing to de-dup by id, inject as-is.
+    }
+
+    if (Array.isArray(items)) {
+      const seen = await loadSeenIds(input.session_id);
+      const fresh = items.filter((item) => {
+        const id = extractId(item);
+        return !id || !seen.has(id);
+      });
+      if (fresh.length > 0) {
+        process.stdout.write(\`\\n\${heading}\\n\${JSON.stringify(fresh, null, 2)}\\n\`);
+        for (const item of fresh) {
+          const id = extractId(item);
+          if (id) seen.add(id);
+        }
+        await saveSeenIds(input.session_id, seen);
+      }
+      // fresh.length === 0: everything here already surfaced this session — inject nothing.
+    } else {
+      process.stdout.write(\`\\n\${heading}\\n\${output.trim()}\\n\`);
+    }
+  }
 }
 `;
 
-  await Bun.write(scriptPath, scriptContent);
-  await Bun.$`chmod +x ${scriptPath}`;
+  // WHO (SessionStart): announces the single "Claude Code" persona's identity
+  // (ensureClaudeCodePersona in src/integrations/claude-code/importer.ts —
+  // display_name "Claude Code", NOT "Claude" — every Claude Code session
+  // shares this one persona, there's no multi-persona tab-switching to
+  // resolve). No dedup state needed: SessionStart itself only fires at real
+  // session boundaries — startup, resume, /clear, compaction, and
+  // --fork-session forks — and Claude Code's own docs say it re-runs on
+  // resume/fork specifically "so they can refresh their context," which is
+  // exactly the semantic we want. Also prunes state files older than 30 days
+  // from the MEMORY hook's per-session dedup store — done here (once per
+  // session) rather than in the MEMORY hook (once per turn) to avoid a
+  // directory scan on every single prompt.
+  const sessionStartScriptContent = `#!/usr/bin/env bun
+import { $ } from "bun";
+import { readdir, stat, unlink } from "fs/promises";
+
+async function runEi(commandArgs) {
+  const direct = await $\`ei \${commandArgs}\`.quiet().text().catch(() => "");
+  if (direct.trim()) return direct;
+  return await $\`bunx ei-tui@latest \${commandArgs}\`.quiet().text().catch(() => "");
+}
+
+const STATE_DIR = \`\${process.env.HOME}/.claude/ei-hook-state\`;
+const STALE_MS = 30 * 24 * 60 * 60 * 1000;
+
+async function pruneStaleState() {
+  let names;
+  try {
+    names = await readdir(STATE_DIR);
+  } catch {
+    return; // state dir doesn't exist yet — nothing to prune
+  }
+  const now = Date.now();
+  for (const name of names) {
+    if (!name.endsWith(".json")) continue;
+    const path = \`\${STATE_DIR}/\${name}\`;
+    try {
+      const info = await stat(path);
+      if (now - info.mtimeMs > STALE_MS) await unlink(path);
+    } catch {
+      // transient stat/unlink failure, or another process already removed it — skip.
+    }
+  }
+}
+
+if (import.meta.main) {
+  const block = await runEi(["personas", "--format", "prompt", "--", "Claude Code"]);
+  if (block.trim() && !block.includes("No saved state")) {
+    process.stdout.write(\`\\n\${block.trim()}\\n\`);
+  }
+
+  await pruneStaleState();
+}
+`;
+
+  await Bun.write(memoryScriptPath, memoryScriptContent);
+  await Bun.$`chmod +x ${memoryScriptPath}`;
+  await Bun.write(sessionStartScriptPath, sessionStartScriptContent);
+  await Bun.$`chmod +x ${sessionStartScriptPath}`;
 
   let settings: Record<string, unknown> = {};
   try {
@@ -466,15 +610,21 @@ The following items MAY be relevant to your current task — use \\\`ei_search\\
   }
 
   const hooks = (settings.hooks ?? {}) as Record<string, unknown>;
+
   const userPromptSubmit = (hooks.UserPromptSubmit ?? []) as unknown[];
-
-  const hookEntry = { hooks: [{ type: "command", command: "~/.claude/hooks/ei-inject.ts" }] };
-  const alreadyInstalled = userPromptSubmit.some((entry) => hookEntryHasCommand(entry, "~/.claude/hooks/ei-inject.ts"));
-  if (!alreadyInstalled) {
-    userPromptSubmit.push(hookEntry);
+  const memoryHookEntry = { hooks: [{ type: "command", command: "~/.claude/hooks/ei-inject.ts" }] };
+  if (!userPromptSubmit.some((entry) => hookEntryHasCommand(entry, "~/.claude/hooks/ei-inject.ts"))) {
+    userPromptSubmit.push(memoryHookEntry);
   }
-
   hooks.UserPromptSubmit = userPromptSubmit;
+
+  const sessionStart = (hooks.SessionStart ?? []) as unknown[];
+  const whoHookEntry = { hooks: [{ type: "command", command: "~/.claude/hooks/ei-session-start.ts" }] };
+  if (!sessionStart.some((entry) => hookEntryHasCommand(entry, "~/.claude/hooks/ei-session-start.ts"))) {
+    sessionStart.push(whoHookEntry);
+  }
+  hooks.SessionStart = sessionStart;
+
   settings.hooks = hooks;
 
   // Atomic write: write to temp file then rename to avoid partial writes
@@ -482,7 +632,7 @@ The following items MAY be relevant to your current task — use \\\`ei_search\\
   await Bun.write(tmpPath, JSON.stringify(settings, null, 2) + "\n");
   await rename(tmpPath, settingsPath);
 
-  console.log(`✓ Installed Ei context hook to ~/.claude/hooks/ei-inject.ts`);
+  console.log(`✓ Installed Ei context hooks to ~/.claude/hooks/ei-inject.ts (UserPromptSubmit) and ~/.claude/hooks/ei-session-start.ts (SessionStart)`);
 }
 
 export async function installCursor(): Promise<void> {
