@@ -131,7 +131,7 @@ describe("find_memory — persona filter resolution", () => {
     expect(searchFn).toHaveBeenCalledWith("music", expect.objectContaining({ persona_filter: "persona-dj" }));
   });
 
-  it("no match calls searchHumanData without persona_filter", async () => {
+  it("no display-name match passes the raw persona arg through as persona_filter (never search unscoped)", async () => {
     const searchFn = makeSearchFn();
     const getPersonaList = vi.fn().mockResolvedValue([
       { id: "persona-xyz", display_name: "Flare" },
@@ -140,16 +140,32 @@ describe("find_memory — persona filter resolution", () => {
     await executor.execute({ query: "music", persona: "Unknown" });
 
     const callOptions = searchFn.mock.calls[0][1] as Record<string, unknown>;
-    expect(callOptions.persona_filter).toBeUndefined();
+    expect(callOptions.persona_filter).toBe("Unknown");
   });
 
-  it("getPersonaList not provided — no filter applied", async () => {
+  it("getPersonaList not provided — persona arg still passed through as persona_filter", async () => {
     const searchFn = makeSearchFn();
     const executor = createFindMemoryExecutor(searchFn);
     await executor.execute({ query: "music", persona: "DJ" });
 
     const callOptions = searchFn.mock.calls[0][1] as Record<string, unknown>;
-    expect(callOptions.persona_filter).toBeUndefined();
+    expect(callOptions.persona_filter).toBe("DJ");
+  });
+
+  it("IRQ-2 acceptance bar: both a resolved-by-name persona and an unresolved/raw-id persona arg pass a persona_filter through to searchHumanData", async () => {
+    const getPersonaList = vi.fn().mockResolvedValue([
+      { id: "persona-abc", display_name: "DJ" },
+    ]);
+
+    const resolvedSearchFn = makeSearchFn();
+    await createFindMemoryExecutor(resolvedSearchFn, getPersonaList).execute({ query: "music", persona: "DJ" });
+    const resolvedOptions = resolvedSearchFn.mock.calls[0][1] as Record<string, unknown>;
+    expect(resolvedOptions.persona_filter).toBeDefined();
+
+    const rawIdSearchFn = makeSearchFn();
+    await createFindMemoryExecutor(rawIdSearchFn, getPersonaList).execute({ query: "music", persona: "persona-not-a-display-name" });
+    const rawIdOptions = rawIdSearchFn.mock.calls[0][1] as Record<string, unknown>;
+    expect(rawIdOptions.persona_filter).toBeDefined();
   });
 });
 

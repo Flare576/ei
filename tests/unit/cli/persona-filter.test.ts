@@ -12,7 +12,10 @@ const NOW = "2026-01-01T00:00:00Z";
 const PERSONA_ID = "persona-1";
 const SOURCE_PREFIX = "cursor";
 
-function makeState(human: Partial<StorageState["human"]> = {}): StorageState {
+function makeState(
+  human: Partial<StorageState["human"]> = {},
+  personas: StorageState["personas"] = {}
+): StorageState {
   return {
     version: 1,
     timestamp: NOW,
@@ -26,28 +29,85 @@ function makeState(human: Partial<StorageState["human"]> = {}): StorageState {
       last_updated: NOW,
       ...human,
     },
-    personas: {},
+    personas,
     queue: [],
     providers: [],
     tools: [],
   } as unknown as StorageState;
 }
 
-// ── filterTypeSpecificByPersona / filterTypeSpecificBySource — fall-through contract ──
-//
-// Both functions resolve a `targetType` string to a collection to filter against.
-// "quotes" has an explicit early-return []; "personas" has no matching branch at
-// all, so `collection` stays null and `if (!collection) return results` hands back
-// the input completely unfiltered. This is surprising (silent no-op rather than an
-// error or an actual persona-scoped filter) and the skill docs now describe it
-// explicitly — these tests freeze the behavior so a future change to either branch
-// is caught instead of silently drifting from the docs.
+function makePersonaRecord(
+  id: string,
+  groupPrimary: string | null,
+  groupsVisible: string[] = []
+): StorageState["personas"][string] {
+  return {
+    entity: {
+      id,
+      display_name: id,
+      entity: "system",
+      group_primary: groupPrimary,
+      groups_visible: groupsVisible,
+      traits: [],
+      topics: [],
+      is_paused: false,
+      is_archived: false,
+      is_static: false,
+      last_updated: NOW,
+    },
+    messages: [],
+  } as unknown as StorageState["personas"][string];
+}
 
-describe("filterTypeSpecificByPersona — quotes/personas fall-through", () => {
-  it("returns [] for targetType 'quotes' regardless of input contents", () => {
-    const state = makeState();
+// ── filterTypeSpecificByPersona — quotes now filter by group-visibility ──
+//
+// "quotes" used to be an explicit early-return [] (total exclusion). Per
+// Flare's ruling, persona-scoped search must FILTER quotes the same way
+// prompt-context-builder.ts's filterHumanDataByVisibility does: intersect the
+// quote's effective persona_groups (empty defaults to "General") against the
+// target persona's visible groups (group_primary + groups_visible). A persona
+// with no visibility into a quote's group correctly gets zero results —
+// that's filtering, not exclusion. "personas" still has no matching branch at
+// all, so `collection` stays null and the fall-through hands back the input
+// unfiltered.
+
+describe("filterTypeSpecificByPersona — quotes group-visibility / personas fall-through", () => {
+  it("returns only quotes whose persona_groups intersect the persona's visible groups", () => {
+    const state = makeState(
+      {
+        quotes: [
+          { id: "quote_1", persona_groups: ["Music"] },
+          { id: "quote_2", persona_groups: ["Cooking"] },
+          { id: "quote_3", persona_groups: [] }, // defaults to "General"
+        ],
+      } as unknown as Partial<StorageState["human"]>,
+      { [PERSONA_ID]: makePersonaRecord(PERSONA_ID, "Music", ["General"]) }
+    );
+    const results = [{ id: "quote_1" }, { id: "quote_2" }, { id: "quote_3" }];
+    const filtered = filterTypeSpecificByPersona(results, state, PERSONA_ID, "quotes");
+    expect(filtered).toEqual([{ id: "quote_1" }, { id: "quote_3" }]);
+  });
+
+  it("returns [] (a filter finding nothing, not an exclusion bug) when no quote's group is visible to the persona", () => {
+    const state = makeState(
+      {
+        quotes: [
+          { id: "quote_1", persona_groups: ["Music"] },
+          { id: "quote_2", persona_groups: ["Cooking"] },
+        ],
+      } as unknown as Partial<StorageState["human"]>,
+      { [PERSONA_ID]: makePersonaRecord(PERSONA_ID, "Woodworking", []) }
+    );
     const results = [{ id: "quote_1" }, { id: "quote_2" }];
     expect(filterTypeSpecificByPersona(results, state, PERSONA_ID, "quotes")).toEqual([]);
+  });
+
+  it("returns [] when the persona id can't be resolved from state at all", () => {
+    const state = makeState({
+      quotes: [{ id: "quote_1", persona_groups: [] }],
+    } as unknown as Partial<StorageState["human"]>);
+    const results = [{ id: "quote_1" }];
+    expect(filterTypeSpecificByPersona(results, state, "unknown-persona", "quotes")).toEqual([]);
   });
 
   it("returns the input array unchanged for targetType 'personas', even though none carry the persona's id", () => {
@@ -73,6 +133,11 @@ describe("filterTypeSpecificByPersona — quotes/personas fall-through", () => {
     expect(filtered).toEqual([{ id: "f1" }]);
   });
 });
+
+// ── filterTypeSpecificBySource — quotes/personas fall-through ──
+//
+// Source filtering has no group-visibility semantic; only the persona-scoped
+// path above changed. Quotes stay excluded here.
 
 describe("filterTypeSpecificBySource — quotes/personas fall-through", () => {
   it("returns [] for targetType 'quotes' regardless of input contents", () => {
@@ -105,17 +170,32 @@ describe("filterTypeSpecificBySource — quotes/personas fall-through", () => {
   });
 });
 
-// ── filterByPersona / filterBySource — balanced-search quote exclusion ──
+// ── filterByPersona — balanced-search quote group-visibility ──
 //
-// The balanced-search variants (used when no --type is given) hard-code
-// `if (result.type === "quote") return false` — quotes are always dropped from
-// --persona/--source-scoped balanced search, never matched against anything.
+// The balanced-search variant used to hard-code
+// `if (result.type === "quote") return false` — total exclusion. It now
+// resolves the original quote from state and applies the same
+// group-visibility predicate as filterTypeSpecificByPersona above.
 
-describe("filterByPersona — balanced search quote exclusion", () => {
-  it("drops every quote result even when nothing else about the query would exclude it", () => {
-    const state = makeState();
+describe("filterByPersona — balanced search quote group-visibility", () => {
+  it("keeps a quote result whose persona_groups intersect the persona's visible groups", () => {
+    const state = makeState(
+      { quotes: [{ id: "quote_1", persona_groups: ["Music"] }] } as unknown as Partial<StorageState["human"]>,
+      { [PERSONA_ID]: makePersonaRecord(PERSONA_ID, "Music", []) }
+    );
     const results = [
-      { type: "quote", text: "hello", speaker: "human", timestamp: NOW, message_id: null, linked_items: [] },
+      { type: "quote", id: "quote_1", text: "hello", speaker: "human", timestamp: NOW, message_id: null, linked_items: [] },
+    ] as unknown as BalancedResult[];
+    expect(filterByPersona(results, state, PERSONA_ID)).toEqual(results);
+  });
+
+  it("drops a quote result whose persona_groups don't intersect the persona's visible groups — empty result is correct, not a bug", () => {
+    const state = makeState(
+      { quotes: [{ id: "quote_1", persona_groups: ["Cooking"] }] } as unknown as Partial<StorageState["human"]>,
+      { [PERSONA_ID]: makePersonaRecord(PERSONA_ID, "Music", []) }
+    );
+    const results = [
+      { type: "quote", id: "quote_1", text: "hello", speaker: "human", timestamp: NOW, message_id: null, linked_items: [] },
     ] as unknown as BalancedResult[];
     expect(filterByPersona(results, state, PERSONA_ID)).toEqual([]);
   });

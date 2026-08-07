@@ -1,3 +1,4 @@
+import { filterQuotesByPersonaGroupVisibility } from "../core/group-visibility.js";
 import type { StorageState } from "../core/types.js";
 import type { BalancedResult } from "./retrieval.js";
 
@@ -12,9 +13,12 @@ export function resolvePersonaId(state: StorageState, name: string): string | nu
 }
 
 export function filterByPersona(results: BalancedResult[], state: StorageState, personaId: string): BalancedResult[] {
+  const persona = state.personas[personaId]?.entity;
   return results.filter((result) => {
     if (result.type === "quote") {
-      return false;
+      const original = state.human.quotes.find((q) => q.id === result.id);
+      if (!original) return false;
+      return filterQuotesByPersonaGroupVisibility([original], persona).length > 0;
     }
     const { id } = result;
     let original: { interested_personas?: string[] } | undefined;
@@ -36,7 +40,12 @@ export function filterTypeSpecificByPersona<T extends { id: string }>(
   targetType: string
 ): T[] {
   if (targetType === "quotes") {
-    return [];
+    const persona = state.personas[personaId]?.entity;
+    return results.filter((r) => {
+      const original = state.human.quotes.find((q) => q.id === r.id);
+      if (!original) return false;
+      return filterQuotesByPersonaGroupVisibility([original], persona).length > 0;
+    });
   }
   const collection =
     targetType === "facts"

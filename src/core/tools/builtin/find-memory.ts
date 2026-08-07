@@ -56,16 +56,22 @@ export function createFindMemoryExecutor(searchHumanData: SearchHumanData, getPe
 
       const limit = typeof args.limit === "number" && args.limit > 0 ? Math.min(args.limit, 20) : 10;
 
-      // Resolve persona display_name to ID
+      // Resolve persona display_name to ID. "Always filter when a persona is
+      // present" (Flare's ruling) is not conditional on successful display-name
+      // resolution: if the arg doesn't match a known display name, it may
+      // already be a persona ID (or an unresolvable one) — pass it through
+      // either way so downstream group-visibility filtering still applies
+      // rather than silently searching unscoped.
       let persona_filter: string | undefined;
-      if (personaArg && getPersonaList) {
-        const personas = await getPersonaList();
+      if (personaArg) {
+        const personas = getPersonaList ? await getPersonaList() : [];
         const match = personas.find(p => p.display_name.toLowerCase() === personaArg.toLowerCase());
         if (match) {
           persona_filter = match.id;
           console.log(`[find_memory] resolved persona "${personaArg}" to ID "${persona_filter}"`);
         } else {
-          console.warn(`[find_memory] persona "${personaArg}" not found, proceeding without filter`);
+          persona_filter = personaArg;
+          console.warn(`[find_memory] persona "${personaArg}" did not match a known display name, using it as-is`);
         }
       }
 

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { searchHumanData } from "../../../src/core/human-data-manager.js";
-import type { Fact, Topic, Person, Quote, HumanEntity } from "../../../src/core/types.js";
+import type { Fact, Topic, Person, Quote, HumanEntity, PersonaEntity } from "../../../src/core/types.js";
+import type { StateManager } from "../../../src/core/state-manager.js";
 
 vi.mock("../../../src/core/embedding-service.js", () => ({
   getEmbeddingService: () => ({
@@ -18,9 +19,10 @@ vi.mock("../../../src/core/embedding-service.js", () => ({
   computeQuoteEmbedding: vi.fn(),
 }));
 
-function createMockStateManager(human: HumanEntity) {
+function createMockStateManager(human: HumanEntity, personas: Record<string, PersonaEntity> = {}) {
   return {
     getHuman: vi.fn(() => human),
+    persona_getById: vi.fn((id: string) => personas[id] ?? null),
   };
 }
 
@@ -66,6 +68,39 @@ function makePerson(id: string, name: string, interested?: string[]): Person {
   };
 }
 
+function makeQuote(id: string, text: string, personaGroups: string[] = []): Quote {
+  return {
+    id,
+    message_id: null,
+    data_item_ids: [],
+    persona_groups: personaGroups,
+    text,
+    speaker: "human",
+    timestamp: new Date().toISOString(),
+    start: null,
+    end: null,
+    created_at: new Date().toISOString(),
+    created_by: "human",
+    embedding: new Array(384).fill(0.1),
+  };
+}
+
+function makePersonaEntity(id: string, groupPrimary: string | null, groupsVisible: string[] = []): PersonaEntity {
+  return {
+    id,
+    display_name: id,
+    entity: "system",
+    group_primary: groupPrimary,
+    groups_visible: groupsVisible,
+    traits: [],
+    topics: [],
+    is_paused: false,
+    is_archived: false,
+    is_static: false,
+    last_updated: new Date().toISOString(),
+  } as unknown as PersonaEntity;
+}
+
 function makeHuman(overrides: Partial<HumanEntity> = {}): HumanEntity {
   return {
     entity: "human",
@@ -90,7 +125,7 @@ describe("searchHumanData - persona_filter option", () => {
       });
       const sm = createMockStateManager(human);
 
-      const result = await searchHumanData(sm as any, "description", {
+      const result = await searchHumanData(sm as unknown as StateManager, "description", {
         types: ["fact"],
         persona_filter: "persona-1",
       });
@@ -108,7 +143,7 @@ describe("searchHumanData - persona_filter option", () => {
       });
       const sm = createMockStateManager(human);
 
-      const result = await searchHumanData(sm as any, "description", {
+      const result = await searchHumanData(sm as unknown as StateManager, "description", {
         types: ["fact"],
         persona_filter: "unknown-persona",
       });
@@ -128,7 +163,7 @@ describe("searchHumanData - persona_filter option", () => {
       });
       const sm = createMockStateManager(human);
 
-      const result = await searchHumanData(sm as any, "description", {
+      const result = await searchHumanData(sm as unknown as StateManager, "description", {
         types: ["topic"],
         persona_filter: "persona-3",
       });
@@ -149,13 +184,62 @@ describe("searchHumanData - persona_filter option", () => {
       });
       const sm = createMockStateManager(human);
 
-      const result = await searchHumanData(sm as any, "description", {
+      const result = await searchHumanData(sm as unknown as StateManager, "description", {
         types: ["person"],
         persona_filter: "persona-2",
       });
 
       expect(result.people.map(p => p.id)).toEqual(expect.arrayContaining(["p2", "p3"]));
       expect(result.people.map(p => p.id)).not.toContain("p1");
+    });
+  });
+
+  // "quotes" don't have interested_personas like Fact/Topic/Person — visibility
+  // is governed by group intersection (persona_groups vs. the persona's
+  // group_primary + groups_visible), the same predicate prompt-context-builder.ts's
+  // filterHumanDataByVisibility already applies. See group-visibility.ts.
+  describe("quotes filtering — group-visibility", () => {
+    it("a persona with visible groups gets only the group-visible quotes", async () => {
+      const human = makeHuman({
+        quotes: [
+          makeQuote("q1", "About music", ["Music"]),
+          makeQuote("q2", "About cooking", ["Cooking"]),
+          makeQuote("q3", "No groups set", []), // defaults to "General"
+        ],
+      });
+      const sm = createMockStateManager(human, {
+        "persona-1": makePersonaEntity("persona-1", "Music", ["General"]),
+      });
+
+      const result = await searchHumanData(sm as unknown as StateManager, "about", {
+        types: ["quote"],
+        persona_filter: "persona-1",
+      });
+
+      expect(result.quotes.map(q => q.id)).toEqual(expect.arrayContaining(["q1", "q3"]));
+      expect(result.quotes.map(q => q.id)).not.toContain("q2");
+    });
+
+    it("a persona with NO visible groups gets zero quotes — this is correct filtering, not a bug", async () => {
+      // Per Flare's IRQ-2 ruling: a persona whose group_primary/groups_visible
+      // don't intersect any quote's persona_groups SHOULD see zero quotes.
+      // That's the filter doing its job, not an exclusion defect to "fix".
+      const human = makeHuman({
+        quotes: [
+          makeQuote("q1", "About music", ["Music"]),
+          makeQuote("q2", "About cooking", ["Cooking"]),
+        ],
+      });
+      const sm = createMockStateManager(human, {
+        "persona-1": makePersonaEntity("persona-1", "Woodworking", []),
+      });
+
+      const result = await searchHumanData(sm as unknown as StateManager, "about", {
+        types: ["quote"],
+        persona_filter: "persona-1",
+      });
+
+      expect(result.quotes).toEqual([]);
     });
   });
 
@@ -175,13 +259,31 @@ describe("searchHumanData - persona_filter option", () => {
       });
       const sm = createMockStateManager(human);
 
-      const result = await searchHumanData(sm as any, "description", {
+      const result = await searchHumanData(sm as unknown as StateManager, "description", {
         types: ["fact", "topic", "person"],
       });
 
       expect(result.facts).toHaveLength(2);
       expect(result.topics).toHaveLength(1);
       expect(result.people).toHaveLength(1);
+    });
+
+    it("no persona_filter still returns all quotes unscoped, unchanged", async () => {
+      const human = makeHuman({
+        quotes: [
+          makeQuote("q1", "About music", ["Music"]),
+          makeQuote("q2", "About cooking", ["Cooking"]),
+          makeQuote("q3", "No groups set", []),
+        ],
+      });
+      const sm = createMockStateManager(human);
+
+      const result = await searchHumanData(sm as unknown as StateManager, "about", {
+        types: ["quote"],
+      });
+
+      expect(result.quotes.map(q => q.id)).toEqual(expect.arrayContaining(["q1", "q2", "q3"]));
+      expect(result.quotes).toHaveLength(3);
     });
 
     it("returns all items when persona_filter is undefined", async () => {
@@ -193,7 +295,7 @@ describe("searchHumanData - persona_filter option", () => {
       });
       const sm = createMockStateManager(human);
 
-      const result = await searchHumanData(sm as any, "fact", {
+      const result = await searchHumanData(sm as unknown as StateManager, "fact", {
         types: ["fact"],
         persona_filter: undefined,
       });
@@ -212,7 +314,7 @@ describe("searchHumanData - persona_filter option", () => {
       });
       const sm = createMockStateManager(human);
 
-      const result = await searchHumanData(sm as any, "fact", {
+      const result = await searchHumanData(sm as unknown as StateManager, "fact", {
         types: ["fact"],
         persona_filter: "persona-1",
       });
@@ -229,7 +331,7 @@ describe("searchHumanData - persona_filter option", () => {
       });
       const sm = createMockStateManager(human);
 
-      const result = await searchHumanData(sm as any, "topic", {
+      const result = await searchHumanData(sm as unknown as StateManager, "topic", {
         types: ["topic"],
         persona_filter: "persona-1",
       });
@@ -254,7 +356,7 @@ describe("searchHumanData - persona_filter option", () => {
       });
       const sm = createMockStateManager(human);
 
-      const result = await searchHumanData(sm as any, "shared", {
+      const result = await searchHumanData(sm as unknown as StateManager, "shared", {
         types: ["fact", "topic", "person"],
         persona_filter: "shared-persona",
       });

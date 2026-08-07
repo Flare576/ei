@@ -9,6 +9,7 @@ import {
   computeQuoteEmbedding,
 } from "./embedding-service.js";
 import { stripDataItemEmbedding, stripQuoteEmbedding, stripHumanEmbeddings } from "./context-utils.js";
+import { filterQuotesByPersonaGroupVisibility } from "./group-visibility.js";
 
 // =============================================================================
 // READ
@@ -242,7 +243,16 @@ export async function searchHumanData(
     ).map(stripDataItemEmbedding);
   }
   if (types.includes("quote")) {
-    result.quotes = searchItems(human.quotes, (q) => q.text).map(stripQuoteEmbedding);
+    // A quote isn't "interested" in a persona the way a Fact/Topic/Person is
+    // (via interested_personas) — it was said in a context, and that context's
+    // visibility is governed by group intersection, same as prompt-context
+    // building (prompt-context-builder.ts's filterHumanDataByVisibility).
+    let quotes = human.quotes;
+    if (persona_filter) {
+      const persona = sm.persona_getById(persona_filter);
+      quotes = filterQuotesByPersonaGroupVisibility(quotes, persona);
+    }
+    result.quotes = searchItems(quotes, (q) => q.text).map(stripQuoteEmbedding);
   }
 
   return result;
