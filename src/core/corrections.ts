@@ -967,6 +967,35 @@ export function applyCorrectionToPersonas(personas: StorageState["personas"], co
 }
 
 /**
+ * The one shared implementation of the ADR-006/ADR-010 person-link
+ * cardinality guard's "which stored record are we comparing against"
+ * step (I7, .sisyphus/reviews/tonight-post-audit-fix-queue.md): looks up
+ * `priorStored` from `allPeople` by id and asks guardPersonaLinks to
+ * decide which links survive the incoming `candidate`. Every consumer
+ * that materializes a Person upsert -- applyCorrectionToState below (the
+ * queued CLI/MCP read overlay and self-drain's authoritative write both
+ * reach it through applyCorrectionsToState/applyCorrectionsToStateWithMerges)
+ * and StateManager.human_person_upsert() (the live Processor drain, LLM
+ * person-update handler, and dedup) -- calls this SAME function rather
+ * than re-deriving `priorStored` and re-invoking guardPersonaLinks at its
+ * own call site. Before this, two independent call sites happened to
+ * produce the same answer only because each one separately remembered to
+ * call guardPersonaLinks; a future change to the guard step now lands on
+ * every materialization path at once instead of requiring two call sites
+ * to be kept in sync by hand. `excludeIds` is dedup's departing-donor
+ * list, forwarded to guardPersonaLinks unchanged -- see its own doc
+ * comment.
+ */
+export function guardPersonUpsert(
+  candidate: Person,
+  allPeople: readonly Person[],
+  excludeIds?: readonly string[]
+): { person: Person; refusals: PersonaLinkRefusal[] } {
+  const priorStored = allPeople.find((p) => p.id === candidate.id);
+  return guardPersonaLinks(candidate, priorStored, allPeople, excludeIds);
+}
+
+/**
  * Route one correction to its target: the personas map for entity_type
  * "persona", the HumanEntity for everything else — except a quote-domain
  * record (isQuoteCorrectionOp) always routes to the HumanEntity, since
@@ -981,20 +1010,28 @@ export function applyCorrectionToPersonas(personas: StorageState["personas"], co
  * `persona_delete` guard.
  *
  * A Person upsert additionally runs the ADR-006/ADR-010 write-time
- * cardinality guard (guardPersonaLinks) against `state.human.people`
- * before it lands (I7, .sisyphus/reviews/tonight-post-audit-fix-queue.md)
- * -- this function is the ONLY place a Person correction is ever
- * materialized into a StorageState, so every consumer shares it: the
- * CLI/MCP's queued read overlay (applyCorrectionsToState, reached from
- * loadLatestState) and self-drain's authoritative write
- * (applyCorrectionsToStateWithMerges). Before this, a still-queued
- * `[X,X]`-shaped correction was visible with BOTH duplicate links
- * through the read overlay even though the eventual drain would keep
- * only one. Any refusal is appended to the optional `personLinkRefusals`
- * accumulator so a caller that needs to report it (self-drain) can; a
- * caller that doesn't (the read overlay) simply omits the argument and
- * the filtered record is applied silently, exactly like every other
- * Person upsert.
+ * cardinality guard through guardPersonUpsert (I7,
+ * .sisyphus/reviews/tonight-post-audit-fix-queue.md) against
+ * `state.human.people` before it lands. That is the SAME shared function
+ * StateManager.human_person_upsert() calls for the live Processor drain
+ * -- so the queued CLI/MCP read overlay (applyCorrectionsToState,
+ * reached from loadLatestState), self-drain's authoritative write
+ * (applyCorrectionsToStateWithMerges), and live-drain all decide
+ * duplicate/conflicting Persona links through one guard implementation,
+ * not three call sites that each independently invoke guardPersonaLinks.
+ * They still apply the filtered result differently -- this function
+ * writes straight into a raw StorageState via applyCorrectionToHuman,
+ * while StateManager.human_person_upsert() additionally owns
+ * scheduleSave() and the async ei-persona-report side effect -- because
+ * those are genuinely StateManager-level responsibilities a pure state
+ * transformation has no business performing. Before the guard step was
+ * shared, a still-queued `[X,X]`-shaped correction was visible with BOTH
+ * duplicate links through the read overlay even though the eventual
+ * drain would keep only one. Any refusal is appended to the optional
+ * `personLinkRefusals` accumulator so a caller that needs to report it
+ * (self-drain) can; a caller that doesn't (the read overlay) simply
+ * omits the argument and the filtered record is applied silently, exactly
+ * like every other Person upsert.
  */
 export function applyCorrectionToState(
   state: StorageState,
@@ -1009,8 +1046,7 @@ export function applyCorrectionToState(
     return;
   }
   if (!isQuoteCorrectionOp(correction) && correction.entity_type === "person" && correction.op === "upsert") {
-    const priorStored = state.human.people.find((p) => p.id === correction.id);
-    const { person: filtered, refusals } = guardPersonaLinks(correction.record as Person, priorStored, state.human.people);
+    const { person: filtered, refusals } = guardPersonUpsert(correction.record as Person, state.human.people);
     if (refusals.length > 0) {
       personLinkRefusals?.push(...refusals);
       return applyCorrectionToHuman(state.human, { ...correction, record: filtered });

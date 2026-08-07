@@ -22,7 +22,8 @@ import { RoomMode, RESERVED_PERSONA_IDS, ContextStatus } from "./types.js";
 import { BUILT_IN_FACT_NAMES } from './constants/built-in-facts.js';
 import { EI_PERSONA_DEFINITION } from '../templates/welcome.js';
 import { qualifyEiMessage } from './utils/message-id.js';
-import { guardPersonaLinks, removePersonaLinksToId, type PersonaLinkRefusal } from './utils/identifier-utils.js';
+import { removePersonaLinksToId, type PersonaLinkRefusal } from './utils/identifier-utils.js';
+import { guardPersonUpsert } from './corrections.js';
 import type { ThemeDefinition } from './types/entities.js';
 import type { Storage } from "../storage/interface.js";
 import {
@@ -785,7 +786,19 @@ export class StateManager {
    * update/add phases, and the live Processor's corrections drain all
    * funnel through here, none of them with a synchronous caller left to
    * answer, so a refusal is reported through the `ei` persona thread
-   * rather than returned. `excludeIds` is dedup's departing-donor list —
+   * rather than returned. The guard step itself is `guardPersonUpsert`
+   * (src/core/corrections.ts) -- the SAME shared function
+   * applyCorrectionToState's person-upsert branch calls (I7,
+   * .sisyphus/reviews/tonight-post-audit-fix-queue.md), so the live
+   * Processor drain, the queued CLI/MCP read overlay, and self-drain all
+   * decide duplicate/conflicting Persona links through one guard
+   * implementation rather than each independently re-deriving
+   * `priorStored` and re-invoking guardPersonaLinks. What differs here is
+   * only what happens AFTER the guard decides: this method still owns
+   * committing through `HumanState.person_upsert`, `scheduleSave()`, and
+   * the async ei-persona-report side effect below -- responsibilities
+   * that belong to this StateManager-level API, not to a pure state
+   * transformation. `excludeIds` is dedup's departing-donor list —
    * see guardPersonaLinks's own doc comment.
    *
    * The `ei` persona thread may not exist yet (a nonempty state can have
@@ -796,8 +809,7 @@ export class StateManager {
    * succeeds; the delivery check remains only as a defensive backstop.
    */
   human_person_upsert(person: Person, excludeIds?: readonly string[]): void {
-    const priorStored = this.getHuman().people.find((p) => p.id === person.id);
-    const { person: guarded, refusals } = guardPersonaLinks(person, priorStored, this.getHuman().people, excludeIds);
+    const { person: guarded, refusals } = guardPersonUpsert(person, this.getHuman().people, excludeIds);
     this.humanState.person_upsert(guarded);
     this.scheduleSave();
     if (refusals.length > 0) {
