@@ -259,6 +259,32 @@ export interface QuoteWriteUnconfirmed {
 }
 
 /**
+ * Returned by createQuoteEntity/fixQuoteEntity instead of the
+ * materialized Quote when a CONFIRMED self-drain merged this call's own
+ * record into an existing overlapping quote on the same message instead
+ * of leaving two overlapping records (ADR-030's "attestation behaves
+ * exactly as extraction does" — see mergeOverlappingQuotes,
+ * src/core/corrections.ts). `quote` is the surviving, persisted record;
+ * `absorbed` is every OTHER quote's id folded into it (never `quote.id`
+ * itself). Returned ONLY after a confirmed self-drain: a queued write
+ * (drainMode "queued") keeps returning QuoteWritePending, unchanged and
+ * with no `absorbed` list, because a queued write has not been evaluated
+ * yet and cannot honestly report what — if anything — it will absorb.
+ */
+export interface QuoteMerged {
+  status: "merged";
+  quote: Quote;
+  absorbed: string[];
+  message: string;
+}
+
+/** Human-readable explanation for a QuoteMerged response — the only signal a caller (often an agent) gets that a `create`/`fix` call quietly absorbed a neighbour instead of leaving it coexisting, per ADR-030's Consequences ("the message field mitigates this only for the caller who triggered the merge"). */
+function describeQuoteMerge(verb: "create" | "fix", survivorId: string, absorbed: string[]): string {
+  const isSingle = absorbed.length === 1;
+  return `Quote ${verb} merged with ${absorbed.length} overlapping ${isSingle ? "quote" : "quotes"} already on this message instead of leaving overlapping duplicates: data_item_ids/persona_groups were unioned onto the surviving quote (${survivorId}), and ${isSingle ? "the absorbed quote no longer exists" : "the absorbed quotes no longer exist"}.`;
+}
+
+/**
  * Strip the embedding vector before handing a just-written record back to a
  * caller. writeCorrection() needs the real embedding (computed above) to
  * persist for search — this only shapes the CLI/MCP *response*, mirroring
@@ -465,9 +491,14 @@ async function verifyQuoteAgainstSource(
  * Returns a QuoteWritePending instead of the materialized Quote when
  * writeCorrection() could only queue the record (see the I8 comment
  * below) — a caller that only checks for Quote-shaped fields must not
- * mistake that for a confirmed create.
+ * mistake that for a confirmed create. Returns a QuoteMerged instead of
+ * the materialized Quote when a CONFIRMED self-drain found the verified
+ * span already overlapping another quote on this message (ADR-030): the
+ * new record is never inserted at all in that case, it is unioned into
+ * the existing quote, so "create" does not always create — a caller must
+ * read the returned object rather than assume the id it gets back is new.
  */
-export async function createQuoteEntity(body: unknown): Promise<Quote | QuoteWritePending> {
+export async function createQuoteEntity(body: unknown): Promise<Quote | QuoteWritePending | QuoteMerged> {
   const result = quoteCreateInputSchema.safeParse(body);
   if (!result.success) {
     throw new CorrectionValidationError(
@@ -507,7 +538,7 @@ export async function createQuoteEntity(body: unknown): Promise<Quote | QuoteWri
   // holding perfectly forever; see fixQuoteEntity, where `quote` starts
   // from persisted state and the same defense is load-bearing today.
   const record: QuoteCreateRecord = { op: "quote.create", entity_type: "quote", ...quote, channel: resolved.container.display_name, embedding: quote.embedding ?? [], verified: true, attempt_id: attemptId };
-  const { skipped, drainMode } = await writeCorrection(record);
+  const { skipped, merged, drainMode } = await writeCorrection(record);
 
   // I8 (round 4): a "queued" drain mode means writeCorrection() only
   // appended this record -- a live Ei instance (or a pending sync) will
@@ -527,6 +558,24 @@ export async function createQuoteEntity(body: unknown): Promise<Quote | QuoteWri
       status: "queued",
       id: quote.id,
       message: "Quote create queued: a live Ei instance is processing this write; it has not been confirmed yet.",
+    };
+  }
+
+  // ADR-030: this self-drain's own applyQuoteOperation call may have
+  // unioned this record into an existing overlapping quote on the same
+  // message instead of inserting it as a new, coexisting record — in
+  // which case `quote.id` above (this call's freshly-minted uuid) was
+  // never persisted at all. `attempt_id`, not `quote.id`, is what
+  // recognizes THIS call's own outcome (the same mechanism the skip
+  // check below already uses), so it must be checked BEFORE the skip
+  // check: a merge is never reported as a skip.
+  const mergedMine = merged.find((m) => m.attempt_id === attemptId);
+  if (mergedMine) {
+    return {
+      status: "merged",
+      quote: stripEmbedding(mergedMine.quote),
+      absorbed: mergedMine.absorbed,
+      message: describeQuoteMerge("create", mergedMine.quote.id, mergedMine.absorbed),
     };
   }
 
@@ -571,9 +620,15 @@ export async function createQuoteEntity(body: unknown): Promise<Quote | QuoteWri
  * Returns a QuoteWritePending instead of the materialized Quote when
  * writeCorrection() could only queue the record (see the I8 comment
  * below) — a caller that only checks for Quote-shaped fields must not
- * mistake that for a confirmed fix.
+ * mistake that for a confirmed fix. Returns a QuoteMerged instead of the
+ * materialized Quote when a CONFIRMED self-drain found the re-verified
+ * span now overlapping another quote on this message (ADR-030): that
+ * neighbour is unioned in — `data_item_ids`/`persona_groups` grow to
+ * include its links and it no longer exists — rather than left coexisting.
+ * `quote_id` itself always survives a fix's own merge; only a neighbour
+ * can be absorbed.
  */
-export async function fixQuoteEntity(body: unknown): Promise<Quote | QuoteWritePending> {
+export async function fixQuoteEntity(body: unknown): Promise<Quote | QuoteWritePending | QuoteMerged> {
   const result = quoteFixInputSchema.safeParse(body);
   if (!result.success) {
     throw new CorrectionValidationError(
@@ -639,7 +694,7 @@ export async function fixQuoteEntity(body: unknown): Promise<Quote | QuoteWriteP
     verified: true,
     attempt_id: attemptId,
   };
-  const { skipped, drainMode } = await writeCorrection(record);
+  const { skipped, merged, drainMode } = await writeCorrection(record);
 
   // I8 (round 4): a "queued" drain mode means writeCorrection() only
   // appended this record -- a live Ei instance (or a pending sync) will
@@ -659,6 +714,23 @@ export async function fixQuoteEntity(body: unknown): Promise<Quote | QuoteWriteP
       status: "queued",
       id: quote.id,
       message: "Quote fix queued: a live Ei instance is processing this write; it has not been confirmed yet.",
+    };
+  }
+
+  // ADR-030: this self-drain's own applyQuoteOperation call may have
+  // widened this record's span into an overlap with another quote on
+  // the same message and unioned that neighbour in — `quote_id` itself
+  // always survives a fix's own merge (see applyQuoteOperation's
+  // "quote.fix" case), but `absorbed` can only come from `merged`, never
+  // from a plain re-read by id. Checked before the skip check below, for
+  // the same reason createQuoteEntity does: a merge is never a skip.
+  const mergedMine = merged.find((m) => m.attempt_id === attemptId);
+  if (mergedMine) {
+    return {
+      status: "merged",
+      quote: stripEmbedding(mergedMine.quote),
+      absorbed: mergedMine.absorbed,
+      message: describeQuoteMerge("fix", mergedMine.quote.id, mergedMine.absorbed),
     };
   }
 

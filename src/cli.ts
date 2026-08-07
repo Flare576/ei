@@ -135,6 +135,9 @@ Quotes (source-verified — a quote claims someone really said something):
   ei remove quote <id>
   'create' and 'fix' refuse unless the text is found in the resolved source message. Speaker,
   channel, timestamp, offsets and the embedding always come from that message, never from you.
+  If the verified span overlaps an existing quote on that message, 'create'/'fix' merge into it
+  instead of coexisting (create then inserts nothing new) — the response is
+  {status:"merged",quote,absorbed,message} instead of the plain record in that case.
   'relink' and 'remove' assert nothing about text or origin, so they also work on a quote whose
   source no longer resolves. 'ei update' on a quote is retired and always rejects — use
   'fix quote' to correct text, 'relink quote' to change links, 'remove quote' to delete.

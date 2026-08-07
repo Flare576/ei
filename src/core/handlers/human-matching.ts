@@ -11,6 +11,7 @@ import type { ItemMatchResult, ExposureImpact, TopicUpdateResult, PersonUpdateRe
 import { queueTopicUpdate, queueTopicValidate, type ExtractionContext } from "../orchestrators/index.js";
 import { getEmbeddingService, getTopicEmbeddingText, getPersonEmbeddingText } from "../embedding-service.js";
 import { calculateExposureCurrent } from "../utils/exposure.js";
+import { mergeOverlappingQuotes, unionIds } from "../corrections.js";
 
 
 import { resolveMessageWindow, getMessageText } from "./utils.js";
@@ -508,43 +509,38 @@ async function validateAndStoreQuotes(
       const matchLevel = match.level;
 
       const existing = state.human_quote_getForMessage(message.id);
-      const overlapping = existing.find(q =>
-        q.start !== null && q.end !== null &&
-        matchStart < q.end && matchEnd > q.start
-      );
+      const merge = mergeOverlappingQuotes(existing, { message_id: message.id, start: matchStart, end: matchEnd, text: matchText });
 
-      if (overlapping) {
-        const mergedStart = Math.min(matchStart, overlapping.start!);
-        const mergedEnd = Math.max(matchEnd, overlapping.end!);
-        const mergedText = msgText.slice(mergedStart, mergedEnd);
+      if (merge) {
+        const survivor = merge.absorbed[0];
+        const others = merge.absorbed.slice(1);
 
-        const mergedDataItemIds = overlapping.data_item_ids.includes(dataItemId)
-          ? overlapping.data_item_ids
-          : [...overlapping.data_item_ids, dataItemId];
         const group = personaGroup || "General";
-        const mergedGroups = overlapping.persona_groups.includes(group)
-          ? overlapping.persona_groups
-          : [...overlapping.persona_groups, group];
+        const dataItemIds = unionIds(survivor.data_item_ids, [dataItemId], ...others.map((q) => q.data_item_ids));
+        const personaGroups = unionIds(survivor.persona_groups, [group], ...others.map((q) => q.persona_groups));
 
-        let embedding = overlapping.embedding;
-        if (mergedText !== overlapping.text) {
+        let embedding = survivor.embedding;
+        if (merge.text !== survivor.text) {
           try {
             const embeddingService = getEmbeddingService();
-            embedding = await embeddingService.embed(mergedText);
+            embedding = await embeddingService.embed(merge.text);
           } catch (err) {
-            console.warn(`[extraction] Failed to recompute embedding for merged quote: "${mergedText.slice(0, 30)}..."`, err);
+            console.warn(`[extraction] Failed to recompute embedding for merged quote: "${merge.text.slice(0, 30)}..."`, err);
           }
         }
 
-        state.human_quote_update(overlapping.id, {
-          start: mergedStart,
-          end: mergedEnd,
-          text: mergedText,
-          data_item_ids: mergedDataItemIds,
-          persona_groups: mergedGroups,
+        state.human_quote_update(survivor.id, {
+          start: merge.start,
+          end: merge.end,
+          text: merge.text,
+          data_item_ids: dataItemIds,
+          persona_groups: personaGroups,
           embedding,
         });
-        console.log(`[extraction] Merged overlapping quote: "${mergedText.slice(0, 50)}..." (${mergedStart}-${mergedEnd})`);
+        for (const absorbed of others) {
+          state.human_quote_remove(absorbed.id);
+        }
+        console.log(`[extraction] Merged ${1 + others.length} overlapping quote(s): "${merge.text.slice(0, 50)}..." (${merge.start}-${merge.end})`);
         found = true;
         break;
       }

@@ -471,7 +471,7 @@ External agents write to Ei's knowledge base through a validated corrections pat
 Quotes have four dedicated verbs rather than the generic create/update/remove trio, because two of them assert provenance and two deliberately do not:
 
 - **`ei create quote --message-id <id> --text "<text>"`** / **`ei_quote_create`** — mints a new quote only if the supplied text is found in the resolved source message. `speaker`, `channel`, `timestamp`, offsets, and the embedding are all derived server-side from that message; a caller cannot supply them.
-- **`ei fix quote --quote-id <id> --text "<text>"`** / **`ei_quote_fix`** — corrects mistranscribed text by re-verifying it against the quote's *existing* source message. It never re-resolves a new source, and never changes links or provenance.
+- **`ei fix quote --quote-id <id> --text "<text>"`** / **`ei_quote_fix`** — corrects mistranscribed text by re-verifying it against the quote's *existing* source message. It never re-resolves a new source, and never lets a caller directly supply a link or provenance field. If the corrected span now overlaps another quote on that message, the two merge into one record instead of coexisting — same as `create`; see the Quote write path detail in `CONTRACTS.md`.
 - **`ei relink quote <id> --to <entity-id,...>`** / **`ei_quote_relink`** — repoints `data_item_ids` after a split/merge. Asserts nothing about text or origin, so it works on quotes whose source no longer resolves and on pre-attestation quotes whose `message_id` is `null`.
 - **`ei remove quote <id>`** / **`ei_remove`** with `entity_type: "quote"` — deletes a quote.
 

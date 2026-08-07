@@ -252,7 +252,7 @@ describe("writeCorrection — self-drain and branch selection", () => {
 
     const result = await writeCorrection(removeFact);
 
-    expect(result).toEqual({ skipped: [], drainMode: "queued" });
+    expect(result).toEqual({ skipped: [], merged: [], drainMode: "queued" });
     expect(readFileSync(statePath, "utf-8")).toBe(originalState);
     expect(readJson<CorrectionRecord[]>(correctionsPath)).toEqual([removeFact]);
   });
@@ -343,7 +343,7 @@ describe("writeCorrection — self-drain and branch selection", () => {
 
     const result = await writeCorrection(removeFact);
 
-    expect(result).toEqual({ skipped: [], drainMode: "queued" });
+    expect(result).toEqual({ skipped: [], merged: [], drainMode: "queued" });
     expect(existsSync(join(tempDir, "state.json"))).toBe(false);
     expect(readJson<CorrectionRecord[]>(correctionsPath)).toEqual([removeFact]);
   });
@@ -486,7 +486,7 @@ describe("writeCorrection — quote corrections (Corrections Wire Grammar)", () 
 
     const result = await writeCorrection(makeQuoteCreateRecord());
 
-    expect(result).toEqual({ skipped: [], drainMode: "self" });
+    expect(result).toEqual({ skipped: [], merged: [], drainMode: "self" });
     const persisted = readJson<StorageState>(statePath);
     const applied = persisted.human.quotes.find((q) => q.id === "quote-1");
     expect(applied).toBeDefined();
@@ -501,7 +501,7 @@ describe("writeCorrection — quote corrections (Corrections Wire Grammar)", () 
 
     const result = await writeCorrection(makeQuoteRelinkRecord("quote-1", ["split-person"]));
 
-    expect(result).toEqual({ skipped: [], drainMode: "self" });
+    expect(result).toEqual({ skipped: [], merged: [], drainMode: "self" });
     const persisted = readJson<StorageState>(statePath);
     expect(persisted.human.quotes).toEqual([{ ...existing, data_item_ids: ["split-person"] }]);
   });
@@ -512,7 +512,7 @@ describe("writeCorrection — quote corrections (Corrections Wire Grammar)", () 
 
     const result = await writeCorrection(makeQuoteRemoveRecord("quote-1"));
 
-    expect(result).toEqual({ skipped: [], drainMode: "self" });
+    expect(result).toEqual({ skipped: [], merged: [], drainMode: "self" });
     const persisted = readJson<StorageState>(statePath);
     expect(persisted.human.quotes).toEqual([]);
   });

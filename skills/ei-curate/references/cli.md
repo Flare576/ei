@@ -124,7 +124,9 @@ ei remove quote <quote-id>
   derives `speaker`, `channel`, `timestamp`, `start`, `end`, and the embedding from it — there
   is no flag for those, and smuggling them in through `--json` is rejected.
 - **`ei fix quote`** corrects mistranscribed text, re-verified against the quote's *existing*
-  source message. It never re-resolves a different source, and never touches links.
+  source message. It never re-resolves a different source, and never lets you directly supply
+  a link. It can still merge: if the corrected span now overlaps another quote on that
+  message, that quote is absorbed into this one instead of the two coexisting.
 - **`ei relink quote`** is the canonical re-point: it changes `data_item_ids` and nothing else.
   `--to` is the **complete** new list, comma-separated — preserve the ids you want to keep, and
   use `--to ""` to clear every link. Every id must resolve to a live fact, topic, or person.

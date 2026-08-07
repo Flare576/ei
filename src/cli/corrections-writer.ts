@@ -28,8 +28,8 @@ import { join } from "path";
 import { readFile, access } from "fs/promises";
 import { getDataPath } from "./retrieval.js";
 import { withLock, atomicWrite } from "../storage/file-lock.js";
-import { appendCorrection, readCorrections, applyCorrectionsToState } from "../core/corrections.js";
-import type { CorrectionRecord, QuoteCorrectionSkip } from "../core/corrections.js";
+import { appendCorrection, readCorrections, applyCorrectionsToStateWithMerges } from "../core/corrections.js";
+import type { CorrectionRecord, QuoteCorrectionSkip, QuoteCorrectionMerge } from "../core/corrections.js";
 import { encodeAllEmbeddings, decodeAllEmbeddings } from "../storage/embeddings.js";
 import type { StorageState } from "../core/types.js";
 
@@ -95,6 +95,16 @@ async function isLiveInstanceRunning(): Promise<boolean> {
  */
 export interface WriteCorrectionResult {
   skipped: QuoteCorrectionSkip[];
+  /**
+   * Every quote.create/quote.fix merge (ADR-030) this self-drain
+   * performed, across the whole batch — always `[]` on the "queued"
+   * branch, for the identical reason `skipped` is: a queued write has
+   * not been evaluated yet, so it cannot have merged (or been declined)
+   * synchronously. createQuoteEntity/fixQuoteEntity look up THIS call's
+   * own record by attempt_id, exactly as they already do against
+   * `skipped`.
+   */
+  merged: QuoteCorrectionMerge[];
   drainMode: "self" | "queued";
 }
 
@@ -115,7 +125,7 @@ export async function writeCorrection(record: CorrectionRecord): Promise<WriteCo
 
   if (await isLiveInstanceRunning()) {
     await appendCorrection(correctionsPath, record);
-    return { skipped: [], drainMode: "queued" };
+    return { skipped: [], merged: [], drainMode: "queued" };
   }
 
   const statePath = join(dataPath, STATE_FILE);
@@ -130,7 +140,7 @@ export async function writeCorrection(record: CorrectionRecord): Promise<WriteCo
     // TUI launch (pulled from remote). Queue for that drain instead of
     // fabricating a local state.json that would conflict with the pull.
     await appendCorrection(correctionsPath, record);
-    return { skipped: [], drainMode: "queued" };
+    return { skipped: [], merged: [], drainMode: "queued" };
   }
 
   // No live instance and state.json exists — safe to self-drain directly.
@@ -139,7 +149,7 @@ export async function writeCorrection(record: CorrectionRecord): Promise<WriteCo
   return await withLock(statePath, async (): Promise<WriteCorrectionResult> => {
     if (await isLiveInstanceRunning()) {
       await appendCorrection(correctionsPath, record);
-      return { skipped: [], drainMode: "queued" };
+      return { skipped: [], merged: [], drainMode: "queued" };
     }
 
     // Read pending corrections, apply them (plus the new record), and clear
@@ -154,7 +164,7 @@ export async function writeCorrection(record: CorrectionRecord): Promise<WriteCo
       const state = decodeAllEmbeddings(JSON.parse(text) as StorageState);
 
       const pending = await readCorrections(correctionsPath);
-      const skipped = applyCorrectionsToState(state, [...pending, record]);
+      const { skipped, merged } = applyCorrectionsToStateWithMerges(state, [...pending, record]);
       state.timestamp = new Date().toISOString();
 
       // State write happens before the queue clear: if we crash in between,
@@ -162,7 +172,7 @@ export async function writeCorrection(record: CorrectionRecord): Promise<WriteCo
       // safely re-applies them (upsert/remove are idempotent by id).
       await atomicWrite(statePath, JSON.stringify(encodeAllEmbeddings(state), null, 2));
       await atomicWrite(correctionsPath, "[]");
-      return { skipped, drainMode: "self" };
+      return { skipped, merged, drainMode: "self" };
     });
   });
 }

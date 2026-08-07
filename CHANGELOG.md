@@ -21,8 +21,10 @@ read `git log`, or the per-document changelog tables in `CONTRACTS.md`.
     are all derived from that message, and are rejected if a caller supplies them.
   - `ei fix quote --quote-id <id> --text "<text>" [--start N --end N]`
     (MCP: `ei_quote_fix`) — corrects mistranscribed text by re-verifying it against the quote's
-    *existing* source message. Never re-resolves a different source, and never touches links or
-    provenance.
+    *existing* source message. Never re-resolves a different source. Links and provenance are
+    otherwise untouched — the one exception is the overlap merge described below, which can
+    grow `data_item_ids`/`persona_groups` as a side effect, never as something the caller
+    directly supplied.
   - `ei relink quote <id> --to <entity-id,...>` (MCP: `ei_quote_relink`) — changes
     `data_item_ids` and nothing else. `--to` is the complete replacement list, and `--to ""`
     clears every link. It asserts nothing about text or origin, so unlike create/fix it also
@@ -30,6 +32,17 @@ read `git log`, or the per-document changelog tables in `CONTRACTS.md`.
     `null` because it predates attestation.
   - `ei remove quote <id>` (MCP: `ei_remove` with `entity_type: "quote"`) — deletes a quote.
     Quote removal was previously unavailable on the public surface entirely.
+- **`create quote` and `fix quote` merge into an overlapping quote instead of coexisting
+  beside it.** If the verified span overlaps an existing quote already on the same message,
+  the two are unioned into one record — widened span, deduplicated `data_item_ids`/
+  `persona_groups` — rather than left as two overlapping records that say almost the same
+  thing. `create` in that case never inserts a new quote at all; `fix` can absorb a
+  neighbouring quote, which then no longer exists. A confirmed merge returns
+  `{status: "merged", quote, absorbed, message}` instead of the plain created/fixed record;
+  `absorbed` lists every quote id folded into the surviving record. A queued (not-yet-confirmed)
+  write is unaffected by this and still returns the existing `{status: "queued", ...}` shape,
+  with no `absorbed` field, since a queued write hasn't been evaluated yet and can't honestly
+  report what it will absorb.
 - `create quote` and `fix quote` either verify the supplied text against a resolved source
   message or refuse — there is no third outcome. The four refusals are `no source message to
   verify against` (the quote predates attestation), `source message could not be found`,

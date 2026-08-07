@@ -105,13 +105,13 @@ interface QuoteFullFields {
   verified: true;
 }
 
-/** `ei create quote` / MCP `ei_quote_create` — a brand-new, verified Quote. `data_item_ids`/`persona_groups` must be empty (a freshly created quote has no links yet). */
+/** `ei create quote` / MCP `ei_quote_create` — a brand-new, verified Quote. `data_item_ids`/`persona_groups` must be empty on THIS wire record (a freshly created quote has no links yet) — but per ADR-030, the record actually materialized by the drain is not always a new insert: if the verified span overlaps an existing quote on the same message, `applyQuoteOperation`'s "quote.create" case unions this record into that existing quote instead (surviving under the EXISTING quote's id, absorbing its own empty links), rather than creating a coexisting duplicate. See mergeOverlappingQuotes below. */
 export interface QuoteCreateRecord extends QuoteFullFields {
   op: "quote.create";
   entity_type: "quote";
 }
 
-/** `ei fix quote` / MCP `ei_quote_fix` — re-verifies an existing Quote's text/source. `id` identifies the record being fixed — the target must already exist, `quote.fix` never inserts (only `quote.create` may). `data_item_ids`/`persona_groups`, along with `message_id`/`speaker`/`timestamp`/`channel`/`created_at`/`created_by`, are always taken from the existing record at apply time regardless of what this wire record carries for them — a fix corrects `text`/`start`/`end`/`embedding` only, it never touches links or immutable provenance (that's relink's job / simply immutable, respectively). */
+/** `ei fix quote` / MCP `ei_quote_fix` — re-verifies an existing Quote's text/source. `id` identifies the record being fixed — the target must already exist, `quote.fix` never inserts (only `quote.create` may). `data_item_ids`/`persona_groups`, along with `message_id`/`speaker`/`timestamp`/`channel`/`created_at`/`created_by`, are always taken from the existing record at apply time regardless of what this wire record carries for them — a fix corrects `text`/`start`/`end`/`embedding` from the CALLER only, it never lets the caller supply a link or provenance field directly. That is narrower than "never changes links": per ADR-030, if the corrected span now overlaps another quote on the same message, `applyQuoteOperation`'s "quote.fix" case unions that neighbour in (this record's own id survives; the neighbour's links are folded on and the neighbour itself no longer exists) rather than leaving two overlapping records — a fix can grow this quote's own `data_item_ids`/`persona_groups` as a SIDE EFFECT of that merge, never as something the caller directly supplied. See mergeOverlappingQuotes below. */
 export interface QuoteFixRecord extends QuoteFullFields {
   op: "quote.fix";
   entity_type: "quote";
@@ -483,10 +483,136 @@ function getCorrectableArray(human: HumanEntity, entityType: string): Array<{ id
   throw new Error(`Unrecognized correction entity_type: ${entityType}`);
 }
 
-/** Pure dispatch + skip result for one Quote-entity correction. See applyQuoteOperation. */
+/**
+ * A quote-shaped span already verified against its source: `text` is
+ * guaranteed to equal `content.slice(start, end)` for the message it came
+ * from — extraction's word-match (human-matching.ts) and attestation's
+ * verifyQuoteAgainstSource (corrections-endpoints.ts) both guarantee this
+ * before ever calling mergeOverlappingQuotes below.
+ */
+export interface VerifiedQuoteSpan {
+  message_id: string;
+  start: number;
+  end: number;
+  text: string;
+}
+
+/** The result of unioning a VerifiedQuoteSpan with every other quote it overlaps. `absorbed` is every OTHER quote folded into the union (never the span's own record, if it has one) — always non-empty, since mergeOverlappingQuotes returns `null` instead when nothing overlaps. */
+export interface QuoteOverlapMerge {
+  start: number;
+  end: number;
+  text: string;
+  absorbed: Quote[];
+}
+
+/**
+ * The one N-aware overlap-merge primitive ADR-030 requires, shared by
+ * extraction (src/core/handlers/human-matching.ts's validateAndStoreQuotes)
+ * and attestation's drain-time quote.create/quote.fix handling in
+ * applyQuoteOperation below. Finds EVERY quote in `pool` on the same
+ * `span.message_id` (excluding `excludeId`, if supplied — the record's
+ * own id when fixing it in place) whose span overlaps `span`
+ * (`span.start < q.end && span.end > q.start`, the exact predicate
+ * extraction has always used) and unions all of them — not just the
+ * first, which is the `Array.find()` N-overlap defect ADR-030 names:
+ * with three overlapping quotes, `.find()` absorbs one and leaves two
+ * still overlapping. Returns `null` when nothing overlaps — the span is
+ * placed as-is, unmerged.
+ *
+ * Text for the union span is reconstructed without ever touching source
+ * content, which the drain (unlike extraction) does not have available.
+ * Because `span` is guaranteed to individually overlap every quote this
+ * returns in `absorbed` (that is how they were found), the union of
+ * `span` with all of them is always ONE contiguous interval with no gap —
+ * a "star" around `span` — so the only pieces ever needed are `span`'s
+ * own text, plus (only if the union reaches further left or right than
+ * `span` itself) the text of whichever single absorbed quote reaches
+ * furthest in that direction.
+ */
+export function mergeOverlappingQuotes(pool: Quote[], span: VerifiedQuoteSpan, excludeId?: string): QuoteOverlapMerge | null {
+  const absorbed = pool.filter((q) =>
+    q.id !== excludeId &&
+    q.message_id === span.message_id &&
+    q.start !== null && q.end !== null &&
+    span.start < q.end && span.end > q.start
+  );
+  if (absorbed.length === 0) return null;
+
+  const pieces = [
+    { start: span.start, end: span.end, text: span.text },
+    ...absorbed.map((q) => ({ start: q.start as number, end: q.end as number, text: q.text })),
+  ];
+  const start = Math.min(...pieces.map((p) => p.start));
+  const end = Math.max(...pieces.map((p) => p.end));
+
+  const exact = pieces.find((p) => p.start === start && p.end === end);
+  let text: string;
+  if (exact) {
+    text = exact.text;
+  } else {
+    const left = pieces.reduce((min, p) => (p.start < min.start ? p : min));
+    const right = pieces.reduce((max, p) => (p.end > max.end ? p : max));
+    const leftExt = left.start < span.start ? left.text.slice(0, span.start - left.start) : "";
+    const rightExt = right.end > span.end ? right.text.slice(span.end - right.start, right.end - right.start) : "";
+    text = leftExt + span.text + rightExt;
+  }
+
+  return { start, end, text, absorbed };
+}
+
+/** Deduplicated concatenation, preserving first-seen order across every list. Folds data_item_ids/persona_groups from a merge's survivor and every absorbed quote into one list without dropping or reordering an id that was already there. */
+export function unionIds(...lists: string[][]): string[] {
+  const result: string[] = [];
+  for (const list of lists) {
+    for (const id of list) {
+      if (!result.includes(id)) result.push(id);
+    }
+  }
+  return result;
+}
+
+/**
+ * The embedding to keep for a merge's surviving record. Reused exactly
+ * when the union span exactly equals one contributing piece's own span
+ * (the common case: a wider existing quote absorbing a narrower new one,
+ * or vice versa) — that piece's embedding already correctly represents
+ * the union text. Otherwise (a genuine multi-piece stitch, where no
+ * single contributor's own span reaches both extremes) the widest
+ * contributing piece's embedding is kept as a labelled best-effort
+ * approximation rather than forcing this pure, synchronous dispatcher —
+ * used by the read overlay on every corrections-aware read, not just a
+ * real write — to perform embedding-service I/O.
+ */
+function pickMergedEmbedding(mergedStart: number, mergedEnd: number, pieces: Array<{ start: number; end: number; embedding?: number[] }>): number[] | undefined {
+  const exact = pieces.find((p) => p.start === mergedStart && p.end === mergedEnd);
+  if (exact) return exact.embedding;
+  return pieces.reduce((widest, p) => (p.end - p.start > widest.end - widest.start ? p : widest)).embedding;
+}
+
+/** Pure dispatch + skip/merge result for one Quote-entity correction. See applyQuoteOperation. */
 export interface QuoteOperationResult {
   quotes: Quote[];
   skipped?: QuoteCorrectionSkip;
+  /**
+   * Present when this create/fix operation's span overlapped one or more
+   * existing quotes on the same message and ADR-030's union-merge
+   * absorbed them into one surviving record — `quote` is the merged,
+   * persisted result and `absorbed` is every OTHER quote's id folded
+   * into it. `attempt_id` threads the record's own transport-only
+   * correlation id through so a caller (createQuoteEntity/fixQuoteEntity's
+   * self-drain check) can recognize its OWN record's merge outcome with
+   * the same certainty QuoteCorrectionSkip.attempt_id already gives a
+   * decline. Never present for quote.relink/quote.remove, which never
+   * merge.
+   */
+  merged?: QuoteCorrectionMerge;
+}
+
+/** The confirmed outcome of a quote.create/quote.fix that unioned into an existing overlapping quote instead of coexisting beside it (ADR-030). See QuoteOperationResult.merged. */
+export interface QuoteCorrectionMerge {
+  quote: Quote;
+  absorbed: string[];
+  attempt_id?: string;
 }
 
 /**
@@ -498,19 +624,27 @@ export interface QuoteOperationResult {
  * `skipped` result instead, so one bad queued record can never wedge every
  * other pending correction behind it.
  *
- * create applies as full-record placement — replace-by-id or insert,
- * exactly the effect of the old `quote_upsert` (src/core/state/human.ts),
- * which is legitimate here because create really does provide the whole
- * record for a quote the Wire Grammar itself requires to have no links
- * yet. fix is deliberately NOT full-record placement: its target id must
- * already exist (a missing target is a reported skip, never an insert —
- * only `quote.create` may insert), and its result is the CURRENT record
- * in `quotes` with only `text`/`start`/`end`/`embedding` overlaid from
- * the incoming record — `message_id`/`speaker`/`timestamp`/`channel`/
- * `created_at`/`created_by`/`data_item_ids`/`persona_groups` always come
- * from the record already in `quotes`, never from the incoming record, so
- * a fix queued before a concurrent relink/remove drains can never
- * resurrect a removed quote or replay a stale link/provenance field.
+ * create/fix are where ADR-030's overlap merge lives (mergeOverlappingQuotes
+ * above): before placing the incoming record, each checks whether its own
+ * verified span overlaps another quote already on the same message. If
+ * not, the pre-existing behaviour is unchanged — create applies as
+ * full-record placement (replace-by-id or insert, exactly the effect of
+ * the old `quote_upsert`, src/core/state/human.ts) and fix overlays only
+ * `text`/`start`/`end`/`embedding` onto the CURRENT record already in
+ * `quotes` (never the incoming record's own copy of anything else, so a
+ * fix queued before a concurrent relink/remove drains can never replay a
+ * stale link/provenance field or resurrect a removed quote). If an
+ * overlap IS found, every overlapping quote is absorbed into one
+ * surviving record instead: for create, the FIRST overlapping existing
+ * quote survives (the incoming record's freshly-minted id is discarded,
+ * matching extraction's own "the new candidate merges into what's
+ * already there" precedent) and its own reported `merged.absorbed`
+ * accordingly excludes it; for fix, the record being fixed always
+ * survives under its OWN id (a fix never surprises a caller by
+ * transplanting its target's identity), and every OTHER overlapping
+ * quote is absorbed. This is why "attestation behaves exactly as
+ * extraction does" (ADR-030's Decision) is coherent: extraction's own
+ * merge below calls this identical primitive.
  * relink applies as a partial merge touching only `data_item_ids` — the
  * effect of `quote_update`, never a full-record placement. Its target id
  * must also already exist: a missing target is now a reported skip too
@@ -520,8 +654,9 @@ export interface QuoteOperationResult {
  * indistinguishable from success to any consumer checking `skipped` by
  * this call's own attempt_id, since nothing was ever appended to find.
  * remove filters the target out — the effect of `quote_remove`.
- * relink/remove/fix never call or duplicate the full-replacement
- * `quote_upsert`.
+ * relink/remove never call or duplicate the full-replacement
+ * `quote_upsert`, and neither ever merges (they assert no provenance, so
+ * ADR-030's span-overlap question does not apply to them).
  *
  * `record` is deliberately `unknown`, not `QuoteCorrectionRecord`: every
  * real caller is handing this function something that has only survived
@@ -547,7 +682,31 @@ export function applyQuoteOperation(quotes: Quote[], record: unknown, human?: Hu
   switch (record.op) {
     case "quote.create": {
       const { op, entity_type, verified, attempt_id, ...quote } = record;
-      void op; void entity_type; void verified; void attempt_id;
+      void op; void entity_type; void verified;
+
+      if (quote.message_id !== null && quote.start !== null && quote.end !== null) {
+        const merge = mergeOverlappingQuotes(quotes, { message_id: quote.message_id, start: quote.start, end: quote.end, text: quote.text });
+        if (merge) {
+          const survivor = merge.absorbed[0];
+          const others = merge.absorbed.slice(1);
+          const mergedQuote: Quote = {
+            ...survivor,
+            start: merge.start,
+            end: merge.end,
+            text: merge.text,
+            data_item_ids: unionIds(survivor.data_item_ids, quote.data_item_ids, ...others.map((q) => q.data_item_ids)),
+            persona_groups: unionIds(survivor.persona_groups, quote.persona_groups, ...others.map((q) => q.persona_groups)),
+            embedding: pickMergedEmbedding(merge.start, merge.end, [
+              { start: quote.start, end: quote.end, embedding: quote.embedding },
+              ...merge.absorbed.map((q) => ({ start: q.start as number, end: q.end as number, embedding: q.embedding })),
+            ]),
+          };
+          const absorbedIds = new Set(others.map((q) => q.id));
+          const nextQuotes = quotes.filter((q) => !absorbedIds.has(q.id)).map((q) => (q.id === survivor.id ? mergedQuote : q));
+          return { quotes: nextQuotes, merged: { quote: mergedQuote, absorbed: merge.absorbed.map((q) => q.id), attempt_id } };
+        }
+      }
+
       const idx = quotes.findIndex((q) => q.id === quote.id);
       const nextQuotes = idx >= 0 ? quotes.map((q, i) => (i === idx ? quote : q)) : [...quotes, quote];
       return { quotes: nextQuotes };
@@ -576,6 +735,28 @@ export function applyQuoteOperation(quotes: Quote[], record: unknown, human?: Hu
       // that no longer matches live state.
       const current = quotes[idx];
       const fixed: Quote = { ...current, text: record.text, start: record.start, end: record.end, embedding: record.embedding };
+
+      if (fixed.message_id !== null && fixed.start !== null && fixed.end !== null) {
+        const merge = mergeOverlappingQuotes(quotes, { message_id: fixed.message_id, start: fixed.start, end: fixed.end, text: fixed.text }, fixed.id);
+        if (merge) {
+          const mergedQuote: Quote = {
+            ...fixed,
+            start: merge.start,
+            end: merge.end,
+            text: merge.text,
+            data_item_ids: unionIds(fixed.data_item_ids, ...merge.absorbed.map((q) => q.data_item_ids)),
+            persona_groups: unionIds(fixed.persona_groups, ...merge.absorbed.map((q) => q.persona_groups)),
+            embedding: pickMergedEmbedding(merge.start, merge.end, [
+              { start: fixed.start, end: fixed.end, embedding: fixed.embedding },
+              ...merge.absorbed.map((q) => ({ start: q.start as number, end: q.end as number, embedding: q.embedding })),
+            ]),
+          };
+          const absorbedIds = new Set(merge.absorbed.map((q) => q.id));
+          const nextQuotes = quotes.filter((q) => !absorbedIds.has(q.id)).map((q) => (q.id === fixed.id ? mergedQuote : q));
+          return { quotes: nextQuotes, merged: { quote: mergedQuote, absorbed: merge.absorbed.map((q) => q.id), attempt_id: record.attempt_id } };
+        }
+      }
+
       return { quotes: quotes.map((q, i) => (i === idx ? fixed : q)) };
     }
     case "quote.relink": {
@@ -728,4 +909,47 @@ export function applyCorrectionsToState(state: StorageState, corrections: Correc
     if (result) skipped.push(result);
   }
   return skipped;
+}
+
+/**
+ * Identical effect to applyCorrectionsToState, but also collects every
+ * quote.create/quote.fix merge that occurred (QuoteCorrectionMerge),
+ * keyed by the record's own attempt_id — the same attempt_id-based
+ * attribution createQuoteEntity/fixQuoteEntity already use to recognize
+ * their own queued record's fate via QuoteCorrectionSkip.attempt_id,
+ * extended to a confirmed merge outcome. Used exclusively by
+ * writeCorrection's self-drain branch (src/cli/corrections-writer.ts),
+ * the only caller that ever has an immediate request waiting to hear
+ * about a merge — the live Processor drain and the CLI's read overlay
+ * both still apply the identical union-merge effect to `state` through
+ * applyCorrectionsToState/applyCorrectionToState/applyQuoteOperation
+ * (nothing about WHETHER quotes merge changes here); they just have
+ * nobody waiting on a specific attempt_id to report it to.
+ *
+ * The quote-domain branch below intentionally mirrors
+ * applyCorrectionToHuman's own (rather than calling it) so it can also
+ * capture `result.merged` — applyCorrectionToHuman's return type stays
+ * exactly `QuoteCorrectionSkip | void` everywhere else, since no other
+ * caller has an attempt_id to look one up by, and changing it would
+ * ripple into every existing caller/test of that widely-used function.
+ */
+export function applyCorrectionsToStateWithMerges(state: StorageState, corrections: CorrectionRecord[]): { skipped: QuoteCorrectionSkip[]; merged: QuoteCorrectionMerge[] } {
+  const skipped: QuoteCorrectionSkip[] = [];
+  const merged: QuoteCorrectionMerge[] = [];
+  for (const correction of corrections) {
+    if (isQuoteCorrectionOp(correction)) {
+      const result = applyQuoteOperation(state.human.quotes, correction, state.human);
+      if (result.skipped) {
+        skipped.push(result.skipped);
+        continue;
+      }
+      state.human.quotes = result.quotes;
+      state.human.last_updated = new Date().toISOString();
+      if (result.merged) merged.push(result.merged);
+      continue;
+    }
+    const result = applyCorrectionToState(state, correction);
+    if (result) skipped.push(result);
+  }
+  return { skipped, merged };
 }

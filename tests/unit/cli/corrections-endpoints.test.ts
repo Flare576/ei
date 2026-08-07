@@ -44,6 +44,7 @@ import {
   fixQuoteEntity,
   relinkQuoteEntity,
 } from "../../../src/cli/corrections-endpoints.js";
+import type { QuoteMerged, QuoteWritePending } from "../../../src/cli/corrections-endpoints.js";
 
 function makeFact(overrides: Partial<Fact> = {}): Fact {
   return {
@@ -2468,5 +2469,264 @@ describe("relinkQuoteEntity — split/merge repair workflow via relink + reverse
     expect(personB?.linked_quotes).toEqual([
       { id: "quote_1", text: "Existing quote text", speaker: "human", timestamp: INITIAL_NOW },
     ]);
+  });
+});
+
+// -----------------------------------------------------------------------
+// createQuoteEntity / fixQuoteEntity — ADR-030 overlap merge
+// -----------------------------------------------------------------------
+// Attestation now behaves exactly as extraction does on overlap: create/fix
+// verify a span against source, then check whether that span overlaps an
+// existing quote already on the same message. If it does, every
+// overlapping quote (N-aware, not just the first) is unioned into one
+// surviving record instead of left coexisting -- src/core/corrections.ts's
+// mergeOverlappingQuotes, the same primitive extraction's own merge
+// (human-matching.ts) calls. A confirmed self-drain merge returns
+// {status:"merged", quote, absorbed, message} instead of the plain
+// created/fixed record; a queued (not-yet-confirmed) write is unaffected
+// and keeps the existing QuoteWritePending shape, with no `absorbed` field
+// -- per Beta's addendum to attested-quote-overlap-unspecified.md, the
+// merge can only be detected/applied at drain time (live drain, self-drain,
+// read overlay), never inside createQuoteEntity/fixQuoteEntity themselves,
+// since a queued write's outcome depends on the FULL quote set at the
+// moment it actually drains, not the moment the endpoint was called.
+
+const MERGE_PERSONA_ID = "33333333-3333-4333-8333-333333333333";
+const MERGE_MSG_ID = "ei:eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+// Precomputed word offsets (verified with node, not hand-counted):
+// alpha[0,5) bravo[6,11) charlie[12,19) delta[20,25) echo[26,30)
+// foxtrot[31,38) golf[39,43) hotel[44,49). Length 49.
+const MERGE_CONTENT = "alpha bravo charlie delta echo foxtrot golf hotel";
+
+function buildMergeState(quotes: Quote[]): StorageState {
+  return {
+    version: 1,
+    timestamp: INITIAL_NOW,
+    human: { entity: "human", facts: [], topics: [], people: [], quotes, last_updated: INITIAL_NOW },
+    personas: {
+      [MERGE_PERSONA_ID]: {
+        entity: {
+          id: MERGE_PERSONA_ID,
+          display_name: "Merge Persona",
+          entity: "system",
+          short_description: "Test persona",
+          long_description: "Test persona prompt",
+          model: "Local LLM:test-model",
+          traits: [],
+          topics: [],
+          is_paused: false,
+          is_archived: false,
+          is_static: false,
+          last_updated: INITIAL_NOW,
+        },
+        messages: [
+          { id: MERGE_MSG_ID, role: "human", content: MERGE_CONTENT, timestamp: INITIAL_NOW, read: false, context_status: ContextStatus.Default },
+        ],
+      },
+    },
+    queue: [],
+    providers: [],
+    tools: [],
+  };
+}
+
+function makeMergeQuote(overrides: Partial<Quote> = {}): Quote {
+  return makeQuote({
+    message_id: MERGE_MSG_ID,
+    channel: "Merge Persona",
+    speaker: "human",
+    timestamp: INITIAL_NOW,
+    created_at: "2020-01-01T00:00:00.000Z",
+    created_by: "human",
+    persona_groups: ["General"],
+    ...overrides,
+  });
+}
+
+describe("createQuoteEntity — ADR-030 overlap merge", () => {
+  it("merges a 2-way overlap into the existing quote, returning {status:'merged', quote, absorbed, message}", async () => {
+    const existing = makeMergeQuote({ id: "merge-existing-2way", data_item_ids: ["item-x"], text: "bravo charlie", start: 6, end: 19 });
+    writeState(buildMergeState([existing]));
+
+    const result = await createQuoteEntity({ message_id: MERGE_MSG_ID, text: "charlie delta" }) as QuoteMerged;
+
+    expect(result.status).toBe("merged");
+    expect(result.absorbed).toEqual(["merge-existing-2way"]);
+    expect(result.quote).toMatchObject({ id: "merge-existing-2way", start: 6, end: 25, text: "bravo charlie delta", data_item_ids: ["item-x"] });
+    expect(result.quote).not.toHaveProperty("embedding");
+    expect(result.message).toEqual(expect.stringContaining("merged"));
+
+    const state = await loadLatestState();
+    expect(state!.human.quotes).toHaveLength(1);
+    expect(state!.human.quotes[0]).toMatchObject({ id: "merge-existing-2way", start: 6, end: 25, text: "bravo charlie delta" });
+  });
+
+  it("merges an N-way (3+) overlap into ONE surviving record, absorbing every overlapping quote -- not just the first -- and the merged text is a verified slice of the source (provenance invariant)", async () => {
+    const left = makeMergeQuote({ id: "merge-left", data_item_ids: ["item-left"], text: "alpha bravo", start: 0, end: 11 });
+    const mid = makeMergeQuote({ id: "merge-mid", data_item_ids: ["item-mid"], text: "delta", start: 20, end: 25 });
+    const right = makeMergeQuote({ id: "merge-right", data_item_ids: ["item-right"], text: "foxtrot golf hotel", start: 31, end: 49 });
+    writeState(buildMergeState([left, mid, right]));
+
+    const result = await createQuoteEntity({ message_id: MERGE_MSG_ID, text: "bravo charlie delta echo foxtrot" }) as QuoteMerged;
+
+    expect(result.status).toBe("merged");
+    expect(result.absorbed).toHaveLength(3);
+    expect(new Set(result.absorbed)).toEqual(new Set(["merge-left", "merge-mid", "merge-right"]));
+    expect(result.quote.start).toBe(0);
+    expect(result.quote.end).toBe(49);
+    expect(result.quote.text).toBe(MERGE_CONTENT);
+    expect(result.quote.data_item_ids).toEqual(expect.arrayContaining(["item-left", "item-mid", "item-right"]));
+    expect(new Set(result.quote.data_item_ids).size).toBe(3);
+
+    // Provenance invariant (explicit, not assumed): the merged record's
+    // text is still exactly the source slice for its widened span, not a
+    // concatenation that merely happens to look right.
+    expect(result.quote.text).toBe(MERGE_CONTENT.slice(result.quote.start, result.quote.end));
+
+    const state = await loadLatestState();
+    expect(state!.human.quotes).toHaveLength(1);
+    expect(state!.human.quotes[0].id).toBe(result.quote.id);
+  });
+});
+
+describe("fixQuoteEntity — ADR-030 overlap merge", () => {
+  it("merges a 2-way overlap into the record being fixed, which keeps its own id", async () => {
+    const target = makeMergeQuote({ id: "merge-fix-target-2way", data_item_ids: ["item-target"], text: "hotel", start: 44, end: 49 });
+    const neighbor = makeMergeQuote({ id: "merge-fix-neighbor-2way", data_item_ids: ["item-neighbor"], text: "bravo charlie", start: 6, end: 19 });
+    writeState(buildMergeState([target, neighbor]));
+
+    const result = await fixQuoteEntity({ quote_id: "merge-fix-target-2way", text: "charlie delta" }) as QuoteMerged;
+
+    expect(result.status).toBe("merged");
+    expect(result.absorbed).toEqual(["merge-fix-neighbor-2way"]);
+    expect(result.quote.id).toBe("merge-fix-target-2way");
+    expect(result.quote.start).toBe(6);
+    expect(result.quote.end).toBe(25);
+    expect(result.quote.text).toBe("bravo charlie delta");
+    expect(result.quote.data_item_ids).toEqual(["item-target", "item-neighbor"]);
+    expect(result.message).toEqual(expect.stringContaining("merged"));
+
+    const state = await loadLatestState();
+    expect(state!.human.quotes).toHaveLength(1);
+    expect(state!.human.quotes.find((q) => q.id === "merge-fix-neighbor-2way")).toBeUndefined();
+  });
+
+  it("merges an N-way (3+) overlap into the record being fixed, absorbing every overlapping neighbor and asserting the provenance invariant", async () => {
+    const target = makeMergeQuote({ id: "merge-fix-target-nway", data_item_ids: ["item-target"], text: "charlie", start: 12, end: 19 });
+    const left = makeMergeQuote({ id: "merge-fix-left", data_item_ids: ["item-left"], text: "alpha bravo", start: 0, end: 11 });
+    const mid = makeMergeQuote({ id: "merge-fix-mid", data_item_ids: ["item-mid"], text: "delta", start: 20, end: 25 });
+    const right = makeMergeQuote({ id: "merge-fix-right", data_item_ids: ["item-right"], text: "foxtrot golf hotel", start: 31, end: 49 });
+    writeState(buildMergeState([target, left, mid, right]));
+
+    const result = await fixQuoteEntity({ quote_id: "merge-fix-target-nway", text: "bravo charlie delta echo foxtrot" }) as QuoteMerged;
+
+    expect(result.status).toBe("merged");
+    expect(result.quote.id).toBe("merge-fix-target-nway");
+    expect(result.absorbed).toHaveLength(3);
+    expect(new Set(result.absorbed)).toEqual(new Set(["merge-fix-left", "merge-fix-mid", "merge-fix-right"]));
+    expect(result.quote.start).toBe(0);
+    expect(result.quote.end).toBe(49);
+    expect(result.quote.text).toBe(MERGE_CONTENT);
+    expect(result.quote.text).toBe(MERGE_CONTENT.slice(result.quote.start, result.quote.end));
+    expect(result.quote.data_item_ids).toEqual(expect.arrayContaining(["item-target", "item-left", "item-mid", "item-right"]));
+
+    const state = await loadLatestState();
+    expect(state!.human.quotes).toHaveLength(1);
+    expect(state!.human.quotes[0].id).toBe("merge-fix-target-nway");
+  });
+});
+
+// -----------------------------------------------------------------------
+// createQuoteEntity / fixQuoteEntity — ADR-030 merge lives in the drain,
+// never in the endpoint (Beta's regression oracle)
+// -----------------------------------------------------------------------
+// Per Beta's addendum to attested-quote-overlap-unspecified.md: a live
+// CLI/MCP call returns before its queued correction is applied, so the
+// N-way overlap check can only run safely where the FULL, current quote
+// set is actually visible -- the drain (live drain, self-drain, read
+// overlay) -- never inside createQuoteEntity/fixQuoteEntity themselves.
+// Each test below holds a live lock so the write queues instead of
+// self-draining, asserts the immediate result is the plain
+// QuoteWritePending shape (no `absorbed`, no `merged` status) while the
+// lock is held, then releases the lock and forces the exact same
+// production drain path (writeCorrection) a later CLI call or live
+// Processor tick would use, and asserts a single, correctly-merged
+// persisted quote afterward.
+//
+// This is a genuine layer-placement proof, not just a shape check: if the
+// overlap/merge logic were implemented inside createQuoteEntity/
+// fixQuoteEntity instead of applyQuoteOperation, it could only run on the
+// "self" branch (drainMode === "self") -- the "queued" branch returns
+// before any state read/merge could happen, by construction (see I8).
+// That means the queued record itself would still be built as a PLAIN,
+// non-merging quote.create/quote.fix wire record. When it actually drains
+// later -- via this exact same writeCorrection() call, in a different
+// invocation, with no memory of what createQuoteEntity/fixQuoteEntity
+// "would have" decided -- applyQuoteOperation would apply it with its OLD,
+// id-only-comparison behavior (unless it too were fixed, which is exactly
+// what moving the logic to the endpoint fails to do), leaving the original
+// quote AND the newly-drained quote coexisting instead of merged: TWO
+// records, not one. The final `toHaveLength(1)` assertion below is what
+// would go red under that wrong implementation.
+
+describe("createQuoteEntity / fixQuoteEntity — ADR-030 merge only ever confirmed by a drain, never by the endpoint itself (Beta's regression oracle)", () => {
+  it("createQuoteEntity: an overlapping create queues honestly under a live lock, then merges into exactly one persisted quote once the queue actually drains", async () => {
+    const existing = makeMergeQuote({ id: "merge-oracle-create-existing", data_item_ids: ["item-x"], text: "bravo charlie", start: 6, end: 19 });
+    writeState(buildMergeState([existing]));
+    const statePath = join(tempDir, "state.json");
+    const correctionsPath = join(tempDir, "corrections.json");
+    const originalStateBytes = readFileSync(statePath, "utf-8");
+    writeFileSync(join(tempDir, "ei.lock"), JSON.stringify({ pid: process.pid }));
+
+    const queuedResult = await createQuoteEntity({ message_id: MERGE_MSG_ID, text: "charlie delta" }) as QuoteWritePending;
+
+    // Held lock: nothing has been evaluated yet -- identical shape to a
+    // plain, non-overlapping create's own queued response.
+    expect(queuedResult.status).toBe("queued");
+    expect(queuedResult).not.toHaveProperty("absorbed");
+    expect(queuedResult).not.toHaveProperty("quote");
+    expect(readFileSync(statePath, "utf-8")).toBe(originalStateBytes);
+
+    // No live instance holds the lock anymore -- force the next drain via
+    // the exact same production entry point every drain uses (a live
+    // Processor tick or the next CLI call's self-drain would do the same).
+    rmSync(join(tempDir, "ei.lock"));
+    await writeCorrection({ op: "remove", entity_type: "fact", id: "merge-oracle-drain-trigger-1", timestamp: new Date().toISOString() });
+
+    expect(JSON.parse(readFileSync(correctionsPath, "utf-8"))).toEqual([]);
+    const state = await loadLatestState();
+    expect(state!.human.quotes).toHaveLength(1);
+    expect(state!.human.quotes[0]).toMatchObject({ id: "merge-oracle-create-existing", start: 6, end: 25, text: "bravo charlie delta", data_item_ids: ["item-x"] });
+  });
+
+  it("fixQuoteEntity: an overlapping fix queues honestly under a live lock, then merges into exactly one persisted quote once the queue actually drains", async () => {
+    const target = makeMergeQuote({ id: "merge-oracle-fix-target", data_item_ids: ["item-target"], text: "hotel", start: 44, end: 49 });
+    const neighbor = makeMergeQuote({ id: "merge-oracle-fix-neighbor", data_item_ids: ["item-neighbor"], text: "bravo charlie", start: 6, end: 19 });
+    writeState(buildMergeState([target, neighbor]));
+    const statePath = join(tempDir, "state.json");
+    const correctionsPath = join(tempDir, "corrections.json");
+    const originalStateBytes = readFileSync(statePath, "utf-8");
+    writeFileSync(join(tempDir, "ei.lock"), JSON.stringify({ pid: process.pid }));
+
+    const queuedResult = await fixQuoteEntity({ quote_id: "merge-oracle-fix-target", text: "charlie delta" }) as QuoteWritePending;
+
+    expect(queuedResult.status).toBe("queued");
+    expect(queuedResult).not.toHaveProperty("absorbed");
+    expect(queuedResult).not.toHaveProperty("quote");
+    expect(readFileSync(statePath, "utf-8")).toBe(originalStateBytes);
+
+    rmSync(join(tempDir, "ei.lock"));
+    await writeCorrection({ op: "remove", entity_type: "fact", id: "merge-oracle-drain-trigger-2", timestamp: new Date().toISOString() });
+
+    expect(JSON.parse(readFileSync(correctionsPath, "utf-8"))).toEqual([]);
+    const state = await loadLatestState();
+    expect(state!.human.quotes).toHaveLength(1);
+    expect(state!.human.quotes[0]).toMatchObject({
+      id: "merge-oracle-fix-target",
+      start: 6,
+      end: 25,
+      text: "bravo charlie delta",
+      data_item_ids: ["item-target", "item-neighbor"],
+    });
   });
 });

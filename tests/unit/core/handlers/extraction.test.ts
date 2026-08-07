@@ -105,6 +105,11 @@ function createMockStateManager() {
     human_quote_getForMessage: vi.fn((messageId: string) =>
       human.quotes.filter(quote => quote.message_id === messageId)
     ),
+    human_quote_remove: vi.fn((id: string) => {
+      const index = human.quotes.findIndex(quote => quote.id === id);
+      if (index >= 0) human.quotes.splice(index, 1);
+      return index >= 0;
+    }),
     persona_getById: vi.fn((id: string) => Object.values(personas).find(p => p.id === id) ?? null),
     persona_getByName: vi.fn((name: string) => Object.values(personas).find(p => p.display_name === name || p.aliases?.includes(name)) ?? null),
     persona_getAll: vi.fn(() => Object.values(personas)),
@@ -2742,6 +2747,94 @@ describe("Channel and speaker attribution on quotes", () => {
         end: 33,
         text: "The durable architecture protects",
       });
+    });
+
+    it("N-way (3+): a single extraction absorbs every overlapping quote on the message, not just the first (ADR-030)", async () => {
+      // Precomputed word offsets (verified with node, not hand-counted):
+      // alpha[0,5) bravo[6,11) charlie[12,19) delta[20,25) echo[26,30)
+      // foxtrot[31,38) golf[39,43) hotel[44,49). Length 49.
+      const msgText = "alpha bravo charlie delta echo foxtrot golf hotel";
+      const message = seedMessage("persona-1", "msg-merge-nway", "human", msgText);
+      seedPersona("persona-1", "Sisyphus", "Research");
+      const topic = seedTopic("topic-merge-nway");
+      const left: Quote = {
+        id: "quote-left",
+        message_id: message.id,
+        data_item_ids: ["topic-left"],
+        persona_groups: ["Group Left"],
+        text: "alpha bravo",
+        speaker: "human",
+        channel: "Prior channel",
+        timestamp: message.timestamp,
+        start: 0,
+        end: 11,
+        created_at: new Date().toISOString(),
+        created_by: "extraction",
+        embedding: [0.1, 0.2],
+      };
+      const mid: Quote = {
+        id: "quote-mid",
+        message_id: message.id,
+        data_item_ids: ["topic-mid"],
+        persona_groups: ["Group Mid"],
+        text: "delta",
+        speaker: "human",
+        channel: "Prior channel",
+        timestamp: message.timestamp,
+        start: 20,
+        end: 25,
+        created_at: new Date().toISOString(),
+        created_by: "extraction",
+        embedding: [0.3, 0.4],
+      };
+      const right: Quote = {
+        id: "quote-right",
+        message_id: message.id,
+        data_item_ids: ["topic-right"],
+        persona_groups: ["Group Right"],
+        text: "foxtrot golf hotel",
+        speaker: "human",
+        channel: "Prior channel",
+        timestamp: message.timestamp,
+        start: 31,
+        end: 49,
+        created_at: new Date().toISOString(),
+        created_by: "extraction",
+        embedding: [0.5, 0.6],
+      };
+      state._human.quotes.push(left, mid, right);
+
+      await captureTopicQuote("bravo charlie delta echo foxtrot", { existingItemId: topic.id });
+
+      // The Array.find() defect this closes: with three overlapping
+      // quotes, the old code absorbed only the first and left the other
+      // two still overlapping. Here all three are absorbed into ONE
+      // surviving record and nothing new is inserted.
+      expect(state.human_quote_add).not.toHaveBeenCalled();
+      expect(state.human_quote_update).toHaveBeenCalledTimes(1);
+      const [quoteId, updates] = state.human_quote_update.mock.calls[0] as [
+        string,
+        Partial<Quote>,
+      ];
+      expect(quoteId).toBe(left.id);
+      expectRawSpan(updates, msgText, { start: 0, end: 49, text: msgText });
+      expect(updates.data_item_ids).toEqual(["topic-left", topic.id, "topic-mid", "topic-right"]);
+      expect(updates.persona_groups).toEqual(["Group Left", "Research", "Group Mid", "Group Right"]);
+      expect(new Set(updates.data_item_ids).size).toBe(updates.data_item_ids?.length);
+      expect(new Set(updates.persona_groups).size).toBe(updates.persona_groups?.length);
+
+      // Both non-survivor quotes were actually removed, not merely
+      // orphaned by an update that widened only the first match.
+      expect(state.human_quote_remove).toHaveBeenCalledTimes(2);
+      expect(state.human_quote_remove.mock.calls.map(call => call[0]).sort()).toEqual(["quote-mid", "quote-right"]);
+
+      expect(state._human.quotes).toHaveLength(1);
+      const mergedQuote = state._human.quotes.find(quote => quote.id === left.id);
+      expect(mergedQuote).toBeDefined();
+      expectRawSpan(mergedQuote!, msgText, { start: 0, end: 49, text: msgText });
+      // Provenance invariant, explicit: the merged text is still exactly
+      // the source slice for its widened span.
+      expect(mergedQuote!.text).toBe(msgText.slice(mergedQuote!.start!, mergedQuote!.end!));
     });
   });
 
