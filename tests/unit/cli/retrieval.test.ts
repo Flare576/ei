@@ -908,6 +908,53 @@ describe("loadLatestState — corrections merge", () => {
   });
 });
 
+describe("loadLatestState — I7 read-overlay parity: the queued duplicate-link guard", () => {
+  it("T19: a queued update from stored [X] to submitted [X, X] materializes exactly one X in the read overlay, matching what self-drain/live-drain each independently produce", async () => {
+    const PERSONA_X = "11111111-1111-4111-8111-111111111111";
+    writeTestState(createTestState({
+      people: 1,
+      peopleIdentifiers: [[{ type: "Ei Persona", value: PERSONA_X }]],
+    }));
+
+    // Still queued, not yet drained -- this is the exact shape the review
+    // reproduces: a live-owned correction for person_0 that would submit
+    // [X, X] once it lands, sitting in corrections.json while a CLI/MCP
+    // read runs concurrently.
+    const correctedPerson: Person = {
+      id: "person_0",
+      name: "Test person 0",
+      description: "A test person",
+      sentiment: 0.5,
+      relationship: "friend",
+      exposure_current: 0.5,
+      exposure_desired: 0.5,
+      last_updated: NOW,
+      last_mentioned: NOW,
+      learned_by: "ei",
+      embedding: EMBEDDING,
+      identifiers: [
+        { type: "Ei Persona", value: PERSONA_X },
+        { type: "Ei Persona", value: PERSONA_X },
+      ],
+    };
+    const correction: CorrectionRecord = {
+      op: "upsert",
+      entity_type: "person",
+      id: "person_0",
+      record: correctedPerson,
+      timestamp: NOW,
+    };
+    writeFileSync(join(tempDir, "corrections.json"), JSON.stringify([correction]));
+
+    const state = await loadLatestState();
+
+    const linksToX = state!.human.people[0].identifiers!.filter(
+      (i) => i.type === "Ei Persona" && i.value === PERSONA_X
+    );
+    expect(linksToX).toHaveLength(1);
+  });
+});
+
 describe("loadLatestState — quote corrections (Corrections Wire Grammar)", () => {
   it("materializes a valid quote.create correction into the returned state without consuming corrections.json", async () => {
     writeTestState(createTestState({}));

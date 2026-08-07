@@ -966,14 +966,55 @@ export function applyCorrectionToPersonas(personas: StorageState["personas"], co
   return true;
 }
 
-/** Route one correction to its target: the personas map for entity_type "persona", the HumanEntity for everything else — except a quote-domain record (isQuoteCorrectionOp) always routes to the HumanEntity, since quotes live there, even if a malformed record's `entity_type` claims "persona". Returns a skip descriptor if a Quote correction was declined; personas/other entities still throw on malformed input, unchanged. A persona removal also strips that persona's id from every Person's `Ei Persona` identifiers (ADR-010 clause 5) — never for pre-existing orphans, and never for a remove whose target Persona was already absent (C3): only for a delete that actually removes an existing record through this path, matching the live path's own `persona_delete` guard. */
-export function applyCorrectionToState(state: StorageState, correction: CorrectionRecord): QuoteCorrectionSkip | void {
+/**
+ * Route one correction to its target: the personas map for entity_type
+ * "persona", the HumanEntity for everything else — except a quote-domain
+ * record (isQuoteCorrectionOp) always routes to the HumanEntity, since
+ * quotes live there, even if a malformed record's `entity_type` claims
+ * "persona". Returns a skip descriptor if a Quote correction was
+ * declined; personas/other entities still throw on malformed input,
+ * unchanged. A persona removal also strips that persona's id from every
+ * Person's `Ei Persona` identifiers (ADR-010 clause 5) — never for
+ * pre-existing orphans, and never for a remove whose target Persona was
+ * already absent (C3): only for a delete that actually removes an
+ * existing record through this path, matching the live path's own
+ * `persona_delete` guard.
+ *
+ * A Person upsert additionally runs the ADR-006/ADR-010 write-time
+ * cardinality guard (guardPersonaLinks) against `state.human.people`
+ * before it lands (I7, .sisyphus/reviews/tonight-post-audit-fix-queue.md)
+ * -- this function is the ONLY place a Person correction is ever
+ * materialized into a StorageState, so every consumer shares it: the
+ * CLI/MCP's queued read overlay (applyCorrectionsToState, reached from
+ * loadLatestState) and self-drain's authoritative write
+ * (applyCorrectionsToStateWithMerges). Before this, a still-queued
+ * `[X,X]`-shaped correction was visible with BOTH duplicate links
+ * through the read overlay even though the eventual drain would keep
+ * only one. Any refusal is appended to the optional `personLinkRefusals`
+ * accumulator so a caller that needs to report it (self-drain) can; a
+ * caller that doesn't (the read overlay) simply omits the argument and
+ * the filtered record is applied silently, exactly like every other
+ * Person upsert.
+ */
+export function applyCorrectionToState(
+  state: StorageState,
+  correction: CorrectionRecord,
+  personLinkRefusals?: PersonaLinkRefusal[]
+): QuoteCorrectionSkip | void {
   if (!isQuoteCorrectionOp(correction) && correction.entity_type === "persona") {
     const removed = applyCorrectionToPersonas(state.personas, correction);
     if (correction.op === "remove" && removed) {
       removePersonaLinksToId(state.human.people, correction.id);
     }
     return;
+  }
+  if (!isQuoteCorrectionOp(correction) && correction.entity_type === "person" && correction.op === "upsert") {
+    const priorStored = state.human.people.find((p) => p.id === correction.id);
+    const { person: filtered, refusals } = guardPersonaLinks(correction.record as Person, priorStored, state.human.people);
+    if (refusals.length > 0) {
+      personLinkRefusals?.push(...refusals);
+      return applyCorrectionToHuman(state.human, { ...correction, record: filtered });
+    }
   }
   return applyCorrectionToHuman(state.human, correction);
 }
@@ -1010,15 +1051,12 @@ export function applyCorrectionsToState(state: StorageState, corrections: Correc
  * caller has an attempt_id to look one up by, and changing it would
  * ripple into every existing caller/test of that widely-used function.
  *
- * The person-upsert branch below mirrors the same reasoning for
- * `personLinkRefusals` (ADR-006/ADR-010): this is the drain-time,
- * authoritative cardinality check for the self-drain path — it runs
- * guardPersonaLinks against `state.human.people` (the just-read,
- * currently-live state, not a stale pre-queue snapshot), applies the
- * filtered record through the normal applyCorrectionToState path, and
- * reports every refusal. A caller (writeCorrection) looks up its own
- * record's outcome by `personId`, the same way create/fixQuoteEntity look
- * theirs up by `attempt_id`.
+ * Every non-quote correction, including every Person upsert, is routed
+ * through applyCorrectionToState's own shared ADR-006/ADR-010 guard
+ * (I7) -- passing this function's own `personLinkRefusals` accumulator
+ * through so a refusal is still collected here for self-drain to report
+ * by `personId`, the same way create/fixQuoteEntity look theirs up by
+ * `attempt_id`, without duplicating the guard's cardinality logic.
  */
 export function applyCorrectionsToStateWithMerges(state: StorageState, corrections: CorrectionRecord[]): { skipped: QuoteCorrectionSkip[]; merged: QuoteCorrectionMerge[]; personLinkRefusals: PersonaLinkRefusal[] } {
   const skipped: QuoteCorrectionSkip[] = [];
@@ -1036,17 +1074,7 @@ export function applyCorrectionsToStateWithMerges(state: StorageState, correctio
       if (result.merged) merged.push(result.merged);
       continue;
     }
-    if (correction.entity_type === "person" && correction.op === "upsert") {
-      const priorStored = state.human.people.find((p) => p.id === correction.id);
-      const { person: filtered, refusals } = guardPersonaLinks(correction.record as Person, priorStored, state.human.people);
-      if (refusals.length > 0) {
-        personLinkRefusals.push(...refusals);
-        const result = applyCorrectionToState(state, { ...correction, record: filtered });
-        if (result) skipped.push(result);
-        continue;
-      }
-    }
-    const result = applyCorrectionToState(state, correction);
+    const result = applyCorrectionToState(state, correction, personLinkRefusals);
     if (result) skipped.push(result);
   }
   return { skipped, merged, personLinkRefusals };

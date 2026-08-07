@@ -22,7 +22,6 @@ import { z } from "zod";
 import { loadLatestState, resolveExternalMessage } from "./retrieval.js";
 import { writeCorrection } from "./corrections-writer.js";
 import { sanitizeEiPersonaIdentifiers } from "../core/utils/identifier-utils.js";
-import { sanitizeMessageIdForLog } from "../core/utils/message-refusal.js";
 import { isQualifiedMessageId, qualifyEiMessage, UUID_PATTERN } from "../core/utils/message-id.js";
 import { computeDataItemEmbedding, computeQuoteEmbedding } from "../core/embedding-service.js";
 import type { CorrectableType, CorrectionRecord, QuoteCreateRecord, QuoteFixRecord, QuoteRelinkRecord, QuoteRemoveRecord } from "../core/corrections.js";
@@ -342,12 +341,15 @@ function parseInput(entityType: NonQuoteType, body: unknown, mode: "create" | "u
  * declined a link on (ADR-006/ADR-010) throws here — the ONLY drain mode
  * with a caller still present to answer synchronously. The record itself
  * was already saved with the offending link dropped and everything else
- * intact; the throw is purely the report, not an undo. A live-queued
- * write is never checked here — its own outcome isn't known yet, and a
- * refusal for it (if any) is reported later via the `ei` persona thread
- * once the live drain actually runs (see StateManager.human_person_upsert /
- * Processor's live drain path — a queued write is never validated by
- * this call at all).
+ * intact; the throw is purely the report, not an undo. The thrown message
+ * names the Person by id, never by its own (caller-controlled) name (I5,
+ * .sisyphus/reviews/tonight-post-audit-fix-queue.md) — every refusal's
+ * `value`/`reason` text is already guardPersonaLinks's own responsibility
+ * to keep safe. A live-queued write is never checked here — its own
+ * outcome isn't known yet, and a refusal for it (if any) is reported
+ * later via the `ei` persona thread once the live drain actually runs
+ * (see StateManager.human_person_upsert / Processor's live drain path —
+ * a queued write is never validated by this call at all).
  */
 async function buildAndWriteUpsert(
   entityType: NonQuoteType,
@@ -378,7 +380,7 @@ async function buildAndWriteUpsert(
     if (ownRefusals.length > 0) {
       const summary = ownRefusals.map((r) => `Persona ${r.value} (${r.reason})`).join("; ");
       throw new Error(
-        `"${sanitizeMessageIdForLog(record.name)}" was saved, but the following Ei Persona link(s) were refused because they would break the one-Person-per-Persona rule: ${summary}`
+        `Person ${id} was saved, but the following Ei Persona link(s) were refused because they would break the one-Person-per-Persona rule: ${summary}`
       );
     }
   }

@@ -7,6 +7,37 @@ import { sanitizeMessageIdForLog } from "./message-refusal.js";
 
 export const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * Fixed placeholder for a Persona-link value that fails
+ * sanitizePersonaValueForDisplay's format check -- never the caller's own
+ * text, so it carries no attacker-controlled content into a rendered
+ * diagnostic (I5).
+ */
+const INVALID_PERSONA_VALUE_PLACEHOLDER = "[invalid value]";
+
+/**
+ * A refusal's `value` (and any value embedded in its `reason`) is only
+ * safe to render raw in a public CLI/MCP diagnostic or a durable,
+ * privileged prompt message when it is actually a well-formed Persona
+ * id -- a UUID or one of the reserved system-persona ids
+ * (`RESERVED_PERSONA_IDS`/`isReservedPersonaId`). `sanitizeEiPersonaIdentifiers()`
+ * normally demotes anything else to a `Nickname` identifier before it can
+ * reach here, but not every ingress point runs it first: LLM extraction's
+ * own `candidateIdentifiers` (src/core/handlers/human-matching.ts's
+ * `handlePersonUpdate`, merged straight from the raw model response) skip
+ * it entirely, so a printable, instruction-shaped string can still carry
+ * an "Ei Persona" type tag into `guardPersonaLinks` unsanitized. Stripping
+ * control bytes (sanitizeMessageIdForLog) is not enough on its own --
+ * printable attacker text survives that unchanged. Anything that fails
+ * this check is replaced with a fixed, safe placeholder instead of being
+ * embedded raw; this never affects which identifiers actually survive the
+ * write, only what a refusal's free-text fields are allowed to say about
+ * them.
+ */
+function sanitizePersonaValueForDisplay(value: string): string {
+  return UUID_REGEX.test(value) || isReservedPersonaId(value) ? value : INVALID_PERSONA_VALUE_PLACEHOLDER;
+}
+
 function toNormalizedKey(s: string): string {
   return s.replace(/[^a-z0-9]/gi, '').toLowerCase();
 }
@@ -204,8 +235,8 @@ export function guardPersonaLinks(
         refusals.push({
           personId: candidate.id,
           personName,
-          value: sanitizeMessageIdForLog(bad.value),
-          reason: `already linked to a different Persona (${sanitizeMessageIdForLog(preExisting[0].value)})`,
+          value: sanitizePersonaValueForDisplay(bad.value),
+          reason: `already linked to a different Persona (${sanitizePersonaValueForDisplay(preExisting[0].value)})`,
         });
       }
     } else {
@@ -218,7 +249,7 @@ export function guardPersonaLinks(
         refusals.push({
           personId: candidate.id,
           personName,
-          value: sanitizeMessageIdForLog(bad.value),
+          value: sanitizePersonaValueForDisplay(bad.value),
           reason: "this write introduced more than one Persona link at once",
         });
       }
@@ -239,7 +270,7 @@ export function guardPersonaLinks(
       refusals.push({
         personId: candidate.id,
         personName,
-        value: sanitizeMessageIdForLog(link.value),
+        value: sanitizePersonaValueForDisplay(link.value),
         reason: "duplicate of a Persona link already present in this same write",
       });
       continue;
@@ -269,7 +300,7 @@ export function guardPersonaLinks(
       refusals.push({
         personId: candidate.id,
         personName,
-        value: sanitizeMessageIdForLog(link.value),
+        value: sanitizePersonaValueForDisplay(link.value),
         reason: `already linked from a different Person (${conflict.id})`,
         conflictPersonId: conflict.id,
       });
