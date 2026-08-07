@@ -3038,6 +3038,186 @@ describe("Channel and speaker attribution on quotes", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Beta Final re-review (2026-08-07) — C1: the prior N-way merge test above
+// (`overlapping quote merge (T3)`) was proven non-falsifying. It hand-wrote
+// `persona_groups` literals for its "room participants" and queried
+// visibility with plain `{id, group_primary}` objects instead of real
+// PersonaEntity records, and one of its seeded groups ("Research") was
+// already present on a hand-written quote BEFORE the merge ran — so the
+// assertion passed identically whether the primary-only bug was present or
+// fixed. This block replaces that proxy with the review's required oracle:
+// real, persisted PersonaEntity records queried through a real StateManager;
+// a room roster built the way room-extraction.ts actually builds it
+// (`room.persona_ids.join("|")`); both handleTopicUpdate and
+// handlePersonUpdate exercised end to end; and a group (Design) that never
+// appears anywhere except via the full-roster tagging this test defends, so
+// primary-only tagging necessarily fails the visibility assertions below.
+// (Legacy pre-fix quote rows with an incomplete roster are an explicit,
+// separately-owned policy question — out of scope here.)
+// ---------------------------------------------------------------------------
+describe("Beta C1 final re-review — merge visibility from a real room roster, not hand-written labels", () => {
+  it("every genuine room participant can see an overlap-merged quote created via handleTopicUpdate + handlePersonUpdate; an outsider cannot", async () => {
+    const sm = new StateManager();
+    await sm.initialize(createMockStorage());
+
+    // Real, persisted PersonaEntity records — three distinct groups, none of
+    // which the test ever hand-attaches to a quote. `personaEng` is first in
+    // the room roster, so it is the ONLY group the old primary-only code
+    // (pre-7bc2a163) would ever tag a quote with.
+    const personaEng: PersonaEntity = {
+      id: "persona-c1-eng", display_name: "Engineer Bot", entity: "system",
+      group_primary: "Engineering", traits: [], topics: [],
+      is_paused: false, is_archived: false, is_static: false,
+      last_updated: new Date().toISOString(),
+    };
+    const personaRes: PersonaEntity = {
+      id: "persona-c1-res", display_name: "Researcher Bot", entity: "system",
+      group_primary: "Research", traits: [], topics: [],
+      is_paused: false, is_archived: false, is_static: false,
+      last_updated: new Date().toISOString(),
+    };
+    const personaDes: PersonaEntity = {
+      id: "persona-c1-des", display_name: "Designer Bot", entity: "system",
+      group_primary: "Design", traits: [], topics: [],
+      is_paused: false, is_archived: false, is_static: false,
+      last_updated: new Date().toISOString(),
+    };
+    const outsider: PersonaEntity = {
+      id: "persona-c1-outsider", display_name: "Legal Bot", entity: "system",
+      group_primary: "Legal", traits: [], topics: [],
+      is_paused: false, is_archived: false, is_static: false,
+      last_updated: new Date().toISOString(),
+    };
+    sm.persona_add(personaEng);
+    sm.persona_add(personaRes);
+    sm.persona_add(personaDes);
+    sm.persona_add(outsider);
+
+    // A real RoomEntity, created through the production addRoom() API — not a
+    // hand-built literal — with the three real personas above as its roster.
+    // `outsider` is never part of this or any room.
+    const room = sm.addRoom({
+      display_name: "C1 real-room regression",
+      mode: RoomMode.FreeForAll,
+      persona_ids: [personaEng.id, personaRes.id, personaDes.id],
+      initial_message: "Room opened.",
+    });
+
+    // Precomputed word offsets (verified with node, not hand-counted):
+    // alpha[0,5) bravo[6,11) charlie[12,19) delta[20,25) echo[26,30)
+    // foxtrot[31,38) golf[39,43) hotel[44,49). Length 49.
+    const msgText = "alpha bravo charlie delta echo foxtrot golf hotel";
+    const roomMessage: RoomMessage = {
+      id: "room-msg-c1-real",
+      parent_id: null,
+      role: "persona",
+      persona_id: personaEng.id,
+      content: msgText,
+      timestamp: new Date().toISOString(),
+      read: true,
+      context_status: "default" as RoomMessage["context_status"],
+    };
+    sm.appendRoomMessage(room.id, roomMessage);
+
+    // The exact convention room-extraction.ts uses for both scan targets
+    // (queueRoomTopicScan/queueRoomPersonScan): `room.persona_ids.join("|")`,
+    // not a synthetic array the test invents.
+    const personaId = room.persona_ids.join("|");
+
+    // First contributing quote, through the real handleTopicUpdate entry
+    // point: candidate text "bravo charlie" -> [6,19).
+    const topicRequest = createMockRequest({
+      next_step: LLMNextStep.HandleTopicUpdate,
+      data: {
+        roomId: room.id,
+        personaId,
+        personaDisplayName: "C1 Real Room",
+        isNewItem: true,
+        candidateName: "Migration plan",
+        candidateDescription: "The room's migration plan discussion.",
+        candidateCategory: "Technical",
+      },
+    });
+    const topicResponse = createMockResponse(topicRequest, {
+      name: "Migration plan",
+      description: "The room's migration plan discussion.",
+      category: "Technical",
+      sentiment: 0.5,
+      exposure_desired: 0.5,
+      quotes: [{ text: "bravo charlie", reason: "topic quote" }],
+    });
+    await handlers[LLMNextStep.HandleTopicUpdate](topicResponse, sm);
+
+    expect(sm.getHuman().quotes).toHaveLength(1);
+    const createdQuoteId = sm.getHuman().quotes[0].id;
+
+    // Second contributing quote, through the real handlePersonUpdate entry
+    // point, overlapping the first: candidate text "charlie delta echo" ->
+    // [12,30). This is the merge — validateAndStoreQuotes absorbs the first
+    // quote and widens it to [6,30) rather than inserting a second record.
+    const personRequest = createMockRequest({
+      next_step: LLMNextStep.HandlePersonUpdate,
+      data: {
+        roomId: room.id,
+        personaId,
+        personaDisplayName: "C1 Real Room",
+        isNewItem: true,
+        candidateName: "David",
+        candidateDescription: "A collaborator mentioned in the room.",
+        candidateRelationship: "Coworker",
+      },
+    });
+    const personResponse = createMockResponse(personRequest, {
+      description: "A collaborator mentioned in the room discussion.",
+      sentiment: 0.5,
+      relationship: "Coworker",
+      exposure_desired: 0.5,
+      identifiers: [{ type: "Full Name", value: "David", is_primary: true }],
+      quotes: [{ text: "charlie delta echo", reason: "person quote" }],
+    });
+    await handlers[LLMNextStep.HandlePersonUpdate](personResponse, sm);
+
+    // Exactly one quote survives the merge — the second capture absorbed
+    // into the first, not added alongside it.
+    const quotes = sm.getHuman().quotes;
+    expect(quotes).toHaveLength(1);
+    const survivor = quotes.find(q => q.id === createdQuoteId);
+    expect(survivor).toBeDefined();
+    expect(survivor!.start).toBe(6);
+    expect(survivor!.end).toBe(30);
+    expect(survivor!.text).toBe(msgText.slice(6, 30));
+
+    // The falsifying assertion: under the current (fixed) code, the merged
+    // quote's persona_groups carries every real room participant's group —
+    // Engineering (the primary/first persona_ids entry), Research, and
+    // Design, in first-seen order. Under the pre-7bc2a163 primary-only code,
+    // this list would be exactly ["Engineering"] no matter how many times
+    // the room's quotes are captured or merged, so Research- and
+    // Design-only personas would fail the visibility checks below.
+    expect(survivor!.persona_groups).toEqual(["Engineering", "Research", "Design"]);
+
+    // Real production predicate, real persisted PersonaEntity records fetched
+    // back through the StateManager — not synthetic {id, group_primary}
+    // literals — for every genuine participant of the contributing room.
+    for (const participant of [personaEng, personaRes, personaDes]) {
+      const stored = sm.persona_getById(participant.id);
+      expect(stored).not.toBeNull();
+      const visible = filterQuotesByPersonaGroupVisibility(quotes, stored!);
+      expect(
+        visible.map(q => q.id),
+        `${stored!.display_name} (group ${stored!.group_primary}) was a genuine room participant and must see the merged quote`
+      ).toContain(createdQuoteId);
+    }
+
+    // An outsider who was never in this (or any) contributing room must not
+    // see it — the union is a real room-witness set, not a free-for-all.
+    const storedOutsider = sm.persona_getById(outsider.id);
+    expect(storedOutsider).not.toBeNull();
+    expect(filterQuotesByPersonaGroupVisibility(quotes, storedOutsider!)).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // IRQ-4 / ADR-006 / ADR-010 — write-time one-to-one Person<->Persona guard,
 // LLM extraction ingress point. Uses a REAL StateManager (not the mock
 // above) so this exercises the actual guardPersonaLinks call inside
