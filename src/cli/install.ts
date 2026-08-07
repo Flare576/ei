@@ -911,43 +911,132 @@ if (import.meta.main) {
   console.log(`✓ Installed Ei context hooks to ~/.cursor/hooks/ei-inject.ts (beforeSubmitPrompt) and ~/.cursor/hooks/ei-session-start.ts (sessionStart)`);
 }
 
-async function installPi(): Promise<void> {
+// WHO/MEMORY for raw Pi: verified against the real installed
+// @earendil-works/pi-coding-agent package (0.75.4), not assumed from OMP's
+// fork. Two confirmed divergences drive this implementation:
+//
+// 1. ExtensionContext has no activePersonaName or any agent-identity concept
+//    at all -- Pi has no persona-switching. Ei's own importer (PI_PERSONA_NAME
+//    in src/integrations/pi/types.ts) already treats every Pi session as one
+//    fixed "Pi" persona, so WHO here is a static single-persona injection,
+//    the same shape as Ei's Claude Code/Cursor hooks -- dedupe once per
+//    session branch via an "ei-who" marker, not per-persona-transition like
+//    OMP.
+// 2. Pi's extensions load via jiti directly from the .ts source (not
+//    bundled), and its own alias table resolves "typebox" but not "bun" --
+//    confirmed absent for both a Node-run `pi` and a Bun-compiled `pi`
+//    binary. The prior version of this hook imported Bun's `$` shell helper,
+//    which cannot resolve inside a Pi extension and would have failed at
+//    load time on every real install. Replaced with node:child_process,
+//    which every Pi runtime provides.
+//
+// registerTool's `parameters` field is real TypeBox (confirmed by Pi's own
+// docs/extensions.md and examples/extensions/hello.ts), and `promptSnippet`
+// is a real, functional ToolDefinition field for Pi (controls the tool's
+// one-line entry in the default "Available tools" system-prompt section) --
+// both kept, unlike OMP where promptSnippet doesn't exist on that fork's
+// ToolDefinition at all.
+export async function installPi(): Promise<void> {
   const home = resolveHome();
 
-  const extensionContent = `import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+  const extensionContent = `import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { $ } from "bun";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
 
 const runEi = async (cmdArgs: string[]): Promise<string> => {
-  const direct = await $\`ei \${cmdArgs}\`.quiet().text().catch(() => "");
-  if (direct.trim()) return direct;
-  return $\`bunx ei-tui@latest \${cmdArgs}\`.quiet().text().catch(() => "");
+  try {
+    const { stdout } = await execFileAsync("ei", cmdArgs, { timeout: 15000 });
+    if (stdout.trim()) return stdout;
+  } catch {
+    // fall through to the bunx fallback
+  }
+  try {
+    const { stdout } = await execFileAsync("bunx", ["ei-tui@latest", ...cmdArgs], { timeout: 30000 });
+    return stdout;
+  } catch {
+    return "";
+  }
 };
 
+// Pi has exactly one persona for the whole install (see file header) --
+// dedupe once per session branch, never re-fetching after a successful send.
+function alreadySentWho(ctx: ExtensionContext): boolean {
+  return ctx.sessionManager.getBranch().some(
+    (entry) => entry.type === "custom" && entry.customType === "ei-who"
+  );
+}
+
+// Union of every entity id the MEMORY hook has already surfaced on this branch.
+function collectSeenMemoryIds(ctx: ExtensionContext): Set<string> {
+  const seen = new Set<string>();
+  for (const entry of ctx.sessionManager.getBranch()) {
+    if (entry.type !== "custom" || entry.customType !== "ei-memory") continue;
+    const data = entry.data;
+    if (!data || typeof data !== "object" || !("ids" in data) || !Array.isArray(data.ids)) continue;
+    for (const id of data.ids) {
+      if (typeof id === "string") seen.add(id);
+    }
+  }
+  return seen;
+}
+
+function extractId(item: unknown): string | undefined {
+  if (item && typeof item === "object" && "id" in item) {
+    const id = item.id;
+    return typeof id === "string" ? id : undefined;
+  }
+  return undefined;
+}
 
 export default function eiIntegration(pi: ExtensionAPI) {
+  // WHO: inject the single <ei-relationship> block once per branch.
+  pi.on("before_agent_start", async (_event, ctx) => {
+    if (alreadySentWho(ctx)) return undefined;
+
+    const block = await runEi(["personas", "--format", "prompt", "--", "Pi"]).catch(() => "");
+    if (!block.trim()) return undefined;
+
+    pi.appendEntry("ei-who", { sent: true });
+
+    return {
+      message: {
+        customType: "ei-persona-who",
+        content: block.trim(),
+        display: false,
+      },
+    };
+  });
+
+  // MEMORY: inject relevant Ei context based on the current prompt, filtered
+  // against every entity id already surfaced earlier on this branch.
   pi.on("before_agent_start", async (event, ctx) => {
-    const entries = ctx.sessionManager.getEntries();
-    const recentMsgs = entries
-      .filter((e: any) => e.type === "message" && (e.message?.role === "user" || e.message?.role === "assistant"))
-      .slice(-5)
-      .map((e: any) => {
-        const role = e.message?.role ?? "unknown";
-        const text = Array.isArray(e.message?.content)
-          ? e.message.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join(" ")
-          : (e.message?.content ?? "");
-        return \`\${role}: \${text.slice(0, 200)}\`;
-      })
-      .join("\\n");
-
     const prompt = event.prompt ?? "";
-    const args = prompt
-      ? ["-n", "5", "--", prompt]
-      : ["--recent", "-n", "5"];
-
+    const args = prompt ? ["-n", "5", "--", prompt] : ["--recent", "-n", "5"];
     const output = await runEi(args).catch(() => "");
-
     if (!output.trim()) return undefined;
+
+    let items: unknown = null;
+    try {
+      items = JSON.parse(output);
+    } catch {
+      // Non-JSON output (e.g. an error string) -- nothing to de-dup by id, inject as-is.
+    }
+
+    let body = output.trim();
+    let newIds: string[] = [];
+    if (Array.isArray(items)) {
+      const seen = collectSeenMemoryIds(ctx);
+      const fresh = items.filter((item) => {
+        const id = extractId(item);
+        return !id || !seen.has(id);
+      });
+      if (fresh.length === 0) return undefined; // everything here already surfaced this session
+      newIds = fresh.map(extractId).filter((id): id is string => id !== undefined);
+      body = JSON.stringify(fresh, null, 2);
+    }
 
     const heading = [
       "## Ei Memory Context",
@@ -958,10 +1047,12 @@ export default function eiIntegration(pi: ExtensionAPI) {
       "The following items MAY be relevant to your current task — use ei_search or ei_lookup for targeted queries.",
     ].join("\\n");
 
+    if (newIds.length > 0) pi.appendEntry("ei-memory", { ids: newIds });
+
     return {
       message: {
         customType: "ei-context",
-        content: \`\${heading}\\n\\n\${output.trim()}\`,
+        content: \`\${heading}\\n\\n\${body}\`,
         display: false,
       },
     };
