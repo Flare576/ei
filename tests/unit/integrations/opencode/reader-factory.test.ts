@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { join } from "path";
+import { tmpdir } from "node:os";
 
 const mockExistsSync = vi.fn();
 
@@ -74,5 +75,43 @@ describe("createOpenCodeReader", () => {
     await createOpenCodeReader();
 
     expect(mockExistsSync).toHaveBeenCalledWith(join(expectedDefault, "opencode.db"));
+  });
+
+  // Bun-only: constructs a real bun:sqlite database, which does not exist under real
+  // Node — this repo's own root Vitest suite (AGENTS.md Test Runner Map) must run under
+  // real Node 22+, so this test runs for real under `bun test`/Bun-shim invocations and
+  // is skipped (not failed) when neither is available.
+  it.skipIf(typeof Bun === "undefined")("produces no stderr output on a successful SQLite reader construction", async () => {
+    const actualFs = await vi.importActual<typeof import("node:fs")>("node:fs");
+    const dir = actualFs.mkdtempSync(join(tmpdir(), "reader-factory-"));
+    const dbPath = join(dir, "opencode.db");
+    const { Database } = await import("bun:sqlite");
+    new Database(dbPath).close();
+
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockExistsSync.mockImplementation((path: string) => path === dbPath);
+
+    const { createOpenCodeReader } = await import("../../../../src/integrations/opencode/reader-factory.js");
+    const reader = await createOpenCodeReader(dir);
+
+    expect(reader.constructor.name).toBe("SqliteReader");
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+    actualFs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("produces no stderr output on a successful JSON reader construction", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockExistsSync.mockImplementation((path: string) => {
+      if (path.endsWith("opencode.db")) return false;
+      if (path.endsWith("storage")) return true;
+      return false;
+    });
+
+    const { createOpenCodeReader } = await import("../../../../src/integrations/opencode/reader-factory.js");
+    await createOpenCodeReader("/test/data");
+
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
   });
 });

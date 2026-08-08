@@ -11,7 +11,6 @@ export async function createOpenCodeReader(basePath?: string): Promise<IOpenCode
   if (existsSync(dbPath)) {
     try {
       const { SqliteReader } = await import("./sqlite-reader.js");
-      console.error("[OpenCode] Using SQLite reader");
       return new SqliteReader(dbPath);
     } catch {
       console.error("[OpenCode] SQLite not available, falling back to JSON reader");
@@ -19,7 +18,6 @@ export async function createOpenCodeReader(basePath?: string): Promise<IOpenCode
   }
 
   if (existsSync(storagePath)) {
-    console.error("[OpenCode] Using JSON reader (legacy)");
     return new JsonReader(storagePath);
   }
 
