@@ -102,6 +102,27 @@ describe("find_memory — quotes with linked_items", () => {
 
     expect(result.quotes[0].linked_items).toContainEqual({ id: "topic-1", name: "Birthday Cake", type: "topic" });
   });
+
+  it("includes id in quote output, matching the stored Quote.id", async () => {
+    const quote: Quote = {
+      id: "quote-42",
+      text: "A genuine critical bug",
+      speaker: "human",
+      timestamp: "2026-01-15T10:00:00Z",
+      message_id: "msg-1",
+      data_item_ids: [],
+      persona_groups: [],
+      start: null,
+      end: null,
+      created_at: "2026-01-15T10:00:00Z",
+      created_by: "extraction",
+    };
+    const searchFn = vi.fn().mockResolvedValue({ facts: [], topics: [], people: [], quotes: [quote] });
+    const executor = createFindMemoryExecutor(searchFn);
+    const result = JSON.parse(await executor.execute({ query: "bug" }));
+
+    expect(result.quotes[0]).toHaveProperty("id", "quote-42");
+  });
 });
 
 describe("find_memory — persona filter resolution", () => {
