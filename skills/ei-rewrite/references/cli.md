@@ -36,50 +36,48 @@ ei create person --json '<json>'
   for reporting to the user).
 - See `references/mechanics.md` for the exact fields to supply.
 
-## Updating — FULL-RECORD ROUND-TRIP
+## Updating — a merge patch, only the field(s) you're rewriting
 
 ```bash
 ei update topic <id> --json '<json>'
 ei update person <id> --json '<json>'
 ```
-**`update` REPLACES the entire record. Any field you omit is deleted.** The
-only safe pattern:
-1. `ei --id <id>` → get the current, complete record.
-2. Change only the field(s) you mean to change (per `references/mechanics.md`).
-3. Send the **whole** record back to `update`.
+**`update` is RFC 7396 JSON Merge Patch (ADR-029).** Send only the field(s) you mean to
+change — for this skill, that's almost always just `description` (occasionally `category`
+for a topic, or `relationship` for a person, if the redistribution changes how you'd
+summarize the relationship/category too). Everything you omit is left completely
+unchanged — there is no "everything else got wiped" hazard to guard against anymore.
 
-**For this skill specifically, do step 1 twice**: once during planning
-(`SKILL.md` step 1), and **again immediately before the actual `update`
-call** (`SKILL.md` step 6) — for every existing record you're about to
-write, not just the original. Planning and getting the user's approval
-takes real time; if the record changed in that window (another correction,
-an extraction, a ceremony pass), the second read catches it before a stale
-full-record replacement silently overwrites the change. **Diff the two
-reads on every field, not only the ones your plan changes** — a full-record
-`update` can silently clobber `sentiment`, `identifiers`, `linked_quotes`,
-`rewrite_length_floor`, or anything else that changed in the gap, even
-though your plan never touched it. Build the actual write payload from the
-**second** read plus your approved edits — never from the first. If the two
-reads disagree on anything at all, stop and re-plan rather than writing.
+**Still do the read twice**: once during planning (`SKILL.md` step 1), and again
+immediately before the actual `update` call (`SKILL.md` step 6) — for every existing record
+you're about to write, not just the original. Planning and getting the user's approval
+takes real time; if `description` itself changed in that window (another correction, an
+extraction, a ceremony pass), the second read catches it before your patch overwrites a
+change you never saw. **Diff the two reads on the field(s) you're about to send** — if
+`description` (or whichever field you're patching) differs between the two reads, stop and
+re-plan rather than writing; a field you're NOT touching can drift freely between the two
+reads without any consequence now, since your patch will never mention it. Build the actual
+write payload from the **second** read's value plus your approved edit — never from the
+first.
 
 Ei recomputes the embedding automatically on every update.
 
 ## Passing JSON safely
 
 Don't hand-type JSON into a shell single-quoted string — descriptions
-routinely contain apostrophes and quotes that will break your quoting. Use a
-temp file:
+routinely contain apostrophes and quotes that will break your quoting. Prefer
+`--json-file <path>`:
 ```bash
-ei update person <id> --json "$(cat /tmp/rec.json)"
+ei update person <id> --json-file /tmp/patch.json
 ```
-Or a scripting runtime: read the record, mutate the object, `JSON.stringify`,
-pass the result as a single interpolated argument. Never hand-retype a
-record from memory — fetch it and mutate it programmatically, or you will
-drop a field.
+Same body as `--json`, read from a file instead of argv. Or a scripting runtime: build the
+patch object, `JSON.stringify`, pass the result as a single interpolated argument to
+`--json`. Never hand-retype JSON from memory.
 
 ## There is no undo
 
-Same as `ei-curate`: every write is an append-only correction. A mistake is
+Same as `ei-curate`: every write is an append-only correction — `update` now queues
+`{ op: "patch", entity_type, id, patch, timestamp }` rather than a full record. A mistake is
 fixed with *another* write, never reverted. `cat`-ing `corrections.json` is
 not a reliable way to confirm a write landed — a running Ei instance drains
 it within ~100ms, and with no live instance the CLI applies the correction

@@ -243,9 +243,7 @@ Read that record back and confirm with the user that the `display_name` and
 description are the persona you both mean, before anything writes. If the
 lookup returns nothing, stop.
 
-### 1b. Capture what the critic already proposed, then settle the critic
-
-This step does two things **in a fixed order, and the order is the point.**
+### 1b. Note what the critic already proposed, then settle the critic
 
 ```bash
 PERSONA_SNAPSHOT=$(mktemp)
@@ -254,7 +252,7 @@ jq '{ external_reflection_only: (.external_reflection_only // false),
       has_pending_update: has("pending_update") }' "$PERSONA_SNAPSHOT"
 ```
 
-#### First: capture `pending_update` — unconditionally, before any write
+#### First: note `pending_update`, if there is one
 
 If `has_pending_update` came back `true`, **read that object out of
 `$PERSONA_SNAPSHOT` now** — `critique`, `short_description`,
@@ -264,15 +262,15 @@ in a sentence or two while you're here: it is a proposal the automatic critic
 left behind that nobody ever applied, and it is about to be resolved either
 way.
 
-> **Capture before you write. Always, whichever branch you take below.**
-> `pending_update` is server-managed, and **every** `ei update persona`
-> deletes it whatever the payload says
-> (→ `references/cli.md` → "Server-managed fields"). The opt-out write below
-> is one of those updates. Write first and the proposal is gone before the
-> lens that was going to read it ever runs — no undo, no second copy.
-> Capturing unconditionally costs one read and keeps this step correct
-> independent of a decision the user has not made yet, so **do not fold it
-> into the approved branch.**
+> Reading it now, rather than waiting until the Persona lens re-reads the
+> record fresh, is still worth doing even though the opt-out write below no
+> longer threatens it (`ei update` is a merge patch now — a write that
+> doesn't mention `pending_update` leaves it alone, see
+> `references/cli.md` → "`pending_update` no longer clears itself"). The
+> residual reason: on an **unprotected** run, Ei's own automatic critic can
+> still overwrite this proposal with a fresh one while you're mid-conversation
+> with the user, so capturing its current content early is cheap insurance,
+> not a workaround for this skill's own write.
 
 Then `rm -f "$PERSONA_SNAPSHOT"` — it holds the full persona identity.
 
@@ -298,11 +296,12 @@ reads it as `// false`.
   > this same log, and there's no undo. I can switch it off so this
   > conversation is the only thing that clears it. Want me to?"
 
-  **Approved** → set `external_reflection_only: true` via a full-record
-  Persona update (→ `references/cli.md`; the round-trip and omitted-boolean
-  rules apply), re-read to confirm it stuck, then continue as a **protected
-  run**. This is the write that deletes `pending_update`; you captured it
-  above, which is why that is now harmless.
+  **Approved** → send `{"external_reflection_only": true}` as a merge-patch
+  Persona update (→ `references/cli.md`), re-read to confirm it stuck, then
+  continue as a **protected run**. This is now an ordinary single-field
+  patch — it does not touch `pending_update` at all, so there's no ordering
+  hazard to manage around it.
+
 
   The setting takes effect on Ei's next drain tick — ordinarily inside about
   100 ms — and holds from then on. A critic run that was already dispatched
@@ -446,7 +445,7 @@ Persona lens still runs — see its `no_change` path.
 → **`lenses/persona.md`**
 
 Hand it: `$PERSONA_ID`, the log text, the identity pile from Step 3, and the
-`pending_update` snapshot Step 1b captured — or the fact that there wasn't
+`pending_update` snapshot Step 1b noted — or the fact that there wasn't
 one. It returns one of `no_change`, `approved_and_applied`, `blocked`.
 
 It writes only to Ei's Persona record. It never clears the log.
@@ -481,9 +480,9 @@ row, no exceptions.** Then, and only then:
 ei --id "$PERSON_LOG_ID"
 ```
 
-Take that **fresh** full record — not the Step 2 copy; the lenses took real
-time and the record may have moved — set `description` to `""`, leave every
-other field exactly as read, and write it back.
+Take a **fresh** read — not the Step 2 copy; the lenses took real time and
+the record may have moved. If `description` isn't already empty, send a
+patch containing ONLY `{"description": ""}` — no other field.
 
 If that fresh read comes back with `description` already empty on an
 unprotected run, the automatic critic got there first. Don't report a clear
@@ -491,7 +490,7 @@ you didn't perform — say what happened, and say whether the evidence reached
 Ei and the harness file before it went.
 
 → `references/cli.md` → "Clearing the PersonLog" for the exact command and
-the full-record round-trip rule.
+the merge-patch write.
 
 Then verify:
 
@@ -536,9 +535,10 @@ bookkeeping; the disposition of the evidence is the result.
   (Step 1b) Ei's automatic critic can consume the log at any moment. Say "I
   won't clear it", never "it'll still be there", and re-offer the opt-out
   every time the run is about to wait on the user.
-- **Capture `pending_update` before the Step 1b opt-out write.** Every
-  `ei update persona` deletes it. Writing first destroys the Persona lens's
-  input with no undo.
+- **`pending_update` no longer clears itself on write.** Every persona
+  update is a merge patch now — omitting `pending_update` leaves it exactly
+  as it was. The Persona lens's write must include `"pending_update": null`
+  explicitly, every time, or a resolved proposal stays stuck forever.
 - **Never first-match a Persona or a Person record.** Take one candidate
   list, require an exact unique match, and otherwise ask. Nothing enforces
   display-name uniqueness, and `-n 1` hides the ambiguity by silently
@@ -572,9 +572,8 @@ bookkeeping; the disposition of the evidence is the result.
   rather than making a partial write and implying completeness. It is a
   coverage limit, not a permissions problem.
   → `references/unreachable-surfaces.md`.
-- **Full-record round-trip on every Ei write.** `ei update` replaces the whole
-  record; anything omitted is deleted, and three booleans silently reset to
-  `false`. → `references/cli.md`.
+- **`ei update` is a merge patch.** Send only the field(s) you mean to change —
+  anything you omit is left completely unchanged. → `references/cli.md`.
 - **There is no undo.** Ei writes are append-only corrections; a mistake is
   fixed with another write, never reverted. Confirm before writing.
 - **STOP and ask when:** more than one Persona matches the name you have, more

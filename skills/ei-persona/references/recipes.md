@@ -1,9 +1,12 @@
 # reference: persona-authoring recipes
 
 Pick the recipe that matches the task. Every recipe assumes you have already **found and
-read** the persona's full record, and that you will **confirm with the user**
-(`references/talking-to-the-user.md`) before writing and **verify** after. All writes
-follow the full-record round-trip rule in `references/cli.md`.
+read** the persona's current record, and that you will **confirm with the user**
+(`references/talking-to-the-user.md`) before writing and **verify** after. `update` is a
+merge patch (RFC 7396, ADR-029) — build a small object with only the field(s) you mean to
+change, per `references/cli.md`. The one thing that hasn't changed: `traits`/`topics`, when
+you include them at all, still replace **wholesale** — send every entry you want to keep,
+not just the new/changed one.
 
 Command mechanics live in `references/cli.md`; this file is the *sequence and judgment*
 for each operation.
@@ -17,16 +20,18 @@ translated into a concrete new character trait.
 
 **Steps:**
 
-1. `ei --id <persona-id>` → read the full record. Look at the existing `traits[]` so the
-   new one doesn't duplicate or contradict one that's already there.
+1. `ei --id <persona-id>` → read. Look at the existing `traits[]` so the new one doesn't
+   duplicate or contradict one that's already there.
 2. Turn the request into a concrete trait: a short `name`, a `description` of what it
    looks like in behavior (not just a label), a `sentiment` (-1..1, how the persona feels
    about having it), and optionally a `strength` (0..1, how consistently it shows up). If
    the user's request is vague ("sarcastic"), propose the concrete wording and get their
    yes before writing — don't silently decide how sarcastic is "sarcastic."
-3. Append the new trait object to the existing `traits[]` array — **don't invent an
-   `id`**, it's auto-assigned. Leave every other trait, and every other field, untouched.
-4. `ei update persona <persona-id> --json '<full record with the trait appended>'`.
+3. Build the patch's `traits` array: a copy of every existing trait, plus the new one
+   appended — **don't invent an `id`** for the new one, it's auto-assigned. `traits` is the
+   only field in this patch.
+4. `ei update persona <persona-id> --json '{"traits":[...]}'` — the whole `traits` array,
+   nothing else.
 5. Verify: re-read, confirm the new trait is present with the values you intended and
    every prior trait is still there.
 
@@ -44,8 +49,10 @@ translated into a concrete new character trait.
    and/or `sentiment` (both stay within their bounds, -1..1 for sentiment, 0..1 for
    strength) and/or `description`. Leave `id` and `name` as-is unless the user explicitly
    wants a rename.
-3. `ei update persona <persona-id> --json '<full record with only that trait changed>'`.
-4. Verify the read-back shows the new value and every other trait unchanged.
+3. Build the patch's `traits` array: a copy of every trait, with just that one entry
+   edited — `traits` is still the whole array, even though only one entry changed.
+4. `ei update persona <persona-id> --json '{"traits":[...]}'`.
+5. Verify the read-back shows the new value and every other trait unchanged.
 
 ---
 
@@ -57,9 +64,10 @@ entirely, not just weaken.
 **Steps:**
 
 1. `ei --id <persona-id>` → read.
-2. Build the new `traits[]` array with that one entry filtered out — everything else in
-   the array, and the rest of the record, unchanged.
-3. `ei update persona <persona-id> --json '<full record with the trait removed>'`.
+2. Build the new `traits[]` array with that one entry filtered out — every other entry
+   unchanged.
+3. `ei update persona <persona-id> --json '{"traits":[...]}'` — the filtered array; every
+   other field on the record is untouched because this patch never mentions it.
 4. Verify: re-read, confirm the trait is gone and nothing else moved.
 
 > If you're not sure whether the user wants the trait **gone** or just **weaker**, ask —
@@ -83,13 +91,14 @@ opinion but doesn't bring it up. Ask which the user means if it's not obvious.
 2. Build the new topic: `name`, `perspective` (their view), `approach` (how they engage
    with it), `personal_stake` (why it matters to them), `sentiment` (-1..1),
    `exposure_current` and `exposure_desired` (both 0..1). No `id` needed — auto-assigned.
-3. Append to `topics[]`, leaving everything else untouched.
-4. `ei update persona <persona-id> --json '<full record with the topic appended>'`.
+3. Build the patch's `topics` array: a copy of every existing topic, plus the new one
+   appended.
+4. `ei update persona <persona-id> --json '{"topics":[...]}'`.
 5. Verify.
 
 **Adjust:** same shape as Recipe B, applied to the matching entry in `topics[]` — change
 only the field(s) that need to change (commonly `sentiment`, `exposure_desired`, or the
-prose fields), preserve `id`.
+prose fields), preserve `id`, send the whole `topics` array back.
 
 **Remove:** same shape as Recipe C, applied to `topics[]`.
 
@@ -106,8 +115,9 @@ alongside a trait or two.
 
 **Steps:**
 
-1. `ei --id <persona-id>` → read the full record, including current
-   `short_description`/`long_description` and existing `traits[]`/`topics[]`.
+1. `ei --id <persona-id>` → read the current record, including `short_description`/
+   `long_description` and existing `traits[]`/`topics[]` (for context, and in case the
+   directive also implies a trait edit — see below).
 2. Translate the directive into a concrete rewrite:
    - "talk like Yoda" is primarily a **voice/manner** instruction — it belongs in
      `long_description` ("speaks with inverted syntax, object before subject; sparse,
@@ -116,14 +126,16 @@ alongside a trait or two.
      ask for.
    - If the directive also implies a durable trait (e.g. "speaks in riddles" is arguably
      a trait, not just a description line), you may propose adding one — but say so
-     explicitly when confirming, don't fold it in silently.
+     explicitly when confirming, don't fold it in silently. If you do, that trait edit
+     follows Recipe A/B and becomes part of the same patch.
    - Keep `short_description` a short label-level summary consistent with the new
      `long_description`; update it too if the old one now reads as inconsistent (e.g. a
      `short_description` of "concise and formal" contradicts a Yoda voice).
 3. Draft the new field value(s) and confirm with the user in plain language *before*
    writing — this is a visible, felt change to how the persona talks, and it deserves a
    clear description of the new voice, not raw text to approve blind.
-4. `ei update persona <persona-id> --json '<full record with only description field(s) changed>'`.
+4. `ei update persona <persona-id> --json '{"long_description":"...","short_description":"..."}'`
+   — only the description field(s) that actually changed; nothing else in the patch.
 5. Verify: re-read, and if you can, exercise the persona (or describe how the user can)
    to confirm the new voice reads the way they wanted.
 
@@ -142,10 +154,12 @@ in X."
    set. There is **no minimum count** and **no auto-generation fallback** on this path —
    whatever character the persona has is whatever you and the user put in the payload.
 2. Draft the full creation payload: `display_name` plus whichever of
-   `short_description`, `long_description`, `traits`, `topics`, `model`, `group_primary`,
-   `groups_visible`, `tools` the user wants set at creation (for `tools`, see Recipe I
-   below and `references/cli.md`'s "Tool grants" section). Omit `id` on every trait/topic —
-   auto-assigned.
+   `short_description`, `long_description`, `traits`, `topics`, `external_reflection_only`
+   the user wants set at creation. Omit `id` on every trait/topic — auto-assigned. `model`,
+   `group_primary`, `groups_visible`, and `tools` are no longer part of this payload at all
+   (ADR-031) — the persona starts with system defaults for all of them, and none of them
+   are settable through `create` either; if the user wants those configured, that's a TUI
+   task, not this one.
 3. Confirm the plan in plain language (name + character summary) before writing.
 4. `ei create persona --json '<payload>'` → **capture the returned `id`.**
 5. Verify: `ei --id <new-id>` and confirm the record matches what you intended. Tell the
@@ -154,23 +168,21 @@ in X."
 
 ---
 
-## Recipe G — Archive a persona (including a reserved one)
+## Recipe G — Archiving is a TUI action now, not this skill's
 
 **Symptom:** "archive Bob, I don't use him anymore" — or a user tries to "delete" Ei or
 Emmet and needs redirecting to the reversible option.
 
-**Steps:**
+`is_archived` left the external write contract entirely (ADR-031) — there is no `ei
+update persona` payload, for a reserved persona or any other, that can archive or unarchive
+one anymore. This recipe is no longer "read → set the flag → write" — it's a redirect:
 
-1. `ei --id <id>` → read the full record.
-2. Set `is_archived: true` (and, if the shape calls for it, `archived_at` to the current
-   timestamp — otherwise leave managed timestamp fields as Ei set them). Change nothing
-   else.
-3. `ei update persona <id> --json '<full record with is_archived: true>'`.
-4. Verify: re-read, confirm `is_archived` is now `true`.
-5. Tell the user the persona is archived, not deleted — it can be brought back later by
-   setting `is_archived: false` the same way.
-
-Unarchiving is the same recipe in reverse: read, set `is_archived: false`, write, verify.
+1. Tell the user archiving (and unarchiving) is done in the TUI now — the `/archive`
+   command — not something this skill can do on their behalf.
+2. If the persona is reserved (`ei`/`emmet`) and the user asked to "delete" it: explain
+   that delete is rejected outright for reserved personas (see Recipe H), and archiving via
+   `/archive` in the TUI is the reversible alternative they actually want.
+3. Don't attempt any JSON write for this — there is no field to send.
 
 ---
 
@@ -181,12 +193,13 @@ Unarchiving is the same recipe in reverse: read, set `is_archived: false`, write
 **Steps:**
 
 1. **Check whether it's reserved first.** If the target is `ei` or `emmet`, stop — this
-   recipe doesn't apply. Route to Recipe G (archive) and tell the user why: deleting a
-   reserved persona is rejected outright (`Cannot delete reserved persona "<id>". Use
-   archive instead.`), checked before the request is even queued.
+   recipe doesn't apply. Route to Recipe G (archive, in the TUI) and tell the user why:
+   deleting a reserved persona is rejected outright (`Cannot delete reserved persona
+   "<id>" — reserved personas can't be deleted via this CLI/MCP path at all; use the TUI's
+   /archive command instead.`), checked before the request is even queued.
 2. For a non-reserved persona: confirm with the user that they want it **permanently
-   gone**, not hidden — mention archive (Recipe G) as the reversible alternative, since
-   `remove` has no undo.
+   gone**, not hidden — mention the TUI's `/archive` command as the reversible alternative,
+   since `remove` has no undo and this skill can't archive on their behalf either.
 3. `ei remove persona <id>`.
 4. Verify: `ei --id <id>` (or a search) no longer finds it.
 5. Tell the user it's gone, and that recreating a persona with the same name later gets a
@@ -195,51 +208,35 @@ Unarchiving is the same recipe in reverse: read, set `is_archived: false`, write
 
 ---
 
-## Recipe I — Grant or revoke a persona's tool access
+## Recipe I — Tool grants are a TUI action now, not this skill's
 
 **Symptom:** "give DJ Spotify access so she can answer what she's listening to" / "let Ei
 search the web" / "[persona] shouldn't be able to read my files anymore."
 
-**Steps:**
+`tools` left the external write contract entirely (ADR-031: it only affects in-harness
+behavior, not the knowledge base this CLI/MCP surface manages). `ei --id <persona-id>` still
+shows the current grants as the same `{ "<Provider>": { "<Tool>": true|false } }` map, so
+you can still tell the user what's currently granted — but there is no `ei update persona`
+payload that can flip a boolean in it anymore.
 
-1. `ei --id <persona-id>` → read the full record. Look at the `tools` map — every tool
-   belonging to every currently-**enabled** provider, `true`/`false` for whether this
-   persona has it granted right now. This read **is** the full menu of what's grantable —
-   there's no separate enumeration step. A provider the human hasn't finished configuring
-   (e.g. Spotify before OAuth) simply won't appear in the map at all.
-2. Find the provider block and tool key matching what the user described — e.g. "Spotify"
-   → `"Currently Playing Track"`. If you don't recognize a capability the user named
-   anywhere in the map — including because the provider itself isn't in the map — say so
-   plainly (name what's missing) and ask what they meant. Don't guess a plausible-sounding
-   display name.
-3. Flip that **one** boolean — `false → true` to grant, `true → false` to revoke. Leave
-   every other entry in the map, and the rest of the record, exactly as you read it. (A
-   persona that has never had a Spotify tool before looks the same as any other case here:
-   its Spotify entries just read all-`false` until you flip the one the user asked for.)
-4. `ei update persona <persona-id> --json '<full record with that one tools entry
-   flipped>'`.
-5. Verify: re-read, confirm the entry you flipped shows the value you intended and every
-   other entry in `tools` — and every other field on the record — is unchanged. Tell the
-   user this only changes what **that persona** can do the next time a human chats with it
-   inside Ei's TUI or web client — it has no effect on your own tool access in this
-   session, or anything else about the current harness.
-
-> **An unresolvable provider or tool name is rejected, not a silent no-op.** If step 4
-> fails with a validation error, a name in your payload didn't match anything real — don't
-> retry with a guessed alternate spelling. Tell the user exactly what the error said, and
-> re-read the persona (step 1) to get the real names before trying again.
+1. `ei --id <persona-id>` → read, and answer any "what does X have access to right now"
+   question directly from the `tools` map.
+2. For an actual grant/revoke request: tell the user this is done in the TUI's persona
+   editor now, not through this skill. Point them there rather than attempting a write.
 
 ---
 
 ## If a write looks wrong afterward
 
 There's no undo, but the data isn't stuck — you fix a bad write with another write:
-- Wrong trait/topic value → `update` again with the correct full record.
-- Added the wrong trait → `update` again with it removed (Recipe C).
+- Wrong trait/topic value → `update` again with a corrected patch for that field.
+- Added the wrong trait → `update` again with a `traits` patch that has it removed
+  (Recipe C).
 - Removed something you shouldn't have → for a non-reserved persona, re-`create` it (note:
   new id, and any prior references to the old id are gone). For a reserved persona this
   never applies — you couldn't have deleted it in the first place.
-- Archived by mistake → set `is_archived: false` and write again.
+- Archived by mistake → tell the user to use the TUI's `/archive` command; this skill has
+  no write of its own to undo an archive with.
 
 Re-read the persona with `ei persona "<name>" --id <id>` (or `ei --id <id>`) to verify what
 actually landed — don't rely on `corrections.json`. In the common case (no live Ei instance

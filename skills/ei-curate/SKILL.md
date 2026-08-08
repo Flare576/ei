@@ -95,8 +95,9 @@ reading that provenance — see `references/provenance.md`.
    if `ei` is not on PATH). **The live `--help` is the source of truth for the command
    surface** — this skill's examples are a guide, but the CLI evolves; if a command here
    doesn't match `--help`, trust `--help` and adapt.
-2. **Read `references/cli.md`** for the exact read/create/update/remove contracts, the
-   critical **full-record round-trip** rule, and how to pass JSON safely.
+2. **Read `references/cli.md`** for the exact read/create/update/remove contracts —
+   `topic`/`person` updates are merge patches, `fact` updates are the one full-record
+   exception — and how to pass JSON safely.
 3. **Do not assume any other tool exists.** You may or may not have a Slack tool, GitHub
    access, or web search. Ei already stores rich provenance on every quote, which is
    usually enough on its own. External tools are a *bonus* for verification, never a
@@ -140,10 +141,12 @@ moment its condition applies.
   describe the *change and the reason*. Wait for approval before any write.
 
 ### 5. Write — make the change
-- Follow `references/cli.md` exactly: **read → modify only the target field(s) → write the
-  whole record back** (updates are full replacements, not patches). Capture the `id` that
-  `create` returns — later steps need it. Do the writes in dependency order (create the new
-  record first, then re-point quotes to it, then clean the original).
+- Follow `references/cli.md` exactly: **read for context → build a patch/record with only
+  the target field(s) → write it** (`fact` updates are still full-record replacements —
+  the one permanent exception; `topic`/`person` updates are merge patches — only the
+  changed fields). Capture the `id` that `create` returns — later steps need it. Do the
+  writes in dependency order (create the new record first, then re-point quotes to it,
+  then clean the original).
 
 ### 6. Verify & report — prove it worked
 - Re-read every record you touched (`ei --id …`) and confirm the change landed: the
@@ -155,9 +158,11 @@ moment its condition applies.
 
 ## Guardrails (non-negotiable)
 
-- **Full-record round-trip.** `update` **replaces** the record. Any field you omit is
-  **lost**. Always fetch the current record, change only what you mean to, and send it all
-  back. (`references/cli.md`)
+- **`fact` update is full-record replacement; `topic`/`person` update is a merge
+  patch.** For `fact`, any field you omit is **lost** — fetch the current record,
+  change only what you mean to, and send it all back. For `topic`/`person`, an
+  omitted field is left **unchanged** — send only the field(s) you're actually
+  changing. (`references/cli.md`)
 - **Capture created ids.** `create` mints a new id and returns it. If you don't capture it,
   you can't link quotes to it.
 - **There is no undo.** Writes append to a corrections log. A mistake is only fixable by

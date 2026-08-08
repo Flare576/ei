@@ -166,10 +166,10 @@ rule and the multi-phrasing requirement.
 For each subject: either it genuinely overlaps with something recon found
 (fold the content in) or it doesn't (create new). Also plan the slimmed
 version of the original record. → **`references/mechanics.md`** has the exact
-bookkeeping — the `rewrite_length_floor` formula, the `persona_groups`/
-`interested_personas` union rule, and the required JSON shape for every
-record you touch or create. Get this right or the ceremony will immediately
-re-flag your slimmed record on its next pass.
+bookkeeping — which fields you can still set on each write (a much shorter
+list than before: `rewrite_length_floor` and `persona_groups`/
+`interested_personas` all left the write contract entirely, ADR-031) and the
+required JSON shape for every record you touch or create.
 
 **Person-creation policy (a deliberate extension beyond the automatic
 ceremony):** the automatic Person-rewrite phase never spins off a new
@@ -191,26 +191,24 @@ first may no longer be current — another correction, an extraction, or a
 ceremony pass could have touched it or a fold-in target in the meantime.
 **Immediately before you write anything**, re-read every record you're
 about to update — every fold-in target and the original — via `ei --id`.
-**Compare the fresh read against your step 1 read of that same record,
-field by field, not just the fields your plan touches.** If *anything*
-differs — `sentiment`, `identifiers`, `linked_quotes`, `rewrite_length_floor`,
-visibility fields, or any other field, not only `description`/
-`persona_groups`/`interested_personas`/`category`/`relationship` — **stop**:
-don't write. Enumerating "the fields that matter" is exactly how this gap
-happens; don't rebuild that mistake by narrowing the check yourself. Show
-the user what changed, redo recon or planning if the change affects it, and
-get fresh approval. When you do write, build the payload by applying only
-your approved changes on top of **this fresh read**, not the step 1 read —
-never let a stale snapshot become the base of a full-record replacement.
-Only proceed to step 7 once every record you're about to touch matches what
-your approved plan assumed, using this fresh copy as the write payload's base.
+**Compare the fresh read against your step 1 read of that same record, on the field(s) your
+patch will actually send — for this skill, that's `description` and, occasionally,
+`category`/`relationship`.** If any of THOSE fields differ, **stop**: don't write. Show the
+user what changed, redo recon or planning if the change affects it, and get fresh approval.
+A field your patch never mentions — `sentiment`, `identifiers`, `linked_quotes`,
+`persona_groups`, `interested_personas`, or anything else — can drift freely between the two
+reads with no consequence: `update` is a merge patch now (ADR-029), so a field you don't
+send is left exactly as it is on the server, whatever it says by the time your write lands.
+When you do write, build the payload from **this fresh read's value(s)** for the field(s)
+you're changing plus your approved edit — never from the step 1 read.
 
 ### 7. Write
 Order matters: create/update the redistribution targets first, **then** slim
 the original last (so if anything fails partway, the original record is
 never left half-edited with its content nowhere else). → `references/cli.md`
-for the exact commands and the full-record round-trip rule (same rule as
-`ei-curate`: `update` replaces the whole record — omit a field, lose it).
+for the exact commands: `create` is still a full-body write; `update` is a merge patch —
+send only the field(s) you're changing (`description`, and whatever else your plan
+actually touches), not the whole record.
 
 **After each individual create/update, re-read that record before moving to
 the next target.** If a write fails, or the re-read doesn't match what you
@@ -224,8 +222,8 @@ failure instead of continuing through a prebuilt batch of writes.
 ### 8. Verify & report
 Re-read every record you touched or created (`ei --id`). Confirm: the
 original is slim and on-contract, every redistributed subject landed
-somewhere (existing or new), nothing was invented that Ei already had under
-another name, and every touched record has a correct `rewrite_length_floor`.
+somewhere (existing or new), and nothing was invented that Ei already had
+under another name.
 Tell the user in plain language what moved where.
 
 ---
@@ -235,8 +233,8 @@ Tell the user in plain language what moved where.
 - **Recon before creation, every time.** Creating a new Topic/Person without
   first searching Ei for an existing match is the one mistake this skill
   exists to prevent. → `references/recon.md`.
-- **Full-record round-trip.** `update` replaces the entire record — read,
-  change only the target fields, write the whole thing back.
+- **`update` is a merge patch.** Read for context, send only the field(s)
+  actually changing (usually just `description`).
 - **Lose no relationship/subject data.** Slimming means *redistributing*, not
   discarding — the only content that's allowed to simply vanish is genuine
   throwaway trivia with no standalone value (see `references/contracts.md`).
@@ -244,9 +242,11 @@ Tell the user in plain language what moved where.
   different meaning is not a match — create a new record rather than
   contaminating an unrelated one. (This is exactly the failure mode
   `ei-curate` cleans up after — don't cause a fresh one here.)
-- **Set `rewrite_length_floor` on every record you touch.** Skipping this
-  means the automatic ceremony immediately re-scans your manual edit.
-  → `references/mechanics.md`.
+- **`rewrite_length_floor` and `persona_groups`/`interested_personas` are no
+  longer yours to set.** Both left the write contract entirely (ADR-031) —
+  don't try, and don't promise the old union/recompute behavior still
+  happens. → `references/mechanics.md` for what actually happens instead and
+  when to flag the resulting visibility gap to the user.
 - **There is no undo.** Same as `ei-curate` — writes are append-only
   corrections; a mistake is fixed with another write, and `remove` discards
   a record's id and quote links for good. Confirm before writing.

@@ -32,10 +32,10 @@ This is your current Persona Identity for the reflection: `short_description`,
 
 **`pending_update` is a proposed identity revision the automatic critic
 generated during a ceremony that nobody ever applied.** Read its critique: it
-becomes additional input to your reflection, not a replacement for it. You
-don't clear it with a separate step; step 3's write drops it automatically.
-That's why step 3 always performs the write, even when the reflection
-concludes nothing should change.
+becomes additional input to your reflection, not a replacement for it. It no
+longer clears itself as a side effect of writing — step 3's patch must
+include `"pending_update": null` explicitly, every time, even when nothing
+else changed (→ "Apply your edits" below).
 
 **Where you get it is not the read above.** `../SKILL.md` Step 1b captures it
 during preflight, before anything writes, and that capture is your source:
@@ -161,9 +161,10 @@ essential character.
 ## 3. Apply the changes
 
 Once you and the user are aligned, write the agreed identity through Ei's
-`persona` corrections path — the same full-record round-trip discipline
-`ei-curate` uses: **read the whole record, touch only what you mean to
-change, write the whole record back.**
+`persona` corrections path as an RFC 7396 JSON Merge Patch (ADR-029):
+**read the current record for context, build a small patch containing ONLY
+the field(s) you mean to change, send just that** — anything you omit is
+left completely unchanged, you never resend the whole record.
 
 ### Re-read first
 
@@ -176,35 +177,48 @@ build your payload on **this** copy — not the step 1 copy. If anything
 differs from what you read in step 1, stop, show the user what changed, and
 get fresh agreement before writing.
 
-This returns the complete, current `PersonaEntity` — not just the fields you
-looked at in step 1. It includes `aliases`, `model`, `group_primary`,
-`groups_visible`, `is_paused`, `pause_until`, `is_archived`,
-`external_reflection_only`, `avatar_emoji`, `tools`, `notes`, and more. This
-is the base you edit — never hand-retype a record from memory.
+This returns the complete, current `PersonaEntity` — read it for context and
+for the diff-check in the prior section, not because you need to resend it.
+`aliases`, `model`, `group_primary`, `groups_visible`, `is_paused`,
+`pause_until`, `is_archived`, `avatar_emoji`, `tools`, and most other fields
+here are either no longer part of the external write contract at all
+(ADR-031 — there is nothing to send for them, touched or not) or simply
+irrelevant to what this lens edits. Never hand-retype anything from memory —
+build the patch from this read's actual values for the fields you ARE
+changing.
 
 ### Apply your edits
 
-Change **only** the fields you and the user agreed on:
+Build a patch containing **only** the fields you and the user agreed on:
 
 - `short_description`
 - `long_description`
 - `traits` — the agreed new array, or the merged result of the specific
   adds/removes you discussed
 - `topics` — same
+- `pending_update: null` — see below; almost every write from this lens
+  needs this too, even when none of the four fields above changed
 
-Leave every other field exactly as read. `update` **replaces** the record:
-anything you omit is deleted, and three booleans (`is_paused`,
-`is_archived`, `external_reflection_only`) don't just vanish — they silently
-come back as `false`. → `../references/cli.md` → "The omitted-boolean hazard".
+`update` is now a merge patch (ADR-029): every field you leave OUT of the
+patch is left completely unchanged on the stored record — including
+`external_reflection_only`, which used to silently reset to `false` on
+every write (GH-82) and no longer does. Do not send `traits`/`topics`
+unless you're actually changing them; sending either means "these are ALL
+the entries now," so a partial array would delete every entry you didn't
+include.
 
-**Write this even if nothing changed.** If the reflection concludes the
-identity already matches reality — a legitimate outcome, not a failure, and
-the `no_change` state — write the record back unedited anyway.
-`ei update persona` is a genuine full-record replace: it always drops
-`pending_update` (and every other server-managed field) from the persisted
-record, whether or not your payload mentions it. Skipping the write because
-"nothing changed" is the one way to leave a stale `pending_update` stuck on
-the persona forever.
+**Write this even if nothing in the four fields above changed.** If the
+reflection concludes the identity already matches reality — a legitimate
+outcome, not a failure, and the `no_change` state — still send a write.
+Under full-record replacement this used to be enough on its own, because
+ANY write dropped `pending_update` as a side effect. Under merge-patch it
+is no longer a side effect: a write that omits `pending_update` now LEAVES
+IT IN PLACE. So the `no_change` write's patch is `{"pending_update": null}`
+— possibly the ONLY field in it — never an empty write, and never skipped
+just because the four content fields above didn't change. Skipping the
+write, or sending a patch without `pending_update: null`, is the one way
+to leave a stale proposal stuck on the persona forever.
+
 
 Self-check against step 2's guidance before writing — the backend does
 **not** enforce these, by design, so a single incremental edit is never
@@ -232,9 +246,9 @@ ei --id "$PERSONA_ID"
 ```
 
 Confirm `short_description`, `long_description`, and the `traits`/`topics`
-arrays (count and content) match what you intended, that the three booleans
-survived, and that the response has **no** `pending_update` key — the write
-should always drop it, so its presence here means something went wrong.
+arrays (count and content) match what you intended, and that the response
+has **no** `pending_update` key — your patch included `"pending_update":
+null`, so its presence here means the write didn't apply what you sent.
 
 ---
 
@@ -271,9 +285,10 @@ evidence is safe when the only thing you control is your own restraint.
 - **Writes are picked up live.** If Ei is running, the update reaches it via
   the corrections queue almost immediately; if it isn't, the write is already
   saved and will be there next time it starts. No restart, no manual reload.
-- **`pending_update` clears itself.** The step 3 write is a full-record
-  replace and drops it automatically. There's no separate "dismiss" command,
-  and none is needed.
+- **`pending_update` does NOT clear itself anymore.** Step 3's patch must
+  explicitly include `"pending_update": null`. There's still no separate
+  "dismiss" command — this write IS the dismissal — but it's no longer a
+  free side effect of any old write; it only happens if you ask for it.
 - **The session that runs this skill** will itself generate new person-log
   entries. That's expected — the log starts fresh after this conversation
   ends.

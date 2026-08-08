@@ -110,90 +110,94 @@ Read the result count:
 
 ---
 
-## Writing — full-record round-trip
+## Writing — a merge patch, plus one field you must set explicitly
 
 ```bash
-ei update persona <persona-id> --json '<json>'
-ei update person  <person-id>  --json '<json>'
+ei update persona <persona-id> --json-file <path>
+ei update person  <person-id>  --json-file <path>
 ```
 
-**`update` REPLACES the entire record. Any field you omit is deleted.** The
-only safe pattern:
+**`update` is now RFC 7396 JSON Merge Patch.** Send only the field(s) you
+mean to change. Anything you omit is left completely unchanged — you no
+longer round-trip the whole record to make one edit, and you can no longer
+destroy a field by forgetting to include it.
 
-1. `ei --id <id>` → the current, complete record.
-2. Change only the field(s) you mean to change.
-3. Send the **whole** record back.
+1. `ei --id <id>` → read the current record, for context and for the
+   diff-check below — not because you need to resend it.
+2. Build a small JSON object containing ONLY the field(s) you mean to
+   change.
+3. Send just that.
 
-**Do the read twice** — once while planning, and again immediately before the
-`update` call. Reflection conversations take real time; if the record moved in
-that window, the second read catches it before a stale full-record replacement
-silently overwrites someone else's change. Diff the two reads on **every**
-field, not just the ones you meant to change, and build the payload from the
-**second** read. If they disagree on anything at all, stop and re-confirm.
+**Still re-read immediately before writing**, and diff against your Step 1
+read. Reflection conversations take real time; if a field you're ABOUT TO
+CHANGE moved in that window, stop and re-confirm with the user before
+overwriting it. This is a narrower check than before — you're only
+comparing the fields your patch touches, not every field on the record —
+but it still matters, because a patch and a concurrent edit to the *same*
+field can still race (ADR-029 narrows this race, it doesn't close it).
 
 Ei recomputes the embedding automatically on every update.
 
-### The omitted-boolean hazard
+### `pending_update` no longer clears itself — you must clear it explicitly
 
-Three persona booleans are schema-defaulted to `false` on update:
+**This is the one real behavior change this skill must adopt, not just
+relearn.** Before merge-patch, ANY persona update wiped `pending_update` as
+a side effect of replacing the whole record — that was the entire
+mechanism `../lenses/persona.md`'s "write this even if nothing changed"
+step relied on. Merge-patch means omission now means "leave unchanged," so
+an update that never mentions `pending_update` **leaves a stale Critic
+proposal in place**. If your write is meant to resolve one, your patch MUST
+include `"pending_update": null` explicitly — that is the only value it
+accepts (a non-null value is always rejected; this field is Clearable, not
+settable). See `../lenses/persona.md` for exactly when this applies.
 
-| Field | Omitted → | When unset, the read shows |
-|---|---|---|
-| `is_paused` | `false` | `false` |
-| `is_archived` | `false` | `false` |
-| `external_reflection_only` | `false` | **absent** — the key isn't there at all |
+### The omitted-boolean hazard — fixed, not just documented
 
-They don't merely fail to update — they come back **flipped off**. Omitting
-`is_paused` unpauses a paused persona. Omitting `external_reflection_only`
-re-enrols a persona that had opted out of Ei's automatic critic — which, if
-`../SKILL.md` Step 1b just switched it on to protect the log, silently undoes
-that protection mid-reflection. `traits` and `topics` default to `[]` the same
-way, so omitting them empties them.
-
-Note the third column: `external_reflection_only` is **absent** from the
-record when it has never been set, not present-and-`false`. Test it as
-`(.external_reflection_only // false)`; a bare truthiness check on a missing
-key is fine, but a `== false` check is not.
-
-Round-trip the whole record and none of this can happen. Hand-type a payload
-and it will.
+`is_paused`/`is_archived`/`tools`/`model` and several other persona settings
+left the external write contract entirely (ADR-031) — there is no flag or
+JSON field that touches them through this CLI/MCP path at all anymore, so
+there is nothing to omit. `external_reflection_only` stays externally
+writable, and — this is the actual fix, not a workaround — omitting it from
+a patch now means exactly what it should: unchanged. If Step 1b turned it
+on to protect a log mid-reflection, a later patch that never mentions it
+can no longer silently turn it back off.
 
 ### Server-managed fields
 
-`pending_update` and other server-managed fields are dropped from the
-persisted record on every `persona` update, whether or not your payload
-mentions them. This is deliberate and it is how this skill resolves a stale
-critic proposal without a separate "dismiss" verb — see `../lenses/persona.md`.
-
-**"Every" includes the preflight opt-out write.** `../SKILL.md` Step 1b may
-set `external_reflection_only: true` before either lens runs, and that write
-destroys `pending_update` exactly like any other. So Step 1b captures the
-proposal **before** it writes, and the Persona lens consumes that capture
-rather than a fresh read. If you are changing the preflight, preserve that
-ordering: a read that must *precede* a write is not the same as a read you can
-redo afterwards.
+Every field NOT in `../SKILL.md`'s edited set, and not explicitly `null`ed,
+survives an update untouched now — including `pending_update` (see above),
+which is exactly the opposite of the old "every update drops it" behavior.
+Genuinely system-owned fields (`id`, `last_updated`, `description_embedding`,
+`is_static`, `last_heartbeat`) are still never yours to set; sending them
+back (e.g. echoed from an `ei --id` read) is harmless — they're silently
+ignored, not rejected — but you never need to include them at all.
 
 ## Passing JSON safely
 
-Descriptions are prose-heavy and routinely contain apostrophes and quotes that
-will break shell quoting. **Do not hand-type the JSON into a single-quoted
-string, and do not open an editor** — no path in this skill may require
-`$EDITOR`.
+Descriptions are prose-heavy and routinely contain apostrophes and quotes
+that will break shell quoting. **Do not hand-type the JSON into a
+single-quoted string, and do not open an editor** — no path in this skill
+may require `$EDITOR`.
 
 ```bash
 EDIT_JSON=$(mktemp)
-# write the edited record to "$EDIT_JSON" with your own file-writing tool
-ei update persona "$PERSONA_ID" --json "$(cat "$EDIT_JSON")"
+# write ONLY the changed field(s) — e.g. {"traits":[...]} or
+# {"pending_update":null} — to "$EDIT_JSON" with your own file-writing tool
+ei update persona "$PERSONA_ID" --json-file "$EDIT_JSON"
 rm -f "$EDIT_JSON"
 ```
 
-`mktemp` rather than a predictable `/tmp/persona-edit.json`: these payloads
-carry the full persona identity and the full person log.
+`--json-file <path>` (not `--json "$(cat ...)"`) is this skill's preferred
+write mode — it takes the exact same body from a file instead of putting it
+on argv, which matters here specifically: these payloads carry the full
+persona identity and the full person log, the most sensitive writes in this
+codebase. `mktemp` rather than a predictable `/tmp/persona-edit.json` for
+the same reason `--json-file` exists — don't leave the file at a guessable
+path either.
 
-Or use a scripting runtime: read the record, mutate the object,
-`JSON.stringify`, pass the result as one interpolated argument. Never
-hand-retype a record from memory — fetch it and mutate it, or you will drop a
-field.
+Or use a scripting runtime: build the patch object, `JSON.stringify`, pass
+the result as one interpolated argument to `--json`. Either way, never
+hand-retype JSON from memory.
 
 ## Clearing the PersonLog
 
@@ -203,23 +207,21 @@ Only ever from `../SKILL.md` Step 6, only after the joint gate passes.
 ei --id "$PERSON_LOG_ID"        # fresh read — NOT the Step 2 copy
 ```
 
-Take that full record, set `description` to `""`, leave every other field
-exactly as read (`name`, `relationship`, `sentiment`, `identifiers`,
-`sources`, …), and write it back with the same safe-JSON pattern:
+Confirm `description` isn't already `""` (see the no-op note in
+`../SKILL.md` Step 6), then send a patch containing only that one field:
 
 ```bash
 LOG_JSON=$(mktemp)
-# write the record above, with description set to "", to "$LOG_JSON"
-ei update person "$PERSON_LOG_ID" --json "$(cat "$LOG_JSON")"
+echo '{"description":""}' > "$LOG_JSON"
+ei update person "$PERSON_LOG_ID" --json-file "$LOG_JSON"
 rm -f "$LOG_JSON"
 ```
 
 Then `ei --id "$PERSON_LOG_ID"` and confirm `description` is `""`.
+`linked_quotes` is a read-only derived projection either way — it was never
+part of the writable schema, patch or otherwise, so there's no reason to
+include it.
 
-`linked_quotes` appears when you read a person but is a derived projection —
-it is not a writable field. Send back what you read for everything else; drop
-`linked_quotes` from the payload if the schema rejects it, and never treat its
-absence from your payload as deleting quotes.
 
 ## There is no undo
 

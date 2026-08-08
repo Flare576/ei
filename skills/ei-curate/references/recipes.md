@@ -5,8 +5,9 @@ the record(s) and **disambiguated** the quotes (`references/provenance.md`), and
 will **confirm with the user** (`references/talking-to-the-user.md`) before writing and
 **verify** after.
 
-Fact/topic/person writes follow the full-record round-trip rule in `references/cli.md`.
-**Quote writes do not.** A quote asserts that someone really said something, so it has four
+`topic`/`person` writes are merge patches (send only the changed fields); `fact` stays a
+full-record replacement, the one permanent exception — see `references/cli.md`.
+**None of that applies to quotes.** A quote asserts that someone really said something, so it has four
 narrow verbs of its own instead: `ei create quote` (attest a new one against its source
 message), `ei fix quote` (correct its text, re-verified against that source), `ei relink
 quote` (change which records it is attached to), and `ei remove quote`. `ei update` on a quote
@@ -52,10 +53,14 @@ Kirk, *contaminated* by "Jeff Nickles."
    ei relink quote <quote-id> --to "<new-id>,<other-id-to-keep>"
    ```
 
-4. **Clean the original record.** Full-record `update` that:
+4. **Clean the original record.** A patch (only these fields) that:
    - rewrites the `description` to describe **only** the identity that stays,
-   - **removes the identifier that caused the merge** and adds a distinct one,
-   - drops any `sources` that belong to the extracted identity (leave the rest; don't invent).
+   - sends a corrected `identifiers` array — **the complete list**, not a delta:
+     `identifiers` replaces wholesale, so include every identifier this record keeps, with
+     the one that caused the merge removed and a distinct one added.
+   - `sources`/provenance fields are no longer writable at all (ADR-031) — there is nothing
+     to send for them either way; whatever the original record's provenance already says
+     stays exactly as it is, contaminated identity aside.
 
 5. **Verify.** Re-read both people and each moved quote. Confirm `linked_quotes` shifted from
    the original to the new record, the descriptions/identifiers are clean, and nothing else
@@ -79,8 +84,8 @@ Kirk, *contaminated* by "Jeff Nickles."
 2. **Move every quote off the loser.** For each of the loser's `linked_quotes`: read its
    `data_item_ids`, then `ei relink quote <quote-id> --to "<survivor-id>,<others-to-keep>"`.
    `--to` is the complete new list, so preserve and de-dupe the other ids yourself.
-3. **Fold in detail.** Full-record `update` the survivor to absorb any correct identifiers
-   and description nuance the loser had (don't lose real information).
+3. **Fold in detail.** Patch the survivor with only the field(s) that need correct
+   identifiers or description nuance absorbed from the loser (don't lose real information).
 4. **Remove the loser** (`ei remove …`) — only *after* its quotes are moved, or you'll orphan
    them.
 5. **Verify** the survivor now carries all the quotes and correct identifiers; confirm the
@@ -95,7 +100,8 @@ Kirk, *contaminated* by "Jeff Nickles."
 1. `ei --id <id>` → read the full record.
 2. Fix `name` and/or `identifiers` (add the real handle/email; fix a misspelled name; set the
    correct `is_primary`). Prefer **adding** a distinct identifier over leaving a generic one.
-3. `ei update person <id> --json '<full record>'`.
+3. `ei update person <id> --json '{"name":"...","identifiers":[...]}'` — only the field(s)
+   you changed; `identifiers`, if included, is the complete corrected array.
 4. Verify the read-back.
 
 ---
@@ -107,7 +113,9 @@ Kirk, *contaminated* by "Jeff Nickles."
 1. `ei --id <id>` → read.
 2. Change only the offending field (`description`, a fact's `description`/value, a topic's
    `description`; preserve a topic's `category` unless you mean to change it).
-3. `ei update <type> <id> --json '<full record>'`.
+3. `ei update <type> <id> --json '{"description":"..."}'` — for `topic`/`person`, only the
+   changed field(s); for `fact`, the whole record (fact's permanent full-replacement
+   exception — `references/cli.md`).
 4. Verify. (Ei re-embeds on write, so search reflects the new text.)
 
 ---
@@ -146,7 +154,8 @@ company name, an empty duplicate, noise).
 ## If a write looks wrong afterward
 
 There's no undo, but the data isn't stuck — you fix a bad write with another write:
-- Wrong field value → `update` it again with the correct full record.
+- Wrong field value → `update` it again with the correct value (a patch for topic/person, the
+  corrected whole record for fact).
 - Re-pointed the wrong quote → `ei relink quote` again with the correct complete `--to` list.
 - Removed something you shouldn't have → re-`create` it (note: new id; re-point its quotes to
   the new id). Tell the user this happened and what the new id is.

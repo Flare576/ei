@@ -11,8 +11,9 @@ description: >
   [persona] a new topic they care about". This is the safe, guided way to
   create, edit, or retire a persona's identity without hand-editing JSON. The
   persona is an artifact the user is designing — there's nothing to verify
-  against evidence, but writes still replace the whole record and there's no
-  undo, so plan, confirm, and write carefully.
+  against evidence, but `update` is a merge patch (a field you omit is left
+  unchanged, never reset) and there's no undo, so plan, confirm, and write
+  carefully.
 ---
 
 # Ei Persona — authoring a persona's character
@@ -95,23 +96,15 @@ people/quotes). It has:
 | **identity fields** | `display_name`, `short_description`, `long_description` | rewrite the field |
 | **traits** (`traits[]`) | named character traits, each with a sentiment and optional strength | add / adjust / remove an entry |
 | **topics** (`topics[]`) | subjects the persona has a stance on — perspective, approach, personal stake | add / adjust / remove an entry |
-| **lifecycle flags** | `is_paused`, `is_archived`, etc. | flip via a normal update |
-| **tool grants** (`tools`) | a map of every tool on each currently-**enabled** provider, `true`/`false` per tool for whether this persona has it granted | read the map, flip the boolean(s), write the whole map back |
+| **reflection opt-out** (`external_reflection_only`) | whether Ei's automatic Reflection critic skips this persona | flip via a normal update |
 
-**Tool grants are not about you.** `tools` has nothing to do with whatever tools *you* —
-the agent running this skill — can reach (MCP, your own harness's toolset). On a read,
-`tools` is a **map**: `{ "<Provider Display Name>": { "<Tool Display Name>": true|false } }`,
-covering every tool belonging to every currently-**enabled** provider, with `true`/`false`
-for whether **this persona** may call it. A disabled provider (e.g. Spotify before the
-human finishes OAuth) simply isn't in the map — there's nothing to grant until it's
-enabled, and the map you read is the full, live menu of what *is* grantable right now.
-Granting a tool means: read the map, flip the one boolean you mean to change, write the
-whole map back. Example: "give DJ Spotify access so she can answer 'what are you listening
-to'" means reading DJ's record, finding `"Spotify": { "Currently Playing Track": false,
-... }` in the `tools` map, flipping `"Currently Playing Track"` to `true`, and writing the
-whole record back — it says nothing about what tools are available to you, right now, in
-this session. If `"Spotify"` isn't in the map at all, the human hasn't finished connecting
-it in Ei yet.
+**Lifecycle flags and tool grants are TUI-only now, not this skill's to touch.**
+`is_paused`, `is_archived`, and `tools` are all real fields on the record — `ei --id`
+still shows them, for context — but none of them can be set through this CLI/MCP
+path anymore (ADR-031: they only affect in-app behavior, not the knowledge base this
+skill manages). If a user asks you to pause, archive, or grant/revoke a tool, tell
+them that's a TUI action (the persona editor, or `/archive`) — this skill can't do
+it on their behalf. See `references/cli.md` for the full writable-field list.
 
 Full CRUD is in scope here — **create**, **update**, and **remove** — unlike
 `ei-curate`'s quote carve-out (quotes are evidence of real events and can't be
@@ -132,7 +125,7 @@ directly). The *only* restriction is **delete** — see Guardrails below.
    the command surface** — this skill's examples are a guide, but the CLI evolves;
    if a command here doesn't match `--help`, trust `--help` and adapt.
 2. **Read `references/cli.md`** for the exact create/update/remove contracts, the
-   full field list and shapes, the critical **full-record round-trip** rule, and
+   full field list and shapes, the merge-patch semantics `update` follows, and
    how to pass JSON safely.
 3. **Don't assume a minimum trait or topic count.** Nothing in this path enforces
    one (unlike the reflection ceremony's own 3-traits/3-topics convention — that's
@@ -156,11 +149,10 @@ the moment its condition applies.
   nothing to find yet — skip to step 3.
 
 ### 2. Read — understand what's actually there
-- `ei --id <id>` → the **full** current record: `display_name`,
-  `short_description`, `long_description`, every entry in `traits[]` and
-  `topics[]`, and the lifecycle flags (`is_paused`, `is_archived`, …). You cannot
-  safely change one field without seeing all the others (full-record round-trip —
-  see `references/cli.md`).
+- `ei --id <id>` → the current record: `display_name`, `short_description`,
+  `long_description`, every entry in `traits[]` and `topics[]`, plus read-only
+  context like the lifecycle flags (`is_paused`, `is_archived`, …) and `tools` —
+  see `references/cli.md` for exactly which fields you can and can't write.
 - Restate to yourself what the persona currently is, in plain terms, before
   deciding what to change.
 
@@ -178,9 +170,10 @@ the moment its condition applies.
   confirm; describe the *character change*. Wait for approval before any write.
 
 ### 5. Write — make the change
-- Follow `references/cli.md` exactly: **read → modify only the target field(s) →
-  write the whole record back** (create and update are both full-object writes,
-  not patches). Capture the `id` a `create` returns.
+- Follow `references/cli.md` exactly: **read for context → build a patch with
+  ONLY the field(s) you mean to change → send just that** (`create` is still a
+  full-object write; `update` is a merge patch). Capture the `id` a `create`
+  returns.
 
 ### 6. Verify & report — prove it worked
 - Re-read the record you touched (`ei --id <id>`) and confirm the change landed:
@@ -193,25 +186,28 @@ the moment its condition applies.
 
 ## Guardrails (non-negotiable)
 
-- **Full-record round-trip.** `update` **replaces** the record. Any field you omit
-  is **lost** — including traits/topics you didn't mean to touch. Always fetch the
-  current record, change only what you mean to, and send it all back.
-  (`references/cli.md`)
+- **`update` is a merge patch, not a round-trip.** Send only the field(s) you mean
+  to change; everything else is left unchanged. The one exception that still
+  needs the whole array: `traits`/`topics`/`aliases`/`notes`, when you include
+  them at all, replace **wholesale** — include every entry you want to keep, not
+  just the new one. (`references/cli.md`)
 - **There is no undo.** Writes append to a corrections log. A mistake is only
   fixable by *another* write, and `remove` discards a persona's id for good. Plan
   and confirm accordingly.
-- **Reserved personas (`ei`, `emmet`) can be edited freely, but never deleted.**
-  Their *identity* — description, traits, topics, even `display_name` — is fair
-  game for this skill (that's the whole point: it's how a user gives Ei a new
-  voice). But `ei remove persona ei` (or `emmet`) is rejected immediately, before
-  it's even queued, with:
-  > `Cannot delete reserved persona "<id>". Use archive instead.`
-  If a user asks to "delete" Ei or Emmet, that's not possible — offer to
-  **archive** instead (`ei update persona <id> --json '<record with
-  "is_archived": true>'`), which hides it without destroying it.
-- **Non-reserved personas can be fully deleted.** `ei remove persona <id>` is
-  permanent — confirm the user actually means "gone for good," not "hide it," and
-  offer archive as the reversible alternative first (`references/recipes.md`).
+- **Reserved personas (`ei`, `emmet`) can be edited freely, but never deleted OR
+  archived through this skill.** Their *identity* — description, traits, topics,
+  even `display_name` — is fair game (that's the whole point: it's how a user
+  gives Ei a new voice). But `ei remove persona ei` (or `emmet`) is rejected
+  immediately, before it's even queued, with:
+  > `Cannot delete reserved persona "<id>" — reserved personas can't be deleted
+  > via this CLI/MCP path at all; use the TUI's /archive command instead.`
+  If a user asks to "delete" (or archive) Ei or Emmet, tell them to use the
+  TUI's `/archive` command — `is_archived` left this skill's write contract
+  entirely (ADR-031), so there is no JSON body that can do it anymore.
+- **Non-reserved personas can be fully deleted, but not archived through this
+  skill either.** `ei remove persona <id>` is permanent — confirm the user
+  actually means "gone for good," not "hide it," and point them at the TUI's
+  `/archive` command if they want the reversible option (`references/recipes.md`).
 - **No minimum trait/topic count here.** Don't invent a floor; a persona with one
   trait, or a brand-new one with none, is valid.
 - **`is_static` is not yours to change.** It marks built-in structural personas and

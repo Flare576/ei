@@ -59,17 +59,25 @@ timestamp, start, end, created_at, created_by   # (managed)
 > is derived by Ei from the source message, and the two you *can* change each have their own
 > dedicated command. `ei update` on a quote always rejects. See "Quote writes" below.
 
-**fact** — `name, description, sentiment, validated_date` (+ managed: sources, persona_groups, …)
+**fact** — `name, description, sentiment, validated_date`. `update` is a full-record
+replacement for fact specifically (the one permanent exception, ADR-029) — no other fields
+are part of the writable surface at all.
 
-**topic** — `name, description, category, sentiment` (+ managed: sources, persona_groups,
-exposure_*, rewrite_length_floor, …). Preserve the existing `category` on update unless you
-mean to change it.
+**topic** — `name, description, category, sentiment`. Preserve the existing `category` on
+update unless you mean to change it. `exposure_current`/`exposure_desired` and every
+provenance field (`sources`, `persona_groups`, `learned_by`, …) left the write contract
+entirely (ADR-031) — you can read them, you cannot set or preserve them, and submitting
+one is rejected as an unrecognized field, not silently ignored.
+
+**person** — `name, description, sentiment, identifiers, relationship, validated_date`.
+Same ADR-031 removal applies: `exposure_current`/`exposure_desired` and provenance fields
+are read-only.
 
 > **`linked_quotes` is read-only.** It appears when you *read* a person, but it is derived
 > from quotes' `data_item_ids`. You never set it in a write — you change it *indirectly* by
-> editing the quotes. It's harmless to leave in an `update` payload (Ei ignores it), so the
-> simplest safe move is: send the record back exactly as `ei --id` gave it to you, with only
-> your intended edits applied.
+> editing the quotes. It's harmless to leave in an `update` payload (Ei ignores it), but you
+> no longer need to round-trip it, or anything else you're not changing — see "Updating"
+> below.
 
 ## Creating
 
@@ -86,25 +94,28 @@ ei create <type> --json '<json>'      # type: fact | topic | person
 - **Quotes are not created this way.** `ei create quote` is a separate, source-verified
   command with its own flags — see "Quote writes" below.
 
-## Updating — FULL-RECORD ROUND-TRIP (read this twice)
+## Updating — a merge patch for topic/person, still full-record for fact
 
 ```bash
 ei update <type> <id> --json '<json>'   # type: fact | topic | person
 ```
 
-**`update` REPLACES the entire record. Any field you leave out is DELETED.** It is not a
-patch/merge. The only safe pattern:
+**`topic`/`person`: `update` is RFC 7396 JSON Merge Patch (ADR-029).** Send only the
+field(s) you're actually changing; everything you omit is left completely unchanged. The
+safe pattern:
 
-1. `ei --id <id>` → get the current, complete record.
-2. Change **only** the field(s) you intend to change (e.g. a person's `description`, a fact's
-   value).
-3. Send the **whole** record back to `update`.
+1. `ei --id <id>` → get the current record, for context.
+2. Build a small JSON object containing **only** the field(s) you intend to change (e.g.
+   just `description` to fix a person's misattributed content).
+3. Send just that to `update`.
+
+**`fact`: `update` is still a full-record replacement (the permanent exception, ADR-029) —
+any field you leave out is deleted.** Fetch the current record, change only the field(s)
+you intend to, and send the whole record back.
 
 Ei recomputes the embedding automatically on every update, so corrected text re-indexes for
 search — you never manage embeddings yourself.
 
-**`update` does not accept quotes.** It is a real command that always rejects for them, and
-its error names the replacements. Use "Quote writes" below.
 
 ## Quote writes
 
@@ -164,11 +175,14 @@ records that are genuine junk/duplicates **after** you've moved any real quotes 
 Inlining JSON with quotes/apostrophes into a shell single-quoted string is a footgun
 (descriptions like `the middleware ('MW')` will break your quoting). Prefer one of:
 
-- **Temp file:** write the JSON to a file, then `ei update person <id> --json "$(cat /tmp/rec.json)"`.
+- **`--json-file <path>`:** write the JSON to a file, then
+  `ei update person <id> --json-file /tmp/patch.json` — same body, but it never puts the
+  JSON on argv.
 - **A scripting runtime:** read the record, parse it, mutate the object, `JSON.stringify`,
-  and pass the string as a single argument (interpolation escaping handles the quotes). This
-  is the most robust for multi-step edits and lets you round-trip the full record without
-  hand-copying fields.
+  and pass the string as a single argument (interpolation escaping handles the quotes). For
+  `topic`/`person` this only needs to be the field(s) you're changing, not the whole record;
+  for `fact`, build the whole record (the one permanent full-replacement exception).
+
 
 Whatever you do, **do not hand-retype a record** — fetch it and mutate it programmatically,
 or you *will* drop a field.
@@ -176,8 +190,9 @@ or you *will* drop a field.
 ## There is no undo
 
 Every write is recorded as a correction: `{ op: "upsert" | "remove", entity_type, id, record,
-timestamp }` for facts/topics/people/personas, and one of `quote.create` / `quote.fix` /
-`quote.relink` / `quote.remove` for a quote. Where it lands depends on what's running on this
+timestamp }` for a full-record write (every `create`, and `fact`'s own `update`) or
+`{ op: "patch", entity_type, id, patch, timestamp }` for a topic/person `update`, and one of
+`quote.create` / `quote.fix` / `quote.relink` / `quote.remove` for a quote. Where it lands
 machine — don't assume it always sits in `corrections.json` waiting to be read:
 
 - **A live Ei instance is running** (holds `ei.lock`) → the correction is appended to

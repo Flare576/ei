@@ -20,7 +20,7 @@ ei --install                   # Wire Ei into Claude Code, Cursor, Codex, and Op
 ei --sync                      # Pull latest state from remote sync server into state.backup.json (no TUI required)
 ei mcp                         # Start the Ei MCP stdio server (for Claude Code/Cursor/Codex)
 ei create <type> --json '<json>'       # Create a new entity (fact/topic/person/persona)
-ei update <type> <id> --json '<json>'  # Replace an entity by ID (fact/topic/person/persona — never quote)
+ei update <type> <id> --json '<json>'  # Update an entity by ID (merge patch for topic/person/persona; full record for fact — never quote)
 ei remove <type> <id>                  # Remove an entity by ID (fact/topic/person/quote/persona)
 ei create quote | fix quote | relink quote | remove quote   # Quote writes have their own verbs — `ei update` on a quote always rejects (see "Quote commands")
 ```
@@ -129,8 +129,8 @@ The MCP server exposes these tools to Claude Code, Cursor, Codex, and OpenCode:
 | `ei_lookup` | Full-record lookup for any entity by ID — facts, topics, people, quotes, or personas. Use when you need complete details beyond the search summary. |
 | `ei_fetch_message` | Retrieve a specific message by fully-qualified ID with optional `before`/`after` context window. Use when a quote result has a `message_id` and you want the original conversation. Routes to the correct source automatically. |
 | `ei_create` | Create a new entity (fact, topic, person, or persona). Pass a full JSON record matching the entity's schema. Validates server-side; unknown fields are rejected. Returns the assigned id and the full stored record. Not available for quotes — use `ei_quote_create`, which verifies the text against its source message. |
-| `ei_update` | Replace a fact, topic, person, or persona by ID. Full-record replacement — fetch first with `ei_lookup`, edit the fields you need to change, and pass the complete record back. Any omitted field is treated as absent, not "leave unchanged". Not available for quotes: `entity_type: "quote"` is accepted by the schema but always rejects with a message naming `ei_quote_fix`/`ei_quote_relink`/`ei_remove` (ADR-012 tombstone). |
-| `ei_remove` | Permanently remove a fact, topic, person, quote, or persona by ID. Use to drop bad extracted data that shouldn't be corrected, just deleted, or to delete a persona that's no longer needed. Reserved built-in personas ("ei", "emmet") can't be removed this way — use `ei_update` to set `is_archived: true` instead. |
+| `ei_update` | Update a fact, topic, person, or persona by ID. For topic/person/persona this is an RFC 7396 merge patch (ADR-029) — pass ONLY the fields you're changing; every omitted field is left unchanged, `null` clears a field, arrays replace wholesale when present. `fact` is the one permanent exception and stays a full-record replacement (no defaults, nothing to merge onto). Server-owned/in-app-only fields (`tools`, `model`, `is_paused`, `is_archived`, `group_primary`, `groups_visible`, `exposure_current`/`exposure_desired`, provenance fields, …) are rejected as unrecognized on both. Not available for quotes: `entity_type: "quote"` is accepted by the schema but always rejects with a message naming `ei_quote_fix`/`ei_quote_relink`/`ei_remove` (ADR-012 tombstone). |
+| `ei_remove` | Permanently remove a fact, topic, person, quote, or persona by ID. Use to drop bad extracted data that shouldn't be corrected, just deleted, or to delete a persona that's no longer needed. Reserved built-in personas ("ei", "emmet") can't be removed OR archived this way at all — `is_archived` left the external write contract entirely (ADR-031); use the TUI's `/archive` command instead. |
 | `ei_quote_create` | Create a source-verified quote. Requires the source `message_id` and the exact `text`; the server matches that text against the resolved message and refuses if it isn't there. `speaker`, `channel`, `timestamp`, offsets, and the embedding are all derived from the source and cannot be supplied. Optional `start`/`end` are a consistency check, not a way to pick a later occurrence. |
 | `ei_quote_fix` | Correct an existing quote's `text` by re-verifying it against the quote's *existing* source message. Never re-resolves a new source; links, provenance, speaker, channel, and timestamp are all preserved. Refuses if the quote has no `message_id`, its source no longer resolves, or the text isn't found. |
 | `ei_quote_relink` | Change which facts/topics/people a quote is linked to (`data_item_ids`) and nothing else. Complete replacement list, not an additive delta; every target must resolve to an existing fact, topic, or person. Asserts no provenance, so it works on dangling and pre-attestation quotes too. |
@@ -198,18 +198,24 @@ ei remove quote <quote-id>
 
 Personas support create/update/remove too, but through a separate schema (`PersonaEntity`, not the fact/topic/person `DataItemBase` shape) — see the `ei create/update/remove persona` examples below and the `ei-persona` skill for guided authoring.
 
-One persona-only field worth flagging for external callers: `external_reflection_only` (default `false`, alongside `is_paused`/`is_archived`) skips Ei's automatic Reflection critic for that persona so an external, agent-driven reflection can run first instead — it applies uniformly to every persona, reserved ones (`ei`/`emmet`) included.
+One persona-only field worth flagging for external callers: `external_reflection_only` skips Ei's automatic Reflection critic for that persona so an external, agent-driven reflection can run first instead — it applies uniformly to every persona, reserved ones (`ei`/`emmet`) included.
 
-### Update semantics: full replacement, not a patch
+### Update semantics: a merge patch, except for `fact`
 
-`ei update` replaces the entire record for facts, topics, people, and personas. Any field you omit is gone. (Quotes are not updateable this way at all — use the quote verbs above.) The safe pattern:
+`ei update`/`ei_update` implement RFC 7396 JSON Merge Patch (ADR-029) for topic, person, and persona: send only the fields you're changing. A field you omit is left completely unchanged — no more read-the-whole-record-back-in round trip. Send a field's new value to set it; send `null` to clear it (the only way to clear a persona's `pending_update`, a Critic-proposed identity revision — a non-null value for it is always rejected). Arrays (`traits[]`, `topics[]`, `identifiers[]`, `aliases`, `notes`) replace wholesale when present: sending `traits` means "these are ALL the traits now," not "append this one."
+
+`fact` is the one permanent exception (ADR-029's own stated exclusion — it has no defaults, so there's nothing to merge onto): `ei update fact`/`ei_update` with `entity_type: "fact"` still replace the whole record, exactly like before. (Quotes are not updateable this way at all — use the quote verbs above.)
+
+Server-owned or in-app-only fields (`tools`, `model`, `heartbeat_delay_ms`, `context_window_ms`, `include_message_timestamps`, `context_boundary`, `is_paused`, `pause_until`, `is_archived`, `archived_at`, `group_primary`, `groups_visible`, `exposure_current`, `exposure_desired`, `last_ei_asked`, `embedding`, and every provenance field — `learned_by`, `last_changed_by`, `sources`, `interested_personas`, `persona_groups`) are rejected as unrecognized fields on update, for every type that has them — not silently ignored, and not settable on create either (ADR-031).
 
 ```sh
-# 1. Fetch the current record
+# fact: still a full replacement — fetch first, then submit the whole thing
 ei --id abc-123
-
-# 2. Edit only the fields you want to change, then submit the whole thing
 ei update fact abc-123 --json '{"name":"Field of Study","description":"Software Engineering / CS","sentiment":0,"validated_date":"2026-03-16T22:46:03.367Z"}'
+
+# topic/person/persona: a merge patch — only the changed field(s)
+ei update topic abc-123 --json '{"category":"Project"}'
+ei update person abc-123 --json '{"relationship":null}'
 ```
 
 ### Examples (from `ei --help`)
@@ -222,8 +228,9 @@ ei fix quote --quote-id abc-123 --text "you guessed it, again"   # Re-verify cor
 ei relink quote abc-123 --to person-b-id            # Repoint a quote after splitting a bad merge
 ei remove quote abc-123                             # Delete a quote
 ei create persona --json '{"display_name":"Yoda","long_description":"Speaks in inverted syntax, wise and patient.","traits":[{"name":"Inverted speech","description":"Talks like Yoda","sentiment":0.7}],"topics":[]}'
-ei update persona <id> --json '<full persona record from ei --id <id>, edited>'
-ei remove persona abc-123              # Remove a persona (reserved personas like "ei"/"emmet" must be archived instead)
+ei update persona abc-123 --json '{"traits":[{"name":"Inverted speech","description":"Talks like Yoda","sentiment":0.7}]}'  # merge patch — every other field (display_name, topics, ...) stays as stored
+ei update persona abc-123 --json-file /tmp/patch.json  # --json-file <path> takes the same body from a file instead of argv — prefer it for large/sensitive payloads (see the ei-reflect skill)
+ei remove persona abc-123              # Remove a persona (reserved personas like "ei"/"emmet" can't be removed at all — use the TUI's /archive command instead)
 ei remove fact abc-123
 ```
 
