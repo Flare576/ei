@@ -3,6 +3,7 @@ import { DLQ_MAX_COUNT, DLQ_MAX_AGE_DAYS, LLMNextStep } from "../types.js";
 
 const BASE_BACKOFF_MS = 2_000;
 const MAX_BACKOFF_MS = 30_000;
+const MAX_ATTEMPTS = 10;
 
 function extractHTTPStatus(error: string): number | null {
   const match = error.match(/\((\d{3})\)/);
@@ -99,14 +100,19 @@ export class QueueState {
       request.data._lastError = error;
     }
 
-    // No error string and not flagged permanent = just increment, no classification
+    // Attempt cap is checked immediately after attempts++ so it also governs
+    // the no-error/no-permanent early-return branch below, not just shouldDrop.
+    const capExceeded = request.attempts >= MAX_ATTEMPTS;
+
+    // No error string and not flagged permanent = just increment, no classification —
+    // unless the attempt cap has been exceeded, in which case this still terminates.
     // Still reset to pending in case it was claimed (processing state)
-    if (!error && !permanent) {
+    if (!error && !permanent && !capExceeded) {
       request.state = "pending";
       return { dropped: false };
     }
 
-    const shouldDrop = permanent || (error ? isPermanentError(error) : false);
+    const shouldDrop = permanent || capExceeded || (error ? isPermanentError(error) : false);
 
     if (shouldDrop) {
       request.state = "dlq";

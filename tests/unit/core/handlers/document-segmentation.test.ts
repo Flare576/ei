@@ -40,6 +40,8 @@ import {
   type LLMRequestState,
   type Message,
 } from "../../../../src/core/types.js";
+import { QueueState } from "../../../../src/core/state/index.js";
+import type { StateManager } from "../../../../src/core/state-manager.js";
 import type { PersonaEntity } from "../../../../src/core/types/entities.js";
 
 // ─── Factories ────────────────────────────────────────────────────────────────
@@ -175,35 +177,71 @@ describe("handleDocumentSegmentation", () => {
     expect(contents).toContain("second chunk");
   });
 
-  it("falls back to originalContent as single message when JSON is malformed", () => {
+  it("throws a distinct message when no JSON array is found in the response (path 1)", () => {
     const state = createMockDocState();
-    const response = makeDocResponse("this is not json at all", { originalContent: "Original fallback content" });
+    const response = makeDocResponse("this is not json at all");
 
-    handleDocumentSegmentation(response, state as any);
-
-    expect(state.messages_append).toHaveBeenCalledTimes(1);
-    expect(state._appendedMessages[0].content).toBe("Original fallback content");
+    expect(() => handleDocumentSegmentation(response, state as unknown as StateManager)).toThrow(
+      "[handleDocumentSegmentation] Segmentation failed: no JSON array"
+    );
+    expect(state.messages_append).not.toHaveBeenCalled();
   });
 
-  it("falls back to originalContent when content is null", () => {
+  it("throws a distinct message when the parsed JSON value is not an array (path 2, defensive)", () => {
     const state = createMockDocState();
-    const response = makeDocResponse(null, { originalContent: "Original fallback content" });
+    const response = makeDocResponse('["placeholder"]');
+    const parseSpy = vi.spyOn(JSON, "parse").mockReturnValueOnce({ not: "an array" });
 
-    handleDocumentSegmentation(response, state as any);
-
-    expect(state.messages_append).toHaveBeenCalledTimes(1);
-    expect(state._appendedMessages[0].content).toBe("Original fallback content");
+    try {
+      expect(() => handleDocumentSegmentation(response, state as unknown as StateManager)).toThrow(
+        "[handleDocumentSegmentation] Segmentation failed: the response parsed as valid JSON"
+      );
+    } finally {
+      parseSpy.mockRestore();
+    }
+    expect(state.messages_append).not.toHaveBeenCalled();
   });
 
-  it("falls back to originalContent when JSON parses to empty array", () => {
+  it("throws a distinct message including the underlying JSON.parse error when the array text is malformed (path 3)", () => {
     const state = createMockDocState();
-    const response = makeDocResponse("[]", { originalContent: "Original fallback content" });
+    const response = makeDocResponse("[not, valid, json]");
 
-    handleDocumentSegmentation(response, state as any);
-
-    expect(state.messages_append).toHaveBeenCalledTimes(1);
-    expect(state._appendedMessages[0].content).toBe("Original fallback content");
+    expect(() => handleDocumentSegmentation(response, state as unknown as StateManager)).toThrow(
+      "[handleDocumentSegmentation] Segmentation failed: the JSON array in the response could not be parsed — JSON.parse error:"
+    );
+    expect(state.messages_append).not.toHaveBeenCalled();
   });
+
+  it("throws a distinct message when the parsed array is empty (path 4) — genuinely empty", () => {
+    const state = createMockDocState();
+    const response = makeDocResponse("[]");
+
+    expect(() => handleDocumentSegmentation(response, state as unknown as StateManager)).toThrow(
+      "[handleDocumentSegmentation] Segmentation failed: the response was a valid JSON array but contained zero usable segments"
+    );
+    expect(state.messages_append).not.toHaveBeenCalled();
+  });
+
+  it("throws the same path-4 message when every array entry is blank or non-string, not just for a literal []", () => {
+    const state = createMockDocState();
+    const response = makeDocResponse('["   ", 42, null, ""]');
+
+    expect(() => handleDocumentSegmentation(response, state as unknown as StateManager)).toThrow(
+      "[handleDocumentSegmentation] Segmentation failed: the response was a valid JSON array but contained zero usable segments"
+    );
+    expect(state.messages_append).not.toHaveBeenCalled();
+  });
+
+  it("throws a distinct message when response content is empty (path 5)", () => {
+    const state = createMockDocState();
+    const response = makeDocResponse(null);
+
+    expect(() => handleDocumentSegmentation(response, state as unknown as StateManager)).toThrow(
+      "[handleDocumentSegmentation] Segmentation failed: the LLM response had no content at all"
+    );
+    expect(state.messages_append).not.toHaveBeenCalled();
+  });
+
 
   it("writes segments with context_status Always and external true", () => {
     const state = createMockDocState();
@@ -235,6 +273,65 @@ describe("handleDocumentSegmentation", () => {
 
     expect(state.messages_append).toHaveBeenCalledWith("emmet", expect.any(Object));
     expect(state.messages_append).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("handleDocumentSegmentation — degraded-path failure messages (regression: silent-degradation fix)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // Cross-checks both tickets at once: the five throw messages above must be
+  // pairwise distinct (a human reading the DLQ can tell them apart) AND none
+  // of them may trip isPermanentError()'s unanchored regex (queue.ts), or a
+  // casually-worded segmentation failure would skip retry entirely and never
+  // reach the DLQ the first ticket's fix depends on.
+  it("produces five pairwise-distinct messages, none of which the queue misclassifies as permanent", () => {
+    const state = createMockDocState();
+    const scenarios: Array<{ content: string | null; mockNotArray?: boolean }> = [
+      { content: "this is not json at all" },
+      { content: '["placeholder"]', mockNotArray: true },
+      { content: "[not, valid, json]" },
+      { content: "[]" },
+      { content: null },
+    ];
+
+    const messages: string[] = [];
+    for (const scenario of scenarios) {
+      const response = makeDocResponse(scenario.content);
+      const parseSpy = scenario.mockNotArray
+        ? vi.spyOn(JSON, "parse").mockReturnValueOnce({ not: "an array" })
+        : undefined;
+      try {
+        let caught: unknown;
+        try {
+          handleDocumentSegmentation(response, state as unknown as StateManager);
+        } catch (err) {
+          caught = err;
+        }
+        expect(caught).toBeInstanceOf(Error);
+        messages.push((caught as Error).message);
+      } finally {
+        parseSpy?.mockRestore();
+      }
+    }
+
+    expect(messages).toHaveLength(5);
+    expect(new Set(messages).size).toBe(5);
+
+    const queue = new QueueState();
+    for (const message of messages) {
+      const id = queue.enqueue({
+        type: LLMRequestType.JSON,
+        priority: LLMPriority.Low,
+        system: "system",
+        user: "user",
+        next_step: LLMNextStep.HandleDocumentSegmentation,
+        data: {},
+      });
+      const result = queue.fail(id, message);
+      expect(result.dropped).toBe(false);
+    }
   });
 });
 

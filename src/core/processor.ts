@@ -1022,6 +1022,9 @@ const toolNextSteps = new Set([
     if (!response.success) {
       const errorMsg = response.error ?? "Unknown LLM error";
       const result = this.stateManager.queue_fail(response.request.id, errorMsg);
+      if (result.dropped) {
+        this.finalizeDocumentSegmentationBatch(response);
+      }
       const code = this.classifyLLMError(errorMsg);
 
       let message = errorMsg;
@@ -1250,13 +1253,7 @@ const toolNextSteps = new Set([
       }
 
       if (response.request.next_step === LLMNextStep.HandleDocumentSegmentation) {
-        const batchId = response.request.data.batchId as string;
-        const filename = response.request.data.filename as string;
-        if (batchId && !this.stateManager.queue_hasPendingDocumentSegments(batchId)) {
-          finishDocumentBatch(batchId, filename, this.stateManager);
-          this.interface.onMessageAdded?.("emmet");
-          this.interface.onHumanUpdated?.();
-        }
+        this.finalizeDocumentSegmentationBatch(response);
       }
 
       const isSynthesisCompletion =
@@ -1272,6 +1269,9 @@ const toolNextSteps = new Set([
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       const result = this.stateManager.queue_fail(response.request.id, errorMsg);
+      if (result.dropped) {
+        this.finalizeDocumentSegmentationBatch(response);
+      }
 
       let message = errorMsg;
       if (!result.dropped && result.retryDelay != null) {
@@ -1284,6 +1284,25 @@ const toolNextSteps = new Set([
         message,
       });
     }
+  }
+
+  /**
+   * A multi-chunk document import shares one batchId across several
+   * HandleDocumentSegmentation queue items. The batch only finalizes
+   * (extraction queued, document marked processed) once none of its
+   * chunks are still pending/processing — whether they got there by
+   * succeeding or by permanently failing to the DLQ. Called from both
+   * the success path and every DLQ-reaching failure path so a sibling
+   * chunk's permanent failure can't orphan already-written segments.
+   */
+  private finalizeDocumentSegmentationBatch(response: LLMResponse): void {
+    if (response.request.next_step !== LLMNextStep.HandleDocumentSegmentation) return;
+    const batchId = response.request.data.batchId as string;
+    const filename = response.request.data.filename as string;
+    if (!batchId || this.stateManager.queue_hasPendingDocumentSegments(batchId)) return;
+    finishDocumentBatch(batchId, filename, this.stateManager);
+    this.interface.onMessageAdded?.("emmet");
+    this.interface.onHumanUpdated?.();
   }
 
   private sleep(ms: number): Promise<void> {

@@ -7,40 +7,75 @@ import {
 } from "../orchestrators/human-extraction.js";
 import { qualifyDocumentMessage } from "../utils/message-id.js";
 
-function parseSegmentArray(content: string): string[] | null {
+type SegmentParseResult =
+  | { ok: true; segments: string[] }
+  | { ok: false; reason: "no-json-array" }
+  | { ok: false; reason: "not-an-array"; parsedType: string }
+  | { ok: false; reason: "json-parse-error"; detail: string };
+
+function parseSegmentArray(content: string): SegmentParseResult {
   const jsonMatch = content.match(/```json\s*([\s\S]*?)```/) ?? content.match(/```\s*([\s\S]*?)```/);
   const jsonText = jsonMatch ? jsonMatch[1].trim() : content.trim();
 
   const arrayMatch = jsonText.match(/\[[\s\S]*\]/);
-  if (!arrayMatch) return null;
+  if (!arrayMatch) return { ok: false, reason: "no-json-array" };
 
+  let parsed: unknown;
   try {
-    const parsed = JSON.parse(arrayMatch[0]);
-    if (!Array.isArray(parsed)) return null;
-    return parsed.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
-  } catch {
-    return null;
+    parsed = JSON.parse(arrayMatch[0]);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    return { ok: false, reason: "json-parse-error", detail };
   }
+
+  if (!Array.isArray(parsed)) {
+    return { ok: false, reason: "not-an-array", parsedType: typeof parsed };
+  }
+
+  const segments = parsed.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+  return { ok: true, segments };
 }
 
 export function handleDocumentSegmentation(response: LLMResponse, state: StateManager): void {
-  const { batchId, filename, originalContent } = response.request.data as {
+  const { batchId, filename } = response.request.data as {
     batchId: string;
     filename: string;
-    originalContent: string;
   };
 
   if (!batchId || !filename) {
     throw new Error("[handleDocumentSegmentation] Missing batchId or filename in request data");
   }
 
-  let segments: string[];
-  if (response.content) {
-    const parsed = parseSegmentArray(response.content);
-    segments = (parsed && parsed.length > 0) ? parsed : [originalContent];
-  } else {
-    segments = [originalContent];
+  if (!response.content) {
+    throw new Error(
+      "[handleDocumentSegmentation] Segmentation failed: the LLM response had no content at all — there was nothing to parse into segments."
+    );
   }
+
+  const parsed = parseSegmentArray(response.content);
+  if (!parsed.ok) {
+    if (parsed.reason === "no-json-array") {
+      throw new Error(
+        "[handleDocumentSegmentation] Segmentation failed: no JSON array (\"[...]\") was found anywhere in the LLM's response — the response did not contain a parseable segment list."
+      );
+    } else if (parsed.reason === "not-an-array") {
+      throw new Error(
+        `[handleDocumentSegmentation] Segmentation failed: the response parsed as valid JSON, but the parsed value was a ${parsed.parsedType}, not an array of segments.`
+      );
+    } else {
+      throw new Error(
+        `[handleDocumentSegmentation] Segmentation failed: the JSON array in the response could not be parsed — JSON.parse error: ${parsed.detail}`
+      );
+    }
+  }
+
+  if (parsed.segments.length === 0) {
+    throw new Error(
+      "[handleDocumentSegmentation] Segmentation failed: the response was a valid JSON array but contained zero usable segments (empty array, or every entry was blank or non-string) — this document produced no segmentation output."
+    );
+  }
+
+  const segments = parsed.segments;
 
   const emmett = state.persona_getById("emmet");
   if (!emmett) {

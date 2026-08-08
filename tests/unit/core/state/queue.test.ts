@@ -227,27 +227,27 @@ describe("QueueState", () => {
       expect(state.dlqLength()).toBe(1);
     });
 
-    it("applies exponential backoff on transient errors", () => {
+    it("computes the full backoff schedule for attempts 1-9: 2s,4s,8s,16s,30s,30s,30s,30s,30s", () => {
+      // Bonus rigor from the retry-cap ticket: confirm calculateBackoff()'s
+      // schedule directly rather than assuming it, since MAX_ATTEMPTS=10
+      // only terminates the schedule — it must not alter attempts 1-9.
       const id = state.enqueue(makeRequest());
 
-      const result1 = state.fail(id, 'LLM API error (529): overloaded');
-      // attempt 1 = 2s base
-      expect(result1.retryDelay).toBe(2000);
+      const delays: (number | undefined)[] = [];
+      for (let attempt = 1; attempt <= 9; attempt++) {
+        const result = state.fail(id, 'LLM API error (529): overloaded');
+        delays.push(result.retryDelay);
+      }
 
-      const result2 = state.fail(id, 'LLM API error (529): overloaded');
-      // attempt 2 = 4s
-      expect(result2.retryDelay).toBe(4000);
-
-      const result3 = state.fail(id, 'LLM API error (529): overloaded');
-      // attempt 3 = 8s
-      expect(result3.retryDelay).toBe(8000);
+      expect(delays).toEqual([2000, 4000, 8000, 16000, 30000, 30000, 30000, 30000, 30000]);
     });
 
-    it("caps backoff at 30 seconds", () => {
+    it("caps backoff at 30 seconds starting at attempt 5", () => {
       const id = state.enqueue(makeRequest());
 
-      // Fail many times to exceed cap
-      for (let i = 0; i < 10; i++) {
+      // Fail a few times to reach the point where the exponential curve
+      // would otherwise exceed the cap (attempt 5 = 2s * 2^4 = 32s).
+      for (let i = 0; i < 4; i++) {
         state.fail(id, 'LLM API error (529): overloaded');
       }
 
@@ -265,17 +265,46 @@ describe("QueueState", () => {
       expect(new Date(exported[0].retry_after!).getTime()).toBeGreaterThan(Date.now() - 1000);
     });
 
-    it("never moves transient errors to DLQ regardless of attempt count", () => {
+    it("reaches the DLQ after exactly MAX_ATTEMPTS (10) attempts instead of retrying transient failures indefinitely", () => {
+      // Regression test for unbounded-transient-retry-has-no-cap: a request
+      // that fails the exact same transient way every time must still
+      // terminate at a bounded attempt count rather than retry forever.
+      // Against pre-fix code (no MAX_ATTEMPTS check in fail()) this test
+      // fails — dropped stays false past attempt 10 instead of flipping true.
       const id = state.enqueue(makeRequest());
 
-      for (let i = 0; i < 20; i++) {
+      for (let attempt = 1; attempt <= 9; attempt++) {
         const result = state.fail(id, "LLM API error (529): overloaded");
         expect(result.dropped).toBe(false);
+        expect(result.retryDelay).toBeGreaterThan(0);
       }
 
       expect(state.length()).toBe(1);
       expect(state.dlqLength()).toBe(0);
-      expect(state.export()[0].attempts).toBe(20);
+
+      const finalResult = state.fail(id, "LLM API error (529): overloaded");
+
+      expect(finalResult.dropped).toBe(true);
+      expect(state.length()).toBe(0);
+      expect(state.dlqLength()).toBe(1);
+      expect(state.getDLQItems()[0]?.attempts).toBe(10);
+    });
+
+    it("caps the no-error/no-permanent early-return branch at MAX_ATTEMPTS too (latent-branch coverage)", () => {
+      // fail() with neither an error string nor the permanent flag takes an
+      // early return before shouldDrop is computed. MAX_ATTEMPTS must be
+      // checked immediately after attempts++ so this branch is capped too,
+      // not just the transient/permanent classification path below it.
+      const id = state.enqueue(makeRequest());
+
+      for (let attempt = 1; attempt <= 9; attempt++) {
+        const result = state.fail(id);
+        expect(result.dropped).toBe(false);
+      }
+
+      const finalResult = state.fail(id);
+      expect(finalResult.dropped).toBe(true);
+      expect(state.dlqLength()).toBe(1);
     });
 
     it("moves pattern-based permanent errors to DLQ", () => {
