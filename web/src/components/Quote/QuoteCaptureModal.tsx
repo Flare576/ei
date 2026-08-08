@@ -3,6 +3,7 @@ import type { Message, Quote } from '../../../../src/core/types';
 import { RangeSlider } from './RangeSlider';
 import { DualListPicker } from './DualListPicker';
 import { useOverlayClose } from '../../hooks/useOverlayClose';
+import { locateQuoteRange, describeQuoteLocateFailure } from './quoteRange';
 
 interface DataItem {
   id: string;
@@ -50,6 +51,7 @@ export function QuoteCaptureModal({
   const [startPos, setStartPos] = useState(0);
   const [endPos, setEndPos] = useState(0);
   const [quoteText, setQuoteText] = useState('');
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [selectedDataItems, setSelectedDataItems] = useState<string[]>([]);
   const modalRef = useRef<HTMLDivElement>(null);
   const previousActiveElement = useRef<Element | null>(null);
@@ -64,6 +66,7 @@ export function QuoteCaptureModal({
       setEndPos(initialEnd);
       setQuoteText(messageText.substring(initialStart, initialEnd));
       setSelectedDataItems([]);
+      setSaveError(null);
     }
   }, [isOpen, message]);
 
@@ -105,6 +108,7 @@ export function QuoteCaptureModal({
     setStartPos(snappedStart);
     setEndPos(snappedEnd);
     setQuoteText(messageText.substring(snappedStart, snappedEnd));
+    setSaveError(null);
   };
 
   const handleDataItemsChange = (ids: string[]) => {
@@ -112,6 +116,12 @@ export function QuoteCaptureModal({
   };
 
   const handleSave = () => {
+    const match = locateQuoteRange(messageText, quoteText, startPos, endPos);
+    if (!match.ok) {
+      setSaveError(describeQuoteLocateFailure(match.reason));
+      return;
+    }
+    setSaveError(null);
     const quote: Omit<Quote, 'id' | 'created_at'> = {
       message_id: message.id,
       data_item_ids: selectedDataItems,
@@ -119,8 +129,8 @@ export function QuoteCaptureModal({
       text: quoteText,
       speaker: message.role === 'human' ? 'human' : personaName,
       timestamp: message.timestamp,
-      start: startPos,
-      end: endPos,
+      start: match.start,
+      end: match.end,
       created_by: 'human',
     };
     onSave(quote);
@@ -198,9 +208,13 @@ export function QuoteCaptureModal({
             <textarea
               className="ei-quote-capture-modal__textarea"
               value={quoteText}
-              onChange={(e) => setQuoteText(e.target.value)}
+              onChange={(e) => {
+                setQuoteText(e.target.value);
+                setSaveError(null);
+              }}
               placeholder="Edit the quote text here..."
             />
+            {saveError && <span className="ei-form-error">{saveError}</span>}
           </div>
 
           {/* Link to Data Items */}
