@@ -41,7 +41,6 @@ import { OverlayProvider } from "../../src/context/overlay";
 import { getInstalledVersion } from "../../src/util/local-state";
 import { onboardingCommand } from "../../src/commands/onboarding";
 import type { Command } from "../../src/commands/registry";
-import pkg from "../../../package.json";
 
 const TestProviders: ParentComponent = (props) => (
   <EiProvider>
@@ -142,7 +141,7 @@ describe("finishBootstrap() — fresh first boot (no accounts, no local.json)", 
 });
 
 describe("finishBootstrap() — existing user (hasAccounts true)", () => {
-  it("shows the upgrade prompt when local.json's installed_version is stale, never the wizard, and stamps on decline", async () => {
+  it("shows the upgrade prompt when local.json's installed_version is stale, never the wizard, and does NOT stamp on decline", async () => {
     const dataDir = mkdtempSync(join(tmpdir(), "ei-wiring-stale-"));
     cleanupDirs.push(dataDir);
     writeFileSync(join(dataDir, "state.json"), JSON.stringify(makeCheckpoint(makeExistingAccountSettings())));
@@ -161,10 +160,13 @@ describe("finishBootstrap() — existing user (hasAccounts true)", () => {
       expect(capturedEi!.showOnboarding()).toBe(false);
       expect(capturedEi!.isFirstBoot()).toBe(false);
 
-      // Decline path: stamps installed_version without running the real installer.
+      // Decline path (fixed per .sisyphus/issues/upgrade-prompt-dismiss-is-permanent.md):
+      // leaves the stale marker untouched and never runs the installer —
+      // see upgrade-prompt-dismiss-is-permanent.test.tsx for the full
+      // installer-not-invoked/sentinel-untouched/re-prompt coverage.
       await capturedEi!.dismissUpgradePrompt();
       expect(capturedEi!.showUpgradePrompt()).toBe(false);
-      expect(await getInstalledVersion(dataDir)).toBe(pkg.version);
+      expect(await getInstalledVersion(dataDir)).toBe("0.0.1");
     } finally {
       renderer.destroy();
     }

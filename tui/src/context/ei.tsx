@@ -918,7 +918,9 @@ export const EiProvider: ParentComponent = (props) => {
 
   const confirmUpgradeInstall = async (): Promise<void> => {
     const result = await runHarnessInstall();
-    await stampInstalled(eiDataPath, pkg.version);
+    if (result.ok) {
+      await stampInstalled(eiDataPath, pkg.version);
+    }
     setShowUpgradePrompt(false);
     if (!result.ok) {
       const failureList = result.failures.join(", ");
@@ -928,7 +930,6 @@ export const EiProvider: ParentComponent = (props) => {
   };
 
   const dismissUpgradePrompt = async (): Promise<void> => {
-    await stampInstalled(eiDataPath, pkg.version);
     setShowUpgradePrompt(false);
   };
 

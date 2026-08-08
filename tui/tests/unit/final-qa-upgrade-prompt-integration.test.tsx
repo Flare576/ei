@@ -1,21 +1,28 @@
 // THROWAWAY QA ARTIFACT — Final Verification Wave, item F3 (Beta).
-// Not a plan deliverable. Exercises scenarios 3 (equal-version leg) and 4
-// of the F3 assignment:
+// Not a plan deliverable. Exercises scenario 3 (equal-version leg) of the
+// F3 assignment:
 //   3. "existing user + local.json present but version EQUAL to
 //      pkg.version — confirm no prompt."
-//   4. "Decline-no-nag: decline the upgrade prompt once — confirm
-//      local.json gets stamped anyway and a SECOND identical bootstrap
-//      does NOT re-prompt."
+//
+// Scenario 4 of the original F3 assignment ("Decline-no-nag: decline the
+// upgrade prompt once — confirm local.json gets stamped anyway and a
+// SECOND identical bootstrap does NOT re-prompt") asserted the exact
+// bookkeeping defect reported in
+// .sisyphus/issues/upgrade-prompt-dismiss-is-permanent.md: dismiss stamped
+// the marker unconditionally, permanently suppressing the prompt even
+// though no install ever ran. Per that issue's fix (ei.tsx's
+// dismissUpgradePrompt() no longer stamps at all), the describe block
+// below is inverted to assert the CORRECT behavior instead — decline must
+// re-prompt on the next launch, not go quiet. Full installer-not-invoked/
+// marker/sentinel coverage for both dismiss and confirm lives in
+// upgrade-prompt-dismiss-is-permanent.test.tsx.
 //
 // Gap this closes: onboarding-wiring.test.tsx already covers the
 // present-stale->true and absent->false legs of shouldShowUpgradePrompt's
-// decision matrix through a real finishBootstrap() run, and separately
-// proves dismissUpgradePrompt() stamps pkg.version — but it never (a)
+// decision matrix through a real finishBootstrap() run, but never
 // exercises the EQUAL-version leg through the real wiring (only through
 // upgrade-prompt.test.ts's pure unit test of the decision function in
-// isolation), nor (b) re-boots a SECOND EiProvider instance against the
-// SAME data path after a decline to prove the stamp it wrote actually
-// prevents a re-prompt on the next real launch.
+// isolation).
 process.env.EI_E2E_MODE = "3";
 
 import { describe, it, expect, mock, afterAll } from "bun:test";
@@ -146,9 +153,9 @@ describe("Final QA — upgrade prompt: equal-version leg (no false-positive nag)
   }, 15000);
 });
 
-describe("Final QA — decline-no-nag: decline once, stamp anyway, second real bootstrap does not re-prompt", () => {
-  it("declining the upgrade prompt stamps pkg.version, and a FRESH second EiProvider boot against the same data path sees no prompt", async () => {
-    const dataDir = mkdtempSync(join(tmpdir(), "ei-final-qa-declinenag-"));
+describe("Final QA — decline re-prompts: declining once leaves the marker stale, so a second real bootstrap prompts again", () => {
+  it("declining the upgrade prompt does NOT stamp pkg.version, and a FRESH second EiProvider boot against the same data path prompts again", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "ei-final-qa-declinereprompt-"));
     cleanupDirs.push(dataDir);
     writeFileSync(join(dataDir, "state.json"), JSON.stringify(makeCheckpoint(makeExistingAccountSettings())));
     // Genuinely stale on the FIRST boot.
@@ -168,7 +175,7 @@ describe("Final QA — decline-no-nag: decline once, stamp anyway, second real b
       await capturedEi!.dismissUpgradePrompt();
       expect(capturedEi!.showUpgradePrompt()).toBe(false);
       const stampedAfterDecline = await getInstalledVersion(dataDir);
-      expect(stampedAfterDecline).toBe(pkg.version);
+      expect(stampedAfterDecline).toBe("0.0.1");
     } finally {
       first.renderer.destroy();
     }
@@ -193,9 +200,9 @@ describe("Final QA — decline-no-nag: decline once, stamp anyway, second real b
     try {
       await waitUntil(() => capturedEi !== undefined);
       // Give the fire-and-forget hasAccounts/upgrade-prompt check a real
-      // chance to settle before asserting its NEGATIVE outcome.
+      // chance to settle before asserting its POSITIVE outcome.
       await wait(400);
-      expect(capturedEi!.showUpgradePrompt()).toBe(false);
+      expect(capturedEi!.showUpgradePrompt()).toBe(true);
       expect(capturedEi!.showOnboarding()).toBe(false);
     } finally {
       second.renderer.destroy();
