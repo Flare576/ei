@@ -50,28 +50,56 @@ export class FileStorage implements Storage {
     });
   }
 
+  /**
+   * Reads under state.json's own advisory lock — the SAME lock
+   * `src/cli/corrections-writer.ts`'s self-drain holds for its entire
+   * read-apply-write-clear sequence. Without this, a TUI starting up
+   * concurrently with a self-drain could read the pre-write snapshot
+   * (unlocked, no wait) and later `save()` it back over the self-drain's
+   * already-committed write, silently resurrecting whatever it just
+   * removed/applied (self-drain-tui-startup-lost-write-race). Taking the
+   * lock here — inside `load()` itself, not at each call site — means
+   * either ordering is safe: startup waits out an in-flight self-drain
+   * and gets the post-write state, or self-drain waits out an in-flight
+   * startup load; the two can never interleave. Every caller of `load()`
+   * (the pre-render validation read in `tui/src/index.tsx` and the
+   * `PersistenceState`/`StateManager` read in `src/core/state/checkpoints.ts`,
+   * reached via `Processor.start()`) goes through this one method, so
+   * both get the protection without needing their own locking.
+   *
+   * ensureDataDir() runs first (as save() already does) because the
+   * advisory lock is itself a file: acquiring it on a data path whose
+   * directory doesn't exist yet — a brand-new EI_DATA_PATH with no
+   * state.json at all — would otherwise fail every create attempt until
+   * the lock's own timeout, turning a legitimate "nothing to load yet"
+   * into a spurious STORAGE_LOCK_TIMEOUT.
+   */
   async load(): Promise<StorageState | null> {
+    await this.ensureDataDir();
     const filePath = join(this.dataPath, STATE_FILE);
-    const file = Bun.file(filePath);
 
-    if (await file.exists()) {
-      let text: string;
-      try {
-        text = await file.text();
-      } catch (e) {
-        throw new Error(`STORAGE_READ_FAILED: Could not read ${filePath}: ${e instanceof Error ? e.message : String(e)}`);
-      }
+    return await withLock(filePath, async (): Promise<StorageState | null> => {
+      const file = Bun.file(filePath);
 
-      if (text) {
+      if (await file.exists()) {
+        let text: string;
         try {
-          return decodeAllEmbeddings(JSON.parse(text) as StorageState);
+          text = await file.text();
         } catch (e) {
-          throw new Error(`STORAGE_PARSE_FAILED: ${filePath} exists but could not be parsed as JSON. Your data is intact — fix the file manually or restore from a backup in ${join(this.dataPath, "backups")}.\n  Parse error: ${e instanceof Error ? e.message : String(e)}`);
+          throw new Error(`STORAGE_READ_FAILED: Could not read ${filePath}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+
+        if (text) {
+          try {
+            return decodeAllEmbeddings(JSON.parse(text) as StorageState);
+          } catch (e) {
+            throw new Error(`STORAGE_PARSE_FAILED: ${filePath} exists but could not be parsed as JSON. Your data is intact — fix the file manually or restore from a backup in ${join(this.dataPath, "backups")}.\n  Parse error: ${e instanceof Error ? e.message : String(e)}`);
+          }
         }
       }
-    }
 
-    return null;
+      return null;
+    });
   }
 
   async moveToBackup(): Promise<void> {
