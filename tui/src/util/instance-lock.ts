@@ -1,5 +1,6 @@
 import { join, dirname } from "path";
 import { unlink, mkdir } from "fs/promises";
+import { unlinkSync } from "fs";
 
 const LOCK_FILE = "ei.lock";
 
@@ -52,6 +53,24 @@ export class InstanceLock {
     this.held = false;
     try {
       await unlink(this.lockPath);
+    } catch {
+      // Already gone — that's fine
+    }
+  }
+
+  /**
+   * Synchronous sibling of `release()`, for use in contexts where async work
+   * cannot complete — namely Node/Bun's `process.on("exit", ...)` handler,
+   * which is documented to run only synchronous code. Same `held` guard and
+   * try/catch shape as `release()`, but backed by `fs.unlinkSync` instead of
+   * `fs/promises`' `unlink` so the removal actually lands before the process
+   * terminates.
+   */
+  releaseSync(): void {
+    if (!this.held) return;
+    this.held = false;
+    try {
+      unlinkSync(this.lockPath);
     } catch {
       // Already gone — that's fine
     }

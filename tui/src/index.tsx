@@ -40,7 +40,7 @@ if (!lockResult.acquired) {
 }
 
 // Release lock when the app exits (keyboard context calls process.exit(0) on normal quit)
-process.on("exit", () => { void lock.release(); });
+process.on("exit", () => { lock.releaseSync(); });
 
 // Validate state.json is parseable before handing off to the app.
 // A corrupt file must never silently wipe all data — exit cleanly with recovery instructions.

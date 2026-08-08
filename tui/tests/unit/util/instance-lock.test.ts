@@ -112,4 +112,17 @@ describe("InstanceLock", () => {
     expect(await lockFile.exists()).toBe(true);
     await lock.release();
   });
+
+  it("removes the lock file when released via releaseSync() from a real process 'exit' handler (regression: fs/promises unlink cannot complete inside process.on('exit'))", async () => {
+    const fixture = join(import.meta.dir, "fixtures", "exit-lock-sim.ts");
+    const proc = Bun.spawn(["bun", fixture, dataPath], {
+      stdout: "ignore",
+      stderr: "inherit",
+    });
+    const exitCode = await proc.exited;
+    expect(exitCode).toBe(0);
+
+    const file = Bun.file(join(dataPath, "ei.lock"));
+    expect(await file.exists()).toBe(false);
+  });
 });
