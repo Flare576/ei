@@ -231,7 +231,9 @@ export function OnboardingOverlay(props: OnboardingOverlayProps) {
 
   // --- Done step actions ---
   const finishWizard = async () => {
-    await stampInstalled(props.dataPath, pkg.version);
+    if (installOutcome()?.status === "ok") {
+      await stampInstalled(props.dataPath, pkg.version);
+    }
     props.onDismiss();
   };
 

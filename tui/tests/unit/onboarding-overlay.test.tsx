@@ -232,6 +232,81 @@ describe("OnboardingOverlay — happy path", () => {
   }, 20000);
 });
 
+describe("OnboardingOverlay — failed install", () => {
+  it("does not stamp installed_version when the install outcome is a failure", async () => {
+    runHarnessInstallImpl = async () => ({ ok: false, failures: ["mcp install failed"] });
+
+    const detectIntegrations = async (): Promise<ImportSourceDetection> => ({
+      claudeCode: false,
+      cursor: false,
+      codex: false,
+      pi: false,
+    });
+
+    // Own dataPath (distinct from the happy-path test's testDataDir) so a
+    // stamp written here can never be confused with — or masked by — the
+    // happy-path test's own stamp-to-the-same-file assertions.
+    const failDataDir = mkdtempSync(join(tmpdir(), "ei-onboarding-failed-install-"));
+
+    let onDismissCalled = false;
+
+    const { renderOnce, mockInput, captureCharFrame, renderer } = await testRender(
+      () => (
+        <TestProviders>
+          <OnboardingOverlay
+            onDismiss={() => {
+              onDismissCalled = true;
+            }}
+            detectedProviders={[{ name: "Anthropic", detected: false }]}
+            isFirstBoot={true}
+            dataPath={failDataDir}
+            detectIntegrations={detectIntegrations}
+            runHarnessInstall={() => runHarnessInstallImpl()}
+          />
+        </TestProviders>
+      ),
+      { width: 220, height: 34 }
+    );
+
+    try {
+      // --- Step 1: Welcome ---
+      let frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Welcome to Ei!"));
+      mockInput.pressEnter();
+      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 2/4: Provider"));
+
+      // --- Step 2: Provider (skip via ProviderForm's own Escape-at-first-step) ---
+      mockInput.pressEscape();
+      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Skipped — no AI provider configured."));
+
+      mockInput.pressEnter();
+      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 3/4: Install"));
+
+      // --- Step 3: Install (confirm Yes, harness install reports failure) ---
+      await mockInput.typeText("y");
+      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("failed to install"));
+      expect(frame).toContain("✗ Some integrations failed to install: mcp install failed");
+
+      mockInput.pressEnter();
+      frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 4/4: Done"));
+      expect(frame).toContain("Install: failed (mcp install failed)");
+
+      // --- Step 4: Done (dismiss) ---
+      expect(onDismissCalled).toBe(false);
+      mockInput.pressEnter();
+      await waitForCondition(renderOnce, () => onDismissCalled);
+      expect(onDismissCalled).toBe(true);
+
+      // A failed install must never stamp installed_version — a stamped
+      // marker here would suppress the re-prompt on next launch even
+      // though skills/hooks never actually finished installing.
+      const stamped = await getInstalledVersion(failDataDir);
+      expect(stamped).toBeUndefined();
+    } finally {
+      renderer.destroy();
+    }
+  }, 20000);
+});
+
 afterAll(async () => {
   // renderer.destroy() triggers EiProvider's onCleanup -> processor.stop(),
   // which fire-and-forgets an async flush()/save()/atomicWrite() chain

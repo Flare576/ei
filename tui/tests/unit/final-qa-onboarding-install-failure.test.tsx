@@ -1,7 +1,7 @@
 // THROWAWAY QA ARTIFACT — Final Verification Wave, item F3 (Beta).
 // Not a plan deliverable. Exercises scenario 6 of the F3 assignment:
 // "Install failure non-fatal: force `runHarnessInstall` to report
-// `{ok:false}` — confirm the wizard still completes and stamps."
+// `{ok:false}` — confirm the wizard still completes and does not stamp."
 //
 // Gap this closes: harness-install.test.ts unit-tests runHarnessInstall's
 // own {ok:false} return shape in isolation (mocking installMcpClients
@@ -9,8 +9,11 @@
 // Install step ('n' -> never calls runHarnessInstall at all). Neither
 // exercises the Install step's OWN failure-rendering branch
 // (installOutcome.status === "failed") through a live OnboardingOverlay,
-// nor proves the wizard still reaches Done and stamps local.json when the
-// user says "yes, install" and the injected installer genuinely fails.
+// nor proves the wizard still reaches Done and dismisses WITHOUT stamping
+// local.json when the user says "yes, install" and the injected installer
+// genuinely fails (see onboarding-wizard-stamps-install-unconditionally.md
+// — a failed install must leave the marker unstamped so the next launch
+// re-prompts).
 process.env.EI_E2E_MODE = "3";
 
 import { mkdtempSync } from "fs";
@@ -47,7 +50,6 @@ import { EiProvider } from "../../src/context/ei";
 import { KeyboardProvider } from "../../src/context/keyboard";
 import { OverlayProvider } from "../../src/context/overlay";
 import { OnboardingOverlay, type ImportSourceDetection } from "../../src/components/OnboardingOverlay";
-import pkg from "../../../package.json";
 
 const TestProviders: ParentComponent = (props) => (
   <EiProvider>
@@ -97,7 +99,7 @@ async function waitForFrame(
 }
 
 describe("Final QA — OnboardingOverlay Install step: genuine installer failure is non-fatal", () => {
-  it("Install reports {ok:false, failures:[...]} -> wizard shows the failure, still reaches Done, still stamps local.json", async () => {
+  it("Install reports {ok:false, failures:[...]} -> wizard shows the failure, still reaches Done, does not stamp local.json", async () => {
     const detectIntegrations = async (): Promise<ImportSourceDetection> => ({
       claudeCode: false,
       cursor: false,
@@ -149,7 +151,9 @@ describe("Final QA — OnboardingOverlay Install step: genuine installer failure
       // Done step's summary correctly reflects the failure, not a false "installed".
       expect(frame).toContain("Install: failed (Claude Code, Cursor)");
 
-      // --- Finish: still completes and stamps despite the failed install ---
+      // --- Finish: still completes (dismisses) despite the failed
+      // install, but does NOT stamp — a failed install must leave
+      // local.json's installed_version unset so the next launch re-prompts. ---
       expect(onDismissCalled).toBe(false);
       mockInput.pressEnter();
       await renderOnce();
@@ -157,7 +161,7 @@ describe("Final QA — OnboardingOverlay Install step: genuine installer failure
       expect(onDismissCalled).toBe(true);
 
       const stamped = await getInstalledVersion(testDataDir);
-      expect(stamped).toBe(pkg.version);
+      expect(stamped).toBeUndefined();
     } finally {
       renderer.destroy();
     }

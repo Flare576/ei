@@ -47,7 +47,6 @@ import { EiProvider, useEi, type EiContextValue } from "../../src/context/ei";
 import { KeyboardProvider } from "../../src/context/keyboard";
 import { OverlayProvider } from "../../src/context/overlay";
 import { OnboardingOverlay, type ImportSourceDetection } from "../../src/components/OnboardingOverlay";
-import pkg from "../../../package.json";
 
 const TestProviders: ParentComponent = (props) => (
   <EiProvider>
@@ -101,7 +100,7 @@ async function waitForCondition(
 }
 
 describe("OnboardingOverlay — negative paths", () => {
-  it("declining Install still completes the wizard and stamps; detected sources are never flagged on when Install is declined", async () => {
+  it("declining Install still completes the wizard without stamping; detected sources are never flagged on when Install is declined", async () => {
     runHarnessInstallCalls = 0;
 
     runHarnessInstallImpl = async () => {
@@ -164,13 +163,17 @@ describe("OnboardingOverlay — negative paths", () => {
       frame = await waitForFrame(captureCharFrame, renderOnce, (f) => f.includes("Step 4/4: Done"));
       expect(frame).toContain("Install: skipped");
 
-      // --- Done: no crash, stamps despite the earlier decline ---
+      // --- Done: no crash, does NOT stamp — the user explicitly declined
+      // to install, so the marker must stay unset (per
+      // onboarding-wizard-stamps-install-unconditionally.md: only a
+      // successful install stamps) and the "run this later" copy above
+      // stays true. ---
       mockInput.pressEnter();
       await waitForCondition(renderOnce, () => onDismissCalled);
       expect(onDismissCalled).toBe(true);
 
       const stamped = await getInstalledVersion(testDataDir);
-      expect(stamped).toBe(pkg.version);
+      expect(stamped).toBeUndefined();
 
       // --- Declining withheld the import flags too, even though Claude
       // Code and Pi were genuinely detected above — the one 'n' gates both
