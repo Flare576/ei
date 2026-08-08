@@ -410,6 +410,103 @@ topics: []
   });
 });
 
+describe("personaFromYAML — scalar boolean field validation", () => {
+  const timestamp = "2024-01-01T00:00:00.000Z";
+
+  const emptyOriginal: PersonaEntity = {
+    id: "test-id",
+    display_name: "TestBot",
+    entity: "system",
+    traits: [],
+    topics: [],
+    is_paused: false,
+    is_archived: false,
+    is_static: false,
+    last_updated: timestamp,
+    last_heartbeat: timestamp,
+    heartbeat_delay_ms: 300000,
+  };
+
+  const BOOLEAN_FIELDS = ["is_paused", "is_static", "include_message_timestamps"] as const;
+
+  for (const field of BOOLEAN_FIELDS) {
+    describe(field, () => {
+      test("accepts literal true", () => {
+        const yaml = `
+display_name: TestBot
+${field}: true
+traits: []
+topics: []
+`;
+        const result = personaFromYAML(yaml, emptyOriginal);
+        expect(result.updates[field]).toBe(true);
+      });
+
+      test("accepts literal false", () => {
+        const yaml = `
+display_name: TestBot
+${field}: false
+traits: []
+topics: []
+`;
+        const result = personaFromYAML(yaml, emptyOriginal);
+        expect(result.updates[field]).toBe(false);
+      });
+
+      test("defaults to false when absent", () => {
+        const yaml = `
+display_name: TestBot
+traits: []
+topics: []
+`;
+        const result = personaFromYAML(yaml, emptyOriginal);
+        expect(result.updates[field]).toBe(false);
+      });
+
+      test("defaults to false when explicitly null", () => {
+        const yaml = `
+display_name: TestBot
+${field}: null
+traits: []
+topics: []
+`;
+        const result = personaFromYAML(yaml, emptyOriginal);
+        expect(result.updates[field]).toBe(false);
+      });
+
+      test("rejects a quoted string \"false\" with a field-named error", () => {
+        const yaml = `
+display_name: TestBot
+${field}: "false"
+traits: []
+topics: []
+`;
+        expect(() => personaFromYAML(yaml, emptyOriginal)).toThrow(new RegExp(`${field}.*boolean`, "i"));
+      });
+
+      test("rejects the number 0 with a field-named error", () => {
+        const yaml = `
+display_name: TestBot
+${field}: 0
+traits: []
+topics: []
+`;
+        expect(() => personaFromYAML(yaml, emptyOriginal)).toThrow(new RegExp(`${field}.*boolean`, "i"));
+      });
+
+      test("rejects an object value with a field-named error", () => {
+        const yaml = `
+display_name: TestBot
+${field}: {}
+traits: []
+topics: []
+`;
+        expect(() => personaFromYAML(yaml, emptyOriginal)).toThrow(new RegExp(`${field}.*boolean`, "i"));
+      });
+    });
+  }
+});
+
 describe("persona rename identity", () => {
   const timestamp = "2024-01-01T00:00:00.000Z";
   const original: PersonaEntity = {
@@ -992,8 +1089,11 @@ describe("round-trip serialization", () => {
     const result = settingsFromYAML(yaml, settings, []);
     expect(result.default_heartbeat_ms).toBe(1800000);
     expect(result.default_context_window_ms).toBe(28800000);
-    expect(result.message_min_count).toBe(200);
-    expect(result.message_max_age_days).toBe(14);
+    // message_min_count/message_max_age_days have no fallback (ADR-033: retention is
+    // unlimited by default; migrations seed both to 0 for every real user, not 200/14 —
+    // an unseeded settings object correctly round-trips as undefined, not a dead literal).
+    expect(result.message_min_count).toBeUndefined();
+    expect(result.message_max_age_days).toBeUndefined();
     expect(result.ceremony?.event_window_hours).toBeUndefined();
   });
 });

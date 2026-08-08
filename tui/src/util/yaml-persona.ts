@@ -12,11 +12,11 @@ import { parseDuration, formatDuration } from "./duration.js";
 
 const PLACEHOLDER_LONG_DESC = "Detailed description of this persona's personality, background, and role";
 
-function validateExternalReflectionOnly(value: unknown): boolean | undefined {
+function validateBooleanField(value: unknown, fieldName: string): boolean | undefined {
   if (value === undefined || value === null) return undefined;
   if (typeof value === "boolean") return value;
   throw new Error(
-    `external_reflection_only must be true, false, or omitted (got: ${JSON.stringify(value)}). ` +
+    `${fieldName} must be true, false, or omitted (got: ${JSON.stringify(value)}). ` +
     "Non-boolean values are silently ambiguous (e.g. the string \"false\" is truthy) and are rejected instead of guessed."
   );
 }
@@ -372,11 +372,11 @@ export function personaFromYAML(yamlContent: string, original: PersonaEntity, al
     context_window_ms: data.context_window_ms == null
       ? undefined
       : parseDuration(data.context_window_ms) ?? undefined,
-    is_paused: data.is_paused ?? false,
-    external_reflection_only: validateExternalReflectionOnly(data.external_reflection_only) ?? false,
+    is_paused: validateBooleanField(data.is_paused, "is_paused") ?? false,
+    external_reflection_only: validateBooleanField(data.external_reflection_only, "external_reflection_only") ?? false,
     pause_until: data.pause_until,
-    is_static: data.is_static ?? false,
-    include_message_timestamps: data.include_message_timestamps ?? false,
+    is_static: validateBooleanField(data.is_static, "is_static") ?? false,
+    include_message_timestamps: validateBooleanField(data.include_message_timestamps, "include_message_timestamps") ?? false,
     tools: preserveHiddenToolGrants(
       resolvePersonaToolsFromMap(data.tools, allTools ?? [], allProviders ?? []),
       original.tools,
