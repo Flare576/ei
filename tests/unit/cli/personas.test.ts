@@ -265,16 +265,29 @@ describe("buildEiRelationshipBlock — topic formatting", () => {
   });
 });
 
-// ── execute() — BUG-1: empty result contract ─────────────────────────────────
-// When no persona matches, execute() must return [] so the CLI can exit clean
+// ── execute() — empty result contract ────────────────────────────────────────
+// execute() must return [] when no state exists at the resolved data path or
+// when the available state has no matching persona, so the CLI can exit clean
 // without emitting JSON. If it returned something truthy, the --format prompt
 // fallthrough would previously inject "[]" into the system prompt.
 
-describe("execute() — empty result when no persona matches", () => {
-  it("returns [] when EI_DATA_PATH is unset", async () => {
+describe("execute() — empty result contract", () => {
+  it("returns [] when no state exists at the resolved fallback path", async () => {
+    const previousXdgDataHome = process.env.XDG_DATA_HOME;
+    tempDir = mkdtempSync(join(tmpdir(), "ei-personas-test-"));
     delete process.env.EI_DATA_PATH;
-    const result = await execute("nonexistent", 10);
-    expect(result).toEqual([]);
+    process.env.XDG_DATA_HOME = tempDir;
+
+    try {
+      const result = await execute("nonexistent", 10);
+      expect(result).toEqual([]);
+    } finally {
+      if (previousXdgDataHome === undefined) {
+        delete process.env.XDG_DATA_HOME;
+      } else {
+        process.env.XDG_DATA_HOME = previousXdgDataHome;
+      }
+    }
   });
 
   it("returns [] when state has no personas", async () => {
