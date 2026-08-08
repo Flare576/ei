@@ -67,6 +67,23 @@ function EiCapture() {
   return <box width={0} height={0} />;
 }
 
+/**
+ * `renderer.destroy()` disposes Solid synchronously, but EiProvider's cleanup
+ * starts `processor.stop()` without awaiting its async persistence flush.
+ * Stop first so a prior test cannot write its stale full snapshot over the
+ * next test's fixture in this intentionally shared data directory.
+ */
+async function stopProcessorAndDestroy(renderer: { destroy: () => void }): Promise<void> {
+  const ei = capturedEi;
+  try {
+    if (!ei) throw new Error("EiProvider context was not captured before teardown");
+    await ei.stopProcessor();
+  } finally {
+    renderer.destroy();
+  }
+}
+
+
 // NOTE on real-clock waits below: this file drives a real SolidJS render
 // tree (testRender) whose OnboardingOverlay mounts real onMount fire-and-
 // forget async work (ei.getHuman() I/O, real fs-backed local.json writes)
@@ -165,6 +182,8 @@ function makeAlreadyConfiguredSettings(): Record<string, unknown> {
 
 describe("Final QA — /onboarding re-run on an already-configured instance", () => {
   it("shows already-done state (Welcome back / pre-filled provider selection) and does not silently overwrite accounts, model fields, or an already-true integration flag", async () => {
+    capturedEi = undefined;
+
     writeFileSync(join(testDataDir, "state.json"), JSON.stringify(makeCheckpoint(makeAlreadyConfiguredSettings())));
     // Already stamped at the current version — this really is a fully
     // "already-done" instance re-running /onboarding, not a fresh/upgrade case.
@@ -257,7 +276,8 @@ describe("Final QA — /onboarding re-run on an already-configured instance", ()
       const stamped = await getInstalledVersion(testDataDir);
       expect(stamped).toBe(pkg.version);
     } finally {
-      renderer.destroy();
+      await stopProcessorAndDestroy(renderer);
+
     }
   }, 20000);
 
@@ -354,11 +374,14 @@ describe("Final QA — /onboarding re-run on an already-configured instance", ()
       expect(human.settings?.conversation_model).toBe(originalModelSettings.conversation_model);
       expect(human.settings?.extraction_model).toBe(originalModelSettings.extraction_model);
     } finally {
-      renderer.destroy();
+      await stopProcessorAndDestroy(renderer);
+
     }
   }, 20000);
 
   it("excludes a disabled LLM account from the provider picker entirely (I3)", async () => {
+    capturedEi = undefined;
+
     const disabledAccount = {
       id: "disabled-account",
       name: "Disabled",
@@ -434,11 +457,14 @@ describe("Final QA — /onboarding re-run on an already-configured instance", ()
       expect(human.settings?.conversation_model).toBe("enabled-model-guid");
       expect(human.settings?.extraction_model).toBe("enabled-model-guid");
     } finally {
-      renderer.destroy();
+      await stopProcessorAndDestroy(renderer);
+
     }
   }, 20000);
 
   it("Install consent copy discloses Cursor's recent-memory injection when Cursor is detected (M1)", async () => {
+    capturedEi = undefined;
+
     writeFileSync(join(testDataDir, "state.json"), JSON.stringify(makeCheckpoint({})));
     writeFileSync(join(testDataDir, "local.json"), JSON.stringify({ installed_version: pkg.version }));
 
@@ -452,6 +478,8 @@ describe("Final QA — /onboarding re-run on an already-configured instance", ()
     const { renderOnce, mockInput, captureCharFrame, renderer } = await testRender(
       () => (
         <TestProviders>
+          <EiCapture />
+
           <OnboardingOverlay
             onDismiss={() => {}}
             detectedProviders={[]}
@@ -479,7 +507,7 @@ describe("Final QA — /onboarding re-run on an already-configured instance", ()
       expect(frame).toContain("context into Cursor's prompts on every request");
       expect(frame).toContain("to Cursor's configured model backend.");
     } finally {
-      renderer.destroy();
+      await stopProcessorAndDestroy(renderer);
     }
   }, 20000);
 });
