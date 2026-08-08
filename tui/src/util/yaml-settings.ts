@@ -101,8 +101,8 @@ export function settingsToYAML(settings: HumanSettings | undefined, accounts: Pr
     name_display: settings?.name_display ?? null,
     default_heartbeat_ms: formatDuration(settings?.default_heartbeat_ms ?? 1800000),
     default_context_window_ms: formatDuration(settings?.default_context_window_ms ?? 28800000),
-    message_min_count: settings?.message_min_count ?? 200,
-    message_max_age_days: settings?.message_max_age_days ?? 14,
+    message_min_count: settings?.message_min_count,
+    message_max_age_days: settings?.message_max_age_days,
     ceremony: {
       time: settings?.ceremony?.time ?? "09:00",
       decay_rate: settings?.ceremony?.decay_rate ?? null,

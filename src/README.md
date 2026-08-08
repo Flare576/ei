@@ -134,7 +134,7 @@ This is intentional. Concurrent LLM calls sound appealing until you're watching 
 
 Personas don't send their entire message history to the LLM. By default, only messages from the last 8 hours are included (`context_window_ms`, configurable per persona). Older messages are still stored — they're just not in the prompt.
 
-Message rolloff works differently: messages are kept until there are at least 200 of them _and_ any are older than 14 days. So a persona you chat with daily will roll off old messages gradually; one you chat with twice a year will keep everything.
+Message retention is unlimited by default — nothing rolls off automatically. Rolloff is opt-in via `message_max_age_days` (a floor of `message_min_count` messages is kept beneath it, so pruning never drops you below that count). Even with rolloff enabled, it can only remove messages that have finished all extraction (topic, person, and fact) and are not pinned as `Always` — unprocessed or pinned conversation is never discarded.
 
 # Embeddings
 
