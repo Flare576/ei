@@ -86,6 +86,7 @@ Easy. The field is optional with a `false` default and no migration; removing it
 
 - ADR-001 — why the evidence is worth preserving in the first place, and the two-lens split it feeds
 - ADR-003 — the PersonLog clear timing this flag defers
+- ADR-008 — Race 1, the drain/dispatch timing race this flag's protected-run promise makes user-visible
 - `src/core/orchestrators/ceremony.ts` — the reflection phase, its threshold constant, and the multi-record warning path this gate must not disturb
 - `src/core/handlers/heartbeat.ts` — `handleReflectionCritic` and its two write sites
 - `src/cli/persona-corrections.ts` — the schema and the two record literals a new persona field must appear in
