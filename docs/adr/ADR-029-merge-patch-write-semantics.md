@@ -141,6 +141,21 @@ Two implementation consequences follow, and both are load-bearing:
   the external contract entirely. **Until that lands, persona merge-patch has a field whose projection cannot
   round-trip**, and item 02 must not claim otherwise.
 
+**Implementation note, 2026-08-07.** Two findings from the actual build, recorded here rather than left to
+drift out of memory:
+
+- **The patch/candidate schema pair is now derived from one shared module** used by both the CLI parser and
+  core validation, rather than two hand-maintained schemas per entity. This closes the exact drift risk this
+  clause warns about — the two representations had already begun to diverge in practice by the time this was
+  caught during implementation review, before any external caller could observe it.
+- **A real drain-time-clobber bug surfaced and was fixed**, in the same class this ADR's clause 1 exists to
+  prevent: a caller's merge patch could carry an embedding vector computed at write time, and if the record
+  changed again before the patch drained, that stale embedding would overwrite a newer one. The fix is that
+  embeddings are never trusted from the wire — they are recomputed at actual drain time, against live state,
+  same as the merge itself. Worth naming explicitly because it is easy to satisfy "merge at drain time" for
+  the fields a reviewer is thinking about while missing a field, like a derived embedding, that quietly rode
+  along on the patch.
+
 **4. `create` and `update` are different operations and must stop sharing one body contract.**
 
 `applyMergePatch(current, patch)` requires an existing record, so it has no meaning for `create`. Today both

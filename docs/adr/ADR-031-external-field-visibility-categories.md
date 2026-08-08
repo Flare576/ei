@@ -218,6 +218,16 @@ should trust. If the exposure system is ever made to work, `exposure_desired` be
   they cannot be reset by omission.
 - **A new field's category is decidable by an implementer** who has never seen it, using two stated tests.
 
+**Implementation note, 2026-08-07.** This ADR's model was fully enforced on writes when first built, but the
+read paths lagged behind: the CLI's `ei --id` output and the MCP `ei_lookup` tool were both still returning
+every stored field, including every System Hidden one this ADR names — the write-side categories existed, but
+nothing on the read side had been taught to apply them. Caught during implementation review, before any
+release shipped it. Fixed by giving both read paths one shared strip function keyed off the same category
+table this ADR defines, so a field's category now governs both directions from a single source rather than
+needing separate enforcement remembered on each path. Worth recording because it's the same shape of gap this
+ADR's own "hand-maintained duplicate enforcement" concerns describe elsewhere — a category model is only as
+strong as every surface that's supposed to honour it.
+
 ### Negative
 
 - **This removes capability that exists today.** Five settings and `tools` are externally writable right now.
