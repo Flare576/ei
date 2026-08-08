@@ -196,6 +196,73 @@ describe("corrections endpoints", () => {
     ).rejects.toThrow(/^No fact found with id: missing$/);
   });
 
+  // Beta's review, plan-1-adr029-merge-patch.md [I1]: ADR-031 defines
+  // `embedding`/`rewrite_length_floor` (all three types) and
+  // `exposure_current`/`exposure_desired`/`last_ei_asked` (Person/Topic
+  // only) as System Hidden -- absent from every external response, not
+  // merely unwritable. Removing them from the write-side schemas (TODO 3)
+  // was not the four-category contract by itself; this proves the
+  // create/update RESPONSE also omits them.
+  it("omits embedding/rewrite_length_floor/exposure_current/exposure_desired/last_ei_asked from a person create response (ADR-031 [I1])", async () => {
+    writeState(makeState());
+
+    const { record } = await createEntity("person", {
+      description: "A person with hidden fields to prove absent",
+      sentiment: 0.2,
+      relationship: "friend",
+      identifiers: [{ type: "Nickname", value: "Hidden Fields Person", is_primary: true }],
+    });
+
+    expect(record).not.toHaveProperty("embedding");
+    expect(record).not.toHaveProperty("rewrite_length_floor");
+    expect(record).not.toHaveProperty("exposure_current");
+    expect(record).not.toHaveProperty("exposure_desired");
+    expect(record).not.toHaveProperty("last_ei_asked");
+  });
+
+  it("omits embedding/rewrite_length_floor/exposure_current/exposure_desired/last_ei_asked from a person update response, even though the stored record carries them (ADR-031 [I1])", async () => {
+    writeState(makeState({
+      human: {
+        entity: "human",
+        facts: [makeFact()],
+        topics: [],
+        people: [makePerson({ rewrite_length_floor: 42, last_ei_asked: INITIAL_NOW })],
+        quotes: [],
+        last_updated: INITIAL_NOW,
+      },
+    }));
+
+    const updated = await updateEntity("person", "person_1", { description: "Updated description" });
+
+    expect(updated).not.toHaveProperty("embedding");
+    expect(updated).not.toHaveProperty("rewrite_length_floor");
+    expect(updated).not.toHaveProperty("exposure_current");
+    expect(updated).not.toHaveProperty("exposure_desired");
+    expect(updated).not.toHaveProperty("last_ei_asked");
+
+    // The strip is a RESPONSE-shaping concern only -- the persisted record
+    // still needs these System Hidden fields for real (rewrite_length_floor
+    // is recomputed by the ceremony, last_ei_asked by proactive-ask logic).
+    const persisted = await loadLatestState();
+    const person = persisted!.human.people.find((p) => p.id === "person_1")!;
+    expect(person.rewrite_length_floor).toBe(42);
+    expect(person.last_ei_asked).toBe(INITIAL_NOW);
+  });
+
+  it("omits embedding/rewrite_length_floor from a fact create response (ADR-031 [I1]; Fact has no exposure/last_ei_asked fields to omit)", async () => {
+    writeState(makeState());
+
+    const { record } = await createEntity("fact", {
+      name: "Hidden Fields Fact",
+      description: "A fact with hidden fields to prove absent",
+      sentiment: 0,
+      validated_date: INITIAL_NOW,
+    });
+
+    expect(record).not.toHaveProperty("embedding");
+    expect(record).not.toHaveProperty("rewrite_length_floor");
+  });
+
   it.each([
     ["null", null],
     ["number", 42],
@@ -246,9 +313,16 @@ describe("corrections endpoints", () => {
       last_updated: INITIAL_NOW,
     });
 
+    // `learned_by` (and every other provenance field) is System Visible —
+    // ADR-031/S5 — and is now a hard rejection on write, not a silent
+    // strip-and-ignore like id/type/last_updated below. A caller round-
+    // tripping full lookupById output must drop it themselves.
+    const { learned_by, ...lookupRecordWithoutProvenance } = lookupRecord as Record<string, unknown>;
+    void learned_by;
+
     const updateStartedAt = Date.now();
     const updated = await updateEntity("fact", "fact_1", {
-      ...lookupRecord,
+      ...lookupRecordWithoutProvenance,
       id: "spoofed-id",
       type: "topic",
       last_updated: "1999-12-31T23:59:59.000Z",
@@ -274,6 +348,18 @@ describe("corrections endpoints", () => {
     expect(await lookupById("spoofed-id")).toBeNull();
   });
 
+  it("rejects a provenance field on update as an unrecognized key, not a silent strip (ADR-031/S5)", async () => {
+    writeState(makeState());
+
+    const lookupRecord = await lookupById("fact_1");
+    await expect(
+      updateEntity("fact", "fact_1", {
+        ...lookupRecord,
+        description: "1984-05-27",
+      })
+    ).rejects.toThrow(/Unrecognized key\(s\) in object: 'learned_by'/);
+  });
+
   it("rejects user-supplied unknown keys that are outside the round-trip allowlist", async () => {
     writeState(makeState());
 
@@ -287,10 +373,11 @@ describe("corrections endpoints", () => {
       })
     ).rejects.toThrow(CorrectionValidationError);
 
-    const lookupRecord = await lookupById("fact_1");
+    const { learned_by, ...lookupRecordWithoutProvenance } = (await lookupById("fact_1")) as Record<string, unknown>;
+    void learned_by;
     await expect(
       updateEntity("fact", "fact_1", {
-        ...lookupRecord,
+        ...lookupRecordWithoutProvenance,
         description: "Still invalid",
         unexpected: true,
       })
@@ -330,10 +417,13 @@ describe("corrections endpoints", () => {
       })
     ).rejects.toThrow(CorrectionValidationError);
 
-    // Update still accepts and ignores these — the allowlist is update-only, not gone entirely.
-    const lookupRecord = await lookupById("fact_1");
+    // Update still accepts and ignores these — the allowlist is update-only,
+    // not gone entirely. `learned_by` must still be dropped by the caller
+    // (ADR-031/S5 hard rejection, unaffected by this allowlist).
+    const { learned_by, ...lookupRecordWithoutProvenance } = (await lookupById("fact_1")) as Record<string, unknown>;
+    void learned_by;
     const updated = await updateEntity("fact", "fact_1", {
-      ...lookupRecord,
+      ...lookupRecordWithoutProvenance,
       id: "spoofed-id",
       type: "topic",
       last_updated: "1999-12-31T23:59:59.000Z",
@@ -359,8 +449,6 @@ describe("corrections endpoints", () => {
       description: "AI Persona",
       sentiment: 0.85,
       relationship: "AI Persona",
-      exposure_current: 0,
-      exposure_desired: 0.5,
       identifiers: [
         { type: "AI Persona", value: "Boulder Master" },
         { type: "Nickname", value: "Sisyphus", is_primary: true },
@@ -383,11 +471,23 @@ describe("corrections endpoints", () => {
     expect(Date.parse(created.record.last_updated)).toBeGreaterThanOrEqual(createStartedAt);
     expect(Date.parse(created.record.last_updated)).toBeLessThanOrEqual(createFinishedAt);
 
-    expect(await lookupById(created.id)).toMatchObject({
+    // `last_updated` is stamped twice now, moments apart: once by
+    // buildAndWriteUpsert when it builds the preview record, and again by
+    // HumanState.person_upsert (the TODO4 single choke point self-drain now
+    // reaches too) at the moment the write actually applies — so the
+    // persisted value is a fresh, independent timestamp, not necessarily
+    // byte-identical to the returned preview's. Assert it separately rather
+    // than folding it into the toMatchObject below.
+    const persisted = await lookupById(created.id);
+    if (!persisted || !("last_updated" in persisted) || typeof persisted.last_updated !== "string") {
+      throw new Error("expected lookupById to return a record with a last_updated string");
+    }
+    expect(Date.parse(persisted.last_updated)).toBeGreaterThanOrEqual(createStartedAt);
+    expect(Date.parse(persisted.last_updated)).toBeLessThanOrEqual(createFinishedAt);
+    expect(persisted).toMatchObject({
       type: "person",
       id: created.id,
       name: "Sisyphus",
-      last_updated: created.record.last_updated,
       identifiers: [
         { type: "Ei Persona", value: PERSONA_ID },
         { type: "Nickname", value: "Sisyphus", is_primary: true },
@@ -408,8 +508,6 @@ describe("corrections endpoints", () => {
         description: "A person with two claimed links",
         sentiment: 0,
         relationship: "friend",
-        exposure_current: 0,
-        exposure_desired: 0.5,
         identifiers: [
           { type: "Ei Persona", value: PERSONA_ID },
           { type: "Ei Persona", value: PERSONA_ID_2 },
@@ -447,8 +545,6 @@ describe("corrections endpoints", () => {
         description: "A brand new person",
         sentiment: 0,
         relationship: "friend",
-        exposure_current: 0,
-        exposure_desired: 0.5,
         identifiers: [
           { type: "Ei Persona", value: PERSONA_ID },
           { type: "Nickname", value: "New Person", is_primary: true },
@@ -477,8 +573,6 @@ describe("corrections endpoints", () => {
         description: "A person with two claimed links",
         sentiment: 0,
         relationship: "friend",
-        exposure_current: 0,
-        exposure_desired: 0.5,
         identifiers: [
           { type: "Ei Persona", value: PERSONA_ID },
           { type: "Ei Persona", value: PERSONA_ID_2 },
@@ -517,8 +611,6 @@ describe("corrections endpoints", () => {
         description: "Updated bio",
         sentiment: 0,
         relationship: "friend",
-        exposure_current: 0,
-        exposure_desired: 0.5,
         identifiers: [{ type: "Nickname", value: "Alice", is_primary: true }, { type: "Ei Persona", value: PERSONA_ID }],
       });
 
@@ -543,8 +635,6 @@ describe("corrections endpoints", () => {
           description: "desc",
           sentiment: 0,
           relationship: "friend",
-          exposure_current: 0,
-          exposure_desired: 0.5,
           identifiers: [
             { type: "Ei Persona", value: PERSONA_ID },
             { type: "Ei Persona", value: PERSONA_ID_2 },
@@ -603,8 +693,6 @@ describe("corrections endpoints", () => {
           description: "A brand new person",
           sentiment: 0,
           relationship: "friend",
-          exposure_current: 0,
-          exposure_desired: 0.5,
           identifiers: [
             { type: "Ei Persona", value: PERSONA_ID },
             { type: "Nickname", value: injected, is_primary: true },
@@ -646,8 +734,6 @@ describe("corrections endpoints", () => {
           description: "A brand new person",
           sentiment: 0,
           relationship: "friend",
-          exposure_current: 0,
-          exposure_desired: 0.5,
           identifiers: [
             { type: "Ei Persona", value: PERSONA_ID },
             { type: "Nickname", value: "New Person", is_primary: true },
@@ -678,8 +764,6 @@ describe("corrections endpoints", () => {
         description: "desc",
         sentiment: 0,
         relationship: "friend",
-        exposure_current: 0,
-        exposure_desired: 0.5,
         identifiers: [
           { type: "Nickname", value: "Alice", is_primary: true },
           { type: "ei persona", value: "emmet" },

@@ -132,6 +132,106 @@ describe("CLI CRUD process behavior", () => {
     });
   });
 
+  // Plan 1 (r4 / TODO 6): --json-file <path> — a non-argv input mode for
+  // create/update, alongside the existing --json <json>. The argv-privacy
+  // oracle needs no /proc polling: this file's own runCli() spawns the
+  // real binary via spawnSync("bun", [...CLI_ARGS, ...args]), so `args` IS
+  // the subprocess's own argv — a marker string that lives only inside the
+  // temp file, and never in `args`, is proof the payload never touched argv.
+  describe("--json-file <path> (r4 non-argv input mode)", () => {
+    it("creates a topic via --json-file, with the marker string never appearing in the process's own argv", () => {
+      const marker = "MARKER-f3a9c1-topic-create";
+      const jsonPath = join(tempDir, "create-topic.json");
+      writeFileSync(jsonPath, JSON.stringify({
+        name: "Process-created topic",
+        description: `Created through --json-file, marker ${marker}`,
+        sentiment: 0.4,
+        category: "Interest",
+      }));
+      const args = ["create", "topic", "--json-file", jsonPath];
+
+      // The argv-privacy oracle: args is the subprocess's own argv.
+      expect(args.join(" ")).not.toContain(marker);
+
+      const result = runCli(args);
+
+      expect(result.status).toBe(0);
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.record.description).toContain(marker);
+    });
+
+    it("exits non-zero with a clear error for a nonexistent --json-file path", () => {
+      const result = runCli(["create", "topic", "--json-file", join(tempDir, "does-not-exist.json")]);
+
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("Could not read --json-file");
+    });
+
+    it("exits non-zero with a clear error for malformed JSON in the --json-file", () => {
+      const jsonPath = join(tempDir, "malformed.json");
+      writeFileSync(jsonPath, "{not-json");
+
+      const result = runCli(["create", "topic", "--json-file", jsonPath]);
+
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toMatch(/^Invalid JSON:/);
+    });
+
+    it("exits non-zero when both --json and --json-file are supplied", () => {
+      const jsonPath = join(tempDir, "both.json");
+      writeFileSync(jsonPath, JSON.stringify({ name: "x" }));
+
+      const result = runCli(["create", "topic", "--json", "{}", "--json-file", jsonPath]);
+
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("pass either --json or --json-file, not both");
+    });
+
+    it("exits non-zero when neither --json nor --json-file is supplied", () => {
+      const result = runCli(["create", "topic"]);
+
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("requires --json '<json>' or --json-file <path>");
+    });
+
+    it("existing --json <json> create still works unchanged (backward-compat regression check)", () => {
+      const result = runCli([
+        "create", "topic", "--json",
+        JSON.stringify({ name: "Still works", description: "d", sentiment: 0.1 }),
+      ]);
+
+      expect(result.status).toBe(0);
+      expect(JSON.parse(result.stdout).record.name).toBe("Still works");
+    });
+
+    it("updates a topic via --json-file with only the changed field — a distinct command path from create, so this needs its own oracle", () => {
+      const createResult = runCli([
+        "create", "topic", "--json",
+        JSON.stringify({ name: "Original Topic", description: "Original description", sentiment: 0.2, category: "Interest" }),
+      ]);
+      expect(createResult.status).toBe(0);
+      const topicId = JSON.parse(createResult.stdout).id as string;
+
+      const marker = "MARKER-9b2e7d-topic-update";
+      const jsonPath = join(tempDir, "update-topic.json");
+      writeFileSync(jsonPath, JSON.stringify({ description: `Updated via --json-file, marker ${marker}` }));
+      const args = ["update", "topic", topicId, "--json-file", jsonPath];
+      expect(args.join(" ")).not.toContain(marker);
+
+      const updateResult = runCli(args);
+
+      expect(updateResult.status).toBe(0);
+      const updated = JSON.parse(updateResult.stdout);
+      expect(updated.description).toContain(marker);
+      // The field the file omitted (`category`) is unchanged -- proves this
+      // is a merge patch, not a full-record write, through --json-file too.
+      expect(updated.category).toBe("Interest");
+
+      const readBack = runCli(["--id", topicId]);
+      expect(JSON.parse(readBack.stdout).category).toBe("Interest");
+    });
+  });
+
   it("exits non-zero and reports missing message_id/text for an empty create-quote body (Plan 2: create quote is now a real attested command, no longer update-only)", () => {
     const result = runCli(["create", "quote", "--json", "{}"]);
 
@@ -275,7 +375,7 @@ describe("CLI CRUD process behavior", () => {
     const result = runCli(["remove", "persona", "ei"]);
 
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain('Cannot delete reserved persona "ei". Use archive instead.');
+    expect(result.stderr).toContain('Cannot delete reserved persona "ei" — reserved personas can\'t be deleted via this CLI/MCP path at all; use the TUI\'s /archive command instead.');
     expect(readFileSync(statePath, "utf-8")).toBe(before);
   });
 

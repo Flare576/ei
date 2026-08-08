@@ -11,7 +11,7 @@ import { getMachineId } from "../integrations/machine-id.js";
 import { readCorrections, applyCorrectionsToState } from "../core/corrections.js";
 import type { QuoteCorrectionSkip } from "../core/corrections.js";
 import { getCorrectionsPath } from "./corrections-writer.js";
-import { buildPersonaToolsMap } from "../core/persona-tools.js";
+import { stripHiddenDataItemFields, stripHiddenPersonaFields } from "../core/entity-schemas.js";
 import type { OpenCodeMessage } from "../integrations/opencode/types.js";
 import type { ClaudeCodeMessage } from "../integrations/claude-code/types.js";
 import { CLAUDE_CODE_PERSONA_NAME } from "../integrations/claude-code/types.js";
@@ -67,7 +67,7 @@ export async function loadLatestState(): Promise<StorageState | null> {
     return null;
   }
   const corrections = await readCorrections(getCorrectionsPath());
-  lastCorrectionSkips = applyCorrectionsToState(state, corrections);
+  lastCorrectionSkips = await applyCorrectionsToState(state, corrections);
   return state;
 }
 
@@ -863,10 +863,31 @@ export async function lookupById(id: string): Promise<({ type: string } & Record
   const personaEntities = Object.values(state.personas).map((p) => p.entity);
   const found = crossFind(id, state.human, personaEntities);
   if (!found) return null;
-  const { type, ...rest } = found;
-  const withoutEmbedding = { ...rest } as Record<string, unknown>;
-  delete withoutEmbedding.embedding;
-  delete withoutEmbedding.description_embedding;
+
+  // ADR-031 (Beta's review, plan-1-adr029-merge-patch.md [I1]): System
+  // Hidden fields are absent from every external read, not merely
+  // unwritable -- fact/topic/person and persona each get their own
+  // hand-maintained strip mirroring ADR-031's table. crossFind's two
+  // persona-nested sub-record shapes (personaTopic/personaTrait) have no
+  // ADR-031 table entry of their own, so they keep the prior narrower
+  // behavior (embedding only). `tools` -- previously enriched here into
+  // the self-documenting provider/tool map -- is now System Hidden and
+  // simply absent: buildPersonaToolsMap remains a real, exported core
+  // utility for the TUI's in-harness YAML editor, it just never runs
+  // against an external CLI/MCP response again.
+  let stripped: Record<string, unknown>;
+  if (found.type === "fact" || found.type === "topic" || found.type === "person") {
+    const { type: _discard, ...rest } = found;
+    stripped = stripHiddenDataItemFields(rest);
+  } else if (found.type === "persona") {
+    const { type: _discard, ...rest } = found;
+    stripped = stripHiddenPersonaFields(rest);
+  } else {
+    const { type: _discard, ...rest } = found;
+    stripped = { ...rest } as Record<string, unknown>;
+    delete stripped.embedding;
+    delete stripped.description_embedding;
+  }
 
   // data_item_ids on a Quote can only point at facts, topics, or people — the other
   // types crossFind can return (quote itself, and the persona-side persona/
@@ -875,27 +896,12 @@ export async function lookupById(id: string): Promise<({ type: string } & Record
   // which quotes reference this entity: a human correcting a bad merge/split (e.g.
   // un-merging an over-merged Person) needs this blast radius before repointing
   // anything.
-  if (type === "fact" || type === "topic" || type === "person") {
-    withoutEmbedding.linked_quotes = state.human.quotes
+  if (found.type === "fact" || found.type === "topic" || found.type === "person") {
+    stripped.linked_quotes = state.human.quotes
       .filter((q) => q.data_item_ids.includes(id))
       .map((q) => ({ id: q.id, text: q.text, speaker: q.speaker, timestamp: q.timestamp }));
   }
-  // A persisted PersonaEntity.tools is a flat array of ToolDefinition ids —
-  // opaque to a caller who doesn't already know every tool's UUID. Enrich it
-  // into the same self-documenting `{ providerDisplayName: { toolDisplayName:
-  // boolean } }` map the TUI's $EDITOR/YAML persona editor uses, so an agent
-  // reading a persona via `ei --id` can both see what's granted AND discover
-  // what else is grantable (and under which — possibly disabled — provider)
-  // without a separate lookup. buildPersonaToolsMap returns undefined when no
-  // tools are registered at all; that undefined/absent result is preserved.
-  if (type === "persona") {
-    withoutEmbedding.tools = buildPersonaToolsMap(
-      (withoutEmbedding.tools as string[] | undefined) ?? [],
-      state.tools ?? [],
-      state.providers ?? []
-    );
-  }
-  return { type, ...withoutEmbedding };
+  return { type: found.type, ...stripped };
 }
 
 // Reverse lookup for the `Person.identifiers[]` array: mirrors

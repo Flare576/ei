@@ -6,10 +6,14 @@
  *
  * Every accepted entity is fully materialized here — id assigned (create),
  * embedding computed, Person identifiers sanitized and name-synced — before
- * being handed to writeCorrection(). Callers of ei_update must round-trip
- * a full record obtained from ei_lookup: unset optional fields are treated
- * as absent, not "leave existing value alone" (full-replacement semantics —
- * see design discussion for why partial-field patching isn't safe here).
+ * being handed to writeCorrection(). `topic`/`person` updates are RFC 7396
+ * JSON Merge Patch (ADR-029): a field the caller omits from the update body
+ * is left UNCHANGED, never reset to a default — see resolveTopicPatchCandidate/
+ * resolvePersonPatchCandidate (src/core/corrections.ts) and
+ * src/core/entity-schemas.ts's schema-pair mechanism. `fact` is the one
+ * permanent exception (Must-Have 9): `ei_update fact` stays full-record
+ * replacement, so a caller round-tripping a full `ei_lookup` result is still
+ * correct for fact specifically, just not for topic/person/persona anymore.
  *
  * createQuoteEntity/fixQuoteEntity (`ei create quote`/`ei fix quote`) are a
  * separate, source-verified write path living in this same file: they
@@ -24,7 +28,18 @@ import { writeCorrection } from "./corrections-writer.js";
 import { sanitizeEiPersonaIdentifiers } from "../core/utils/identifier-utils.js";
 import { isQualifiedMessageId, qualifyEiMessage, UUID_PATTERN } from "../core/utils/message-id.js";
 import { computeDataItemEmbedding, computeQuoteEmbedding } from "../core/embedding-service.js";
-import type { CorrectableType, CorrectionRecord, QuoteCreateRecord, QuoteFixRecord, QuoteRelinkRecord, QuoteRemoveRecord } from "../core/corrections.js";
+import {
+  topicCreateSchema as topicSchema,
+  personCreateSchema as personSchema,
+  topicPatchSchema,
+  topicCandidateSchema,
+  personPatchSchema,
+  personCandidateSchema,
+  stripHiddenDataItemFields,
+  type ExternalDataItem,
+} from "../core/entity-schemas.js";
+import { resolveTopicPatchCandidate, resolvePersonPatchCandidate } from "../core/corrections.js";
+import type { CorrectableType, CorrectionRecord, MergePatch, QuoteCreateRecord, QuoteFixRecord, QuoteRelinkRecord, QuoteRemoveRecord } from "../core/corrections.js";
 import type { Fact, Topic, Person, Quote } from "../core/types.js";
 import type { PersonaEntity } from "../core/types/entities.js";
 import type { ResolvedMessage } from "./retrieval.js";
@@ -74,60 +89,37 @@ export const CORRECTABLE_TYPES: CorrectableType[] = ["fact", "topic", "person", 
 // quote branch always rejects. See updateEntity's doc comment below.
 export const UPDATABLE_TYPES: CorrectableType[] = ["fact", "topic", "person", "quote"];
 
-// Metadata fields common to all three entity types, all server-preserved
-// pass-through — a caller round-tripping ei_lookup output keeps them
-// unless they deliberately edit/clear them.
-const metaFields = {
-  learned_on: z.string().optional(),
-  last_mentioned: z.string().optional(),
-  learned_by: z.string().optional(),
-  last_changed_by: z.string().optional(),
-  interested_personas: z.array(z.string()).optional(),
-  sources: z.array(z.string()).optional(),
-  persona_groups: z.array(z.string()).optional(),
-  rewrite_length_floor: z.number().optional(),
-};
+// ADR-031 field-visibility sweep (this plan's TODO 3): every field that
+// was here previously — `learned_on`/`last_mentioned`/`learned_by`/
+// `last_changed_by`/`interested_personas`/`sources`/`persona_groups`
+// (all System Visible: read, never caller-write — provenance is never
+// caller-assertable, ADR-031's own table) and `rewrite_length_floor`
+// (System Hidden, system-written on update per ADR-032) — is gone from
+// every one of factSchema/topicSchema/personSchema's write-side shapes
+// below. None of them survive as Full Access on any of the three types,
+// so this shared object has nothing left to contribute and no longer
+// exists; a caller submitting any of them now gets `z.strictObject`'s
+// ordinary unrecognized-key rejection, not a silent accept-and-ignore.
 
 const factSchema = z.strictObject({
   name: z.string().min(1),
   description: z.string(),
   sentiment: z.number().min(-1).max(1),
   validated_date: z.string(),
-  ...metaFields,
 });
 
-const topicSchema = z.strictObject({
-  name: z.string().min(1),
-  description: z.string(),
-  sentiment: z.number().min(-1).max(1),
-  category: z.string().optional(),
-  exposure_current: z.number().min(0).max(1).default(0),
-  exposure_desired: z.number().min(0).max(1).default(0.5),
-  last_ei_asked: z.string().nullable().optional(),
-  ...metaFields,
-});
+// `exposure_current`/`exposure_desired` (System Hidden — ADR-031, ADR-025)
+// and `last_ei_asked` (System Hidden — Ei's own bookkeeping, state.json is
+// that surface) are gone from Topic's write-side shape entirely, per this
+// plan's TODO 3. `topicBaseShape`/`personBaseShape` and their derived
+// patch/candidate schemas now live in `src/core/entity-schemas.ts`
+// (relocated 2026-08-07, Beta's review [I3]) — core's own drain-time
+// candidate validation (resolveTopicPatchCandidate/
+// resolvePersonPatchCandidate) needs the SAME real Zod schemas this CLI
+// layer parses input against, not a hand-maintained shadow of them, so
+// there is exactly one declaration for each, imported at the top of this
+// file rather than re-declared.
 
-const identifierSchema = z.strictObject({
-  type: z.string().min(1),
-  value: z.string().min(1),
-  is_primary: z.boolean().optional(),
-});
-
-const personSchema = z.strictObject({
-  name: z.string().optional(),
-  description: z.string(),
-  sentiment: z.number().min(-1).max(1),
-  identifiers: z.array(identifierSchema).optional(),
-  validated_date: z.string().optional(),
-  relationship: z.string().default(""),
-  exposure_current: z.number().min(0).max(1).default(0),
-  exposure_desired: z.number().min(0).max(1).default(0.5),
-  last_ei_asked: z.string().nullable().optional(),
-  ...metaFields,
-}).refine(
-  (p) => (p.identifiers && p.identifiers.length > 0) || (p.name && p.name.length > 0),
-  { message: "Person requires at least one identifier or a name" }
-);
 
 /**
  * `ei create quote` / MCP `ei_quote_create` input — deliberately narrow:
@@ -201,10 +193,14 @@ function formatQuoteValidationIssues(issues: z.ZodIssue[]): string {
 }
 
 const SCHEMAS = { fact: factSchema, topic: topicSchema, person: personSchema } as const;
+const PATCH_SCHEMAS = { topic: topicPatchSchema, person: personPatchSchema } as const;
 
 export type FactInput = z.infer<typeof factSchema>;
 export type TopicInput = z.infer<typeof topicSchema>;
 export type PersonInput = z.infer<typeof personSchema>;
+export type TopicPatchInput = z.infer<typeof topicPatchSchema>;
+export type PersonPatchInput = z.infer<typeof personPatchSchema>;
+export { topicCandidateSchema, personCandidateSchema, topicPatchSchema, personPatchSchema };
 
 /** Thrown on schema violations — callers should surface `.message` directly, not swallow it. */
 export class CorrectionValidationError extends Error {}
@@ -332,10 +328,49 @@ function parseInput(entityType: NonQuoteType, body: unknown, mode: "create" | "u
 }
 
 /**
- * Materialize a validated input into a full entity record (id, name-synced
- * identifiers, embedding) and persist it as an upsert correction. Shared by
- * createEntity (fresh id) and updateEntity (caller-supplied id) — both
- * need identical Person identifier sanitization and embedding computation.
+ * Parses an `ei update topic`/`ei update person` body as an RFC 7396
+ * merge PATCH (ADR-029) — every field optional, `unrecognized_keys`
+ * rejects any field ADR-031 classifies Hidden or System Visible (they
+ * simply aren't in `topicPatchSchema`/`personPatchSchema`'s shape at
+ * all, per this plan's TODO 3). ROUND_TRIP_FIELDS is still stripped
+ * first: those four are pure read-shape noise (`ei --id` echoes them),
+ * never a data assertion, so a caller who hasn't yet adopted the
+ * patch-only contract and still round-trips full `ei_lookup` output
+ * isn't punished for including them — unlike a genuine Hidden/System
+ * Visible field, which IS a real assertion and must be rejected.
+ */
+function parsePatchInput(entityType: "topic" | "person", body: unknown): TopicPatchInput | PersonPatchInput {
+  let input: unknown = body;
+  if (body && typeof body === "object") {
+    const stripped: Record<string, unknown> = { ...body };
+    for (const field of ROUND_TRIP_FIELDS) {
+      delete stripped[field];
+    }
+    input = stripped;
+  }
+  const result = PATCH_SCHEMAS[entityType].safeParse(input);
+  if (!result.success) {
+    throw new CorrectionValidationError(
+      `Invalid ${entityType} update: ${result.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`
+    );
+  }
+  return result.data;
+}
+
+/**
+ * Materialize a validated CREATE input into a full entity record (id,
+ * name-synced identifiers, embedding) and persist it as an `upsert`
+ * correction. Shared by createEntity (fresh id, all three types) and
+ * updateEntity's `fact` branch (caller-supplied id) — fact is the
+ * ADR-029-stated permanent full-record-replacement exception
+ * (Must-Have 9), so its update path stays exactly this function, never
+ * the merge-patch pipeline topic/person use below.
+ *
+ * `exposure_current`/`exposure_desired` are stamped here directly rather
+ * than taken from `parsed` — they left Topic's and Person's write-side
+ * schema entirely under ADR-031 (System Hidden), so there is no caller
+ * value to read; a freshly created Topic/Person simply starts at the
+ * same neutral values the old schema defaulted to.
  *
  * A self-drained Person write that the drain-time cardinality guard
  * declined a link on (ADR-006/ADR-010) throws here — the ONLY drain mode
@@ -365,9 +400,11 @@ async function buildAndWriteUpsert(
     const identifiers = sanitizeEiPersonaIdentifiers(input.identifiers ?? [], personas);
     const primary = identifiers.find((i) => i.is_primary) ?? identifiers[0];
     const name = primary?.value ?? input.name ?? "";
-    record = { ...input, id, identifiers, name, last_updated: now } as Person;
+    record = { ...input, id, identifiers, name, last_updated: now, exposure_current: 0, exposure_desired: 0.5 } as Person;
+  } else if (entityType === "topic") {
+    record = { ...(parsed as TopicInput), id, last_updated: now, exposure_current: 0, exposure_desired: 0.5 } as Topic;
   } else {
-    record = { ...parsed, id, last_updated: now } as Fact | Topic;
+    record = { ...(parsed as FactInput), id, last_updated: now } as Fact;
   }
 
   record.embedding = await computeDataItemEmbedding(record);
@@ -391,7 +428,7 @@ async function buildAndWriteUpsert(
 export async function createEntity(
   entityType: CorrectableType,
   body: unknown
-): Promise<{ id: string; record: Fact | Topic | Person }> {
+): Promise<{ id: string; record: ExternalDataItem }> {
   const parsed = parseInput(entityType as NonQuoteType, body, "create");
   const state = await loadLatestState();
   if (!state) {
@@ -400,7 +437,7 @@ export async function createEntity(
 
   const id = crypto.randomUUID();
   const record = await buildAndWriteUpsert(entityType as NonQuoteType, id, parsed, Object.values(state.personas).map((p) => p.entity));
-  return { id, record: stripEmbedding(record) };
+  return { id, record: stripHiddenDataItemFields(record) };
 }
 
 /**
@@ -414,30 +451,86 @@ export async function createEntity(
  * do any part of the old work first." Never delete this branch outright
  * (ADR-012 requires keep-and-reject, not disappearance) and never let it
  * fall through to the old full-replacement quote_upsert shape again.
+ *
+ * `fact` keeps `ei update`'s pre-ADR-029 full-record-replacement contract
+ * exactly (Must-Have 9, permanent exception — no defaults, no merge-patch
+ * path). `topic`/`person` implement ADR-029's RFC 7396 merge patch: the
+ * target must already exist (there is nothing to merge onto otherwise),
+ * every field the caller omits is left unchanged, `null` removes a
+ * member, and a patch valid by grammar but invalid once merged onto
+ * stored state is rejected wholesale by resolveTopicPatchCandidate/
+ * resolvePersonPatchCandidate — nothing is written on that path either
+ * way, since the actual write only happens inside writeCorrection's own
+ * self-drain (or, for a live instance, ~100ms later inside the
+ * Processor's own drain tick), never here.
  */
 export async function updateEntity(
   entityType: NonQuoteType | "quote",
   id: string,
   body: unknown
-): Promise<Fact | Topic | Person | Quote> {
+): Promise<ExternalDataItem | Quote> {
   if (entityType === "quote") {
     throw new Error(
       `"ei update quote" is retired. Use "ei fix quote" to correct text, "ei relink quote" to change links, or "ei remove quote" to delete a quote instead — if you were told to call this, your installed skills predate this version. Scheduled for removal two releases after the one that ships this message (ADR-012).`
     );
   }
 
-  const parsed = parseInput(entityType, body, "update");
   const state = await loadLatestState();
   if (!state) {
     throw new Error("No saved state found. Is EI_DATA_PATH set correctly?");
   }
+  const personas = Object.values(state.personas).map((p) => p.entity);
 
-  const array = entityType === "fact" ? state.human.facts : entityType === "topic" ? state.human.topics : state.human.people;
-  if (!array.some((item: { id: string }) => item.id === id)) {
+  if (entityType === "fact") {
+    const parsed = parseInput("fact", body, "update");
+    if (!state.human.facts.some((f) => f.id === id)) {
+      throw new Error(`No fact found with id: ${id}`);
+    }
+    return stripHiddenDataItemFields(await buildAndWriteUpsert("fact", id, parsed, personas));
+  }
+
+  const array = entityType === "topic" ? state.human.topics : state.human.people;
+  const current = array.find((item) => item.id === id);
+  if (!current) {
     throw new Error(`No ${entityType} found with id: ${id}`);
   }
 
-  return stripEmbedding(await buildAndWriteUpsert(entityType, id, parsed, Object.values(state.personas).map((p) => p.entity)));
+  const patch = parsePatchInput(entityType, body);
+  const candidate: Topic | Person =
+    entityType === "topic"
+      ? await resolveTopicPatchCandidate(current as Topic, patch as MergePatch<Topic>)
+      : await resolvePersonPatchCandidate(current as Person, patch as MergePatch<Person>, personas);
+
+  // The correction queued below carries the raw PATCH only — never an
+  // embedding. ADR-029 clause 1 forbids merging at write time against a
+  // snapshot; the authoritative merge that actually decides what gets
+  // written happens again at drain time (self-drain, moments later in
+  // this same call via writeCorrection; or live-drain, ~100ms later in
+  // the Processor's own tick), against whichever state is ACTUALLY
+  // stored then — and THAT call to resolveTopicPatchCandidate/
+  // resolvePersonPatchCandidate is the one that recomputes `embedding`,
+  // from the finally-merged text (see those functions' own doc
+  // comments). Smuggling a write-time embedding through the wire patch
+  // — the previous approach — could silently overwrite a NEWER
+  // description's vector if another write interleaved before this one
+  // drained (Beta's review, [I2]); `candidate` here is a best-effort
+  // PREVIEW for this call's own synchronous response only, computed
+  // against THIS call's own snapshot, and is discarded once returned.
+  const now = new Date().toISOString();
+  const correction: CorrectionRecord = { op: "patch", entity_type: entityType, id, patch, timestamp: now };
+  const { personLinkRefusals, drainMode } = await writeCorrection(correction);
+
+  if (entityType === "person" && drainMode === "self") {
+    const ownRefusals = personLinkRefusals.filter((r) => r.personId === id);
+    if (ownRefusals.length > 0) {
+      const summary = ownRefusals.map((r) => `Persona ${r.value} (${r.reason})`).join("; ");
+      throw new Error(
+        `Person ${id} was saved, but the following Ei Persona link(s) were refused because they would break the one-Person-per-Persona rule: ${summary}`
+      );
+    }
+  }
+
+  return stripHiddenDataItemFields(candidate);
 }
 
 /**

@@ -12,6 +12,7 @@
  */
 
 import { parseArgs } from "util";
+import { readFile } from "fs/promises";
 import { retrieveBalanced, lookupById, lookupByIdentifier, resolveExternalMessage, loadLatestState, resolvePersonLogLength } from "./cli/retrieval";
 import type { StorageState } from "./core/types";
 import { resolvePersonaId, filterByPersona, filterTypeSpecificByPersona, filterBySource, filterTypeSpecificBySource } from "./cli/persona-filter.js";
@@ -97,6 +98,50 @@ function readFlag(args: string[], flag: string): string | undefined {
   return idx !== -1 ? args[idx + 1] : undefined;
 }
 
+/**
+ * Resolves the JSON body for `ei create`/`ei update` from either
+ * `--json '<json>'` (unchanged, argv-exposed) or `--json-file <path>`
+ * (r4: a non-argv input mode for the most sensitive write payloads —
+ * persona reflection especially, where the body may carry a full persona
+ * identity or PersonLog record). Exactly one of the two must be present;
+ * passing both, or neither, is a usage error. `--json-file` never writes
+ * anything itself — the caller supplies the path (typically a `mktemp`
+ * file, per the shipped-skill convention this flag replaces), so this
+ * flag introduces no new predictable-path exposure of its own.
+ */
+async function readJsonBody(args: string[], usage: string): Promise<unknown> {
+  const jsonStr = readFlag(args, "--json");
+  const filePath = readFlag(args, "--json-file");
+
+  if (jsonStr !== undefined && filePath !== undefined) {
+    console.error(`${usage}: pass either --json or --json-file, not both`);
+    process.exit(1);
+  }
+  if (jsonStr === undefined && filePath === undefined) {
+    console.error(`${usage} requires --json '<json>' or --json-file <path>`);
+    process.exit(1);
+  }
+
+  let raw: string;
+  if (filePath !== undefined) {
+    try {
+      raw = await readFile(filePath, "utf-8");
+    } catch (e) {
+      console.error(`Could not read --json-file "${filePath}": ${(e as Error).message}`);
+      process.exit(1);
+    }
+  } else {
+    raw = jsonStr as string;
+  }
+
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    console.error(`Invalid JSON: ${(e as Error).message}`);
+    process.exit(1);
+  }
+}
+
 function printHelp(): void {
   console.log(`
 Ei
@@ -116,8 +161,12 @@ Usage:
   echo <id> | ei --id           Look up entity by ID from stdin
   ei --identifier <type> <value>  Look up a person by identifier type + value, e.g. --identifier "GitHub" "flare576"
   ei mcp                        Start the Ei MCP stdio server (for Claude Code/Cursor/Codex)
-  ei create <type> --json '<json>'  Create a new entity (fact/topic/person/persona)
-  ei update <type> <id> --json '<json>'  Replace an entity by ID (full record, not a patch; fact/topic/person/persona)
+  ei create <type> --json '<json>' | --json-file <path>  Create a new entity (fact/topic/person/persona)
+  ei update <type> <id> --json '<json>' | --json-file <path>  Update an entity by ID — a merge patch for
+                                 topic/person/persona (RFC 7396: omit a field to leave it unchanged, send
+                                 null to clear it, send a value to set it); fact is the one permanent
+                                 exception and stays a full-record replacement (no defaults, nothing to
+                                 merge onto)
   ei remove <type> <id>         Remove an entity by ID (fact/topic/person/quote/persona)
   ei create quote | fix quote | relink quote | remove quote   Quote writes (see Quotes below)
 
@@ -157,7 +206,13 @@ Options:
   --hook-source <src> Source of the hook: "opencode-plugin" (OpenCode SQLite), "cursor", or "codex"
   --transcript <path> Path to a Claude Code JSONL transcript file for context enrichment
   --help, -h          Show this help message
-  --json <json>       JSON body for create/update (full record for update, not a patch); on the quote verbs it merges over the discrete flags
+  --json <json>       JSON body for create/update, on argv (full record for create/fact-update; a merge
+                       patch — only the fields you're changing — for topic/person/persona update); on the
+                       quote verbs it merges over the discrete flags
+  --json-file <path>  Same body as --json, read from a file instead of argv — prefer this for large or
+                       sensitive payloads (persona reflection especially) so the JSON never appears in
+                       process listings/shell history. Exactly one of --json/--json-file is required for
+                       create/update; passing both, or neither, is a usage error.
 
 Examples:
   ei "debugging"                         # Search everything
@@ -172,14 +227,16 @@ Examples:
   ei "memory leak" | jq -r '.[0].id' | ei --id  # Pipe ID from search (every hit — including quotes — carries an id)
   ei --id "ei:abc-123" --before 2 --after 2  # Message ID: read the surrounding conversation
   ei create fact --json '{"name":"Field of Study","description":"CS","sentiment":0,"validated_date":""}'
-  ei update fact abc-123 --json '{"name":"Field of Study","description":"Updated","sentiment":0,"validated_date":""}'
+  ei update fact abc-123 --json '{"name":"Field of Study","description":"Updated","sentiment":0,"validated_date":""}'  # fact: full record, the permanent exception
+  ei update topic abc-123 --json '{"category":"Project"}'  # topic/person/persona: merge patch — only the changed field, everything else untouched
+  ei update person abc-123 --json '{"relationship":null}'  # null clears a field (RFC 7396); omitted fields are simply left alone
   ei create quote --message-id "opencode:my-machine:ses_abc:msg_def" --text "you guessed it"  # Attest a quote against its source message
   ei fix quote --quote-id abc-123 --text "you guessed it, again"   # Re-verify corrected text against the quote's existing source
   ei relink quote abc-123 --to person-b-id  # Repoint a quote after splitting a bad merge
   ei remove quote abc-123                   # Delete a quote
   ei create persona --json '{"display_name":"Yoda","long_description":"Speaks in inverted syntax, wise and patient.","traits":[{"name":"Inverted speech","description":"Talks like Yoda","sentiment":0.7}],"topics":[]}'
-  ei update persona <id> --json '<full persona record from ei --id <id>, edited>'
-  ei remove persona abc-123              # Remove a persona (reserved personas like "ei"/"emmet" must be archived instead)
+  ei update persona abc-123 --json-file /tmp/patch.json  # patch file contains e.g. {"traits":[...]} — only traits changes; display_name/topics/etc stay as stored
+  ei remove persona abc-123              # Remove a persona (reserved personas like "ei"/"emmet" can't be removed at all — use the TUI's /archive command instead)
   ei remove fact abc-123                 # Remove a fact by ID
 `);
 }
@@ -306,19 +363,7 @@ async function main(): Promise<void> {
       console.error(`ei create requires a valid type (${CLI_CORRECTABLE_TYPES.join(", ")}). Got: ${rawType ?? "(none)"}`);
       process.exit(1);
     }
-    const jsonIdx = args.indexOf("--json");
-    const jsonStr = jsonIdx !== -1 ? args[jsonIdx + 1] : undefined;
-    if (!jsonStr) {
-      console.error("ei create requires --json '<json>'");
-      process.exit(1);
-    }
-    let body: unknown;
-    try {
-      body = JSON.parse(jsonStr);
-    } catch (e) {
-      console.error(`Invalid JSON: ${(e as Error).message}`);
-      process.exit(1);
-    }
+    const body = await readJsonBody(args, "ei create");
     try {
       const result = entityType === "persona" ? await createPersonaEntity(body) : await createEntity(entityType, body);
       console.log(JSON.stringify(result, null, 2));
@@ -334,16 +379,16 @@ async function main(): Promise<void> {
     const id = args[2];
     const entityType = rawType ? resolveUpdatableType(rawType) : null;
     if (!entityType || !id) {
-      console.error(`Usage: ei update <type> <id> --json '<json>' (types: ${CLI_UPDATABLE_TYPES.join(", ")})`);
+      console.error(`Usage: ei update <type> <id> --json '<json>' | --json-file <path> (types: ${CLI_UPDATABLE_TYPES.join(", ")})`);
       process.exit(1);
     }
     // I2 (.sisyphus/reviews/quote-attestation-final-implementation.md):
     // the ADR-012 tombstone must be unconditional once "quote" is
     // recognized as the update target -- reached here, before requiring
-    // or parsing --json at all, so a missing or malformed legacy payload
-    // still gets the retirement guidance instead of a generic parse/
-    // usage error. updateEntity's own quote branch ignores `body`
-    // entirely and always throws, so passing `undefined` is safe.
+    // or parsing --json/--json-file at all, so a missing or malformed
+    // legacy payload still gets the retirement guidance instead of a
+    // generic parse/usage error. updateEntity's own quote branch ignores
+    // `body` entirely and always throws, so passing `undefined` is safe.
     if (entityType === "quote") {
       try {
         await updateEntity(entityType, id, undefined);
@@ -352,19 +397,7 @@ async function main(): Promise<void> {
         process.exit(1);
       }
     }
-    const jsonIdx = args.indexOf("--json");
-    const jsonStr = jsonIdx !== -1 ? args[jsonIdx + 1] : undefined;
-    if (!jsonStr) {
-      console.error("ei update requires --json '<json>'");
-      process.exit(1);
-    }
-    let body: unknown;
-    try {
-      body = JSON.parse(jsonStr);
-    } catch (e) {
-      console.error(`Invalid JSON: ${(e as Error).message}`);
-      process.exit(1);
-    }
+    const body = await readJsonBody(args, "ei update");
     try {
       const record = entityType === "persona" ? await updatePersonaEntity(id, body) : await updateEntity(entityType, id, body);
       console.log(JSON.stringify(record, null, 2));

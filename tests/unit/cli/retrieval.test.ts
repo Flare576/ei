@@ -321,6 +321,40 @@ describe("lookupById", () => {
     expect(result).not.toHaveProperty("embedding");
   });
 
+  // Beta's review, plan-1-adr029-merge-patch.md [I1]: ADR-031 also marks
+  // `rewrite_length_floor` (all three types) and `exposure_current`/
+  // `exposure_desired`/`last_ei_asked` (Topic/Person only) System Hidden --
+  // absent from every external read, not merely `embedding`.
+  it("strips rewrite_length_floor/exposure_current/exposure_desired/last_ei_asked from a topic lookup (ADR-031 [I1])", async () => {
+    const state = createTestState({ topics: 1 });
+    (state.human.topics[0] as unknown as Record<string, unknown>).rewrite_length_floor = 42;
+    (state.human.topics[0] as unknown as Record<string, unknown>).last_ei_asked = "2026-01-01T00:00:00.000Z";
+    writeTestState(state);
+
+    const result = await lookupById("topic_0");
+
+    expect(result).not.toBeNull();
+    expect(result).not.toHaveProperty("rewrite_length_floor");
+    expect(result).not.toHaveProperty("exposure_current");
+    expect(result).not.toHaveProperty("exposure_desired");
+    expect(result).not.toHaveProperty("last_ei_asked");
+  });
+
+  it("strips rewrite_length_floor/exposure_current/exposure_desired/last_ei_asked from a person lookup (ADR-031 [I1])", async () => {
+    const state = createTestState({ people: 1 });
+    (state.human.people[0] as unknown as Record<string, unknown>).rewrite_length_floor = 42;
+    (state.human.people[0] as unknown as Record<string, unknown>).last_ei_asked = "2026-01-01T00:00:00.000Z";
+    writeTestState(state);
+
+    const result = await lookupById("person_0");
+
+    expect(result).not.toBeNull();
+    expect(result).not.toHaveProperty("rewrite_length_floor");
+    expect(result).not.toHaveProperty("exposure_current");
+    expect(result).not.toHaveProperty("exposure_desired");
+    expect(result).not.toHaveProperty("last_ei_asked");
+  });
+
   it("returns null for nonexistent ID", async () => {
     writeTestState(createTestState({ facts: 1, topics: 1 }));
     const result = await lookupById("nonexistent_id");
@@ -679,7 +713,7 @@ describe("lookupById — persona records", () => {
   });
 });
 
-describe("lookupById — persona tools boolean-map enrichment", () => {
+describe("lookupById — persona `tools` is System Hidden (ADR-031 [I1])", () => {
   function makeProvider(overrides: Partial<ToolProvider> = {}): ToolProvider {
     return {
       id: crypto.randomUUID(),
@@ -709,7 +743,7 @@ describe("lookupById — persona tools boolean-map enrichment", () => {
     };
   }
 
-  it("replaces the flat tools id array with a nested provider->tool->boolean map, excluding disabled providers", async () => {
+  it("never surfaces `tools` -- neither the flat id array nor an enriched map -- even when tools are actually granted", async () => {
     const state = createTestState({ personas: 1, personaNamePrefix: "TestAgent" }) as unknown as StorageState;
     (state.personas["persona_0"].entity as PersonaEntity).tools = ["t-web-search", "t-list-issues"];
 
@@ -726,10 +760,11 @@ describe("lookupById — persona tools boolean-map enrichment", () => {
     const result = await lookupById("persona_0");
 
     expect(result).not.toBeNull();
-    expect(result!.tools).toEqual({
-      "Brave Search": { "Web Search": true, "News Search": false },
-    });
-    expect(result!.tools).not.toHaveProperty("GitHub");
+    // Beta's review [I1]: the prior "enriched provider->tool->boolean map"
+    // response WAS the leak ADR-031 closes -- `tools` only affects
+    // in-harness behavior, so it must be absent from an external read
+    // entirely, not merely reshaped.
+    expect(result).not.toHaveProperty("tools");
   });
 
   it("leaves tools absent when no tools are registered at all", async () => {

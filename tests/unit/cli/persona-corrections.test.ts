@@ -43,7 +43,6 @@ vi.mock("../../../src/core/embedding-service.js", async (importOriginal) => {
 import { loadLatestState } from "../../../src/cli/retrieval.js";
 import { createPersonaEntity, updatePersonaEntity, removePersonaEntity } from "../../../src/cli/persona-corrections.js";
 import { CorrectionValidationError } from "../../../src/cli/corrections-endpoints.js";
-import { buildPersonaToolsMap } from "../../../src/core/persona-tools.js";
 import { NOTES_MAX } from "../../../src/core/tools/builtin/persona-notes.js";
 
 function makeExistingPersonaEntity(id: string, overrides: Partial<PersonaEntity> = {}): PersonaEntity {
@@ -60,6 +59,7 @@ function makeExistingPersonaEntity(id: string, overrides: Partial<PersonaEntity>
     traits: [],
     topics: [],
     tools: ["tool-1"],
+    external_reflection_only: false,
     is_paused: false,
     is_archived: false,
     is_static: false,
@@ -154,8 +154,8 @@ describe("createPersonaEntity", () => {
     expect(record.id).toBe(id);
     expect(record.display_name).toBe("Nova");
     expect(record.entity).toBe("system");
-    expect(record.is_paused).toBe(false);
-    expect(record.is_archived).toBe(false);
+    expect(record).not.toHaveProperty("is_paused");
+    expect(record).not.toHaveProperty("is_archived");
     expect(record.is_static).toBe(false);
     expect(record.aliases).toEqual(["Nova"]);
     expect(record.group_primary).toBe("General");
@@ -163,6 +163,12 @@ describe("createPersonaEntity", () => {
     expect(record.traits).toEqual([]);
     expect(record.topics).toEqual([]);
     expect(record).not.toHaveProperty("description_embedding");
+    // is_paused/is_archived are System Hidden (ADR-031) -- absent from the
+    // response above -- but the "sensible defaults" claim still needs a
+    // real assertion somewhere: verify the persisted record.
+    const state = await loadLatestState();
+    expect(state!.personas[id].entity.is_paused).toBe(false);
+    expect(state!.personas[id].entity.is_archived).toBe(false);
   });
 
   it("defaults external_reflection_only to false when omitted from a create body", async () => {
@@ -310,91 +316,40 @@ describe("createPersonaEntity", () => {
     );
   });
 
-  it("grants a tool via a boolean-map tools payload, persisting only the resolved flat id and returning the re-enriched map", async () => {
-    const brave = makeToolProvider({ id: "p-brave", display_name: "Brave Search" });
-    const webSearch = makeToolDefinition({ id: "t-web-search", provider_id: "p-brave", display_name: "Web Search" });
-    const newsSearch = makeToolDefinition({ id: "t-news-search", provider_id: "p-brave", display_name: "News Search" });
-    writeState(makeState({}, { providers: [brave], tools: [webSearch, newsSearch] }));
+  // `tools` (along with model/group_primary/groups_visible/is_paused/
+  // pause_until/is_archived/archived_at/heartbeat_delay_ms/context_window_ms/
+  // include_message_timestamps/context_boundary) left the external write
+  // contract entirely — ADR-031, this plan's TODO 3. Granting/revoking tools
+  // is a TUI-only action now; the four "grants a tool via boolean-map
+  // payload"/"rejects an unknown provider/tool" tests this block used to
+  // have are replaced by this single red-first rejection test.
+  it("rejects a tools payload on create as an unrecognized field (ADR-031)", async () => {
+    writeState(makeState({}));
 
-    const { id, record } = await createPersonaEntity({
-      display_name: "Nova",
-      tools: { "Brave Search": { "Web Search": true, "News Search": false } },
-    });
+    await expect(
+      createPersonaEntity({ display_name: "Nova", tools: { "Brave Search": { "Web Search": true } } })
+    ).rejects.toThrow(/Unrecognized key\(s\) in object: 'tools'/);
 
-    expect(record.tools).toEqual({ "Brave Search": { "Web Search": true, "News Search": false } });
-    expect(Array.isArray(record.tools)).toBe(false);
-
+    // Nothing was written — the whole create is refused, not partially applied.
     const persisted = await loadLatestState();
-    expect(persisted!.personas[id].entity.tools).toEqual(["t-web-search"]);
-  });
-
-  it("rejects a tools payload naming an unknown provider", async () => {
-    const brave = makeToolProvider({ id: "p-brave", display_name: "Brave Search" });
-    const webSearch = makeToolDefinition({ id: "t-web-search", provider_id: "p-brave", display_name: "Web Search" });
-    writeState(makeState({}, { providers: [brave], tools: [webSearch] }));
-
-    await expect(
-      createPersonaEntity({ display_name: "Nova", tools: { "Nonexistent Provider": { "Web Search": true } } })
-    ).rejects.toThrow(CorrectionValidationError);
-    await expect(
-      createPersonaEntity({ display_name: "Nova", tools: { "Nonexistent Provider": { "Web Search": true } } })
-    ).rejects.toThrow(/unknown provider "Nonexistent Provider"/);
-  });
-
-  it("rejects a tools payload naming an unknown tool under a known provider", async () => {
-    const brave = makeToolProvider({ id: "p-brave", display_name: "Brave Search" });
-    const webSearch = makeToolDefinition({ id: "t-web-search", provider_id: "p-brave", display_name: "Web Search" });
-    writeState(makeState({}, { providers: [brave], tools: [webSearch] }));
-
-    await expect(
-      createPersonaEntity({ display_name: "Nova", tools: { "Brave Search": { "Nonexistent Tool": true } } })
-    ).rejects.toThrow(CorrectionValidationError);
-    await expect(
-      createPersonaEntity({ display_name: "Nova", tools: { "Brave Search": { "Nonexistent Tool": true } } })
-    ).rejects.toThrow(/unknown tool "Nonexistent Tool" under provider "Brave Search"/);
-  });
-
-  it("rejects granting a tool under a disabled provider instead of silently no-op-ing", async () => {
-    const github = makeToolProvider({ id: "p-github", display_name: "GitHub", enabled: false });
-    const listIssues = makeToolDefinition({ id: "t-list-issues", provider_id: "p-github", display_name: "List Issues" });
-    writeState(makeState({}, { providers: [github], tools: [listIssues] }));
-
-    await expect(
-      createPersonaEntity({ display_name: "Nova", tools: { "GitHub": { "List Issues": true } } })
-    ).rejects.toThrow(CorrectionValidationError);
-    await expect(
-      createPersonaEntity({ display_name: "Nova", tools: { "GitHub": { "List Issues": true } } })
-    ).rejects.toThrow(/provider "GitHub" is disabled/);
+    expect(Object.keys(persisted!.personas)).toHaveLength(0);
   });
 });
 
 // ── updatePersonaEntity ───────────────────────────────────────────────────────
 
 describe("updatePersonaEntity", () => {
-  it("drops fields omitted from the update payload instead of preserving the prior value", async () => {
-    const existing = makeExistingPersonaEntity(PERSONA_ID);
-    writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }));
-
-    const updated = await updatePersonaEntity(PERSONA_ID, { display_name: "New Name" });
-
-    expect(updated.display_name).toBe("New Name");
-    expect(updated.aliases).toBeUndefined();
-    expect(updated.short_description).toBeUndefined();
-    expect(updated.long_description).toBeUndefined();
-    expect(updated.model).toBeUndefined();
-    expect(updated.group_primary).toBeUndefined();
-    expect(updated.groups_visible).toBeUndefined();
-    expect(updated.tools).toBeUndefined();
-    expect(updated.heartbeat_delay_ms).toBeUndefined();
-    expect(updated.context_window_ms).toBeUndefined();
-    expect(updated.avatar_emoji).toBeUndefined();
-    expect(updated.notes).toBeUndefined();
-  });
-
-  it("resets traits/topics/is_paused/is_archived to their schema defaults (not the prior value) when omitted", async () => {
+  // Red-first regression for GH-82/this plan's TODO 5 & 8: before ADR-029's
+  // merge-patch pipeline, EVERY field a caller omitted from an `update`
+  // payload was silently reset to its create-time default — omitting
+  // `traits`/`aliases`/`notes` erased them, omitting `external_reflection_only`
+  // re-enrolled a persona in the automatic critic. This test proves the fix:
+  // a patch mentioning only `display_name` leaves every other field, on
+  // every code path (server-owned/Hidden fields included, since they were
+  // never reachable to begin with), exactly as it was stored.
+  it("leaves every field the patch doesn't mention completely unchanged (ADR-029 omission-preserves, GH-82)", async () => {
     const existing = makeExistingPersonaEntity(PERSONA_ID, {
-      is_paused: true,
-      is_archived: true,
+      external_reflection_only: true,
       traits: [{ id: "old-trait", name: "Old Trait", description: "d", sentiment: 0, last_updated: INITIAL_NOW }],
       topics: [
         {
@@ -412,12 +367,34 @@ describe("updatePersonaEntity", () => {
     });
     writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }));
 
-    const updated = await updatePersonaEntity(PERSONA_ID, { display_name: "Original Name" });
+    const updated = await updatePersonaEntity(PERSONA_ID, { display_name: "New Name" });
 
-    expect(updated.is_paused).toBe(false);
-    expect(updated.is_archived).toBe(false);
-    expect(updated.traits).toEqual([]);
-    expect(updated.topics).toEqual([]);
+    expect(updated.display_name).toBe("New Name");
+    expect(updated.aliases).toEqual(existing.aliases);
+    expect(updated.short_description).toBe(existing.short_description);
+    expect(updated.long_description).toBe(existing.long_description);
+    expect(updated.avatar_emoji).toBe(existing.avatar_emoji);
+    expect(updated.preferred_theme).toBe(existing.preferred_theme);
+    expect(updated.notes).toEqual(existing.notes);
+    expect(updated.traits).toEqual(existing.traits);
+    expect(updated.topics).toEqual(existing.topics);
+    expect(updated.external_reflection_only).toBe(true);
+    // Server-owned/Hidden fields are gone from the response entirely now
+    // (ADR-031: System Hidden, not merely unwritable) -- verified against
+    // the persisted record below instead, where they must still be
+    // untouched by construction (never in the patch schema, so never
+    // reachable via the payload at all).
+    expect(updated.group_primary).toBe(existing.group_primary);
+    expect(updated.groups_visible).toEqual(existing.groups_visible);
+
+    const persisted = await loadLatestState();
+    const reloaded = persisted!.personas[PERSONA_ID].entity;
+    expect(reloaded.display_name).toBe("New Name");
+    expect(reloaded.traits).toEqual(existing.traits);
+    expect(reloaded.topics).toEqual(existing.topics);
+    expect(reloaded.external_reflection_only).toBe(true);
+    expect(reloaded.is_paused).toBe(existing.is_paused);
+    expect(reloaded.is_archived).toBe(existing.is_archived);
   });
 
   it("replaces the traits array wholesale when the payload supplies new traits, discarding the old ones entirely", async () => {
@@ -436,7 +413,37 @@ describe("updatePersonaEntity", () => {
     expect(updated.traits.some((t) => t.id === "old-trait")).toBe(false);
   });
 
-  it("strips server-owned round-trip fields before validation so a lookupById-style read doesn't fail strictObject", async () => {
+  it("rejects every ADR-031 Hidden/System-Visible field on update as an unrecognized key, not a silent strip-and-ignore", async () => {
+    const existing = makeExistingPersonaEntity(PERSONA_ID);
+    const hiddenFields: Array<[string, unknown]> = [
+      ["model", "Local LLM:other-model"],
+      ["group_primary", "NewGroup"],
+      ["groups_visible", ["NewGroup"]],
+      ["tools", { "Brave Search": { "Web Search": true } }],
+      ["is_paused", true],
+      ["pause_until", "2027-01-01T00:00:00.000Z"],
+      ["is_archived", true],
+      ["archived_at", "2027-01-01T00:00:00.000Z"],
+      ["heartbeat_delay_ms", 9999],
+      ["context_window_ms", 9999],
+      ["include_message_timestamps", false],
+      ["context_boundary", "2027-01-01T00:00:00.000Z"],
+    ];
+
+    for (const [field, value] of hiddenFields) {
+      writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }));
+      await expect(
+        updatePersonaEntity(PERSONA_ID, { display_name: "Renamed", [field]: value })
+      ).rejects.toThrow(new RegExp(`Unrecognized key\\(s\\) in object: '${field}'`));
+      // Nothing was written — the whole update is refused, not partially applied.
+      const persisted = await loadLatestState();
+      expect(persisted!.personas[PERSONA_ID].entity.display_name).toBe(existing.display_name);
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+    tempDir = undefined as never;
+  });
+
+  it("strips the four structural round-trip fields (id/type/entity/last_updated) before validation so a lookupById-style read doesn't fail strictObject, once every Hidden/System-Visible field is also dropped by the caller", async () => {
     const existing = makeExistingPersonaEntity(PERSONA_ID, {
       description_embedding: [0.9, 0.9, 0.9],
       tools: undefined,
@@ -451,58 +458,109 @@ describe("updatePersonaEntity", () => {
         created_at: "2026-01-02T00:00:00.000Z",
       },
     });
-    const expectedWritableFields = {
-      display_name: existing.display_name,
-      aliases: existing.aliases,
-      short_description: existing.short_description,
-      long_description: existing.long_description,
-      model: existing.model,
-      group_primary: existing.group_primary,
-      groups_visible: existing.groups_visible,
-      traits: existing.traits,
-      topics: existing.topics,
-      is_paused: existing.is_paused,
-      is_archived: existing.is_archived,
-      heartbeat_delay_ms: existing.heartbeat_delay_ms,
-      context_window_ms: existing.context_window_ms,
-      include_message_timestamps: existing.include_message_timestamps,
-      context_boundary: existing.context_boundary,
-      avatar_emoji: existing.avatar_emoji,
-      preferred_theme: existing.preferred_theme,
-      notes: existing.notes,
-    };
     writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }));
 
+    // The NEW round-trip pattern: a caller submits only the writable subset
+    // of what `ei --id` returned — the four structural fields are tolerated
+    // (silently stripped), but the ten Hidden/System-Visible fields
+    // (model/group_primary/groups_visible/tools/is_paused/pause_until/
+    // is_archived/archived_at/heartbeat_delay_ms/context_window_ms/
+    // include_message_timestamps/context_boundary) and `pending_update`'s
+    // own object form must be dropped by the caller first — this is exactly
+    // the behavior change this plan's docs sweep (TODO 7) teaches.
+    const {
+      model, group_primary, groups_visible, tools, is_paused, pause_until,
+      is_archived, archived_at, heartbeat_delay_ms, context_window_ms,
+      include_message_timestamps, context_boundary, pending_update,
+      ...writablePayload
+    } = existing;
+    void model; void group_primary; void groups_visible; void tools; void is_paused;
+    void pause_until; void is_archived; void archived_at; void heartbeat_delay_ms;
+    void context_window_ms; void include_message_timestamps; void context_boundary;
+    void pending_update;
+
     const roundTripPayload = {
-      ...existing,
+      ...writablePayload,
       type: "persona", // lookupById's discriminator -- not a PersonaEntity field at all
     };
 
     const updated = await updatePersonaEntity(PERSONA_ID, roundTripPayload);
 
-    expect(updated).toMatchObject(expectedWritableFields);
+    expect(updated.display_name).toBe(existing.display_name);
+    expect(updated.aliases).toEqual(existing.aliases);
+    expect(updated.short_description).toBe(existing.short_description);
+    expect(updated.long_description).toBe(existing.long_description);
+    expect(updated.notes).toEqual(existing.notes);
+    // Untouched by the payload -- preserved by merge-patch omission, exactly
+    // like every Hidden field the caller could never have sent anyway.
+    // `last_heartbeat` is System Hidden (ADR-031) and is gone from the
+    // response entirely now -- verified against the persisted record below.
     expect(updated.is_static).toBe(existing.is_static);
-    expect(updated.last_heartbeat).toBe(existing.last_heartbeat);
-    expect(updated.pending_update).toBeUndefined();
+    // `pending_update` is Clearable, not auto-wiped: since this payload
+    // never mentions it (excluded above), merge-patch leaves it exactly as
+    // it was -- the opposite of the old full-record-replace behavior,
+    // which used to drop it on every update regardless of payload. See the
+    // dedicated "clears pending_update only when..." test below for the
+    // explicit-null path.
+    expect(updated.pending_update).toEqual(existing.pending_update);
 
     const persisted = await loadLatestState();
     const reloaded = persisted!.personas[PERSONA_ID].entity;
-    expect(reloaded).toMatchObject(expectedWritableFields);
+    expect(reloaded.display_name).toBe(existing.display_name);
     expect(reloaded.is_static).toBe(existing.is_static);
     expect(reloaded.last_heartbeat).toBe(existing.last_heartbeat);
-    expect(reloaded.pending_update).toBeUndefined();
+    expect(reloaded.pending_update).toEqual(existing.pending_update);
   });
 
-  it("preserves external_reflection_only: true across a full-record round trip (lookupById-style read -> update) -- catches both the strip-list and record-literal hazards", async () => {
+  it("clears pending_update only when the patch explicitly sends null -- never as a side effect of an unrelated field edit (ADR-029 clause 5)", async () => {
+    const pendingUpdate = {
+      short_description: "Pending short description",
+      long_description: "Pending long description",
+      traits: [],
+      topics: [],
+      critique: "Pending critique",
+      created_at: "2026-01-02T00:00:00.000Z",
+    };
+    const existing = makeExistingPersonaEntity(PERSONA_ID, { pending_update: pendingUpdate });
+    writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }));
+
+    // An unrelated edit that never mentions pending_update leaves it in place.
+    const afterUnrelatedEdit = await updatePersonaEntity(PERSONA_ID, { display_name: "New Name" });
+    expect(afterUnrelatedEdit.pending_update).toEqual(pendingUpdate);
+
+    // Explicit null clears it.
+    const afterClear = await updatePersonaEntity(PERSONA_ID, { pending_update: null });
+    expect(afterClear.pending_update).toBeUndefined();
+
+    const persisted = await loadLatestState();
+    expect(persisted!.personas[PERSONA_ID].entity.pending_update).toBeUndefined();
+  });
+
+  it("rejects a non-null pending_update outright, writing nothing (Clearable, not settable)", async () => {
+    const pendingUpdate = {
+      short_description: "Pending short description",
+      long_description: "Pending long description",
+      traits: [],
+      topics: [],
+      critique: "Pending critique",
+      created_at: "2026-01-02T00:00:00.000Z",
+    };
+    const existing = makeExistingPersonaEntity(PERSONA_ID, { pending_update: pendingUpdate });
+    writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }));
+
+    await expect(
+      updatePersonaEntity(PERSONA_ID, { pending_update: { critique: "Forged proposal" } })
+    ).rejects.toThrow(CorrectionValidationError);
+
+    const persisted = await loadLatestState();
+    expect(persisted!.personas[PERSONA_ID].entity.pending_update).toEqual(pendingUpdate);
+  });
+
+  it("preserves external_reflection_only: true when a round-trip payload omits it, and when an unrelated field changes", async () => {
     const existing = makeExistingPersonaEntity(PERSONA_ID, { external_reflection_only: true, tools: undefined });
     writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }));
 
-    const roundTripPayload = {
-      ...existing,
-      type: "persona", // lookupById's discriminator -- not a PersonaEntity field at all
-    };
-
-    const updated = await updatePersonaEntity(PERSONA_ID, roundTripPayload);
+    const updated = await updatePersonaEntity(PERSONA_ID, { display_name: "Renamed" });
 
     expect(updated.external_reflection_only).toBe(true);
   });
@@ -524,14 +582,11 @@ describe("updatePersonaEntity", () => {
     );
   });
 
-  it("recomputes description_embedding whenever long_description is present, even when unchanged", async () => {
+  it("recomputes description_embedding whenever the candidate ends up with a long_description, even when the payload never mentions it", async () => {
     const existing = makeExistingPersonaEntity(PERSONA_ID, { long_description: "Old description" });
     writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }));
 
-    const updated = await updatePersonaEntity(PERSONA_ID, {
-      display_name: "Original Name",
-      long_description: "Old description",
-    });
+    const updated = await updatePersonaEntity(PERSONA_ID, { display_name: "Original Name" });
 
     expect(updated).not.toHaveProperty("description_embedding");
 
@@ -541,13 +596,27 @@ describe("updatePersonaEntity", () => {
     expect(embedding!.length).toBeGreaterThan(0);
   });
 
-  it("never recomputes description_embedding when long_description is absent from the payload", async () => {
-    const existing = makeExistingPersonaEntity(PERSONA_ID, { long_description: "Old description" });
+  it("never computes description_embedding when the candidate has no long_description at all", async () => {
+    const existing = makeExistingPersonaEntity(PERSONA_ID, { long_description: undefined });
     writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }));
 
     await updatePersonaEntity(PERSONA_ID, { display_name: "Original Name" });
 
     const persisted = await loadLatestState();
+    expect(persisted!.personas[PERSONA_ID].entity.description_embedding).toBeUndefined();
+  });
+
+  it("clears description_embedding when a patch explicitly clears long_description (null)", async () => {
+    const existing = makeExistingPersonaEntity(PERSONA_ID, {
+      long_description: "Old description",
+      description_embedding: [0.1, 0.2, 0.3],
+    });
+    writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }));
+
+    await updatePersonaEntity(PERSONA_ID, { display_name: "Original Name", long_description: null });
+
+    const persisted = await loadLatestState();
+    expect(persisted!.personas[PERSONA_ID].entity.long_description).toBeUndefined();
     expect(persisted!.personas[PERSONA_ID].entity.description_embedding).toBeUndefined();
   });
 
@@ -578,204 +647,46 @@ describe("updatePersonaEntity", () => {
 
     await expect(
       updatePersonaEntity(PERSONA_ID, { display_name: "Original Name", notes })
-    ).rejects.toThrow(new RegExp(`^Invalid persona: notes: Array must contain at most ${NOTES_MAX} element`));
+    ).rejects.toThrow(new RegExp(`^Invalid persona update: notes: Array must contain at most ${NOTES_MAX} element`));
   });
 
-  it("round-trips a tools map from a prior read, flipping exactly one flag while leaving every other grant untouched", async () => {
+  // `tools` left the external write contract entirely (ADR-031) — granting/
+  // revoking is a TUI-only action now. The eight round-trip/revoke/preserve
+  // tests this block used to have (all exercising a `tools` update payload)
+  // are replaced by these two: one proving the field is hard-rejected, one
+  // proving an existing grant simply survives any update that (necessarily)
+  // never mentions it, and still shows correctly in the enriched response.
+  it("rejects a tools payload on update as an unrecognized field (ADR-031)", async () => {
     const brave = makeToolProvider({ id: "p-brave", display_name: "Brave Search" });
     const webSearch = makeToolDefinition({ id: "t-web-search", provider_id: "p-brave", display_name: "Web Search" });
-    const newsSearch = makeToolDefinition({ id: "t-news-search", provider_id: "p-brave", display_name: "News Search" });
-    const imageSearch = makeToolDefinition({ id: "t-image-search", provider_id: "p-brave", display_name: "Image Search" });
-    const allTools = [webSearch, newsSearch, imageSearch];
-    const allProviders = [brave];
-
-    // Existing grants: Web Search + Image Search, NOT News Search.
-    const existing = makeExistingPersonaEntity(PERSONA_ID, { tools: ["t-web-search", "t-image-search"] });
-    writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }, { providers: allProviders, tools: allTools }));
-
-    // Simulate exactly what a caller following the documented `ei --id` ->
-    // edit -> `ei update persona` round trip would send: the SAME
-    // read-shaped map lookupById would have returned, with exactly one
-    // flag flipped (News Search false -> true).
-    const readShapedInput = buildPersonaToolsMap(existing.tools!, allTools, allProviders)!;
-    expect(readShapedInput).toEqual({
-      "Brave Search": { "Web Search": true, "News Search": false, "Image Search": true },
-    });
-    const flippedInput = {
-      "Brave Search": { ...readShapedInput["Brave Search"], "News Search": true },
-    };
-
-    const updated = await updatePersonaEntity(PERSONA_ID, {
-      display_name: existing.display_name,
-      tools: flippedInput,
-    });
-
-    expect(updated.tools).toEqual({
-      "Brave Search": { "Web Search": true, "News Search": true, "Image Search": true },
-    });
-
-    const persisted = await loadLatestState();
-    expect(persisted!.personas[PERSONA_ID].entity.tools?.slice().sort()).toEqual(
-      ["t-image-search", "t-news-search", "t-web-search"].sort()
-    );
-  });
-
-  it("rejects an update tools payload naming an unknown provider", async () => {
-    const brave = makeToolProvider({ id: "p-brave", display_name: "Brave Search" });
-    const webSearch = makeToolDefinition({ id: "t-web-search", provider_id: "p-brave", display_name: "Web Search" });
-    const existing = makeExistingPersonaEntity(PERSONA_ID, { tools: undefined });
+    const existing = makeExistingPersonaEntity(PERSONA_ID, { tools: ["t-web-search"] });
     writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }, { providers: [brave], tools: [webSearch] }));
 
     await expect(
-      updatePersonaEntity(PERSONA_ID, {
-        display_name: existing.display_name,
-        tools: { "Nonexistent Provider": { "Web Search": true } },
-      })
-    ).rejects.toThrow(CorrectionValidationError);
-    await expect(
-      updatePersonaEntity(PERSONA_ID, {
-        display_name: existing.display_name,
-        tools: { "Nonexistent Provider": { "Web Search": true } },
-      })
-    ).rejects.toThrow(/unknown provider "Nonexistent Provider"/);
+      updatePersonaEntity(PERSONA_ID, { display_name: "Renamed", tools: { "Brave Search": { "Web Search": false } } })
+    ).rejects.toThrow(/Unrecognized key\(s\) in object: 'tools'/);
+
+    // Nothing was written — the grant is untouched, the name is untouched.
+    const persisted = await loadLatestState();
+    expect(persisted!.personas[PERSONA_ID].entity.tools).toEqual(["t-web-search"]);
+    expect(persisted!.personas[PERSONA_ID].entity.display_name).toBe(existing.display_name);
   });
 
-  it("rejects an update tools payload naming an unknown tool under a known provider", async () => {
+  it("an existing tools grant survives an update that never mentions tools, and `tools` is absent from the response entirely (ADR-031 [I1])", async () => {
     const brave = makeToolProvider({ id: "p-brave", display_name: "Brave Search" });
     const webSearch = makeToolDefinition({ id: "t-web-search", provider_id: "p-brave", display_name: "Web Search" });
-    const existing = makeExistingPersonaEntity(PERSONA_ID, { tools: undefined });
+    const existing = makeExistingPersonaEntity(PERSONA_ID, { tools: ["t-web-search"] });
     writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }, { providers: [brave], tools: [webSearch] }));
 
-    await expect(
-      updatePersonaEntity(PERSONA_ID, {
-        display_name: existing.display_name,
-        tools: { "Brave Search": { "Nonexistent Tool": true } },
-      })
-    ).rejects.toThrow(CorrectionValidationError);
-    await expect(
-      updatePersonaEntity(PERSONA_ID, {
-        display_name: existing.display_name,
-        tools: { "Brave Search": { "Nonexistent Tool": true } },
-      })
-    ).rejects.toThrow(/unknown tool "Nonexistent Tool" under provider "Brave Search"/);
-  });
+    const updated = await updatePersonaEntity(PERSONA_ID, { display_name: "Renamed Persona" });
 
-  it("preserves an existing grant under a disabled provider when the submitted tools map covers only visible/enabled providers (I5)", async () => {
-    const brave = makeToolProvider({ id: "p-brave", display_name: "Brave Search", enabled: true });
-    const legacy = makeToolProvider({ id: "p-legacy", display_name: "Legacy Provider", enabled: false });
-    const webSearch = makeToolDefinition({ id: "t-web-search", provider_id: "p-brave", display_name: "Web Search" });
-    const hiddenTool = makeToolDefinition({ id: "t-hidden", provider_id: "p-legacy", display_name: "Hidden Tool" });
-    const allTools = [webSearch, hiddenTool];
-    const allProviders = [brave, legacy];
-
-    // Existing grants: Web Search (visible, Brave enabled) + Hidden Tool
-    // (invisible, Legacy disabled).
-    const existing = makeExistingPersonaEntity(PERSONA_ID, { tools: ["t-web-search", "t-hidden"] });
-    writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }, { providers: allProviders, tools: allTools }));
-
-    // A real read only ever shows the visible portion -- the disabled
-    // provider (and its tool) never appears.
-    const readShapedInput = buildPersonaToolsMap(existing.tools!, allTools, allProviders)!;
-    expect(readShapedInput).toEqual({ "Brave Search": { "Web Search": true } });
-
-    // Caller round-trips exactly that map, unmodified, alongside an
-    // unrelated field edit -- the real-world "read -> edit unrelated
-    // field -> write back" flow from I5.
-    const updated = await updatePersonaEntity(PERSONA_ID, {
-      display_name: "Renamed Persona",
-      tools: readShapedInput,
-    });
-
-    // The disabled provider's grant must have survived even though it was
-    // never present in the submitted payload.
-    const persisted = await loadLatestState();
-    expect(persisted!.personas[PERSONA_ID].entity.tools?.slice().sort()).toEqual(
-      ["t-hidden", "t-web-search"].sort()
-    );
-    // And it stays invisible in the enriched response, exactly as
-    // buildPersonaToolsMap already guarantees on read.
-    expect(updated.tools).toEqual({ "Brave Search": { "Web Search": true } });
-  });
-
-  it("preserves a grant under a disabled provider even when `tools` is omitted from the request body entirely (I5)", async () => {
-    const brave = makeToolProvider({ id: "p-brave", display_name: "Brave Search", enabled: true });
-    const legacy = makeToolProvider({ id: "p-legacy", display_name: "Legacy Provider", enabled: false });
-    const webSearch = makeToolDefinition({ id: "t-web-search", provider_id: "p-brave", display_name: "Web Search" });
-    const hiddenTool = makeToolDefinition({ id: "t-hidden", provider_id: "p-legacy", display_name: "Hidden Tool" });
-    const allTools = [webSearch, hiddenTool];
-    const allProviders = [brave, legacy];
-
-    const existing = makeExistingPersonaEntity(PERSONA_ID, { tools: ["t-web-search", "t-hidden"] });
-    writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }, { providers: allProviders, tools: allTools }));
-
-    // No `tools` key at all in the request body -- full-record-replace
-    // semantics wipe the visible portion (pre-existing, documented
-    // behavior for every other omitted field), but the hidden grant must
-    // still survive unconditionally.
-    await updatePersonaEntity(PERSONA_ID, { display_name: "Renamed Persona" });
+    // `tools` is System Hidden (ADR-031) -- Beta's review [I1] found the
+    // prior "enriched map" response was itself the leak this ADR closes.
+    // Absent entirely now, not merely reshaped.
+    expect(updated).not.toHaveProperty("tools");
 
     const persisted = await loadLatestState();
-    expect(persisted!.personas[PERSONA_ID].entity.tools).toEqual(["t-hidden"]);
-  });
-
-  it("still revokes a visible grant flipped to false, without resurrecting it via hidden-grant preservation", async () => {
-    const brave = makeToolProvider({ id: "p-brave", display_name: "Brave Search", enabled: true });
-    const legacy = makeToolProvider({ id: "p-legacy", display_name: "Legacy Provider", enabled: false });
-    const webSearch = makeToolDefinition({ id: "t-web-search", provider_id: "p-brave", display_name: "Web Search" });
-    const newsSearch = makeToolDefinition({ id: "t-news-search", provider_id: "p-brave", display_name: "News Search" });
-    const hiddenTool = makeToolDefinition({ id: "t-hidden", provider_id: "p-legacy", display_name: "Hidden Tool" });
-    const allTools = [webSearch, newsSearch, hiddenTool];
-    const allProviders = [brave, legacy];
-
-    // Existing grants: Web Search + News Search (both visible) + Hidden
-    // Tool (invisible).
-    const existing = makeExistingPersonaEntity(PERSONA_ID, { tools: ["t-web-search", "t-news-search", "t-hidden"] });
-    writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }, { providers: allProviders, tools: allTools }));
-
-    // Caller reads, flips News Search false (a real revocation), submits.
-    const readShapedInput = buildPersonaToolsMap(existing.tools!, allTools, allProviders)!;
-    expect(readShapedInput).toEqual({
-      "Brave Search": { "Web Search": true, "News Search": true },
-    });
-    const revokedInput = {
-      "Brave Search": { "Web Search": true, "News Search": false },
-    };
-
-    await updatePersonaEntity(PERSONA_ID, { display_name: "Renamed Persona", tools: revokedInput });
-
-    const persisted = await loadLatestState();
-    // News Search is gone (real revocation honored); Web Search stays;
-    // Hidden Tool survives despite never appearing in the payload.
-    expect(persisted!.personas[PERSONA_ID].entity.tools?.slice().sort()).toEqual(
-      ["t-hidden", "t-web-search"].sort()
-    );
-  });
-
-  it("still revokes a visible grant omitted from an otherwise-included tools map, without resurrecting it via hidden-grant preservation", async () => {
-    const brave = makeToolProvider({ id: "p-brave", display_name: "Brave Search", enabled: true });
-    const legacy = makeToolProvider({ id: "p-legacy", display_name: "Legacy Provider", enabled: false });
-    const webSearch = makeToolDefinition({ id: "t-web-search", provider_id: "p-brave", display_name: "Web Search" });
-    const newsSearch = makeToolDefinition({ id: "t-news-search", provider_id: "p-brave", display_name: "News Search" });
-    const hiddenTool = makeToolDefinition({ id: "t-hidden", provider_id: "p-legacy", display_name: "Hidden Tool" });
-    const allTools = [webSearch, newsSearch, hiddenTool];
-    const allProviders = [brave, legacy];
-
-    const existing = makeExistingPersonaEntity(PERSONA_ID, { tools: ["t-web-search", "t-news-search", "t-hidden"] });
-    writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }, { providers: allProviders, tools: allTools }));
-
-    // Submitted map includes the "Brave Search" provider key but simply
-    // leaves News Search out entirely (not even `false`) -- still a real
-    // revocation under full-record-replace semantics for the visible
-    // portion.
-    await updatePersonaEntity(PERSONA_ID, {
-      display_name: "Renamed Persona",
-      tools: { "Brave Search": { "Web Search": true } },
-    });
-
-    const persisted = await loadLatestState();
-    expect(persisted!.personas[PERSONA_ID].entity.tools?.slice().sort()).toEqual(
-      ["t-hidden", "t-web-search"].sort()
-    );
+    expect(persisted!.personas[PERSONA_ID].entity.tools).toEqual(["t-web-search"]);
   });
 });
 
@@ -789,46 +700,34 @@ describe("updatePersonaEntity", () => {
 // even if the returned/rejected value looked identical.
 
 describe("removePersonaEntity", () => {
-  it.each(RESERVED_PERSONA_IDS)(
-    "throws the exact reserved-persona message for id %s and never queues a correction",
-    async (reservedId) => {
-      const existing = makeExistingPersonaEntity(reservedId, { display_name: reservedId });
-      writeState(makeState({ [reservedId]: { entity: existing, messages: [] } }));
-      const statePath = join(tempDir, "state.json");
-      const originalStateJson = readFileSync(statePath, "utf-8");
+  it.each(RESERVED_PERSONA_IDS)("throws the exact reserved-persona message for id %s and never queues a correction", async (reservedId) => {
+    const existing = makeExistingPersonaEntity(reservedId, { display_name: reservedId === "ei" ? "Ei" : "Emmett" });
+    writeState(makeState({ [reservedId]: { entity: existing, messages: [] } }));
+    const statePath = join(tempDir, "state.json");
+    const correctionsPath = join(tempDir, "corrections.json");
+    const originalStateJson = readFileSync(statePath, "utf-8");
 
-      await expect(removePersonaEntity(reservedId)).rejects.toThrow(
-        new RegExp(`^Cannot delete reserved persona "${reservedId}"\\. Use archive instead\\.$`)
-      );
-
-      expect(existsSync(join(tempDir, "corrections.json"))).toBe(false);
-      expect(readFileSync(statePath, "utf-8")).toBe(originalStateJson);
-    }
-  );
-
-  it("throws the not-found message (not the reserved message) when a reserved id isn't actually present in state, because the existence check runs first", async () => {
-    writeState(makeState({}));
-
-    await expect(removePersonaEntity("ei")).rejects.toThrow(/^No persona found with id: ei$/);
-    expect(existsSync(join(tempDir, "corrections.json"))).toBe(false);
-  });
-
-  it("throws 'No persona found with id: X' for a nonexistent non-reserved id and never queues a correction", async () => {
-    writeState(makeState({}));
-
-    await expect(removePersonaEntity("does-not-exist")).rejects.toThrow(
-      /^No persona found with id: does-not-exist$/
+    await expect(removePersonaEntity(reservedId)).rejects.toThrow(
+      new RegExp(`^Cannot delete reserved persona "${reservedId}" — reserved personas can't be deleted via this CLI/MCP path at all; use the TUI's /archive command instead\\.$`)
     );
-    expect(existsSync(join(tempDir, "corrections.json"))).toBe(false);
+
+    expect(existsSync(correctionsPath)).toBe(false);
+    expect(readFileSync(statePath, "utf-8")).toBe(originalStateJson);
   });
 
-  it("succeeds and removes an ordinary non-reserved id from persisted state", async () => {
-    const existing = makeExistingPersonaEntity("regular-1");
-    writeState(makeState({ "regular-1": { entity: existing, messages: [] } }));
+  it("removes a non-reserved persona, queuing/self-draining a remove correction", async () => {
+    const existing = makeExistingPersonaEntity(PERSONA_ID);
+    writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }));
 
-    await expect(removePersonaEntity("regular-1")).resolves.toBeUndefined();
+    await removePersonaEntity(PERSONA_ID);
 
-    const persisted = JSON.parse(readFileSync(join(tempDir, "state.json"), "utf-8")) as StorageState;
-    expect(persisted.personas["regular-1"]).toBeUndefined();
+    const persisted = await loadLatestState();
+    expect(persisted!.personas[PERSONA_ID]).toBeUndefined();
+  });
+
+  it("throws 'No persona found with id: X' for an unknown id", async () => {
+    writeState(makeState({}));
+
+    await expect(removePersonaEntity("missing-id")).rejects.toThrow(/^No persona found with id: missing-id$/);
   });
 });
