@@ -187,8 +187,6 @@ describe("I7 T22: Person duplicate-link guard parity across overlay, self-drain,
       description: "A test person",
       sentiment: 0.1,
       relationship: "friend",
-      exposure_current: 0.1,
-      exposure_desired: 0.5,
       identifiers: [
         { type: "Ei Persona", value: PERSONA_X },
         { type: "Ei Persona", value: PERSONA_X },

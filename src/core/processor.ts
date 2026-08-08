@@ -29,8 +29,17 @@ import { buildPersonaFromPersonPrompt } from "../prompts/index.js";
 import { buildSiblingAwarenessSection } from "../prompts/room/index.js";
 import type { PersonaGenerationResult } from "../prompts/generation/types.js";
 
-import { readCorrections, assertValidCorrection, applyQuoteOperation, isQuoteCorrectionOp, resolveMergedEmbedding } from "./corrections.js";
-import type { CorrectionRecord, QuoteCorrectionSkip } from "./corrections.js";
+import {
+  readCorrections,
+  assertValidCorrection,
+  applyQuoteOperation,
+  isQuoteCorrectionOp,
+  resolveMergedEmbedding,
+  resolveTopicPatchCandidate,
+  resolvePersonPatchCandidate,
+  resolvePersonaPatchCandidate,
+} from "./corrections.js";
+import type { CorrectionRecord, QuoteCorrectionSkip, MergePatch } from "./corrections.js";
 import { withLock, atomicWrite } from "../storage/file-lock.js";
 import type { Storage } from "../storage/interface.js";
 import { remoteSync } from "../storage/remote.js";
@@ -850,12 +859,26 @@ const toolNextSteps = new Set([
     } else if (record.entity_type === "topic") {
       if (record.op === "upsert") {
         this.stateManager.human_topic_upsert(record.record as Topic);
+      } else if (record.op === "patch") {
+        const current = this.stateManager.getHuman().topics.find((t) => t.id === record.id);
+        if (!current) {
+          throw new Error(`Cannot update topic ${record.id}: not found`);
+        }
+        this.stateManager.human_topic_upsert(await resolveTopicPatchCandidate(current, record.patch as MergePatch<Topic>));
       } else {
         this.stateManager.human_topic_remove(record.id);
       }
     } else if (record.entity_type === "person") {
       if (record.op === "upsert") {
         this.stateManager.human_person_upsert(record.record as Person);
+      } else if (record.op === "patch") {
+        const current = this.stateManager.getHuman().people.find((p) => p.id === record.id);
+        if (!current) {
+          throw new Error(`Cannot update person ${record.id}: not found`);
+        }
+        this.stateManager.human_person_upsert(
+          await resolvePersonPatchCandidate(current, record.patch as MergePatch<Person>, this.stateManager.persona_getAll())
+        );
       } else {
         this.stateManager.human_person_remove(record.id);
       }
@@ -867,6 +890,12 @@ const toolNextSteps = new Set([
         } else {
           this.stateManager.persona_add(record.record as PersonaEntity);
         }
+      } else if (record.op === "patch") {
+        const existing = this.stateManager.persona_getById(record.id);
+        if (!existing) {
+          throw new Error(`Cannot update persona ${record.id}: not found`);
+        }
+        this.stateManager.persona_replace(record.id, await resolvePersonaPatchCandidate(existing, record.patch as MergePatch<PersonaEntity>));
       } else {
         // Defense in depth — this should never reach here since the
         // synchronous write-time guard in src/cli/persona-corrections.ts's

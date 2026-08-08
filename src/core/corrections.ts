@@ -31,19 +31,57 @@
 
 import type { HumanEntity, Fact, Topic, Person, Quote, PersonaEntity, StorageState } from "./types.js";
 import { isReservedPersonaId } from "./types.js";
-import { guardPersonaLinks, removePersonaLinksToId, type PersonaLinkRefusal } from "./utils/identifier-utils.js";
+import { guardPersonaLinks, removePersonaLinksToId, sanitizeEiPersonaIdentifiers, type PersonaLinkRefusal } from "./utils/identifier-utils.js";
 import { withLock, atomicWrite } from "../storage/file-lock.js";
-import { getEmbeddingService } from "./embedding-service.js";
+import { getEmbeddingService, computeDataItemEmbedding, computePersonaDescriptionEmbedding, needsEmbeddingUpdate } from "./embedding-service.js";
+import { HumanState } from "./state/human.js";
+import {
+  applyMergePatch,
+  type MergePatch,
+} from "./corrections-merge.js";
+import { validateCandidate, topicBaseShape, topicCandidateSchema, personBaseShape, personCandidateSchema, personaBaseShape, personaCandidateSchema } from "./entity-schemas.js";
+export type { MergePatch } from "./corrections-merge.js";
 
 export type CorrectableType = "fact" | "topic" | "person" | "quote" | "persona";
 export type CorrectableEntity = Fact | Topic | Person | Quote | PersonaEntity;
 export const CORRECTABLE_TYPES: CorrectableType[] = ["fact", "topic", "person", "quote", "persona"];
 
+/**
+ * A brand-new, full record for `entity_type` — `op: "upsert"` keeps its
+ * pre-ADR-029 meaning exactly: insert-or-replace-by-id, every field taken
+ * from `record` as given. Used by every `ei create`, and — per Must-Have
+ * 9's permanent exception — by `ei update fact` too, since fact never
+ * gains merge-patch semantics. The wire discriminator this plan's TODO 1
+ * decided on is therefore about SHAPE (a full record vs. a patch), not
+ * about the CLI verb that produced it: `ei update fact` still queues an
+ * `"upsert"`, because there is nothing else it could correctly mean for
+ * fact. See CorrectionPatch below for the shape a real patch takes.
+ */
 export interface CorrectionUpsert {
   op: "upsert";
   entity_type: CorrectableType;
   id: string;
   record: CorrectableEntity;
+  timestamp: string;
+}
+
+/**
+ * An RFC 7396 merge patch against an EXISTING persona/person/topic record
+ * — ADR-029. Structurally distinct from CorrectionUpsert by both `op` and
+ * field name (`patch`, never `record`): a caller cannot construct a value
+ * that is ambiguous between "this is a full record" and "this is a
+ * patch" merely by omitting fields, which is exactly the ambiguity this
+ * plan's TODO 1 set out to remove. `entity_type` is narrower than
+ * CorrectableType on purpose — "quote" is a separate wire grammar
+ * entirely (see QuoteCorrectionRecord) and "fact" has no merge-patch path
+ * at all (Must-Have 9); assertValidCorrection rejects both explicitly
+ * rather than silently accepting and no-op'ing them.
+ */
+export interface CorrectionPatch {
+  op: "patch";
+  entity_type: "persona" | "person" | "topic";
+  id: string;
+  patch: MergePatch<CorrectableEntity>;
   timestamp: string;
 }
 
@@ -53,6 +91,7 @@ export interface CorrectionRemove {
   id: string;
   timestamp: string;
 }
+
 
 // ---------------------------------------------------------------------------
 // Quote Corrections Wire Grammar
@@ -173,7 +212,7 @@ export interface QuoteCorrectionSkip {
   reason: string;
 }
 
-export type CorrectionRecord = CorrectionUpsert | CorrectionRemove | QuoteCorrectionRecord;
+export type CorrectionRecord = CorrectionUpsert | CorrectionPatch | CorrectionRemove | QuoteCorrectionRecord;
 
 /** The only legal wire values for a quote correction's `op`. Any other value — including the retired generic "upsert"/"remove" — is a pre-cutover or malformed record and is rejected. Built with `Object.create(null)`, not an object literal: an object literal inherits `Object.prototype`, so a truthy lookup like `QUOTE_OPS[value.op]` would treat inherited names such as `constructor`/`toString` as if they were allowed values (I1) — a null-prototype object has no such inherited names to leak through. */
 const QUOTE_OPS: Record<string, true> = Object.assign(Object.create(null), {
@@ -366,11 +405,12 @@ function assertValidQuoteCorrection(value: object, human: HumanEntity | undefine
  * corrections.json. The TypeScript union is compile-time only — every
  * record actually enters the system via `JSON.parse(...) as CorrectionRecord`
  * in readCorrections(), so a malformed-but-valid-JSON record (bad `op`,
- * mismatched `record.id`, missing `record` on an upsert) is otherwise
- * silently trusted. Both consumers (CLI read-merge/self-drain via
- * applyCorrectionToHuman, and Processor.applyCorrectionRecord) call this
- * before mutating anything — it throws, never coerces, so a malformed `op`
- * can never be silently treated as its sibling operation.
+ * mismatched `record.id`, missing `record` on an upsert, or a `patch` op
+ * naming "fact"/"quote" — ADR-029's merge-patch path never covers either)
+ * is otherwise silently trusted. Both consumers (CLI read-merge/self-drain
+ * via applyCorrectionToHuman, and Processor.applyCorrectionRecord) call
+ * this before mutating anything — it throws, never coerces, so a
+ * malformed `op` can never be silently treated as its sibling operation.
  *
  * A quote-domain record — `op` one of the four `quote.*` literals, or
  * `entity_type: "quote"` (see isQuoteCorrectionOp) — is checked first and
@@ -397,8 +437,8 @@ export function assertValidCorrection(value: unknown, human?: HumanEntity): asse
     return;
   }
 
-  if (!("op" in value) || (value.op !== "upsert" && value.op !== "remove")) {
-    throw new Error(`Malformed correction record: op must be "upsert" or "remove", got ${JSON.stringify("op" in value ? value.op : undefined)}`);
+  if (!("op" in value) || (value.op !== "upsert" && value.op !== "patch" && value.op !== "remove")) {
+    throw new Error(`Malformed correction record: op must be "upsert", "patch", or "remove", got ${JSON.stringify("op" in value ? value.op : undefined)}`);
   }
   if (!("entity_type" in value) || !CORRECTABLE_TYPES.includes(value.entity_type as CorrectableType)) {
     throw new Error(`Malformed correction record: entity_type must be one of ${CORRECTABLE_TYPES.join(", ")}, got ${JSON.stringify("entity_type" in value ? value.entity_type : undefined)}`);
@@ -412,6 +452,14 @@ export function assertValidCorrection(value: unknown, human?: HumanEntity): asse
     }
     if (!("id" in value.record) || value.record.id !== value.id) {
       throw new Error(`Malformed correction record: record.id (${JSON.stringify("id" in value.record ? value.record.id : undefined)}) must equal wrapper id (${JSON.stringify(value.id)})`);
+    }
+  }
+  if (value.op === "patch") {
+    if (value.entity_type !== "persona" && value.entity_type !== "person" && value.entity_type !== "topic") {
+      throw new Error(`Malformed correction record: patch is only valid for persona/person/topic (no merge-patch path for fact or quote), got ${JSON.stringify(value.entity_type)}`);
+    }
+    if (!("patch" in value) || !value.patch || typeof value.patch !== "object") {
+      throw new Error(`Malformed correction record: patch requires a patch object`);
     }
   }
 }
@@ -858,18 +906,124 @@ export function applyQuoteOperation(quotes: Quote[], record: unknown, human?: Hu
 }
 
 /**
+ * Resolves an update-patch candidate for `topic`: merge onto a COPY of
+ * `current` (never mutates it), validate the merged candidate's
+ * writable projection against the REAL `topicCandidateSchema` (ADR-029
+ * clause 3) — throws MergePatchValidationError, leaving nothing
+ * written, if the merge produced an invalid candidate — then recompute
+ * `embedding` from the FINALLY MERGED text, never from whatever value
+ * (if any) the queued patch carried.
+ *
+ * The embedding recompute happens HERE, at the actual drain-time choke
+ * point, deliberately — Beta's review [I2]: a write-time embedding
+ * computed by the CLI layer against its own pre-drain snapshot and
+ * smuggled through the wire patch can silently overwrite a NEWER
+ * description's vector if another write to the same topic interleaves
+ * before this one drains. Recomputing against `current` (whichever
+ * state is ACTUALLY stored at the moment this function runs, per
+ * TODO4's single choke point) is the only way to guarantee the
+ * persisted vector represents the persisted text. `needsEmbeddingUpdate`
+ * skips the model call when the caller's patch didn't actually touch
+ * `name`/`description` (mirrors src/core/human-data-manager.ts's own
+ * upsert path, the live-drain TUI/daemon side's identical policy).
+ */
+export async function resolveTopicPatchCandidate(current: Topic, patch: MergePatch<Topic>): Promise<Topic> {
+  const merged = applyMergePatch(current, patch);
+  validateCandidate(merged, topicBaseShape, topicCandidateSchema, "topic");
+  const candidate: Topic = { ...merged };
+  candidate.embedding = needsEmbeddingUpdate(current, candidate) ? await computeDataItemEmbedding(candidate) : current.embedding;
+  return candidate;
+}
+
+/**
+ * Resolves an update-patch candidate for `person`: merge onto a COPY of
+ * `current`, then — per this plan's TODO 5 ordering constraint — run
+ * identifier sanitization and name-sync on the FULL MERGED CANDIDATE,
+ * never on the raw patch, since a patch that omits `identifiers`
+ * (relying on merge to preserve the stored ones) must not have them
+ * sanitized-to-empty by applying `?? []` to the unmerged patch. Only
+ * after that does the writable-projection invariant run against the
+ * REAL `personCandidateSchema` (its own "at least one identifier or a
+ * name" refine) — depends on post-sync state, so it must run last —
+ * and only once validation passes does `embedding` get recomputed from
+ * the finally-merged text (see resolveTopicPatchCandidate's doc comment
+ * for why this must happen here, at drain time, not at write time).
+ * `allPersonas` is used only for Ei-Persona alias matching
+ * (sanitizeEiPersonaIdentifiers); the ADR-006/ADR-010 cardinality guard
+ * (guardPersonUpsert) is a SEPARATE concern this function does not run —
+ * every caller that needs it (applyCorrectionToState, StateManager.human_person_upsert)
+ * runs it on this function's return value, exactly as it already does
+ * for a full-record upsert.
+ */
+export async function resolvePersonPatchCandidate(current: Person, patch: MergePatch<Person>, allPersonas: readonly PersonaEntity[] = []): Promise<Person> {
+  let candidate = applyMergePatch(current, patch);
+  candidate = { ...candidate, identifiers: sanitizeEiPersonaIdentifiers(candidate.identifiers ?? [], allPersonas as PersonaEntity[]) };
+  candidate = syncPersonName(candidate);
+  validateCandidate(candidate, personBaseShape, personCandidateSchema, "person");
+  candidate.embedding = needsEmbeddingUpdate(current, candidate) ? await computeDataItemEmbedding(candidate) : current.embedding;
+  return candidate;
+}
+
+/**
+ * Resolves an update-patch candidate for `persona`: merge onto a COPY of
+ * `current`, stamp a fresh `last_updated` (mirroring every other
+ * persona-write path's own stamp), then enforce the writable-projection
+ * invariant against the REAL `personaCandidateSchema`. Traits/topics
+ * arrays arriving in `patch` are expected to already be materialized
+ * (ids assigned, their own `last_updated` stamped) by the CLI layer
+ * BEFORE this function ever sees them — see
+ * src/cli/persona-corrections.ts's updatePersonaEntity — since merge
+ * itself is purely structural and has no id-assignment policy of its
+ * own; when `patch` omits `traits`/`topics` entirely, merge correctly
+ * leaves the stored (already-materialized) arrays untouched.
+ *
+ * `description_embedding` is ALWAYS recomputed here, at the drain-time
+ * choke point, from the finally-merged `long_description` — never taken
+ * from `patch` (which no longer carries it at all; see
+ * src/cli/persona-corrections.ts's updatePersonaEntity, which used to
+ * smuggle a write-time value through the wire patch, exactly the [I2]
+ * hazard resolveTopicPatchCandidate's own doc comment describes).
+ */
+export async function resolvePersonaPatchCandidate(current: PersonaEntity, patch: MergePatch<PersonaEntity>): Promise<PersonaEntity> {
+  const merged = applyMergePatch(current, patch);
+  const candidate: PersonaEntity = { ...merged, id: current.id, last_updated: new Date().toISOString() };
+  validateCandidate(candidate, personaBaseShape, personaCandidateSchema, "persona");
+  candidate.description_embedding = candidate.long_description ? await computePersonaDescriptionEmbedding(candidate) : undefined;
+  return candidate;
+}
+
+/**
  * Apply one correction to a HumanEntity in place, mirroring the exact
- * upsert/remove semantics of HumanState (src/core/state/human.ts) —
- * replace-by-id for upsert, splice + orphaned quote-reference cleanup for
- * remove (for all 3 types, matching fact_remove/topic_remove/person_remove
- * in HumanState — not just person). Used by both the CLI's read-merge
- * (materializing a corrected view without a StateManager) and its
- * self-drain (writing corrections straight into state.json when no live
- * instance is running).
+ * upsert/patch/remove semantics of HumanState (src/core/state/human.ts) —
+ * replace-by-id for upsert, merge-then-validate-then-replace for patch,
+ * splice + orphaned quote-reference cleanup for remove (for all 3 types,
+ * matching fact_remove/topic_remove/person_remove in HumanState — not
+ * just person). Used by both the CLI's read-merge (materializing a
+ * corrected view without a StateManager) and its self-drain (writing
+ * corrections straight into state.json when no live instance is
+ * running).
+ *
+ * Topic/person upsert AND patch both route through a shared HumanState
+ * instance (`state.load(human)` aliases the SAME object, so its
+ * topic_upsert/person_upsert calls mutate `human` directly) — the single
+ * choke point this plan's TODO 4 requires, so live-drain
+ * (StateManager.human_topic_upsert/human_person_upsert, which already use
+ * HumanState) and this CLI-facing path always stamp/normalize identically.
+ * Fact keeps the original bare splice: it stays full-record-replacement
+ * forever (Must-Have 9) and was never part of TODO 4's consolidation.
+ *
+ * `patch` requires the target to already exist — a patch has nothing to
+ * merge onto otherwise — and throws if it doesn't, same as a genuinely
+ * malformed correction. `allPersonas`, forwarded to
+ * resolvePersonPatchCandidate for Ei-Persona alias matching, defaults to
+ * `[]` for callers (mostly tests, and this function's own recursive use
+ * from applyCorrectionsToHuman) that have no PersonaEntity list handy —
+ * degrades gracefully to skipping alias-based sanitization, never throws
+ * for its absence.
  *
  * A quote-domain record (see isQuoteCorrectionOp — `op` one of the four
  * `quote.*` literals, or `entity_type: "quote"`) is intercepted before
- * any of the generic upsert/remove logic below and routed through
+ * any of the generic upsert/patch/remove logic below and routed through
  * applyQuoteOperation instead, which never throws — a malformed quote
  * record, including a `quote.*` op with a wrong or missing `entity_type`
  * (I2), comes back as this function's return value (a skip descriptor)
@@ -878,7 +1032,7 @@ export function applyQuoteOperation(quotes: Quote[], record: unknown, human?: Hu
  * applying the rest. Every other record keeps the original
  * throw-on-invalid behavior unchanged.
  */
-export function applyCorrectionToHuman(human: HumanEntity, correction: CorrectionRecord): QuoteCorrectionSkip | void {
+export async function applyCorrectionToHuman(human: HumanEntity, correction: CorrectionRecord, allPersonas: readonly PersonaEntity[] = []): Promise<QuoteCorrectionSkip | void> {
   if (isQuoteCorrectionOp(correction)) {
     const result = applyQuoteOperation(human.quotes, correction, human);
     if (result.skipped) return result.skipped;
@@ -888,9 +1042,9 @@ export function applyCorrectionToHuman(human: HumanEntity, correction: Correctio
   }
 
   assertValidCorrection(correction);
-  const array = getCorrectableArray(human, correction.entity_type);
 
   if (correction.op === "remove") {
+    const array = getCorrectableArray(human, correction.entity_type);
     const idx = array.findIndex((item) => item.id === correction.id);
     if (idx < 0) return;
     array.splice(idx, 1);
@@ -901,23 +1055,49 @@ export function applyCorrectionToHuman(human: HumanEntity, correction: Correctio
     return;
   }
 
-  const record = correction.entity_type === "person"
-    ? syncPersonName(correction.record as Person)
-    : correction.record;
+  if (correction.op === "patch") {
+    const array = getCorrectableArray(human, correction.entity_type);
+    const idx = array.findIndex((item) => item.id === correction.id);
+    if (idx < 0) {
+      throw new Error(`Cannot update ${correction.entity_type} ${correction.id}: not found`);
+    }
+    const state = new HumanState();
+    state.load(human);
+    if (correction.entity_type === "topic") {
+      state.topic_upsert(await resolveTopicPatchCandidate(array[idx] as Topic, correction.patch as MergePatch<Topic>));
+    } else {
+      state.person_upsert(await resolvePersonPatchCandidate(array[idx] as Person, correction.patch as MergePatch<Person>, allPersonas));
+    }
+    return;
+  }
+
+  // op === "upsert" (full record, insert-or-replace-by-id).
+  if (correction.entity_type === "topic" || correction.entity_type === "person") {
+    const state = new HumanState();
+    state.load(human);
+    if (correction.entity_type === "topic") {
+      state.topic_upsert(correction.record as Topic);
+    } else {
+      state.person_upsert(correction.record as Person);
+    }
+    return;
+  }
+
+  const array = getCorrectableArray(human, correction.entity_type);
   const idx = array.findIndex((item) => item.id === correction.id);
   if (idx >= 0) {
-    array[idx] = record;
+    array[idx] = correction.record;
   } else {
-    array.push(record);
+    array.push(correction.record);
   }
   human.last_updated = new Date().toISOString();
 }
 
 /** Apply every pending correction to a HumanEntity, in file order (later records for the same id win). Returns every skipped Quote record (wrong shape, forbidden key, stale relink target, etc.) — every other pending correction still applies, quote or not. */
-export function applyCorrectionsToHuman(human: HumanEntity, corrections: CorrectionRecord[]): QuoteCorrectionSkip[] {
+export async function applyCorrectionsToHuman(human: HumanEntity, corrections: CorrectionRecord[], allPersonas: readonly PersonaEntity[] = []): Promise<QuoteCorrectionSkip[]> {
   const skipped: QuoteCorrectionSkip[] = [];
   for (const correction of corrections) {
-    const result = applyCorrectionToHuman(human, correction);
+    const result = await applyCorrectionToHuman(human, correction, allPersonas);
     if (result) skipped.push(result);
   }
   return skipped;
@@ -931,14 +1111,17 @@ export function applyCorrectionsToHuman(human: HumanEntity, corrections: Correct
  * applyCorrectionToHuman, which only ever resolve arrays on HumanEntity.
  *
  * Only ever called for entity_type "persona" (see applyCorrectionToState),
- * hence the narrower CorrectionUpsert | CorrectionRemove parameter type —
- * a QuoteCorrectionRecord is never routed here.
+ * hence the narrower CorrectionUpsert | CorrectionPatch | CorrectionRemove
+ * parameter type — a QuoteCorrectionRecord is never routed here. `patch`
+ * merges onto the existing entry via resolvePersonaPatchCandidate and
+ * throws if the target doesn't exist yet — same "nothing to merge onto"
+ * rule as the generic path.
  *
  * Returns whether a remove op actually deleted an existing Persona record
  * (false for a remove whose target id was already absent — a no-op, C3)
- * — always true for an upsert. applyCorrectionToState uses this to decide
- * whether to strip that id's links from Person records, mirroring the
- * live path's own `PersonaState.delete()` boolean check
+ * — always true for an upsert or a patch. applyCorrectionToState uses this
+ * to decide whether to strip that id's links from Person records,
+ * mirroring the live path's own `PersonaState.delete()` boolean check
  * (StateManager.persona_delete): a Persona removal that deletes nothing
  * must not cascade into a link cleanup that live-drain would never have
  * performed either.
@@ -949,7 +1132,7 @@ export function applyCorrectionsToHuman(human: HumanEntity, corrections: Correct
  * before a correction is ever queued (so a live-drained rejection here can
  * never surface as a silent no-op after an apparent CLI success).
  */
-export function applyCorrectionToPersonas(personas: StorageState["personas"], correction: CorrectionUpsert | CorrectionRemove): boolean {
+export async function applyCorrectionToPersonas(personas: StorageState["personas"], correction: CorrectionUpsert | CorrectionPatch | CorrectionRemove): Promise<boolean> {
   assertValidCorrection(correction);
   if (correction.op === "remove") {
     if (isReservedPersonaId(correction.id)) {
@@ -959,12 +1142,22 @@ export function applyCorrectionToPersonas(personas: StorageState["personas"], co
     delete personas[correction.id];
     return existed;
   }
+  if (correction.op === "patch") {
+    const existing = personas[correction.id];
+    if (!existing) {
+      throw new Error(`Cannot update persona ${correction.id}: not found`);
+    }
+    const candidate = await resolvePersonaPatchCandidate(existing.entity, correction.patch as MergePatch<PersonaEntity>);
+    personas[correction.id] = { entity: candidate, messages: existing.messages };
+    return true;
+  }
   personas[correction.id] = {
     entity: correction.record as PersonaEntity,
     messages: personas[correction.id]?.messages ?? [],
   };
   return true;
 }
+
 
 /**
  * The one shared implementation of the ADR-006/ADR-010 person-link
@@ -1033,33 +1226,48 @@ export function guardPersonUpsert(
  * omits the argument and the filtered record is applied silently, exactly
  * like every other Person upsert.
  */
-export function applyCorrectionToState(
+export async function applyCorrectionToState(
   state: StorageState,
   correction: CorrectionRecord,
   personLinkRefusals?: PersonaLinkRefusal[]
-): QuoteCorrectionSkip | void {
+): Promise<QuoteCorrectionSkip | void> {
   if (!isQuoteCorrectionOp(correction) && correction.entity_type === "persona") {
-    const removed = applyCorrectionToPersonas(state.personas, correction);
+    const removed = await applyCorrectionToPersonas(state.personas, correction);
     if (correction.op === "remove" && removed) {
       removePersonaLinksToId(state.human.people, correction.id);
     }
     return;
   }
-  if (!isQuoteCorrectionOp(correction) && correction.entity_type === "person" && correction.op === "upsert") {
-    const { person: filtered, refusals } = guardPersonUpsert(correction.record as Person, state.human.people);
+  const allPersonas = Object.values(state.personas).map((p) => p.entity);
+  if (!isQuoteCorrectionOp(correction) && correction.entity_type === "person" && (correction.op === "upsert" || correction.op === "patch")) {
+    let record: Person;
+    if (correction.op === "upsert") {
+      record = correction.record as Person;
+    } else {
+      const current = state.human.people.find((p) => p.id === correction.id);
+      if (!current) {
+        throw new Error(`Cannot update person ${correction.id}: not found`);
+      }
+      record = await resolvePersonPatchCandidate(current, correction.patch as MergePatch<Person>, allPersonas);
+    }
+    const { person: filtered, refusals } = guardPersonUpsert(record, state.human.people);
     if (refusals.length > 0) {
       personLinkRefusals?.push(...refusals);
-      return applyCorrectionToHuman(state.human, { ...correction, record: filtered });
     }
+    return applyCorrectionToHuman(
+      state.human,
+      { op: "upsert", entity_type: "person", id: correction.id, record: filtered, timestamp: correction.timestamp },
+      allPersonas
+    );
   }
-  return applyCorrectionToHuman(state.human, correction);
+  return applyCorrectionToHuman(state.human, correction, allPersonas);
 }
 
 /** Apply every pending correction to a StorageState, in file order (later records for the same id win). Returns every skipped Quote record — every other pending correction still applies. */
-export function applyCorrectionsToState(state: StorageState, corrections: CorrectionRecord[]): QuoteCorrectionSkip[] {
+export async function applyCorrectionsToState(state: StorageState, corrections: CorrectionRecord[]): Promise<QuoteCorrectionSkip[]> {
   const skipped: QuoteCorrectionSkip[] = [];
   for (const correction of corrections) {
-    const result = applyCorrectionToState(state, correction);
+    const result = await applyCorrectionToState(state, correction);
     if (result) skipped.push(result);
   }
   return skipped;
@@ -1094,7 +1302,7 @@ export function applyCorrectionsToState(state: StorageState, corrections: Correc
  * by `personId`, the same way create/fixQuoteEntity look theirs up by
  * `attempt_id`, without duplicating the guard's cardinality logic.
  */
-export function applyCorrectionsToStateWithMerges(state: StorageState, corrections: CorrectionRecord[]): { skipped: QuoteCorrectionSkip[]; merged: QuoteCorrectionMerge[]; personLinkRefusals: PersonaLinkRefusal[] } {
+export async function applyCorrectionsToStateWithMerges(state: StorageState, corrections: CorrectionRecord[]): Promise<{ skipped: QuoteCorrectionSkip[]; merged: QuoteCorrectionMerge[]; personLinkRefusals: PersonaLinkRefusal[] }> {
   const skipped: QuoteCorrectionSkip[] = [];
   const merged: QuoteCorrectionMerge[] = [];
   const personLinkRefusals: PersonaLinkRefusal[] = [];
@@ -1110,7 +1318,7 @@ export function applyCorrectionsToStateWithMerges(state: StorageState, correctio
       if (result.merged) merged.push(result.merged);
       continue;
     }
-    const result = applyCorrectionToState(state, correction, personLinkRefusals);
+    const result = await applyCorrectionToState(state, correction, personLinkRefusals);
     if (result) skipped.push(result);
   }
   return { skipped, merged, personLinkRefusals };

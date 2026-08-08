@@ -178,7 +178,7 @@ export async function writeCorrection(record: CorrectionRecord): Promise<WriteCo
       // validates the merged candidate against the state just read from
       // disk, not a stale snapshot taken before queueing — see corrections.ts's
       // applyCorrectionsToStateWithMerges doc comment.
-      const { skipped, merged, personLinkRefusals } = applyCorrectionsToStateWithMerges(state, [...pending, record]);
+      const { skipped, merged, personLinkRefusals } = await applyCorrectionsToStateWithMerges(state, [...pending, record]);
       // I2: a widened merge's embedding may only be pickMergedEmbedding's
       // best-effort placeholder (QuoteCorrectionMerge.embeddingStale) --
       // recompute it against the actual persisted union text before this

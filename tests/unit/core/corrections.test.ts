@@ -196,7 +196,7 @@ afterEach(() => {
 });
 
 describe("applyCorrectionToHuman — quote cleanup on remove", () => {
-  it("removing a fact also removes that fact id from every quote that referenced it", () => {
+  it("removing a fact also removes that fact id from every quote that referenced it", async () => {
     const removedFact = makeFact("fact-remove");
     const keptFact = makeFact("fact-keep");
     const human = makeHuman({
@@ -208,7 +208,7 @@ describe("applyCorrectionToHuman — quote cleanup on remove", () => {
       ],
     });
 
-    applyCorrectionToHuman(human, {
+    await applyCorrectionToHuman(human, {
       op: "remove",
       entity_type: "fact",
       id: removedFact.id,
@@ -223,7 +223,7 @@ describe("applyCorrectionToHuman — quote cleanup on remove", () => {
     ]);
   });
 
-  it("removing a topic also removes that topic id from every quote that referenced it", () => {
+  it("removing a topic also removes that topic id from every quote that referenced it", async () => {
     const removedTopic = makeTopic("topic-remove");
     const keptTopic = makeTopic("topic-keep");
     const human = makeHuman({
@@ -235,7 +235,7 @@ describe("applyCorrectionToHuman — quote cleanup on remove", () => {
       ],
     });
 
-    applyCorrectionToHuman(human, {
+    await applyCorrectionToHuman(human, {
       op: "remove",
       entity_type: "topic",
       id: removedTopic.id,
@@ -261,7 +261,7 @@ describe("assertValidCorrection — runtime shape validation", () => {
         record: makeFact("fact-1"),
         timestamp: NOW,
       })
-    ).toThrow(/op must be "upsert" or "remove".*not-a-real-op/);
+    ).toThrow(/op must be "upsert", "patch", or "remove".*not-a-real-op/);
   });
 
   it("rejects an upsert that is missing its record", () => {
@@ -305,10 +305,10 @@ describe("assertValidCorrection — runtime shape validation", () => {
 });
 
 describe("applyCorrectionToHuman — malformed op/record shape validation (C1)", () => {
-  it("throws on an unrecognized op instead of silently treating it as an upsert", () => {
+  it("throws on an unrecognized op instead of silently treating it as an upsert", async () => {
     const human = makeHuman({ facts: [makeFact("fact-1")] });
 
-    expect(() =>
+    await expect(
       applyCorrectionToHuman(human, {
         op: "not-a-real-op",
         entity_type: "fact",
@@ -316,16 +316,16 @@ describe("applyCorrectionToHuman — malformed op/record shape validation (C1)",
         record: makeFact("fact-2"),
         timestamp: NOW,
       } as unknown as CorrectionRecord)
-    ).toThrow();
+    ).rejects.toThrow();
 
     // fact-2 must never have been inserted — the throw must happen before mutation.
     expect(human.facts.map((f) => f.id)).toEqual(["fact-1"]);
   });
 
-  it("throws when an upsert's record.id does not match the wrapper id", () => {
+  it("throws when an upsert's record.id does not match the wrapper id", async () => {
     const human = makeHuman({ facts: [] });
 
-    expect(() =>
+    await expect(
       applyCorrectionToHuman(human, {
         op: "upsert",
         entity_type: "fact",
@@ -333,22 +333,22 @@ describe("applyCorrectionToHuman — malformed op/record shape validation (C1)",
         record: makeFact("a-different-id"),
         timestamp: NOW,
       })
-    ).toThrow();
+    ).rejects.toThrow();
 
     expect(human.facts).toEqual([]);
   });
 
-  it("throws when an upsert is missing its record", () => {
+  it("throws when an upsert is missing its record", async () => {
     const human = makeHuman({ facts: [] });
 
-    expect(() =>
+    await expect(
       applyCorrectionToHuman(human, {
         op: "upsert",
         entity_type: "fact",
         id: "fact-1",
         timestamp: NOW,
       } as unknown as CorrectionRecord)
-    ).toThrow();
+    ).rejects.toThrow();
   });
 });
 
@@ -400,7 +400,7 @@ describe("loadLatestState — malformed correction records", () => {
 });
 
 describe("applyCorrectionsToHuman — file order last-wins semantics", () => {
-  it("lets a later upsert recreate the same fact after an earlier remove in the same batch", () => {
+  it("lets a later upsert recreate the same fact after an earlier remove in the same batch", async () => {
     const original = makeFact("fact-1", { description: "Original description" });
     const replacement = makeFact("fact-1", { description: "Replacement description" });
     const human = makeHuman({ facts: [original] });
@@ -420,12 +420,12 @@ describe("applyCorrectionsToHuman — file order last-wins semantics", () => {
       },
     ];
 
-    applyCorrectionsToHuman(human, corrections);
+    await applyCorrectionsToHuman(human, corrections);
 
     expect(human.facts).toEqual([replacement]);
   });
 
-  it("lets a later remove delete the same fact after an earlier upsert in the same batch", () => {
+  it("lets a later remove delete the same fact after an earlier upsert in the same batch", async () => {
     const original = makeFact("fact-1", { description: "Original description" });
     const updated = makeFact("fact-1", { description: "Updated description" });
     const human = makeHuman({ facts: [original] });
@@ -445,66 +445,66 @@ describe("applyCorrectionsToHuman — file order last-wins semantics", () => {
       },
     ];
 
-    applyCorrectionsToHuman(human, corrections);
+    await applyCorrectionsToHuman(human, corrections);
 
     expect(human.facts).toEqual([]);
   });
 });
 
 describe("applyCorrectionToHuman — quote operations (Corrections Wire Grammar)", () => {
-  it("quote.create inserts a new quote when no existing quote shares its id", () => {
+  it("quote.create inserts a new quote when no existing quote shares its id", async () => {
     const existingQuote = makeQuote("quote-existing", ["fact-1"]);
     const human = makeHuman({ quotes: [existingQuote] });
 
-    const result = applyCorrectionToHuman(human, makeQuoteCreateRecord("quote-new"));
+    const result = await applyCorrectionToHuman(human, makeQuoteCreateRecord("quote-new"));
 
     expect(result).toBeUndefined();
     expect(human.quotes.map((q) => q.id)).toEqual(["quote-existing", "quote-new"]);
     expect(human.quotes[1]).not.toHaveProperty("verified");
   });
 
-  it("quote.fix replaces an existing quote in place by id, preserving array position", () => {
+  it("quote.fix replaces an existing quote in place by id, preserving array position", async () => {
     const before = makeQuote("quote-1", ["merged-person"]);
     const other = makeQuote("quote-2", ["fact-2"]);
     const human = makeHuman({ quotes: [before, other] });
 
-    const result = applyCorrectionToHuman(human, makeQuoteFixRecord("quote-1", ["merged-person"], { text: "Corrected text" }));
+    const result = await applyCorrectionToHuman(human, makeQuoteFixRecord("quote-1", ["merged-person"], { text: "Corrected text" }));
 
     expect(result).toBeUndefined();
     expect(human.quotes[0]).toMatchObject({ id: "quote-1", text: "Corrected text", data_item_ids: ["merged-person"] });
     expect(human.quotes[1]).toEqual(other);
   });
 
-  it("quote.relink changes only data_item_ids, leaving every other field byte-identical (un-merge repoint)", () => {
+  it("quote.relink changes only data_item_ids, leaving every other field byte-identical (un-merge repoint)", async () => {
     const before = makeQuote("quote-1", ["merged-person"]);
     const other = makeQuote("quote-2", ["fact-2"]);
     const human = makeHuman({ quotes: [before, other], people: [makePerson("split-person")] });
 
-    const result = applyCorrectionToHuman(human, makeQuoteRelinkRecord("quote-1", ["split-person"]));
+    const result = await applyCorrectionToHuman(human, makeQuoteRelinkRecord("quote-1", ["split-person"]));
 
     expect(result).toBeUndefined();
     expect(human.quotes[0]).toEqual({ ...before, data_item_ids: ["split-person"] });
     expect(human.quotes[1]).toEqual(other);
   });
 
-  it("quote.remove filters the target quote out, leaving others untouched", () => {
+  it("quote.remove filters the target quote out, leaving others untouched", async () => {
     const target = makeQuote("quote-1", []);
     const other = makeQuote("quote-2", []);
     const human = makeHuman({ quotes: [target, other] });
 
-    const result = applyCorrectionToHuman(human, makeQuoteRemoveRecord("quote-1"));
+    const result = await applyCorrectionToHuman(human, makeQuoteRemoveRecord("quote-1"));
 
     expect(result).toBeUndefined();
     expect(human.quotes).toEqual([other]);
   });
 
-  it("bumps last_updated on a successful quote operation", () => {
+  it("bumps last_updated on a successful quote operation", async () => {
     const human = makeHuman({ quotes: [], last_updated: "2020-01-01T00:00:00Z" });
-    applyCorrectionToHuman(human, makeQuoteCreateRecord("quote-new"));
+    await applyCorrectionToHuman(human, makeQuoteCreateRecord("quote-new"));
     expect(human.last_updated).not.toBe("2020-01-01T00:00:00Z");
   });
 
-  it("returns a QuoteCorrectionSkip (never throws, never mutates) for a pre-cutover unmarked full-record quote correction", () => {
+  it("returns a QuoteCorrectionSkip (never throws, never mutates) for a pre-cutover unmarked full-record quote correction", async () => {
     const existing = makeQuote("quote-1", []);
     const human = makeHuman({ quotes: [existing] });
     const legacyRecord = {
@@ -515,7 +515,7 @@ describe("applyCorrectionToHuman — quote operations (Corrections Wire Grammar)
       timestamp: NOW,
     } as unknown as CorrectionRecord;
 
-    const result = applyCorrectionToHuman(human, legacyRecord);
+    const result = await applyCorrectionToHuman(human, legacyRecord);
 
     expect(result).toEqual({ record_id: "quote-1", reason: expect.stringContaining("quote.create") });
     expect(human.quotes).toEqual([existing]);
@@ -1029,30 +1029,30 @@ describe("quote.* op routing regardless of entity_type (I2)", () => {
     expect(skipped?.reason).toContain("entity_type");
   });
 
-  it("applyCorrectionToHuman returns a skip (never throws) for a quote.relink with the wrong entity_type, leaving quotes untouched", () => {
+  it("applyCorrectionToHuman returns a skip (never throws) for a quote.relink with the wrong entity_type, leaving quotes untouched", async () => {
     const existing = makeQuote("quote-1", ["fact-1"]);
     const human = makeHuman({ quotes: [existing] });
     const malformed = { op: "quote.relink", entity_type: "person", id: "quote-1", data_item_ids: [] } as unknown as CorrectionRecord;
 
-    const result = applyCorrectionToHuman(human, malformed);
+    const result = await applyCorrectionToHuman(human, malformed);
 
     expect(result).toEqual({ record_id: "quote-1", reason: expect.stringContaining("entity_type") });
     expect(human.quotes).toEqual([existing]);
   });
 
-  it('a quote.* op still routes to quote handling even when entity_type claims "persona" — never reaches applyCorrectionToPersonas (I2)', () => {
+  it('a quote.* op still routes to quote handling even when entity_type claims "persona" — never reaches applyCorrectionToPersonas (I2)', async () => {
     const existing = makeQuote("quote-1", ["fact-1"]);
     const state = makeState(makeHuman({ quotes: [existing] }));
     const malformed = { op: "quote.relink", entity_type: "persona", id: "quote-1", data_item_ids: [] } as unknown as CorrectionRecord;
 
-    const result = applyCorrectionToState(state, malformed);
+    const result = await applyCorrectionToState(state, malformed);
 
     expect(result).toEqual({ record_id: "quote-1", reason: expect.stringContaining("entity_type") });
     expect(state.human.quotes).toEqual([existing]);
     expect(state.personas).toEqual({});
   });
 
-  it("T2: applyCorrectionsToHuman skips a quote.relink with a missing entity_type and still applies a later valid quote.remove and person upsert in the same batch, with no throw", () => {
+  it("T2: applyCorrectionsToHuman skips a quote.relink with a missing entity_type and still applies a later valid quote.remove and person upsert in the same batch, with no throw", async () => {
     const survivingQuote = makeQuote("quote-keep", []);
     const removableQuote = makeQuote("quote-remove-me", []);
     const human = makeHuman({ quotes: [survivingQuote, removableQuote] });
@@ -1064,7 +1064,7 @@ describe("quote.* op routing regardless of entity_type (I2)", () => {
       { op: "upsert", entity_type: "person", id: goodPerson.id, record: goodPerson, timestamp: NOW },
     ];
 
-    const skipped = applyCorrectionsToHuman(human, corrections);
+    const skipped = await applyCorrectionsToHuman(human, corrections);
 
     expect(skipped).toHaveLength(1);
     expect(skipped[0].record_id).toBe("quote-keep");
@@ -1072,7 +1072,7 @@ describe("quote.* op routing regardless of entity_type (I2)", () => {
     expect(human.people.find((p) => p.id === "person-new")).toBeDefined();
   });
 
-  it("T2: applyCorrectionsToState skips a quote.relink with a wrong entity_type and still applies a later valid correction in the same batch, with no throw", () => {
+  it("T2: applyCorrectionsToState skips a quote.relink with a wrong entity_type and still applies a later valid correction in the same batch, with no throw", async () => {
     const survivingQuote = makeQuote("quote-keep", []);
     const state = makeState(makeHuman({ quotes: [survivingQuote] }));
     const goodFact = makeFact("fact-new");
@@ -1082,7 +1082,7 @@ describe("quote.* op routing regardless of entity_type (I2)", () => {
       { op: "upsert", entity_type: "fact", id: goodFact.id, record: goodFact, timestamp: NOW },
     ];
 
-    const skipped = applyCorrectionsToState(state, corrections);
+    const skipped = await applyCorrectionsToState(state, corrections);
 
     expect(skipped).toHaveLength(1);
     expect(skipped[0].record_id).toBe("quote-keep");
@@ -1140,30 +1140,30 @@ describe("quote.* op routing regardless of entity_type — create/fix/remove (I6
         expect(skipped?.reason).toContain("entity_type");
       });
 
-      it(`applyCorrectionToHuman returns a skip (never throws) for a ${label} with the wrong entity_type, leaving quotes untouched`, () => {
+      it(`applyCorrectionToHuman returns a skip (never throws) for a ${label} with the wrong entity_type, leaving quotes untouched`, async () => {
         const existing = makeQuote("quote-1", ["fact-1"]);
         const human = makeHuman({ quotes: [existing] });
         const malformed = { ...buildValid("quote-1"), entity_type: "person" } as unknown as CorrectionRecord;
 
-        const result = applyCorrectionToHuman(human, malformed);
+        const result = await applyCorrectionToHuman(human, malformed);
 
         expect(result).toEqual({ record_id: "quote-1", reason: expect.stringContaining("entity_type"), ...(label === "quote.remove" ? {} : { attempt_id: expect.any(String) }) });
         expect(human.quotes).toEqual([existing]);
       });
 
-      it(`a ${label} still routes to quote handling even when entity_type claims "persona" — never reaches applyCorrectionToPersonas (I2/I6)`, () => {
+      it(`a ${label} still routes to quote handling even when entity_type claims "persona" — never reaches applyCorrectionToPersonas (I2/I6)`, async () => {
         const existing = makeQuote("quote-1", ["fact-1"]);
         const state = makeState(makeHuman({ quotes: [existing] }));
         const malformed = { ...buildValid("quote-1"), entity_type: "persona" } as unknown as CorrectionRecord;
 
-        const result = applyCorrectionToState(state, malformed);
+        const result = await applyCorrectionToState(state, malformed);
 
         expect(result).toEqual({ record_id: "quote-1", reason: expect.stringContaining("entity_type"), ...(label === "quote.remove" ? {} : { attempt_id: expect.any(String) }) });
         expect(state.human.quotes).toEqual([existing]);
         expect(state.personas).toEqual({});
       });
 
-      it(`T2: applyCorrectionsToHuman skips a ${label} with a missing entity_type and still applies a later valid correction in the same batch, with no throw`, () => {
+      it(`T2: applyCorrectionsToHuman skips a ${label} with a missing entity_type and still applies a later valid correction in the same batch, with no throw`, async () => {
         const survivingQuote = makeQuote("quote-keep", []);
         const human = makeHuman({ quotes: [survivingQuote] });
         const goodPerson = makePerson("person-new");
@@ -1175,7 +1175,7 @@ describe("quote.* op routing regardless of entity_type — create/fix/remove (I6
           { op: "upsert", entity_type: "person", id: goodPerson.id, record: goodPerson, timestamp: NOW },
         ];
 
-        const skipped = applyCorrectionsToHuman(human, corrections);
+        const skipped = await applyCorrectionsToHuman(human, corrections);
 
         expect(skipped).toHaveLength(1);
         expect(skipped[0].record_id).toBe(targetId);
@@ -1184,7 +1184,7 @@ describe("quote.* op routing regardless of entity_type — create/fix/remove (I6
         expect(human.people.find((p) => p.id === "person-new")).toBeDefined();
       });
 
-      it(`T2: applyCorrectionsToState skips a ${label} with a wrong entity_type and still applies a later valid correction in the same batch, with no throw`, () => {
+      it(`T2: applyCorrectionsToState skips a ${label} with a wrong entity_type and still applies a later valid correction in the same batch, with no throw`, async () => {
         const survivingQuote = makeQuote("quote-keep", []);
         const state = makeState(makeHuman({ quotes: [survivingQuote] }));
         const goodFact = makeFact("fact-new");
@@ -1196,7 +1196,7 @@ describe("quote.* op routing regardless of entity_type — create/fix/remove (I6
           { op: "upsert", entity_type: "fact", id: goodFact.id, record: goodFact, timestamp: NOW },
         ];
 
-        const skipped = applyCorrectionsToState(state, corrections);
+        const skipped = await applyCorrectionsToState(state, corrections);
 
         expect(skipped).toHaveLength(1);
         expect(skipped[0].record_id).toBe(targetId);
@@ -1228,11 +1228,11 @@ describe("non-object correction entries are skipped, not thrown (I7, T8)", () =>
     ["number", 42],
     ["boolean", true],
     ["array", ["not", "a", "record"]],
-  ])("applyCorrectionToHuman returns a skip (never throws) for a %s correction entry, leaving quotes untouched", (_label, malformed) => {
+  ])("applyCorrectionToHuman returns a skip (never throws) for a %s correction entry, leaving quotes untouched", async (_label, malformed) => {
     const existing = makeQuote("quote-1", ["fact-1"]);
     const human = makeHuman({ quotes: [existing] });
 
-    const result = applyCorrectionToHuman(human, malformed as unknown as CorrectionRecord);
+    const result = await applyCorrectionToHuman(human, malformed as unknown as CorrectionRecord);
 
     expect(result).toEqual({ record_id: "<unknown>", reason: expect.stringContaining("Malformed quote correction") });
     expect(human.quotes).toEqual([existing]);
@@ -1244,18 +1244,18 @@ describe("non-object correction entries are skipped, not thrown (I7, T8)", () =>
     ["number", 42],
     ["boolean", true],
     ["array", ["not", "a", "record"]],
-  ])("applyCorrectionToState returns a skip (never throws) for a %s correction entry — never reaches applyCorrectionToPersonas", (_label, malformed) => {
+  ])("applyCorrectionToState returns a skip (never throws) for a %s correction entry — never reaches applyCorrectionToPersonas", async (_label, malformed) => {
     const existing = makeQuote("quote-1", ["fact-1"]);
     const state = makeState(makeHuman({ quotes: [existing] }));
 
-    const result = applyCorrectionToState(state, malformed as unknown as CorrectionRecord);
+    const result = await applyCorrectionToState(state, malformed as unknown as CorrectionRecord);
 
     expect(result).toEqual({ record_id: "<unknown>", reason: expect.stringContaining("Malformed quote correction") });
     expect(state.human.quotes).toEqual([existing]);
     expect(state.personas).toEqual({});
   });
 
-  it("T8: applyCorrectionsToHuman skips a null entry and still applies a later valid quote.remove and person upsert in the same batch, with no throw", () => {
+  it("T8: applyCorrectionsToHuman skips a null entry and still applies a later valid quote.remove and person upsert in the same batch, with no throw", async () => {
     const survivingQuote = makeQuote("quote-keep", []);
     const removableQuote = makeQuote("quote-remove-me", []);
     const human = makeHuman({ quotes: [survivingQuote, removableQuote] });
@@ -1267,7 +1267,7 @@ describe("non-object correction entries are skipped, not thrown (I7, T8)", () =>
       { op: "upsert", entity_type: "person", id: goodPerson.id, record: goodPerson, timestamp: NOW },
     ];
 
-    const skipped = applyCorrectionsToHuman(human, corrections);
+    const skipped = await applyCorrectionsToHuman(human, corrections);
 
     expect(skipped).toHaveLength(1);
     expect(skipped[0].record_id).toBe("<unknown>");
@@ -1275,7 +1275,7 @@ describe("non-object correction entries are skipped, not thrown (I7, T8)", () =>
     expect(human.people.find((p) => p.id === "person-new")).toBeDefined();
   });
 
-  it("T8: applyCorrectionsToState skips a null entry and still applies a later valid quote.create and fact upsert in the same batch, with no throw", () => {
+  it("T8: applyCorrectionsToState skips a null entry and still applies a later valid quote.create and fact upsert in the same batch, with no throw", async () => {
     const survivingQuote = makeQuote("quote-keep", []);
     const state = makeState(makeHuman({ quotes: [survivingQuote] }));
     const goodFact = makeFact("fact-new");
@@ -1286,7 +1286,7 @@ describe("non-object correction entries are skipped, not thrown (I7, T8)", () =>
       { op: "upsert", entity_type: "fact", id: goodFact.id, record: goodFact, timestamp: NOW },
     ];
 
-    const skipped = applyCorrectionsToState(state, corrections);
+    const skipped = await applyCorrectionsToState(state, corrections);
 
     expect(skipped).toHaveLength(1);
     expect(skipped[0].record_id).toBe("<unknown>");
@@ -1294,7 +1294,7 @@ describe("non-object correction entries are skipped, not thrown (I7, T8)", () =>
     expect(state.human.facts.find((f) => f.id === "fact-new")).toBeDefined();
   });
 
-  it("readCorrections-shaped batch: a malformed non-object entry between two valid quote records is skipped while both valid records still apply (overlay/self-drain oracle)", () => {
+  it("readCorrections-shaped batch: a malformed non-object entry between two valid quote records is skipped while both valid records still apply (overlay/self-drain oracle)", async () => {
     const targetQuote = makeQuote("quote-target", []);
     const human = makeHuman({ quotes: [targetQuote] });
     const fixed = makeQuoteFixRecord("quote-target", [], { text: "Fixed text" });
@@ -1305,7 +1305,7 @@ describe("non-object correction entries are skipped, not thrown (I7, T8)", () =>
       fixed,
     ];
 
-    const skipped = applyCorrectionsToHuman(human, corrections);
+    const skipped = await applyCorrectionsToHuman(human, corrections);
 
     expect(skipped).toHaveLength(1);
     expect(skipped[0].record_id).toBe("<unknown>");
@@ -1315,11 +1315,11 @@ describe("non-object correction entries are skipped, not thrown (I7, T8)", () =>
 });
 
 describe("applyCorrectionToPersonas — upsert/remove against StorageState.personas", () => {
-  it("creates a persona entry with messages: [] on upsert into an empty personas map", () => {
+  it("creates a persona entry with messages: [] on upsert into an empty personas map", async () => {
     const personas: StorageState["personas"] = {};
     const entity = makePersonaEntity("persona-1");
 
-    applyCorrectionToPersonas(personas, {
+    await applyCorrectionToPersonas(personas, {
       op: "upsert",
       entity_type: "persona",
       id: entity.id,
@@ -1330,7 +1330,7 @@ describe("applyCorrectionToPersonas — upsert/remove against StorageState.perso
     expect(personas["persona-1"]).toEqual({ entity, messages: [] });
   });
 
-  it("preserves the persona's existing messages array untouched while replacing entity wholesale on upsert", () => {
+  it("preserves the persona's existing messages array untouched while replacing entity wholesale on upsert", async () => {
     const oldEntity = makePersonaEntity("persona-1", { display_name: "Old Name", aliases: ["Old Alias"] });
     const existingMessages = [makeMessage("m1"), makeMessage("m2")];
     const personas: StorageState["personas"] = {
@@ -1338,7 +1338,7 @@ describe("applyCorrectionToPersonas — upsert/remove against StorageState.perso
     };
     const newEntity = makePersonaEntity("persona-1", { display_name: "New Name" });
 
-    applyCorrectionToPersonas(personas, {
+    await applyCorrectionToPersonas(personas, {
       op: "upsert",
       entity_type: "persona",
       id: "persona-1",
@@ -1351,13 +1351,13 @@ describe("applyCorrectionToPersonas — upsert/remove against StorageState.perso
     expect(personas["persona-1"].entity).not.toHaveProperty("aliases");
   });
 
-  it("deletes the persona map entry on remove", () => {
+  it("deletes the persona map entry on remove", async () => {
     const entity = makePersonaEntity("persona-1");
     const personas: StorageState["personas"] = {
       "persona-1": { entity, messages: [] },
     };
 
-    applyCorrectionToPersonas(personas, {
+    await applyCorrectionToPersonas(personas, {
       op: "remove",
       entity_type: "persona",
       id: "persona-1",
@@ -1369,20 +1369,20 @@ describe("applyCorrectionToPersonas — upsert/remove against StorageState.perso
 
   it.each(RESERVED_PERSONA_IDS)(
     "throws the exact reserved-persona message and never deletes when removing reserved id %s (defense-in-depth)",
-    (reservedId) => {
+    async (reservedId) => {
       const entity = makePersonaEntity(reservedId, { display_name: reservedId });
       const personas: StorageState["personas"] = {
         [reservedId]: { entity, messages: [] },
       };
 
-      expect(() =>
+      await expect(
         applyCorrectionToPersonas(personas, {
           op: "remove",
           entity_type: "persona",
           id: reservedId,
           timestamp: NOW,
         })
-      ).toThrow(`Cannot delete reserved persona "${reservedId}". Use archive instead.`);
+      ).rejects.toThrow(`Cannot delete reserved persona "${reservedId}". Use archive instead.`);
 
       expect(personas[reservedId]).toBeDefined();
     }
@@ -1390,11 +1390,11 @@ describe("applyCorrectionToPersonas — upsert/remove against StorageState.perso
 });
 
 describe("applyCorrectionToState — routing personas vs human", () => {
-  it("routes a persona correction to the personas map, leaving the human entity untouched", () => {
+  it("routes a persona correction to the personas map, leaving the human entity untouched", async () => {
     const state = makeStateWithPersonas({});
     const entity = makePersonaEntity("persona-1");
 
-    applyCorrectionToState(state, {
+    await applyCorrectionToState(state, {
       op: "upsert",
       entity_type: "persona",
       id: entity.id,
@@ -1406,11 +1406,11 @@ describe("applyCorrectionToState — routing personas vs human", () => {
     expect(state.human.facts).toEqual([]);
   });
 
-  it("routes a fact correction to the human entity, leaving the personas map untouched", () => {
+  it("routes a fact correction to the human entity, leaving the personas map untouched", async () => {
     const state = makeStateWithPersonas({});
     const fact = makeFact("fact-1");
 
-    applyCorrectionToState(state, {
+    await applyCorrectionToState(state, {
       op: "upsert",
       entity_type: "fact",
       id: fact.id,
@@ -1424,46 +1424,46 @@ describe("applyCorrectionToState — routing personas vs human", () => {
 });
 
 describe("applyCorrectionToPersonas — C3: reports whether a remove actually deleted something", () => {
-  it("returns true when an upsert is applied", () => {
+  it("returns true when an upsert is applied", async () => {
     const personas: StorageState["personas"] = {};
     const entity = makePersonaEntity("persona-1");
-    const removed = applyCorrectionToPersonas(personas, { op: "upsert", entity_type: "persona", id: entity.id, record: entity, timestamp: NOW });
+    const removed = await applyCorrectionToPersonas(personas, { op: "upsert", entity_type: "persona", id: entity.id, record: entity, timestamp: NOW });
     expect(removed).toBe(true);
   });
 
-  it("returns true when removing a Persona that exists", () => {
+  it("returns true when removing a Persona that exists", async () => {
     const entity = makePersonaEntity("persona-1");
     const personas: StorageState["personas"] = { "persona-1": { entity, messages: [] } };
-    const removed = applyCorrectionToPersonas(personas, { op: "remove", entity_type: "persona", id: "persona-1", timestamp: NOW });
+    const removed = await applyCorrectionToPersonas(personas, { op: "remove", entity_type: "persona", id: "persona-1", timestamp: NOW });
     expect(removed).toBe(true);
   });
 
-  it("returns false (a no-op) when removing a Persona that doesn't exist", () => {
+  it("returns false (a no-op) when removing a Persona that doesn't exist", async () => {
     const personas: StorageState["personas"] = {};
-    const removed = applyCorrectionToPersonas(personas, { op: "remove", entity_type: "persona", id: "no-such-persona", timestamp: NOW });
+    const removed = await applyCorrectionToPersonas(personas, { op: "remove", entity_type: "persona", id: "no-such-persona", timestamp: NOW });
     expect(removed).toBe(false);
   });
 });
 
 describe("applyCorrectionToState — C3 regression: orphan Persona links only stripped when a removal actually deletes something", () => {
-  it("a remove whose target Persona already doesn't exist leaves a Person's historical orphan link untouched (matches live-drain's persona_delete)", () => {
+  it("a remove whose target Persona already doesn't exist leaves a Person's historical orphan link untouched (matches live-drain's persona_delete)", async () => {
     const orphanLinkedPerson = makePerson("p1", { identifiers: [{ type: "Ei Persona", value: "gone-persona" }] });
     const state = makeStateWithPersonas({});
     state.human.people = [orphanLinkedPerson];
 
-    const result = applyCorrectionToState(state, { op: "remove", entity_type: "persona", id: "gone-persona", timestamp: NOW });
+    const result = await applyCorrectionToState(state, { op: "remove", entity_type: "persona", id: "gone-persona", timestamp: NOW });
 
     expect(result).toBeUndefined();
     expect(state.human.people[0].identifiers).toEqual([{ type: "Ei Persona", value: "gone-persona" }]);
   });
 
-  it("removing a Persona that DOES exist still strips its links from Person records (unchanged live-drain-equivalent behavior)", () => {
+  it("removing a Persona that DOES exist still strips its links from Person records (unchanged live-drain-equivalent behavior)", async () => {
     const entity = makePersonaEntity("persona-1");
     const linkedPerson = makePerson("p1", { identifiers: [{ type: "Ei Persona", value: "persona-1" }] });
     const state = makeStateWithPersonas({ "persona-1": { entity, messages: [] } });
     state.human.people = [linkedPerson];
 
-    applyCorrectionToState(state, { op: "remove", entity_type: "persona", id: "persona-1", timestamp: NOW });
+    await applyCorrectionToState(state, { op: "remove", entity_type: "persona", id: "persona-1", timestamp: NOW });
 
     expect(state.personas["persona-1"]).toBeUndefined();
     expect(state.human.people[0].identifiers).toEqual([]);
@@ -1471,12 +1471,12 @@ describe("applyCorrectionToState — C3 regression: orphan Persona links only st
 });
 
 describe("applyCorrectionsToState — mixed-type batch in file order", () => {
-  it("applies a persona upsert and a fact upsert from the same batch to their respective targets", () => {
+  it("applies a persona upsert and a fact upsert from the same batch to their respective targets", async () => {
     const state = makeStateWithPersonas({});
     const entity = makePersonaEntity("persona-1");
     const fact = makeFact("fact-1");
 
-    applyCorrectionsToState(state, [
+    await applyCorrectionsToState(state, [
       { op: "upsert", entity_type: "persona", id: entity.id, record: entity, timestamp: NOW },
       { op: "upsert", entity_type: "fact", id: fact.id, record: fact, timestamp: NOW },
     ]);
@@ -1485,11 +1485,11 @@ describe("applyCorrectionsToState — mixed-type batch in file order", () => {
     expect(state.human.facts).toEqual([fact]);
   });
 
-  it("lets a later persona remove delete a persona upserted earlier in the same batch", () => {
+  it("lets a later persona remove delete a persona upserted earlier in the same batch", async () => {
     const state = makeStateWithPersonas({});
     const entity = makePersonaEntity("persona-1");
 
-    applyCorrectionsToState(state, [
+    await applyCorrectionsToState(state, [
       { op: "upsert", entity_type: "persona", id: entity.id, record: entity, timestamp: NOW },
       { op: "remove", entity_type: "persona", id: entity.id, timestamp: NOW },
     ]);

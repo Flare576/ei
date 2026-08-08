@@ -279,7 +279,7 @@ describe("writeCorrection — self-drain and branch selection", () => {
         id: fact.id,
         timestamp: NOW,
       }),
-    ).rejects.toThrow(/op must be "upsert" or "remove"/);
+    ).rejects.toThrow(/op must be "upsert", "patch", or "remove"/);
     expect(readFileSync(statePath, "utf-8")).toBe(originalState);
   });
 
