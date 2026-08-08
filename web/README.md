@@ -65,7 +65,7 @@ Open the **☰ menu** → **Settings** to:
 
 ### Sync & Privacy
 
-Ei stores everything in your browser's local storage — nothing leaves your device unless you turn on sync.
+Ei stores everything in your browser's IndexedDB — nothing leaves your device unless you turn on sync. (If you have data from an older session, it's migrated automatically from localStorage the first time you load the app; localStorage is only kept as a fallback for browsers where IndexedDB is unavailable.)
 
 If you enable sync, your data is **encrypted before it's sent**, using a key derived from your username and passphrase. The server stores an encrypted blob it cannot read. Even I can't decrypt your data.
 

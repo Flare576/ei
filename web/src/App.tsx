@@ -104,41 +104,56 @@ IMPORTANT: The "explanation" field is your outlet for creative reasoning. Put AL
 Focus on visual elements: subjects, setting, style, lighting, mood. Skip abstract concepts unless they translate to concrete visuals.
 `;
 
-async function initializeStorage(): Promise<Storage> {
+export async function initializeStorage(): Promise<Storage> {
   const indexedStorage = new IndexedDBStorage();
 
-  if (await indexedStorage.isAvailable()) {
-    const existingState = await indexedStorage.load();
+  try {
+    if (await indexedStorage.isAvailable()) {
+      const existingState = await indexedStorage.load();
 
-    if (!existingState) {
-      // No IDB data — check localStorage for data to migrate
-      const legacyStorage = new LocalStorage();
-      if (await legacyStorage.isAvailable()) {
-        const legacyState = await legacyStorage.load();
-        if (legacyState) {
-          console.log("[Storage] Migrating from localStorage → IndexedDB");
-          await indexedStorage.save(legacyState);
-          const legacyBackup = await legacyStorage.loadBackup();
-          if (legacyBackup) {
-            // Migrate backup: save to IDB backup key directly via moveToBackup pattern.
-            // Save backup as primary then move it, to reuse the moveToBackup flow.
-            // Simpler: just save primary (already done), backup is nice-to-have.
-            // Store the raw compressed backup string if possible; just save the state.
-            const backupStorage = new IndexedDBStorage();
-            await backupStorage.save(legacyBackup);
-            await backupStorage.moveToBackup();
-            // Restore primary from migration
+      if (!existingState) {
+        // No IDB data — check localStorage for data to migrate
+        const legacyStorage = new LocalStorage();
+        if (await legacyStorage.isAvailable()) {
+          const legacyState = await legacyStorage.load();
+          if (legacyState) {
+            console.log("[Storage] Migrating from localStorage → IndexedDB");
             await indexedStorage.save(legacyState);
+            const legacyBackup = await legacyStorage.loadBackup();
+            if (legacyBackup) {
+              // Migrate backup: save to IDB backup key directly via moveToBackup pattern.
+              // Save backup as primary then move it, to reuse the moveToBackup flow.
+              // Simpler: just save primary (already done), backup is nice-to-have.
+              // Store the raw compressed backup string if possible; just save the state.
+              const backupStorage = new IndexedDBStorage();
+              await backupStorage.save(legacyBackup);
+              await backupStorage.moveToBackup();
+              // Restore primary from migration
+              await indexedStorage.save(legacyState);
+            }
           }
         }
       }
+
+      return indexedStorage;
     }
 
-    return indexedStorage;
+    console.warn("[Storage] IndexedDB unavailable, falling back to localStorage");
+    return new LocalStorage();
+  } catch (e) {
+    // A real IndexedDB failure (open/read/write/migration) must never surface as a
+    // successful-but-empty load — that would let a later save overwrite recoverable data
+    // with the empty state. Fall back to a fresh LocalStorage for the session instead of
+    // rejecting/hanging startup, mirroring the isAvailable()-false branch above. This
+    // fallback still reads whatever real data localStorage has (via its own load()) —
+    // nothing here treats the failure as "no data".
+    const message = e instanceof Error ? e.message : String(e);
+    console.error(`[Storage] IndexedDB initialization failed, falling back to localStorage: ${message}`, e);
+    alert(
+      `Ei couldn't access its usual browser storage (IndexedDB) and switched to a limited fallback for this session. Your data has not been erased. (${message})`
+    );
+    return new LocalStorage();
   }
-
-  console.warn("[Storage] IndexedDB unavailable, falling back to localStorage");
-  return new LocalStorage();
 }
 
 function App() {

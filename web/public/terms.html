@@ -44,8 +44,10 @@
   device before it ever leaves — I store a blob I cannot read.
 </p>
 <p>
-  The web app uses your browser's localStorage. The TUI stores everything
-  in your local filesystem. Either way: your machine, your data.
+  The web app stores your data in your browser's IndexedDB. localStorage is
+  used only to migrate data from older sessions and as a fallback when
+  IndexedDB isn't available. The TUI stores everything in your local
+  filesystem. Either way: your machine, your data.
 </p>
 
 <h2>What I'm Actually Providing</h2>
