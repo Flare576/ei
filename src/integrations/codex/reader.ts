@@ -236,6 +236,11 @@ export class CodexReader implements ICodexReader {
       return [];
     }
 
-    return parseCodexRolloutMessages(text, sessionId);
+    try {
+      return parseCodexRolloutMessages(text, sessionId);
+    } catch (err) {
+      console.warn(`[CodexReader] skipping malformed rollout ${_basename(rolloutPath)}:`, err);
+      return [];
+    }
   }
 }

@@ -265,3 +265,51 @@ describe("importCodexSessions", () => {
     expect(mockHuman.settings?.codex?.extraction_point).toBe("2026-01-15T12:00:00.000Z");
   });
 });
+
+// Blast-radius check for .sisyphus/issues/codex-getsessions-throws-on-malformed-rollout.md:
+// the issue's text says "the importer is not known to be covered" and asks for its
+// exposure to be established and fixed if exposed. A sibling describe (not nested
+// under "importCodexSessions" above) so it doesn't depend on that block's own
+// beforeEach/mocks.
+describe("importCodexSessions exposure to reader.getSessions() throwing", () => {
+  function makeStub(): Partial<StateManager> {
+    const human = buildMockHuman();
+    return buildMockStateManager(
+      () => null,
+      () => null,
+      () => "persona-1",
+      () => true,
+      new Map(),
+      () => human,
+      () => {}
+    );
+  }
+
+  it("propagates a getSessions() rejection uncaught -- importer.ts has no independent guard around it", async () => {
+    const throwingReader: Partial<ICodexReader> = {
+      getSessions: async () => {
+        throw new TypeError("null is not an object (evaluating 'record.type')");
+      },
+    };
+
+    await expect(
+      importCodexSessions({
+        stateManager: makeStub() as StateManager,
+        reader: throwingReader as ICodexReader,
+      })
+    ).rejects.toThrow(/null is not an object/);
+  });
+
+  it("resolves normally once getSessions() simply omits the malformed session, per the reader.ts fix", async () => {
+    const partialReader: Partial<ICodexReader> = {
+      getSessions: async () => [], // malformed session already skipped upstream by the reader
+    };
+
+    const result = await importCodexSessions({
+      stateManager: makeStub() as StateManager,
+      reader: partialReader as ICodexReader,
+    });
+
+    expect(result.sessionsProcessed).toBe(0);
+  });
+});
