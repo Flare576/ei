@@ -307,8 +307,9 @@ export function bootstrapTools(stateManager: StateManager): void {
         max_calls_per_interaction: 1,
     });
 
-    // submit_response tool — auto-injected for Heartbeat steps only (HandleHeartbeatCheck).
-    // PersonaResponse and RoomResponse agents now use natural Markdown output instead.
+    // submit_response tool — NOT auto-injected under any current step. submitToolByStep
+    // (src/core/processor.ts) wires HandleHeartbeatCheck to submit_heartbeat_check instead.
+    // PersonaResponse and RoomResponse agents use natural Markdown output instead.
     // Not user-configurable; invisible in the tools UI. Terminates the tool loop immediately
     // when called; its arguments become response.parsed.
     stateManager.tools_upsertBuiltin({

@@ -472,7 +472,7 @@ describe("handleCeremonyProgress Multi-Phase Support", () => {
     handleCeremonyProgress(state as any, 1);
     
     expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining("Dedup complete, starting Expose phase")
+      expect.stringContaining("Migration complete, starting Expose phase")
     );
     expect(state.queue_enqueue).toHaveBeenCalled();
     

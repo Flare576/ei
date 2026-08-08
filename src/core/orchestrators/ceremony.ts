@@ -86,7 +86,7 @@ export function startCeremony(state: StateManager): void {
   }
   
   const duration = Date.now() - startTime;
-  console.log(`[ceremony] Dedup phase queued in ${duration}ms`);
+  console.log(`[ceremony] Migration phase queued in ${duration}ms`);
 }
 
 /**
@@ -167,7 +167,7 @@ function queueExposurePhase(personaId: string, state: StateManager, options?: Ex
  * AND at the end of startCeremony (for the zero-messages edge case).
  * 
  * If any ceremony_progress items remain in the queue, does nothing — more work pending.
- * Phase 1: Dedup → Phase 2: Expose → Phase 3: EventSummary → Decay → Phase 4: Person Rewrite → Topic Rewrite (fire-and-forget)
+ * Phase 1: Migration → Phase 2: Expose → Phase 3: EventSummary → Decay → Phase 4: Person Rewrite → Topic Rewrite (fire-and-forget)
  */
 export function handleCeremonyProgress(state: StateManager, lastPhase: number): { wroteEiWarning: boolean } {
   if (state.queue_hasPendingCeremonies()) {
@@ -175,8 +175,8 @@ export function handleCeremonyProgress(state: StateManager, lastPhase: number): 
   }
   
   if (lastPhase === 1) {
-    // Dedup phase complete → start Expose phase
-    console.log("[ceremony:progress] Dedup complete, starting Expose phase");
+    // Migration phase complete → start Expose phase
+    console.log("[ceremony:progress] Migration complete, starting Expose phase");
     
     const personas = state.persona_getAll();
     const activePersonas = personas.filter(p => 

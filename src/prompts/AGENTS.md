@@ -11,7 +11,7 @@ prompts/
 ├── ceremony/          # Exposure decay, persona enrichment
 ├── generation/        # New persona creation
 ├── heartbeat/         # Periodic check-ins
-├── human/             # Fact/trait/topic/person extraction
+├── human/             # Fact/topic/person extraction
 ├── persona/           # Persona trait extraction, topic matching
 ├── response/          # Main conversation responses
 └── validation/        # Data validation prompts

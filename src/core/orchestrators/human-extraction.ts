@@ -330,34 +330,6 @@ const EMBEDDING_MIN_SIMILARITY = 0.3;
 export const VALIDATE_MIN_SIMILARITY = 0.92;
 
 /**
- * Returns the best cosine similarity between a topic candidate and any existing
- * topic in state. Used by queueTopicValidate to detect near-duplicates after
- * a new topic is created.
- * Returns 0 if no topics exist or embedding fails.
- */
-export async function getBestTopicSimilarity(
-  candidate: TopicScanCandidate,
-  state: StateManager
-): Promise<number> {
-  const human = state.getHuman();
-  const topicsWithEmbeddings = human.topics.filter(t => t.embedding && t.embedding.length > 0);
-  if (topicsWithEmbeddings.length === 0) return 0;
-  try {
-    const embeddingService = getEmbeddingService();
-    const candidateText = getTopicEmbeddingText({
-      name: candidate.name,
-      category: candidate.category,
-      description: candidate.description,
-    });
-    const candidateVector = await embeddingService.embed(candidateText);
-    const topK = findTopK(candidateVector, topicsWithEmbeddings, 1);
-    return topK.length > 0 ? topK[0].similarity : 0;
-  } catch {
-    return 0;
-  }
-}
-
-/**
  * Queue a topic match request using embedding-based similarity (topics only).
  */
 export async function queueTopicMatch(

@@ -475,8 +475,8 @@ export function buildToolsSection(): string {
 
 You have tools available (listed in the API call). Use them freely:
 - **Chain as many as you need before responding.** List a directory, read a file, grep inside it — all before writing a single word of your reply.
-- Tool calls are a *pre-response step*, not a response. Do NOT produce the JSON reply until you have gathered everything you need.
-- When you are ready to speak, produce the JSON reply as specified above.`;
+- Tool calls are a *pre-response step*, not a response. Do NOT write your Markdown reply until you have gathered everything you need.
+- When you are ready to speak, respond in Markdown as specified above (or begin with \`## No Response\` if you're not replying).`;
 }
 
 // =============================================================================

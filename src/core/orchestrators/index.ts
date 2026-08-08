@@ -12,7 +12,6 @@ export {
   queueTargetedPersonUpdate,
   queueTargetedTopicUpdate,
   VALIDATE_MIN_SIMILARITY,
-  getBestTopicSimilarity,
   type ExtractionContext,
   type ExtractionOptions,
 } from "./human-extraction.js";
