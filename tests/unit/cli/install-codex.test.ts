@@ -120,9 +120,21 @@ async function installCodexInto(home: string) {
   mkdirSync(fakeBinDir, { recursive: true });
   writeFileSync(
     join(fakeBinDir, "ei"),
-    `#!/bin/bash\nif [ -n "$EI_ARGV_CAPTURE_FILE" ]; then\n  for arg in "$@"; do printf '%s\\n' "$arg" >> "$EI_ARGV_CAPTURE_FILE"; done\n  printf -- '---\\n' >> "$EI_ARGV_CAPTURE_FILE"\nfi\ncat "$EI_FAKE_RESPONSE_FILE" 2>/dev/null\n`,
+    `#!/bin/bash\nif [ -n "$EI_ARGV_CAPTURE_FILE" ]; then\n  for arg in "$@"; do printf '%s\\n' "$arg" >> "$EI_ARGV_CAPTURE_FILE"; done\n  printf -- '---\\n' >> "$EI_ARGV_CAPTURE_FILE"\nfi\nif [ -n "$EI_FAKE_EXIT_CODE" ] && [ "$EI_FAKE_EXIT_CODE" != "0" ]; then\n  exit "$EI_FAKE_EXIT_CODE"\nfi\ncat "$EI_FAKE_RESPONSE_FILE" 2>/dev/null\n`,
   );
   execSync(`chmod +x ${quoteShellArg(join(fakeBinDir, "ei"))}`);
+  // Fake `bunx` sits on the same PATH-shadowing fakeBinDir so runEi()'s
+  // fallback branch (`bunx ei-tui@latest ...`) resolves to this script
+  // instead of a real network-hitting bunx. Records that it was invoked at
+  // all via EI_BUNX_CALLED_FILE (existence alone is the signal — content is
+  // irrelevant) and responds from EI_BUNX_RESPONSE_FILE, independently of
+  // the local `ei` fake's own EI_FAKE_RESPONSE_FILE, so a test can tell
+  // "local ei's output" and "bunx's output" apart on sight.
+  writeFileSync(
+    join(fakeBinDir, "bunx"),
+    `#!/bin/bash\nif [ -n "$EI_BUNX_CALLED_FILE" ]; then\n  printf 'called\\n' >> "$EI_BUNX_CALLED_FILE"\nfi\ncat "$EI_BUNX_RESPONSE_FILE" 2>/dev/null\n`,
+  );
+  execSync(`chmod +x ${quoteShellArg(join(fakeBinDir, "bunx"))}`);
   return {
     memoryScript: join(home, ".codex", "hooks", "ei-inject.ts"),
     sessionStartScript: join(home, ".codex", "hooks", "ei-session-start.ts"),
@@ -152,6 +164,7 @@ function runHook(
         ...process.env,
         PATH: `${fakeBinDir}:${process.env.PATH}`,
         HOME: home,
+        EI_DATA_PATH: home,
         EI_FAKE_RESPONSE_FILE: respFile,
       },
     });
@@ -245,6 +258,7 @@ describe("installCodex — SessionStart WHO hook", () => {
         ...process.env,
         PATH: `${fakeBinDir}:${process.env.PATH}`,
         HOME: home,
+        EI_DATA_PATH: home,
         EI_FAKE_RESPONSE_FILE: respFile,
         EI_ARGV_CAPTURE_FILE: argvFile,
       },
@@ -275,6 +289,7 @@ describe("installCodex — UserPromptSubmit MEMORY dedup hook", () => {
         ...process.env,
         PATH: `${fakeBinDir}:${process.env.PATH}`,
         HOME: home,
+        EI_DATA_PATH: home,
         EI_FAKE_RESPONSE_FILE: respFile,
         EI_ARGV_CAPTURE_FILE: argvFile,
       },
@@ -312,6 +327,7 @@ describe("installCodex — UserPromptSubmit MEMORY dedup hook", () => {
         ...process.env,
         PATH: `${fakeBinDir}:${process.env.PATH}`,
         HOME: home,
+        EI_DATA_PATH: home,
         EI_FAKE_RESPONSE_FILE: respFile,
         EI_ARGV_CAPTURE_FILE: argvFile,
       },
@@ -467,11 +483,76 @@ describe("installCodex — MEMORY dedup hook robustness", () => {
         ...process.env,
         PATH: `${fakeBinDir}:${process.env.PATH}`,
         HOME: home,
+        EI_DATA_PATH: home,
         EI_FAKE_RESPONSE_FILE: respFile,
       },
     });
 
     expect(extractAdditionalContext(out)).toContain('"survived"');
+  });
+});
+
+describe("installCodex — runEi local/bunx fallback discrimination", () => {
+  // These two tests are the oracle for the fallback-on-empty-output fix:
+  // they observe the `bunx` fallback directly (via a fake `bunx` on PATH,
+  // never the real one) instead of only inferring it from final hook
+  // output. A test that only asserts on output shape can't tell "local ei
+  // legitimately returned nothing" apart from "local ei failed and bunx's
+  // response happened to also come back empty" -- both look identical from
+  // the outside. Observing whether bunx was ever invoked closes that gap.
+  it("invokes the bunx fallback when the local ei binary exits nonzero", async () => {
+    const home = makeTempDir("ei-codex-fallback-throws-home-");
+    const { sessionStartScript, fakeBinDir } = await installCodexInto(home);
+    const respFile = join(home, "resp.txt");
+    const bunxRespFile = join(home, "bunx-resp.txt");
+    const bunxCalledFile = join(home, "bunx-called.txt");
+    writeFileSync(respFile, "");
+    writeFileSync(bunxRespFile, "<ei-relationship>via bunx fallback</ei-relationship>");
+
+    const out = execSync(quoteShellArg(sessionStartScript), {
+      encoding: "utf-8",
+      input: "",
+      env: {
+        ...process.env,
+        PATH: `${fakeBinDir}:${process.env.PATH}`,
+        HOME: home,
+        EI_DATA_PATH: home,
+        EI_FAKE_RESPONSE_FILE: respFile,
+        EI_FAKE_EXIT_CODE: "1",
+        EI_BUNX_RESPONSE_FILE: bunxRespFile,
+        EI_BUNX_CALLED_FILE: bunxCalledFile,
+      },
+    });
+
+    expect(out).toContain("<ei-relationship>via bunx fallback</ei-relationship>");
+    expect(readFileSync(bunxCalledFile, "utf-8")).toContain("called");
+  });
+
+  it("never invokes the bunx fallback when the local ei binary exits 0 with genuinely empty output", async () => {
+    const home = makeTempDir("ei-codex-fallback-empty-home-");
+    const { sessionStartScript, fakeBinDir } = await installCodexInto(home);
+    const respFile = join(home, "resp.txt");
+    const bunxRespFile = join(home, "bunx-resp.txt");
+    const bunxCalledFile = join(home, "bunx-called.txt");
+    writeFileSync(respFile, "");
+    writeFileSync(bunxRespFile, "<ei-relationship>via bunx fallback</ei-relationship>");
+
+    const out = execSync(quoteShellArg(sessionStartScript), {
+      encoding: "utf-8",
+      input: "",
+      env: {
+        ...process.env,
+        PATH: `${fakeBinDir}:${process.env.PATH}`,
+        HOME: home,
+        EI_DATA_PATH: home,
+        EI_FAKE_RESPONSE_FILE: respFile,
+        EI_BUNX_RESPONSE_FILE: bunxRespFile,
+        EI_BUNX_CALLED_FILE: bunxCalledFile,
+      },
+    });
+
+    expect(out.trim()).toBe("");
+    expect(() => statSync(bunxCalledFile)).toThrow();
   });
 });
 

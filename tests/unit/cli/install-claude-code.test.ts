@@ -178,6 +178,7 @@ function runHook(
         ...process.env,
         PATH: `${fakeBinDir}:${process.env.PATH}`,
         HOME: home,
+        EI_DATA_PATH: home,
         EI_FAKE_RESPONSE_FILE: respFile,
       },
     });
@@ -255,6 +256,7 @@ describe("installClaudeCode — SessionStart WHO hook", () => {
         ...process.env,
         PATH: `${fakeBinDir}:${process.env.PATH}`,
         HOME: home,
+        EI_DATA_PATH: home,
         EI_FAKE_RESPONSE_FILE: respFile,
         EI_ARGV_CAPTURE_FILE: argvFile,
       },
@@ -286,6 +288,7 @@ describe("installClaudeCode — UserPromptSubmit MEMORY dedup hook", () => {
         ...process.env,
         PATH: `${fakeBinDir}:${process.env.PATH}`,
         HOME: home,
+        EI_DATA_PATH: home,
         EI_FAKE_RESPONSE_FILE: respFile,
         EI_ARGV_CAPTURE_FILE: argvFile,
       },
@@ -456,6 +459,7 @@ describe("installClaudeCode — MEMORY dedup hook robustness", () => {
         ...process.env,
         PATH: `${fakeBinDir}:${process.env.PATH}`,
         HOME: home,
+        EI_DATA_PATH: home,
         EI_FAKE_RESPONSE_FILE: respFile,
       },
     });

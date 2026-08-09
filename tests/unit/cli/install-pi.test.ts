@@ -207,7 +207,11 @@ async function invoke(handler: Handler, ctx: FakeContext, prompt = "question"): 
 }
 
 /** Writes a fake `ei` (and optionally `bunx`) executable into a scratch bin dir. */
-function makeFakeEiBin(dir: string, response: string, opts: { failEi?: boolean; bunxResponse?: string } = {}): void {
+function makeFakeEiBin(
+  dir: string,
+  response: string,
+  opts: { failEi?: boolean; bunxResponse?: string; bunxCalledFile?: string } = {},
+): void {
   mkdirSync(dir, { recursive: true });
   const eiScript = opts.failEi
     ? `#!/bin/sh\nexit 1\n`
@@ -218,8 +222,14 @@ function makeFakeEiBin(dir: string, response: string, opts: { failEi?: boolean; 
   if (opts.bunxResponse !== undefined) {
     // Real `bunx` takes "ei-tui@latest" as argv[0] then the real args after —
     // our fake ignores argv entirely and always returns the fixed response,
-    // matching how the other install-*.test.ts fakes behave.
-    const bunxScript = `#!/bin/sh\ncat <<'EI_FAKE_EOF'\n${opts.bunxResponse}\nEI_FAKE_EOF\n`;
+    // matching how the other install-*.test.ts fakes behave. When
+    // bunxCalledFile is given, the fallback's invocation is recorded there
+    // independently of the response content, so a test can prove "bunx was
+    // never invoked" even when its would-be response is itself empty.
+    const recordCall = opts.bunxCalledFile
+      ? `printf 'called\\n' >> ${quoteShellArg(opts.bunxCalledFile)}\n`
+      : "";
+    const bunxScript = `#!/bin/sh\n${recordCall}cat <<'EI_FAKE_EOF'\n${opts.bunxResponse}\nEI_FAKE_EOF\n`;
     writeFileSync(join(dir, "bunx"), bunxScript);
     chmodSync(join(dir, "bunx"), 0o755);
   }
@@ -382,6 +392,51 @@ describe("installPi generated before_agent_start hooks", () => {
     const result = (await invoke(who, ctx)) as { message: { content: string } };
 
     expect(result.message.content).toBe("<ei-relationship>fallback persona</ei-relationship>");
+  });
+
+  // These two are the oracle for the fallback-on-empty-output fix in Pi's
+  // execFileAsync runEi: they observe the bunx fallback directly (via a
+  // call-recorder file), not just by inferring it from final hook output.
+  // A test that only checks output shape can't tell "local ei legitimately
+  // returned nothing" apart from "local ei failed and bunx's own response
+  // also happened to be empty" -- both look identical from the outside.
+  it("runEi: records that bunx was actually invoked when the local ei binary exits nonzero", async () => {
+    const home = makeTempDir("ei-pi-fallback-throws-");
+    const bin = makeTempDir("ei-pi-bin-fallback-throws-");
+    const bunxCalledFile = join(home, "bunx-called.txt");
+    makeFakeEiBin(bin, "", {
+      failEi: true,
+      bunxResponse: "<ei-relationship>via bunx fallback</ei-relationship>",
+      bunxCalledFile,
+    });
+
+    const { handlers } = await loadGeneratedExtension(home, bin);
+    const [who] = handlers;
+    const ctx = new FakeContext([]);
+
+    const result = (await invoke(who, ctx)) as { message: { content: string } };
+
+    expect(result.message.content).toBe("<ei-relationship>via bunx fallback</ei-relationship>");
+    expect(readFileSync(bunxCalledFile, "utf-8")).toContain("called");
+  });
+
+  it("runEi: never invokes bunx when the local ei binary exits 0 with genuinely empty output", async () => {
+    const home = makeTempDir("ei-pi-fallback-empty-");
+    const bin = makeTempDir("ei-pi-bin-fallback-empty-");
+    const bunxCalledFile = join(home, "bunx-called.txt");
+    makeFakeEiBin(bin, "", {
+      bunxResponse: "<ei-relationship>via bunx fallback</ei-relationship>",
+      bunxCalledFile,
+    });
+
+    const { handlers } = await loadGeneratedExtension(home, bin);
+    const [who] = handlers;
+    const ctx = new FakeContext([]);
+
+    const result = await invoke(who, ctx);
+
+    expect(result).toBeUndefined();
+    expect(() => readFileSync(bunxCalledFile, "utf-8")).toThrow();
   });
 
   it("registerTool: ei_search carries a TypeBox schema and a real promptSnippet", async () => {

@@ -3,6 +3,26 @@ import { fileURLToPath } from "url";
 import { homedir } from "os";
 import { cp, mkdir, readdir, rename, rm, stat } from "fs/promises";
 
+// Canonical runEi() body shared by every Bun-shell-based generated hook
+// script (Codex/Claude Code/Cursor hook files, the OMP extension, and the
+// OpenCode plugin) -- interpolated verbatim into each script's own template
+// literal at hook-generation time. These scripts run standalone on an end
+// user's machine via Bun's own runtime and can't import a real shared
+// module, so a template-string constant is the only dedup available here.
+// Local `ei` is tried first and its settled result -- including a
+// legitimate empty string, a valid zero-results answer -- is returned
+// as-is; only an actual thrown error (nonzero exit / binary not found)
+// falls through to `bunx ei-tui@latest`. Pi's separate execFileAsync-based
+// runEi (no Bun `$` available in that runtime) applies the same
+// exception-based fix but isn't built from this snippet -- see installPi().
+const RUN_EI_BUN_SNIPPET = `async function runEi(commandArgs) {
+  try {
+    return await $\`ei \${commandArgs}\`.quiet().text();
+  } catch {
+    return await $\`bunx ei-tui@latest \${commandArgs}\`.quiet().text().catch(() => "");
+  }
+}`;
+
 /**
  * Copy every skills/<name>/ directory from Ei's own package into a
  * harness's native skill-discovery directory (targetDir). Copy, not
@@ -313,11 +333,7 @@ async function installCodexHooks(): Promise<void> {
 import { $ } from "bun";
 import { mkdir, writeFile, chmod } from "fs/promises";
 
-async function runEi(commandArgs) {
-  const direct = await $\`ei \${commandArgs}\`.quiet().text().catch(() => "");
-  if (direct.trim()) return direct;
-  return await $\`bunx ei-tui@latest \${commandArgs}\`.quiet().text().catch(() => "");
-}
+${RUN_EI_BUN_SNIPPET}
 
 const STATE_DIR = \`\${process.env.HOME}/.codex/ei-hook-state\`;
 // Codex session_ids are UUIDs, but treat that as a convention, not a
@@ -446,11 +462,7 @@ if (import.meta.main) {
 import { $ } from "bun";
 import { readdir, stat, unlink } from "fs/promises";
 
-async function runEi(commandArgs) {
-  const direct = await $\`ei \${commandArgs}\`.quiet().text().catch(() => "");
-  if (direct.trim()) return direct;
-  return await $\`bunx ei-tui@latest \${commandArgs}\`.quiet().text().catch(() => "");
-}
+${RUN_EI_BUN_SNIPPET}
 
 const STATE_DIR = \`\${process.env.HOME}/.codex/ei-hook-state\`;
 const STALE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -624,11 +636,7 @@ async function installClaudeCodeHooks(): Promise<void> {
 import { $ } from "bun";
 import { mkdir, writeFile, chmod } from "fs/promises";
 
-async function runEi(commandArgs) {
-  const direct = await $\`ei \${commandArgs}\`.quiet().text().catch(() => "");
-  if (direct.trim()) return direct;
-  return await $\`bunx ei-tui@latest \${commandArgs}\`.quiet().text().catch(() => "");
-}
+${RUN_EI_BUN_SNIPPET}
 
 const STATE_DIR = \`\${process.env.HOME}/.claude/ei-hook-state\`;
 // Claude Code session_ids are UUIDs, but treat that as a convention, not a
@@ -742,11 +750,7 @@ The following items MAY be relevant to your current task — use \\\`ei_search\\
 import { $ } from "bun";
 import { readdir, stat, unlink } from "fs/promises";
 
-async function runEi(commandArgs) {
-  const direct = await $\`ei \${commandArgs}\`.quiet().text().catch(() => "");
-  if (direct.trim()) return direct;
-  return await $\`bunx ei-tui@latest \${commandArgs}\`.quiet().text().catch(() => "");
-}
+${RUN_EI_BUN_SNIPPET}
 
 const STATE_DIR = \`\${process.env.HOME}/.claude/ei-hook-state\`;
 const STALE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -894,11 +898,7 @@ async function installCursorHooks(): Promise<void> {
 import { $ } from "bun";
 import { mkdir, readFile, writeFile, chmod, rename } from "fs/promises";
 
-async function runEi(commandArgs) {
-  const direct = await $\`ei \${commandArgs}\`.quiet().text().catch(() => "");
-  if (direct.trim()) return direct;
-  return await $\`bunx ei-tui@latest \${commandArgs}\`.quiet().text().catch(() => "");
-}
+${RUN_EI_BUN_SNIPPET}
 
 const STATE_DIR = \`\${process.env.HOME}/.cursor/ei-hook-state\`;
 const RULES_DIR = \`\${process.env.HOME}/.cursor/rules\`;
@@ -1014,11 +1014,7 @@ if (import.meta.main) {
 import { $ } from "bun";
 import { readdir, stat, unlink } from "fs/promises";
 
-async function runEi(commandArgs) {
-  const direct = await $\`ei \${commandArgs}\`.quiet().text().catch(() => "");
-  if (direct.trim()) return direct;
-  return await $\`bunx ei-tui@latest \${commandArgs}\`.quiet().text().catch(() => "");
-}
+${RUN_EI_BUN_SNIPPET}
 
 const STATE_DIR = \`\${process.env.HOME}/.cursor/ei-hook-state\`;
 const STALE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -1134,9 +1130,9 @@ const execFileAsync = promisify(execFile);
 const runEi = async (cmdArgs: string[]): Promise<string> => {
   try {
     const { stdout } = await execFileAsync("ei", cmdArgs, { timeout: 15000 });
-    if (stdout.trim()) return stdout;
+    return stdout;
   } catch {
-    // fall through to the bunx fallback
+    // local ei failed (nonzero exit / binary not found) -- fall back to bunx
   }
   try {
     const { stdout } = await execFileAsync("bunx", ["ei-tui@latest", ...cmdArgs], { timeout: 30000 });
@@ -1302,11 +1298,7 @@ export async function installOmp(): Promise<void> {
   const extensionContent = `import type { ExtensionAPI, ExtensionContext } from "@oh-my-pi/pi-coding-agent";
 import { $ } from "bun";
 
-const runEi = async (cmdArgs: string[]): Promise<string> => {
-  const direct = await $\`ei \${cmdArgs}\`.quiet().text().catch(() => "");
-  if (direct.trim()) return direct;
-  return $\`bunx ei-tui@latest \${cmdArgs}\`.quiet().text().catch(() => "");
-};
+${RUN_EI_BUN_SNIPPET}
 
 // WHO block deduplication: Promise identity reuse — resolving is synchronous on subsequent calls.
 const personaBlockFetch = new Map<string, Promise<string | null>>();
@@ -1558,11 +1550,7 @@ export function extractAgentName(systemPrompt: string): string | null {
   return null
 }
 
-const runEi = async (cmdArgs: string[]): Promise<string> => {
-  const direct = await $\`ei \${cmdArgs}\`.quiet().text().catch(() => "")
-  if (direct.trim()) return direct
-  return $\`bunx ei-tui@latest \${cmdArgs}\`.quiet().text().catch(() => "")
-}
+${RUN_EI_BUN_SNIPPET}
 
 // Fetch the <ei-relationship> block for a named persona via the Ei CLI.
 // Delegates all formatting to \`ei personas <name> --format prompt\` so
